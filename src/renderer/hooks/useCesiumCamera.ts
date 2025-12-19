@@ -44,6 +44,14 @@ export function useCesiumCamera(
   const adjustFov = useCameraStore((state) => state.adjustFov)
   const adjustTopdownAltitude = useCameraStore((state) => state.adjustTopdownAltitude)
   const adjustFollowZoom = useCameraStore((state) => state.adjustFollowZoom)
+  const followMode = useCameraStore((state) => state.followMode)
+  const toggleFollowMode = useCameraStore((state) => state.toggleFollowMode)
+  const orbitDistance = useCameraStore((state) => state.orbitDistance)
+  const orbitHeading = useCameraStore((state) => state.orbitHeading)
+  const orbitPitch = useCameraStore((state) => state.orbitPitch)
+  const adjustOrbitDistance = useCameraStore((state) => state.adjustOrbitDistance)
+  const adjustOrbitHeading = useCameraStore((state) => state.adjustOrbitHeading)
+  const adjustOrbitPitch = useCameraStore((state) => state.adjustOrbitPitch)
   const moveForward = useCameraStore((state) => state.moveForward)
   const moveRight = useCameraStore((state) => state.moveRight)
   const resetViewStore = useCameraStore((state) => state.resetView)
@@ -133,8 +141,11 @@ export function useCesiumCamera(
     let targetHeading = heading
     let targetPitch = pitch
     let targetFov = fov
+    let cameraLat = offsetLat
+    let cameraLon = offsetLon
+    let cameraHeight = offsetHeight
 
-    // If following an aircraft, calculate heading/pitch to look at it
+    // If following an aircraft, calculate camera position and orientation
     if (followingCallsign && interpolatedAircraft) {
       const aircraft = interpolatedAircraft.get(followingCallsign)
       if (aircraft) {
@@ -142,36 +153,82 @@ export function useCesiumCamera(
         const aircraftLat = aircraft.interpolatedLatitude
         const aircraftLon = aircraft.interpolatedLongitude
         const aircraftAlt = aircraft.interpolatedAltitude
-
-        // Calculate bearing to aircraft from current position
-        const bearing = calculateBearing(
-          offsetLat,
-          offsetLon,
-          aircraftLat,
-          aircraftLon
-        )
-
-        // Calculate pitch based on altitude difference and distance
+        const aircraftHeading = aircraft.interpolatedHeading
         const altitudeMeters = aircraftAlt * 0.3048
-        const altitudeDiff = altitudeMeters - offsetHeight
 
-        // Approximate distance in meters
-        const latDiff = (aircraftLat - offsetLat) * 111111
-        const lonDiff = (aircraftLon - offsetLon) *
-          111111 * Math.cos(offsetLat * Math.PI / 180)
-        const horizontalDistance = Math.sqrt(latDiff * latDiff + lonDiff * lonDiff)
+        if (followMode === 'orbit') {
+          // ORBIT MODE: Camera orbits around aircraft
+          // orbitHeading is relative to aircraft's heading (0 = behind aircraft)
+          // Calculate absolute angle: aircraft heading + 180 (to be behind) + orbit offset
+          const absoluteOrbitAngle = aircraftHeading + 180 + orbitHeading
+          const orbitAngleRad = Cesium.Math.toRadians(absoluteOrbitAngle)
+          const orbitPitchRad = Cesium.Math.toRadians(orbitPitch)
 
-        const pitchAngle = Math.atan2(altitudeDiff, horizontalDistance) * 180 / Math.PI
+          // Calculate camera position using spherical coordinates relative to aircraft
+          const horizontalDistance = orbitDistance * Math.cos(orbitPitchRad)
+          const verticalOffset = orbitDistance * Math.sin(orbitPitchRad)
 
-        targetHeading = bearing
-        targetPitch = pitchAngle
+          // Convert horizontal distance to lat/lon offset
+          const metersToDegreesLat = 1 / 111111
+          const metersToDegreesLon = 1 / (111111 * Math.cos(aircraftLat * Math.PI / 180))
 
-        // Apply follow zoom to FOV
-        targetFov = Math.max(10, Math.min(120, 60 / followZoom))
+          // Camera position: aircraft position + spherical offset
+          // orbitAngle: 0 = North, 90 = East (compass direction)
+          cameraLat = aircraftLat + horizontalDistance * Math.cos(orbitAngleRad) * metersToDegreesLat
+          cameraLon = aircraftLon + horizontalDistance * Math.sin(orbitAngleRad) * metersToDegreesLon
+          cameraHeight = altitudeMeters + verticalOffset
 
-        // Update store with calculated values (for UI display)
-        setHeading(bearing)
-        setPitch(pitchAngle)
+          // Ensure camera doesn't go below ground (minimum 10m above ground)
+          const groundHeight = currentAirport?.elevation ? currentAirport.elevation * 0.3048 : 0
+          cameraHeight = Math.max(groundHeight + 10, cameraHeight)
+
+          // Calculate heading/pitch to look at aircraft from camera position
+          targetHeading = calculateBearing(cameraLat, cameraLon, aircraftLat, aircraftLon)
+
+          // Calculate pitch to look at aircraft
+          const latDiff = (aircraftLat - cameraLat) * 111111
+          const lonDiff = (aircraftLon - cameraLon) * 111111 * Math.cos(cameraLat * Math.PI / 180)
+          const distToAircraft = Math.sqrt(latDiff * latDiff + lonDiff * lonDiff)
+          const altDiff = altitudeMeters - cameraHeight
+          targetPitch = Math.atan2(altDiff, distToAircraft) * 180 / Math.PI
+
+          // Apply follow zoom to FOV
+          targetFov = Math.max(10, Math.min(120, 60 / followZoom))
+
+          // Update store with calculated values (for UI display)
+          setHeading(targetHeading)
+          setPitch(targetPitch)
+        } else {
+          // TOWER MODE: Camera stays at tower, rotates to look at aircraft
+          // Calculate bearing to aircraft from current position
+          const bearing = calculateBearing(
+            offsetLat,
+            offsetLon,
+            aircraftLat,
+            aircraftLon
+          )
+
+          // Calculate pitch based on altitude difference and distance
+          const altitudeDiff = altitudeMeters - offsetHeight
+
+          // Approximate distance in meters
+          const latDiff = (aircraftLat - offsetLat) * 111111
+          const lonDiff = (aircraftLon - offsetLon) *
+            111111 * Math.cos(offsetLat * Math.PI / 180)
+          const horizontalDistance = Math.sqrt(latDiff * latDiff + lonDiff * lonDiff)
+
+          const pitchAngle = Math.atan2(altitudeDiff, horizontalDistance) * 180 / Math.PI
+
+          targetHeading = bearing
+          targetPitch = pitchAngle
+
+          // Apply follow zoom to FOV
+          targetFov = Math.max(10, Math.min(120, 60 / followZoom))
+
+          // Update store with calculated values (for UI display)
+          setHeading(bearing)
+          setPitch(pitchAngle)
+        }
       } else {
         // Aircraft no longer exists, stop following
         stopFollowingStore()
@@ -180,9 +237,9 @@ export function useCesiumCamera(
 
     // Set camera position and orientation
     const cameraPosition = Cesium.Cartesian3.fromDegrees(
-      offsetLon,
-      offsetLat,
-      offsetHeight
+      cameraLon,
+      cameraLat,
+      cameraHeight
     )
 
     viewer.camera.setView({
@@ -211,7 +268,11 @@ export function useCesiumCamera(
     topdownAltitude,
     currentAirport,
     followingCallsign,
+    followMode,
     followZoom,
+    orbitDistance,
+    orbitHeading,
+    orbitPitch,
     interpolatedAircraft,
     setHeading,
     setPitch,
@@ -230,8 +291,9 @@ export function useCesiumCamera(
       isDraggingRef.current = true
       lastMousePosRef.current = { x: movement.position.x, y: movement.position.y }
 
-      // Stop following when user starts dragging
-      if (followingCallsign) {
+      // In tower follow mode, stop following when user starts dragging
+      // In orbit mode, allow drag to orbit around the aircraft
+      if (followingCallsign && followMode === 'tower') {
         stopFollowingStore()
       }
     }, Cesium.ScreenSpaceEventType.RIGHT_DOWN)
@@ -241,7 +303,8 @@ export function useCesiumCamera(
       isDraggingRef.current = true
       lastMousePosRef.current = { x: movement.position.x, y: movement.position.y }
 
-      if (followingCallsign) {
+      // In tower follow mode, stop following when user starts dragging
+      if (followingCallsign && followMode === 'tower') {
         stopFollowingStore()
       }
     }, Cesium.ScreenSpaceEventType.MIDDLE_DOWN)
@@ -256,11 +319,16 @@ export function useCesiumCamera(
       // Sensitivity
       const sensitivity = 0.3
 
-      // Update heading (horizontal movement) - positive deltaX = look right
-      adjustHeading(deltaX * sensitivity)
-
-      // Update pitch (vertical movement) - positive deltaY = look down
-      adjustPitch(-deltaY * sensitivity)
+      if (followingCallsign && followMode === 'orbit') {
+        // In orbit mode: adjust orbit heading/pitch
+        adjustOrbitHeading(deltaX * sensitivity)
+        adjustOrbitPitch(deltaY * sensitivity)
+      } else {
+        // Normal mode: update heading (horizontal movement) - positive deltaX = look right
+        adjustHeading(deltaX * sensitivity)
+        // Update pitch (vertical movement) - positive deltaY = look down
+        adjustPitch(-deltaY * sensitivity)
+      }
 
       lastMousePosRef.current = { x: movement.endPosition.x, y: movement.endPosition.y }
     }, Cesium.ScreenSpaceEventType.MOUSE_MOVE)
@@ -286,7 +354,7 @@ export function useCesiumCamera(
       handler.destroy()
       canvas.removeEventListener('contextmenu', handleContextMenu)
     }
-  }, [viewer, followingCallsign, adjustHeading, adjustPitch, stopFollowingStore])
+  }, [viewer, followingCallsign, followMode, adjustHeading, adjustPitch, adjustOrbitHeading, adjustOrbitPitch, stopFollowingStore])
 
   // Mouse wheel for zoom
   useEffect(() => {
@@ -299,8 +367,12 @@ export function useCesiumCamera(
         // In top-down mode, adjust altitude
         const altitudeSpeed = 100
         adjustTopdownAltitude(event.deltaY > 0 ? altitudeSpeed : -altitudeSpeed)
+      } else if (followingCallsign && followMode === 'orbit') {
+        // In orbit mode, adjust orbit distance
+        const distanceSpeed = 50
+        adjustOrbitDistance(event.deltaY > 0 ? distanceSpeed : -distanceSpeed)
       } else if (followingCallsign) {
-        // When following, adjust follow zoom
+        // In tower follow mode, adjust follow zoom
         adjustFollowZoom(event.deltaY > 0 ? -0.1 : 0.1)
       } else {
         // When not following, adjust FOV
@@ -316,7 +388,7 @@ export function useCesiumCamera(
     return () => {
       canvas.removeEventListener('wheel', handleWheel)
     }
-  }, [viewer, viewMode, followingCallsign, adjustFov, adjustFollowZoom, adjustTopdownAltitude])
+  }, [viewer, viewMode, followingCallsign, followMode, adjustFov, adjustFollowZoom, adjustOrbitDistance, adjustTopdownAltitude])
 
   // Keyboard controls
   useEffect(() => {
@@ -352,22 +424,38 @@ export function useCesiumCamera(
           moveRight(moveDistance)
           break
 
-        // Arrow keys for camera rotation
+        // Arrow keys for camera rotation / orbit control
         case 'ArrowLeft':
-          adjustHeading(-rotateAmount)
-          if (followingCallsign) stopFollowingStore()
+          if (followingCallsign && followMode === 'orbit') {
+            adjustOrbitHeading(-rotateAmount)
+          } else {
+            adjustHeading(-rotateAmount)
+            if (followingCallsign) stopFollowingStore()
+          }
           break
         case 'ArrowRight':
-          adjustHeading(rotateAmount)
-          if (followingCallsign) stopFollowingStore()
+          if (followingCallsign && followMode === 'orbit') {
+            adjustOrbitHeading(rotateAmount)
+          } else {
+            adjustHeading(rotateAmount)
+            if (followingCallsign) stopFollowingStore()
+          }
           break
         case 'ArrowUp':
-          adjustPitch(rotateAmount)
-          if (followingCallsign) stopFollowingStore()
+          if (followingCallsign && followMode === 'orbit') {
+            adjustOrbitPitch(rotateAmount)
+          } else {
+            adjustPitch(rotateAmount)
+            if (followingCallsign) stopFollowingStore()
+          }
           break
         case 'ArrowDown':
-          adjustPitch(-rotateAmount)
-          if (followingCallsign) stopFollowingStore()
+          if (followingCallsign && followMode === 'orbit') {
+            adjustOrbitPitch(-rotateAmount)
+          } else {
+            adjustPitch(-rotateAmount)
+            if (followingCallsign) stopFollowingStore()
+          }
           break
 
         // View mode toggle
@@ -390,6 +478,8 @@ export function useCesiumCamera(
         case '=':
           if (viewMode === 'topdown') {
             adjustTopdownAltitude(-200)
+          } else if (followingCallsign && followMode === 'orbit') {
+            adjustOrbitDistance(-100)
           } else if (followingCallsign) {
             adjustFollowZoom(0.2)
           } else {
@@ -400,10 +490,20 @@ export function useCesiumCamera(
         case '_':
           if (viewMode === 'topdown') {
             adjustTopdownAltitude(200)
+          } else if (followingCallsign && followMode === 'orbit') {
+            adjustOrbitDistance(100)
           } else if (followingCallsign) {
             adjustFollowZoom(-0.2)
           } else {
             adjustFov(zoomAmount)
+          }
+          break
+
+        // Toggle follow mode (tower/orbit) when following
+        case 'o':
+        case 'O':
+          if (followingCallsign) {
+            toggleFollowMode()
           }
           break
 
@@ -422,11 +522,16 @@ export function useCesiumCamera(
     viewer,
     viewMode,
     followingCallsign,
+    followMode,
     adjustHeading,
     adjustPitch,
     adjustFov,
     adjustTopdownAltitude,
     adjustFollowZoom,
+    adjustOrbitHeading,
+    adjustOrbitPitch,
+    adjustOrbitDistance,
+    toggleFollowMode,
     moveForward,
     moveRight,
     toggleViewMode,

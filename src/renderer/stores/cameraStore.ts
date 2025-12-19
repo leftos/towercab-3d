@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist, subscribeWithSelector } from 'zustand/middleware'
 
 export type ViewMode = '3d' | 'topdown'
+export type FollowMode = 'tower' | 'orbit'
 
 // Debounce timer for auto-save
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
@@ -51,7 +52,13 @@ interface CameraStore {
 
   // Follow mode
   followingCallsign: string | null
+  followMode: FollowMode
   followZoom: number
+
+  // Orbit follow mode parameters
+  orbitDistance: number    // Distance from aircraft in meters
+  orbitHeading: number     // Angle around aircraft (0=behind, relative to aircraft heading)
+  orbitPitch: number       // Angle above/below aircraft level (-89 to 89)
 
   // Persisted per-airport settings
   airportSettings: PersistedCameraSettings
@@ -77,8 +84,18 @@ interface CameraStore {
   // Follow actions
   followAircraft: (callsign: string) => void
   stopFollowing: () => void
+  setFollowMode: (mode: FollowMode) => void
+  toggleFollowMode: () => void
   setFollowZoom: (zoom: number) => void
   adjustFollowZoom: (delta: number) => void
+
+  // Orbit mode actions
+  setOrbitDistance: (distance: number) => void
+  adjustOrbitDistance: (delta: number) => void
+  setOrbitHeading: (heading: number) => void
+  adjustOrbitHeading: (delta: number) => void
+  setOrbitPitch: (pitch: number) => void
+  adjustOrbitPitch: (delta: number) => void
 
   // Airport-specific actions
   setCurrentAirport: (icao: string) => void
@@ -94,6 +111,11 @@ const DEFAULT_PITCH = -15
 const DEFAULT_FOV = 60
 const DEFAULT_FOLLOW_ZOOM = 1.0
 const DEFAULT_TOPDOWN_ALTITUDE = 2000
+
+// Orbit follow mode defaults
+const DEFAULT_ORBIT_DISTANCE = 500    // meters
+const DEFAULT_ORBIT_HEADING = 0       // behind aircraft (0=behind, 90=right, 180=front, 270=left)
+const DEFAULT_ORBIT_PITCH = 15        // slightly above aircraft
 
 const DEFAULT_3D_SETTINGS: ViewSettings = {
   heading: DEFAULT_HEADING,
@@ -146,7 +168,11 @@ export const useCameraStore = create<CameraStore>()(
       positionOffsetZ: 0,
       topdownAltitude: DEFAULT_TOPDOWN_ALTITUDE,
       followingCallsign: null,
+      followMode: 'tower' as FollowMode,
       followZoom: DEFAULT_FOLLOW_ZOOM,
+      orbitDistance: DEFAULT_ORBIT_DISTANCE,
+      orbitHeading: DEFAULT_ORBIT_HEADING,
+      orbitPitch: DEFAULT_ORBIT_PITCH,
       airportSettings: {},
 
       // Save current view settings to the persisted store
@@ -328,12 +354,26 @@ export const useCameraStore = create<CameraStore>()(
       followAircraft: (callsign: string) => {
         set({
           followingCallsign: callsign,
-          followZoom: DEFAULT_FOLLOW_ZOOM
+          followZoom: DEFAULT_FOLLOW_ZOOM,
+          orbitDistance: DEFAULT_ORBIT_DISTANCE,
+          orbitHeading: DEFAULT_ORBIT_HEADING,
+          orbitPitch: DEFAULT_ORBIT_PITCH
         })
       },
 
       stopFollowing: () => {
         set({ followingCallsign: null })
+      },
+
+      setFollowMode: (mode: FollowMode) => {
+        set({ followMode: mode })
+      },
+
+      toggleFollowMode: () => {
+        const { followMode, followingCallsign } = get()
+        if (followingCallsign) {
+          set({ followMode: followMode === 'tower' ? 'orbit' : 'tower' })
+        }
       },
 
       setFollowZoom: (zoom: number) => {
@@ -344,6 +384,37 @@ export const useCameraStore = create<CameraStore>()(
       adjustFollowZoom: (delta: number) => {
         const { followZoom, setFollowZoom } = get()
         setFollowZoom(followZoom + delta)
+      },
+
+      // Orbit mode actions
+      setOrbitDistance: (distance: number) => {
+        const clamped = Math.max(50, Math.min(5000, distance))
+        set({ orbitDistance: clamped })
+      },
+
+      adjustOrbitDistance: (delta: number) => {
+        const { orbitDistance, setOrbitDistance } = get()
+        setOrbitDistance(orbitDistance + delta)
+      },
+
+      setOrbitHeading: (heading: number) => {
+        const normalized = ((heading % 360) + 360) % 360
+        set({ orbitHeading: normalized })
+      },
+
+      adjustOrbitHeading: (delta: number) => {
+        const { orbitHeading, setOrbitHeading } = get()
+        setOrbitHeading(orbitHeading + delta)
+      },
+
+      setOrbitPitch: (pitch: number) => {
+        const clamped = Math.max(-89, Math.min(89, pitch))
+        set({ orbitPitch: clamped })
+      },
+
+      adjustOrbitPitch: (delta: number) => {
+        const { orbitPitch, setOrbitPitch } = get()
+        setOrbitPitch(orbitPitch + delta)
       },
 
       // Reset all
@@ -361,7 +432,11 @@ export const useCameraStore = create<CameraStore>()(
           positionOffsetZ: 0,
           topdownAltitude: defaults.topdownAltitude,
           followingCallsign: null,
-          followZoom: DEFAULT_FOLLOW_ZOOM
+          followMode: 'tower' as FollowMode,
+          followZoom: DEFAULT_FOLLOW_ZOOM,
+          orbitDistance: DEFAULT_ORBIT_DISTANCE,
+          orbitHeading: DEFAULT_ORBIT_HEADING,
+          orbitPitch: DEFAULT_ORBIT_PITCH
         })
       }
     }),

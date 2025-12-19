@@ -31,7 +31,10 @@ function AircraftPanel() {
   const followingCallsign = useCameraStore((state) => state.followingCallsign)
   const followAircraft = useCameraStore((state) => state.followAircraft)
   const stopFollowing = useCameraStore((state) => state.stopFollowing)
+  const followMode = useCameraStore((state) => state.followMode)
+  const toggleFollowMode = useCameraStore((state) => state.toggleFollowMode)
   const followZoom = useCameraStore((state) => state.followZoom)
+  const orbitDistance = useCameraStore((state) => state.orbitDistance)
 
   const nearbyAircraft = useMemo((): AircraftListItem[] => {
     if (!currentAirport) return []
@@ -93,8 +96,19 @@ function AircraftPanel() {
             <span className="following-label">Following</span>
             <span className="following-callsign">{followingCallsign}</span>
           </div>
+          <button
+            className={`follow-mode-btn ${followMode}`}
+            onClick={toggleFollowMode}
+            title="Toggle follow mode (O)"
+          >
+            {followMode === 'tower' ? 'Tower' : 'Orbit'}
+          </button>
           <div className="zoom-control">
-            <span className="zoom-label">Zoom: {followZoom.toFixed(1)}x</span>
+            {followMode === 'orbit' ? (
+              <span className="zoom-label">Dist: {orbitDistance}m</span>
+            ) : (
+              <span className="zoom-label">Zoom: {followZoom.toFixed(1)}x</span>
+            )}
           </div>
           <button className="stop-following-btn" onClick={stopFollowing}>
             Stop (Esc)
