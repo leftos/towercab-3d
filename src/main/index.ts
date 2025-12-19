@@ -1,11 +1,70 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, shell, screen } from 'electron'
 import { join } from 'path'
+import { readFileSync, writeFileSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 
+interface WindowBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+  isMaximized: boolean
+}
+
+const BOUNDS_FILE = join(app.getPath('userData'), 'window-bounds.json')
+
+function loadWindowBounds(): WindowBounds | null {
+  try {
+    const data = readFileSync(BOUNDS_FILE, 'utf-8')
+    return JSON.parse(data) as WindowBounds
+  } catch {
+    return null
+  }
+}
+
+function saveWindowBounds(window: BrowserWindow): void {
+  const bounds = window.getBounds()
+  const isMaximized = window.isMaximized()
+  const data: WindowBounds = { ...bounds, isMaximized }
+  try {
+    writeFileSync(BOUNDS_FILE, JSON.stringify(data))
+  } catch {
+    // Ignore write errors
+  }
+}
+
+function getValidBounds(saved: WindowBounds | null): Partial<WindowBounds> {
+  if (!saved) return { width: 1600, height: 900 }
+
+  // Check if saved position is still on a visible display
+  const displays = screen.getAllDisplays()
+  const isOnScreen = displays.some((display) => {
+    const { x, y, width, height } = display.bounds
+    return (
+      saved.x >= x &&
+      saved.x < x + width &&
+      saved.y >= y &&
+      saved.y < y + height
+    )
+  })
+
+  if (isOnScreen) {
+    return saved
+  }
+
+  // Position off-screen, use saved size but default position
+  return { width: saved.width, height: saved.height }
+}
+
 function createWindow(): void {
+  const savedBounds = loadWindowBounds()
+  const bounds = getValidBounds(savedBounds)
+
   const mainWindow = new BrowserWindow({
-    width: 1600,
-    height: 900,
+    width: bounds.width ?? 1600,
+    height: bounds.height ?? 900,
+    x: bounds.x,
+    y: bounds.y,
     minWidth: 1024,
     minHeight: 768,
     show: false,
@@ -17,6 +76,14 @@ function createWindow(): void {
       nodeIntegration: false
     }
   })
+
+  // Restore maximized state
+  if (savedBounds?.isMaximized) {
+    mainWindow.maximize()
+  }
+
+  // Save bounds when window is moved, resized, or closed
+  mainWindow.on('close', () => saveWindowBounds(mainWindow))
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()

@@ -23,6 +23,7 @@ interface ViewSettings {
 interface AirportCameraSettings {
   '3d': ViewSettings
   'topdown': ViewSettings
+  lastViewMode: ViewMode
 }
 
 // Storage format for persisted settings
@@ -140,7 +141,8 @@ const DEFAULT_TOPDOWN_SETTINGS: ViewSettings = {
 
 const getDefaultAirportSettings = (): AirportCameraSettings => ({
   '3d': { ...DEFAULT_3D_SETTINGS },
-  'topdown': { ...DEFAULT_TOPDOWN_SETTINGS }
+  'topdown': { ...DEFAULT_TOPDOWN_SETTINGS },
+  lastViewMode: '3d'
 })
 
 // Schedule a debounced auto-save
@@ -197,6 +199,7 @@ export const useCameraStore = create<CameraStore>()(
           airportSettings[icao] = getDefaultAirportSettings()
         }
         airportSettings[icao][state.viewMode] = currentSettings
+        airportSettings[icao].lastViewMode = state.viewMode
 
         set({ airportSettings })
       },
@@ -238,8 +241,8 @@ export const useCameraStore = create<CameraStore>()(
         const state = get()
         const normalizedIcao = icao.toUpperCase()
 
-        // Save current airport's settings before switching
-        if (state.currentAirportIcao) {
+        // Save current airport's settings before switching (only if switching to a different airport)
+        if (state.currentAirportIcao && state.currentAirportIcao !== normalizedIcao) {
           state.saveCurrentViewSettings()
         }
 
@@ -249,13 +252,17 @@ export const useCameraStore = create<CameraStore>()(
           airportSettings[normalizedIcao] = getDefaultAirportSettings()
         }
 
+        // Get the saved view mode for this airport (default to '3d' for legacy settings)
+        const savedViewMode = airportSettings[normalizedIcao].lastViewMode || '3d'
+
         set({
           currentAirportIcao: normalizedIcao,
-          airportSettings
+          airportSettings,
+          viewMode: savedViewMode
         })
 
-        // Load settings for current view mode
-        get().loadViewSettings(state.viewMode)
+        // Load settings for the saved view mode
+        get().loadViewSettings(savedViewMode)
       },
 
       // View mode
@@ -456,9 +463,33 @@ export const useCameraStore = create<CameraStore>()(
         name: 'camera-store',
         partialize: (state) => ({
           airportSettings: state.airportSettings,
-          currentAirportIcao: state.currentAirportIcao,
-          viewMode: state.viewMode
-        })
+          currentAirportIcao: state.currentAirportIcao
+        }),
+        onRehydrateStorage: () => (state) => {
+          // After rehydration, load the saved camera settings for the current airport
+          if (state && state.currentAirportIcao) {
+            const icao = state.currentAirportIcao
+            const settings = state.airportSettings[icao]
+            if (settings) {
+              // Get the saved view mode (default to '3d' for legacy settings)
+              const savedViewMode = settings.lastViewMode || '3d'
+              const viewSettings = settings[savedViewMode]
+              if (viewSettings) {
+                // Apply the saved settings
+                useCameraStore.setState({
+                  viewMode: savedViewMode,
+                  heading: viewSettings.heading,
+                  pitch: viewSettings.pitch,
+                  fov: viewSettings.fov,
+                  positionOffsetX: viewSettings.positionOffsetX,
+                  positionOffsetY: viewSettings.positionOffsetY,
+                  positionOffsetZ: viewSettings.positionOffsetZ,
+                  topdownAltitude: viewSettings.topdownAltitude
+                })
+              }
+            }
+          }
+        }
       }
     )
   )
