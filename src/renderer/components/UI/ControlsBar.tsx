@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useCameraStore } from '../../stores/cameraStore'
+import GlobalSearchPanel from './GlobalSearchPanel'
 import './ControlsBar.css'
 
 function ControlsBar() {
@@ -66,6 +67,8 @@ function ControlsBar() {
             )}
             {viewMode === '3d' ? '3D' : '2D'}
           </button>
+
+          <GlobalSearchPanel />
 
           <div className="camera-info">
             {viewMode === 'topdown' ? (
@@ -225,15 +228,19 @@ function ControlsBar() {
                     <span className="action">Follow aircraft</span>
                   </div>
                   <div className="shortcut">
+                    <span className="keys">Ctrl+K</span>
+                    <span className="action">Global aircraft search</span>
+                  </div>
+                  <div className="shortcut">
+                    <span className="keys">O</span>
+                    <span className="action">Toggle orbit mode</span>
+                  </div>
+                  <div className="shortcut">
                     <span className="keys">Scroll (following)</span>
-                    <span className="action">Adjust zoom</span>
+                    <span className="action">Adjust zoom/distance</span>
                   </div>
                   <div className="shortcut">
                     <span className="keys">Escape</span>
-                    <span className="action">Stop following</span>
-                  </div>
-                  <div className="shortcut">
-                    <span className="keys">Drag/Arrow keys</span>
                     <span className="action">Stop following</span>
                   </div>
                 </div>

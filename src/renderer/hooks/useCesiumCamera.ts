@@ -101,6 +101,79 @@ export function useCesiumCamera(
     if (!viewer) return
 
     const towerPos = getTowerPos()
+
+    // Handle orbit mode following without requiring an airport
+    if (followingCallsign && followMode === 'orbit' && interpolatedAircraft) {
+      const aircraft = interpolatedAircraft.get(followingCallsign)
+      if (aircraft) {
+        // Use interpolated positions for smooth tracking
+        const aircraftLat = aircraft.interpolatedLatitude
+        const aircraftLon = aircraft.interpolatedLongitude
+        const aircraftAlt = aircraft.interpolatedAltitude
+        const aircraftHeading = aircraft.interpolatedHeading
+        const altitudeMeters = aircraftAlt * 0.3048
+
+        // ORBIT MODE: Camera orbits around aircraft
+        const absoluteOrbitAngle = aircraftHeading + 180 + orbitHeading
+        const orbitAngleRad = Cesium.Math.toRadians(absoluteOrbitAngle)
+        const orbitPitchRad = Cesium.Math.toRadians(orbitPitch)
+
+        // Calculate camera position using spherical coordinates relative to aircraft
+        const horizontalDistance = orbitDistance * Math.cos(orbitPitchRad)
+        const verticalOffset = orbitDistance * Math.sin(orbitPitchRad)
+
+        // Convert horizontal distance to lat/lon offset
+        const metersToDegreesLatOrbit = 1 / 111111
+        const metersToDegreesLonOrbit = 1 / (111111 * Math.cos(aircraftLat * Math.PI / 180))
+
+        // Camera position: aircraft position + spherical offset
+        const cameraLat = aircraftLat + horizontalDistance * Math.cos(orbitAngleRad) * metersToDegreesLatOrbit
+        const cameraLon = aircraftLon + horizontalDistance * Math.sin(orbitAngleRad) * metersToDegreesLonOrbit
+        let cameraHeight = altitudeMeters + verticalOffset
+
+        // Ensure camera doesn't go below ground (minimum 10m)
+        cameraHeight = Math.max(10, cameraHeight)
+
+        // Calculate heading/pitch to look at aircraft from camera position
+        const targetHeading = calculateBearing(cameraLat, cameraLon, aircraftLat, aircraftLon)
+
+        // Calculate pitch to look at aircraft
+        const latDiff = (aircraftLat - cameraLat) * 111111
+        const lonDiff = (aircraftLon - cameraLon) * 111111 * Math.cos(cameraLat * Math.PI / 180)
+        const distToAircraft = Math.sqrt(latDiff * latDiff + lonDiff * lonDiff)
+        const altDiff = altitudeMeters - cameraHeight
+        const targetPitch = Math.atan2(altDiff, distToAircraft) * 180 / Math.PI
+
+        // Apply follow zoom to FOV
+        const targetFov = Math.max(10, Math.min(120, 60 / followZoom))
+
+        // Update store with calculated values (for UI display)
+        setHeading(targetHeading)
+        setPitch(targetPitch)
+
+        // Set camera position and orientation
+        const cameraPosition = Cesium.Cartesian3.fromDegrees(cameraLon, cameraLat, cameraHeight)
+        viewer.camera.setView({
+          destination: cameraPosition,
+          orientation: {
+            heading: Cesium.Math.toRadians(targetHeading),
+            pitch: Cesium.Math.toRadians(targetPitch),
+            roll: 0
+          }
+        })
+
+        // Set FOV
+        if (viewer.camera.frustum instanceof Cesium.PerspectiveFrustum) {
+          viewer.camera.frustum.fov = Cesium.Math.toRadians(targetFov)
+        }
+        return
+      } else {
+        // Aircraft no longer exists, stop following
+        stopFollowingStore()
+      }
+    }
+
+    // For all other modes, we need a tower position
     if (!towerPos) return
 
     // Apply position offsets (convert meters to degrees approximately)
@@ -145,90 +218,45 @@ export function useCesiumCamera(
     let cameraLon = offsetLon
     let cameraHeight = offsetHeight
 
-    // If following an aircraft, calculate camera position and orientation
-    if (followingCallsign && interpolatedAircraft) {
+    // If following an aircraft in tower mode
+    if (followingCallsign && followMode === 'tower' && interpolatedAircraft) {
       const aircraft = interpolatedAircraft.get(followingCallsign)
       if (aircraft) {
         // Use interpolated positions for smooth tracking
         const aircraftLat = aircraft.interpolatedLatitude
         const aircraftLon = aircraft.interpolatedLongitude
         const aircraftAlt = aircraft.interpolatedAltitude
-        const aircraftHeading = aircraft.interpolatedHeading
         const altitudeMeters = aircraftAlt * 0.3048
 
-        if (followMode === 'orbit') {
-          // ORBIT MODE: Camera orbits around aircraft
-          // orbitHeading is relative to aircraft's heading (0 = behind aircraft)
-          // Calculate absolute angle: aircraft heading + 180 (to be behind) + orbit offset
-          const absoluteOrbitAngle = aircraftHeading + 180 + orbitHeading
-          const orbitAngleRad = Cesium.Math.toRadians(absoluteOrbitAngle)
-          const orbitPitchRad = Cesium.Math.toRadians(orbitPitch)
+        // TOWER MODE: Camera stays at tower, rotates to look at aircraft
+        // Calculate bearing to aircraft from current position
+        const bearing = calculateBearing(
+          offsetLat,
+          offsetLon,
+          aircraftLat,
+          aircraftLon
+        )
 
-          // Calculate camera position using spherical coordinates relative to aircraft
-          const horizontalDistance = orbitDistance * Math.cos(orbitPitchRad)
-          const verticalOffset = orbitDistance * Math.sin(orbitPitchRad)
+        // Calculate pitch based on altitude difference and distance
+        const altitudeDiff = altitudeMeters - offsetHeight
 
-          // Convert horizontal distance to lat/lon offset
-          const metersToDegreesLat = 1 / 111111
-          const metersToDegreesLon = 1 / (111111 * Math.cos(aircraftLat * Math.PI / 180))
+        // Approximate distance in meters
+        const latDiff = (aircraftLat - offsetLat) * 111111
+        const lonDiff = (aircraftLon - offsetLon) *
+          111111 * Math.cos(offsetLat * Math.PI / 180)
+        const horizontalDistance = Math.sqrt(latDiff * latDiff + lonDiff * lonDiff)
 
-          // Camera position: aircraft position + spherical offset
-          // orbitAngle: 0 = North, 90 = East (compass direction)
-          cameraLat = aircraftLat + horizontalDistance * Math.cos(orbitAngleRad) * metersToDegreesLat
-          cameraLon = aircraftLon + horizontalDistance * Math.sin(orbitAngleRad) * metersToDegreesLon
-          cameraHeight = altitudeMeters + verticalOffset
+        const pitchAngle = Math.atan2(altitudeDiff, horizontalDistance) * 180 / Math.PI
 
-          // Ensure camera doesn't go below ground (minimum 10m above ground)
-          const groundHeight = currentAirport?.elevation ? currentAirport.elevation * 0.3048 : 0
-          cameraHeight = Math.max(groundHeight + 10, cameraHeight)
+        targetHeading = bearing
+        targetPitch = pitchAngle
 
-          // Calculate heading/pitch to look at aircraft from camera position
-          targetHeading = calculateBearing(cameraLat, cameraLon, aircraftLat, aircraftLon)
+        // Apply follow zoom to FOV
+        targetFov = Math.max(10, Math.min(120, 60 / followZoom))
 
-          // Calculate pitch to look at aircraft
-          const latDiff = (aircraftLat - cameraLat) * 111111
-          const lonDiff = (aircraftLon - cameraLon) * 111111 * Math.cos(cameraLat * Math.PI / 180)
-          const distToAircraft = Math.sqrt(latDiff * latDiff + lonDiff * lonDiff)
-          const altDiff = altitudeMeters - cameraHeight
-          targetPitch = Math.atan2(altDiff, distToAircraft) * 180 / Math.PI
-
-          // Apply follow zoom to FOV
-          targetFov = Math.max(10, Math.min(120, 60 / followZoom))
-
-          // Update store with calculated values (for UI display)
-          setHeading(targetHeading)
-          setPitch(targetPitch)
-        } else {
-          // TOWER MODE: Camera stays at tower, rotates to look at aircraft
-          // Calculate bearing to aircraft from current position
-          const bearing = calculateBearing(
-            offsetLat,
-            offsetLon,
-            aircraftLat,
-            aircraftLon
-          )
-
-          // Calculate pitch based on altitude difference and distance
-          const altitudeDiff = altitudeMeters - offsetHeight
-
-          // Approximate distance in meters
-          const latDiff = (aircraftLat - offsetLat) * 111111
-          const lonDiff = (aircraftLon - offsetLon) *
-            111111 * Math.cos(offsetLat * Math.PI / 180)
-          const horizontalDistance = Math.sqrt(latDiff * latDiff + lonDiff * lonDiff)
-
-          const pitchAngle = Math.atan2(altitudeDiff, horizontalDistance) * 180 / Math.PI
-
-          targetHeading = bearing
-          targetPitch = pitchAngle
-
-          // Apply follow zoom to FOV
-          targetFov = Math.max(10, Math.min(120, 60 / followZoom))
-
-          // Update store with calculated values (for UI display)
-          setHeading(bearing)
-          setPitch(pitchAngle)
-        }
+        // Update store with calculated values (for UI display)
+        setHeading(bearing)
+        setPitch(pitchAngle)
       } else {
         // Aircraft no longer exists, stop following
         stopFollowingStore()

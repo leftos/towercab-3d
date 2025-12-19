@@ -83,6 +83,7 @@ interface CameraStore {
 
   // Follow actions
   followAircraft: (callsign: string) => void
+  followAircraftInOrbit: (callsign: string) => void
   stopFollowing: () => void
   setFollowMode: (mode: FollowMode) => void
   toggleFollowMode: () => void
@@ -114,8 +115,8 @@ const DEFAULT_TOPDOWN_ALTITUDE = 2000
 
 // Orbit follow mode defaults
 const DEFAULT_ORBIT_DISTANCE = 500    // meters
-const DEFAULT_ORBIT_HEADING = 0       // behind aircraft (0=behind, 90=right, 180=front, 270=left)
-const DEFAULT_ORBIT_PITCH = 15        // slightly above aircraft
+const DEFAULT_ORBIT_HEADING = 315     // back-left of aircraft (0=behind, 90=right, 180=front, 270=left)
+const DEFAULT_ORBIT_PITCH = 15        // 15 degree angle above aircraft
 
 const DEFAULT_3D_SETTINGS: ViewSettings = {
   heading: DEFAULT_HEADING,
@@ -354,6 +355,17 @@ export const useCameraStore = create<CameraStore>()(
       followAircraft: (callsign: string) => {
         set({
           followingCallsign: callsign,
+          followZoom: DEFAULT_FOLLOW_ZOOM,
+          orbitDistance: DEFAULT_ORBIT_DISTANCE,
+          orbitHeading: DEFAULT_ORBIT_HEADING,
+          orbitPitch: DEFAULT_ORBIT_PITCH
+        })
+      },
+
+      followAircraftInOrbit: (callsign: string) => {
+        set({
+          followingCallsign: callsign,
+          followMode: 'orbit' as FollowMode,
           followZoom: DEFAULT_FOLLOW_ZOOM,
           orbitDistance: DEFAULT_ORBIT_DISTANCE,
           orbitHeading: DEFAULT_ORBIT_HEADING,

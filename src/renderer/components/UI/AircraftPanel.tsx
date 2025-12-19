@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useAirportStore } from '../../stores/airportStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useCameraStore } from '../../stores/cameraStore'
@@ -7,6 +7,8 @@ import { calculateDistanceNM, calculateBearing } from '../../utils/interpolation
 import { formatAltitude, formatGroundspeed, formatHeading } from '../../utils/towerHeight'
 import { getTowerPosition } from '../../utils/towerHeight'
 import './AircraftPanel.css'
+
+type SortOption = 'distance' | 'callsign' | 'altitude' | 'speed'
 
 interface AircraftListItem {
   callsign: string
@@ -27,6 +29,10 @@ function AircraftPanel() {
   const showAircraftPanel = useSettingsStore((state) => state.showAircraftPanel)
   const labelVisibilityDistance = useSettingsStore((state) => state.labelVisibilityDistance)
 
+  // Local state for sorting and searching
+  const [sortOption, setSortOption] = useState<SortOption>('distance')
+  const [searchQuery, setSearchQuery] = useState('')
+
   // Camera store for follow functionality
   const followingCallsign = useCameraStore((state) => state.followingCallsign)
   const followAircraft = useCameraStore((state) => state.followAircraft)
@@ -36,22 +42,50 @@ function AircraftPanel() {
   const followZoom = useCameraStore((state) => state.followZoom)
   const orbitDistance = useCameraStore((state) => state.orbitDistance)
 
+  // Determine if we're in orbit mode without an airport (following an aircraft globally)
+  const isOrbitModeWithoutAirport = followMode === 'orbit' && followingCallsign && !currentAirport
+
+  // Get the followed aircraft data for orbit mode display
+  const followedAircraftData = useMemo(() => {
+    if (!followingCallsign) return null
+    return interpolatedStates.get(followingCallsign) || null
+  }, [followingCallsign, interpolatedStates])
+
   const nearbyAircraft = useMemo((): AircraftListItem[] => {
-    if (!currentAirport) return []
+    // Determine reference point for distance/bearing calculations
+    let refLat: number
+    let refLon: number
 
-    const towerPos = getTowerPosition(currentAirport, towerHeight)
+    if (isOrbitModeWithoutAirport && followedAircraftData) {
+      // In orbit mode without airport, use followed aircraft as reference
+      refLat = followedAircraftData.interpolatedLatitude
+      refLon = followedAircraftData.interpolatedLongitude
+    } else if (currentAirport) {
+      // Normal mode: use tower position
+      const towerPos = getTowerPosition(currentAirport, towerHeight)
+      refLat = towerPos.latitude
+      refLon = towerPos.longitude
+    } else {
+      // No reference point available
+      return []
+    }
 
-    return Array.from(interpolatedStates.values())
+    const query = searchQuery.toLowerCase().trim()
+
+    const mapped = Array.from(interpolatedStates.values())
+      // In orbit mode without airport, exclude the followed aircraft from the "nearby" list
+      // (it will be shown separately at the top)
+      .filter((aircraft) => !(isOrbitModeWithoutAirport && aircraft.callsign === followingCallsign))
       .map((aircraft) => {
         const distance = calculateDistanceNM(
-          towerPos.latitude,
-          towerPos.longitude,
+          refLat,
+          refLon,
           aircraft.interpolatedLatitude,
           aircraft.interpolatedLongitude
         )
         const bearing = calculateBearing(
-          towerPos.latitude,
-          towerPos.longitude,
+          refLat,
+          refLon,
           aircraft.interpolatedLatitude,
           aircraft.interpolatedLongitude
         )
@@ -69,9 +103,34 @@ function AircraftPanel() {
         }
       })
       .filter((a) => a.distance <= labelVisibilityDistance)
-      .sort((a, b) => a.distance - b.distance)
-      .slice(0, 50)
-  }, [interpolatedStates, currentAirport, towerHeight, labelVisibilityDistance])
+
+    // Apply search filter
+    const filtered = query
+      ? mapped.filter((a) =>
+          a.callsign.toLowerCase().includes(query) ||
+          a.aircraftType?.toLowerCase().includes(query) ||
+          a.departure?.toLowerCase().includes(query) ||
+          a.arrival?.toLowerCase().includes(query)
+        )
+      : mapped
+
+    // Apply sorting
+    const sorted = filtered.sort((a, b) => {
+      switch (sortOption) {
+        case 'callsign':
+          return a.callsign.localeCompare(b.callsign)
+        case 'altitude':
+          return b.altitude - a.altitude // Highest first
+        case 'speed':
+          return b.groundspeed - a.groundspeed // Fastest first
+        case 'distance':
+        default:
+          return a.distance - b.distance // Closest first
+      }
+    })
+
+    return sorted.slice(0, 50)
+  }, [interpolatedStates, currentAirport, towerHeight, labelVisibilityDistance, sortOption, searchQuery, isOrbitModeWithoutAirport, followedAircraftData, followingCallsign])
 
   const handleFollowClick = (callsign: string) => {
     if (followingCallsign === callsign) {
@@ -86,8 +145,31 @@ function AircraftPanel() {
   return (
     <div className="aircraft-panel">
       <div className="panel-header">
-        <h3>Nearby Aircraft</h3>
+        <h3>{isOrbitModeWithoutAirport ? `Near ${followingCallsign}` : 'Nearby Aircraft'}</h3>
         <span className="aircraft-count">{nearbyAircraft.length}</span>
+      </div>
+
+      <div className="panel-controls">
+        <input
+          type="text"
+          className="search-input"
+          placeholder="Search callsign, type, route..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+        <div className="sort-controls">
+          <span className="sort-label">Sort:</span>
+          <select
+            className="sort-select"
+            value={sortOption}
+            onChange={(e) => setSortOption(e.target.value as SortOption)}
+          >
+            <option value="distance">Distance</option>
+            <option value="callsign">Callsign</option>
+            <option value="altitude">Altitude</option>
+            <option value="speed">Speed</option>
+          </select>
+        </div>
       </div>
 
       {followingCallsign && (
@@ -116,10 +198,45 @@ function AircraftPanel() {
         </div>
       )}
 
+      {/* Show detailed info for followed aircraft in orbit mode without airport */}
+      {isOrbitModeWithoutAirport && followedAircraftData && (
+        <div className="followed-aircraft-details">
+          <div className="followed-header">
+            <span className="followed-callsign">{followedAircraftData.callsign}</span>
+            <span className="followed-type">{followedAircraftData.aircraftType || '???'}</span>
+          </div>
+          <div className="followed-stats">
+            <div className="stat-item">
+              <span className="stat-label">ALT</span>
+              <span className="stat-value">{formatAltitude(followedAircraftData.interpolatedAltitude)}</span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-label">GS</span>
+              <span className="stat-value">{formatGroundspeed(followedAircraftData.interpolatedGroundspeed)}</span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-label">HDG</span>
+              <span className="stat-value">{formatHeading(followedAircraftData.interpolatedHeading)}</span>
+            </div>
+          </div>
+          {(followedAircraftData.departure || followedAircraftData.arrival) && (
+            <div className="followed-route">
+              <span className="route-from">{followedAircraftData.departure || '????'}</span>
+              <span className="route-arrow">→</span>
+              <span className="route-to">{followedAircraftData.arrival || '????'}</span>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="aircraft-list">
         {nearbyAircraft.length === 0 ? (
           <div className="no-aircraft">
-            {currentAirport ? 'No aircraft nearby' : 'Select an airport'}
+            {isOrbitModeWithoutAirport
+              ? 'No other aircraft nearby'
+              : currentAirport
+                ? 'No aircraft nearby'
+                : 'Select an airport or search globally (Ctrl+K)'}
           </div>
         ) : (
           nearbyAircraft.map((aircraft) => {

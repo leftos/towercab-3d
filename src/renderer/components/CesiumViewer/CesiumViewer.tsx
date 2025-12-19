@@ -35,6 +35,7 @@ function CesiumViewer() {
 
   // Camera store for follow highlighting and view mode
   const followingCallsign = useCameraStore((state) => state.followingCallsign)
+  const followMode = useCameraStore((state) => state.followMode)
   const viewMode = useCameraStore((state) => state.viewMode)
 
   // Get interpolated aircraft states
@@ -123,20 +124,68 @@ function CesiumViewer() {
     }
   }, [cesiumIonToken])
 
-  // Setup Babylon root node when airport changes
+  // Setup Babylon root node when airport changes OR when in orbit mode without airport
   useEffect(() => {
-    if (!currentAirport || !babylonOverlay.sceneReady) return
+    if (!babylonOverlay.sceneReady) return
 
-    const towerPos = getTowerPosition(currentAirport, towerHeight)
-    babylonOverlay.setupRootNode(towerPos.latitude, towerPos.longitude, towerPos.height)
-    rootNodeSetupRef.current = true
-  }, [currentAirport, towerHeight, babylonOverlay.sceneReady, babylonOverlay.setupRootNode])
+    // If we have an airport, use tower position as root
+    if (currentAirport) {
+      const towerPos = getTowerPosition(currentAirport, towerHeight)
+      babylonOverlay.setupRootNode(towerPos.latitude, towerPos.longitude, towerPos.height)
+      rootNodeSetupRef.current = true
+      return
+    }
+
+    // If in orbit mode following an aircraft without airport, use aircraft position as root
+    if (followMode === 'orbit' && followingCallsign && interpolatedAircraft.size > 0) {
+      const followedAircraft = interpolatedAircraft.get(followingCallsign)
+      if (followedAircraft) {
+        const altitudeMeters = followedAircraft.interpolatedAltitude * 0.3048
+        babylonOverlay.setupRootNode(
+          followedAircraft.interpolatedLatitude,
+          followedAircraft.interpolatedLongitude,
+          altitudeMeters
+        )
+        rootNodeSetupRef.current = true
+      }
+    }
+  }, [currentAirport, towerHeight, babylonOverlay.sceneReady, babylonOverlay.setupRootNode, followMode, followingCallsign, interpolatedAircraft])
 
   // Update aircraft entities
   const updateAircraftEntities = useCallback(() => {
-    if (!cesiumViewer || !currentAirport) return
+    if (!cesiumViewer) return
 
-    const towerPos = getTowerPosition(currentAirport, towerHeight)
+    // Determine the reference point for distance calculations
+    // In orbit mode, use the followed aircraft; otherwise use the tower
+    let refLat: number
+    let refLon: number
+    let refElevationMeters = 0
+    let isOrbitModeWithoutAirport = false
+
+    if (followMode === 'orbit' && followingCallsign) {
+      const followedAircraft = interpolatedAircraft.get(followingCallsign)
+      if (followedAircraft) {
+        refLat = followedAircraft.interpolatedLatitude
+        refLon = followedAircraft.interpolatedLongitude
+        refElevationMeters = followedAircraft.interpolatedAltitude * 0.3048
+        isOrbitModeWithoutAirport = !currentAirport
+      } else if (currentAirport) {
+        const towerPos = getTowerPosition(currentAirport, towerHeight)
+        refLat = towerPos.latitude
+        refLon = towerPos.longitude
+        refElevationMeters = currentAirport.elevation ? currentAirport.elevation * 0.3048 : 0
+      } else {
+        return // No reference point available
+      }
+    } else if (currentAirport) {
+      const towerPos = getTowerPosition(currentAirport, towerHeight)
+      refLat = towerPos.latitude
+      refLon = towerPos.longitude
+      refElevationMeters = currentAirport.elevation ? currentAirport.elevation * 0.3048 : 0
+    } else {
+      return // Need either an airport or orbit mode with a followed aircraft
+    }
+
     const seenCallsigns = new Set<string>()
 
     // Sort aircraft by distance and limit count
@@ -144,8 +193,8 @@ function CesiumViewer() {
       .map((aircraft) => ({
         ...aircraft,
         distance: calculateDistanceNM(
-          towerPos.latitude,
-          towerPos.longitude,
+          refLat,
+          refLon,
           aircraft.interpolatedLatitude,
           aircraft.interpolatedLongitude
         )
@@ -155,19 +204,22 @@ function CesiumViewer() {
         if (aircraft.distance > labelVisibilityDistance) return false
 
         // Filter by traffic type - use interpolated altitude for smooth transitions
-        const isAirborne = aircraft.interpolatedAltitude > 500
-        if (isAirborne && !showAirborneTraffic) return false
-        if (!isAirborne && !showGroundTraffic) return false
+        // In orbit mode without airport, show all traffic types
+        if (!isOrbitModeWithoutAirport) {
+          const isAirborne = aircraft.interpolatedAltitude > 500
+          if (isAirborne && !showAirborneTraffic) return false
+          if (!isAirborne && !showGroundTraffic) return false
+        }
 
         return true
       })
       .sort((a, b) => a.distance - b.distance)
       .slice(0, maxAircraftDisplay)
 
-    // Get airport elevation for ground aircraft positioning
-    const airportElevationMeters = currentAirport.elevation
+    // Get ground elevation for aircraft positioning
+    const groundElevationMeters = currentAirport?.elevation
       ? currentAirport.elevation * 0.3048
-      : 0
+      : (isOrbitModeWithoutAirport ? 0 : refElevationMeters)
 
     // First pass: Update all aircraft mesh positions
     const aircraftData: Array<{
@@ -191,7 +243,7 @@ function CesiumViewer() {
       // Calculate height above ellipsoid
       // Use Math.max to ensure aircraft never go below ground, but can smoothly climb
       // This prevents jumps when transitioning from ground to airborne
-      const groundLevel = airportElevationMeters + 0.5
+      const groundLevel = groundElevationMeters + 0.5
       const heightAboveEllipsoid = isAirborne
         ? altitudeMeters
         : Math.max(groundLevel, altitudeMeters)
@@ -224,7 +276,7 @@ function CesiumViewer() {
           aircraft.interpolatedLatitude,
           aircraft.interpolatedLongitude,
           heightAboveEllipsoid,
-          airportElevationMeters,
+          groundElevationMeters,
           aircraft.interpolatedHeading, // Use interpolated heading for smooth cone rotation
           babylonColor,
           isFollowed,
@@ -354,6 +406,7 @@ function CesiumViewer() {
     showGroundTraffic,
     showAirborneTraffic,
     followingCallsign,
+    followMode,
     babylonOverlay,
     viewMode
   ])
