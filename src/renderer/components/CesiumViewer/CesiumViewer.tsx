@@ -239,6 +239,9 @@ function CesiumViewer() {
         )
       }))
       .filter((aircraft) => {
+        // Always include the followed aircraft regardless of distance
+        if (aircraft.callsign === followingCallsign) return true
+
         // Filter by distance
         if (aircraft.distance > labelVisibilityDistance) return false
 
