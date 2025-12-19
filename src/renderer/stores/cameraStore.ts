@@ -301,7 +301,7 @@ export const useCameraStore = create<CameraStore>()(
       },
 
       setTopdownAltitude: (altitude: number) => {
-        const clamped = Math.max(500, Math.min(10000, altitude))
+        const clamped = Math.max(500, Math.min(50000, altitude))
         set({ topdownAltitude: clamped })
       },
 

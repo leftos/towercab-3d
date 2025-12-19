@@ -37,6 +37,7 @@ function CesiumViewer() {
   const followingCallsign = useCameraStore((state) => state.followingCallsign)
   const followMode = useCameraStore((state) => state.followMode)
   const viewMode = useCameraStore((state) => state.viewMode)
+  const topdownAltitude = useCameraStore((state) => state.topdownAltitude)
 
   // Get interpolated aircraft states
   const interpolatedAircraft = useAircraftInterpolation()
@@ -268,8 +269,14 @@ function CesiumViewer() {
         babylonColor = { r: 1, g: 0.65, b: 0 }
       }
 
-      // Update mesh position - scale cones 3.5x bigger in topdown view
-      const viewModeScale = viewMode === 'topdown' ? 3.5 : 1.0
+      // Update mesh position - scale cones dynamically in topdown view based on altitude
+      // At reference altitude (8000m), use base scale of 3.5
+      // Scale proportionally with altitude to maintain minimum visual size when zoomed out
+      const referenceAltitude = 6000
+      const baseTopdownScale = 3.5
+      const viewModeScale = viewMode === 'topdown'
+        ? baseTopdownScale * (topdownAltitude / referenceAltitude)
+        : 1.0
       if (rootNodeSetupRef.current) {
         babylonOverlay.updateAircraftMesh(
           aircraft.callsign,
@@ -408,7 +415,8 @@ function CesiumViewer() {
     followingCallsign,
     followMode,
     babylonOverlay,
-    viewMode
+    viewMode,
+    topdownAltitude
   ])
 
   // Update aircraft on each render frame

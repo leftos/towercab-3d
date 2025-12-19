@@ -431,7 +431,12 @@ export function useCesiumCamera(
 
       const rotateAmount = 3  // degrees
       const zoomAmount = 5
-      const moveDistance = 10  // meters
+      // Scale movement with altitude in topdown view for consistent feel when zoomed out
+      const baseMoveDistance = 10  // meters at reference altitude
+      const referenceAltitude = 2000
+      const moveDistance = viewMode === 'topdown'
+        ? baseMoveDistance * (topdownAltitude / referenceAltitude)
+        : baseMoveDistance
 
       switch (event.key) {
         // WASD movement
@@ -549,6 +554,7 @@ export function useCesiumCamera(
   }, [
     viewer,
     viewMode,
+    topdownAltitude,
     followingCallsign,
     followMode,
     adjustHeading,

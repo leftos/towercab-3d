@@ -73,7 +73,7 @@ function ControlsBar() {
           <div className="camera-info">
             {viewMode === 'topdown' ? (
               <span className="info-item" title="Altitude">
-                ALT {Math.round(topdownAltitude)}m
+                ALT {Math.round(topdownAltitude * 3.28084).toLocaleString()}ft
               </span>
             ) : (
               <>
