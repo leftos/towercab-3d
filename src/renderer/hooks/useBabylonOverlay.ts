@@ -211,7 +211,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
 
     // Set FOV from Cesium
     const frustum = viewer.camera.frustum
-    if (frustum instanceof Cesium.PerspectiveFrustum) {
+    if (frustum instanceof Cesium.PerspectiveFrustum && frustum.fovy !== undefined) {
       camera.fov = frustum.fovy
     }
 
@@ -233,7 +233,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
 
     // Get Cesium camera FOV
     const frustum = viewer.camera.frustum
-    if (frustum instanceof Cesium.PerspectiveFrustum) {
+    if (frustum instanceof Cesium.PerspectiveFrustum && frustum.fovy !== undefined) {
       camera.fov = frustum.fovy
     }
 
@@ -598,7 +598,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
       coneWorldPos,
       BABYLON.Matrix.Identity(),
       scene.getTransformMatrix(),
-      { x: 0, y: 0, width: screenWidth, height: screenHeight }
+      new BABYLON.Viewport(0, 0, screenWidth, screenHeight)
     )
 
     // Check if behind camera (z outside 0-1 range in NDC)
@@ -715,7 +715,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
       coneWorldPos,
       BABYLON.Matrix.Identity(),
       scene.getTransformMatrix(),
-      { x: 0, y: 0, width: screenWidth, height: screenHeight }
+      new BABYLON.Viewport(0, 0, screenWidth, screenHeight)
     )
 
     const visible = screenPos.z >= 0 && screenPos.z <= 1
