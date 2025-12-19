@@ -39,6 +39,9 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
   const camera2DHeadingRef = useRef<number>(0)
   const isTopDownModeRef = useRef(false)
 
+  // Track if camera has been synced at least once (labels shouldn't show until then)
+  const cameraSyncedRef = useRef(false)
+
   // State to track when scene is ready (triggers re-render for dependents)
   const [sceneReady, setSceneReady] = useState(false)
 
@@ -122,6 +125,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
       camera2DLonRef.current = 0
       camera2DHeadingRef.current = 0
       isTopDownModeRef.current = false
+      cameraSyncedRef.current = false
       aircraftMeshesRef.current.clear()
       setSceneReady(false)
     }
@@ -289,6 +293,9 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     } else {
       syncCamera3D()
     }
+
+    // Mark camera as synced (labels can now be positioned correctly)
+    cameraSyncedRef.current = true
   }, [cesiumViewer, syncCamera2D, syncCamera3D])
 
   // Create or update aircraft cone mesh and label
@@ -515,6 +522,15 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
 
     if (!meshData?.leaderLine || !meshData?.cone || !meshData?.label || !scene || !engine) return
 
+    // Don't show labels until camera has been synced at least once
+    // (prevents labels appearing at wrong positions on initial load)
+    if (!cameraSyncedRef.current) {
+      meshData.cone.isVisible = false
+      meshData.label.isVisible = false
+      meshData.leaderLine.isVisible = false
+      return
+    }
+
     const screenWidth = engine.getRenderWidth()
     const screenHeight = engine.getRenderHeight()
 
@@ -529,6 +545,21 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
 
     // Check if behind camera (z outside 0-1 range in NDC)
     if (screenPos.z < 0 || screenPos.z > 1) {
+      meshData.cone.isVisible = false
+      meshData.label.isVisible = false
+      meshData.leaderLine.isVisible = false
+      return
+    }
+
+    // Check for suspicious center-screen projection (indicates transform matrix not ready)
+    // This catches cases where the projection returns default/invalid values
+    const centerX = screenWidth / 2
+    const centerY = screenHeight / 2
+    const distFromCenter = Math.sqrt(
+      Math.pow(screenPos.x - centerX, 2) + Math.pow(screenPos.y - centerY, 2)
+    )
+    // If projected very close to exact center and cone is far from origin, likely invalid
+    if (distFromCenter < 5 && coneWorldPos.length() > 100) {
       meshData.cone.isVisible = false
       meshData.label.isVisible = false
       meshData.leaderLine.isVisible = false
