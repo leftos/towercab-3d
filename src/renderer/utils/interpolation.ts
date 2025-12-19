@@ -1,8 +1,14 @@
 // Interpolation utilities for smooth aircraft movement
+// Uses physics-based prediction for natural flight simulation appearance
 
 import type { AircraftState, InterpolatedAircraftState } from '../types/vatsim'
 
-const UPDATE_INTERVAL = 15000 // 15 seconds in ms
+// Constants for physics-based interpolation
+const NM_TO_DEGREES_LAT = 1 / 60 // 1 NM = 1/60 degree latitude
+const KNOTS_TO_NM_PER_MS = 1 / 3600000 // Convert knots to NM/ms
+
+// Turn rate constants
+const MAX_TURN_RATE_DEG_PER_SEC = 6 // Maximum realistic turn rate
 
 /**
  * Linear interpolation between two values
@@ -12,22 +18,145 @@ export function lerp(a: number, b: number, t: number): number {
 }
 
 /**
+ * Smooth easing function (smoothstep) for natural acceleration/deceleration
+ * Creates smooth S-curve transition instead of linear
+ */
+export function smoothstep(t: number): number {
+  const clamped = Math.max(0, Math.min(1, t))
+  return clamped * clamped * (3 - 2 * clamped)
+}
+
+/**
+ * Smoother easing function (smootherstep) for even more natural motion
+ */
+export function smootherstep(t: number): number {
+  const clamped = Math.max(0, Math.min(1, t))
+  return clamped * clamped * clamped * (clamped * (clamped * 6 - 15) + 10)
+}
+
+/**
+ * Normalize angle to 0-360 range
+ */
+export function normalizeAngle(angle: number): number {
+  return ((angle % 360) + 360) % 360
+}
+
+/**
+ * Calculate shortest angular difference between two headings
+ * Returns value in range [-180, 180]
+ */
+export function angleDifference(from: number, to: number): number {
+  const a = normalizeAngle(from)
+  const b = normalizeAngle(to)
+  let diff = b - a
+  if (diff > 180) diff -= 360
+  if (diff < -180) diff += 360
+  return diff
+}
+
+/**
  * Interpolate angle (heading) taking shortest path
  * Handles wrap-around at 360 degrees
  */
 export function lerpAngle(a: number, b: number, t: number): number {
-  // Normalize angles to 0-360
-  a = ((a % 360) + 360) % 360
-  b = ((b % 360) + 360) % 360
-
-  // Find shortest path
-  let diff = b - a
-  if (diff > 180) diff -= 360
-  if (diff < -180) diff += 360
-
-  // Interpolate and normalize result
+  const diff = angleDifference(a, b)
   const result = a + diff * t
-  return ((result % 360) + 360) % 360
+  return normalizeAngle(result)
+}
+
+/**
+ * Calculate rate of turn in degrees per second
+ * Based on heading change over the interval
+ */
+export function calculateTurnRate(
+  headingFrom: number,
+  headingTo: number,
+  intervalMs: number
+): number {
+  if (intervalMs <= 0) return 0
+  const headingChange = angleDifference(headingFrom, headingTo)
+  const turnRate = (headingChange / intervalMs) * 1000 // deg/sec
+  // Clamp to realistic limits
+  return Math.max(-MAX_TURN_RATE_DEG_PER_SEC, Math.min(MAX_TURN_RATE_DEG_PER_SEC, turnRate))
+}
+
+/**
+ * Calculate new position using dead reckoning from heading and groundspeed
+ * Uses great circle approximation for short distances
+ */
+export function deadReckonPosition(
+  lat: number,
+  lon: number,
+  headingDeg: number,
+  groundspeedKnots: number,
+  durationMs: number
+): { lat: number; lon: number } {
+  // Distance traveled in nautical miles
+  const distanceNM = groundspeedKnots * KNOTS_TO_NM_PER_MS * durationMs
+
+  // Convert to radians
+  const headingRad = headingDeg * Math.PI / 180
+  const latRad = lat * Math.PI / 180
+
+  // Calculate displacement in degrees
+  // North component (latitude change)
+  const dLat = distanceNM * Math.cos(headingRad) * NM_TO_DEGREES_LAT
+
+  // East component (longitude change) - adjusted for latitude
+  const cosLat = Math.cos(latRad)
+  const dLon = cosLat > 0.001
+    ? (distanceNM * Math.sin(headingRad) * NM_TO_DEGREES_LAT) / cosLat
+    : 0
+
+  return {
+    lat: lat + dLat,
+    lon: lon + dLon
+  }
+}
+
+/**
+ * Interpolate position along a curved arc for turning aircraft
+ * Uses circular arc approximation based on turn rate
+ */
+export function arcInterpolatePosition(
+  startLat: number,
+  startLon: number,
+  startHeading: number,
+  endLat: number,
+  endLon: number,
+  endHeading: number,
+  groundspeed: number,
+  t: number,
+  intervalMs: number
+): { lat: number; lon: number; heading: number } {
+  const headingChange = angleDifference(startHeading, endHeading)
+
+  // If minimal turn (< 5 degrees), use simple linear interpolation
+  if (Math.abs(headingChange) < 5) {
+    return {
+      lat: lerp(startLat, endLat, t),
+      lon: lerp(startLon, endLon, t),
+      heading: lerpAngle(startHeading, endHeading, t)
+    }
+  }
+
+  // For significant turns, use arc interpolation
+  // The heading changes linearly through the turn
+  const currentHeading = lerpAngle(startHeading, endHeading, t)
+
+  // For arc interpolation, we trace the path by integrating heading
+  // Using midpoint heading between start and current for better arc approximation
+  const avgHeading = lerpAngle(startHeading, currentHeading, 0.5)
+
+  // Calculate position using the average heading over the arc segment
+  // This produces a smooth curved path that follows the turn
+  const pos = deadReckonPosition(startLat, startLon, avgHeading, groundspeed, intervalMs * t)
+
+  return {
+    lat: pos.lat,
+    lon: pos.lon,
+    heading: currentHeading
+  }
 }
 
 /**
@@ -51,10 +180,17 @@ export function getInterpolationFactor(
 }
 
 /**
- * Interpolate aircraft state between two snapshots
- * Uses constant-speed linear interpolation for smooth motion
- * Seamlessly extrapolates beyond t=1.0 until new data arrives
- * If no previous state, returns current state with isInterpolated=false
+ * Interpolate aircraft state between two snapshots using physics-based prediction
+ *
+ * For t <= 1.0 (interpolation):
+ * - Uses arc interpolation for turning aircraft (curved flight paths)
+ * - Uses smoothstep easing for altitude and speed changes
+ * - Produces natural, flight-sim-like motion
+ *
+ * For t > 1.0 (extrapolation/dead reckoning):
+ * - Uses velocity-driven dead reckoning based on last known heading and speed
+ * - Continues turn rate for consistent heading extrapolation
+ * - Maintains aircraft momentum realistically
  */
 export function interpolateAircraftState(
   previous: AircraftState | undefined,
@@ -74,22 +210,88 @@ export function interpolateAircraftState(
     }
   }
 
-  // Calculate interpolation factor (unbounded - allows extrapolation)
+  const interval = current.timestamp - previous.timestamp
   const t = getInterpolationFactor(previous.timestamp, current.timestamp, now)
 
-  // Clamp t for altitude and heading (don't extrapolate these)
-  const clampedT = Math.min(t, 1.0)
+  // Calculate turn rate for this segment
+  const turnRate = calculateTurnRate(previous.heading, current.heading, interval)
 
-  // Linear interpolation for constant-speed motion
-  // Position uses unbounded t for seamless extrapolation
-  // Altitude, heading, and groundspeed use clamped t (hold at final value)
+  let interpolatedLat: number
+  let interpolatedLon: number
+  let interpolatedHeading: number
+  let interpolatedAltitude: number
+  let interpolatedGroundspeed: number
+
+  if (t <= 1.0) {
+    // INTERPOLATION PHASE (0 <= t <= 1.0)
+    // Use arc interpolation for smooth curved paths during turns
+
+    // Average groundspeed for the segment
+    const avgGroundspeed = (previous.groundspeed + current.groundspeed) / 2
+
+    // Get curved position and heading
+    const arcResult = arcInterpolatePosition(
+      previous.latitude,
+      previous.longitude,
+      previous.heading,
+      current.latitude,
+      current.longitude,
+      current.heading,
+      avgGroundspeed,
+      t,
+      interval
+    )
+
+    interpolatedLat = arcResult.lat
+    interpolatedLon = arcResult.lon
+    interpolatedHeading = arcResult.heading
+
+    // Use smoothstep easing for altitude and speed (more natural acceleration)
+    const easedT = smoothstep(t)
+    interpolatedAltitude = lerp(previous.altitude, current.altitude, easedT)
+    interpolatedGroundspeed = lerp(previous.groundspeed, current.groundspeed, easedT)
+
+  } else {
+    // EXTRAPOLATION PHASE (t > 1.0) - Dead reckoning
+    // Use heading and groundspeed to predict position
+
+    // Time elapsed since we reached the "current" position
+    const extrapolationMs = now - current.timestamp
+
+    // Continue the turn at the same rate (decaying slightly over time)
+    // This prevents sudden heading stops and makes turns look natural
+    const turnDecay = Math.exp(-extrapolationMs / 10000) // Decay over ~10 seconds
+    const extrapolatedTurnDeg = turnRate * (extrapolationMs / 1000) * turnDecay
+    interpolatedHeading = normalizeAngle(current.heading + extrapolatedTurnDeg)
+
+    // Use average heading during extrapolation for smoother arcs
+    const avgExtrapolationHeading = lerpAngle(current.heading, interpolatedHeading, 0.5)
+
+    // Dead reckon position from last known position using heading and speed
+    const deadReckonedPos = deadReckonPosition(
+      current.latitude,
+      current.longitude,
+      avgExtrapolationHeading,
+      current.groundspeed,
+      extrapolationMs
+    )
+
+    interpolatedLat = deadReckonedPos.lat
+    interpolatedLon = deadReckonedPos.lon
+
+    // Hold altitude and groundspeed at final values during extrapolation
+    // (We don't have good prediction for these)
+    interpolatedAltitude = current.altitude
+    interpolatedGroundspeed = current.groundspeed
+  }
+
   return {
     ...current,
-    interpolatedLatitude: lerp(previous.latitude, current.latitude, t),
-    interpolatedLongitude: lerp(previous.longitude, current.longitude, t),
-    interpolatedAltitude: lerp(previous.altitude, current.altitude, clampedT),
-    interpolatedHeading: lerpAngle(previous.heading, current.heading, clampedT),
-    interpolatedGroundspeed: lerp(previous.groundspeed, current.groundspeed, clampedT),
+    interpolatedLatitude: interpolatedLat,
+    interpolatedLongitude: interpolatedLon,
+    interpolatedAltitude: interpolatedAltitude,
+    interpolatedHeading: interpolatedHeading,
+    interpolatedGroundspeed: interpolatedGroundspeed,
     isInterpolated: true
   }
 }

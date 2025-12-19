@@ -221,7 +221,7 @@ function CesiumViewer() {
           aircraft.interpolatedLongitude,
           heightAboveEllipsoid,
           airportElevationMeters,
-          aircraft.heading,
+          aircraft.interpolatedHeading, // Use interpolated heading for smooth cone rotation
           babylonColor,
           isFollowed,
           labelText,
