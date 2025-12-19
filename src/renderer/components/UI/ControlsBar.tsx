@@ -14,6 +14,8 @@ function ControlsBar() {
   const setShowAircraftPanel = useSettingsStore((state) => state.setShowAircraftPanel)
   const cesiumIonToken = useSettingsStore((state) => state.cesiumIonToken)
   const setCesiumIonToken = useSettingsStore((state) => state.setCesiumIonToken)
+  const terrainQuality = useSettingsStore((state) => state.terrainQuality)
+  const setTerrainQuality = useSettingsStore((state) => state.setTerrainQuality)
 
   // Camera store
   const viewMode = useCameraStore((state) => state.viewMode)
@@ -183,6 +185,27 @@ function ControlsBar() {
                     />
                     Show Aircraft Panel
                   </label>
+                </div>
+              </div>
+
+              <div className="settings-section">
+                <h3>Graphics</h3>
+                <div className="setting-item">
+                  <label>Terrain Quality</label>
+                  <div className="slider-with-value">
+                    <input
+                      type="range"
+                      min="1"
+                      max="5"
+                      step="1"
+                      value={terrainQuality}
+                      onChange={(e) => setTerrainQuality(Number(e.target.value))}
+                    />
+                    <span>{['Low', 'Medium', 'High', 'Very High', 'Ultra'][terrainQuality - 1]}</span>
+                  </div>
+                  <p className="setting-hint">
+                    Lower quality loads faster. Higher quality shows more detail at distance.
+                  </p>
                 </div>
               </div>
 

@@ -8,10 +8,24 @@ import { useCesiumCamera } from '../../hooks/useCesiumCamera'
 import { useBabylonOverlay } from '../../hooks/useBabylonOverlay'
 import { getTowerPosition } from '../../utils/towerHeight'
 import { calculateDistanceNM } from '../../utils/interpolation'
+import { createCachingImageryProvider } from '../../utils/tileCache'
 import './CesiumViewer.css'
 
 // Import Cesium CSS
 import 'cesium/Build/Cesium/Widgets/widgets.css'
+
+// Maps terrain quality (1-5) to Cesium's maximumScreenSpaceError
+// Lower error = higher quality but more tiles to load
+function getScreenSpaceError(quality: number): number {
+  const qualityMap: Record<number, number> = {
+    1: 16,  // Low - fast loading, blurry at distance
+    2: 8,   // Medium - balanced
+    3: 4,   // High - good quality
+    4: 2,   // Very High - excellent quality (Cesium default)
+    5: 1    // Ultra - maximum quality, slower
+  }
+  return qualityMap[quality] ?? 4
+}
 
 function CesiumViewer() {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -32,6 +46,7 @@ function CesiumViewer() {
   const maxAircraftDisplay = useSettingsStore((state) => state.maxAircraftDisplay)
   const showGroundTraffic = useSettingsStore((state) => state.showGroundTraffic)
   const showAirborneTraffic = useSettingsStore((state) => state.showAirborneTraffic)
+  const terrainQuality = useSettingsStore((state) => state.terrainQuality)
 
   // Camera store for follow highlighting and view mode
   const followingCallsign = useCameraStore((state) => state.followingCallsign)
@@ -114,6 +129,23 @@ function CesiumViewer() {
     viewer.scene.fog.enabled = true
     viewer.scene.globe.depthTestAgainstTerrain = true
 
+    // Increase in-memory tile cache for smoother panning (default is 100)
+    viewer.scene.globe.tileCacheSize = 1000
+
+    // Preload nearby tiles for smoother camera movement
+    viewer.scene.globe.preloadAncestors = true
+    viewer.scene.globe.preloadSiblings = true
+
+    // Wrap the default imagery provider with caching after a short delay
+    // to ensure the provider is fully initialized
+    setTimeout(() => {
+      const imageryLayers = viewer.imageryLayers
+      if (imageryLayers.length > 0) {
+        const baseLayer = imageryLayers.get(0)
+        createCachingImageryProvider(baseLayer.imageryProvider)
+      }
+    }, 500)
+
     viewerRef.current = viewer
     setCesiumViewer(viewer)
 
@@ -124,6 +156,12 @@ function CesiumViewer() {
       setCesiumViewer(null)
     }
   }, [cesiumIonToken])
+
+  // Update terrain quality when setting changes
+  useEffect(() => {
+    if (!cesiumViewer) return
+    cesiumViewer.scene.globe.maximumScreenSpaceError = getScreenSpaceError(terrainQuality)
+  }, [cesiumViewer, terrainQuality])
 
   // Setup Babylon root node when airport changes OR when in orbit mode without airport
   useEffect(() => {
