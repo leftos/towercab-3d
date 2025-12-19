@@ -42,6 +42,10 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
   // Track if camera has been synced at least once (labels shouldn't show until then)
   const cameraSyncedRef = useRef(false)
 
+  // Terrain offset: difference between MSL elevation and actual Cesium terrain height
+  // This corrects for geoid undulation (varies by location, e.g., -30m at Boston)
+  const terrainOffsetRef = useRef<number>(0)
+
   // State to track when scene is ready (triggers re-render for dependents)
   const [sceneReady, setSceneReady] = useState(false)
 
@@ -134,6 +138,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
   // Setup root node when we have a base position
   const setupRootNode = useCallback((lat: number, lon: number, height: number) => {
     const scene = sceneRef.current
+    const viewer = cesiumViewer
     if (!scene) return
 
     // Calculate base point in ECEF coordinates
@@ -155,6 +160,20 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     basePointRef.current = cart2vec(baseCart)
     basePointUpRef.current = cart2vec(baseCartUp)
 
+    // Sample terrain to calculate offset between MSL elevation and actual terrain height
+    // This corrects for geoid undulation automatically at any location
+    if (viewer?.terrainProvider) {
+      const positions = [Cesium.Cartographic.fromDegrees(lon, lat)]
+      Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, positions).then((updatedPositions) => {
+        const terrainHeight = updatedPositions[0].height
+        // Offset = terrain height - MSL height (height parameter is MSL-based)
+        terrainOffsetRef.current = terrainHeight - height
+        console.log(`Terrain offset calculated: ${terrainOffsetRef.current.toFixed(1)}m (terrain: ${terrainHeight.toFixed(1)}m, MSL: ${height.toFixed(1)}m)`)
+      }).catch((err) => {
+        console.warn('Failed to sample terrain, using default offset:', err)
+        terrainOffsetRef.current = 0
+      })
+    }
 
     // Create or update root node
     if (rootNodeRef.current) {
@@ -163,7 +182,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
 
     const rootNode = new BABYLON.TransformNode('RootNode', scene)
     rootNodeRef.current = rootNode
-  }, [cart2vec])
+  }, [cart2vec, cesiumViewer])
 
   // Sync Babylon camera for 2D topdown view - completely separate from 3D
   // Simple design: camera at fixed position looking down, heading applied to positions
@@ -356,11 +375,22 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
       const fixedToEnu = fixedToEnuMatrixRef.current
       if (!fixedToEnu) return
 
-      const posCart = Cesium.Cartesian3.fromDegrees(lon, lat, altitudeMeters)
+      // Check if aircraft is on or near ground (within 15m of ground elevation)
+      const isOnGround = (altitudeMeters - groundElevationMeters) < 15
+      const coneRadius = 6 // Half of 12m diameter
+
+      // Get horizontal position using ENU transformation (at ground elevation for consistency)
+      const posCart = Cesium.Cartesian3.fromDegrees(lon, lat, groundElevationMeters)
       const enuPos = Cesium.Matrix4.multiplyByPoint(fixedToEnu, posCart, new Cesium.Cartesian3())
 
+      // Calculate Y position: terrain offset + height above ground + cone radius
+      // For ground aircraft, height above ground is ~0; for airborne, it's their altitude minus ground
+      const heightAboveGround = isOnGround ? 0 : (altitudeMeters - groundElevationMeters)
+      const yPosition = terrainOffsetRef.current + heightAboveGround + coneRadius
+
       // Convert ENU to Babylon: X=East, Y=Up, Z=North
-      localPos = new BABYLON.Vector3(enuPos.x, enuPos.z, enuPos.y)
+      // Use enuPos for horizontal (X,Z) but calculate Y independently to avoid ENU Z issues
+      localPos = new BABYLON.Vector3(enuPos.x, yPosition, enuPos.y)
     }
 
 
@@ -409,8 +439,21 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
       material.backFaceCulling = false
       cone.material = material
 
-      // Shadow creation temporarily disabled for debugging
-      const shadow: BABYLON.Mesh | undefined = undefined
+      // Create shadow mesh - a flat disc that sits on the ground
+      const shadow = BABYLON.MeshBuilder.CreateDisc(`${callsign}_shadow`, {
+        radius: coneDiameter * 0.8,
+        tessellation: 16
+      }, scene)
+      // Rotate disc to be horizontal (default is vertical facing camera)
+      shadow.rotation.x = Math.PI / 2
+      // Create dark semi-transparent material for shadow
+      const shadowMaterial = new BABYLON.StandardMaterial(`${callsign}_shadow_mat`, scene)
+      shadowMaterial.diffuseColor = new BABYLON.Color3(0, 0, 0)
+      shadowMaterial.emissiveColor = new BABYLON.Color3(0, 0, 0)
+      shadowMaterial.alpha = 0.4
+      shadowMaterial.disableLighting = true
+      shadowMaterial.backFaceCulling = false
+      shadow.material = shadowMaterial
 
       // Create GUI label (positioned manually in updateLeaderLine)
       const label = new GUI.Rectangle(`${callsign}_label`)
@@ -458,7 +501,17 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     // Update cone position
     meshData.cone.position = localPos
 
-    // Shadow update temporarily disabled for debugging
+    // Update shadow position - place at ground level below the cone
+    if (meshData.shadow) {
+      if (isTopDownModeRef.current) {
+        // In 2D view, shadow sits just below the cone
+        meshData.shadow.position = new BABYLON.Vector3(localPos.x, 40, localPos.z)
+      } else {
+        // In 3D view, place shadow at terrain level (applying same geoid correction)
+        const shadowY = terrainOffsetRef.current + 0.5
+        meshData.shadow.position = new BABYLON.Vector3(localPos.x, shadowY, localPos.z)
+      }
+    }
 
     // Orient cone to point in heading direction
     // Cone's default axis is +Y, we need to rotate it to point along dirBabylon
@@ -507,6 +560,10 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     const baseScale = isFollowed ? 1.5 : 1.0
     const scale = baseScale * viewModeScale
     meshData.cone.scaling.setAll(scale)
+    // Scale shadow to match cone
+    if (meshData.shadow) {
+      meshData.shadow.scaling.setAll(scale)
+    }
   }, [])
 
   // Update leader line and label position manually
@@ -526,6 +583,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     // (prevents labels appearing at wrong positions on initial load)
     if (!cameraSyncedRef.current) {
       meshData.cone.isVisible = false
+      if (meshData.shadow) meshData.shadow.isVisible = false
       meshData.label.isVisible = false
       meshData.leaderLine.isVisible = false
       return
@@ -546,6 +604,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     // Check if behind camera (z outside 0-1 range in NDC)
     if (screenPos.z < 0 || screenPos.z > 1) {
       meshData.cone.isVisible = false
+      if (meshData.shadow) meshData.shadow.isVisible = false
       meshData.label.isVisible = false
       meshData.leaderLine.isVisible = false
       return
@@ -561,12 +620,14 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     // If projected very close to exact center and cone is far from origin, likely invalid
     if (distFromCenter < 5 && coneWorldPos.length() > 100) {
       meshData.cone.isVisible = false
+      if (meshData.shadow) meshData.shadow.isVisible = false
       meshData.label.isVisible = false
       meshData.leaderLine.isVisible = false
       return
     }
 
     meshData.cone.isVisible = true
+    if (meshData.shadow) meshData.shadow.isVisible = true
     meshData.label.isVisible = true
     meshData.leaderLine.isVisible = true
 

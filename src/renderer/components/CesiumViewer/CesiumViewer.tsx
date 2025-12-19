@@ -190,7 +190,7 @@ function CesiumViewer() {
       // Calculate height above ellipsoid
       const heightAboveEllipsoid = isAirborne
         ? altitudeMeters
-        : airportElevationMeters + 5
+        : airportElevationMeters + 0.5
 
       // Format datablock text
       const type = aircraft.aircraftType || '????'
