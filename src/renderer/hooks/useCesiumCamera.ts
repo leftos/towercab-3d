@@ -186,11 +186,25 @@ export function useCesiumCamera(
 
     // Handle different view modes
     if (viewMode === 'topdown') {
-      // Top-down view: camera above airport looking straight down
+      // Top-down view: camera above looking straight down
       const airportElevation = currentAirport?.elevation ? currentAirport.elevation * 0.3048 : 0
+
+      // Determine camera center point - follow aircraft if active, otherwise use tower/offset
+      let centerLat = offsetLat
+      let centerLon = offsetLon
+
+      if (followingCallsign && interpolatedAircraft) {
+        const aircraft = interpolatedAircraft.get(followingCallsign)
+        if (aircraft) {
+          // Center on followed aircraft, with position offset applied
+          centerLat = aircraft.interpolatedLatitude + positionOffsetY * metersToDegreesLat
+          centerLon = aircraft.interpolatedLongitude + positionOffsetX * metersToDegreesLon
+        }
+      }
+
       const cameraPosition = Cesium.Cartesian3.fromDegrees(
-        offsetLon,
-        offsetLat,
+        centerLon,
+        centerLat,
         airportElevation + topdownAltitude
       )
 
