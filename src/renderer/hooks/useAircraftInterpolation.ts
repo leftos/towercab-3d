@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useVatsimStore } from '../stores/vatsimStore'
 import { interpolateAircraftState } from '../utils/interpolation'
-import { debugLog } from '../utils/debugLog'
 import type { InterpolatedAircraftState, AircraftState } from '../types/vatsim'
 
 /**
@@ -31,9 +30,6 @@ export function useAircraftInterpolation(): Map<string, InterpolatedAircraftStat
     return unsubscribe
   }, [])
 
-  // Debug: throttle logging to once per second
-  const lastDebugLogRef = useRef<number>(0)
-
   // Animation loop that reads from refs (no stale closures)
   const updateInterpolation = useCallback(() => {
     const now = Date.now()
@@ -42,21 +38,10 @@ export function useAircraftInterpolation(): Map<string, InterpolatedAircraftStat
     const aircraftStates = aircraftStatesRef.current
     const previousStates = previousStatesRef.current
 
-    // Debug logging for UAL1882 (throttled to once per second)
-    const shouldLog = now - lastDebugLogRef.current > 1000
-
     for (const [callsign, currentState] of aircraftStates) {
       const previousState = previousStates.get(callsign)
       const interpolated = interpolateAircraftState(previousState, currentState, now)
       newStates.set(callsign, interpolated)
-
-      // Debug UAL1882
-      if (callsign === 'UAL1882' && shouldLog) {
-        const interval = previousState ? currentState.timestamp - previousState.timestamp : 0
-        const t = interval > 0 ? (now - currentState.timestamp) / interval : 0
-        debugLog(`[Frame] UAL1882: t=${t.toFixed(3)}, prev=${previousState?.latitude.toFixed(5) ?? 'none'}, curr=${currentState.latitude.toFixed(5)}, interp=${interpolated.interpolatedLatitude.toFixed(5)}`)
-        lastDebugLogRef.current = now
-      }
     }
 
     setInterpolatedStates(newStates)

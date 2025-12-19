@@ -1,7 +1,6 @@
 import { create } from 'zustand'
 import type { PilotData, VatsimData, AircraftState } from '../types/vatsim'
 import { interpolateAircraftState } from '../utils/interpolation'
-import { debugLog } from '../utils/debugLog'
 
 const VATSIM_API_URL = 'https://data.vatsim.net/v3/vatsim-data.json'
 const POLL_INTERVAL = 3000 // Poll every 3 seconds (VATSIM updates ~15s, but poll faster to catch updates sooner)
@@ -113,20 +112,6 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
         if (oldCurrentState) {
           // Aircraft existed before - calculate its current visual position
           const interpolated = interpolateAircraftState(oldPrevState, oldCurrentState, now)
-
-          // Debug logging for UAL1882
-          if (callsign === 'UAL1882') {
-            const t = oldPrevState
-              ? (now - oldCurrentState.timestamp) / (oldCurrentState.timestamp - oldPrevState.timestamp)
-              : 0
-            debugLog(`[Store Update] UAL1882: t=${t.toFixed(3)} (${t > 1 ? 'EXTRAPOLATING' : 'interpolating'})`)
-            debugLog(`  oldPrevState exists: ${!!oldPrevState}`)
-            debugLog(`  Old prev pos: ${oldPrevState ? `${oldPrevState.latitude.toFixed(5)}, ${oldPrevState.longitude.toFixed(5)}` : 'N/A'}`)
-            debugLog(`  Old current pos: ${oldCurrentState.latitude.toFixed(5)}, ${oldCurrentState.longitude.toFixed(5)}`)
-            debugLog(`  Interpolated pos (visual): ${interpolated.interpolatedLatitude.toFixed(5)}, ${interpolated.interpolatedLongitude.toFixed(5)}`)
-            debugLog(`  New VATSIM pos (target): ${newState.latitude.toFixed(5)}, ${newState.longitude.toFixed(5)}`)
-            debugLog(`  Will interpolate FROM visual TO target over ${actualInterval}ms`)
-          }
 
           // Use the current interpolated/extrapolated position as the starting point
           // ALL interpolated values must be captured for proper Hermite spline continuity
