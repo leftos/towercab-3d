@@ -154,8 +154,8 @@ function CesiumViewer() {
         // Filter by distance
         if (aircraft.distance > labelVisibilityDistance) return false
 
-        // Filter by traffic type
-        const isAirborne = aircraft.altitude > 500
+        // Filter by traffic type - use interpolated altitude for smooth transitions
+        const isAirborne = aircraft.interpolatedAltitude > 500
         if (isAirborne && !showAirborneTraffic) return false
         if (!isAirborne && !showGroundTraffic) return false
 
@@ -181,16 +181,20 @@ function CesiumViewer() {
     for (const aircraft of sortedAircraft) {
       seenCallsigns.add(aircraft.callsign)
 
-      const isAirborne = aircraft.altitude > 500
+      // Use INTERPOLATED altitude for airborne check to ensure smooth transitions
+      const isAirborne = aircraft.interpolatedAltitude > 500
       const isFollowed = followingCallsign === aircraft.callsign
 
       // Calculate altitude in meters
       const altitudeMeters = aircraft.interpolatedAltitude * 0.3048
 
       // Calculate height above ellipsoid
+      // Use Math.max to ensure aircraft never go below ground, but can smoothly climb
+      // This prevents jumps when transitioning from ground to airborne
+      const groundLevel = airportElevationMeters + 0.5
       const heightAboveEllipsoid = isAirborne
         ? altitudeMeters
-        : airportElevationMeters + 0.5
+        : Math.max(groundLevel, altitudeMeters)
 
       // Format datablock text
       const type = aircraft.aircraftType || '????'

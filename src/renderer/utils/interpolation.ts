@@ -115,48 +115,86 @@ export function deadReckonPosition(
 }
 
 /**
- * Interpolate position along a curved arc for turning aircraft
- * Uses circular arc approximation based on turn rate
+ * Calculate velocity vector in degrees per millisecond from heading and groundspeed
+ * Returns {dLat, dLon} representing the velocity components
  */
-export function arcInterpolatePosition(
+export function headingToVelocity(
+  headingDeg: number,
+  groundspeedKnots: number,
+  lat: number
+): { dLat: number; dLon: number } {
+  // Speed in degrees per millisecond
+  const speedDegPerMs = groundspeedKnots * KNOTS_TO_NM_PER_MS * NM_TO_DEGREES_LAT
+
+  const headingRad = headingDeg * Math.PI / 180
+  const cosLat = Math.cos(lat * Math.PI / 180)
+
+  return {
+    dLat: speedDegPerMs * Math.cos(headingRad),
+    dLon: cosLat > 0.001 ? (speedDegPerMs * Math.sin(headingRad)) / cosLat : 0
+  }
+}
+
+/**
+ * Cubic Hermite spline interpolation
+ * Guarantees passing through both endpoints with specified tangents
+ * Creates smooth C1-continuous curves with no discontinuities
+ *
+ * @param p0 - Start value
+ * @param m0 - Start tangent (derivative * interval)
+ * @param p1 - End value
+ * @param m1 - End tangent (derivative * interval)
+ * @param t - Interpolation factor [0, 1]
+ */
+export function hermite(p0: number, m0: number, p1: number, m1: number, t: number): number {
+  const t2 = t * t
+  const t3 = t2 * t
+
+  // Hermite basis functions
+  const h00 = 2 * t3 - 3 * t2 + 1  // Position weight at start
+  const h10 = t3 - 2 * t2 + t       // Tangent weight at start
+  const h01 = -2 * t3 + 3 * t2      // Position weight at end
+  const h11 = t3 - t2               // Tangent weight at end
+
+  return h00 * p0 + h10 * m0 + h01 * p1 + h11 * m1
+}
+
+/**
+ * Interpolate position using Hermite splines for smooth curved paths
+ * Guarantees arrival at the target position at t=1.0 with no jumps
+ * Uses velocity vectors derived from heading and groundspeed as tangents
+ */
+export function hermiteInterpolatePosition(
   startLat: number,
   startLon: number,
   startHeading: number,
+  startGroundspeed: number,
   endLat: number,
   endLon: number,
   endHeading: number,
-  groundspeed: number,
+  endGroundspeed: number,
   t: number,
   intervalMs: number
 ): { lat: number; lon: number; heading: number } {
-  const headingChange = angleDifference(startHeading, endHeading)
+  // Calculate velocity vectors at start and end points
+  // Scale by interval to get tangent magnitude for Hermite interpolation
+  const startVel = headingToVelocity(startHeading, startGroundspeed, startLat)
+  const endVel = headingToVelocity(endHeading, endGroundspeed, endLat)
 
-  // If minimal turn (< 5 degrees), use simple linear interpolation
-  if (Math.abs(headingChange) < 5) {
-    return {
-      lat: lerp(startLat, endLat, t),
-      lon: lerp(startLon, endLon, t),
-      heading: lerpAngle(startHeading, endHeading, t)
-    }
-  }
+  // Tangent vectors scaled by interval (m0 and m1 in Hermite formula)
+  const m0Lat = startVel.dLat * intervalMs
+  const m0Lon = startVel.dLon * intervalMs
+  const m1Lat = endVel.dLat * intervalMs
+  const m1Lon = endVel.dLon * intervalMs
 
-  // For significant turns, use arc interpolation
-  // The heading changes linearly through the turn
-  const currentHeading = lerpAngle(startHeading, endHeading, t)
+  // Hermite interpolation for position - guarantees smooth curve through both points
+  const lat = hermite(startLat, m0Lat, endLat, m1Lat, t)
+  const lon = hermite(startLon, m0Lon, endLon, m1Lon, t)
 
-  // For arc interpolation, we trace the path by integrating heading
-  // Using midpoint heading between start and current for better arc approximation
-  const avgHeading = lerpAngle(startHeading, currentHeading, 0.5)
+  // Smoothly interpolate heading
+  const heading = lerpAngle(startHeading, endHeading, t)
 
-  // Calculate position using the average heading over the arc segment
-  // This produces a smooth curved path that follows the turn
-  const pos = deadReckonPosition(startLat, startLon, avgHeading, groundspeed, intervalMs * t)
-
-  return {
-    lat: pos.lat,
-    lon: pos.lon,
-    heading: currentHeading
-  }
+  return { lat, lon, heading }
 }
 
 /**
@@ -183,9 +221,10 @@ export function getInterpolationFactor(
  * Interpolate aircraft state between two snapshots using physics-based prediction
  *
  * For t <= 1.0 (interpolation):
- * - Uses arc interpolation for turning aircraft (curved flight paths)
+ * - Uses Hermite spline interpolation for smooth curved paths
+ * - Guarantees arrival at target position at t=1.0 (no jumps/warps)
+ * - Velocity vectors from heading/groundspeed define curve tangents
  * - Uses smoothstep easing for altitude and speed changes
- * - Produces natural, flight-sim-like motion
  *
  * For t > 1.0 (extrapolation/dead reckoning):
  * - Uses velocity-driven dead reckoning based on last known heading and speed
@@ -222,29 +261,67 @@ export function interpolateAircraftState(
   let interpolatedAltitude: number
   let interpolatedGroundspeed: number
 
-  if (t <= 1.0) {
+  // Check if previous and current positions are essentially the same
+  // This happens when an aircraft first appears or data hasn't changed
+  const positionDelta = Math.abs(previous.latitude - current.latitude) +
+                        Math.abs(previous.longitude - current.longitude)
+  const positionsAreSame = positionDelta < 0.00001 // ~1 meter
+
+  if (positionsAreSame) {
+    // When prev ≈ curr for lat/lon, skip Hermite (which produces weird results with tangents)
+    // But ALWAYS interpolate altitude smoothly - aircraft can climb while stationary (takeoff roll)
+    const clampedT = Math.min(1, t)
+    const easedT = smoothstep(clampedT)
+    interpolatedAltitude = lerp(previous.altitude, current.altitude, easedT)
+    interpolatedGroundspeed = lerp(previous.groundspeed, current.groundspeed, easedT)
+    interpolatedHeading = lerpAngle(previous.heading, current.heading, clampedT)
+
+    if (t <= 1.0) {
+      interpolatedLat = current.latitude
+      interpolatedLon = current.longitude
+    } else {
+      // Extrapolate from current position using dead reckoning
+      const extrapolationMs = (t - 1.0) * interval
+
+      const turnRate = calculateTurnRate(previous.heading, current.heading, interval)
+      const turnDecay = Math.exp(-extrapolationMs / 10000)
+      const extrapolatedTurnDeg = turnRate * (extrapolationMs / 1000) * turnDecay
+      interpolatedHeading = normalizeAngle(current.heading + extrapolatedTurnDeg)
+
+      const avgExtrapolationHeading = lerpAngle(current.heading, interpolatedHeading, 0.5)
+      const deadReckonedPos = deadReckonPosition(
+        current.latitude,
+        current.longitude,
+        avgExtrapolationHeading,
+        current.groundspeed,
+        extrapolationMs
+      )
+
+      interpolatedLat = deadReckonedPos.lat
+      interpolatedLon = deadReckonedPos.lon
+    }
+  } else if (t <= 1.0) {
     // INTERPOLATION PHASE (0 <= t <= 1.0)
-    // Use arc interpolation for smooth curved paths during turns
+    // Use Hermite spline interpolation for smooth curved paths
+    // This guarantees we arrive at the target position at t=1.0 with no jumps
 
-    // Average groundspeed for the segment
-    const avgGroundspeed = (previous.groundspeed + current.groundspeed) / 2
-
-    // Get curved position and heading
-    const arcResult = arcInterpolatePosition(
+    // Get curved position and heading using Hermite splines
+    const hermiteResult = hermiteInterpolatePosition(
       previous.latitude,
       previous.longitude,
       previous.heading,
+      previous.groundspeed,
       current.latitude,
       current.longitude,
       current.heading,
-      avgGroundspeed,
+      current.groundspeed,
       t,
       interval
     )
 
-    interpolatedLat = arcResult.lat
-    interpolatedLon = arcResult.lon
-    interpolatedHeading = arcResult.heading
+    interpolatedLat = hermiteResult.lat
+    interpolatedLon = hermiteResult.lon
+    interpolatedHeading = hermiteResult.heading
 
     // Use smoothstep easing for altitude and speed (more natural acceleration)
     const easedT = smoothstep(t)
@@ -255,8 +332,9 @@ export function interpolateAircraftState(
     // EXTRAPOLATION PHASE (t > 1.0) - Dead reckoning
     // Use heading and groundspeed to predict position
 
-    // Time elapsed since we reached the "current" position
-    const extrapolationMs = now - current.timestamp
+    // Time elapsed since we reached the "current" position (at t=1.0)
+    // NOT total time since current.timestamp - that would cause a jump!
+    const extrapolationMs = (t - 1.0) * interval
 
     // Continue the turn at the same rate (decaying slightly over time)
     // This prevents sudden heading stops and makes turns look natural
