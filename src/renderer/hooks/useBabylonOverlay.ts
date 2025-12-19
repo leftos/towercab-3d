@@ -9,6 +9,9 @@ interface AircraftMesh {
   label?: GUI.Rectangle
   labelText?: GUI.TextBlock
   leaderLine?: GUI.Line
+  // Smoothed screen position for reducing jitter in orbit follow mode
+  smoothedScreenX?: number
+  smoothedScreenY?: number
 }
 
 interface BabylonOverlayOptions {
@@ -700,6 +703,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
   }, [])
 
   // Get screen position of a cone (for overlap detection)
+  // Applies exponential smoothing to reduce jitter in orbit follow mode
   const getConeScreenPosition = useCallback((callsign: string): { x: number; y: number; visible: boolean } | null => {
     const meshData = aircraftMeshesRef.current.get(callsign)
     const scene = sceneRef.current
@@ -719,7 +723,41 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     )
 
     const visible = screenPos.z >= 0 && screenPos.z <= 1
-    return { x: screenPos.x, y: screenPos.y, visible }
+
+    // Apply exponential smoothing to reduce jitter
+    // Higher smoothing factor = more responsive but more jittery
+    // Lower smoothing factor = smoother but more laggy
+    const smoothingFactor = 0.4
+
+    let smoothedX: number
+    let smoothedY: number
+
+    if (meshData.smoothedScreenX === undefined || meshData.smoothedScreenY === undefined) {
+      // First time - initialize with raw position
+      smoothedX = screenPos.x
+      smoothedY = screenPos.y
+    } else {
+      // Check if the position jumped significantly (e.g., aircraft came back into view)
+      const jumpThreshold = 100
+      const dx = Math.abs(screenPos.x - meshData.smoothedScreenX)
+      const dy = Math.abs(screenPos.y - meshData.smoothedScreenY)
+
+      if (dx > jumpThreshold || dy > jumpThreshold) {
+        // Large jump - snap to new position
+        smoothedX = screenPos.x
+        smoothedY = screenPos.y
+      } else {
+        // Apply exponential smoothing: new = old + factor * (raw - old)
+        smoothedX = meshData.smoothedScreenX + smoothingFactor * (screenPos.x - meshData.smoothedScreenX)
+        smoothedY = meshData.smoothedScreenY + smoothingFactor * (screenPos.y - meshData.smoothedScreenY)
+      }
+    }
+
+    // Store smoothed values for next frame
+    meshData.smoothedScreenX = smoothedX
+    meshData.smoothedScreenY = smoothedY
+
+    return { x: smoothedX, y: smoothedY, visible }
   }, [])
 
   // Render one frame
