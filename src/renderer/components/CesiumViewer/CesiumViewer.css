@@ -1,0 +1,29 @@
+.cesium-viewer-container {
+  position: absolute;
+  top: 48px; /* Height of top bar */
+  left: 0;
+  right: 0;
+  bottom: 48px; /* Height of controls bar */
+  overflow: hidden;
+}
+
+/* Override some Cesium default styles */
+.cesium-viewer-container .cesium-viewer {
+  width: 100%;
+  height: 100%;
+}
+
+.cesium-viewer-container .cesium-viewer-bottom {
+  display: none;
+}
+
+/* Babylon.js overlay canvas - must be on top of Cesium */
+.babylon-overlay-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+}

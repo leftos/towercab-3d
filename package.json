@@ -1,0 +1,72 @@
+{
+  "name": "towercab-3d",
+  "version": "1.0.0",
+  "description": "3D Tower Cab View for VATSIM Controllers",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "start": "electron-vite preview",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "keywords": [
+    "vatsim",
+    "atc",
+    "tower",
+    "cesium",
+    "electron"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^25.0.3",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.2",
+    "electron": "^39.2.7",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^5.0.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.0",
+    "vite-plugin-cesium": "^1.2.23",
+    "vite-plugin-static-copy": "^3.1.4"
+  },
+  "dependencies": {
+    "@babylonjs/core": "^8.42.0",
+    "@babylonjs/gui": "^8.42.0",
+    "@babylonjs/loaders": "^8.42.0",
+    "@electron-toolkit/utils": "^4.0.0",
+    "cesium": "^1.136.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "resium": "^1.19.2",
+    "zustand": "^5.0.9"
+  },
+  "build": {
+    "appId": "com.towercab.viewer",
+    "productName": "TowerCab 3D",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "out/**/*",
+      "resources/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "mods",
+        "to": "mods",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "resources/icon.png"
+    }
+  }
+}

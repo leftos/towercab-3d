@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:data.vatsim.net)",
+      "Bash(dir \"X:\\\\dev\\\\towercab-3d\" /b /a)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__get-library-docs",
+      "WebSearch",
+      "WebFetch(domain:docs.unity3d.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:davidmegginson.github.io)",
+      "Bash(npm init:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run dev:*)",
+      "Bash(timeout 30 npm run dev:*)",
+      "Bash(npx tsc:*)",
+      "Bash(timeout 20 npm run dev:*)",
+      "Bash(npm ls:*)"
+    ]
+  }
+}

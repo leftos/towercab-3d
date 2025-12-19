@@ -1,0 +1,398 @@
+import { create } from 'zustand'
+import { persist, subscribeWithSelector } from 'zustand/middleware'
+
+export type ViewMode = '3d' | 'topdown'
+
+// Debounce timer for auto-save
+let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
+const AUTO_SAVE_DELAY = 5000 // 5 seconds
+
+// Camera settings for a single view mode
+interface ViewSettings {
+  heading: number
+  pitch: number
+  fov: number
+  positionOffsetX: number
+  positionOffsetY: number
+  positionOffsetZ: number
+  topdownAltitude: number
+}
+
+// Per-airport camera settings (both view modes)
+interface AirportCameraSettings {
+  '3d': ViewSettings
+  'topdown': ViewSettings
+}
+
+// Storage format for persisted settings
+interface PersistedCameraSettings {
+  [icao: string]: AirportCameraSettings
+}
+
+interface CameraStore {
+  // Current view mode
+  viewMode: ViewMode
+
+  // Current airport ICAO (for tracking which airport's settings we're using)
+  currentAirportIcao: string | null
+
+  // Current camera orientation (degrees)
+  heading: number
+  pitch: number
+  fov: number
+
+  // Position offset from tower (meters, in local ENU coordinates)
+  positionOffsetX: number
+  positionOffsetY: number
+  positionOffsetZ: number
+
+  // Top-down view altitude (meters above airport)
+  topdownAltitude: number
+
+  // Follow mode
+  followingCallsign: string | null
+  followZoom: number
+
+  // Persisted per-airport settings
+  airportSettings: PersistedCameraSettings
+
+  // Actions
+  setViewMode: (mode: ViewMode) => void
+  toggleViewMode: () => void
+  setHeading: (heading: number) => void
+  setPitch: (pitch: number) => void
+  setFov: (fov: number) => void
+  adjustHeading: (delta: number) => void
+  adjustPitch: (delta: number) => void
+  adjustFov: (delta: number) => void
+  setTopdownAltitude: (altitude: number) => void
+  adjustTopdownAltitude: (delta: number) => void
+
+  // Position movement (WASD)
+  moveForward: (distance: number) => void
+  moveRight: (distance: number) => void
+  moveUp: (distance: number) => void
+  resetPosition: () => void
+
+  // Follow actions
+  followAircraft: (callsign: string) => void
+  stopFollowing: () => void
+  setFollowZoom: (zoom: number) => void
+  adjustFollowZoom: (delta: number) => void
+
+  // Airport-specific actions
+  setCurrentAirport: (icao: string) => void
+  saveCurrentViewSettings: () => void
+  loadViewSettings: (mode: ViewMode) => void
+
+  // Reset
+  resetView: () => void
+}
+
+const DEFAULT_HEADING = 0
+const DEFAULT_PITCH = -15
+const DEFAULT_FOV = 60
+const DEFAULT_FOLLOW_ZOOM = 1.0
+const DEFAULT_TOPDOWN_ALTITUDE = 2000
+
+const DEFAULT_3D_SETTINGS: ViewSettings = {
+  heading: DEFAULT_HEADING,
+  pitch: DEFAULT_PITCH,
+  fov: DEFAULT_FOV,
+  positionOffsetX: 0,
+  positionOffsetY: 0,
+  positionOffsetZ: 0,
+  topdownAltitude: DEFAULT_TOPDOWN_ALTITUDE
+}
+
+const DEFAULT_TOPDOWN_SETTINGS: ViewSettings = {
+  heading: DEFAULT_HEADING,
+  pitch: -90,  // Looking straight down
+  fov: 60,
+  positionOffsetX: 0,
+  positionOffsetY: 0,
+  positionOffsetZ: 0,
+  topdownAltitude: DEFAULT_TOPDOWN_ALTITUDE
+}
+
+const getDefaultAirportSettings = (): AirportCameraSettings => ({
+  '3d': { ...DEFAULT_3D_SETTINGS },
+  'topdown': { ...DEFAULT_TOPDOWN_SETTINGS }
+})
+
+// Schedule a debounced auto-save
+const scheduleAutoSave = (saveFunc: () => void) => {
+  if (autoSaveTimer) {
+    clearTimeout(autoSaveTimer)
+  }
+  autoSaveTimer = setTimeout(() => {
+    saveFunc()
+    autoSaveTimer = null
+  }, AUTO_SAVE_DELAY)
+}
+
+export const useCameraStore = create<CameraStore>()(
+  subscribeWithSelector(
+    persist(
+      (set, get) => ({
+      // Initial state
+      viewMode: '3d' as ViewMode,
+      currentAirportIcao: null,
+      heading: DEFAULT_HEADING,
+      pitch: DEFAULT_PITCH,
+      fov: DEFAULT_FOV,
+      positionOffsetX: 0,
+      positionOffsetY: 0,
+      positionOffsetZ: 0,
+      topdownAltitude: DEFAULT_TOPDOWN_ALTITUDE,
+      followingCallsign: null,
+      followZoom: DEFAULT_FOLLOW_ZOOM,
+      airportSettings: {},
+
+      // Save current view settings to the persisted store
+      saveCurrentViewSettings: () => {
+        const state = get()
+        const icao = state.currentAirportIcao
+        if (!icao) return
+
+        const currentSettings: ViewSettings = {
+          heading: state.heading,
+          pitch: state.pitch,
+          fov: state.fov,
+          positionOffsetX: state.positionOffsetX,
+          positionOffsetY: state.positionOffsetY,
+          positionOffsetZ: state.positionOffsetZ,
+          topdownAltitude: state.topdownAltitude
+        }
+
+        const airportSettings = { ...state.airportSettings }
+        if (!airportSettings[icao]) {
+          airportSettings[icao] = getDefaultAirportSettings()
+        }
+        airportSettings[icao][state.viewMode] = currentSettings
+
+        set({ airportSettings })
+      },
+
+      // Load settings for a specific view mode
+      loadViewSettings: (mode: ViewMode) => {
+        const state = get()
+        const icao = state.currentAirportIcao
+        if (!icao) return
+
+        const settings = state.airportSettings[icao]?.[mode]
+        if (settings) {
+          set({
+            heading: settings.heading,
+            pitch: settings.pitch,
+            fov: settings.fov,
+            positionOffsetX: settings.positionOffsetX,
+            positionOffsetY: settings.positionOffsetY,
+            positionOffsetZ: settings.positionOffsetZ,
+            topdownAltitude: settings.topdownAltitude
+          })
+        } else {
+          // Use defaults for this mode
+          const defaults = mode === '3d' ? DEFAULT_3D_SETTINGS : DEFAULT_TOPDOWN_SETTINGS
+          set({
+            heading: defaults.heading,
+            pitch: defaults.pitch,
+            fov: defaults.fov,
+            positionOffsetX: defaults.positionOffsetX,
+            positionOffsetY: defaults.positionOffsetY,
+            positionOffsetZ: defaults.positionOffsetZ,
+            topdownAltitude: defaults.topdownAltitude
+          })
+        }
+      },
+
+      // Set current airport and load its settings
+      setCurrentAirport: (icao: string) => {
+        const state = get()
+        const normalizedIcao = icao.toUpperCase()
+
+        // Save current airport's settings before switching
+        if (state.currentAirportIcao) {
+          state.saveCurrentViewSettings()
+        }
+
+        // Initialize settings for new airport if needed
+        const airportSettings = { ...state.airportSettings }
+        if (!airportSettings[normalizedIcao]) {
+          airportSettings[normalizedIcao] = getDefaultAirportSettings()
+        }
+
+        set({
+          currentAirportIcao: normalizedIcao,
+          airportSettings
+        })
+
+        // Load settings for current view mode
+        get().loadViewSettings(state.viewMode)
+      },
+
+      // View mode
+      setViewMode: (mode: ViewMode) => {
+        const state = get()
+        if (mode === state.viewMode) return
+
+        // Save current view settings before switching
+        state.saveCurrentViewSettings()
+
+        set({ viewMode: mode })
+
+        // Load settings for new view mode
+        get().loadViewSettings(mode)
+      },
+
+      toggleViewMode: () => {
+        const { viewMode, setViewMode } = get()
+        setViewMode(viewMode === '3d' ? 'topdown' : '3d')
+      },
+
+      // Setters
+      setHeading: (heading: number) => {
+        const normalized = ((heading % 360) + 360) % 360
+        set({ heading: normalized })
+      },
+
+      setPitch: (pitch: number) => {
+        const clamped = Math.max(-90, Math.min(90, pitch))
+        set({ pitch: clamped })
+      },
+
+      setFov: (fov: number) => {
+        const clamped = Math.max(10, Math.min(120, fov))
+        set({ fov: clamped })
+      },
+
+      setTopdownAltitude: (altitude: number) => {
+        const clamped = Math.max(500, Math.min(10000, altitude))
+        set({ topdownAltitude: clamped })
+      },
+
+      // Adjusters
+      adjustHeading: (delta: number) => {
+        const { heading, setHeading } = get()
+        setHeading(heading + delta)
+      },
+
+      adjustPitch: (delta: number) => {
+        const { pitch, setPitch } = get()
+        setPitch(pitch + delta)
+      },
+
+      adjustFov: (delta: number) => {
+        const { fov, setFov } = get()
+        setFov(fov + delta)
+      },
+
+      adjustTopdownAltitude: (delta: number) => {
+        const { topdownAltitude, setTopdownAltitude } = get()
+        setTopdownAltitude(topdownAltitude + delta)
+      },
+
+      // Position movement (relative to camera heading)
+      moveForward: (distance: number) => {
+        const { heading, positionOffsetX, positionOffsetY } = get()
+        const headingRad = heading * Math.PI / 180
+        set({
+          positionOffsetX: positionOffsetX + Math.sin(headingRad) * distance,
+          positionOffsetY: positionOffsetY + Math.cos(headingRad) * distance
+        })
+      },
+
+      moveRight: (distance: number) => {
+        const { heading, positionOffsetX, positionOffsetY } = get()
+        const headingRad = heading * Math.PI / 180
+        set({
+          positionOffsetX: positionOffsetX + Math.cos(headingRad) * distance,
+          positionOffsetY: positionOffsetY - Math.sin(headingRad) * distance
+        })
+      },
+
+      moveUp: (distance: number) => {
+        const { positionOffsetZ } = get()
+        set({ positionOffsetZ: positionOffsetZ + distance })
+      },
+
+      resetPosition: () => {
+        set({
+          positionOffsetX: 0,
+          positionOffsetY: 0,
+          positionOffsetZ: 0
+        })
+      },
+
+      // Follow mode
+      followAircraft: (callsign: string) => {
+        set({
+          followingCallsign: callsign,
+          followZoom: DEFAULT_FOLLOW_ZOOM
+        })
+      },
+
+      stopFollowing: () => {
+        set({ followingCallsign: null })
+      },
+
+      setFollowZoom: (zoom: number) => {
+        const clamped = Math.max(0.5, Math.min(5.0, zoom))
+        set({ followZoom: clamped })
+      },
+
+      adjustFollowZoom: (delta: number) => {
+        const { followZoom, setFollowZoom } = get()
+        setFollowZoom(followZoom + delta)
+      },
+
+      // Reset all
+      resetView: () => {
+        const state = get()
+        const viewMode = state.viewMode
+        const defaults = viewMode === '3d' ? DEFAULT_3D_SETTINGS : DEFAULT_TOPDOWN_SETTINGS
+
+        set({
+          heading: defaults.heading,
+          pitch: defaults.pitch,
+          fov: defaults.fov,
+          positionOffsetX: 0,
+          positionOffsetY: 0,
+          positionOffsetZ: 0,
+          topdownAltitude: defaults.topdownAltitude,
+          followingCallsign: null,
+          followZoom: DEFAULT_FOLLOW_ZOOM
+        })
+      }
+    }),
+      {
+        name: 'camera-store',
+        partialize: (state) => ({
+          airportSettings: state.airportSettings,
+          currentAirportIcao: state.currentAirportIcao,
+          viewMode: state.viewMode
+        })
+      }
+    )
+  )
+)
+
+// Subscribe to camera setting changes and auto-save after 5 seconds of inactivity
+useCameraStore.subscribe(
+  (state) => ({
+    heading: state.heading,
+    pitch: state.pitch,
+    fov: state.fov,
+    positionOffsetX: state.positionOffsetX,
+    positionOffsetY: state.positionOffsetY,
+    positionOffsetZ: state.positionOffsetZ,
+    topdownAltitude: state.topdownAltitude
+  }),
+  () => {
+    // Schedule auto-save when any camera setting changes
+    scheduleAutoSave(() => {
+      useCameraStore.getState().saveCurrentViewSettings()
+    })
+  },
+  { equalityFn: (a, b) => JSON.stringify(a) === JSON.stringify(b) }
+)

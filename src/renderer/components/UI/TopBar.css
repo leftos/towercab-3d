@@ -1,0 +1,107 @@
+.top-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 48px;
+  background: rgba(20, 20, 30, 0.95);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  z-index: 100;
+  backdrop-filter: blur(10px);
+}
+
+.top-bar-left,
+.top-bar-right {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.top-bar-right {
+  justify-content: flex-end;
+}
+
+.top-bar-center {
+  flex: 0 0 auto;
+}
+
+.airport-button {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  padding: 8px 16px;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: all 0.2s ease;
+}
+
+.airport-button:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.airport-icao {
+  font-weight: 700;
+  font-size: 16px;
+  color: #4fc3f7;
+}
+
+.airport-name {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.8);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.airport-placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.zulu-time {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 20px;
+  font-weight: 600;
+  color: #4fc3f7;
+  letter-spacing: 1px;
+}
+
+.status-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.aircraft-count {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.connection-status {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.connection-status.connected {
+  background: rgba(76, 175, 80, 0.2);
+  color: #81c784;
+  border: 1px solid rgba(76, 175, 80, 0.4);
+}
+
+.connection-status.disconnected {
+  background: rgba(244, 67, 54, 0.2);
+  color: #ef5350;
+  border: 1px solid rgba(244, 67, 54, 0.4);
+}
