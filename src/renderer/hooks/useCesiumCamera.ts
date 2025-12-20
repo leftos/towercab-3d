@@ -105,7 +105,7 @@ export function useCesiumCamera(
 
   // Disable Cesium's default camera controls
   useEffect(() => {
-    if (!viewer) return
+    if (!viewer || viewer.isDestroyed()) return
 
     const controller = viewer.scene.screenSpaceCameraController
     controller.enableRotate = false
@@ -117,7 +117,7 @@ export function useCesiumCamera(
 
   // Update camera position and orientation
   useEffect(() => {
-    if (!viewer) return
+    if (!viewer || viewer.isDestroyed()) return
 
     const towerPos = getTowerPos()
 
@@ -340,12 +340,42 @@ export function useCesiumCamera(
     stopFollowingStore
   ])
 
+  // Mouse drag state for left-click panning
+  const isLeftDraggingRef = useRef(false)
+
+  // Refs for values needed during drag (avoids effect re-running during drag)
+  const viewModeRef = useRef(viewMode)
+  const topdownAltitudeRef = useRef(topdownAltitude)
+  const headingRef = useRef(heading)
+  const followingCallsignRef = useRef(followingCallsign)
+  const followModeRef = useRef(followMode)
+
+  // Keep refs updated
+  viewModeRef.current = viewMode
+  topdownAltitudeRef.current = topdownAltitude
+  headingRef.current = heading
+  followingCallsignRef.current = followingCallsign
+  followModeRef.current = followMode
+
   // Mouse drag controls for panning/tilting using Cesium's event handler
   useEffect(() => {
-    if (!viewer) return
+    if (!viewer || viewer.isDestroyed()) return
 
     // Use Cesium's ScreenSpaceEventHandler for reliable mouse event handling
     const handler = new Cesium.ScreenSpaceEventHandler(viewer.canvas)
+
+    // Left-click drag start (for panning in top-down view)
+    handler.setInputAction((movement: { position: Cesium.Cartesian2 }) => {
+      if (viewModeRef.current === 'topdown') {
+        isLeftDraggingRef.current = true
+        lastMousePosRef.current = { x: movement.position.x, y: movement.position.y }
+      }
+    }, Cesium.ScreenSpaceEventType.LEFT_DOWN)
+
+    // Left-click drag end
+    handler.setInputAction(() => {
+      isLeftDraggingRef.current = false
+    }, Cesium.ScreenSpaceEventType.LEFT_UP)
 
     // Right-click drag start
     handler.setInputAction((movement: { position: Cesium.Cartesian2 }) => {
@@ -354,7 +384,7 @@ export function useCesiumCamera(
 
       // In tower follow mode, stop following when user starts dragging
       // In orbit mode, allow drag to orbit around the aircraft
-      if (followingCallsign && followMode === 'tower') {
+      if (followingCallsignRef.current && followModeRef.current === 'tower') {
         stopFollowingStore()
       }
     }, Cesium.ScreenSpaceEventType.RIGHT_DOWN)
@@ -365,22 +395,40 @@ export function useCesiumCamera(
       lastMousePosRef.current = { x: movement.position.x, y: movement.position.y }
 
       // In tower follow mode, stop following when user starts dragging
-      if (followingCallsign && followMode === 'tower') {
+      if (followingCallsignRef.current && followModeRef.current === 'tower') {
         stopFollowingStore()
       }
     }, Cesium.ScreenSpaceEventType.MIDDLE_DOWN)
 
     // Mouse move while dragging
     handler.setInputAction((movement: { startPosition: Cesium.Cartesian2; endPosition: Cesium.Cartesian2 }) => {
-      if (!isDraggingRef.current) return
-
       const deltaX = movement.endPosition.x - lastMousePosRef.current.x
       const deltaY = movement.endPosition.y - lastMousePosRef.current.y
+
+      // Handle left-click drag for panning in top-down view
+      if (isLeftDraggingRef.current && viewModeRef.current === 'topdown') {
+        // Scale pan speed with altitude (higher = faster panning)
+        const panScale = topdownAltitudeRef.current / 1000
+        // Invert directions so dragging moves the view intuitively
+        // Account for heading rotation
+        const headingRad = headingRef.current * Math.PI / 180
+        const cosH = Math.cos(headingRad)
+        const sinH = Math.sin(headingRad)
+        // Rotate the delta by heading to get world-space movement (inverted for grab-and-drag feel)
+        const worldDeltaX = -(deltaX * cosH - deltaY * sinH)
+        const worldDeltaY = -(deltaX * sinH + deltaY * cosH)
+        moveRight(worldDeltaX * panScale)
+        moveForward(worldDeltaY * panScale)
+        lastMousePosRef.current = { x: movement.endPosition.x, y: movement.endPosition.y }
+        return
+      }
+
+      if (!isDraggingRef.current) return
 
       // Sensitivity
       const sensitivity = 0.3
 
-      if (followingCallsign && followMode === 'orbit') {
+      if (followingCallsignRef.current && followModeRef.current === 'orbit') {
         // In orbit mode: adjust orbit heading/pitch
         adjustOrbitHeading(deltaX * sensitivity)
         adjustOrbitPitch(deltaY * sensitivity)
@@ -415,11 +463,11 @@ export function useCesiumCamera(
       handler.destroy()
       canvas.removeEventListener('contextmenu', handleContextMenu)
     }
-  }, [viewer, followingCallsign, followMode, adjustHeading, adjustPitch, adjustOrbitHeading, adjustOrbitPitch, stopFollowingStore])
+  }, [viewer, adjustHeading, adjustPitch, adjustOrbitHeading, adjustOrbitPitch, moveForward, moveRight, stopFollowingStore])
 
   // Mouse wheel for zoom - adds impulse for smooth scrolling
   useEffect(() => {
-    if (!viewer) return
+    if (!viewer || viewer.isDestroyed()) return
 
     const handleWheel = (event: WheelEvent) => {
       event.preventDefault()
@@ -441,7 +489,7 @@ export function useCesiumCamera(
 
   // Smooth keyboard controls with animation loop
   useEffect(() => {
-    if (!viewer) return
+    if (!viewer || viewer.isDestroyed()) return
 
     // Movement configuration
     const ACCELERATION = 8.0       // How fast velocity builds up (per second)

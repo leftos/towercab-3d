@@ -274,7 +274,7 @@ function CesiumViewer() {
 
     return () => {
       isCancelled = true
-      if (currentTileset) {
+      if (currentTileset && cesiumViewer && !cesiumViewer.isDestroyed()) {
         cesiumViewer.scene.primitives.remove(currentTileset)
         setBuildingsTileset(null)
       }

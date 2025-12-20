@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, screen } from 'electron'
+import { app, BrowserWindow, shell, screen, session } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -140,6 +140,16 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.towercab.viewer')
+
+  // Bypass CORS for Cesium Ion assets
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const headers = details.responseHeaders || {}
+    // Add CORS headers if not present
+    if (!headers['access-control-allow-origin']) {
+      headers['access-control-allow-origin'] = ['*']
+    }
+    callback({ responseHeaders: headers })
+  })
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
