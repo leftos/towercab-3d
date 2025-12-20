@@ -283,17 +283,17 @@ function getModelDimensions(): Map<string, { wingspan: number; length: number }>
  * Find the closest model by dimensions using Euclidean distance
  * @param targetWingspan Target wingspan in meters
  * @param targetLength Target length in meters
- * @returns Best matching model name and scale factor
+ * @returns Best matching model name and non-uniform scale factors
  */
 function findClosestModel(
   targetWingspan: number,
   targetLength: number
-): { model: string; scale: number } {
+): { model: string; scale: { x: number; y: number; z: number } } {
   const modelDims = getModelDimensions()
 
   let bestModel = FALLBACK_MODEL
   let bestDistance = Infinity
-  let bestScale = 1.0
+  let bestScale = { x: 1, y: 1, z: 1 }
 
   for (const [model, dims] of modelDims) {
     // Calculate normalized Euclidean distance
@@ -306,10 +306,15 @@ function findClosestModel(
       bestDistance = distance
       bestModel = model
 
-      // Calculate scale factor: average of wingspan and length ratios
+      // Calculate non-uniform scale factors
+      // X = wingspan (left-right), Z = length (fuselage), Y = average (height)
       const wingspanScale = targetWingspan / dims.wingspan
       const lengthScale = targetLength / dims.length
-      bestScale = (wingspanScale + lengthScale) / 2
+      bestScale = {
+        x: wingspanScale,
+        y: (wingspanScale + lengthScale) / 2,  // Average for proportional height
+        z: lengthScale
+      }
     }
   }
 
@@ -318,7 +323,7 @@ function findClosestModel(
 
 export interface ModelInfo {
   modelUrl: string
-  scale: number  // Scale factor to apply (1.0 for exact matches)
+  scale: { x: number; y: number; z: number }  // Non-uniform scale factors
   matchType: 'exact' | 'mapped' | 'closest' | 'fallback'
   matchedModel?: string  // For debugging: which model was matched
 }
@@ -365,10 +370,12 @@ class AircraftModelServiceClass {
    * @returns Model URL, scale factor, and match type
    */
   getModelInfo(aircraftType: string | null | undefined): ModelInfo {
+    const uniformScale = { x: 1, y: 1, z: 1 }
+
     if (!aircraftType) {
       return {
         modelUrl: `./${FALLBACK_MODEL}.glb`,
-        scale: 1.0,
+        scale: uniformScale,
         matchType: 'fallback'
       }
     }
@@ -380,7 +387,7 @@ class AircraftModelServiceClass {
     if (mappedModel && AVAILABLE_MODELS.has(mappedModel)) {
       return {
         modelUrl: `./${mappedModel}.glb`,
-        scale: 1.0,
+        scale: uniformScale,
         matchType: normalized.toLowerCase() === mappedModel ? 'exact' : 'mapped'
       }
     }
@@ -390,7 +397,7 @@ class AircraftModelServiceClass {
     if (AVAILABLE_MODELS.has(directMatch)) {
       return {
         modelUrl: `./${directMatch}.glb`,
-        scale: 1.0,
+        scale: uniformScale,
         matchType: 'exact'
       }
     }
@@ -410,7 +417,7 @@ class AircraftModelServiceClass {
     // No dimensions available - use B738 fallback at 1:1 scale
     return {
       modelUrl: `./${FALLBACK_MODEL}.glb`,
-      scale: 1.0,
+      scale: uniformScale,
       matchType: 'fallback'
     }
   }

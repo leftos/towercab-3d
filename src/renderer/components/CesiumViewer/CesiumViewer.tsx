@@ -37,11 +37,10 @@ function getScreenSpaceError(quality: number): number {
   return qualityMap[quality] ?? 4
 }
 
-// Cone pool size - pre-create this many cone entities at init time
+// Model pool size - pre-create this many Model primitives at init time
 const CONE_POOL_SIZE = 100
 
 // Model rendering constants
-const MODEL_BASE_SCALE = 1.0        // Base scale for all aircraft models
 const MODEL_HEIGHT_OFFSET = 1       // Meters to raise models above ground to prevent clipping
 const MODEL_DEFAULT_COLOR = new Cesium.Color(0.85, 0.85, 0.85, 1.0)  // Muted gray until airline liveries
 
@@ -67,11 +66,15 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   // which would otherwise cause infinite render loops
   const lastRefPositionRef = useRef<{ lat: number; lon: number } | null>(null)
 
-  // Cone pool: maps pool index to callsign (or null if unused)
-  const conePoolAssignmentsRef = useRef<Map<number, string | null>>(new Map())
+  // Model primitive pool: maps pool index to Model primitive (or undefined if not loaded)
+  const modelPoolRef = useRef<Map<number, Cesium.Model>>(new Map())
+  // Pool assignments: maps pool index to callsign (or null if unused)
+  const modelPoolAssignmentsRef = useRef<Map<number, string | null>>(new Map())
   // Track which model URL each pool slot is currently using
-  const conePoolModelsRef = useRef<Map<number, string>>(new Map())
-  const conePoolReadyRef = useRef<boolean>(false)
+  const modelPoolUrlsRef = useRef<Map<number, string>>(new Map())
+  // Track which pool slots are currently loading a new model (to avoid duplicate loads)
+  const modelPoolLoadingRef = useRef<Set<number>>(new Set())
+  const modelPoolReadyRef = useRef<boolean>(false)
 
   // Propeller animation state: maps callsign to propeller state
   const propellerStatesRef = useRef<Map<string, PropellerState>>(new Map())
@@ -266,36 +269,37 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     viewerRef.current = viewer
     setCesiumViewer(viewer)
 
-    // Create aircraft model pool - all models start hidden
+    // Create aircraft model pool using Cesium.Model primitives for non-uniform scaling
     // Models from Flightradar24/fr24-3d-models (GPL-2.0, originally from FlightGear)
     // Default to B738, will be updated dynamically based on aircraft type
     const defaultModelUrl = './b738.glb'
-    const defaultPos = Cesium.Cartesian3.fromDegrees(0, 0, 0)
-    const defaultHpr = new Cesium.HeadingPitchRoll(0, 0, 0)
-    const defaultOrientation = Cesium.Transforms.headingPitchRollQuaternion(defaultPos, defaultHpr)
 
+    // Load models asynchronously into the pool
+    let modelsLoaded = 0
     for (let i = 0; i < CONE_POOL_SIZE; i++) {
-      viewer.entities.add({
-        id: `cone_pool_${i}`,
-        show: false, // Start hidden
-        position: defaultPos,
-        orientation: defaultOrientation,
-        model: {
-          uri: defaultModelUrl,
-          minimumPixelSize: 24,
-          maximumScale: 50,
-          scale: MODEL_BASE_SCALE,
-          runAnimations: false, // Disabled - we manually control animation via animationTime callback
-          shadows: Cesium.ShadowMode.ENABLED,
-          color: MODEL_DEFAULT_COLOR,
-          colorBlendMode: Cesium.ColorBlendMode.REPLACE
+      modelPoolAssignmentsRef.current.set(i, null)
+      modelPoolUrlsRef.current.set(i, defaultModelUrl)
+
+      Cesium.Model.fromGltfAsync({
+        url: defaultModelUrl,
+        show: false,
+        modelMatrix: Cesium.Matrix4.IDENTITY,
+        shadows: Cesium.ShadowMode.ENABLED,
+        color: MODEL_DEFAULT_COLOR,
+        colorBlendMode: Cesium.ColorBlendMode.REPLACE
+      }).then(model => {
+        if (viewer.isDestroyed()) return
+        viewer.scene.primitives.add(model)
+        modelPoolRef.current.set(i, model)
+        modelsLoaded++
+        if (modelsLoaded === CONE_POOL_SIZE) {
+          modelPoolReadyRef.current = true
+          console.log(`Created aircraft model pool with ${CONE_POOL_SIZE} primitives`)
         }
+      }).catch(err => {
+        console.error(`Failed to load model for pool slot ${i}:`, err)
       })
-      conePoolAssignmentsRef.current.set(i, null)
-      conePoolModelsRef.current.set(i, defaultModelUrl)
     }
-    conePoolReadyRef.current = true
-    console.log(`Created aircraft model pool with ${CONE_POOL_SIZE} entities`)
 
     // Cleanup on unmount
     return () => {
@@ -734,22 +738,22 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
         babylonColor = { r: 1, g: 0.65, b: 0 }
       }
 
-      // Update mesh position - scale cones dynamically in topdown view based on altitude
-      // Scale proportionally with altitude to maintain visibility when zoomed out
+      // Top-down view scaling: keep real scale when zoomed in, scale up when zoomed out
+      // This preserves relative aircraft sizes for conflict detection while ensuring visibility
       const referenceAltitude = 6000
-      const baseTopdownScale = 1.0
+      const altitudeBasedScale = topdownAltitude / referenceAltitude
       const viewModeScale = viewMode === 'topdown'
-        ? baseTopdownScale * (topdownAltitude / referenceAltitude)
+        ? Math.max(1.0, altitudeBasedScale)  // Never shrink below real size
         : 1.0
 
       // Use model from pool - find or assign a pool slot for this aircraft
-      if (conePoolReadyRef.current && terrainOffsetReadyRef.current) {
+      if (modelPoolReadyRef.current && terrainOffsetReadyRef.current) {
         // Calculate model position with terrain offset correction and height offset to prevent ground clipping
         const modelHeight = heightAboveEllipsoid + terrainOffsetRef.current + MODEL_HEIGHT_OFFSET
 
         // Find existing pool slot for this callsign, or get an unused one
         let poolIndex = -1
-        for (const [idx, assignedCallsign] of conePoolAssignmentsRef.current.entries()) {
+        for (const [idx, assignedCallsign] of modelPoolAssignmentsRef.current.entries()) {
           if (assignedCallsign === aircraft.callsign) {
             poolIndex = idx
             break
@@ -757,75 +761,102 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
         }
         if (poolIndex === -1) {
           // Find an unused slot
-          for (const [idx, assignedCallsign] of conePoolAssignmentsRef.current.entries()) {
+          for (const [idx, assignedCallsign] of modelPoolAssignmentsRef.current.entries()) {
             if (assignedCallsign === null) {
               poolIndex = idx
-              conePoolAssignmentsRef.current.set(idx, aircraft.callsign)
+              modelPoolAssignmentsRef.current.set(idx, aircraft.callsign)
               break
             }
           }
         }
 
         if (poolIndex !== -1) {
-          const modelEntity = viewer.entities.getById(`cone_pool_${poolIndex}`)
-          if (modelEntity) {
+          const model = modelPoolRef.current.get(poolIndex)
+          if (model) {
+            // Get the correct model info for this aircraft type
+            const modelInfo = aircraftModelService.getModelInfo(aircraft.aircraftType)
+            const currentModelUrl = modelPoolUrlsRef.current.get(poolIndex)
+
+            // If model URL changed, load the new model asynchronously
+            if (currentModelUrl !== modelInfo.modelUrl && !modelPoolLoadingRef.current.has(poolIndex)) {
+              modelPoolLoadingRef.current.add(poolIndex)
+              modelPoolUrlsRef.current.set(poolIndex, modelInfo.modelUrl)
+
+              // Load new model in background
+              Cesium.Model.fromGltfAsync({
+                url: modelInfo.modelUrl,
+                show: false,
+                modelMatrix: model.modelMatrix,  // Copy current transform
+                shadows: Cesium.ShadowMode.ENABLED,
+                color: model.color,
+                colorBlendMode: Cesium.ColorBlendMode.REPLACE
+              }).then(newModel => {
+                if (viewer.isDestroyed()) return
+
+                // Remove old model from scene
+                const oldModel = modelPoolRef.current.get(poolIndex)
+                if (oldModel) {
+                  viewer.scene.primitives.remove(oldModel)
+                }
+
+                // Add new model to scene and update pool
+                viewer.scene.primitives.add(newModel)
+                modelPoolRef.current.set(poolIndex, newModel)
+                modelAnimationsConfiguredRef.current.delete(poolIndex)
+                modelPoolLoadingRef.current.delete(poolIndex)
+              }).catch(err => {
+                console.error(`Failed to load model ${modelInfo.modelUrl}:`, err)
+                modelPoolLoadingRef.current.delete(poolIndex)
+                // Reset URL to trigger retry on next frame
+                modelPoolUrlsRef.current.set(poolIndex, './b738.glb')
+              })
+            }
+
+            // Build modelMatrix with position, rotation, and non-uniform scale
             const position = Cesium.Cartesian3.fromDegrees(
               aircraft.interpolatedLongitude,
               aircraft.interpolatedLatitude,
               modelHeight
             )
+
             // Model heading: Cesium models typically face +X, so heading=0 means east
             // Subtract 90 to convert from compass heading (north=0) to model heading
-            // Add 180° to flip models that face backwards (rotate around Z/up axis)
+            // Add 180° to flip models that face backwards
             const hpr = new Cesium.HeadingPitchRoll(
               Cesium.Math.toRadians(aircraft.interpolatedHeading - 90 + 180),
               0,
               0
             )
-            modelEntity.position = new Cesium.ConstantPositionProperty(position)
-            modelEntity.orientation = new Cesium.ConstantProperty(
-              Cesium.Transforms.headingPitchRollQuaternion(position, hpr)
+
+            // Create base transformation matrix (translation + rotation)
+            const modelMatrix = Cesium.Transforms.headingPitchRollToFixedFrame(position, hpr)
+
+            // Apply non-uniform scale (viewModeScale is uniform, modelInfo.scale is per-axis)
+            const totalScaleX = viewModeScale * modelInfo.scale.x
+            const totalScaleY = viewModeScale * modelInfo.scale.y
+            const totalScaleZ = viewModeScale * modelInfo.scale.z
+            const scaleMatrix = Cesium.Matrix4.fromScale(
+              new Cesium.Cartesian3(totalScaleX, totalScaleY, totalScaleZ)
             )
+            Cesium.Matrix4.multiply(modelMatrix, scaleMatrix, modelMatrix)
 
-            // Update model based on aircraft type
-            if (modelEntity.model) {
-              // Get the correct model for this aircraft type
-              // For exact/mapped matches: scale = 1.0
-              // For closest matches: scale adjusts to match target dimensions
-              // For fallback: scale = 1.0 (unknown aircraft shown as B738)
-              const modelInfo = aircraftModelService.getModelInfo(aircraft.aircraftType)
-              const currentModelUrl = conePoolModelsRef.current.get(poolIndex)
+            // Apply the transformation
+            model.modelMatrix = modelMatrix
 
-              // Update model URI if it changed
-              if (currentModelUrl !== modelInfo.modelUrl) {
-                modelEntity.model.uri = new Cesium.ConstantProperty(modelInfo.modelUrl)
-                conePoolModelsRef.current.set(poolIndex, modelInfo.modelUrl)
-                // Reset animation config when model changes
-                modelAnimationsConfiguredRef.current.delete(poolIndex)
-              }
-
-              // Apply the model's scale factor (1.0 for exact matches, calculated for closest matches)
-              modelEntity.model.scale = new Cesium.ConstantProperty(MODEL_BASE_SCALE * viewModeScale * modelInfo.scale)
-
-              // Apply color - white in topdown for visibility, off-white in 3D to hide bad textures
-              // TODO: Replace with airline-specific liveries when available
-              if (viewMode === 'topdown') {
-                modelEntity.model.color = new Cesium.ConstantProperty(Cesium.Color.WHITE)
-              } else {
-                modelEntity.model.color = new Cesium.ConstantProperty(MODEL_DEFAULT_COLOR)
-              }
-              modelEntity.model.colorBlendMode = new Cesium.ConstantProperty(Cesium.ColorBlendMode.REPLACE)
+            // Apply color - white in topdown for visibility, off-white in 3D
+            if (viewMode === 'topdown') {
+              model.color = Cesium.Color.WHITE
+            } else {
+              model.color = MODEL_DEFAULT_COLOR
             }
 
             // Update propeller animation based on groundspeed
-            // Get or create propeller state for this aircraft
             let propState = propellerStatesRef.current.get(aircraft.callsign)
             if (!propState) {
               propState = createPropellerState()
               propellerStatesRef.current.set(aircraft.callsign, propState)
             }
 
-            // Update propeller physics with inertia
             const newPropState = updatePropellerState(
               propState,
               aircraft.interpolatedGroundspeed,
@@ -834,57 +865,35 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
             propellerStatesRef.current.set(aircraft.callsign, newPropState)
 
             // Configure animation on the Model primitive if not already done
-            // We need to access the underlying Model to control animation timing
-            if (!modelAnimationsConfiguredRef.current.has(poolIndex)) {
-              // Try multiple approaches to get the Model primitive
-              // Approach 1: Internal _modelPrimitive property (common in recent Cesium versions)
-              let modelPrimitive = (modelEntity as { _modelPrimitive?: Cesium.Model })._modelPrimitive
+            if (!modelAnimationsConfiguredRef.current.has(poolIndex) && model.ready) {
+              const animations = model.activeAnimations
+              if (animations.length === 0) {
+                // Store propeller state reference on the model for the callback
+                const modelWithState = model as Cesium.Model & { _propStateRef?: { current: PropellerState } }
+                modelWithState._propStateRef = { current: newPropState }
 
-              // Approach 2: Search in scene primitives if approach 1 fails
-              if (!modelPrimitive) {
-                const primitives = viewer.scene.primitives
-                for (let i = 0; i < primitives.length; i++) {
-                  const primitive = primitives.get(i)
-                  if (primitive instanceof Cesium.Model && (primitive as { id?: { id?: string } }).id?.id === modelEntity.id) {
-                    modelPrimitive = primitive
-                    break
-                  }
-                }
-              }
-
-              if (modelPrimitive && modelPrimitive.ready) {
-                // Add animations with manual control via animationTime callback
-                const animations = modelPrimitive.activeAnimations
-                if (animations.length === 0) {
-                  const propStateRef = { current: newPropState }
-                  // Store reference for the callback to access
-                  ;(modelEntity as { _propStateRef?: { current: PropellerState } })._propStateRef = propStateRef
-
-                  animations.addAll({
-                    loop: Cesium.ModelAnimationLoop.REPEAT,
-                    animationTime: (duration: number) => {
-                      // Get the current propeller state from the entity
-                      const entity = modelEntity as { _propStateRef?: { current: PropellerState } }
-                      const state = entity._propStateRef?.current
-                      if (state) {
-                        return getPropellerAnimationTime(state, duration)
-                      }
-                      return 0
+                animations.addAll({
+                  loop: Cesium.ModelAnimationLoop.REPEAT,
+                  animationTime: (duration: number) => {
+                    const state = modelWithState._propStateRef?.current
+                    if (state) {
+                      return getPropellerAnimationTime(state, duration)
                     }
-                  })
-                  modelAnimationsConfiguredRef.current.add(poolIndex)
-                }
+                    return 0
+                  }
+                })
+                modelAnimationsConfiguredRef.current.add(poolIndex)
               }
             } else {
               // Update the propeller state reference for the animation callback
-              const entity = modelEntity as { _propStateRef?: { current: PropellerState } }
-              if (entity._propStateRef) {
-                entity._propStateRef.current = newPropState
+              const modelWithState = model as Cesium.Model & { _propStateRef?: { current: PropellerState } }
+              if (modelWithState._propStateRef) {
+                modelWithState._propStateRef.current = newPropState
               }
             }
 
             // Show the model
-            modelEntity.show = true
+            model.show = true
           }
         }
       }
@@ -898,7 +907,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
       )
 
       // Store the Cesium position for screen projection
-      const cesiumPosition = conePoolReadyRef.current && terrainOffsetReadyRef.current
+      const cesiumPosition = modelPoolReadyRef.current && terrainOffsetReadyRef.current
         ? Cesium.Cartesian3.fromDegrees(
             aircraft.interpolatedLongitude,
             aircraft.interpolatedLatitude,
@@ -1068,27 +1077,25 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     }
 
     // Hide unused pool models and clean up references to prevent memory leaks
-    for (const [idx, assignedCallsign] of conePoolAssignmentsRef.current.entries()) {
+    for (const [idx, assignedCallsign] of modelPoolAssignmentsRef.current.entries()) {
       if (assignedCallsign !== null && !seenCallsigns.has(assignedCallsign)) {
         // Release this slot and hide the model
-        conePoolAssignmentsRef.current.set(idx, null)
-        const modelEntity = viewer.entities.getById(`cone_pool_${idx}`)
-        if (modelEntity) {
-          modelEntity.show = false
+        modelPoolAssignmentsRef.current.set(idx, null)
+        const model = modelPoolRef.current.get(idx)
+        if (model) {
+          model.show = false
 
           // CRITICAL: Clear the propeller state reference to break closure memory leak
-          // The animation callback closure captures this reference
-          const entityWithRef = modelEntity as { _propStateRef?: { current: PropellerState } }
-          if (entityWithRef._propStateRef) {
-            entityWithRef._propStateRef = undefined
+          const modelWithRef = model as Cesium.Model & { _propStateRef?: { current: PropellerState } }
+          if (modelWithRef._propStateRef) {
+            modelWithRef._propStateRef = undefined
           }
 
           // Clear animation configured flag so animations can be reconfigured for next aircraft
-          // This allows the pool slot to be properly reused with fresh animation state
           modelAnimationsConfiguredRef.current.delete(idx)
 
           // Reset model URL tracking (next aircraft may need different model)
-          conePoolModelsRef.current.set(idx, './b738.glb')
+          modelPoolUrlsRef.current.set(idx, './b738.glb')
         }
       }
     }
@@ -1152,7 +1159,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     const logMemoryCounters = async () => {
       const counters = getMemoryCounters()
       const babylonMeshes = babylonOverlay.getAircraftCallsigns().length
-      const poolUsed = [...conePoolAssignmentsRef.current.values()].filter(v => v !== null).length
+      const poolUsed = [...modelPoolAssignmentsRef.current.values()].filter(v => v !== null).length
 
       // Get Cesium tile cache size if viewer is available
       const cesiumTileCache = viewerRef.current?.scene?.globe?.tileCacheSize ?? 0
