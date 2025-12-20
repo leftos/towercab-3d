@@ -25,6 +25,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ### Fixed
 - Main viewport controls now work correctly after localStorage migration (fixed main viewport ID normalization)
+- Cloud layers now hidden in 2D top-down view (prevents clouds from obscuring the entire view when looking straight down)
+- Cloud ceiling culling disabled in 2D view (datablocks no longer hidden by cloud layers when in top-down mode)
 
 ## v0.0.3-alpha
 

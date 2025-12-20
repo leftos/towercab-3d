@@ -81,6 +81,9 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
   // State to track when scene is ready (triggers re-render for dependents)
   const [sceneReady, setSceneReady] = useState(false)
 
+  // State to track top-down mode for cloud visibility (clouds hidden in 2D view)
+  const [isTopDownView, setIsTopDownView] = useState(false)
+
   // Weather store subscriptions
   const cloudLayers = useWeatherStore((state) => state.cloudLayers)
   const fogDensity = useWeatherStore((state) => state.fogDensity)
@@ -273,17 +276,20 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
   }, [canvas, cesiumViewer])
 
   // Update cloud planes based on weather data and settings
+  // Clouds are hidden in 2D/top-down view since looking straight down through clouds
+  // would obscure the entire view
   useEffect(() => {
     if (!cloudPlanesCreatedRef.current) return
 
-    const shouldShowClouds = showWeatherEffects && showClouds
+    // Don't show clouds in 2D top-down view - they would obscure everything
+    const shouldShowClouds = showWeatherEffects && showClouds && !isTopDownView
     const pool = cloudMeshPoolRef.current
 
     for (let i = 0; i < CLOUD_POOL_SIZE; i++) {
       const meshData = pool[i]
       if (!meshData) continue
 
-      // Hide if clouds disabled or no layer at this index
+      // Hide if clouds disabled, no layer at this index, or in 2D view
       if (!shouldShowClouds || i >= cloudLayers.length) {
         meshData.plane.isVisible = false
         continue
@@ -299,7 +305,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
       // Adjust opacity based on coverage and user setting
       meshData.material.alpha = layer.coverage * cloudOpacity
     }
-  }, [cloudLayers, showWeatherEffects, showClouds, cloudOpacity])
+  }, [cloudLayers, showWeatherEffects, showClouds, cloudOpacity, isTopDownView])
 
   // Apply Babylon.js fog effect using a fog dome mesh
   // The dome surrounds the camera at visibility distance, creating a fog wall
@@ -395,7 +401,8 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
 
     // Check cloud ceiling culling
     // Only cull if clouds are enabled and we have cloud data
-    if (showClouds && cloudLayers.length > 0) {
+    // Skip cloud culling in 2D top-down view - clouds don't visually obscure in this mode
+    if (showClouds && cloudLayers.length > 0 && !isTopDownModeRef.current) {
       const lowerAlt = Math.min(cameraAltitudeMeters, aircraftAltitudeMeters)
       const higherAlt = Math.max(cameraAltitudeMeters, aircraftAltitudeMeters)
 
@@ -462,7 +469,12 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     if (!viewer || !camera) return
 
     camera.rotationQuaternion = null
-    isTopDownModeRef.current = true
+
+    // Update state only when mode changes (to trigger cloud visibility update)
+    if (!isTopDownModeRef.current) {
+      isTopDownModeRef.current = true
+      setIsTopDownView(true)
+    }
 
     // Get Cesium camera's geographic position
     const cartographic = Cesium.Cartographic.fromCartesian(viewer.camera.positionWC)
@@ -504,7 +516,12 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
 
     // Clear any quaternion so Euler angles work
     camera.rotationQuaternion = null
-    isTopDownModeRef.current = false
+
+    // Update state only when mode changes (to trigger cloud visibility update)
+    if (isTopDownModeRef.current) {
+      isTopDownModeRef.current = false
+      setIsTopDownView(false)
+    }
 
     // Use utility function for camera sync calculation
     const syncData = calculateBabylonCameraSync(viewer, fixedToEnu)
