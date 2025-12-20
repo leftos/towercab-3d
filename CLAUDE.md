@@ -18,6 +18,15 @@ npm run dist       # Build and package for Windows (outputs to dist/)
 
 **Note for Claude:** Only the user can run `npm run dev` and `npm run preview` as these launch the Electron app with a GUI. Ask the user to run these commands and report back any errors.
 
+**Important:** Always run ESLint before committing changes:
+
+```bash
+npx eslint src/        # Check for linting errors
+npx eslint src/ --fix  # Auto-fix fixable issues
+```
+
+Fix all ESLint errors before committing. Do not disable ESLint rules without a justified reason.
+
 ## Architecture
 
 ### Dual Rendering System
