@@ -28,6 +28,12 @@
   color: rgba(255, 255, 255, 0.9);
 }
 
+.panel-header .header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .panel-header .aircraft-count {
   background: rgba(79, 195, 247, 0.2);
   color: #4fc3f7;
@@ -35,6 +41,34 @@
   border-radius: 10px;
   font-size: 12px;
   font-weight: 600;
+}
+
+.collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.collapse-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* Collapsed state */
+.aircraft-panel.collapsed {
+  max-height: none;
+}
+
+.aircraft-panel.collapsed .panel-header {
+  border-bottom: none;
 }
 
 /* Panel Controls - Search and Sort */

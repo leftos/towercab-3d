@@ -3,7 +3,7 @@ import * as Cesium from 'cesium'
 const DB_NAME = 'cesium-tile-cache'
 const DB_VERSION = 1
 const STORE_NAME = 'tiles'
-const MAX_CACHE_SIZE = 500 * 1024 * 1024 // 500MB max cache size
+const MAX_CACHE_SIZE = 200 * 1024 * 1024 // 200MB max cache size (reduced from 500MB to prevent OOM)
 const CACHE_EXPIRY_DAYS = 7
 
 interface CachedTile {

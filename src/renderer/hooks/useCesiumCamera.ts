@@ -54,6 +54,7 @@ export function useCesiumCamera(
   const adjustOrbitPitch = useCameraStore((state) => state.adjustOrbitPitch)
   const moveForward = useCameraStore((state) => state.moveForward)
   const moveRight = useCameraStore((state) => state.moveRight)
+  const moveUp = useCameraStore((state) => state.moveUp)
   const resetViewStore = useCameraStore((state) => state.resetView)
   const resetPosition = useCameraStore((state) => state.resetPosition)
   const followAircraftStore = useCameraStore((state) => state.followAircraft)
@@ -73,6 +74,7 @@ export function useCesiumCamera(
   const velocityRef = useRef({
     forward: 0,
     right: 0,
+    up: 0,
     heading: 0,
     pitch: 0,
     zoom: 0,
@@ -569,6 +571,7 @@ export function useCesiumCamera(
     // Keys that trigger continuous movement (mapped to velocity channels)
     const MOVEMENT_KEYS = new Set([
       'w', 'W', 's', 'S', 'a', 'A', 'd', 'D',
+      'q', 'Q', 'e', 'E',  // Up/down movement
       'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown',
       '+', '=', '-', '_',
       'Shift'  // Sprint modifier
@@ -644,6 +647,7 @@ export function useCesiumCamera(
       // Calculate target velocities based on pressed keys
       let targetForward = 0
       let targetRight = 0
+      let targetUp = 0
       let targetHeading = 0
       let targetPitch = 0
       let targetZoom = 0
@@ -660,6 +664,10 @@ export function useCesiumCamera(
       if (keys.has('s')) targetForward = -1
       if (keys.has('a')) targetRight = -1
       if (keys.has('d')) targetRight = 1
+
+      // Q/E for vertical movement (height above ground)
+      if (keys.has('e')) targetUp = 1
+      if (keys.has('q')) targetUp = -1
 
       // Arrow keys - rotation or orbit control
       const inOrbitMode = followingCallsign && followMode === 'orbit'
@@ -747,6 +755,7 @@ export function useCesiumCamera(
 
       vel.forward = accelerate(vel.forward, targetForward, effectiveMoveSpeed)
       vel.right = accelerate(vel.right, targetRight, effectiveMoveSpeed)
+      vel.up = accelerate(vel.up, targetUp, effectiveMoveSpeed)
       vel.heading = accelerate(vel.heading, targetHeading, MAX_ROTATE_SPEED)
       vel.pitch = accelerate(vel.pitch, targetPitch, MAX_ROTATE_SPEED)
       vel.zoom = accelerate(vel.zoom, targetZoom, MAX_ZOOM_SPEED)
@@ -763,6 +772,9 @@ export function useCesiumCamera(
       }
       if (Math.abs(vel.right) > threshold) {
         moveRight(vel.right * dt)
+      }
+      if (Math.abs(vel.up) > threshold) {
+        moveUp(vel.up * dt)
       }
       if (Math.abs(vel.heading) > threshold) {
         adjustHeading(vel.heading * dt)

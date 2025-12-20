@@ -168,8 +168,9 @@ function CesiumViewer() {
     // Enable clock animation for model animations (propellers, etc.)
     viewer.clock.shouldAnimate = true
 
-    // Increase in-memory tile cache for smoother panning (default is 100)
-    viewer.scene.globe.tileCacheSize = 1000
+    // In-memory tile cache - balance between smooth panning and memory usage
+    // Default is 100, we use 250 for smoother experience without excessive memory
+    viewer.scene.globe.tileCacheSize = 250
 
     // Preload nearby tiles for smoother camera movement
     viewer.scene.globe.preloadAncestors = true
@@ -276,6 +277,10 @@ function CesiumViewer() {
         try {
           const tileset = await Cesium.createOsmBuildingsAsync()
           if (isCancelled) return
+
+          // Memory optimization: minimize tile caching to reduce RAM usage
+          tileset.cacheBytes = 0  // Don't cache tiles in memory (new API, replaces maximumMemoryUsage)
+          tileset.maximumScreenSpaceError = 24  // Use lower quality tiles (default is 16)
 
           cesiumViewer.scene.primitives.add(tileset)
           currentTileset = tileset

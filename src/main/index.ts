@@ -3,6 +3,10 @@ import { join } from 'path'
 import { readFileSync, writeFileSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 
+// Increase renderer memory limit to prevent OOM crashes with large Cesium/Babylon scenes
+// Must be set before app.whenReady()
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096')
+
 interface WindowBounds {
   x: number
   y: number

@@ -29,9 +29,10 @@ function AircraftPanel() {
   const showAircraftPanel = useSettingsStore((state) => state.showAircraftPanel)
   const labelVisibilityDistance = useSettingsStore((state) => state.labelVisibilityDistance)
 
-  // Local state for sorting and searching
+  // Local state for sorting, searching, and collapse
   const [sortOption, setSortOption] = useState<SortOption>('distance')
   const [searchQuery, setSearchQuery] = useState('')
+  const [isCollapsed, setIsCollapsed] = useState(false)
 
   // Camera store for follow functionality
   const followingCallsign = useCameraStore((state) => state.followingCallsign)
@@ -143,36 +144,53 @@ function AircraftPanel() {
   if (!showAircraftPanel) return null
 
   return (
-    <div className="aircraft-panel">
+    <div className={`aircraft-panel ${isCollapsed ? 'collapsed' : ''}`}>
       <div className="panel-header">
         <h3>{isOrbitModeWithoutAirport ? `Near ${followingCallsign}` : 'Nearby Aircraft'}</h3>
-        <span className="aircraft-count">{nearbyAircraft.length}</span>
-      </div>
-
-      <div className="panel-controls">
-        <input
-          type="text"
-          className="search-input"
-          placeholder="Search callsign, type, route..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
-        <div className="sort-controls">
-          <span className="sort-label">Sort:</span>
-          <select
-            className="sort-select"
-            value={sortOption}
-            onChange={(e) => setSortOption(e.target.value as SortOption)}
+        <div className="header-right">
+          <span className="aircraft-count">{nearbyAircraft.length}</span>
+          <button
+            className="collapse-btn"
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            title={isCollapsed ? 'Expand panel' : 'Collapse panel'}
           >
-            <option value="distance">Distance</option>
-            <option value="callsign">Callsign</option>
-            <option value="altitude">Altitude</option>
-            <option value="speed">Speed</option>
-          </select>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              {isCollapsed ? (
+                <polyline points="6 9 12 15 18 9" />
+              ) : (
+                <polyline points="18 15 12 9 6 15" />
+              )}
+            </svg>
+          </button>
         </div>
       </div>
 
-      {followingCallsign && (
+      {!isCollapsed && (
+        <>
+          <div className="panel-controls">
+            <input
+              type="text"
+              className="search-input"
+              placeholder="Search callsign, type, route..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            <div className="sort-controls">
+              <span className="sort-label">Sort:</span>
+              <select
+                className="sort-select"
+                value={sortOption}
+                onChange={(e) => setSortOption(e.target.value as SortOption)}
+              >
+                <option value="distance">Distance</option>
+                <option value="callsign">Callsign</option>
+                <option value="altitude">Altitude</option>
+                <option value="speed">Speed</option>
+              </select>
+            </div>
+          </div>
+
+          {followingCallsign && (
         <div className="following-indicator">
           <div className="following-info">
             <span className="following-label">Following</span>
@@ -301,6 +319,8 @@ function AircraftPanel() {
           })
         )}
       </div>
+        </>
+      )}
     </div>
   )
 }
