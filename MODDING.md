@@ -4,9 +4,19 @@ This guide explains how to create custom aircraft and tower models for TowerCab 
 
 ## Overview
 
-TowerCab 3D supports loading custom 3D models in glTF/GLB format. You can create:
+TowerCab 3D supports loading custom 3D models in multiple formats. You can create:
 - **Aircraft models**: Replace the default cone with realistic aircraft
 - **Tower models**: Add custom control tower models for specific airports
+
+### Supported Formats
+
+| Format | Extension | Recommended | Notes |
+|--------|-----------|-------------|-------|
+| glTF Binary | `.glb` | ✅ Best | Smallest file size, fastest loading |
+| glTF | `.gltf` | ✅ Good | JSON format with separate assets |
+| Collada | `.dae` | Good | Native SketchUp export format |
+| Wavefront OBJ | `.obj` | Good | Universal format, widely supported |
+| STL | `.stl` | Limited | Geometry only, no textures/materials |
 
 ## File Structure
 
@@ -83,7 +93,7 @@ One mod can match multiple aircraft types by listing them in `aircraftTypes`.
 2. **Origin**: Place the origin at the aircraft's center
 3. **Scale**: Model should be in meters (1 unit = 1 meter)
 4. **File Size**: Keep models under 5MB for best performance
-5. **Format**: Use GLB (binary glTF) for smaller file sizes
+5. **Format**: GLB recommended; DAE and OBJ also supported
 
 ## Tower Mods
 
@@ -133,9 +143,52 @@ Create a `manifest.json` file in your tower mod folder:
 
 ### Recommended Tools
 
-- **Blender** (free): Full-featured 3D modeling
-- **SketchUp** (free/paid): Easy to use for beginners
+- **Blender** (free): Full-featured 3D modeling with excellent export options
+- **SketchUp** (free/paid): Easy to use, great for buildings and towers
 - **3ds Max** / **Maya**: Professional tools
+
+### Export Settings (SketchUp)
+
+SketchUp is excellent for creating tower models due to its intuitive building tools. Here's how to export for TowerCab 3D:
+
+#### Option 1: Collada (.dae) - Recommended for SketchUp
+
+1. File → Export → 3D Model...
+2. Select "COLLADA File (*.dae)" as the format
+3. Click "Options..." and configure:
+   - ✅ Export Two-Sided Faces
+   - ✅ Export Edges (optional, for sharp edges)
+   - ✅ Triangulate All Faces
+   - ✅ Export Texture Maps
+   - Export only: Current Selection (if exporting specific objects)
+4. Save as `model.dae` in your mod folder
+
+#### Option 2: OBJ (.obj) - Alternative Format
+
+1. File → Export → 3D Model...
+2. Select "OBJ File (*.obj)" as the format
+3. Click "Options..." and configure:
+   - ✅ Triangulate All Faces
+   - ✅ Export Texture Maps
+   - Swap YZ coordinates: Check if model appears sideways
+4. Save as `model.obj` in your mod folder
+
+#### Option 3: GLB via Blender (Best Quality)
+
+For best results, convert SketchUp models to GLB:
+
+1. Export from SketchUp as .dae (Collada)
+2. Open Blender and import the .dae file (File → Import → Collada)
+3. Adjust materials if needed
+4. Export as .glb (File → Export → glTF 2.0)
+
+#### SketchUp Tips
+
+- **Scale**: SketchUp uses inches by default. Set units to Meters (Window → Model Info → Units)
+- **Origin**: Position your model at the origin (0,0,0) for proper placement
+- **Orientation**: Tower entrance should face the green axis (+Y)
+- **Textures**: Use simple, low-resolution textures for better performance
+- **Components**: Flatten components before export (Edit → Component → Explode)
 
 ### Export Settings (Blender)
 
@@ -167,7 +220,8 @@ Create a `manifest.json` file in your tower mod folder:
 
 - Verify `manifest.json` is valid JSON
 - Check that `modelFile` path is correct
-- Ensure the model file exists and is a valid glTF/GLB
+- Ensure the model file exists and is a valid format (.glb, .gltf, .dae, .obj, .stl)
+- For OBJ files, ensure the .mtl material file is in the same folder
 
 ### Model Appears Wrong Size
 
@@ -183,6 +237,14 @@ Create a `manifest.json` file in your tower mod folder:
 
 - Verify `aircraftTypes` includes the correct ICAO codes
 - Check that the folder name matches an aircraft type code
+
+### SketchUp Export Issues
+
+- **Model appears huge**: SketchUp defaults to inches; set Model Info → Units to Meters
+- **Model is sideways**: Enable "Swap YZ coordinates" in OBJ export options, or adjust `rotationOffset` in manifest
+- **Missing textures**: Ensure "Export Texture Maps" is checked; keep texture files in same folder
+- **Dark or black model**: Enable "Export Two-Sided Faces" for Collada exports
+- **Jagged edges**: Enable "Triangulate All Faces" in export options
 
 ## Examples
 
@@ -227,6 +289,34 @@ manifest.json:
   "positionOffset": {
     "lat": 0.0001,
     "lon": -0.0002
+  }
+}
+```
+
+### SketchUp Tower Mod (Collada)
+
+```
+mods/towers/KSFO/
+├── model.dae
+├── textures/
+│   ├── glass.png
+│   └── concrete.png
+└── manifest.json
+```
+
+manifest.json:
+```json
+{
+  "name": "SFO Tower",
+  "author": "Community",
+  "version": "1.0.0",
+  "modelFile": "model.dae",
+  "airports": ["KSFO"],
+  "scale": 1.0,
+  "rotationOffset": {
+    "x": 0,
+    "y": 90,
+    "z": 0
   }
 }
 ```
