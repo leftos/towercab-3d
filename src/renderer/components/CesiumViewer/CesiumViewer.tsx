@@ -17,6 +17,7 @@ import {
   type PropellerState
 } from '../../utils/interpolation'
 import { getServiceWorkerCacheStats } from '../../utils/serviceWorkerRegistration'
+import { aircraftModelService } from '../../services/AircraftModelService'
 import './CesiumViewer.css'
 
 // Import Cesium CSS
@@ -38,6 +39,11 @@ function getScreenSpaceError(quality: number): number {
 // Cone pool size - pre-create this many cone entities at init time
 const CONE_POOL_SIZE = 100
 
+// Model rendering constants
+const MODEL_BASE_SCALE = 2.5        // Base scale for all aircraft models
+const MODEL_HEIGHT_OFFSET = 1       // Meters to raise models above ground to prevent clipping
+const MODEL_DEFAULT_COLOR = new Cesium.Color(0.85, 0.85, 0.85, 1.0)  // Muted gray until airline liveries
+
 function CesiumViewer() {
   const containerRef = useRef<HTMLDivElement>(null)
   const babylonCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -51,6 +57,8 @@ function CesiumViewer() {
 
   // Cone pool: maps pool index to callsign (or null if unused)
   const conePoolAssignmentsRef = useRef<Map<number, string | null>>(new Map())
+  // Track which model URL each pool slot is currently using
+  const conePoolModelsRef = useRef<Map<number, string>>(new Map())
   const conePoolReadyRef = useRef<boolean>(false)
 
   // Propeller animation state: maps callsign to propeller state
@@ -216,8 +224,9 @@ function CesiumViewer() {
     setCesiumViewer(viewer)
 
     // Create aircraft model pool - all models start hidden
-    // Using Cesium's sample aircraft model from GitHub
-    const aircraftModelUrl = 'https://raw.githubusercontent.com/CesiumGS/cesium/main/Apps/SampleData/models/CesiumAir/Cesium_Air.glb'
+    // Models from Flightradar24/fr24-3d-models (GPL-2.0, originally from FlightGear)
+    // Default to B738, will be updated dynamically based on aircraft type
+    const defaultModelUrl = './b738.glb'
     const defaultPos = Cesium.Cartesian3.fromDegrees(0, 0, 0)
     const defaultHpr = new Cesium.HeadingPitchRoll(0, 0, 0)
     const defaultOrientation = Cesium.Transforms.headingPitchRollQuaternion(defaultPos, defaultHpr)
@@ -229,15 +238,18 @@ function CesiumViewer() {
         position: defaultPos,
         orientation: defaultOrientation,
         model: {
-          uri: aircraftModelUrl,
+          uri: defaultModelUrl,
           minimumPixelSize: 24,
           maximumScale: 50,
-          scale: 2,
+          scale: MODEL_BASE_SCALE,
           runAnimations: false, // Disabled - we manually control animation via animationTime callback
-          shadows: Cesium.ShadowMode.ENABLED
+          shadows: Cesium.ShadowMode.ENABLED,
+          color: MODEL_DEFAULT_COLOR,
+          colorBlendMode: Cesium.ColorBlendMode.REPLACE
         }
       })
       conePoolAssignmentsRef.current.set(i, null)
+      conePoolModelsRef.current.set(i, defaultModelUrl)
     }
     conePoolReadyRef.current = true
     console.log(`Created aircraft model pool with ${CONE_POOL_SIZE} entities`)
@@ -674,8 +686,8 @@ function CesiumViewer() {
 
       // Use model from pool - find or assign a pool slot for this aircraft
       if (conePoolReadyRef.current && terrainOffsetReadyRef.current) {
-        // Calculate model position with terrain offset correction
-        const modelHeight = heightAboveEllipsoid + terrainOffsetRef.current
+        // Calculate model position with terrain offset correction and height offset to prevent ground clipping
+        const modelHeight = heightAboveEllipsoid + terrainOffsetRef.current + MODEL_HEIGHT_OFFSET
 
         // Find existing pool slot for this callsign, or get an unused one
         let poolIndex = -1
@@ -706,8 +718,9 @@ function CesiumViewer() {
             )
             // Model heading: Cesium models typically face +X, so heading=0 means east
             // Subtract 90 to convert from compass heading (north=0) to model heading
+            // Add 180° to flip models that face backwards (rotate around Z/up axis)
             const hpr = new Cesium.HeadingPitchRoll(
-              Cesium.Math.toRadians(aircraft.interpolatedHeading - 90),
+              Cesium.Math.toRadians(aircraft.interpolatedHeading - 90 + 180),
               0,
               0
             )
@@ -716,17 +729,34 @@ function CesiumViewer() {
               Cesium.Transforms.headingPitchRollQuaternion(position, hpr)
             )
 
-            // Update model scale and color based on view mode
+            // Update model based on aircraft type
             if (modelEntity.model) {
-              modelEntity.model.scale = new Cesium.ConstantProperty(2 * viewModeScale)
-              // White in topdown view for visibility, normal color in 3D
+              // Get the correct model for this aircraft type
+              // For exact/mapped matches: scale = 1.0
+              // For closest matches: scale adjusts to match target dimensions
+              // For fallback: scale = 1.0 (unknown aircraft shown as B738)
+              const modelInfo = aircraftModelService.getModelInfo(aircraft.aircraftType)
+              const currentModelUrl = conePoolModelsRef.current.get(poolIndex)
+
+              // Update model URI if it changed
+              if (currentModelUrl !== modelInfo.modelUrl) {
+                modelEntity.model.uri = new Cesium.ConstantProperty(modelInfo.modelUrl)
+                conePoolModelsRef.current.set(poolIndex, modelInfo.modelUrl)
+                // Reset animation config when model changes
+                modelAnimationsConfiguredRef.current.delete(poolIndex)
+              }
+
+              // Apply the model's scale factor (1.0 for exact matches, calculated for closest matches)
+              modelEntity.model.scale = new Cesium.ConstantProperty(MODEL_BASE_SCALE * viewModeScale * modelInfo.scale)
+
+              // Apply color - white in topdown for visibility, off-white in 3D to hide bad textures
+              // TODO: Replace with airline-specific liveries when available
               if (viewMode === 'topdown') {
                 modelEntity.model.color = new Cesium.ConstantProperty(Cesium.Color.WHITE)
-                modelEntity.model.colorBlendMode = new Cesium.ConstantProperty(Cesium.ColorBlendMode.REPLACE)
               } else {
-                modelEntity.model.color = undefined
-                modelEntity.model.colorBlendMode = undefined
+                modelEntity.model.color = new Cesium.ConstantProperty(MODEL_DEFAULT_COLOR)
               }
+              modelEntity.model.colorBlendMode = new Cesium.ConstantProperty(Cesium.ColorBlendMode.REPLACE)
             }
 
             // Update propeller animation based on groundspeed
@@ -801,22 +831,13 @@ function CesiumViewer() {
         }
       }
 
-      // Update Babylon overlay (for labels - cones will be hidden)
-      // This depends on Babylon root node being set up
-      if (rootNodeSetupRef.current) {
-        babylonOverlay.updateAircraftMesh(
-          aircraft.callsign,
-          aircraft.interpolatedLatitude,
-          aircraft.interpolatedLongitude,
-          heightAboveEllipsoid,
-          groundElevationMeters,
-          aircraft.interpolatedHeading, // Use interpolated heading for smooth cone rotation
-          babylonColor,
-          isFollowed,
-          labelText,
-          viewModeScale
-        )
-      }
+      // Update Babylon overlay for labels (Cesium handles 3D aircraft models)
+      babylonOverlay.updateAircraftLabel(
+        aircraft.callsign,
+        babylonColor,
+        isFollowed,
+        labelText
+      )
 
       // Store the Cesium position for screen projection
       const cesiumPosition = conePoolReadyRef.current && terrainOffsetReadyRef.current
@@ -973,11 +994,11 @@ function CesiumViewer() {
       babylonOverlay.updateLeaderLine(pos.callsign, pos.coneX, pos.coneY, pos.offsetX, pos.offsetY)
     }
 
-    // Clean up any Babylon meshes that are no longer in the visible set
+    // Clean up any Babylon labels that are no longer in the visible set
     const babylonCallsigns = babylonOverlay.getAircraftCallsigns()
     for (const callsign of babylonCallsigns) {
       if (!seenCallsigns.has(callsign)) {
-        babylonOverlay.removeAircraftMesh(callsign)
+        babylonOverlay.removeAircraftLabel(callsign)
       }
     }
 
@@ -1007,6 +1028,9 @@ function CesiumViewer() {
           // Clear animation configured flag so animations can be reconfigured for next aircraft
           // This allows the pool slot to be properly reused with fresh animation state
           modelAnimationsConfiguredRef.current.delete(idx)
+
+          // Reset model URL tracking (next aircraft may need different model)
+          conePoolModelsRef.current.set(idx, './b738.glb')
         }
       }
     }

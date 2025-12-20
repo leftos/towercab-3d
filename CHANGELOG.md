@@ -5,6 +5,18 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- 39 aircraft 3D models from Flightradar24/fr24-3d-models (GPL-2.0, originally from FlightGear):
+  - Airbus: A318, A319, A320, A321, A330-200/300, A340-300/600, A350, A380
+  - Boeing: 737-600/700/800/900, 747-400/8, 757-200/300, 767-200/300/400, 777-200/300, 787-8/9
+  - Regional: ATR 42, BAe 146, CRJ-700/900, A220-100/300, E170, E190, Q400
+  - Other: Beluga, Citation, helicopter, PA-28, ASK-21 glider
+- Aircraft type-based model selection - uses correct 3D model when available (e.g., B738 uses b738.glb)
+- Dimension-based model matching for unknown aircraft types:
+  - Finds closest matching model by FAA wingspan/length data
+  - Applies calculated scale factor to match actual aircraft dimensions
+  - Falls back to B738 at 1:1 scale only when no FAA dimension data available
+- AircraftDimensionsService for FAA aircraft dimension lookups
+- AircraftModelService for managing model selection and scaling logic
 - Tabbed settings modal with 5 tabs: General, Display, Graphics, Performance, and Help
 - Datablock display mode setting with three options:
   - Full: shows callsign, aircraft type, altitude, and speed
@@ -43,9 +55,13 @@ All notable changes to TowerCab 3D will be documented in this file.
   - Enables realistic weather when flying around globally
 
 ### Changed
+- Aircraft rendering now uses type-specific 3D models instead of generic cones/sample model
 - Settings modal reorganized into tabs to reduce vertical scrolling
 - Keyboard shortcuts moved to dedicated Help tab
 
 ### Fixed
 - Aircraft models and datablocks now render correctly when using global search (Ctrl+K) to orbit an aircraft without an airport selected
 - Ground aircraft at high-elevation airports (e.g., KRNO at 4,517ft) no longer appear floating; now uses altitude above ground level (AGL) instead of absolute altitude for ground detection
+- Aircraft 3D models now face the correct direction (fixed 180° rotation issue from Flightradar24 models)
+- Aircraft models no longer clip through ground (added 1m height offset)
+- Applied muted gray color to aircraft models to hide UV test textures until airline liveries are implemented

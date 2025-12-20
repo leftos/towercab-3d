@@ -24,15 +24,10 @@ export function getMemoryCounters() {
   return { ...memoryCounters }
 }
 
-interface AircraftMesh {
-  cone: BABYLON.Mesh
-  shadow?: BABYLON.Mesh
-  label?: GUI.Rectangle
-  labelText?: GUI.TextBlock
-  leaderLine?: GUI.Line
-  // Smoothed screen position for reducing jitter in orbit follow mode
-  smoothedScreenX?: number
-  smoothedScreenY?: number
+interface AircraftLabel {
+  label: GUI.Rectangle
+  labelText: GUI.TextBlock
+  leaderLine: GUI.Line
 }
 
 interface CloudMeshData {
@@ -57,7 +52,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
   const sceneRef = useRef<BABYLON.Scene | null>(null)
   const cameraRef = useRef<BABYLON.FreeCamera | null>(null)
   const rootNodeRef = useRef<BABYLON.TransformNode | null>(null)
-  const aircraftMeshesRef = useRef<Map<string, AircraftMesh>>(new Map())
+  const aircraftLabelsRef = useRef<Map<string, AircraftLabel>>(new Map())
   const basePointRef = useRef<BABYLON.Vector3 | null>(null)
   const basePointUpRef = useRef<BABYLON.Vector3 | null>(null)
   const baseCartesianRef = useRef<Cesium.Cartesian3 | null>(null)
@@ -218,40 +213,16 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     return () => {
       window.removeEventListener('resize', handleResize)
 
-      // CRITICAL: Dispose all aircraft resources BEFORE disposing scene
-      // Materials must be explicitly disposed or they leak
-      for (const [, meshData] of aircraftMeshesRef.current) {
-        // Dispose materials first
-        if (meshData.cone.material) {
-          meshData.cone.material.dispose()
-          memoryCounters.materialsDisposed++
-        }
-        if (meshData.shadow?.material) {
-          meshData.shadow.material.dispose()
-          memoryCounters.materialsDisposed++
-        }
-        // Dispose meshes
-        meshData.cone.dispose()
-        memoryCounters.meshesDisposed++
-        if (meshData.shadow) {
-          meshData.shadow.dispose()
-          memoryCounters.meshesDisposed++
-        }
-        // Dispose GUI controls
-        if (meshData.labelText) {
-          meshData.labelText.dispose()
-          memoryCounters.guiControlsDisposed++
-        }
-        if (meshData.leaderLine) {
-          meshData.leaderLine.dispose()
-          memoryCounters.guiControlsDisposed++
-        }
-        if (meshData.label) {
-          meshData.label.dispose()
-          memoryCounters.guiControlsDisposed++
-        }
+      // Dispose all aircraft label resources BEFORE disposing scene
+      for (const [, labelData] of aircraftLabelsRef.current) {
+        labelData.labelText.dispose()
+        memoryCounters.guiControlsDisposed++
+        labelData.leaderLine.dispose()
+        memoryCounters.guiControlsDisposed++
+        labelData.label.dispose()
+        memoryCounters.guiControlsDisposed++
       }
-      aircraftMeshesRef.current.clear()
+      aircraftLabelsRef.current.clear()
 
       // Dispose cloud plane resources
       for (const cloudData of cloudMeshPoolRef.current) {
@@ -567,152 +538,20 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     }
   }, [cesiumViewer, syncCamera2D, syncCamera3D])
 
-  // Create or update aircraft cone mesh and label
-  const updateAircraftMesh = useCallback((
+  // Create or update aircraft label (labels and leader lines only - Cesium handles 3D aircraft models)
+  const updateAircraftLabel = useCallback((
     callsign: string,
-    lat: number,
-    lon: number,
-    altitudeMeters: number,
-    groundElevationMeters: number,
-    heading: number,
     color: { r: number; g: number; b: number },
     isFollowed: boolean,
-    labelText?: string,
-    viewModeScale: number = 1.0
+    labelText?: string
   ) => {
-    const scene = sceneRef.current
     const guiTexture = guiTextureRef.current
+    if (!guiTexture) return
 
-    if (!scene || !guiTexture) return
+    let labelData = aircraftLabelsRef.current.get(callsign)
 
-    let localPos: BABYLON.Vector3
-
-    if (isTopDownModeRef.current) {
-      // 2D VIEW: Simple lat/lon to meter offset calculation
-      // No complex matrix math - just basic geography
-      const camLat = camera2DLatRef.current
-      const camLon = camera2DLonRef.current
-      const camHeading = camera2DHeadingRef.current
-
-      // Convert lat/lon difference to meters
-      // 1 degree latitude ≈ 111,111 meters
-      // 1 degree longitude ≈ 111,111 * cos(latitude) meters
-      const metersPerDegreeLat = 111111
-      const metersPerDegreeLon = 111111 * Math.cos(camLat * Math.PI / 180)
-
-      const deltaLat = lat - camLat
-      const deltaLon = lon - camLon
-
-      const northOffset = deltaLat * metersPerDegreeLat  // +North in world
-      const eastOffset = deltaLon * metersPerDegreeLon   // +East in world
-
-      // Rotate by heading so that the heading direction points "up" on screen
-      // Cesium heading: 0=North, 90=East (clockwise from above)
-      // We want to rotate world coordinates into screen coordinates
-      // Screen: +Z = up, +X = right (when looking down)
-      const cosH = Math.cos(camHeading)
-      const sinH = Math.sin(camHeading)
-
-      // Rotate (east, north) by -heading
-      const rotatedX = eastOffset * cosH - northOffset * sinH
-      const rotatedZ = eastOffset * sinH + northOffset * cosH
-
-      // Babylon coordinates: X=right on screen, Y=Up (towards camera), Z=up on screen
-      // For 2D, Y position is just a small offset above ground (flatten everything)
-      localPos = new BABYLON.Vector3(rotatedX, 50, rotatedZ)
-    } else {
-      // 3D VIEW: Use ENU transformation relative to tower
-      const fixedToEnu = fixedToEnuMatrixRef.current
-      if (!fixedToEnu) return
-
-      // Check if aircraft is on or near ground (within 60m / ~200ft of ground elevation)
-      // Larger threshold accounts for pressure altitude variations at high-elevation airports
-      const isOnGround = (altitudeMeters - groundElevationMeters) < 60
-      const coneRadius = 6 // Half of 12m diameter
-
-      // Compute effective altitude including terrain offset (matches Cesium model positioning)
-      const effectiveAltitude = isOnGround
-        ? groundElevationMeters + terrainOffsetRef.current + 0.5  // ground level with small offset
-        : altitudeMeters + terrainOffsetRef.current
-
-      // Get ENU position at actual altitude (accounts for Earth curvature at high altitudes)
-      const posCart = Cesium.Cartesian3.fromDegrees(lon, lat, effectiveAltitude)
-      const enuPos = Cesium.Matrix4.multiplyByPoint(fixedToEnu, posCart, new Cesium.Cartesian3())
-
-      // Convert ENU to Babylon: ENU(X,Y,Z) -> Babylon(X=East, Y=Up, Z=North)
-      // enuPos.z is the ENU "Up" component, which becomes Babylon Y
-      // Add coneRadius so cone mesh center is above the aircraft position
-      localPos = new BABYLON.Vector3(enuPos.x, enuPos.z + coneRadius, enuPos.y)
-    }
-
-
-    // Calculate heading direction in Babylon coordinates
-    // Heading: 0 = North, 90 = East, etc.
-    const headingRad = Cesium.Math.toRadians(heading)
-    let dirEast = Math.sin(headingRad)
-    let dirNorth = Math.cos(headingRad)
-
-    // In 2D view, rotate the direction by camera heading (same as positions)
-    if (isTopDownModeRef.current) {
-      const camHeading = camera2DHeadingRef.current
-      const cosH = Math.cos(camHeading)
-      const sinH = Math.sin(camHeading)
-      const rotatedDirX = dirEast * cosH - dirNorth * sinH
-      const rotatedDirZ = dirEast * sinH + dirNorth * cosH
-      dirEast = rotatedDirX
-      dirNorth = rotatedDirZ
-    }
-
-    // Direction in Babylon coordinates (Y-up): X = East, Y = Up (0 for level flight), Z = North
-    const dirBabylon = new BABYLON.Vector3(dirEast, 0, dirNorth)
-
-    let meshData = aircraftMeshesRef.current.get(callsign)
-
-    if (!meshData) {
-      // Create cone mesh - pointing along +Y axis by default (will be rotated)
-      // Size in meters - should be small enough to represent aircraft position
-      const coneHeight = 25
-      const coneDiameter = 12
-      const cone = BABYLON.MeshBuilder.CreateCylinder(callsign, {
-        height: coneHeight,
-        diameterTop: 0,  // Point at top
-        diameterBottom: coneDiameter,
-        tessellation: 16
-      }, scene)
-      memoryCounters.meshesCreated++
-      // Store cone dimensions for leader line calculation
-      cone.metadata = { height: coneHeight, diameter: coneDiameter }
-
-      // Create material for the cone (invisible - Cesium handles cone rendering)
-      const material = new BABYLON.StandardMaterial(`${callsign}_mat`, scene)
-      memoryCounters.materialsCreated++
-      material.emissiveColor = new BABYLON.Color3(color.r, color.g, color.b)
-      material.diffuseColor = new BABYLON.Color3(color.r, color.g, color.b)
-      material.disableLighting = true
-      material.alpha = 0  // Invisible - Cesium cones are visible instead
-      material.backFaceCulling = false
-      cone.material = material
-      cone.isVisible = false  // Hide - Cesium handles cone rendering with proper depth occlusion
-
-      // Create shadow mesh - a flat disc that sits on the ground
-      // Hidden since Cesium renders the visible shadows
-      const shadow = BABYLON.MeshBuilder.CreateDisc(`${callsign}_shadow`, {
-        radius: coneDiameter * 0.8,
-        tessellation: 16
-      }, scene)
-      memoryCounters.meshesCreated++
-      shadow.rotation.x = Math.PI / 2
-      shadow.isVisible = false // Hide - Cesium handles shadow rendering
-      const shadowMaterial = new BABYLON.StandardMaterial(`${callsign}_shadow_mat`, scene)
-      memoryCounters.materialsCreated++
-      shadowMaterial.diffuseColor = new BABYLON.Color3(0, 0, 0)
-      shadowMaterial.emissiveColor = new BABYLON.Color3(0, 0, 0)
-      shadowMaterial.alpha = 0
-      shadowMaterial.disableLighting = true
-      shadowMaterial.backFaceCulling = false
-      shadow.material = shadowMaterial
-
-      // Create GUI label (positioned manually in updateLeaderLine)
+    if (!labelData) {
+      // Create GUI label (positioned by updateLeaderLine)
       const label = new GUI.Rectangle(`${callsign}_label`)
       memoryCounters.guiControlsCreated++
       label.width = 'auto'
@@ -726,7 +565,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
       label.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT
       label.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_TOP
       label.zIndex = 10  // Labels render on top of leader lines
-      label.isVisible = false  // Start hidden until camera is synced and position is valid
+      label.isVisible = false  // Start hidden until positioned
       guiTexture.addControl(label)
 
       const text = new GUI.TextBlock(`${callsign}_text`)
@@ -744,94 +583,30 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
       text.paddingBottom = '2px'
       label.addControl(text)
 
-      // Create leader line (positioned manually in updateLeaderLine)
+      // Create leader line (positioned by updateLeaderLine)
       const leaderLine = new GUI.Line(`${callsign}_leaderLine`)
       memoryCounters.guiControlsCreated++
       leaderLine.lineWidth = 3
-      leaderLine.color = 'white'  // Use white for visibility testing
+      leaderLine.color = rgbToHex(color.r, color.g, color.b)
       leaderLine.zIndex = 1  // Leader lines render below labels (zIndex 10)
-      leaderLine.isVisible = false  // Start hidden until camera is synced and position is valid
-      // Set initial test coordinates - simple line from center
-      leaderLine.x1 = 0
-      leaderLine.y1 = 0
-      leaderLine.x2 = 100
-      leaderLine.y2 = 100
+      leaderLine.isVisible = false  // Start hidden until positioned
       guiTexture.addControl(leaderLine)
 
-      meshData = { cone, shadow, label, labelText: text, leaderLine }
-      aircraftMeshesRef.current.set(callsign, meshData)
+      labelData = { label, labelText: text, leaderLine }
+      aircraftLabelsRef.current.set(callsign, labelData)
     }
 
-    // Update cone position
-    meshData.cone.position = localPos
-
-    // Update shadow position - place at ground level below the cone
-    if (meshData.shadow) {
-      if (isTopDownModeRef.current) {
-        // In 2D view, shadow sits just below the cone
-        meshData.shadow.position = new BABYLON.Vector3(localPos.x, 40, localPos.z)
-      } else {
-        // In 3D view, place shadow at terrain level (applying same geoid correction)
-        const shadowY = terrainOffsetRef.current + 0.5
-        meshData.shadow.position = new BABYLON.Vector3(localPos.x, shadowY, localPos.z)
-      }
-    }
-
-    // Orient cone to point in heading direction
-    // Cone's default axis is +Y, we need to rotate it to point along dirBabylon
-    const defaultAxis = new BABYLON.Vector3(0, 1, 0)
-    const targetDir = dirBabylon.normalize()
-
-    // Calculate rotation quaternion from default axis to target direction
-    const cross = BABYLON.Vector3.Cross(defaultAxis, targetDir)
-    const dot = BABYLON.Vector3.Dot(defaultAxis, targetDir)
-
-    if (cross.length() > 0.0001) {
-      const angle = Math.acos(Math.max(-1, Math.min(1, dot)))
-      const axis = cross.normalize()
-      meshData.cone.rotationQuaternion = BABYLON.Quaternion.RotationAxis(axis, angle)
-    } else if (dot < 0) {
-      // Pointing opposite direction
-      meshData.cone.rotationQuaternion = BABYLON.Quaternion.RotationAxis(
-        new BABYLON.Vector3(1, 0, 0),
-        Math.PI
-      )
-    } else {
-      meshData.cone.rotationQuaternion = BABYLON.Quaternion.Identity()
-    }
-
-    // Update color
-    const mat = meshData.cone.material as BABYLON.StandardMaterial
-    mat.emissiveColor = new BABYLON.Color3(color.r, color.g, color.b)
-    mat.diffuseColor = new BABYLON.Color3(color.r, color.g, color.b)
-
-    if (meshData.leaderLine) {
-      meshData.leaderLine.color = rgbToHex(color.r, color.g, color.b)
-    }
-
-    // Update label
-    if (meshData.label && meshData.labelText) {
-      meshData.labelText.text = labelText || callsign
-      meshData.labelText.color = rgbToHex(color.r, color.g, color.b)
-      meshData.label.color = rgbToHex(color.r, color.g, color.b)
-      meshData.label.background = isFollowed ? 'rgba(0, 50, 80, 0.85)' : 'rgba(0, 0, 0, 0.85)'
-      const scale = isFollowed ? 1.2 : 1.0
-      meshData.label.scaleX = scale
-      meshData.label.scaleY = scale
-    }
-
-    // Scale followed aircraft, with additional view mode scale
-    const baseScale = isFollowed ? 1.5 : 1.0
-    const scale = baseScale * viewModeScale
-    meshData.cone.scaling.setAll(scale)
-    // Scale shadow to match cone
-    if (meshData.shadow) {
-      meshData.shadow.scaling.setAll(scale)
-    }
+    // Update colors and text
+    labelData.leaderLine.color = rgbToHex(color.r, color.g, color.b)
+    labelData.labelText.text = labelText || callsign
+    labelData.labelText.color = rgbToHex(color.r, color.g, color.b)
+    labelData.label.color = rgbToHex(color.r, color.g, color.b)
+    labelData.label.background = isFollowed ? 'rgba(0, 50, 80, 0.85)' : 'rgba(0, 0, 0, 0.85)'
+    const scale = isFollowed ? 1.2 : 1.0
+    labelData.label.scaleX = scale
+    labelData.label.scaleY = scale
   }, [])
 
-  // Update leader line and label position manually
-  // We project the cone's 3D position to screen space and position GUI elements accordingly
   // Update label position using screen coordinates from Cesium
   // screenX, screenY are the screen position of the aircraft model (from Cesium projection)
   // labelOffsetX, labelOffsetY are the offset from the model to position the label
@@ -842,25 +617,24 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     labelOffsetX: number,
     labelOffsetY: number
   ) => {
-    const meshData = aircraftMeshesRef.current.get(callsign)
-
-    if (!meshData?.leaderLine || !meshData?.label) return
+    const labelData = aircraftLabelsRef.current.get(callsign)
+    if (!labelData) return
 
     // Show label and leader line
-    meshData.label.isVisible = true
-    meshData.leaderLine.isVisible = true
+    labelData.label.isVisible = true
+    labelData.leaderLine.isVisible = true
 
     // Position label with offset from model screen position
     // GUI uses left/top from top-left corner when using LEFT/TOP alignment
     const labelX = screenX + labelOffsetX
     const labelY = screenY + labelOffsetY
 
-    meshData.label.left = labelX
-    meshData.label.top = labelY
+    labelData.label.left = labelX
+    labelData.label.top = labelY
 
     // Get label dimensions for line endpoint calculation
-    const labelW = meshData.label.widthInPixels || 80
-    const labelH = meshData.label.heightInPixels || 24
+    const labelW = labelData.label.widthInPixels || 80
+    const labelH = labelData.label.heightInPixels || 24
 
     // Line from label center to model screen position
     const labelCenterX = labelX + labelW / 2
@@ -873,7 +647,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
 
     if (dist < 1) {
       // Too close, hide line
-      meshData.leaderLine.isVisible = false
+      labelData.leaderLine.isVisible = false
       return
     }
 
@@ -895,121 +669,37 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     const endY = screenY - ny * 10
 
     // GUI Line uses absolute screen coordinates (top-left origin)
-    meshData.leaderLine.x1 = startX
-    meshData.leaderLine.y1 = startY
-    meshData.leaderLine.x2 = endX
-    meshData.leaderLine.y2 = endY
+    labelData.leaderLine.x1 = startX
+    labelData.leaderLine.y1 = startY
+    labelData.leaderLine.x2 = endX
+    labelData.leaderLine.y2 = endY
   }, [])
 
-  // Remove aircraft mesh - properly disposes all resources including materials
-  const removeAircraftMesh = useCallback((callsign: string) => {
-    const meshData = aircraftMeshesRef.current.get(callsign)
-    if (meshData) {
-      // Dispose materials BEFORE disposing meshes (materials don't auto-dispose)
-      if (meshData.cone.material) {
-        meshData.cone.material.dispose()
-        memoryCounters.materialsDisposed++
-      }
-      if (meshData.shadow?.material) {
-        meshData.shadow.material.dispose()
-        memoryCounters.materialsDisposed++
-      }
-
-      // Dispose meshes
-      meshData.cone.dispose()
-      memoryCounters.meshesDisposed++
-      if (meshData.shadow) {
-        meshData.shadow.dispose()
-        memoryCounters.meshesDisposed++
-      }
-
-      // Dispose GUI controls (labelText is child of label, disposed with parent)
-      if (meshData.labelText) {
-        meshData.labelText.dispose()
-        memoryCounters.guiControlsDisposed++
-      }
-      if (meshData.leaderLine) {
-        meshData.leaderLine.dispose()
-        memoryCounters.guiControlsDisposed++
-      }
-      if (meshData.label) {
-        meshData.label.dispose()
-        memoryCounters.guiControlsDisposed++
-      }
-
-      aircraftMeshesRef.current.delete(callsign)
+  // Remove aircraft label - properly disposes all GUI resources
+  const removeAircraftLabel = useCallback((callsign: string) => {
+    const labelData = aircraftLabelsRef.current.get(callsign)
+    if (labelData) {
+      labelData.labelText.dispose()
+      memoryCounters.guiControlsDisposed++
+      labelData.leaderLine.dispose()
+      memoryCounters.guiControlsDisposed++
+      labelData.label.dispose()
+      memoryCounters.guiControlsDisposed++
+      aircraftLabelsRef.current.delete(callsign)
     }
   }, [])
 
   // Get all current aircraft callsigns
   const getAircraftCallsigns = useCallback(() => {
-    return Array.from(aircraftMeshesRef.current.keys())
+    return Array.from(aircraftLabelsRef.current.keys())
   }, [])
 
   // Hide all labels (called at start of frame before updating visible ones)
   const hideAllLabels = useCallback(() => {
-    for (const [, meshData] of aircraftMeshesRef.current) {
-      if (meshData.label) meshData.label.isVisible = false
-      if (meshData.leaderLine) meshData.leaderLine.isVisible = false
+    for (const [, labelData] of aircraftLabelsRef.current) {
+      labelData.label.isVisible = false
+      labelData.leaderLine.isVisible = false
     }
-  }, [])
-
-  // Get screen position of a cone (for overlap detection)
-  // Applies exponential smoothing to reduce jitter in orbit follow mode
-  const getConeScreenPosition = useCallback((callsign: string): { x: number; y: number; visible: boolean } | null => {
-    const meshData = aircraftMeshesRef.current.get(callsign)
-    const scene = sceneRef.current
-    const engine = engineRef.current
-
-    if (!meshData?.cone || !scene || !engine) return null
-
-    const screenWidth = engine.getRenderWidth()
-    const screenHeight = engine.getRenderHeight()
-
-    const coneWorldPos = meshData.cone.absolutePosition
-    const screenPos = BABYLON.Vector3.Project(
-      coneWorldPos,
-      BABYLON.Matrix.Identity(),
-      scene.getTransformMatrix(),
-      new BABYLON.Viewport(0, 0, screenWidth, screenHeight)
-    )
-
-    const visible = screenPos.z >= 0 && screenPos.z <= 1
-
-    // Apply exponential smoothing to reduce jitter
-    // Higher smoothing factor = more responsive but more jittery
-    // Lower smoothing factor = smoother but more laggy
-    const smoothingFactor = 0.4
-
-    let smoothedX: number
-    let smoothedY: number
-
-    if (meshData.smoothedScreenX === undefined || meshData.smoothedScreenY === undefined) {
-      // First time - initialize with raw position
-      smoothedX = screenPos.x
-      smoothedY = screenPos.y
-    } else {
-      // Check if the position jumped significantly (e.g., aircraft came back into view)
-      const jumpThreshold = 100
-      const dx = Math.abs(screenPos.x - meshData.smoothedScreenX)
-      const dy = Math.abs(screenPos.y - meshData.smoothedScreenY)
-
-      if (dx > jumpThreshold || dy > jumpThreshold) {
-        // Large jump - snap to new position
-        smoothedX = screenPos.x
-        smoothedY = screenPos.y
-      } else {
-        // Apply exponential smoothing: new = old + factor * (raw - old)
-        smoothedX = meshData.smoothedScreenX + smoothingFactor * (screenPos.x - meshData.smoothedScreenX)
-        smoothedY = meshData.smoothedScreenY + smoothingFactor * (screenPos.y - meshData.smoothedScreenY)
-      }
-    }
-
-    // Store smoothed values for next frame
-    meshData.smoothedScreenX = smoothedX
-    meshData.smoothedScreenY = smoothedY
-
-    return { x: smoothedX, y: smoothedY, visible }
   }, [])
 
   // Render one frame
@@ -1028,12 +718,11 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     scene: sceneRef.current,
     sceneReady,
     setupRootNode,
-    updateAircraftMesh,
+    updateAircraftLabel,
     updateLeaderLine,
-    removeAircraftMesh,
+    removeAircraftLabel,
     getAircraftCallsigns,
     hideAllLabels,
-    getConeScreenPosition,
     isDatablockVisibleByWeather,
     render,
     syncCamera

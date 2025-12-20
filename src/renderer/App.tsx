@@ -12,6 +12,7 @@ import { useSettingsStore } from './stores/settingsStore'
 import { useWeatherStore } from './stores/weatherStore'
 import { useCameraStore } from './stores/cameraStore'
 import { airportService } from './services/AirportService'
+import { aircraftDimensionsService } from './services/AircraftDimensionsService'
 
 function App() {
   const startPolling = useVatsimStore((state) => state.startPolling)
@@ -41,6 +42,9 @@ function App() {
         setLoadingStatus('Loading airport database...')
         const airports = await airportService.loadAirports()
         loadAirports(Object.fromEntries(airports))
+
+        // Load aircraft dimensions data (non-blocking)
+        aircraftDimensionsService.load()
 
         // Start VATSIM data polling
         setLoadingStatus('Connecting to VATSIM...')

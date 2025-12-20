@@ -17,7 +17,7 @@ A 3D tower cab view application for VATSIM air traffic controllers. View real-ti
 - Configurable terrain quality (5 levels from Low to Ultra)
 - Optional 3D OpenStreetMap buildings
 - Dynamic time-of-day lighting (real-time or fixed hour)
-- Aircraft rendered as 3D cone meshes with shadows
+- Aircraft rendered as 3D models with realistic type-based sizing
 
 ### Camera System
 - **3D Tower View**: Look around from tower perspective with smooth controls
@@ -167,7 +167,7 @@ towercab-3d/
 | **React 19** | UI framework |
 | **TypeScript 5** | Type-safe development |
 | **CesiumJS 1.136** | 3D globe rendering |
-| **Babylon.js 8** | 3D aircraft mesh overlay |
+| **Babylon.js 8** | GUI overlay (labels, leader lines, weather effects) |
 | **Zustand 5** | State management |
 | **Vite 7** | Build tool |
 
@@ -176,6 +176,20 @@ towercab-3d/
 - **VATSIM**: Real-time flight data from [data.vatsim.net](https://data.vatsim.net/v3/vatsim-data.json)
 - **Airports**: Database from [github.com/mwgg/Airports](https://github.com/mwgg/Airports)
 - **Terrain/Imagery**: Cesium Ion World Terrain and Bing Maps Aerial
+- **Aircraft Dimensions**: Wingspan and length data from [FAA Aircraft Characteristics Database](https://www.faa.gov/airports/engineering/aircraft_char_database)
+- **Aircraft 3D Models**: 39 aircraft models from [Flightradar24/fr24-3d-models](https://github.com/Flightradar24/fr24-3d-models) (GPL-2.0, originally from FlightGear) - includes A320 family, B737/747/757/767/777/787, CRJ, E-Jets, Q400, and more
+
+### Refreshing Aircraft Dimensions Data
+
+The aircraft dimensions data (used for realistic model sizing) is bundled with the app. To update it with the latest FAA data:
+
+```bash
+# Requires Python 3 with pandas and openpyxl
+pip install pandas openpyxl
+python scripts/convert-aircraft-data.py
+```
+
+This downloads the latest FAA Excel file and converts it to `src/renderer/public/aircraft-dimensions.json`.
 
 ## Settings Reference
 
@@ -221,3 +235,4 @@ MIT License - See [LICENSE](LICENSE) file for details.
 - [Cesium](https://cesium.com) - 3D geospatial platform
 - [mwgg/Airports](https://github.com/mwgg/Airports) - Airport database
 - [Babylon.js](https://babylonjs.com) - 3D rendering engine
+- [FlightGear](https://www.flightgear.org/) / [FGMEMBERS](https://github.com/FGMEMBERS) - Aircraft 3D model (via [Flightradar24](https://github.com/Flightradar24/fr24-3d-models))

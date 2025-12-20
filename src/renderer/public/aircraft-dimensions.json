@@ -1,0 +1,1554 @@
+{
+  "A10": {
+    "length": 16.25,
+    "wingspan": 17.53
+  },
+  "A124": {
+    "length": 68.95,
+    "wingspan": 73.3
+  },
+  "A19N": {
+    "length": 33.83,
+    "wingspan": 35.81
+  },
+  "A20N": {
+    "length": 37.58,
+    "wingspan": 35.81
+  },
+  "A21N": {
+    "length": 44.5,
+    "wingspan": 35.81
+  },
+  "A306": {
+    "length": 54.07,
+    "wingspan": 44.84
+  },
+  "A30B": {
+    "length": 53.49,
+    "wingspan": 44.84
+  },
+  "A310": {
+    "length": 46.7,
+    "wingspan": 43.89
+  },
+  "A318": {
+    "length": 31.46,
+    "wingspan": 34.11
+  },
+  "A319": {
+    "length": 33.83,
+    "wingspan": 35.81
+  },
+  "A320": {
+    "length": 37.58,
+    "wingspan": 35.81
+  },
+  "A321": {
+    "length": 44.5,
+    "wingspan": 35.81
+  },
+  "A332": {
+    "length": 59.01,
+    "wingspan": 60.29
+  },
+  "A333": {
+    "length": 63.7,
+    "wingspan": 60.29
+  },
+  "A337": {
+    "length": 63.09,
+    "wingspan": 60.29
+  },
+  "A338": {
+    "length": 58.83,
+    "wingspan": 64.01
+  },
+  "A339": {
+    "length": 63.67,
+    "wingspan": 64.01
+  },
+  "A342": {
+    "length": 59.44,
+    "wingspan": 60.29
+  },
+  "A343": {
+    "length": 63.7,
+    "wingspan": 60.29
+  },
+  "A345": {
+    "length": 67.94,
+    "wingspan": 63.46
+  },
+  "A346": {
+    "length": 75.35,
+    "wingspan": 63.46
+  },
+  "A359": {
+    "length": 66.61,
+    "wingspan": 64.75
+  },
+  "A35K": {
+    "length": 73.58,
+    "wingspan": 64.74
+  },
+  "A388": {
+    "length": 72.73,
+    "wingspan": 79.77
+  },
+  "A400": {
+    "length": 45.11,
+    "wingspan": 42.4
+  },
+  "A5": {
+    "length": 7.01,
+    "wingspan": 10.61
+  },
+  "AA1": {
+    "length": 5.88,
+    "wingspan": 7.44
+  },
+  "AA5": {
+    "length": 6.71,
+    "wingspan": 9.57
+  },
+  "AC11": {
+    "length": 7.59,
+    "wingspan": 10.0
+  },
+  "AC50": {
+    "length": 11.22,
+    "wingspan": 14.94
+  },
+  "AC56": {
+    "length": 11.22,
+    "wingspan": 14.94
+  },
+  "AC68": {
+    "length": 10.7,
+    "wingspan": 15.09
+  },
+  "AC6L": {
+    "length": 13.11,
+    "wingspan": 13.44
+  },
+  "AC80": {
+    "length": 12.65,
+    "wingspan": 14.23
+  },
+  "AC90": {
+    "length": 13.53,
+    "wingspan": 15.88
+  },
+  "AC95": {
+    "length": 13.11,
+    "wingspan": 15.88
+  },
+  "AEST": {
+    "length": 10.61,
+    "wingspan": 11.19
+  },
+  "AN12": {
+    "length": 34.02,
+    "wingspan": 38.04
+  },
+  "AN72": {
+    "length": 28.07,
+    "wingspan": 31.88
+  },
+  "AR11": {
+    "length": 6.34,
+    "wingspan": 10.97
+  },
+  "ASTR": {
+    "length": 16.95,
+    "wingspan": 16.06
+  },
+  "AT3T": {
+    "length": 9.33,
+    "wingspan": 15.58
+  },
+  "AT43": {
+    "length": 22.68,
+    "wingspan": 24.6
+  },
+  "AT44": {
+    "length": 22.68,
+    "wingspan": 24.6
+  },
+  "AT45": {
+    "length": 22.68,
+    "wingspan": 24.6
+  },
+  "AT46": {
+    "length": 22.68,
+    "wingspan": 24.6
+  },
+  "AT5T": {
+    "length": 8.23,
+    "wingspan": 15.85
+  },
+  "AT6T": {
+    "length": 10.21,
+    "wingspan": 17.07
+  },
+  "AT72": {
+    "length": 27.16,
+    "wingspan": 27.07
+  },
+  "AT73": {
+    "length": 27.16,
+    "wingspan": 27.04
+  },
+  "AT75": {
+    "length": 27.16,
+    "wingspan": 24.57
+  },
+  "AT76": {
+    "length": 27.16,
+    "wingspan": 27.04
+  },
+  "AT8T": {
+    "length": 11.43,
+    "wingspan": 18.07
+  },
+  "B18T": {
+    "length": 13.5,
+    "wingspan": 14.02
+  },
+  "B190": {
+    "length": 17.59,
+    "wingspan": 17.68
+  },
+  "B2": {
+    "length": 21.03,
+    "wingspan": 52.43
+  },
+  "B350": {
+    "length": 14.23,
+    "wingspan": 17.65
+  },
+  "B36T": {
+    "length": 8.9,
+    "wingspan": 10.21
+  },
+  "B37M": {
+    "length": 35.57,
+    "wingspan": 35.91
+  },
+  "B38M": {
+    "length": 39.53,
+    "wingspan": 35.91
+  },
+  "B39M": {
+    "length": 42.15,
+    "wingspan": 35.91
+  },
+  "B461": {
+    "length": 26.18,
+    "wingspan": 26.33
+  },
+  "B462": {
+    "length": 28.56,
+    "wingspan": 26.33
+  },
+  "B52": {
+    "length": 49.04,
+    "wingspan": 56.39
+  },
+  "B703": {
+    "length": 46.6,
+    "wingspan": 44.44
+  },
+  "B712": {
+    "length": 37.8,
+    "wingspan": 28.44
+  },
+  "B721": {
+    "length": 40.6,
+    "wingspan": 32.92
+  },
+  "B722": {
+    "length": 46.7,
+    "wingspan": 33.31
+  },
+  "B732": {
+    "length": 30.54,
+    "wingspan": 28.35
+  },
+  "B733": {
+    "length": 33.41,
+    "wingspan": 31.21
+  },
+  "B734": {
+    "length": 36.45,
+    "wingspan": 28.9
+  },
+  "B735": {
+    "length": 31.03,
+    "wingspan": 28.9
+  },
+  "B736": {
+    "length": 31.24,
+    "wingspan": 35.78
+  },
+  "B737": {
+    "length": 33.62,
+    "wingspan": 35.78
+  },
+  "B738": {
+    "length": 39.47,
+    "wingspan": 35.78
+  },
+  "B739": {
+    "length": 42.12,
+    "wingspan": 35.78
+  },
+  "B741": {
+    "length": 70.65,
+    "wingspan": 59.65
+  },
+  "B742": {
+    "length": 70.65,
+    "wingspan": 59.65
+  },
+  "B743": {
+    "length": 70.65,
+    "wingspan": 59.65
+  },
+  "B744": {
+    "length": 70.68,
+    "wingspan": 59.65
+  },
+  "B748": {
+    "length": 76.26,
+    "wingspan": 68.4
+  },
+  "B752": {
+    "length": 47.34,
+    "wingspan": 41.09
+  },
+  "B753": {
+    "length": 54.44,
+    "wingspan": 41.09
+  },
+  "B762": {
+    "length": 48.52,
+    "wingspan": 47.58
+  },
+  "B763": {
+    "length": 54.96,
+    "wingspan": 50.9
+  },
+  "B764": {
+    "length": 61.36,
+    "wingspan": 51.91
+  },
+  "B772": {
+    "length": 63.73,
+    "wingspan": 60.93
+  },
+  "B773": {
+    "length": 63.73,
+    "wingspan": 60.93
+  },
+  "B778": {
+    "length": 69.8,
+    "wingspan": 71.75
+  },
+  "B779": {
+    "length": 76.75,
+    "wingspan": 71.75
+  },
+  "B77L": {
+    "length": 63.73,
+    "wingspan": 64.65
+  },
+  "B77W": {
+    "length": 73.85,
+    "wingspan": 64.8
+  },
+  "B788": {
+    "length": 56.72,
+    "wingspan": 60.14
+  },
+  "B789": {
+    "length": 62.82,
+    "wingspan": 60.14
+  },
+  "B78X": {
+    "length": 68.31,
+    "wingspan": 60.14
+  },
+  "BA11": {
+    "length": 28.5,
+    "wingspan": 26.97
+  },
+  "BCS1": {
+    "length": 34.99,
+    "wingspan": 35.08
+  },
+  "BCS3": {
+    "length": 38.71,
+    "wingspan": 35.08
+  },
+  "BE10": {
+    "length": 12.16,
+    "wingspan": 13.99
+  },
+  "BE18": {
+    "length": 10.76,
+    "wingspan": 15.15
+  },
+  "BE19": {
+    "length": 7.83,
+    "wingspan": 10.0
+  },
+  "BE20": {
+    "length": 13.35,
+    "wingspan": 16.61
+  },
+  "BE23": {
+    "length": 7.83,
+    "wingspan": 10.0
+  },
+  "BE24": {
+    "length": 7.83,
+    "wingspan": 10.0
+  },
+  "BE30": {
+    "length": 14.23,
+    "wingspan": 17.65
+  },
+  "BE33": {
+    "length": 8.14,
+    "wingspan": 10.21
+  },
+  "BE35": {
+    "length": 7.68,
+    "wingspan": 10.82
+  },
+  "BE36": {
+    "length": 8.38,
+    "wingspan": 10.21
+  },
+  "BE40": {
+    "length": 14.75,
+    "wingspan": 13.26
+  },
+  "BE50": {
+    "length": 9.6,
+    "wingspan": 13.81
+  },
+  "BE55": {
+    "length": 8.53,
+    "wingspan": 11.52
+  },
+  "BE58": {
+    "length": 9.08,
+    "wingspan": 11.52
+  },
+  "BE60": {
+    "length": 10.3,
+    "wingspan": 11.98
+  },
+  "BE65": {
+    "length": 10.82,
+    "wingspan": 13.99
+  },
+  "BE70": {
+    "length": 10.82,
+    "wingspan": 15.33
+  },
+  "BE76": {
+    "length": 8.84,
+    "wingspan": 11.58
+  },
+  "BE77": {
+    "length": 7.32,
+    "wingspan": 9.14
+  },
+  "BE80": {
+    "length": 10.82,
+    "wingspan": 15.33
+  },
+  "BE95": {
+    "length": 7.89,
+    "wingspan": 11.52
+  },
+  "BE99": {
+    "length": 13.59,
+    "wingspan": 13.99
+  },
+  "BE9L": {
+    "length": 10.82,
+    "wingspan": 15.33
+  },
+  "BE9T": {
+    "length": 10.82,
+    "wingspan": 16.61
+  },
+  "BL17": {
+    "length": 8.02,
+    "wingspan": 10.42
+  },
+  "BL8": {
+    "length": 7.01,
+    "wingspan": 11.03
+  },
+  "BLCF": {
+    "length": 71.69,
+    "wingspan": 64.92
+  },
+  "BT36": {
+    "length": 8.38,
+    "wingspan": 11.52
+  },
+  "C120": {
+    "length": 6.55,
+    "wingspan": 10.15
+  },
+  "C130": {
+    "length": 29.81,
+    "wingspan": 40.42
+  },
+  "C140": {
+    "length": 6.55,
+    "wingspan": 10.15
+  },
+  "C150": {
+    "length": 7.28,
+    "wingspan": 10.12
+  },
+  "C152": {
+    "length": 7.35,
+    "wingspan": 10.12
+  },
+  "C160": {
+    "length": 32.4,
+    "wingspan": 39.99
+  },
+  "C162": {
+    "length": 6.95,
+    "wingspan": 9.14
+  },
+  "C17": {
+    "length": 53.04,
+    "wingspan": 51.76
+  },
+  "C170": {
+    "length": 7.62,
+    "wingspan": 10.97
+  },
+  "C172": {
+    "length": 8.29,
+    "wingspan": 11.0
+  },
+  "C175": {
+    "length": 7.62,
+    "wingspan": 11.03
+  },
+  "C177": {
+    "length": 8.32,
+    "wingspan": 10.82
+  },
+  "C180": {
+    "length": 7.8,
+    "wingspan": 10.91
+  },
+  "C182": {
+    "length": 8.84,
+    "wingspan": 10.97
+  },
+  "C185": {
+    "length": 7.8,
+    "wingspan": 10.91
+  },
+  "C188": {
+    "length": 8.02,
+    "wingspan": 12.71
+  },
+  "C195": {
+    "length": 8.32,
+    "wingspan": 11.03
+  },
+  "C206": {
+    "length": 8.63,
+    "wingspan": 10.97
+  },
+  "C207": {
+    "length": 9.6,
+    "wingspan": 11.0
+  },
+  "C208": {
+    "length": 11.46,
+    "wingspan": 15.88
+  },
+  "C210": {
+    "length": 8.6,
+    "wingspan": 11.22
+  },
+  "C212": {
+    "length": 16.15,
+    "wingspan": 18.99
+  },
+  "C240": {
+    "length": 7.68,
+    "wingspan": 11.0
+  },
+  "C25A": {
+    "length": 14.54,
+    "wingspan": 15.18
+  },
+  "C25B": {
+    "length": 15.61,
+    "wingspan": 16.25
+  },
+  "C25C": {
+    "length": 16.25,
+    "wingspan": 15.48
+  },
+  "C25M": {
+    "length": 12.98,
+    "wingspan": 14.42
+  },
+  "C303": {
+    "length": 9.27,
+    "wingspan": 11.89
+  },
+  "C30J": {
+    "length": 34.38,
+    "wingspan": 40.42
+  },
+  "C310": {
+    "length": 9.75,
+    "wingspan": 11.25
+  },
+  "C320": {
+    "length": 9.75,
+    "wingspan": 11.25
+  },
+  "C335": {
+    "length": 10.45,
+    "wingspan": 11.61
+  },
+  "C340": {
+    "length": 13.2,
+    "wingspan": 11.61
+  },
+  "C402": {
+    "length": 11.09,
+    "wingspan": 13.47
+  },
+  "C404": {
+    "length": 12.04,
+    "wingspan": 14.11
+  },
+  "C414": {
+    "length": 11.09,
+    "wingspan": 13.47
+  },
+  "C421": {
+    "length": 11.09,
+    "wingspan": 13.47
+  },
+  "C425": {
+    "length": 10.91,
+    "wingspan": 13.47
+  },
+  "C441": {
+    "length": 11.89,
+    "wingspan": 15.03
+  },
+  "C500": {
+    "length": 13.26,
+    "wingspan": 14.36
+  },
+  "C501": {
+    "length": 13.26,
+    "wingspan": 14.36
+  },
+  "C510": {
+    "length": 12.37,
+    "wingspan": 13.17
+  },
+  "C525": {
+    "length": 12.98,
+    "wingspan": 14.3
+  },
+  "C526": {
+    "length": 12.98,
+    "wingspan": 14.26
+  },
+  "C550": {
+    "length": 14.42,
+    "wingspan": 15.76
+  },
+  "C551": {
+    "length": 14.54,
+    "wingspan": 15.76
+  },
+  "C55B": {
+    "length": 14.54,
+    "wingspan": 15.91
+  },
+  "C560": {
+    "length": 14.9,
+    "wingspan": 16.49
+  },
+  "C56X": {
+    "length": 15.79,
+    "wingspan": 17.16
+  },
+  "C650": {
+    "length": 16.92,
+    "wingspan": 16.31
+  },
+  "C680": {
+    "length": 19.35,
+    "wingspan": 19.23
+  },
+  "C68A": {
+    "length": 18.99,
+    "wingspan": 22.04
+  },
+  "C700": {
+    "length": 22.31,
+    "wingspan": 21.0
+  },
+  "C72R": {
+    "length": 8.29,
+    "wingspan": 11.0
+  },
+  "C750": {
+    "length": 22.04,
+    "wingspan": 19.39
+  },
+  "C77R": {
+    "length": 8.32,
+    "wingspan": 10.82
+  },
+  "C82R": {
+    "length": 8.84,
+    "wingspan": 10.97
+  },
+  "CH7A": {
+    "length": 6.74,
+    "wingspan": 10.21
+  },
+  "CH7B": {
+    "length": 6.74,
+    "wingspan": 10.21
+  },
+  "CL30": {
+    "length": 20.97,
+    "wingspan": 19.45
+  },
+  "CL35": {
+    "length": 20.91,
+    "wingspan": 21.0
+  },
+  "CL41": {
+    "length": 9.75,
+    "wingspan": 11.13
+  },
+  "CL60": {
+    "length": 20.85,
+    "wingspan": 19.6
+  },
+  "CN35": {
+    "length": 19.66,
+    "wingspan": 25.82
+  },
+  "COL3": {
+    "length": 7.68,
+    "wingspan": 11.0
+  },
+  "COL4": {
+    "length": 7.68,
+    "wingspan": 11.0
+  },
+  "COUR": {
+    "length": 9.45,
+    "wingspan": 11.89
+  },
+  "CRJ1": {
+    "length": 26.76,
+    "wingspan": 21.21
+  },
+  "CRJ2": {
+    "length": 26.76,
+    "wingspan": 20.94
+  },
+  "CRJ7": {
+    "length": 32.49,
+    "wingspan": 23.26
+  },
+  "CRJ9": {
+    "length": 36.21,
+    "wingspan": 24.84
+  },
+  "CRUZ": {
+    "length": 6.49,
+    "wingspan": 8.78
+  },
+  "CVLP": {
+    "length": 24.14,
+    "wingspan": 27.98
+  },
+  "CVLT": {
+    "length": 29.2,
+    "wingspan": 32.1
+  },
+  "D328": {
+    "length": 21.28,
+    "wingspan": 20.97
+  },
+  "DA40": {
+    "length": 8.02,
+    "wingspan": 11.95
+  },
+  "DA42": {
+    "length": 8.56,
+    "wingspan": 13.56
+  },
+  "DC10": {
+    "length": 55.35,
+    "wingspan": 50.38
+  },
+  "DC3": {
+    "length": 19.72,
+    "wingspan": 29.02
+  },
+  "DC3S": {
+    "length": 20.67,
+    "wingspan": 27.43
+  },
+  "DC3T": {
+    "length": 20.67,
+    "wingspan": 28.96
+  },
+  "DC6": {
+    "length": 30.66,
+    "wingspan": 35.81
+  },
+  "DC87": {
+    "length": 57.21,
+    "wingspan": 45.23
+  },
+  "DC91": {
+    "length": 31.82,
+    "wingspan": 27.25
+  },
+  "DC93": {
+    "length": 36.36,
+    "wingspan": 28.44
+  },
+  "DC95": {
+    "length": 40.72,
+    "wingspan": 28.47
+  },
+  "DH8A": {
+    "length": 22.25,
+    "wingspan": 25.91
+  },
+  "DH8B": {
+    "length": 22.25,
+    "wingspan": 25.91
+  },
+  "DH8C": {
+    "length": 25.69,
+    "wingspan": 27.43
+  },
+  "DH8D": {
+    "length": 32.86,
+    "wingspan": 28.44
+  },
+  "DHC2": {
+    "length": 9.24,
+    "wingspan": 14.63
+  },
+  "DHC6": {
+    "length": 15.79,
+    "wingspan": 19.81
+  },
+  "DHC7": {
+    "length": 24.54,
+    "wingspan": 28.35
+  },
+  "DV20": {
+    "length": 7.16,
+    "wingspan": 10.88
+  },
+  "E110": {
+    "length": 15.33,
+    "wingspan": 15.33
+  },
+  "E120": {
+    "length": 20.03,
+    "wingspan": 19.78
+  },
+  "E135": {
+    "length": 28.47,
+    "wingspan": 20.06
+  },
+  "E145": {
+    "length": 29.87,
+    "wingspan": 20.06
+  },
+  "E170": {
+    "length": 29.9,
+    "wingspan": 26.0
+  },
+  "E190": {
+    "length": 36.24,
+    "wingspan": 28.71
+  },
+  "E195": {
+    "length": 38.65,
+    "wingspan": 28.71
+  },
+  "E290": {
+    "length": 36.21,
+    "wingspan": 33.71
+  },
+  "E295": {
+    "length": 41.51,
+    "wingspan": 35.11
+  },
+  "E35L": {
+    "length": 26.33,
+    "wingspan": 21.09
+  },
+  "E45X": {
+    "length": 29.87,
+    "wingspan": 19.99
+  },
+  "E50P": {
+    "length": 12.83,
+    "wingspan": 12.28
+  },
+  "E545": {
+    "length": 19.69,
+    "wingspan": 20.24
+  },
+  "E550": {
+    "length": 20.73,
+    "wingspan": 20.27
+  },
+  "E55P": {
+    "length": 15.64,
+    "wingspan": 15.91
+  },
+  "E75L": {
+    "length": 32.31,
+    "wingspan": 31.0
+  },
+  "E75S": {
+    "length": 31.67,
+    "wingspan": 28.71
+  },
+  "EA50": {
+    "length": 10.09,
+    "wingspan": 11.37
+  },
+  "ERCO": {
+    "length": 6.34,
+    "wingspan": 9.14
+  },
+  "EVOT": {
+    "length": 9.14,
+    "wingspan": 11.28
+  },
+  "F15": {
+    "length": 19.45,
+    "wingspan": 13.05
+  },
+  "F16": {
+    "length": 15.06,
+    "wingspan": 9.97
+  },
+  "F18H": {
+    "length": 17.07,
+    "wingspan": 12.31
+  },
+  "F18S": {
+    "length": 18.32,
+    "wingspan": 13.62
+  },
+  "F22": {
+    "length": 18.93,
+    "wingspan": 13.56
+  },
+  "F2TH": {
+    "length": 20.21,
+    "wingspan": 19.32
+  },
+  "F406": {
+    "length": 11.89,
+    "wingspan": 15.09
+  },
+  "F900": {
+    "length": 20.21,
+    "wingspan": 19.32
+  },
+  "FA10": {
+    "length": 13.87,
+    "wingspan": 13.08
+  },
+  "FA20": {
+    "length": 17.16,
+    "wingspan": 16.31
+  },
+  "FA50": {
+    "length": 18.53,
+    "wingspan": 18.87
+  },
+  "FA7X": {
+    "length": 23.2,
+    "wingspan": 26.21
+  },
+  "FA8X": {
+    "length": 24.44,
+    "wingspan": 26.3
+  },
+  "FDCT": {
+    "length": 6.61,
+    "wingspan": 8.56
+  },
+  "G150": {
+    "length": 17.31,
+    "wingspan": 16.95
+  },
+  "G164": {
+    "length": 7.89,
+    "wingspan": 12.89
+  },
+  "G280": {
+    "length": 20.36,
+    "wingspan": 19.2
+  },
+  "GA5C": {
+    "length": 27.79,
+    "wingspan": 26.32
+  },
+  "GA6C": {
+    "length": 29.29,
+    "wingspan": 28.7
+  },
+  "GA7": {
+    "length": 8.75,
+    "wingspan": 11.22
+  },
+  "GALX": {
+    "length": 18.99,
+    "wingspan": 17.71
+  },
+  "GC1": {
+    "length": 6.34,
+    "wingspan": 8.93
+  },
+  "GL5T": {
+    "length": 29.5,
+    "wingspan": 28.65
+  },
+  "GL7T": {
+    "length": 33.71,
+    "wingspan": 31.79
+  },
+  "GLEX": {
+    "length": 30.3,
+    "wingspan": 28.65
+  },
+  "GLF2": {
+    "length": 24.35,
+    "wingspan": 20.97
+  },
+  "GLF3": {
+    "length": 25.33,
+    "wingspan": 23.71
+  },
+  "GLF4": {
+    "length": 26.91,
+    "wingspan": 23.71
+  },
+  "GLF5": {
+    "length": 29.38,
+    "wingspan": 28.5
+  },
+  "GLF6": {
+    "length": 30.42,
+    "wingspan": 30.39
+  },
+  "H25A": {
+    "length": 15.39,
+    "wingspan": 14.33
+  },
+  "H25B": {
+    "length": 15.61,
+    "wingspan": 15.67
+  },
+  "H25C": {
+    "length": 16.43,
+    "wingspan": 15.67
+  },
+  "HA4T": {
+    "length": 21.09,
+    "wingspan": 18.84
+  },
+  "HAWK": {
+    "length": 11.4,
+    "wingspan": 9.94
+  },
+  "HDJT": {
+    "length": 12.53,
+    "wingspan": 12.16
+  },
+  "HUSK": {
+    "length": 6.89,
+    "wingspan": 10.82
+  },
+  "IL76": {
+    "length": 46.6,
+    "wingspan": 50.51
+  },
+  "J328": {
+    "length": 21.24,
+    "wingspan": 20.97
+  },
+  "JS31": {
+    "length": 14.36,
+    "wingspan": 15.85
+  },
+  "JS32": {
+    "length": 14.36,
+    "wingspan": 15.85
+  },
+  "JS41": {
+    "length": 19.26,
+    "wingspan": 18.41
+  },
+  "K35R": {
+    "length": 41.54,
+    "wingspan": 39.87
+  },
+  "KODI": {
+    "length": 10.42,
+    "wingspan": 13.72
+  },
+  "L29B": {
+    "length": 18.38,
+    "wingspan": 16.55
+  },
+  "L5": {
+    "length": 7.35,
+    "wingspan": 10.36
+  },
+  "L8": {
+    "length": 6.1,
+    "wingspan": 10.67
+  },
+  "LA4": {
+    "length": 7.59,
+    "wingspan": 11.58
+  },
+  "LJ23": {
+    "length": 13.2,
+    "wingspan": 10.85
+  },
+  "LJ24": {
+    "length": 13.2,
+    "wingspan": 10.85
+  },
+  "LJ25": {
+    "length": 14.51,
+    "wingspan": 10.85
+  },
+  "LJ31": {
+    "length": 14.84,
+    "wingspan": 13.35
+  },
+  "LJ35": {
+    "length": 14.84,
+    "wingspan": 12.04
+  },
+  "LJ40": {
+    "length": 16.95,
+    "wingspan": 14.57
+  },
+  "LJ45": {
+    "length": 17.68,
+    "wingspan": 14.57
+  },
+  "LJ55": {
+    "length": 16.79,
+    "wingspan": 13.35
+  },
+  "LJ60": {
+    "length": 17.89,
+    "wingspan": 13.35
+  },
+  "LJ70": {
+    "length": 17.07,
+    "wingspan": 15.51
+  },
+  "LJ75": {
+    "length": 17.68,
+    "wingspan": 15.51
+  },
+  "LNC4": {
+    "length": 7.62,
+    "wingspan": 9.94
+  },
+  "LNP4": {
+    "length": 7.62,
+    "wingspan": 9.94
+  },
+  "M20P": {
+    "length": 8.17,
+    "wingspan": 11.0
+  },
+  "M20T": {
+    "length": 8.17,
+    "wingspan": 11.0
+  },
+  "M5": {
+    "length": 7.16,
+    "wingspan": 9.39
+  },
+  "MD11": {
+    "length": 61.63,
+    "wingspan": 51.97
+  },
+  "MD81": {
+    "length": 45.05,
+    "wingspan": 32.89
+  },
+  "MD82": {
+    "length": 45.05,
+    "wingspan": 32.89
+  },
+  "MD83": {
+    "length": 45.05,
+    "wingspan": 32.89
+  },
+  "MD87": {
+    "length": 39.75,
+    "wingspan": 32.89
+  },
+  "MD88": {
+    "length": 45.05,
+    "wingspan": 32.89
+  },
+  "MD90": {
+    "length": 46.51,
+    "wingspan": 32.89
+  },
+  "MU2": {
+    "length": 12.01,
+    "wingspan": 11.95
+  },
+  "MU30": {
+    "length": 14.75,
+    "wingspan": 13.26
+  },
+  "NAVI": {
+    "length": 8.38,
+    "wingspan": 10.18
+  },
+  "P180": {
+    "length": 14.42,
+    "wingspan": 14.02
+  },
+  "P210": {
+    "length": 8.6,
+    "wingspan": 11.83
+  },
+  "P28A": {
+    "length": 7.25,
+    "wingspan": 10.67
+  },
+  "P28B": {
+    "length": 7.53,
+    "wingspan": 10.67
+  },
+  "P28R": {
+    "length": 7.53,
+    "wingspan": 10.79
+  },
+  "P28T": {
+    "length": 7.53,
+    "wingspan": 10.79
+  },
+  "P3": {
+    "length": 35.36,
+    "wingspan": 30.39
+  },
+  "P32R": {
+    "length": 8.44,
+    "wingspan": 11.03
+  },
+  "P32T": {
+    "length": 8.44,
+    "wingspan": 11.03
+  },
+  "P46T": {
+    "length": 9.02,
+    "wingspan": 13.11
+  },
+  "P51": {
+    "length": 9.85,
+    "wingspan": 11.28
+  },
+  "P68": {
+    "length": 9.54,
+    "wingspan": 12.01
+  },
+  "P750": {
+    "length": 11.83,
+    "wingspan": 12.8
+  },
+  "P8": {
+    "length": 39.47,
+    "wingspan": 37.67
+  },
+  "PA11": {
+    "length": 7.28,
+    "wingspan": 10.82
+  },
+  "PA12": {
+    "length": 6.95,
+    "wingspan": 10.82
+  },
+  "PA16": {
+    "length": 6.13,
+    "wingspan": 8.93
+  },
+  "PA18": {
+    "length": 6.86,
+    "wingspan": 10.76
+  },
+  "PA20": {
+    "length": 6.25,
+    "wingspan": 8.93
+  },
+  "PA22": {
+    "length": 6.25,
+    "wingspan": 8.93
+  },
+  "PA23": {
+    "length": 8.41,
+    "wingspan": 11.34
+  },
+  "PA24": {
+    "length": 7.56,
+    "wingspan": 10.97
+  },
+  "PA25": {
+    "length": 7.56,
+    "wingspan": 11.03
+  },
+  "PA27": {
+    "length": 9.51,
+    "wingspan": 11.34
+  },
+  "PA30": {
+    "length": 7.68,
+    "wingspan": 11.22
+  },
+  "PA31": {
+    "length": 9.94,
+    "wingspan": 12.41
+  },
+  "PA32": {
+    "length": 8.41,
+    "wingspan": 11.03
+  },
+  "PA34": {
+    "length": 8.72,
+    "wingspan": 11.86
+  },
+  "PA36": {
+    "length": 8.38,
+    "wingspan": 11.83
+  },
+  "PA38": {
+    "length": 7.04,
+    "wingspan": 10.36
+  },
+  "PA44": {
+    "length": 8.41,
+    "wingspan": 11.77
+  },
+  "PA46": {
+    "length": 8.81,
+    "wingspan": 13.11
+  },
+  "PAT4": {
+    "length": 10.58,
+    "wingspan": 13.01
+  },
+  "PAY1": {
+    "length": 10.58,
+    "wingspan": 13.01
+  },
+  "PAY2": {
+    "length": 10.58,
+    "wingspan": 13.01
+  },
+  "PAY3": {
+    "length": 13.23,
+    "wingspan": 14.54
+  },
+  "PAY4": {
+    "length": 13.23,
+    "wingspan": 14.54
+  },
+  "PC12": {
+    "length": 14.42,
+    "wingspan": 16.25
+  },
+  "PC24": {
+    "length": 16.86,
+    "wingspan": 17.01
+  },
+  "PRM1": {
+    "length": 14.02,
+    "wingspan": 13.56
+  },
+  "R721": {
+    "length": 40.6,
+    "wingspan": 32.92
+  },
+  "R722": {
+    "length": 46.7,
+    "wingspan": 32.92
+  },
+  "RJ1H": {
+    "length": 31.0,
+    "wingspan": 26.33
+  },
+  "RJ85": {
+    "length": 28.56,
+    "wingspan": 26.33
+  },
+  "RV12": {
+    "length": 6.07,
+    "wingspan": 8.17
+  },
+  "S108": {
+    "length": 7.47,
+    "wingspan": 10.33
+  },
+  "S22T": {
+    "length": 7.92,
+    "wingspan": 11.67
+  },
+  "SB20": {
+    "length": 27.28,
+    "wingspan": 24.78
+  },
+  "SBR1": {
+    "length": 14.3,
+    "wingspan": 13.62
+  },
+  "SBR2": {
+    "length": 14.3,
+    "wingspan": 13.62
+  },
+  "SC7": {
+    "length": 12.59,
+    "wingspan": 19.78
+  },
+  "SF34": {
+    "length": 19.72,
+    "wingspan": 22.74
+  },
+  "SF50": {
+    "length": 9.36,
+    "wingspan": 11.8
+  },
+  "SH33": {
+    "length": 17.68,
+    "wingspan": 22.77
+  },
+  "SH36": {
+    "length": 21.58,
+    "wingspan": 22.8
+  },
+  "SR20": {
+    "length": 7.92,
+    "wingspan": 11.67
+  },
+  "SR22": {
+    "length": 7.92,
+    "wingspan": 11.67
+  },
+  "SU95": {
+    "length": 29.93,
+    "wingspan": 27.8
+  },
+  "SW3": {
+    "length": 12.86,
+    "wingspan": 14.11
+  },
+  "SW4": {
+    "length": 18.11,
+    "wingspan": 17.37
+  },
+  "T210": {
+    "length": 8.6,
+    "wingspan": 11.83
+  },
+  "T28": {
+    "length": 10.06,
+    "wingspan": 12.22
+  },
+  "T34P": {
+    "length": 8.75,
+    "wingspan": 10.15
+  },
+  "T38": {
+    "length": 14.11,
+    "wingspan": 7.71
+  },
+  "T6": {
+    "length": 8.84,
+    "wingspan": 12.8
+  },
+  "TAYB": {
+    "length": 6.71,
+    "wingspan": 10.97
+  },
+  "TB20": {
+    "length": 7.74,
+    "wingspan": 9.97
+  },
+  "TBM7": {
+    "length": 10.64,
+    "wingspan": 12.68
+  },
+  "TBM8": {
+    "length": 10.64,
+    "wingspan": 12.68
+  },
+  "TBM9": {
+    "length": 10.73,
+    "wingspan": 12.83
+  },
+  "TEX2": {
+    "length": 10.12,
+    "wingspan": 10.18
+  },
+  "TOBA": {
+    "length": 7.74,
+    "wingspan": 10.0
+  },
+  "V22": {
+    "length": 19.2,
+    "wingspan": 13.96
+  },
+  "WW24": {
+    "length": 15.94,
+    "wingspan": 13.66
+  }
+}
