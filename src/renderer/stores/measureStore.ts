@@ -10,30 +10,41 @@ export interface MeasurePoint {
   }
 }
 
+export interface Measurement {
+  id: string
+  point1: MeasurePoint
+  point2: MeasurePoint
+  distanceMeters: number
+}
+
 interface MeasureState {
   // Measuring mode state
   isActive: boolean
 
-  // Points
-  point1: MeasurePoint | null
-  point2: MeasurePoint | null
+  // Completed measurements (can have multiple)
+  measurements: Measurement[]
 
-  // Calculated distance
-  distanceMeters: number | null
+  // Current in-progress measurement
+  pendingPoint: MeasurePoint | null  // First point clicked, waiting for second
+  previewPoint: MeasurePoint | null  // Mouse hover position for live preview
+  previewDistance: number | null     // Distance from pendingPoint to previewPoint
 
   // Actions
   startMeasuring: () => void
   stopMeasuring: () => void
   toggleMeasuring: () => void
-  setPoint1: (point: MeasurePoint) => void
-  setPoint2: (point: MeasurePoint) => void
-  clearMeasurement: () => void
+  setPendingPoint: (point: MeasurePoint) => void
+  setPreviewPoint: (point: MeasurePoint | null) => void
+  completeMeasurement: (point: MeasurePoint) => void
+  cancelPendingMeasurement: () => void
+  removeMeasurement: (id: string) => void
+  clearAllMeasurements: () => void
 }
 
 /**
  * Calculate the geodesic (great-circle) distance between two points on Earth
  */
-function calculateGeodesicDistance(point1: MeasurePoint, point2: MeasurePoint): number {
+export function calculateGeodesicDistance(point1: MeasurePoint, point2: MeasurePoint): number {
   const geodesic = new Cesium.EllipsoidGeodesic(
     Cesium.Cartographic.fromDegrees(point1.cartographic.longitude, point1.cartographic.latitude),
     Cesium.Cartographic.fromDegrees(point2.cartographic.longitude, point2.cartographic.latitude)
@@ -41,28 +52,36 @@ function calculateGeodesicDistance(point1: MeasurePoint, point2: MeasurePoint): 
   return geodesic.surfaceDistance
 }
 
+/**
+ * Generate a unique ID for measurements
+ */
+function generateId(): string {
+  return `measure_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+}
+
 export const useMeasureStore = create<MeasureState>((set, get) => ({
   // Initial state
   isActive: false,
-  point1: null,
-  point2: null,
-  distanceMeters: null,
+  measurements: [],
+  pendingPoint: null,
+  previewPoint: null,
+  previewDistance: null,
 
   startMeasuring: () => {
     set({
       isActive: true,
-      point1: null,
-      point2: null,
-      distanceMeters: null
+      pendingPoint: null,
+      previewPoint: null,
+      previewDistance: null
     })
   },
 
   stopMeasuring: () => {
     set({
       isActive: false,
-      point1: null,
-      point2: null,
-      distanceMeters: null
+      pendingPoint: null,
+      previewPoint: null,
+      previewDistance: null
     })
   },
 
@@ -75,30 +94,71 @@ export const useMeasureStore = create<MeasureState>((set, get) => ({
     }
   },
 
-  setPoint1: (point: MeasurePoint) => {
+  setPendingPoint: (point: MeasurePoint) => {
     set({
-      point1: point,
-      point2: null,
-      distanceMeters: null
+      pendingPoint: point,
+      previewPoint: null,
+      previewDistance: null
     })
   },
 
-  setPoint2: (point: MeasurePoint) => {
+  setPreviewPoint: (point: MeasurePoint | null) => {
     const state = get()
-    if (!state.point1) return
+    if (!state.pendingPoint || !point) {
+      set({ previewPoint: null, previewDistance: null })
+      return
+    }
 
-    const distance = calculateGeodesicDistance(state.point1, point)
+    const distance = calculateGeodesicDistance(state.pendingPoint, point)
     set({
+      previewPoint: point,
+      previewDistance: distance
+    })
+  },
+
+  completeMeasurement: (point: MeasurePoint) => {
+    const state = get()
+    if (!state.pendingPoint) return
+
+    const distance = calculateGeodesicDistance(state.pendingPoint, point)
+    const newMeasurement: Measurement = {
+      id: generateId(),
+      point1: state.pendingPoint,
       point2: point,
       distanceMeters: distance
+    }
+
+    set({
+      measurements: [...state.measurements, newMeasurement],
+      pendingPoint: null,
+      previewPoint: null,
+      previewDistance: null,
+      // Keep measuring mode active so user can add more measurements
+      isActive: true
     })
   },
 
-  clearMeasurement: () => {
+  cancelPendingMeasurement: () => {
     set({
-      point1: null,
-      point2: null,
-      distanceMeters: null
+      pendingPoint: null,
+      previewPoint: null,
+      previewDistance: null
+    })
+  },
+
+  removeMeasurement: (id: string) => {
+    const state = get()
+    set({
+      measurements: state.measurements.filter(m => m.id !== id)
+    })
+  },
+
+  clearAllMeasurements: () => {
+    set({
+      measurements: [],
+      pendingPoint: null,
+      previewPoint: null,
+      previewDistance: null
     })
   }
 }))

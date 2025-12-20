@@ -9,109 +9,252 @@ interface MeasuringToolProps {
 
 function MeasuringTool({ cesiumViewer }: MeasuringToolProps) {
   const isActive = useMeasureStore((state) => state.isActive)
-  const point1 = useMeasureStore((state) => state.point1)
-  const point2 = useMeasureStore((state) => state.point2)
-  const distanceMeters = useMeasureStore((state) => state.distanceMeters)
-  const clearMeasurement = useMeasureStore((state) => state.clearMeasurement)
+  const measurements = useMeasureStore((state) => state.measurements)
+  const pendingPoint = useMeasureStore((state) => state.pendingPoint)
+  const previewPoint = useMeasureStore((state) => state.previewPoint)
+  const previewDistance = useMeasureStore((state) => state.previewDistance)
   const stopMeasuring = useMeasureStore((state) => state.stopMeasuring)
+  const clearAllMeasurements = useMeasureStore((state) => state.clearAllMeasurements)
 
-  // Refs for Cesium entities
-  const point1EntityRef = useRef<Cesium.Entity | null>(null)
-  const point2EntityRef = useRef<Cesium.Entity | null>(null)
-  const lineEntityRef = useRef<Cesium.Entity | null>(null)
+  // Refs for Cesium entities - keyed by measurement id
+  const measurementEntitiesRef = useRef<Map<string, {
+    point1: Cesium.Entity
+    point2: Cesium.Entity
+    line: Cesium.Entity
+    label: Cesium.Entity
+  }>>(new Map())
 
-  // Create/update Cesium entities for visualization
+  // Refs for pending/preview entities
+  const pendingPointEntityRef = useRef<Cesium.Entity | null>(null)
+  const previewLineEntityRef = useRef<Cesium.Entity | null>(null)
+  const previewLabelEntityRef = useRef<Cesium.Entity | null>(null)
+
+  // Create/update Cesium entities for completed measurements
   useEffect(() => {
     if (!cesiumViewer || cesiumViewer.isDestroyed()) return
 
-    // Clean up existing entities
-    const cleanup = () => {
-      if (point1EntityRef.current) {
-        cesiumViewer.entities.remove(point1EntityRef.current)
-        point1EntityRef.current = null
-      }
-      if (point2EntityRef.current) {
-        cesiumViewer.entities.remove(point2EntityRef.current)
-        point2EntityRef.current = null
-      }
-      if (lineEntityRef.current) {
-        cesiumViewer.entities.remove(lineEntityRef.current)
-        lineEntityRef.current = null
-      }
-    }
+    const existingIds = new Set(measurementEntitiesRef.current.keys())
+    const currentIds = new Set(measurements.map(m => m.id))
 
-    // If not active or no points, clean up and exit
-    if (!isActive) {
-      cleanup()
-      return cleanup
-    }
-
-    // Create point 1 marker
-    if (point1 && !point1EntityRef.current) {
-      point1EntityRef.current = cesiumViewer.entities.add({
-        id: 'measure_point_1',
-        position: point1.cartesian,
-        point: {
-          pixelSize: 12,
-          color: Cesium.Color.CYAN,
-          outlineColor: Cesium.Color.WHITE,
-          outlineWidth: 2,
-          disableDepthTestDistance: Number.POSITIVE_INFINITY
+    // Remove entities for deleted measurements
+    for (const id of existingIds) {
+      if (!currentIds.has(id)) {
+        const entities = measurementEntitiesRef.current.get(id)
+        if (entities) {
+          cesiumViewer.entities.remove(entities.point1)
+          cesiumViewer.entities.remove(entities.point2)
+          cesiumViewer.entities.remove(entities.line)
+          cesiumViewer.entities.remove(entities.label)
+          measurementEntitiesRef.current.delete(id)
         }
-      })
-    } else if (point1 && point1EntityRef.current) {
-      point1EntityRef.current.position = new Cesium.ConstantPositionProperty(point1.cartesian)
-    } else if (!point1 && point1EntityRef.current) {
-      cesiumViewer.entities.remove(point1EntityRef.current)
-      point1EntityRef.current = null
+      }
     }
 
-    // Create point 2 marker
-    if (point2 && !point2EntityRef.current) {
-      point2EntityRef.current = cesiumViewer.entities.add({
-        id: 'measure_point_2',
-        position: point2.cartesian,
-        point: {
-          pixelSize: 12,
-          color: Cesium.Color.CYAN,
-          outlineColor: Cesium.Color.WHITE,
-          outlineWidth: 2,
-          disableDepthTestDistance: Number.POSITIVE_INFINITY
-        }
-      })
-    } else if (point2 && point2EntityRef.current) {
-      point2EntityRef.current.position = new Cesium.ConstantPositionProperty(point2.cartesian)
-    } else if (!point2 && point2EntityRef.current) {
-      cesiumViewer.entities.remove(point2EntityRef.current)
-      point2EntityRef.current = null
-    }
+    // Create entities for new measurements
+    for (const m of measurements) {
+      if (!measurementEntitiesRef.current.has(m.id)) {
+        // Calculate midpoint for label
+        const midpoint = Cesium.Cartesian3.midpoint(
+          m.point1.cartesian,
+          m.point2.cartesian,
+          new Cesium.Cartesian3()
+        )
 
-    // Create line between points
-    if (point1 && point2 && !lineEntityRef.current) {
-      lineEntityRef.current = cesiumViewer.entities.add({
-        id: 'measure_line',
-        polyline: {
-          positions: [point1.cartesian, point2.cartesian],
-          width: 3,
-          material: new Cesium.PolylineDashMaterialProperty({
+        const point1Entity = cesiumViewer.entities.add({
+          id: `measure_${m.id}_p1`,
+          position: m.point1.cartesian,
+          point: {
+            pixelSize: 10,
             color: Cesium.Color.CYAN,
-            dashLength: 16
-          }),
-          clampToGround: true
+            outlineColor: Cesium.Color.WHITE,
+            outlineWidth: 2,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY
+          }
+        })
+
+        const point2Entity = cesiumViewer.entities.add({
+          id: `measure_${m.id}_p2`,
+          position: m.point2.cartesian,
+          point: {
+            pixelSize: 10,
+            color: Cesium.Color.CYAN,
+            outlineColor: Cesium.Color.WHITE,
+            outlineWidth: 2,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY
+          }
+        })
+
+        const lineEntity = cesiumViewer.entities.add({
+          id: `measure_${m.id}_line`,
+          polyline: {
+            positions: [m.point1.cartesian, m.point2.cartesian],
+            width: 3,
+            material: new Cesium.PolylineDashMaterialProperty({
+              color: Cesium.Color.CYAN,
+              dashLength: 16
+            }),
+            clampToGround: true
+          }
+        })
+
+        const labelEntity = cesiumViewer.entities.add({
+          id: `measure_${m.id}_label`,
+          position: midpoint,
+          label: {
+            text: formatDistance(m.distanceMeters),
+            font: '14px sans-serif',
+            fillColor: Cesium.Color.WHITE,
+            outlineColor: Cesium.Color.BLACK,
+            outlineWidth: 2,
+            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+            showBackground: true,
+            backgroundColor: new Cesium.Color(0, 0, 0, 0.6),
+            backgroundPadding: new Cesium.Cartesian2(6, 4),
+            verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+            pixelOffset: new Cesium.Cartesian2(0, -10),
+            disableDepthTestDistance: Number.POSITIVE_INFINITY
+          }
+        })
+
+        measurementEntitiesRef.current.set(m.id, {
+          point1: point1Entity,
+          point2: point2Entity,
+          line: lineEntity,
+          label: labelEntity
+        })
+      }
+    }
+
+    // Cleanup on unmount - capture ref value to avoid stale closure
+    const entitiesMap = measurementEntitiesRef.current
+    return () => {
+      for (const entities of entitiesMap.values()) {
+        if (!cesiumViewer.isDestroyed()) {
+          cesiumViewer.entities.remove(entities.point1)
+          cesiumViewer.entities.remove(entities.point2)
+          cesiumViewer.entities.remove(entities.line)
+          cesiumViewer.entities.remove(entities.label)
         }
-      })
-    } else if (point1 && point2 && lineEntityRef.current && lineEntityRef.current.polyline) {
-      lineEntityRef.current.polyline.positions = new Cesium.ConstantProperty([point1.cartesian, point2.cartesian])
-    } else if ((!point1 || !point2) && lineEntityRef.current) {
-      cesiumViewer.entities.remove(lineEntityRef.current)
-      lineEntityRef.current = null
+      }
+      entitiesMap.clear()
+    }
+  }, [cesiumViewer, measurements])
+
+  // Create/update pending point and preview line
+  useEffect(() => {
+    if (!cesiumViewer || cesiumViewer.isDestroyed()) return
+
+    // Cleanup function
+    const cleanup = () => {
+      if (pendingPointEntityRef.current && !cesiumViewer.isDestroyed()) {
+        cesiumViewer.entities.remove(pendingPointEntityRef.current)
+        pendingPointEntityRef.current = null
+      }
+      if (previewLineEntityRef.current && !cesiumViewer.isDestroyed()) {
+        cesiumViewer.entities.remove(previewLineEntityRef.current)
+        previewLineEntityRef.current = null
+      }
+      if (previewLabelEntityRef.current && !cesiumViewer.isDestroyed()) {
+        cesiumViewer.entities.remove(previewLabelEntityRef.current)
+        previewLabelEntityRef.current = null
+      }
+    }
+
+    // Create/update pending point marker
+    if (pendingPoint) {
+      if (!pendingPointEntityRef.current) {
+        pendingPointEntityRef.current = cesiumViewer.entities.add({
+          id: 'measure_pending_point',
+          position: pendingPoint.cartesian,
+          point: {
+            pixelSize: 12,
+            color: Cesium.Color.YELLOW,
+            outlineColor: Cesium.Color.WHITE,
+            outlineWidth: 2,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY
+          }
+        })
+      } else {
+        pendingPointEntityRef.current.position = new Cesium.ConstantPositionProperty(pendingPoint.cartesian)
+      }
+
+      // Create/update preview line if we have a preview point
+      if (previewPoint) {
+        const midpoint = Cesium.Cartesian3.midpoint(
+          pendingPoint.cartesian,
+          previewPoint.cartesian,
+          new Cesium.Cartesian3()
+        )
+
+        if (!previewLineEntityRef.current) {
+          previewLineEntityRef.current = cesiumViewer.entities.add({
+            id: 'measure_preview_line',
+            polyline: {
+              positions: [pendingPoint.cartesian, previewPoint.cartesian],
+              width: 2,
+              material: new Cesium.PolylineDashMaterialProperty({
+                color: Cesium.Color.YELLOW.withAlpha(0.7),
+                dashLength: 12
+              }),
+              clampToGround: true
+            }
+          })
+        } else if (previewLineEntityRef.current.polyline) {
+          previewLineEntityRef.current.polyline.positions = new Cesium.ConstantProperty([
+            pendingPoint.cartesian,
+            previewPoint.cartesian
+          ])
+        }
+
+        // Create/update preview distance label
+        if (previewDistance !== null) {
+          if (!previewLabelEntityRef.current) {
+            previewLabelEntityRef.current = cesiumViewer.entities.add({
+              id: 'measure_preview_label',
+              position: midpoint,
+              label: {
+                text: formatDistance(previewDistance),
+                font: '13px sans-serif',
+                fillColor: Cesium.Color.YELLOW,
+                outlineColor: Cesium.Color.BLACK,
+                outlineWidth: 2,
+                style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                showBackground: true,
+                backgroundColor: new Cesium.Color(0, 0, 0, 0.6),
+                backgroundPadding: new Cesium.Cartesian2(6, 4),
+                verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                pixelOffset: new Cesium.Cartesian2(0, -8),
+                disableDepthTestDistance: Number.POSITIVE_INFINITY
+              }
+            })
+          } else {
+            previewLabelEntityRef.current.position = new Cesium.ConstantPositionProperty(midpoint)
+            if (previewLabelEntityRef.current.label) {
+              previewLabelEntityRef.current.label.text = new Cesium.ConstantProperty(formatDistance(previewDistance))
+            }
+          }
+        }
+      } else {
+        // No preview point, remove preview line and label
+        if (previewLineEntityRef.current) {
+          cesiumViewer.entities.remove(previewLineEntityRef.current)
+          previewLineEntityRef.current = null
+        }
+        if (previewLabelEntityRef.current) {
+          cesiumViewer.entities.remove(previewLabelEntityRef.current)
+          previewLabelEntityRef.current = null
+        }
+      }
+    } else {
+      // No pending point, clean up all preview entities
+      cleanup()
     }
 
     return cleanup
-  }, [cesiumViewer, isActive, point1, point2])
+  }, [cesiumViewer, pendingPoint, previewPoint, previewDistance])
 
   // Format distance for display
-  const formatDistance = (meters: number): string => {
+  function formatDistance(meters: number): string {
     const nm = meters / 1852
     const feet = meters * 3.28084
     const km = meters / 1000
@@ -125,8 +268,8 @@ function MeasuringTool({ cesiumViewer }: MeasuringToolProps) {
     }
   }
 
-  // Don't render UI if not active
-  if (!isActive) return null
+  // Don't render UI if not active and no measurements
+  if (!isActive && measurements.length === 0) return null
 
   return (
     <div className="measuring-tool">
@@ -138,24 +281,37 @@ function MeasuringTool({ cesiumViewer }: MeasuringToolProps) {
       </div>
 
       <div className="measuring-content">
-        {!point1 && (
-          <p className="measuring-hint">Click on the terrain to set the first point</p>
+        {isActive && !pendingPoint && (
+          <p className="measuring-hint">Click on the terrain to start measuring</p>
         )}
 
-        {point1 && !point2 && (
-          <p className="measuring-hint">Click on the terrain to set the second point</p>
+        {isActive && pendingPoint && !previewPoint && (
+          <p className="measuring-hint">Move mouse to preview, click to confirm (Esc to cancel)</p>
         )}
 
-        {point1 && point2 && distanceMeters !== null && (
-          <>
-            <div className="measuring-result">
-              <span className="measuring-label">Distance:</span>
-              <span className="measuring-value">{formatDistance(distanceMeters)}</span>
+        {isActive && pendingPoint && previewPoint && previewDistance !== null && (
+          <div className="measuring-preview">
+            <span className="measuring-label">Preview:</span>
+            <span className="measuring-value preview">{formatDistance(previewDistance)}</span>
+          </div>
+        )}
+
+        {measurements.length > 0 && (
+          <div className="measuring-list">
+            <div className="measuring-list-header">
+              <span>Measurements ({measurements.length})</span>
+              <button className="measuring-clear-all" onClick={clearAllMeasurements} title="Clear all measurements">
+                Clear All
+              </button>
             </div>
-            <button className="measuring-reset" onClick={clearMeasurement}>
-              New Measurement
-            </button>
-          </>
+            {measurements.map((m, index) => (
+              <div key={m.id} className="measuring-item">
+                <span className="measuring-item-number">{index + 1}.</span>
+                <span className="measuring-item-value">{formatDistance(m.distanceMeters)}</span>
+                <span className="measuring-item-hint">(right-click endpoint to remove)</span>
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </div>

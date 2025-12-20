@@ -41,7 +41,7 @@ function getScreenSpaceError(quality: number): number {
 const CONE_POOL_SIZE = 100
 
 // Model rendering constants
-const MODEL_BASE_SCALE = 2.5        // Base scale for all aircraft models
+const MODEL_BASE_SCALE = 1.0        // Base scale for all aircraft models
 const MODEL_HEIGHT_OFFSET = 1       // Meters to raise models above ground to prevent clipping
 const MODEL_DEFAULT_COLOR = new Cesium.Color(0.85, 0.85, 0.85, 1.0)  // Muted gray until airline liveries
 
@@ -107,9 +107,13 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
 
   // Measure store for measuring mode
   const isMeasuring = useMeasureStore((state) => state.isActive)
-  const measurePoint1 = useMeasureStore((state) => state.point1)
-  const setMeasurePoint1 = useMeasureStore((state) => state.setPoint1)
-  const setMeasurePoint2 = useMeasureStore((state) => state.setPoint2)
+  const measurements = useMeasureStore((state) => state.measurements)
+  const pendingPoint = useMeasureStore((state) => state.pendingPoint)
+  const setPendingPoint = useMeasureStore((state) => state.setPendingPoint)
+  const setPreviewPoint = useMeasureStore((state) => state.setPreviewPoint)
+  const completeMeasurement = useMeasureStore((state) => state.completeMeasurement)
+  const cancelPendingMeasurement = useMeasureStore((state) => state.cancelPendingMeasurement)
+  const removeMeasurement = useMeasureStore((state) => state.removeMeasurement)
 
   // Viewport store for follow highlighting and view mode (read from this viewport)
   const viewports = useViewportStore((state) => state.viewports)
@@ -1178,21 +1182,23 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     return () => clearInterval(intervalId)
   }, [babylonOverlay, totalPilotsFromApi, pilotsFilteredByDistance])
 
-  // Measuring mode click handler
+  // Measuring mode event handlers
   useEffect(() => {
-    if (!cesiumViewer || !isMeasuring) return
+    if (!cesiumViewer || !isMeasuring) {
+      // Clear preview when not measuring
+      setPreviewPoint(null)
+      return
+    }
 
     const handler = new Cesium.ScreenSpaceEventHandler(cesiumViewer.scene.canvas)
 
-    handler.setInputAction((click: { position: Cesium.Cartesian2 }) => {
-      // Pick position on terrain
-      const cartesian = cesiumViewer.scene.pickPosition(click.position)
-      if (!cartesian) return
+    // Helper to pick terrain position
+    const pickTerrainPosition = (position: Cesium.Cartesian2) => {
+      const cartesian = cesiumViewer.scene.pickPosition(position)
+      if (!cartesian) return null
 
-      // Convert to cartographic (lat/lon/height)
       const cartographic = Cesium.Cartographic.fromCartesian(cartesian)
-
-      const point = {
+      return {
         cartesian,
         cartographic: {
           latitude: Cesium.Math.toDegrees(cartographic.latitude),
@@ -1200,19 +1206,80 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
           height: cartographic.height
         }
       }
+    }
 
-      // Set point1 if not set, otherwise set point2
-      if (!measurePoint1) {
-        setMeasurePoint1(point)
+    // Helper to check if click is near a measurement endpoint
+    const findNearbyMeasurementEndpoint = (screenPos: Cesium.Cartesian2): string | null => {
+      const threshold = 15 // pixels
+      for (const m of measurements) {
+        // Check point1
+        const p1Screen = Cesium.SceneTransforms.worldToWindowCoordinates(cesiumViewer.scene, m.point1.cartesian)
+        if (p1Screen) {
+          const dx = p1Screen.x - screenPos.x
+          const dy = p1Screen.y - screenPos.y
+          if (Math.sqrt(dx * dx + dy * dy) < threshold) {
+            return m.id
+          }
+        }
+        // Check point2
+        const p2Screen = Cesium.SceneTransforms.worldToWindowCoordinates(cesiumViewer.scene, m.point2.cartesian)
+        if (p2Screen) {
+          const dx = p2Screen.x - screenPos.x
+          const dy = p2Screen.y - screenPos.y
+          if (Math.sqrt(dx * dx + dy * dy) < threshold) {
+            return m.id
+          }
+        }
+      }
+      return null
+    }
+
+    // Left-click: Set pending point or complete measurement
+    handler.setInputAction((click: { position: Cesium.Cartesian2 }) => {
+      const point = pickTerrainPosition(click.position)
+      if (!point) return
+
+      if (!pendingPoint) {
+        // First click - set pending point
+        setPendingPoint(point)
       } else {
-        setMeasurePoint2(point)
+        // Second click - complete the measurement
+        completeMeasurement(point)
       }
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK)
 
+    // Mouse move: Update preview when we have a pending point
+    handler.setInputAction((movement: { endPosition: Cesium.Cartesian2 }) => {
+      if (!pendingPoint) {
+        setPreviewPoint(null)
+        return
+      }
+
+      const point = pickTerrainPosition(movement.endPosition)
+      setPreviewPoint(point)
+    }, Cesium.ScreenSpaceEventType.MOUSE_MOVE)
+
+    // Right-click: Remove measurement if clicking near an endpoint
+    handler.setInputAction((click: { position: Cesium.Cartesian2 }) => {
+      const measurementId = findNearbyMeasurementEndpoint(click.position)
+      if (measurementId) {
+        removeMeasurement(measurementId)
+      }
+    }, Cesium.ScreenSpaceEventType.RIGHT_CLICK)
+
+    // Escape key: Cancel pending measurement
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && pendingPoint) {
+        cancelPendingMeasurement()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+
     return () => {
       handler.destroy()
+      window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [cesiumViewer, isMeasuring, measurePoint1, setMeasurePoint1, setMeasurePoint2])
+  }, [cesiumViewer, isMeasuring, measurements, pendingPoint, setPendingPoint, setPreviewPoint, completeMeasurement, cancelPendingMeasurement, removeMeasurement])
 
   return (
     <div className={`cesium-viewer-container ${isInset ? 'inset' : ''}`} ref={containerRef} />

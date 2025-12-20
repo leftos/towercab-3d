@@ -40,10 +40,13 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ### Added
 - Measuring tool for measuring distances on the terrain:
-  - Click the Measure button in the controls bar to activate
-  - Click any two points on the terrain to measure the distance between them
+  - Click the Measure button in the controls bar to activate measuring mode
+  - Click to set the first point, then see a live preview of the distance as you move your mouse
+  - Click again to lock in the measurement; the line and distance label remain on screen
+  - Add multiple measurements by clicking additional points while in measuring mode
+  - Right-click on any measurement endpoint to remove that measurement
   - Distance shown in meters/feet for short distances, kilometers/nautical miles for longer distances
-  - Dashed line visualization connects the two measurement points
+  - Dashed line visualization connects measurement points with distance labels at midpoints
 - WebXR VR support foundation:
   - VR button appears in controls bar when a VR headset is detected (via Quest Link, SteamVR, or similar)
   - Dual-pass Cesium stereo rendering captures left/right eye views with proper frustum offsets
