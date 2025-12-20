@@ -61,6 +61,7 @@ function CesiumViewer() {
   const showAirborneTraffic = useSettingsStore((state) => state.showAirborneTraffic)
   const terrainQuality = useSettingsStore((state) => state.terrainQuality)
   const show3DBuildings = useSettingsStore((state) => state.show3DBuildings)
+  const forceNoon = useSettingsStore((state) => state.forceNoon)
 
   // Camera store for follow highlighting and view mode
   const followingCallsign = useCameraStore((state) => state.followingCallsign)
@@ -144,9 +145,13 @@ function CesiumViewer() {
     viewer.scene.fog.enabled = true
     viewer.scene.globe.depthTestAgainstTerrain = true
 
+
     // Enable shadows
     viewer.shadows = true
     viewer.shadowMap.softShadows = true
+    viewer.shadowMap.size = 2048  // Higher resolution shadows
+    viewer.shadowMap.maximumDistance = 10000.0  // Shadow distance in meters
+    viewer.terrainShadows = Cesium.ShadowMode.ENABLED  // Terrain casts and receives shadows
 
     // Enable clock animation for model animations (propellers, etc.)
     viewer.clock.shouldAnimate = true
@@ -166,6 +171,12 @@ function CesiumViewer() {
         removeListener()
         if (!viewer.isDestroyed()) {
           createCachingImageryProvider(provider)
+          // Suppress verbose tile loading errors (transient, Cesium retries automatically)
+          if (provider.errorEvent) {
+            provider.errorEvent.addEventListener(() => {
+              // Silently ignore - these are usually transient network issues
+            })
+          }
         }
       })
     }
@@ -213,6 +224,29 @@ function CesiumViewer() {
     if (!cesiumViewer) return
     cesiumViewer.scene.globe.maximumScreenSpaceError = getScreenSpaceError(terrainQuality)
   }, [cesiumViewer, terrainQuality])
+
+  // Force noon time for shadow testing
+  useEffect(() => {
+    if (!cesiumViewer) return
+
+    if (forceNoon && currentAirport) {
+      // Calculate solar noon based on tower longitude
+      // Solar noon occurs when longitude / 15 hours have passed since UTC midnight
+      const towerPos = getTowerPosition(currentAirport, towerHeight)
+      const now = new Date()
+      const utcNoon = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12, 0, 0))
+      // Adjust for longitude: subtract hours for east, add for west
+      const longitudeOffsetHours = towerPos.longitude / 15
+      utcNoon.setTime(utcNoon.getTime() - longitudeOffsetHours * 60 * 60 * 1000)
+
+      cesiumViewer.clock.currentTime = Cesium.JulianDate.fromDate(utcNoon)
+      cesiumViewer.clock.shouldAnimate = false
+    } else {
+      // Restore real-world current time
+      cesiumViewer.clock.currentTime = Cesium.JulianDate.now()
+      cesiumViewer.clock.shouldAnimate = true
+    }
+  }, [cesiumViewer, forceNoon, currentAirport, towerHeight])
 
   // Manage OSM 3D Buildings tileset
   useEffect(() => {
@@ -382,6 +416,7 @@ function CesiumViewer() {
       isFollowed: boolean
       labelText: string
       color: { r: number; g: number; b: number }
+      cesiumPosition: Cesium.Cartesian3 | null
     }> = []
 
     for (const aircraft of sortedAircraft) {
@@ -423,10 +458,9 @@ function CesiumViewer() {
       }
 
       // Update mesh position - scale cones dynamically in topdown view based on altitude
-      // At reference altitude (8000m), use base scale of 3.5
-      // Scale proportionally with altitude to maintain minimum visual size when zoomed out
+      // Scale proportionally with altitude to maintain visibility when zoomed out
       const referenceAltitude = 6000
-      const baseTopdownScale = 3.5
+      const baseTopdownScale = 1.0
       const viewModeScale = viewMode === 'topdown'
         ? baseTopdownScale * (topdownAltitude / referenceAltitude)
         : 1.0
@@ -434,8 +468,7 @@ function CesiumViewer() {
       // Use model from pool - find or assign a pool slot for this aircraft
       if (conePoolReadyRef.current && terrainOffsetReadyRef.current) {
         // Calculate model position with terrain offset correction
-        // Ground aircraft sit on the ground, airborne aircraft use their altitude
-        const modelHeight = heightAboveEllipsoid + terrainOffsetRef.current + 4
+        const modelHeight = heightAboveEllipsoid + terrainOffsetRef.current
 
         // Find existing pool slot for this callsign, or get an unused one
         let poolIndex = -1
@@ -476,9 +509,17 @@ function CesiumViewer() {
               Cesium.Transforms.headingPitchRollQuaternion(position, hpr)
             )
 
-            // Update model scale based on view mode
+            // Update model scale and color based on view mode
             if (modelEntity.model) {
               modelEntity.model.scale = new Cesium.ConstantProperty(2 * viewModeScale)
+              // White in topdown view for visibility, normal color in 3D
+              if (viewMode === 'topdown') {
+                modelEntity.model.color = new Cesium.ConstantProperty(Cesium.Color.WHITE)
+                modelEntity.model.colorBlendMode = new Cesium.ConstantProperty(Cesium.ColorBlendMode.REPLACE)
+              } else {
+                modelEntity.model.color = undefined
+                modelEntity.model.colorBlendMode = undefined
+              }
             }
 
             // Show the model
@@ -504,8 +545,20 @@ function CesiumViewer() {
         )
       }
 
-      aircraftData.push({ callsign: aircraft.callsign, isAirborne, isFollowed, labelText, color: babylonColor })
+      // Store the Cesium position for screen projection
+      const cesiumPosition = conePoolReadyRef.current && terrainOffsetReadyRef.current
+        ? Cesium.Cartesian3.fromDegrees(
+            aircraft.interpolatedLongitude,
+            aircraft.interpolatedLatitude,
+            heightAboveEllipsoid + terrainOffsetRef.current
+          )
+        : null
+
+      aircraftData.push({ callsign: aircraft.callsign, isAirborne, isFollowed, labelText, color: babylonColor, cesiumPosition })
     }
+
+    // Hide all labels first, then show only visible ones
+    babylonOverlay.hideAllLabels()
 
     // Second pass: Calculate label offsets with overlap detection
     const labelWidth = 90  // Approximate label width
@@ -527,8 +580,13 @@ function CesiumViewer() {
     }> = []
 
     for (const data of aircraftData) {
-      const screenPos = babylonOverlay.getConeScreenPosition(data.callsign)
-      if (!screenPos || !screenPos.visible) continue
+      // Use Cesium's projection to get screen position (matches where model is rendered)
+      if (!data.cesiumPosition) continue
+      const windowPos = Cesium.SceneTransforms.worldToWindowCoordinates(viewer.scene, data.cesiumPosition)
+      if (!windowPos) continue
+
+      // windowPos is in CSS pixels, use it directly as screen position
+      const screenPos = { x: windowPos.x, y: windowPos.y }
 
       // Default offset: top-left of cone
       let offsetX = -labelWidth - labelGap
@@ -605,7 +663,7 @@ function CesiumViewer() {
 
     // Third pass: Update leader lines with calculated offsets
     for (const pos of labelPositions) {
-      babylonOverlay.updateLeaderLine(pos.callsign, pos.offsetX, pos.offsetY)
+      babylonOverlay.updateLeaderLine(pos.callsign, pos.coneX, pos.coneY, pos.offsetX, pos.offsetY)
     }
 
     // Clean up any Babylon meshes that are no longer in the visible set

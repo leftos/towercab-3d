@@ -42,9 +42,6 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
   const camera2DHeadingRef = useRef<number>(0)
   const isTopDownModeRef = useRef(false)
 
-  // Track if camera has been synced at least once (labels shouldn't show until then)
-  const cameraSyncedRef = useRef(false)
-
   // Terrain offset: difference between MSL elevation and actual Cesium terrain height
   // This corrects for geoid undulation (varies by location, e.g., -30m at Boston)
   const terrainOffsetRef = useRef<number>(0)
@@ -132,7 +129,6 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
       camera2DLonRef.current = 0
       camera2DHeadingRef.current = 0
       isTopDownModeRef.current = false
-      cameraSyncedRef.current = false
       aircraftMeshesRef.current.clear()
       setSceneReady(false)
     }
@@ -223,12 +219,13 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
   }, [cesiumViewer])
 
   // Sync Babylon camera for 3D view
-  const syncCamera3D = useCallback(() => {
+  // Returns true if sync was successful, false if prerequisites are missing
+  const syncCamera3D = useCallback((): boolean => {
     const viewer = cesiumViewer
     const camera = cameraRef.current
     const fixedToEnu = fixedToEnuMatrixRef.current
 
-    if (!viewer || !camera || !fixedToEnu) return
+    if (!viewer || !camera || !fixedToEnu) return false
 
     // Clear any quaternion so Euler angles work
     camera.rotationQuaternion = null
@@ -299,6 +296,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     }
 
     camera.rotation.set(rotationX, rotationY, rotationZ)
+    return true
   }, [cesiumViewer])
 
   // Main sync camera function - dispatches to 2D or 3D based on view
@@ -315,9 +313,6 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     } else {
       syncCamera3D()
     }
-
-    // Mark camera as synced (labels can now be positioned correctly)
-    cameraSyncedRef.current = true
   }, [cesiumViewer, syncCamera2D, syncCamera3D])
 
   // Create or update aircraft cone mesh and label
@@ -382,18 +377,19 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
       const isOnGround = (altitudeMeters - groundElevationMeters) < 15
       const coneRadius = 6 // Half of 12m diameter
 
-      // Get horizontal position using ENU transformation (at ground elevation for consistency)
-      const posCart = Cesium.Cartesian3.fromDegrees(lon, lat, groundElevationMeters)
+      // Compute effective altitude including terrain offset (matches Cesium model positioning)
+      const effectiveAltitude = isOnGround
+        ? groundElevationMeters + terrainOffsetRef.current + 0.5  // ground level with small offset
+        : altitudeMeters + terrainOffsetRef.current
+
+      // Get ENU position at actual altitude (accounts for Earth curvature at high altitudes)
+      const posCart = Cesium.Cartesian3.fromDegrees(lon, lat, effectiveAltitude)
       const enuPos = Cesium.Matrix4.multiplyByPoint(fixedToEnu, posCart, new Cesium.Cartesian3())
 
-      // Calculate Y position: terrain offset + height above ground + cone radius
-      // For ground aircraft, height above ground is ~0; for airborne, it's their altitude minus ground
-      const heightAboveGround = isOnGround ? 0 : (altitudeMeters - groundElevationMeters)
-      const yPosition = terrainOffsetRef.current + heightAboveGround + coneRadius
-
-      // Convert ENU to Babylon: X=East, Y=Up, Z=North
-      // Use enuPos for horizontal (X,Z) but calculate Y independently to avoid ENU Z issues
-      localPos = new BABYLON.Vector3(enuPos.x, yPosition, enuPos.y)
+      // Convert ENU to Babylon: ENU(X,Y,Z) -> Babylon(X=East, Y=Up, Z=North)
+      // enuPos.z is the ENU "Up" component, which becomes Babylon Y
+      // Add coneRadius so cone mesh center is above the aircraft position
+      localPos = new BABYLON.Vector3(enuPos.x, enuPos.z + coneRadius, enuPos.y)
     }
 
 
@@ -475,6 +471,8 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
       label.adaptHeightToChildren = true
       label.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT
       label.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_TOP
+      label.zIndex = 10  // Labels render on top of leader lines
+      label.isVisible = false  // Start hidden until camera is synced and position is valid
       guiTexture.addControl(label)
 
       const text = new GUI.TextBlock(`${callsign}_text`)
@@ -491,6 +489,8 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
       const leaderLine = new GUI.Line(`${callsign}_leaderLine`)
       leaderLine.lineWidth = 3
       leaderLine.color = 'white'  // Use white for visibility testing
+      leaderLine.zIndex = 1  // Leader lines render below labels (zIndex 10)
+      leaderLine.isVisible = false  // Start hidden until camera is synced and position is valid
       // Set initial test coordinates - simple line from center
       leaderLine.x1 = 0
       leaderLine.y1 = 0
@@ -572,74 +572,28 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
 
   // Update leader line and label position manually
   // We project the cone's 3D position to screen space and position GUI elements accordingly
+  // Update label position using screen coordinates from Cesium
+  // screenX, screenY are the screen position of the aircraft model (from Cesium projection)
+  // labelOffsetX, labelOffsetY are the offset from the model to position the label
   const updateLeaderLine = useCallback((
     callsign: string,
+    screenX: number,
+    screenY: number,
     labelOffsetX: number,
     labelOffsetY: number
   ) => {
     const meshData = aircraftMeshesRef.current.get(callsign)
-    const scene = sceneRef.current
-    const engine = engineRef.current
 
-    if (!meshData?.leaderLine || !meshData?.cone || !meshData?.label || !scene || !engine) return
+    if (!meshData?.leaderLine || !meshData?.label) return
 
-    // Don't show labels until camera has been synced at least once
-    // (prevents labels appearing at wrong positions on initial load)
-    if (!cameraSyncedRef.current) {
-      meshData.cone.isVisible = false
-      if (meshData.shadow) meshData.shadow.isVisible = false
-      meshData.label.isVisible = false
-      meshData.leaderLine.isVisible = false
-      return
-    }
-
-    const screenWidth = engine.getRenderWidth()
-    const screenHeight = engine.getRenderHeight()
-
-    // Project cone position to screen using scene's active camera
-    const coneWorldPos = meshData.cone.absolutePosition
-    const screenPos = BABYLON.Vector3.Project(
-      coneWorldPos,
-      BABYLON.Matrix.Identity(),
-      scene.getTransformMatrix(),
-      new BABYLON.Viewport(0, 0, screenWidth, screenHeight)
-    )
-
-    // Check if behind camera (z outside 0-1 range in NDC)
-    if (screenPos.z < 0 || screenPos.z > 1) {
-      meshData.cone.isVisible = false
-      if (meshData.shadow) meshData.shadow.isVisible = false
-      meshData.label.isVisible = false
-      meshData.leaderLine.isVisible = false
-      return
-    }
-
-    // Check for suspicious center-screen projection (indicates transform matrix not ready)
-    // This catches cases where the projection returns default/invalid values
-    const centerX = screenWidth / 2
-    const centerY = screenHeight / 2
-    const distFromCenter = Math.sqrt(
-      Math.pow(screenPos.x - centerX, 2) + Math.pow(screenPos.y - centerY, 2)
-    )
-    // If projected very close to exact center and cone is far from origin, likely invalid
-    if (distFromCenter < 5 && coneWorldPos.length() > 100) {
-      meshData.cone.isVisible = false
-      if (meshData.shadow) meshData.shadow.isVisible = false
-      meshData.label.isVisible = false
-      meshData.leaderLine.isVisible = false
-      return
-    }
-
-    // Cone stays hidden - Cesium handles cone rendering with proper depth occlusion
-    // meshData.cone.isVisible = true
-    // if (meshData.shadow) meshData.shadow.isVisible = true
+    // Show label and leader line
     meshData.label.isVisible = true
     meshData.leaderLine.isVisible = true
 
-    // Position label with offset from cone screen position
+    // Position label with offset from model screen position
     // GUI uses left/top from top-left corner when using LEFT/TOP alignment
-    const labelX = screenPos.x + labelOffsetX
-    const labelY = screenPos.y + labelOffsetY
+    const labelX = screenX + labelOffsetX
+    const labelY = screenY + labelOffsetY
 
     meshData.label.left = labelX
     meshData.label.top = labelY
@@ -648,16 +602,16 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     const labelW = meshData.label.widthInPixels || 80
     const labelH = meshData.label.heightInPixels || 24
 
-    // Line from label center to cone screen position
+    // Line from label center to model screen position
     const labelCenterX = labelX + labelW / 2
     const labelCenterY = labelY + labelH / 2
 
-    // Calculate direction from label to cone
-    const dirX = screenPos.x - labelCenterX
-    const dirY = screenPos.y - labelCenterY
+    // Calculate direction from label to model
+    const dirX = screenX - labelCenterX
+    const dirY = screenY - labelCenterY
     const dist = Math.sqrt(dirX * dirX + dirY * dirY)
 
-    if (dist < 0) {
+    if (dist < 1) {
       // Too close, hide line
       meshData.leaderLine.isVisible = false
       return
@@ -676,9 +630,9 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     const startX = labelCenterX + nx * tEdge
     const startY = labelCenterY + ny * tEdge
 
-    // Line ends near cone (leave small gap)
-    const endX = screenPos.x - nx * 10
-    const endY = screenPos.y - ny * 10
+    // Line ends near model (leave small gap)
+    const endX = screenX - nx * 10
+    const endY = screenY - ny * 10
 
     // GUI Line uses absolute screen coordinates (top-left origin)
     meshData.leaderLine.x1 = startX
@@ -702,6 +656,14 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
   // Get all current aircraft callsigns
   const getAircraftCallsigns = useCallback(() => {
     return Array.from(aircraftMeshesRef.current.keys())
+  }, [])
+
+  // Hide all labels (called at start of frame before updating visible ones)
+  const hideAllLabels = useCallback(() => {
+    for (const [, meshData] of aircraftMeshesRef.current) {
+      if (meshData.label) meshData.label.isVisible = false
+      if (meshData.leaderLine) meshData.leaderLine.isVisible = false
+    }
   }, [])
 
   // Get screen position of a cone (for overlap detection)
@@ -782,6 +744,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     updateLeaderLine,
     removeAircraftMesh,
     getAircraftCallsigns,
+    hideAllLabels,
     getConeScreenPosition,
     render,
     syncCamera

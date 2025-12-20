@@ -18,6 +18,8 @@ function ControlsBar() {
   const setTerrainQuality = useSettingsStore((state) => state.setTerrainQuality)
   const show3DBuildings = useSettingsStore((state) => state.show3DBuildings)
   const setShow3DBuildings = useSettingsStore((state) => state.setShow3DBuildings)
+  const forceNoon = useSettingsStore((state) => state.forceNoon)
+  const setForceNoon = useSettingsStore((state) => state.setForceNoon)
 
   // Camera store
   const viewMode = useCameraStore((state) => state.viewMode)
@@ -221,6 +223,23 @@ function ControlsBar() {
                   </label>
                   <p className="setting-hint">
                     Display OpenStreetMap 3D buildings. May impact performance.
+                  </p>
+                </div>
+              </div>
+
+              <div className="settings-section">
+                <h3>Debug</h3>
+                <div className="setting-item">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={forceNoon}
+                      onChange={(e) => setForceNoon(e.target.checked)}
+                    />
+                    Force Noon (Solar Time)
+                  </label>
+                  <p className="setting-hint">
+                    Freeze time at solar noon for optimal shadow testing.
                   </p>
                 </div>
               </div>

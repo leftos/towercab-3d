@@ -25,6 +25,9 @@ interface SettingsStore {
   // 3D Buildings
   show3DBuildings: boolean
 
+  // Debug settings
+  forceNoon: boolean
+
   // Actions
   setCesiumIonToken: (token: string) => void
   setLabelVisibilityDistance: (distance: number) => void
@@ -37,6 +40,7 @@ interface SettingsStore {
   setTheme: (theme: 'light' | 'dark') => void
   setShowAircraftPanel: (show: boolean) => void
   setShow3DBuildings: (show: boolean) => void
+  setForceNoon: (force: boolean) => void
   resetToDefaults: () => void
 }
 
@@ -51,7 +55,8 @@ const DEFAULT_SETTINGS = {
   cameraSpeed: 5,
   theme: 'dark' as const,
   showAircraftPanel: true,
-  show3DBuildings: false
+  show3DBuildings: false,
+  forceNoon: false
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -85,6 +90,8 @@ export const useSettingsStore = create<SettingsStore>()(
       setShowAircraftPanel: (show: boolean) => set({ showAircraftPanel: show }),
 
       setShow3DBuildings: (show: boolean) => set({ show3DBuildings: show }),
+
+      setForceNoon: (force: boolean) => set({ forceNoon: force }),
 
       resetToDefaults: () => set(DEFAULT_SETTINGS)
     }),
