@@ -2,6 +2,16 @@
 
 All notable changes to TowerCab 3D will be documented in this file.
 
+## v0.0.3-alpha
+
+### Added
+- WebXR VR support foundation:
+  - VR button appears in controls bar when a VR headset is detected (via Quest Link, SteamVR, or similar)
+  - Dual-pass Cesium stereo rendering captures left/right eye views with proper frustum offsets
+  - Babylon.js WebXR session displays Cesium terrain as background textures in VR
+  - UI automatically hides when VR mode is active for immersive experience
+  - Configurable IPD (interpupillary distance) for stereo separation
+
 ## v0.0.2-alpha
 
 ### Added
