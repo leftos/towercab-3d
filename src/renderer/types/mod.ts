@@ -1,11 +1,29 @@
 // Mod types for custom aircraft and tower models
 
+// Supported 3D model formats
+// - GLB/GLTF: Recommended, best performance
+// - OBJ: Widely supported, good for SketchUp exports
+// - DAE: Collada format, native SketchUp export format
+// - STL: Simple geometry only (no textures/materials)
+export const SUPPORTED_MODEL_FORMATS = ['.glb', '.gltf', '.obj', '.dae', '.stl'] as const
+export type SupportedModelFormat = (typeof SUPPORTED_MODEL_FORMATS)[number]
+
+export function isSupportedModelFormat(filename: string): boolean {
+  const ext = filename.toLowerCase().slice(filename.lastIndexOf('.'))
+  return SUPPORTED_MODEL_FORMATS.includes(ext as SupportedModelFormat)
+}
+
+export function getModelFormat(filename: string): SupportedModelFormat | null {
+  const ext = filename.toLowerCase().slice(filename.lastIndexOf('.')) as SupportedModelFormat
+  return SUPPORTED_MODEL_FORMATS.includes(ext) ? ext : null
+}
+
 export interface AircraftModManifest {
   name: string
   author: string
   version: string
   description?: string
-  modelFile: string  // relative path to .glb/.gltf file
+  modelFile: string  // relative path to model file (.glb, .gltf, .obj, .dae, .stl)
   aircraftTypes: string[]  // ICAO type codes this model applies to, e.g., ["B738", "B737"]
   scale: number  // scale factor for the model
   rotationOffset?: {
@@ -20,7 +38,7 @@ export interface TowerModManifest {
   author: string
   version: string
   description?: string
-  modelFile: string  // relative path to .glb/.gltf file
+  modelFile: string  // relative path to model file (.glb, .gltf, .obj, .dae, .stl)
   airports: string[]  // ICAO codes this tower applies to, e.g., ["KJFK", "KLAX"]
   scale: number  // scale factor for the model
   heightOffset?: number  // additional height offset in meters
