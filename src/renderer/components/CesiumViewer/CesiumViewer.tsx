@@ -79,7 +79,7 @@ function CesiumViewer() {
   const fixedTimeHour = useSettingsStore((state) => state.fixedTimeHour)
   const inMemoryTileCacheSize = useSettingsStore((state) => state.inMemoryTileCacheSize)
   const showWeatherEffects = useSettingsStore((state) => state.showWeatherEffects)
-  const showFog = useSettingsStore((state) => state.showFog)
+  const showCesiumFog = useSettingsStore((state) => state.showCesiumFog)
 
   // Weather store for fog effects
   const fogDensity = useWeatherStore((state) => state.fogDensity)
@@ -263,11 +263,12 @@ function CesiumViewer() {
     cesiumViewer.scene.globe.tileCacheSize = inMemoryTileCacheSize
   }, [cesiumViewer, inMemoryTileCacheSize])
 
-  // Update fog based on weather effects and METAR visibility
+  // Update Cesium fog based on weather effects and METAR visibility
+  // Cesium fog primarily reduces draw distance and fades terrain/imagery
   useEffect(() => {
     if (!cesiumViewer) return
 
-    const shouldShowFog = showWeatherEffects && showFog
+    const shouldShowFog = showWeatherEffects && showCesiumFog
     cesiumViewer.scene.fog.enabled = shouldShowFog
 
     if (shouldShowFog && fogDensity > 0) {
@@ -293,7 +294,7 @@ function CesiumViewer() {
       cesiumViewer.scene.fog.screenSpaceErrorFactor = 2.0
       cesiumViewer.scene.fog.minimumBrightness = 0.03 // Cesium default
     }
-  }, [cesiumViewer, showWeatherEffects, showFog, fogDensity])
+  }, [cesiumViewer, showWeatherEffects, showCesiumFog, fogDensity])
 
   // Track the last terrain quality to detect actual user changes vs initial mount
   const lastTerrainQualityRef = useRef<number | null>(null)
@@ -569,6 +570,8 @@ function CesiumViewer() {
       labelText: string
       color: { r: number; g: number; b: number }
       cesiumPosition: Cesium.Cartesian3 | null
+      altitudeMetersAGL: number
+      distanceMeters: number
     }> = []
 
     for (const aircraft of sortedAircraft) {
@@ -789,11 +792,34 @@ function CesiumViewer() {
           )
         : null
 
-      aircraftData.push({ callsign: aircraft.callsign, isAirborne, isFollowed, labelText, color: babylonColor, cesiumPosition })
+      // Calculate aircraft altitude AGL (above ground level) in meters
+      const altitudeMetersAGL = altitudeMeters - groundElevationMeters
+
+      // Distance in meters (aircraft.distance is in NM, 1 NM = 1852 meters)
+      const distanceMeters = aircraft.distance * 1852
+
+      aircraftData.push({
+        callsign: aircraft.callsign,
+        isAirborne,
+        isFollowed,
+        labelText,
+        color: babylonColor,
+        cesiumPosition,
+        altitudeMetersAGL,
+        distanceMeters
+      })
     }
 
     // Hide all labels first, then show only visible ones
     babylonOverlay.hideAllLabels()
+
+    // Get camera altitude for weather visibility checks
+    // Camera position in cartographic coordinates gives us altitude above ellipsoid
+    const cameraCartographic = viewer.camera.positionCartographic
+    // Convert camera altitude to AGL (approximate - subtract ground elevation at reference point)
+    const cameraAltitudeAGL = cameraCartographic
+      ? cameraCartographic.height - groundElevationMeters
+      : towerHeight // Fallback to tower height if camera position unavailable
 
     // Second pass: Calculate label offsets with overlap detection
     const labelWidth = 90  // Approximate label width
@@ -817,6 +843,17 @@ function CesiumViewer() {
     for (const data of aircraftData) {
       // Use Cesium's projection to get screen position (matches where model is rendered)
       if (!data.cesiumPosition) continue
+
+      // Check weather visibility - hide datablocks obscured by clouds or beyond visibility range
+      // Always show the followed aircraft's datablock regardless of weather
+      if (!data.isFollowed && !babylonOverlay.isDatablockVisibleByWeather(
+        cameraAltitudeAGL,
+        data.altitudeMetersAGL,
+        data.distanceMeters
+      )) {
+        continue // Skip this aircraft - datablock hidden by weather
+      }
+
       const windowPos = Cesium.SceneTransforms.worldToWindowCoordinates(viewer.scene, data.cesiumPosition)
       if (!windowPos) continue
 
@@ -950,7 +987,8 @@ function CesiumViewer() {
     followMode,
     babylonOverlay,
     viewMode,
-    topdownAltitude
+    topdownAltitude,
+    datablockMode
   ])
 
   // Update aircraft entities when data changes (outside of Cesium's render loop)

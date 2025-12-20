@@ -48,12 +48,18 @@ function ControlsBar() {
   // Settings store - Weather
   const showWeatherEffects = useSettingsStore((state) => state.showWeatherEffects)
   const setShowWeatherEffects = useSettingsStore((state) => state.setShowWeatherEffects)
-  const showFog = useSettingsStore((state) => state.showFog)
-  const setShowFog = useSettingsStore((state) => state.setShowFog)
+  const showCesiumFog = useSettingsStore((state) => state.showCesiumFog)
+  const setShowCesiumFog = useSettingsStore((state) => state.setShowCesiumFog)
+  const showBabylonFog = useSettingsStore((state) => state.showBabylonFog)
+  const setShowBabylonFog = useSettingsStore((state) => state.setShowBabylonFog)
   const showClouds = useSettingsStore((state) => state.showClouds)
   const setShowClouds = useSettingsStore((state) => state.setShowClouds)
   const cloudOpacity = useSettingsStore((state) => state.cloudOpacity)
   const setCloudOpacity = useSettingsStore((state) => state.setCloudOpacity)
+  const fogIntensity = useSettingsStore((state) => state.fogIntensity)
+  const setFogIntensity = useSettingsStore((state) => state.setFogIntensity)
+  const visibilityScale = useSettingsStore((state) => state.visibilityScale)
+  const setVisibilityScale = useSettingsStore((state) => state.setVisibilityScale)
 
   // Weather store
   const currentMetar = useWeatherStore((state) => state.currentMetar)
@@ -225,7 +231,7 @@ function ControlsBar() {
       </div>
 
       {showSettings && (
-        <div className="settings-modal-overlay" onClick={() => setShowSettings(false)}>
+        <div className={`settings-modal-overlay ${activeTab === 'graphics' ? 'no-blur' : ''}`} onClick={() => setShowSettings(false)}>
           <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
             <div className="settings-header">
               <h2>Settings</h2>
@@ -574,11 +580,28 @@ function ControlsBar() {
                           <label>
                             <input
                               type="checkbox"
-                              checked={showFog}
-                              onChange={(e) => setShowFog(e.target.checked)}
+                              checked={showCesiumFog}
+                              onChange={(e) => setShowCesiumFog(e.target.checked)}
                             />
-                            Show Fog/Visibility
+                            Cesium Fog (Distance Fade)
                           </label>
+                          <p className="setting-hint">
+                            Reduces terrain/imagery draw distance based on visibility.
+                          </p>
+                        </div>
+
+                        <div className="setting-item">
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={showBabylonFog}
+                              onChange={(e) => setShowBabylonFog(e.target.checked)}
+                            />
+                            Babylon Fog (Visual Atmosphere)
+                          </label>
+                          <p className="setting-hint">
+                            Adds visible fog effect to aircraft and overlays.
+                          </p>
                         </div>
 
                         <div className="setting-item">
@@ -605,6 +628,44 @@ function ControlsBar() {
                             />
                             <span>{Math.round(cloudOpacity * 100)}%</span>
                           </div>
+                        </div>
+
+                        <div className="setting-item">
+                          <label>Fog Intensity</label>
+                          <div className="slider-with-value">
+                            <input
+                              type="range"
+                              min="0.5"
+                              max="2.0"
+                              step="0.1"
+                              value={fogIntensity}
+                              onChange={(e) => setFogIntensity(Number(e.target.value))}
+                              disabled={!showBabylonFog}
+                            />
+                            <span>{fogIntensity.toFixed(1)}x</span>
+                          </div>
+                          <p className="setting-hint">
+                            How opaque the fog dome appears. Lower = clearer.
+                          </p>
+                        </div>
+
+                        <div className="setting-item">
+                          <label>Visibility Scale</label>
+                          <div className="slider-with-value">
+                            <input
+                              type="range"
+                              min="0.5"
+                              max="2.0"
+                              step="0.1"
+                              value={visibilityScale}
+                              onChange={(e) => setVisibilityScale(Number(e.target.value))}
+                              disabled={!showBabylonFog}
+                            />
+                            <span>{visibilityScale.toFixed(1)}x</span>
+                          </div>
+                          <p className="setting-hint">
+                            Multiplier for fog distance. 2.0 = see twice as far as METAR visibility.
+                          </p>
                         </div>
 
                         <div className="setting-item weather-status">

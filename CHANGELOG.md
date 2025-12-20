@@ -19,6 +19,22 @@ All notable changes to TowerCab 3D will be documented in this file.
   - Disk cache size
   - Aircraft data radius
 - Weather effects section in Graphics tab with fog and cloud controls
+- METAR-based weather visualization:
+  - Cesium fog (reduces terrain/imagery draw distance based on visibility)
+  - Babylon fog dome (visual fog wall at visibility distance with fresnel edge effect)
+  - Cloud layer planes positioned at METAR-reported ceiling altitudes
+  - Automatic 5-minute weather refresh from Aviation Weather API
+- Weather-based datablock culling:
+  - Datablocks hidden when aircraft is beyond reported visibility range
+  - Datablocks hidden when BKN/OVC cloud layer is between camera and aircraft
+  - Followed aircraft always visible regardless of weather
+- Aircraft panel filters:
+  - "Visible" filter to show only weather-visible aircraft
+  - Airport traffic filter to show only aircraft departing/arriving at current airport
+- Tunable weather settings:
+  - Fog Intensity (0.5x-2.0x): controls fog dome opacity
+  - Visibility Scale (0.5x-2.0x): multiplier for fog distance (2.0 = see twice as far as METAR)
+- Settings modal removes blur on Graphics tab for real-time weather preview
 
 ### Changed
 - Settings modal reorganized into tabs to reduce vertical scrolling

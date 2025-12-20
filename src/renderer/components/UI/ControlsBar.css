@@ -120,6 +120,11 @@
   backdrop-filter: blur(4px);
 }
 
+.settings-modal-overlay.no-blur {
+  backdrop-filter: none;
+  background: rgba(0, 0, 0, 0.3);
+}
+
 .settings-modal {
   background: rgba(30, 30, 40, 0.98);
   border: 1px solid rgba(255, 255, 255, 0.15);

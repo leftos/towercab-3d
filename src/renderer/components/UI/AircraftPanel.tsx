@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from 'react'
 import { useAirportStore } from '../../stores/airportStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useCameraStore } from '../../stores/cameraStore'
+import { useWeatherStore } from '../../stores/weatherStore'
 import { useAircraftInterpolation } from '../../hooks/useAircraftInterpolation'
 import { calculateDistanceNM, calculateBearing } from '../../utils/interpolation'
 import { formatAltitude, formatGroundspeed, formatHeading } from '../../utils/towerHeight'
@@ -29,10 +30,19 @@ function AircraftPanel() {
   const showAircraftPanel = useSettingsStore((state) => state.showAircraftPanel)
   const labelVisibilityDistance = useSettingsStore((state) => state.labelVisibilityDistance)
 
-  // Local state for sorting, searching, and collapse
+  // Local state for sorting, searching, filtering, and collapse
   const [sortOption, setSortOption] = useState<SortOption>('distance')
   const [searchQuery, setSearchQuery] = useState('')
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const [filterVisible, setFilterVisible] = useState(false) // Only show weather-visible aircraft
+  const [filterAirportTraffic, setFilterAirportTraffic] = useState(false) // Only show dep/arr at current airport
+
+  // Weather store for visibility filtering
+  const showWeatherEffects = useSettingsStore((state) => state.showWeatherEffects)
+  const showCesiumFog = useSettingsStore((state) => state.showCesiumFog)
+  const showClouds = useSettingsStore((state) => state.showClouds)
+  const cloudLayers = useWeatherStore((state) => state.cloudLayers)
+  const currentMetar = useWeatherStore((state) => state.currentMetar)
 
   // Periodic refresh to update distances/bearings from the mutating interpolated Map
   // The Map is mutated every frame but doesn't trigger re-renders, so we force a refresh every second
@@ -61,10 +71,47 @@ function AircraftPanel() {
     return interpolatedStates.get(followingCallsign) || null
   }, [followingCallsign, interpolatedStates, refreshTick])
 
+  // Check if an aircraft would be visible based on weather conditions
+  // Similar logic to useBabylonOverlay.isDatablockVisibleByWeather
+  const isVisibleByWeather = (
+    cameraAltitudeAGL: number,
+    aircraftAltitudeAGL: number,
+    distanceMeters: number
+  ): boolean => {
+    // If weather effects are disabled, always visible
+    if (!showWeatherEffects) return true
+
+    // Check visibility range (surface visibility culling)
+    if (currentMetar && showCesiumFog) {
+      const visibilityMeters = currentMetar.visib * 1609.34 // SM to meters
+      if (distanceMeters > visibilityMeters) {
+        return false
+      }
+    }
+
+    // Check cloud ceiling culling (BKN or OVC between camera and aircraft)
+    if (showClouds && cloudLayers.length > 0) {
+      const lowerAlt = Math.min(cameraAltitudeAGL, aircraftAltitudeAGL)
+      const higherAlt = Math.max(cameraAltitudeAGL, aircraftAltitudeAGL)
+
+      for (const layer of cloudLayers) {
+        // BKN = 0.75, OVC = 1.0 - these are "ceilings" that block visibility
+        if (layer.coverage >= 0.75) {
+          if (layer.altitude > lowerAlt && layer.altitude < higherAlt) {
+            return false
+          }
+        }
+      }
+    }
+
+    return true
+  }
+
   const nearbyAircraft = useMemo((): AircraftListItem[] => {
     // Determine reference point for distance/bearing calculations
     let refLat: number
     let refLon: number
+    let groundElevationMeters = 0
 
     if (isOrbitModeWithoutAirport && followedAircraftData) {
       // In orbit mode without airport, use followed aircraft as reference
@@ -75,12 +122,17 @@ function AircraftPanel() {
       const towerPos = getTowerPosition(currentAirport, towerHeight)
       refLat = towerPos.latitude
       refLon = towerPos.longitude
+      groundElevationMeters = currentAirport.elevation ? currentAirport.elevation * 0.3048 : 0
     } else {
       // No reference point available
       return []
     }
 
+    // Tower altitude AGL (camera position for visibility check)
+    const cameraAltitudeAGL = towerHeight
+
     const query = searchQuery.toLowerCase().trim()
+    const airportIcao = currentAirport?.icao?.toUpperCase()
 
     const mapped = Array.from(interpolatedStates.values())
       // In orbit mode without airport, exclude the followed aircraft from the "nearby" list
@@ -100,6 +152,13 @@ function AircraftPanel() {
           aircraft.interpolatedLongitude
         )
 
+        // Calculate altitude AGL in meters for visibility check
+        const altitudeMeters = aircraft.interpolatedAltitude * 0.3048
+        const altitudeAGL = altitudeMeters - groundElevationMeters
+
+        // Calculate distance in meters for visibility check
+        const distanceMeters = distance * 1852 // NM to meters
+
         return {
           callsign: aircraft.callsign,
           aircraftType: aircraft.aircraftType,
@@ -109,20 +168,36 @@ function AircraftPanel() {
           distance,
           bearing,
           departure: aircraft.departure,
-          arrival: aircraft.arrival
+          arrival: aircraft.arrival,
+          // Extra fields for filtering (not displayed)
+          _altitudeAGL: altitudeAGL,
+          _distanceMeters: distanceMeters
         }
       })
       .filter((a) => a.distance <= labelVisibilityDistance)
 
+    // Apply weather visibility filter
+    let filtered = filterVisible
+      ? mapped.filter((a) => isVisibleByWeather(cameraAltitudeAGL, a._altitudeAGL, a._distanceMeters))
+      : mapped
+
+    // Apply airport traffic filter (departure or arrival matches current airport)
+    if (filterAirportTraffic && airportIcao) {
+      filtered = filtered.filter((a) =>
+        a.departure?.toUpperCase() === airportIcao ||
+        a.arrival?.toUpperCase() === airportIcao
+      )
+    }
+
     // Apply search filter
-    const filtered = query
-      ? mapped.filter((a) =>
+    filtered = query
+      ? filtered.filter((a) =>
           a.callsign.toLowerCase().includes(query) ||
           a.aircraftType?.toLowerCase().includes(query) ||
           a.departure?.toLowerCase().includes(query) ||
           a.arrival?.toLowerCase().includes(query)
         )
-      : mapped
+      : filtered
 
     // Apply sorting
     const sorted = filtered.sort((a, b) => {
@@ -141,7 +216,7 @@ function AircraftPanel() {
 
     return sorted.slice(0, 50)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [interpolatedStates, currentAirport, towerHeight, labelVisibilityDistance, sortOption, searchQuery, isOrbitModeWithoutAirport, followedAircraftData, followingCallsign, refreshTick])
+  }, [interpolatedStates, currentAirport, towerHeight, labelVisibilityDistance, sortOption, searchQuery, isOrbitModeWithoutAirport, followedAircraftData, followingCallsign, refreshTick, filterVisible, filterAirportTraffic, showWeatherEffects, showCesiumFog, showClouds, cloudLayers, currentMetar])
 
   const handleFollowClick = (callsign: string) => {
     if (followingCallsign === callsign) {
@@ -185,6 +260,24 @@ function AircraftPanel() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
+            <div className="filter-controls">
+              <button
+                className={`filter-btn ${filterVisible ? 'active' : ''}`}
+                onClick={() => setFilterVisible(!filterVisible)}
+                title="Only show aircraft visible through weather (not obscured by clouds or beyond visibility)"
+                disabled={!showWeatherEffects}
+              >
+                Visible
+              </button>
+              <button
+                className={`filter-btn ${filterAirportTraffic ? 'active' : ''}`}
+                onClick={() => setFilterAirportTraffic(!filterAirportTraffic)}
+                title="Only show aircraft departing from or arriving at this airport"
+                disabled={!currentAirport}
+              >
+                {currentAirport?.icao || 'Airport'}
+              </button>
+            </div>
             <div className="sort-controls">
               <span className="sort-label">Sort:</span>
               <select

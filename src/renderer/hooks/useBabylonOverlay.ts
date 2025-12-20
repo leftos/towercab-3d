@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback, useState } from 'react'
 import * as BABYLON from '@babylonjs/core'
 import * as GUI from '@babylonjs/gui'
 import * as Cesium from 'cesium'
-import { useWeatherStore, type CloudLayer } from '../stores/weatherStore'
+import { useWeatherStore } from '../stores/weatherStore'
 import { useSettingsStore } from '../stores/settingsStore'
 
 // Memory diagnostic counters
@@ -75,14 +75,24 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
   const cloudMeshPoolRef = useRef<CloudMeshData[]>([])
   const cloudPlanesCreatedRef = useRef(false)
 
+  // Fog dome mesh for visibility effect (hemisphere that follows camera)
+  const fogDomeRef = useRef<BABYLON.Mesh | null>(null)
+  const fogDomeMaterialRef = useRef<BABYLON.StandardMaterial | null>(null)
+
   // State to track when scene is ready (triggers re-render for dependents)
   const [sceneReady, setSceneReady] = useState(false)
 
   // Weather store subscriptions
   const cloudLayers = useWeatherStore((state) => state.cloudLayers)
+  const fogDensity = useWeatherStore((state) => state.fogDensity)
+  const currentMetar = useWeatherStore((state) => state.currentMetar)
   const showWeatherEffects = useSettingsStore((state) => state.showWeatherEffects)
+  const showCesiumFog = useSettingsStore((state) => state.showCesiumFog)
+  const showBabylonFog = useSettingsStore((state) => state.showBabylonFog)
   const showClouds = useSettingsStore((state) => state.showClouds)
   const cloudOpacity = useSettingsStore((state) => state.cloudOpacity)
+  const fogIntensity = useSettingsStore((state) => state.fogIntensity)
+  const visibilityScale = useSettingsStore((state) => state.visibilityScale)
 
   // Convert Cesium Cartesian3 to Babylon Vector3 (swap Y and Z)
   const cart2vec = useCallback((cart: { x: number; y: number; z: number }) => {
@@ -164,6 +174,39 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     }
     cloudPlanesCreatedRef.current = true
 
+    // Create fog dome - a sphere that surrounds the camera to simulate visibility limits
+    // Uses inside rendering (sideOrientation = BACKSIDE) so fog is visible from inside
+    const fogDome = BABYLON.MeshBuilder.CreateSphere('fog_dome', {
+      diameter: 2,  // Will be scaled dynamically based on visibility
+      segments: 32,
+      sideOrientation: BABYLON.Mesh.BACKSIDE  // Render inside faces only
+    }, scene)
+    memoryCounters.meshesCreated++
+    fogDome.isVisible = false  // Start hidden until fog is enabled
+
+    // Fog dome material - subtle fog color with fresnel for edge fade
+    // Designed to be barely visible at moderate visibility, only prominent at very low vis
+    const fogDomeMaterial = new BABYLON.StandardMaterial('fog_dome_mat', scene)
+    memoryCounters.materialsCreated++
+    fogDomeMaterial.diffuseColor = new BABYLON.Color3(0.8, 0.8, 0.82)
+    fogDomeMaterial.emissiveColor = new BABYLON.Color3(0.6, 0.6, 0.65)
+    fogDomeMaterial.specularColor = new BABYLON.Color3(0, 0, 0)
+    fogDomeMaterial.alpha = 0.3  // Base opacity - will be adjusted dynamically
+    fogDomeMaterial.backFaceCulling = true  // Only render inside faces
+    fogDomeMaterial.disableLighting = true
+
+    // Fresnel effect - fog only visible at edges (looking through the sphere wall)
+    // Center should be almost completely transparent
+    fogDomeMaterial.opacityFresnelParameters = new BABYLON.FresnelParameters()
+    fogDomeMaterial.opacityFresnelParameters.bias = 0.1   // Center almost fully transparent
+    fogDomeMaterial.opacityFresnelParameters.power = 3    // Sharp edge falloff
+    fogDomeMaterial.opacityFresnelParameters.leftColor = new BABYLON.Color3(1, 1, 1)   // Edges visible
+    fogDomeMaterial.opacityFresnelParameters.rightColor = new BABYLON.Color3(0, 0, 0)  // Center invisible
+
+    fogDome.material = fogDomeMaterial
+    fogDomeRef.current = fogDome
+    fogDomeMaterialRef.current = fogDomeMaterial
+
     // Handle resize
     const handleResize = () => {
       const rect = canvas.getBoundingClientRect()
@@ -223,6 +266,18 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
       cloudMeshPoolRef.current = []
       cloudPlanesCreatedRef.current = false
 
+      // Dispose fog dome resources
+      if (fogDomeMaterialRef.current) {
+        fogDomeMaterialRef.current.dispose()
+        memoryCounters.materialsDisposed++
+      }
+      if (fogDomeRef.current) {
+        fogDomeRef.current.dispose()
+        memoryCounters.meshesDisposed++
+      }
+      fogDomeRef.current = null
+      fogDomeMaterialRef.current = null
+
       guiTexture.dispose()
       scene.dispose()
       engine.dispose()
@@ -270,6 +325,118 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
       meshData.material.alpha = layer.coverage * cloudOpacity
     }
   }, [cloudLayers, showWeatherEffects, showClouds, cloudOpacity])
+
+  // Apply Babylon.js fog effect using a fog dome mesh
+  // The dome surrounds the camera at visibility distance, creating a fog wall
+  // This actually affects visibility since scene.fogMode only affects Babylon meshes (not Cesium terrain)
+  useEffect(() => {
+    const fogDome = fogDomeRef.current
+    const fogMaterial = fogDomeMaterialRef.current
+    if (!fogDome || !fogMaterial) return
+
+    const shouldShowFog = showWeatherEffects && showBabylonFog && currentMetar && fogDensity > 0
+
+    if (shouldShowFog && currentMetar) {
+      // Convert visibility from statute miles to meters
+      // 1 SM = 1609.34 meters
+      const visibilityMeters = currentMetar.visib * 1609.34
+
+      // Scale the fog dome to the visibility distance, adjusted by user preference
+      // The dome was created with diameter=2, so scale = visibilityMeters
+      // visibilityScale: 1.0 = match METAR, 2.0 = see twice as far
+      const domeScale = visibilityMeters * visibilityScale
+      fogDome.scaling.setAll(domeScale)
+
+      // Adjust fog opacity based on visibility severity
+      // Use logarithmic scale since visibility perception is logarithmic
+      // Only make fog prominent at very low visibility (under 1 SM)
+      const visib = currentMetar.visib
+
+      let baseAlpha: number
+      let fresnelBias: number
+
+      if (visib <= 0.25) {
+        // Extremely low vis (1/4 SM or less) - heavy fog
+        baseAlpha = 0.5
+        fresnelBias = 0.3
+      } else if (visib <= 1) {
+        // Low vis (1/4 to 1 SM) - moderate to heavy fog
+        // Interpolate: 0.5 at 0.25 SM to 0.25 at 1 SM
+        const t = (visib - 0.25) / 0.75
+        baseAlpha = 0.5 - (t * 0.25)
+        fresnelBias = 0.3 - (t * 0.15)
+      } else if (visib <= 3) {
+        // Moderate vis (1 to 3 SM) - light fog
+        // Interpolate: 0.25 at 1 SM to 0.1 at 3 SM
+        const t = (visib - 1) / 2
+        baseAlpha = 0.25 - (t * 0.15)
+        fresnelBias = 0.15 - (t * 0.05)
+      } else if (visib <= 6) {
+        // Decent vis (3 to 6 SM) - very light haze
+        // Interpolate: 0.1 at 3 SM to 0.03 at 6 SM
+        const t = (visib - 3) / 3
+        baseAlpha = 0.1 - (t * 0.07)
+        fresnelBias = 0.1
+      } else {
+        // Good vis (6+ SM) - barely visible hint
+        baseAlpha = 0.03
+        fresnelBias = 0.1
+      }
+
+      // Apply user's fog intensity preference
+      // fogIntensity: 0.5 = half opacity, 1.0 = default, 2.0 = double opacity
+      fogMaterial.alpha = Math.min(1.0, baseAlpha * fogIntensity)
+      fogMaterial.opacityFresnelParameters!.bias = fresnelBias
+
+      fogDome.isVisible = true
+    } else {
+      // Hide fog dome when fog is disabled
+      fogDome.isVisible = false
+    }
+  }, [showWeatherEffects, showBabylonFog, currentMetar, fogDensity, fogIntensity, visibilityScale])
+
+  // Check if a datablock should be visible based on weather conditions
+  // Returns true if datablock should be shown, false if it should be hidden due to weather
+  // cameraAltitudeMeters: camera height above ground in meters
+  // aircraftAltitudeMeters: aircraft height above ground in meters (AGL)
+  // horizontalDistanceMeters: horizontal distance from camera to aircraft
+  const isDatablockVisibleByWeather = useCallback((
+    cameraAltitudeMeters: number,
+    aircraftAltitudeMeters: number,
+    horizontalDistanceMeters: number
+  ): boolean => {
+    // If weather effects are disabled, always show
+    if (!showWeatherEffects) return true
+
+    // Check visibility range (surface visibility culling)
+    // Use Cesium fog setting since that controls draw distance visibility
+    if (currentMetar && showCesiumFog) {
+      const visibilityMeters = currentMetar.visib * 1609.34  // SM to meters
+      if (horizontalDistanceMeters > visibilityMeters) {
+        return false
+      }
+    }
+
+    // Check cloud ceiling culling
+    // Only cull if clouds are enabled and we have cloud data
+    if (showClouds && cloudLayers.length > 0) {
+      const lowerAlt = Math.min(cameraAltitudeMeters, aircraftAltitudeMeters)
+      const higherAlt = Math.max(cameraAltitudeMeters, aircraftAltitudeMeters)
+
+      // Check if any BKN (0.75) or OVC (1.0) layer is between camera and aircraft
+      for (const layer of cloudLayers) {
+        // BKN = 0.75, OVC = 1.0 - these are "ceilings" that block visibility
+        if (layer.coverage >= 0.75) {
+          // Check if this ceiling is between camera and aircraft
+          if (layer.altitude > lowerAlt && layer.altitude < higherAlt) {
+            return false
+          }
+        }
+      }
+    }
+
+    return true
+  }, [showWeatherEffects, showCesiumFog, showClouds, currentMetar, cloudLayers])
 
   // Setup root node when we have a base position
   const setupRootNode = useCallback((lat: number, lon: number, height: number) => {
@@ -353,6 +520,11 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
 
     // Look straight down with no rotation - heading is applied to positions instead
     camera.rotation.set(Math.PI / 2, 0, 0)
+
+    // Position fog dome at camera position
+    if (fogDomeRef.current) {
+      fogDomeRef.current.position.copyFrom(camera.position)
+    }
   }, [cesiumViewer])
 
   // Sync Babylon camera for 3D view
@@ -433,6 +605,12 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     }
 
     camera.rotation.set(rotationX, rotationY, rotationZ)
+
+    // Position fog dome at camera position
+    if (fogDomeRef.current) {
+      fogDomeRef.current.position.copyFrom(camera.position)
+    }
+
     return true
   }, [cesiumViewer])
 
@@ -918,6 +1096,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     getAircraftCallsigns,
     hideAllLabels,
     getConeScreenPosition,
+    isDatablockVisibleByWeather,
     render,
     syncCamera
   }

@@ -37,9 +37,12 @@ interface SettingsStore {
 
   // Weather settings
   showWeatherEffects: boolean  // Master toggle for weather effects
-  showFog: boolean             // Show fog/visibility effects
+  showCesiumFog: boolean       // Show Cesium fog (reduces draw distance)
+  showBabylonFog: boolean      // Show Babylon fog (visual fog atmosphere)
   showClouds: boolean          // Show cloud layer planes
   cloudOpacity: number         // Cloud plane opacity (0.3-0.8)
+  fogIntensity: number         // Fog dome opacity multiplier (0.5-2.0)
+  visibilityScale: number      // Fog dome radius multiplier (0.5-2.0)
 
   // Actions
   setCesiumIonToken: (token: string) => void
@@ -60,9 +63,12 @@ interface SettingsStore {
   setDiskCacheSizeGB: (size: number) => void
   setAircraftDataRadiusNM: (radius: number) => void
   setShowWeatherEffects: (show: boolean) => void
-  setShowFog: (show: boolean) => void
+  setShowCesiumFog: (show: boolean) => void
+  setShowBabylonFog: (show: boolean) => void
   setShowClouds: (show: boolean) => void
   setCloudOpacity: (opacity: number) => void
+  setFogIntensity: (intensity: number) => void
+  setVisibilityScale: (scale: number) => void
   resetToDefaults: () => void
 }
 
@@ -87,9 +93,12 @@ const DEFAULT_SETTINGS = {
   aircraftDataRadiusNM: 100,  // Only keep aircraft data within 100nm of camera
   // Weather settings
   showWeatherEffects: true,
-  showFog: true,
+  showCesiumFog: true,
+  showBabylonFog: true,
   showClouds: true,
-  cloudOpacity: 0.5
+  cloudOpacity: 0.5,
+  fogIntensity: 1.0,      // 1.0 = default, 0.5 = half opacity, 2.0 = double opacity
+  visibilityScale: 1.0    // 1.0 = match METAR, 2.0 = see twice as far as reported
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -142,12 +151,20 @@ export const useSettingsStore = create<SettingsStore>()(
 
       setShowWeatherEffects: (show: boolean) => set({ showWeatherEffects: show }),
 
-      setShowFog: (show: boolean) => set({ showFog: show }),
+      setShowCesiumFog: (show: boolean) => set({ showCesiumFog: show }),
+
+      setShowBabylonFog: (show: boolean) => set({ showBabylonFog: show }),
 
       setShowClouds: (show: boolean) => set({ showClouds: show }),
 
       setCloudOpacity: (opacity: number) =>
         set({ cloudOpacity: Math.max(0.3, Math.min(0.8, opacity)) }),
+
+      setFogIntensity: (intensity: number) =>
+        set({ fogIntensity: Math.max(0.5, Math.min(2.0, intensity)) }),
+
+      setVisibilityScale: (scale: number) =>
+        set({ visibilityScale: Math.max(0.5, Math.min(2.0, scale)) }),
 
       resetToDefaults: () => set(DEFAULT_SETTINGS)
     }),
