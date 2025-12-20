@@ -261,6 +261,9 @@ export function interpolateAircraftState(
   let interpolatedAltitude: number
   let interpolatedGroundspeed: number
 
+  // Calculate vertical rate (feet per ms) for extrapolation
+  const verticalRate = interval > 0 ? (current.altitude - previous.altitude) / interval : 0
+
   // Check if previous and current positions are essentially the same
   // This happens when an aircraft first appears or data hasn't changed
   const positionDelta = Math.abs(previous.latitude - current.latitude) +
@@ -270,22 +273,26 @@ export function interpolateAircraftState(
   if (positionsAreSame) {
     // When prev ≈ curr for lat/lon, skip Hermite (which produces weird results with tangents)
     // But ALWAYS interpolate altitude smoothly - aircraft can climb while stationary (takeoff roll)
-    const clampedT = Math.min(1, t)
-    const easedT = smoothstep(clampedT)
-    interpolatedAltitude = lerp(previous.altitude, current.altitude, easedT)
-    interpolatedGroundspeed = lerp(previous.groundspeed, current.groundspeed, easedT)
-    interpolatedHeading = lerpAngle(previous.heading, current.heading, clampedT)
 
     if (t <= 1.0) {
+      // Use linear interpolation for altitude to maintain consistent climb/descent rate
+      interpolatedAltitude = lerp(previous.altitude, current.altitude, t)
+      interpolatedGroundspeed = lerp(previous.groundspeed, current.groundspeed, smoothstep(t))
+      interpolatedHeading = lerpAngle(previous.heading, current.heading, t)
       interpolatedLat = current.latitude
       interpolatedLon = current.longitude
     } else {
       // Extrapolate from current position using dead reckoning
       const extrapolationMs = (t - 1.0) * interval
 
-      const turnRate = calculateTurnRate(previous.heading, current.heading, interval)
+      // Continue altitude at the same vertical rate during extrapolation
+      // Clamp to 0 to prevent extrapolating underground
+      interpolatedAltitude = Math.max(0, current.altitude + verticalRate * extrapolationMs)
+      interpolatedGroundspeed = current.groundspeed
+
+      const stationaryTurnRate = calculateTurnRate(previous.heading, current.heading, interval)
       const turnDecay = Math.exp(-extrapolationMs / 10000)
-      const extrapolatedTurnDeg = turnRate * (extrapolationMs / 1000) * turnDecay
+      const extrapolatedTurnDeg = stationaryTurnRate * (extrapolationMs / 1000) * turnDecay
       interpolatedHeading = normalizeAngle(current.heading + extrapolatedTurnDeg)
 
       const avgExtrapolationHeading = lerpAngle(current.heading, interpolatedHeading, 0.5)
@@ -323,10 +330,11 @@ export function interpolateAircraftState(
     interpolatedLon = hermiteResult.lon
     interpolatedHeading = hermiteResult.heading
 
-    // Use smoothstep easing for altitude and speed (more natural acceleration)
-    const easedT = smoothstep(t)
-    interpolatedAltitude = lerp(previous.altitude, current.altitude, easedT)
-    interpolatedGroundspeed = lerp(previous.groundspeed, current.groundspeed, easedT)
+    // Use LINEAR interpolation for altitude to maintain consistent climb/descent rate
+    // (smoothstep causes slowdown at ends which looks wrong for steady climbs/descents)
+    interpolatedAltitude = lerp(previous.altitude, current.altitude, t)
+    // Use smoothstep easing for speed (more natural acceleration/deceleration)
+    interpolatedGroundspeed = lerp(previous.groundspeed, current.groundspeed, smoothstep(t))
 
   } else {
     // EXTRAPOLATION PHASE (t > 1.0) - Dead reckoning
@@ -357,9 +365,11 @@ export function interpolateAircraftState(
     interpolatedLat = deadReckonedPos.lat
     interpolatedLon = deadReckonedPos.lon
 
-    // Hold altitude and groundspeed at final values during extrapolation
-    // (We don't have good prediction for these)
-    interpolatedAltitude = current.altitude
+    // Continue altitude at the same vertical rate during extrapolation
+    // This maintains smooth climbs/descents instead of stair-stepping
+    // Clamp to 0 to prevent extrapolating underground
+    interpolatedAltitude = Math.max(0, current.altitude + verticalRate * extrapolationMs)
+    // Hold groundspeed at final value during extrapolation
     interpolatedGroundspeed = current.groundspeed
   }
 
@@ -420,4 +430,108 @@ export function calculateBearing(
 
   const bearing = Math.atan2(y, x) * 180 / Math.PI
   return ((bearing % 360) + 360) % 360
+}
+
+// ============================================================================
+// Propeller Animation Physics
+// ============================================================================
+
+/**
+ * State for propeller animation with inertia simulation
+ */
+export interface PropellerState {
+  currentSpeed: number      // 0-1 normalized speed (0 = stopped, 1 = max)
+  rotationAngle: number     // Current rotation angle in revolutions (wraps)
+  lastUpdateTime: number    // Timestamp of last update
+}
+
+// Propeller physics constants
+const PROPELLER_ACCELERATION = 2.0      // Speed units per second when accelerating
+const PROPELLER_DECELERATION = 0.15     // Speed units per second when decelerating (slow windmill down)
+const GROUNDSPEED_THRESHOLD = 40        // Knots at which propeller reaches max speed
+const GROUNDSPEED_MIN_SPIN = 5          // Knots at which propeller starts spinning
+const MAX_PROPELLER_RPS = 15            // Maximum rotations per second at full speed
+
+/**
+ * Create initial propeller state
+ */
+export function createPropellerState(): PropellerState {
+  return {
+    currentSpeed: 0,
+    rotationAngle: 0,
+    lastUpdateTime: Date.now()
+  }
+}
+
+/**
+ * Update propeller state based on aircraft groundspeed
+ * Implements inertia: fast acceleration, slow deceleration (windmilling)
+ *
+ * @param state Current propeller state
+ * @param groundspeed Aircraft groundspeed in knots
+ * @param isOnGround Whether aircraft is on the ground
+ * @returns Updated propeller state
+ */
+export function updatePropellerState(
+  state: PropellerState,
+  groundspeed: number,
+  isOnGround: boolean
+): PropellerState {
+  const now = Date.now()
+  const deltaTime = (now - state.lastUpdateTime) / 1000 // Convert to seconds
+
+  // Calculate target speed based on groundspeed
+  let targetSpeed: number
+  if (groundspeed >= GROUNDSPEED_THRESHOLD) {
+    // At or above threshold: max speed
+    targetSpeed = 1.0
+  } else if (groundspeed >= GROUNDSPEED_MIN_SPIN) {
+    // Between min and threshold: linear ramp
+    targetSpeed = (groundspeed - GROUNDSPEED_MIN_SPIN) / (GROUNDSPEED_THRESHOLD - GROUNDSPEED_MIN_SPIN)
+  } else if (isOnGround && groundspeed > 0) {
+    // On ground with some movement: minimum spin (taxiing)
+    targetSpeed = 0.1
+  } else {
+    // Stopped
+    targetSpeed = 0
+  }
+
+  // Apply inertia physics
+  let newSpeed: number
+  if (state.currentSpeed < targetSpeed) {
+    // Accelerating - relatively fast
+    newSpeed = Math.min(targetSpeed, state.currentSpeed + PROPELLER_ACCELERATION * deltaTime)
+  } else {
+    // Decelerating - slow windmill effect
+    newSpeed = Math.max(targetSpeed, state.currentSpeed - PROPELLER_DECELERATION * deltaTime)
+  }
+
+  // Update rotation angle based on current speed
+  // Rotation angle is in "revolutions" for use with animationTime
+  const rotationsThisFrame = newSpeed * MAX_PROPELLER_RPS * deltaTime
+  const newRotationAngle = state.rotationAngle + rotationsThisFrame
+
+  return {
+    currentSpeed: newSpeed,
+    rotationAngle: newRotationAngle,
+    lastUpdateTime: now
+  }
+}
+
+/**
+ * Get animation time value for Cesium's animationTime callback
+ * This returns a value that, when divided by the animation duration,
+ * gives the normalized position in the animation cycle
+ *
+ * @param state Current propeller state
+ * @param animationDuration Duration of one full animation cycle in seconds
+ * @returns The local animation time in seconds
+ */
+export function getPropellerAnimationTime(
+  state: PropellerState,
+  animationDuration: number
+): number {
+  // rotationAngle is in revolutions, multiply by duration to get animation time
+  // The modulo ensures we don't overflow with very large values
+  return (state.rotationAngle % 1000) * animationDuration
 }

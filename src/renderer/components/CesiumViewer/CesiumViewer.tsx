@@ -7,7 +7,13 @@ import { useAircraftInterpolation } from '../../hooks/useAircraftInterpolation'
 import { useCesiumCamera } from '../../hooks/useCesiumCamera'
 import { useBabylonOverlay } from '../../hooks/useBabylonOverlay'
 import { getTowerPosition } from '../../utils/towerHeight'
-import { calculateDistanceNM } from '../../utils/interpolation'
+import {
+  calculateDistanceNM,
+  createPropellerState,
+  updatePropellerState,
+  getPropellerAnimationTime,
+  type PropellerState
+} from '../../utils/interpolation'
 import { createCachingImageryProvider } from '../../utils/tileCache'
 import './CesiumViewer.css'
 
@@ -44,6 +50,11 @@ function CesiumViewer() {
   // Cone pool: maps pool index to callsign (or null if unused)
   const conePoolAssignmentsRef = useRef<Map<number, string | null>>(new Map())
   const conePoolReadyRef = useRef<boolean>(false)
+
+  // Propeller animation state: maps callsign to propeller state
+  const propellerStatesRef = useRef<Map<string, PropellerState>>(new Map())
+  // Track which pool models have been configured for manual animation control
+  const modelAnimationsConfiguredRef = useRef<Set<number>>(new Set())
 
   // Use state for viewer and canvas to trigger re-renders when they're ready
   const [cesiumViewer, setCesiumViewer] = useState<Cesium.Viewer | null>(null)
@@ -203,7 +214,7 @@ function CesiumViewer() {
           minimumPixelSize: 24,
           maximumScale: 50,
           scale: 2,
-          runAnimations: true,
+          runAnimations: false, // Disabled - we manually control animation via animationTime callback
           shadows: Cesium.ShadowMode.ENABLED
         }
       })
@@ -527,6 +538,72 @@ function CesiumViewer() {
               }
             }
 
+            // Update propeller animation based on groundspeed
+            // Get or create propeller state for this aircraft
+            let propState = propellerStatesRef.current.get(aircraft.callsign)
+            if (!propState) {
+              propState = createPropellerState()
+              propellerStatesRef.current.set(aircraft.callsign, propState)
+            }
+
+            // Update propeller physics with inertia
+            const newPropState = updatePropellerState(
+              propState,
+              aircraft.interpolatedGroundspeed,
+              !isAirborne
+            )
+            propellerStatesRef.current.set(aircraft.callsign, newPropState)
+
+            // Configure animation on the Model primitive if not already done
+            // We need to access the underlying Model to control animation timing
+            if (!modelAnimationsConfiguredRef.current.has(poolIndex)) {
+              // Try multiple approaches to get the Model primitive
+              // Approach 1: Internal _modelPrimitive property (common in recent Cesium versions)
+              let modelPrimitive = (modelEntity as { _modelPrimitive?: Cesium.Model })._modelPrimitive
+
+              // Approach 2: Search in scene primitives if approach 1 fails
+              if (!modelPrimitive) {
+                const primitives = viewer.scene.primitives
+                for (let i = 0; i < primitives.length; i++) {
+                  const primitive = primitives.get(i)
+                  if (primitive instanceof Cesium.Model && (primitive as { id?: { id?: string } }).id?.id === modelEntity.id) {
+                    modelPrimitive = primitive
+                    break
+                  }
+                }
+              }
+
+              if (modelPrimitive && modelPrimitive.ready) {
+                // Add animations with manual control via animationTime callback
+                const animations = modelPrimitive.activeAnimations
+                if (animations.length === 0) {
+                  const propStateRef = { current: newPropState }
+                  // Store reference for the callback to access
+                  ;(modelEntity as { _propStateRef?: { current: PropellerState } })._propStateRef = propStateRef
+
+                  animations.addAll({
+                    loop: Cesium.ModelAnimationLoop.REPEAT,
+                    animationTime: (duration: number) => {
+                      // Get the current propeller state from the entity
+                      const entity = modelEntity as { _propStateRef?: { current: PropellerState } }
+                      const state = entity._propStateRef?.current
+                      if (state) {
+                        return getPropellerAnimationTime(state, duration)
+                      }
+                      return 0
+                    }
+                  })
+                  modelAnimationsConfiguredRef.current.add(poolIndex)
+                }
+              }
+            } else {
+              // Update the propeller state reference for the animation callback
+              const entity = modelEntity as { _propStateRef?: { current: PropellerState } }
+              if (entity._propStateRef) {
+                entity._propStateRef.current = newPropState
+              }
+            }
+
             // Show the model
             modelEntity.show = true
           }
@@ -676,6 +753,13 @@ function CesiumViewer() {
     for (const callsign of babylonCallsigns) {
       if (!seenCallsigns.has(callsign)) {
         babylonOverlay.removeAircraftMesh(callsign)
+      }
+    }
+
+    // Clean up propeller states for aircraft no longer visible
+    for (const callsign of propellerStatesRef.current.keys()) {
+      if (!seenCallsigns.has(callsign)) {
+        propellerStatesRef.current.delete(callsign)
       }
     }
 
