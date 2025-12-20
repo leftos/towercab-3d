@@ -20,6 +20,8 @@ function ControlsBar() {
   const setDefaultFov = useSettingsStore((state) => state.setDefaultFov)
   const cameraSpeed = useSettingsStore((state) => state.cameraSpeed)
   const setCameraSpeed = useSettingsStore((state) => state.setCameraSpeed)
+  const mouseSensitivity = useSettingsStore((state) => state.mouseSensitivity)
+  const setMouseSensitivity = useSettingsStore((state) => state.setMouseSensitivity)
 
   // Settings store - Display
   const labelVisibilityDistance = useSettingsStore((state) => state.labelVisibilityDistance)
@@ -356,6 +358,22 @@ function ControlsBar() {
                         <span>{cameraSpeed}</span>
                       </div>
                       <p className="setting-hint">WASD movement speed multiplier.</p>
+                    </div>
+
+                    <div className="setting-item">
+                      <label>Mouse Sensitivity</label>
+                      <div className="slider-with-value">
+                        <input
+                          type="range"
+                          min="0.1"
+                          max="2"
+                          step="0.1"
+                          value={mouseSensitivity}
+                          onChange={(e) => setMouseSensitivity(Number(e.target.value))}
+                        />
+                        <span>{mouseSensitivity.toFixed(1)}</span>
+                      </div>
+                      <p className="setting-hint">Right-click drag sensitivity for camera rotation.</p>
                     </div>
                   </div>
                 </>

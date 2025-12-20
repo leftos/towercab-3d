@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import * as Cesium from 'cesium'
 import { useCameraStore } from '../stores/cameraStore'
+import { useSettingsStore } from '../stores/settingsStore'
 import {
   createVelocityState,
   MOVEMENT_CONFIG,
@@ -28,6 +29,9 @@ export function useCameraInput(
   options: UseCameraInputOptions = {}
 ): void {
   const { onBreakTowerFollow } = options
+
+  // Settings store
+  const mouseSensitivity = useSettingsStore((state) => state.mouseSensitivity)
 
   // Camera store actions
   const viewMode = useCameraStore((state) => state.viewMode)
@@ -72,6 +76,7 @@ export function useCameraInput(
   const headingRef = useRef(heading)
   const followingCallsignRef = useRef(followingCallsign)
   const followModeRef = useRef(followMode)
+  const mouseSensitivityRef = useRef(mouseSensitivity)
 
   // Keep refs updated
   viewModeRef.current = viewMode
@@ -79,6 +84,7 @@ export function useCameraInput(
   headingRef.current = heading
   followingCallsignRef.current = followingCallsign
   followModeRef.current = followMode
+  mouseSensitivityRef.current = mouseSensitivity
 
   // Mouse drag controls for panning/tilting using Cesium's event handler
   useEffect(() => {
@@ -146,8 +152,8 @@ export function useCameraInput(
 
       if (!isDraggingRef.current) return
 
-      // Sensitivity
-      const sensitivity = 0.3
+      // Base sensitivity (0.3) scaled by user setting (0.1-2.0, default 1.0)
+      const sensitivity = 0.3 * mouseSensitivityRef.current
 
       if (followingCallsignRef.current && followModeRef.current === 'orbit') {
         // In orbit mode: adjust orbit heading/pitch

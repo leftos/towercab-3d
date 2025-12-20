@@ -18,6 +18,7 @@ interface SettingsStore {
   // Camera settings
   defaultFov: number  // degrees
   cameraSpeed: number  // 1-10 scale
+  mouseSensitivity: number  // 0.1-2.0 scale (1.0 = default)
 
   // UI settings
   theme: 'light' | 'dark'
@@ -54,6 +55,7 @@ interface SettingsStore {
   setTerrainQuality: (quality: number) => void
   setDefaultFov: (fov: number) => void
   setCameraSpeed: (speed: number) => void
+  setMouseSensitivity: (sensitivity: number) => void
   setTheme: (theme: 'light' | 'dark') => void
   setShowAircraftPanel: (show: boolean) => void
   setShow3DBuildings: (show: boolean) => void
@@ -82,6 +84,7 @@ const DEFAULT_SETTINGS = {
   terrainQuality: 3,  // 1=low, 2=medium, 3=high, 4=very high, 5=ultra
   defaultFov: 60,
   cameraSpeed: 5,
+  mouseSensitivity: 1.0,
   theme: 'dark' as const,
   showAircraftPanel: true,
   show3DBuildings: false,
@@ -128,6 +131,9 @@ export const useSettingsStore = create<SettingsStore>()(
 
       setCameraSpeed: (speed: number) =>
         set({ cameraSpeed: Math.max(1, Math.min(10, speed)) }),
+
+      setMouseSensitivity: (sensitivity: number) =>
+        set({ mouseSensitivity: Math.max(0.1, Math.min(2.0, sensitivity)) }),
 
       setTheme: (theme: 'light' | 'dark') => set({ theme }),
 

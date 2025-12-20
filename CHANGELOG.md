@@ -13,6 +13,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 - New settings now accessible in the UI:
   - Theme (light/dark)
   - Default FOV and camera speed
+  - Mouse sensitivity for right-click drag camera rotation
   - Max aircraft display limit
   - Show/hide ground and airborne traffic separately
   - In-memory tile cache size
