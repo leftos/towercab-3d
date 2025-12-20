@@ -2,9 +2,11 @@
 
 All notable changes to TowerCab 3D will be documented in this file.
 
-## v0.0.4-alpha
+## v0.0.3-alpha
 
 ### Added
+- Non-uniform aircraft scaling: aircraft now scale separately for wingspan and length instead of using an averaged ratio, better representing relative sizes of different aircraft types
+- Dynamic model switching: aircraft models now update in real-time when switching between aircraft types (e.g., following a B738 then switching to follow an A380)
 - Multi-viewport system with inset viewports:
   - Click "Add Inset" button to create additional viewports overlaid on the main view
   - Each viewport has independent camera controls (heading, pitch, FOV, follow mode)
@@ -14,31 +16,6 @@ All notable changes to TowerCab 3D will be documented in this file.
   - Performance warning at 3+ insets, severe warning at 6+ insets
   - Per-airport viewport layout persistence (inset positions/sizes saved per airport)
   - Each viewport can follow different aircraft independently
-- ViewportStore for centralized viewport and per-viewport camera state management
-- InsetCesiumViewer wrapper for delayed initialization (prevents WebGL context errors)
-
-### Changed
-- Camera state moved from cameraStore to viewportStore (per-viewport camera state)
-- CesiumViewer now accepts viewportId and isInset props
-- useCesiumCamera and useCameraInput hooks now operate on specific viewports
-- Inset viewports use reduced quality settings for performance (lower MSAA, no shadows, smaller tile cache, no 3D buildings)
-
-### Fixed
-- Main viewport controls now work correctly after localStorage migration (fixed main viewport ID normalization)
-- Cloud layers now hidden in 2D top-down view (prevents clouds from obscuring the entire view when looking straight down)
-- Cloud ceiling culling disabled in 2D view (datablocks no longer hidden by cloud layers when in top-down mode)
-
-## v0.0.3-alpha
-
-### Changed
-- Status bar now displays total pilots on VATSIM network (previously showed only nearby aircraft)
-- Global search (Ctrl+K) now searches all pilots on the network, not just nearby aircraft
-
-### Fixed
-- Aircraft now refilter immediately when changing airports (previously waited up to 3 seconds for next API poll)
-- WASD diagonal movement now works correctly (e.g., W+A moves forward-left at proper speed)
-
-### Added
 - Measuring tool for measuring distances on the terrain:
   - Click the Measure button in the controls bar to activate measuring mode
   - Click to set the first point, then see a live preview of the distance as you move your mouse
@@ -53,6 +30,18 @@ All notable changes to TowerCab 3D will be documented in this file.
   - Babylon.js WebXR session displays Cesium terrain as background textures in VR
   - UI automatically hides when VR mode is active for immersive experience
   - Configurable IPD (interpupillary distance) for stereo separation
+
+### Changed
+- Top-down view scaling redesigned: aircraft stay at real-world scale when zoomed in (for accurate conflict assessment), only scaling up when zoomed out far enough that they'd become too small to see
+- Aircraft rendering switched from Entity pool to Model primitives for improved performance and non-uniform scale support
+- Status bar now displays total pilots on VATSIM network (previously showed only nearby aircraft)
+- Global search (Ctrl+K) now searches all pilots on the network, not just nearby aircraft
+
+### Fixed
+- Cloud layers now hidden in 2D top-down view (prevents clouds from obscuring the entire view when looking straight down)
+- Cloud ceiling culling disabled in 2D view (datablocks no longer hidden by cloud layers when in top-down mode)
+- Aircraft now refilter immediately when changing airports (previously waited up to 3 seconds for next API poll)
+- WASD diagonal movement now works correctly (e.g., W+A moves forward-left at proper speed)
 
 ## v0.0.2-alpha
 
