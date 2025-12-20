@@ -63,6 +63,25 @@ export function useCesiumCamera(
   const isDraggingRef = useRef(false)
   const lastMousePosRef = useRef({ x: 0, y: 0 })
 
+  // Smooth keyboard movement state
+  const pressedKeysRef = useRef<Set<string>>(new Set())
+  const velocityRef = useRef({
+    forward: 0,
+    right: 0,
+    heading: 0,
+    pitch: 0,
+    zoom: 0,
+    orbitHeading: 0,
+    orbitPitch: 0,
+    orbitDistance: 0,
+    altitude: 0
+  })
+  const animationFrameRef = useRef<number | null>(null)
+  const lastFrameTimeRef = useRef<number>(0)
+
+  // Mouse wheel impulse for smooth scrolling
+  const wheelImpulseRef = useRef(0)
+
   // Get tower position
   const getTowerPos = useCallback(() => {
     if (!currentAirport) return null
@@ -398,30 +417,18 @@ export function useCesiumCamera(
     }
   }, [viewer, followingCallsign, followMode, adjustHeading, adjustPitch, adjustOrbitHeading, adjustOrbitPitch, stopFollowingStore])
 
-  // Mouse wheel for zoom
+  // Mouse wheel for zoom - adds impulse for smooth scrolling
   useEffect(() => {
     if (!viewer) return
 
     const handleWheel = (event: WheelEvent) => {
       event.preventDefault()
 
-      if (viewMode === 'topdown') {
-        // In top-down mode, adjust altitude
-        const altitudeSpeed = 100
-        adjustTopdownAltitude(event.deltaY > 0 ? altitudeSpeed : -altitudeSpeed)
-      } else if (followingCallsign && followMode === 'orbit') {
-        // In orbit mode, adjust orbit distance
-        const distanceSpeed = 50
-        adjustOrbitDistance(event.deltaY > 0 ? distanceSpeed : -distanceSpeed)
-      } else if (followingCallsign) {
-        // In tower follow mode, adjust follow zoom
-        adjustFollowZoom(event.deltaY > 0 ? -0.1 : 0.1)
-      } else {
-        // When not following, adjust FOV
-        const zoomSpeed = 2
-        const delta = event.deltaY > 0 ? zoomSpeed : -zoomSpeed
-        adjustFov(delta)
-      }
+      // Normalize wheel delta and add to impulse (accumulates for fast scrolling)
+      const normalizedDelta = Math.sign(event.deltaY) * Math.min(Math.abs(event.deltaY), 100) / 100
+      wheelImpulseRef.current += normalizedDelta
+      // Clamp total impulse to prevent excessive buildup
+      wheelImpulseRef.current = Math.max(-3, Math.min(3, wheelImpulseRef.current))
     }
 
     const canvas = viewer.canvas
@@ -430,11 +437,28 @@ export function useCesiumCamera(
     return () => {
       canvas.removeEventListener('wheel', handleWheel)
     }
-  }, [viewer, viewMode, followingCallsign, followMode, adjustFov, adjustFollowZoom, adjustOrbitDistance, adjustTopdownAltitude])
+  }, [viewer])
 
-  // Keyboard controls
+  // Smooth keyboard controls with animation loop
   useEffect(() => {
     if (!viewer) return
+
+    // Movement configuration
+    const ACCELERATION = 8.0       // How fast velocity builds up (per second)
+    const DECELERATION = 6.0       // How fast velocity decays (per second)
+    const MAX_MOVE_SPEED = 60      // Max movement speed (meters per second)
+    const MAX_ROTATE_SPEED = 90    // Max rotation speed (degrees per second)
+    const MAX_ZOOM_SPEED = 30      // Max FOV change speed (degrees per second)
+    const MAX_ALTITUDE_SPEED = 1500 // Max altitude change speed (meters per second)
+    const MAX_ORBIT_DIST_SPEED = 500 // Max orbit distance change speed (meters per second)
+
+    // Keys that trigger continuous movement (mapped to velocity channels)
+    const MOVEMENT_KEYS = new Set([
+      'w', 'W', 's', 'S', 'a', 'A', 'd', 'D',
+      'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown',
+      '+', '=', '-', '_',
+      'Shift'  // Sprint modifier
+    ])
 
     const handleKeyDown = (event: KeyboardEvent) => {
       // Ignore if typing in an input
@@ -443,127 +467,233 @@ export function useCesiumCamera(
         return
       }
 
-      const rotateAmount = 3  // degrees
-      const zoomAmount = 5
-      // Scale movement with altitude in topdown view for consistent feel when zoomed out
-      const baseMoveDistance = 10  // meters at reference altitude
-      const referenceAltitude = 2000
-      const moveDistance = viewMode === 'topdown'
-        ? baseMoveDistance * (topdownAltitude / referenceAltitude)
-        : baseMoveDistance
+      const key = event.key
 
-      switch (event.key) {
-        // WASD movement
-        case 'w':
-        case 'W':
-          moveForward(moveDistance)
-          break
-        case 's':
-        case 'S':
-          moveForward(-moveDistance)
-          break
-        case 'a':
-        case 'A':
-          moveRight(-moveDistance)
-          break
-        case 'd':
-        case 'D':
-          moveRight(moveDistance)
-          break
-
-        // Arrow keys for camera rotation / orbit control
-        case 'ArrowLeft':
-          if (followingCallsign && followMode === 'orbit') {
-            adjustOrbitHeading(-rotateAmount)
-          } else {
-            adjustHeading(-rotateAmount)
-            if (followingCallsign) stopFollowingStore()
-          }
-          break
-        case 'ArrowRight':
-          if (followingCallsign && followMode === 'orbit') {
-            adjustOrbitHeading(rotateAmount)
-          } else {
-            adjustHeading(rotateAmount)
-            if (followingCallsign) stopFollowingStore()
-          }
-          break
-        case 'ArrowUp':
-          if (followingCallsign && followMode === 'orbit') {
-            adjustOrbitPitch(rotateAmount)
-          } else {
-            adjustPitch(rotateAmount)
-            if (followingCallsign) stopFollowingStore()
-          }
-          break
-        case 'ArrowDown':
-          if (followingCallsign && followMode === 'orbit') {
-            adjustOrbitPitch(-rotateAmount)
-          } else {
-            adjustPitch(-rotateAmount)
-            if (followingCallsign) stopFollowingStore()
-          }
-          break
-
-        // View mode toggle
+      // Handle one-shot keys (not continuous movement)
+      switch (key) {
         case 't':
         case 'T':
           toggleViewMode()
-          break
-
-        // Reset position (R resets position, Home resets everything)
+          return
         case 'r':
           resetPosition()
-          break
+          return
         case 'R':
         case 'Home':
           resetView()
-          break
-
-        // Zoom controls
-        case '+':
-        case '=':
-          if (viewMode === 'topdown') {
-            adjustTopdownAltitude(-200)
-          } else if (followingCallsign && followMode === 'orbit') {
-            adjustOrbitDistance(-100)
-          } else if (followingCallsign) {
-            adjustFollowZoom(0.2)
-          } else {
-            adjustFov(-zoomAmount)
-          }
-          break
-        case '-':
-        case '_':
-          if (viewMode === 'topdown') {
-            adjustTopdownAltitude(200)
-          } else if (followingCallsign && followMode === 'orbit') {
-            adjustOrbitDistance(100)
-          } else if (followingCallsign) {
-            adjustFollowZoom(-0.2)
-          } else {
-            adjustFov(zoomAmount)
-          }
-          break
-
-        // Toggle follow mode (tower/orbit) when following
+          return
         case 'o':
         case 'O':
           if (followingCallsign) {
             toggleFollowMode()
           }
-          break
-
+          return
         case 'Escape':
           stopFollowing()
-          break
+          return
+      }
+
+      // Track continuous movement keys
+      if (MOVEMENT_KEYS.has(key)) {
+        pressedKeysRef.current.add(key.toLowerCase())
+
+        // Stop following in tower mode when arrow keys are pressed
+        if ((key.startsWith('Arrow')) && followingCallsign && followMode === 'tower') {
+          stopFollowingStore()
+        }
       }
     }
 
+    const handleKeyUp = (event: KeyboardEvent) => {
+      const key = event.key
+      pressedKeysRef.current.delete(key.toLowerCase())
+      // Also remove the uppercase version in case it was tracked that way
+      pressedKeysRef.current.delete(key)
+    }
+
+    // Clear all keys when window loses focus
+    const handleBlur = () => {
+      pressedKeysRef.current.clear()
+    }
+
+    // Animation loop for smooth movement
+    const animate = (currentTime: number) => {
+      const deltaTime = lastFrameTimeRef.current ? (currentTime - lastFrameTimeRef.current) / 1000 : 0.016
+      lastFrameTimeRef.current = currentTime
+
+      // Clamp deltaTime to avoid huge jumps
+      const dt = Math.min(deltaTime, 0.1)
+
+      const keys = pressedKeysRef.current
+      const vel = velocityRef.current
+
+      // Calculate target velocities based on pressed keys
+      let targetForward = 0
+      let targetRight = 0
+      let targetHeading = 0
+      let targetPitch = 0
+      let targetZoom = 0
+      let targetOrbitHeading = 0
+      let targetOrbitPitch = 0
+      let targetOrbitDistance = 0
+      let targetAltitude = 0
+
+      // WASD movement (shift = sprint)
+      const shiftHeld = keys.has('shift')
+      const sprintMultiplier = shiftHeld ? 3.0 : 1.0
+
+      if (keys.has('w')) targetForward = 1
+      if (keys.has('s')) targetForward = -1
+      if (keys.has('a')) targetRight = -1
+      if (keys.has('d')) targetRight = 1
+
+      // Arrow keys - rotation or orbit control
+      const inOrbitMode = followingCallsign && followMode === 'orbit'
+      if (keys.has('arrowleft')) {
+        if (inOrbitMode) targetOrbitHeading = -1
+        else targetHeading = -1
+      }
+      if (keys.has('arrowright')) {
+        if (inOrbitMode) targetOrbitHeading = 1
+        else targetHeading = 1
+      }
+      if (keys.has('arrowup')) {
+        if (inOrbitMode) targetOrbitPitch = 1
+        else targetPitch = 1
+      }
+      if (keys.has('arrowdown')) {
+        if (inOrbitMode) targetOrbitPitch = -1
+        else targetPitch = -1
+      }
+
+      // Zoom controls (+/-)
+      const zoomIn = keys.has('+') || keys.has('=')
+      const zoomOut = keys.has('-') || keys.has('_')
+      if (zoomIn) {
+        if (viewMode === 'topdown') targetAltitude = -1
+        else if (inOrbitMode) targetOrbitDistance = -1
+        else if (followingCallsign) targetZoom = 1  // Positive = zoom in (increase followZoom)
+        else targetZoom = -1  // Negative = decrease FOV = zoom in
+      }
+      if (zoomOut) {
+        if (viewMode === 'topdown') targetAltitude = 1
+        else if (inOrbitMode) targetOrbitDistance = 1
+        else if (followingCallsign) targetZoom = -1
+        else targetZoom = 1
+      }
+
+      // Process mouse wheel impulse (adds to velocity directly)
+      const wheelImpulse = wheelImpulseRef.current
+      if (Math.abs(wheelImpulse) > 0.001) {
+        const WHEEL_IMPULSE_STRENGTH = 80  // How much velocity each unit of wheel adds
+        const impulseAmount = wheelImpulse * WHEEL_IMPULSE_STRENGTH
+
+        if (viewMode === 'topdown') {
+          vel.altitude += impulseAmount * 3  // Scale up for altitude
+        } else if (inOrbitMode) {
+          vel.orbitDistance += impulseAmount * 1.2
+        } else if (followingCallsign) {
+          vel.zoom -= impulseAmount * 0.002  // Inverted and scaled for follow zoom
+        } else {
+          vel.zoom += impulseAmount * 0.08
+        }
+
+        // Decay the impulse
+        wheelImpulseRef.current *= 0.6
+        if (Math.abs(wheelImpulseRef.current) < 0.01) {
+          wheelImpulseRef.current = 0
+        }
+      }
+
+      // Smoothly interpolate velocities toward targets
+      const accelerate = (current: number, target: number, maxSpeed: number): number => {
+        const targetVel = target * maxSpeed
+        if (Math.abs(targetVel) > 0.001) {
+          // Accelerating toward target
+          const diff = targetVel - current
+          const change = Math.sign(diff) * ACCELERATION * maxSpeed * dt
+          if (Math.abs(change) > Math.abs(diff)) {
+            return targetVel
+          }
+          return current + change
+        } else {
+          // Decelerating to zero
+          const change = DECELERATION * maxSpeed * dt
+          if (Math.abs(current) < change) {
+            return 0
+          }
+          return current - Math.sign(current) * change
+        }
+      }
+
+      // Scale movement speed with altitude in topdown view, and apply sprint multiplier
+      const referenceAltitude = 2000
+      const altitudeScale = viewMode === 'topdown' ? topdownAltitude / referenceAltitude : 1
+      const effectiveMoveSpeed = MAX_MOVE_SPEED * altitudeScale * sprintMultiplier
+
+      vel.forward = accelerate(vel.forward, targetForward, effectiveMoveSpeed)
+      vel.right = accelerate(vel.right, targetRight, effectiveMoveSpeed)
+      vel.heading = accelerate(vel.heading, targetHeading, MAX_ROTATE_SPEED)
+      vel.pitch = accelerate(vel.pitch, targetPitch, MAX_ROTATE_SPEED)
+      vel.zoom = accelerate(vel.zoom, targetZoom, MAX_ZOOM_SPEED)
+      vel.orbitHeading = accelerate(vel.orbitHeading, targetOrbitHeading, MAX_ROTATE_SPEED)
+      vel.orbitPitch = accelerate(vel.orbitPitch, targetOrbitPitch, MAX_ROTATE_SPEED)
+      vel.orbitDistance = accelerate(vel.orbitDistance, targetOrbitDistance, MAX_ORBIT_DIST_SPEED)
+      vel.altitude = accelerate(vel.altitude, targetAltitude, MAX_ALTITUDE_SPEED)
+
+      // Apply velocities
+      const threshold = 0.01
+
+      if (Math.abs(vel.forward) > threshold) {
+        moveForward(vel.forward * dt)
+      }
+      if (Math.abs(vel.right) > threshold) {
+        moveRight(vel.right * dt)
+      }
+      if (Math.abs(vel.heading) > threshold) {
+        adjustHeading(vel.heading * dt)
+      }
+      if (Math.abs(vel.pitch) > threshold) {
+        adjustPitch(vel.pitch * dt)
+      }
+      if (Math.abs(vel.zoom) > threshold) {
+        if (followingCallsign && followMode !== 'orbit') {
+          adjustFollowZoom(vel.zoom * dt * 0.05)  // Scale down for follow zoom
+        } else {
+          adjustFov(vel.zoom * dt)
+        }
+      }
+      if (Math.abs(vel.orbitHeading) > threshold) {
+        adjustOrbitHeading(vel.orbitHeading * dt)
+      }
+      if (Math.abs(vel.orbitPitch) > threshold) {
+        adjustOrbitPitch(vel.orbitPitch * dt)
+      }
+      if (Math.abs(vel.orbitDistance) > threshold) {
+        adjustOrbitDistance(vel.orbitDistance * dt)
+      }
+      if (Math.abs(vel.altitude) > threshold) {
+        adjustTopdownAltitude(vel.altitude * dt)
+      }
+
+      animationFrameRef.current = requestAnimationFrame(animate)
+    }
+
+    // Start animation loop
+    animationFrameRef.current = requestAnimationFrame(animate)
+
     window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+    window.addEventListener('blur', handleBlur)
 
     return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current)
+      }
       window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+      window.removeEventListener('blur', handleBlur)
+      pressedKeysRef.current.clear()
     }
   }, [
     viewer,

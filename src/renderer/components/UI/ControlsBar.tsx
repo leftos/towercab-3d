@@ -31,9 +31,20 @@ function ControlsBar() {
   const followingCallsign = useCameraStore((state) => state.followingCallsign)
   const resetView = useCameraStore((state) => state.resetView)
   const setFov = useCameraStore((state) => state.setFov)
+  const saveCurrentAsDefault = useCameraStore((state) => state.saveCurrentAsDefault)
+  const resetToDefault = useCameraStore((state) => state.resetToDefault)
+  const hasCustomDefault = useCameraStore((state) => state.hasCustomDefault)
 
   const handleResetView = () => {
     resetView()
+  }
+
+  const handleSaveAsDefault = () => {
+    saveCurrentAsDefault()
+  }
+
+  const handleResetToDefault = () => {
+    resetToDefault()
   }
 
   const formatAngle = (angle: number) => {
@@ -72,6 +83,34 @@ function ControlsBar() {
               </svg>
             )}
             {viewMode === '3d' ? '3D' : '2D'}
+          </button>
+
+          <div className="button-divider" />
+
+          <button
+            className="control-button"
+            onClick={handleSaveAsDefault}
+            title={`Save current ${viewMode === '3d' ? '3D' : '2D'} view as default for this airport`}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+              <polyline points="17 21 17 13 7 13 7 21" />
+              <polyline points="7 3 7 8 15 8" />
+            </svg>
+            Set Default
+          </button>
+
+          <button
+            className={`control-button ${hasCustomDefault() ? 'has-default' : ''}`}
+            onClick={handleResetToDefault}
+            title={`Reset to default ${viewMode === '3d' ? '3D' : '2D'} view for this airport`}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+              <path d="M3 3v5h5" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            To Default
           </button>
 
           <GlobalSearchPanel />

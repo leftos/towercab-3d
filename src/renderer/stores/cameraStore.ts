@@ -24,6 +24,9 @@ interface AirportCameraSettings {
   '3d': ViewSettings
   'topdown': ViewSettings
   lastViewMode: ViewMode
+  // User-defined defaults (optional - if not set, uses global defaults)
+  'default3d'?: ViewSettings
+  'defaultTopdown'?: ViewSettings
 }
 
 // Storage format for persisted settings
@@ -103,6 +106,11 @@ interface CameraStore {
   setCurrentAirport: (icao: string) => void
   saveCurrentViewSettings: () => void
   loadViewSettings: (mode: ViewMode) => void
+
+  // Default view actions
+  saveCurrentAsDefault: () => void
+  resetToDefault: () => void
+  hasCustomDefault: () => boolean
 
   // Reset
   resetView: () => void
@@ -434,6 +442,79 @@ export const useCameraStore = create<CameraStore>()(
       adjustOrbitPitch: (delta: number) => {
         const { orbitPitch, setOrbitPitch } = get()
         setOrbitPitch(orbitPitch + delta)
+      },
+
+      // Save current view as the default for this airport/view mode
+      saveCurrentAsDefault: () => {
+        const state = get()
+        const icao = state.currentAirportIcao
+        if (!icao) return
+
+        const currentSettings: ViewSettings = {
+          heading: state.heading,
+          pitch: state.pitch,
+          fov: state.fov,
+          positionOffsetX: state.positionOffsetX,
+          positionOffsetY: state.positionOffsetY,
+          positionOffsetZ: state.positionOffsetZ,
+          topdownAltitude: state.topdownAltitude
+        }
+
+        const airportSettings = { ...state.airportSettings }
+        if (!airportSettings[icao]) {
+          airportSettings[icao] = getDefaultAirportSettings()
+        }
+
+        // Save to the appropriate default key based on current view mode
+        if (state.viewMode === '3d') {
+          airportSettings[icao].default3d = { ...currentSettings }
+        } else {
+          airportSettings[icao].defaultTopdown = { ...currentSettings }
+        }
+
+        set({ airportSettings })
+      },
+
+      // Reset to the user-defined default (or global default if none set)
+      resetToDefault: () => {
+        const state = get()
+        const icao = state.currentAirportIcao
+
+        // Get the default settings for current view mode
+        let defaults: ViewSettings
+        if (icao && state.airportSettings[icao]) {
+          const airportDefaults = state.viewMode === '3d'
+            ? state.airportSettings[icao].default3d
+            : state.airportSettings[icao].defaultTopdown
+
+          defaults = airportDefaults || (state.viewMode === '3d' ? DEFAULT_3D_SETTINGS : DEFAULT_TOPDOWN_SETTINGS)
+        } else {
+          defaults = state.viewMode === '3d' ? DEFAULT_3D_SETTINGS : DEFAULT_TOPDOWN_SETTINGS
+        }
+
+        set({
+          heading: defaults.heading,
+          pitch: defaults.pitch,
+          fov: defaults.fov,
+          positionOffsetX: defaults.positionOffsetX,
+          positionOffsetY: defaults.positionOffsetY,
+          positionOffsetZ: defaults.positionOffsetZ,
+          topdownAltitude: defaults.topdownAltitude,
+          followingCallsign: null,
+          followMode: 'tower' as FollowMode,
+          followZoom: DEFAULT_FOLLOW_ZOOM
+        })
+      },
+
+      // Check if the current airport has a custom default for current view mode
+      hasCustomDefault: () => {
+        const state = get()
+        const icao = state.currentAirportIcao
+        if (!icao || !state.airportSettings[icao]) return false
+
+        return state.viewMode === '3d'
+          ? !!state.airportSettings[icao].default3d
+          : !!state.airportSettings[icao].defaultTopdown
       },
 
       // Reset all

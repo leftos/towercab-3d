@@ -49,6 +49,21 @@
   border-color: rgba(255, 255, 255, 0.3);
 }
 
+.control-button.has-default {
+  border-color: rgba(79, 195, 247, 0.5);
+}
+
+.control-button.has-default svg circle {
+  fill: rgba(79, 195, 247, 0.3);
+}
+
+.button-divider {
+  width: 1px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.2);
+  margin: 0 4px;
+}
+
 .zoom-control {
   display: flex;
   align-items: center;
