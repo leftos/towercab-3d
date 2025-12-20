@@ -625,8 +625,9 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
       const fixedToEnu = fixedToEnuMatrixRef.current
       if (!fixedToEnu) return
 
-      // Check if aircraft is on or near ground (within 15m of ground elevation)
-      const isOnGround = (altitudeMeters - groundElevationMeters) < 15
+      // Check if aircraft is on or near ground (within 60m / ~200ft of ground elevation)
+      // Larger threshold accounts for pressure altitude variations at high-elevation airports
+      const isOnGround = (altitudeMeters - groundElevationMeters) < 60
       const coneRadius = 6 // Half of 12m diameter
 
       // Compute effective altitude including terrain offset (matches Cesium model positioning)

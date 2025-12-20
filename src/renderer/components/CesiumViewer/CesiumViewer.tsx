@@ -573,10 +573,14 @@ function CesiumViewer() {
         // Filter by distance
         if (aircraft.distance > labelVisibilityDistance) return false
 
-        // Filter by traffic type - use interpolated altitude for smooth transitions
+        // Filter by traffic type - use altitude above ground level (AGL) for accurate ground detection
         // In orbit mode without airport, show all traffic types
         if (!isOrbitModeWithoutAirport) {
-          const isAirborne = aircraft.interpolatedAltitude > 500
+          // Calculate AGL in feet - use 200ft threshold to account for pressure altitude variations
+          // At high-elevation airports (e.g., KRNO at 4,517ft), absolute altitude would misclassify ground traffic
+          const airportElevationFeet = currentAirport?.elevation || 0
+          const aglFeet = aircraft.interpolatedAltitude - airportElevationFeet
+          const isAirborne = aglFeet > 200
           if (isAirborne && !showAirborneTraffic) return false
           if (!isAirborne && !showGroundTraffic) return false
         }
@@ -606,12 +610,14 @@ function CesiumViewer() {
     for (const aircraft of sortedAircraft) {
       seenCallsigns.add(aircraft.callsign)
 
-      // Use INTERPOLATED altitude for airborne check to ensure smooth transitions
-      const isAirborne = aircraft.interpolatedAltitude > 500
-      const isFollowed = followingCallsign === aircraft.callsign
-
       // Calculate altitude in meters
       const altitudeMeters = aircraft.interpolatedAltitude * 0.3048
+
+      // Use altitude above ground level (AGL) for airborne detection
+      // 60m (~200ft) threshold accounts for pressure altitude variations at high-elevation airports
+      const aglMeters = altitudeMeters - groundElevationMeters
+      const isAirborne = aglMeters > 60
+      const isFollowed = followingCallsign === aircraft.callsign
 
       // Calculate height above ellipsoid
       // Use Math.max to ensure aircraft never go below ground, but can smoothly climb

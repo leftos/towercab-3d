@@ -48,3 +48,4 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ### Fixed
 - Aircraft models and datablocks now render correctly when using global search (Ctrl+K) to orbit an aircraft without an airport selected
+- Ground aircraft at high-elevation airports (e.g., KRNO at 4,517ft) no longer appear floating; now uses altitude above ground level (AGL) instead of absolute altitude for ground detection
