@@ -2,6 +2,8 @@ import { useEffect, useRef, useCallback, useState } from 'react'
 import * as BABYLON from '@babylonjs/core'
 import * as GUI from '@babylonjs/gui'
 import * as Cesium from 'cesium'
+import { useWeatherStore, type CloudLayer } from '../stores/weatherStore'
+import { useSettingsStore } from '../stores/settingsStore'
 
 // Memory diagnostic counters
 const memoryCounters = {
@@ -28,6 +30,14 @@ interface AircraftMesh {
   smoothedScreenX?: number
   smoothedScreenY?: number
 }
+
+interface CloudMeshData {
+  plane: BABYLON.Mesh
+  material: BABYLON.StandardMaterial
+}
+
+const CLOUD_POOL_SIZE = 4  // Max 4 cloud layers
+const CLOUD_PLANE_DIAMETER = 50000  // 50km diameter to cover horizon
 
 interface BabylonOverlayOptions {
   cesiumViewer: Cesium.Viewer | null
@@ -61,8 +71,18 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
   // This corrects for geoid undulation (varies by location, e.g., -30m at Boston)
   const terrainOffsetRef = useRef<number>(0)
 
+  // Cloud plane mesh pool for weather visualization
+  const cloudMeshPoolRef = useRef<CloudMeshData[]>([])
+  const cloudPlanesCreatedRef = useRef(false)
+
   // State to track when scene is ready (triggers re-render for dependents)
   const [sceneReady, setSceneReady] = useState(false)
+
+  // Weather store subscriptions
+  const cloudLayers = useWeatherStore((state) => state.cloudLayers)
+  const showWeatherEffects = useSettingsStore((state) => state.showWeatherEffects)
+  const showClouds = useSettingsStore((state) => state.showClouds)
+  const cloudOpacity = useSettingsStore((state) => state.cloudOpacity)
 
   // Convert Cesium Cartesian3 to Babylon Vector3 (swap Y and Z)
   const cart2vec = useCallback((cart: { x: number; y: number; z: number }) => {
@@ -118,6 +138,32 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     const dirLight = new BABYLON.DirectionalLight('dirLight', new BABYLON.Vector3(-1, -2, -1), scene)
     dirLight.intensity = 0.6
 
+    // Create cloud plane mesh pool for weather visualization
+    for (let i = 0; i < CLOUD_POOL_SIZE; i++) {
+      // Create large horizontal plane for cloud layer
+      const plane = BABYLON.MeshBuilder.CreatePlane(`cloud_layer_${i}`, {
+        size: CLOUD_PLANE_DIAMETER
+      }, scene)
+      memoryCounters.meshesCreated++
+
+      // Rotate to horizontal (XZ plane) - plane is created in XY, we need it in XZ
+      plane.rotation.x = Math.PI / 2
+      plane.isVisible = false  // Start hidden until weather data is available
+
+      // Create semi-transparent cloud material
+      const material = new BABYLON.StandardMaterial(`cloud_mat_${i}`, scene)
+      memoryCounters.materialsCreated++
+      material.diffuseColor = new BABYLON.Color3(0.95, 0.95, 0.98)
+      material.emissiveColor = new BABYLON.Color3(0.4, 0.4, 0.45)
+      material.alpha = 0.5
+      material.backFaceCulling = false  // Visible from both above and below
+      material.disableLighting = false
+      plane.material = material
+
+      cloudMeshPoolRef.current.push({ plane, material })
+    }
+    cloudPlanesCreatedRef.current = true
+
     // Handle resize
     const handleResize = () => {
       const rect = canvas.getBoundingClientRect()
@@ -165,6 +211,18 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
       }
       aircraftMeshesRef.current.clear()
 
+      // Dispose cloud plane resources
+      for (const cloudData of cloudMeshPoolRef.current) {
+        if (cloudData.material) {
+          cloudData.material.dispose()
+          memoryCounters.materialsDisposed++
+        }
+        cloudData.plane.dispose()
+        memoryCounters.meshesDisposed++
+      }
+      cloudMeshPoolRef.current = []
+      cloudPlanesCreatedRef.current = false
+
       guiTexture.dispose()
       scene.dispose()
       engine.dispose()
@@ -183,6 +241,35 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
       setSceneReady(false)
     }
   }, [canvas, cesiumViewer])
+
+  // Update cloud planes based on weather data and settings
+  useEffect(() => {
+    if (!cloudPlanesCreatedRef.current) return
+
+    const shouldShowClouds = showWeatherEffects && showClouds
+    const pool = cloudMeshPoolRef.current
+
+    for (let i = 0; i < CLOUD_POOL_SIZE; i++) {
+      const meshData = pool[i]
+      if (!meshData) continue
+
+      // Hide if clouds disabled or no layer at this index
+      if (!shouldShowClouds || i >= cloudLayers.length) {
+        meshData.plane.isVisible = false
+        continue
+      }
+
+      const layer = cloudLayers[i]
+
+      // Position cloud at its altitude above ground (Y is up in Babylon)
+      // Cloud planes follow the camera horizontally but stay at fixed altitude
+      meshData.plane.position.y = layer.altitude
+      meshData.plane.isVisible = true
+
+      // Adjust opacity based on coverage and user setting
+      meshData.material.alpha = layer.coverage * cloudOpacity
+    }
+  }, [cloudLayers, showWeatherEffects, showClouds, cloudOpacity])
 
   // Setup root node when we have a base position
   const setupRootNode = useCallback((lat: number, lon: number, height: number) => {

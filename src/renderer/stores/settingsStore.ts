@@ -35,6 +35,12 @@ interface SettingsStore {
   diskCacheSizeGB: number  // IndexedDB cache size in GB (0.1-10)
   aircraftDataRadiusNM: number  // Radius for keeping aircraft data in memory (10-500 NM)
 
+  // Weather settings
+  showWeatherEffects: boolean  // Master toggle for weather effects
+  showFog: boolean             // Show fog/visibility effects
+  showClouds: boolean          // Show cloud layer planes
+  cloudOpacity: number         // Cloud plane opacity (0.3-0.8)
+
   // Actions
   setCesiumIonToken: (token: string) => void
   setLabelVisibilityDistance: (distance: number) => void
@@ -53,6 +59,10 @@ interface SettingsStore {
   setInMemoryTileCacheSize: (size: number) => void
   setDiskCacheSizeGB: (size: number) => void
   setAircraftDataRadiusNM: (radius: number) => void
+  setShowWeatherEffects: (show: boolean) => void
+  setShowFog: (show: boolean) => void
+  setShowClouds: (show: boolean) => void
+  setCloudOpacity: (opacity: number) => void
   resetToDefaults: () => void
 }
 
@@ -74,7 +84,12 @@ const DEFAULT_SETTINGS = {
   // Memory management - balanced defaults for smooth panning without OOM
   inMemoryTileCacheSize: 500,  // Cesium tile cache size (higher = smoother panning, more RAM)
   diskCacheSizeGB: 2,  // 2GB disk cache for tiles
-  aircraftDataRadiusNM: 100  // Only keep aircraft data within 100nm of camera
+  aircraftDataRadiusNM: 100,  // Only keep aircraft data within 100nm of camera
+  // Weather settings
+  showWeatherEffects: true,
+  showFog: true,
+  showClouds: true,
+  cloudOpacity: 0.5
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -124,6 +139,15 @@ export const useSettingsStore = create<SettingsStore>()(
 
       setAircraftDataRadiusNM: (radius: number) =>
         set({ aircraftDataRadiusNM: Math.max(10, Math.min(500, Math.round(radius))) }),
+
+      setShowWeatherEffects: (show: boolean) => set({ showWeatherEffects: show }),
+
+      setShowFog: (show: boolean) => set({ showFog: show }),
+
+      setShowClouds: (show: boolean) => set({ showClouds: show }),
+
+      setCloudOpacity: (opacity: number) =>
+        set({ cloudOpacity: Math.max(0.3, Math.min(0.8, opacity)) }),
 
       resetToDefaults: () => set(DEFAULT_SETTINGS)
     }),

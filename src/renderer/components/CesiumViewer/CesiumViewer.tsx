@@ -4,6 +4,7 @@ import { useAirportStore } from '../../stores/airportStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useCameraStore } from '../../stores/cameraStore'
 import { useVatsimStore } from '../../stores/vatsimStore'
+import { useWeatherStore } from '../../stores/weatherStore'
 import { useAircraftInterpolation } from '../../hooks/useAircraftInterpolation'
 import { useCesiumCamera } from '../../hooks/useCesiumCamera'
 import { useBabylonOverlay, getMemoryCounters } from '../../hooks/useBabylonOverlay'
@@ -77,6 +78,11 @@ function CesiumViewer() {
   const timeMode = useSettingsStore((state) => state.timeMode)
   const fixedTimeHour = useSettingsStore((state) => state.fixedTimeHour)
   const inMemoryTileCacheSize = useSettingsStore((state) => state.inMemoryTileCacheSize)
+  const showWeatherEffects = useSettingsStore((state) => state.showWeatherEffects)
+  const showFog = useSettingsStore((state) => state.showFog)
+
+  // Weather store for fog effects
+  const fogDensity = useWeatherStore((state) => state.fogDensity)
 
   // Camera store for follow highlighting and view mode
   const followingCallsign = useCameraStore((state) => state.followingCallsign)
@@ -256,6 +262,38 @@ function CesiumViewer() {
     if (!cesiumViewer) return
     cesiumViewer.scene.globe.tileCacheSize = inMemoryTileCacheSize
   }, [cesiumViewer, inMemoryTileCacheSize])
+
+  // Update fog based on weather effects and METAR visibility
+  useEffect(() => {
+    if (!cesiumViewer) return
+
+    const shouldShowFog = showWeatherEffects && showFog
+    cesiumViewer.scene.fog.enabled = shouldShowFog
+
+    if (shouldShowFog && fogDensity > 0) {
+      // Apply fog density from METAR visibility
+      // fogDensity ranges from ~0.015 (1/4 SM) to ~0 (10+ SM)
+      cesiumViewer.scene.fog.density = fogDensity
+
+      // visualDensityScalar controls the visual appearance of fog (default 0.15)
+      // Scale it based on fog density for more dramatic effect in low visibility
+      // Range from 0.15 (light fog) to 1.0 (very dense fog)
+      const visualScalar = Math.min(1.0, 0.15 + (fogDensity / 0.015) * 0.85)
+      cesiumViewer.scene.fog.visualDensityScalar = visualScalar
+
+      // Increase screen space error factor in fog for better performance
+      cesiumViewer.scene.fog.screenSpaceErrorFactor = 2.0
+
+      // Prevent fog from being too dark
+      cesiumViewer.scene.fog.minimumBrightness = 0.1
+    } else {
+      // Reset to default fog settings when no weather effects
+      cesiumViewer.scene.fog.density = 0.0006 // Cesium default
+      cesiumViewer.scene.fog.visualDensityScalar = 0.15 // Cesium default
+      cesiumViewer.scene.fog.screenSpaceErrorFactor = 2.0
+      cesiumViewer.scene.fog.minimumBrightness = 0.03 // Cesium default
+    }
+  }, [cesiumViewer, showWeatherEffects, showFog, fogDensity])
 
   // Track the last terrain quality to detect actual user changes vs initial mount
   const lastTerrainQualityRef = useRef<number | null>(null)

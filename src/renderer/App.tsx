@@ -9,12 +9,19 @@ import CommandInput from './components/UI/CommandInput'
 import { useVatsimStore } from './stores/vatsimStore'
 import { useAirportStore } from './stores/airportStore'
 import { useSettingsStore } from './stores/settingsStore'
+import { useWeatherStore } from './stores/weatherStore'
 import { airportService } from './services/AirportService'
 
 function App() {
   const startPolling = useVatsimStore((state) => state.startPolling)
   const loadAirports = useAirportStore((state) => state.loadAirports)
+  const currentAirport = useAirportStore((state) => state.currentAirport)
   const cesiumIonToken = useSettingsStore((state) => state.cesiumIonToken)
+  const showWeatherEffects = useSettingsStore((state) => state.showWeatherEffects)
+  const fetchWeather = useWeatherStore((state) => state.fetchWeather)
+  const startAutoRefresh = useWeatherStore((state) => state.startAutoRefresh)
+  const stopAutoRefresh = useWeatherStore((state) => state.stopAutoRefresh)
+  const clearWeather = useWeatherStore((state) => state.clearWeather)
 
   const [isLoading, setIsLoading] = useState(true)
   const [loadingStatus, setLoadingStatus] = useState('Initializing...')
@@ -45,6 +52,28 @@ function App() {
 
     initialize()
   }, [cesiumIonToken, startPolling, loadAirports])
+
+  // Fetch weather data when airport changes or weather effects are enabled
+  const currentIcao = currentAirport?.icao
+  useEffect(() => {
+    if (!currentIcao || !showWeatherEffects) {
+      stopAutoRefresh()
+      if (!showWeatherEffects) {
+        clearWeather()
+      }
+      return
+    }
+
+    // Fetch immediately on airport change
+    fetchWeather(currentIcao)
+
+    // Start 5-minute auto-refresh
+    startAutoRefresh(currentIcao)
+
+    return () => {
+      stopAutoRefresh()
+    }
+  }, [currentIcao, showWeatherEffects, fetchWeather, startAutoRefresh, stopAutoRefresh, clearWeather])
 
   if (isLoading) {
     return (

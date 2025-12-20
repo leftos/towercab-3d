@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useCameraStore } from '../../stores/cameraStore'
+import { useWeatherStore } from '../../stores/weatherStore'
 import GlobalSearchPanel from './GlobalSearchPanel'
 import './ControlsBar.css'
 
@@ -43,6 +44,20 @@ function ControlsBar() {
   const setTimeMode = useSettingsStore((state) => state.setTimeMode)
   const fixedTimeHour = useSettingsStore((state) => state.fixedTimeHour)
   const setFixedTimeHour = useSettingsStore((state) => state.setFixedTimeHour)
+
+  // Settings store - Weather
+  const showWeatherEffects = useSettingsStore((state) => state.showWeatherEffects)
+  const setShowWeatherEffects = useSettingsStore((state) => state.setShowWeatherEffects)
+  const showFog = useSettingsStore((state) => state.showFog)
+  const setShowFog = useSettingsStore((state) => state.setShowFog)
+  const showClouds = useSettingsStore((state) => state.showClouds)
+  const setShowClouds = useSettingsStore((state) => state.setShowClouds)
+  const cloudOpacity = useSettingsStore((state) => state.cloudOpacity)
+  const setCloudOpacity = useSettingsStore((state) => state.setCloudOpacity)
+
+  // Weather store
+  const currentMetar = useWeatherStore((state) => state.currentMetar)
+  const isLoadingWeather = useWeatherStore((state) => state.isLoading)
 
   // Settings store - Performance
   const inMemoryTileCacheSize = useSettingsStore((state) => state.inMemoryTileCacheSize)
@@ -534,6 +549,79 @@ function ControlsBar() {
                           <span>{formatTimeHour(fixedTimeHour)}</span>
                         </div>
                       </div>
+                    )}
+                  </div>
+
+                  <div className="settings-section">
+                    <h3>Weather (METAR)</h3>
+                    <div className="setting-item">
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={showWeatherEffects}
+                          onChange={(e) => setShowWeatherEffects(e.target.checked)}
+                        />
+                        Enable Weather Effects
+                      </label>
+                      <p className="setting-hint">
+                        Fetches real weather data for the current airport.
+                      </p>
+                    </div>
+
+                    {showWeatherEffects && (
+                      <>
+                        <div className="setting-item">
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={showFog}
+                              onChange={(e) => setShowFog(e.target.checked)}
+                            />
+                            Show Fog/Visibility
+                          </label>
+                        </div>
+
+                        <div className="setting-item">
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={showClouds}
+                              onChange={(e) => setShowClouds(e.target.checked)}
+                            />
+                            Show Cloud Layers
+                          </label>
+                        </div>
+
+                        <div className="setting-item">
+                          <label>Cloud Opacity</label>
+                          <div className="slider-with-value">
+                            <input
+                              type="range"
+                              min="0.3"
+                              max="0.8"
+                              step="0.1"
+                              value={cloudOpacity}
+                              onChange={(e) => setCloudOpacity(Number(e.target.value))}
+                            />
+                            <span>{Math.round(cloudOpacity * 100)}%</span>
+                          </div>
+                        </div>
+
+                        <div className="setting-item weather-status">
+                          {isLoadingWeather ? (
+                            <span className="loading">Loading weather...</span>
+                          ) : currentMetar ? (
+                            <span>
+                              <strong>{currentMetar.fltCat}</strong> - Vis {currentMetar.visib}SM
+                              {currentMetar.clouds.length > 0 && (
+                                <> | {currentMetar.clouds.map(c => `${c.cover}${Math.round(c.base / 100).toString().padStart(3, '0')}`).join(' ')}</>
+                              )}
+                            </span>
+                          ) : (
+                            <span className="no-data">No weather data available</span>
+                          )}
+                        </div>
+                      </>
                     )}
                   </div>
                 </>
