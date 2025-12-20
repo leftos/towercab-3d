@@ -518,10 +518,6 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
       label.thickness = 1
       label.background = isFollowed ? 'rgba(0, 50, 80, 0.85)' : 'rgba(0, 0, 0, 0.85)'
       label.color = rgbToHex(color.r, color.g, color.b)
-      label.paddingLeft = '6px'
-      label.paddingRight = '6px'
-      label.paddingTop = '4px'
-      label.paddingBottom = '4px'
       label.adaptWidthToChildren = true
       label.adaptHeightToChildren = true
       label.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT
@@ -539,6 +535,10 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
       text.fontWeight = 'bold'
       text.textHorizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT
       text.resizeToFit = true
+      text.paddingLeft = '4px'
+      text.paddingRight = '4px'
+      text.paddingTop = '2px'
+      text.paddingBottom = '2px'
       label.addControl(text)
 
       // Create leader line (positioned manually in updateLeaderLine)
