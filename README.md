@@ -46,15 +46,30 @@ A 3D tower cab view application for VATSIM air traffic controllers. View real-ti
 ## Requirements
 
 - Windows 10/11 (64-bit)
-- Node.js 18+ (for development)
 - Cesium Ion account (free tier) for terrain and imagery
+- Node.js 18+ (only for development)
 
 ## Quick Start
 
-### 1. Install Dependencies
+### Option A: Download the Installer (Recommended)
+
+1. Download the latest Windows installer from [GitHub Releases](https://github.com/leftos/towercab-3d/releases)
+2. Run the installer and follow the prompts
+3. Launch TowerCab 3D from the Start Menu or desktop shortcut
+4. Continue to [Get a Cesium Ion Token](#2-get-a-cesium-ion-token) below
+
+### Option B: Run from Source (Development)
+
+#### 1. Install Dependencies
 
 ```bash
 npm install
+```
+
+#### 2. Run in Development Mode
+
+```bash
+npm run dev
 ```
 
 ### 2. Get a Cesium Ion Token
@@ -63,20 +78,14 @@ npm install
 2. Go to Access Tokens and create a new token with default permissions
 3. Copy the token
 
-### 3. Run in Development Mode
-
-```bash
-npm run dev
-```
-
-### 4. Configure the Application
+### 3. Configure the Application
 
 1. Click the **Settings** button (gear icon) in the bottom-right corner
 2. Paste your Cesium Ion token in the token field
 3. Adjust terrain quality and other settings as desired
 4. Close the settings modal
 
-### 5. Select an Airport
+### 4. Select an Airport
 
 1. Click the airport button in the top-left (shows "Select Airport" initially)
 2. Search for an airport by ICAO code (e.g., "KJFK"), IATA code (e.g., "JFK"), name, or city
@@ -128,7 +137,7 @@ npm run build
 npm run dist
 ```
 
-The installer will be created in the `dist/` folder.
+The installer will be created in the `dist/` folder. This is the same installer distributed via [GitHub Releases](https://github.com/leftos/towercab-3d/releases).
 
 ## Project Structure
 
