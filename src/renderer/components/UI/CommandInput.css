@@ -1,0 +1,59 @@
+.command-input-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.command-input-bar {
+  background: rgba(0, 0, 0, 0.95);
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 16px;
+  border-bottom: 1px solid rgba(0, 255, 0, 0.3);
+}
+
+.command-prompt {
+  color: #00ff00;
+  font-weight: bold;
+}
+
+.command-text {
+  color: #00ff00;
+  letter-spacing: 1px;
+}
+
+.command-cursor {
+  color: #00ff00;
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+.command-feedback {
+  background: rgba(0, 0, 0, 0.85);
+  padding: 6px 16px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.command-feedback.success {
+  color: #00ff00;
+}
+
+.command-feedback.error {
+  color: #ff6b6b;
+}

@@ -5,6 +5,7 @@ import TopBar from './components/UI/TopBar'
 import AircraftPanel from './components/UI/AircraftPanel'
 import ControlsBar from './components/UI/ControlsBar'
 import AirportSelector from './components/UI/AirportSelector'
+import CommandInput from './components/UI/CommandInput'
 import { useVatsimStore } from './stores/vatsimStore'
 import { useAirportStore } from './stores/airportStore'
 import { useSettingsStore } from './stores/settingsStore'
@@ -97,6 +98,7 @@ function App() {
     <div className="app">
       <TopBar />
       <div className="main-content">
+        <CommandInput />
         <CesiumViewer />
         <AircraftPanel />
       </div>

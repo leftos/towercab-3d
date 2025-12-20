@@ -59,11 +59,27 @@ export function useCesiumCamera(
   const resetPosition = useCameraStore((state) => state.resetPosition)
   const followAircraftStore = useCameraStore((state) => state.followAircraft)
   const stopFollowingStore = useCameraStore((state) => state.stopFollowing)
+  const clearPreFollowState = useCameraStore((state) => state.clearPreFollowState)
 
   // Track the previous airport to detect airport switches
   const previousAirportRef = useRef<string | null>(null)
   // Flag to indicate we're in the middle of a flyTo animation
   const isFlyingToAirportRef = useRef(false)
+  // Track previous following state to detect follow start/end
+  const previousFollowingRef = useRef<string | null>(null)
+  // Flag to indicate we're animating to follow target
+  const isAnimatingToFollowRef = useRef(false)
+  // Track previous heading/pitch for detecting restoration animation
+  const prevHeadingRef = useRef(heading)
+  const prevPitchRef = useRef(pitch)
+
+  // FOV animation state (Cesium flyTo doesn't animate FOV, so we do it manually)
+  const fovAnimationRef = useRef<{
+    startFov: number
+    targetFov: number
+    startTime: number
+    duration: number
+  } | null>(null)
 
   // Mouse drag state
   const isDraggingRef = useRef(false)
@@ -122,6 +138,51 @@ export function useCesiumCamera(
     controller.enableLook = false
   }, [viewer])
 
+  // Sync store with camera on every render frame during animations
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return
+
+    const onPreRender = () => {
+      // Only sync during animations
+      if (!isFlyingToAirportRef.current && !isAnimatingToFollowRef.current) return
+
+      const cameraHeading = Cesium.Math.toDegrees(viewer.camera.heading)
+      const cameraPitch = Cesium.Math.toDegrees(viewer.camera.pitch)
+      const normalizedHeading = ((cameraHeading % 360) + 360) % 360
+
+      // Update store to keep labels in sync
+      const state = useCameraStore.getState()
+      if (Math.abs(normalizedHeading - state.heading) > 0.5 || Math.abs(cameraPitch - state.pitch) > 0.5) {
+        useCameraStore.setState({
+          heading: normalizedHeading,
+          pitch: cameraPitch
+        })
+      }
+
+      // Animate FOV manually (Cesium flyTo doesn't support FOV animation)
+      const fovAnim = fovAnimationRef.current
+      if (fovAnim && viewer.camera.frustum instanceof Cesium.PerspectiveFrustum) {
+        const elapsed = (Date.now() - fovAnim.startTime) / 1000
+        const t = Math.min(1, elapsed / fovAnim.duration)
+        // Use ease-in-out curve to match Cesium's flyTo easing
+        const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
+        const currentFov = fovAnim.startFov + (fovAnim.targetFov - fovAnim.startFov) * eased
+        viewer.camera.frustum.fov = Cesium.Math.toRadians(currentFov)
+
+        if (t >= 1) {
+          fovAnimationRef.current = null
+        }
+      }
+    }
+
+    viewer.scene.preRender.addEventListener(onPreRender)
+    return () => {
+      if (!viewer.isDestroyed()) {
+        viewer.scene.preRender.removeEventListener(onPreRender)
+      }
+    }
+  }, [viewer])
+
   // Update camera position and orientation
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return
@@ -137,8 +198,25 @@ export function useCesiumCamera(
     // Update the ref for next comparison
     previousAirportRef.current = currentIcao
 
-    // Skip camera updates while flying to new airport
-    if (isFlyingToAirportRef.current) return
+    // Skip camera updates while flying to new airport or animating to follow target
+    // (preRender event handler syncs the store during animations)
+    if (isFlyingToAirportRef.current || isAnimatingToFollowRef.current) {
+      return
+    }
+
+    // Detect start of following (transition from not following to following)
+    const isStartingToFollow = followingCallsign !== null &&
+      previousFollowingRef.current === null &&
+      followMode === 'tower'
+
+    // Detect end of following with camera restoration (heading/pitch changed significantly)
+    const isEndingFollow = followingCallsign === null &&
+      previousFollowingRef.current !== null &&
+      (Math.abs(heading - prevHeadingRef.current) > 1 || Math.abs(pitch - prevPitchRef.current) > 1)
+
+    previousFollowingRef.current = followingCallsign
+    prevHeadingRef.current = heading
+    prevPitchRef.current = pitch
 
     // Handle orbit mode following without requiring an airport
     if (followingCallsign && followMode === 'orbit' && interpolatedAircraft) {
@@ -221,6 +299,46 @@ export function useCesiumCamera(
     const offsetLat = towerPos.latitude + positionOffsetY * metersToDegreesLat
     const offsetLon = towerPos.longitude + positionOffsetX * metersToDegreesLon
     const offsetHeight = towerPos.height + positionOffsetZ
+
+    // Animate smoothly when restoring camera after unfollowing
+    if (isEndingFollow && viewMode === '3d') {
+      isAnimatingToFollowRef.current = true
+      const cameraPosition = Cesium.Cartesian3.fromDegrees(offsetLon, offsetLat, offsetHeight)
+      const animDuration = 0.5
+
+      // Start FOV animation (Cesium flyTo doesn't animate FOV)
+      const currentFov = viewer.camera.frustum instanceof Cesium.PerspectiveFrustum && viewer.camera.frustum.fov !== undefined
+        ? Cesium.Math.toDegrees(viewer.camera.frustum.fov)
+        : 60
+      fovAnimationRef.current = {
+        startFov: currentFov,
+        targetFov: fov,
+        startTime: Date.now(),
+        duration: animDuration
+      }
+
+      viewer.camera.flyTo({
+        destination: cameraPosition,
+        orientation: {
+          heading: Cesium.Math.toRadians(heading),
+          pitch: Cesium.Math.toRadians(pitch),
+          roll: 0
+        },
+        duration: animDuration,
+        complete: () => {
+          isAnimatingToFollowRef.current = false
+          fovAnimationRef.current = null
+          if (viewer.camera.frustum instanceof Cesium.PerspectiveFrustum) {
+            viewer.camera.frustum.fov = Cesium.Math.toRadians(fov)
+          }
+        },
+        cancel: () => {
+          isAnimatingToFollowRef.current = false
+          fovAnimationRef.current = null
+        }
+      })
+      return
+    }
 
     // Handle different view modes
     if (viewMode === 'topdown') {
@@ -329,6 +447,48 @@ export function useCesiumCamera(
 
         // Apply follow zoom to FOV
         targetFov = Math.max(10, Math.min(120, 60 / followZoom))
+
+        // If just starting to follow, animate smoothly to target
+        if (isStartingToFollow) {
+          isAnimatingToFollowRef.current = true
+          const cameraPosition = Cesium.Cartesian3.fromDegrees(cameraLon, cameraLat, cameraHeight)
+          const animDuration = 0.5
+
+          // Start FOV animation (Cesium flyTo doesn't animate FOV)
+          const currentFov = viewer.camera.frustum instanceof Cesium.PerspectiveFrustum && viewer.camera.frustum.fov !== undefined
+            ? Cesium.Math.toDegrees(viewer.camera.frustum.fov)
+            : 60
+          fovAnimationRef.current = {
+            startFov: currentFov,
+            targetFov: targetFov,
+            startTime: Date.now(),
+            duration: animDuration
+          }
+
+          viewer.camera.flyTo({
+            destination: cameraPosition,
+            orientation: {
+              heading: Cesium.Math.toRadians(bearing),
+              pitch: Cesium.Math.toRadians(pitchAngle),
+              roll: 0
+            },
+            duration: animDuration,
+            complete: () => {
+              isAnimatingToFollowRef.current = false
+              fovAnimationRef.current = null
+              setHeading(bearing)
+              setPitch(pitchAngle)
+              if (viewer.camera.frustum instanceof Cesium.PerspectiveFrustum) {
+                viewer.camera.frustum.fov = Cesium.Math.toRadians(targetFov)
+              }
+            },
+            cancel: () => {
+              isAnimatingToFollowRef.current = false
+              fovAnimationRef.current = null
+            }
+          })
+          return
+        }
 
         // Update store with calculated values (for UI display)
         setHeading(bearing)
@@ -453,7 +613,9 @@ export function useCesiumCamera(
       // In tower follow mode, stop following when user starts dragging
       // In orbit mode, allow drag to orbit around the aircraft
       if (followingCallsignRef.current && followModeRef.current === 'tower') {
-        stopFollowingStore()
+        // User is breaking out manually - don't restore camera position
+        clearPreFollowState()
+        stopFollowingStore(false)
       }
     }, Cesium.ScreenSpaceEventType.RIGHT_DOWN)
 
@@ -464,7 +626,9 @@ export function useCesiumCamera(
 
       // In tower follow mode, stop following when user starts dragging
       if (followingCallsignRef.current && followModeRef.current === 'tower') {
-        stopFollowingStore()
+        // User is breaking out manually - don't restore camera position
+        clearPreFollowState()
+        stopFollowingStore(false)
       }
     }, Cesium.ScreenSpaceEventType.MIDDLE_DOWN)
 
@@ -531,7 +695,7 @@ export function useCesiumCamera(
       handler.destroy()
       canvas.removeEventListener('contextmenu', handleContextMenu)
     }
-  }, [viewer, adjustHeading, adjustPitch, adjustOrbitHeading, adjustOrbitPitch, moveForward, moveRight, stopFollowingStore])
+  }, [viewer, adjustHeading, adjustPitch, adjustOrbitHeading, adjustOrbitPitch, moveForward, moveRight, stopFollowingStore, clearPreFollowState])
 
   // Mouse wheel for zoom - adds impulse for smooth scrolling
   useEffect(() => {
@@ -616,7 +780,9 @@ export function useCesiumCamera(
 
         // Stop following in tower mode when arrow keys are pressed
         if ((key.startsWith('Arrow')) && followingCallsign && followMode === 'tower') {
-          stopFollowingStore()
+          // User is breaking out manually - don't restore camera position
+          clearPreFollowState()
+          stopFollowingStore(false)
         }
       }
     }
@@ -842,7 +1008,8 @@ export function useCesiumCamera(
     resetView,
     resetPosition,
     stopFollowing,
-    stopFollowingStore
+    stopFollowingStore,
+    clearPreFollowState
   ])
 
   return {

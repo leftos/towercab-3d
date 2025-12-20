@@ -19,6 +19,11 @@ interface ViewSettings {
   topdownAltitude: number
 }
 
+// Camera bookmark (numbered position save)
+interface CameraBookmark extends ViewSettings {
+  viewMode: ViewMode
+}
+
 // Per-airport camera settings (both view modes)
 interface AirportCameraSettings {
   '3d': ViewSettings
@@ -27,11 +32,21 @@ interface AirportCameraSettings {
   // User-defined defaults (optional - if not set, uses global defaults)
   'default3d'?: ViewSettings
   'defaultTopdown'?: ViewSettings
+  // Camera bookmarks (0-99)
+  bookmarks?: { [slot: number]: CameraBookmark }
 }
 
 // Storage format for persisted settings
 interface PersistedCameraSettings {
   [icao: string]: AirportCameraSettings
+}
+
+// State saved before following an aircraft (for restoration)
+interface PreFollowState {
+  heading: number
+  pitch: number
+  fov: number
+  viewMode: ViewMode
 }
 
 interface CameraStore {
@@ -58,6 +73,7 @@ interface CameraStore {
   followingCallsign: string | null
   followMode: FollowMode
   followZoom: number
+  preFollowState: PreFollowState | null  // Camera state before following started
 
   // Orbit follow mode parameters
   orbitDistance: number    // Distance from aircraft in meters
@@ -88,7 +104,8 @@ interface CameraStore {
   // Follow actions
   followAircraft: (callsign: string) => void
   followAircraftInOrbit: (callsign: string) => void
-  stopFollowing: () => void
+  stopFollowing: (restoreCamera?: boolean) => void
+  clearPreFollowState: () => void  // Clear saved state (e.g., when user manually drags)
   setFollowMode: (mode: FollowMode) => void
   toggleFollowMode: () => void
   setFollowZoom: (zoom: number) => void
@@ -111,6 +128,10 @@ interface CameraStore {
   saveCurrentAsDefault: () => void
   resetToDefault: () => void
   hasCustomDefault: () => boolean
+
+  // Bookmark actions (0-99)
+  saveBookmark: (slot: number) => void
+  loadBookmark: (slot: number) => boolean  // Returns true if bookmark exists
 
   // Reset
   resetView: () => void
@@ -181,6 +202,7 @@ export const useCameraStore = create<CameraStore>()(
       followingCallsign: null,
       followMode: 'tower' as FollowMode,
       followZoom: DEFAULT_FOLLOW_ZOOM,
+      preFollowState: null,
       orbitDistance: DEFAULT_ORBIT_DISTANCE,
       orbitHeading: DEFAULT_ORBIT_HEADING,
       orbitPitch: DEFAULT_ORBIT_PITCH,
@@ -370,28 +392,62 @@ export const useCameraStore = create<CameraStore>()(
 
       // Follow mode
       followAircraft: (callsign: string) => {
+        const state = get()
+        // Save current camera state before starting to follow (only if not already following)
+        const preFollowState = state.followingCallsign ? state.preFollowState : {
+          heading: state.heading,
+          pitch: state.pitch,
+          fov: state.fov,
+          viewMode: state.viewMode
+        }
         set({
           followingCallsign: callsign,
           followZoom: DEFAULT_FOLLOW_ZOOM,
           orbitDistance: DEFAULT_ORBIT_DISTANCE,
           orbitHeading: DEFAULT_ORBIT_HEADING,
-          orbitPitch: DEFAULT_ORBIT_PITCH
+          orbitPitch: DEFAULT_ORBIT_PITCH,
+          preFollowState
         })
       },
 
       followAircraftInOrbit: (callsign: string) => {
+        const state = get()
+        // Save current camera state before starting to follow (only if not already following)
+        const preFollowState = state.followingCallsign ? state.preFollowState : {
+          heading: state.heading,
+          pitch: state.pitch,
+          fov: state.fov,
+          viewMode: state.viewMode
+        }
         set({
           followingCallsign: callsign,
           followMode: 'orbit' as FollowMode,
           followZoom: DEFAULT_FOLLOW_ZOOM,
           orbitDistance: DEFAULT_ORBIT_DISTANCE,
           orbitHeading: DEFAULT_ORBIT_HEADING,
-          orbitPitch: DEFAULT_ORBIT_PITCH
+          orbitPitch: DEFAULT_ORBIT_PITCH,
+          preFollowState
         })
       },
 
-      stopFollowing: () => {
-        set({ followingCallsign: null })
+      stopFollowing: (restoreCamera = true) => {
+        const state = get()
+        if (restoreCamera && state.preFollowState) {
+          // Restore camera to pre-follow state
+          set({
+            followingCallsign: null,
+            heading: state.preFollowState.heading,
+            pitch: state.preFollowState.pitch,
+            fov: state.preFollowState.fov,
+            preFollowState: null
+          })
+        } else {
+          set({ followingCallsign: null, preFollowState: null })
+        }
+      },
+
+      clearPreFollowState: () => {
+        set({ preFollowState: null })
       },
 
       setFollowMode: (mode: FollowMode) => {
@@ -517,6 +573,64 @@ export const useCameraStore = create<CameraStore>()(
         return state.viewMode === '3d'
           ? !!state.airportSettings[icao].default3d
           : !!state.airportSettings[icao].defaultTopdown
+      },
+
+      // Save current camera state to a bookmark slot (0-99)
+      saveBookmark: (slot: number) => {
+        if (slot < 0 || slot > 99) return
+
+        const state = get()
+        const icao = state.currentAirportIcao
+        if (!icao) return
+
+        const bookmark: CameraBookmark = {
+          heading: state.heading,
+          pitch: state.pitch,
+          fov: state.fov,
+          positionOffsetX: state.positionOffsetX,
+          positionOffsetY: state.positionOffsetY,
+          positionOffsetZ: state.positionOffsetZ,
+          topdownAltitude: state.topdownAltitude,
+          viewMode: state.viewMode
+        }
+
+        const airportSettings = { ...state.airportSettings }
+        if (!airportSettings[icao]) {
+          airportSettings[icao] = getDefaultAirportSettings()
+        }
+        if (!airportSettings[icao].bookmarks) {
+          airportSettings[icao].bookmarks = {}
+        }
+        airportSettings[icao].bookmarks![slot] = bookmark
+
+        set({ airportSettings })
+      },
+
+      // Load a bookmark slot (0-99), returns true if bookmark exists
+      loadBookmark: (slot: number): boolean => {
+        if (slot < 0 || slot > 99) return false
+
+        const state = get()
+        const icao = state.currentAirportIcao
+        if (!icao) return false
+
+        const bookmark = state.airportSettings[icao]?.bookmarks?.[slot]
+        if (!bookmark) return false
+
+        set({
+          heading: bookmark.heading,
+          pitch: bookmark.pitch,
+          fov: bookmark.fov,
+          positionOffsetX: bookmark.positionOffsetX,
+          positionOffsetY: bookmark.positionOffsetY,
+          positionOffsetZ: bookmark.positionOffsetZ,
+          topdownAltitude: bookmark.topdownAltitude,
+          viewMode: bookmark.viewMode,
+          followingCallsign: null,  // Stop following when loading bookmark
+          preFollowState: null
+        })
+
+        return true
       },
 
       // Reset all
