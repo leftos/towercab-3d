@@ -77,6 +77,7 @@ function createWindow(): void {
   const bounds = getValidBounds(savedBounds)
 
   const mainWindow = new BrowserWindow({
+    title: `TowerCab 3D v${app.getVersion()}`,
     width: bounds.width ?? 1600,
     height: bounds.height ?? 900,
     x: bounds.x,

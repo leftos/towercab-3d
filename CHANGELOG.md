@@ -5,6 +5,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## v0.0.2-alpha
 
 ### Added
+- Version number now displayed in window title bar
 - 39 aircraft 3D models from Flightradar24/fr24-3d-models (GPL-2.0, originally from FlightGear):
   - Airbus: A318, A319, A320, A321, A330-200/300, A340-300/600, A350, A380
   - Boeing: 737-600/700/800/900, 747-400/8, 757-200/300, 767-200/300/400, 777-200/300, 787-8/9
