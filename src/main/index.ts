@@ -107,6 +107,8 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
+    // Set title after page loads (HTML <title> would otherwise override BrowserWindow title)
+    mainWindow.setTitle(`TowerCab 3D v${app.getVersion()}`)
     // Open DevTools in dev mode for easier debugging
     if (is.dev) {
       mainWindow.webContents.openDevTools({ mode: 'detach' })
