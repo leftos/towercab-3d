@@ -171,7 +171,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
         const terrainHeight = updatedPositions[0].height
         // Offset = terrain height - MSL height (height parameter is MSL-based)
         terrainOffsetRef.current = terrainHeight - height
-        console.log(`Terrain offset calculated: ${terrainOffsetRef.current.toFixed(1)}m (terrain: ${terrainHeight.toFixed(1)}m, MSL: ${height.toFixed(1)}m)`)
+        //console.log(`Terrain offset calculated: ${terrainOffsetRef.current.toFixed(1)}m (terrain: ${terrainHeight.toFixed(1)}m, MSL: ${height.toFixed(1)}m)`)
       }).catch((err) => {
         console.warn('Failed to sample terrain, using default offset:', err)
         terrainOffsetRef.current = 0
@@ -433,27 +433,28 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
       // Store cone dimensions for leader line calculation
       cone.metadata = { height: coneHeight, diameter: coneDiameter }
 
-      // Create material - semi-transparent to allow labels to show through
+      // Create material for the cone (invisible - Cesium handles cone rendering)
       const material = new BABYLON.StandardMaterial(`${callsign}_mat`, scene)
       material.emissiveColor = new BABYLON.Color3(color.r, color.g, color.b)
       material.diffuseColor = new BABYLON.Color3(color.r, color.g, color.b)
       material.disableLighting = true
-      material.alpha = 0.7
+      material.alpha = 0  // Invisible - Cesium cones are visible instead
       material.backFaceCulling = false
       cone.material = material
+      cone.isVisible = false  // Hide - Cesium handles cone rendering with proper depth occlusion
 
       // Create shadow mesh - a flat disc that sits on the ground
+      // Hidden since Cesium renders the visible shadows
       const shadow = BABYLON.MeshBuilder.CreateDisc(`${callsign}_shadow`, {
         radius: coneDiameter * 0.8,
         tessellation: 16
       }, scene)
-      // Rotate disc to be horizontal (default is vertical facing camera)
       shadow.rotation.x = Math.PI / 2
-      // Create dark semi-transparent material for shadow
+      shadow.isVisible = false // Hide - Cesium handles shadow rendering
       const shadowMaterial = new BABYLON.StandardMaterial(`${callsign}_shadow_mat`, scene)
       shadowMaterial.diffuseColor = new BABYLON.Color3(0, 0, 0)
       shadowMaterial.emissiveColor = new BABYLON.Color3(0, 0, 0)
-      shadowMaterial.alpha = 0.4
+      shadowMaterial.alpha = 0
       shadowMaterial.disableLighting = true
       shadowMaterial.backFaceCulling = false
       shadow.material = shadowMaterial
@@ -629,8 +630,9 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
       return
     }
 
-    meshData.cone.isVisible = true
-    if (meshData.shadow) meshData.shadow.isVisible = true
+    // Cone stays hidden - Cesium handles cone rendering with proper depth occlusion
+    // meshData.cone.isVisible = true
+    // if (meshData.shadow) meshData.shadow.isVisible = true
     meshData.label.isVisible = true
     meshData.leaderLine.isVisible = true
 

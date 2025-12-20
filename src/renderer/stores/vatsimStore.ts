@@ -64,7 +64,6 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
       // Detect stale data - if VATSIM timestamp hasn't changed, skip this update
       if (vatsimTimestamp === lastVatsimTimestamp) {
         set({ isLoading: false })
-        console.log('VATSIM data unchanged, skipping update')
         return
       }
 

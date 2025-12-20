@@ -27,15 +27,28 @@ function getScreenSpaceError(quality: number): number {
   return qualityMap[quality] ?? 4
 }
 
+// Cone pool size - pre-create this many cone entities at init time
+const CONE_POOL_SIZE = 100
+
 function CesiumViewer() {
   const containerRef = useRef<HTMLDivElement>(null)
   const babylonCanvasRef = useRef<HTMLCanvasElement>(null)
   const viewerRef = useRef<Cesium.Viewer | null>(null)
   const rootNodeSetupRef = useRef(false)
 
+  // Terrain offset: difference between ellipsoidal height and MSL elevation
+  // This corrects for geoid undulation (varies by location, e.g., -30m at Boston)
+  const terrainOffsetRef = useRef<number>(0)
+  const terrainOffsetReadyRef = useRef<boolean>(false)
+
+  // Cone pool: maps pool index to callsign (or null if unused)
+  const conePoolAssignmentsRef = useRef<Map<number, string | null>>(new Map())
+  const conePoolReadyRef = useRef<boolean>(false)
+
   // Use state for viewer and canvas to trigger re-renders when they're ready
   const [cesiumViewer, setCesiumViewer] = useState<Cesium.Viewer | null>(null)
   const [babylonCanvas, setBabylonCanvas] = useState<HTMLCanvasElement | null>(null)
+  const [buildingsTileset, setBuildingsTileset] = useState<Cesium.Cesium3DTileset | null>(null)
   const babylonCanvasCreatedRef = useRef(false)
 
   // Store state
@@ -47,6 +60,7 @@ function CesiumViewer() {
   const showGroundTraffic = useSettingsStore((state) => state.showGroundTraffic)
   const showAirborneTraffic = useSettingsStore((state) => state.showAirborneTraffic)
   const terrainQuality = useSettingsStore((state) => state.terrainQuality)
+  const show3DBuildings = useSettingsStore((state) => state.show3DBuildings)
 
   // Camera store for follow highlighting and view mode
   const followingCallsign = useCameraStore((state) => state.followingCallsign)
@@ -61,12 +75,13 @@ function CesiumViewer() {
   // Pass interpolated aircraft for smooth follow tracking
   useCesiumCamera(cesiumViewer, interpolatedAircraft)
 
-  // Initialize Babylon.js overlay for 3D aircraft rendering
+  // Initialize Babylon.js overlay for labels and leader lines
   // Uses state variables to ensure re-render when viewer/canvas are ready
   const babylonOverlay = useBabylonOverlay({
     cesiumViewer,
     canvas: babylonCanvas
   })
+
 
   // Create Babylon canvas after Cesium viewer is ready
   useEffect(() => {
@@ -129,6 +144,13 @@ function CesiumViewer() {
     viewer.scene.fog.enabled = true
     viewer.scene.globe.depthTestAgainstTerrain = true
 
+    // Enable shadows
+    viewer.shadows = true
+    viewer.shadowMap.softShadows = true
+
+    // Enable clock animation for model animations (propellers, etc.)
+    viewer.clock.shouldAnimate = true
+
     // Increase in-memory tile cache for smoother panning (default is 100)
     viewer.scene.globe.tileCacheSize = 1000
 
@@ -136,18 +158,47 @@ function CesiumViewer() {
     viewer.scene.globe.preloadAncestors = true
     viewer.scene.globe.preloadSiblings = true
 
-    // Wrap the default imagery provider with caching after a short delay
-    // to ensure the provider is fully initialized
-    setTimeout(() => {
-      const imageryLayers = viewer.imageryLayers
-      if (imageryLayers.length > 0) {
-        const baseLayer = imageryLayers.get(0)
-        createCachingImageryProvider(baseLayer.imageryProvider)
-      }
-    }, 500)
+    // Wrap the default imagery provider with caching once it's ready
+    const imageryLayers = viewer.imageryLayers
+    if (imageryLayers.length > 0) {
+      const baseLayer = imageryLayers.get(0)
+      const removeListener = baseLayer.readyEvent.addEventListener((provider) => {
+        removeListener()
+        if (!viewer.isDestroyed()) {
+          createCachingImageryProvider(provider)
+        }
+      })
+    }
 
     viewerRef.current = viewer
     setCesiumViewer(viewer)
+
+    // Create aircraft model pool - all models start hidden
+    // Using Cesium's sample aircraft model from GitHub
+    const aircraftModelUrl = 'https://raw.githubusercontent.com/CesiumGS/cesium/main/Apps/SampleData/models/CesiumAir/Cesium_Air.glb'
+    const defaultPos = Cesium.Cartesian3.fromDegrees(0, 0, 0)
+    const defaultHpr = new Cesium.HeadingPitchRoll(0, 0, 0)
+    const defaultOrientation = Cesium.Transforms.headingPitchRollQuaternion(defaultPos, defaultHpr)
+
+    for (let i = 0; i < CONE_POOL_SIZE; i++) {
+      viewer.entities.add({
+        id: `cone_pool_${i}`,
+        show: false, // Start hidden
+        position: defaultPos,
+        orientation: defaultOrientation,
+        model: {
+          uri: aircraftModelUrl,
+          minimumPixelSize: 24,
+          maximumScale: 50,
+          scale: 2,
+          runAnimations: true,
+          shadows: Cesium.ShadowMode.ENABLED
+        }
+      })
+      conePoolAssignmentsRef.current.set(i, null)
+    }
+    conePoolReadyRef.current = true
+    console.log(`Created aircraft model pool with ${CONE_POOL_SIZE} entities`)
 
     // Cleanup on unmount
     return () => {
@@ -162,6 +213,66 @@ function CesiumViewer() {
     if (!cesiumViewer) return
     cesiumViewer.scene.globe.maximumScreenSpaceError = getScreenSpaceError(terrainQuality)
   }, [cesiumViewer, terrainQuality])
+
+  // Manage OSM 3D Buildings tileset
+  useEffect(() => {
+    if (!cesiumViewer) return
+
+    let currentTileset: Cesium.Cesium3DTileset | null = null
+    let isCancelled = false
+
+    const loadBuildings = async () => {
+      if (show3DBuildings) {
+        try {
+          const tileset = await Cesium.createOsmBuildingsAsync()
+          if (isCancelled) return
+
+          cesiumViewer.scene.primitives.add(tileset)
+          currentTileset = tileset
+          setBuildingsTileset(tileset)
+        } catch (error) {
+          console.error('Error loading OSM Buildings:', error)
+        }
+      }
+    }
+
+    loadBuildings()
+
+    return () => {
+      isCancelled = true
+      if (currentTileset) {
+        cesiumViewer.scene.primitives.remove(currentTileset)
+        setBuildingsTileset(null)
+      }
+    }
+  }, [cesiumViewer, show3DBuildings])
+
+  // Calculate terrain offset when airport changes
+  // This corrects for the difference between MSL and ellipsoidal height
+  useEffect(() => {
+    if (!cesiumViewer || !currentAirport) {
+      terrainOffsetReadyRef.current = false
+      return
+    }
+
+    const towerPos = getTowerPosition(currentAirport, towerHeight)
+    const groundElevationMsl = currentAirport.elevation ? currentAirport.elevation * 0.3048 : 0
+
+    // Sample terrain to calculate offset between MSL elevation and actual terrain height
+    if (cesiumViewer.terrainProvider) {
+      const positions = [Cesium.Cartographic.fromDegrees(towerPos.longitude, towerPos.latitude)]
+      Cesium.sampleTerrainMostDetailed(cesiumViewer.terrainProvider, positions).then((updatedPositions) => {
+        const terrainHeight = updatedPositions[0].height
+        terrainOffsetRef.current = terrainHeight - groundElevationMsl
+        terrainOffsetReadyRef.current = true
+      }).catch(() => {
+        terrainOffsetRef.current = 0
+        terrainOffsetReadyRef.current = true
+      })
+    } else {
+      terrainOffsetReadyRef.current = true
+    }
+  }, [cesiumViewer, currentAirport, towerHeight])
 
   // Setup Babylon root node when airport changes OR when in orbit mode without airport
   useEffect(() => {
@@ -192,7 +303,8 @@ function CesiumViewer() {
 
   // Update aircraft entities
   const updateAircraftEntities = useCallback(() => {
-    if (!cesiumViewer) return
+    const viewer = viewerRef.current
+    if (!viewer || viewer.isDestroyed()) return
 
     // Determine the reference point for distance calculations
     // In orbit mode, use the followed aircraft; otherwise use the tower
@@ -318,6 +430,65 @@ function CesiumViewer() {
       const viewModeScale = viewMode === 'topdown'
         ? baseTopdownScale * (topdownAltitude / referenceAltitude)
         : 1.0
+
+      // Use model from pool - find or assign a pool slot for this aircraft
+      if (conePoolReadyRef.current && terrainOffsetReadyRef.current) {
+        // Calculate model position with terrain offset correction
+        // Ground aircraft sit on the ground, airborne aircraft use their altitude
+        const modelHeight = heightAboveEllipsoid + terrainOffsetRef.current + 4
+
+        // Find existing pool slot for this callsign, or get an unused one
+        let poolIndex = -1
+        for (const [idx, assignedCallsign] of conePoolAssignmentsRef.current.entries()) {
+          if (assignedCallsign === aircraft.callsign) {
+            poolIndex = idx
+            break
+          }
+        }
+        if (poolIndex === -1) {
+          // Find an unused slot
+          for (const [idx, assignedCallsign] of conePoolAssignmentsRef.current.entries()) {
+            if (assignedCallsign === null) {
+              poolIndex = idx
+              conePoolAssignmentsRef.current.set(idx, aircraft.callsign)
+              break
+            }
+          }
+        }
+
+        if (poolIndex !== -1) {
+          const modelEntity = viewer.entities.getById(`cone_pool_${poolIndex}`)
+          if (modelEntity) {
+            const position = Cesium.Cartesian3.fromDegrees(
+              aircraft.interpolatedLongitude,
+              aircraft.interpolatedLatitude,
+              modelHeight
+            )
+            // Model heading: Cesium models typically face +X, so heading=0 means east
+            // Subtract 90 to convert from compass heading (north=0) to model heading
+            const hpr = new Cesium.HeadingPitchRoll(
+              Cesium.Math.toRadians(aircraft.interpolatedHeading - 90),
+              0,
+              0
+            )
+            modelEntity.position = new Cesium.ConstantPositionProperty(position)
+            modelEntity.orientation = new Cesium.ConstantProperty(
+              Cesium.Transforms.headingPitchRollQuaternion(position, hpr)
+            )
+
+            // Update model scale based on view mode
+            if (modelEntity.model) {
+              modelEntity.model.scale = new Cesium.ConstantProperty(2 * viewModeScale)
+            }
+
+            // Show the model
+            modelEntity.show = true
+          }
+        }
+      }
+
+      // Update Babylon overlay (for labels - cones will be hidden)
+      // This depends on Babylon root node being set up
       if (rootNodeSetupRef.current) {
         babylonOverlay.updateAircraftMesh(
           aircraft.callsign,
@@ -444,8 +615,19 @@ function CesiumViewer() {
         babylonOverlay.removeAircraftMesh(callsign)
       }
     }
+
+    // Hide unused pool models
+    for (const [idx, assignedCallsign] of conePoolAssignmentsRef.current.entries()) {
+      if (assignedCallsign !== null && !seenCallsigns.has(assignedCallsign)) {
+        // Release this slot and hide the model
+        conePoolAssignmentsRef.current.set(idx, null)
+        const modelEntity = viewer.entities.getById(`cone_pool_${idx}`)
+        if (modelEntity) {
+          modelEntity.show = false
+        }
+      }
+    }
   }, [
-    cesiumViewer,
     interpolatedAircraft,
     currentAirport,
     towerHeight,
@@ -460,23 +642,27 @@ function CesiumViewer() {
     topdownAltitude
   ])
 
-  // Update aircraft on each render frame
+  // Update aircraft entities when data changes (outside of Cesium's render loop)
+  // This ensures entities are added before Cesium's next render cycle processes them
   useEffect(() => {
-    if (!cesiumViewer) return
+    updateAircraftEntities()
+  }, [updateAircraftEntities])
 
-    const removeListener = cesiumViewer.scene.postRender.addEventListener(() => {
-      // IMPORTANT: Sync camera FIRST so label projections use current camera position
+  // Sync Babylon overlay on each render frame
+  useEffect(() => {
+    const viewer = viewerRef.current
+    if (!viewer) return
+
+    // Sync Babylon overlay AFTER render when camera position is finalized
+    const removePostRender = viewer.scene.postRender.addEventListener(() => {
       babylonOverlay.syncCamera()
-      // Then update aircraft positions and labels
-      updateAircraftEntities()
-      // Finally render the Babylon scene
       babylonOverlay.render()
     })
 
     return () => {
-      removeListener()
+      removePostRender()
     }
-  }, [cesiumViewer, updateAircraftEntities, babylonOverlay])
+  }, [cesiumViewer, babylonOverlay])
 
   return (
     <div className="cesium-viewer-container" ref={containerRef} />

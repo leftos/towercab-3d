@@ -16,6 +16,8 @@ function ControlsBar() {
   const setCesiumIonToken = useSettingsStore((state) => state.setCesiumIonToken)
   const terrainQuality = useSettingsStore((state) => state.terrainQuality)
   const setTerrainQuality = useSettingsStore((state) => state.setTerrainQuality)
+  const show3DBuildings = useSettingsStore((state) => state.show3DBuildings)
+  const setShow3DBuildings = useSettingsStore((state) => state.setShow3DBuildings)
 
   // Camera store
   const viewMode = useCameraStore((state) => state.viewMode)
@@ -205,6 +207,20 @@ function ControlsBar() {
                   </div>
                   <p className="setting-hint">
                     Lower quality loads faster. Higher quality shows more detail at distance.
+                  </p>
+                </div>
+
+                <div className="setting-item">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={show3DBuildings}
+                      onChange={(e) => setShow3DBuildings(e.target.checked)}
+                    />
+                    Show 3D Buildings (OSM)
+                  </label>
+                  <p className="setting-hint">
+                    Display OpenStreetMap 3D buildings. May impact performance.
                   </p>
                 </div>
               </div>
