@@ -3,6 +3,7 @@ import { useSettingsStore } from '../../stores/settingsStore'
 import { useCameraStore } from '../../stores/cameraStore'
 import { useWeatherStore } from '../../stores/weatherStore'
 import GlobalSearchPanel from './GlobalSearchPanel'
+import VRButton from '../VR/VRButton'
 import './ControlsBar.css'
 
 type SettingsTab = 'general' | 'display' | 'graphics' | 'performance' | 'help'
@@ -219,6 +220,8 @@ function ControlsBar() {
         </div>
 
         <div className="controls-right">
+          <VRButton />
+
           <button
             className="control-button"
             onClick={() => setShowSettings(!showSettings)}

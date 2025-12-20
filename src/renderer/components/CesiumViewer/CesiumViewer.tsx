@@ -44,7 +44,11 @@ const MODEL_BASE_SCALE = 2.5        // Base scale for all aircraft models
 const MODEL_HEIGHT_OFFSET = 1       // Meters to raise models above ground to prevent clipping
 const MODEL_DEFAULT_COLOR = new Cesium.Color(0.85, 0.85, 0.85, 1.0)  // Muted gray until airline liveries
 
-function CesiumViewer() {
+interface CesiumViewerProps {
+  onViewerReady?: (viewer: Cesium.Viewer | null) => void
+}
+
+function CesiumViewer({ onViewerReady }: CesiumViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const babylonCanvasRef = useRef<HTMLCanvasElement>(null)
   const viewerRef = useRef<Cesium.Viewer | null>(null)
@@ -119,6 +123,12 @@ function CesiumViewer() {
     canvas: babylonCanvas
   })
 
+  // Notify parent when viewer is ready (for VR integration)
+  useEffect(() => {
+    if (onViewerReady) {
+      onViewerReady(cesiumViewer)
+    }
+  }, [cesiumViewer, onViewerReady])
 
   // Create Babylon canvas after Cesium viewer is ready
   useEffect(() => {

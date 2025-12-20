@@ -1,16 +1,18 @@
-import { useEffect, useState } from 'react'
-import { Ion } from 'cesium'
+import { useEffect, useState, useCallback } from 'react'
+import { Ion, Viewer } from 'cesium'
 import CesiumViewer from './components/CesiumViewer/CesiumViewer'
 import TopBar from './components/UI/TopBar'
 import AircraftPanel from './components/UI/AircraftPanel'
 import ControlsBar from './components/UI/ControlsBar'
 import AirportSelector from './components/UI/AirportSelector'
 import CommandInput from './components/UI/CommandInput'
+import VRScene from './components/VR/VRScene'
 import { useVatsimStore } from './stores/vatsimStore'
 import { useAirportStore } from './stores/airportStore'
 import { useSettingsStore } from './stores/settingsStore'
 import { useWeatherStore } from './stores/weatherStore'
 import { useCameraStore } from './stores/cameraStore'
+import { useVRStore } from './stores/vrStore'
 import { airportService } from './services/AirportService'
 import { aircraftDimensionsService } from './services/AircraftDimensionsService'
 
@@ -27,8 +29,19 @@ function App() {
   const stopAutoRefresh = useWeatherStore((state) => state.stopAutoRefresh)
   const clearWeather = useWeatherStore((state) => state.clearWeather)
 
+  // VR state
+  const isVRActive = useVRStore((state) => state.isVRActive)
+  const checkVRSupport = useVRStore((state) => state.checkVRSupport)
+
   const [isLoading, setIsLoading] = useState(true)
   const [loadingStatus, setLoadingStatus] = useState('Initializing...')
+
+  // Track Cesium viewer for VR integration
+  const [cesiumViewer, setCesiumViewer] = useState<Viewer | null>(null)
+
+  const handleViewerReady = useCallback((viewer: Viewer | null) => {
+    setCesiumViewer(viewer)
+  }, [])
 
   useEffect(() => {
     async function initialize() {
@@ -50,6 +63,9 @@ function App() {
         setLoadingStatus('Connecting to VATSIM...')
         startPolling()
 
+        // Check VR support
+        checkVRSupport()
+
         setIsLoading(false)
       } catch (error) {
         console.error('Initialization error:', error)
@@ -58,7 +74,7 @@ function App() {
     }
 
     initialize()
-  }, [cesiumIonToken, startPolling, loadAirports])
+  }, [cesiumIonToken, startPolling, loadAirports, checkVRSupport])
 
   // Fetch weather data when airport changes or weather effects are enabled
   // When no airport is selected but following an aircraft, use nearest METAR mode
@@ -140,14 +156,18 @@ function App() {
 
   return (
     <div className="app">
-      <TopBar />
+      {/* VR Scene - renders when VR is active */}
+      <VRScene cesiumViewer={cesiumViewer} />
+
+      {/* Hide normal UI when VR is active */}
+      {!isVRActive && <TopBar />}
       <div className="main-content">
-        <CommandInput />
-        <CesiumViewer />
-        <AircraftPanel />
+        {!isVRActive && <CommandInput />}
+        <CesiumViewer onViewerReady={handleViewerReady} />
+        {!isVRActive && <AircraftPanel />}
       </div>
-      <ControlsBar />
-      <AirportSelector />
+      {!isVRActive && <ControlsBar />}
+      {!isVRActive && <AirportSelector />}
     </div>
   )
 }
