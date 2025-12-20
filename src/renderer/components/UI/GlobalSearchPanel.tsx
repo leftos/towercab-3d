@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useVatsimStore } from '../../stores/vatsimStore'
-import { useCameraStore } from '../../stores/cameraStore'
+import { useActiveViewportCamera } from '../../hooks/useActiveViewportCamera'
 import './GlobalSearchPanel.css'
 
 interface SearchResult {
@@ -18,9 +18,8 @@ function GlobalSearchPanel() {
   const [query, setQuery] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const aircraftStates = useVatsimStore((state) => state.aircraftStates)
-  const followAircraftInOrbit = useCameraStore((state) => state.followAircraftInOrbit)
-  const followingCallsign = useCameraStore((state) => state.followingCallsign)
+  const allPilots = useVatsimStore((state) => state.allPilots)
+  const { followAircraftInOrbit, followingCallsign } = useActiveViewportCamera()
 
   // Focus input when opened
   useEffect(() => {
@@ -51,20 +50,24 @@ function GlobalSearchPanel() {
     const searchTerm = query.toLowerCase().trim()
     const results: SearchResult[] = []
 
-    for (const [, aircraft] of aircraftStates) {
-      const matchesCallsign = aircraft.callsign.toLowerCase().includes(searchTerm)
-      const matchesType = aircraft.aircraftType?.toLowerCase().includes(searchTerm)
-      const matchesDeparture = aircraft.departure?.toLowerCase().includes(searchTerm)
-      const matchesArrival = aircraft.arrival?.toLowerCase().includes(searchTerm)
+    for (const pilot of allPilots) {
+      const aircraftType = pilot.flight_plan?.aircraft_short || null
+      const departure = pilot.flight_plan?.departure || null
+      const arrival = pilot.flight_plan?.arrival || null
+
+      const matchesCallsign = pilot.callsign.toLowerCase().includes(searchTerm)
+      const matchesType = aircraftType?.toLowerCase().includes(searchTerm)
+      const matchesDeparture = departure?.toLowerCase().includes(searchTerm)
+      const matchesArrival = arrival?.toLowerCase().includes(searchTerm)
 
       if (matchesCallsign || matchesType || matchesDeparture || matchesArrival) {
         results.push({
-          callsign: aircraft.callsign,
-          aircraftType: aircraft.aircraftType,
-          departure: aircraft.departure,
-          arrival: aircraft.arrival,
-          altitude: aircraft.altitude,
-          groundspeed: aircraft.groundspeed
+          callsign: pilot.callsign,
+          aircraftType,
+          departure,
+          arrival,
+          altitude: pilot.altitude,
+          groundspeed: pilot.groundspeed
         })
       }
 
@@ -80,7 +83,7 @@ function GlobalSearchPanel() {
       if (!aStartsWithQuery && bStartsWithQuery) return 1
       return a.callsign.localeCompare(b.callsign)
     })
-  }, [query, aircraftStates])
+  }, [query, allPilots])
 
   const handleSelect = useCallback((callsign: string) => {
     followAircraftInOrbit(callsign)
@@ -143,10 +146,10 @@ function GlobalSearchPanel() {
             <div className="search-results">
               {query.trim() === '' ? (
                 <div className="search-hint">
-                  Start typing to search all {aircraftStates.size} aircraft on VATSIM
+                  Start typing to search all {allPilots.length} aircraft on VATSIM
                 </div>
               ) : searchResults.length === 0 ? (
-                <div className="no-results">No aircraft found matching "{query}"</div>
+                <div className="no-results">No aircraft found matching &quot;{query}&quot;</div>
               ) : (
                 searchResults.map((result) => (
                   <button

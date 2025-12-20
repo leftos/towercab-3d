@@ -14,7 +14,8 @@ interface ReferencePosition {
 
 interface VatsimStore {
   // Data
-  pilots: PilotData[]
+  allPilots: PilotData[] // All pilots from API (for global search, stats)
+  pilots: PilotData[] // Filtered pilots (near reference position)
   aircraftStates: Map<string, AircraftState>
   previousStates: Map<string, AircraftState>
 
@@ -44,10 +45,12 @@ interface VatsimStore {
   stopPolling: () => void
   updateAircraftState: (callsign: string, state: AircraftState) => void
   setReferencePosition: (lat: number, lon: number) => void
+  refilterPilots: () => void
 }
 
 export const useVatsimStore = create<VatsimStore>((set, get) => ({
   // Initial state
+  allPilots: [],
   pilots: [],
   aircraftStates: new Map(),
   previousStates: new Map(),
@@ -172,6 +175,7 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
       }
 
       set({
+        allPilots: data.pilots,
         pilots: filteredPilots,
         aircraftStates: newAircraftStates,
         previousStates: newPreviousStates,
@@ -231,5 +235,51 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
   // Called when airport changes or camera moves significantly
   setReferencePosition: (latitude: number, longitude: number) => {
     set({ referencePosition: { latitude, longitude } })
+    // Immediately refilter pilots with new reference position
+    get().refilterPilots()
+  },
+
+  // Refilter pilots based on current reference position
+  // Called when reference position changes or settings change
+  refilterPilots: () => {
+    const { allPilots, referencePosition, aircraftStates, previousStates } = get()
+    const aircraftDataRadiusNM = useSettingsStore.getState().aircraftDataRadiusNM
+
+    if (!referencePosition || allPilots.length === 0) {
+      return
+    }
+
+    // Filter pilots by distance from reference position
+    const filteredPilots = allPilots.filter(pilot => {
+      const distance = calculateDistanceNM(
+        referencePosition.latitude,
+        referencePosition.longitude,
+        pilot.latitude,
+        pilot.longitude
+      )
+      return distance <= aircraftDataRadiusNM
+    })
+
+    // Build new state maps containing only filtered aircraft
+    const newAircraftStates = new Map<string, AircraftState>()
+    const newPreviousStates = new Map<string, AircraftState>()
+
+    for (const pilot of filteredPilots) {
+      const callsign = pilot.callsign
+      // Preserve existing interpolation state if available
+      if (aircraftStates.has(callsign)) {
+        newAircraftStates.set(callsign, aircraftStates.get(callsign)!)
+      }
+      if (previousStates.has(callsign)) {
+        newPreviousStates.set(callsign, previousStates.get(callsign)!)
+      }
+    }
+
+    set({
+      pilots: filteredPilots,
+      pilotsFilteredByDistance: filteredPilots.length,
+      aircraftStates: newAircraftStates,
+      previousStates: newPreviousStates
+    })
   }
 }))

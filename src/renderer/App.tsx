@@ -6,6 +6,8 @@ import AircraftPanel from './components/UI/AircraftPanel'
 import ControlsBar from './components/UI/ControlsBar'
 import AirportSelector from './components/UI/AirportSelector'
 import CommandInput from './components/UI/CommandInput'
+import MeasuringTool from './components/UI/MeasuringTool'
+import ViewportManager from './components/Viewport/ViewportManager'
 import VRScene from './components/VR/VRScene'
 import { useVatsimStore } from './stores/vatsimStore'
 import { useAirportStore } from './stores/airportStore'
@@ -162,12 +164,14 @@ function App() {
       {/* Hide normal UI when VR is active */}
       {!isVRActive && <TopBar />}
       <div className="main-content">
-        {!isVRActive && <CommandInput />}
-        <CesiumViewer onViewerReady={handleViewerReady} />
-        {!isVRActive && <AircraftPanel />}
+        <ViewportManager mainViewportContent={<CesiumViewer onViewerReady={handleViewerReady} />}>
+          {!isVRActive && <CommandInput />}
+          {!isVRActive && <AircraftPanel />}
+        </ViewportManager>
       </div>
       {!isVRActive && <ControlsBar />}
       {!isVRActive && <AirportSelector />}
+      {!isVRActive && <MeasuringTool cesiumViewer={cesiumViewer} />}
     </div>
   )
 }

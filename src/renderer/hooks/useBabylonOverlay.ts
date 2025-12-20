@@ -210,11 +210,16 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     }
     window.addEventListener('resize', handleResize)
 
+    // Capture ref values before cleanup to avoid stale reference issues
+    // (refs may change by the time cleanup runs)
+    const labelsToDispose = aircraftLabelsRef.current
+    const cloudsToDispose = cloudMeshPoolRef.current
+
     return () => {
       window.removeEventListener('resize', handleResize)
 
       // Dispose all aircraft label resources BEFORE disposing scene
-      for (const [, labelData] of aircraftLabelsRef.current) {
+      for (const [, labelData] of labelsToDispose) {
         labelData.labelText.dispose()
         memoryCounters.guiControlsDisposed++
         labelData.leaderLine.dispose()
@@ -222,10 +227,10 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
         labelData.label.dispose()
         memoryCounters.guiControlsDisposed++
       }
-      aircraftLabelsRef.current.clear()
+      labelsToDispose.clear()
 
       // Dispose cloud plane resources
-      for (const cloudData of cloudMeshPoolRef.current) {
+      for (const cloudData of cloudsToDispose) {
         if (cloudData.material) {
           cloudData.material.dispose()
           memoryCounters.materialsDisposed++

@@ -106,7 +106,7 @@ function parseCloudLayers(metar: MetarData): CloudLayer[] {
 }
 
 // Grid size for position-based cache (in degrees, ~6nm)
-const POSITION_GRID_SIZE = 0.1
+const _POSITION_GRID_SIZE = 0.1
 
 // Minimum distance change to trigger a new nearest METAR fetch (in degrees, ~3nm)
 const POSITION_CHANGE_THRESHOLD = 0.05

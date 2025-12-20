@@ -1,9 +1,9 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useAirportStore } from '../../stores/airportStore'
 import { useSettingsStore } from '../../stores/settingsStore'
-import { useCameraStore } from '../../stores/cameraStore'
 import { useWeatherStore } from '../../stores/weatherStore'
 import { useAircraftInterpolation } from '../../hooks/useAircraftInterpolation'
+import { useActiveViewportCamera } from '../../hooks/useActiveViewportCamera'
 import { calculateDistanceNM, calculateBearing } from '../../utils/interpolation'
 import { formatAltitude, formatGroundspeed, formatHeading } from '../../utils/towerHeight'
 import { getTowerPosition } from '../../utils/towerHeight'
@@ -52,24 +52,25 @@ function AircraftPanel() {
     return () => clearInterval(interval)
   }, [])
 
-  // Camera store for follow functionality
-  const followingCallsign = useCameraStore((state) => state.followingCallsign)
-  const followAircraft = useCameraStore((state) => state.followAircraft)
-  const stopFollowing = useCameraStore((state) => state.stopFollowing)
-  const followMode = useCameraStore((state) => state.followMode)
-  const toggleFollowMode = useCameraStore((state) => state.toggleFollowMode)
-  const followZoom = useCameraStore((state) => state.followZoom)
-  const orbitDistance = useCameraStore((state) => state.orbitDistance)
+  // Active viewport camera for follow functionality
+  const {
+    followingCallsign,
+    followAircraft,
+    stopFollowing,
+    followMode,
+    toggleFollowMode,
+    followZoom,
+    orbitDistance
+  } = useActiveViewportCamera()
 
   // Determine if we're in orbit mode without an airport (following an aircraft globally)
   const isOrbitModeWithoutAirport = followMode === 'orbit' && followingCallsign && !currentAirport
 
   // Get the followed aircraft data for orbit mode display
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const followedAircraftData = useMemo(() => {
     if (!followingCallsign) return null
     return interpolatedStates.get(followingCallsign) || null
-  }, [followingCallsign, interpolatedStates, refreshTick])
+  }, [followingCallsign, interpolatedStates])
 
   // Check if an aircraft would be visible based on weather conditions
   // Similar logic to useBabylonOverlay.isDatablockVisibleByWeather

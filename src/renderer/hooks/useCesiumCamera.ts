@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useMemo } from 'react'
 import * as Cesium from 'cesium'
 import { useAirportStore } from '../stores/airportStore'
-import { useCameraStore } from '../stores/cameraStore'
+import { useViewportStore } from '../stores/viewportStore'
 import { getTowerPosition } from '../utils/towerHeight'
 import {
   calculateOrbitCameraPosition,
@@ -23,38 +23,49 @@ interface CameraControls {
  * Hook for managing Cesium camera controls in tower view mode
  * Camera is fixed at tower position, only orientation changes
  * @param viewer - The Cesium viewer instance
+ * @param viewportId - The ID of the viewport this camera controls
  * @param interpolatedAircraft - Map of interpolated aircraft states for smooth follow tracking
  */
 export function useCesiumCamera(
   viewer: Cesium.Viewer | null,
+  viewportId: string,
   interpolatedAircraft?: Map<string, InterpolatedAircraftState>
 ): CameraControls {
   const currentAirport = useAirportStore((state) => state.currentAirport)
   const towerHeight = useAirportStore((state) => state.towerHeight)
 
-  // Camera store - state values
-  const viewMode = useCameraStore((state) => state.viewMode)
-  const heading = useCameraStore((state) => state.heading)
-  const pitch = useCameraStore((state) => state.pitch)
-  const fov = useCameraStore((state) => state.fov)
-  const positionOffsetX = useCameraStore((state) => state.positionOffsetX)
-  const positionOffsetY = useCameraStore((state) => state.positionOffsetY)
-  const positionOffsetZ = useCameraStore((state) => state.positionOffsetZ)
-  const topdownAltitude = useCameraStore((state) => state.topdownAltitude)
-  const followingCallsign = useCameraStore((state) => state.followingCallsign)
-  const followZoom = useCameraStore((state) => state.followZoom)
-  const followMode = useCameraStore((state) => state.followMode)
-  const orbitDistance = useCameraStore((state) => state.orbitDistance)
-  const orbitHeading = useCameraStore((state) => state.orbitHeading)
-  const orbitPitch = useCameraStore((state) => state.orbitPitch)
+  // Viewport store - find this viewport's camera state
+  const viewports = useViewportStore((state) => state.viewports)
+  const thisViewport = useMemo(
+    () => viewports.find(v => v.id === viewportId),
+    [viewports, viewportId]
+  )
+  const cameraState = thisViewport?.cameraState
 
-  // Camera store - actions
-  const setHeading = useCameraStore((state) => state.setHeading)
-  const setPitch = useCameraStore((state) => state.setPitch)
-  const resetViewStore = useCameraStore((state) => state.resetView)
-  const followAircraftStore = useCameraStore((state) => state.followAircraft)
-  const stopFollowingStore = useCameraStore((state) => state.stopFollowing)
-  const clearPreFollowState = useCameraStore((state) => state.clearPreFollowState)
+  // Camera state values (from this viewport)
+  const viewMode = cameraState?.viewMode ?? '3d'
+  const heading = cameraState?.heading ?? 0
+  const pitch = cameraState?.pitch ?? -15
+  const fov = cameraState?.fov ?? 60
+  const positionOffsetX = cameraState?.positionOffsetX ?? 0
+  const positionOffsetY = cameraState?.positionOffsetY ?? 0
+  const positionOffsetZ = cameraState?.positionOffsetZ ?? 0
+  const topdownAltitude = cameraState?.topdownAltitude ?? 5000
+  const followingCallsign = cameraState?.followingCallsign ?? null
+  const followZoom = cameraState?.followZoom ?? 1
+  const followMode = cameraState?.followMode ?? 'tower'
+  const orbitDistance = cameraState?.orbitDistance ?? 500
+  const orbitHeading = cameraState?.orbitHeading ?? 0
+  const orbitPitch = cameraState?.orbitPitch ?? -20
+
+  // Viewport store - actions (these operate on this specific viewport when called from preRender,
+  // but we'll use setState directly for the preRender callback to avoid activeViewport routing)
+  const setHeading = useViewportStore((state) => state.setHeading)
+  const setPitch = useViewportStore((state) => state.setPitch)
+  const resetViewStore = useViewportStore((state) => state.resetView)
+  const followAircraftStore = useViewportStore((state) => state.followAircraft)
+  const stopFollowingStore = useViewportStore((state) => state.stopFollowing)
+  const clearPreFollowState = useViewportStore((state) => state.clearPreFollowState)
 
   // Track the previous airport to detect airport switches
   const previousAirportRef = useRef<string | null>(null)
@@ -83,7 +94,7 @@ export function useCesiumCamera(
   }, [clearPreFollowState, stopFollowingStore])
 
   // Use camera input hook for keyboard/mouse handling
-  useCameraInput(viewer, { onBreakTowerFollow: handleBreakTowerFollow })
+  useCameraInput(viewer, viewportId, { onBreakTowerFollow: handleBreakTowerFollow })
 
   // Get tower position
   const getTowerPos = useCallback(() => {
@@ -128,8 +139,26 @@ export function useCesiumCamera(
 
     const onPreRender = () => {
       // Handle camera following every frame (needed because interpolated positions update every frame)
-      const state = useCameraStore.getState()
+      // Get this viewport's camera state from the store
+      const storeState = useViewportStore.getState()
+      const thisVp = storeState.viewports.find(v => v.id === viewportId)
+      if (!thisVp) return
+      const state = thisVp.cameraState
       const currentInterpolatedAircraft = interpolatedAircraftRef.current
+
+      // Helper to update this viewport's camera state directly
+      const updateCameraState = (updates: Partial<typeof state>) => {
+        useViewportStore.setState((prev) => {
+          const viewportsCopy = [...prev.viewports]
+          const idx = viewportsCopy.findIndex(v => v.id === viewportId)
+          if (idx === -1) return prev
+          viewportsCopy[idx] = {
+            ...viewportsCopy[idx],
+            cameraState: { ...viewportsCopy[idx].cameraState, ...updates }
+          }
+          return { viewports: viewportsCopy }
+        })
+      }
 
       // Skip if animating (let the animation complete)
       if (isAnimatingToFollowRef.current || isFlyingToAirportRef.current) {
@@ -151,7 +180,7 @@ export function useCesiumCamera(
         const cameraPitch = Cesium.Math.toDegrees(viewer.camera.pitch)
         const normalizedHeading = ((cameraHeading % 360) + 360) % 360
         if (Math.abs(normalizedHeading - state.heading) > 0.5 || Math.abs(cameraPitch - state.pitch) > 0.5) {
-          useCameraStore.setState({
+          updateCameraState({
             heading: normalizedHeading,
             pitch: cameraPitch
           })
@@ -205,7 +234,7 @@ export function useCesiumCamera(
 
           // Update store with calculated values (for UI display) - but only if changed
           if (Math.abs(orbitResult.heading - state.heading) > 0.1 || Math.abs(orbitResult.pitch - state.pitch) > 0.1) {
-            useCameraStore.setState({
+            updateCameraState({
               heading: orbitResult.heading,
               pitch: orbitResult.pitch
             })
@@ -251,7 +280,7 @@ export function useCesiumCamera(
 
           // Update store with calculated values (for UI display) - but only if changed
           if (Math.abs(lookAt.heading - state.heading) > 0.1 || Math.abs(lookAt.pitch - state.pitch) > 0.1) {
-            useCameraStore.setState({
+            updateCameraState({
               heading: lookAt.heading,
               pitch: lookAt.pitch
             })
@@ -266,7 +295,7 @@ export function useCesiumCamera(
         viewer.scene.preRender.removeEventListener(onPreRender)
       }
     }
-  }, [viewer])
+  }, [viewer, viewportId])
 
   // Update camera position and orientation
   useEffect(() => {

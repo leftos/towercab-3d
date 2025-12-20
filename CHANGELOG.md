@@ -2,9 +2,46 @@
 
 All notable changes to TowerCab 3D will be documented in this file.
 
-## v0.0.3-alpha
+## v0.0.4-alpha
 
 ### Added
+- Multi-viewport system with inset viewports:
+  - Click "Add Inset" button to create additional viewports overlaid on the main view
+  - Each viewport has independent camera controls (heading, pitch, FOV, follow mode)
+  - Click-to-activate system: cyan border indicates active viewport, keyboard/mouse controls affect only the active viewport
+  - Inset viewports are draggable (via title bar) and resizable (via edges/corners)
+  - Close button (×) to remove inset viewports
+  - Performance warning at 3+ insets, severe warning at 6+ insets
+  - Per-airport viewport layout persistence (inset positions/sizes saved per airport)
+  - Each viewport can follow different aircraft independently
+- ViewportStore for centralized viewport and per-viewport camera state management
+- InsetCesiumViewer wrapper for delayed initialization (prevents WebGL context errors)
+
+### Changed
+- Camera state moved from cameraStore to viewportStore (per-viewport camera state)
+- CesiumViewer now accepts viewportId and isInset props
+- useCesiumCamera and useCameraInput hooks now operate on specific viewports
+- Inset viewports use reduced quality settings for performance (lower MSAA, no shadows, smaller tile cache, no 3D buildings)
+
+### Fixed
+- Main viewport controls now work correctly after localStorage migration (fixed main viewport ID normalization)
+
+## v0.0.3-alpha
+
+### Changed
+- Status bar now displays total pilots on VATSIM network (previously showed only nearby aircraft)
+- Global search (Ctrl+K) now searches all pilots on the network, not just nearby aircraft
+
+### Fixed
+- Aircraft now refilter immediately when changing airports (previously waited up to 3 seconds for next API poll)
+- WASD diagonal movement now works correctly (e.g., W+A moves forward-left at proper speed)
+
+### Added
+- Measuring tool for measuring distances on the terrain:
+  - Click the Measure button in the controls bar to activate
+  - Click any two points on the terrain to measure the distance between them
+  - Distance shown in meters/feet for short distances, kilometers/nautical miles for longer distances
+  - Dashed line visualization connects the two measurement points
 - WebXR VR support foundation:
   - VR button appears in controls bar when a VR headset is detected (via Quest Link, SteamVR, or similar)
   - Dual-pass Cesium stereo rendering captures left/right eye views with proper frustum offsets

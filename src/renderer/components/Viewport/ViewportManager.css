@@ -1,0 +1,134 @@
+.viewport-manager {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+/* Inset viewport layer sits on top of main viewport */
+.inset-viewport-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none; /* Allow clicks to pass through to main viewport */
+  z-index: 50;
+}
+
+/* But inset viewports themselves should receive events */
+.inset-viewport-layer .viewport-container {
+  pointer-events: auto;
+}
+
+/* Placeholder for inset content before Phase 3 */
+.inset-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  background: linear-gradient(135deg, #1a1a2f 0%, #0d0d15 100%);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  gap: 4px;
+}
+
+.inset-placeholder .placeholder-hint {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+/* Add inset button */
+.add-inset-button {
+  position: absolute;
+  bottom: 60px; /* Above ControlsBar */
+  right: 20px;
+  z-index: 55;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: rgba(20, 20, 30, 0.9);
+  border: 1px solid rgba(79, 195, 247, 0.4);
+  border-radius: 6px;
+  color: #4fc3f7;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.add-inset-button:hover {
+  background: rgba(30, 35, 50, 0.95);
+  border-color: #4fc3f7;
+  box-shadow: 0 0 12px rgba(79, 195, 247, 0.3);
+}
+
+.add-inset-button svg {
+  opacity: 0.8;
+}
+
+.add-inset-button:hover svg {
+  opacity: 1;
+}
+
+/* Performance warning banner */
+.viewport-perf-warning {
+  position: absolute;
+  bottom: 110px; /* Above add-inset-button */
+  right: 20px;
+  z-index: 55;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(255, 193, 7, 0.15);
+  border: 1px solid rgba(255, 193, 7, 0.5);
+  border-radius: 6px;
+  color: #ffc107;
+  font-size: 12px;
+  max-width: 320px;
+  animation: slideIn 0.3s ease;
+}
+
+.viewport-perf-warning.severe {
+  background: rgba(244, 67, 54, 0.15);
+  border-color: rgba(244, 67, 54, 0.5);
+  color: #f44336;
+}
+
+.viewport-perf-warning .warning-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.viewport-perf-warning .warning-text {
+  flex: 1;
+  line-height: 1.3;
+}
+
+.viewport-perf-warning .warning-dismiss {
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+  opacity: 0.7;
+  transition: opacity 0.15s ease;
+}
+
+.viewport-perf-warning .warning-dismiss:hover {
+  opacity: 1;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

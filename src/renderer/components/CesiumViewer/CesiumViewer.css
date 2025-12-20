@@ -7,6 +7,12 @@
   overflow: hidden;
 }
 
+/* Inset viewports fill their container completely */
+.cesium-viewer-container.inset {
+  top: 0;
+  bottom: 0;
+}
+
 /* Override some Cesium default styles */
 .cesium-viewer-container .cesium-viewer {
   width: 100%;

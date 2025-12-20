@@ -7,8 +7,7 @@ function TopBar() {
   const currentAirport = useAirportStore((state) => state.currentAirport)
   const setAirportSelectorOpen = useAirportStore((state) => state.setAirportSelectorOpen)
   const isConnected = useVatsimStore((state) => state.isConnected)
-  const lastUpdate = useVatsimStore((state) => state.lastUpdate)
-  const pilots = useVatsimStore((state) => state.pilots)
+  const totalPilotsFromApi = useVatsimStore((state) => state.totalPilotsFromApi)
 
   const [zuluTime, setZuluTime] = useState('')
 
@@ -53,7 +52,7 @@ function TopBar() {
 
       <div className="top-bar-right">
         <div className="status-info">
-          <span className="aircraft-count">{pilots.length} aircraft online</span>
+          <span className="aircraft-count">{totalPilotsFromApi} pilots online</span>
           <span className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>
             {isConnected ? 'Connected' : 'Disconnected'}
           </span>

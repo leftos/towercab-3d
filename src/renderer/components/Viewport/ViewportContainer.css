@@ -1,0 +1,219 @@
+.viewport-container {
+  position: relative;
+  box-sizing: border-box;
+  border: 2px solid transparent;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  overflow: hidden;
+}
+
+/* Main viewport fills its container */
+.viewport-container.main {
+  width: 100%;
+  height: 100%;
+}
+
+/* Inset viewports are absolutely positioned */
+.viewport-container.inset {
+  position: absolute;
+  background: #0a0a0f;
+  border-radius: 6px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  min-width: 200px;
+  min-height: 150px;
+}
+
+/* Active state - cyan border and glow */
+.viewport-container.active {
+  border-color: #00ffff;
+  box-shadow: 0 0 15px rgba(0, 255, 255, 0.4),
+              inset 0 0 8px rgba(0, 255, 255, 0.1);
+}
+
+/* Inactive state - subtle border */
+.viewport-container.inactive {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.viewport-container.inactive.inset {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Content area fills the container */
+.viewport-content {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+/* Inset header with drag handle */
+.viewport-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 28px;
+  background: linear-gradient(to bottom, rgba(40, 40, 60, 0.95), rgba(25, 25, 40, 0.9));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  z-index: 10;
+  cursor: move;
+  user-select: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.viewport-container.active .viewport-header {
+  background: linear-gradient(to bottom, rgba(50, 60, 80, 0.95), rgba(30, 40, 55, 0.9));
+  border-bottom-color: rgba(0, 255, 255, 0.3);
+}
+
+.viewport-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viewport-container.active .viewport-label {
+  color: #00ffff;
+}
+
+.viewport-close-button {
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: rgba(255, 100, 100, 0.7);
+  color: white;
+  border-radius: 4px;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease;
+}
+
+.viewport-close-button:hover {
+  background: rgba(255, 80, 80, 1);
+}
+
+/* Active indicator dot (for non-inset viewports) */
+.active-indicator {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 8px;
+  height: 8px;
+  background: #00ffff;
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(0, 255, 255, 0.8);
+  z-index: 100;
+  pointer-events: none;
+}
+
+.viewport-container.inset .active-indicator {
+  display: none; /* Header shows active state for insets */
+}
+
+/* When inset has header, adjust content area */
+.viewport-container.inset .viewport-content {
+  position: absolute;
+  top: 28px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: auto;
+}
+
+/* Dragging/resizing states */
+.viewport-container.dragging,
+.viewport-container.resizing {
+  transition: none;
+  user-select: none;
+}
+
+.viewport-container.dragging .viewport-content,
+.viewport-container.resizing .viewport-content {
+  pointer-events: none;
+}
+
+/* Resize handles */
+.resize-handle {
+  position: absolute;
+  z-index: 20;
+}
+
+/* Edge handles - thin strips along edges */
+.resize-n {
+  top: 0;
+  left: 8px;
+  right: 8px;
+  height: 6px;
+  cursor: ns-resize;
+}
+
+.resize-s {
+  bottom: 0;
+  left: 8px;
+  right: 8px;
+  height: 6px;
+  cursor: ns-resize;
+}
+
+.resize-e {
+  right: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 6px;
+  cursor: ew-resize;
+}
+
+.resize-w {
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 6px;
+  cursor: ew-resize;
+}
+
+/* Corner handles - small squares at corners */
+.resize-nw {
+  top: 0;
+  left: 0;
+  width: 12px;
+  height: 12px;
+  cursor: nwse-resize;
+}
+
+.resize-ne {
+  top: 0;
+  right: 0;
+  width: 12px;
+  height: 12px;
+  cursor: nesw-resize;
+}
+
+.resize-sw {
+  bottom: 0;
+  left: 0;
+  width: 12px;
+  height: 12px;
+  cursor: nesw-resize;
+}
+
+.resize-se {
+  bottom: 0;
+  right: 0;
+  width: 12px;
+  height: 12px;
+  cursor: nwse-resize;
+}
+
+/* Visual indicator on hover for active viewport */
+.viewport-container.active .resize-handle:hover {
+  background: rgba(0, 255, 255, 0.2);
+}

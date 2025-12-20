@@ -1,10 +1,11 @@
-import { useEffect, useRef, useCallback, useState } from 'react'
+import { useEffect, useRef, useCallback, useState, useMemo } from 'react'
 import * as Cesium from 'cesium'
 import { useAirportStore } from '../../stores/airportStore'
 import { useSettingsStore } from '../../stores/settingsStore'
-import { useCameraStore } from '../../stores/cameraStore'
+import { useViewportStore } from '../../stores/viewportStore'
 import { useVatsimStore } from '../../stores/vatsimStore'
 import { useWeatherStore } from '../../stores/weatherStore'
+import { useMeasureStore } from '../../stores/measureStore'
 import { useAircraftInterpolation } from '../../hooks/useAircraftInterpolation'
 import { useCesiumCamera } from '../../hooks/useCesiumCamera'
 import { useBabylonOverlay, getMemoryCounters } from '../../hooks/useBabylonOverlay'
@@ -45,10 +46,13 @@ const MODEL_HEIGHT_OFFSET = 1       // Meters to raise models above ground to pr
 const MODEL_DEFAULT_COLOR = new Cesium.Color(0.85, 0.85, 0.85, 1.0)  // Muted gray until airline liveries
 
 interface CesiumViewerProps {
+  viewportId?: string
+  /** Whether this is an inset viewport (uses reduced quality settings for performance) */
+  isInset?: boolean
   onViewerReady?: (viewer: Cesium.Viewer | null) => void
 }
 
-function CesiumViewer({ onViewerReady }: CesiumViewerProps) {
+function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: CesiumViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const babylonCanvasRef = useRef<HTMLCanvasElement>(null)
   const viewerRef = useRef<Cesium.Viewer | null>(null)
@@ -58,6 +62,10 @@ function CesiumViewer({ onViewerReady }: CesiumViewerProps) {
   // This corrects for geoid undulation (varies by location, e.g., -30m at Boston)
   const terrainOffsetRef = useRef<number>(0)
   const terrainOffsetReadyRef = useRef<boolean>(false)
+
+  // Track last reference position to prevent redundant setReferencePosition calls
+  // which would otherwise cause infinite render loops
+  const lastRefPositionRef = useRef<{ lat: number; lon: number } | null>(null)
 
   // Cone pool: maps pool index to callsign (or null if unused)
   const conePoolAssignmentsRef = useRef<Map<number, string | null>>(new Map())
@@ -73,7 +81,7 @@ function CesiumViewer({ onViewerReady }: CesiumViewerProps) {
   // Use state for viewer and canvas to trigger re-renders when they're ready
   const [cesiumViewer, setCesiumViewer] = useState<Cesium.Viewer | null>(null)
   const [babylonCanvas, setBabylonCanvas] = useState<HTMLCanvasElement | null>(null)
-  const [buildingsTileset, setBuildingsTileset] = useState<Cesium.Cesium3DTileset | null>(null)
+  const [_buildingsTileset, setBuildingsTileset] = useState<Cesium.Cesium3DTileset | null>(null)
   const babylonCanvasCreatedRef = useRef(false)
 
   // Store state
@@ -97,15 +105,27 @@ function CesiumViewer({ onViewerReady }: CesiumViewerProps) {
   const fogDensity = useWeatherStore((state) => state.fogDensity)
   const updateCameraPosition = useWeatherStore((state) => state.updateCameraPosition)
 
-  // Camera store for follow highlighting and view mode
-  const followingCallsign = useCameraStore((state) => state.followingCallsign)
-  const followMode = useCameraStore((state) => state.followMode)
-  const viewMode = useCameraStore((state) => state.viewMode)
-  const topdownAltitude = useCameraStore((state) => state.topdownAltitude)
+  // Measure store for measuring mode
+  const isMeasuring = useMeasureStore((state) => state.isActive)
+  const measurePoint1 = useMeasureStore((state) => state.point1)
+  const setMeasurePoint1 = useMeasureStore((state) => state.setPoint1)
+  const setMeasurePoint2 = useMeasureStore((state) => state.setPoint2)
+
+  // Viewport store for follow highlighting and view mode (read from this viewport)
+  const viewports = useViewportStore((state) => state.viewports)
+  const thisViewport = useMemo(
+    () => viewports.find(v => v.id === viewportId),
+    [viewports, viewportId]
+  )
+  const cameraState = thisViewport?.cameraState
+  const followingCallsign = cameraState?.followingCallsign ?? null
+  const followMode = cameraState?.followMode ?? 'tower'
+  const viewMode = cameraState?.viewMode ?? '3d'
+  const topdownAltitude = cameraState?.topdownAltitude ?? 5000
 
   // VATSIM store for setting reference position
   const setReferencePosition = useVatsimStore((state) => state.setReferencePosition)
-  const aircraftStates = useVatsimStore((state) => state.aircraftStates)
+  // Note: aircraftStates is read directly from store via getState() to avoid infinite loops
   const totalPilotsFromApi = useVatsimStore((state) => state.totalPilotsFromApi)
   const pilotsFilteredByDistance = useVatsimStore((state) => state.pilotsFilteredByDistance)
 
@@ -114,7 +134,7 @@ function CesiumViewer({ onViewerReady }: CesiumViewerProps) {
 
   // Initialize camera controls (this hook manages all camera behavior)
   // Pass interpolated aircraft for smooth follow tracking
-  useCesiumCamera(cesiumViewer, interpolatedAircraft)
+  useCesiumCamera(cesiumViewer, viewportId, interpolatedAircraft)
 
   // Initialize Babylon.js overlay for labels and leader lines
   // Uses state variables to ensure re-render when viewer/canvas are ready
@@ -169,6 +189,7 @@ function CesiumViewer({ onViewerReady }: CesiumViewerProps) {
     }
 
     // Create viewer with default terrain and imagery
+    // Insets use reduced quality for performance
     const viewer = new Cesium.Viewer(containerRef.current, {
       terrain: Cesium.Terrain.fromWorldTerrain(),
       animation: false,
@@ -183,7 +204,7 @@ function CesiumViewer({ onViewerReady }: CesiumViewerProps) {
       navigationHelpButton: false,
       navigationInstructionsInitiallyVisible: false,
       creditContainer: document.createElement('div'), // Hide credits
-      msaaSamples: 4
+      msaaSamples: isInset ? 2 : 4  // Reduced MSAA for insets
     })
 
     // Configure scene
@@ -191,24 +212,32 @@ function CesiumViewer({ onViewerReady }: CesiumViewerProps) {
     viewer.scene.fog.enabled = true
     viewer.scene.globe.depthTestAgainstTerrain = true
 
-
-    // Enable shadows
-    viewer.shadows = true
-    viewer.shadowMap.softShadows = true
-    viewer.shadowMap.size = 2048  // Higher resolution shadows
-    viewer.shadowMap.maximumDistance = 10000.0  // Shadow distance in meters
-    viewer.terrainShadows = Cesium.ShadowMode.ENABLED  // Terrain casts and receives shadows
+    // Shadows - disabled for insets for performance
+    if (isInset) {
+      viewer.shadows = false
+      viewer.terrainShadows = Cesium.ShadowMode.DISABLED
+    } else {
+      viewer.shadows = true
+      viewer.shadowMap.softShadows = true
+      viewer.shadowMap.size = 2048  // Higher resolution shadows
+      viewer.shadowMap.maximumDistance = 10000.0  // Shadow distance in meters
+      viewer.terrainShadows = Cesium.ShadowMode.ENABLED  // Terrain casts and receives shadows
+    }
 
     // Enable clock animation for model animations (propellers, etc.)
     viewer.clock.shouldAnimate = true
 
-    // In-memory tile cache - configurable via settings
-    // Lower = less RAM usage, higher = smoother panning
-    viewer.scene.globe.tileCacheSize = useSettingsStore.getState().inMemoryTileCacheSize
+    // In-memory tile cache - reduced for insets (50 vs user setting)
+    viewer.scene.globe.tileCacheSize = isInset ? 50 : useSettingsStore.getState().inMemoryTileCacheSize
 
-    // Preload nearby tiles for smoother camera movement
-    viewer.scene.globe.preloadAncestors = true
-    viewer.scene.globe.preloadSiblings = true
+    // Tile quality - insets use higher screen space error (lower quality) for performance
+    if (isInset) {
+      viewer.scene.globe.maximumScreenSpaceError = 16  // Lower quality tiles
+    }
+
+    // Preload nearby tiles for smoother camera movement (disabled for insets)
+    viewer.scene.globe.preloadAncestors = !isInset
+    viewer.scene.globe.preloadSiblings = !isInset
 
     // NOTE: Custom tile caching disabled - it breaks Cesium's request throttling
     // by always returning Promises instead of undefined for deferred requests.
@@ -270,7 +299,7 @@ function CesiumViewer({ onViewerReady }: CesiumViewerProps) {
       viewerRef.current = null
       setCesiumViewer(null)
     }
-  }, [cesiumIonToken])
+  }, [cesiumIonToken, isInset])
 
   // Clear old IndexedDB tile cache on startup (we now use Service Worker caching)
   useEffect(() => {
@@ -415,8 +444,11 @@ function CesiumViewer({ onViewerReady }: CesiumViewerProps) {
   }, [cesiumViewer, timeMode, fixedTimeHour, currentAirport, towerHeight])
 
   // Manage OSM 3D Buildings tileset
+  // Skip loading buildings for inset viewports to reduce memory usage and prevent WebGL context issues
   useEffect(() => {
     if (!cesiumViewer) return
+    // Skip buildings for insets - they use reduced quality and don't need buildings
+    if (isInset) return
 
     let currentTileset: Cesium.Cesium3DTileset | null = null
     let isCancelled = false
@@ -449,7 +481,7 @@ function CesiumViewer({ onViewerReady }: CesiumViewerProps) {
         setBuildingsTileset(null)
       }
     }
-  }, [cesiumViewer, show3DBuildings])
+  }, [cesiumViewer, show3DBuildings, isInset])
 
   // Calculate terrain offset when airport changes or when in orbit mode without airport
   // This corrects for the difference between MSL and ellipsoidal height
@@ -494,8 +526,19 @@ function CesiumViewer({ onViewerReady }: CesiumViewerProps) {
 
   // Setup Babylon root node when airport changes OR when in orbit mode without airport
   // Also set reference position for VATSIM distance filtering
+  // Note: We avoid including aircraftStates in dependencies to prevent infinite loops
+  // (setReferencePosition -> refilterPilots -> updates aircraftStates -> re-triggers effect)
   useEffect(() => {
     if (!babylonOverlay.sceneReady) return
+
+    // Helper to set reference position only if it changed (prevents infinite loops)
+    const setRefPosIfChanged = (lat: number, lon: number) => {
+      const last = lastRefPositionRef.current
+      if (!last || Math.abs(last.lat - lat) > 0.0001 || Math.abs(last.lon - lon) > 0.0001) {
+        lastRefPositionRef.current = { lat, lon }
+        setReferencePosition(lat, lon)
+      }
+    }
 
     // If we have an airport, use tower position as root
     if (currentAirport) {
@@ -504,15 +547,15 @@ function CesiumViewer({ onViewerReady }: CesiumViewerProps) {
       rootNodeSetupRef.current = true
 
       // Set reference position for VATSIM filtering - only store aircraft near tower
-      setReferencePosition(towerPos.latitude, towerPos.longitude)
+      setRefPosIfChanged(towerPos.latitude, towerPos.longitude)
       return
     }
 
     // If in orbit mode following an aircraft without airport, use aircraft position as root
     if (followMode === 'orbit' && followingCallsign) {
-      // Try interpolated data first, fall back to raw store data
+      // Try interpolated data first, fall back to raw store data (read directly to avoid reactive dependency)
       const interpolated = interpolatedAircraft.get(followingCallsign)
-      const rawAircraft = aircraftStates.get(followingCallsign)
+      const rawAircraft = useVatsimStore.getState().aircraftStates.get(followingCallsign)
 
       // Use interpolated if available, otherwise use raw store data
       const lat = interpolated?.interpolatedLatitude ?? rawAircraft?.latitude
@@ -525,10 +568,11 @@ function CesiumViewer({ onViewerReady }: CesiumViewerProps) {
         rootNodeSetupRef.current = true
 
         // Set reference position to followed aircraft for VATSIM filtering
-        setReferencePosition(lat, lon)
+        setRefPosIfChanged(lat, lon)
       }
     }
-  }, [currentAirport, towerHeight, babylonOverlay.sceneReady, babylonOverlay.setupRootNode, followMode, followingCallsign, interpolatedAircraft, aircraftStates, setReferencePosition])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally using specific babylonOverlay properties
+  }, [currentAirport, towerHeight, babylonOverlay.sceneReady, babylonOverlay.setupRootNode, followMode, followingCallsign, interpolatedAircraft, setReferencePosition])
 
   // Update aircraft entities
   const updateAircraftEntities = useCallback(() => {
@@ -545,7 +589,7 @@ function CesiumViewer({ onViewerReady }: CesiumViewerProps) {
     if (followMode === 'orbit' && followingCallsign) {
       // Try interpolated data first, fall back to raw store data
       const followedAircraft = interpolatedAircraft.get(followingCallsign)
-      const rawAircraft = aircraftStates.get(followingCallsign)
+      const rawAircraft = useVatsimStore.getState().aircraftStates.get(followingCallsign)
 
       if (followedAircraft) {
         refLat = followedAircraft.interpolatedLatitude
@@ -1046,7 +1090,7 @@ function CesiumViewer({ onViewerReady }: CesiumViewerProps) {
     }
   }, [
     interpolatedAircraft,
-    aircraftStates,
+    // Note: aircraftStates read via getState() - not included to avoid render loops
     currentAirport,
     towerHeight,
     labelVisibilityDistance,
@@ -1134,8 +1178,44 @@ function CesiumViewer({ onViewerReady }: CesiumViewerProps) {
     return () => clearInterval(intervalId)
   }, [babylonOverlay, totalPilotsFromApi, pilotsFilteredByDistance])
 
+  // Measuring mode click handler
+  useEffect(() => {
+    if (!cesiumViewer || !isMeasuring) return
+
+    const handler = new Cesium.ScreenSpaceEventHandler(cesiumViewer.scene.canvas)
+
+    handler.setInputAction((click: { position: Cesium.Cartesian2 }) => {
+      // Pick position on terrain
+      const cartesian = cesiumViewer.scene.pickPosition(click.position)
+      if (!cartesian) return
+
+      // Convert to cartographic (lat/lon/height)
+      const cartographic = Cesium.Cartographic.fromCartesian(cartesian)
+
+      const point = {
+        cartesian,
+        cartographic: {
+          latitude: Cesium.Math.toDegrees(cartographic.latitude),
+          longitude: Cesium.Math.toDegrees(cartographic.longitude),
+          height: cartographic.height
+        }
+      }
+
+      // Set point1 if not set, otherwise set point2
+      if (!measurePoint1) {
+        setMeasurePoint1(point)
+      } else {
+        setMeasurePoint2(point)
+      }
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK)
+
+    return () => {
+      handler.destroy()
+    }
+  }, [cesiumViewer, isMeasuring, measurePoint1, setMeasurePoint1, setMeasurePoint2])
+
   return (
-    <div className="cesium-viewer-container" ref={containerRef} />
+    <div className={`cesium-viewer-container ${isInset ? 'inset' : ''}`} ref={containerRef} />
   )
 }
 

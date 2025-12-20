@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, screen, session } from 'electron'
+import { app, BrowserWindow, shell, screen, session, dialog } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -118,7 +118,6 @@ function createWindow(): void {
   // Always show crash dialog (important for debugging production issues)
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
     console.error('Renderer process crashed:', details.reason)
-    const { dialog } = require('electron')
     dialog.showErrorBox(
       'Renderer Crashed',
       `Reason: ${details.reason}\nExit code: ${details.exitCode}`

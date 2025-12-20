@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useCameraStore } from '../../stores/cameraStore'
 import { useWeatherStore } from '../../stores/weatherStore'
+import { useMeasureStore } from '../../stores/measureStore'
+import { useActiveViewportCamera } from '../../hooks/useActiveViewportCamera'
 import GlobalSearchPanel from './GlobalSearchPanel'
 import VRButton from '../VR/VRButton'
 import './ControlsBar.css'
@@ -76,19 +78,27 @@ function ControlsBar() {
   const aircraftDataRadiusNM = useSettingsStore((state) => state.aircraftDataRadiusNM)
   const setAircraftDataRadiusNM = useSettingsStore((state) => state.setAircraftDataRadiusNM)
 
-  // Camera store
-  const viewMode = useCameraStore((state) => state.viewMode)
-  const toggleViewMode = useCameraStore((state) => state.toggleViewMode)
-  const heading = useCameraStore((state) => state.heading)
-  const pitch = useCameraStore((state) => state.pitch)
-  const fov = useCameraStore((state) => state.fov)
-  const topdownAltitude = useCameraStore((state) => state.topdownAltitude)
-  const followingCallsign = useCameraStore((state) => state.followingCallsign)
-  const resetView = useCameraStore((state) => state.resetView)
-  const setFov = useCameraStore((state) => state.setFov)
+  // Active viewport camera state (from viewportStore)
+  const {
+    viewMode,
+    toggleViewMode,
+    heading,
+    pitch,
+    fov,
+    topdownAltitude,
+    followingCallsign,
+    resetView,
+    setFov
+  } = useActiveViewportCamera()
+
+  // Camera store - only for default saving (shared across viewports)
   const saveCurrentAsDefault = useCameraStore((state) => state.saveCurrentAsDefault)
   const resetToDefault = useCameraStore((state) => state.resetToDefault)
   const hasCustomDefault = useCameraStore((state) => state.hasCustomDefault)
+
+  // Measure store
+  const isMeasuring = useMeasureStore((state) => state.isActive)
+  const toggleMeasuring = useMeasureStore((state) => state.toggleMeasuring)
 
   const handleResetView = () => {
     resetView()
@@ -220,6 +230,20 @@ function ControlsBar() {
         </div>
 
         <div className="controls-right">
+          <button
+            className={`control-button ${isMeasuring ? 'active' : ''}`}
+            onClick={toggleMeasuring}
+            title="Measure distance (M)"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M2 12h4m12 0h4" />
+              <path d="M6 8v8" />
+              <path d="M18 8v8" />
+              <path d="M8 12h8" />
+            </svg>
+            Measure
+          </button>
+
           <VRButton />
 
           <button

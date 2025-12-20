@@ -145,6 +145,10 @@ App.tsx
 
 ### Hook Modifications
 
+The current architecture splits camera logic into two hooks:
+- **`useCesiumCamera.ts`** (637 lines): Camera positioning, following, animations
+- **`useCameraInput.ts`** (398 lines): Keyboard/mouse input handling
+
 **`useCesiumCamera.ts`** - New signature:
 ```typescript
 useCesiumCamera(
@@ -154,10 +158,24 @@ useCesiumCamera(
 )
 ```
 
-Key changes:
-1. Keyboard handlers check `activeViewportId === viewportId` before processing
-2. Mouse handlers call `setActiveViewport(viewportId)` on mouse down
-3. All store actions use viewportId-scoped functions
+**`useCameraInput.ts`** - New signature:
+```typescript
+useCameraInput(
+  viewer: Cesium.Viewer | null,
+  viewportId: string,           // NEW
+  options: { onBreakTowerFollow?: () => void }
+)
+```
+
+Key changes to `useCameraInput`:
+1. Keyboard handlers (currently `window.addEventListener`) check `activeViewportId === viewportId` before processing
+2. Mouse handlers (already canvas-scoped via `ScreenSpaceEventHandler`) call `setActiveViewport(viewportId)` on mouse down
+3. All store actions become scoped: read/write via viewportStore instead of cameraStore
+
+Key changes to `useCesiumCamera`:
+1. Pass `viewportId` to `useCameraInput`
+2. Read camera state from `viewportStore.getViewport(viewportId).cameraState` instead of `cameraStore`
+3. Apply camera to the viewport's Cesium viewer
 
 ### Bookmark Flow
 
@@ -237,9 +255,11 @@ Z-index hierarchy:
 - Triggered by: camera changes, viewport resize/move, viewport add/remove
 
 ### Save Default (Explicit - "Save as Default" button)
-- Saves complete snapshot to `airportViewportConfigs[icao].defaultConfig`
+- Currently: `cameraStore.saveCurrentAsDefault()` saves per view mode (3d/topdown separately)
+- New behavior: Saves complete snapshot to `airportViewportConfigs[icao].defaultConfig`
 - Includes ALL viewports with their layouts and camera states
 - User explicitly saves their preferred multi-viewport setup for an airport
+- Note: This changes the current per-viewmode default to a unified multi-viewport default
 
 ### Reset to Default
 - Restores `viewports` from `defaultConfig` if it exists
@@ -267,12 +287,12 @@ Each Cesium viewer consumes significant memory. Mitigations:
 
 ## Implementation Phases
 
-### Phase 1: Foundation (Core Store & Components)
-- [ ] Create `viewportStore.ts` with viewport CRUD and per-viewport camera state
-- [ ] Create `ViewportContainer.tsx` with activation border (no drag yet)
-- [ ] Create `ViewportManager.tsx` to wrap main content
-- [ ] Modify `App.tsx` to use ViewportManager
-- [ ] Wrap existing CesiumViewer in ViewportContainer
+### Phase 1: Foundation (Core Store & Components) - COMPLETED
+- [x] Create `viewportStore.ts` with viewport CRUD and per-viewport camera state
+- [x] Create `ViewportContainer.tsx` with activation border (no drag yet)
+- [x] Create `ViewportManager.tsx` to wrap main content
+- [x] Modify `App.tsx` to use ViewportManager
+- [x] Wrap existing CesiumViewer in ViewportContainer
 
 ### Phase 2: Controls Routing
 - [ ] Modify `useCesiumCamera.ts` to accept viewportId, check active state
@@ -311,10 +331,11 @@ Each Cesium viewer consumes significant memory. Mitigations:
 |------|---------|
 | `src/renderer/stores/viewportStore.ts` | **NEW** - Core viewport state management |
 | `src/renderer/stores/cameraStore.ts` | Reduce to bookmark-only, integrate with viewportStore |
-| `src/renderer/hooks/useCesiumCamera.ts` | Add viewportId param, active state gating |
+| `src/renderer/hooks/useCameraInput.ts` | Add viewportId param, check active state before processing input |
+| `src/renderer/hooks/useCesiumCamera.ts` | Add viewportId param, read camera state from viewportStore |
 | `src/renderer/hooks/useBabylonOverlay.ts` | Minor - pass viewportId through |
 | `src/renderer/components/CesiumViewer/CesiumViewer.tsx` | Accept viewportId, pass to hooks |
-| `src/renderer/components/UI/ControlsBar.tsx` | Read/write active viewport state |
+| `src/renderer/components/UI/ControlsBar.tsx` | Read/write active viewport state via viewportStore |
 | `src/renderer/components/UI/CommandInput.tsx` | Route bookmarks through active viewport |
 | `src/renderer/components/UI/AircraftPanel.tsx` | Follow aircraft in active viewport |
 | `src/renderer/App.tsx` | Wrap with ViewportManager |
@@ -323,10 +344,11 @@ Each Cesium viewer consumes significant memory. Mitigations:
 
 | File | Purpose |
 |------|---------|
-| `src/renderer/stores/viewportStore.ts` | Viewport state management |
-| `src/renderer/components/Viewport/ViewportManager.tsx` | Orchestration component |
-| `src/renderer/components/Viewport/ViewportContainer.tsx` | Wrapper with border/handles |
-| `src/renderer/components/Viewport/InsetViewport.tsx` | Self-contained inset |
-| `src/renderer/components/Viewport/InsetViewportLayer.tsx` | Inset container |
-| `src/renderer/components/Viewport/AddInsetButton.tsx` | Create inset UI |
-| `src/renderer/hooks/useDragResize.ts` | Drag and resize logic |
+| `src/renderer/stores/viewportStore.ts` | Viewport collection and per-viewport camera state |
+| `src/renderer/components/Viewport/ViewportManager.tsx` | Orchestrates all viewports, provides context |
+| `src/renderer/components/Viewport/ViewportContainer.tsx` | Wrapper with activation border and drag/resize handles |
+| `src/renderer/components/Viewport/InsetViewport.tsx` | Self-contained inset (Cesium + Babylon instance) |
+| `src/renderer/components/Viewport/InsetViewportLayer.tsx` | Container for all insets with z-index management |
+| `src/renderer/components/Viewport/AddInsetButton.tsx` | Floating button to create new insets |
+| `src/renderer/hooks/useDragResize.ts` | Custom pointer event handling for drag/resize |
+| `src/renderer/components/Viewport/ViewportContainer.css` | Styles for activation border, drag handles |

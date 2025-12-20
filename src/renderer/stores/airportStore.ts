@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware'
 import type { Airport } from '../types/airport'
 import { getEstimatedTowerHeight } from '../types/airport'
 import { useCameraStore } from './cameraStore'
+import { useViewportStore } from './viewportStore'
 
 interface AirportStore {
   // Data
@@ -65,6 +66,9 @@ export const useAirportStore = create<AirportStore>()(
 
           // Update camera store with new airport (loads saved camera settings)
           useCameraStore.getState().setCurrentAirport(icao)
+
+          // Update viewport store (saves/loads viewport configurations per airport)
+          useViewportStore.getState().setCurrentAirport(icao)
         }
       },
 

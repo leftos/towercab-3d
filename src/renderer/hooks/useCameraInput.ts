@@ -1,6 +1,6 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useMemo } from 'react'
 import * as Cesium from 'cesium'
-import { useCameraStore } from '../stores/cameraStore'
+import { useViewportStore } from '../stores/viewportStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import {
   createVelocityState,
@@ -20,12 +20,15 @@ interface UseCameraInputOptions {
 /**
  * Hook for handling camera input (keyboard, mouse drag, mouse wheel)
  * Manages smooth velocity-based movement with acceleration/deceleration
+ * Only processes input when this viewport is the active viewport.
  *
  * @param viewer - The Cesium viewer instance
+ * @param viewportId - The ID of the viewport this hook controls
  * @param options - Configuration options
  */
 export function useCameraInput(
   viewer: Cesium.Viewer | null,
+  viewportId: string,
   options: UseCameraInputOptions = {}
 ): void {
   const { onBreakTowerFollow } = options
@@ -33,28 +36,42 @@ export function useCameraInput(
   // Settings store
   const mouseSensitivity = useSettingsStore((state) => state.mouseSensitivity)
 
-  // Camera store actions
-  const viewMode = useCameraStore((state) => state.viewMode)
-  const heading = useCameraStore((state) => state.heading)
-  const topdownAltitude = useCameraStore((state) => state.topdownAltitude)
-  const followingCallsign = useCameraStore((state) => state.followingCallsign)
-  const followMode = useCameraStore((state) => state.followMode)
-  const toggleViewMode = useCameraStore((state) => state.toggleViewMode)
-  const adjustHeading = useCameraStore((state) => state.adjustHeading)
-  const adjustPitch = useCameraStore((state) => state.adjustPitch)
-  const adjustFov = useCameraStore((state) => state.adjustFov)
-  const adjustTopdownAltitude = useCameraStore((state) => state.adjustTopdownAltitude)
-  const adjustFollowZoom = useCameraStore((state) => state.adjustFollowZoom)
-  const adjustOrbitHeading = useCameraStore((state) => state.adjustOrbitHeading)
-  const adjustOrbitPitch = useCameraStore((state) => state.adjustOrbitPitch)
-  const adjustOrbitDistance = useCameraStore((state) => state.adjustOrbitDistance)
-  const toggleFollowMode = useCameraStore((state) => state.toggleFollowMode)
-  const moveForward = useCameraStore((state) => state.moveForward)
-  const moveRight = useCameraStore((state) => state.moveRight)
-  const moveUp = useCameraStore((state) => state.moveUp)
-  const resetView = useCameraStore((state) => state.resetView)
-  const resetPosition = useCameraStore((state) => state.resetPosition)
-  const stopFollowing = useCameraStore((state) => state.stopFollowing)
+  // Viewport store - check if this viewport is active
+  const activeViewportId = useViewportStore((state) => state.activeViewportId)
+  const viewports = useViewportStore((state) => state.viewports)
+
+  // Find this viewport's camera state
+  const thisViewport = useMemo(
+    () => viewports.find(v => v.id === viewportId),
+    [viewports, viewportId]
+  )
+  const cameraState = thisViewport?.cameraState
+
+  // Camera state values (from this viewport)
+  const viewMode = cameraState?.viewMode ?? '3d'
+  const heading = cameraState?.heading ?? 0
+  const topdownAltitude = cameraState?.topdownAltitude ?? 5000
+  const followingCallsign = cameraState?.followingCallsign ?? null
+  const followMode = cameraState?.followMode ?? 'tower'
+
+  // Viewport store actions (operate on active viewport)
+  const toggleViewMode = useViewportStore((state) => state.toggleViewMode)
+  const adjustHeading = useViewportStore((state) => state.adjustHeading)
+  const adjustPitch = useViewportStore((state) => state.adjustPitch)
+  const adjustFov = useViewportStore((state) => state.adjustFov)
+  const adjustTopdownAltitude = useViewportStore((state) => state.adjustTopdownAltitude)
+  const adjustFollowZoom = useViewportStore((state) => state.adjustFollowZoom)
+  const adjustOrbitHeading = useViewportStore((state) => state.adjustOrbitHeading)
+  const adjustOrbitPitch = useViewportStore((state) => state.adjustOrbitPitch)
+  const adjustOrbitDistance = useViewportStore((state) => state.adjustOrbitDistance)
+  const toggleFollowMode = useViewportStore((state) => state.toggleFollowMode)
+  const moveForward = useViewportStore((state) => state.moveForward)
+  const moveRight = useViewportStore((state) => state.moveRight)
+  const moveUp = useViewportStore((state) => state.moveUp)
+  const resetView = useViewportStore((state) => state.resetView)
+  const resetPosition = useViewportStore((state) => state.resetPosition)
+  const stopFollowing = useViewportStore((state) => state.stopFollowing)
+  const setActiveViewport = useViewportStore((state) => state.setActiveViewport)
 
   // Mouse drag state
   const isDraggingRef = useRef(false)
@@ -77,6 +94,8 @@ export function useCameraInput(
   const followingCallsignRef = useRef(followingCallsign)
   const followModeRef = useRef(followMode)
   const mouseSensitivityRef = useRef(mouseSensitivity)
+  const isActiveRef = useRef(activeViewportId === viewportId)
+  const viewportIdRef = useRef(viewportId)
 
   // Keep refs updated
   viewModeRef.current = viewMode
@@ -85,6 +104,8 @@ export function useCameraInput(
   followingCallsignRef.current = followingCallsign
   followModeRef.current = followMode
   mouseSensitivityRef.current = mouseSensitivity
+  isActiveRef.current = activeViewportId === viewportId
+  viewportIdRef.current = viewportId
 
   // Mouse drag controls for panning/tilting using Cesium's event handler
   useEffect(() => {
@@ -95,6 +116,8 @@ export function useCameraInput(
 
     // Left-click drag start (for panning in top-down view)
     handler.setInputAction((movement: { position: Cesium.Cartesian2 }) => {
+      // Activate this viewport on click
+      setActiveViewport(viewportIdRef.current)
       if (viewModeRef.current === 'topdown') {
         isLeftDraggingRef.current = true
         lastMousePosRef.current = { x: movement.position.x, y: movement.position.y }
@@ -108,6 +131,8 @@ export function useCameraInput(
 
     // Right-click drag start
     handler.setInputAction((movement: { position: Cesium.Cartesian2 }) => {
+      // Activate this viewport on click
+      setActiveViewport(viewportIdRef.current)
       isDraggingRef.current = true
       lastMousePosRef.current = { x: movement.position.x, y: movement.position.y }
 
@@ -119,6 +144,8 @@ export function useCameraInput(
 
     // Middle-click drag start
     handler.setInputAction((movement: { position: Cesium.Cartesian2 }) => {
+      // Activate this viewport on click
+      setActiveViewport(viewportIdRef.current)
       isDraggingRef.current = true
       lastMousePosRef.current = { x: movement.position.x, y: movement.position.y }
 
@@ -190,7 +217,7 @@ export function useCameraInput(
       handler.destroy()
       canvas.removeEventListener('contextmenu', handleContextMenu)
     }
-  }, [viewer, adjustHeading, adjustPitch, adjustOrbitHeading, adjustOrbitPitch, moveForward, moveRight, onBreakTowerFollow])
+  }, [viewer, adjustHeading, adjustPitch, adjustOrbitHeading, adjustOrbitPitch, moveForward, moveRight, onBreakTowerFollow, setActiveViewport])
 
   // Mouse wheel for zoom - adds impulse for smooth scrolling
   useEffect(() => {
@@ -219,6 +246,9 @@ export function useCameraInput(
     if (!viewer || viewer.isDestroyed()) return
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      // Only process keyboard input if this viewport is active
+      if (!isActiveRef.current) return
+
       // Ignore if typing in an input
       if (event.target instanceof HTMLInputElement ||
           event.target instanceof HTMLTextAreaElement) {
@@ -284,6 +314,13 @@ export function useCameraInput(
 
       const keys = pressedKeysRef.current
       const vel = velocityRef.current
+
+      // Only process input if this viewport is active
+      if (!isActiveRef.current) {
+        // Still need to schedule next frame but skip processing
+        animationFrameRef.current = requestAnimationFrame(animate)
+        return
+      }
 
       // Calculate target velocities based on pressed keys
       const targets = calculateTargetVelocities(keys, viewModeRef.current, followingCallsignRef.current, followModeRef.current)
@@ -363,6 +400,9 @@ export function useCameraInput(
     window.addEventListener('keyup', handleKeyUp)
     window.addEventListener('blur', handleBlur)
 
+    // Capture ref for cleanup to avoid stale reference issues
+    const pressedKeys = pressedKeysRef.current
+
     return () => {
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current)
@@ -370,7 +410,7 @@ export function useCameraInput(
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('keyup', handleKeyUp)
       window.removeEventListener('blur', handleBlur)
-      pressedKeysRef.current.clear()
+      pressedKeys.clear()
     }
   }, [
     viewer,

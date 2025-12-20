@@ -146,11 +146,18 @@ export function calculateTargetVelocities(
   let targetOrbitDistance = 0
   let targetAltitude = 0
 
-  // WASD movement
-  if (pressedKeys.has('w')) targetForward = 1
-  if (pressedKeys.has('s')) targetForward = -1
-  if (pressedKeys.has('a')) targetRight = -1
-  if (pressedKeys.has('d')) targetRight = 1
+  // WASD movement (accumulate so opposite keys cancel)
+  if (pressedKeys.has('w')) targetForward += 1
+  if (pressedKeys.has('s')) targetForward -= 1
+  if (pressedKeys.has('a')) targetRight -= 1
+  if (pressedKeys.has('d')) targetRight += 1
+
+  // Normalize diagonal movement so it's not faster than cardinal
+  if (targetForward !== 0 && targetRight !== 0) {
+    const invSqrt2 = 1 / Math.sqrt(2)
+    targetForward *= invSqrt2
+    targetRight *= invSqrt2
+  }
 
   // Q/E for vertical movement
   if (pressedKeys.has('e')) targetUp = 1
