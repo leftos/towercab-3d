@@ -138,39 +138,165 @@ export function useCesiumCamera(
     controller.enableLook = false
   }, [viewer])
 
-  // Sync store with camera on every render frame during animations
+  // Store interpolatedAircraft in a ref for access in render callbacks
+  const interpolatedAircraftRef = useRef(interpolatedAircraft)
+  interpolatedAircraftRef.current = interpolatedAircraft
+
+  // Sync store with camera on every render frame during animations and following
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return
 
     const onPreRender = () => {
-      // Only sync during animations
-      if (!isFlyingToAirportRef.current && !isAnimatingToFollowRef.current) return
-
-      const cameraHeading = Cesium.Math.toDegrees(viewer.camera.heading)
-      const cameraPitch = Cesium.Math.toDegrees(viewer.camera.pitch)
-      const normalizedHeading = ((cameraHeading % 360) + 360) % 360
-
-      // Update store to keep labels in sync
+      // Handle camera following every frame (needed because interpolated positions update every frame)
       const state = useCameraStore.getState()
-      if (Math.abs(normalizedHeading - state.heading) > 0.5 || Math.abs(cameraPitch - state.pitch) > 0.5) {
-        useCameraStore.setState({
-          heading: normalizedHeading,
-          pitch: cameraPitch
-        })
+      const currentInterpolatedAircraft = interpolatedAircraftRef.current
+
+      // Skip if animating (let the animation complete)
+      if (isAnimatingToFollowRef.current || isFlyingToAirportRef.current) {
+        // Handle FOV animation during flyTo
+        const fovAnim = fovAnimationRef.current
+        if (fovAnim && viewer.camera.frustum instanceof Cesium.PerspectiveFrustum) {
+          const elapsed = (Date.now() - fovAnim.startTime) / 1000
+          const t = Math.min(1, elapsed / fovAnim.duration)
+          const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
+          const currentFov = fovAnim.startFov + (fovAnim.targetFov - fovAnim.startFov) * eased
+          viewer.camera.frustum.fov = Cesium.Math.toRadians(currentFov)
+          if (t >= 1) {
+            fovAnimationRef.current = null
+          }
+        }
+
+        // Sync heading/pitch to store during animation
+        const cameraHeading = Cesium.Math.toDegrees(viewer.camera.heading)
+        const cameraPitch = Cesium.Math.toDegrees(viewer.camera.pitch)
+        const normalizedHeading = ((cameraHeading % 360) + 360) % 360
+        if (Math.abs(normalizedHeading - state.heading) > 0.5 || Math.abs(cameraPitch - state.pitch) > 0.5) {
+          useCameraStore.setState({
+            heading: normalizedHeading,
+            pitch: cameraPitch
+          })
+        }
+        return
       }
 
-      // Animate FOV manually (Cesium flyTo doesn't support FOV animation)
-      const fovAnim = fovAnimationRef.current
-      if (fovAnim && viewer.camera.frustum instanceof Cesium.PerspectiveFrustum) {
-        const elapsed = (Date.now() - fovAnim.startTime) / 1000
-        const t = Math.min(1, elapsed / fovAnim.duration)
-        // Use ease-in-out curve to match Cesium's flyTo easing
-        const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
-        const currentFov = fovAnim.startFov + (fovAnim.targetFov - fovAnim.startFov) * eased
-        viewer.camera.frustum.fov = Cesium.Math.toRadians(currentFov)
+      if (state.followingCallsign && currentInterpolatedAircraft) {
+        const aircraft = currentInterpolatedAircraft.get(state.followingCallsign)
+        if (!aircraft) return
 
-        if (t >= 1) {
-          fovAnimationRef.current = null
+        // Use interpolated positions for smooth tracking
+        const aircraftLat = aircraft.interpolatedLatitude
+        const aircraftLon = aircraft.interpolatedLongitude
+        const aircraftAlt = aircraft.interpolatedAltitude
+        const aircraftHeading = aircraft.interpolatedHeading
+        const altitudeMeters = aircraftAlt * 0.3048
+
+        if (state.followMode === 'orbit') {
+          // ORBIT MODE: Camera orbits around aircraft
+          const absoluteOrbitAngle = aircraftHeading + 180 + state.orbitHeading
+          const orbitAngleRad = Cesium.Math.toRadians(absoluteOrbitAngle)
+          const orbitPitchRad = Cesium.Math.toRadians(state.orbitPitch)
+
+          // Calculate camera position using spherical coordinates relative to aircraft
+          const horizontalDistance = state.orbitDistance * Math.cos(orbitPitchRad)
+          const verticalOffset = state.orbitDistance * Math.sin(orbitPitchRad)
+
+          // Convert horizontal distance to lat/lon offset
+          const metersToDegreesLatOrbit = 1 / 111111
+          const metersToDegreesLonOrbit = 1 / (111111 * Math.cos(aircraftLat * Math.PI / 180))
+
+          // Camera position: aircraft position + spherical offset
+          const cameraLat = aircraftLat + horizontalDistance * Math.cos(orbitAngleRad) * metersToDegreesLatOrbit
+          const cameraLon = aircraftLon + horizontalDistance * Math.sin(orbitAngleRad) * metersToDegreesLonOrbit
+          let cameraHeight = altitudeMeters + verticalOffset
+
+          // Ensure camera doesn't go below ground (minimum 10m)
+          cameraHeight = Math.max(10, cameraHeight)
+
+          // Calculate heading/pitch to look at aircraft from camera position
+          const targetHeading = calculateBearing(cameraLat, cameraLon, aircraftLat, aircraftLon)
+
+          // Calculate pitch to look at aircraft
+          const latDiff = (aircraftLat - cameraLat) * 111111
+          const lonDiff = (aircraftLon - cameraLon) * 111111 * Math.cos(cameraLat * Math.PI / 180)
+          const distToAircraft = Math.sqrt(latDiff * latDiff + lonDiff * lonDiff)
+          const altDiff = altitudeMeters - cameraHeight
+          const targetPitch = Math.atan2(altDiff, distToAircraft) * 180 / Math.PI
+
+          // Apply follow zoom to FOV
+          const targetFov = Math.max(10, Math.min(120, 60 / state.followZoom))
+
+          // Set camera position and orientation
+          const cameraPosition = Cesium.Cartesian3.fromDegrees(cameraLon, cameraLat, cameraHeight)
+          viewer.camera.setView({
+            destination: cameraPosition,
+            orientation: {
+              heading: Cesium.Math.toRadians(targetHeading),
+              pitch: Cesium.Math.toRadians(targetPitch),
+              roll: 0
+            }
+          })
+
+          // Set FOV
+          if (viewer.camera.frustum instanceof Cesium.PerspectiveFrustum) {
+            viewer.camera.frustum.fov = Cesium.Math.toRadians(targetFov)
+          }
+
+          // Update store with calculated values (for UI display) - but only if changed
+          if (Math.abs(targetHeading - state.heading) > 0.1 || Math.abs(targetPitch - state.pitch) > 0.1) {
+            useCameraStore.setState({
+              heading: targetHeading,
+              pitch: targetPitch
+            })
+          }
+        } else if (state.followMode === 'tower' && state.viewMode === '3d') {
+          // TOWER MODE: Camera stays at tower, rotates to look at aircraft
+          const airportState = useAirportStore.getState()
+          if (!airportState.currentAirport) return
+
+          const towerPos = getTowerPosition(airportState.currentAirport, airportState.towerHeight)
+          const metersToDegreesLat = 1 / 111111
+          const metersToDegreesLon = 1 / (111111 * Math.cos(towerPos.latitude * Math.PI / 180))
+
+          const offsetLat = towerPos.latitude + state.positionOffsetY * metersToDegreesLat
+          const offsetLon = towerPos.longitude + state.positionOffsetX * metersToDegreesLon
+          const offsetHeight = towerPos.height + state.positionOffsetZ
+
+          // Calculate bearing to aircraft from current position
+          const bearing = calculateBearing(offsetLat, offsetLon, aircraftLat, aircraftLon)
+
+          // Calculate pitch based on altitude difference and distance
+          const altitudeDiff = altitudeMeters - offsetHeight
+          const latDiff = (aircraftLat - offsetLat) * 111111
+          const lonDiff = (aircraftLon - offsetLon) * 111111 * Math.cos(offsetLat * Math.PI / 180)
+          const horizontalDistance = Math.sqrt(latDiff * latDiff + lonDiff * lonDiff)
+          const pitchAngle = Math.atan2(altitudeDiff, horizontalDistance) * 180 / Math.PI
+
+          // Apply follow zoom to FOV
+          const targetFov = Math.max(10, Math.min(120, 60 / state.followZoom))
+
+          // Set camera position and orientation
+          const cameraPosition = Cesium.Cartesian3.fromDegrees(offsetLon, offsetLat, offsetHeight)
+          viewer.camera.setView({
+            destination: cameraPosition,
+            orientation: {
+              heading: Cesium.Math.toRadians(bearing),
+              pitch: Cesium.Math.toRadians(pitchAngle),
+              roll: 0
+            }
+          })
+
+          // Set FOV
+          if (viewer.camera.frustum instanceof Cesium.PerspectiveFrustum) {
+            viewer.camera.frustum.fov = Cesium.Math.toRadians(targetFov)
+          }
+
+          // Update store with calculated values (for UI display) - but only if changed
+          if (Math.abs(bearing - state.heading) > 0.1 || Math.abs(pitchAngle - state.pitch) > 0.1) {
+            useCameraStore.setState({
+              heading: bearing,
+              pitch: pitchAngle
+            })
+          }
         }
       }
     }

@@ -800,13 +800,16 @@ function CesiumViewer() {
     updateAircraftEntities()
   }, [updateAircraftEntities])
 
-  // Sync Babylon overlay on each render frame
+  // Sync Babylon overlay and update aircraft on each render frame
   useEffect(() => {
     const viewer = viewerRef.current
     if (!viewer) return
 
-    // Sync Babylon overlay AFTER render when camera position is finalized
+    // Update aircraft and sync Babylon overlay AFTER render when camera position is finalized
+    // This runs every frame (~60fps) to ensure smooth interpolated aircraft movement
     const removePostRender = viewer.scene.postRender.addEventListener(() => {
+      // Update aircraft positions from interpolated data (mutated every frame by useAircraftInterpolation)
+      updateAircraftEntities()
       babylonOverlay.syncCamera()
       babylonOverlay.render()
     })
@@ -814,7 +817,7 @@ function CesiumViewer() {
     return () => {
       removePostRender()
     }
-  }, [cesiumViewer, babylonOverlay])
+  }, [cesiumViewer, babylonOverlay, updateAircraftEntities])
 
   return (
     <div className="cesium-viewer-container" ref={containerRef} />

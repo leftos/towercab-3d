@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useAirportStore } from '../../stores/airportStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useCameraStore } from '../../stores/cameraStore'
@@ -34,6 +34,14 @@ function AircraftPanel() {
   const [searchQuery, setSearchQuery] = useState('')
   const [isCollapsed, setIsCollapsed] = useState(false)
 
+  // Periodic refresh to update distances/bearings from the mutating interpolated Map
+  // The Map is mutated every frame but doesn't trigger re-renders, so we force a refresh every second
+  const [refreshTick, setRefreshTick] = useState(0)
+  useEffect(() => {
+    const interval = setInterval(() => setRefreshTick(t => t + 1), 1000)
+    return () => clearInterval(interval)
+  }, [])
+
   // Camera store for follow functionality
   const followingCallsign = useCameraStore((state) => state.followingCallsign)
   const followAircraft = useCameraStore((state) => state.followAircraft)
@@ -47,10 +55,11 @@ function AircraftPanel() {
   const isOrbitModeWithoutAirport = followMode === 'orbit' && followingCallsign && !currentAirport
 
   // Get the followed aircraft data for orbit mode display
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const followedAircraftData = useMemo(() => {
     if (!followingCallsign) return null
     return interpolatedStates.get(followingCallsign) || null
-  }, [followingCallsign, interpolatedStates])
+  }, [followingCallsign, interpolatedStates, refreshTick])
 
   const nearbyAircraft = useMemo((): AircraftListItem[] => {
     // Determine reference point for distance/bearing calculations
@@ -131,7 +140,8 @@ function AircraftPanel() {
     })
 
     return sorted.slice(0, 50)
-  }, [interpolatedStates, currentAirport, towerHeight, labelVisibilityDistance, sortOption, searchQuery, isOrbitModeWithoutAirport, followedAircraftData, followingCallsign])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [interpolatedStates, currentAirport, towerHeight, labelVisibilityDistance, sortOption, searchQuery, isOrbitModeWithoutAirport, followedAircraftData, followingCallsign, refreshTick])
 
   const handleFollowClick = (callsign: string) => {
     if (followingCallsign === callsign) {
