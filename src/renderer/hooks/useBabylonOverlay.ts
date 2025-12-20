@@ -4,6 +4,10 @@ import * as GUI from '@babylonjs/gui'
 import * as Cesium from 'cesium'
 import { useWeatherStore } from '../stores/weatherStore'
 import { useSettingsStore } from '../stores/settingsStore'
+import {
+  setupEnuTransforms,
+  calculateBabylonCameraSync
+} from '../utils/enuTransforms'
 
 // Memory diagnostic counters
 const memoryCounters = {
@@ -93,11 +97,6 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
   const cloudOpacity = useSettingsStore((state) => state.cloudOpacity)
   const fogIntensity = useSettingsStore((state) => state.fogIntensity)
   const visibilityScale = useSettingsStore((state) => state.visibilityScale)
-
-  // Convert Cesium Cartesian3 to Babylon Vector3 (swap Y and Z)
-  const cart2vec = useCallback((cart: { x: number; y: number; z: number }) => {
-    return new BABYLON.Vector3(cart.x, cart.z, cart.y)
-  }, [])
 
   // Initialize Babylon.js engine and scene
   useEffect(() => {
@@ -445,24 +444,15 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     const viewer = cesiumViewer
     if (!scene) return
 
-    // Calculate base point in ECEF coordinates
-    const baseCart = Cesium.Cartesian3.fromDegrees(lon, lat, height)
-    const baseCartUp = Cesium.Cartesian3.fromDegrees(lon, lat, height + 1000)
+    // Use utility function for ENU transform setup
+    const enuData = setupEnuTransforms(lat, lon, height)
 
-    // Store the base cartesian for later use
-    baseCartesianRef.current = baseCart
-
-    // Calculate the ENU (East-North-Up) to Fixed (ECEF) transformation matrix
-    // This allows us to convert local ENU coordinates to ECEF
-    const enuToFixed = Cesium.Transforms.eastNorthUpToFixedFrame(baseCart)
-    enuToFixedMatrixRef.current = enuToFixed
-
-    // Calculate the inverse (Fixed to ENU) for converting ECEF positions to local ENU
-    const fixedToEnu = Cesium.Matrix4.inverse(enuToFixed, new Cesium.Matrix4())
-    fixedToEnuMatrixRef.current = fixedToEnu
-
-    basePointRef.current = cart2vec(baseCart)
-    basePointUpRef.current = cart2vec(baseCartUp)
+    // Store the transform data in refs
+    baseCartesianRef.current = enuData.baseCartesian
+    enuToFixedMatrixRef.current = enuData.enuToFixed
+    fixedToEnuMatrixRef.current = enuData.fixedToEnu
+    basePointRef.current = enuData.basePoint
+    basePointUpRef.current = enuData.basePointUp
 
     // Sample terrain to calculate offset between MSL elevation and actual terrain height
     // This corrects for geoid undulation automatically at any location
@@ -472,7 +462,6 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
         const terrainHeight = updatedPositions[0].height
         // Offset = terrain height - MSL height (height parameter is MSL-based)
         terrainOffsetRef.current = terrainHeight - height
-        //console.log(`Terrain offset calculated: ${terrainOffsetRef.current.toFixed(1)}m (terrain: ${terrainHeight.toFixed(1)}m, MSL: ${height.toFixed(1)}m)`)
       }).catch((err) => {
         console.warn('Failed to sample terrain, using default offset:', err)
         terrainOffsetRef.current = 0
@@ -486,7 +475,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
 
     const rootNode = new BABYLON.TransformNode('RootNode', scene)
     rootNodeRef.current = rootNode
-  }, [cart2vec, cesiumViewer])
+  }, [cesiumViewer])
 
   // Sync Babylon camera for 2D topdown view - completely separate from 3D
   // Simple design: camera at fixed position looking down, heading applied to positions
@@ -541,71 +530,18 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     camera.rotationQuaternion = null
     isTopDownModeRef.current = false
 
-    // Get Cesium camera FOV
-    const frustum = viewer.camera.frustum
-    if (frustum instanceof Cesium.PerspectiveFrustum && frustum.fovy !== undefined) {
-      camera.fov = frustum.fovy
-    }
+    // Use utility function for camera sync calculation
+    const syncData = calculateBabylonCameraSync(viewer, fixedToEnu)
+    if (!syncData) return false
 
-    // Get camera position in ECEF and transform to local ENU (relative to tower)
-    const cesiumCamPos = viewer.camera.positionWC
-    const camEnu = Cesium.Matrix4.multiplyByPoint(fixedToEnu, cesiumCamPos, new Cesium.Cartesian3())
-
-    // Transform camera direction from ECEF to ENU (direction vector, not point)
-    const cesiumCamDir = viewer.camera.direction
-    const dirEnu = Cesium.Matrix4.multiplyByPointAsVector(fixedToEnu, cesiumCamDir, new Cesium.Cartesian3())
-
-    // Transform camera up vector from ECEF to ENU
-    const cesiumCamUp = viewer.camera.up
-    const upEnu = Cesium.Matrix4.multiplyByPointAsVector(fixedToEnu, cesiumCamUp, new Cesium.Cartesian3())
-
-    // Convert ENU to Babylon coordinates: ENU(X,Y,Z) -> Babylon(X=East, Y=Up, Z=North)
-    // ENU: X=East, Y=North, Z=Up
-    // Babylon: X=East, Y=Up, Z=North
-    camera.position.set(camEnu.x, camEnu.z, camEnu.y)
-
-    const dirBabylon = new BABYLON.Vector3(dirEnu.x, dirEnu.z, dirEnu.y)
-    const upBabylon = new BABYLON.Vector3(upEnu.x, upEnu.z, upEnu.y)
-
-    // Calculate rotation from direction and up vectors
-    const forward = dirBabylon.normalize()
-
-    // Normal 3D view - use standard Euler angle calculation
-    // Yaw: rotation around Y axis (heading)
-    const rotationY = Math.atan2(forward.x, forward.z)
-
-    // Pitch: rotation around X axis (looking up/down)
-    const rotationX = -Math.asin(Math.max(-1, Math.min(1, forward.y)))
-
-    // Roll: rotation around Z axis
-    const cosY = Math.cos(rotationY)
-    const sinY = Math.sin(rotationY)
-    const cosX = Math.cos(rotationX)
-    const sinX = Math.sin(rotationX)
-
-    // Expected right vector after yaw
-    const rightAfterYaw = new BABYLON.Vector3(cosY, 0, -sinY)
-    // Expected up after yaw and pitch
-    const upAfterYawPitch = new BABYLON.Vector3(
-      sinY * sinX,
-      cosX,
-      cosY * sinX
+    // Apply position, rotation, and FOV
+    camera.position.copyFrom(syncData.position)
+    camera.rotation.set(
+      syncData.rotation.rotationX,
+      syncData.rotation.rotationY,
+      syncData.rotation.rotationZ
     )
-
-    // Project actual up onto the plane perpendicular to forward
-    const upNormalized = upBabylon.normalize()
-    const upInPlane = upNormalized.subtract(forward.scale(BABYLON.Vector3.Dot(upNormalized, forward)))
-    const upInPlaneLen = upInPlane.length()
-
-    let rotationZ = 0
-    if (upInPlaneLen > 0.001) {
-      upInPlane.scaleInPlace(1 / upInPlaneLen)
-      const dotUp = BABYLON.Vector3.Dot(upAfterYawPitch, upInPlane)
-      const dotRight = BABYLON.Vector3.Dot(rightAfterYaw, upInPlane)
-      rotationZ = Math.atan2(dotRight, dotUp)
-    }
-
-    camera.rotation.set(rotationX, rotationY, rotationZ)
+    camera.fov = syncData.fov
 
     // Position fog dome at camera position
     if (fogDomeRef.current) {
