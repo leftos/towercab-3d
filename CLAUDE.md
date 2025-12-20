@@ -183,3 +183,43 @@ See MODDING.md for manifest format and model requirements. Models are loaded on 
 1. Camera math: `useCesiumCamera.ts`
 2. Babylon sync: `useBabylonOverlay.ts`
 3. State management: `cameraStore.ts`
+
+## Changelog Maintenance
+
+**Important:** Maintain `CHANGELOG.md` whenever committing changes. This file informs end users about updates between releases.
+
+### Guidelines
+
+1. **Update on every commit**: Add an entry describing what changed in user-friendly terms
+2. **Use simple language**: Write for end users, not developers. Avoid technical jargon
+3. **Group by version**: Use `## [Unreleased]` for pending changes, move to version headers on release
+4. **Categorize changes**: Use these section headers within each version:
+   - `### Added` - New features
+   - `### Changed` - Changes to existing features
+   - `### Fixed` - Bug fixes
+   - `### Removed` - Removed features
+
+### Writing Style
+
+- Focus on what users will notice, not implementation details
+- Use active voice: "Added dark mode" not "Dark mode was added"
+- Be specific but concise: "Fixed aircraft labels disappearing when zooming out" not "Fixed label bug"
+
+### Examples
+
+**Good (user-friendly):**
+```markdown
+### Added
+- Weather effects now show fog and clouds based on real METAR data
+- New settings panel with tabs for easier navigation
+
+### Fixed
+- Aircraft no longer appear in the wrong position when first loading an airport
+```
+
+**Avoid (too technical):**
+```markdown
+### Changed
+- Refactored useBabylonOverlay to use ENU transforms
+- Added cameraSyncedRef to prevent race condition in label projection
+```
