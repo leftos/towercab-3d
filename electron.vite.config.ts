@@ -52,6 +52,22 @@ export default defineConfig({
         '@': resolve('src/renderer')
       }
     },
+    build: {
+      // Production optimizations
+      minify: 'esbuild',
+      target: 'esnext',
+      sourcemap: false,
+      rollupOptions: {
+        output: {
+          // Split chunks for better caching
+          manualChunks: {
+            'cesium': ['cesium'],
+            'babylon': ['@babylonjs/core', '@babylonjs/loaders', '@babylonjs/gui'],
+            'react-vendor': ['react', 'react-dom']
+          }
+        }
+      }
+    },
     plugins: [
       react(),
       serveCesiumDev(),

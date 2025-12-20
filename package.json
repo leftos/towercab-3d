@@ -1,6 +1,6 @@
 {
   "name": "towercab-3d",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "3D Tower Cab View for VATSIM Controllers",
   "main": "./out/main/index.js",
   "scripts": {
@@ -72,11 +72,18 @@
         ]
       }
     ],
+    "asar": true,
+    "compression": "maximum",
     "win": {
       "target": [
         "nsis"
       ],
       "icon": "resources/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
     }
   }
 }

@@ -3,9 +3,21 @@ import { join } from 'path'
 import { readFileSync, writeFileSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 
-// Increase renderer memory limit to prevent OOM crashes with large Cesium/Babylon scenes
-// Must be set before app.whenReady()
+// Note: V8 pointer compression in Electron 14+ limits the renderer V8 heap to 4GB max.
+// This flag ensures we use the full 4GB rather than a smaller default.
+// ArrayBuffers (used by Cesium/Babylon for geometry/textures) have separate, larger limits.
 app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096')
+
+// GPU and rendering optimizations for Cesium/Babylon performance
+app.commandLine.appendSwitch('enable-gpu-rasterization')
+app.commandLine.appendSwitch('enable-zero-copy')
+app.commandLine.appendSwitch('ignore-gpu-blocklist')
+app.commandLine.appendSwitch('enable-webgl2-compute-context')
+// Use high-performance GPU on multi-GPU systems (laptops with integrated + discrete)
+app.commandLine.appendSwitch('force_high_performance_gpu')
+// Disable throttling when window is in background (useful for ATC monitoring)
+app.commandLine.appendSwitch('disable-renderer-backgrounding')
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows')
 
 interface WindowBounds {
   x: number
@@ -77,7 +89,10 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      // Performance optimizations
+      backgroundThrottling: false, // Keep rendering at full speed when minimized/background
+      spellcheck: false // Disable spellcheck (not needed for ATC app)
     }
   })
 
@@ -97,38 +112,38 @@ function createWindow(): void {
     }
   })
 
-  // Debug renderer crashes
+  // Always show crash dialog (important for debugging production issues)
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
     console.error('Renderer process crashed:', details.reason)
-    console.error('Exit code:', details.exitCode)
-    // Show a dialog so you know what happened
     const { dialog } = require('electron')
     dialog.showErrorBox(
       'Renderer Crashed',
-      `Reason: ${details.reason}\nExit code: ${details.exitCode}\n\nCheck the console for more details.`
+      `Reason: ${details.reason}\nExit code: ${details.exitCode}`
     )
   })
 
-  mainWindow.webContents.on('unresponsive', () => {
-    console.error('Renderer became unresponsive')
-  })
+  // Dev-only debug handlers (reduce overhead in production)
+  if (is.dev) {
+    mainWindow.webContents.on('unresponsive', () => {
+      console.error('Renderer became unresponsive')
+    })
 
-  mainWindow.webContents.on('responsive', () => {
-    console.log('Renderer is responsive again')
-  })
+    mainWindow.webContents.on('responsive', () => {
+      console.log('Renderer is responsive again')
+    })
 
-  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
-    console.error('Failed to load:', errorCode, errorDescription)
-  })
+    mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+      console.error('Failed to load:', errorCode, errorDescription)
+    })
 
-  // Log console messages from renderer
-  mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
-    const levels = ['verbose', 'info', 'warning', 'error']
-    if (level >= 2) {
-      // Only log warnings and errors
-      console.log(`[Renderer ${levels[level]}] ${message} (${sourceId}:${line})`)
-    }
-  })
+    // Log console messages from renderer
+    mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+      const levels = ['verbose', 'info', 'warning', 'error']
+      if (level >= 2) {
+        console.log(`[Renderer ${levels[level]}] ${message} (${sourceId}:${line})`)
+      }
+    })
+  }
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
