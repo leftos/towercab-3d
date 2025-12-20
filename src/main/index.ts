@@ -144,9 +144,13 @@ app.whenReady().then(() => {
   // Bypass CORS for Cesium Ion assets
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const headers = details.responseHeaders || {}
-    // Add CORS headers if not present
-    if (!headers['access-control-allow-origin']) {
-      headers['access-control-allow-origin'] = ['*']
+    // Check for CORS header (case-insensitive)
+    const hasOriginHeader = Object.keys(headers).some(
+      (key) => key.toLowerCase() === 'access-control-allow-origin'
+    )
+    // Add CORS headers only if not already present
+    if (!hasOriginHeader) {
+      headers['Access-Control-Allow-Origin'] = ['*']
     }
     callback({ responseHeaders: headers })
   })

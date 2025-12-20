@@ -25,8 +25,9 @@ interface SettingsStore {
   // 3D Buildings
   show3DBuildings: boolean
 
-  // Debug settings
-  forceNoon: boolean
+  // Lighting settings
+  timeMode: 'real' | 'fixed'
+  fixedTimeHour: number  // 0-24, local time at tower
 
   // Actions
   setCesiumIonToken: (token: string) => void
@@ -40,7 +41,8 @@ interface SettingsStore {
   setTheme: (theme: 'light' | 'dark') => void
   setShowAircraftPanel: (show: boolean) => void
   setShow3DBuildings: (show: boolean) => void
-  setForceNoon: (force: boolean) => void
+  setTimeMode: (mode: 'real' | 'fixed') => void
+  setFixedTimeHour: (hour: number) => void
   resetToDefaults: () => void
 }
 
@@ -56,7 +58,8 @@ const DEFAULT_SETTINGS = {
   theme: 'dark' as const,
   showAircraftPanel: true,
   show3DBuildings: false,
-  forceNoon: false
+  timeMode: 'real' as const,
+  fixedTimeHour: 12
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -91,7 +94,10 @@ export const useSettingsStore = create<SettingsStore>()(
 
       setShow3DBuildings: (show: boolean) => set({ show3DBuildings: show }),
 
-      setForceNoon: (force: boolean) => set({ forceNoon: force }),
+      setTimeMode: (mode: 'real' | 'fixed') => set({ timeMode: mode }),
+
+      setFixedTimeHour: (hour: number) =>
+        set({ fixedTimeHour: Math.max(0, Math.min(24, hour)) }),
 
       resetToDefaults: () => set(DEFAULT_SETTINGS)
     }),

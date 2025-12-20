@@ -61,7 +61,8 @@ function CesiumViewer() {
   const showAirborneTraffic = useSettingsStore((state) => state.showAirborneTraffic)
   const terrainQuality = useSettingsStore((state) => state.terrainQuality)
   const show3DBuildings = useSettingsStore((state) => state.show3DBuildings)
-  const forceNoon = useSettingsStore((state) => state.forceNoon)
+  const timeMode = useSettingsStore((state) => state.timeMode)
+  const fixedTimeHour = useSettingsStore((state) => state.fixedTimeHour)
 
   // Camera store for follow highlighting and view mode
   const followingCallsign = useCameraStore((state) => state.followingCallsign)
@@ -225,28 +226,32 @@ function CesiumViewer() {
     cesiumViewer.scene.globe.maximumScreenSpaceError = getScreenSpaceError(terrainQuality)
   }, [cesiumViewer, terrainQuality])
 
-  // Force noon time for shadow testing
+  // Time of day control (real time vs fixed time)
   useEffect(() => {
     if (!cesiumViewer) return
 
-    if (forceNoon && currentAirport) {
-      // Calculate solar noon based on tower longitude
-      // Solar noon occurs when longitude / 15 hours have passed since UTC midnight
+    if (timeMode === 'fixed' && currentAirport) {
+      // Calculate the specified local time at the tower location
       const towerPos = getTowerPosition(currentAirport, towerHeight)
       const now = new Date()
-      const utcNoon = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12, 0, 0))
-      // Adjust for longitude: subtract hours for east, add for west
-      const longitudeOffsetHours = towerPos.longitude / 15
-      utcNoon.setTime(utcNoon.getTime() - longitudeOffsetHours * 60 * 60 * 1000)
 
-      cesiumViewer.clock.currentTime = Cesium.JulianDate.fromDate(utcNoon)
+      // Start with UTC midnight of today
+      const targetTime = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0))
+
+      // Add the fixed hour in UTC, then adjust for longitude to get local time
+      // Longitude / 15 gives hours offset from UTC (east is positive)
+      const longitudeOffsetHours = towerPos.longitude / 15
+      const utcHour = fixedTimeHour - longitudeOffsetHours
+      targetTime.setTime(targetTime.getTime() + utcHour * 60 * 60 * 1000)
+
+      cesiumViewer.clock.currentTime = Cesium.JulianDate.fromDate(targetTime)
       cesiumViewer.clock.shouldAnimate = false
     } else {
-      // Restore real-world current time
+      // Real time mode - use current time and animate
       cesiumViewer.clock.currentTime = Cesium.JulianDate.now()
       cesiumViewer.clock.shouldAnimate = true
     }
-  }, [cesiumViewer, forceNoon, currentAirport, towerHeight])
+  }, [cesiumViewer, timeMode, fixedTimeHour, currentAirport, towerHeight])
 
   // Manage OSM 3D Buildings tileset
   useEffect(() => {

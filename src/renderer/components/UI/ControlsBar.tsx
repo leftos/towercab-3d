@@ -18,8 +18,10 @@ function ControlsBar() {
   const setTerrainQuality = useSettingsStore((state) => state.setTerrainQuality)
   const show3DBuildings = useSettingsStore((state) => state.show3DBuildings)
   const setShow3DBuildings = useSettingsStore((state) => state.setShow3DBuildings)
-  const forceNoon = useSettingsStore((state) => state.forceNoon)
-  const setForceNoon = useSettingsStore((state) => state.setForceNoon)
+  const timeMode = useSettingsStore((state) => state.timeMode)
+  const setTimeMode = useSettingsStore((state) => state.setTimeMode)
+  const fixedTimeHour = useSettingsStore((state) => state.fixedTimeHour)
+  const setFixedTimeHour = useSettingsStore((state) => state.setFixedTimeHour)
 
   // Camera store
   const viewMode = useCameraStore((state) => state.viewMode)
@@ -54,6 +56,12 @@ function ControlsBar() {
   const formatPitch = (angle: number) => {
     const sign = angle >= 0 ? '+' : ''
     return sign + Math.round(angle) + '°'
+  }
+
+  const formatTimeHour = (hour: number): string => {
+    const h = Math.floor(hour)
+    const m = Math.round((hour - h) * 60)
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
   }
 
   return (
@@ -267,20 +275,49 @@ function ControlsBar() {
               </div>
 
               <div className="settings-section">
-                <h3>Debug</h3>
+                <h3>Lighting</h3>
                 <div className="setting-item">
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={forceNoon}
-                      onChange={(e) => setForceNoon(e.target.checked)}
-                    />
-                    Force Noon (Solar Time)
-                  </label>
-                  <p className="setting-hint">
-                    Freeze time at solar noon for optimal shadow testing.
-                  </p>
+                  <label>Time of Day</label>
+                  <div className="radio-group">
+                    <label>
+                      <input
+                        type="radio"
+                        name="timeMode"
+                        value="real"
+                        checked={timeMode === 'real'}
+                        onChange={() => setTimeMode('real')}
+                      />
+                      Real Time
+                    </label>
+                    <label>
+                      <input
+                        type="radio"
+                        name="timeMode"
+                        value="fixed"
+                        checked={timeMode === 'fixed'}
+                        onChange={() => setTimeMode('fixed')}
+                      />
+                      Fixed Time
+                    </label>
+                  </div>
                 </div>
+
+                {timeMode === 'fixed' && (
+                  <div className="setting-item">
+                    <label>Local Time</label>
+                    <div className="slider-with-value">
+                      <input
+                        type="range"
+                        min="0"
+                        max="24"
+                        step="0.5"
+                        value={fixedTimeHour}
+                        onChange={(e) => setFixedTimeHour(Number(e.target.value))}
+                      />
+                      <span>{formatTimeHour(fixedTimeHour)}</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="settings-section">
