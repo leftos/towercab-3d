@@ -34,7 +34,7 @@ Fix all ESLint errors before committing. Do not disable ESLint rules without a j
 The application uses two 3D rendering engines simultaneously:
 
 - **CesiumJS** (`cesium ^1.136.0`): Renders the globe, terrain, satellite imagery via Cesium Ion
-- **Babylon.js** (`@babylonjs/core ^8.42.0`): Renders 3D aircraft cone meshes as a transparent overlay on top of Cesium
+- **Babylon.js** (`@babylonjs/core ^8.42.0`): Renders 3D aircraft models, weather effects (fog dome, cloud layers), measuring tool visualizations, and VR stereo display as a transparent overlay on top of Cesium
 
 The `useBabylonOverlay` hook synchronizes the Babylon.js camera with Cesium's camera each frame using ENU (East-North-Up) coordinate transformations. Aircraft positions are converted from geographic coordinates (lat/lon/alt) to Babylon's local coordinate system relative to a root node positioned at the tower location.
 
@@ -46,15 +46,18 @@ The `useBabylonOverlay` hook synchronizes the Babylon.js camera with Cesium's ca
 
 ### State Management (Zustand)
 
-Five stores manage application state:
+Eight stores manage application state:
 
 | Store | File | Responsibility |
 |-------|------|----------------|
 | `vatsimStore` | `stores/vatsimStore.ts` | Polls VATSIM API every 3s, stores pilot data, manages interpolation states |
 | `airportStore` | `stores/airportStore.ts` | Airport database (28,000+ airports) from mwgg/Airports GitHub repo |
-| `cameraStore` | `stores/cameraStore.ts` | Camera orientation, FOV, position offsets, follow mode, view mode, bookmarks |
-| `settingsStore` | `stores/settingsStore.ts` | Cesium Ion token, display settings, terrain quality (persisted to localStorage) |
-| `labelStore` | `stores/labelStore.ts` | Label visibility, positions, and rendering state |
+| `cameraStore` | `stores/cameraStore.ts` | Global camera defaults, bookmarks per airport |
+| `viewportStore` | `stores/viewportStore.ts` | Multi-viewport management, per-viewport camera state, inset positions/sizes |
+| `settingsStore` | `stores/settingsStore.ts` | Cesium Ion token, display settings, terrain quality, weather settings (persisted to localStorage) |
+| `weatherStore` | `stores/weatherStore.ts` | METAR data fetching, weather state (visibility, clouds, ceiling) |
+| `measureStore` | `stores/measureStore.ts` | Active measurement points, measurement mode state |
+| `vrStore` | `stores/vrStore.ts` | VR session state, WebXR availability, IPD settings |
 
 ### Aircraft Data Flow
 
@@ -70,24 +73,32 @@ Five stores manage application state:
 | Hook | File | Purpose |
 |------|------|---------|
 | `useAircraftInterpolation` | `hooks/useAircraftInterpolation.ts` | Smooth position/heading interpolation between 15s API updates |
-| `useCesiumCamera` | `hooks/useCesiumCamera.ts` | Tower-based camera controls, WASD movement, follow modes, top-down view |
+| `useCesiumCamera` | `hooks/useCesiumCamera.ts` | Tower-based camera controls, follow modes, top-down view (per-viewport) |
+| `useCameraInput` | `hooks/useCameraInput.ts` | Keyboard/mouse input handling for camera (WASD, arrows, mouse drag) |
+| `useActiveViewportCamera` | `hooks/useActiveViewportCamera.ts` | Returns camera state for the currently active viewport |
 | `useBabylonOverlay` | `hooks/useBabylonOverlay.ts` | Syncs Babylon camera with Cesium, manages 3D aircraft meshes and shadows |
+| `useBabylonCameraSync` | `hooks/useBabylonCameraSync.ts` | Synchronizes Babylon.js camera matrix with Cesium's view |
+| `useCesiumStereo` | `hooks/useCesiumStereo.ts` | Dual-pass Cesium stereo rendering for VR (left/right eye frustums) |
+| `useDragResize` | `hooks/useDragResize.ts` | Drag and resize functionality for inset viewports |
 | `useVatsimData` | `hooks/useVatsimData.ts` | Wrapper for accessing VATSIM store with auto-polling |
-| `useKeyboardControls` | `hooks/useKeyboardControls.ts` | All keyboard input handling (WASD, arrows, shortcuts) |
 
 ### Key Components
 
 | Component | File | Purpose |
 |-----------|------|---------|
-| `CesiumViewer` | `components/CesiumViewer.tsx` | Main 3D globe with aircraft entities and camera setup |
-| `BabylonOverlay` | `components/BabylonOverlay.tsx` | Transparent Babylon.js canvas overlay |
-| `ControlsBar` | `components/ControlsBar.tsx` | Bottom HUD with camera controls, FOV slider, following status |
-| `TopBar` | `components/TopBar.tsx` | Airport selector, Zulu time, connection status |
-| `AircraftPanel` | `components/AircraftPanel.tsx` | Right-side nearby aircraft list with sorting/filtering |
-| `SettingsModal` | `components/SettingsModal.tsx` | Configuration UI for all settings |
-| `AirportSelector` | `components/AirportSelector.tsx` | Airport search modal with recent/popular airports |
-| `GlobalSearch` | `components/GlobalSearch.tsx` | Ctrl+K search across all VATSIM aircraft |
-| `CommandInput` | `components/CommandInput.tsx` | Terminal-style input for bookmark save/load (.XX. syntax) |
+| `CesiumViewer` | `components/CesiumViewer/CesiumViewer.tsx` | 3D globe with aircraft entities, camera setup, weather effects |
+| `ViewportManager` | `components/Viewport/ViewportManager.tsx` | Manages main viewport and inset viewports |
+| `ViewportContainer` | `components/Viewport/ViewportContainer.tsx` | Container for a single viewport (main or inset) |
+| `InsetCesiumViewer` | `components/Viewport/InsetCesiumViewer.tsx` | Delayed-init wrapper for inset Cesium viewers |
+| `ControlsBar` | `components/UI/ControlsBar.tsx` | Bottom HUD with camera controls, FOV slider, following status |
+| `TopBar` | `components/UI/TopBar.tsx` | Airport selector, Zulu time, connection status |
+| `AircraftPanel` | `components/UI/AircraftPanel.tsx` | Right-side nearby aircraft list with sorting/filtering |
+| `AirportSelector` | `components/UI/AirportSelector.tsx` | Airport search modal with recent/popular airports |
+| `GlobalSearchPanel` | `components/UI/GlobalSearchPanel.tsx` | Ctrl+K search across all VATSIM aircraft |
+| `CommandInput` | `components/UI/CommandInput.tsx` | Terminal-style input for bookmark save/load (.XX. syntax) |
+| `MeasuringTool` | `components/UI/MeasuringTool.tsx` | Distance measurement visualization on terrain |
+| `VRButton` | `components/VR/VRButton.tsx` | WebXR session entry button (shows when VR available) |
+| `VRScene` | `components/VR/VRScene.tsx` | Babylon.js WebXR scene with stereo background planes |
 
 ## Path Alias
 
@@ -98,6 +109,28 @@ Five stores manage application state:
 - **Cesium Ion**: Requires user-provided access token for terrain/imagery (free tier available)
 - **VATSIM API**: `https://data.vatsim.net/v3/vatsim-data.json` (polled every 3 seconds)
 - **Airport Database**: Fetched from `mwgg/Airports` GitHub raw JSON on startup
+- **Aviation Weather API**: `https://aviationweather.gov/api/data/metar` for METAR weather data (5-minute refresh)
+
+## Multi-Viewport Architecture
+
+The application supports multiple simultaneous views through the viewport system:
+
+- **Main Viewport**: Always present, full-screen Cesium viewer
+- **Inset Viewports**: Overlay windows with independent Cesium viewers
+- **Active Viewport**: Only one viewport receives keyboard/mouse input at a time (cyan border)
+- Each viewport maintains independent camera state (heading, pitch, FOV, follow target)
+- Inset positions and sizes are persisted per-airport in localStorage
+
+## Weather System
+
+METAR-based weather visualization:
+
+1. **Fetch**: `weatherStore` fetches METAR data from Aviation Weather API
+2. **Parse**: Extracts visibility, cloud layers (SCT/BKN/OVC), and ceiling
+3. **Cesium Fog**: Reduces terrain draw distance based on visibility
+4. **Babylon Fog Dome**: Semi-transparent dome mesh at visibility boundary with fresnel effect
+5. **Cloud Layers**: Plane meshes positioned at METAR-reported ceiling altitudes
+6. **Datablock Culling**: Hides aircraft labels beyond visibility or behind cloud layers
 
 ## Camera System
 
@@ -178,8 +211,8 @@ See MODDING.md for manifest format and model requirements. Models are loaded on 
 
 ### Adding a New Keyboard Shortcut
 
-1. Add key handler in `useKeyboardControls.ts`
-2. Update keyboard reference in `SettingsModal.tsx`
+1. Add key handler in `useCameraInput.ts` (for camera-related) or `App.tsx` (for global shortcuts)
+2. Update keyboard reference in Settings Help tab
 
 ### Modifying Aircraft Rendering
 
@@ -190,8 +223,23 @@ See MODDING.md for manifest format and model requirements. Models are loaded on 
 ### Modifying Camera Behavior
 
 1. Camera math: `useCesiumCamera.ts`
-2. Babylon sync: `useBabylonOverlay.ts`
-3. State management: `cameraStore.ts`
+2. Input handling: `useCameraInput.ts`
+3. Babylon sync: `useBabylonOverlay.ts`
+4. State management: `viewportStore.ts` (per-viewport) and `cameraStore.ts` (bookmarks)
+
+### Modifying Weather Effects
+
+1. METAR fetching: `weatherStore.ts`
+2. Weather service: `services/WeatherService.ts`
+3. Fog/cloud rendering: `useBabylonOverlay.ts`
+4. Settings: `settingsStore.ts` (fog/cloud toggles, intensity)
+
+### Modifying Viewport System
+
+1. Viewport creation: `viewportStore.ts`
+2. Viewport UI: `ViewportManager.tsx`, `ViewportContainer.tsx`
+3. Inset initialization: `InsetCesiumViewer.tsx`
+4. Drag/resize: `useDragResize.ts`
 
 ## Changelog Maintenance
 

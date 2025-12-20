@@ -17,7 +17,14 @@ A 3D tower cab view application for VATSIM air traffic controllers. View real-ti
 - Configurable terrain quality (5 levels from Low to Ultra)
 - Optional 3D OpenStreetMap buildings
 - Dynamic time-of-day lighting (real-time or fixed hour)
-- Aircraft rendered as 3D models with realistic type-based sizing
+- Aircraft rendered as 3D models with realistic type-based sizing (39 aircraft types)
+- METAR-based weather effects: fog domes and cloud layers at real ceiling altitudes
+
+### Multi-Viewport System
+- Create multiple inset viewports for simultaneous views
+- Each viewport has independent camera controls and can follow different aircraft
+- Drag and resize inset viewports, positions saved per airport
+- Click to activate a viewport for keyboard/mouse control
 
 ### Camera System
 - **3D Tower View**: Look around from tower perspective with smooth controls
@@ -37,6 +44,17 @@ A 3D tower cab view application for VATSIM air traffic controllers. View real-ti
 - Recent airports history
 - Quick access to popular international hubs
 - Smooth camera animation when changing airports
+
+### Measuring Tool
+- Click-to-measure distances on terrain
+- Live preview as you move the cursor
+- Multiple measurements can be active simultaneously
+- Right-click to remove individual measurements
+
+### VR Support (Experimental)
+- WebXR integration for VR headsets (Quest Link, SteamVR, etc.)
+- Stereo rendering with configurable IPD
+- Immersive tower cab experience
 
 ### Modding Support
 - Custom aircraft 3D models (glTF/GLB format)
@@ -108,6 +126,7 @@ npm run dev
 | **O** | Toggle follow mode (Tower/Orbit) when following |
 | **Escape** | Stop following / close modals |
 | **Ctrl+K** | Open global aircraft search |
+| **M** | Toggle measuring tool |
 
 ### Mouse Controls
 
@@ -167,7 +186,7 @@ towercab-3d/
 | **React 19** | UI framework |
 | **TypeScript 5** | Type-safe development |
 | **CesiumJS 1.136** | 3D globe rendering |
-| **Babylon.js 8** | GUI overlay (labels, leader lines, weather effects) |
+| **Babylon.js 8** | 3D aircraft models, weather effects, VR rendering |
 | **Zustand 5** | State management |
 | **Vite 7** | Build tool |
 
@@ -193,14 +212,44 @@ This downloads the latest FAA Excel file and converts it to `src/renderer/public
 
 ## Settings Reference
 
+Settings are organized into tabs: General, Display, Graphics, Performance, and Help.
+
+### General Tab
 | Setting | Description | Range |
 |---------|-------------|-------|
 | Cesium Ion Token | API key for terrain/imagery | Required |
-| Label Visibility | Distance for showing aircraft labels | 5-100 nm |
+| Theme | Light or dark interface | Light/Dark |
+| Default FOV | Starting field of view | 10-120° |
+| Camera Speed | WASD movement speed | 0.1x-3x |
+| Mouse Sensitivity | Right-click drag rotation speed | 0.1x-3x |
+
+### Display Tab
+| Setting | Description | Options |
+|---------|-------------|---------|
+| Label Visibility Distance | How far to show aircraft labels | 5-100 nm |
+| Datablock Display | Label detail level | Full/Airline Codes Only/None |
 | Show Aircraft Panel | Toggle nearby aircraft list | On/Off |
+| Show Ground Traffic | Display aircraft on ground | On/Off |
+| Show Airborne Traffic | Display flying aircraft | On/Off |
+| Max Aircraft | Limit displayed aircraft count | 10-500 |
+
+### Graphics Tab
+| Setting | Description | Options |
+|---------|-------------|---------|
 | Terrain Quality | Level of terrain detail | Low to Ultra (5 levels) |
 | Show 3D Buildings | OpenStreetMap 3D buildings | On/Off |
 | Time of Day | Real-time or fixed local hour | Real/0-24h |
+| Enable Fog | METAR-based fog effects | On/Off |
+| Fog Intensity | Fog opacity multiplier | 0.5x-2x |
+| Visibility Scale | Fog distance multiplier | 0.5x-2x |
+| Enable Clouds | Cloud layers at METAR ceilings | On/Off |
+
+### Performance Tab
+| Setting | Description | Range |
+|---------|-------------|-------|
+| In-Memory Tile Cache | Cached terrain tiles in memory | 50-500 tiles |
+| Disk Cache Size | Persistent tile cache on disk | 0.1-10 GB |
+| Aircraft Data Radius | VATSIM data fetch radius | 50-500 nm |
 
 ## Performance Tips
 

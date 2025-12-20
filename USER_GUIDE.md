@@ -12,10 +12,14 @@ Welcome to TowerCab 3D, a real-time 3D tower visualization tool for VATSIM air t
 6. [Aircraft Panel](#aircraft-panel)
 7. [Global Aircraft Search](#global-aircraft-search)
 8. [Bookmark System](#bookmark-system)
-9. [Settings](#settings)
-10. [Modding](#modding)
-11. [Keyboard Shortcuts Reference](#keyboard-shortcuts-reference)
-12. [Troubleshooting](#troubleshooting)
+9. [Multi-Viewport System](#multi-viewport-system)
+10. [Measuring Tool](#measuring-tool)
+11. [Weather Effects](#weather-effects)
+12. [VR Support](#vr-support)
+13. [Settings](#settings)
+14. [Modding](#modding)
+15. [Keyboard Shortcuts Reference](#keyboard-shortcuts-reference)
+16. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -39,7 +43,8 @@ Welcome to TowerCab 3D, a real-time 3D tower visualization tool for VATSIM air t
 
 Once configured, you'll see:
 - A 3D globe with satellite imagery and terrain
-- Aircraft displayed as 3D cone shapes with callsign labels
+- Aircraft displayed as 3D models with callsign labels (datablocks)
+- Weather effects: fog at visibility limits, cloud layers at ceilings
 - A panel on the right showing nearby aircraft
 - Status information in the top bar
 
@@ -66,6 +71,8 @@ The bottom bar is divided into three sections:
 - **Set Default**: Saves current view as default for this airport
 - **Reset to Default**: Returns to saved default view
 - **Global Search**: Opens aircraft search (Ctrl+K)
+- **Measure**: Activates distance measuring tool
+- **Add Inset**: Creates a new inset viewport
 - **Camera Info**: Shows current HDG/PIT/FOV (3D) or ALT (top-down)
 
 **Center Section:**
@@ -73,6 +80,7 @@ The bottom bar is divided into three sections:
 - **Following Status**: Shows which aircraft you're following and hints
 
 **Right Section:**
+- **VR Button**: Enters VR mode (only visible when VR headset detected)
 - **Settings Button**: Opens configuration modal
 
 ### Aircraft Panel (Right Side)
@@ -260,11 +268,18 @@ The header shows:
 
 ### Filtering Aircraft
 
+**Search Box:**
 Use the search box to filter by:
 - Callsign (e.g., `UAL`, `BAW123`)
 - Aircraft type (e.g., `B738`, `A320`)
 - Departure airport (e.g., `KJFK`)
 - Arrival airport (e.g., `EGLL`)
+
+**Quick Filters:**
+| Filter | Description |
+|--------|-------------|
+| **Visible** | Show only aircraft visible through weather (not hidden by fog/clouds) |
+| **Airport** | Show only aircraft departing from or arriving at the current airport |
 
 ### Sorting Aircraft
 
@@ -365,32 +380,208 @@ Bookmarks store the complete camera state:
 
 ---
 
+## Multi-Viewport System
+
+TowerCab 3D supports multiple simultaneous views through inset viewports.
+
+### Creating Inset Viewports
+
+1. Click the **Add Inset** button in the controls bar
+2. A new viewport window appears overlaid on the main view
+3. Each inset has independent camera controls and follow modes
+
+### Managing Viewports
+
+**Activating a Viewport:**
+- Click anywhere inside a viewport to activate it
+- The active viewport has a cyan border
+- Keyboard and mouse controls affect only the active viewport
+
+**Moving and Resizing:**
+- Drag the title bar to move an inset viewport
+- Drag any edge or corner to resize
+- Minimum size is enforced for usability
+
+**Closing Viewports:**
+- Click the × button in the top-right corner of an inset
+- The main viewport cannot be closed
+
+### Independent Camera Control
+
+Each viewport maintains its own:
+- Heading, pitch, and field of view
+- Follow target and follow mode (Tower/Orbit)
+- Top-down vs 3D view setting
+
+### Performance Considerations
+
+- Inset viewports use reduced quality settings for performance
+- A warning appears at 3+ insets, severe warning at 6+
+- Consider closing unused insets to improve frame rate
+
+### Viewport Persistence
+
+Inset viewport positions and sizes are saved per-airport. When you return to an airport, your viewport layout is restored.
+
+---
+
+## Measuring Tool
+
+The measuring tool allows you to measure distances on the terrain.
+
+### Activating the Tool
+
+1. Click the **Measure** button in the controls bar, or press **M**
+2. The cursor changes to indicate measuring mode
+3. Click to place measurement points
+
+### Taking Measurements
+
+1. **First click**: Sets the starting point
+2. **Move cursor**: See a live preview of the distance
+3. **Second click**: Locks in the measurement line
+
+### Multiple Measurements
+
+- Continue clicking to add more measurement points
+- Each pair of consecutive clicks creates a separate measurement
+- All measurements remain visible on screen
+
+### Removing Measurements
+
+- **Right-click** on any measurement endpoint to remove that measurement
+- Click the Measure button again to exit measuring mode and clear all measurements
+
+### Distance Display
+
+- **Short distances**: Shown in meters and feet
+- **Long distances**: Shown in kilometers and nautical miles
+- Distance labels appear at the midpoint of each measurement line
+
+---
+
+## Weather Effects
+
+TowerCab 3D displays real-time weather based on METAR reports.
+
+### Weather Features
+
+**Fog Effects:**
+- Visibility-based fog that limits terrain draw distance
+- Visual fog dome at the visibility boundary
+- Adjustable intensity and visibility scale
+
+**Cloud Layers:**
+- Cloud planes positioned at METAR-reported ceiling altitudes
+- Scattered (SCT), broken (BKN), and overcast (OVC) layers shown
+- Aircraft behind clouds may have hidden datablocks
+
+### Weather-Based Visibility
+
+When weather effects are enabled:
+- Aircraft beyond the reported visibility have hidden labels
+- Aircraft above broken or overcast cloud layers have hidden labels
+- Followed aircraft are always visible regardless of weather
+- Use the "Visible" filter in Aircraft Panel to show only weather-visible aircraft
+
+### Weather Settings
+
+| Setting | Description |
+|---------|-------------|
+| Enable Fog | Toggle fog effects on/off |
+| Fog Intensity | Opacity of the fog dome (0.5x-2x) |
+| Visibility Scale | Multiplier for fog distance (2x = see twice as far as METAR) |
+| Enable Clouds | Toggle cloud layer display on/off |
+
+### Automatic Weather Updates
+
+- Weather updates every 5 minutes from Aviation Weather API
+- When orbit-following without an airport, weather is based on camera position
+- Weather station is automatically selected based on nearest METAR
+
+---
+
+## VR Support
+
+TowerCab 3D includes experimental WebXR support for VR headsets.
+
+### Requirements
+
+- VR headset connected via Quest Link, SteamVR, or similar
+- WebXR-compatible browser runtime
+- The VR button only appears when a headset is detected
+
+### Entering VR Mode
+
+1. Connect your VR headset and launch the headset runtime
+2. Look for the **VR** button in the controls bar
+3. Click the button to enter VR mode
+4. UI automatically hides for an immersive experience
+
+### VR Controls
+
+- Look around naturally with head tracking
+- Camera position follows your current tower/airport location
+- Stereo rendering provides depth perception
+
+### Exiting VR Mode
+
+- Remove headset or use the VR runtime's exit function
+- UI returns when VR mode ends
+
+### IPD Configuration
+
+Interpupillary distance (IPD) can be adjusted in settings for proper stereo separation.
+
+---
+
 ## Settings
 
-Access settings by clicking the gear icon in the bottom-right corner.
+Access settings by clicking the gear icon in the bottom-right corner. Settings are organized into five tabs.
 
-### Cesium Ion Token
+### General Tab
 
-Required for terrain and satellite imagery. Get a free token at [cesium.com/ion](https://cesium.com/ion).
+| Setting | Description | Default |
+|---------|-------------|---------|
+| **Cesium Ion Token** | API key for terrain/imagery (required) | - |
+| **Theme** | Light or dark interface | Dark |
+| **Default FOV** | Starting field of view | 60° |
+| **Camera Speed** | WASD movement speed multiplier | 1x |
+| **Mouse Sensitivity** | Right-click drag rotation speed | 1x |
 
-1. Create an account
+**Getting a Cesium Ion Token:**
+1. Create a free account at [cesium.com/ion](https://cesium.com/ion)
 2. Go to Access Tokens
 3. Create a new token with default permissions
 4. Paste the token in the settings field
 
-### Display Settings
+### Display Tab
 
 | Setting | Description | Default |
 |---------|-------------|---------|
-| **Label Visibility Distance** | How far away aircraft labels appear | 30 nm |
+| **Label Visibility Distance** | How far aircraft labels appear | 30 nm |
+| **Datablock Display** | Label detail level | Full |
 | **Show Aircraft Panel** | Toggle the right-side aircraft list | On |
+| **Show Ground Traffic** | Display aircraft on ground | On |
+| **Show Airborne Traffic** | Display flying aircraft | On |
+| **Max Aircraft** | Limit displayed aircraft count | 100 |
 
-### Graphics Settings
+**Datablock Display Modes:**
+- **Full**: Shows callsign, aircraft type, altitude, and speed
+- **Airline Codes Only**: Shows only the airline ICAO code (e.g., "UAL" instead of "UAL123")
+- **None**: Hides labels entirely, showing only aircraft models
 
-| Setting | Description | Options |
+### Graphics Tab
+
+| Setting | Description | Default |
 |---------|-------------|---------|
-| **Terrain Quality** | Level of terrain detail | Low (1) to Ultra (5) |
-| **Show 3D Buildings** | OpenStreetMap building models | On/Off |
+| **Terrain Quality** | Level of terrain detail | High |
+| **Show 3D Buildings** | OpenStreetMap building models | Off |
+| **Time of Day** | Real-time or fixed local hour | Real |
+| **Enable Fog** | METAR-based fog effects | On |
+| **Fog Intensity** | Fog opacity multiplier | 1x |
+| **Visibility Scale** | Fog distance multiplier | 1x |
+| **Enable Clouds** | Cloud layers at METAR ceilings | On |
 
 **Terrain Quality Levels:**
 1. **Low**: Fastest loading, minimal detail
@@ -399,23 +590,33 @@ Required for terrain and satellite imagery. Get a free token at [cesium.com/ion]
 4. **Very High**: Detailed terrain
 5. **Ultra**: Maximum detail (may impact performance)
 
-### Time of Day
+**Time of Day Options:**
+- **Real Time**: Uses current UTC time for sun position
+- **Fixed Time**: Set a specific local hour (0-24) at the tower location
 
-Control the lighting in the scene:
+Fixed time is useful for consistent lighting, viewing dawn/dusk conditions, or avoiding harsh midday shadows.
 
-| Option | Description |
-|--------|-------------|
-| **Real Time** | Uses current UTC time for sun position |
-| **Fixed Time** | Set a specific local hour (0-24) at the tower location |
+### Performance Tab
 
-Fixed time is useful for:
-- Consistent lighting for screenshots
-- Viewing dawn/dusk conditions
-- Avoiding harsh midday shadows
+| Setting | Description | Default |
+|---------|-------------|---------|
+| **In-Memory Tile Cache** | Cached terrain tiles in memory | 150 tiles |
+| **Disk Cache Size** | Persistent tile cache on disk | 1 GB |
+| **Aircraft Data Radius** | VATSIM data fetch radius | 100 nm |
 
-### Controls Reference
+**Performance Tips:**
+- Lower terrain quality for smoother performance on older hardware
+- Disable 3D buildings if experiencing frame drops
+- Reduce label visibility distance to decrease rendered aircraft
+- Close unused inset viewports
 
-The settings modal includes a complete reference of all keyboard controls and follow mode controls for quick lookup.
+### Help Tab
+
+The Help tab includes:
+- Complete keyboard shortcuts reference
+- Follow mode controls
+- Mouse controls overview
+- Links to documentation
 
 ---
 
@@ -497,12 +698,18 @@ See [MODDING.md](MODDING.md) for complete modding instructions including:
 | O | Toggle Tower / Orbit mode |
 | Escape | Stop following |
 
+### Tools
+
+| Key | Action |
+|-----|--------|
+| M | Toggle measuring tool |
+| Ctrl+K | Open global aircraft search |
+
 ### Global
 
 | Key | Action |
 |-----|--------|
-| Ctrl+K | Open global aircraft search |
-| Escape | Close modals and panels |
+| Escape | Close modals, stop following, exit measuring mode |
 
 ---
 
