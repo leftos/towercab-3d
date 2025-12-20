@@ -10,6 +10,7 @@ import { useVatsimStore } from './stores/vatsimStore'
 import { useAirportStore } from './stores/airportStore'
 import { useSettingsStore } from './stores/settingsStore'
 import { useWeatherStore } from './stores/weatherStore'
+import { useCameraStore } from './stores/cameraStore'
 import { airportService } from './services/AirportService'
 
 function App() {
@@ -18,8 +19,10 @@ function App() {
   const currentAirport = useAirportStore((state) => state.currentAirport)
   const cesiumIonToken = useSettingsStore((state) => state.cesiumIonToken)
   const showWeatherEffects = useSettingsStore((state) => state.showWeatherEffects)
+  const followingCallsign = useCameraStore((state) => state.followingCallsign)
   const fetchWeather = useWeatherStore((state) => state.fetchWeather)
   const startAutoRefresh = useWeatherStore((state) => state.startAutoRefresh)
+  const startNearestAutoRefresh = useWeatherStore((state) => state.startNearestAutoRefresh)
   const stopAutoRefresh = useWeatherStore((state) => state.stopAutoRefresh)
   const clearWeather = useWeatherStore((state) => state.clearWeather)
 
@@ -54,26 +57,34 @@ function App() {
   }, [cesiumIonToken, startPolling, loadAirports])
 
   // Fetch weather data when airport changes or weather effects are enabled
+  // When no airport is selected but following an aircraft, use nearest METAR mode
   const currentIcao = currentAirport?.icao
+  const isOrbitModeWithoutAirport = !currentAirport && followingCallsign
+
   useEffect(() => {
-    if (!currentIcao || !showWeatherEffects) {
+    if (!showWeatherEffects) {
       stopAutoRefresh()
-      if (!showWeatherEffects) {
-        clearWeather()
-      }
+      clearWeather()
       return
     }
 
-    // Fetch immediately on airport change
-    fetchWeather(currentIcao)
-
-    // Start 5-minute auto-refresh
-    startAutoRefresh(currentIcao)
+    if (currentIcao) {
+      // Airport selected - use airport's METAR
+      fetchWeather(currentIcao)
+      startAutoRefresh(currentIcao)
+    } else if (isOrbitModeWithoutAirport) {
+      // No airport but following aircraft - use nearest METAR mode
+      // The actual position updates will come from CesiumViewer
+      startNearestAutoRefresh()
+    } else {
+      // No airport and not following - stop weather
+      stopAutoRefresh()
+    }
 
     return () => {
       stopAutoRefresh()
     }
-  }, [currentIcao, showWeatherEffects, fetchWeather, startAutoRefresh, stopAutoRefresh, clearWeather])
+  }, [currentIcao, showWeatherEffects, isOrbitModeWithoutAirport, fetchWeather, startAutoRefresh, startNearestAutoRefresh, stopAutoRefresh, clearWeather])
 
   if (isLoading) {
     return (

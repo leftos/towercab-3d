@@ -18,12 +18,19 @@ interface WeatherState {
   fogDensity: number        // 0 to ~0.0003, computed from visibility
   cloudLayers: CloudLayer[] // Processed cloud data
 
+  // Camera position for nearest METAR mode
+  cameraPosition: { lat: number; lon: number } | null
+  useNearestMetar: boolean  // true when using position-based weather instead of airport METAR
+
   // Auto-refresh state
   refreshIntervalId: ReturnType<typeof setInterval> | null
 
   // Actions
   fetchWeather: (icao: string) => Promise<void>
+  fetchNearestWeather: (lat: number, lon: number) => Promise<void>
+  updateCameraPosition: (lat: number, lon: number) => void
   startAutoRefresh: (icao: string) => void
+  startNearestAutoRefresh: () => void
   stopAutoRefresh: () => void
   clearWeather: () => void
 }
@@ -98,6 +105,12 @@ function parseCloudLayers(metar: MetarData): CloudLayer[] {
     .slice(0, 4) // Max 4 cloud layers
 }
 
+// Grid size for position-based cache (in degrees, ~6nm)
+const POSITION_GRID_SIZE = 0.1
+
+// Minimum distance change to trigger a new nearest METAR fetch (in degrees, ~3nm)
+const POSITION_CHANGE_THRESHOLD = 0.05
+
 export const useWeatherStore = create<WeatherState>((set, get) => ({
   // Initial state
   currentMetar: null,
@@ -106,10 +119,12 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
   error: null,
   fogDensity: 0,
   cloudLayers: [],
+  cameraPosition: null,
+  useNearestMetar: false,
   refreshIntervalId: null,
 
   fetchWeather: async (icao: string) => {
-    set({ isLoading: true, error: null })
+    set({ isLoading: true, error: null, useNearestMetar: false })
 
     try {
       const metar = await metarService.fetchMetar(icao)
@@ -137,6 +152,69 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
     }
   },
 
+  fetchNearestWeather: async (lat: number, lon: number) => {
+    set({ isLoading: true, error: null, useNearestMetar: true })
+
+    try {
+      const metar = await metarService.fetchNearestMetar(lat, lon, 100)
+
+      if (metar) {
+        set({
+          currentMetar: metar,
+          lastFetchTime: Date.now(),
+          isLoading: false,
+          error: null,
+          fogDensity: visibilityToFogDensity(metar.visib),
+          cloudLayers: parseCloudLayers(metar),
+          cameraPosition: { lat, lon }
+        })
+      } else {
+        set({
+          isLoading: false,
+          error: 'No nearby METAR stations'
+        })
+      }
+    } catch (error) {
+      set({
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to fetch nearest weather'
+      })
+    }
+  },
+
+  updateCameraPosition: (lat: number, lon: number) => {
+    const state = get()
+    const oldPos = state.cameraPosition
+
+    // Only update and potentially refetch if position changed significantly
+    // or if we don't have weather data yet
+    if (!state.useNearestMetar) {
+      // Not in nearest METAR mode, just store position for potential future use
+      set({ cameraPosition: { lat, lon } })
+      return
+    }
+
+    // Check if position changed enough to warrant a new fetch
+    if (oldPos) {
+      const latDiff = Math.abs(lat - oldPos.lat)
+      const lonDiff = Math.abs(lon - oldPos.lon)
+
+      if (latDiff < POSITION_CHANGE_THRESHOLD && lonDiff < POSITION_CHANGE_THRESHOLD) {
+        // Position hasn't changed much, no need to refetch
+        return
+      }
+    }
+
+    // Position changed significantly, update and fetch
+    set({ cameraPosition: { lat, lon } })
+
+    // Throttle fetches - only fetch if last fetch was > 30 seconds ago
+    const timeSinceLastFetch = Date.now() - state.lastFetchTime
+    if (timeSinceLastFetch > 30000) {
+      state.fetchNearestWeather(lat, lon)
+    }
+  },
+
   startAutoRefresh: (icao: string) => {
     const state = get()
 
@@ -150,7 +228,29 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
       get().fetchWeather(icao)
     }, 5 * 60 * 1000) // 5 minutes
 
-    set({ refreshIntervalId: intervalId })
+    set({ refreshIntervalId: intervalId, useNearestMetar: false })
+  },
+
+  startNearestAutoRefresh: () => {
+    const state = get()
+
+    // Clear any existing interval
+    if (state.refreshIntervalId) {
+      clearInterval(state.refreshIntervalId)
+    }
+
+    // Start new 5-minute refresh interval for nearest METAR
+    const intervalId = setInterval(() => {
+      const currentState = get()
+      if (currentState.cameraPosition && currentState.useNearestMetar) {
+        currentState.fetchNearestWeather(
+          currentState.cameraPosition.lat,
+          currentState.cameraPosition.lon
+        )
+      }
+    }, 5 * 60 * 1000) // 5 minutes
+
+    set({ refreshIntervalId: intervalId, useNearestMetar: true })
   },
 
   stopAutoRefresh: () => {
@@ -173,6 +273,8 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
       error: null,
       fogDensity: 0,
       cloudLayers: [],
+      cameraPosition: null,
+      useNearestMetar: false,
       refreshIntervalId: null
     })
   }

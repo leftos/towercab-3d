@@ -81,8 +81,9 @@ function CesiumViewer() {
   const showWeatherEffects = useSettingsStore((state) => state.showWeatherEffects)
   const showCesiumFog = useSettingsStore((state) => state.showCesiumFog)
 
-  // Weather store for fog effects
+  // Weather store for fog effects and camera position updates
   const fogDensity = useWeatherStore((state) => state.fogDensity)
+  const updateCameraPosition = useWeatherStore((state) => state.updateCameraPosition)
 
   // Camera store for follow highlighting and view mode
   const followingCallsign = useCameraStore((state) => state.followingCallsign)
@@ -1009,12 +1010,23 @@ function CesiumViewer() {
       updateAircraftEntities()
       babylonOverlay.syncCamera()
       babylonOverlay.render()
+
+      // Update camera position for nearest METAR mode when in orbit mode without airport
+      // This enables weather to update based on camera location when flying around freely
+      if (showWeatherEffects && followMode === 'orbit' && followingCallsign && !currentAirport) {
+        const cameraCartographic = viewer.camera.positionCartographic
+        if (cameraCartographic) {
+          const lat = Cesium.Math.toDegrees(cameraCartographic.latitude)
+          const lon = Cesium.Math.toDegrees(cameraCartographic.longitude)
+          updateCameraPosition(lat, lon)
+        }
+      }
     })
 
     return () => {
       removePostRender()
     }
-  }, [cesiumViewer, babylonOverlay, updateAircraftEntities])
+  }, [cesiumViewer, babylonOverlay, updateAircraftEntities, showWeatherEffects, followMode, followingCallsign, currentAirport, updateCameraPosition])
 
   // Memory diagnostic logging - logs counters every 5 seconds
   useEffect(() => {

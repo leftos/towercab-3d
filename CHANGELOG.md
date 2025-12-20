@@ -35,6 +35,11 @@ All notable changes to TowerCab 3D will be documented in this file.
   - Fog Intensity (0.5x-2.0x): controls fog dome opacity
   - Visibility Scale (0.5x-2.0x): multiplier for fog distance (2.0 = see twice as far as METAR)
 - Settings modal removes blur on Graphics tab for real-time weather preview
+- Nearest METAR mode for orbit following without airport:
+  - When orbit-following aircraft without an airport selected, weather updates based on camera position
+  - Automatically finds nearest METAR station within 100nm of current location
+  - Position-based throttling to avoid excessive API requests (refetches when moving ~3nm)
+  - Enables realistic weather when flying around globally
 
 ### Changed
 - Settings modal reorganized into tabs to reduce vertical scrolling
