@@ -6,6 +6,7 @@ import type {
   LoadedMod,
   ModRegistry
 } from '../types/mod'
+import { isSupportedModelFormat, getModelFormat, SUPPORTED_MODEL_FORMATS } from '../types/mod'
 
 class ModService {
   private registry: ModRegistry = {
@@ -120,6 +121,28 @@ class ModService {
       aircraftModels: this.registry.aircraft.size,
       towerModels: this.registry.towers.size
     }
+  }
+
+  /**
+   * Validate a model file path
+   * Returns true if the file has a supported format
+   */
+  validateModelFile(modelFile: string): boolean {
+    return isSupportedModelFormat(modelFile)
+  }
+
+  /**
+   * Get the format of a model file
+   */
+  getModelFormat(modelFile: string): string | null {
+    return getModelFormat(modelFile)
+  }
+
+  /**
+   * Get list of supported model formats
+   */
+  getSupportedFormats(): readonly string[] {
+    return SUPPORTED_MODEL_FORMATS
   }
 }
 
