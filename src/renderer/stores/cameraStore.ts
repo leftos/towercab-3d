@@ -266,7 +266,9 @@ export const useCameraStore = create<CameraStore>()(
         set({
           currentAirportIcao: normalizedIcao,
           airportSettings,
-          viewMode: savedViewMode
+          viewMode: savedViewMode,
+          // Stop following any aircraft when switching airports
+          followingCallsign: null
         })
 
         // Load settings for the saved view mode

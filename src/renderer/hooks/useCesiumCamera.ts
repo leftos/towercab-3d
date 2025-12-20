@@ -59,6 +59,11 @@ export function useCesiumCamera(
   const followAircraftStore = useCameraStore((state) => state.followAircraft)
   const stopFollowingStore = useCameraStore((state) => state.stopFollowing)
 
+  // Track the previous airport to detect airport switches
+  const previousAirportRef = useRef<string | null>(null)
+  // Flag to indicate we're in the middle of a flyTo animation
+  const isFlyingToAirportRef = useRef(false)
+
   // Mouse drag state
   const isDraggingRef = useRef(false)
   const lastMousePosRef = useRef({ x: 0, y: 0 })
@@ -120,6 +125,18 @@ export function useCesiumCamera(
     if (!viewer || viewer.isDestroyed()) return
 
     const towerPos = getTowerPos()
+    const currentIcao = currentAirport?.icao ?? null
+
+    // Detect airport switch
+    const isAirportSwitch = currentIcao !== null &&
+      previousAirportRef.current !== null &&
+      previousAirportRef.current !== currentIcao
+
+    // Update the ref for next comparison
+    previousAirportRef.current = currentIcao
+
+    // Skip camera updates while flying to new airport
+    if (isFlyingToAirportRef.current) return
 
     // Handle orbit mode following without requiring an airport
     if (followingCallsign && followMode === 'orbit' && interpolatedAircraft) {
@@ -227,6 +244,30 @@ export function useCesiumCamera(
         airportElevation + topdownAltitude
       )
 
+      // Use flyTo for airport switches to allow terrain tiles to load progressively
+      if (isAirportSwitch) {
+        isFlyingToAirportRef.current = true
+        viewer.camera.flyTo({
+          destination: cameraPosition,
+          orientation: {
+            heading: Cesium.Math.toRadians(heading),
+            pitch: Cesium.Math.toRadians(-90),
+            roll: 0
+          },
+          duration: 2.0,
+          complete: () => {
+            isFlyingToAirportRef.current = false
+            if (viewer.camera.frustum instanceof Cesium.PerspectiveFrustum) {
+              viewer.camera.frustum.fov = Cesium.Math.toRadians(60)
+            }
+          },
+          cancel: () => {
+            isFlyingToAirportRef.current = false
+          }
+        })
+        return
+      }
+
       viewer.camera.setView({
         destination: cameraPosition,
         orientation: {
@@ -302,6 +343,31 @@ export function useCesiumCamera(
       cameraLat,
       cameraHeight
     )
+
+    // Use flyTo for airport switches to allow terrain tiles to load progressively
+    if (isAirportSwitch) {
+      isFlyingToAirportRef.current = true
+      viewer.camera.flyTo({
+        destination: cameraPosition,
+        orientation: {
+          heading: Cesium.Math.toRadians(targetHeading),
+          pitch: Cesium.Math.toRadians(targetPitch),
+          roll: 0
+        },
+        duration: 2.0, // 2 second flight gives terrain time to stream
+        complete: () => {
+          isFlyingToAirportRef.current = false
+          // Set FOV after flight completes
+          if (viewer.camera.frustum instanceof Cesium.PerspectiveFrustum) {
+            viewer.camera.frustum.fov = Cesium.Math.toRadians(targetFov)
+          }
+        },
+        cancel: () => {
+          isFlyingToAirportRef.current = false
+        }
+      })
+      return
+    }
 
     viewer.camera.setView({
       destination: cameraPosition,
