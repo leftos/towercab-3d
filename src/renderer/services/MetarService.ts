@@ -134,10 +134,20 @@ class MetarService {
     }
 
     try {
-      // Aviation Weather API supports @lat,lon syntax with distance parameter
-      // Distance is in statute miles, so convert from NM
-      const distanceSM = Math.round(maxDistanceNM * 1.15078)
-      const url = `${METAR_API_URL}?ids=@${latitude.toFixed(4)},${longitude.toFixed(4)}&distance=${distanceSM}&format=json`
+      // Aviation Weather API uses bbox parameter for geographic queries
+      // bbox format: lat0,lon0,lat1,lon1 (SW corner to NE corner)
+      // Calculate bounding box from center point and radius
+      // 1 degree latitude ≈ 60 nautical miles
+      // 1 degree longitude ≈ 60 * cos(latitude) nautical miles
+      const latOffset = maxDistanceNM / 60
+      const lonOffset = maxDistanceNM / (60 * Math.cos(latitude * Math.PI / 180))
+
+      const lat0 = (latitude - latOffset).toFixed(4)
+      const lon0 = (longitude - lonOffset).toFixed(4)
+      const lat1 = (latitude + latOffset).toFixed(4)
+      const lon1 = (longitude + lonOffset).toFixed(4)
+
+      const url = `${METAR_API_URL}?bbox=${lat0},${lon0},${lat1},${lon1}&format=json`
 
       const response = await fetch(url)
 

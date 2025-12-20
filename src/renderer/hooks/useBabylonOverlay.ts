@@ -437,7 +437,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     }
 
     return true
-  }, [showWeatherEffects, showCesiumFog, showClouds, currentMetar, cloudLayers])
+  }, [showWeatherEffects, showCesiumFog, showClouds, currentMetar, cloudLayers, visibilityScale])
 
   // Setup root node when we have a base position
   const setupRootNode = useCallback((lat: number, lon: number, height: number) => {
