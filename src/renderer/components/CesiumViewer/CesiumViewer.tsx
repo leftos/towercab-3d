@@ -71,6 +71,7 @@ function CesiumViewer() {
   const maxAircraftDisplay = useSettingsStore((state) => state.maxAircraftDisplay)
   const showGroundTraffic = useSettingsStore((state) => state.showGroundTraffic)
   const showAirborneTraffic = useSettingsStore((state) => state.showAirborneTraffic)
+  const datablockMode = useSettingsStore((state) => state.datablockMode)
   const terrainQuality = useSettingsStore((state) => state.terrainQuality)
   const show3DBuildings = useSettingsStore((state) => state.show3DBuildings)
   const timeMode = useSettingsStore((state) => state.timeMode)
@@ -550,13 +551,30 @@ function CesiumViewer() {
         ? altitudeMeters
         : Math.max(groundLevel, altitudeMeters)
 
-      // Format datablock text
-      const type = aircraft.aircraftType || '????'
-      const speedTens = Math.round(aircraft.interpolatedGroundspeed / 10).toString().padStart(2, '0')
-      const dataLine = isAirborne
-        ? `${Math.round(aircraft.interpolatedAltitude / 100).toString().padStart(3, '0')} ${speedTens}`
-        : speedTens
-      const labelText = `${aircraft.callsign}\n${type} ${dataLine}`
+      // Format datablock text based on datablockMode setting
+      let labelText = ''
+      if (datablockMode !== 'none') {
+        const type = aircraft.aircraftType || '????'
+        const speedTens = Math.round(aircraft.interpolatedGroundspeed / 10).toString().padStart(2, '0')
+        const dataLine = isAirborne
+          ? `${Math.round(aircraft.interpolatedAltitude / 100).toString().padStart(3, '0')} ${speedTens}`
+          : speedTens
+
+        // Format callsign based on mode
+        let displayCallsign = aircraft.callsign
+        if (datablockMode === 'airline') {
+          // Check if callsign matches airline pattern: exactly 3 letters followed by 1-4 digits
+          const airlinePattern = /^([A-Z]{3})\d{1,4}$/
+          const match = aircraft.callsign.match(airlinePattern)
+          if (match) {
+            // Show only the airline ICAO code (first 3 letters)
+            displayCallsign = match[1]
+          }
+          // If doesn't match pattern, show full callsign (e.g., N12345)
+        }
+
+        labelText = `${displayCallsign}\n${type} ${dataLine}`
+      }
 
       // Get color
       let babylonColor: { r: number; g: number; b: number }

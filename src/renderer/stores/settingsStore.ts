@@ -10,6 +10,7 @@ interface SettingsStore {
   maxAircraftDisplay: number
   showGroundTraffic: boolean
   showAirborneTraffic: boolean
+  datablockMode: 'full' | 'airline' | 'none'  // full=show all, airline=ICAO only, none=no labels
 
   // Graphics settings
   terrainQuality: number  // 1-5 scale (1=low, 5=ultra)
@@ -40,6 +41,7 @@ interface SettingsStore {
   setMaxAircraftDisplay: (max: number) => void
   setShowGroundTraffic: (show: boolean) => void
   setShowAirborneTraffic: (show: boolean) => void
+  setDatablockMode: (mode: 'full' | 'airline' | 'none') => void
   setTerrainQuality: (quality: number) => void
   setDefaultFov: (fov: number) => void
   setCameraSpeed: (speed: number) => void
@@ -60,6 +62,7 @@ const DEFAULT_SETTINGS = {
   maxAircraftDisplay: 200,
   showGroundTraffic: true,
   showAirborneTraffic: true,
+  datablockMode: 'full' as const,  // full=show all, airline=ICAO only, none=no labels
   terrainQuality: 3,  // 1=low, 2=medium, 3=high, 4=very high, 5=ultra
   defaultFov: 60,
   cameraSpeed: 5,
@@ -69,7 +72,7 @@ const DEFAULT_SETTINGS = {
   timeMode: 'real' as const,
   fixedTimeHour: 12,
   // Memory management - balanced defaults for smooth panning without OOM
-  inMemoryTileCacheSize: 1000,  // Cesium tile cache size (higher = smoother panning, more RAM)
+  inMemoryTileCacheSize: 500,  // Cesium tile cache size (higher = smoother panning, more RAM)
   diskCacheSizeGB: 2,  // 2GB disk cache for tiles
   aircraftDataRadiusNM: 100  // Only keep aircraft data within 100nm of camera
 }
@@ -90,6 +93,8 @@ export const useSettingsStore = create<SettingsStore>()(
       setShowGroundTraffic: (show: boolean) => set({ showGroundTraffic: show }),
 
       setShowAirborneTraffic: (show: boolean) => set({ showAirborneTraffic: show }),
+
+      setDatablockMode: (mode: 'full' | 'airline' | 'none') => set({ datablockMode: mode }),
 
       setTerrainQuality: (quality: number) =>
         set({ terrainQuality: Math.max(1, Math.min(5, Math.round(quality))) }),

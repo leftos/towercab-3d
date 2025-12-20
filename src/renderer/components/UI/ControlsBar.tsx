@@ -4,16 +4,37 @@ import { useCameraStore } from '../../stores/cameraStore'
 import GlobalSearchPanel from './GlobalSearchPanel'
 import './ControlsBar.css'
 
+type SettingsTab = 'general' | 'display' | 'graphics' | 'performance' | 'help'
+
 function ControlsBar() {
   const [showSettings, setShowSettings] = useState(false)
+  const [activeTab, setActiveTab] = useState<SettingsTab>('general')
 
-  // Settings store
-  const labelVisibilityDistance = useSettingsStore((state) => state.labelVisibilityDistance)
-  const setLabelVisibilityDistance = useSettingsStore((state) => state.setLabelVisibilityDistance)
-  const showAircraftPanel = useSettingsStore((state) => state.showAircraftPanel)
-  const setShowAircraftPanel = useSettingsStore((state) => state.setShowAircraftPanel)
+  // Settings store - General
   const cesiumIonToken = useSettingsStore((state) => state.cesiumIonToken)
   const setCesiumIonToken = useSettingsStore((state) => state.setCesiumIonToken)
+  const theme = useSettingsStore((state) => state.theme)
+  const setTheme = useSettingsStore((state) => state.setTheme)
+  const defaultFov = useSettingsStore((state) => state.defaultFov)
+  const setDefaultFov = useSettingsStore((state) => state.setDefaultFov)
+  const cameraSpeed = useSettingsStore((state) => state.cameraSpeed)
+  const setCameraSpeed = useSettingsStore((state) => state.setCameraSpeed)
+
+  // Settings store - Display
+  const labelVisibilityDistance = useSettingsStore((state) => state.labelVisibilityDistance)
+  const setLabelVisibilityDistance = useSettingsStore((state) => state.setLabelVisibilityDistance)
+  const maxAircraftDisplay = useSettingsStore((state) => state.maxAircraftDisplay)
+  const setMaxAircraftDisplay = useSettingsStore((state) => state.setMaxAircraftDisplay)
+  const datablockMode = useSettingsStore((state) => state.datablockMode)
+  const setDatablockMode = useSettingsStore((state) => state.setDatablockMode)
+  const showGroundTraffic = useSettingsStore((state) => state.showGroundTraffic)
+  const setShowGroundTraffic = useSettingsStore((state) => state.setShowGroundTraffic)
+  const showAirborneTraffic = useSettingsStore((state) => state.showAirborneTraffic)
+  const setShowAirborneTraffic = useSettingsStore((state) => state.setShowAirborneTraffic)
+  const showAircraftPanel = useSettingsStore((state) => state.showAircraftPanel)
+  const setShowAircraftPanel = useSettingsStore((state) => state.setShowAircraftPanel)
+
+  // Settings store - Graphics
   const terrainQuality = useSettingsStore((state) => state.terrainQuality)
   const setTerrainQuality = useSettingsStore((state) => state.setTerrainQuality)
   const show3DBuildings = useSettingsStore((state) => state.show3DBuildings)
@@ -22,6 +43,14 @@ function ControlsBar() {
   const setTimeMode = useSettingsStore((state) => state.setTimeMode)
   const fixedTimeHour = useSettingsStore((state) => state.fixedTimeHour)
   const setFixedTimeHour = useSettingsStore((state) => state.setFixedTimeHour)
+
+  // Settings store - Performance
+  const inMemoryTileCacheSize = useSettingsStore((state) => state.inMemoryTileCacheSize)
+  const setInMemoryTileCacheSize = useSettingsStore((state) => state.setInMemoryTileCacheSize)
+  const diskCacheSizeGB = useSettingsStore((state) => state.diskCacheSizeGB)
+  const setDiskCacheSizeGB = useSettingsStore((state) => state.setDiskCacheSizeGB)
+  const aircraftDataRadiusNM = useSettingsStore((state) => state.aircraftDataRadiusNM)
+  const setAircraftDataRadiusNM = useSettingsStore((state) => state.setAircraftDataRadiusNM)
 
   // Camera store
   const viewMode = useCameraStore((state) => state.viewMode)
@@ -190,195 +219,455 @@ function ControlsBar() {
               </button>
             </div>
 
+            <div className="settings-tabs">
+              <button
+                className={`tab-button ${activeTab === 'general' ? 'active' : ''}`}
+                onClick={() => setActiveTab('general')}
+              >
+                General
+              </button>
+              <button
+                className={`tab-button ${activeTab === 'display' ? 'active' : ''}`}
+                onClick={() => setActiveTab('display')}
+              >
+                Display
+              </button>
+              <button
+                className={`tab-button ${activeTab === 'graphics' ? 'active' : ''}`}
+                onClick={() => setActiveTab('graphics')}
+              >
+                Graphics
+              </button>
+              <button
+                className={`tab-button ${activeTab === 'performance' ? 'active' : ''}`}
+                onClick={() => setActiveTab('performance')}
+              >
+                Performance
+              </button>
+              <button
+                className={`tab-button ${activeTab === 'help' ? 'active' : ''}`}
+                onClick={() => setActiveTab('help')}
+              >
+                Help
+              </button>
+            </div>
+
             <div className="settings-content">
-              <div className="settings-section">
-                <h3>Cesium Ion</h3>
-                <div className="setting-item">
-                  <label>API Token</label>
-                  <input
-                    type="text"
-                    value={cesiumIonToken}
-                    onChange={(e) => setCesiumIonToken(e.target.value)}
-                    placeholder="Enter your Cesium Ion access token"
-                    className="text-input"
-                  />
-                  <p className="setting-hint">
-                    Get a free token at{' '}
-                    <a href="https://cesium.com/ion/" target="_blank" rel="noopener noreferrer">
-                      cesium.com/ion
-                    </a>
-                  </p>
-                </div>
-              </div>
-
-              <div className="settings-section">
-                <h3>Display</h3>
-                <div className="setting-item">
-                  <label>Label Visibility Distance</label>
-                  <div className="slider-with-value">
-                    <input
-                      type="range"
-                      min="5"
-                      max="100"
-                      value={labelVisibilityDistance}
-                      onChange={(e) => setLabelVisibilityDistance(Number(e.target.value))}
-                    />
-                    <span>{labelVisibilityDistance} nm</span>
-                  </div>
-                </div>
-
-                <div className="setting-item">
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={showAircraftPanel}
-                      onChange={(e) => setShowAircraftPanel(e.target.checked)}
-                    />
-                    Show Aircraft Panel
-                  </label>
-                </div>
-              </div>
-
-              <div className="settings-section">
-                <h3>Graphics</h3>
-                <div className="setting-item">
-                  <label>Terrain Quality</label>
-                  <div className="slider-with-value">
-                    <input
-                      type="range"
-                      min="1"
-                      max="5"
-                      step="1"
-                      value={terrainQuality}
-                      onChange={(e) => setTerrainQuality(Number(e.target.value))}
-                    />
-                    <span>{['Low', 'Medium', 'High', 'Very High', 'Ultra'][terrainQuality - 1]}</span>
-                  </div>
-                  <p className="setting-hint">
-                    Lower quality loads faster. Higher quality shows more detail at distance.
-                  </p>
-                </div>
-
-                <div className="setting-item">
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={show3DBuildings}
-                      onChange={(e) => setShow3DBuildings(e.target.checked)}
-                    />
-                    Show 3D Buildings (OSM)
-                  </label>
-                  <p className="setting-hint">
-                    Display OpenStreetMap 3D buildings. May impact performance.
-                  </p>
-                </div>
-              </div>
-
-              <div className="settings-section">
-                <h3>Lighting</h3>
-                <div className="setting-item">
-                  <label>Time of Day</label>
-                  <div className="radio-group">
-                    <label>
+              {/* General Tab */}
+              {activeTab === 'general' && (
+                <>
+                  <div className="settings-section">
+                    <h3>Cesium Ion</h3>
+                    <div className="setting-item">
+                      <label>API Token</label>
                       <input
-                        type="radio"
-                        name="timeMode"
-                        value="real"
-                        checked={timeMode === 'real'}
-                        onChange={() => setTimeMode('real')}
+                        type="text"
+                        value={cesiumIonToken}
+                        onChange={(e) => setCesiumIonToken(e.target.value)}
+                        placeholder="Enter your Cesium Ion access token"
+                        className="text-input"
                       />
-                      Real Time
-                    </label>
-                    <label>
-                      <input
-                        type="radio"
-                        name="timeMode"
-                        value="fixed"
-                        checked={timeMode === 'fixed'}
-                        onChange={() => setTimeMode('fixed')}
-                      />
-                      Fixed Time
-                    </label>
-                  </div>
-                </div>
-
-                {timeMode === 'fixed' && (
-                  <div className="setting-item">
-                    <label>Local Time</label>
-                    <div className="slider-with-value">
-                      <input
-                        type="range"
-                        min="0"
-                        max="24"
-                        step="0.5"
-                        value={fixedTimeHour}
-                        onChange={(e) => setFixedTimeHour(Number(e.target.value))}
-                      />
-                      <span>{formatTimeHour(fixedTimeHour)}</span>
+                      <p className="setting-hint">
+                        Get a free token at{' '}
+                        <a href="https://cesium.com/ion/" target="_blank" rel="noopener noreferrer">
+                          cesium.com/ion
+                        </a>
+                      </p>
                     </div>
                   </div>
-                )}
-              </div>
 
-              <div className="settings-section">
-                <h3>Camera Controls</h3>
-                <div className="shortcuts-list">
-                  <div className="shortcut">
-                    <span className="keys">Right-click + Drag</span>
-                    <span className="action">Look around</span>
+                  <div className="settings-section">
+                    <h3>Appearance</h3>
+                    <div className="setting-item">
+                      <label>Theme</label>
+                      <div className="radio-group">
+                        <label>
+                          <input
+                            type="radio"
+                            name="theme"
+                            value="dark"
+                            checked={theme === 'dark'}
+                            onChange={() => setTheme('dark')}
+                          />
+                          Dark
+                        </label>
+                        <label>
+                          <input
+                            type="radio"
+                            name="theme"
+                            value="light"
+                            checked={theme === 'light'}
+                            onChange={() => setTheme('light')}
+                          />
+                          Light
+                        </label>
+                      </div>
+                    </div>
                   </div>
-                  <div className="shortcut">
-                    <span className="keys">WASD</span>
-                    <span className="action">Move position</span>
-                  </div>
-                  <div className="shortcut">
-                    <span className="keys">Arrow Keys</span>
-                    <span className="action">Pan/Tilt camera</span>
-                  </div>
-                  <div className="shortcut">
-                    <span className="keys">Scroll Wheel</span>
-                    <span className="action">Zoom (FOV/Altitude)</span>
-                  </div>
-                  <div className="shortcut">
-                    <span className="keys">T</span>
-                    <span className="action">Toggle 3D/2D view</span>
-                  </div>
-                  <div className="shortcut">
-                    <span className="keys">r</span>
-                    <span className="action">Reset position</span>
-                  </div>
-                  <div className="shortcut">
-                    <span className="keys">Shift+R / Home</span>
-                    <span className="action">Reset everything</span>
-                  </div>
-                </div>
-              </div>
 
-              <div className="settings-section">
-                <h3>Aircraft Following</h3>
-                <div className="shortcuts-list">
-                  <div className="shortcut">
-                    <span className="keys">Click target icon</span>
-                    <span className="action">Follow aircraft</span>
+                  <div className="settings-section">
+                    <h3>Camera</h3>
+                    <div className="setting-item">
+                      <label>Default FOV</label>
+                      <div className="slider-with-value">
+                        <input
+                          type="range"
+                          min="10"
+                          max="120"
+                          value={defaultFov}
+                          onChange={(e) => setDefaultFov(Number(e.target.value))}
+                        />
+                        <span>{defaultFov}°</span>
+                      </div>
+                      <p className="setting-hint">Field of view used when resetting camera.</p>
+                    </div>
+
+                    <div className="setting-item">
+                      <label>Camera Speed</label>
+                      <div className="slider-with-value">
+                        <input
+                          type="range"
+                          min="1"
+                          max="10"
+                          value={cameraSpeed}
+                          onChange={(e) => setCameraSpeed(Number(e.target.value))}
+                        />
+                        <span>{cameraSpeed}</span>
+                      </div>
+                      <p className="setting-hint">WASD movement speed multiplier.</p>
+                    </div>
                   </div>
-                  <div className="shortcut">
-                    <span className="keys">Ctrl+K</span>
-                    <span className="action">Global aircraft search</span>
+                </>
+              )}
+
+              {/* Display Tab */}
+              {activeTab === 'display' && (
+                <>
+                  <div className="settings-section">
+                    <h3>Labels</h3>
+                    <div className="setting-item">
+                      <label>Label Visibility Distance</label>
+                      <div className="slider-with-value">
+                        <input
+                          type="range"
+                          min="5"
+                          max="100"
+                          value={labelVisibilityDistance}
+                          onChange={(e) => setLabelVisibilityDistance(Number(e.target.value))}
+                        />
+                        <span>{labelVisibilityDistance} nm</span>
+                      </div>
+                    </div>
+
+                    <div className="setting-item">
+                      <label>Datablock Mode</label>
+                      <div className="radio-group-vertical">
+                        <label>
+                          <input
+                            type="radio"
+                            name="datablockMode"
+                            value="full"
+                            checked={datablockMode === 'full'}
+                            onChange={() => setDatablockMode('full')}
+                          />
+                          Full (callsign + type + altitude + speed)
+                        </label>
+                        <label>
+                          <input
+                            type="radio"
+                            name="datablockMode"
+                            value="airline"
+                            checked={datablockMode === 'airline'}
+                            onChange={() => setDatablockMode('airline')}
+                          />
+                          Airline Codes Only (ICAO code for airline flights)
+                        </label>
+                        <label>
+                          <input
+                            type="radio"
+                            name="datablockMode"
+                            value="none"
+                            checked={datablockMode === 'none'}
+                            onChange={() => setDatablockMode('none')}
+                          />
+                          None (hide labels, show cones only)
+                        </label>
+                      </div>
+                    </div>
                   </div>
-                  <div className="shortcut">
-                    <span className="keys">O</span>
-                    <span className="action">Toggle orbit mode</span>
+
+                  <div className="settings-section">
+                    <h3>Aircraft</h3>
+                    <div className="setting-item">
+                      <label>Max Aircraft Display</label>
+                      <div className="slider-with-value">
+                        <input
+                          type="range"
+                          min="10"
+                          max="1000"
+                          step="10"
+                          value={maxAircraftDisplay}
+                          onChange={(e) => setMaxAircraftDisplay(Number(e.target.value))}
+                        />
+                        <span>{maxAircraftDisplay}</span>
+                      </div>
+                      <p className="setting-hint">Maximum number of aircraft to render.</p>
+                    </div>
+
+                    <div className="setting-item">
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={showGroundTraffic}
+                          onChange={(e) => setShowGroundTraffic(e.target.checked)}
+                        />
+                        Show Ground Traffic
+                      </label>
+                    </div>
+
+                    <div className="setting-item">
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={showAirborneTraffic}
+                          onChange={(e) => setShowAirborneTraffic(e.target.checked)}
+                        />
+                        Show Airborne Traffic
+                      </label>
+                    </div>
                   </div>
-                  <div className="shortcut">
-                    <span className="keys">Scroll (following)</span>
-                    <span className="action">Adjust zoom/distance</span>
+
+                  <div className="settings-section">
+                    <h3>UI</h3>
+                    <div className="setting-item">
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={showAircraftPanel}
+                          onChange={(e) => setShowAircraftPanel(e.target.checked)}
+                        />
+                        Show Aircraft Panel
+                      </label>
+                    </div>
                   </div>
-                  <div className="shortcut">
-                    <span className="keys">Escape</span>
-                    <span className="action">Stop following</span>
+                </>
+              )}
+
+              {/* Graphics Tab */}
+              {activeTab === 'graphics' && (
+                <>
+                  <div className="settings-section">
+                    <h3>Terrain</h3>
+                    <div className="setting-item">
+                      <label>Terrain Quality</label>
+                      <div className="slider-with-value">
+                        <input
+                          type="range"
+                          min="1"
+                          max="5"
+                          step="1"
+                          value={terrainQuality}
+                          onChange={(e) => setTerrainQuality(Number(e.target.value))}
+                        />
+                        <span>{['Low', 'Medium', 'High', 'Very High', 'Ultra'][terrainQuality - 1]}</span>
+                      </div>
+                      <p className="setting-hint">
+                        Lower quality loads faster. Higher quality shows more detail at distance.
+                      </p>
+                    </div>
+
+                    <div className="setting-item">
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={show3DBuildings}
+                          onChange={(e) => setShow3DBuildings(e.target.checked)}
+                        />
+                        Show 3D Buildings (OSM)
+                      </label>
+                      <p className="setting-hint">
+                        Display OpenStreetMap 3D buildings. May impact performance.
+                      </p>
+                    </div>
                   </div>
-                </div>
-              </div>
+
+                  <div className="settings-section">
+                    <h3>Lighting</h3>
+                    <div className="setting-item">
+                      <label>Time of Day</label>
+                      <div className="radio-group">
+                        <label>
+                          <input
+                            type="radio"
+                            name="timeMode"
+                            value="real"
+                            checked={timeMode === 'real'}
+                            onChange={() => setTimeMode('real')}
+                          />
+                          Real Time
+                        </label>
+                        <label>
+                          <input
+                            type="radio"
+                            name="timeMode"
+                            value="fixed"
+                            checked={timeMode === 'fixed'}
+                            onChange={() => setTimeMode('fixed')}
+                          />
+                          Fixed Time
+                        </label>
+                      </div>
+                    </div>
+
+                    {timeMode === 'fixed' && (
+                      <div className="setting-item">
+                        <label>Local Time</label>
+                        <div className="slider-with-value">
+                          <input
+                            type="range"
+                            min="0"
+                            max="24"
+                            step="0.5"
+                            value={fixedTimeHour}
+                            onChange={(e) => setFixedTimeHour(Number(e.target.value))}
+                          />
+                          <span>{formatTimeHour(fixedTimeHour)}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {/* Performance Tab */}
+              {activeTab === 'performance' && (
+                <>
+                  <div className="settings-section">
+                    <h3>Tile Cache</h3>
+                    <div className="setting-item">
+                      <label>In-Memory Tile Cache</label>
+                      <div className="slider-with-value">
+                        <input
+                          type="range"
+                          min="50"
+                          max="500"
+                          step="50"
+                          value={inMemoryTileCacheSize}
+                          onChange={(e) => setInMemoryTileCacheSize(Number(e.target.value))}
+                        />
+                        <span>{inMemoryTileCacheSize} tiles</span>
+                      </div>
+                      <p className="setting-hint">
+                        Higher values = smoother panning, more RAM usage.
+                      </p>
+                    </div>
+
+                    <div className="setting-item">
+                      <label>Disk Cache Size</label>
+                      <div className="slider-with-value">
+                        <input
+                          type="range"
+                          min="0.1"
+                          max="10"
+                          step="0.1"
+                          value={diskCacheSizeGB}
+                          onChange={(e) => setDiskCacheSizeGB(Number(e.target.value))}
+                        />
+                        <span>{diskCacheSizeGB.toFixed(1)} GB</span>
+                      </div>
+                      <p className="setting-hint">
+                        IndexedDB cache for satellite/terrain tiles.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="settings-section">
+                    <h3>Data</h3>
+                    <div className="setting-item">
+                      <label>Aircraft Data Radius</label>
+                      <div className="slider-with-value">
+                        <input
+                          type="range"
+                          min="10"
+                          max="500"
+                          step="10"
+                          value={aircraftDataRadiusNM}
+                          onChange={(e) => setAircraftDataRadiusNM(Number(e.target.value))}
+                        />
+                        <span>{aircraftDataRadiusNM} nm</span>
+                      </div>
+                      <p className="setting-hint">
+                        Only keep aircraft data within this radius of tower.
+                      </p>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Help Tab */}
+              {activeTab === 'help' && (
+                <>
+                  <div className="settings-section">
+                    <h3>Camera Controls</h3>
+                    <div className="shortcuts-list">
+                      <div className="shortcut">
+                        <span className="keys">Right-click + Drag</span>
+                        <span className="action">Look around</span>
+                      </div>
+                      <div className="shortcut">
+                        <span className="keys">WASD</span>
+                        <span className="action">Move position</span>
+                      </div>
+                      <div className="shortcut">
+                        <span className="keys">Arrow Keys</span>
+                        <span className="action">Pan/Tilt camera</span>
+                      </div>
+                      <div className="shortcut">
+                        <span className="keys">Scroll Wheel</span>
+                        <span className="action">Zoom (FOV/Altitude)</span>
+                      </div>
+                      <div className="shortcut">
+                        <span className="keys">T</span>
+                        <span className="action">Toggle 3D/2D view</span>
+                      </div>
+                      <div className="shortcut">
+                        <span className="keys">r</span>
+                        <span className="action">Reset position</span>
+                      </div>
+                      <div className="shortcut">
+                        <span className="keys">Shift+R / Home</span>
+                        <span className="action">Reset everything</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="settings-section">
+                    <h3>Aircraft Following</h3>
+                    <div className="shortcuts-list">
+                      <div className="shortcut">
+                        <span className="keys">Click target icon</span>
+                        <span className="action">Follow aircraft</span>
+                      </div>
+                      <div className="shortcut">
+                        <span className="keys">Ctrl+K</span>
+                        <span className="action">Global aircraft search</span>
+                      </div>
+                      <div className="shortcut">
+                        <span className="keys">O</span>
+                        <span className="action">Toggle orbit mode</span>
+                      </div>
+                      <div className="shortcut">
+                        <span className="keys">Scroll (following)</span>
+                        <span className="action">Adjust zoom/distance</span>
+                      </div>
+                      <div className="shortcut">
+                        <span className="keys">Escape</span>
+                        <span className="action">Stop following</span>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
