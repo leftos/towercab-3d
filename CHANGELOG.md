@@ -2,7 +2,7 @@
 
 All notable changes to TowerCab 3D will be documented in this file.
 
-## [Unreleased]
+## v0.0.2-alpha
 
 ### Added
 - 39 aircraft 3D models from Flightradar24/fr24-3d-models (GPL-2.0, originally from FlightGear):
@@ -65,3 +65,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Aircraft 3D models now face the correct direction (fixed 180° rotation issue from Flightradar24 models)
 - Aircraft models no longer clip through ground (added 1m height offset)
 - Applied muted gray color to aircraft models to hide UV test textures until airline liveries are implemented
+
+## v0.0.1-alpha
+
+- Initial Release
