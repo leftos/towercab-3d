@@ -87,6 +87,43 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
+    // Open DevTools in dev mode for easier debugging
+    if (is.dev) {
+      mainWindow.webContents.openDevTools({ mode: 'detach' })
+    }
+  })
+
+  // Debug renderer crashes
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    console.error('Renderer process crashed:', details.reason)
+    console.error('Exit code:', details.exitCode)
+    // Show a dialog so you know what happened
+    const { dialog } = require('electron')
+    dialog.showErrorBox(
+      'Renderer Crashed',
+      `Reason: ${details.reason}\nExit code: ${details.exitCode}\n\nCheck the console for more details.`
+    )
+  })
+
+  mainWindow.webContents.on('unresponsive', () => {
+    console.error('Renderer became unresponsive')
+  })
+
+  mainWindow.webContents.on('responsive', () => {
+    console.log('Renderer is responsive again')
+  })
+
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+    console.error('Failed to load:', errorCode, errorDescription)
+  })
+
+  // Log console messages from renderer
+  mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    const levels = ['verbose', 'info', 'warning', 'error']
+    if (level >= 2) {
+      // Only log warnings and errors
+      console.log(`[Renderer ${levels[level]}] ${message} (${sourceId}:${line})`)
+    }
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {

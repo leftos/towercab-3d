@@ -15,6 +15,8 @@ npm run build      # Build for production (outputs to dist/)
 npm run preview    # Preview production build
 ```
 
+**Note for Claude:** Only the user can run `npm run dev` and `npm run preview` as these launch the Electron app with a GUI. Ask the user to run these commands and report back any errors.
+
 ## Architecture
 
 ### Dual Rendering System

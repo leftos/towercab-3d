@@ -8,7 +8,8 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "start": "electron-vite preview",
-    "postinstall": "electron-builder install-app-deps"
+    "postinstall": "electron-builder install-app-deps",
+    "dist": "npm run build && electron-builder --win"
   },
   "keywords": [
     "vatsim",
@@ -23,13 +24,15 @@
     "@types/node": "^25.0.3",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
+    "@types/serve-static": "^2.2.0",
     "@vitejs/plugin-react": "^5.1.2",
     "electron": "^39.2.7",
     "electron-builder": "^25.1.8",
     "electron-vite": "^5.0.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.0",
-    "vite-plugin-cesium": "^1.2.23",
+    "vite-plugin-cesium-build": "^0.7.2",
+    "vite-plugin-externals": "^0.6.2",
     "vite-plugin-static-copy": "^3.1.4"
   },
   "dependencies": {
@@ -38,6 +41,7 @@
     "@babylonjs/loaders": "^8.42.0",
     "@electron-toolkit/utils": "^4.0.0",
     "cesium": "^1.136.0",
+    "pnpm": "^10.26.1",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "resium": "^1.19.2",
