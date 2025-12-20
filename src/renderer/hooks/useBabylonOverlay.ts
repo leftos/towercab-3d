@@ -3,6 +3,21 @@ import * as BABYLON from '@babylonjs/core'
 import * as GUI from '@babylonjs/gui'
 import * as Cesium from 'cesium'
 
+// Memory diagnostic counters
+const memoryCounters = {
+  materialsCreated: 0,
+  materialsDisposed: 0,
+  meshesCreated: 0,
+  meshesDisposed: 0,
+  guiControlsCreated: 0,
+  guiControlsDisposed: 0,
+}
+
+// Export for external access if needed
+export function getMemoryCounters() {
+  return { ...memoryCounters }
+}
+
 interface AircraftMesh {
   cone: BABYLON.Mesh
   shadow?: BABYLON.Mesh
@@ -114,6 +129,42 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
 
     return () => {
       window.removeEventListener('resize', handleResize)
+
+      // CRITICAL: Dispose all aircraft resources BEFORE disposing scene
+      // Materials must be explicitly disposed or they leak
+      for (const [, meshData] of aircraftMeshesRef.current) {
+        // Dispose materials first
+        if (meshData.cone.material) {
+          meshData.cone.material.dispose()
+          memoryCounters.materialsDisposed++
+        }
+        if (meshData.shadow?.material) {
+          meshData.shadow.material.dispose()
+          memoryCounters.materialsDisposed++
+        }
+        // Dispose meshes
+        meshData.cone.dispose()
+        memoryCounters.meshesDisposed++
+        if (meshData.shadow) {
+          meshData.shadow.dispose()
+          memoryCounters.meshesDisposed++
+        }
+        // Dispose GUI controls
+        if (meshData.labelText) {
+          meshData.labelText.dispose()
+          memoryCounters.guiControlsDisposed++
+        }
+        if (meshData.leaderLine) {
+          meshData.leaderLine.dispose()
+          memoryCounters.guiControlsDisposed++
+        }
+        if (meshData.label) {
+          meshData.label.dispose()
+          memoryCounters.guiControlsDisposed++
+        }
+      }
+      aircraftMeshesRef.current.clear()
+
       guiTexture.dispose()
       scene.dispose()
       engine.dispose()
@@ -129,7 +180,6 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
       camera2DLonRef.current = 0
       camera2DHeadingRef.current = 0
       isTopDownModeRef.current = false
-      aircraftMeshesRef.current.clear()
       setSceneReady(false)
     }
   }, [canvas, cesiumViewer])
@@ -426,11 +476,13 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
         diameterBottom: coneDiameter,
         tessellation: 16
       }, scene)
+      memoryCounters.meshesCreated++
       // Store cone dimensions for leader line calculation
       cone.metadata = { height: coneHeight, diameter: coneDiameter }
 
       // Create material for the cone (invisible - Cesium handles cone rendering)
       const material = new BABYLON.StandardMaterial(`${callsign}_mat`, scene)
+      memoryCounters.materialsCreated++
       material.emissiveColor = new BABYLON.Color3(color.r, color.g, color.b)
       material.diffuseColor = new BABYLON.Color3(color.r, color.g, color.b)
       material.disableLighting = true
@@ -445,9 +497,11 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
         radius: coneDiameter * 0.8,
         tessellation: 16
       }, scene)
+      memoryCounters.meshesCreated++
       shadow.rotation.x = Math.PI / 2
       shadow.isVisible = false // Hide - Cesium handles shadow rendering
       const shadowMaterial = new BABYLON.StandardMaterial(`${callsign}_shadow_mat`, scene)
+      memoryCounters.materialsCreated++
       shadowMaterial.diffuseColor = new BABYLON.Color3(0, 0, 0)
       shadowMaterial.emissiveColor = new BABYLON.Color3(0, 0, 0)
       shadowMaterial.alpha = 0
@@ -457,6 +511,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
 
       // Create GUI label (positioned manually in updateLeaderLine)
       const label = new GUI.Rectangle(`${callsign}_label`)
+      memoryCounters.guiControlsCreated++
       label.width = 'auto'
       label.height = 'auto'
       label.cornerRadius = 4
@@ -476,6 +531,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
       guiTexture.addControl(label)
 
       const text = new GUI.TextBlock(`${callsign}_text`)
+      memoryCounters.guiControlsCreated++
       text.text = labelText || callsign
       text.color = rgbToHex(color.r, color.g, color.b)
       text.fontSize = 12
@@ -487,6 +543,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
 
       // Create leader line (positioned manually in updateLeaderLine)
       const leaderLine = new GUI.Line(`${callsign}_leaderLine`)
+      memoryCounters.guiControlsCreated++
       leaderLine.lineWidth = 3
       leaderLine.color = 'white'  // Use white for visibility testing
       leaderLine.zIndex = 1  // Leader lines render below labels (zIndex 10)
@@ -641,14 +698,42 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     meshData.leaderLine.y2 = endY
   }, [])
 
-  // Remove aircraft mesh
+  // Remove aircraft mesh - properly disposes all resources including materials
   const removeAircraftMesh = useCallback((callsign: string) => {
     const meshData = aircraftMeshesRef.current.get(callsign)
     if (meshData) {
+      // Dispose materials BEFORE disposing meshes (materials don't auto-dispose)
+      if (meshData.cone.material) {
+        meshData.cone.material.dispose()
+        memoryCounters.materialsDisposed++
+      }
+      if (meshData.shadow?.material) {
+        meshData.shadow.material.dispose()
+        memoryCounters.materialsDisposed++
+      }
+
+      // Dispose meshes
       meshData.cone.dispose()
-      meshData.shadow?.dispose()
-      meshData.leaderLine?.dispose()
-      meshData.label?.dispose()
+      memoryCounters.meshesDisposed++
+      if (meshData.shadow) {
+        meshData.shadow.dispose()
+        memoryCounters.meshesDisposed++
+      }
+
+      // Dispose GUI controls (labelText is child of label, disposed with parent)
+      if (meshData.labelText) {
+        meshData.labelText.dispose()
+        memoryCounters.guiControlsDisposed++
+      }
+      if (meshData.leaderLine) {
+        meshData.leaderLine.dispose()
+        memoryCounters.guiControlsDisposed++
+      }
+      if (meshData.label) {
+        meshData.label.dispose()
+        memoryCounters.guiControlsDisposed++
+      }
+
       aircraftMeshesRef.current.delete(callsign)
     }
   }, [])

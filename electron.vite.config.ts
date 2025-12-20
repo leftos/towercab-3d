@@ -44,6 +44,7 @@ export default defineConfig({
   },
   renderer: {
     base: './',
+    publicDir: resolve('src/renderer/public'),
     define: {
       CESIUM_BASE_URL: JSON.stringify(`./${cesiumBaseUrl}`)
     },

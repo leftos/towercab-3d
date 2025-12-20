@@ -3,9 +3,10 @@ import * as Cesium from 'cesium'
 import { useAirportStore } from '../../stores/airportStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useCameraStore } from '../../stores/cameraStore'
+import { useVatsimStore } from '../../stores/vatsimStore'
 import { useAircraftInterpolation } from '../../hooks/useAircraftInterpolation'
 import { useCesiumCamera } from '../../hooks/useCesiumCamera'
-import { useBabylonOverlay } from '../../hooks/useBabylonOverlay'
+import { useBabylonOverlay, getMemoryCounters } from '../../hooks/useBabylonOverlay'
 import { getTowerPosition } from '../../utils/towerHeight'
 import {
   calculateDistanceNM,
@@ -14,7 +15,7 @@ import {
   getPropellerAnimationTime,
   type PropellerState
 } from '../../utils/interpolation'
-import { createCachingImageryProvider } from '../../utils/tileCache'
+import { getServiceWorkerCacheStats } from '../../utils/serviceWorkerRegistration'
 import './CesiumViewer.css'
 
 // Import Cesium CSS
@@ -74,12 +75,18 @@ function CesiumViewer() {
   const show3DBuildings = useSettingsStore((state) => state.show3DBuildings)
   const timeMode = useSettingsStore((state) => state.timeMode)
   const fixedTimeHour = useSettingsStore((state) => state.fixedTimeHour)
+  const inMemoryTileCacheSize = useSettingsStore((state) => state.inMemoryTileCacheSize)
 
   // Camera store for follow highlighting and view mode
   const followingCallsign = useCameraStore((state) => state.followingCallsign)
   const followMode = useCameraStore((state) => state.followMode)
   const viewMode = useCameraStore((state) => state.viewMode)
   const topdownAltitude = useCameraStore((state) => state.topdownAltitude)
+
+  // VATSIM store for setting reference position
+  const setReferencePosition = useVatsimStore((state) => state.setReferencePosition)
+  const totalPilotsFromApi = useVatsimStore((state) => state.totalPilotsFromApi)
+  const pilotsFilteredByDistance = useVatsimStore((state) => state.pilotsFilteredByDistance)
 
   // Get interpolated aircraft states
   const interpolatedAircraft = useAircraftInterpolation()
@@ -168,28 +175,30 @@ function CesiumViewer() {
     // Enable clock animation for model animations (propellers, etc.)
     viewer.clock.shouldAnimate = true
 
-    // In-memory tile cache - balance between smooth panning and memory usage
-    // Default is 100, we use 250 for smoother experience without excessive memory
-    viewer.scene.globe.tileCacheSize = 250
+    // In-memory tile cache - configurable via settings
+    // Lower = less RAM usage, higher = smoother panning
+    viewer.scene.globe.tileCacheSize = useSettingsStore.getState().inMemoryTileCacheSize
 
     // Preload nearby tiles for smoother camera movement
     viewer.scene.globe.preloadAncestors = true
     viewer.scene.globe.preloadSiblings = true
 
-    // Wrap the default imagery provider with caching once it's ready
+    // NOTE: Custom tile caching disabled - it breaks Cesium's request throttling
+    // by always returning Promises instead of undefined for deferred requests.
+    // This caused runaway tile loading and memory exhaustion.
+    // Cesium's built-in tile caching (tileCacheSize) is sufficient for in-memory caching.
+    // For persistent disk caching, a Service Worker approach would be needed.
+
+    // Suppress verbose tile loading errors (transient, Cesium retries automatically)
     const imageryLayers = viewer.imageryLayers
     if (imageryLayers.length > 0) {
       const baseLayer = imageryLayers.get(0)
       const removeListener = baseLayer.readyEvent.addEventListener((provider) => {
         removeListener()
-        if (!viewer.isDestroyed()) {
-          createCachingImageryProvider(provider)
-          // Suppress verbose tile loading errors (transient, Cesium retries automatically)
-          if (provider.errorEvent) {
-            provider.errorEvent.addEventListener(() => {
-              // Silently ignore - these are usually transient network issues
-            })
-          }
+        if (!viewer.isDestroyed() && provider.errorEvent) {
+          provider.errorEvent.addEventListener(() => {
+            // Silently ignore - these are usually transient network issues
+          })
         }
       })
     }
@@ -232,10 +241,86 @@ function CesiumViewer() {
     }
   }, [cesiumIonToken])
 
-  // Update terrain quality when setting changes
+  // Clear old IndexedDB tile cache on startup (we now use Service Worker caching)
+  useEffect(() => {
+    // Clear any residual data from the old IndexedDB cache
+    if ('indexedDB' in window) {
+      indexedDB.deleteDatabase('cesium-tile-cache')
+      console.log('Old IndexedDB tile cache deleted')
+    }
+  }, [])
+
+  // Update in-memory tile cache size when setting changes
   useEffect(() => {
     if (!cesiumViewer) return
-    cesiumViewer.scene.globe.maximumScreenSpaceError = getScreenSpaceError(terrainQuality)
+    cesiumViewer.scene.globe.tileCacheSize = inMemoryTileCacheSize
+  }, [cesiumViewer, inMemoryTileCacheSize])
+
+  // Track the last terrain quality to detect actual user changes vs initial mount
+  const lastTerrainQualityRef = useRef<number | null>(null)
+  const qualityChangeInProgressRef = useRef(false)
+
+  // Update terrain quality when setting changes - only flush cache on actual user changes
+  useEffect(() => {
+    if (!cesiumViewer || qualityChangeInProgressRef.current) return
+
+    const newError = getScreenSpaceError(terrainQuality)
+
+    // On first mount, just set the quality without flushing
+    if (lastTerrainQualityRef.current === null) {
+      cesiumViewer.scene.globe.maximumScreenSpaceError = newError
+      lastTerrainQualityRef.current = terrainQuality
+      return
+    }
+
+    // Only flush cache if the user actually changed the terrain quality setting
+    if (lastTerrainQualityRef.current !== terrainQuality) {
+      const oldError = getScreenSpaceError(lastTerrainQualityRef.current)
+      const originalCacheSize = cesiumViewer.scene.globe.tileCacheSize
+
+      qualityChangeInProgressRef.current = true
+      console.log(`Terrain quality changing: SSE ${oldError} -> ${newError}, flushing tiles first...`)
+
+      // CRITICAL: Evict tiles BEFORE changing quality to prevent memory spike
+      // Step 1: Hide globe to stop new tile requests
+      cesiumViewer.scene.globe.show = false
+
+      // Step 2: Aggressively reduce cache to force eviction
+      cesiumViewer.scene.globe.tileCacheSize = 1
+
+      // Step 3: Force multiple render cycles to actually evict tiles
+      // Cesium only evicts tiles during render cycles, so we must render
+      let renderCount = 0
+      const forceEviction = () => {
+        if (cesiumViewer.isDestroyed()) return
+
+        // Force a render to trigger tile eviction
+        cesiumViewer.scene.render()
+        renderCount++
+
+        if (renderCount < 10) {
+          // Continue forcing renders to ensure tiles are evicted
+          requestAnimationFrame(forceEviction)
+        } else {
+          // Step 4: After eviction, change quality and restore
+          // Now change the quality setting (no old tiles to compete with)
+          cesiumViewer.scene.globe.maximumScreenSpaceError = newError
+          lastTerrainQualityRef.current = terrainQuality
+
+          // Restore cache size
+          cesiumViewer.scene.globe.tileCacheSize = originalCacheSize
+
+          // Show globe again - will load fresh tiles at new quality
+          cesiumViewer.scene.globe.show = true
+
+          qualityChangeInProgressRef.current = false
+          console.log(`Terrain quality changed to SSE ${newError}, cache restored after ${renderCount} eviction cycles`)
+        }
+      }
+
+      // Start the eviction process
+      requestAnimationFrame(forceEviction)
+    }
   }, [cesiumViewer, terrainQuality])
 
   // Time of day control (real time vs fixed time)
@@ -330,6 +415,7 @@ function CesiumViewer() {
   }, [cesiumViewer, currentAirport, towerHeight])
 
   // Setup Babylon root node when airport changes OR when in orbit mode without airport
+  // Also set reference position for VATSIM distance filtering
   useEffect(() => {
     if (!babylonOverlay.sceneReady) return
 
@@ -338,6 +424,9 @@ function CesiumViewer() {
       const towerPos = getTowerPosition(currentAirport, towerHeight)
       babylonOverlay.setupRootNode(towerPos.latitude, towerPos.longitude, towerPos.height)
       rootNodeSetupRef.current = true
+
+      // Set reference position for VATSIM filtering - only store aircraft near tower
+      setReferencePosition(towerPos.latitude, towerPos.longitude)
       return
     }
 
@@ -352,9 +441,12 @@ function CesiumViewer() {
           altitudeMeters
         )
         rootNodeSetupRef.current = true
+
+        // Set reference position to followed aircraft for VATSIM filtering
+        setReferencePosition(followedAircraft.interpolatedLatitude, followedAircraft.interpolatedLongitude)
       }
     }
-  }, [currentAirport, towerHeight, babylonOverlay.sceneReady, babylonOverlay.setupRootNode, followMode, followingCallsign, interpolatedAircraft])
+  }, [currentAirport, towerHeight, babylonOverlay.sceneReady, babylonOverlay.setupRootNode, followMode, followingCallsign, interpolatedAircraft, setReferencePosition])
 
   // Update aircraft entities
   const updateAircraftEntities = useCallback(() => {
@@ -768,7 +860,7 @@ function CesiumViewer() {
       }
     }
 
-    // Hide unused pool models
+    // Hide unused pool models and clean up references to prevent memory leaks
     for (const [idx, assignedCallsign] of conePoolAssignmentsRef.current.entries()) {
       if (assignedCallsign !== null && !seenCallsigns.has(assignedCallsign)) {
         // Release this slot and hide the model
@@ -776,6 +868,17 @@ function CesiumViewer() {
         const modelEntity = viewer.entities.getById(`cone_pool_${idx}`)
         if (modelEntity) {
           modelEntity.show = false
+
+          // CRITICAL: Clear the propeller state reference to break closure memory leak
+          // The animation callback closure captures this reference
+          const entityWithRef = modelEntity as { _propStateRef?: { current: PropellerState } }
+          if (entityWithRef._propStateRef) {
+            entityWithRef._propStateRef = undefined
+          }
+
+          // Clear animation configured flag so animations can be reconfigured for next aircraft
+          // This allows the pool slot to be properly reused with fresh animation state
+          modelAnimationsConfiguredRef.current.delete(idx)
         }
       }
     }
@@ -818,6 +921,43 @@ function CesiumViewer() {
       removePostRender()
     }
   }, [cesiumViewer, babylonOverlay, updateAircraftEntities])
+
+  // Memory diagnostic logging - logs counters every 5 seconds
+  useEffect(() => {
+    let swCacheStats = { count: 0, sizeBytes: 0 }
+
+    const logMemoryCounters = async () => {
+      const counters = getMemoryCounters()
+      const babylonMeshes = babylonOverlay.getAircraftCallsigns().length
+      const poolUsed = [...conePoolAssignmentsRef.current.values()].filter(v => v !== null).length
+
+      // Get Cesium tile cache size if viewer is available
+      const cesiumTileCache = viewerRef.current?.scene?.globe?.tileCacheSize ?? 0
+
+      // Get service worker cache stats (async but we use last known value to avoid blocking)
+      getServiceWorkerCacheStats().then(stats => { swCacheStats = stats })
+      const cacheSizeMB = (swCacheStats.sizeBytes / (1024 * 1024)).toFixed(1)
+
+      // Calculate memory estimate (rough)
+      // StandardMaterial: ~2KB, Mesh: ~5KB, GUI Control: ~1KB
+      const estimatedLeakMB = (
+        (counters.materialsCreated - counters.materialsDisposed) * 2 +
+        (counters.meshesCreated - counters.meshesDisposed) * 5 +
+        (counters.guiControlsCreated - counters.guiControlsDisposed) * 1
+      ) / 1024
+
+      console.log(
+        `[Memory] Babylon - Mat: ${counters.materialsCreated - counters.materialsDisposed} Mesh: ${counters.meshesCreated - counters.meshesDisposed} GUI: ${counters.guiControlsCreated - counters.guiControlsDisposed} AC: ${babylonMeshes} | ` +
+        `Cesium - Pool: ${poolUsed}/100 TileCache: ${cesiumTileCache} | ` +
+        `VATSIM: ${pilotsFilteredByDistance}/${totalPilotsFromApi} | ` +
+        `SW Cache: ${swCacheStats.count} tiles ${cacheSizeMB}MB | ` +
+        `Leak: ${estimatedLeakMB.toFixed(2)}MB`
+      )
+    }
+
+    const intervalId = setInterval(logMemoryCounters, 5000)
+    return () => clearInterval(intervalId)
+  }, [babylonOverlay, totalPilotsFromApi, pilotsFilteredByDistance])
 
   return (
     <div className="cesium-viewer-container" ref={containerRef} />

@@ -1,16 +1,29 @@
 import { create } from 'zustand'
 import type { PilotData, VatsimData, AircraftState } from '../types/vatsim'
-import { interpolateAircraftState } from '../utils/interpolation'
+import { interpolateAircraftState, calculateDistanceNM } from '../utils/interpolation'
+import { useSettingsStore } from './settingsStore'
 
 const VATSIM_API_URL = 'https://data.vatsim.net/v3/vatsim-data.json'
 const POLL_INTERVAL = 3000 // Poll every 3 seconds (VATSIM updates ~15s, but poll faster to catch updates sooner)
 const DEFAULT_UPDATE_INTERVAL = 15000 // Expected time between actual VATSIM data updates
+
+interface ReferencePosition {
+  latitude: number
+  longitude: number
+}
 
 interface VatsimStore {
   // Data
   pilots: PilotData[]
   aircraftStates: Map<string, AircraftState>
   previousStates: Map<string, AircraftState>
+
+  // Reference position for distance filtering (camera/tower location)
+  referencePosition: ReferencePosition | null
+
+  // Stats for memory diagnostics
+  totalPilotsFromApi: number
+  pilotsFilteredByDistance: number
 
   // Timing - using VATSIM's timestamps for accurate interpolation
   lastVatsimTimestamp: number // VATSIM's update_timestamp as epoch ms
@@ -30,6 +43,7 @@ interface VatsimStore {
   startPolling: () => void
   stopPolling: () => void
   updateAircraftState: (callsign: string, state: AircraftState) => void
+  setReferencePosition: (lat: number, lon: number) => void
 }
 
 export const useVatsimStore = create<VatsimStore>((set, get) => ({
@@ -37,6 +51,9 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
   pilots: [],
   aircraftStates: new Map(),
   previousStates: new Map(),
+  referencePosition: null,
+  totalPilotsFromApi: 0,
+  pilotsFilteredByDistance: 0,
   lastVatsimTimestamp: 0,
   lastUpdateInterval: DEFAULT_UPDATE_INTERVAL, // Default to expected VATSIM update interval
   isConnected: false,
@@ -59,7 +76,7 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
 
       // Parse VATSIM's update timestamp for stale detection
       const vatsimTimestamp = new Date(data.general.update_timestamp).getTime()
-      const { lastVatsimTimestamp } = get()
+      const { lastVatsimTimestamp, referencePosition } = get()
 
       // Detect stale data - if VATSIM timestamp hasn't changed, skip this update
       if (vatsimTimestamp === lastVatsimTimestamp) {
@@ -80,9 +97,31 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
       const oldCurrentStates = get().aircraftStates
       const oldPreviousStates = get().previousStates
 
-      // First, create the new aircraft states from VATSIM data
+      // Get distance filter radius from settings
+      const aircraftDataRadiusNM = useSettingsStore.getState().aircraftDataRadiusNM
+
+      // Filter pilots by distance if we have a reference position
+      // This prevents storing data for aircraft that are far away
+      let filteredPilots = data.pilots
+      const totalPilotsFromApi = data.pilots.length
+
+      if (referencePosition) {
+        filteredPilots = data.pilots.filter(pilot => {
+          const distance = calculateDistanceNM(
+            referencePosition.latitude,
+            referencePosition.longitude,
+            pilot.latitude,
+            pilot.longitude
+          )
+          return distance <= aircraftDataRadiusNM
+        })
+      }
+
+      const pilotsFilteredByDistance = filteredPilots.length
+
+      // First, create the new aircraft states from filtered VATSIM data
       const newAircraftStates = new Map<string, AircraftState>()
-      for (const pilot of data.pilots) {
+      for (const pilot of filteredPilots) {
         const state: AircraftState = {
           callsign: pilot.callsign,
           cid: pilot.cid,
@@ -133,9 +172,11 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
       }
 
       set({
-        pilots: data.pilots,
+        pilots: filteredPilots,
         aircraftStates: newAircraftStates,
         previousStates: newPreviousStates,
+        totalPilotsFromApi,
+        pilotsFilteredByDistance,
         lastVatsimTimestamp: vatsimTimestamp,
         lastUpdateInterval: actualInterval,
         isConnected: true,
@@ -184,5 +225,11 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
     const newStates = new Map(aircraftStates)
     newStates.set(callsign, state)
     set({ aircraftStates: newStates })
+  },
+
+  // Set reference position for distance-based filtering
+  // Called when airport changes or camera moves significantly
+  setReferencePosition: (latitude: number, longitude: number) => {
+    set({ referencePosition: { latitude, longitude } })
   }
 }))

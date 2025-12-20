@@ -29,6 +29,11 @@ interface SettingsStore {
   timeMode: 'real' | 'fixed'
   fixedTimeHour: number  // 0-24, local time at tower
 
+  // Memory management settings
+  inMemoryTileCacheSize: number  // Number of tiles to keep in Cesium's memory (50-500)
+  diskCacheSizeGB: number  // IndexedDB cache size in GB (0.1-10)
+  aircraftDataRadiusNM: number  // Radius for keeping aircraft data in memory (10-500 NM)
+
   // Actions
   setCesiumIonToken: (token: string) => void
   setLabelVisibilityDistance: (distance: number) => void
@@ -43,6 +48,9 @@ interface SettingsStore {
   setShow3DBuildings: (show: boolean) => void
   setTimeMode: (mode: 'real' | 'fixed') => void
   setFixedTimeHour: (hour: number) => void
+  setInMemoryTileCacheSize: (size: number) => void
+  setDiskCacheSizeGB: (size: number) => void
+  setAircraftDataRadiusNM: (radius: number) => void
   resetToDefaults: () => void
 }
 
@@ -59,7 +67,11 @@ const DEFAULT_SETTINGS = {
   showAircraftPanel: true,
   show3DBuildings: false,
   timeMode: 'real' as const,
-  fixedTimeHour: 12
+  fixedTimeHour: 12,
+  // Memory management - balanced defaults for smooth panning without OOM
+  inMemoryTileCacheSize: 1000,  // Cesium tile cache size (higher = smoother panning, more RAM)
+  diskCacheSizeGB: 2,  // 2GB disk cache for tiles
+  aircraftDataRadiusNM: 100  // Only keep aircraft data within 100nm of camera
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -98,6 +110,15 @@ export const useSettingsStore = create<SettingsStore>()(
 
       setFixedTimeHour: (hour: number) =>
         set({ fixedTimeHour: Math.max(0, Math.min(24, hour)) }),
+
+      setInMemoryTileCacheSize: (size: number) =>
+        set({ inMemoryTileCacheSize: Math.max(50, Math.min(500, Math.round(size))) }),
+
+      setDiskCacheSizeGB: (size: number) =>
+        set({ diskCacheSizeGB: Math.max(0.1, Math.min(10, size)) }),
+
+      setAircraftDataRadiusNM: (radius: number) =>
+        set({ aircraftDataRadiusNM: Math.max(10, Math.min(500, Math.round(radius))) }),
 
       resetToDefaults: () => set(DEFAULT_SETTINGS)
     }),

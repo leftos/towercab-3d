@@ -3,8 +3,33 @@ import * as Cesium from 'cesium'
 const DB_NAME = 'cesium-tile-cache'
 const DB_VERSION = 1
 const STORE_NAME = 'tiles'
-const MAX_CACHE_SIZE = 200 * 1024 * 1024 // 200MB max cache size (reduced from 500MB to prevent OOM)
 const CACHE_EXPIRY_DAYS = 7
+
+// Configurable cache size - can be updated at runtime
+let maxCacheSizeBytes = 1 * 1024 * 1024 * 1024 // Default 1GB
+
+// Cache statistics for diagnostics
+const cacheStats = {
+  hits: 0,
+  misses: 0,
+  writes: 0,
+  lastLogTime: 0
+}
+
+/**
+ * Get cache hit/miss statistics
+ */
+export function getCacheHitStats() {
+  return { ...cacheStats }
+}
+
+/**
+ * Sets the maximum disk cache size in gigabytes
+ */
+export function setDiskCacheMaxSize(sizeGB: number): void {
+  maxCacheSizeBytes = Math.max(0.1, Math.min(10, sizeGB)) * 1024 * 1024 * 1024
+  console.log(`Tile disk cache max size set to ${sizeGB.toFixed(1)}GB`)
+}
 
 interface CachedTile {
   key: string
@@ -58,21 +83,26 @@ async function getCachedTile(key: string): Promise<ArrayBuffer | null> {
           if (Date.now() - result.timestamp > expiryTime) {
             // Entry expired, delete it
             deleteCachedTile(key)
+            cacheStats.misses++
             resolve(null)
           } else {
+            cacheStats.hits++
             resolve(result.data)
           }
         } else {
+          cacheStats.misses++
           resolve(null)
         }
       }
 
       request.onerror = () => {
         console.warn('Failed to get cached tile:', request.error)
+        cacheStats.misses++
         resolve(null)
       }
     })
   } catch {
+    cacheStats.misses++
     return null
   }
 }
@@ -93,6 +123,7 @@ async function setCachedTile(key: string, data: ArrayBuffer): Promise<void> {
       store.put(tile)
 
       transaction.oncomplete = () => {
+        cacheStats.writes++
         // Check cache size and cleanup if needed (fire and forget)
         cleanupCacheIfNeeded()
         resolve()
@@ -136,11 +167,11 @@ async function cleanupCacheIfNeeded(): Promise<void> {
       const tiles = request.result as CachedTile[]
       const totalSize = tiles.reduce((sum, tile) => sum + tile.size, 0)
 
-      if (totalSize > MAX_CACHE_SIZE) {
+      if (totalSize > maxCacheSizeBytes) {
         // Sort by timestamp (oldest first) and delete until under limit
         tiles.sort((a, b) => a.timestamp - b.timestamp)
 
-        let sizeToFree = totalSize - MAX_CACHE_SIZE * 0.8 // Free 20% extra
+        let sizeToFree = totalSize - maxCacheSizeBytes * 0.8 // Free 20% extra
         const keysToDelete: string[] = []
 
         for (const tile of tiles) {
@@ -212,6 +243,103 @@ export function createCachingImageryProvider(
   }
 
   return baseProvider
+}
+
+/**
+ * Creates a caching wrapper around a Cesium TerrainProvider.
+ * Terrain tiles are cached to IndexedDB for persistence across sessions.
+ */
+export function createCachingTerrainProvider(
+  baseProvider: Cesium.TerrainProvider
+): Cesium.TerrainProvider {
+  const originalRequestTileGeometry = baseProvider.requestTileGeometry.bind(baseProvider)
+
+  baseProvider.requestTileGeometry = function (
+    x: number,
+    y: number,
+    level: number,
+    request?: Cesium.Request
+  ): Promise<Cesium.TerrainData> | undefined {
+    const cacheKey = `terrain_${level}_${x}_${y}`
+
+    // Try to get from cache first
+    return getCachedTile(cacheKey).then((cachedData) => {
+      if (cachedData) {
+        // Reconstruct QuantizedMeshTerrainData from cached buffer
+        try {
+          return reconstructTerrainData(cachedData, level)
+        } catch {
+          // Cache data corrupted, fetch fresh
+        }
+      }
+
+      // Not in cache, fetch from original provider
+      const result = originalRequestTileGeometry(x, y, level, request)
+      if (!result) return undefined
+
+      return Promise.resolve(result).then(async (terrainData) => {
+        // Cache the terrain data (fire and forget)
+        if (terrainData) {
+          try {
+            const buffer = serializeTerrainData(terrainData)
+            if (buffer) {
+              setCachedTile(cacheKey, buffer)
+            }
+          } catch {
+            // Caching failed, that's ok
+          }
+        }
+        return terrainData
+      })
+    }) as Promise<Cesium.TerrainData> | undefined
+  }
+
+  return baseProvider
+}
+
+/**
+ * Serialize terrain data to ArrayBuffer for caching
+ * Note: This is a simplified version - full terrain data is complex
+ */
+function serializeTerrainData(terrainData: Cesium.TerrainData): ArrayBuffer | null {
+  try {
+    // For HeightmapTerrainData, we can serialize the height buffer
+    if ('_buffer' in terrainData) {
+      const buffer = (terrainData as { _buffer?: ArrayBuffer })._buffer
+      if (buffer) {
+        return buffer
+      }
+    }
+    // QuantizedMeshTerrainData is more complex - skip caching for now
+    return null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Reconstruct terrain data from cached buffer
+ */
+function reconstructTerrainData(buffer: ArrayBuffer, level: number): Cesium.TerrainData | null {
+  try {
+    // Create HeightmapTerrainData from buffer
+    // Note: This is simplified and may not work for all terrain types
+    const heightBuffer = new Float32Array(buffer)
+    const width = Math.sqrt(heightBuffer.length)
+
+    if (width !== Math.floor(width)) {
+      return null // Not a square heightmap
+    }
+
+    return new Cesium.HeightmapTerrainData({
+      buffer: heightBuffer,
+      width: width,
+      height: width,
+      childTileMask: level < 14 ? 15 : 0 // Assume children exist up to level 14
+    })
+  } catch {
+    return null
+  }
 }
 
 async function createImageFromBuffer(buffer: ArrayBuffer): Promise<ImageBitmap> {
