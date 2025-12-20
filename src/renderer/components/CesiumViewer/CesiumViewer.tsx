@@ -93,6 +93,7 @@ function CesiumViewer() {
 
   // VATSIM store for setting reference position
   const setReferencePosition = useVatsimStore((state) => state.setReferencePosition)
+  const aircraftStates = useVatsimStore((state) => state.aircraftStates)
   const totalPilotsFromApi = useVatsimStore((state) => state.totalPilotsFromApi)
   const pilotsFilteredByDistance = useVatsimStore((state) => state.pilotsFilteredByDistance)
 
@@ -428,32 +429,46 @@ function CesiumViewer() {
     }
   }, [cesiumViewer, show3DBuildings])
 
-  // Calculate terrain offset when airport changes
+  // Calculate terrain offset when airport changes or when in orbit mode without airport
   // This corrects for the difference between MSL and ellipsoidal height
   useEffect(() => {
-    if (!cesiumViewer || !currentAirport) {
+    if (!cesiumViewer) {
       terrainOffsetReadyRef.current = false
       return
     }
 
-    const towerPos = getTowerPosition(currentAirport, towerHeight)
-    const groundElevationMsl = currentAirport.elevation ? currentAirport.elevation * 0.3048 : 0
+    // For airport mode, calculate terrain offset at tower position
+    if (currentAirport) {
+      const towerPos = getTowerPosition(currentAirport, towerHeight)
+      const groundElevationMsl = currentAirport.elevation ? currentAirport.elevation * 0.3048 : 0
 
-    // Sample terrain to calculate offset between MSL elevation and actual terrain height
-    if (cesiumViewer.terrainProvider) {
-      const positions = [Cesium.Cartographic.fromDegrees(towerPos.longitude, towerPos.latitude)]
-      Cesium.sampleTerrainMostDetailed(cesiumViewer.terrainProvider, positions).then((updatedPositions) => {
-        const terrainHeight = updatedPositions[0].height
-        terrainOffsetRef.current = terrainHeight - groundElevationMsl
+      // Sample terrain to calculate offset between MSL and actual terrain height
+      if (cesiumViewer.terrainProvider) {
+        const positions = [Cesium.Cartographic.fromDegrees(towerPos.longitude, towerPos.latitude)]
+        Cesium.sampleTerrainMostDetailed(cesiumViewer.terrainProvider, positions).then((updatedPositions) => {
+          const terrainHeight = updatedPositions[0].height
+          terrainOffsetRef.current = terrainHeight - groundElevationMsl
+          terrainOffsetReadyRef.current = true
+        }).catch(() => {
+          terrainOffsetRef.current = 0
+          terrainOffsetReadyRef.current = true
+        })
+      } else {
         terrainOffsetReadyRef.current = true
-      }).catch(() => {
-        terrainOffsetRef.current = 0
-        terrainOffsetReadyRef.current = true
-      })
-    } else {
-      terrainOffsetReadyRef.current = true
+      }
+      return
     }
-  }, [cesiumViewer, currentAirport, towerHeight])
+
+    // For orbit mode without airport, use default offset (will be recalculated per-aircraft as needed)
+    if (followMode === 'orbit' && followingCallsign) {
+      terrainOffsetRef.current = 0
+      terrainOffsetReadyRef.current = true
+      return
+    }
+
+    // No airport and not in orbit mode - reset
+    terrainOffsetReadyRef.current = false
+  }, [cesiumViewer, currentAirport, towerHeight, followMode, followingCallsign])
 
   // Setup Babylon root node when airport changes OR when in orbit mode without airport
   // Also set reference position for VATSIM distance filtering
@@ -472,22 +487,26 @@ function CesiumViewer() {
     }
 
     // If in orbit mode following an aircraft without airport, use aircraft position as root
-    if (followMode === 'orbit' && followingCallsign && interpolatedAircraft.size > 0) {
-      const followedAircraft = interpolatedAircraft.get(followingCallsign)
-      if (followedAircraft) {
-        const altitudeMeters = followedAircraft.interpolatedAltitude * 0.3048
-        babylonOverlay.setupRootNode(
-          followedAircraft.interpolatedLatitude,
-          followedAircraft.interpolatedLongitude,
-          altitudeMeters
-        )
+    if (followMode === 'orbit' && followingCallsign) {
+      // Try interpolated data first, fall back to raw store data
+      const interpolated = interpolatedAircraft.get(followingCallsign)
+      const rawAircraft = aircraftStates.get(followingCallsign)
+
+      // Use interpolated if available, otherwise use raw store data
+      const lat = interpolated?.interpolatedLatitude ?? rawAircraft?.latitude
+      const lon = interpolated?.interpolatedLongitude ?? rawAircraft?.longitude
+      const alt = interpolated?.interpolatedAltitude ?? rawAircraft?.altitude
+
+      if (lat !== undefined && lon !== undefined && alt !== undefined) {
+        const altitudeMeters = alt * 0.3048
+        babylonOverlay.setupRootNode(lat, lon, altitudeMeters)
         rootNodeSetupRef.current = true
 
         // Set reference position to followed aircraft for VATSIM filtering
-        setReferencePosition(followedAircraft.interpolatedLatitude, followedAircraft.interpolatedLongitude)
+        setReferencePosition(lat, lon)
       }
     }
-  }, [currentAirport, towerHeight, babylonOverlay.sceneReady, babylonOverlay.setupRootNode, followMode, followingCallsign, interpolatedAircraft, setReferencePosition])
+  }, [currentAirport, towerHeight, babylonOverlay.sceneReady, babylonOverlay.setupRootNode, followMode, followingCallsign, interpolatedAircraft, aircraftStates, setReferencePosition])
 
   // Update aircraft entities
   const updateAircraftEntities = useCallback(() => {
@@ -502,11 +521,20 @@ function CesiumViewer() {
     let isOrbitModeWithoutAirport = false
 
     if (followMode === 'orbit' && followingCallsign) {
+      // Try interpolated data first, fall back to raw store data
       const followedAircraft = interpolatedAircraft.get(followingCallsign)
+      const rawAircraft = aircraftStates.get(followingCallsign)
+
       if (followedAircraft) {
         refLat = followedAircraft.interpolatedLatitude
         refLon = followedAircraft.interpolatedLongitude
         refElevationMeters = followedAircraft.interpolatedAltitude * 0.3048
+        isOrbitModeWithoutAirport = !currentAirport
+      } else if (rawAircraft) {
+        // Fallback to raw store data if interpolated not yet available
+        refLat = rawAircraft.latitude
+        refLon = rawAircraft.longitude
+        refElevationMeters = rawAircraft.altitude * 0.3048
         isOrbitModeWithoutAirport = !currentAirport
       } else if (currentAirport) {
         const towerPos = getTowerPosition(currentAirport, towerHeight)
@@ -978,6 +1006,7 @@ function CesiumViewer() {
     }
   }, [
     interpolatedAircraft,
+    aircraftStates,
     currentAirport,
     towerHeight,
     labelVisibilityDistance,

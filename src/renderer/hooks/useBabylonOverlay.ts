@@ -411,7 +411,8 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     // Check visibility range (surface visibility culling)
     // Use Cesium fog setting since that controls draw distance visibility
     if (currentMetar && showCesiumFog) {
-      const visibilityMeters = currentMetar.visib * 1609.34  // SM to meters
+      // Apply visibilityScale: 1.0 = match METAR, 2.0 = see twice as far
+      const visibilityMeters = currentMetar.visib * 1609.34 * visibilityScale  // SM to meters, scaled
       if (horizontalDistanceMeters > visibilityMeters) {
         return false
       }

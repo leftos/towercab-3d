@@ -44,3 +44,6 @@ All notable changes to TowerCab 3D will be documented in this file.
 ### Changed
 - Settings modal reorganized into tabs to reduce vertical scrolling
 - Keyboard shortcuts moved to dedicated Help tab
+
+### Fixed
+- Aircraft models and datablocks now render correctly when using global search (Ctrl+K) to orbit an aircraft without an airport selected

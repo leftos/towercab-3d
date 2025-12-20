@@ -409,10 +409,12 @@ export function useCesiumCamera(
           viewer.camera.frustum.fov = Cesium.Math.toRadians(targetFov)
         }
         return
-      } else {
-        // Aircraft no longer exists, stop following
-        stopFollowingStore()
       }
+      // Aircraft not found in interpolated map yet - don't stop following here.
+      // The preRender handler will keep checking, and the aircraft may appear
+      // after the next animation frame. Let the user manually stop following
+      // or wait for the aircraft to appear.
+      return
     }
 
     // For all other modes, we need a tower position
@@ -619,10 +621,9 @@ export function useCesiumCamera(
         // Update store with calculated values (for UI display)
         setHeading(bearing)
         setPitch(pitchAngle)
-      } else {
-        // Aircraft no longer exists, stop following
-        stopFollowingStore()
       }
+      // If aircraft not found, don't stop following immediately - it may appear
+      // after the next animation frame. The preRender handler keeps checking.
     }
 
     // Set camera position and orientation
