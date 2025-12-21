@@ -441,8 +441,8 @@ export function useBabylonLabels(
     const startY = labelCenterY + ny * tEdge
 
     // Line ends near model (leave small gap)
-    const endX = screenX - nx * 10
-    const endY = screenY - ny * 10
+    const endX = screenX - nx * 3
+    const endY = screenY - ny * 3
 
     // GUI Line uses absolute screen coordinates
     labelData.leaderLine.x1 = startX

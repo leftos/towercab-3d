@@ -7,7 +7,6 @@ import { calculateDistanceNM } from '../utils/interpolation'
 import {
   GROUNDSPEED_THRESHOLD_KNOTS,
   DATABLOCK_HEIGHT_MULTIPLIER,
-  DATABLOCK_LEADER_LINE_HEIGHT_MULTIPLIER,
   GROUND_AIRCRAFT_TERRAIN_OFFSET
 } from '../constants/rendering'
 
@@ -368,9 +367,21 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
         continue // Skip this aircraft - datablock hidden by weather
       }
 
-      // Project aircraft position to screen
+      // Estimate aircraft height (tail height ≈ 33% of wingspan for most aircraft)
+      const aircraftHeightMeters = data.wingspanMeters * 0.33
+
+      // Project aircraft position to screen (base/center of aircraft)
       const aircraftWindowPos = Cesium.SceneTransforms.worldToWindowCoordinates(viewer.scene, data.cesiumPosition)
       if (!aircraftWindowPos) continue
+
+      // Project the TOP of the aircraft to screen space for leader line endpoint
+      const aircraftTopPosition = Cesium.Cartesian3.fromDegrees(
+        data.longitude,
+        data.latitude,
+        data.heightAboveEllipsoid + aircraftHeightMeters
+      )
+      const aircraftTopWindowPos = Cesium.SceneTransforms.worldToWindowCoordinates(viewer.scene, aircraftTopPosition)
+      if (!aircraftTopWindowPos) continue
 
       // Calculate wingspan in screen-space pixels for proportional label offset
       // Project a point offset by wingspan meters to get screen-space wingspan
@@ -390,10 +401,6 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
       const viewModeScale = viewMode === 'topdown' ? 0.5 : 1.0
       const verticalOffsetPixels = wingspanPixels * DATABLOCK_HEIGHT_MULTIPLIER * viewModeScale
       const horizontalOffsetPixels = 30 // Reduced from 50px to bring datablock closer
-
-      // Leader line endpoint offset (where line connects to aircraft)
-      // Smaller than label offset to position above fuselage but below label
-      const leaderLineOffsetPixels = wingspanPixels * DATABLOCK_LEADER_LINE_HEIGHT_MULTIPLIER * viewModeScale
 
       const aircraftScreenPos = { x: aircraftWindowPos.x, y: aircraftWindowPos.y }
 
@@ -467,8 +474,8 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
 
       labelPositions.push({
         callsign: data.callsign,
-        coneX: aircraftScreenPos.x,
-        coneY: aircraftScreenPos.y - leaderLineOffsetPixels, // Offset upward (negative Y = up in screen coords)
+        coneX: aircraftTopWindowPos.x,
+        coneY: aircraftTopWindowPos.y, // Point to top of aircraft bounding box in screen space
         labelX: screenPos.x,
         labelY: screenPos.y,
         offsetX,
