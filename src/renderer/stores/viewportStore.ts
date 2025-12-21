@@ -1,82 +1,13 @@
 import { create } from 'zustand'
 import { persist, subscribeWithSelector } from 'zustand/middleware'
+import type { ViewMode, FollowMode, ViewportLayout, ViewportCameraState, Viewport, CameraBookmark } from '../types'
 
 // Generate unique IDs using native crypto API
 const generateId = () => crypto.randomUUID()
 
-export type ViewMode = '3d' | 'topdown'
-export type FollowMode = 'tower' | 'orbit'
-
 // Debounce timer for auto-save
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
 const AUTO_SAVE_DELAY = 5000 // 5 seconds
-
-// Viewport position and size (normalized 0-1 values relative to container)
-export interface ViewportLayout {
-  x: number      // Left edge (0 = left of container, 1 = right)
-  y: number      // Top edge (0 = top of container, 1 = bottom)
-  width: number  // Width (0-1)
-  height: number // Height (0-1)
-  zIndex: number // Stacking order for overlapping viewports
-}
-
-// State saved before following an aircraft (for restoration)
-export interface PreFollowState {
-  heading: number
-  pitch: number
-  fov: number
-  viewMode: ViewMode
-}
-
-// Camera state for a single viewport (mirrors cameraStore structure)
-export interface ViewportCameraState {
-  // View mode
-  viewMode: ViewMode
-
-  // Camera orientation (degrees)
-  heading: number
-  pitch: number
-  fov: number
-
-  // Position offset from tower (meters, in local ENU coordinates)
-  positionOffsetX: number
-  positionOffsetY: number
-  positionOffsetZ: number
-
-  // Top-down view altitude (meters above airport)
-  topdownAltitude: number
-
-  // Follow mode
-  followingCallsign: string | null
-  followMode: FollowMode
-  followZoom: number
-  preFollowState: PreFollowState | null
-
-  // Orbit follow mode parameters
-  orbitDistance: number
-  orbitHeading: number
-  orbitPitch: number
-}
-
-// Complete viewport definition
-export interface Viewport {
-  id: string
-  layout: ViewportLayout
-  cameraState: ViewportCameraState
-  label?: string  // Optional user-defined label
-}
-
-// Camera bookmark (just camera state without follow/pre-follow state)
-interface CameraBookmark {
-  viewMode: ViewMode
-  heading: number
-  pitch: number
-  fov: number
-  positionOffsetX: number
-  positionOffsetY: number
-  positionOffsetZ: number
-  topdownAltitude: number
-}
 
 // Per-airport viewport configuration (persisted)
 interface AirportViewportConfig {

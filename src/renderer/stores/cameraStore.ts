@@ -1,8 +1,6 @@
 import { create } from 'zustand'
 import { persist, subscribeWithSelector } from 'zustand/middleware'
-
-export type ViewMode = '3d' | 'topdown'
-export type FollowMode = 'tower' | 'orbit'
+import type { ViewMode, FollowMode } from '../types'
 
 // Debounce timer for auto-save
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null

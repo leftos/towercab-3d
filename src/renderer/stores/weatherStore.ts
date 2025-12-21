@@ -1,11 +1,6 @@
 import { create } from 'zustand'
 import { metarService, type MetarData } from '../services/MetarService'
-
-export interface CloudLayer {
-  altitude: number    // Altitude in meters above ground
-  coverage: number    // 0-1 coverage (FEW=0.25, SCT=0.5, BKN=0.75, OVC=1.0)
-  type: string        // Original cover type (FEW, SCT, BKN, OVC)
-}
+import type { CloudLayer } from '../types'
 
 interface WeatherState {
   // Current weather data
