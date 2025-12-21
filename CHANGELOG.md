@@ -4,6 +4,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+## v0.0.6-alpha (2025-12-21)
+
 ### Fixed
 - Fixed infinite loop crash when using orbit follow mode or dragging inset viewports
 - Aircraft list now shows the same aircraft as datablocks on the map
