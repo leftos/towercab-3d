@@ -8,13 +8,125 @@ import {
 } from '../utils/cesiumFrustumPatch'
 
 /**
- * Hook for managing Cesium stereo rendering for VR
+ * Manages Cesium stereo rendering for WebXR VR mode by rendering separate left/right eye views.
  *
- * When VR is active, this hook:
- * 1. Takes control of Cesium's render loop
- * 2. Renders each frame twice (left and right eye)
- * 3. Captures each eye's render to a canvas/texture
- * 4. Provides the textures to the VR scene for display
+ * ## Responsibilities
+ * - Creates offscreen canvases for left and right eye rendering targets
+ * - Disables Cesium's default render loop when VR is active
+ * - Renders Cesium scene twice per frame with adjusted camera frustums for each eye
+ * - Captures rendered frames to canvases that can be used as textures in Babylon.js VR scene
+ * - Restores Cesium's normal rendering when VR deactivates
+ *
+ * ## Dependencies
+ * - Requires: Cesium viewer instance (must be initialized)
+ * - Reads: `vrStore` (isVRActive state, IPD settings)
+ * - Writes: Cesium viewer's `useDefaultRenderLoop` property
+ *
+ * ## Call Order
+ * This hook should be called before setting up the VR scene that will display the stereo textures:
+ * ```typescript
+ * function VRScene() {
+ *   const cesiumViewer = useRef<Cesium.Viewer>(null)
+ *
+ *   // Setup stereo rendering (disables Cesium auto-render)
+ *   const { stereoTextures, renderStereoFrame, isActive } = useCesiumStereo(
+ *     cesiumViewer.current,
+ *     1536, 1536 // Render resolution per eye
+ *   )
+ *
+ *   // Setup VR scene that uses the stereo textures
+ *   useEffect(() => {
+ *     if (isActive && stereoTextures.leftCanvas && stereoTextures.rightCanvas) {
+ *       // Create Babylon materials using the canvases as textures
+ *       // Call renderStereoFrame() in XR render loop
+ *     }
+ *   }, [isActive, stereoTextures])
+ * }
+ * ```
+ *
+ * ## Stereo Rendering Pipeline
+ *
+ * When VR is active, this hook takes over Cesium's render loop:
+ *
+ * 1. **Disable Auto-Render**: Sets `viewer.useDefaultRenderLoop = false` to prevent automatic rendering
+ * 2. **Create Offscreen Canvases**: Two canvases at specified resolution (default 1536×1536 per eye)
+ * 3. **Render Loop** (called by VR scene's XR frame callback):
+ *    - Save original camera state
+ *    - Configure camera for right eye (apply IPD offset)
+ *    - Render Cesium scene → copy to right canvas
+ *    - Restore camera state
+ *    - Configure camera for left eye (apply IPD offset)
+ *    - Render Cesium scene → copy to left canvas
+ *    - Restore original camera state
+ * 4. **Texture Consumption**: VR scene reads canvases as textures for display on stereo planes
+ *
+ * ## IPD (Inter-Pupillary Distance)
+ *
+ * The Inter-Pupillary Distance determines the separation between left and right eye cameras:
+ * - Read from `vrStore.ipd` (user-configurable, typically 63mm)
+ * - Applied via `configureEyeCamera()` which adjusts frustum offset
+ * - Larger IPD = greater stereo effect (more 3D depth perception)
+ * - See `utils/cesiumFrustumPatch.ts` for frustum manipulation details
+ *
+ * ## Performance Considerations
+ *
+ * - **Double Rendering Cost**: Cesium renders the entire globe twice per frame (60Hz × 2 = 120 renders/sec)
+ * - **Resolution**: Default 1536×1536 per eye balances quality with performance
+ * - **Canvas Copying**: Uses `drawImage()` to copy Cesium's WebGL canvas to 2D canvases (fast)
+ * - **VR Frame Rate**: Must maintain 90Hz for most VR headsets (renders every other VR frame)
+ *
+ * ## Camera State Preservation
+ *
+ * The hook uses `saveCameraState()` and `restoreCameraState()` from `cesiumFrustumPatch.ts` to:
+ * - Save original camera position/orientation before rendering
+ * - Restore it after both eyes are rendered
+ * - Ensure the main Cesium viewer shows the correct view when mirrored to desktop
+ *
+ * ## Cleanup Behavior
+ *
+ * When VR deactivates or component unmounts:
+ * - Offscreen canvases are destroyed
+ * - `viewer.useDefaultRenderLoop` is restored to original value
+ * - Cesium resumes normal automatic rendering
+ *
+ * @param viewer - The Cesium viewer instance (must not be destroyed)
+ * @param renderWidth - Width of offscreen render canvases in pixels (default: 1536)
+ * @param renderHeight - Height of offscreen render canvases in pixels (default: 1536)
+ * @returns Stereo rendering controls and state
+ *
+ * @example
+ * // Basic VR stereo setup
+ * const { stereoTextures, renderStereoFrame, isActive } = useCesiumStereo(
+ *   viewer,
+ *   1920, // High-res rendering
+ *   1920
+ * )
+ *
+ * // In XR render loop:
+ * if (isActive) {
+ *   renderStereoFrame() // Render both eyes to canvases
+ * }
+ *
+ * @example
+ * // Using stereo textures in Babylon.js
+ * useEffect(() => {
+ *   if (!stereoTextures.leftCanvas || !stereoTextures.rightCanvas) return
+ *
+ *   const leftTexture = new BABYLON.Texture(
+ *     stereoTextures.leftCanvas.toDataURL(),
+ *     scene
+ *   )
+ *   const rightTexture = new BABYLON.Texture(
+ *     stereoTextures.rightCanvas.toDataURL(),
+ *     scene
+ *   )
+ *
+ *   // Apply to stereo planes...
+ * }, [stereoTextures])
+ *
+ * @see utils/cesiumFrustumPatch.ts - For camera frustum manipulation and state management
+ * @see vrStore - For VR session state and IPD settings
+ * @see VRScene.tsx - For Babylon.js VR scene that consumes stereo textures
  */
 
 interface StereoTextures {

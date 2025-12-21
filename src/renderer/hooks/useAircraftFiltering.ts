@@ -45,27 +45,204 @@ interface UseAircraftFilteringOptions {
 }
 
 /**
- * Shared aircraft filtering hook used by AircraftPanel for UI list updates.
+ * Filters interpolated aircraft data for UI display with multi-stage filtering pipeline.
  *
- * NOTE: This hook is NOT used by CesiumViewer for rendering because it only
- * re-executes when React re-renders (typically 1Hz due to refresh tick).
- * CesiumViewer reads directly from the interpolatedAircraft Map to achieve
- * 60Hz position updates while applying the same filter settings from stores.
+ * ## Responsibilities
+ * - Calculates reference point for distance filtering (tower or followed aircraft in orbit mode)
+ * - Filters aircraft by distance, traffic type, weather visibility, search query, and airport
+ * - Sorts aircraft by 3D slant range distance
+ * - Provides filtering statistics for UI feedback
+ * - Returns reference point data for additional calculations (e.g., AGL altitude)
  *
- * This hook is perfect for UI components that don't need frame-rate updates.
+ * ## Dependencies
+ * - Requires: `useAircraftInterpolation` hook to provide `interpolatedAircraft` Map
+ * - Reads: `settingsStore` (distance limits, traffic type toggles, weather settings)
+ * - Reads: `aircraftFilterStore` (search query, airport filter, weather filter toggles)
+ * - Reads: `viewportStore` (active viewport, following callsign, camera state)
+ * - Reads: `airportStore` (current airport, tower height)
+ * - Reads: `weatherStore` (METAR data, cloud layers)
  *
- * @param interpolatedAircraft - The interpolated aircraft Map from useAircraftInterpolation()
- * @param options - Optional filtering options
+ * ## Call Order
+ * This hook is designed for UI components that update at 1Hz, not frame-rate rendering:
+ * ```typescript
+ * function AircraftPanel() {
+ *   // Get interpolated aircraft (updated 60Hz)
+ *   const { interpolatedAircraft } = useAircraftInterpolation()
  *
- * Filtering order:
- * 1. Calculate reference position (tower or followed aircraft)
- * 2. Calculate distance for each aircraft (3D slant range)
- * 3. Filter by distance (labelVisibilityDistance)
- * 4. Filter by traffic type (showGroundTraffic, showAirborneTraffic)
- * 5. Filter by weather visibility (if filterWeatherVisibility enabled)
- * 6. Filter by search query (if searchQuery not empty)
- * 7. Filter by airport traffic (if filterAirportTraffic enabled)
- * 8. Sort by distance
+ *   // Filter for UI display (evaluated ~1Hz due to refresh tick)
+ *   const { filtered, stats } = useAircraftFiltering(interpolatedAircraft)
+ *
+ *   return (
+ *     <div>
+ *       {filtered.map(aircraft => (
+ *         <AircraftListItem key={aircraft.callsign} aircraft={aircraft} />
+ *       ))}
+ *     </div>
+ *   )
+ * }
+ * ```
+ *
+ * **IMPORTANT:** This hook is **NOT** used by `CesiumViewer` for aircraft rendering because:
+ * - The hook only re-executes when React re-renders (typically 1Hz due to refresh tick)
+ * - `CesiumViewer` needs 60Hz position updates for smooth aircraft movement
+ * - `CesiumViewer` reads directly from the `interpolatedAircraft` Map and applies filtering inline
+ * - Both implementations use the same filter settings from stores for consistency
+ *
+ * ## Filtering Pipeline
+ *
+ * Aircraft are filtered through 5 sequential stages (order matters):
+ *
+ * ### 1. Distance Filter
+ * - Calculate 3D slant range distance from reference point to each aircraft
+ * - Reference point: Tower position (normal mode) or followed aircraft (orbit mode without airport)
+ * - Filter by `settingsStore.aircraft.labelVisibilityDistance` (default: 10 NM)
+ * - Option: Include followed aircraft regardless of distance (`includeFollowedRegardlessOfDistance`)
+ *
+ * ### 2. Traffic Type Filter
+ * - Determine if aircraft is airborne (>200ft AGL) or on ground
+ * - Filter by `settingsStore.aircraft.showGroundTraffic` and `showAirborneTraffic`
+ * - **Note:** Uses 200ft AGL threshold to account for pressure altitude variations at high-elevation airports
+ * - **Skipped** in orbit mode without airport (show all traffic types)
+ *
+ * ### 3. Weather Visibility Filter (if enabled)
+ * - **Surface Visibility**: Hide aircraft beyond METAR visibility range (scaled by `visibilityScale`)
+ * - **Cloud Ceiling**: Hide aircraft obscured by BKN/OVC cloud layers between camera and aircraft
+ * - **Top-Down Mode**: Cloud culling is disabled (clouds don't visually obscure in this view)
+ * - Requires: `aircraftFilterStore.filterWeatherVisibility = true` and `settingsStore.weather.showWeatherEffects = true`
+ *
+ * ### 4. Search Query Filter (if not empty)
+ * - Match against: callsign, aircraft type, departure airport, arrival airport
+ * - Case-insensitive substring search
+ * - Requires: `aircraftFilterStore.searchQuery` to be non-empty
+ *
+ * ### 5. Airport Traffic Filter (if enabled)
+ * - Show only aircraft with departure or arrival matching current airport ICAO
+ * - Requires: `aircraftFilterStore.filterAirportTraffic = true` and current airport selected
+ *
+ * ### 6. Sort and Limit
+ * - Sort by distance (closest first)
+ * - Limit to `settingsStore.aircraft.maxAircraftDisplay` (default: 100)
+ *
+ * ## Distance Calculation
+ *
+ * Uses 3D slant range (Haversine formula with altitude delta):
+ * ```typescript
+ * distance = sqrt(
+ *   haversineDistance(lat1, lon1, lat2, lon2)^2 +
+ *   (alt1 - alt2)^2
+ * )
+ * ```
+ *
+ * This provides true Euclidean distance, accounting for altitude differences.
+ * See `utils/interpolation.ts` → `calculateDistanceNM()` for implementation.
+ *
+ * ## Reference Point Selection
+ *
+ * The reference point for distance calculations depends on mode:
+ *
+ * - **Normal mode** (airport selected): Tower position + tower height
+ * - **Orbit mode without airport**: Followed aircraft's current interpolated position
+ * - **No reference available**: Return empty result
+ *
+ * ## Weather Visibility Culling
+ *
+ * ### Surface Visibility
+ * ```typescript
+ * visibilityMeters = metar.visibility * 1609.34 * visibilityScale
+ * if (horizontalDistance > visibilityMeters) {
+ *   // Hide aircraft (beyond visibility range)
+ * }
+ * ```
+ *
+ * ### Cloud Ceiling
+ * ```typescript
+ * // Check if any BKN/OVC layer is between camera and aircraft
+ * if (layer.coverage >= 0.75 && layer.altitude between [cameraAlt, aircraftAlt]) {
+ *   // Hide aircraft (obscured by clouds)
+ * }
+ * ```
+ *
+ * Cloud culling is skipped in top-down view because clouds don't visually block line-of-sight.
+ *
+ * ## Filtering Statistics
+ *
+ * The hook returns statistics showing how many aircraft passed each filter stage:
+ * ```typescript
+ * stats = {
+ *   total: 450,           // Total aircraft in interpolatedAircraft Map
+ *   afterDistance: 85,    // After distance filter
+ *   afterTrafficType: 72, // After traffic type filter
+ *   afterWeather: 65,     // After weather visibility filter
+ *   afterSearch: 65,      // After search query filter
+ *   afterAirport: 18      // After airport traffic filter (final count)
+ * }
+ * ```
+ *
+ * This helps users understand why aircraft are hidden and diagnose filter issues.
+ *
+ * ## Echo Loop Prevention
+ *
+ * This hook intentionally does **NOT** use `useMemo` to cache results because:
+ * - The `interpolatedAircraft` Map is mutated every frame (60Hz)
+ * - We want to read the latest interpolated positions each time the hook executes
+ * - UI components control update rate via refresh tick (1Hz), not this hook
+ *
+ * ## Performance Considerations
+ *
+ * - **Array.from()**: Converts Map to array once per filter execution (~1Hz for UI)
+ * - **Filter passes**: Each filter pass iterates the remaining aircraft (sequential reduction)
+ * - **Distance calculation**: Haversine formula for all aircraft (typically <500 iterations)
+ * - **Sorting**: O(n log n) sort on filtered list (typically <100 aircraft after filtering)
+ * - **Total cost**: ~0.1-1ms per filter execution on typical hardware
+ *
+ * @param interpolatedAircraft - Map of callsign → InterpolatedAircraftState from `useAircraftInterpolation`
+ * @param options - Optional filtering configuration
+ * @param options.includeFollowedRegardlessOfDistance - If true, followed aircraft bypasses distance filter (default: false)
+ * @param options.viewportId - Viewport ID for determining follow target (default: active viewport)
+ * @returns Filtered aircraft list, reference point, orbit mode flag, and statistics
+ *
+ * @example
+ * // Basic usage in aircraft list panel
+ * const { interpolatedAircraft } = useAircraftInterpolation()
+ * const { filtered, stats } = useAircraftFiltering(interpolatedAircraft)
+ *
+ * return (
+ *   <div>
+ *     <div>Showing {filtered.length} of {stats.total} aircraft</div>
+ *     {filtered.map(aircraft => (
+ *       <div key={aircraft.callsign}>
+ *         {aircraft.callsign} - {aircraft.distance.toFixed(1)} NM
+ *       </div>
+ *     ))}
+ *   </div>
+ * )
+ *
+ * @example
+ * // Usage with followed aircraft always visible
+ * const { filtered } = useAircraftFiltering(interpolatedAircraft, {
+ *   includeFollowedRegardlessOfDistance: true
+ * })
+ * // Followed aircraft will appear even if beyond labelVisibilityDistance
+ *
+ * @example
+ * // Display filtering statistics
+ * const { filtered, stats } = useAircraftFiltering(interpolatedAircraft)
+ *
+ * return (
+ *   <div>
+ *     <h3>Filter Pipeline</h3>
+ *     <div>Total aircraft: {stats.total}</div>
+ *     <div>Within distance: {stats.afterDistance}</div>
+ *     <div>Correct traffic type: {stats.afterTrafficType}</div>
+ *     <div>Weather visible: {stats.afterWeather}</div>
+ *     <div>Search match: {stats.afterSearch}</div>
+ *     <div>Airport traffic: {stats.afterAirport}</div>
+ *   </div>
+ * )
+ *
+ * @see useAircraftInterpolation - Provides the interpolated aircraft Map
+ * @see utils/interpolation.ts - For distance calculation implementation
+ * @see CesiumViewer.tsx - For 60Hz rendering that doesn't use this hook
  */
 export function useAircraftFiltering(
   interpolatedAircraft: Map<string, InterpolatedAircraftState>,

@@ -1,5 +1,164 @@
 import { useCallback, useRef, useState, useEffect } from 'react'
 
+/**
+ * Provides drag-to-move and resize functionality for inset viewports with normalized coordinates.
+ *
+ * ## Responsibilities
+ * - Tracks pointer events (down/move/up) for dragging and resizing
+ * - Converts between pixel coordinates and normalized (0-1) viewport coordinates
+ * - Enforces minimum size constraints and viewport boundary limits
+ * - Prevents echo loops when position/size changes propagate back from store
+ * - Provides props for drag handles and resize handles (8 directions)
+ *
+ * ## Dependencies
+ * - Requires: `.viewport-manager` container element in DOM (for bounds calculations)
+ * - Reads: Position/size props (from parent component, typically from `viewportStore`)
+ * - Writes: Calls callbacks (`onPositionChange`, `onSizeChange`, `onDragEnd`) during drag/resize
+ *
+ * ## Call Order
+ * This hook should be called in components that render draggable/resizable inset viewports:
+ * ```typescript
+ * function InsetViewport({ viewportId }) {
+ *   const viewport = useViewportStore(state =>
+ *     state.viewports.find(v => v.id === viewportId)
+ *   )
+ *
+ *   const { position, size, dragHandleProps, getResizeHandleProps } = useDragResize({
+ *     initialPosition: viewport.position,
+ *     initialSize: viewport.size,
+ *     onDragEnd: (pos, size) => {
+ *       // Persist to store when drag/resize ends
+ *       viewportStore.getState().updateViewportLayout(viewportId, pos, size)
+ *     }
+ *   })
+ *
+ *   return (
+ *     <div style={{ left: `${position.x * 100}%`, width: `${size.width * 100}%` }}>
+ *       <div {...dragHandleProps}>Drag Handle</div>
+ *       <div {...getResizeHandleProps('se')}>SE Resize Handle</div>
+ *     </div>
+ *   )
+ * }
+ * ```
+ *
+ * ## Coordinate System
+ *
+ * This hook uses **normalized coordinates** (0-1 range) rather than pixels:
+ * - `position.x = 0.0` = left edge of container
+ * - `position.x = 1.0` = right edge of container
+ * - `size.width = 0.5` = 50% of container width
+ *
+ * **Why normalized coordinates?**
+ * - Viewport layout remains consistent across different screen sizes
+ * - Easy to persist to localStorage (no pixel values tied to specific monitor)
+ * - Simple percentage-based CSS positioning (`left: ${x * 100}%`)
+ *
+ * **Conversion:**
+ * - Pixel → Normalized: `normalized = pixels / containerDimension`
+ * - Normalized → Pixel: `pixels = normalized * containerDimension`
+ *
+ * ## Drag Behavior
+ *
+ * When user drags the handle:
+ * 1. **Pointer Down**: Record start mouse position and current viewport position
+ * 2. **Pointer Move**: Calculate delta in pixels, convert to normalized delta, apply to position
+ * 3. **Boundary Constraints**: Clamp position so viewport stays within container bounds
+ * 4. **Real-time Updates**: Call `onPositionChange()` on every move event
+ * 5. **Pointer Up**: Call `onDragEnd()` with final position/size
+ *
+ * ## Resize Behavior
+ *
+ * When user drags a resize handle (8 directions: n/s/e/w/ne/nw/se/sw):
+ * 1. **Pointer Down**: Record start mouse position, current position/size, and resize direction
+ * 2. **Pointer Move**: Calculate delta based on direction:
+ *    - East (`e`): Increase width, keep position fixed
+ *    - West (`w`): Move left edge (adjust position AND width)
+ *    - South (`s`): Increase height, keep position fixed
+ *    - North (`n`): Move top edge (adjust position AND height)
+ *    - Corners (e.g., `se`): Combine horizontal and vertical logic
+ * 3. **Minimum Size**: Enforce `minSize` constraints (default 200×150 pixels)
+ * 4. **Boundary Constraints**: Prevent viewport from extending outside container
+ * 5. **Real-time Updates**: Call `onPositionChange()` and `onSizeChange()` on every move event
+ * 6. **Pointer Up**: Call `onDragEnd()` with final position/size
+ *
+ * ## Echo Loop Prevention
+ *
+ * **Problem:** When position/size changes are committed to store, store updates trigger prop changes,
+ * which would cause the hook to re-apply those same changes, creating an infinite loop.
+ *
+ * **Solution:** Track the last committed values in refs (`lastCommittedPositionRef`, `lastCommittedSizeRef`):
+ * - When drag/resize ends, save committed values to refs BEFORE calling `onDragEnd()`
+ * - When props change, only apply if difference > 0.001 (prevents echoing our own commits)
+ * - This allows external changes (e.g., viewport reset) to still update the hook
+ *
+ * ## Pointer Capture
+ *
+ * This hook uses `setPointerCapture()` to ensure smooth dragging:
+ * - All pointer move events route to the original target, even if cursor leaves element
+ * - Prevents losing drag/resize if user moves mouse quickly
+ * - Automatically released on pointer up
+ *
+ * ## Resize Handle Cursors
+ *
+ * Each resize direction has an appropriate cursor:
+ * - `n`, `s`: `ns-resize` (vertical)
+ * - `e`, `w`: `ew-resize` (horizontal)
+ * - `ne`, `sw`: `nesw-resize` (diagonal)
+ * - `nw`, `se`: `nwse-resize` (diagonal)
+ * - Drag handle: `move` cursor
+ *
+ * @param options - Configuration options
+ * @param options.initialPosition - Initial position in normalized coordinates (0-1)
+ * @param options.initialSize - Initial size in normalized coordinates (0-1)
+ * @param options.minSize - Minimum size in pixels (default: 200×150)
+ * @param options.onPositionChange - Called during drag with new position (optional)
+ * @param options.onSizeChange - Called during resize with new size (optional)
+ * @param options.onDragEnd - Called when drag/resize ends with final position and size (optional)
+ * @returns Drag/resize state and handle props
+ *
+ * @example
+ * // Basic draggable viewport with SE resize handle
+ * const { position, size, isDragging, dragHandleProps, getResizeHandleProps } = useDragResize({
+ *   initialPosition: { x: 0.7, y: 0.7 },
+ *   initialSize: { width: 0.25, height: 0.25 },
+ *   minSize: { width: 300, height: 200 },
+ *   onDragEnd: (pos, size) => {
+ *     console.log('Final position:', pos, 'size:', size)
+ *     saveToStore(pos, size)
+ *   }
+ * })
+ *
+ * return (
+ *   <div style={{
+ *     position: 'absolute',
+ *     left: `${position.x * 100}%`,
+ *     top: `${position.y * 100}%`,
+ *     width: `${size.width * 100}%`,
+ *     height: `${size.height * 100}%`
+ *   }}>
+ *     <div {...dragHandleProps}>Drag Me</div>
+ *     <div {...getResizeHandleProps('se')} style={{ position: 'absolute', right: 0, bottom: 0 }}>
+ *       ↘
+ *     </div>
+ *   </div>
+ * )
+ *
+ * @example
+ * // Viewport with all 8 resize handles
+ * const handles: ResizeDirection[] = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw']
+ *
+ * return (
+ *   <div className="viewport">
+ *     <div {...dragHandleProps}>Title Bar</div>
+ *     {handles.map(dir => (
+ *       <div key={dir} {...getResizeHandleProps(dir)} className={`resize-${dir}`} />
+ *     ))}
+ *   </div>
+ * )
+ *
+ * @see viewportStore - For viewport position/size persistence
+ * @see ViewportContainer.tsx - For usage in inset viewport rendering
+ */
 export type ResizeDirection = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
 
 interface Position {

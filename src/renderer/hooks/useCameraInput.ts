@@ -18,13 +18,147 @@ interface UseCameraInputOptions {
 }
 
 /**
- * Hook for handling camera input (keyboard, mouse drag, mouse wheel)
- * Manages smooth velocity-based movement with acceleration/deceleration
- * Only processes input when this viewport is the active viewport.
+ * Handles keyboard, mouse, and wheel input for camera controls with smooth velocity-based movement.
  *
- * @param viewer - The Cesium viewer instance
- * @param viewportId - The ID of the viewport this hook controls
- * @param options - Configuration options
+ * ## Responsibilities
+ * - Processes keyboard input (WASD, arrows, view mode toggles) for camera movement
+ * - Handles mouse drag input (right-click for rotation, left-click for panning in top-down mode)
+ * - Manages mouse wheel scrolling for zoom/FOV adjustment
+ * - Implements smooth acceleration/deceleration physics for all inputs
+ * - Respects viewport activation state (only processes input when this viewport is active)
+ * - Breaks tower follow mode when user manually manipulates camera
+ *
+ * ## Dependencies
+ * - Requires: Cesium viewer instance (must be initialized)
+ * - Reads: `settingsStore` (mouse sensitivity), `viewportStore` (camera state, active viewport)
+ * - Writes: `viewportStore` (camera state via actions: adjustHeading, moveForward, etc.)
+ *
+ * ## Call Order
+ * Call this hook in components that need camera input handling, typically alongside `useCesiumCamera`:
+ * ```typescript
+ * function CesiumViewer({ viewportId }) {
+ *   const viewer = useRef<Cesium.Viewer>(null)
+ *
+ *   // Setup camera math (position/orientation calculations)
+ *   useCesiumCamera(viewer.current, viewportId)
+ *
+ *   // Setup input handling (keyboard/mouse controls)
+ *   useCameraInput(viewer.current, viewportId, {
+ *     onBreakTowerFollow: () => handleStopFollowing()
+ *   })
+ * }
+ * ```
+ *
+ * ## Input Handling
+ *
+ * ### Keyboard Controls
+ * - **WASD / Arrow Keys**: Movement (forward/back/left/right)
+ * - **Shift + WASD**: Sprint mode (3x speed)
+ * - **Q/E**: Rotate heading (left/right)
+ * - **Z/C**: Adjust pitch (up/down)
+ * - **R/F**: Zoom (decrease/increase FOV)
+ * - **T**: Toggle view mode (3D ⟷ top-down)
+ * - **R**: Reset position offsets to zero
+ * - **Shift+R / Home**: Reset entire view to defaults
+ * - **O**: Toggle follow mode (tower ⟷ orbit) when following aircraft
+ * - **Esc**: Stop following aircraft
+ *
+ * ### Mouse Controls
+ * - **Right-click drag**: Rotate camera (heading/pitch in 3D, orbit heading/pitch when following)
+ * - **Middle-click drag**: Same as right-click drag
+ * - **Left-click drag** (top-down mode only): Pan the map
+ * - **Mouse wheel**: Zoom in/out (adjusts FOV or follow zoom)
+ *
+ * ### Sensitivity Scaling
+ * Mouse drag rotation is scaled by user setting (0.1-2.0, default 1.0) from `settingsStore.camera.mouseSensitivity`.
+ *
+ * ## Velocity Physics
+ *
+ * All movements use smooth acceleration/deceleration rather than instant position changes:
+ *
+ * 1. **Target Velocity**: Calculated based on currently pressed keys (e.g., W pressed = forward target velocity)
+ * 2. **Acceleration**: Current velocity interpolates toward target velocity each frame
+ * 3. **Threshold**: Velocities below threshold are ignored to prevent jitter
+ * 4. **Application**: Velocities are applied as deltas (velocity × deltaTime) to camera state
+ *
+ * This creates smooth, natural-feeling camera movement with momentum. See `utils/inputVelocity.ts` for implementation details.
+ *
+ * ## Wheel Impulse System
+ *
+ * Mouse wheel uses an impulse-based system for smooth scrolling:
+ * - Each wheel event adds to an impulse accumulator (clamped to ±3)
+ * - Impulse decays exponentially each frame as it's applied to zoom velocity
+ * - Supports fast scrolling (multiple wheel events accumulate) without feeling laggy
+ *
+ * ## View Mode Behavior
+ *
+ * ### 3D Tower View
+ * - WASD/arrows move camera position relative to tower
+ * - Mouse drag rotates camera heading/pitch
+ * - Wheel adjusts FOV
+ *
+ * ### Top-Down View
+ * - WASD/arrows and left-click drag move camera position (panning)
+ * - Q/E or right-click drag rotates heading (map rotation)
+ * - Wheel adjusts altitude
+ *
+ * ### Follow Tower Mode
+ * - Camera at tower, tracks aircraft heading
+ * - Arrow keys, right/middle-click drag, or mouse wheel break follow mode
+ * - Wheel adjusts follow zoom instead of FOV
+ *
+ * ### Follow Orbit Mode
+ * - Camera orbits around aircraft
+ * - WASD/arrows adjust orbit distance
+ * - Mouse drag adjusts orbit heading/pitch
+ * - Wheel adjusts orbit distance
+ *
+ * ## Multi-Viewport Behavior
+ *
+ * Only the **active viewport** receives input. When a viewport is clicked:
+ * 1. It becomes the active viewport (cyan border in UI)
+ * 2. All keyboard/mouse/wheel input routes to that viewport
+ * 3. Other viewports ignore input until activated
+ *
+ * ## Event Handling
+ *
+ * - **Mouse events**: Uses Cesium's `ScreenSpaceEventHandler` for reliable canvas event handling
+ * - **Keyboard events**: Uses global window event listeners (filtered by active viewport)
+ * - **Animation loop**: RequestAnimationFrame loop for smooth 60Hz velocity updates
+ * - **Cleanup**: All event listeners and animation frames are properly cleaned up on unmount
+ *
+ * @param viewer - The Cesium viewer instance (must not be destroyed)
+ * @param viewportId - The unique ID of this viewport (for activation tracking)
+ * @param options - Optional configuration
+ * @param options.onBreakTowerFollow - Callback when user manually breaks tower follow mode (optional)
+ *
+ * @example
+ * // Basic usage with follow break callback
+ * useCameraInput(viewer, 'main-viewport', {
+ *   onBreakTowerFollow: () => {
+ *     console.log('User broke tower follow mode')
+ *     viewportStore.getState().stopFollowing()
+ *   }
+ * })
+ *
+ * @example
+ * // Usage in multi-viewport setup
+ * function InsetViewer({ viewportId }) {
+ *   const viewerRef = useRef<Cesium.Viewer>(null)
+ *
+ *   useCameraInput(viewerRef.current, viewportId, {
+ *     onBreakTowerFollow: () => {
+ *       // Only this viewport will receive input when active
+ *       stopFollowing()
+ *     }
+ *   })
+ *
+ *   return <div ref={viewerRef} />
+ * }
+ *
+ * @see useCesiumCamera - For camera position/orientation calculations
+ * @see utils/inputVelocity.ts - For velocity physics implementation
+ * @see viewportStore - For camera state management and actions
  */
 export function useCameraInput(
   viewer: Cesium.Viewer | null,
