@@ -6,7 +6,8 @@ import { viteStaticCopy } from 'vite-plugin-static-copy'
 import type { Plugin } from 'vite'
 
 const cesiumBaseUrl = 'cesium-package'
-const cesiumSource = resolve('node_modules/cesium/Build/Cesium')
+// Use forward slashes for glob patterns (fast-glob requirement)
+const cesiumSource = resolve('node_modules/cesium/Build/Cesium').replace(/\\/g, '/')
 
 // Middleware plugin to serve Cesium assets in dev mode
 function serveCesiumDev(): Plugin {
@@ -78,10 +79,10 @@ export default defineConfig({
     serveCesiumDev(),
     viteStaticCopy({
       targets: [
-        { src: 'node_modules/cesium/Build/Cesium/ThirdParty/**/*', dest: `${cesiumBaseUrl}/ThirdParty` },
-        { src: 'node_modules/cesium/Build/Cesium/Workers/**/*', dest: `${cesiumBaseUrl}/Workers` },
-        { src: 'node_modules/cesium/Build/Cesium/Assets/**/*', dest: `${cesiumBaseUrl}/Assets` },
-        { src: 'node_modules/cesium/Build/Cesium/Widgets/**/*', dest: `${cesiumBaseUrl}/Widgets` }
+        { src: `${cesiumSource}/ThirdParty/**/*`, dest: `${cesiumBaseUrl}/ThirdParty` },
+        { src: `${cesiumSource}/Workers/**/*`, dest: `${cesiumBaseUrl}/Workers` },
+        { src: `${cesiumSource}/Assets/**/*`, dest: `${cesiumBaseUrl}/Assets` },
+        { src: `${cesiumSource}/Widgets/**/*`, dest: `${cesiumBaseUrl}/Widgets` }
       ]
     })
   ]
