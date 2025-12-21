@@ -4,6 +4,12 @@ import type { InterpolatedAircraftState } from '../types/vatsim'
 import type { ViewMode } from '../types'
 import { aircraftModelService } from '../services/AircraftModelService'
 import { calculateDistanceNM } from '../utils/interpolation'
+import {
+  GROUNDSPEED_THRESHOLD_KNOTS,
+  DATABLOCK_HEIGHT_MULTIPLIER,
+  DATABLOCK_LEADER_LINE_HEIGHT_MULTIPLIER,
+  GROUND_AIRCRAFT_TERRAIN_OFFSET
+} from '../constants/rendering'
 
 export type DatablockMode = 'none' | 'full' | 'airline'
 
@@ -26,6 +32,7 @@ interface UseCesiumLabelsParams {
   currentAirportIcao: string | null
   airportElevationFeet: number
   groundElevationMeters: number
+  terrainOffset: number  // Geoid offset for MSL → ellipsoid conversion
   towerHeight: number
   // Reference position for distance calculation
   refLat: number | null
@@ -38,6 +45,8 @@ interface UseCesiumLabelsParams {
   searchQuery: string
   filterAirportTraffic: boolean
   isOrbitModeWithoutAirport: boolean
+  // Ground aircraft terrain heights (sampled 3x per second)
+  groundAircraftTerrain: Map<string, number>
 }
 
 /**
@@ -118,8 +127,8 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
     viewMode,
     followingCallsign,
     currentAirportIcao,
-    airportElevationFeet,
     groundElevationMeters,
+    terrainOffset,
     towerHeight,
     refLat,
     refLon,
@@ -129,7 +138,8 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
     showAirborneTraffic,
     searchQuery,
     filterAirportTraffic,
-    isOrbitModeWithoutAirport
+    isOrbitModeWithoutAirport,
+    groundAircraftTerrain
   } = params
 
   // Update labels
@@ -145,7 +155,10 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
       labelText: string
       labelColor: { r: number; g: number; b: number }
       cesiumPosition: Cesium.Cartesian3 | null
-      labelPosition: Cesium.Cartesian3 | null
+      wingspanMeters: number
+      heightAboveEllipsoid: number
+      latitude: number
+      longitude: number
       altitudeMetersAGL: number
       distanceMeters: number
       isFollowed: boolean
@@ -168,8 +181,9 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
       )
 
       const isFollowed = aircraft.callsign === followingCallsign
-      const altitudeMeters = aircraft.interpolatedAltitude
-      const isAirborne = altitudeMeters > groundElevationMeters + 5
+      const altitudeMeters = aircraft.interpolatedAltitude  // Altitude is in METERS
+      // Aircraft is on ground if groundspeed < threshold (40 knots)
+      const isAirborne = aircraft.interpolatedGroundspeed >= GROUNDSPEED_THRESHOLD_KNOTS
 
       // Determine if this aircraft should have a datablock shown
       let showDatablock = false
@@ -188,12 +202,11 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
 
         // Ground/airborne filter (skip in orbit mode without airport)
         if (showDatablock && !isOrbitModeWithoutAirport) {
-          const aglFeet = aircraft.interpolatedAltitude - airportElevationFeet
-          const isAirborneCheck = aglFeet > 200
-          if (isAirborneCheck && !showAirborneTraffic) {
+          // Use groundspeed-based check (already defined on line 178)
+          if (isAirborne && !showAirborneTraffic) {
             showDatablock = false
           }
-          if (!isAirborneCheck && !showGroundTraffic) {
+          if (!isAirborne && !showGroundTraffic) {
             showDatablock = false
           }
         }
@@ -222,8 +235,10 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
       if (datablockMode !== 'none' && showDatablock) {
         const type = aircraft.aircraftType || '????'
         const speedTens = Math.round(aircraft.interpolatedGroundspeed / 10).toString().padStart(2, '0')
+        // Convert altitude to feet for FL display (METERS → FEET)
+        const altitudeFeet = aircraft.interpolatedAltitude / 0.3048
         const dataLine = isAirborne
-          ? `${Math.round(aircraft.interpolatedAltitude / 100).toString().padStart(3, '0')} ${speedTens}`
+          ? `${Math.round(altitudeFeet / 100).toString().padStart(3, '0')} ${speedTens}`
           : speedTens
 
         // Format callsign based on mode
@@ -254,11 +269,23 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
         babylonColor = { r: 1, g: 0.5, b: 0 } // Orange for ground
       }
 
-      // Calculate positions
-      const groundLevel = groundElevationMeters + 0.5
-      const heightAboveEllipsoid = isAirborne
-        ? altitudeMeters
-        : Math.max(groundLevel, altitudeMeters)
+      // Calculate positions (altitude is in MSL METERS, convert to ellipsoid height)
+      // ellipsoidHeight = mslAltitude + geoidOffset
+      let heightAboveEllipsoid = altitudeMeters + terrainOffset
+
+      // For ground aircraft, use terrain-sampled height if available
+      if (!isAirborne) {
+        const sampledTerrainHeight = groundAircraftTerrain.get(aircraft.callsign)
+        if (sampledTerrainHeight !== undefined) {
+          // Use sampled terrain height + small offset (matches model positioning)
+          heightAboveEllipsoid = sampledTerrainHeight + GROUND_AIRCRAFT_TERRAIN_OFFSET
+        } else {
+          // Fallback: use MAX of (reported altitude, ground elevation) + terrain offset
+          const reportedEllipsoidHeight = altitudeMeters + terrainOffset
+          const groundEllipsoidHeight = groundElevationMeters + terrainOffset
+          heightAboveEllipsoid = Math.max(reportedEllipsoidHeight, groundEllipsoidHeight) + GROUND_AIRCRAFT_TERRAIN_OFFSET
+        }
+      }
 
       const cesiumPosition = Cesium.Cartesian3.fromDegrees(
         aircraft.interpolatedLongitude,
@@ -266,19 +293,14 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
         heightAboveEllipsoid
       )
 
-      // Calculate label attachment point (top of aircraft model bounding box)
+      // Labels are positioned in screen-space relative to the model position
+      // No separate labelPosition - all offsets applied in screen coordinates
+      // This ensures labels are always positioned relative to where the model actually renders
       const modelInfo = aircraftModelService.getModelInfo(aircraft.aircraftType)
-      const baseModelHeight = modelInfo.dimensions.wingspan / 3
-      const viewModeScale = viewMode === 'topdown' ? 0.5 : 1.0
-      const labelAttachmentHeight = heightAboveEllipsoid + (baseModelHeight * viewModeScale)
+      const wingspanMeters = modelInfo.dimensions.wingspan
 
-      const labelPosition = Cesium.Cartesian3.fromDegrees(
-        aircraft.interpolatedLongitude,
-        aircraft.interpolatedLatitude,
-        labelAttachmentHeight
-      )
-
-      const altitudeMetersAGL = aircraft.interpolatedAltitude - groundElevationMeters
+      // Calculate AGL in meters (both altitudeMeters and groundElevationMeters are in meters)
+      const altitudeMetersAGL = altitudeMeters - groundElevationMeters
       const distanceMeters = distance * 1852 // NM to meters
 
       aircraftData.push({
@@ -286,7 +308,10 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
         labelText,
         labelColor: babylonColor,
         cesiumPosition,
-        labelPosition,
+        wingspanMeters,
+        heightAboveEllipsoid,
+        latitude: aircraft.interpolatedLatitude,
+        longitude: aircraft.interpolatedLongitude,
         altitudeMetersAGL,
         distanceMeters,
         isFollowed,
@@ -332,7 +357,7 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
 
     for (const data of aircraftData) {
       if (!data.showDatablock || !data.labelText) continue
-      if (!data.cesiumPosition || !data.labelPosition) continue
+      if (!data.cesiumPosition) continue
 
       // Check weather visibility - hide datablocks obscured by clouds or beyond visibility range
       if (!data.isFollowed && !babylonOverlay.isDatablockVisibleByWeather(
@@ -343,25 +368,59 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
         continue // Skip this aircraft - datablock hidden by weather
       }
 
-      const windowPos = Cesium.SceneTransforms.worldToWindowCoordinates(viewer.scene, data.labelPosition)
-      if (!windowPos) continue
+      // Project aircraft position to screen
+      const aircraftWindowPos = Cesium.SceneTransforms.worldToWindowCoordinates(viewer.scene, data.cesiumPosition)
+      if (!aircraftWindowPos) continue
 
-      const screenPos = { x: windowPos.x, y: windowPos.y }
+      // Calculate wingspan in screen-space pixels for proportional label offset
+      // Project a point offset by wingspan meters to get screen-space wingspan
+      const wingspanOffset = Cesium.Cartesian3.fromDegrees(
+        data.longitude + (data.wingspanMeters * 0.000009), // ~wingspan meters east
+        data.latitude,
+        data.heightAboveEllipsoid
+      )
+      const wingspanWindowPos = Cesium.SceneTransforms.worldToWindowCoordinates(viewer.scene, wingspanOffset)
+      const wingspanPixels = wingspanWindowPos
+        ? Math.abs(wingspanWindowPos.x - aircraftWindowPos.x)
+        : 30 // Fallback if projection fails
 
-      // Default offset: top-left of cone
-      let offsetX = -labelWidth - labelGap
-      let offsetY = -labelHeight - labelGap
+      // Apply screen-space offsets:
+      // - Vertical: Move up by wingspan * DATABLOCK_HEIGHT_MULTIPLIER
+      // - Horizontal: Move left by 30 pixels (closer to aircraft for better visibility)
+      const viewModeScale = viewMode === 'topdown' ? 0.5 : 1.0
+      const verticalOffsetPixels = wingspanPixels * DATABLOCK_HEIGHT_MULTIPLIER * viewModeScale
+      const horizontalOffsetPixels = 30 // Reduced from 50px to bring datablock closer
 
-      // Check for overlap with cone itself
-      const labelLeft = screenPos.x + offsetX
-      const labelTop = screenPos.y + offsetY
+      // Leader line endpoint offset (where line connects to aircraft)
+      // Smaller than label offset to position above fuselage but below label
+      const leaderLineOffsetPixels = wingspanPixels * DATABLOCK_LEADER_LINE_HEIGHT_MULTIPLIER * viewModeScale
+
+      const aircraftScreenPos = { x: aircraftWindowPos.x, y: aircraftWindowPos.y }
+
+      // Default offset: top-left of cone + height multiplier for vertical separation
+      let offsetX = -labelWidth - labelGap - horizontalOffsetPixels
+      let offsetY = -labelHeight - labelGap - verticalOffsetPixels
+
+      // Screen position for overlap detection (includes base offsets)
+      const screenPos = {
+        x: aircraftScreenPos.x + offsetX,
+        y: aircraftScreenPos.y + offsetY
+      }
+
+      // Check for overlap with cone itself (cone is at aircraft position, not label attachment point)
+      const labelLeft = screenPos.x
+      const labelTop = screenPos.y
       const labelRight = labelLeft + labelWidth
       const labelBottom = labelTop + labelHeight
 
-      if (labelRight > screenPos.x - coneRadius && labelLeft < screenPos.x + coneRadius &&
-          labelBottom > screenPos.y - coneRadius && labelTop < screenPos.y + coneRadius) {
-        offsetX = -labelWidth - coneRadius - labelGap
-        offsetY = -labelHeight - coneRadius - labelGap
+      if (labelRight > aircraftScreenPos.x - coneRadius && labelLeft < aircraftScreenPos.x + coneRadius &&
+          labelBottom > aircraftScreenPos.y - coneRadius && labelTop < aircraftScreenPos.y + coneRadius) {
+        // Adjust offsets to avoid cone overlap
+        offsetX = -labelWidth - coneRadius - labelGap - horizontalOffsetPixels
+        offsetY = -labelHeight - coneRadius - labelGap - verticalOffsetPixels
+        // Recalculate screenPos with new offsets
+        screenPos.x = aircraftScreenPos.x + offsetX
+        screenPos.y = aircraftScreenPos.y + offsetY
       }
 
       // Check for overlap with other labels
@@ -371,23 +430,20 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
         const existingRight = existingLeft + labelWidth
         const existingBottom = existingTop + labelHeight
 
-        const newLabelX = screenPos.x + offsetX
-        const newLabelY = screenPos.y + offsetY
-
-        if (newLabelX < existingRight + 5 && newLabelX + labelWidth > existingLeft - 5 &&
-            newLabelY < existingBottom + 5 && newLabelY + labelHeight > existingTop - 5) {
-          // Try alternative positions
+        if (screenPos.x < existingRight + 5 && screenPos.x + labelWidth > existingLeft - 5 &&
+            screenPos.y < existingBottom + 5 && screenPos.y + labelHeight > existingTop - 5) {
+          // Try alternative positions relative to aircraft (including height offset)
           const alternatives = [
-            { x: labelGap, y: -labelHeight - labelGap },
-            { x: -labelWidth - labelGap, y: labelGap },
+            { x: labelGap, y: -labelHeight - labelGap - verticalOffsetPixels },
+            { x: -labelWidth - labelGap - horizontalOffsetPixels, y: labelGap },
             { x: labelGap, y: labelGap },
-            { x: -labelWidth - labelGap, y: -labelHeight - labelGap - 30 },
-            { x: labelGap + 30, y: -labelHeight - labelGap },
+            { x: -labelWidth - labelGap - horizontalOffsetPixels, y: -labelHeight - labelGap - 30 - verticalOffsetPixels },
+            { x: labelGap + 30, y: -labelHeight - labelGap - verticalOffsetPixels },
           ]
 
           for (const alt of alternatives) {
-            const testX = screenPos.x + alt.x
-            const testY = screenPos.y + alt.y
+            const testX = aircraftScreenPos.x + alt.x
+            const testY = aircraftScreenPos.y + alt.y
             let overlaps = false
 
             for (const check of labelPositions) {
@@ -401,6 +457,8 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
             if (!overlaps) {
               offsetX = alt.x
               offsetY = alt.y
+              screenPos.x = aircraftScreenPos.x + offsetX
+              screenPos.y = aircraftScreenPos.y + offsetY
               break
             }
           }
@@ -409,10 +467,10 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
 
       labelPositions.push({
         callsign: data.callsign,
-        coneX: screenPos.x,
-        coneY: screenPos.y,
-        labelX: screenPos.x + offsetX,
-        labelY: screenPos.y + offsetY,
+        coneX: aircraftScreenPos.x,
+        coneY: aircraftScreenPos.y - leaderLineOffsetPixels, // Offset upward (negative Y = up in screen coords)
+        labelX: screenPos.x,
+        labelY: screenPos.y,
         offsetX,
         offsetY
       })
@@ -438,8 +496,9 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
     viewMode,
     followingCallsign,
     currentAirportIcao,
-    airportElevationFeet,
     groundElevationMeters,
+    groundAircraftTerrain,
+    terrainOffset,
     towerHeight,
     refLat,
     refLon,

@@ -66,7 +66,7 @@ function GlobalSearchPanel() {
           aircraftType,
           departure,
           arrival,
-          altitude: pilot.altitude,
+          altitude: pilot.altitude,  // Keep in METERS
           groundspeed: pilot.groundspeed
         })
       }
@@ -169,7 +169,7 @@ function GlobalSearchPanel() {
                         </span>
                       ) : null}
                       <span className="result-info">
-                        FL{Math.round(result.altitude / 100).toString().padStart(3, '0')} • {result.groundspeed}kts
+                        FL{Math.round((result.altitude / 0.3048) / 100).toString().padStart(3, '0')} • {result.groundspeed}kts
                       </span>
                     </div>
                   </button>

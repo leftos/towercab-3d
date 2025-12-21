@@ -127,7 +127,7 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
           cid: pilot.cid,
           latitude: pilot.latitude,
           longitude: pilot.longitude,
-          altitude: pilot.altitude,
+          altitude: pilot.altitude * 0.3048,  // Convert VATSIM feet → meters
           groundspeed: pilot.groundspeed,
           heading: pilot.heading,
           transponder: pilot.transponder,

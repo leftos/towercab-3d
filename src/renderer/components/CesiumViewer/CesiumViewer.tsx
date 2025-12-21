@@ -7,7 +7,7 @@ import { useVatsimStore } from '../../stores/vatsimStore'
 import { useWeatherStore } from '../../stores/weatherStore'
 import { useMeasureStore } from '../../stores/measureStore'
 import { useAircraftFilterStore } from '../../stores/aircraftFilterStore'
-import { useAircraftInterpolation } from '../../hooks/useAircraftInterpolation'
+import { useAircraftInterpolation, setInterpolationTerrainData } from '../../hooks/useAircraftInterpolation'
 import { useCesiumCamera } from '../../hooks/useCesiumCamera'
 import { useBabylonOverlay } from '../../hooks/useBabylonOverlay'
 import { useCesiumViewer } from '../../hooks/useCesiumViewer'
@@ -16,6 +16,7 @@ import { useCesiumLighting } from '../../hooks/useCesiumLighting'
 import { useCesiumWeather } from '../../hooks/useCesiumWeather'
 import { useAircraftModels } from '../../hooks/useAircraftModels'
 import { useCesiumLabels } from '../../hooks/useCesiumLabels'
+import { useGroundAircraftTerrain } from '../../hooks/useGroundAircraftTerrain'
 import { getTowerPosition } from '../../utils/towerHeight'
 import { performanceMonitor } from '../../utils/performanceMonitor'
 import { getServiceWorkerCacheStats } from '../../utils/serviceWorkerRegistration'
@@ -136,6 +137,35 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   const showAirborneTraffic = useSettingsStore((state) => state.aircraft.showAirborneTraffic)
 
   // =========================================================================
+  // Calculate reference position and ground elevation (used by hooks below)
+  // =========================================================================
+  let refLat: number | null = null
+  let refLon: number | null = null
+  let refAltitudeFeet: number | null = null
+  let groundElevationMeters = 0
+  let airportElevationFeet = 0
+  let isOrbitModeWithoutAirport = false
+
+  // Check if in orbit mode without airport (use followed aircraft as reference)
+  if (followingCallsign && !currentAirport && interpolatedAircraft.has(followingCallsign)) {
+    const followedAircraft = interpolatedAircraft.get(followingCallsign)!
+    refLat = followedAircraft.interpolatedLatitude
+    refLon = followedAircraft.interpolatedLongitude
+    groundElevationMeters = followedAircraft.interpolatedAltitude
+    refAltitudeFeet = followedAircraft.interpolatedAltitude
+    isOrbitModeWithoutAirport = true
+  } else if (currentAirport) {
+    // Normal mode: use tower position
+    const towerPos = getTowerPosition(currentAirport, towerHeight)
+    refLat = towerPos.latitude
+    refLon = towerPos.longitude
+    groundElevationMeters = currentAirport.elevation ? currentAirport.elevation * 0.3048 : 0
+    airportElevationFeet = currentAirport.elevation || 0
+    // Tower altitude = ground elevation + tower height (convert tower height from meters to feet)
+    refAltitudeFeet = (currentAirport.elevation || 0) + (towerHeight / 0.3048)
+  }
+
+  // =========================================================================
   // 1. Core Cesium Viewer Initialization
   // =========================================================================
   const { viewer, modelPoolRefs } = useCesiumViewer(containerRef, viewportId, {
@@ -185,52 +215,46 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   useCesiumWeather(viewer, showWeatherEffects, showCesiumFog, fogDensity)
 
   // =========================================================================
-  // 5. Aircraft Model Pool Rendering
+  // 5. Ground Aircraft Terrain Sampling (3x per second)
+  // =========================================================================
+  const groundAircraftTerrain = useGroundAircraftTerrain(viewer, interpolatedAircraft)
+
+  // Inject terrain data into interpolation system for terrain correction
+  useEffect(() => {
+    setInterpolationTerrainData(
+      groundAircraftTerrain,
+      terrainOffsetRef.current,
+      groundElevationMeters
+    )
+  }, [groundAircraftTerrain, groundElevationMeters])
+
+  // =========================================================================
+  // 6. Aircraft Model Pool Rendering
   // =========================================================================
   useAircraftModels(
     viewer,
     modelPoolRefs,
     interpolatedAircraft,
-    terrainOffsetRef,
-    terrainOffsetReady,
     viewMode,
     followingCallsign
   )
 
   // =========================================================================
-  // 6. Datablock Label Rendering
+  // 7. Datablock Label Rendering
   // =========================================================================
+  // (Reference position calculated above before hook initialization)
 
-  // Calculate reference position for distance calculations
-  let refLat: number | null = null
-  let refLon: number | null = null
-  let refAltitudeFeet: number | null = null
-  let groundElevationMeters = 0
-  let airportElevationFeet = 0
-  let isOrbitModeWithoutAirport = false
-
-  // Check if in orbit mode without airport (use followed aircraft as reference)
-  if (followingCallsign && !currentAirport && interpolatedAircraft.has(followingCallsign)) {
-    const followedAircraft = interpolatedAircraft.get(followingCallsign)!
-    refLat = followedAircraft.interpolatedLatitude
-    refLon = followedAircraft.interpolatedLongitude
-    groundElevationMeters = followedAircraft.interpolatedAltitude
-    refAltitudeFeet = followedAircraft.interpolatedAltitude
-    isOrbitModeWithoutAirport = true
-  } else if (currentAirport) {
-    // Normal mode: use tower position
-    const towerPos = getTowerPosition(currentAirport, towerHeight)
-    refLat = towerPos.latitude
-    refLon = towerPos.longitude
-    groundElevationMeters = currentAirport.elevation ? currentAirport.elevation * 0.3048 : 0
-    airportElevationFeet = currentAirport.elevation || 0
-    // Tower altitude = ground elevation + tower height (convert tower height from meters to feet)
-    refAltitudeFeet = (currentAirport.elevation || 0) + (towerHeight / 0.3048)
-  }
+  // =========================================================================
+  // 8. Babylon.js Overlay Initialization (before labels - labels need babylonOverlay)
+  // =========================================================================
+  const babylonOverlay = useBabylonOverlay({
+    cesiumViewer: viewer,
+    canvas: babylonCanvas
+  })
 
   useCesiumLabels({
     viewer,
-    babylonOverlay: null, // Will be set after Babylon is initialized
+    babylonOverlay, // Now passes actual babylonOverlay (may be null initially, but will update)
     interpolatedAircraft,
     datablockMode,
     viewMode,
@@ -238,6 +262,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     currentAirportIcao: currentAirport?.icao?.toUpperCase() ?? null,
     airportElevationFeet,
     groundElevationMeters,
+    terrainOffset: terrainOffsetRef.current,
     towerHeight,
     refLat,
     refLon,
@@ -247,21 +272,14 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     showAirborneTraffic,
     searchQuery,
     filterAirportTraffic,
-    isOrbitModeWithoutAirport
+    isOrbitModeWithoutAirport,
+    groundAircraftTerrain  // Pass terrain heights for correct label attachment
   })
 
   // =========================================================================
-  // 7. Camera Controls
+  // 9. Camera Controls
   // =========================================================================
   useCesiumCamera(viewer, viewportId, interpolatedAircraft)
-
-  // =========================================================================
-  // 8. Babylon.js Overlay Initialization
-  // =========================================================================
-  const babylonOverlay = useBabylonOverlay({
-    cesiumViewer: viewer,
-    canvas: babylonCanvas
-  })
 
   // Notify parent when viewer is ready (for VR integration)
   useEffect(() => {
@@ -403,12 +421,20 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
         Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, positions).then((updatedPositions) => {
           const terrainHeight = updatedPositions[0].height
           terrainOffsetRef.current = terrainHeight - groundElevationMsl
+          console.log(
+            `[Terrain Offset] Airport: ${currentAirport.icao} | ` +
+            `AirportElevMSL: ${groundElevationMsl.toFixed(1)}m | ` +
+            `TerrainHeightEllipsoid: ${terrainHeight.toFixed(1)}m | ` +
+            `Offset (geoid): ${terrainOffsetRef.current.toFixed(1)}m`
+          )
           setTerrainOffsetReady(true)
         }).catch(() => {
           terrainOffsetRef.current = 0
+          console.warn('[Terrain Offset] Failed to sample terrain, using 0m offset')
           setTerrainOffsetReady(true)
         })
       } else {
+        console.warn('[Terrain Offset] No terrain provider, using 0m offset')
         setTerrainOffsetReady(true)
       }
       return
@@ -464,7 +490,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
       const alt = interpolated?.interpolatedAltitude ?? rawAircraft?.altitude
 
       if (lat !== undefined && lon !== undefined && alt !== undefined) {
-        const altitudeMeters = alt * 0.3048
+        const altitudeMeters = alt  // Already in METERS
         babylonOverlay.setupRootNode(lat, lon, altitudeMeters)
         rootNodeSetupRef.current = true
 

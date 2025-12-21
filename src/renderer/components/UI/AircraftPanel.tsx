@@ -62,22 +62,16 @@ function AircraftPanel() {
   const interpolatedAircraft = useAircraftInterpolation()
 
   // Use shared filtering hook (affects both list and datablocks)
-  const { filtered, referencePoint, isOrbitModeWithoutAirport } = useAircraftFiltering(interpolatedAircraft)
+  const { filtered, referencePoint } = useAircraftFiltering(interpolatedAircraft)
 
   // Calculate bearing and convert to AircraftListItem format with sorting
   const nearbyAircraft = useMemo((): AircraftListItem[] => {
     if (!referencePoint) return []
 
-    // In orbit mode without airport, exclude the followed aircraft from the "nearby" list
-    // (it will be shown separately at the top)
-    const aircraftToShow = isOrbitModeWithoutAirport
-      ? filtered.filter((aircraft) => aircraft.callsign !== followingCallsign)
-      : filtered
-
-    const withBearing = aircraftToShow.map((aircraft) => ({
+    const withBearing = filtered.map((aircraft) => ({
       callsign: aircraft.callsign,
       aircraftType: aircraft.aircraftType,
-      altitude: aircraft.interpolatedAltitude,
+      altitude: aircraft.interpolatedAltitude,  // Keep in METERS (formatAltitude handles conversion)
       groundspeed: aircraft.interpolatedGroundspeed,
       heading: aircraft.interpolatedHeading,
       distance: aircraft.distance,
@@ -93,6 +87,11 @@ function AircraftPanel() {
 
     // Apply sorting (UI-only, doesn't affect filtering)
     const sorted = withBearing.sort((a, b) => {
+      // Pin followed aircraft to the top
+      if (a.callsign === followingCallsign) return -1
+      if (b.callsign === followingCallsign) return 1
+
+      // Apply normal sorting for non-followed aircraft
       switch (sortOption) {
         case 'callsign':
           return a.callsign.localeCompare(b.callsign)
@@ -108,14 +107,8 @@ function AircraftPanel() {
 
     return sorted.slice(0, 50)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refreshTick intentionally forces periodic recalculation of distances/bearings
-  }, [filtered, referencePoint, followingCallsign, isOrbitModeWithoutAirport, sortOption, refreshTick])
+  }, [filtered, referencePoint, followingCallsign, sortOption, refreshTick])
 
-  // Get the followed aircraft data for orbit mode display
-  const followedAircraftData = useMemo(() => {
-    if (!followingCallsign) return null
-    // Find in filtered list or use the first match from filtered aircraft
-    return filtered.find((a) => a.callsign === followingCallsign) || null
-  }, [followingCallsign, filtered])
 
   const handleFollowClick = (callsign: string) => {
     if (followingCallsign === callsign) {
@@ -130,7 +123,7 @@ function AircraftPanel() {
   return (
     <div className={`aircraft-panel ${isCollapsed ? 'collapsed' : ''}`}>
       <div className="panel-header">
-        <h3>{isOrbitModeWithoutAirport ? `Near ${followingCallsign}` : 'Nearby Aircraft'}</h3>
+        <h3>Nearby Aircraft</h3>
         <div className="header-right">
           <span className="aircraft-count">{nearbyAircraft.length}</span>
           <button
@@ -218,45 +211,12 @@ function AircraftPanel() {
         </div>
       )}
 
-      {/* Show detailed info for followed aircraft in orbit mode without airport */}
-      {isOrbitModeWithoutAirport && followedAircraftData && (
-        <div className="followed-aircraft-details">
-          <div className="followed-header">
-            <span className="followed-callsign">{followedAircraftData.callsign}</span>
-            <span className="followed-type">{followedAircraftData.aircraftType || '???'}</span>
-          </div>
-          <div className="followed-stats">
-            <div className="stat-item">
-              <span className="stat-label">ALT</span>
-              <span className="stat-value">{formatAltitude(followedAircraftData.interpolatedAltitude)}</span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-label">GS</span>
-              <span className="stat-value">{formatGroundspeed(followedAircraftData.interpolatedGroundspeed)}</span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-label">HDG</span>
-              <span className="stat-value">{formatHeading(followedAircraftData.interpolatedHeading)}</span>
-            </div>
-          </div>
-          {(followedAircraftData.departure || followedAircraftData.arrival) && (
-            <div className="followed-route">
-              <span className="route-from">{followedAircraftData.departure || '????'}</span>
-              <span className="route-arrow">→</span>
-              <span className="route-to">{followedAircraftData.arrival || '????'}</span>
-            </div>
-          )}
-        </div>
-      )}
-
       <div className="aircraft-list">
         {nearbyAircraft.length === 0 ? (
           <div className="no-aircraft">
-            {isOrbitModeWithoutAirport
-              ? 'No other aircraft nearby'
-              : currentAirport
-                ? 'No aircraft nearby'
-                : 'Select an airport or search globally (Ctrl+K)'}
+            {currentAirport
+              ? 'No aircraft nearby'
+              : 'Select an airport or search globally (Ctrl+K)'}
           </div>
         ) : (
           nearbyAircraft.map((aircraft) => {

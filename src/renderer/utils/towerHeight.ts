@@ -64,8 +64,11 @@ export function metersToFeet(meters: number): number {
 
 /**
  * Format altitude for display
+ * @param altitudeMeters - Altitude in METERS (internal storage)
+ * @returns Formatted string in feet/flight level
  */
-export function formatAltitude(altitudeFeet: number): string {
+export function formatAltitude(altitudeMeters: number): string {
+  const altitudeFeet = metersToFeet(altitudeMeters)
   if (altitudeFeet >= 18000) {
     // Flight level
     return `FL${Math.round(altitudeFeet / 100)}`

@@ -86,54 +86,16 @@ Nine stores manage application state:
 
 > **Important:** All camera-related functionality (heading, pitch, fov, follow mode, bookmarks, defaults) should use `viewportStore`, not `cameraStore`. The `cameraStore` is deprecated and only exists for backward compatibility with the export/import service.
 
-### Aircraft Data Flow
+### Key Directories
 
-1. **Fetch**: `VatsimService` fetches pilot data from VATSIM API (every 3s poll, 15s actual update interval)
-2. **Store**: `vatsimStore` stores raw pilot data and creates aircraft state records for interpolation
-3. **Interpolate**: `useAircraftInterpolation` hook smoothly interpolates positions between API updates (60Hz)
-4. **Filter**:
-   - **CesiumViewer** (60Hz rendering): Reads directly from `interpolatedAircraft` Map and applies filtering inline for smooth model updates
-   - **AircraftPanel** (1Hz UI updates): Uses `useAircraftFiltering` hook with refresh tick for list display
-   - Both use the same filter settings from `settingsStore` and `aircraftFilterStore`
-5. **Render 3D Models**: Cesium model pool updates aircraft 3D model positions at interpolated locations
-6. **Render Labels**: Babylon.js overlay renders screen-space datablock labels and leader lines
+- **`hooks/`**: React hooks for Cesium, Babylon, camera, aircraft interpolation, and input handling
+- **`components/`**: UI components (TopBar, ControlsBar, panels) and viewers (CesiumViewer, ViewportManager)
+- **`stores/`**: Zustand state management (see table above)
+- **`services/`**: API clients (VatsimService, WeatherService, AircraftModelService)
+- **`types/`**: Centralized TypeScript interfaces organized by domain
+- **`constants/`**: Configuration values and magic numbers
 
-### Key Hooks
-
-| Hook | File | Purpose |
-|------|------|---------|
-| `useAircraftInterpolation` | `hooks/useAircraftInterpolation.ts` | Smooth position/heading interpolation between 15s API updates |
-| `useAircraftFiltering` | `hooks/useAircraftFiltering.ts` | Aircraft filtering logic for UI components (AircraftPanel). Returns 1Hz updates suitable for lists. |
-| `useCesiumCamera` | `hooks/useCesiumCamera.ts` | Tower-based camera controls, follow modes, top-down view (per-viewport) |
-| `useCameraInput` | `hooks/useCameraInput.ts` | Keyboard/mouse input handling for camera (WASD, arrows, mouse drag) |
-| `useActiveViewportCamera` | `hooks/useActiveViewportCamera.ts` | Returns camera state for the currently active viewport |
-| `useBabylonOverlay` | `hooks/useBabylonOverlay.ts` | **Orchestrator** for Babylon.js overlay - composes scene, weather, labels, and camera sync hooks |
-| `useBabylonScene` | `hooks/useBabylonScene.ts` | Babylon.js engine, scene, camera, GUI, and lighting initialization |
-| `useBabylonWeather` | `hooks/useBabylonWeather.ts` | METAR-based fog dome and cloud layer visualization |
-| `useBabylonLabels` | `hooks/useBabylonLabels.ts` | Aircraft datablock labels and leader lines in GUI overlay |
-| `useBabylonRootNode` | `hooks/useBabylonRootNode.ts` | ENU coordinate system transforms and root node management |
-| `useBabylonCameraSync` | `hooks/useBabylonCameraSync.ts` | Synchronizes Babylon.js camera matrix with Cesium's view |
-| `useCesiumStereo` | `hooks/useCesiumStereo.ts` | Dual-pass Cesium stereo rendering for VR (left/right eye frustums) |
-| `useDragResize` | `hooks/useDragResize.ts` | Drag and resize functionality for inset viewports |
-| `useVatsimData` | `hooks/useVatsimData.ts` | Wrapper for accessing VATSIM store with auto-polling |
-
-### Key Components
-
-| Component | File | Purpose |
-|-----------|------|---------|
-| `CesiumViewer` | `components/CesiumViewer/CesiumViewer.tsx` | 3D globe with aircraft entities, camera setup, weather effects |
-| `ViewportManager` | `components/Viewport/ViewportManager.tsx` | Manages main viewport and inset viewports |
-| `ViewportContainer` | `components/Viewport/ViewportContainer.tsx` | Container for a single viewport (main or inset) |
-| `InsetCesiumViewer` | `components/Viewport/InsetCesiumViewer.tsx` | Delayed-init wrapper for inset Cesium viewers |
-| `ControlsBar` | `components/UI/ControlsBar.tsx` | Bottom HUD with camera controls, FOV slider, following status |
-| `TopBar` | `components/UI/TopBar.tsx` | Airport selector, Zulu time, connection status |
-| `AircraftPanel` | `components/UI/AircraftPanel.tsx` | Right-side nearby aircraft list with sorting/filtering |
-| `AirportSelector` | `components/UI/AirportSelector.tsx` | Airport search modal with recent/popular airports |
-| `GlobalSearchPanel` | `components/UI/GlobalSearchPanel.tsx` | Ctrl+K search across all VATSIM aircraft |
-| `CommandInput` | `components/UI/CommandInput.tsx` | Terminal-style input for bookmark save/load (.XX. syntax) |
-| `MeasuringTool` | `components/UI/MeasuringTool.tsx` | Distance measurement visualization on terrain |
-| `VRButton` | `components/VR/VRButton.tsx` | WebXR session entry button (shows when VR available) |
-| `VRScene` | `components/VR/VRScene.tsx` | Babylon.js WebXR scene with stereo background planes |
+> **📖 For detailed hook dependencies, data flows, and component hierarchy:** See `src/renderer/docs/architecture.md`
 
 ## Path Alias
 
@@ -225,63 +187,24 @@ const distance = Math.max(ORBIT_DISTANCE_MIN, Math.min(ORBIT_DISTANCE_MAX, value
 - **Airport Database**: Fetched from `mwgg/Airports` GitHub raw JSON on startup
 - **Aviation Weather API**: `https://aviationweather.gov/api/data/metar` for METAR weather data (5-minute refresh)
 
-## Multi-Viewport Architecture
+## Key Systems
 
-The application supports multiple simultaneous views through the viewport system:
+### Multi-Viewport
+- **Main Viewport**: Full-screen Cesium viewer (always present)
+- **Inset Viewports**: Draggable/resizable overlay windows with independent cameras
+- **Active Viewport**: Cyan border indicates which viewport receives input
 
-- **Main Viewport**: Always present, full-screen Cesium viewer
-- **Inset Viewports**: Overlay windows with independent Cesium viewers
-- **Active Viewport**: Only one viewport receives keyboard/mouse input at a time (cyan border)
-- Each viewport maintains independent camera state (heading, pitch, FOV, follow target)
-- Inset positions and sizes are persisted per-airport in localStorage
+### Weather (METAR-based)
+- Cesium fog reduces terrain draw distance based on visibility
+- Babylon.js renders fog dome and cloud layer meshes
+- Labels hidden beyond visibility or behind clouds
 
-## Weather System
+### Camera
+- **View Modes**: 3D Tower View (heading/pitch/FOV) or Top-Down View (altitude adjustable)
+- **Follow Modes**: Tower (camera at tower, rotates to track) or Orbit (camera orbits aircraft)
+- **Bookmarks**: 99 slots per airport (`.00`-`.99`). Save: `.XX.` + Enter. Load: `.XX` + Enter.
 
-METAR-based weather visualization:
-
-1. **Fetch**: `weatherStore` fetches METAR data from Aviation Weather API
-2. **Parse**: Extracts visibility, cloud layers (SCT/BKN/OVC), and ceiling
-3. **Cesium Fog**: Reduces terrain draw distance based on visibility
-4. **Babylon Fog Dome**: Semi-transparent dome mesh at visibility boundary with fresnel effect
-5. **Cloud Layers**: Plane meshes positioned at METAR-reported ceiling altitudes
-6. **Datablock Culling**: Hides aircraft labels beyond visibility or behind cloud layers
-
-## Camera System
-
-### View Modes
-
-1. **3D Tower View**: Camera at tower position with heading/pitch/FOV controls
-2. **Top-Down View**: Orthographic-style view looking straight down, altitude adjustable
-
-### Follow Modes
-
-1. **Tower Mode**: Camera stays at tower, rotates to track aircraft, zoom adjusts FOV
-2. **Orbit Mode**: Camera orbits around aircraft at configurable distance/heading/pitch
-
-### Camera State
-
-```typescript
-interface CameraState {
-  heading: number           // 0-360 degrees
-  pitch: number             // -90 to 90 degrees
-  fov: number               // 10-120 degrees (default 60)
-  positionOffset: { x, y, z } // Meters from tower center
-  topDownAltitude: number   // Meters above airport (top-down mode)
-  isTopDown: boolean        // View mode toggle
-  followTarget: string | null // Aircraft callsign or null
-  followMode: 'tower' | 'orbit'
-  orbitDistance: number     // 50-5000 meters
-  orbitHeading: number      // 0-360 degrees around aircraft
-  orbitPitch: number        // -89 to 89 degrees
-}
-```
-
-### Bookmark System
-
-- 99 slots per airport (`.00` through `.99`)
-- Save: Type `.XX.` (e.g., `.00.`) and press Enter
-- Load: Type `.XX` (e.g., `.00`) and press Enter
-- Stores: heading, pitch, FOV, position offsets, view mode
+> **📖 For detailed camera state, data flows, and coordinate transforms:** See `src/renderer/docs/architecture.md`
 
 ## Performance Features
 

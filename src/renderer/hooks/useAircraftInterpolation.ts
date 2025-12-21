@@ -4,6 +4,11 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { interpolateAircraftState } from '../utils/interpolation'
 import { performanceMonitor } from '../utils/performanceMonitor'
 import type { InterpolatedAircraftState, AircraftState } from '../types/vatsim'
+import {
+  GROUNDSPEED_THRESHOLD_KNOTS,
+  GROUND_AIRCRAFT_TERRAIN_OFFSET,
+  FLYING_AIRCRAFT_TERRAIN_OFFSET
+} from '../constants/rendering'
 
 // SINGLETON: Shared interpolated states map and animation loop
 // This ensures only ONE interpolation loop runs, even if hook is called multiple times
@@ -19,6 +24,16 @@ const sharedOrientationEnabledRef = { current: true }
 const sharedOrientationIntensityRef = { current: 1.0 }
 const sharedLastInterpolationTimeRef = { current: 0 }
 const sharedLastAircraftCountRef = { current: 0 }
+
+// Shared state for terrain correction (injected from rendering layer)
+const sharedGroundAircraftTerrainRef = { current: new Map<string, number>() }
+const sharedTerrainOffsetRef = { current: 0 }
+const sharedGroundElevationMetersRef = { current: 0 }
+
+// Terrain correction transition state (for smooth ground/air transitions)
+const sharedSmoothedTerrainHeightsRef = { current: new Map<string, number>() }
+const sharedPrevGroundStateRef = { current: new Map<string, boolean>() }
+const sharedTransitionHeightsRef = { current: new Map<string, { source: number; target: number; progress: number }>() }
 
 // Store subscribers for triggering re-renders
 const subscribers = new Set<() => void>()
@@ -95,6 +110,98 @@ function updateInterpolation() {
     } else {
       statesMap.set(callsign, interpolated)
     }
+
+    // Apply terrain correction to aircraft altitude
+    // This ensures consistent height across all rendering (models, labels, etc.)
+    const entry = statesMap.get(callsign)!
+    const isOnGround = entry.interpolatedGroundspeed < GROUNDSPEED_THRESHOLD_KNOTS
+    const heightAboveEllipsoid = entry.interpolatedAltitude // VATSIM altitude in meters MSL
+    const terrainOffset = sharedTerrainOffsetRef.current
+    const groundElevationMeters = sharedGroundElevationMetersRef.current
+    const groundAircraftTerrain = sharedGroundAircraftTerrainRef.current
+
+    // Calculate heights in ellipsoid coordinates for comparison
+    const reportedEllipsoidHeight = heightAboveEllipsoid + terrainOffset
+    const sampledTerrainHeight = groundAircraftTerrain.get(callsign)
+
+    // Determine if we should clamp to terrain:
+    // 1. Groundspeed is low (definitely on ground), OR
+    // 2. Terrain sample exists AND is higher than reported altitude (prevents going underground)
+    //    This fixes the issue where landing aircraft (>40kts) would clip through runway
+    let shouldClampToTerrain = false
+    if (sampledTerrainHeight !== undefined) {
+      const terrainEllipsoidHeight = sampledTerrainHeight + GROUND_AIRCRAFT_TERRAIN_OFFSET
+      shouldClampToTerrain = isOnGround || (terrainEllipsoidHeight > reportedEllipsoidHeight)
+    } else {
+      shouldClampToTerrain = isOnGround
+    }
+
+    let targetHeight: number
+
+    if (shouldClampToTerrain && sampledTerrainHeight !== undefined) {
+      // Clamp to terrain: use terrain-sampled height (smoothed for consistency)
+      const currentSmoothed = sharedSmoothedTerrainHeightsRef.current.get(callsign) ?? sampledTerrainHeight
+      const lerpFactor = 0.2
+      const newSmoothed = currentSmoothed + (sampledTerrainHeight - currentSmoothed) * lerpFactor
+      sharedSmoothedTerrainHeightsRef.current.set(callsign, newSmoothed)
+
+      // Target height: smoothed terrain + offset
+      targetHeight = newSmoothed + GROUND_AIRCRAFT_TERRAIN_OFFSET
+    } else if (isOnGround) {
+      // Low groundspeed but no terrain sample - use fallback
+      const groundEllipsoidHeight = groundElevationMeters + terrainOffset
+      targetHeight = Math.max(reportedEllipsoidHeight, groundEllipsoidHeight) + GROUND_AIRCRAFT_TERRAIN_OFFSET
+    } else {
+      // Truly airborne: use reported altitude + terrain offset + flying offset
+      targetHeight = reportedEllipsoidHeight + FLYING_AIRCRAFT_TERRAIN_OFFSET
+
+      // Clean up smoothed terrain height for aircraft that are truly airborne
+      sharedSmoothedTerrainHeightsRef.current.delete(callsign)
+    }
+
+    // Smooth transition when switching between ground/airborne states
+    let correctedHeight = targetHeight
+    const prevGroundState = sharedPrevGroundStateRef.current.get(callsign)
+
+    if (prevGroundState !== undefined && prevGroundState !== isOnGround) {
+      // State changed! Start a transition
+      const currentTransition = sharedTransitionHeightsRef.current.get(callsign)
+
+      if (!currentTransition || currentTransition.target !== targetHeight) {
+        // Initialize new transition from current position to target
+        const sourceHeight = currentTransition?.source ?? targetHeight
+        sharedTransitionHeightsRef.current.set(callsign, {
+          source: sourceHeight,
+          target: targetHeight,
+          progress: 0
+        })
+      }
+    }
+
+    // Apply ongoing transition if exists
+    const transition = sharedTransitionHeightsRef.current.get(callsign)
+    if (transition && transition.progress < 1.0) {
+      // Lerp from source to target over ~7 frames (0.12 seconds at 60fps)
+      const lerpFactor = 0.15
+      transition.progress = Math.min(1.0, transition.progress + lerpFactor)
+      correctedHeight = transition.source + (transition.target - transition.source) * transition.progress
+
+      // Update target if it changed during transition
+      if (transition.target !== targetHeight) {
+        transition.target = targetHeight
+      }
+
+      // Clean up completed transitions
+      if (transition.progress >= 1.0) {
+        sharedTransitionHeightsRef.current.delete(callsign)
+      }
+    }
+
+    // Update previous state
+    sharedPrevGroundStateRef.current.set(callsign, isOnGround)
+
+    // Apply corrected height to interpolated altitude
+    entry.interpolatedAltitude = correctedHeight
   }
 
   // Remove stale entries (aircraft that are no longer in the data)
@@ -115,6 +222,26 @@ function updateInterpolation() {
 
   // Schedule next frame
   animationFrameId = requestAnimationFrame(updateInterpolation)
+}
+
+/**
+ * Inject terrain correction data into the interpolation system
+ *
+ * This function allows the rendering layer to provide terrain data that will be
+ * used for ground aircraft altitude correction during interpolation.
+ *
+ * @param groundAircraftTerrain - Map of terrain heights (ellipsoid) sampled at 3Hz
+ * @param terrainOffset - Geoid offset for MSL → ellipsoid conversion
+ * @param groundElevationMeters - Ground elevation at tower/reference position
+ */
+export function setInterpolationTerrainData(
+  groundAircraftTerrain: Map<string, number>,
+  terrainOffset: number,
+  groundElevationMeters: number
+) {
+  sharedGroundAircraftTerrainRef.current = groundAircraftTerrain
+  sharedTerrainOffsetRef.current = terrainOffset
+  sharedGroundElevationMetersRef.current = groundElevationMeters
 }
 
 /**

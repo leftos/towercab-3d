@@ -30,7 +30,7 @@ export interface PilotData {
   pilot_rating: number
   latitude: number
   longitude: number
-  altitude: number
+  altitude: number // Altitude in FEET (from VATSIM API - will be converted to meters on ingestion)
   groundspeed: number
   transponder: string
   heading: number
@@ -131,7 +131,7 @@ export interface AircraftState {
   cid: number
   latitude: number
   longitude: number
-  altitude: number
+  altitude: number        // Altitude in METERS (converted from VATSIM feet)
   groundspeed: number
   heading: number
   transponder: string
@@ -145,14 +145,14 @@ export interface InterpolatedAircraftState extends AircraftState {
   // Interpolated values for smooth rendering
   interpolatedLatitude: number
   interpolatedLongitude: number
-  interpolatedAltitude: number
+  interpolatedAltitude: number  // Interpolated altitude in METERS
   interpolatedHeading: number
   interpolatedGroundspeed: number
   // Emulated orientation (derived from physics)
-  interpolatedPitch: number   // Degrees, positive = nose up
-  interpolatedRoll: number    // Degrees, positive = right wing down
-  verticalRate: number        // ft/min
-  turnRate: number            // degrees/sec
+  interpolatedPitch: number     // Degrees, positive = nose up
+  interpolatedRoll: number      // Degrees, positive = right wing down
+  verticalRate: number          // Vertical rate in METERS/MINUTE
+  turnRate: number              // degrees/sec
   // True if we have previous state data for interpolation, false if showing raw data
   isInterpolated: boolean
 }

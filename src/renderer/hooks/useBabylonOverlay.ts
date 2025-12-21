@@ -216,7 +216,40 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     scene.render()
   }, [engine, scene, syncCameraInternal])
 
-  // Public API - delegates to specialized hooks
+  // Adapter functions to match the legacy API expected by useCesiumLabels
+  const updateAircraftLabel = useCallback(
+    (callsign: string, text: string, r: number, g: number, b: number) => {
+      updateLabel(callsign, { r, g, b }, false, text)
+    },
+    [updateLabel]
+  )
+
+  const updateLeaderLineAdapter = useCallback(
+    (callsign: string, coneX: number, coneY: number, offsetX: number, offsetY: number) => {
+      updateLabelPosition(callsign, coneX, coneY, offsetX, offsetY)
+    },
+    [updateLabelPosition]
+  )
+
+  const removeAircraftLabelAdapter = useCallback(
+    (callsign: string) => {
+      removeLabel(callsign)
+    },
+    [removeLabel]
+  )
+
+  const isDatablockVisibleByWeatherAdapter = useCallback(
+    (cameraAltitudeAGL: number, aircraftAltitudeAGL: number, distanceMeters: number) => {
+      return isVisibleByWeather({
+        cameraAltitudeMeters: cameraAltitudeAGL,
+        aircraftAltitudeMeters: aircraftAltitudeAGL,
+        horizontalDistanceMeters: distanceMeters
+      })
+    },
+    [isVisibleByWeather]
+  )
+
+  // Public API - delegates to specialized hooks with adapter functions for backward compatibility
   return {
     // Scene management
     engine,
@@ -226,15 +259,15 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     // Root node setup (ENU coordinate system)
     setupRootNode,
 
-    // Label management (delegated to useBabylonLabels)
-    updateAircraftLabel: updateLabel,
-    updateLeaderLine: updateLabelPosition,
-    removeAircraftLabel: removeLabel,
+    // Label management (adapted to match legacy useCesiumLabels interface)
+    updateAircraftLabel,
+    updateLeaderLine: updateLeaderLineAdapter,
+    removeAircraftLabel: removeAircraftLabelAdapter,
     getAircraftCallsigns,
     hideAllLabels,
 
-    // Weather visibility (delegated to useBabylonWeather)
-    isDatablockVisibleByWeather: isVisibleByWeather,
+    // Weather visibility (adapted to match legacy useCesiumLabels interface)
+    isDatablockVisibleByWeather: isDatablockVisibleByWeatherAdapter,
 
     // Rendering
     render,

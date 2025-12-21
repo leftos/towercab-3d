@@ -5,6 +5,7 @@ import { useAirportStore } from '@/stores/airportStore'
 import { useWeatherStore } from '@/stores/weatherStore'
 import { calculateDistanceNM } from '@/utils/interpolation'
 import { getTowerPosition } from '@/utils/towerHeight'
+import { GROUNDSPEED_THRESHOLD_KNOTS } from '@/constants/rendering'
 import type { InterpolatedAircraftState } from '@/types/vatsim'
 
 interface FilteredAircraftWithDistance extends InterpolatedAircraftState {
@@ -298,7 +299,7 @@ export function useAircraftFiltering(
       const followedAircraft = interpolatedAircraft.get(followingCallsign)!
       refLat = followedAircraft.interpolatedLatitude
       refLon = followedAircraft.interpolatedLongitude
-      refElevationMeters = followedAircraft.interpolatedAltitude * 0.3048
+      refElevationMeters = followedAircraft.interpolatedAltitude  // Already in METERS
       refAltitudeFeet = followedAircraft.interpolatedAltitude
       isOrbitModeWithoutAirport = true
     } else if (currentAirport) {
@@ -329,7 +330,6 @@ export function useAircraftFiltering(
     }
 
     const cameraAltitudeMeters = refElevationMeters + towerHeight
-    const airportElevationFeet = currentAirport?.elevation || 0
     const airportIcao = currentAirport?.icao?.toUpperCase()
     const query = searchQuery.toLowerCase().trim()
 
@@ -372,10 +372,8 @@ export function useAircraftFiltering(
     // In orbit mode without airport, show all traffic types
     if (!isOrbitModeWithoutAirport) {
       filtered = filtered.filter((aircraft) => {
-        // Calculate AGL in feet - use 200ft threshold to account for pressure altitude variations
-        // At high-elevation airports (e.g., KRNO at 4,517ft), absolute altitude would misclassify ground traffic
-        const aglFeet = aircraft.interpolatedAltitude - airportElevationFeet
-        const isAirborne = aglFeet > 200
+        // Use groundspeed to determine airborne status (consistent with positioning logic)
+        const isAirborne = aircraft.interpolatedGroundspeed >= GROUNDSPEED_THRESHOLD_KNOTS
         if (isAirborne && !showAirborneTraffic) return false
         if (!isAirborne && !showGroundTraffic) return false
         return true
@@ -386,7 +384,7 @@ export function useAircraftFiltering(
     // Filter 3: Weather visibility (if enabled)
     if (filterWeatherVisibility && showWeatherEffects) {
       filtered = filtered.filter((aircraft) => {
-        const aircraftAltitudeMeters = aircraft.interpolatedAltitude * 0.3048
+        const aircraftAltitudeMeters = aircraft.interpolatedAltitude  // Already in METERS
         const horizontalDistanceMeters = aircraft.distance * 1852 // NM to meters
 
         // Check visibility range (surface visibility culling)

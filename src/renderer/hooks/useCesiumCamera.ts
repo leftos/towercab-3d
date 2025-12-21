@@ -296,7 +296,7 @@ export function useCesiumCamera(
         const aircraftLat = aircraft.interpolatedLatitude
         const aircraftLon = aircraft.interpolatedLongitude
         const aircraftHeading = aircraft.interpolatedHeading
-        const altitudeMeters = feetToMeters(aircraft.interpolatedAltitude)
+        const altitudeMeters = aircraft.interpolatedAltitude  // Already in METERS
 
         if (state.followMode === 'orbit') {
           // ORBIT MODE: Camera orbits around aircraft
@@ -442,7 +442,7 @@ export function useCesiumCamera(
         // Use interpolated positions for smooth tracking
         const aircraftLat = aircraft.interpolatedLatitude
         const aircraftLon = aircraft.interpolatedLongitude
-        const altitudeMeters = feetToMeters(aircraft.interpolatedAltitude)
+        const altitudeMeters = aircraft.interpolatedAltitude  // Already in METERS
 
         // Calculate orbit camera position and orientation
         const orbitResult = calculateOrbitCameraPosition(
@@ -622,7 +622,7 @@ export function useCesiumCamera(
         // Use interpolated positions for smooth tracking
         const aircraftLat = aircraft.interpolatedLatitude
         const aircraftLon = aircraft.interpolatedLongitude
-        const altitudeMeters = feetToMeters(aircraft.interpolatedAltitude)
+        const altitudeMeters = aircraft.interpolatedAltitude  // Already in METERS
 
         // TOWER MODE: Camera stays at tower, rotates to look at aircraft
         const lookAt = calculateTowerLookAt(

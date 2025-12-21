@@ -57,14 +57,31 @@ export const SHADOW_DISC_RADIUS = 3.5
 // ============================================================================
 
 /**
+ * Ground speed threshold in knots for determining if aircraft is on ground
+ *
+ * Aircraft with groundspeed below this threshold are considered on the ground:
+ * - Display orange datablocks (ground traffic)
+ * - Position at ground elevation + small offset
+ * - Show groundspeed only (no altitude) in datablock
+ *
+ * Aircraft with groundspeed >= this threshold are considered airborne:
+ * - Display green datablocks (airborne traffic)
+ * - Position at reported altitude
+ * - Show altitude and groundspeed in datablock
+ *
+ * Standard ATC threshold: 40 knots
+ */
+export const GROUNDSPEED_THRESHOLD_KNOTS = 40
+
+/**
  * Terrain offset for ground aircraft in meters
  *
  * Vertical offset above sampled terrain elevation for aircraft on the ground.
  * Prevents z-fighting and ensures aircraft appear resting on the surface.
  *
- * Reduced from 5m to 0.5m for more realistic ground positioning.
+ * Minimal offset (0.1m) to prevent z-fighting while keeping aircraft on ground.
  */
-export const GROUND_AIRCRAFT_TERRAIN_OFFSET = 0.5
+export const GROUND_AIRCRAFT_TERRAIN_OFFSET = 0.1
 
 /**
  * Terrain offset for flying aircraft in meters
@@ -133,3 +150,41 @@ export const LABEL_CENTER_SCREEN_THRESHOLD_PX = 5
  * further than this distance from the camera.
  */
 export const LABEL_PROJECTION_MIN_DISTANCE_M = 100
+
+// ============================================================================
+// DATABLOCK POSITIONING
+// ============================================================================
+
+/**
+ * Vertical height multiplier for datablock attachment point
+ *
+ * Multiplied by aircraft wingspan to determine how far above the aircraft
+ * the datablock label is positioned. Higher values raise the label further.
+ *
+ * Default: ~0.4 of wingspan (closer to aircraft)
+ * Example: For B738 with 35m wingspan, label attaches ~14m above aircraft
+ */
+export const DATABLOCK_HEIGHT_MULTIPLIER = 0.4
+
+/**
+ * Vertical height multiplier for leader line endpoint
+ *
+ * Multiplied by aircraft wingspan to determine how far above the aircraft
+ * the leader line connects (where the line ends at the aircraft).
+ * Smaller than DATABLOCK_HEIGHT_MULTIPLIER to position endpoint above fuselage
+ * but below the label itself.
+ *
+ * Default: ~0.25 of wingspan (positioned above fuselage)
+ * Example: For B738 with 35m wingspan, leader line connects ~8.75m above center
+ */
+export const DATABLOCK_LEADER_LINE_HEIGHT_MULTIPLIER = 0.25
+
+/**
+ * Horizontal offset for datablock attachment point in meters
+ *
+ * Shifts the leader line connection point to the left (negative) or right (positive)
+ * of the aircraft center. Useful for avoiding overlap with aircraft models.
+ *
+ * Default: -2 meters (slightly to the left of aircraft center)
+ */
+export const DATABLOCK_HORIZONTAL_OFFSET_M = -10

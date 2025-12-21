@@ -5,10 +5,15 @@ import type { InterpolatedAircraftState } from '../types/vatsim'
 import type { ViewMode } from '../types'
 import { aircraftModelService } from '../services/AircraftModelService'
 import { performanceMonitor } from '../utils/performanceMonitor'
-import { MODEL_DEFAULT_COLOR_RGB, MODEL_COLOR_BLEND_AMOUNT } from '../constants/rendering'
+import {
+  MODEL_DEFAULT_COLOR_RGB,
+  MODEL_COLOR_BLEND_AMOUNT,
+  GROUNDSPEED_THRESHOLD_KNOTS,
+  GROUND_AIRCRAFT_TERRAIN_OFFSET
+} from '../constants/rendering'
 
 // Model rendering constants
-const MODEL_HEIGHT_OFFSET = 1  // Meters to raise models above ground to prevent clipping
+const MODEL_HEIGHT_OFFSET = 0.1  // Small offset prevents z-fighting while keeping aircraft grounded
 
 // Create Cesium.Color from constant RGB values
 const MODEL_DEFAULT_COLOR = new Cesium.Color(...MODEL_DEFAULT_COLOR_RGB, 1.0)
@@ -55,6 +60,8 @@ const MODEL_DEFAULT_COLOR = new Cesium.Color(...MODEL_DEFAULT_COLOR_RGB, 1.0)
  * @param terrainOffsetReady - Whether terrain offset has been calculated
  * @param viewMode - Current view mode ('3d' or 'topdown')
  * @param followingCallsign - Callsign of followed aircraft (for diagnostic logging)
+ * @param groundElevationMeters - Ground elevation in meters MSL (for ground aircraft positioning)
+ * @param groundAircraftTerrain - Map of terrain heights (ellipsoid) sampled 3x per second
  *
  * @example
  * ```tsx
@@ -76,8 +83,6 @@ export function useAircraftModels(
   viewer: Cesium.Viewer | null,
   modelPoolRefs: ModelPoolRefs,
   interpolatedAircraft: Map<string, InterpolatedAircraftState>,
-  terrainOffsetRef: React.MutableRefObject<number>,
-  terrainOffsetReady: boolean,
   viewMode: ViewMode,
   followingCallsign: string | null
 ) {
@@ -94,7 +99,7 @@ export function useAircraftModels(
 
   // Update aircraft models
   const updateAircraftModels = useCallback(() => {
-    if (!viewer || !modelPoolReady.current || !terrainOffsetReady) return
+    if (!viewer || !modelPoolReady.current) return
 
     performanceMonitor.startTimer('aircraftUpdate')
 
@@ -108,14 +113,12 @@ export function useAircraftModels(
     for (const aircraft of interpolatedAircraft.values()) {
       seenCallsigns.add(aircraft.callsign)
 
-      // Calculate height above ellipsoid
-      const heightAboveEllipsoid = aircraft.interpolatedAltitude
+      // Model height: interpolatedAltitude is already terrain-corrected by interpolation system
+      // (includes terrain sampling, ground/air transitions, and all offsets)
+      const modelHeight = aircraft.interpolatedAltitude
 
       // Get the correct model info for this aircraft type
       const modelInfo = aircraftModelService.getModelInfo(aircraft.aircraftType)
-
-      // Calculate model position with terrain offset correction and height offset to prevent ground clipping
-      const modelHeight = heightAboveEllipsoid + terrainOffsetRef.current + MODEL_HEIGHT_OFFSET
 
       // Find existing pool slot for this callsign, or get an unused one
       let poolIndex = -1
@@ -265,8 +268,6 @@ export function useAircraftModels(
     modelPoolUrls,
     modelPoolLoading,
     modelPoolReady,
-    terrainOffsetRef,
-    terrainOffsetReady,
     viewMode,
     followingCallsign
   ])

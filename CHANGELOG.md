@@ -15,15 +15,18 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Aircraft banking direction now correct (left turn drops left wing, right turn drops right wing)
 - Aircraft on the ground no longer bank when turning (yaw only below 40 knots groundspeed)
 - Aircraft models no longer jitter when multiple viewports are active
+- Landing aircraft no longer clip through the runway during rollout (terrain clamping now applies even at high speeds)
 
 ### Changed
 - Panel filters (search, airport traffic, weather visibility) now affect both list and datablocks on the map
 - Aircraft panel filters now persist across sessions
+- Followed aircraft now pinned to the top of the Nearby Aircraft list for easier tracking
 - Improved shadow quality at longer distances (default max range increased from 2km to 10km)
 - Improved shadow rendering performance (reduced default shadow map resolution from 4096 to 2048)
 - Shadow max distance can now be configured up to 20km for advanced users
 - Aircraft pitch and roll now smoothly interpolated at 60Hz (prevents jumps when VATSIM data updates)
 - Improved performance at busy airports by removing unused propeller animation code
+- Datablock labels positioned closer to aircraft for better visibility
 
 ### Removed
 - Removed "Shadow Cascades" setting from graphics options (not user-configurable)

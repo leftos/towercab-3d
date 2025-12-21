@@ -476,7 +476,7 @@ export function interpolateAircraftState(
     interpolatedGroundspeed: interpolatedGroundspeed,
     interpolatedPitch: pitch,
     interpolatedRoll: roll,
-    verticalRate: verticalRate * 60000,  // Convert ft/ms to ft/min
+    verticalRate: verticalRate * 60000,  // Convert m/ms to m/min
     turnRate: turnRate,
     isInterpolated: true
   }
@@ -485,15 +485,15 @@ export function interpolateAircraftState(
 /**
  * Calculate distance between two coordinates in nautical miles using haversine formula.
  *
- * If altitudes are provided (in feet MSL), calculates 3D slant range.
+ * If altitudes are provided (in meters MSL), calculates 3D slant range.
  * Otherwise calculates 2D great-circle surface distance.
  *
  * @param lat1 - First position latitude in degrees (geographic coordinates)
  * @param lon1 - First position longitude in degrees (geographic coordinates)
  * @param lat2 - Second position latitude in degrees (geographic coordinates)
  * @param lon2 - Second position longitude in degrees (geographic coordinates)
- * @param alt1Feet - Optional first position altitude in feet MSL
- * @param alt2Feet - Optional second position altitude in feet MSL
+ * @param alt1Meters - Optional first position altitude in meters MSL
+ * @param alt2Meters - Optional second position altitude in meters MSL
  * @returns Distance in nautical miles
  *
  * @see {@link ../docs/coordinate-systems.md#1-geographic-coordinates} for geographic coordinate system
@@ -504,8 +504,8 @@ export function calculateDistanceNM(
   lon1: number,
   lat2: number,
   lon2: number,
-  alt1Feet?: number,
-  alt2Feet?: number
+  alt1Meters?: number,
+  alt2Meters?: number
 ): number {
   const R = 3440.065 // Earth radius in nautical miles
 
@@ -524,10 +524,10 @@ export function calculateDistanceNM(
   const horizontalDistanceNM = R * c
 
   // If altitudes provided, calculate 3D slant range
-  if (alt1Feet !== undefined && alt2Feet !== undefined) {
-    const altDiffFeet = alt2Feet - alt1Feet
-    // Convert altitude difference to nautical miles (1 NM = 6076.12 feet)
-    const altDiffNM = altDiffFeet / 6076.12
+  if (alt1Meters !== undefined && alt2Meters !== undefined) {
+    const altDiffMeters = alt2Meters - alt1Meters
+    // Convert altitude difference to nautical miles (1 NM = 1852 meters)
+    const altDiffNM = altDiffMeters / 1852
     return Math.sqrt(horizontalDistanceNM * horizontalDistanceNM + altDiffNM * altDiffNM)
   }
 
