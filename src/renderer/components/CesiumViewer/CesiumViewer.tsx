@@ -713,6 +713,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     let refLat: number
     let refLon: number
     let refElevationMeters = 0
+    let refAltitudeFeet = 0  // Reference altitude for 3D slant range calculation
     let isOrbitModeWithoutAirport = false
 
     if (followMode === 'orbit' && followingCallsign) {
@@ -724,18 +725,22 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
         refLat = followedAircraft.interpolatedLatitude
         refLon = followedAircraft.interpolatedLongitude
         refElevationMeters = followedAircraft.interpolatedAltitude * 0.3048
+        refAltitudeFeet = followedAircraft.interpolatedAltitude
         isOrbitModeWithoutAirport = !currentAirport
       } else if (rawAircraft) {
         // Fallback to raw store data if interpolated not yet available
         refLat = rawAircraft.latitude
         refLon = rawAircraft.longitude
         refElevationMeters = rawAircraft.altitude * 0.3048
+        refAltitudeFeet = rawAircraft.altitude
         isOrbitModeWithoutAirport = !currentAirport
       } else if (currentAirport) {
         const towerPos = getTowerPosition(currentAirport, towerHeight)
         refLat = towerPos.latitude
         refLon = towerPos.longitude
         refElevationMeters = currentAirport.elevation ? currentAirport.elevation * 0.3048 : 0
+        // Tower altitude = ground elevation + tower height (convert tower height from meters to feet)
+        refAltitudeFeet = (currentAirport.elevation || 0) + (towerHeight / 0.3048)
       } else {
         return // No reference point available
       }
@@ -744,13 +749,15 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
       refLat = towerPos.latitude
       refLon = towerPos.longitude
       refElevationMeters = currentAirport.elevation ? currentAirport.elevation * 0.3048 : 0
+      // Tower altitude = ground elevation + tower height (convert tower height from meters to feet)
+      refAltitudeFeet = (currentAirport.elevation || 0) + (towerHeight / 0.3048)
     } else {
       return // Need either an airport or orbit mode with a followed aircraft
     }
 
     const seenCallsigns = new Set<string>()
 
-    // Sort aircraft by distance and limit count
+    // Sort aircraft by distance and limit count (using 3D slant range)
     const sortedAircraft = [...interpolatedAircraft.values()]
       .map((aircraft) => ({
         ...aircraft,
@@ -758,7 +765,9 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
           refLat,
           refLon,
           aircraft.interpolatedLatitude,
-          aircraft.interpolatedLongitude
+          aircraft.interpolatedLongitude,
+          refAltitudeFeet,
+          aircraft.interpolatedAltitude
         )
       }))
       .filter((aircraft) => {

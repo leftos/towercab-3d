@@ -385,13 +385,17 @@ export function interpolateAircraftState(
 }
 
 /**
- * Calculate distance between two coordinates in nautical miles
+ * Calculate distance between two coordinates in nautical miles.
+ * If altitudes are provided (in feet), calculates 3D slant range.
+ * Otherwise calculates 2D surface distance.
  */
 export function calculateDistanceNM(
   lat1: number,
   lon1: number,
   lat2: number,
-  lon2: number
+  lon2: number,
+  alt1Feet?: number,
+  alt2Feet?: number
 ): number {
   const R = 3440.065 // Earth radius in nautical miles
 
@@ -407,7 +411,17 @@ export function calculateDistanceNM(
 
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 
-  return R * c
+  const horizontalDistanceNM = R * c
+
+  // If altitudes provided, calculate 3D slant range
+  if (alt1Feet !== undefined && alt2Feet !== undefined) {
+    const altDiffFeet = alt2Feet - alt1Feet
+    // Convert altitude difference to nautical miles (1 NM = 6076.12 feet)
+    const altDiffNM = altDiffFeet / 6076.12
+    return Math.sqrt(horizontalDistanceNM * horizontalDistanceNM + altDiffNM * altDiffNM)
+  }
+
+  return horizontalDistanceNM
 }
 
 /**

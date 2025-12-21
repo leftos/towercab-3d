@@ -113,17 +113,21 @@ function AircraftPanel() {
     let refLat: number
     let refLon: number
     let groundElevationMeters = 0
+    let refAltitudeFeet = 0  // Reference altitude for 3D slant range calculation
 
     if (isOrbitModeWithoutAirport && followedAircraftData) {
       // In orbit mode without airport, use followed aircraft as reference
       refLat = followedAircraftData.interpolatedLatitude
       refLon = followedAircraftData.interpolatedLongitude
+      refAltitudeFeet = followedAircraftData.interpolatedAltitude
     } else if (currentAirport) {
       // Normal mode: use tower position
       const towerPos = getTowerPosition(currentAirport, towerHeight)
       refLat = towerPos.latitude
       refLon = towerPos.longitude
       groundElevationMeters = currentAirport.elevation ? currentAirport.elevation * 0.3048 : 0
+      // Tower altitude = ground elevation + tower height (convert tower height from meters to feet)
+      refAltitudeFeet = (currentAirport.elevation || 0) + (towerHeight / 0.3048)
     } else {
       // No reference point available
       return []
@@ -144,7 +148,9 @@ function AircraftPanel() {
           refLat,
           refLon,
           aircraft.interpolatedLatitude,
-          aircraft.interpolatedLongitude
+          aircraft.interpolatedLongitude,
+          refAltitudeFeet,
+          aircraft.interpolatedAltitude
         )
         const bearing = calculateBearing(
           refLat,

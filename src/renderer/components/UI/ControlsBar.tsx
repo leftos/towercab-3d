@@ -515,9 +515,9 @@ function ControlsBar() {
               {activeTab === 'display' && (
                 <>
                   <div className="settings-section">
-                    <h3>Labels</h3>
+                    <h3>Aircraft Display</h3>
                     <div className="setting-item">
-                      <label>Label Visibility Distance</label>
+                      <label>Max Nearby Aircraft Range</label>
                       <div className="slider-with-value">
                         <input
                           type="range"
