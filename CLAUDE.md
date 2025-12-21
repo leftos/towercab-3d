@@ -50,6 +50,10 @@ The build script now automatically runs typecheck first, so production builds wi
 
 ## Architecture
 
+> **📖 Detailed Documentation:** See `src/renderer/docs/architecture.md` for comprehensive diagrams of data flow, rendering pipeline, multi-viewport system, and hook dependencies.
+
+> **📐 Coordinate Systems:** See `src/renderer/docs/coordinate-systems.md` for detailed explanation of geographic, Cartesian3, and ENU coordinate transformations.
+
 ### Dual Rendering System
 
 The application uses two 3D rendering engines simultaneously:
@@ -74,7 +78,7 @@ Nine stores manage application state:
 | `airportStore` | `stores/airportStore.ts` | Airport database (28,000+ airports) from mwgg/Airports GitHub repo |
 | `viewportStore` | `stores/viewportStore.ts` | **Primary camera store.** Multi-viewport management, per-viewport camera state, bookmarks, defaults, inset positions/sizes |
 | `cameraStore` | `stores/cameraStore.ts` | **DEPRECATED.** Legacy store kept only for export/import backward compatibility. Do not use for new features. |
-| `settingsStore` | `stores/settingsStore.ts` | Cesium Ion token, display settings, terrain quality, weather settings (persisted to localStorage) |
+| `settingsStore` | `stores/settingsStore.ts` | **Grouped settings** organized by domain (cesium, graphics, camera, weather, memory, aircraft, ui). Persisted to localStorage with auto-migration from v1 (flat) to v2 (grouped). |
 | `weatherStore` | `stores/weatherStore.ts` | METAR data fetching, weather state (visibility, clouds, ceiling) |
 | `measureStore` | `stores/measureStore.ts` | Active measurement points, measurement mode state |
 | `aircraftFilterStore` | `stores/aircraftFilterStore.ts` | Panel filter state (search query, airport traffic filter, weather visibility filter) affecting both list and datablocks |
@@ -309,9 +313,11 @@ See MODDING.md for manifest format and model requirements. Models are loaded on 
 
 ### Adding a New Setting
 
-1. Add to `settingsStore.ts` state interface and initial state
-2. Add persistence in the store's `persist` middleware config
-3. Add UI control in `SettingsModal.tsx`
+1. Add to `types/settings.ts` grouped interface (cesium, graphics, camera, weather, memory, aircraft, or ui)
+2. Update `DEFAULT_SETTINGS` in `settingsStore.ts`
+3. Add corresponding update function validation (if needed)
+4. Add UI control in `ControlsBar.tsx` under the appropriate tab
+5. Settings are auto-persisted to localStorage with migration support
 
 ### Adding a New Keyboard Shortcut
 
@@ -320,9 +326,9 @@ See MODDING.md for manifest format and model requirements. Models are loaded on 
 
 ### Modifying Aircraft Rendering
 
-1. Interpolation logic: `useAircraftInterpolation.ts`
-2. 3D mesh creation: `useBabylonOverlay.ts`
-3. Label rendering: `CesiumViewer.tsx` (HTML entities)
+1. Interpolation logic (60 Hz smooth motion): `useAircraftInterpolation.ts`
+2. 3D model rendering (aircraft cones/models): `CesiumViewer.tsx` (Cesium entities)
+3. Datablock labels and leader lines: `useBabylonOverlay.ts` (Babylon.js GUI)
 
 ### Modifying Camera Behavior
 
