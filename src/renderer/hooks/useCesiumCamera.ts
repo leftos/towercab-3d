@@ -87,6 +87,13 @@ export function useCesiumCamera(
     duration: number
   } | null>(null)
 
+  // Smoothed camera position for orbit mode (prevents jitter)
+  const smoothedOrbitPositionRef = useRef<{
+    lat: number
+    lon: number
+    height: number
+  } | null>(null)
+
   // Callback for when user breaks out of tower follow mode via input
   const handleBreakTowerFollow = useCallback(() => {
     clearPreFollowState()
@@ -210,13 +217,35 @@ export function useCesiumCamera(
             state.orbitDistance
           )
 
+          // Apply smoothing to camera position to reduce jitter
+          // Smoothing factor: lower = smoother but more lag (0.15 = good balance)
+          const smoothingFactor = 0.15
+
+          if (!smoothedOrbitPositionRef.current) {
+            // Initialize smoothed position on first frame
+            smoothedOrbitPositionRef.current = {
+              lat: orbitResult.cameraLat,
+              lon: orbitResult.cameraLon,
+              height: orbitResult.cameraHeight
+            }
+          } else {
+            // Exponential moving average (lerp) for smooth camera movement
+            const prev = smoothedOrbitPositionRef.current
+            smoothedOrbitPositionRef.current = {
+              lat: prev.lat + (orbitResult.cameraLat - prev.lat) * smoothingFactor,
+              lon: prev.lon + (orbitResult.cameraLon - prev.lon) * smoothingFactor,
+              height: prev.height + (orbitResult.cameraHeight - prev.height) * smoothingFactor
+            }
+          }
+
+          const smoothed = smoothedOrbitPositionRef.current
           const targetFov = calculateFollowFov(60, state.followZoom)
 
-          // Set camera position and orientation
+          // Set camera position using smoothed coordinates
           const cameraPosition = Cesium.Cartesian3.fromDegrees(
-            orbitResult.cameraLon,
-            orbitResult.cameraLat,
-            orbitResult.cameraHeight
+            smoothed.lon,
+            smoothed.lat,
+            smoothed.height
           )
           viewer.camera.setView({
             destination: cameraPosition,
@@ -352,17 +381,38 @@ export function useCesiumCamera(
           orbitDistance
         )
 
+        // Apply smoothing to camera position to reduce jitter
+        const smoothingFactor = 0.15
+
+        if (!smoothedOrbitPositionRef.current) {
+          // Initialize smoothed position on first frame
+          smoothedOrbitPositionRef.current = {
+            lat: orbitResult.cameraLat,
+            lon: orbitResult.cameraLon,
+            height: orbitResult.cameraHeight
+          }
+        } else {
+          // Exponential moving average (lerp) for smooth camera movement
+          const prev = smoothedOrbitPositionRef.current
+          smoothedOrbitPositionRef.current = {
+            lat: prev.lat + (orbitResult.cameraLat - prev.lat) * smoothingFactor,
+            lon: prev.lon + (orbitResult.cameraLon - prev.lon) * smoothingFactor,
+            height: prev.height + (orbitResult.cameraHeight - prev.height) * smoothingFactor
+          }
+        }
+
+        const smoothed = smoothedOrbitPositionRef.current
         const targetFov = calculateFollowFov(60, followZoom)
 
         // Update store with calculated values (for UI display)
         setHeading(orbitResult.heading)
         setPitch(orbitResult.pitch)
 
-        // Set camera position and orientation
+        // Set camera position using smoothed coordinates
         const cameraPosition = Cesium.Cartesian3.fromDegrees(
-          orbitResult.cameraLon,
-          orbitResult.cameraLat,
-          orbitResult.cameraHeight
+          smoothed.lon,
+          smoothed.lat,
+          smoothed.height
         )
         viewer.camera.setView({
           destination: cameraPosition,
@@ -654,6 +704,13 @@ export function useCesiumCamera(
     setPitch,
     stopFollowingStore
   ])
+
+  // Reset smoothed orbit position when following stops or follow mode changes
+  useEffect(() => {
+    if (!followingCallsign || followMode !== 'orbit') {
+      smoothedOrbitPositionRef.current = null
+    }
+  }, [followingCallsign, followMode])
 
   return {
     resetView,

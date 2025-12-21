@@ -10,6 +10,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Shadow banding artifacts no longer visible (ambient occlusion disabled by default)
 - Aircraft models now update smoothly at 60Hz instead of jerking once per second
 - Aircraft models now render for all aircraft within the sphere radius, while datablocks are filtered separately (fixes missing aircraft models)
+- Camera no longer jitters in orbit follow mode (added exponential smoothing to camera position)
 
 ### Changed
 - Panel filters (search, airport traffic, weather visibility) now affect both list and datablocks on the map
