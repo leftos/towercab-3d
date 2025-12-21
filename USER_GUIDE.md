@@ -44,6 +44,7 @@ Welcome to TowerCab 3D, a real-time 3D tower visualization tool for VATSIM air t
 Once configured, you'll see:
 - A 3D globe with satellite imagery and terrain
 - Aircraft displayed as 3D models with callsign labels (datablocks)
+- Aircraft physics emulation: pitch during climbs/descents, banking in turns, landing flare
 - Weather effects: fog at visibility limits, cloud layers at ceilings
 - A panel on the right showing nearby aircraft
 - Status information in the top bar
@@ -59,6 +60,7 @@ Once configured, you'll see:
 | **Airport Button** | Shows current airport ICAO. Click to change airports |
 | **Zulu Time** | Current UTC time (updates every second) |
 | **Aircraft Count** | Number of pilots currently online on VATSIM |
+| **Compass** | Camera heading direction (N/NE/E/SE/S/SW/W/NW) |
 | **Connection Status** | Green "Connected" or red "Disconnected" indicator |
 
 ### Controls Bar (Bottom)
@@ -582,6 +584,9 @@ Access settings by clicking the gear icon in the bottom-right corner. Settings a
 | **Fog Intensity** | Fog opacity multiplier | 1x |
 | **Visibility Scale** | Fog distance multiplier | 1x |
 | **Enable Clouds** | Cloud layers at METAR ceilings | On |
+| **Ambient Occlusion** | HBAO screen-space shading | Off |
+| **Orientation Emulation** | Aircraft pitch/roll physics simulation | On |
+| **Emulation Intensity** | Strength of pitch/roll effects | 100% |
 
 **Terrain Quality Levels:**
 1. **Low**: Fastest loading, minimal detail
@@ -704,6 +709,7 @@ See [MODDING.md](MODDING.md) for complete modding instructions including:
 |-----|--------|
 | M | Toggle measuring tool |
 | Ctrl+K | Open global aircraft search |
+| F1 | Toggle performance HUD |
 
 ### Global
 

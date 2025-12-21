@@ -110,7 +110,7 @@ All TypeScript types are centralized in the `types/` directory, organized by dom
 | `types/camera.ts` | Camera state, view modes, follow modes, bookmarks |
 | `types/viewport.ts` | Viewport layout, multi-viewport configuration, inset positioning |
 | `types/weather.ts` | METAR data, cloud layers, fog density, flight categories |
-| `types/settings.ts` | Application settings (grouped by domain: cesium, graphics, camera, weather, memory) |
+| `types/settings.ts` | Application settings (grouped by domain: cesium, graphics, camera, weather, memory, aircraft, ui) |
 | `types/vatsim.ts` | VATSIM API data structures, pilot/controller data |
 | `types/babylon.ts` | Babylon.js types (labels, weather meshes, scene options, hook return types, ENU transforms) |
 | `types/index.ts` | Barrel export for all types |

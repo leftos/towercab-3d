@@ -11,6 +11,7 @@ A 3D tower cab view application for VATSIM air traffic controllers. View real-ti
 - Smooth interpolation between updates for fluid aircraft movement
 - Global aircraft search (Ctrl+K) to find and follow any aircraft on the network
 - Connection status indicator with pilot count
+- Compass direction indicator showing camera heading
 
 ### 3D Visualization
 - High-fidelity 3D globe with Cesium Ion satellite imagery
@@ -18,6 +19,7 @@ A 3D tower cab view application for VATSIM air traffic controllers. View real-ti
 - Optional 3D OpenStreetMap buildings
 - Dynamic time-of-day lighting (real-time or fixed hour)
 - Aircraft rendered as 3D models with realistic type-based sizing (39 aircraft types)
+- Aircraft physics emulation: pitch during climbs/descents, banking in turns, landing flare
 - METAR-based weather effects: fog domes and cloud layers at real ceiling altitudes
 
 ### Multi-Viewport System
@@ -127,6 +129,7 @@ npm run dev
 | **Escape** | Stop following / close modals |
 | **Ctrl+K** | Open global aircraft search |
 | **M** | Toggle measuring tool |
+| **F1** | Toggle performance HUD |
 
 ### Mouse Controls
 
@@ -245,6 +248,13 @@ Settings are organized into tabs: General, Display, Graphics, Performance, and H
 | Fog Intensity | Fog opacity multiplier | 0.5x-2x |
 | Visibility Scale | Fog distance multiplier | 0.5x-2x |
 | Enable Clouds | Cloud layers at METAR ceilings | On/Off |
+| Ambient Occlusion | HBAO screen-space shading | On/Off |
+
+### Display Tab (continued)
+| Setting | Description | Options |
+|---------|-------------|---------|
+| Orientation Emulation | Aircraft pitch/roll physics simulation | On/Off |
+| Emulation Intensity | Strength of pitch/roll effects | 25%-150% |
 
 ### Performance Tab
 | Setting | Description | Range |
@@ -281,12 +291,12 @@ Settings are organized into tabs: General, Display, Graphics, Performance, and H
 This project uses GitHub Actions for continuous integration and releases:
 
 - **Build workflow**: Runs on every push and PR to `main` - builds the app and runs ESLint
-- **Release workflow**: Triggered by version tags (e.g., `v0.0.4`) - creates GitHub releases with installers
+- **Release workflow**: Triggered by version tags (e.g., `v0.0.6`) - creates GitHub releases with installers
 
 To create a new release:
 ```bash
-git tag v0.0.4
-git push origin v0.0.4
+git tag v0.0.6
+git push origin v0.0.6
 ```
 
 ## License
