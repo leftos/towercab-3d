@@ -26,7 +26,6 @@ class ModService {
     // Only load mods in Tauri environment
     if (!isTauri()) {
       this.loaded = true
-      console.log('Mod service initialized (not in Tauri environment)')
       return
     }
 
@@ -38,8 +37,6 @@ class ModService {
       await this.loadModsOfType('towers')
 
       this.loaded = true
-      const stats = this.getStats()
-      console.log(`Mod service initialized: ${stats.aircraftModels} aircraft, ${stats.towerModels} towers`)
     } catch (error) {
       console.error('Failed to load mods:', error)
       this.loaded = true // Mark as loaded even on error to prevent retry loops

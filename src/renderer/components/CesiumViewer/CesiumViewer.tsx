@@ -308,7 +308,6 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     // Clear any residual data from the old IndexedDB cache
     if ('indexedDB' in window) {
       indexedDB.deleteDatabase('cesium-tile-cache')
-      console.log('Old IndexedDB tile cache deleted')
     }
   }, [])
 
@@ -536,13 +535,16 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
         (counters.guiControlsCreated - counters.guiControlsDisposed) * 1
       ) / 1024
 
-      console.log(
-        `[Memory] Babylon - Mat: ${counters.materialsCreated - counters.materialsDisposed} Mesh: ${counters.meshesCreated - counters.meshesDisposed} GUI: ${counters.guiControlsCreated - counters.guiControlsDisposed} AC: ${babylonMeshes} | ` +
-        `Cesium - Pool: ${poolUsed}/100 TileCache: ${cesiumTileCache} | ` +
-        `VATSIM: ${pilotsFilteredByDistance}/${totalPilotsFromApi} | ` +
-        `SW Cache: ${swCacheStats.count} tiles ${cacheSizeMB}MB | ` +
-        `Leak: ${estimatedLeakMB.toFixed(2)}MB`
-      )
+      // Suppress verbose memory logging - only log when leak is significant
+      if (estimatedLeakMB > 50) {
+        console.warn(
+          `[Memory] Potential leak detected: ${estimatedLeakMB.toFixed(2)}MB | ` +
+          `Babylon - Mat: ${counters.materialsCreated - counters.materialsDisposed} Mesh: ${counters.meshesCreated - counters.meshesDisposed} GUI: ${counters.guiControlsCreated - counters.guiControlsDisposed} AC: ${babylonMeshes} | ` +
+          `Cesium - Pool: ${poolUsed}/100 TileCache: ${cesiumTileCache} | ` +
+          `VATSIM: ${pilotsFilteredByDistance}/${totalPilotsFromApi} | ` +
+          `SW Cache: ${swCacheStats.count} tiles ${cacheSizeMB}MB`
+        )
+      }
     }
 
     const intervalId = setInterval(logMemoryCounters, 5000)

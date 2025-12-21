@@ -21,11 +21,8 @@ export async function registerTileCacheServiceWorker(): Promise<ServiceWorkerReg
       scope
     })
 
-    console.log('[TileCache] Service worker registered:', registration.scope)
-
     // Wait for the service worker to be ready
     await navigator.serviceWorker.ready
-    console.log('[TileCache] Service worker is ready')
 
     return registration
   } catch (error) {
@@ -43,7 +40,6 @@ export async function clearServiceWorkerCache(): Promise<boolean> {
     if ('caches' in window) {
       try {
         await caches.delete('cesium-tiles-v1')
-        console.log('[TileCache] Cache cleared directly')
         return true
       } catch {
         return false

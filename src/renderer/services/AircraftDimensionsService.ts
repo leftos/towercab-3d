@@ -48,7 +48,6 @@ class AircraftDimensionsServiceClass {
       }
 
       this.loaded = true
-      console.log(`Loaded ${this.dimensions.size} aircraft dimension records`)
     } catch (error) {
       console.warn('Error loading aircraft dimensions:', error)
     }

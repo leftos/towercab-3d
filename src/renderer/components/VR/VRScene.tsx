@@ -120,17 +120,13 @@ function VRScene({ cesiumViewer }: VRSceneProps) {
       xrHelper.baseExperience.onStateChangedObservable.add((state) => {
         switch (state) {
           case BABYLON.WebXRState.NOT_IN_XR:
-            console.log('VR: Exited XR session')
             setVRActive(false)
             break
           case BABYLON.WebXRState.ENTERING_XR:
-            console.log('VR: Entering XR session')
             break
           case BABYLON.WebXRState.IN_XR:
-            console.log('VR: In XR session')
             break
           case BABYLON.WebXRState.EXITING_XR:
-            console.log('VR: Exiting XR session')
             break
         }
       })

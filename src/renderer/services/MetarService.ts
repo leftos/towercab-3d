@@ -205,7 +205,6 @@ class MetarService {
       // Also cache by ICAO for future direct lookups
       this.cache.set(metar.icaoId, { data: metar, fetchTime: now })
 
-      console.log(`Found nearest METAR: ${metar.icaoId} (${nearestDistance.toFixed(1)}nm away)`)
       return metar
     } catch (error) {
       console.warn(`Failed to fetch nearest METAR:`, error)

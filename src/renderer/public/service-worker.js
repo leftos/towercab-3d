@@ -17,13 +17,11 @@ const TILE_URL_PATTERNS = [
 const MAX_CACHE_SIZE = 2 * 1024 * 1024 * 1024
 
 self.addEventListener('install', (event) => {
-  console.log('[SW] Service worker installed')
   // Skip waiting to activate immediately
   event.waitUntil(self.skipWaiting())
 })
 
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Service worker activated')
   // Claim all clients immediately
   event.waitUntil(self.clients.claim())
 })
@@ -96,7 +94,6 @@ async function handleTileRequest(request) {
     // Network error - try to return stale cache if available
     const staleResponse = await cache.match(request)
     if (staleResponse) {
-      console.log('[SW] Serving stale cache for:', request.url)
       return staleResponse
     }
     throw error
@@ -138,8 +135,6 @@ async function cleanupCache() {
       await cache.delete(entry.request)
       freedSize += entry.size
     }
-
-    console.log(`[SW] Cache cleanup: freed ${(freedSize / 1024 / 1024).toFixed(1)}MB`)
   }
 
   // Also delete expired entries
@@ -155,7 +150,6 @@ async function cleanupCache() {
 self.addEventListener('message', (event) => {
   if (event.data.type === 'CLEAR_CACHE') {
     caches.delete(CACHE_NAME).then(() => {
-      console.log('[SW] Cache cleared')
       if (event.ports[0]) {
         event.ports[0].postMessage({ success: true })
       }

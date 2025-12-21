@@ -28,7 +28,6 @@ export function getCacheHitStats() {
  */
 export function setDiskCacheMaxSize(sizeGB: number): void {
   maxCacheSizeBytes = Math.max(0.1, Math.min(10, sizeGB)) * 1024 * 1024 * 1024
-  console.log(`Tile disk cache max size set to ${sizeGB.toFixed(1)}GB`)
 }
 
 interface CachedTile {
@@ -187,8 +186,6 @@ async function cleanupCacheIfNeeded(): Promise<void> {
         for (const key of keysToDelete) {
           deleteStore.delete(key)
         }
-
-        console.log(`Tile cache cleanup: removed ${keysToDelete.length} tiles`)
       }
     }
   } catch {
@@ -395,7 +392,6 @@ export async function clearTileCache(): Promise<void> {
     const transaction = db.transaction(STORE_NAME, 'readwrite')
     const store = transaction.objectStore(STORE_NAME)
     store.clear()
-    console.log('Tile cache cleared')
   } catch (error) {
     console.error('Failed to clear tile cache:', error)
   }

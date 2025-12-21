@@ -157,7 +157,6 @@ export function useCesiumViewer(
 
     // Log MSAA setting for debugging
     const effectiveMsaa = isInset ? 2 : msaaSamples
-    console.log(`Creating Cesium viewer with MSAA=${effectiveMsaa}x (viewport: ${viewportId})`)
 
     // Set Ion access token
     if (cesiumIonToken) {
@@ -197,19 +196,6 @@ export function useCesiumViewer(
     // Improve texture quality - helps reduce mipmap banding
     newViewer.scene.globe.showGroundAtmosphere = enableGroundAtmosphere
     newViewer.scene.globe.baseColor = Cesium.Color.fromCssColorString('#1a1a2e')
-
-    // Try to enable maximum anisotropic filtering for better texture quality at oblique angles
-    // Note: context is private, using type assertion to access WebGL context
-    const gl = (newViewer.scene as { context?: { _gl?: WebGL2RenderingContext } }).context?._gl ?? null
-    if (gl) {
-      const ext = gl.getExtension('EXT_texture_filter_anisotropic') ||
-                  gl.getExtension('WEBKIT_EXT_texture_filter_anisotropic') ||
-                  gl.getExtension('MOZ_EXT_texture_filter_anisotropic')
-      if (ext) {
-        const maxAnisotropy = gl.getParameter(ext.MAX_TEXTURE_MAX_ANISOTROPY_EXT)
-        console.log(`Anisotropic filtering available, max level: ${maxAnisotropy}`)
-      }
-    }
 
     // Shadows - from settings, but disabled for insets for performance
     // Uses cascaded shadow maps with configurable settings
@@ -287,7 +273,6 @@ export function useCesiumViewer(
         modelsLoaded++
         if (modelsLoaded === CONE_POOL_SIZE) {
           modelPoolReadyRef.current = true
-          console.log(`Created aircraft model pool with ${CONE_POOL_SIZE} primitives`)
         }
       }).catch(err => {
         console.error(`Failed to load model for pool slot ${i}:`, err)

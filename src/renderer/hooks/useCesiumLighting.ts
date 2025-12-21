@@ -112,8 +112,6 @@ export function useCesiumLighting(
         viewer.terrainShadows = Cesium.ShadowMode.DISABLED
       }
     }
-
-    console.log(`Lighting settings updated: Lighting=${enableLighting}, GroundAtmo=${enableGroundAtmosphere}, Shadows=${enableShadows}`)
   }, [
     viewer,
     isInset,

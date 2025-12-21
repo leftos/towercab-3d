@@ -60,7 +60,6 @@ class AirportService {
       }
 
       this.loaded = true
-      console.log(`Loaded ${this.airports.size} airports`)
 
       return this.airports
     } catch (error) {

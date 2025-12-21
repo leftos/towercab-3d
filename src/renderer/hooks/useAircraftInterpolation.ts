@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useVatsimStore } from '../stores/vatsimStore'
 import { useSettingsStore } from '../stores/settingsStore'
-import { useViewportStore } from '../stores/viewportStore'
 import { interpolateAircraftState } from '../utils/interpolation'
 import { performanceMonitor } from '../utils/performanceMonitor'
 import type { InterpolatedAircraftState, AircraftState } from '../types/vatsim'
@@ -31,7 +30,6 @@ function updateInterpolation() {
   const now = Date.now()
 
   // Track frame timing for diagnostics
-  const frameDelta = sharedLastInterpolationTimeRef.current > 0 ? now - sharedLastInterpolationTimeRef.current : 0
   sharedLastInterpolationTimeRef.current = now
 
   const statesMap = sharedInterpolatedStates
@@ -69,30 +67,7 @@ function updateInterpolation() {
       previousTurnRate
     )
 
-    // Add diagnostic logging for followed aircraft only (avoid console spam)
-    const mainViewport = useViewportStore.getState().viewports.find(v => v.id === 'main')
-    if (callsign === mainViewport?.cameraState.followingCallsign) {
-      const timeSinceUpdate = now - currentState.timestamp
-      // Calculate t-value: time since last update divided by time between updates
-      const deltaTime = previousState ? currentState.timestamp - previousState.timestamp : 15000
-      const t = deltaTime > 0 ? timeSinceUpdate / deltaTime : 0
-      const isExtrapolating = t > 1.0
-
-      // Log every 60 frames (~1 second at 60Hz)
-      if (Math.floor(now / 1000) !== Math.floor((now - 16) / 1000)) {
-        const extrapolatingFlag = isExtrapolating ? ' [EXTRAPOLATING]' : ''
-        const frameWarning = frameDelta > 25 ? ' ⚠️ SLOW FRAME' : ''
-        console.log(
-          `[Interpolation] ${callsign}${extrapolatingFlag}${frameWarning}: ` +
-          `t=${t.toFixed(3)} | ${(timeSinceUpdate / 1000).toFixed(1)}s since update | ` +
-          `frameDelta=${frameDelta.toFixed(1)}ms | ` +
-          `pos=${interpolated.interpolatedLatitude.toFixed(6)},${interpolated.interpolatedLongitude.toFixed(6)} | ` +
-          `alt=${interpolated.interpolatedAltitude.toFixed(0)}ft | ` +
-          `hdg=${interpolated.interpolatedHeading.toFixed(1)}° | ` +
-          `gs=${interpolated.interpolatedGroundspeed.toFixed(0)}kts`
-        )
-      }
-    }
+    // Diagnostic logging removed - use performance monitor for frame timing
 
     // Reuse existing entry or create new one
     if (existing) {
