@@ -131,6 +131,83 @@ Nine stores manage application state:
 
 `@/` maps to `src/renderer/` (configured in vite.config.ts)
 
+## Type System Organization
+
+All TypeScript types are centralized in the `types/` directory, organized by domain:
+
+| File | Purpose |
+|------|---------|
+| `types/camera.ts` | Camera state, view modes, follow modes, bookmarks |
+| `types/viewport.ts` | Viewport layout, multi-viewport configuration, inset positioning |
+| `types/weather.ts` | METAR data, cloud layers, fog density, flight categories |
+| `types/settings.ts` | Application settings (grouped by domain: cesium, graphics, camera, weather, memory) |
+| `types/vatsim.ts` | VATSIM API data structures, pilot/controller data |
+| `types/index.ts` | Barrel export for all types |
+
+**Usage:**
+```typescript
+// Import types from centralized location
+import type { ViewportCameraState, FollowMode, ViewMode } from '@/types'
+
+// Or use path alias
+import type { CloudLayer, FogDensity } from '@/types'
+
+// All types include comprehensive JSDoc with examples
+const camera: ViewportCameraState = {
+  heading: 0,
+  pitch: -15,
+  fov: 60,
+  // ...
+}
+```
+
+**When to add a type:**
+- Data structures shared across multiple files
+- Complex interfaces with reusable properties
+- Enums or union types for state machines
+- API response/request shapes
+
+**Best practices:**
+- Use `import type` for type-only imports (better tree-shaking)
+- Add JSDoc documentation for complex types
+- Include state machine diagrams for modes/states
+- Document units (degrees, meters, etc.) in comments
+
+## Constants Organization
+
+Configuration values and magic numbers are centralized in the `constants/` directory for easy discovery and maintenance:
+
+| File | Purpose |
+|------|---------|
+| `constants/rendering.ts` | Aircraft model pool sizes, shadow configuration, positioning offsets, colors |
+| `constants/camera.ts` | FOV/pitch/heading limits, orbit mode defaults, follow mode settings, top-down view settings |
+| `constants/api.ts` | External API endpoints (VATSIM, weather, airports), polling intervals, cache TTL |
+| `constants/index.ts` | Barrel export for all constants |
+
+**Usage:**
+```typescript
+// Import specific constants
+import { FOV_DEFAULT, VATSIM_POLL_INTERVAL } from '@/constants'
+
+// Or import from domain-specific file
+import { ORBIT_DISTANCE_MIN, ORBIT_DISTANCE_MAX } from '@/constants/camera'
+
+// All constants are documented with JSDoc
+const distance = Math.max(ORBIT_DISTANCE_MIN, Math.min(ORBIT_DISTANCE_MAX, value))
+```
+
+**When to add a constant:**
+- Configuration values used in multiple places
+- Numeric limits or thresholds
+- API endpoints or URLs
+- Timing intervals (polling, refresh, throttle)
+- Default values for settings
+
+**Naming convention:**
+- Use `SCREAMING_SNAKE_CASE` for constants
+- Suffix pattern: `FEATURE_PROPERTY_QUALIFIER` (e.g., `FOV_DEFAULT`, `ORBIT_DISTANCE_MAX`)
+- Group related constants with common prefixes
+
 ## External Dependencies
 
 - **Cesium Ion**: Requires user-provided access token for terrain/imagery (free tier available)
