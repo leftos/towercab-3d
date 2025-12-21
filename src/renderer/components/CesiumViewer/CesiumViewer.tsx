@@ -249,7 +249,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
 
     // Try to enable maximum anisotropic filtering for better texture quality at oblique angles
     // Note: context is private, using type assertion to access WebGL context
-    const gl = (viewer.scene as any).context?._gl as WebGL2RenderingContext | null
+    const gl = (viewer.scene as { context?: { _gl?: WebGL2RenderingContext } }).context?._gl ?? null
     if (gl) {
       const ext = gl.getExtension('EXT_texture_filter_anisotropic') ||
                   gl.getExtension('WEBKIT_EXT_texture_filter_anisotropic') ||

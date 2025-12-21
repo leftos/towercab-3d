@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useVatsimStore } from '../stores/vatsimStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useViewportStore } from '../stores/viewportStore'

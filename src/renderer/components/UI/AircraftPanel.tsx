@@ -107,6 +107,7 @@ function AircraftPanel() {
     })
 
     return sorted.slice(0, 50)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refreshTick intentionally forces periodic recalculation of distances/bearings
   }, [filtered, referencePoint, followingCallsign, isOrbitModeWithoutAirport, sortOption, refreshTick])
 
   // Get the followed aircraft data for orbit mode display
