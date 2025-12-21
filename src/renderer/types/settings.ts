@@ -153,6 +153,9 @@ export interface GraphicsSettings {
 
   /** Use normal offset to reduce shadow acne artifacts (default: true) */
   shadowNormalOffset: boolean
+
+  /** Only render shadows from aircraft models, not terrain self-shadowing (default: false) */
+  aircraftShadowsOnly: boolean
 }
 
 /**
@@ -394,7 +397,8 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     shadowDarkness: 0.3,
     shadowSoftness: true,
     shadowFadingEnabled: false,
-    shadowNormalOffset: true
+    shadowNormalOffset: true,
+    aircraftShadowsOnly: false
   },
   camera: {
     defaultFov: 60,

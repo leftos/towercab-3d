@@ -128,7 +128,12 @@
 
 .settings-modal-overlay.no-blur {
   backdrop-filter: none;
-  background: rgba(0, 0, 0, 0.3);
+  background: transparent;
+  pointer-events: none;
+}
+
+.settings-modal-overlay.no-blur .settings-modal {
+  pointer-events: auto;
 }
 
 .settings-modal {
@@ -245,6 +250,17 @@
 .setting-item input[type="checkbox"] {
   width: 16px;
   height: 16px;
+}
+
+/* Disabled shadow settings group */
+.shadow-settings-group.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.shadow-settings-group.disabled input,
+.shadow-settings-group.disabled select {
+  cursor: not-allowed;
 }
 
 .text-input {

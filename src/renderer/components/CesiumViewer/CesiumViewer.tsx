@@ -64,7 +64,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
 
   // Use state for viewer and canvas to trigger re-renders when they're ready
   const [babylonCanvas, setBabylonCanvas] = useState<HTMLCanvasElement | null>(null)
-  const [_buildingsTileset, setBuildingsTileset] = useState<Cesium.Cesium3DTileset | null>(null)
+  const [buildingsTileset, setBuildingsTileset] = useState<Cesium.Cesium3DTileset | null>(null)
   const babylonCanvasCreatedRef = useRef(false)
 
   // Store state
@@ -94,6 +94,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   const shadowSoftness = useSettingsStore((state) => state.graphics.shadowSoftness)
   const shadowFadingEnabled = useSettingsStore((state) => state.graphics.shadowFadingEnabled)
   const shadowNormalOffset = useSettingsStore((state) => state.graphics.shadowNormalOffset)
+  const aircraftShadowsOnly = useSettingsStore((state) => state.graphics.aircraftShadowsOnly)
   const enableAmbientOcclusion = useSettingsStore((state) => state.graphics.enableAmbientOcclusion)
 
   // Weather store for fog effects and camera position updates
@@ -206,7 +207,8 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     shadowDarkness,
     shadowSoftness,
     shadowFadingEnabled,
-    shadowNormalOffset
+    shadowNormalOffset,
+    aircraftShadowsOnly
   })
 
   // =========================================================================
@@ -382,6 +384,11 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
           tileset.cacheBytes = 0  // Don't cache tiles in memory (new API, replaces maximumMemoryUsage)
           tileset.maximumScreenSpaceError = 24  // Use lower quality tiles (default is 16)
 
+          // Disable building shadows when aircraftShadowsOnly is enabled
+          tileset.shadows = aircraftShadowsOnly
+            ? Cesium.ShadowMode.DISABLED
+            : Cesium.ShadowMode.ENABLED
+
           viewer.scene.primitives.add(tileset)
           currentTileset = tileset
           setBuildingsTileset(tileset)
@@ -400,7 +407,15 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
         setBuildingsTileset(null)
       }
     }
-  }, [viewer, show3DBuildings, isInset])
+  }, [viewer, show3DBuildings, isInset, aircraftShadowsOnly])
+
+  // Update building shadows when aircraftShadowsOnly changes
+  useEffect(() => {
+    if (!buildingsTileset) return
+    buildingsTileset.shadows = aircraftShadowsOnly
+      ? Cesium.ShadowMode.DISABLED
+      : Cesium.ShadowMode.ENABLED
+  }, [buildingsTileset, aircraftShadowsOnly])
 
   // Calculate terrain offset when airport changes or when in orbit mode without airport
   // This corrects for the difference between MSL and ellipsoidal height

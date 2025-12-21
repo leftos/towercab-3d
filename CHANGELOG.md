@@ -4,6 +4,13 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- "Aircraft Shadows Only" graphics setting: renders only shadows cast by aircraft onto the ground, disabling expensive terrain and building self-shadowing for better performance
+
+### Changed
+- Shadow sub-settings now shown as disabled (greyed out) instead of hidden when shadows are off
+- Graphics settings tab no longer dims the viewport, allowing you to see changes in real-time
+
 ## v0.0.6-alpha (2025-12-21)
 
 ### Fixed

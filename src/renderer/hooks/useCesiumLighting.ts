@@ -22,6 +22,8 @@ export interface CesiumLightingSettings {
   shadowFadingEnabled: boolean
   /** Normal offset to prevent shadow acne */
   shadowNormalOffset: boolean
+  /** Only render shadows from aircraft models (terrain won't self-shadow) */
+  aircraftShadowsOnly: boolean
 }
 
 /**
@@ -79,7 +81,8 @@ export function useCesiumLighting(
     shadowDarkness,
     shadowSoftness,
     shadowFadingEnabled,
-    shadowNormalOffset
+    shadowNormalOffset,
+    aircraftShadowsOnly
   } = settings
 
   // Update lighting and shadows when settings change
@@ -107,7 +110,10 @@ export function useCesiumLighting(
         viewer.shadowMap.darkness = shadowDarkness
         viewer.shadowMap.fadingEnabled = shadowFadingEnabled
         viewer.shadowMap.normalOffset = shadowNormalOffset
-        viewer.terrainShadows = Cesium.ShadowMode.ENABLED
+        // RECEIVE_ONLY: terrain receives shadows from aircraft but doesn't cast shadows on itself
+        viewer.terrainShadows = aircraftShadowsOnly
+          ? Cesium.ShadowMode.RECEIVE_ONLY
+          : Cesium.ShadowMode.ENABLED
       } else {
         viewer.terrainShadows = Cesium.ShadowMode.DISABLED
       }
@@ -123,6 +129,7 @@ export function useCesiumLighting(
     shadowDarkness,
     shadowSoftness,
     shadowFadingEnabled,
-    shadowNormalOffset
+    shadowNormalOffset,
+    aircraftShadowsOnly
   ])
 }
