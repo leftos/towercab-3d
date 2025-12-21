@@ -1,5 +1,4 @@
 import { useCallback } from 'react'
-import * as Cesium from 'cesium'
 import type { BabylonOverlayOptions } from '@/types'
 import { useBabylonScene } from './useBabylonScene'
 import { useBabylonWeather } from './useBabylonWeather'
