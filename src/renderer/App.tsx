@@ -9,6 +9,8 @@ import CommandInput from './components/UI/CommandInput'
 import MeasuringTool from './components/UI/MeasuringTool'
 import ViewportManager from './components/Viewport/ViewportManager'
 import VRScene from './components/VR/VRScene'
+import { PerformanceHUD } from './components/UI/PerformanceHUD'
+import { performanceMonitor } from './utils/performanceMonitor'
 import { useVatsimStore } from './stores/vatsimStore'
 import { useAirportStore } from './stores/airportStore'
 import { useSettingsStore } from './stores/settingsStore'
@@ -41,6 +43,9 @@ function App() {
 
   // Track Cesium viewer for VR integration
   const [cesiumViewer, setCesiumViewer] = useState<Viewer | null>(null)
+
+  // Performance monitor toggle
+  const [showPerformanceHUD, setShowPerformanceHUD] = useState(false)
 
   const handleViewerReady = useCallback((viewer: Viewer | null) => {
     setCesiumViewer(viewer)
@@ -79,6 +84,9 @@ function App() {
         checkVRSupport()
 
         setIsLoading(false)
+
+        // Start performance logging to console
+        performanceMonitor.startLogging()
       } catch (error) {
         console.error('Initialization error:', error)
         setLoadingStatus(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`)
@@ -86,6 +94,10 @@ function App() {
     }
 
     initialize()
+
+    return () => {
+      performanceMonitor.stopLogging()
+    }
   }, [cesiumIonToken, startPolling, loadAirports, checkVRSupport])
 
   // Fetch weather data when airport changes or weather effects are enabled
@@ -117,6 +129,19 @@ function App() {
       stopAutoRefresh()
     }
   }, [currentIcao, showWeatherEffects, isOrbitModeWithoutAirport, fetchWeather, startAutoRefresh, startNearestAutoRefresh, stopAutoRefresh, clearWeather])
+
+  // F1 key to toggle performance HUD
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F1') {
+        e.preventDefault()
+        setShowPerformanceHUD(prev => !prev)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   if (isLoading) {
     return (
@@ -182,6 +207,7 @@ function App() {
       {!isVRActive && <ControlsBar />}
       {!isVRActive && <AirportSelector />}
       {!isVRActive && <MeasuringTool cesiumViewer={cesiumViewer} />}
+      <PerformanceHUD visible={showPerformanceHUD} />
     </div>
   )
 }
