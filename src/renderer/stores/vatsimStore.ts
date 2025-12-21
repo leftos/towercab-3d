@@ -98,7 +98,7 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
       const oldPreviousStates = get().previousStates
 
       // Get distance filter radius from settings
-      const aircraftDataRadiusNM = useSettingsStore.getState().aircraftDataRadiusNM
+      const aircraftDataRadiusNM = useSettingsStore.getState().memory.aircraftDataRadiusNM
 
       // Filter pilots by distance if we have a reference position
       // This prevents storing data for aircraft that are far away
@@ -240,7 +240,7 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
   // Called when reference position changes or settings change
   refilterPilots: () => {
     const { allPilots, referencePosition, aircraftStates, previousStates } = get()
-    const aircraftDataRadiusNM = useSettingsStore.getState().aircraftDataRadiusNM
+    const aircraftDataRadiusNM = useSettingsStore.getState().memory.aircraftDataRadiusNM
 
     if (!referencePosition || allPilots.length === 0) {
       return

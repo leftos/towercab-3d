@@ -74,14 +74,14 @@ export function useAircraftFiltering(
   const includeFollowedRegardlessOfDistance = options?.includeFollowedRegardlessOfDistance ?? false
 
   // Get global settings
-  const labelVisibilityDistance = useSettingsStore((state) => state.labelVisibilityDistance)
-  const showGroundTraffic = useSettingsStore((state) => state.showGroundTraffic)
-  const showAirborneTraffic = useSettingsStore((state) => state.showAirborneTraffic)
-  const showWeatherEffects = useSettingsStore((state) => state.showWeatherEffects)
-  const showCesiumFog = useSettingsStore((state) => state.showCesiumFog)
-  const showClouds = useSettingsStore((state) => state.showClouds)
-  const visibilityScale = useSettingsStore((state) => state.visibilityScale)
-  const maxAircraftDisplay = useSettingsStore((state) => state.maxAircraftDisplay)
+  const labelVisibilityDistance = useSettingsStore((state) => state.aircraft.labelVisibilityDistance)
+  const showGroundTraffic = useSettingsStore((state) => state.aircraft.showGroundTraffic)
+  const showAirborneTraffic = useSettingsStore((state) => state.aircraft.showAirborneTraffic)
+  const showWeatherEffects = useSettingsStore((state) => state.weather.showWeatherEffects)
+  const showCesiumFog = useSettingsStore((state) => state.weather.showCesiumFog)
+  const showClouds = useSettingsStore((state) => state.weather.showClouds)
+  const visibilityScale = useSettingsStore((state) => state.weather.visibilityScale)
+  const maxAircraftDisplay = useSettingsStore((state) => state.aircraft.maxAircraftDisplay)
 
   const towerHeight = useAirportStore((state) => state.towerHeight)
 

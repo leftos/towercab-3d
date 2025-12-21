@@ -163,8 +163,8 @@ export function useAircraftInterpolation(): Map<string, InterpolatedAircraftStat
     })
 
     const unsubscribeSettings = useSettingsStore.subscribe((state) => {
-      sharedOrientationEnabledRef.current = state.orientationEmulation
-      sharedOrientationIntensityRef.current = state.orientationIntensity
+      sharedOrientationEnabledRef.current = state.aircraft.orientationEmulation
+      sharedOrientationIntensityRef.current = state.aircraft.orientationIntensity
     })
 
     // Initialize shared refs with current state
@@ -173,8 +173,8 @@ export function useAircraftInterpolation(): Map<string, InterpolatedAircraftStat
     sharedPreviousStatesRef.current = vatsimState.previousStates
 
     const settingsState = useSettingsStore.getState()
-    sharedOrientationEnabledRef.current = settingsState.orientationEmulation
-    sharedOrientationIntensityRef.current = settingsState.orientationIntensity
+    sharedOrientationEnabledRef.current = settingsState.aircraft.orientationEmulation
+    sharedOrientationIntensityRef.current = settingsState.aircraft.orientationIntensity
 
     // Subscribe this component to updates
     const updateCallback = () => setVersion(v => v + 1)

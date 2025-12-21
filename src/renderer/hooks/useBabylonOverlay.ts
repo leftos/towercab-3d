@@ -88,13 +88,13 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
   const cloudLayers = useWeatherStore((state) => state.cloudLayers)
   const fogDensity = useWeatherStore((state) => state.fogDensity)
   const currentMetar = useWeatherStore((state) => state.currentMetar)
-  const showWeatherEffects = useSettingsStore((state) => state.showWeatherEffects)
-  const showCesiumFog = useSettingsStore((state) => state.showCesiumFog)
-  const showBabylonFog = useSettingsStore((state) => state.showBabylonFog)
-  const showClouds = useSettingsStore((state) => state.showClouds)
-  const cloudOpacity = useSettingsStore((state) => state.cloudOpacity)
-  const fogIntensity = useSettingsStore((state) => state.fogIntensity)
-  const visibilityScale = useSettingsStore((state) => state.visibilityScale)
+  const showWeatherEffects = useSettingsStore((state) => state.weather.showWeatherEffects)
+  const showCesiumFog = useSettingsStore((state) => state.weather.showCesiumFog)
+  const showBabylonFog = useSettingsStore((state) => state.weather.showBabylonFog)
+  const showClouds = useSettingsStore((state) => state.weather.showClouds)
+  const cloudOpacity = useSettingsStore((state) => state.weather.cloudOpacity)
+  const fogIntensity = useSettingsStore((state) => state.weather.fogIntensity)
+  const visibilityScale = useSettingsStore((state) => state.weather.visibilityScale)
 
   // Initialize Babylon.js engine and scene
   useEffect(() => {

@@ -34,7 +34,7 @@ export function useCameraInput(
   const { onBreakTowerFollow } = options
 
   // Settings store
-  const mouseSensitivity = useSettingsStore((state) => state.mouseSensitivity)
+  const mouseSensitivity = useSettingsStore((state) => state.camera.mouseSensitivity)
 
   // Viewport store - check if this viewport is active
   const activeViewportId = useViewportStore((state) => state.activeViewportId)

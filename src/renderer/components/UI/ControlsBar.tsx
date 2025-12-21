@@ -20,102 +20,68 @@ function ControlsBar() {
   const [showImportModal, setShowImportModal] = useState(false)
 
   // Settings store - General
-  const cesiumIonToken = useSettingsStore((state) => state.cesiumIonToken)
-  const setCesiumIonToken = useSettingsStore((state) => state.setCesiumIonToken)
-  const theme = useSettingsStore((state) => state.theme)
-  const setTheme = useSettingsStore((state) => state.setTheme)
-  const defaultFov = useSettingsStore((state) => state.defaultFov)
-  const setDefaultFov = useSettingsStore((state) => state.setDefaultFov)
-  const cameraSpeed = useSettingsStore((state) => state.cameraSpeed)
-  const setCameraSpeed = useSettingsStore((state) => state.setCameraSpeed)
-  const mouseSensitivity = useSettingsStore((state) => state.mouseSensitivity)
-  const setMouseSensitivity = useSettingsStore((state) => state.setMouseSensitivity)
+  const cesiumIonToken = useSettingsStore((state) => state.cesium.cesiumIonToken)
+  const updateCesiumSettings = useSettingsStore((state) => state.updateCesiumSettings)
+  const theme = useSettingsStore((state) => state.ui.theme)
+  const updateUISettings = useSettingsStore((state) => state.updateUISettings)
+  const defaultFov = useSettingsStore((state) => state.camera.defaultFov)
+  const cameraSpeed = useSettingsStore((state) => state.camera.cameraSpeed)
+  const mouseSensitivity = useSettingsStore((state) => state.camera.mouseSensitivity)
+  const updateCameraSettings = useSettingsStore((state) => state.updateCameraSettings)
 
-  // Settings store - Display
-  const labelVisibilityDistance = useSettingsStore((state) => state.labelVisibilityDistance)
-  const setLabelVisibilityDistance = useSettingsStore((state) => state.setLabelVisibilityDistance)
-  const maxAircraftDisplay = useSettingsStore((state) => state.maxAircraftDisplay)
-  const setMaxAircraftDisplay = useSettingsStore((state) => state.setMaxAircraftDisplay)
-  const datablockMode = useSettingsStore((state) => state.datablockMode)
-  const setDatablockMode = useSettingsStore((state) => state.setDatablockMode)
-  const showGroundTraffic = useSettingsStore((state) => state.showGroundTraffic)
-  const setShowGroundTraffic = useSettingsStore((state) => state.setShowGroundTraffic)
-  const showAirborneTraffic = useSettingsStore((state) => state.showAirborneTraffic)
-  const setShowAirborneTraffic = useSettingsStore((state) => state.setShowAirborneTraffic)
-  const showAircraftPanel = useSettingsStore((state) => state.showAircraftPanel)
-  const setShowAircraftPanel = useSettingsStore((state) => state.setShowAircraftPanel)
-  const orientationEmulation = useSettingsStore((state) => state.orientationEmulation)
-  const setOrientationEmulation = useSettingsStore((state) => state.setOrientationEmulation)
-  const orientationIntensity = useSettingsStore((state) => state.orientationIntensity)
-  const setOrientationIntensity = useSettingsStore((state) => state.setOrientationIntensity)
+  // Settings store - Display (Aircraft group)
+  const labelVisibilityDistance = useSettingsStore((state) => state.aircraft.labelVisibilityDistance)
+  const maxAircraftDisplay = useSettingsStore((state) => state.aircraft.maxAircraftDisplay)
+  const datablockMode = useSettingsStore((state) => state.aircraft.datablockMode)
+  const showGroundTraffic = useSettingsStore((state) => state.aircraft.showGroundTraffic)
+  const showAirborneTraffic = useSettingsStore((state) => state.aircraft.showAirborneTraffic)
+  const orientationEmulation = useSettingsStore((state) => state.aircraft.orientationEmulation)
+  const orientationIntensity = useSettingsStore((state) => state.aircraft.orientationIntensity)
+  const updateAircraftSettings = useSettingsStore((state) => state.updateAircraftSettings)
+  const showAircraftPanel = useSettingsStore((state) => state.ui.showAircraftPanel)
 
-  // Settings store - Graphics
-  const terrainQuality = useSettingsStore((state) => state.terrainQuality)
-  const setTerrainQuality = useSettingsStore((state) => state.setTerrainQuality)
-  const show3DBuildings = useSettingsStore((state) => state.show3DBuildings)
-  const setShow3DBuildings = useSettingsStore((state) => state.setShow3DBuildings)
-  const timeMode = useSettingsStore((state) => state.timeMode)
-  const setTimeMode = useSettingsStore((state) => state.setTimeMode)
-  const fixedTimeHour = useSettingsStore((state) => state.fixedTimeHour)
-  const setFixedTimeHour = useSettingsStore((state) => state.setFixedTimeHour)
+  // Settings store - Graphics (Cesium group)
+  const terrainQuality = useSettingsStore((state) => state.cesium.terrainQuality)
+  const show3DBuildings = useSettingsStore((state) => state.cesium.show3DBuildings)
+  const timeMode = useSettingsStore((state) => state.cesium.timeMode)
+  const fixedTimeHour = useSettingsStore((state) => state.cesium.fixedTimeHour)
+  const enableLighting = useSettingsStore((state) => state.cesium.enableLighting)
 
   // Settings store - Weather
-  const showWeatherEffects = useSettingsStore((state) => state.showWeatherEffects)
-  const setShowWeatherEffects = useSettingsStore((state) => state.setShowWeatherEffects)
-  const showCesiumFog = useSettingsStore((state) => state.showCesiumFog)
-  const setShowCesiumFog = useSettingsStore((state) => state.setShowCesiumFog)
-  const showBabylonFog = useSettingsStore((state) => state.showBabylonFog)
-  const setShowBabylonFog = useSettingsStore((state) => state.setShowBabylonFog)
-  const showClouds = useSettingsStore((state) => state.showClouds)
-  const setShowClouds = useSettingsStore((state) => state.setShowClouds)
-  const cloudOpacity = useSettingsStore((state) => state.cloudOpacity)
-  const setCloudOpacity = useSettingsStore((state) => state.setCloudOpacity)
-  const fogIntensity = useSettingsStore((state) => state.fogIntensity)
-  const setFogIntensity = useSettingsStore((state) => state.setFogIntensity)
-  const visibilityScale = useSettingsStore((state) => state.visibilityScale)
-  const setVisibilityScale = useSettingsStore((state) => state.setVisibilityScale)
+  const showWeatherEffects = useSettingsStore((state) => state.weather.showWeatherEffects)
+  const showCesiumFog = useSettingsStore((state) => state.weather.showCesiumFog)
+  const showBabylonFog = useSettingsStore((state) => state.weather.showBabylonFog)
+  const showClouds = useSettingsStore((state) => state.weather.showClouds)
+  const cloudOpacity = useSettingsStore((state) => state.weather.cloudOpacity)
+  const fogIntensity = useSettingsStore((state) => state.weather.fogIntensity)
+  const visibilityScale = useSettingsStore((state) => state.weather.visibilityScale)
+  const updateWeatherSettings = useSettingsStore((state) => state.updateWeatherSettings)
 
   // Weather store
   const currentMetar = useWeatherStore((state) => state.currentMetar)
   const isLoadingWeather = useWeatherStore((state) => state.isLoading)
 
-  // Settings store - Performance
-  const inMemoryTileCacheSize = useSettingsStore((state) => state.inMemoryTileCacheSize)
-  const setInMemoryTileCacheSize = useSettingsStore((state) => state.setInMemoryTileCacheSize)
-  const diskCacheSizeGB = useSettingsStore((state) => state.diskCacheSizeGB)
-  const setDiskCacheSizeGB = useSettingsStore((state) => state.setDiskCacheSizeGB)
-  const aircraftDataRadiusNM = useSettingsStore((state) => state.aircraftDataRadiusNM)
-  const setAircraftDataRadiusNM = useSettingsStore((state) => state.setAircraftDataRadiusNM)
+  // Settings store - Performance (Memory group)
+  const inMemoryTileCacheSize = useSettingsStore((state) => state.memory.inMemoryTileCacheSize)
+  const diskCacheSizeGB = useSettingsStore((state) => state.memory.diskCacheSizeGB)
+  const aircraftDataRadiusNM = useSettingsStore((state) => state.memory.aircraftDataRadiusNM)
+  const updateMemorySettings = useSettingsStore((state) => state.updateMemorySettings)
 
-  // Settings store - Experimental Graphics
-  const msaaSamples = useSettingsStore((state) => state.msaaSamples)
-  const setMsaaSamples = useSettingsStore((state) => state.setMsaaSamples)
-  const enableFxaa = useSettingsStore((state) => state.enableFxaa)
-  const setEnableFxaa = useSettingsStore((state) => state.setEnableFxaa)
-  const enableHdr = useSettingsStore((state) => state.enableHdr)
-  const setEnableHdr = useSettingsStore((state) => state.setEnableHdr)
-  const enableLogDepth = useSettingsStore((state) => state.enableLogDepth)
-  const setEnableLogDepth = useSettingsStore((state) => state.setEnableLogDepth)
-  const enableGroundAtmosphere = useSettingsStore((state) => state.enableGroundAtmosphere)
-  const setEnableGroundAtmosphere = useSettingsStore((state) => state.setEnableGroundAtmosphere)
-  const enableAmbientOcclusion = useSettingsStore((state) => state.enableAmbientOcclusion)
-  const setEnableAmbientOcclusion = useSettingsStore((state) => state.setEnableAmbientOcclusion)
-  const enableLighting = useSettingsStore((state) => state.enableLighting)
-  const setEnableLighting = useSettingsStore((state) => state.setEnableLighting)
-  const enableShadows = useSettingsStore((state) => state.enableShadows)
-  const setEnableShadows = useSettingsStore((state) => state.setEnableShadows)
-  const shadowMapSize = useSettingsStore((state) => state.shadowMapSize)
-  const setShadowMapSize = useSettingsStore((state) => state.setShadowMapSize)
-  const shadowMaxDistance = useSettingsStore((state) => state.shadowMaxDistance)
-  const setShadowMaxDistance = useSettingsStore((state) => state.setShadowMaxDistance)
-  const shadowDarkness = useSettingsStore((state) => state.shadowDarkness)
-  const setShadowDarkness = useSettingsStore((state) => state.setShadowDarkness)
-  const shadowSoftness = useSettingsStore((state) => state.shadowSoftness)
-  const setShadowSoftness = useSettingsStore((state) => state.setShadowSoftness)
-  const shadowFadingEnabled = useSettingsStore((state) => state.shadowFadingEnabled)
-  const setShadowFadingEnabled = useSettingsStore((state) => state.setShadowFadingEnabled)
-  const shadowNormalOffset = useSettingsStore((state) => state.shadowNormalOffset)
-  const setShadowNormalOffset = useSettingsStore((state) => state.setShadowNormalOffset)
+  // Settings store - Experimental Graphics (Graphics group)
+  const msaaSamples = useSettingsStore((state) => state.graphics.msaaSamples)
+  const enableFxaa = useSettingsStore((state) => state.graphics.enableFxaa)
+  const enableHdr = useSettingsStore((state) => state.graphics.enableHdr)
+  const enableLogDepth = useSettingsStore((state) => state.graphics.enableLogDepth)
+  const enableGroundAtmosphere = useSettingsStore((state) => state.graphics.enableGroundAtmosphere)
+  const enableAmbientOcclusion = useSettingsStore((state) => state.graphics.enableAmbientOcclusion)
+  const enableShadows = useSettingsStore((state) => state.graphics.enableShadows)
+  const shadowMapSize = useSettingsStore((state) => state.graphics.shadowMapSize)
+  const shadowMaxDistance = useSettingsStore((state) => state.graphics.shadowMaxDistance)
+  const shadowDarkness = useSettingsStore((state) => state.graphics.shadowDarkness)
+  const shadowSoftness = useSettingsStore((state) => state.graphics.shadowSoftness)
+  const shadowFadingEnabled = useSettingsStore((state) => state.graphics.shadowFadingEnabled)
+  const shadowNormalOffset = useSettingsStore((state) => state.graphics.shadowNormalOffset)
+  const updateGraphicsSettings = useSettingsStore((state) => state.updateGraphicsSettings)
 
   // Active viewport camera state (from viewportStore)
   const {
@@ -405,7 +371,7 @@ function ControlsBar() {
                       <input
                         type="text"
                         value={cesiumIonToken}
-                        onChange={(e) => setCesiumIonToken(e.target.value)}
+                        onChange={(e) => updateCesiumSettings({ cesiumIonToken: e.target.value })}
                         placeholder="Enter your Cesium Ion access token"
                         className="text-input"
                       />
@@ -429,7 +395,7 @@ function ControlsBar() {
                             name="theme"
                             value="dark"
                             checked={theme === 'dark'}
-                            onChange={() => setTheme('dark')}
+                            onChange={() => updateUISettings({ theme: 'dark' })}
                           />
                           Dark
                         </label>
@@ -439,7 +405,7 @@ function ControlsBar() {
                             name="theme"
                             value="light"
                             checked={theme === 'light'}
-                            onChange={() => setTheme('light')}
+                            onChange={() => updateUISettings({ theme: 'light' })}
                           />
                           Light
                         </label>
@@ -457,7 +423,7 @@ function ControlsBar() {
                           min="10"
                           max="120"
                           value={defaultFov}
-                          onChange={(e) => setDefaultFov(Number(e.target.value))}
+                          onChange={(e) => updateCameraSettings({ defaultFov: Number(e.target.value) })}
                         />
                         <span>{defaultFov}°</span>
                       </div>
@@ -472,7 +438,7 @@ function ControlsBar() {
                           min="1"
                           max="10"
                           value={cameraSpeed}
-                          onChange={(e) => setCameraSpeed(Number(e.target.value))}
+                          onChange={(e) => updateCameraSettings({ cameraSpeed: Number(e.target.value) })}
                         />
                         <span>{cameraSpeed}</span>
                       </div>
@@ -488,7 +454,7 @@ function ControlsBar() {
                           max="2"
                           step="0.1"
                           value={mouseSensitivity}
-                          onChange={(e) => setMouseSensitivity(Number(e.target.value))}
+                          onChange={(e) => updateCameraSettings({ mouseSensitivity: Number(e.target.value) })}
                         />
                         <span>{mouseSensitivity.toFixed(1)}</span>
                       </div>
@@ -546,7 +512,7 @@ function ControlsBar() {
                           min="5"
                           max="100"
                           value={labelVisibilityDistance}
-                          onChange={(e) => setLabelVisibilityDistance(Number(e.target.value))}
+                          onChange={(e) => updateAircraftSettings({ labelVisibilityDistance: Number(e.target.value) })}
                         />
                         <span>{labelVisibilityDistance} nm</span>
                       </div>
@@ -561,7 +527,7 @@ function ControlsBar() {
                             name="datablockMode"
                             value="full"
                             checked={datablockMode === 'full'}
-                            onChange={() => setDatablockMode('full')}
+                            onChange={() => updateAircraftSettings({ datablockMode: 'full' })}
                           />
                           Full (callsign + type + altitude + speed)
                         </label>
@@ -571,7 +537,7 @@ function ControlsBar() {
                             name="datablockMode"
                             value="airline"
                             checked={datablockMode === 'airline'}
-                            onChange={() => setDatablockMode('airline')}
+                            onChange={() => updateAircraftSettings({ datablockMode: 'airline' })}
                           />
                           Airline Codes Only (ICAO code for airline flights)
                         </label>
@@ -581,7 +547,7 @@ function ControlsBar() {
                             name="datablockMode"
                             value="none"
                             checked={datablockMode === 'none'}
-                            onChange={() => setDatablockMode('none')}
+                            onChange={() => updateAircraftSettings({ datablockMode: 'none' })}
                           />
                           None (hide labels, show cones only)
                         </label>
@@ -600,7 +566,7 @@ function ControlsBar() {
                           max="1000"
                           step="10"
                           value={maxAircraftDisplay}
-                          onChange={(e) => setMaxAircraftDisplay(Number(e.target.value))}
+                          onChange={(e) => updateAircraftSettings({ maxAircraftDisplay: Number(e.target.value) })}
                         />
                         <span>{maxAircraftDisplay}</span>
                       </div>
@@ -612,7 +578,7 @@ function ControlsBar() {
                         <input
                           type="checkbox"
                           checked={showGroundTraffic}
-                          onChange={(e) => setShowGroundTraffic(e.target.checked)}
+                          onChange={(e) => updateAircraftSettings({ showGroundTraffic: e.target.checked })}
                         />
                         Show Ground Traffic
                       </label>
@@ -623,7 +589,7 @@ function ControlsBar() {
                         <input
                           type="checkbox"
                           checked={showAirborneTraffic}
-                          onChange={(e) => setShowAirborneTraffic(e.target.checked)}
+                          onChange={(e) => updateAircraftSettings({ showAirborneTraffic: e.target.checked })}
                         />
                         Show Airborne Traffic
                       </label>
@@ -634,7 +600,7 @@ function ControlsBar() {
                         <input
                           type="checkbox"
                           checked={orientationEmulation}
-                          onChange={(e) => setOrientationEmulation(e.target.checked)}
+                          onChange={(e) => updateAircraftSettings({ orientationEmulation: e.target.checked })}
                         />
                         Emulate Aircraft Pitch/Roll
                       </label>
@@ -653,7 +619,7 @@ function ControlsBar() {
                             max="1.5"
                             step="0.05"
                             value={orientationIntensity}
-                            onChange={(e) => setOrientationIntensity(Number(e.target.value))}
+                            onChange={(e) => updateAircraftSettings({ orientationIntensity: Number(e.target.value) })}
                           />
                           <span>{Math.round(orientationIntensity * 100)}%</span>
                         </div>
@@ -671,7 +637,7 @@ function ControlsBar() {
                         <input
                           type="checkbox"
                           checked={showAircraftPanel}
-                          onChange={(e) => setShowAircraftPanel(e.target.checked)}
+                          onChange={(e) => updateUISettings({ showAircraftPanel: e.target.checked })}
                         />
                         Show Aircraft Panel
                       </label>
@@ -694,7 +660,7 @@ function ControlsBar() {
                           max="5"
                           step="1"
                           value={terrainQuality}
-                          onChange={(e) => setTerrainQuality(Number(e.target.value))}
+                          onChange={(e) => updateCesiumSettings({ terrainQuality: Number(e.target.value) as 1 | 2 | 3 | 4 | 5 })}
                         />
                         <span>{['Low', 'Medium', 'High', 'Very High', 'Ultra'][terrainQuality - 1]}</span>
                       </div>
@@ -708,7 +674,7 @@ function ControlsBar() {
                         <input
                           type="checkbox"
                           checked={show3DBuildings}
-                          onChange={(e) => setShow3DBuildings(e.target.checked)}
+                          onChange={(e) => updateCesiumSettings({ show3DBuildings: e.target.checked })}
                         />
                         Show 3D Buildings (OSM)
                       </label>
@@ -729,7 +695,7 @@ function ControlsBar() {
                             name="timeMode"
                             value="real"
                             checked={timeMode === 'real'}
-                            onChange={() => setTimeMode('real')}
+                            onChange={() => updateCesiumSettings({ timeMode: 'real' })}
                           />
                           Real Time
                         </label>
@@ -739,7 +705,7 @@ function ControlsBar() {
                             name="timeMode"
                             value="fixed"
                             checked={timeMode === 'fixed'}
-                            onChange={() => setTimeMode('fixed')}
+                            onChange={() => updateCesiumSettings({ timeMode: 'fixed' })}
                           />
                           Fixed Time
                         </label>
@@ -756,7 +722,7 @@ function ControlsBar() {
                             max="24"
                             step="0.5"
                             value={fixedTimeHour}
-                            onChange={(e) => setFixedTimeHour(Number(e.target.value))}
+                            onChange={(e) => updateCesiumSettings({ fixedTimeHour: Number(e.target.value) })}
                           />
                           <span>{formatTimeHour(fixedTimeHour)}</span>
                         </div>
@@ -771,7 +737,7 @@ function ControlsBar() {
                         <input
                           type="checkbox"
                           checked={showWeatherEffects}
-                          onChange={(e) => setShowWeatherEffects(e.target.checked)}
+                          onChange={(e) => updateWeatherSettings({ showWeatherEffects: e.target.checked })}
                         />
                         Enable Weather Effects
                       </label>
@@ -787,7 +753,7 @@ function ControlsBar() {
                             <input
                               type="checkbox"
                               checked={showCesiumFog}
-                              onChange={(e) => setShowCesiumFog(e.target.checked)}
+                              onChange={(e) => updateWeatherSettings({ showCesiumFog: e.target.checked })}
                             />
                             Cesium Fog (Distance Fade)
                           </label>
@@ -801,7 +767,7 @@ function ControlsBar() {
                             <input
                               type="checkbox"
                               checked={showBabylonFog}
-                              onChange={(e) => setShowBabylonFog(e.target.checked)}
+                              onChange={(e) => updateWeatherSettings({ showBabylonFog: e.target.checked })}
                             />
                             Babylon Fog (Visual Atmosphere)
                           </label>
@@ -815,7 +781,7 @@ function ControlsBar() {
                             <input
                               type="checkbox"
                               checked={showClouds}
-                              onChange={(e) => setShowClouds(e.target.checked)}
+                              onChange={(e) => updateWeatherSettings({ showClouds: e.target.checked })}
                             />
                             Show Cloud Layers
                           </label>
@@ -830,7 +796,7 @@ function ControlsBar() {
                               max="0.8"
                               step="0.1"
                               value={cloudOpacity}
-                              onChange={(e) => setCloudOpacity(Number(e.target.value))}
+                              onChange={(e) => updateWeatherSettings({ cloudOpacity: Number(e.target.value) })}
                             />
                             <span>{Math.round(cloudOpacity * 100)}%</span>
                           </div>
@@ -845,7 +811,7 @@ function ControlsBar() {
                               max="2.0"
                               step="0.1"
                               value={fogIntensity}
-                              onChange={(e) => setFogIntensity(Number(e.target.value))}
+                              onChange={(e) => updateWeatherSettings({ fogIntensity: Number(e.target.value) })}
                               disabled={!showBabylonFog}
                             />
                             <span>{fogIntensity.toFixed(1)}x</span>
@@ -864,7 +830,7 @@ function ControlsBar() {
                               max="2.0"
                               step="0.1"
                               value={visibilityScale}
-                              onChange={(e) => setVisibilityScale(Number(e.target.value))}
+                              onChange={(e) => updateWeatherSettings({ visibilityScale: Number(e.target.value) })}
                               disabled={!showBabylonFog}
                             />
                             <span>{visibilityScale.toFixed(1)}x</span>
@@ -902,7 +868,7 @@ function ControlsBar() {
                       <label>MSAA Samples</label>
                       <select
                         value={msaaSamples}
-                        onChange={(e) => setMsaaSamples(Number(e.target.value))}
+                        onChange={(e) => updateGraphicsSettings({ msaaSamples: Number(e.target.value) as 1 | 2 | 4 | 8 })}
                         className="select-input"
                       >
                         <option value={1}>1 (Off)</option>
@@ -920,7 +886,7 @@ function ControlsBar() {
                         <input
                           type="checkbox"
                           checked={enableFxaa}
-                          onChange={(e) => setEnableFxaa(e.target.checked)}
+                          onChange={(e) => updateGraphicsSettings({ enableFxaa: e.target.checked })}
                         />
                         FXAA (Fast Approximate Anti-Aliasing)
                       </label>
@@ -934,7 +900,7 @@ function ControlsBar() {
                         <input
                           type="checkbox"
                           checked={enableHdr}
-                          onChange={(e) => setEnableHdr(e.target.checked)}
+                          onChange={(e) => updateGraphicsSettings({ enableHdr: e.target.checked })}
                         />
                         HDR (High Dynamic Range)
                       </label>
@@ -948,7 +914,7 @@ function ControlsBar() {
                         <input
                           type="checkbox"
                           checked={enableLogDepth}
-                          onChange={(e) => setEnableLogDepth(e.target.checked)}
+                          onChange={(e) => updateGraphicsSettings({ enableLogDepth: e.target.checked })}
                         />
                         Logarithmic Depth Buffer
                       </label>
@@ -962,7 +928,7 @@ function ControlsBar() {
                         <input
                           type="checkbox"
                           checked={enableGroundAtmosphere}
-                          onChange={(e) => setEnableGroundAtmosphere(e.target.checked)}
+                          onChange={(e) => updateGraphicsSettings({ enableGroundAtmosphere: e.target.checked })}
                         />
                         Ground Atmosphere
                       </label>
@@ -976,7 +942,7 @@ function ControlsBar() {
                         <input
                           type="checkbox"
                           checked={enableAmbientOcclusion}
-                          onChange={(e) => setEnableAmbientOcclusion(e.target.checked)}
+                          onChange={(e) => updateGraphicsSettings({ enableAmbientOcclusion: e.target.checked })}
                         />
                         Ambient Occlusion (HBAO)
                       </label>
@@ -990,7 +956,7 @@ function ControlsBar() {
                         <input
                           type="checkbox"
                           checked={enableLighting}
-                          onChange={(e) => setEnableLighting(e.target.checked)}
+                          onChange={(e) => updateCesiumSettings({ enableLighting: e.target.checked })}
                         />
                         Globe Lighting
                       </label>
@@ -1004,7 +970,7 @@ function ControlsBar() {
                         <input
                           type="checkbox"
                           checked={enableShadows}
-                          onChange={(e) => setEnableShadows(e.target.checked)}
+                          onChange={(e) => updateGraphicsSettings({ enableShadows: e.target.checked })}
                         />
                         Shadows
                       </label>
@@ -1019,7 +985,7 @@ function ControlsBar() {
                           <label>Shadow Map Size</label>
                           <select
                             value={shadowMapSize}
-                            onChange={(e) => setShadowMapSize(Number(e.target.value))}
+                            onChange={(e) => updateGraphicsSettings({ shadowMapSize: Number(e.target.value) as 1024 | 2048 | 4096 | 8192 })}
                             className="select-input"
                           >
                             <option value={1024}>1024 (Low)</option>
@@ -1042,7 +1008,7 @@ function ControlsBar() {
                               max="20000"
                               step="100"
                               value={shadowMaxDistance}
-                              onChange={(e) => setShadowMaxDistance(Number(e.target.value))}
+                              onChange={(e) => updateGraphicsSettings({ shadowMaxDistance: Number(e.target.value) })}
                             />
                             <span>{shadowMaxDistance}m</span>
                           </div>
@@ -1060,7 +1026,7 @@ function ControlsBar() {
                               max="1"
                               step="0.1"
                               value={shadowDarkness}
-                              onChange={(e) => setShadowDarkness(Number(e.target.value))}
+                              onChange={(e) => updateGraphicsSettings({ shadowDarkness: Number(e.target.value) })}
                             />
                             <span>{(shadowDarkness * 100).toFixed(0)}%</span>
                           </div>
@@ -1074,7 +1040,7 @@ function ControlsBar() {
                             <input
                               type="checkbox"
                               checked={shadowSoftness}
-                              onChange={(e) => setShadowSoftness(e.target.checked)}
+                              onChange={(e) => updateGraphicsSettings({ shadowSoftness: e.target.checked })}
                             />
                             Soft Shadows
                           </label>
@@ -1088,7 +1054,7 @@ function ControlsBar() {
                             <input
                               type="checkbox"
                               checked={shadowFadingEnabled}
-                              onChange={(e) => setShadowFadingEnabled(e.target.checked)}
+                              onChange={(e) => updateGraphicsSettings({ shadowFadingEnabled: e.target.checked })}
                             />
                             Shadow Fading
                           </label>
@@ -1102,7 +1068,7 @@ function ControlsBar() {
                             <input
                               type="checkbox"
                               checked={shadowNormalOffset}
-                              onChange={(e) => setShadowNormalOffset(e.target.checked)}
+                              onChange={(e) => updateGraphicsSettings({ shadowNormalOffset: e.target.checked })}
                             />
                             Normal Offset
                           </label>
@@ -1130,7 +1096,7 @@ function ControlsBar() {
                           max="500"
                           step="50"
                           value={inMemoryTileCacheSize}
-                          onChange={(e) => setInMemoryTileCacheSize(Number(e.target.value))}
+                          onChange={(e) => updateMemorySettings({ inMemoryTileCacheSize: Number(e.target.value) })}
                         />
                         <span>{inMemoryTileCacheSize} tiles</span>
                       </div>
@@ -1148,7 +1114,7 @@ function ControlsBar() {
                           max="10"
                           step="0.1"
                           value={diskCacheSizeGB}
-                          onChange={(e) => setDiskCacheSizeGB(Number(e.target.value))}
+                          onChange={(e) => updateMemorySettings({ diskCacheSizeGB: Number(e.target.value) })}
                         />
                         <span>{diskCacheSizeGB.toFixed(1)} GB</span>
                       </div>
@@ -1169,7 +1135,7 @@ function ControlsBar() {
                           max="500"
                           step="10"
                           value={aircraftDataRadiusNM}
-                          onChange={(e) => setAircraftDataRadiusNM(Number(e.target.value))}
+                          onChange={(e) => updateMemorySettings({ aircraftDataRadiusNM: Number(e.target.value) })}
                         />
                         <span>{aircraftDataRadiusNM} nm</span>
                       </div>

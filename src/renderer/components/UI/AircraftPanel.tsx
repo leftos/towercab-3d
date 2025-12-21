@@ -25,8 +25,8 @@ interface AircraftListItem {
 
 function AircraftPanel() {
   const currentAirport = useAirportStore((state) => state.currentAirport)
-  const showAircraftPanel = useSettingsStore((state) => state.showAircraftPanel)
-  const showWeatherEffects = useSettingsStore((state) => state.showWeatherEffects)
+  const showAircraftPanel = useSettingsStore((state) => state.ui.showAircraftPanel)
+  const showWeatherEffects = useSettingsStore((state) => state.weather.showWeatherEffects)
 
   // Panel filter state from store (affects both list and datablocks)
   const searchQuery = useAircraftFilterStore((state) => state.searchQuery)

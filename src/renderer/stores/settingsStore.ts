@@ -1,279 +1,187 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import type {
+  SettingsStore,
+  CesiumSettings,
+  GraphicsSettings,
+  CameraSettings,
+  WeatherSettings,
+  MemorySettings,
+  AircraftSettings,
+  UISettings
+} from '../types/settings'
+import { DEFAULT_SETTINGS } from '../types/settings'
 
-interface SettingsStore {
-  // Cesium settings
-  cesiumIonToken: string
-
-  // Display settings
-  labelVisibilityDistance: number  // nautical miles
-  maxAircraftDisplay: number
-  showGroundTraffic: boolean
-  showAirborneTraffic: boolean
-  datablockMode: 'full' | 'airline' | 'none'  // full=show all, airline=ICAO only, none=no labels
-
-  // Aircraft orientation emulation
-  orientationEmulation: boolean   // Enable/disable pitch/roll emulation
-  orientationIntensity: number    // 0.25 to 1.5 (1.0 = realistic)
-
-  // Graphics settings
-  terrainQuality: number  // 1-5 scale (1=low, 5=ultra)
-
-  // Camera settings
-  defaultFov: number  // degrees
-  cameraSpeed: number  // 1-10 scale
-  mouseSensitivity: number  // 0.1-2.0 scale (1.0 = default)
-
-  // UI settings
-  theme: 'light' | 'dark'
-  showAircraftPanel: boolean
-
-  // 3D Buildings
-  show3DBuildings: boolean
-
-  // Lighting settings
-  timeMode: 'real' | 'fixed'
-  fixedTimeHour: number  // 0-24, local time at tower
-
-  // Memory management settings
-  inMemoryTileCacheSize: number  // Number of tiles to keep in Cesium's memory (50-500)
-  diskCacheSizeGB: number  // IndexedDB cache size in GB (0.1-10)
-  aircraftDataRadiusNM: number  // Radius for keeping aircraft data in memory (10-500 NM)
-
-  // Weather settings
-  showWeatherEffects: boolean  // Master toggle for weather effects
-  showCesiumFog: boolean       // Show Cesium fog (reduces draw distance)
-  showBabylonFog: boolean      // Show Babylon fog (visual fog atmosphere)
-  showClouds: boolean          // Show cloud layer planes
-  cloudOpacity: number         // Cloud plane opacity (0.3-0.8)
-  fogIntensity: number         // Fog dome opacity multiplier (0.5-2.0)
-  visibilityScale: number      // Fog dome radius multiplier (0.5-2.0)
-
-  // Experimental graphics settings
-  msaaSamples: number          // MSAA samples: 1, 2, 4, 8
-  enableFxaa: boolean          // Fast approximate anti-aliasing
-  enableHdr: boolean           // High dynamic range
-  enableLogDepth: boolean      // Logarithmic depth buffer
-  enableGroundAtmosphere: boolean  // Ground atmosphere effect
-  enableAmbientOcclusion: boolean  // Screen-space ambient occlusion (can cause banding)
-  enableLighting: boolean      // Globe lighting
-  enableShadows: boolean       // Terrain/model shadows
-  shadowMapSize: number        // Shadow map resolution: 1024, 2048, 4096
-  shadowMaxDistance: number    // Maximum shadow distance in meters
-  shadowDarkness: number       // Shadow darkness: 0.0-1.0
-  shadowSoftness: boolean      // Soft shadows vs hard shadows
-  shadowFadingEnabled: boolean // Fade shadows at edge
-  shadowNormalOffset: boolean  // Use normal offset to reduce shadow acne
-
-  // Actions
-  setCesiumIonToken: (token: string) => void
-  setLabelVisibilityDistance: (distance: number) => void
-  setMaxAircraftDisplay: (max: number) => void
-  setShowGroundTraffic: (show: boolean) => void
-  setShowAirborneTraffic: (show: boolean) => void
-  setDatablockMode: (mode: 'full' | 'airline' | 'none') => void
-  setOrientationEmulation: (enabled: boolean) => void
-  setOrientationIntensity: (intensity: number) => void
-  setTerrainQuality: (quality: number) => void
-  setDefaultFov: (fov: number) => void
-  setCameraSpeed: (speed: number) => void
-  setMouseSensitivity: (sensitivity: number) => void
-  setTheme: (theme: 'light' | 'dark') => void
-  setShowAircraftPanel: (show: boolean) => void
-  setShow3DBuildings: (show: boolean) => void
-  setTimeMode: (mode: 'real' | 'fixed') => void
-  setFixedTimeHour: (hour: number) => void
-  setInMemoryTileCacheSize: (size: number) => void
-  setDiskCacheSizeGB: (size: number) => void
-  setAircraftDataRadiusNM: (radius: number) => void
-  setShowWeatherEffects: (show: boolean) => void
-  setShowCesiumFog: (show: boolean) => void
-  setShowBabylonFog: (show: boolean) => void
-  setShowClouds: (show: boolean) => void
-  setCloudOpacity: (opacity: number) => void
-  setFogIntensity: (intensity: number) => void
-  setVisibilityScale: (scale: number) => void
-  setMsaaSamples: (samples: number) => void
-  setEnableFxaa: (enable: boolean) => void
-  setEnableHdr: (enable: boolean) => void
-  setEnableLogDepth: (enable: boolean) => void
-  setEnableGroundAtmosphere: (enable: boolean) => void
-  setEnableAmbientOcclusion: (enable: boolean) => void
-  setEnableLighting: (enable: boolean) => void
-  setEnableShadows: (enable: boolean) => void
-  setShadowMapSize: (size: number) => void
-  setShadowMaxDistance: (distance: number) => void
-  setShadowDarkness: (darkness: number) => void
-  setShadowSoftness: (soft: boolean) => void
-  setShadowFadingEnabled: (enabled: boolean) => void
-  setShadowNormalOffset: (enabled: boolean) => void
-  resetToDefaults: () => void
-  exportSettings: () => string
-  importSettings: (json: string) => boolean
-}
-
-const DEFAULT_SETTINGS = {
-  cesiumIonToken: '',
-  labelVisibilityDistance: 30,  // 30 nm
-  maxAircraftDisplay: 200,
-  showGroundTraffic: true,
-  showAirborneTraffic: true,
-  datablockMode: 'full' as const,  // full=show all, airline=ICAO only, none=no labels
-  orientationEmulation: true,      // Enable pitch/roll emulation by default
-  orientationIntensity: 1.0,       // 1.0 = realistic physics
-  terrainQuality: 3,  // 1=low, 2=medium, 3=high, 4=very high, 5=ultra
-  defaultFov: 60,
-  cameraSpeed: 5,
-  mouseSensitivity: 1.0,
-  theme: 'dark' as const,
-  showAircraftPanel: true,
-  show3DBuildings: false,
-  timeMode: 'real' as const,
-  fixedTimeHour: 12,
-  // Memory management - balanced defaults for smooth panning without OOM
-  inMemoryTileCacheSize: 500,  // Cesium tile cache size (higher = smoother panning, more RAM)
-  diskCacheSizeGB: 2,  // 2GB disk cache for tiles
-  aircraftDataRadiusNM: 100,  // Only keep aircraft data within 100nm of camera
-  // Weather settings
-  showWeatherEffects: true,
-  showCesiumFog: true,
-  showBabylonFog: true,
-  showClouds: true,
-  cloudOpacity: 0.5,
-  fogIntensity: 1.0,      // 1.0 = default, 0.5 = half opacity, 2.0 = double opacity
-  visibilityScale: 1.0,   // 1.0 = match METAR, 2.0 = see twice as far as reported
-  // Experimental graphics settings
-  msaaSamples: 4,         // 1, 2, 4, or 8
-  enableFxaa: true,       // Fast approximate anti-aliasing
-  enableHdr: false,       // High dynamic range (can cause banding)
-  enableLogDepth: true,   // Logarithmic depth buffer
-  enableGroundAtmosphere: true,
-  enableAmbientOcclusion: false, // Disabled by default - can cause visible banding artifacts
-  enableLighting: true,
-  enableShadows: true,
-  shadowMapSize: 2048,    // 1024, 2048, 4096 (reduced from 4096 to balance quality vs performance)
-  shadowMaxDistance: 10000, // meters (increased from 2000 to reduce banding, matches Cesium Sandcastle)
-  shadowDarkness: 0.3,    // 0.0 = no darkening, 1.0 = black
-  shadowSoftness: true,   // soft vs hard shadows (PCF filtering)
-  shadowFadingEnabled: false, // Disabled to reduce banding visibility at cascade boundaries
-  shadowNormalOffset: true  // Reduces shadow acne
-}
-
+/**
+ * Settings store with grouped structure
+ *
+ * Organizes settings into domain-specific groups for better discoverability:
+ * - cesium: Globe, terrain, lighting, time
+ * - graphics: Shadows, anti-aliasing, post-processing
+ * - camera: FOV, speeds, sensitivity
+ * - weather: Fog, clouds, visibility effects
+ * - memory: Caching, data radius
+ * - aircraft: Display modes, orientation emulation
+ * - ui: Theme, panel visibility
+ *
+ * Migration: Old flat localStorage will be auto-converted to grouped structure
+ * on first load. The migration preserves all user settings.
+ *
+ * @example
+ * ```typescript
+ * // Access grouped settings
+ * const { cesium, graphics } = useSettingsStore()
+ * console.log(cesium.terrainQuality)  // 1-5
+ * console.log(graphics.enableShadows)  // boolean
+ *
+ * // Update settings (partial updates supported)
+ * updateCesiumSettings({ terrainQuality: 4, enableLighting: true })
+ * updateGraphicsSettings({ enableShadows: false })
+ * ```
+ */
 export const useSettingsStore = create<SettingsStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       ...DEFAULT_SETTINGS,
 
-      setCesiumIonToken: (token: string) => set({ cesiumIonToken: token }),
+      // ========================================================================
+      // UPDATE FUNCTIONS (Group-based)
+      // ========================================================================
 
-      setLabelVisibilityDistance: (distance: number) =>
-        set({ labelVisibilityDistance: Math.max(1, Math.min(100, distance)) }),
+      updateCesiumSettings: (updates: Partial<CesiumSettings>) =>
+        set((state) => ({
+          cesium: { ...state.cesium, ...updates }
+        })),
 
-      setMaxAircraftDisplay: (max: number) =>
-        set({ maxAircraftDisplay: Math.max(10, Math.min(1000, max)) }),
+      updateGraphicsSettings: (updates: Partial<GraphicsSettings>) =>
+        set((state) => ({
+          graphics: {
+            ...state.graphics,
+            ...updates,
+            // Validate enum values
+            ...(updates.msaaSamples !== undefined && {
+              msaaSamples: [1, 2, 4, 8].includes(updates.msaaSamples)
+                ? updates.msaaSamples
+                : state.graphics.msaaSamples
+            }),
+            ...(updates.shadowMapSize !== undefined && {
+              shadowMapSize: [1024, 2048, 4096, 8192].includes(updates.shadowMapSize)
+                ? updates.shadowMapSize
+                : state.graphics.shadowMapSize
+            }),
+            // Clamp numeric values
+            ...(updates.shadowMaxDistance !== undefined && {
+              shadowMaxDistance: Math.max(100, Math.min(20000, updates.shadowMaxDistance))
+            }),
+            ...(updates.shadowDarkness !== undefined && {
+              shadowDarkness: Math.max(0, Math.min(1, updates.shadowDarkness))
+            })
+          }
+        })),
 
-      setShowGroundTraffic: (show: boolean) => set({ showGroundTraffic: show }),
+      updateCameraSettings: (updates: Partial<CameraSettings>) =>
+        set((state) => ({
+          camera: {
+            ...state.camera,
+            ...updates,
+            // Clamp numeric values
+            ...(updates.defaultFov !== undefined && {
+              defaultFov: Math.max(10, Math.min(120, updates.defaultFov))
+            }),
+            ...(updates.cameraSpeed !== undefined && {
+              cameraSpeed: Math.max(1, Math.min(10, updates.cameraSpeed))
+            }),
+            ...(updates.mouseSensitivity !== undefined && {
+              mouseSensitivity: Math.max(0.1, Math.min(2.0, updates.mouseSensitivity))
+            })
+          }
+        })),
 
-      setShowAirborneTraffic: (show: boolean) => set({ showAirborneTraffic: show }),
+      updateWeatherSettings: (updates: Partial<WeatherSettings>) =>
+        set((state) => ({
+          weather: {
+            ...state.weather,
+            ...updates,
+            // Clamp numeric values
+            ...(updates.cloudOpacity !== undefined && {
+              cloudOpacity: Math.max(0.3, Math.min(0.8, updates.cloudOpacity))
+            }),
+            ...(updates.fogIntensity !== undefined && {
+              fogIntensity: Math.max(0.5, Math.min(2.0, updates.fogIntensity))
+            }),
+            ...(updates.visibilityScale !== undefined && {
+              visibilityScale: Math.max(0.5, Math.min(2.0, updates.visibilityScale))
+            })
+          }
+        })),
 
-      setDatablockMode: (mode: 'full' | 'airline' | 'none') => set({ datablockMode: mode }),
+      updateMemorySettings: (updates: Partial<MemorySettings>) =>
+        set((state) => ({
+          memory: {
+            ...state.memory,
+            ...updates,
+            // Clamp numeric values
+            ...(updates.inMemoryTileCacheSize !== undefined && {
+              inMemoryTileCacheSize: Math.max(
+                50,
+                Math.min(500, Math.round(updates.inMemoryTileCacheSize))
+              )
+            }),
+            ...(updates.diskCacheSizeGB !== undefined && {
+              diskCacheSizeGB: Math.max(0.1, Math.min(10, updates.diskCacheSizeGB))
+            }),
+            ...(updates.aircraftDataRadiusNM !== undefined && {
+              aircraftDataRadiusNM: Math.max(
+                10,
+                Math.min(500, Math.round(updates.aircraftDataRadiusNM))
+              )
+            })
+          }
+        })),
 
-      setOrientationEmulation: (enabled: boolean) => set({ orientationEmulation: enabled }),
+      updateAircraftSettings: (updates: Partial<AircraftSettings>) =>
+        set((state) => ({
+          aircraft: {
+            ...state.aircraft,
+            ...updates,
+            // Clamp numeric values
+            ...(updates.labelVisibilityDistance !== undefined && {
+              labelVisibilityDistance: Math.max(1, Math.min(100, updates.labelVisibilityDistance))
+            }),
+            ...(updates.maxAircraftDisplay !== undefined && {
+              maxAircraftDisplay: Math.max(10, Math.min(1000, updates.maxAircraftDisplay))
+            }),
+            ...(updates.orientationIntensity !== undefined && {
+              orientationIntensity: Math.max(0.25, Math.min(1.5, updates.orientationIntensity))
+            })
+          }
+        })),
 
-      setOrientationIntensity: (intensity: number) =>
-        set({ orientationIntensity: Math.max(0.25, Math.min(1.5, intensity)) }),
+      updateUISettings: (updates: Partial<UISettings>) =>
+        set((state) => ({
+          ui: { ...state.ui, ...updates }
+        })),
 
-      setTerrainQuality: (quality: number) =>
-        set({ terrainQuality: Math.max(1, Math.min(5, Math.round(quality))) }),
-
-      setDefaultFov: (fov: number) =>
-        set({ defaultFov: Math.max(10, Math.min(120, fov)) }),
-
-      setCameraSpeed: (speed: number) =>
-        set({ cameraSpeed: Math.max(1, Math.min(10, speed)) }),
-
-      setMouseSensitivity: (sensitivity: number) =>
-        set({ mouseSensitivity: Math.max(0.1, Math.min(2.0, sensitivity)) }),
-
-      setTheme: (theme: 'light' | 'dark') => set({ theme }),
-
-      setShowAircraftPanel: (show: boolean) => set({ showAircraftPanel: show }),
-
-      setShow3DBuildings: (show: boolean) => set({ show3DBuildings: show }),
-
-      setTimeMode: (mode: 'real' | 'fixed') => set({ timeMode: mode }),
-
-      setFixedTimeHour: (hour: number) =>
-        set({ fixedTimeHour: Math.max(0, Math.min(24, hour)) }),
-
-      setInMemoryTileCacheSize: (size: number) =>
-        set({ inMemoryTileCacheSize: Math.max(50, Math.min(500, Math.round(size))) }),
-
-      setDiskCacheSizeGB: (size: number) =>
-        set({ diskCacheSizeGB: Math.max(0.1, Math.min(10, size)) }),
-
-      setAircraftDataRadiusNM: (radius: number) =>
-        set({ aircraftDataRadiusNM: Math.max(10, Math.min(500, Math.round(radius))) }),
-
-      setShowWeatherEffects: (show: boolean) => set({ showWeatherEffects: show }),
-
-      setShowCesiumFog: (show: boolean) => set({ showCesiumFog: show }),
-
-      setShowBabylonFog: (show: boolean) => set({ showBabylonFog: show }),
-
-      setShowClouds: (show: boolean) => set({ showClouds: show }),
-
-      setCloudOpacity: (opacity: number) =>
-        set({ cloudOpacity: Math.max(0.3, Math.min(0.8, opacity)) }),
-
-      setFogIntensity: (intensity: number) =>
-        set({ fogIntensity: Math.max(0.5, Math.min(2.0, intensity)) }),
-
-      setVisibilityScale: (scale: number) =>
-        set({ visibilityScale: Math.max(0.5, Math.min(2.0, scale)) }),
-
-      setMsaaSamples: (samples: number) =>
-        set({ msaaSamples: [1, 2, 4, 8].includes(samples) ? samples : 4 }),
-
-      setEnableFxaa: (enable: boolean) => set({ enableFxaa: enable }),
-
-      setEnableHdr: (enable: boolean) => set({ enableHdr: enable }),
-
-      setEnableLogDepth: (enable: boolean) => set({ enableLogDepth: enable }),
-
-      setEnableGroundAtmosphere: (enable: boolean) => set({ enableGroundAtmosphere: enable }),
-
-      setEnableAmbientOcclusion: (enable: boolean) => set({ enableAmbientOcclusion: enable }),
-
-      setEnableLighting: (enable: boolean) => set({ enableLighting: enable }),
-
-      setEnableShadows: (enable: boolean) => set({ enableShadows: enable }),
-
-      setShadowMapSize: (size: number) =>
-        set({ shadowMapSize: [1024, 2048, 4096, 8192].includes(size) ? size : 2048 }),
-
-      setShadowMaxDistance: (distance: number) =>
-        set({ shadowMaxDistance: Math.max(100, Math.min(20000, distance)) }),
-
-      setShadowDarkness: (darkness: number) =>
-        set({ shadowDarkness: Math.max(0, Math.min(1, darkness)) }),
-
-      setShadowSoftness: (soft: boolean) => set({ shadowSoftness: soft }),
-
-      setShadowFadingEnabled: (enabled: boolean) => set({ shadowFadingEnabled: enabled }),
-
-      setShadowNormalOffset: (enabled: boolean) => set({ shadowNormalOffset: enabled }),
+      // ========================================================================
+      // RESET TO DEFAULTS
+      // ========================================================================
 
       resetToDefaults: () => set(DEFAULT_SETTINGS),
 
+      // ========================================================================
+      // EXPORT / IMPORT
+      // ========================================================================
+
       exportSettings: () => {
-        // Get current state, excluding action functions
-        const state = useSettingsStore.getState()
-        const settings: Record<string, unknown> = {}
-        for (const key in state) {
-          if (typeof state[key as keyof SettingsStore] !== 'function') {
-            settings[key] = state[key as keyof SettingsStore]
-          }
+        const state = get()
+        const settings = {
+          cesium: state.cesium,
+          graphics: state.graphics,
+          camera: state.camera,
+          weather: state.weather,
+          memory: state.memory,
+          aircraft: state.aircraft,
+          ui: state.ui
         }
         return JSON.stringify(settings, null, 2)
       },
@@ -281,20 +189,45 @@ export const useSettingsStore = create<SettingsStore>()(
       importSettings: (json: string) => {
         try {
           const imported = JSON.parse(json)
+
           // Validate it's an object
           if (typeof imported !== 'object' || imported === null) {
             return false
           }
-          // Only import known settings keys (filter out functions and unknown keys)
-          const validKeys = Object.keys(DEFAULT_SETTINGS)
-          const validSettings: Partial<typeof DEFAULT_SETTINGS> = {}
-          for (const key of validKeys) {
-            if (key in imported) {
-              validSettings[key as keyof typeof DEFAULT_SETTINGS] = imported[key]
-            }
+
+          // If it's the old flat structure, migrate it
+          if ('cesiumIonToken' in imported && !('cesium' in imported)) {
+            const migrated = migrateOldSettings(imported)
+            set(migrated)
+            return true
           }
-          // Apply imported settings
-          set(validSettings)
+
+          // New grouped structure - validate and apply
+          const updates: Partial<typeof DEFAULT_SETTINGS> = {}
+
+          if (imported.cesium && typeof imported.cesium === 'object') {
+            updates.cesium = { ...DEFAULT_SETTINGS.cesium, ...imported.cesium }
+          }
+          if (imported.graphics && typeof imported.graphics === 'object') {
+            updates.graphics = { ...DEFAULT_SETTINGS.graphics, ...imported.graphics }
+          }
+          if (imported.camera && typeof imported.camera === 'object') {
+            updates.camera = { ...DEFAULT_SETTINGS.camera, ...imported.camera }
+          }
+          if (imported.weather && typeof imported.weather === 'object') {
+            updates.weather = { ...DEFAULT_SETTINGS.weather, ...imported.weather }
+          }
+          if (imported.memory && typeof imported.memory === 'object') {
+            updates.memory = { ...DEFAULT_SETTINGS.memory, ...imported.memory }
+          }
+          if (imported.aircraft && typeof imported.aircraft === 'object') {
+            updates.aircraft = { ...DEFAULT_SETTINGS.aircraft, ...imported.aircraft }
+          }
+          if (imported.ui && typeof imported.ui === 'object') {
+            updates.ui = { ...DEFAULT_SETTINGS.ui, ...imported.ui }
+          }
+
+          set(updates)
           return true
         } catch {
           return false
@@ -302,7 +235,100 @@ export const useSettingsStore = create<SettingsStore>()(
       }
     }),
     {
-      name: 'settings-store'
+      name: 'settings-store',
+      version: 2, // Incremented for migration
+      migrate: (persistedState: unknown, version: number) => {
+        // Auto-migrate old flat structure to grouped structure
+        if (version < 2) {
+          console.log('[Settings] Migrating from flat structure (v1) to grouped structure (v2)')
+          return migrateOldSettings(persistedState)
+        }
+        return persistedState as SettingsStore
+      }
     }
   )
 )
+
+/**
+ * Migrate old flat settings structure to new grouped structure
+ *
+ * Preserves all user settings during migration from v1 (flat) to v2 (grouped).
+ * This function is called automatically on first load after upgrading.
+ *
+ * @param oldSettings - Old flat settings object from localStorage
+ * @returns New grouped settings object
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
+  return {
+    cesium: {
+      cesiumIonToken: oldSettings.cesiumIonToken ?? DEFAULT_SETTINGS.cesium.cesiumIonToken,
+      terrainQuality: oldSettings.terrainQuality ?? DEFAULT_SETTINGS.cesium.terrainQuality,
+      enableLighting: oldSettings.enableLighting ?? DEFAULT_SETTINGS.cesium.enableLighting,
+      show3DBuildings: oldSettings.show3DBuildings ?? DEFAULT_SETTINGS.cesium.show3DBuildings,
+      timeMode: oldSettings.timeMode ?? DEFAULT_SETTINGS.cesium.timeMode,
+      fixedTimeHour: oldSettings.fixedTimeHour ?? DEFAULT_SETTINGS.cesium.fixedTimeHour
+    },
+    graphics: {
+      msaaSamples: oldSettings.msaaSamples ?? DEFAULT_SETTINGS.graphics.msaaSamples,
+      enableFxaa: oldSettings.enableFxaa ?? DEFAULT_SETTINGS.graphics.enableFxaa,
+      enableHdr: oldSettings.enableHdr ?? DEFAULT_SETTINGS.graphics.enableHdr,
+      enableLogDepth: oldSettings.enableLogDepth ?? DEFAULT_SETTINGS.graphics.enableLogDepth,
+      enableGroundAtmosphere:
+        oldSettings.enableGroundAtmosphere ?? DEFAULT_SETTINGS.graphics.enableGroundAtmosphere,
+      enableAmbientOcclusion:
+        oldSettings.enableAmbientOcclusion ?? DEFAULT_SETTINGS.graphics.enableAmbientOcclusion,
+      enableShadows: oldSettings.enableShadows ?? DEFAULT_SETTINGS.graphics.enableShadows,
+      shadowMapSize: oldSettings.shadowMapSize ?? DEFAULT_SETTINGS.graphics.shadowMapSize,
+      shadowMaxDistance:
+        oldSettings.shadowMaxDistance ?? DEFAULT_SETTINGS.graphics.shadowMaxDistance,
+      shadowDarkness: oldSettings.shadowDarkness ?? DEFAULT_SETTINGS.graphics.shadowDarkness,
+      shadowSoftness: oldSettings.shadowSoftness ?? DEFAULT_SETTINGS.graphics.shadowSoftness,
+      shadowFadingEnabled:
+        oldSettings.shadowFadingEnabled ?? DEFAULT_SETTINGS.graphics.shadowFadingEnabled,
+      shadowNormalOffset:
+        oldSettings.shadowNormalOffset ?? DEFAULT_SETTINGS.graphics.shadowNormalOffset
+    },
+    camera: {
+      defaultFov: oldSettings.defaultFov ?? DEFAULT_SETTINGS.camera.defaultFov,
+      cameraSpeed: oldSettings.cameraSpeed ?? DEFAULT_SETTINGS.camera.cameraSpeed,
+      mouseSensitivity: oldSettings.mouseSensitivity ?? DEFAULT_SETTINGS.camera.mouseSensitivity
+    },
+    weather: {
+      showWeatherEffects:
+        oldSettings.showWeatherEffects ?? DEFAULT_SETTINGS.weather.showWeatherEffects,
+      showCesiumFog: oldSettings.showCesiumFog ?? DEFAULT_SETTINGS.weather.showCesiumFog,
+      showBabylonFog: oldSettings.showBabylonFog ?? DEFAULT_SETTINGS.weather.showBabylonFog,
+      showClouds: oldSettings.showClouds ?? DEFAULT_SETTINGS.weather.showClouds,
+      cloudOpacity: oldSettings.cloudOpacity ?? DEFAULT_SETTINGS.weather.cloudOpacity,
+      fogIntensity: oldSettings.fogIntensity ?? DEFAULT_SETTINGS.weather.fogIntensity,
+      visibilityScale: oldSettings.visibilityScale ?? DEFAULT_SETTINGS.weather.visibilityScale
+    },
+    memory: {
+      inMemoryTileCacheSize:
+        oldSettings.inMemoryTileCacheSize ?? DEFAULT_SETTINGS.memory.inMemoryTileCacheSize,
+      diskCacheSizeGB: oldSettings.diskCacheSizeGB ?? DEFAULT_SETTINGS.memory.diskCacheSizeGB,
+      aircraftDataRadiusNM:
+        oldSettings.aircraftDataRadiusNM ?? DEFAULT_SETTINGS.memory.aircraftDataRadiusNM
+    },
+    aircraft: {
+      labelVisibilityDistance:
+        oldSettings.labelVisibilityDistance ?? DEFAULT_SETTINGS.aircraft.labelVisibilityDistance,
+      maxAircraftDisplay:
+        oldSettings.maxAircraftDisplay ?? DEFAULT_SETTINGS.aircraft.maxAircraftDisplay,
+      showGroundTraffic:
+        oldSettings.showGroundTraffic ?? DEFAULT_SETTINGS.aircraft.showGroundTraffic,
+      showAirborneTraffic:
+        oldSettings.showAirborneTraffic ?? DEFAULT_SETTINGS.aircraft.showAirborneTraffic,
+      datablockMode: oldSettings.datablockMode ?? DEFAULT_SETTINGS.aircraft.datablockMode,
+      orientationEmulation:
+        oldSettings.orientationEmulation ?? DEFAULT_SETTINGS.aircraft.orientationEmulation,
+      orientationIntensity:
+        oldSettings.orientationIntensity ?? DEFAULT_SETTINGS.aircraft.orientationIntensity
+    },
+    ui: {
+      theme: oldSettings.theme ?? DEFAULT_SETTINGS.ui.theme,
+      showAircraftPanel: oldSettings.showAircraftPanel ?? DEFAULT_SETTINGS.ui.showAircraftPanel
+    }
+  }
+}
