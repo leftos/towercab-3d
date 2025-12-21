@@ -9,8 +9,8 @@ out/
 build/
 *.local
 
-# Electron build outputs
-release/
+# Tauri build outputs
+src-tauri/target/
 
 # Logs
 logs

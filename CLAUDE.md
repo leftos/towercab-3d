@@ -4,19 +4,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-TowerCab 3D is an Electron desktop application that provides a 3D tower cab view for VATSIM air traffic controllers. It displays real-time aircraft positions on a 3D globe with satellite imagery and terrain, featuring smooth camera controls, aircraft following modes, and extensive customization options.
+TowerCab 3D is a Tauri 2 desktop application that provides a 3D tower cab view for VATSIM air traffic controllers. It displays real-time aircraft positions on a 3D globe with satellite imagery and terrain, featuring smooth camera controls, aircraft following modes, and extensive customization options.
 
 ## Development Commands
 
 ```bash
 npm install        # Install dependencies
-npm run dev        # Start development mode with hot reload
-npm run build      # Build for production (outputs to out/)
-npm run preview    # Preview production build
-npm run dist       # Build and package for Windows (outputs to dist/)
+npm run dev        # Start development mode with hot reload (Tauri desktop app)
+npm run serve      # Run in browser mode (opens http://localhost:5173 in default browser)
+npm run build      # Build for production (outputs Windows installer to src-tauri/target/release/bundle/)
+npm run vite:dev   # Frontend only (internal, used by Tauri)
+npm run vite:build # Build frontend only (internal, used by Tauri)
 ```
 
-**Note for Claude:** Only the user can run `npm run dev` and `npm run preview` as these launch the Electron app with a GUI. Ask the user to run these commands and report back any errors.
+**Note for Claude:** Only the user can run `npm run dev` as it launches the Tauri app with a GUI. Ask the user to run this command and report back any errors.
 
 **Important:** Always run ESLint before committing changes:
 
@@ -38,11 +39,10 @@ The application uses two 3D rendering engines simultaneously:
 
 The `useBabylonOverlay` hook synchronizes the Babylon.js camera with Cesium's camera each frame using ENU (East-North-Up) coordinate transformations. Aircraft positions are converted from geographic coordinates (lat/lon/alt) to Babylon's local coordinate system relative to a root node positioned at the tower location.
 
-### Process Architecture (Electron)
+### Process Architecture (Tauri)
 
-- **Main process** (`src/main/`): Window management, uses `@electron-toolkit/utils`
-- **Preload** (`src/preload/`): Context bridge with electronAPI exposure
-- **Renderer** (`src/renderer/`): React 19 application with Cesium/Babylon visualization
+- **Rust backend** (`src-tauri/`): Window management, native OS integration via Tauri 2
+- **Frontend** (`src/renderer/`): React 19 application with Cesium/Babylon visualization
 
 ### State Management (Zustand)
 
@@ -102,7 +102,7 @@ Eight stores manage application state:
 
 ## Path Alias
 
-`@/` maps to `src/renderer/` (configured in electron.vite.config.ts)
+`@/` maps to `src/renderer/` (configured in vite.config.ts)
 
 ## External Dependencies
 
@@ -195,11 +195,11 @@ See MODDING.md for manifest format and model requirements. Models are loaded on 
 
 ## Build Configuration
 
-- **Vite**: Build tool with electron-vite plugin
+- **Tauri 2**: Native desktop wrapper with Rust backend
+- **Vite 7**: Frontend build tool
 - **TypeScript**: Strict mode with path aliases
 - **React 19**: Latest React with concurrent features
-- **Cesium Build Plugin**: `vite-plugin-cesium-build` for Cesium asset handling
-- **Static Copy**: Cesium workers copied to output
+- **vite-plugin-static-copy**: Cesium assets copied to output
 
 ## Common Development Tasks
 

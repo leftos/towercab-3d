@@ -63,9 +63,9 @@ A 3D tower cab view application for VATSIM air traffic controllers. View real-ti
 
 ## Requirements
 
-- Windows 10/11 (64-bit)
+- Windows 10/11 (64-bit), macOS 10.13+, or Linux
 - Cesium Ion account (free tier) for terrain and imagery
-- Node.js 18+ (only for development)
+- Node.js 18+ and Rust toolchain (only for development)
 
 ## Quick Start
 
@@ -146,25 +146,23 @@ Save and restore camera positions quickly:
 
 ## Building for Production
 
-### Development Build
+### Development Build (Frontend Only)
+```bash
+npm run vite:build
+```
+
+### Full Application Build (Windows Installer)
 ```bash
 npm run build
 ```
 
-### Windows Installer
-```bash
-npm run dist
-```
-
-The installer will be created in the `dist/` folder. This is the same installer distributed via [GitHub Releases](https://github.com/leftos/towercab-3d/releases).
+The installer will be created in the `src-tauri/target/release/bundle/` folder. This is the same installer distributed via [GitHub Releases](https://github.com/leftos/towercab-3d/releases).
 
 ## Project Structure
 
 ```
 towercab-3d/
 ├── src/
-│   ├── main/           # Electron main process
-│   ├── preload/        # Preload scripts (context bridge)
 │   └── renderer/       # React frontend
 │       ├── components/ # React UI components
 │       ├── hooks/      # Custom React hooks
@@ -172,6 +170,10 @@ towercab-3d/
 │       ├── stores/     # Zustand state stores
 │       ├── types/      # TypeScript type definitions
 │       └── utils/      # Utility functions
+├── src-tauri/          # Tauri Rust backend
+│   ├── src/            # Rust source code
+│   ├── icons/          # Application icons
+│   └── tauri.conf.json # Tauri configuration
 ├── resources/          # Static assets (icons, etc.)
 └── mods/               # Custom models directory
     ├── aircraft/       # Aircraft model mods
@@ -182,7 +184,7 @@ towercab-3d/
 
 | Technology | Purpose |
 |------------|---------|
-| **Electron 39** | Desktop application framework |
+| **Tauri 2** | Desktop application framework (Rust backend, WebView2 frontend) |
 | **React 19** | UI framework |
 | **TypeScript 5** | Type-safe development |
 | **CesiumJS 1.136** | 3D globe rendering |
@@ -274,9 +276,22 @@ Settings are organized into tabs: General, Display, Graphics, Performance, and H
 - Disable 3D buildings
 - Close other GPU-intensive applications
 
+## CI/CD
+
+This project uses GitHub Actions for continuous integration and releases:
+
+- **Build workflow**: Runs on every push and PR to `main` - builds the app and runs ESLint
+- **Release workflow**: Triggered by version tags (e.g., `v0.0.4`) - creates GitHub releases with installers
+
+To create a new release:
+```bash
+git tag v0.0.4
+git push origin v0.0.4
+```
+
 ## License
 
-MIT License - See [LICENSE](LICENSE) file for details.
+GPL-2.0 License - See [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 

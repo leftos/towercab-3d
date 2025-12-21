@@ -1,6 +1,6 @@
 import { resolve, join } from 'node:path'
 import { createReadStream, existsSync } from 'node:fs'
-import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
+import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { viteStaticCopy } from 'vite-plugin-static-copy'
 import type { Plugin } from 'vite'
@@ -35,51 +35,54 @@ function serveCesiumDev(): Plugin {
   }
 }
 
+// https://vitejs.dev/config/
 export default defineConfig({
-  main: {
-    plugins: [externalizeDepsPlugin()]
+  base: './',
+  publicDir: resolve('src/renderer/public'),
+  root: resolve('src/renderer'),
+
+  define: {
+    CESIUM_BASE_URL: JSON.stringify(`./${cesiumBaseUrl}`)
   },
-  preload: {
-    plugins: [externalizeDepsPlugin()]
+
+  resolve: {
+    alias: {
+      '@': resolve('src/renderer')
+    }
   },
-  renderer: {
-    base: './',
-    publicDir: resolve('src/renderer/public'),
-    define: {
-      CESIUM_BASE_URL: JSON.stringify(`./${cesiumBaseUrl}`)
-    },
-    resolve: {
-      alias: {
-        '@': resolve('src/renderer')
-      }
-    },
-    build: {
-      // Production optimizations
-      minify: 'esbuild',
-      target: 'esnext',
-      sourcemap: false,
-      rollupOptions: {
-        output: {
-          // Split chunks for better caching
-          manualChunks: {
-            'cesium': ['cesium'],
-            'babylon': ['@babylonjs/core', '@babylonjs/loaders', '@babylonjs/gui'],
-            'react-vendor': ['react', 'react-dom']
-          }
+
+  build: {
+    outDir: resolve('dist'),
+    emptyOutDir: true,
+    minify: 'esbuild',
+    target: 'esnext',
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'cesium': ['cesium'],
+          'babylon': ['@babylonjs/core', '@babylonjs/loaders', '@babylonjs/gui'],
+          'react-vendor': ['react', 'react-dom']
         }
       }
-    },
-    plugins: [
-      react(),
-      serveCesiumDev(),
-      viteStaticCopy({
-        targets: [
-          { src: '../../node_modules/cesium/Build/Cesium/ThirdParty', dest: cesiumBaseUrl },
-          { src: '../../node_modules/cesium/Build/Cesium/Workers', dest: cesiumBaseUrl },
-          { src: '../../node_modules/cesium/Build/Cesium/Assets', dest: cesiumBaseUrl },
-          { src: '../../node_modules/cesium/Build/Cesium/Widgets', dest: cesiumBaseUrl }
-        ]
-      })
-    ]
-  }
+    }
+  },
+
+  server: {
+    port: 5173,
+    strictPort: true
+  },
+
+  plugins: [
+    react(),
+    serveCesiumDev(),
+    viteStaticCopy({
+      targets: [
+        { src: 'node_modules/cesium/Build/Cesium/ThirdParty/**/*', dest: `${cesiumBaseUrl}/ThirdParty` },
+        { src: 'node_modules/cesium/Build/Cesium/Workers/**/*', dest: `${cesiumBaseUrl}/Workers` },
+        { src: 'node_modules/cesium/Build/Cesium/Assets/**/*', dest: `${cesiumBaseUrl}/Assets` },
+        { src: 'node_modules/cesium/Build/Cesium/Widgets/**/*', dest: `${cesiumBaseUrl}/Widgets` }
+      ]
+    })
+  ]
 })

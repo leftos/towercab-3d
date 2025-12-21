@@ -88,11 +88,11 @@ export function useDragResize({
   // Update position/size when props change (e.g., from store)
   useEffect(() => {
     setPosition(initialPosition)
-  }, [initialPosition.x, initialPosition.y])
+  }, [initialPosition])
 
   useEffect(() => {
     setSize(initialSize)
-  }, [initialSize.width, initialSize.height])
+  }, [initialSize])
 
   // Get container dimensions for converting between pixels and normalized values
   const getContainerRect = useCallback(() => {

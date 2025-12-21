@@ -267,6 +267,34 @@
   color: rgba(255, 255, 255, 0.3);
 }
 
+.select-input {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: white;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23999' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+}
+
+.select-input:focus {
+  border-color: #4fc3f7;
+}
+
+.select-input option {
+  background: #1e1e28;
+  color: white;
+}
+
 .setting-hint {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.4);
@@ -416,4 +444,15 @@
 .follow-hint {
   font-size: 11px;
   color: rgba(255, 255, 255, 0.5);
+}
+
+/* Import/Export buttons */
+.import-export-buttons {
+  display: flex;
+  gap: 12px;
+}
+
+.import-export-buttons .control-button {
+  flex: 1;
+  justify-content: center;
 }

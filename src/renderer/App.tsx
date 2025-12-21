@@ -17,6 +17,7 @@ import { useCameraStore } from './stores/cameraStore'
 import { useVRStore } from './stores/vrStore'
 import { airportService } from './services/AirportService'
 import { aircraftDimensionsService } from './services/AircraftDimensionsService'
+import { migrateFromElectron, isMigrationComplete } from './services/MigrationService'
 
 function App() {
   const startPolling = useVatsimStore((state) => state.startPolling)
@@ -48,6 +49,15 @@ function App() {
   useEffect(() => {
     async function initialize() {
       try {
+        // Migrate settings from Electron version (one-time, on first launch)
+        if (!isMigrationComplete()) {
+          setLoadingStatus('Checking for previous installation...')
+          const migrationResult = await migrateFromElectron()
+          if (migrationResult.settingsFound) {
+            console.log('Migrated settings from Electron version')
+          }
+        }
+
         // Set Cesium Ion access token
         if (cesiumIonToken) {
           Ion.defaultAccessToken = cesiumIonToken

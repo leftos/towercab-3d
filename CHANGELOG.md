@@ -2,6 +2,33 @@
 
 All notable changes to TowerCab 3D will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- Browser mode: run `npm run serve` to launch the app in your default browser instead of as a desktop application (mods not supported in browser mode)
+- Experimental Graphics settings in Settings modal:
+  - MSAA samples (1x, 2x, 4x, 8x)
+  - FXAA toggle
+  - HDR toggle
+  - Logarithmic depth buffer toggle
+  - Ground atmosphere toggle
+  - Globe lighting toggle
+  - Shadow settings: enable/disable, map resolution (1K-8K), cascades, max distance, darkness, softness
+- Automatic settings migration from previous Electron version on first launch
+- Comprehensive Export/Import in Settings modal:
+  - Exports global settings, per-airport camera bookmarks, default views, and viewport layouts
+  - Import wizard lets you select which airports and settings to import
+  - Merge or replace modes for combining with existing data
+- GitHub Actions CI/CD for automated builds and releases
+
+### Changed
+- Migrated from Electron to Tauri 2 for smaller bundle size and better performance
+- Application now uses native WebView2 on Windows instead of bundled Chromium
+
+### Fixed
+- Graphics settings now apply immediately without requiring app restart
+- Changing MSAA samples no longer causes crash
+
 ## v0.0.3-alpha
 
 ### Added

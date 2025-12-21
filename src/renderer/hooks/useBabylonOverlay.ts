@@ -466,7 +466,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     const viewer = cesiumViewer
     const camera = cameraRef.current
 
-    if (!viewer || !camera) return
+    if (!viewer || viewer.isDestroyed() || !camera) return
 
     camera.rotationQuaternion = null
 
@@ -512,7 +512,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     const camera = cameraRef.current
     const fixedToEnu = fixedToEnuMatrixRef.current
 
-    if (!viewer || !camera || !fixedToEnu) return false
+    if (!viewer || viewer.isDestroyed() || !camera || !fixedToEnu) return false
 
     // Clear any quaternion so Euler angles work
     camera.rotationQuaternion = null
@@ -547,7 +547,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
   // Main sync camera function - dispatches to 2D or 3D based on view
   const syncCamera = useCallback(() => {
     const viewer = cesiumViewer
-    if (!viewer) return
+    if (!viewer || viewer.isDestroyed()) return
 
     // Check if we're in topdown view by looking at the camera pitch
     // Cesium pitch: -PI/2 = looking straight down

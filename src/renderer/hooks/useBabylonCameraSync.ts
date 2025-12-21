@@ -74,7 +74,7 @@ export function useBabylonCameraSync({
 
   // Sync Babylon camera for 2D topdown view
   const syncCamera2D = useCallback(() => {
-    if (!cesiumViewer || !camera) return
+    if (!cesiumViewer || cesiumViewer.isDestroyed() || !camera) return
 
     camera.rotationQuaternion = null
     isTopDownModeRef.current = true
@@ -113,7 +113,7 @@ export function useBabylonCameraSync({
   // Sync Babylon camera for 3D view
   const syncCamera3D = useCallback((): boolean => {
     const fixedToEnu = enuDataRef.current?.fixedToEnu
-    if (!cesiumViewer || !camera || !fixedToEnu) return false
+    if (!cesiumViewer || cesiumViewer.isDestroyed() || !camera || !fixedToEnu) return false
 
     // Clear any quaternion so Euler angles work
     camera.rotationQuaternion = null
@@ -142,7 +142,7 @@ export function useBabylonCameraSync({
 
   // Main sync camera function - dispatches to 2D or 3D based on view
   const syncCamera = useCallback(() => {
-    if (!cesiumViewer) return
+    if (!cesiumViewer || cesiumViewer.isDestroyed()) return
 
     // Check if we're in topdown view by looking at the camera pitch
     // Cesium pitch: -PI/2 = looking straight down

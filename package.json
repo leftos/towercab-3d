@@ -2,89 +2,53 @@
   "name": "towercab-3d",
   "version": "0.0.3",
   "description": "3D Tower Cab View for VATSIM Controllers",
-  "main": "./out/main/index.js",
+  "type": "module",
   "scripts": {
-    "dev": "electron-vite dev",
-    "build": "electron-vite build",
-    "preview": "electron-vite preview",
-    "start": "electron-vite preview",
-    "postinstall": "electron-builder install-app-deps",
-    "dist": "npm run build && electron-builder --win"
+    "serve": "vite --open",
+    "vite:dev": "vite",
+    "vite:build": "vite build",
+    "vite:preview": "vite preview",
+    "dev": "tauri dev",
+    "build": "tauri build"
   },
   "keywords": [
     "vatsim",
     "atc",
     "tower",
     "cesium",
-    "electron"
+    "tauri"
   ],
   "author": "",
-  "license": "MIT",
+  "license": "GPL-2.0",
   "devDependencies": {
     "@eslint/js": "^9.39.2",
+    "@tauri-apps/cli": "^2.9.6",
     "@types/node": "^25.0.3",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
-    "@types/serve-static": "^2.2.0",
     "@vitejs/plugin-react": "^5.1.2",
-    "electron": "^39.2.7",
-    "electron-builder": "^25.1.8",
-    "electron-vite": "^5.0.0",
     "eslint": "^9.39.2",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.0.1",
     "globals": "^16.5.0",
     "jiti": "^2.6.1",
+    "sharp": "^0.34.5",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.50.0",
     "vite": "^7.3.0",
-    "vite-plugin-cesium-build": "^0.7.2",
-    "vite-plugin-externals": "^0.6.2",
     "vite-plugin-static-copy": "^3.1.4"
   },
   "dependencies": {
     "@babylonjs/core": "^8.42.0",
     "@babylonjs/gui": "^8.42.0",
     "@babylonjs/loaders": "^8.42.0",
-    "@electron-toolkit/utils": "^4.0.0",
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-fs": "^2.4.4",
+    "@tauri-apps/plugin-shell": "^2",
     "cesium": "^1.136.0",
-    "pnpm": "^10.26.1",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "resium": "^1.19.2",
     "zustand": "^5.0.9"
-  },
-  "build": {
-    "appId": "com.towercab.viewer",
-    "productName": "TowerCab 3D",
-    "directories": {
-      "output": "dist"
-    },
-    "files": [
-      "out/**/*",
-      "resources/**/*"
-    ],
-    "extraResources": [
-      {
-        "from": "mods",
-        "to": "mods",
-        "filter": [
-          "**/*"
-        ]
-      }
-    ],
-    "asar": true,
-    "compression": "maximum",
-    "win": {
-      "target": [
-        "nsis"
-      ],
-      "icon": "resources/icon.png"
-    },
-    "nsis": {
-      "oneClick": false,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": true
-    }
   }
 }

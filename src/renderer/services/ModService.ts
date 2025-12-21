@@ -7,6 +7,7 @@ import type {
   ModRegistry
 } from '../types/mod'
 import { isSupportedModelFormat, getModelFormat, SUPPORTED_MODEL_FORMATS } from '../types/mod'
+import { modApi, isTauri } from '../utils/tauriApi'
 
 class ModService {
   private registry: ModRegistry = {
@@ -17,25 +18,85 @@ class ModService {
 
   /**
    * Initialize mod loading
-   * In Electron, this would scan the mods directory
-   * For now, this is a placeholder for the mod loading logic
+   * Scans the mods directory and loads all valid mods
    */
   async loadMods(): Promise<void> {
     if (this.loaded) return
 
-    try {
-      // In a full implementation, this would:
-      // 1. Use IPC to communicate with main process
-      // 2. Scan mods/aircraft and mods/towers directories
-      // 3. Load and validate manifest.json files
-      // 4. Register models in the registry
-
-      // For now, we'll just mark as loaded
+    // Only load mods in Tauri environment
+    if (!isTauri()) {
       this.loaded = true
-      console.log('Mod service initialized (no mods loaded)')
+      console.log('Mod service initialized (not in Tauri environment)')
+      return
+    }
+
+    try {
+      // Load aircraft mods
+      await this.loadModsOfType('aircraft')
+
+      // Load tower mods
+      await this.loadModsOfType('towers')
+
+      this.loaded = true
+      const stats = this.getStats()
+      console.log(`Mod service initialized: ${stats.aircraftModels} aircraft, ${stats.towerModels} towers`)
     } catch (error) {
       console.error('Failed to load mods:', error)
+      this.loaded = true // Mark as loaded even on error to prevent retry loops
     }
+  }
+
+  /**
+   * Load all mods of a specific type
+   */
+  private async loadModsOfType(modType: 'aircraft' | 'towers'): Promise<void> {
+    try {
+      const modsPath = await modApi.getModsPath(modType)
+      const modDirs = await modApi.listModDirectories(modType)
+
+      for (const modDir of modDirs) {
+        const modPath = `${modsPath}/${modDir}`
+        try {
+          const manifest = await modApi.readModManifest(modPath)
+
+          if (modType === 'aircraft') {
+            await this.loadAircraftMod(manifest as AircraftModManifest, modPath)
+          } else {
+            await this.loadTowerMod(manifest as TowerModManifest, modPath)
+          }
+        } catch (error) {
+          console.warn(`Failed to load mod at ${modPath}:`, error)
+        }
+      }
+    } catch (error) {
+      console.warn(`Failed to list ${modType} mods:`, error)
+    }
+  }
+
+  /**
+   * Load and register an aircraft mod
+   */
+  private async loadAircraftMod(manifest: AircraftModManifest, basePath: string): Promise<void> {
+    if (!manifest.model || !this.validateModelFile(manifest.model)) {
+      console.warn(`Invalid model file in aircraft mod: ${basePath}`)
+      return
+    }
+
+    const modelUrl = `${basePath}/${manifest.model}`
+    this.registerAircraftMod(manifest, modelUrl, basePath)
+  }
+
+  /**
+   * Load and register a tower mod
+   */
+  private async loadTowerMod(manifest: TowerModManifest, basePath: string): Promise<void> {
+    if (!manifest.model || !this.validateModelFile(manifest.model)) {
+      console.warn(`Invalid model file in tower mod: ${basePath}`)
+      return
+    }
+
+    const modelUrl = `${basePath}/${manifest.model}`
+    this.registerTowerMod(manifest, modelUrl, basePath)
   }
 
   /**

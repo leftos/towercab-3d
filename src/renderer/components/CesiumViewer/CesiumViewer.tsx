@@ -42,7 +42,8 @@ const CONE_POOL_SIZE = 100
 
 // Model rendering constants
 const MODEL_HEIGHT_OFFSET = 1       // Meters to raise models above ground to prevent clipping
-const MODEL_DEFAULT_COLOR = new Cesium.Color(0.85, 0.85, 0.85, 1.0)  // Muted gray until airline liveries
+const MODEL_DEFAULT_COLOR = new Cesium.Color(0.9, 0.9, 0.9, 1.0)  // Light gray tint for MIX mode
+const MODEL_COLOR_BLEND_AMOUNT = 0.15  // Subtle blend to preserve original textures (0=original, 1=full tint)
 
 interface CesiumViewerProps {
   viewportId?: string
@@ -103,6 +104,21 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   const inMemoryTileCacheSize = useSettingsStore((state) => state.inMemoryTileCacheSize)
   const showWeatherEffects = useSettingsStore((state) => state.showWeatherEffects)
   const showCesiumFog = useSettingsStore((state) => state.showCesiumFog)
+  // Experimental graphics settings
+  const msaaSamples = useSettingsStore((state) => state.msaaSamples)
+  const enableFxaa = useSettingsStore((state) => state.enableFxaa)
+  const enableHdr = useSettingsStore((state) => state.enableHdr)
+  const enableLogDepth = useSettingsStore((state) => state.enableLogDepth)
+  const enableGroundAtmosphere = useSettingsStore((state) => state.enableGroundAtmosphere)
+  const enableLighting = useSettingsStore((state) => state.enableLighting)
+  const enableShadows = useSettingsStore((state) => state.enableShadows)
+  const shadowMapSize = useSettingsStore((state) => state.shadowMapSize)
+  const shadowCascades = useSettingsStore((state) => state.shadowCascades)
+  const shadowMaxDistance = useSettingsStore((state) => state.shadowMaxDistance)
+  const shadowDarkness = useSettingsStore((state) => state.shadowDarkness)
+  const shadowSoftness = useSettingsStore((state) => state.shadowSoftness)
+  const shadowFadingEnabled = useSettingsStore((state) => state.shadowFadingEnabled)
+  const shadowNormalOffset = useSettingsStore((state) => state.shadowNormalOffset)
 
   // Weather store for fog effects and camera position updates
   const fogDensity = useWeatherStore((state) => state.fogDensity)
@@ -187,8 +203,13 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   }, [cesiumViewer])
 
   // Initialize Cesium viewer
+  // This effect re-runs when MSAA changes, recreating the viewer with new settings
   useEffect(() => {
     if (!containerRef.current || viewerRef.current) return
+
+    // Log MSAA setting for debugging
+    const effectiveMsaa = isInset ? 2 : msaaSamples
+    console.log(`Creating Cesium viewer with MSAA=${effectiveMsaa}x (viewport: ${viewportId})`)
 
     // Set Ion access token
     if (cesiumIonToken) {
@@ -211,24 +232,54 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
       navigationHelpButton: false,
       navigationInstructionsInitiallyVisible: false,
       creditContainer: document.createElement('div'), // Hide credits
-      msaaSamples: isInset ? 2 : 4  // Reduced MSAA for insets
+      msaaSamples: isInset ? 2 : msaaSamples  // Use settings, reduced for insets
     })
 
-    // Configure scene
-    viewer.scene.globe.enableLighting = true
+    // Configure scene - use settings from store
+    viewer.scene.globe.enableLighting = enableLighting
     viewer.scene.fog.enabled = true
     viewer.scene.globe.depthTestAgainstTerrain = true
 
-    // Shadows - disabled for insets for performance
+    // Rendering quality improvements - from settings
+    viewer.scene.logarithmicDepthBuffer = enableLogDepth
+    viewer.scene.highDynamicRange = enableHdr
+    viewer.scene.fxaa = enableFxaa
+
+    // Improve texture quality - helps reduce mipmap banding
+    viewer.scene.globe.showGroundAtmosphere = enableGroundAtmosphere
+    viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString('#1a1a2e')
+
+    // Try to enable maximum anisotropic filtering for better texture quality at oblique angles
+    const gl = viewer.scene.context._gl as WebGL2RenderingContext | null
+    if (gl) {
+      const ext = gl.getExtension('EXT_texture_filter_anisotropic') ||
+                  gl.getExtension('WEBKIT_EXT_texture_filter_anisotropic') ||
+                  gl.getExtension('MOZ_EXT_texture_filter_anisotropic')
+      if (ext) {
+        const maxAnisotropy = gl.getParameter(ext.MAX_TEXTURE_MAX_ANISOTROPY_EXT)
+        console.log(`Anisotropic filtering available, max level: ${maxAnisotropy}`)
+      }
+    }
+
+    // Shadows - from settings, but disabled for insets for performance
+    // Uses cascaded shadow maps with configurable settings
     if (isInset) {
       viewer.shadows = false
       viewer.terrainShadows = Cesium.ShadowMode.DISABLED
     } else {
-      viewer.shadows = true
-      viewer.shadowMap.softShadows = true
-      viewer.shadowMap.size = 2048  // Higher resolution shadows
-      viewer.shadowMap.maximumDistance = 10000.0  // Shadow distance in meters
-      viewer.terrainShadows = Cesium.ShadowMode.ENABLED  // Terrain casts and receives shadows
+      viewer.shadows = enableShadows
+      if (enableShadows) {
+        viewer.shadowMap.softShadows = shadowSoftness
+        viewer.shadowMap.size = shadowMapSize
+        viewer.shadowMap.numberOfCascades = shadowCascades
+        viewer.shadowMap.maximumDistance = shadowMaxDistance
+        viewer.shadowMap.darkness = shadowDarkness
+        viewer.shadowMap.fadingEnabled = shadowFadingEnabled
+        viewer.shadowMap.normalOffset = shadowNormalOffset
+        viewer.terrainShadows = Cesium.ShadowMode.ENABLED
+      } else {
+        viewer.terrainShadows = Cesium.ShadowMode.DISABLED
+      }
     }
 
     // Enable clock animation for model animations (propellers, etc.)
@@ -286,7 +337,8 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
         modelMatrix: Cesium.Matrix4.IDENTITY,
         shadows: Cesium.ShadowMode.ENABLED,
         color: MODEL_DEFAULT_COLOR,
-        colorBlendMode: Cesium.ColorBlendMode.REPLACE
+        colorBlendMode: Cesium.ColorBlendMode.MIX,
+        colorBlendAmount: MODEL_COLOR_BLEND_AMOUNT
       }).then(model => {
         if (viewer.isDestroyed()) return
         viewer.scene.primitives.add(model)
@@ -301,13 +353,44 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
       })
     }
 
-    // Cleanup on unmount
+    // Cleanup on unmount or when MSAA changes
+    // Capture refs at effect time for cleanup (intentionally clearing them)
+    const modelPool = modelPoolRef.current
+    const modelPoolAssignments = modelPoolAssignmentsRef.current
+    const modelPoolUrls = modelPoolUrlsRef.current
+    const modelPoolLoading = modelPoolLoadingRef.current
+    const modelAnimationsConfigured = modelAnimationsConfiguredRef.current
+    const propellerStates = propellerStatesRef.current
+    const babylonCanvas = babylonCanvasRef.current
+
     return () => {
       viewer.destroy()
       viewerRef.current = null
       setCesiumViewer(null)
+
+      // Reset model pool state so it can be recreated
+      modelPool.clear()
+      modelPoolAssignments.clear()
+      modelPoolUrls.clear()
+      modelPoolLoading.clear()
+      modelPoolReadyRef.current = false
+      modelAnimationsConfigured.clear()
+      propellerStates.clear()
+
+      // Reset other state
+      rootNodeSetupRef.current = false
+      terrainOffsetReadyRef.current = false
+
+      // Remove Babylon canvas so it can be recreated
+      if (babylonCanvas && babylonCanvas.parentNode) {
+        babylonCanvas.parentNode.removeChild(babylonCanvas)
+      }
+      babylonCanvasRef.current = null
+      babylonCanvasCreatedRef.current = false
+      setBabylonCanvas(null)
     }
-  }, [cesiumIonToken, isInset])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- graphics settings used at init only; runtime updates handled by separate useEffect
+  }, [cesiumIonToken, isInset, msaaSamples])
 
   // Clear old IndexedDB tile cache on startup (we now use Service Worker caching)
   useEffect(() => {
@@ -423,6 +506,44 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
       requestAnimationFrame(forceEviction)
     }
   }, [cesiumViewer, terrainQuality])
+
+  // Update experimental graphics settings at runtime
+  // Note: MSAA samples cannot be changed at runtime (requires viewer recreation)
+  useEffect(() => {
+    if (!cesiumViewer || isInset) return
+
+    // Update FXAA
+    cesiumViewer.scene.fxaa = enableFxaa
+
+    // Update HDR
+    cesiumViewer.scene.highDynamicRange = enableHdr
+
+    // Update logarithmic depth buffer
+    cesiumViewer.scene.logarithmicDepthBuffer = enableLogDepth
+
+    // Update ground atmosphere
+    cesiumViewer.scene.globe.showGroundAtmosphere = enableGroundAtmosphere
+
+    // Update lighting
+    cesiumViewer.scene.globe.enableLighting = enableLighting
+
+    // Update shadows - use cascaded shadow maps with configurable settings
+    cesiumViewer.shadows = enableShadows
+    if (enableShadows) {
+      cesiumViewer.shadowMap.softShadows = shadowSoftness
+      cesiumViewer.shadowMap.size = shadowMapSize
+      cesiumViewer.shadowMap.numberOfCascades = shadowCascades
+      cesiumViewer.shadowMap.maximumDistance = shadowMaxDistance
+      cesiumViewer.shadowMap.darkness = shadowDarkness
+      cesiumViewer.shadowMap.fadingEnabled = shadowFadingEnabled
+      cesiumViewer.shadowMap.normalOffset = shadowNormalOffset
+      cesiumViewer.terrainShadows = Cesium.ShadowMode.ENABLED
+    } else {
+      cesiumViewer.terrainShadows = Cesium.ShadowMode.DISABLED
+    }
+
+    console.log(`Graphics settings updated: FXAA=${enableFxaa}, HDR=${enableHdr}, LogDepth=${enableLogDepth}, GroundAtmo=${enableGroundAtmosphere}, Lighting=${enableLighting}, Shadows=${enableShadows}`)
+  }, [cesiumViewer, isInset, enableFxaa, enableHdr, enableLogDepth, enableGroundAtmosphere, enableLighting, enableShadows, shadowMapSize, shadowCascades, shadowMaxDistance, shadowDarkness, shadowSoftness, shadowFadingEnabled, shadowNormalOffset])
 
   // Time of day control (real time vs fixed time)
   useEffect(() => {
@@ -789,7 +910,8 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
                 modelMatrix: model.modelMatrix,  // Copy current transform
                 shadows: Cesium.ShadowMode.ENABLED,
                 color: model.color,
-                colorBlendMode: Cesium.ColorBlendMode.REPLACE
+                colorBlendMode: Cesium.ColorBlendMode.MIX,
+                colorBlendAmount: MODEL_COLOR_BLEND_AMOUNT
               }).then(newModel => {
                 if (viewer.isDestroyed()) return
 
@@ -843,11 +965,13 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
             // Apply the transformation
             model.modelMatrix = modelMatrix
 
-            // Apply color - white in topdown for visibility, off-white in 3D
+            // Apply color blend - full white in topdown, subtle tint in 3D to preserve textures
             if (viewMode === 'topdown') {
               model.color = Cesium.Color.WHITE
+              model.colorBlendAmount = 1.0  // Full white for 2D visibility
             } else {
               model.color = MODEL_DEFAULT_COLOR
+              model.colorBlendAmount = MODEL_COLOR_BLEND_AMOUNT  // Subtle blend preserves textures
             }
 
             // Update propeller animation based on groundspeed

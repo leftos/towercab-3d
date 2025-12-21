@@ -4,8 +4,10 @@ import { useCameraStore } from '../../stores/cameraStore'
 import { useWeatherStore } from '../../stores/weatherStore'
 import { useMeasureStore } from '../../stores/measureStore'
 import { useActiveViewportCamera } from '../../hooks/useActiveViewportCamera'
+import { exportAllData, downloadExport } from '../../services/ExportImportService'
 import GlobalSearchPanel from './GlobalSearchPanel'
 import VRButton from '../VR/VRButton'
+import ImportModal from './ImportModal'
 import './ControlsBar.css'
 
 type SettingsTab = 'general' | 'display' | 'graphics' | 'performance' | 'help'
@@ -13,6 +15,8 @@ type SettingsTab = 'general' | 'display' | 'graphics' | 'performance' | 'help'
 function ControlsBar() {
   const [showSettings, setShowSettings] = useState(false)
   const [activeTab, setActiveTab] = useState<SettingsTab>('general')
+  const [importStatus, setImportStatus] = useState<'idle' | 'success' | 'error'>('idle')
+  const [showImportModal, setShowImportModal] = useState(false)
 
   // Settings store - General
   const cesiumIonToken = useSettingsStore((state) => state.cesiumIonToken)
@@ -78,6 +82,36 @@ function ControlsBar() {
   const aircraftDataRadiusNM = useSettingsStore((state) => state.aircraftDataRadiusNM)
   const setAircraftDataRadiusNM = useSettingsStore((state) => state.setAircraftDataRadiusNM)
 
+  // Settings store - Experimental Graphics
+  const msaaSamples = useSettingsStore((state) => state.msaaSamples)
+  const setMsaaSamples = useSettingsStore((state) => state.setMsaaSamples)
+  const enableFxaa = useSettingsStore((state) => state.enableFxaa)
+  const setEnableFxaa = useSettingsStore((state) => state.setEnableFxaa)
+  const enableHdr = useSettingsStore((state) => state.enableHdr)
+  const setEnableHdr = useSettingsStore((state) => state.setEnableHdr)
+  const enableLogDepth = useSettingsStore((state) => state.enableLogDepth)
+  const setEnableLogDepth = useSettingsStore((state) => state.setEnableLogDepth)
+  const enableGroundAtmosphere = useSettingsStore((state) => state.enableGroundAtmosphere)
+  const setEnableGroundAtmosphere = useSettingsStore((state) => state.setEnableGroundAtmosphere)
+  const enableLighting = useSettingsStore((state) => state.enableLighting)
+  const setEnableLighting = useSettingsStore((state) => state.setEnableLighting)
+  const enableShadows = useSettingsStore((state) => state.enableShadows)
+  const setEnableShadows = useSettingsStore((state) => state.setEnableShadows)
+  const shadowMapSize = useSettingsStore((state) => state.shadowMapSize)
+  const setShadowMapSize = useSettingsStore((state) => state.setShadowMapSize)
+  const shadowCascades = useSettingsStore((state) => state.shadowCascades)
+  const setShadowCascades = useSettingsStore((state) => state.setShadowCascades)
+  const shadowMaxDistance = useSettingsStore((state) => state.shadowMaxDistance)
+  const setShadowMaxDistance = useSettingsStore((state) => state.setShadowMaxDistance)
+  const shadowDarkness = useSettingsStore((state) => state.shadowDarkness)
+  const setShadowDarkness = useSettingsStore((state) => state.setShadowDarkness)
+  const shadowSoftness = useSettingsStore((state) => state.shadowSoftness)
+  const setShadowSoftness = useSettingsStore((state) => state.setShadowSoftness)
+  const shadowFadingEnabled = useSettingsStore((state) => state.shadowFadingEnabled)
+  const setShadowFadingEnabled = useSettingsStore((state) => state.setShadowFadingEnabled)
+  const shadowNormalOffset = useSettingsStore((state) => state.shadowNormalOffset)
+  const setShadowNormalOffset = useSettingsStore((state) => state.setShadowNormalOffset)
+
   // Active viewport camera state (from viewportStore)
   const {
     viewMode,
@@ -125,6 +159,39 @@ function ControlsBar() {
     const h = Math.floor(hour)
     const m = Math.round((hour - h) * 60)
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
+  }
+
+  const handleExportSettings = () => {
+    const data = exportAllData()
+    downloadExport(data)
+  }
+
+  const handleImportFromElectron = async () => {
+    // Use the migration service to re-attempt Electron migration
+    const { migrateFromElectron } = await import('../../services/MigrationService')
+
+    // Reset migration flag to allow re-migration
+    localStorage.removeItem('electron-migration-complete')
+
+    const result = await migrateFromElectron()
+
+    if (result.settingsFound) {
+      setImportStatus('success')
+      setShowImportModal(false)
+      setTimeout(() => setImportStatus('idle'), 3000)
+    } else if (result.success) {
+      throw new Error(
+        'No Electron settings found. The old version may not have been installed, ' +
+        'or its data has been removed.'
+      )
+    } else {
+      throw new Error(result.message)
+    }
+  }
+
+  const handleImportSuccess = () => {
+    setImportStatus('success')
+    setTimeout(() => setImportStatus('idle'), 3000)
   }
 
   return (
@@ -401,6 +468,44 @@ function ControlsBar() {
                         <span>{mouseSensitivity.toFixed(1)}</span>
                       </div>
                       <p className="setting-hint">Right-click drag sensitivity for camera rotation.</p>
+                    </div>
+                  </div>
+
+                  <div className="settings-section">
+                    <h3>Import / Export Settings</h3>
+                    <p className="setting-hint" style={{ marginBottom: '12px' }}>
+                      Migrating from the Electron version? Use Import to transfer your settings.
+                    </p>
+                    <div className="setting-item">
+                      <div className="import-export-buttons">
+                        <button className="control-button" onClick={handleExportSettings}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                          </svg>
+                          Export Settings
+                        </button>
+                        <button
+                          className="control-button"
+                          onClick={() => {
+                            setImportError(null)
+                            setShowImportModal(true)
+                          }}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="17 8 12 3 7 8" />
+                            <line x1="12" y1="3" x2="12" y2="15" />
+                          </svg>
+                          Import Settings
+                        </button>
+                      </div>
+                      {importStatus === 'success' && (
+                        <p className="setting-hint" style={{ color: '#4caf50', marginTop: '8px' }}>
+                          Settings imported successfully!
+                        </p>
+                      )}
                     </div>
                   </div>
                 </>
@@ -730,6 +835,229 @@ function ControlsBar() {
                       </>
                     )}
                   </div>
+
+                  <div className="settings-section">
+                    <h3>Advanced Graphics (Experimental)</h3>
+                    <p className="setting-hint" style={{ marginBottom: '12px' }}>
+                      Adjust these settings to troubleshoot terrain texture banding or visual artifacts.
+                    </p>
+
+                    <div className="setting-item">
+                      <label>MSAA Samples</label>
+                      <select
+                        value={msaaSamples}
+                        onChange={(e) => setMsaaSamples(Number(e.target.value))}
+                        className="select-input"
+                      >
+                        <option value={1}>1 (Off)</option>
+                        <option value={2}>2x</option>
+                        <option value={4}>4x (Default)</option>
+                        <option value={8}>8x</option>
+                      </select>
+                      <p className="setting-hint">
+                        Multisample anti-aliasing. Changing this will briefly reload the 3D view.
+                      </p>
+                    </div>
+
+                    <div className="setting-item">
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={enableFxaa}
+                          onChange={(e) => setEnableFxaa(e.target.checked)}
+                        />
+                        FXAA (Fast Approximate Anti-Aliasing)
+                      </label>
+                      <p className="setting-hint">
+                        Post-process anti-aliasing. Works with MSAA for smoother edges.
+                      </p>
+                    </div>
+
+                    <div className="setting-item">
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={enableHdr}
+                          onChange={(e) => setEnableHdr(e.target.checked)}
+                        />
+                        HDR (High Dynamic Range)
+                      </label>
+                      <p className="setting-hint">
+                        Enables high dynamic range rendering. May cause color banding on some GPUs.
+                      </p>
+                    </div>
+
+                    <div className="setting-item">
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={enableLogDepth}
+                          onChange={(e) => setEnableLogDepth(e.target.checked)}
+                        />
+                        Logarithmic Depth Buffer
+                      </label>
+                      <p className="setting-hint">
+                        Improves depth precision at large distances. Reduces z-fighting artifacts.
+                      </p>
+                    </div>
+
+                    <div className="setting-item">
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={enableGroundAtmosphere}
+                          onChange={(e) => setEnableGroundAtmosphere(e.target.checked)}
+                        />
+                        Ground Atmosphere
+                      </label>
+                      <p className="setting-hint">
+                        Adds atmospheric haze effect to distant terrain.
+                      </p>
+                    </div>
+
+                    <div className="setting-item">
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={enableLighting}
+                          onChange={(e) => setEnableLighting(e.target.checked)}
+                        />
+                        Globe Lighting
+                      </label>
+                      <p className="setting-hint">
+                        Enables sun-based lighting on terrain. Affects day/night cycle.
+                      </p>
+                    </div>
+
+                    <div className="setting-item">
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={enableShadows}
+                          onChange={(e) => setEnableShadows(e.target.checked)}
+                        />
+                        Shadows
+                      </label>
+                      <p className="setting-hint">
+                        Enables shadow casting for terrain and 3D models. Performance impact.
+                      </p>
+                    </div>
+
+                    {enableShadows && (
+                      <>
+                        <div className="setting-item">
+                          <label>Shadow Map Size</label>
+                          <select
+                            value={shadowMapSize}
+                            onChange={(e) => setShadowMapSize(Number(e.target.value))}
+                            className="select-input"
+                          >
+                            <option value={1024}>1024 (Low)</option>
+                            <option value={2048}>2048 (Medium)</option>
+                            <option value={4096}>4096 (High)</option>
+                            <option value={8192}>8192 (Ultra)</option>
+                          </select>
+                          <p className="setting-hint">
+                            Shadow texture resolution. Higher = sharper shadows, more VRAM. 8192 uses ~256MB VRAM.
+                          </p>
+                        </div>
+
+                        <div className="setting-item">
+                          <label>Shadow Cascades</label>
+                          <select
+                            value={shadowCascades}
+                            onChange={(e) => setShadowCascades(Number(e.target.value))}
+                            className="select-input"
+                          >
+                            <option value={1}>1 (Single)</option>
+                            <option value={2}>2 (Dual)</option>
+                            <option value={4}>4 (Quad)</option>
+                          </select>
+                          <p className="setting-hint">
+                            More cascades = better shadow quality at different distances.
+                          </p>
+                        </div>
+
+                        <div className="setting-item">
+                          <label>Shadow Max Distance</label>
+                          <div className="slider-with-value">
+                            <input
+                              type="range"
+                              min="100"
+                              max="10000"
+                              step="100"
+                              value={shadowMaxDistance}
+                              onChange={(e) => setShadowMaxDistance(Number(e.target.value))}
+                            />
+                            <span>{shadowMaxDistance}m</span>
+                          </div>
+                          <p className="setting-hint">
+                            Maximum distance for shadows. Lower = better quality nearby.
+                          </p>
+                        </div>
+
+                        <div className="setting-item">
+                          <label>Shadow Darkness</label>
+                          <div className="slider-with-value">
+                            <input
+                              type="range"
+                              min="0"
+                              max="1"
+                              step="0.1"
+                              value={shadowDarkness}
+                              onChange={(e) => setShadowDarkness(Number(e.target.value))}
+                            />
+                            <span>{(shadowDarkness * 100).toFixed(0)}%</span>
+                          </div>
+                          <p className="setting-hint">
+                            Shadow brightness. 0% = black shadows, 100% = invisible shadows.
+                          </p>
+                        </div>
+
+                        <div className="setting-item">
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={shadowSoftness}
+                              onChange={(e) => setShadowSoftness(e.target.checked)}
+                            />
+                            Soft Shadows
+                          </label>
+                          <p className="setting-hint">
+                            Blur shadow edges. Disable for sharper (but potentially aliased) shadows.
+                          </p>
+                        </div>
+
+                        <div className="setting-item">
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={shadowFadingEnabled}
+                              onChange={(e) => setShadowFadingEnabled(e.target.checked)}
+                            />
+                            Shadow Fading
+                          </label>
+                          <p className="setting-hint">
+                            Fade shadows at the edge of shadow distance.
+                          </p>
+                        </div>
+
+                        <div className="setting-item">
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={shadowNormalOffset}
+                              onChange={(e) => setShadowNormalOffset(e.target.checked)}
+                            />
+                            Normal Offset
+                          </label>
+                          <p className="setting-hint">
+                            Reduces shadow acne artifacts. Try disabling if you see banding.
+                          </p>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </>
               )}
 
@@ -865,6 +1193,15 @@ function ControlsBar() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Import Settings Modal */}
+      {showImportModal && (
+        <ImportModal
+          onClose={() => setShowImportModal(false)}
+          onSuccess={handleImportSuccess}
+          onElectronImport={handleImportFromElectron}
+        />
       )}
     </>
   )

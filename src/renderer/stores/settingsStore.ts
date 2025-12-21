@@ -45,6 +45,22 @@ interface SettingsStore {
   fogIntensity: number         // Fog dome opacity multiplier (0.5-2.0)
   visibilityScale: number      // Fog dome radius multiplier (0.5-2.0)
 
+  // Experimental graphics settings
+  msaaSamples: number          // MSAA samples: 1, 2, 4, 8
+  enableFxaa: boolean          // Fast approximate anti-aliasing
+  enableHdr: boolean           // High dynamic range
+  enableLogDepth: boolean      // Logarithmic depth buffer
+  enableGroundAtmosphere: boolean  // Ground atmosphere effect
+  enableLighting: boolean      // Globe lighting
+  enableShadows: boolean       // Terrain/model shadows
+  shadowMapSize: number        // Shadow map resolution: 1024, 2048, 4096
+  shadowCascades: number       // Number of shadow cascades: 1, 2, 4
+  shadowMaxDistance: number    // Maximum shadow distance in meters
+  shadowDarkness: number       // Shadow darkness: 0.0-1.0
+  shadowSoftness: boolean      // Soft shadows vs hard shadows
+  shadowFadingEnabled: boolean // Fade shadows at edge
+  shadowNormalOffset: boolean  // Use normal offset to reduce shadow acne
+
   // Actions
   setCesiumIonToken: (token: string) => void
   setLabelVisibilityDistance: (distance: number) => void
@@ -71,7 +87,23 @@ interface SettingsStore {
   setCloudOpacity: (opacity: number) => void
   setFogIntensity: (intensity: number) => void
   setVisibilityScale: (scale: number) => void
+  setMsaaSamples: (samples: number) => void
+  setEnableFxaa: (enable: boolean) => void
+  setEnableHdr: (enable: boolean) => void
+  setEnableLogDepth: (enable: boolean) => void
+  setEnableGroundAtmosphere: (enable: boolean) => void
+  setEnableLighting: (enable: boolean) => void
+  setEnableShadows: (enable: boolean) => void
+  setShadowMapSize: (size: number) => void
+  setShadowCascades: (cascades: number) => void
+  setShadowMaxDistance: (distance: number) => void
+  setShadowDarkness: (darkness: number) => void
+  setShadowSoftness: (soft: boolean) => void
+  setShadowFadingEnabled: (enabled: boolean) => void
+  setShadowNormalOffset: (enabled: boolean) => void
   resetToDefaults: () => void
+  exportSettings: () => string
+  importSettings: (json: string) => boolean
 }
 
 const DEFAULT_SETTINGS = {
@@ -101,7 +133,22 @@ const DEFAULT_SETTINGS = {
   showClouds: true,
   cloudOpacity: 0.5,
   fogIntensity: 1.0,      // 1.0 = default, 0.5 = half opacity, 2.0 = double opacity
-  visibilityScale: 1.0    // 1.0 = match METAR, 2.0 = see twice as far as reported
+  visibilityScale: 1.0,   // 1.0 = match METAR, 2.0 = see twice as far as reported
+  // Experimental graphics settings
+  msaaSamples: 4,         // 1, 2, 4, or 8
+  enableFxaa: true,       // Fast approximate anti-aliasing
+  enableHdr: false,       // High dynamic range (can cause banding)
+  enableLogDepth: true,   // Logarithmic depth buffer
+  enableGroundAtmosphere: true,
+  enableLighting: true,
+  enableShadows: true,
+  shadowMapSize: 4096,    // 1024, 2048, 4096
+  shadowCascades: 4,      // 1, 2, 4
+  shadowMaxDistance: 2000, // meters
+  shadowDarkness: 0.3,    // 0.0 = no darkening, 1.0 = black
+  shadowSoftness: true,   // soft vs hard shadows
+  shadowFadingEnabled: true,
+  shadowNormalOffset: true
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -172,7 +219,75 @@ export const useSettingsStore = create<SettingsStore>()(
       setVisibilityScale: (scale: number) =>
         set({ visibilityScale: Math.max(0.5, Math.min(2.0, scale)) }),
 
-      resetToDefaults: () => set(DEFAULT_SETTINGS)
+      setMsaaSamples: (samples: number) =>
+        set({ msaaSamples: [1, 2, 4, 8].includes(samples) ? samples : 4 }),
+
+      setEnableFxaa: (enable: boolean) => set({ enableFxaa: enable }),
+
+      setEnableHdr: (enable: boolean) => set({ enableHdr: enable }),
+
+      setEnableLogDepth: (enable: boolean) => set({ enableLogDepth: enable }),
+
+      setEnableGroundAtmosphere: (enable: boolean) => set({ enableGroundAtmosphere: enable }),
+
+      setEnableLighting: (enable: boolean) => set({ enableLighting: enable }),
+
+      setEnableShadows: (enable: boolean) => set({ enableShadows: enable }),
+
+      setShadowMapSize: (size: number) =>
+        set({ shadowMapSize: [1024, 2048, 4096, 8192].includes(size) ? size : 4096 }),
+
+      setShadowCascades: (cascades: number) =>
+        set({ shadowCascades: [1, 2, 4].includes(cascades) ? cascades : 4 }),
+
+      setShadowMaxDistance: (distance: number) =>
+        set({ shadowMaxDistance: Math.max(100, Math.min(10000, distance)) }),
+
+      setShadowDarkness: (darkness: number) =>
+        set({ shadowDarkness: Math.max(0, Math.min(1, darkness)) }),
+
+      setShadowSoftness: (soft: boolean) => set({ shadowSoftness: soft }),
+
+      setShadowFadingEnabled: (enabled: boolean) => set({ shadowFadingEnabled: enabled }),
+
+      setShadowNormalOffset: (enabled: boolean) => set({ shadowNormalOffset: enabled }),
+
+      resetToDefaults: () => set(DEFAULT_SETTINGS),
+
+      exportSettings: () => {
+        // Get current state, excluding action functions
+        const state = useSettingsStore.getState()
+        const settings: Record<string, unknown> = {}
+        for (const key in state) {
+          if (typeof state[key as keyof SettingsStore] !== 'function') {
+            settings[key] = state[key as keyof SettingsStore]
+          }
+        }
+        return JSON.stringify(settings, null, 2)
+      },
+
+      importSettings: (json: string) => {
+        try {
+          const imported = JSON.parse(json)
+          // Validate it's an object
+          if (typeof imported !== 'object' || imported === null) {
+            return false
+          }
+          // Only import known settings keys (filter out functions and unknown keys)
+          const validKeys = Object.keys(DEFAULT_SETTINGS)
+          const validSettings: Partial<typeof DEFAULT_SETTINGS> = {}
+          for (const key of validKeys) {
+            if (key in imported) {
+              validSettings[key as keyof typeof DEFAULT_SETTINGS] = imported[key]
+            }
+          }
+          // Apply imported settings
+          set(validSettings)
+          return true
+        } catch {
+          return false
+        }
+      }
     }),
     {
       name: 'settings-store'
