@@ -48,6 +48,26 @@ fn read_mod_manifest(path: String) -> Result<serde_json::Value, String> {
         .map_err(|e| format!("Failed to parse manifest JSON: {}", e))
 }
 
+/// Fetch a URL and return the response as text (bypasses CORS)
+#[tauri::command]
+async fn fetch_url(url: String) -> Result<String, String> {
+    let client = reqwest::Client::new();
+    let response = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch URL: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("HTTP error: {}", response.status()));
+    }
+
+    response
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read response: {}", e))
+}
+
 /// Set WebView2 browser arguments for GPU optimization
 fn set_webview2_args() {
     #[cfg(target_os = "windows")]
@@ -91,6 +111,7 @@ pub fn run() {
             get_mods_path,
             list_mod_directories,
             read_mod_manifest,
+            fetch_url,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
