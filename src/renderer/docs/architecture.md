@@ -2,7 +2,7 @@
 
 ## Overview
 
-TowerCab 3D is a React-based desktop application using Tauri 2, featuring dual 3D rendering engines (CesiumJS for globe/terrain, Babylon.js for aircraft models) and real-time VATSIM data integration.
+TowerCab 3D is a React-based desktop application using Tauri 2, featuring dual 3D rendering engines (CesiumJS for globe/terrain/aircraft, Babylon.js for screen-space labels and weather effects) and real-time VATSIM data integration.
 
 ## Data Flow
 
@@ -30,9 +30,9 @@ useAircraftInterpolation() [60 Hz singleton]
          │           └─ Projects labels with overlap detection
          │
          └──→ useBabylonOverlay (60Hz rendering)
-                ├─ Aircraft 3D models at ENU coordinates
-                ├─ Shadow discs at ground level
-                └─ Leader lines from cones to labels
+                ├─ Datablock labels in screen space
+                ├─ Leader lines from aircraft to labels
+                └─ Weather effects (fog dome, cloud layers)
 
 Note: AircraftPanel uses useAircraftFiltering for 1Hz UI updates
 ```
@@ -245,7 +245,7 @@ CesiumViewer Component Mount
     └─ 8. useBabylonOverlay({ cesiumViewer: viewer, canvas })
            ├─ Creates Babylon.js scene on top of Cesium
            ├─ Syncs Babylon camera with Cesium camera (ENU transform)
-           ├─ Renders 3D aircraft models, shadows, weather effects
+           ├─ Renders datablock labels, leader lines, weather effects
            └─ Handles measuring tool visualizations
 
 IMPORTANT: Babylon overlay MUST be initialized AFTER Cesium viewer
@@ -383,8 +383,8 @@ requestAnimationFrame
     │    └─ Updates Babylon camera
     │
     ├─ useBabylonOverlay.render()
-    │    ├─ Renders 3D aircraft models
-    │    ├─ Renders shadow discs
+    │    ├─ Renders datablock labels in screen space
+    │    ├─ Renders leader lines from aircraft to labels
     │    ├─ Renders weather effects (fog dome, clouds)
     │    └─ Renders measuring tool lines
     │
@@ -403,15 +403,15 @@ VATSIM Data (Geographic)
          │      ↓
          │   Cesium Cartesian3 (ECEF)
          │      ↓
-         │   Model/Camera positioning in Cesium
+         │   Aircraft model/Camera positioning in Cesium
          │
-         └──→ Babylon Rendering Path
+         └──→ Babylon Screen Space Path
                 ↓
-             transformPositionToENU(lon, lat, alt, enuTransform)
+             viewer.scene.cartesianToCanvasCoordinates()
                 ↓
-             ENU Coordinates {x: east, y: up, z: north}
+             Screen Coordinates {x, y}
                 ↓
-             mesh.position.set(enu.x, enu.y, enu.z)
+             Label/leader line positioning in screen space
 
 See: docs/coordinate-systems.md for detailed explanation
 ```

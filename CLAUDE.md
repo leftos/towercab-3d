@@ -54,10 +54,10 @@ The build script now automatically runs typecheck first, so production builds wi
 
 The application uses two 3D rendering engines simultaneously:
 
-- **CesiumJS** (`cesium ^1.136.0`): Renders the globe, terrain, satellite imagery via Cesium Ion
-- **Babylon.js** (`@babylonjs/core ^8.42.0`): Renders 3D aircraft models, weather effects (fog dome, cloud layers), measuring tool visualizations, and VR stereo display as a transparent overlay on top of Cesium
+- **CesiumJS** (`cesium ^1.136.0`): Renders the globe, terrain, satellite imagery, and aircraft 3D models via Cesium Ion
+- **Babylon.js** (`@babylonjs/core ^8.42.0`): Renders screen-space datablock labels, leader lines, weather effects (fog dome, cloud layers), measuring tool visualizations, and VR stereo display as a transparent overlay on top of Cesium
 
-The `useBabylonOverlay` hook synchronizes the Babylon.js camera with Cesium's camera each frame using ENU (East-North-Up) coordinate transformations. Aircraft positions are converted from geographic coordinates (lat/lon/alt) to Babylon's local coordinate system relative to a root node positioned at the tower location.
+The `useBabylonOverlay` hook synchronizes the Babylon.js camera with Cesium's camera each frame for correct screen-space label positioning. Weather effects use ENU (East-North-Up) coordinate transformations relative to a root node positioned at the tower location.
 
 ### Process Architecture (Tauri)
 
@@ -91,8 +91,8 @@ Nine stores manage application state:
    - **CesiumViewer** (60Hz rendering): Reads directly from `interpolatedAircraft` Map and applies filtering inline for smooth model updates
    - **AircraftPanel** (1Hz UI updates): Uses `useAircraftFiltering` hook with refresh tick for list display
    - Both use the same filter settings from `settingsStore` and `aircraftFilterStore`
-5. **Render Labels**: Cesium entities display HTML text labels with callsign, altitude, speed
-6. **Render 3D**: Babylon.js overlay renders aircraft models with shadows at interpolated positions
+5. **Render 3D Models**: Cesium model pool updates aircraft 3D model positions at interpolated locations
+6. **Render Labels**: Babylon.js overlay renders screen-space datablock labels and leader lines
 
 ### Key Hooks
 
@@ -103,7 +103,7 @@ Nine stores manage application state:
 | `useCesiumCamera` | `hooks/useCesiumCamera.ts` | Tower-based camera controls, follow modes, top-down view (per-viewport) |
 | `useCameraInput` | `hooks/useCameraInput.ts` | Keyboard/mouse input handling for camera (WASD, arrows, mouse drag) |
 | `useActiveViewportCamera` | `hooks/useActiveViewportCamera.ts` | Returns camera state for the currently active viewport |
-| `useBabylonOverlay` | `hooks/useBabylonOverlay.ts` | Syncs Babylon camera with Cesium, manages 3D aircraft meshes and shadows |
+| `useBabylonOverlay` | `hooks/useBabylonOverlay.ts` | Syncs Babylon camera with Cesium, manages screen-space labels, leader lines, and weather effects |
 | `useBabylonCameraSync` | `hooks/useBabylonCameraSync.ts` | Synchronizes Babylon.js camera matrix with Cesium's view |
 | `useCesiumStereo` | `hooks/useCesiumStereo.ts` | Dual-pass Cesium stereo rendering for VR (left/right eye frustums) |
 | `useDragResize` | `hooks/useDragResize.ts` | Drag and resize functionality for inset viewports |

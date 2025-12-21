@@ -188,7 +188,7 @@ towercab-3d/
 | **React 19** | UI framework |
 | **TypeScript 5** | Type-safe development |
 | **CesiumJS 1.136** | 3D globe rendering |
-| **Babylon.js 8** | 3D aircraft models, weather effects, VR rendering |
+| **Babylon.js 8** | Screen-space labels, leader lines, weather effects, VR rendering |
 | **Zustand 5** | State management |
 | **Vite 7** | Build tool |
 

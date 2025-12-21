@@ -14,7 +14,7 @@ interface VRSceneProps {
  *
  * Creates a Babylon.js WebXR scene that:
  * 1. Displays Cesium stereo renders as background textures
- * 2. Renders Babylon.js overlay elements (labels, weather, aircraft) in VR
+ * 2. Renders Babylon.js overlay elements (labels, leader lines, weather effects) in VR
  * 3. Manages WebXR session lifecycle
  */
 function VRScene({ cesiumViewer }: VRSceneProps) {

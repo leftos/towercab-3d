@@ -45,7 +45,7 @@ interface CesiumViewerProps {
  * 4. useCesiumWeather - weather effects
  * 5. useAircraftModels - aircraft model pool
  * 6. useCesiumLabels - datablock labels
- * 7. useBabylonOverlay - 3D models overlay (requires viewer fully initialized)
+ * 7. useBabylonOverlay - screen-space labels, leader lines, weather effects (requires viewer fully initialized)
  */
 function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: CesiumViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null!)
