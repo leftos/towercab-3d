@@ -3,6 +3,7 @@ import { useAirportStore } from '../../stores/airportStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAircraftFilterStore } from '../../stores/aircraftFilterStore'
 import { useActiveViewportCamera } from '../../hooks/useActiveViewportCamera'
+import { useAircraftInterpolation } from '../../hooks/useAircraftInterpolation'
 import { useAircraftFiltering } from '../../hooks/useAircraftFiltering'
 import { calculateBearing } from '../../utils/interpolation'
 import { formatAltitude, formatGroundspeed, formatHeading } from '../../utils/towerHeight'
@@ -57,8 +58,11 @@ function AircraftPanel() {
     orbitDistance
   } = useActiveViewportCamera()
 
+  // Get interpolated aircraft data (shared single source)
+  const interpolatedAircraft = useAircraftInterpolation()
+
   // Use shared filtering hook (affects both list and datablocks)
-  const { filtered, referencePoint, isOrbitModeWithoutAirport } = useAircraftFiltering()
+  const { filtered, referencePoint, isOrbitModeWithoutAirport } = useAircraftFiltering(interpolatedAircraft)
 
   // Calculate bearing and convert to AircraftListItem format with sorting
   const nearbyAircraft = useMemo((): AircraftListItem[] => {

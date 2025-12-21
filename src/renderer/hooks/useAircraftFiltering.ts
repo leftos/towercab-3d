@@ -3,7 +3,6 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useViewportStore } from '@/stores/viewportStore'
 import { useAirportStore } from '@/stores/airportStore'
 import { useWeatherStore } from '@/stores/weatherStore'
-import { useAircraftInterpolation } from './useAircraftInterpolation'
 import { calculateDistanceNM } from '@/utils/interpolation'
 import { getTowerPosition } from '@/utils/towerHeight'
 import type { InterpolatedAircraftState } from '@/types/vatsim'
@@ -55,6 +54,9 @@ interface UseAircraftFilteringOptions {
  *
  * This hook is perfect for UI components that don't need frame-rate updates.
  *
+ * @param interpolatedAircraft - The interpolated aircraft Map from useAircraftInterpolation()
+ * @param options - Optional filtering options
+ *
  * Filtering order:
  * 1. Calculate reference position (tower or followed aircraft)
  * 2. Calculate distance for each aircraft (3D slant range)
@@ -65,11 +67,11 @@ interface UseAircraftFilteringOptions {
  * 7. Filter by airport traffic (if filterAirportTraffic enabled)
  * 8. Sort by distance
  */
-export function useAircraftFiltering(options?: UseAircraftFilteringOptions): FilteredAircraftResult {
+export function useAircraftFiltering(
+  interpolatedAircraft: Map<string, InterpolatedAircraftState>,
+  options?: UseAircraftFilteringOptions
+): FilteredAircraftResult {
   const includeFollowedRegardlessOfDistance = options?.includeFollowedRegardlessOfDistance ?? false
-
-  // Get interpolated aircraft data
-  const interpolatedAircraft = useAircraftInterpolation()
 
   // Get global settings
   const labelVisibilityDistance = useSettingsStore((state) => state.labelVisibilityDistance)
