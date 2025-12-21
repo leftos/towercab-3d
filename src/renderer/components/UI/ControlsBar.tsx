@@ -44,6 +44,10 @@ function ControlsBar() {
   const setShowAirborneTraffic = useSettingsStore((state) => state.setShowAirborneTraffic)
   const showAircraftPanel = useSettingsStore((state) => state.showAircraftPanel)
   const setShowAircraftPanel = useSettingsStore((state) => state.setShowAircraftPanel)
+  const orientationEmulation = useSettingsStore((state) => state.orientationEmulation)
+  const setOrientationEmulation = useSettingsStore((state) => state.setOrientationEmulation)
+  const orientationIntensity = useSettingsStore((state) => state.orientationIntensity)
+  const setOrientationIntensity = useSettingsStore((state) => state.setOrientationIntensity)
 
   // Settings store - Graphics
   const terrainQuality = useSettingsStore((state) => state.terrainQuality)
@@ -624,6 +628,40 @@ function ControlsBar() {
                         Show Airborne Traffic
                       </label>
                     </div>
+
+                    <div className="setting-item">
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={orientationEmulation}
+                          onChange={(e) => setOrientationEmulation(e.target.checked)}
+                        />
+                        Emulate Aircraft Pitch/Roll
+                      </label>
+                      <p className="setting-hint">
+                        Tilts aircraft based on climb/descent and turn rates.
+                      </p>
+                    </div>
+
+                    {orientationEmulation && (
+                      <div className="setting-item">
+                        <label>Orientation Intensity</label>
+                        <div className="slider-with-value">
+                          <input
+                            type="range"
+                            min="0.25"
+                            max="1.5"
+                            step="0.05"
+                            value={orientationIntensity}
+                            onChange={(e) => setOrientationIntensity(Number(e.target.value))}
+                          />
+                          <span>{Math.round(orientationIntensity * 100)}%</span>
+                        </div>
+                        <p className="setting-hint">
+                          100% = realistic. Lower for subtle, higher for exaggerated motion.
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   <div className="settings-section">

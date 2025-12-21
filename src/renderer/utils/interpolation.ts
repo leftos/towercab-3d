@@ -230,11 +230,17 @@ export function getInterpolationFactor(
  * - Uses velocity-driven dead reckoning based on last known heading and speed
  * - Continues turn rate for consistent heading extrapolation
  * - Maintains aircraft momentum realistically
+ *
+ * Orientation emulation (when enabled):
+ * - Pitch derived from vertical rate: γ = atan(vertical_velocity / horizontal_velocity)
+ * - Roll derived from turn rate using coordinated flight: bank = atan(V × ω / g)
  */
 export function interpolateAircraftState(
   previous: AircraftState | undefined,
   current: AircraftState,
-  now: number
+  now: number,
+  orientationEnabled: boolean = true,
+  orientationIntensity: number = 1.0
 ): InterpolatedAircraftState {
   // If no previous state, return current position without interpolation
   if (!previous) {
@@ -245,6 +251,10 @@ export function interpolateAircraftState(
       interpolatedAltitude: current.altitude,
       interpolatedHeading: current.heading,
       interpolatedGroundspeed: current.groundspeed,
+      interpolatedPitch: 0,
+      interpolatedRoll: 0,
+      verticalRate: 0,
+      turnRate: 0,
       isInterpolated: false
     }
   }
@@ -373,6 +383,29 @@ export function interpolateAircraftState(
     interpolatedGroundspeed = current.groundspeed
   }
 
+  // Calculate pitch and roll from physics
+  let pitch = 0
+  let roll = 0
+
+  if (orientationEnabled) {
+    // Pitch from flight path angle: γ = atan(vertical_velocity / horizontal_velocity)
+    // verticalRate is in ft/ms, convert to ft/sec; groundspeed in knots -> ft/sec
+    const verticalRateFps = verticalRate * 1000  // ft/ms to ft/sec
+    const groundspeedFps = interpolatedGroundspeed * 1.68781  // knots to ft/sec
+    if (groundspeedFps > 10) {
+      const rawPitch = Math.atan2(verticalRateFps, groundspeedFps) * (180 / Math.PI)
+      pitch = Math.max(-15, Math.min(20, rawPitch * orientationIntensity))
+    }
+
+    // Roll from coordinated turn: bank = atan(V × ω / g)
+    const velocityMs = interpolatedGroundspeed * 0.514444  // knots to m/s
+    const turnRateRad = turnRate * (Math.PI / 180)  // deg/s to rad/s
+    if (velocityMs > 5) {
+      const rawRoll = Math.atan2(velocityMs * turnRateRad, 9.81) * (180 / Math.PI)
+      roll = Math.max(-35, Math.min(35, rawRoll * orientationIntensity))
+    }
+  }
+
   return {
     ...current,
     interpolatedLatitude: interpolatedLat,
@@ -380,6 +413,10 @@ export function interpolateAircraftState(
     interpolatedAltitude: interpolatedAltitude,
     interpolatedHeading: interpolatedHeading,
     interpolatedGroundspeed: interpolatedGroundspeed,
+    interpolatedPitch: pitch,
+    interpolatedRoll: roll,
+    verticalRate: verticalRate * 60000,  // Convert ft/ms to ft/min
+    turnRate: turnRate,
     isInterpolated: true
   }
 }

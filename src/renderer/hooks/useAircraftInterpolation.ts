@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useVatsimStore } from '../stores/vatsimStore'
+import { useSettingsStore } from '../stores/settingsStore'
 import { interpolateAircraftState } from '../utils/interpolation'
 import type { InterpolatedAircraftState, AircraftState } from '../types/vatsim'
 
@@ -21,19 +22,35 @@ export function useAircraftInterpolation(): Map<string, InterpolatedAircraftStat
   const animationFrameRef = useRef<number | null>(null)
   const lastAircraftCountRef = useRef(0)
 
+  // Orientation settings refs
+  const orientationEnabledRef = useRef(true)
+  const orientationIntensityRef = useRef(1.0)
+
   // Subscribe to store changes and update refs
   useEffect(() => {
-    const unsubscribe = useVatsimStore.subscribe((state) => {
+    const unsubscribeVatsim = useVatsimStore.subscribe((state) => {
       aircraftStatesRef.current = state.aircraftStates
       previousStatesRef.current = state.previousStates
     })
 
-    // Initialize refs with current state
-    const state = useVatsimStore.getState()
-    aircraftStatesRef.current = state.aircraftStates
-    previousStatesRef.current = state.previousStates
+    const unsubscribeSettings = useSettingsStore.subscribe((state) => {
+      orientationEnabledRef.current = state.orientationEmulation
+      orientationIntensityRef.current = state.orientationIntensity
+    })
 
-    return unsubscribe
+    // Initialize refs with current state
+    const vatsimState = useVatsimStore.getState()
+    aircraftStatesRef.current = vatsimState.aircraftStates
+    previousStatesRef.current = vatsimState.previousStates
+
+    const settingsState = useSettingsStore.getState()
+    orientationEnabledRef.current = settingsState.orientationEmulation
+    orientationIntensityRef.current = settingsState.orientationIntensity
+
+    return () => {
+      unsubscribeVatsim()
+      unsubscribeSettings()
+    }
   }, [])
 
   // Animation loop that reads from refs (no stale closures)
@@ -46,10 +63,19 @@ export function useAircraftInterpolation(): Map<string, InterpolatedAircraftStat
     // Track which callsigns are still active
     const activeCallsigns = new Set<string>()
 
+    const orientationEnabled = orientationEnabledRef.current
+    const orientationIntensity = orientationIntensityRef.current
+
     for (const [callsign, currentState] of aircraftStates) {
       activeCallsigns.add(callsign)
       const previousState = previousStates.get(callsign)
-      const interpolated = interpolateAircraftState(previousState, currentState, now)
+      const interpolated = interpolateAircraftState(
+        previousState,
+        currentState,
+        now,
+        orientationEnabled,
+        orientationIntensity
+      )
 
       // Reuse existing entry or create new one
       const existing = statesMap.get(callsign)
@@ -61,6 +87,10 @@ export function useAircraftInterpolation(): Map<string, InterpolatedAircraftStat
         existing.interpolatedAltitude = interpolated.interpolatedAltitude
         existing.interpolatedGroundspeed = interpolated.interpolatedGroundspeed
         existing.interpolatedHeading = interpolated.interpolatedHeading
+        existing.interpolatedPitch = interpolated.interpolatedPitch
+        existing.interpolatedRoll = interpolated.interpolatedRoll
+        existing.verticalRate = interpolated.verticalRate
+        existing.turnRate = interpolated.turnRate
         existing.aircraftType = interpolated.aircraftType
         existing.departure = interpolated.departure
         existing.arrival = interpolated.arrival

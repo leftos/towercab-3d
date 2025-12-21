@@ -953,10 +953,12 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
             // Model heading: Cesium models typically face +X, so heading=0 means east
             // Subtract 90 to convert from compass heading (north=0) to model heading
             // Add 180° to flip models that face backwards
+            // Pitch: Cesium uses positive pitch for nose-down, so negate for intuitive behavior
+            // Roll: Applied directly from interpolated value
             const hpr = new Cesium.HeadingPitchRoll(
               Cesium.Math.toRadians(aircraft.interpolatedHeading - 90 + 180),
-              0,
-              0
+              Cesium.Math.toRadians(-aircraft.interpolatedPitch),
+              Cesium.Math.toRadians(aircraft.interpolatedRoll)
             )
 
             // Create base transformation matrix (translation + rotation)

@@ -148,6 +148,11 @@ export interface InterpolatedAircraftState extends AircraftState {
   interpolatedAltitude: number
   interpolatedHeading: number
   interpolatedGroundspeed: number
+  // Emulated orientation (derived from physics)
+  interpolatedPitch: number   // Degrees, positive = nose up
+  interpolatedRoll: number    // Degrees, positive = right wing down
+  verticalRate: number        // ft/min
+  turnRate: number            // degrees/sec
   // True if we have previous state data for interpolation, false if showing raw data
   isInterpolated: boolean
 }

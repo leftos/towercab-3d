@@ -12,6 +12,10 @@ interface SettingsStore {
   showAirborneTraffic: boolean
   datablockMode: 'full' | 'airline' | 'none'  // full=show all, airline=ICAO only, none=no labels
 
+  // Aircraft orientation emulation
+  orientationEmulation: boolean   // Enable/disable pitch/roll emulation
+  orientationIntensity: number    // 0.25 to 1.5 (1.0 = realistic)
+
   // Graphics settings
   terrainQuality: number  // 1-5 scale (1=low, 5=ultra)
 
@@ -68,6 +72,8 @@ interface SettingsStore {
   setShowGroundTraffic: (show: boolean) => void
   setShowAirborneTraffic: (show: boolean) => void
   setDatablockMode: (mode: 'full' | 'airline' | 'none') => void
+  setOrientationEmulation: (enabled: boolean) => void
+  setOrientationIntensity: (intensity: number) => void
   setTerrainQuality: (quality: number) => void
   setDefaultFov: (fov: number) => void
   setCameraSpeed: (speed: number) => void
@@ -113,6 +119,8 @@ const DEFAULT_SETTINGS = {
   showGroundTraffic: true,
   showAirborneTraffic: true,
   datablockMode: 'full' as const,  // full=show all, airline=ICAO only, none=no labels
+  orientationEmulation: true,      // Enable pitch/roll emulation by default
+  orientationIntensity: 1.0,       // 1.0 = realistic physics
   terrainQuality: 3,  // 1=low, 2=medium, 3=high, 4=very high, 5=ultra
   defaultFov: 60,
   cameraSpeed: 5,
@@ -169,6 +177,11 @@ export const useSettingsStore = create<SettingsStore>()(
       setShowAirborneTraffic: (show: boolean) => set({ showAirborneTraffic: show }),
 
       setDatablockMode: (mode: 'full' | 'airline' | 'none') => set({ datablockMode: mode }),
+
+      setOrientationEmulation: (enabled: boolean) => set({ orientationEmulation: enabled }),
+
+      setOrientationIntensity: (intensity: number) =>
+        set({ orientationIntensity: Math.max(0.25, Math.min(1.5, intensity)) }),
 
       setTerrainQuality: (quality: number) =>
         set({ terrainQuality: Math.max(1, Math.min(5, Math.round(quality))) }),

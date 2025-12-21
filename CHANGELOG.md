@@ -4,6 +4,10 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Aircraft pitch and roll emulation: aircraft now tilt nose up/down during climbs and descents, and bank into turns based on physics
+- New Display settings for orientation emulation with adjustable intensity (25%-150%)
+
 ## v0.0.5-alpha (2025-12-20)
 
 ### Fixed
