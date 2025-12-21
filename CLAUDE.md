@@ -107,7 +107,11 @@ Nine stores manage application state:
 | `useCesiumCamera` | `hooks/useCesiumCamera.ts` | Tower-based camera controls, follow modes, top-down view (per-viewport) |
 | `useCameraInput` | `hooks/useCameraInput.ts` | Keyboard/mouse input handling for camera (WASD, arrows, mouse drag) |
 | `useActiveViewportCamera` | `hooks/useActiveViewportCamera.ts` | Returns camera state for the currently active viewport |
-| `useBabylonOverlay` | `hooks/useBabylonOverlay.ts` | Syncs Babylon camera with Cesium, manages screen-space labels, leader lines, and weather effects |
+| `useBabylonOverlay` | `hooks/useBabylonOverlay.ts` | **Orchestrator** for Babylon.js overlay - composes scene, weather, labels, and camera sync hooks |
+| `useBabylonScene` | `hooks/useBabylonScene.ts` | Babylon.js engine, scene, camera, GUI, and lighting initialization |
+| `useBabylonWeather` | `hooks/useBabylonWeather.ts` | METAR-based fog dome and cloud layer visualization |
+| `useBabylonLabels` | `hooks/useBabylonLabels.ts` | Aircraft datablock labels and leader lines in GUI overlay |
+| `useBabylonRootNode` | `hooks/useBabylonRootNode.ts` | ENU coordinate system transforms and root node management |
 | `useBabylonCameraSync` | `hooks/useBabylonCameraSync.ts` | Synchronizes Babylon.js camera matrix with Cesium's view |
 | `useCesiumStereo` | `hooks/useCesiumStereo.ts` | Dual-pass Cesium stereo rendering for VR (left/right eye frustums) |
 | `useDragResize` | `hooks/useDragResize.ts` | Drag and resize functionality for inset viewports |
@@ -146,6 +150,7 @@ All TypeScript types are centralized in the `types/` directory, organized by dom
 | `types/weather.ts` | METAR data, cloud layers, fog density, flight categories |
 | `types/settings.ts` | Application settings (grouped by domain: cesium, graphics, camera, weather, memory) |
 | `types/vatsim.ts` | VATSIM API data structures, pilot/controller data |
+| `types/babylon.ts` | Babylon.js types (labels, weather meshes, scene options, hook return types, ENU transforms) |
 | `types/index.ts` | Barrel export for all types |
 
 **Usage:**
@@ -186,6 +191,7 @@ Configuration values and magic numbers are centralized in the `constants/` direc
 | `constants/rendering.ts` | Aircraft model pool sizes, shadow configuration, positioning offsets, colors |
 | `constants/camera.ts` | FOV/pitch/heading limits, orbit mode defaults, follow mode settings, top-down view settings |
 | `constants/api.ts` | External API endpoints (VATSIM, weather, airports), polling intervals, cache TTL |
+| `constants/babylon.ts` | Babylon.js scene/camera settings, cloud/fog parameters, visibility thresholds, lighting values |
 | `constants/index.ts` | Barrel export for all constants |
 
 **Usage:**
