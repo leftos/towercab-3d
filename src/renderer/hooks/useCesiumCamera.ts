@@ -67,6 +67,8 @@ export function useCesiumCamera(
   const stopFollowingStore = useViewportStore((state) => state.stopFollowing)
   const clearPreFollowState = useViewportStore((state) => state.clearPreFollowState)
 
+  // Track whether heading/pitch updates came from internal calculations
+  const internalUpdateRef = useRef(false)
   // Track the previous airport to detect airport switches
   const previousAirportRef = useRef<string | null>(null)
   // Flag to indicate we're in the middle of a flyTo animation
@@ -87,12 +89,19 @@ export function useCesiumCamera(
     duration: number
   } | null>(null)
 
-  // Smoothed camera position for orbit mode (prevents jitter)
-  const smoothedOrbitPositionRef = useRef<{
-    lat: number
-    lon: number
-    height: number
-  } | null>(null)
+  // Wrapper functions to mark heading/pitch updates as internal (from calculations)
+  // This prevents infinite loops when the main effect depends on heading/pitch
+  const setHeadingInternal = useCallback((value: number) => {
+    internalUpdateRef.current = true
+    setHeading(value)
+    queueMicrotask(() => { internalUpdateRef.current = false })
+  }, [setHeading])
+
+  const setPitchInternal = useCallback((value: number) => {
+    internalUpdateRef.current = true
+    setPitch(value)
+    queueMicrotask(() => { internalUpdateRef.current = false })
+  }, [setPitch])
 
   // Callback for when user breaks out of tower follow mode via input
   const handleBreakTowerFollow = useCallback(() => {
@@ -217,35 +226,13 @@ export function useCesiumCamera(
             state.orbitDistance
           )
 
-          // Apply smoothing to camera position to reduce jitter
-          // Smoothing factor: lower = smoother but more lag (0.15 = good balance)
-          const smoothingFactor = 0.15
-
-          if (!smoothedOrbitPositionRef.current) {
-            // Initialize smoothed position on first frame
-            smoothedOrbitPositionRef.current = {
-              lat: orbitResult.cameraLat,
-              lon: orbitResult.cameraLon,
-              height: orbitResult.cameraHeight
-            }
-          } else {
-            // Exponential moving average (lerp) for smooth camera movement
-            const prev = smoothedOrbitPositionRef.current
-            smoothedOrbitPositionRef.current = {
-              lat: prev.lat + (orbitResult.cameraLat - prev.lat) * smoothingFactor,
-              lon: prev.lon + (orbitResult.cameraLon - prev.lon) * smoothingFactor,
-              height: prev.height + (orbitResult.cameraHeight - prev.height) * smoothingFactor
-            }
-          }
-
-          const smoothed = smoothedOrbitPositionRef.current
+          // Set camera position directly (no smoothing)
           const targetFov = calculateFollowFov(60, state.followZoom)
 
-          // Set camera position using smoothed coordinates
           const cameraPosition = Cesium.Cartesian3.fromDegrees(
-            smoothed.lon,
-            smoothed.lat,
-            smoothed.height
+            orbitResult.cameraLon,
+            orbitResult.cameraLat,
+            orbitResult.cameraHeight
           )
           viewer.camera.setView({
             destination: cameraPosition,
@@ -330,6 +317,9 @@ export function useCesiumCamera(
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return
 
+    // Skip if this effect run was triggered by our own internal updates
+    if (internalUpdateRef.current) return
+
     const towerPos = getTowerPos()
     const currentIcao = currentAirport?.icao ?? null
 
@@ -381,38 +371,18 @@ export function useCesiumCamera(
           orbitDistance
         )
 
-        // Apply smoothing to camera position to reduce jitter
-        const smoothingFactor = 0.15
-
-        if (!smoothedOrbitPositionRef.current) {
-          // Initialize smoothed position on first frame
-          smoothedOrbitPositionRef.current = {
-            lat: orbitResult.cameraLat,
-            lon: orbitResult.cameraLon,
-            height: orbitResult.cameraHeight
-          }
-        } else {
-          // Exponential moving average (lerp) for smooth camera movement
-          const prev = smoothedOrbitPositionRef.current
-          smoothedOrbitPositionRef.current = {
-            lat: prev.lat + (orbitResult.cameraLat - prev.lat) * smoothingFactor,
-            lon: prev.lon + (orbitResult.cameraLon - prev.lon) * smoothingFactor,
-            height: prev.height + (orbitResult.cameraHeight - prev.height) * smoothingFactor
-          }
-        }
-
-        const smoothed = smoothedOrbitPositionRef.current
+        // Set camera position directly (no smoothing)
         const targetFov = calculateFollowFov(60, followZoom)
 
         // Update store with calculated values (for UI display)
-        setHeading(orbitResult.heading)
-        setPitch(orbitResult.pitch)
+        setHeadingInternal(orbitResult.heading)
+        setPitchInternal(orbitResult.pitch)
 
-        // Set camera position using smoothed coordinates
+        // Set camera position
         const cameraPosition = Cesium.Cartesian3.fromDegrees(
-          smoothed.lon,
-          smoothed.lat,
-          smoothed.height
+          orbitResult.cameraLon,
+          orbitResult.cameraLat,
+          orbitResult.cameraHeight
         )
         viewer.camera.setView({
           destination: cameraPosition,
@@ -614,8 +584,8 @@ export function useCesiumCamera(
             complete: () => {
               isAnimatingToFollowRef.current = false
               fovAnimationRef.current = null
-              setHeading(lookAt.heading)
-              setPitch(lookAt.pitch)
+              setHeadingInternal(lookAt.heading)
+              setPitchInternal(lookAt.pitch)
               if (viewer.camera.frustum instanceof Cesium.PerspectiveFrustum) {
                 viewer.camera.frustum.fov = Cesium.Math.toRadians(targetFov)
               }
@@ -629,8 +599,8 @@ export function useCesiumCamera(
         }
 
         // Update store with calculated values (for UI display)
-        setHeading(lookAt.heading)
-        setPitch(lookAt.pitch)
+        setHeadingInternal(lookAt.heading)
+        setPitchInternal(lookAt.pitch)
       }
       // If aircraft not found, don't stop following immediately - it may appear
       // after the next animation frame. The preRender handler keeps checking.
@@ -702,15 +672,10 @@ export function useCesiumCamera(
     interpolatedAircraft,
     setHeading,
     setPitch,
+    setHeadingInternal,
+    setPitchInternal,
     stopFollowingStore
   ])
-
-  // Reset smoothed orbit position when following stops or follow mode changes
-  useEffect(() => {
-    if (!followingCallsign || followMode !== 'orbit') {
-      smoothedOrbitPositionRef.current = null
-    }
-  }, [followingCallsign, followMode])
 
   return {
     resetView,
