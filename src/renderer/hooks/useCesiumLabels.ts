@@ -7,9 +7,18 @@ import { calculateDistanceNM } from '../utils/interpolation'
 
 export type DatablockMode = 'none' | 'full' | 'airline'
 
+interface BabylonOverlay {
+  updateAircraftLabel: (callsign: string, text: string, r: number, g: number, b: number) => void
+  hideAllLabels: () => void
+  updateLeaderLine: (callsign: string, coneX: number, coneY: number, offsetX: number, offsetY: number) => void
+  getAircraftCallsigns: () => string[]
+  removeAircraftLabel: (callsign: string) => void
+  isDatablockVisibleByWeather: (cameraAltitudeAGL: number, aircraftAltitudeAGL: number, distanceMeters: number) => boolean
+}
+
 interface UseCesiumLabelsParams {
   viewer: Cesium.Viewer | null
-  babylonOverlay: any | null  // BabylonOverlay instance
+  babylonOverlay: BabylonOverlay | null
   interpolatedAircraft: Map<string, InterpolatedAircraftState>
   datablockMode: DatablockMode
   viewMode: ViewMode
@@ -432,6 +441,9 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
     airportElevationFeet,
     groundElevationMeters,
     towerHeight,
+    refLat,
+    refLon,
+    refAltitudeFeet,
     labelVisibilityDistance,
     showGroundTraffic,
     showAirborneTraffic,

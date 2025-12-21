@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import * as Cesium from 'cesium'
 
 // Model rendering constants
-const MODEL_HEIGHT_OFFSET = 1       // Meters to raise models above ground to prevent clipping
 const MODEL_DEFAULT_COLOR = new Cesium.Color(0.9, 0.9, 0.9, 1.0)  // Light gray tint for MIX mode
 const MODEL_COLOR_BLEND_AMOUNT = 0.15  // Subtle blend to preserve original textures (0=original, 1=full tint)
 
@@ -295,16 +294,22 @@ export function useCesiumViewer(
     }
 
     // Cleanup on unmount or when MSAA changes
+    // Capture refs at effect time for cleanup (intentionally clearing them)
+    const modelPool = modelPoolRef.current
+    const modelPoolAssignments = modelPoolAssignmentsRef.current
+    const modelPoolUrls = modelPoolUrlsRef.current
+    const modelPoolLoading = modelPoolLoadingRef.current
+
     return () => {
       newViewer.destroy()
       viewerRef.current = null
       setViewer(null)
 
       // Reset model pool state so it can be recreated
-      modelPoolRef.current.clear()
-      modelPoolAssignmentsRef.current.clear()
-      modelPoolUrlsRef.current.clear()
-      modelPoolLoadingRef.current.clear()
+      modelPool.clear()
+      modelPoolAssignments.clear()
+      modelPoolUrls.clear()
+      modelPoolLoading.clear()
       modelPoolReadyRef.current = false
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- graphics settings used at init only; runtime updates handled by separate hooks
