@@ -1,13 +1,30 @@
 import { useEffect, useState } from 'react'
 import { useAirportStore } from '../../stores/airportStore'
 import { useVatsimStore } from '../../stores/vatsimStore'
+import { useViewportStore } from '../../stores/viewportStore'
 import './TopBar.css'
+
+/**
+ * Convert heading (0-360) to cardinal direction
+ */
+function getCardinalDirection(heading: number): string {
+  const h = ((heading % 360) + 360) % 360
+  if (h >= 337.5 || h < 22.5) return 'N'
+  if (h >= 22.5 && h < 67.5) return 'NE'
+  if (h >= 67.5 && h < 112.5) return 'E'
+  if (h >= 112.5 && h < 157.5) return 'SE'
+  if (h >= 157.5 && h < 202.5) return 'S'
+  if (h >= 202.5 && h < 247.5) return 'SW'
+  if (h >= 247.5 && h < 292.5) return 'W'
+  return 'NW'
+}
 
 function TopBar() {
   const currentAirport = useAirportStore((state) => state.currentAirport)
   const setAirportSelectorOpen = useAirportStore((state) => state.setAirportSelectorOpen)
   const isConnected = useVatsimStore((state) => state.isConnected)
   const totalPilotsFromApi = useVatsimStore((state) => state.totalPilotsFromApi)
+  const heading = useViewportStore((state) => state.getActiveCameraState().heading)
 
   const [zuluTime, setZuluTime] = useState('')
 
@@ -34,6 +51,7 @@ function TopBar() {
   return (
     <div className="top-bar">
       <div className="top-bar-left">
+        <span className="compass-direction">{getCardinalDirection(heading)}</span>
         <button className="airport-button" onClick={handleAirportClick}>
           {currentAirport ? (
             <>

@@ -29,6 +29,16 @@
   flex: 0 0 auto;
 }
 
+.compass-direction {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 14px;
+  font-weight: 600;
+  color: #4fc3f7;
+  min-width: 24px;
+  text-align: center;
+  margin-right: 12px;
+}
+
 .airport-button {
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.2);
