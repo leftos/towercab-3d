@@ -151,6 +151,41 @@ export {
 } from './mod'
 
 // ============================================================================
+// BABYLON.JS TYPES
+// ============================================================================
+
+export type {
+  // Aircraft labels
+  AircraftLabel,
+
+  // Weather effects
+  CloudMeshData,
+
+  // Scene initialization
+  BabylonOverlayOptions,
+  BabylonSceneOptions,
+
+  // Camera synchronization
+  BabylonCameraSyncOptions,
+
+  // ENU transforms
+  EnuTransformData,
+
+  // Weather visibility
+  WeatherVisibilityParams,
+
+  // Memory diagnostics
+  BabylonMemoryCounters,
+
+  // Hook return types
+  UseBabylonSceneResult,
+  UseBabylonWeatherResult,
+  UseBabylonLabelsResult,
+  UseBabylonRootNodeResult,
+  UseBabylonCameraSyncResult
+} from './babylon'
+
+// ============================================================================
 // TYPE ORGANIZATION NOTES
 // ============================================================================
 
@@ -186,6 +221,10 @@ export {
  * 7. **Modding types** → `mod.ts`
  *    - Custom aircraft/tower models
  *    - Used by: AircraftModelService, TowerModelService
+ *
+ * 8. **Babylon.js types** → `babylon.ts`
+ *    - Babylon rendering, labels, weather effects, ENU transforms
+ *    - Used by: useBabylonOverlay, useBabylonScene, useBabylonWeather, useBabylonLabels
  *
  * Always add comprehensive JSDoc comments with:
  * - Purpose and description
