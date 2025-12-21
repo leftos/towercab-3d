@@ -9,7 +9,8 @@
     "vite:build": "vite build",
     "vite:preview": "vite preview",
     "dev": "tauri dev",
-    "build": "tauri build"
+    "build": "tauri build",
+    "tauri": "tauri"
   },
   "keywords": [
     "vatsim",
