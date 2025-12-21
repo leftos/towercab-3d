@@ -117,9 +117,6 @@ export function useCesiumStereo(
     saveCameraState(camera)
 
     try {
-      // Initialize the frame
-      scene.initializeFrame()
-
       // --- Render Right Eye ---
       configureEyeCamera(camera, 'right', ipd)
       scene.render()

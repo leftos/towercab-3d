@@ -21,7 +21,7 @@ export interface ViewportLayout {
 }
 
 // State saved before following an aircraft (for restoration)
-interface PreFollowState {
+export interface PreFollowState {
   heading: number
   pitch: number
   fov: number

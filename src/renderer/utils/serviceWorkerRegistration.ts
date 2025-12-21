@@ -14,8 +14,8 @@ export async function registerTileCacheServiceWorker(): Promise<ServiceWorkerReg
     // Service worker is in public folder
     // In dev: served from root (/)
     // In prod: served relative to the HTML file (./)
-    const swUrl = import.meta.env.DEV ? '/service-worker.js' : './service-worker.js'
-    const scope = import.meta.env.DEV ? '/' : './'
+    const swUrl = (import.meta as any).env.DEV ? '/service-worker.js' : './service-worker.js'
+    const scope = (import.meta as any).env.DEV ? '/' : './'
 
     const registration = await navigator.serviceWorker.register(swUrl, {
       scope
@@ -53,12 +53,19 @@ export async function clearServiceWorkerCache(): Promise<boolean> {
   }
 
   return new Promise((resolve) => {
+    const controller = navigator.serviceWorker.controller
+    if (!controller) {
+      console.warn('No service worker controller available')
+      resolve(false)
+      return
+    }
+
     const channel = new MessageChannel()
     channel.port1.onmessage = (event) => {
       resolve(event.data.success)
     }
 
-    navigator.serviceWorker.controller.postMessage(
+    controller.postMessage(
       { type: 'CLEAR_CACHE' },
       [channel.port2]
     )

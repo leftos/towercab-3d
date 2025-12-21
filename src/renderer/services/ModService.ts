@@ -77,12 +77,12 @@ class ModService {
    * Load and register an aircraft mod
    */
   private async loadAircraftMod(manifest: AircraftModManifest, basePath: string): Promise<void> {
-    if (!manifest.model || !this.validateModelFile(manifest.model)) {
+    if (!manifest.modelFile || !this.validateModelFile(manifest.modelFile)) {
       console.warn(`Invalid model file in aircraft mod: ${basePath}`)
       return
     }
 
-    const modelUrl = `${basePath}/${manifest.model}`
+    const modelUrl = `${basePath}/${manifest.modelFile}`
     this.registerAircraftMod(manifest, modelUrl, basePath)
   }
 
@@ -90,12 +90,12 @@ class ModService {
    * Load and register a tower mod
    */
   private async loadTowerMod(manifest: TowerModManifest, basePath: string): Promise<void> {
-    if (!manifest.model || !this.validateModelFile(manifest.model)) {
+    if (!manifest.modelFile || !this.validateModelFile(manifest.modelFile)) {
       console.warn(`Invalid model file in tower mod: ${basePath}`)
       return
     }
 
-    const modelUrl = `${basePath}/${manifest.model}`
+    const modelUrl = `${basePath}/${manifest.modelFile}`
     this.registerTowerMod(manifest, modelUrl, basePath)
   }
 

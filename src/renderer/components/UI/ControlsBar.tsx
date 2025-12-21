@@ -98,14 +98,14 @@ function ControlsBar() {
   const setEnableLogDepth = useSettingsStore((state) => state.setEnableLogDepth)
   const enableGroundAtmosphere = useSettingsStore((state) => state.enableGroundAtmosphere)
   const setEnableGroundAtmosphere = useSettingsStore((state) => state.setEnableGroundAtmosphere)
+  const enableAmbientOcclusion = useSettingsStore((state) => state.enableAmbientOcclusion)
+  const setEnableAmbientOcclusion = useSettingsStore((state) => state.setEnableAmbientOcclusion)
   const enableLighting = useSettingsStore((state) => state.enableLighting)
   const setEnableLighting = useSettingsStore((state) => state.setEnableLighting)
   const enableShadows = useSettingsStore((state) => state.enableShadows)
   const setEnableShadows = useSettingsStore((state) => state.setEnableShadows)
   const shadowMapSize = useSettingsStore((state) => state.shadowMapSize)
   const setShadowMapSize = useSettingsStore((state) => state.setShadowMapSize)
-  const shadowCascades = useSettingsStore((state) => state.shadowCascades)
-  const setShadowCascades = useSettingsStore((state) => state.setShadowCascades)
   const shadowMaxDistance = useSettingsStore((state) => state.shadowMaxDistance)
   const setShadowMaxDistance = useSettingsStore((state) => state.setShadowMaxDistance)
   const shadowDarkness = useSettingsStore((state) => state.shadowDarkness)
@@ -975,6 +975,20 @@ function ControlsBar() {
                       <label>
                         <input
                           type="checkbox"
+                          checked={enableAmbientOcclusion}
+                          onChange={(e) => setEnableAmbientOcclusion(e.target.checked)}
+                        />
+                        Ambient Occlusion (HBAO)
+                      </label>
+                      <p className="setting-hint">
+                        Darkens creases and corners for depth. ⚠️ Can cause visible banding artifacts - disable if you see dark bands.
+                      </p>
+                    </div>
+
+                    <div className="setting-item">
+                      <label>
+                        <input
+                          type="checkbox"
                           checked={enableLighting}
                           onChange={(e) => setEnableLighting(e.target.checked)}
                         />
@@ -1018,21 +1032,6 @@ function ControlsBar() {
                           </p>
                         </div>
 
-                        <div className="setting-item">
-                          <label>Shadow Cascades</label>
-                          <select
-                            value={shadowCascades}
-                            onChange={(e) => setShadowCascades(Number(e.target.value))}
-                            className="select-input"
-                          >
-                            <option value={1}>1 (Single)</option>
-                            <option value={2}>2 (Dual)</option>
-                            <option value={4}>4 (Quad)</option>
-                          </select>
-                          <p className="setting-hint">
-                            More cascades = better shadow quality at different distances.
-                          </p>
-                        </div>
 
                         <div className="setting-item">
                           <label>Shadow Max Distance</label>
@@ -1040,7 +1039,7 @@ function ControlsBar() {
                             <input
                               type="range"
                               min="100"
-                              max="10000"
+                              max="20000"
                               step="100"
                               value={shadowMaxDistance}
                               onChange={(e) => setShadowMaxDistance(Number(e.target.value))}
@@ -1048,7 +1047,7 @@ function ControlsBar() {
                             <span>{shadowMaxDistance}m</span>
                           </div>
                           <p className="setting-hint">
-                            Maximum distance for shadows. Lower = better quality nearby.
+                            Maximum distance for rendering shadows. Higher values reduce banding but may impact performance. Default: 10000m (10km).
                           </p>
                         </div>
 

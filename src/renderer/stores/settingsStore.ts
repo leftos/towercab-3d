@@ -55,10 +55,10 @@ interface SettingsStore {
   enableHdr: boolean           // High dynamic range
   enableLogDepth: boolean      // Logarithmic depth buffer
   enableGroundAtmosphere: boolean  // Ground atmosphere effect
+  enableAmbientOcclusion: boolean  // Screen-space ambient occlusion (can cause banding)
   enableLighting: boolean      // Globe lighting
   enableShadows: boolean       // Terrain/model shadows
   shadowMapSize: number        // Shadow map resolution: 1024, 2048, 4096
-  shadowCascades: number       // Number of shadow cascades: 1, 2, 4
   shadowMaxDistance: number    // Maximum shadow distance in meters
   shadowDarkness: number       // Shadow darkness: 0.0-1.0
   shadowSoftness: boolean      // Soft shadows vs hard shadows
@@ -98,10 +98,10 @@ interface SettingsStore {
   setEnableHdr: (enable: boolean) => void
   setEnableLogDepth: (enable: boolean) => void
   setEnableGroundAtmosphere: (enable: boolean) => void
+  setEnableAmbientOcclusion: (enable: boolean) => void
   setEnableLighting: (enable: boolean) => void
   setEnableShadows: (enable: boolean) => void
   setShadowMapSize: (size: number) => void
-  setShadowCascades: (cascades: number) => void
   setShadowMaxDistance: (distance: number) => void
   setShadowDarkness: (darkness: number) => void
   setShadowSoftness: (soft: boolean) => void
@@ -148,15 +148,15 @@ const DEFAULT_SETTINGS = {
   enableHdr: false,       // High dynamic range (can cause banding)
   enableLogDepth: true,   // Logarithmic depth buffer
   enableGroundAtmosphere: true,
+  enableAmbientOcclusion: false, // Disabled by default - can cause visible banding artifacts
   enableLighting: true,
   enableShadows: true,
-  shadowMapSize: 4096,    // 1024, 2048, 4096
-  shadowCascades: 4,      // 1, 2, 4
-  shadowMaxDistance: 2000, // meters
+  shadowMapSize: 2048,    // 1024, 2048, 4096 (reduced from 4096 to balance quality vs performance)
+  shadowMaxDistance: 10000, // meters (increased from 2000 to reduce banding, matches Cesium Sandcastle)
   shadowDarkness: 0.3,    // 0.0 = no darkening, 1.0 = black
-  shadowSoftness: true,   // soft vs hard shadows
-  shadowFadingEnabled: true,
-  shadowNormalOffset: true
+  shadowSoftness: true,   // soft vs hard shadows (PCF filtering)
+  shadowFadingEnabled: false, // Disabled to reduce banding visibility at cascade boundaries
+  shadowNormalOffset: true  // Reduces shadow acne
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -243,18 +243,17 @@ export const useSettingsStore = create<SettingsStore>()(
 
       setEnableGroundAtmosphere: (enable: boolean) => set({ enableGroundAtmosphere: enable }),
 
+      setEnableAmbientOcclusion: (enable: boolean) => set({ enableAmbientOcclusion: enable }),
+
       setEnableLighting: (enable: boolean) => set({ enableLighting: enable }),
 
       setEnableShadows: (enable: boolean) => set({ enableShadows: enable }),
 
       setShadowMapSize: (size: number) =>
-        set({ shadowMapSize: [1024, 2048, 4096, 8192].includes(size) ? size : 4096 }),
-
-      setShadowCascades: (cascades: number) =>
-        set({ shadowCascades: [1, 2, 4].includes(cascades) ? cascades : 4 }),
+        set({ shadowMapSize: [1024, 2048, 4096, 8192].includes(size) ? size : 2048 }),
 
       setShadowMaxDistance: (distance: number) =>
-        set({ shadowMaxDistance: Math.max(100, Math.min(10000, distance)) }),
+        set({ shadowMaxDistance: Math.max(100, Math.min(20000, distance)) }),
 
       setShadowDarkness: (darkness: number) =>
         set({ shadowDarkness: Math.max(0, Math.min(1, darkness)) }),

@@ -19,14 +19,34 @@ npm run vite:build # Build frontend only (internal, used by Tauri)
 
 **Note for Claude:** Only the user can run `npm run dev` as it launches the Tauri app with a GUI. Ask the user to run this command and report back any errors.
 
-**Important:** Always run ESLint before committing changes:
+**Important:** Always run ESLint and TypeScript checks before committing changes:
 
 ```bash
-npx eslint src/        # Check for linting errors
-npx eslint src/ --fix  # Auto-fix fixable issues
+npx eslint src/         # Check for linting errors
+npx eslint src/ --fix   # Auto-fix fixable issues
+npm run typecheck       # Run TypeScript type checking (CRITICAL)
 ```
 
-Fix all ESLint errors before committing. Do not disable ESLint rules without a justified reason.
+Fix all ESLint and TypeScript errors before committing. Do not disable rules without a justified reason.
+
+### Why Type Checking Matters
+
+**CRITICAL:** Vite does not perform type checking during builds - it only transpiles TypeScript to JavaScript using esbuild. This means type errors can slip through if you don't explicitly run `tsc`.
+
+**TypeScript errors were previously missed because:**
+1. `vite build` uses esbuild for transpilation, which skips type checking for performance
+2. ESLint checks code style/patterns, not type correctness
+3. `skipLibCheck: true` in tsconfig.json skips checking node_modules types (for performance)
+4. There was no explicit `tsc --noEmit` check in the build workflow
+
+**The `npm run typecheck` script is now part of the build process to prevent this in the future.**
+
+Always run `npm run typecheck` before:
+- Creating a commit
+- Opening a pull request
+- Before `npm run build`
+
+The build script now automatically runs typecheck first, so production builds will fail if there are type errors.
 
 ## Architecture
 

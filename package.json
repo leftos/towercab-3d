@@ -8,8 +8,9 @@
     "vite:dev": "vite",
     "vite:build": "vite build",
     "vite:preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.web.json --noEmit",
     "dev": "tauri dev",
-    "build": "tauri build",
+    "build": "npm run typecheck && tauri build",
     "tauri": "tauri"
   },
   "keywords": [

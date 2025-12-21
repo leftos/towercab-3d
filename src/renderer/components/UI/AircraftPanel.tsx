@@ -320,7 +320,7 @@ function AircraftPanel() {
               <span className="zoom-label">Zoom: {followZoom.toFixed(1)}x</span>
             )}
           </div>
-          <button className="stop-following-btn" onClick={stopFollowing}>
+          <button className="stop-following-btn" onClick={() => stopFollowing()}>
             Stop (Esc)
           </button>
         </div>

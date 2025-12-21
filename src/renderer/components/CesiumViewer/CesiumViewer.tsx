@@ -110,10 +110,10 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   const enableHdr = useSettingsStore((state) => state.enableHdr)
   const enableLogDepth = useSettingsStore((state) => state.enableLogDepth)
   const enableGroundAtmosphere = useSettingsStore((state) => state.enableGroundAtmosphere)
+  const enableAmbientOcclusion = useSettingsStore((state) => state.enableAmbientOcclusion)
   const enableLighting = useSettingsStore((state) => state.enableLighting)
   const enableShadows = useSettingsStore((state) => state.enableShadows)
   const shadowMapSize = useSettingsStore((state) => state.shadowMapSize)
-  const shadowCascades = useSettingsStore((state) => state.shadowCascades)
   const shadowMaxDistance = useSettingsStore((state) => state.shadowMaxDistance)
   const shadowDarkness = useSettingsStore((state) => state.shadowDarkness)
   const shadowSoftness = useSettingsStore((state) => state.shadowSoftness)
@@ -243,14 +243,16 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     // Rendering quality improvements - from settings
     viewer.scene.logarithmicDepthBuffer = enableLogDepth
     viewer.scene.highDynamicRange = enableHdr
-    viewer.scene.fxaa = enableFxaa
+    viewer.scene.postProcessStages.fxaa.enabled = enableFxaa
+    viewer.scene.postProcessStages.ambientOcclusion.enabled = enableAmbientOcclusion
 
     // Improve texture quality - helps reduce mipmap banding
     viewer.scene.globe.showGroundAtmosphere = enableGroundAtmosphere
     viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString('#1a1a2e')
 
     // Try to enable maximum anisotropic filtering for better texture quality at oblique angles
-    const gl = viewer.scene.context._gl as WebGL2RenderingContext | null
+    // Note: context is private, using type assertion to access WebGL context
+    const gl = (viewer.scene as any).context?._gl as WebGL2RenderingContext | null
     if (gl) {
       const ext = gl.getExtension('EXT_texture_filter_anisotropic') ||
                   gl.getExtension('WEBKIT_EXT_texture_filter_anisotropic') ||
@@ -271,7 +273,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
       if (enableShadows) {
         viewer.shadowMap.softShadows = shadowSoftness
         viewer.shadowMap.size = shadowMapSize
-        viewer.shadowMap.numberOfCascades = shadowCascades
+        // Note: numberOfCascades is not configurable in Cesium API (only 1 or 4 cascades supported internally)
         viewer.shadowMap.maximumDistance = shadowMaxDistance
         viewer.shadowMap.darkness = shadowDarkness
         viewer.shadowMap.fadingEnabled = shadowFadingEnabled
@@ -513,7 +515,10 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     if (!cesiumViewer || isInset) return
 
     // Update FXAA
-    cesiumViewer.scene.fxaa = enableFxaa
+    cesiumViewer.scene.postProcessStages.fxaa.enabled = enableFxaa
+
+    // Update ambient occlusion
+    cesiumViewer.scene.postProcessStages.ambientOcclusion.enabled = enableAmbientOcclusion
 
     // Update HDR
     cesiumViewer.scene.highDynamicRange = enableHdr
@@ -532,7 +537,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     if (enableShadows) {
       cesiumViewer.shadowMap.softShadows = shadowSoftness
       cesiumViewer.shadowMap.size = shadowMapSize
-      cesiumViewer.shadowMap.numberOfCascades = shadowCascades
+      // Note: numberOfCascades is not configurable in Cesium API (only 1 or 4 cascades supported internally)
       cesiumViewer.shadowMap.maximumDistance = shadowMaxDistance
       cesiumViewer.shadowMap.darkness = shadowDarkness
       cesiumViewer.shadowMap.fadingEnabled = shadowFadingEnabled
@@ -542,8 +547,8 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
       cesiumViewer.terrainShadows = Cesium.ShadowMode.DISABLED
     }
 
-    console.log(`Graphics settings updated: FXAA=${enableFxaa}, HDR=${enableHdr}, LogDepth=${enableLogDepth}, GroundAtmo=${enableGroundAtmosphere}, Lighting=${enableLighting}, Shadows=${enableShadows}`)
-  }, [cesiumViewer, isInset, enableFxaa, enableHdr, enableLogDepth, enableGroundAtmosphere, enableLighting, enableShadows, shadowMapSize, shadowCascades, shadowMaxDistance, shadowDarkness, shadowSoftness, shadowFadingEnabled, shadowNormalOffset])
+    console.log(`Graphics settings updated: FXAA=${enableFxaa}, AO=${enableAmbientOcclusion}, HDR=${enableHdr}, LogDepth=${enableLogDepth}, GroundAtmo=${enableGroundAtmosphere}, Lighting=${enableLighting}, Shadows=${enableShadows}`)
+  }, [cesiumViewer, isInset, enableFxaa, enableAmbientOcclusion, enableHdr, enableLogDepth, enableGroundAtmosphere, enableLighting, enableShadows, shadowMapSize, shadowMaxDistance, shadowDarkness, shadowSoftness, shadowFadingEnabled, shadowNormalOffset])
 
   // Time of day control (real time vs fixed time)
   useEffect(() => {
