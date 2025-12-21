@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { metarService, type MetarData } from '../services/MetarService'
 import type { CloudLayer } from '../types'
+import { WEATHER_REFRESH_INTERVAL, NEAREST_METAR_THROTTLE, POSITION_CHANGE_THRESHOLD } from '../constants'
 
 interface WeatherState {
   // Current weather data
@@ -103,9 +104,6 @@ function parseCloudLayers(metar: MetarData): CloudLayer[] {
 // Grid size for position-based cache (in degrees, ~6nm)
 const _POSITION_GRID_SIZE = 0.1
 
-// Minimum distance change to trigger a new nearest METAR fetch (in degrees, ~3nm)
-const POSITION_CHANGE_THRESHOLD = 0.05
-
 export const useWeatherStore = create<WeatherState>((set, get) => ({
   // Initial state
   currentMetar: null,
@@ -203,9 +201,9 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
     // Position changed significantly, update and fetch
     set({ cameraPosition: { lat, lon } })
 
-    // Throttle fetches - only fetch if last fetch was > 30 seconds ago
+    // Throttle fetches - only fetch if last fetch was > NEAREST_METAR_THROTTLE ms ago
     const timeSinceLastFetch = Date.now() - state.lastFetchTime
-    if (timeSinceLastFetch > 30000) {
+    if (timeSinceLastFetch > NEAREST_METAR_THROTTLE) {
       state.fetchNearestWeather(lat, lon)
     }
   },
@@ -218,10 +216,10 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
       clearInterval(state.refreshIntervalId)
     }
 
-    // Start new 5-minute refresh interval
+    // Start new refresh interval
     const intervalId = setInterval(() => {
       get().fetchWeather(icao)
-    }, 5 * 60 * 1000) // 5 minutes
+    }, WEATHER_REFRESH_INTERVAL)
 
     set({ refreshIntervalId: intervalId, useNearestMetar: false })
   },
@@ -234,7 +232,7 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
       clearInterval(state.refreshIntervalId)
     }
 
-    // Start new 5-minute refresh interval for nearest METAR
+    // Start new refresh interval for nearest METAR
     const intervalId = setInterval(() => {
       const currentState = get()
       if (currentState.cameraPosition && currentState.useNearestMetar) {
@@ -243,7 +241,7 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
           currentState.cameraPosition.lon
         )
       }
-    }, 5 * 60 * 1000) // 5 minutes
+    }, WEATHER_REFRESH_INTERVAL)
 
     set({ refreshIntervalId: intervalId, useNearestMetar: true })
   },

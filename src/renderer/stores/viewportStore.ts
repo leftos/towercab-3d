@@ -1,6 +1,26 @@
 import { create } from 'zustand'
 import { persist, subscribeWithSelector } from 'zustand/middleware'
 import type { ViewMode, FollowMode, ViewportLayout, ViewportCameraState, Viewport, CameraBookmark } from '../types'
+import {
+  HEADING_DEFAULT,
+  PITCH_DEFAULT,
+  PITCH_MIN,
+  PITCH_MAX,
+  FOV_DEFAULT,
+  FOV_MIN,
+  FOV_MAX,
+  FOLLOW_ZOOM_DEFAULT,
+  TOPDOWN_ALTITUDE_DEFAULT,
+  TOPDOWN_ALTITUDE_MIN,
+  TOPDOWN_ALTITUDE_MAX,
+  ORBIT_DISTANCE_DEFAULT,
+  ORBIT_DISTANCE_MIN,
+  ORBIT_DISTANCE_MAX,
+  ORBIT_HEADING_DEFAULT,
+  ORBIT_PITCH_DEFAULT,
+  ORBIT_PITCH_MIN,
+  ORBIT_PITCH_MAX
+} from '../constants'
 
 // Generate unique IDs using native crypto API
 const generateId = () => crypto.randomUUID()
@@ -21,32 +41,22 @@ interface AirportViewportConfig {
   bookmarks?: { [slot: number]: CameraBookmark }
 }
 
-// Default camera state values
-const DEFAULT_HEADING = 0
-const DEFAULT_PITCH = -15
-const DEFAULT_FOV = 60
-const DEFAULT_FOLLOW_ZOOM = 1.0
-const DEFAULT_TOPDOWN_ALTITUDE = 2000
-const DEFAULT_ORBIT_DISTANCE = 500
-const DEFAULT_ORBIT_HEADING = 315
-const DEFAULT_ORBIT_PITCH = 15
-
 const createDefaultCameraState = (): ViewportCameraState => ({
   viewMode: '3d',
-  heading: DEFAULT_HEADING,
-  pitch: DEFAULT_PITCH,
-  fov: DEFAULT_FOV,
+  heading: HEADING_DEFAULT,
+  pitch: PITCH_DEFAULT,
+  fov: FOV_DEFAULT,
   positionOffsetX: 0,
   positionOffsetY: 0,
   positionOffsetZ: 0,
-  topdownAltitude: DEFAULT_TOPDOWN_ALTITUDE,
+  topdownAltitude: TOPDOWN_ALTITUDE_DEFAULT,
   followingCallsign: null,
   followMode: 'tower',
-  followZoom: DEFAULT_FOLLOW_ZOOM,
+  followZoom: FOLLOW_ZOOM_DEFAULT,
   preFollowState: null,
-  orbitDistance: DEFAULT_ORBIT_DISTANCE,
-  orbitHeading: DEFAULT_ORBIT_HEADING,
-  orbitPitch: DEFAULT_ORBIT_PITCH
+  orbitDistance: ORBIT_DISTANCE_DEFAULT,
+  orbitHeading: ORBIT_HEADING_DEFAULT,
+  orbitPitch: ORBIT_PITCH_DEFAULT
 })
 
 // Main viewport always uses this fixed ID so CesiumViewer can find it
@@ -432,7 +442,7 @@ export const useViewportStore = create<ViewportStore>()(
           },
 
           setPitch: (pitch) => {
-            const clamped = Math.max(-90, Math.min(90, pitch))
+            const clamped = Math.max(PITCH_MIN, Math.min(PITCH_MAX, pitch))
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
@@ -442,7 +452,7 @@ export const useViewportStore = create<ViewportStore>()(
           },
 
           setFov: (fov) => {
-            const clamped = Math.max(10, Math.min(120, fov))
+            const clamped = Math.max(FOV_MIN, Math.min(FOV_MAX, fov))
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
@@ -464,7 +474,7 @@ export const useViewportStore = create<ViewportStore>()(
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, (state) => ({
-                pitch: Math.max(-90, Math.min(90, state.pitch + delta))
+                pitch: Math.max(PITCH_MIN, Math.min(PITCH_MAX, state.pitch + delta))
               }))
             })
           },
@@ -473,13 +483,13 @@ export const useViewportStore = create<ViewportStore>()(
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, (state) => ({
-                fov: Math.max(10, Math.min(120, state.fov + delta))
+                fov: Math.max(FOV_MIN, Math.min(FOV_MAX, state.fov + delta))
               }))
             })
           },
 
           setTopdownAltitude: (altitude) => {
-            const clamped = Math.max(500, Math.min(50000, altitude))
+            const clamped = Math.max(TOPDOWN_ALTITUDE_MIN, Math.min(TOPDOWN_ALTITUDE_MAX, altitude))
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
@@ -492,7 +502,7 @@ export const useViewportStore = create<ViewportStore>()(
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, (state) => ({
-                topdownAltitude: Math.max(500, Math.min(50000, state.topdownAltitude + delta))
+                topdownAltitude: Math.max(TOPDOWN_ALTITUDE_MIN, Math.min(TOPDOWN_ALTITUDE_MAX, state.topdownAltitude + delta))
               }))
             })
           },
@@ -556,10 +566,10 @@ export const useViewportStore = create<ViewportStore>()(
                 }
                 return {
                   followingCallsign: callsign,
-                  followZoom: DEFAULT_FOLLOW_ZOOM,
-                  orbitDistance: DEFAULT_ORBIT_DISTANCE,
-                  orbitHeading: DEFAULT_ORBIT_HEADING,
-                  orbitPitch: DEFAULT_ORBIT_PITCH,
+                  followZoom: FOLLOW_ZOOM_DEFAULT,
+                  orbitDistance: ORBIT_DISTANCE_DEFAULT,
+                  orbitHeading: ORBIT_HEADING_DEFAULT,
+                  orbitPitch: ORBIT_PITCH_DEFAULT,
                   preFollowState
                 }
               })
@@ -579,10 +589,10 @@ export const useViewportStore = create<ViewportStore>()(
                 return {
                   followingCallsign: callsign,
                   followMode: 'orbit' as FollowMode,
-                  followZoom: DEFAULT_FOLLOW_ZOOM,
-                  orbitDistance: DEFAULT_ORBIT_DISTANCE,
-                  orbitHeading: DEFAULT_ORBIT_HEADING,
-                  orbitPitch: DEFAULT_ORBIT_PITCH,
+                  followZoom: FOLLOW_ZOOM_DEFAULT,
+                  orbitDistance: ORBIT_DISTANCE_DEFAULT,
+                  orbitHeading: ORBIT_HEADING_DEFAULT,
+                  orbitPitch: ORBIT_PITCH_DEFAULT,
                   preFollowState
                 }
               })
@@ -658,7 +668,7 @@ export const useViewportStore = create<ViewportStore>()(
 
           // Orbit mode actions
           setOrbitDistance: (distance) => {
-            const clamped = Math.max(50, Math.min(5000, distance))
+            const clamped = Math.max(ORBIT_DISTANCE_MIN, Math.min(ORBIT_DISTANCE_MAX, distance))
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
@@ -671,7 +681,7 @@ export const useViewportStore = create<ViewportStore>()(
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, (state) => ({
-                orbitDistance: Math.max(50, Math.min(5000, state.orbitDistance + delta))
+                orbitDistance: Math.max(ORBIT_DISTANCE_MIN, Math.min(ORBIT_DISTANCE_MAX, state.orbitDistance + delta))
               }))
             })
           },
@@ -696,7 +706,7 @@ export const useViewportStore = create<ViewportStore>()(
           },
 
           setOrbitPitch: (pitch) => {
-            const clamped = Math.max(-89, Math.min(89, pitch))
+            const clamped = Math.max(ORBIT_PITCH_MIN, Math.min(ORBIT_PITCH_MAX, pitch))
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
@@ -709,7 +719,7 @@ export const useViewportStore = create<ViewportStore>()(
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, (state) => ({
-                orbitPitch: Math.max(-89, Math.min(89, state.orbitPitch + delta))
+                orbitPitch: Math.max(ORBIT_PITCH_MIN, Math.min(ORBIT_PITCH_MAX, state.orbitPitch + delta))
               }))
             })
           },
@@ -894,20 +904,20 @@ export const useViewportStore = create<ViewportStore>()(
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, (state) => {
                 const defaults = state.viewMode === '3d'
-                  ? { heading: DEFAULT_HEADING, pitch: DEFAULT_PITCH, fov: DEFAULT_FOV }
-                  : { heading: DEFAULT_HEADING, pitch: -90, fov: 60 }
+                  ? { heading: HEADING_DEFAULT, pitch: PITCH_DEFAULT, fov: FOV_DEFAULT }
+                  : { heading: HEADING_DEFAULT, pitch: -90, fov: 60 }
                 return {
                   ...defaults,
                   positionOffsetX: 0,
                   positionOffsetY: 0,
                   positionOffsetZ: 0,
-                  topdownAltitude: DEFAULT_TOPDOWN_ALTITUDE,
+                  topdownAltitude: TOPDOWN_ALTITUDE_DEFAULT,
                   followingCallsign: null,
                   followMode: 'tower' as FollowMode,
-                  followZoom: DEFAULT_FOLLOW_ZOOM,
-                  orbitDistance: DEFAULT_ORBIT_DISTANCE,
-                  orbitHeading: DEFAULT_ORBIT_HEADING,
-                  orbitPitch: DEFAULT_ORBIT_PITCH,
+                  followZoom: FOLLOW_ZOOM_DEFAULT,
+                  orbitDistance: ORBIT_DISTANCE_DEFAULT,
+                  orbitHeading: ORBIT_HEADING_DEFAULT,
+                  orbitPitch: ORBIT_PITCH_DEFAULT,
                   preFollowState: null
                 }
               })

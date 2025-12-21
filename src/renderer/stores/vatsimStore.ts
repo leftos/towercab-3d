@@ -2,10 +2,7 @@ import { create } from 'zustand'
 import type { PilotData, VatsimData, AircraftState } from '../types/vatsim'
 import { interpolateAircraftState, calculateDistanceNM } from '../utils/interpolation'
 import { useSettingsStore } from './settingsStore'
-
-const VATSIM_API_URL = 'https://data.vatsim.net/v3/vatsim-data.json'
-const POLL_INTERVAL = 3000 // Poll every 3 seconds (VATSIM updates ~15s, but poll faster to catch updates sooner)
-const DEFAULT_UPDATE_INTERVAL = 15000 // Expected time between actual VATSIM data updates
+import { VATSIM_DATA_URL, VATSIM_POLL_INTERVAL, VATSIM_ACTUAL_UPDATE_INTERVAL } from '../constants'
 
 interface ReferencePosition {
   latitude: number
@@ -58,7 +55,7 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
   totalPilotsFromApi: 0,
   pilotsFilteredByDistance: 0,
   lastVatsimTimestamp: 0,
-  lastUpdateInterval: DEFAULT_UPDATE_INTERVAL, // Default to expected VATSIM update interval
+  lastUpdateInterval: VATSIM_ACTUAL_UPDATE_INTERVAL, // Default to expected VATSIM update interval
   isConnected: false,
   lastUpdate: null,
   error: null,
@@ -70,7 +67,7 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
     set({ isLoading: true, error: null })
 
     try {
-      const response = await fetch(VATSIM_API_URL)
+      const response = await fetch(VATSIM_DATA_URL)
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
@@ -91,7 +88,7 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
       // This tells us how long interpolation should take to reach the target
       const actualInterval = lastVatsimTimestamp > 0
         ? vatsimTimestamp - lastVatsimTimestamp
-        : DEFAULT_UPDATE_INTERVAL
+        : VATSIM_ACTUAL_UPDATE_INTERVAL
 
       // Use local time for interpolation (avoids clock skew issues with VATSIM server)
       const now = Date.now()
@@ -210,7 +207,7 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
     fetchData()
 
     // Set up interval
-    const interval = setInterval(fetchData, POLL_INTERVAL)
+    const interval = setInterval(fetchData, VATSIM_POLL_INTERVAL)
     set({ pollingInterval: interval })
   },
 
