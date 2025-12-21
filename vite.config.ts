@@ -43,7 +43,7 @@ export default defineConfig({
   root: resolve('src/renderer'),
 
   define: {
-    CESIUM_BASE_URL: JSON.stringify(`./${cesiumBaseUrl}`)
+    CESIUM_BASE_URL: JSON.stringify(`/${cesiumBaseUrl}`)
   },
 
   resolve: {

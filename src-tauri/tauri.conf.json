@@ -18,11 +18,12 @@
         "minWidth": 1024,
         "minHeight": 768,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "devtools": true
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.cesium.com https://*.arcgisonline.com https://*.tile.openstreetmap.org; connect-src 'self' https://*.cesium.com https://data.vatsim.net https://raw.githubusercontent.com https://aviationweather.gov wss://*.cesium.com; worker-src 'self' blob:"
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; connect-src 'self' http: https: wss:; worker-src 'self' blob:"
     }
   },
   "bundle": {
