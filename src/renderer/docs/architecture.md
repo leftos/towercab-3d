@@ -468,6 +468,91 @@ App.tsx (root)
     └─ Stereo Cesium background planes (left/right eye)
 ```
 
+## Babylon.js Hook Decomposition
+
+### Orchestrator Pattern
+
+useBabylonOverlay was refactored from a monolithic 889-line hook into a thin orchestrator (265 LOC) that composes specialized hooks:
+
+```
+useBabylonOverlay (Orchestrator - 265 LOC)
+    ├─ 1. useBabylonScene({ canvas })
+    │      ├─ Creates Babylon.Engine with transparent background
+    │      ├─ Creates Babylon.Scene with MSAA 4x anti-aliasing
+    │      ├─ Creates FreeCamera (synchronized with Cesium)
+    │      ├─ Creates GUI AdvancedDynamicTexture for 2D overlays
+    │      ├─ Adds hemispheric and directional lighting
+    │      └─ Handles canvas resizing and resource disposal
+    │
+    ├─ 2. useBabylonWeather({ scene })
+    │      ├─ Creates fog dome mesh (hemisphere, BACKSIDE rendering)
+    │      ├─ Creates cloud layer mesh pool (4 planes, 50km diameter)
+    │      ├─ Updates fog scale/opacity based on METAR visibility
+    │      ├─ Updates cloud positions based on METAR ceiling data
+    │      └─ Provides isVisibleByWeather() for label culling
+    │
+    ├─ 3. useBabylonLabels({ guiTexture })
+    │      ├─ Creates aircraft datablock labels (Rectangle + TextBlock)
+    │      ├─ Creates leader lines (Line connecting label to aircraft)
+    │      ├─ Updates label colors and followed aircraft highlighting
+    │      ├─ Positions labels with screen-space coordinates
+    │      ├─ Calculates leader line endpoints (ray-rectangle intersection)
+    │      └─ Disposes labels when aircraft disappear
+    │
+    ├─ 4. useBabylonRootNode({ scene, cesiumViewer })
+    │      ├─ Creates root TransformNode at ENU origin (tower location)
+    │      ├─ Setups ENU transformation matrices (enuToFixed, fixedToEnu)
+    │      ├─ Samples Cesium terrain for geoid offset calculation
+    │      ├─ Provides getters for matrices and terrain offset
+    │      └─ Disposes root node on unmount or airport change
+    │
+    └─ 5. useBabylonCameraSync({ cesiumViewer, camera, fogDome })
+           ├─ Reads Cesium camera position/rotation/FOV
+           ├─ Converts ECEF → ENU using fixedToEnu matrix
+           ├─ Extracts Euler angles from direction/up vectors
+           ├─ Updates Babylon camera position/rotation/FOV
+           ├─ Positions fog dome at camera location
+           └─ Handles both 3D perspective and top-down modes
+```
+
+### Hook Call Order (Critical!)
+
+```typescript
+// Correct order - each hook depends on previous ones
+const { engine, scene, camera, guiTexture, sceneReady } = useBabylonScene({ canvas })
+const { fogDome, isVisibleByWeather } = useBabylonWeather({ scene })
+const { updateLabel, updateLabelPosition, removeLabel } = useBabylonLabels({ guiTexture })
+const { setupRootNode } = useBabylonRootNode({ scene, cesiumViewer })
+const { syncCamera } = useBabylonCameraSync({ cesiumViewer, camera, fogDome })
+
+// WRONG - camera sync before scene initialization
+const { syncCamera } = useBabylonCameraSync({ cesiumViewer, camera, fogDome })  // ❌ camera is null!
+const { camera } = useBabylonScene({ canvas })
+```
+
+### Benefits of Decomposition
+
+**For LLM Agents:**
+- 70% reduction in file size (889 → 265 LOC for orchestrator)
+- Clear hook boundaries with single responsibilities
+- Easier to locate specific functionality (search for "fog" → useBabylonWeather)
+- Better code search results (specialized files vs monolith)
+
+**For Developers:**
+- Modular architecture (test hooks independently)
+- Reusable hooks (use useBabylonScene alone for non-overlay cases)
+- Clear separation of concerns (scene vs weather vs labels)
+- Easier to add features (modify one hook, not monolith)
+- Simpler debugging (smaller scope per hook)
+
+**Memory Management:**
+Each hook manages its own resource disposal:
+- useBabylonScene → engine, scene, camera, GUI
+- useBabylonWeather → fog dome, cloud meshes
+- useBabylonLabels → labels, leader lines
+- useBabylonRootNode → root transform node
+- useBabylonCameraSync → no resources (stateless calculations)
+
 ## Performance Optimizations
 
 ### Memory Management
@@ -577,12 +662,14 @@ src/renderer/
 │   ├─ viewport.ts (Viewport, ViewportLayout, etc.)
 │   ├─ vatsim.ts (Pilot, AircraftState, InterpolatedAircraftState)
 │   ├─ weather.ts (CloudLayer, FlightCategory, etc.)
-│   └─ settings.ts (grouped settings interfaces)
+│   ├─ settings.ts (grouped settings interfaces)
+│   └─ babylon.ts (labels, weather meshes, scene options, hook return types, ENU transforms)
 │
 ├─ constants/
 │   ├─ rendering.ts (model pool, shadows, colors)
 │   ├─ camera.ts (FOV/pitch limits, speeds)
-│   └─ api.ts (endpoints, poll intervals)
+│   ├─ api.ts (endpoints, poll intervals)
+│   └─ babylon.ts (scene/camera settings, fog/cloud params, visibility thresholds, lighting)
 │
 └─ docs/
     ├─ coordinate-systems.md (this helped you!)
