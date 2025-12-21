@@ -5,12 +5,15 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Fixed infinite loop crash when using orbit follow mode or dragging inset viewports
 - Aircraft list now shows the same aircraft as datablocks on the map
 - Ground/airborne traffic toggles now affect both aircraft list and datablocks
 - Shadow banding artifacts no longer visible (ambient occlusion disabled by default)
 - Aircraft models now update smoothly at 60Hz instead of jerking once per second
 - Aircraft models now render for all aircraft within the sphere radius, while datablocks are filtered separately (fixes missing aircraft models)
 - Camera no longer jitters in orbit follow mode (added exponential smoothing to camera position)
+- Aircraft banking direction now correct (left turn drops left wing, right turn drops right wing)
+- Aircraft on the ground no longer bank when turning (yaw only below 40 knots groundspeed)
 
 ### Changed
 - Panel filters (search, airport traffic, weather visibility) now affect both list and datablocks on the map
@@ -18,6 +21,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Improved shadow quality at longer distances (default max range increased from 2km to 10km)
 - Improved shadow rendering performance (reduced default shadow map resolution from 4096 to 2048)
 - Shadow max distance can now be configured up to 20km for advanced users
+- Aircraft pitch and roll now smoothly interpolated at 60Hz (prevents jumps when VATSIM data updates)
 
 ### Removed
 - Removed "Shadow Cascades" setting from graphics options (not user-configurable)

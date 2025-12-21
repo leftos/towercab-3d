@@ -218,6 +218,45 @@ export function getInterpolationFactor(
 }
 
 /**
+ * Calculate pitch and roll from physics for a given state
+ * @param verticalRateFtPerMs Vertical rate in feet per millisecond
+ * @param groundspeedKnots Groundspeed in knots
+ * @param turnRateDegPerSec Turn rate in degrees per second
+ * @param orientationIntensity Intensity multiplier (0.25 to 1.5)
+ * @returns Pitch and roll in degrees
+ */
+function calculateOrientation(
+  verticalRateFtPerMs: number,
+  groundspeedKnots: number,
+  turnRateDegPerSec: number,
+  orientationIntensity: number
+): { pitch: number; roll: number } {
+  let pitch = 0
+  let roll = 0
+
+  // Pitch from flight path angle: γ = atan(vertical_velocity / horizontal_velocity)
+  const verticalRateFps = verticalRateFtPerMs * 1000  // ft/ms to ft/sec
+  const groundspeedFps = groundspeedKnots * 1.68781  // knots to ft/sec
+  if (groundspeedFps > 10) {
+    const rawPitch = Math.atan2(verticalRateFps, groundspeedFps) * (180 / Math.PI)
+    pitch = Math.max(-15, Math.min(20, rawPitch * orientationIntensity))
+  }
+
+  // Roll from coordinated turn: bank = atan(V × ω / g)
+  // Only apply roll when airborne (groundspeed > 40 knots)
+  // Ground aircraft should only yaw without banking
+  const velocityMs = groundspeedKnots * 0.514444  // knots to m/s
+  const turnRateRad = turnRateDegPerSec * (Math.PI / 180)  // deg/s to rad/s
+  const isLikelyAirborne = groundspeedKnots > 40  // Knots threshold for airborne detection
+  if (velocityMs > 5 && isLikelyAirborne) {
+    const rawRoll = Math.atan2(velocityMs * turnRateRad, 9.81) * (180 / Math.PI)
+    roll = Math.max(-35, Math.min(35, rawRoll * orientationIntensity))
+  }
+
+  return { pitch, roll }
+}
+
+/**
  * Interpolate aircraft state between two snapshots using physics-based prediction
  *
  * For t <= 1.0 (interpolation):
@@ -234,13 +273,19 @@ export function getInterpolationFactor(
  * Orientation emulation (when enabled):
  * - Pitch derived from vertical rate: γ = atan(vertical_velocity / horizontal_velocity)
  * - Roll derived from turn rate using coordinated flight: bank = atan(V × ω / g)
+ * - Both pitch and roll are smoothly interpolated between updates for realistic motion
+ *
+ * @param previousVerticalRate Vertical rate from the previous segment (ft/ms) for smooth orientation transitions
+ * @param previousTurnRate Turn rate from the previous segment (deg/sec) for smooth orientation transitions
  */
 export function interpolateAircraftState(
   previous: AircraftState | undefined,
   current: AircraftState,
   now: number,
   orientationEnabled: boolean = true,
-  orientationIntensity: number = 1.0
+  orientationIntensity: number = 1.0,
+  previousVerticalRate: number = 0,
+  previousTurnRate: number = 0
 ): InterpolatedAircraftState {
   // If no previous state, return current position without interpolation
   if (!previous) {
@@ -262,17 +307,15 @@ export function interpolateAircraftState(
   const interval = current.timestamp - previous.timestamp
   const t = getInterpolationFactor(previous.timestamp, current.timestamp, now)
 
-  // Calculate turn rate for this segment
+  // Calculate turn rate and vertical rate for this segment
   const turnRate = calculateTurnRate(previous.heading, current.heading, interval)
+  const verticalRate = interval > 0 ? (current.altitude - previous.altitude) / interval : 0
 
   let interpolatedLat: number
   let interpolatedLon: number
   let interpolatedHeading: number
   let interpolatedAltitude: number
   let interpolatedGroundspeed: number
-
-  // Calculate vertical rate (feet per ms) for extrapolation
-  const verticalRate = interval > 0 ? (current.altitude - previous.altitude) / interval : 0
 
   // Check if previous and current positions are essentially the same
   // This happens when an aircraft first appears or data hasn't changed
@@ -383,26 +426,42 @@ export function interpolateAircraftState(
     interpolatedGroundspeed = current.groundspeed
   }
 
-  // Calculate pitch and roll from physics
+  // Calculate pitch and roll from physics with smooth interpolation
   let pitch = 0
   let roll = 0
 
   if (orientationEnabled) {
-    // Pitch from flight path angle: γ = atan(vertical_velocity / horizontal_velocity)
-    // verticalRate is in ft/ms, convert to ft/sec; groundspeed in knots -> ft/sec
-    const verticalRateFps = verticalRate * 1000  // ft/ms to ft/sec
-    const groundspeedFps = interpolatedGroundspeed * 1.68781  // knots to ft/sec
-    if (groundspeedFps > 10) {
-      const rawPitch = Math.atan2(verticalRateFps, groundspeedFps) * (180 / Math.PI)
-      pitch = Math.max(-15, Math.min(20, rawPitch * orientationIntensity))
-    }
+    // Calculate orientation at START of interpolation period (t=0)
+    // Use previous segment's physics (vertical rate and turn rate from before current segment)
+    const prevOrientation = calculateOrientation(
+      previousVerticalRate,
+      previous.groundspeed,
+      previousTurnRate,
+      orientationIntensity
+    )
 
-    // Roll from coordinated turn: bank = atan(V × ω / g)
-    const velocityMs = interpolatedGroundspeed * 0.514444  // knots to m/s
-    const turnRateRad = turnRate * (Math.PI / 180)  // deg/s to rad/s
-    if (velocityMs > 5) {
-      const rawRoll = Math.atan2(velocityMs * turnRateRad, 9.81) * (180 / Math.PI)
-      roll = Math.max(-35, Math.min(35, rawRoll * orientationIntensity))
+    // Calculate orientation at END of interpolation period (t=1)
+    // Use current segment's physics (vertical rate and turn rate for this segment)
+    const currOrientation = calculateOrientation(
+      verticalRate,
+      current.groundspeed,
+      turnRate,
+      orientationIntensity
+    )
+
+    // Smoothly interpolate orientation synchronized with position
+    // Orientation completes transition at the same time as position (when next VATSIM data arrives)
+    const orientationSmoothingFactor = 1.0
+    const tOrientation = Math.min(1.0, t / orientationSmoothingFactor)
+
+    // Use smootherstep (even gentler than smoothstep) for very gradual transitions
+    const easedT = smootherstep(tOrientation)
+    pitch = lerp(prevOrientation.pitch, currOrientation.pitch, easedT)
+    roll = lerp(prevOrientation.roll, currOrientation.roll, easedT)
+
+    // Debug logging - sample every 60th frame (~1 second)
+    if (Math.random() < 0.016 && (Math.abs(turnRate) > 0.1 || Math.abs(roll) > 0.1)) {
+      console.log(`[${current.callsign}] prevTR:${previousTurnRate.toFixed(1)} currTR:${turnRate.toFixed(1)} prevR:${prevOrientation.roll.toFixed(1)} currR:${currOrientation.roll.toFixed(1)} finalR:${roll.toFixed(1)} t:${t.toFixed(2)}`)
     }
   }
 

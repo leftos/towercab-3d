@@ -975,12 +975,18 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
             // Model heading: Cesium models typically face +X, so heading=0 means east
             // Subtract 90 to convert from compass heading (north=0) to model heading
             // Add 180° to flip models that face backwards
-            // Pitch: Cesium uses positive pitch for nose-down, so negate for intuitive behavior
-            // Roll: Applied directly from interpolated value
+            // Pitch: Negate because Cesium's coordinate system is opposite to our convention
+            // Roll: Negate for same reason as pitch (due to model orientation)
+
+            // Debug: Sample a few aircraft per frame
+            if (Math.random() < 0.01 && Math.abs(aircraft.interpolatedRoll) > 0.1) {
+              console.log(`Cesium [${aircraft.callsign}] applying pitch:${aircraft.interpolatedPitch.toFixed(1)} roll:${aircraft.interpolatedRoll.toFixed(1)} TR:${aircraft.turnRate.toFixed(1)}`)
+            }
+
             const hpr = new Cesium.HeadingPitchRoll(
               Cesium.Math.toRadians(aircraft.interpolatedHeading - 90 + 180),
               Cesium.Math.toRadians(-aircraft.interpolatedPitch),
-              Cesium.Math.toRadians(aircraft.interpolatedRoll)
+              Cesium.Math.toRadians(-aircraft.interpolatedRoll)
             )
 
             // Create base transformation matrix (translation + rotation)

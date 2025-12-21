@@ -69,16 +69,29 @@ export function useAircraftInterpolation(): Map<string, InterpolatedAircraftStat
     for (const [callsign, currentState] of aircraftStates) {
       activeCallsigns.add(callsign)
       const previousState = previousStates.get(callsign)
+
+      // Get previous segment's physics from last interpolated state for smooth transitions
+      const existing = statesMap.get(callsign)
+
+      // Detect if this is a new VATSIM data update (currentState timestamp changed)
+      const isNewVatsimData = !existing || existing.timestamp !== currentState.timestamp
+
+      // Only extract previous physics if we have existing data and it's a NEW update
+      // This preserves the OLD segment's physics for smooth transitions
+      const previousVerticalRate = (existing && isNewVatsimData) ? (existing.verticalRate / 60000) : 0
+      const previousTurnRate = (existing && isNewVatsimData) ? existing.turnRate : 0
+
       const interpolated = interpolateAircraftState(
         previousState,
         currentState,
         now,
         orientationEnabled,
-        orientationIntensity
+        orientationIntensity,
+        previousVerticalRate,
+        previousTurnRate
       )
 
       // Reuse existing entry or create new one
-      const existing = statesMap.get(callsign)
       if (existing) {
         // Update in place to avoid object allocation
         existing.callsign = interpolated.callsign
@@ -89,12 +102,18 @@ export function useAircraftInterpolation(): Map<string, InterpolatedAircraftStat
         existing.interpolatedHeading = interpolated.interpolatedHeading
         existing.interpolatedPitch = interpolated.interpolatedPitch
         existing.interpolatedRoll = interpolated.interpolatedRoll
-        existing.verticalRate = interpolated.verticalRate
-        existing.turnRate = interpolated.turnRate
         existing.aircraftType = interpolated.aircraftType
         existing.departure = interpolated.departure
         existing.arrival = interpolated.arrival
         existing.isInterpolated = interpolated.isInterpolated
+
+        // CRITICAL: Only update physics when VATSIM data changes
+        // This preserves the segment's physics for smooth orientation transitions
+        if (isNewVatsimData) {
+          existing.verticalRate = interpolated.verticalRate
+          existing.turnRate = interpolated.turnRate
+          existing.timestamp = interpolated.timestamp
+        }
       } else {
         statesMap.set(callsign, interpolated)
       }
