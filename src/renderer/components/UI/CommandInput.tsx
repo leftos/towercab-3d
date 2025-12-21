@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useCameraStore } from '../../stores/cameraStore'
+import { useViewportStore } from '../../stores/viewportStore'
 import './CommandInput.css'
 
 /**
@@ -15,9 +15,9 @@ function CommandInput() {
   const [feedback, setFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const feedbackTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  const saveBookmark = useCameraStore((state) => state.saveBookmark)
-  const loadBookmark = useCameraStore((state) => state.loadBookmark)
-  const currentAirportIcao = useCameraStore((state) => state.currentAirportIcao)
+  const saveBookmark = useViewportStore((state) => state.saveBookmark)
+  const loadBookmark = useViewportStore((state) => state.loadBookmark)
+  const currentAirportIcao = useViewportStore((state) => state.currentAirportIcao)
 
   // Show feedback message briefly
   const showFeedback = useCallback((message: string, type: 'success' | 'error') => {

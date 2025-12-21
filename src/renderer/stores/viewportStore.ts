@@ -66,6 +66,18 @@ export interface Viewport {
   label?: string  // Optional user-defined label
 }
 
+// Camera bookmark (just camera state without follow/pre-follow state)
+interface CameraBookmark {
+  viewMode: ViewMode
+  heading: number
+  pitch: number
+  fov: number
+  positionOffsetX: number
+  positionOffsetY: number
+  positionOffsetZ: number
+  topdownAltitude: number
+}
+
 // Per-airport viewport configuration (persisted)
 interface AirportViewportConfig {
   viewports: Viewport[]
@@ -74,6 +86,8 @@ interface AirportViewportConfig {
     viewports: Viewport[]
     activeViewportId: string
   }
+  // Camera bookmarks (0-99) - shared across all viewports for this airport
+  bookmarks?: { [slot: number]: CameraBookmark }
 }
 
 // Default camera state values
@@ -241,6 +255,10 @@ interface ViewportStore {
   resetToDefault: () => void
   hasCustomDefault: () => boolean
 
+  // Bookmark actions (0-99)
+  saveBookmark: (slot: number) => void
+  loadBookmark: (slot: number) => boolean  // Returns true if bookmark exists
+
   // Reset
   resetView: () => void
 
@@ -277,6 +295,74 @@ const scheduleAutoSave = (saveFunc: () => void) => {
     saveFunc()
     autoSaveTimer = null
   }, AUTO_SAVE_DELAY)
+}
+
+// Migrate bookmarks from cameraStore to viewportStore (one-time migration)
+const migrateCameraStoreBookmarks = (viewportState: ViewportStore) => {
+  const MIGRATION_KEY = 'viewport-store-bookmark-migration-v1'
+  if (localStorage.getItem(MIGRATION_KEY)) {
+    return // Already migrated
+  }
+
+  try {
+    // Get cameraStore data from localStorage
+    const cameraStoreRaw = localStorage.getItem('camera-store')
+    if (!cameraStoreRaw) {
+      localStorage.setItem(MIGRATION_KEY, 'done')
+      return
+    }
+
+    const cameraStoreData = JSON.parse(cameraStoreRaw)
+    const airportSettings = cameraStoreData?.state?.airportSettings
+    if (!airportSettings || typeof airportSettings !== 'object') {
+      localStorage.setItem(MIGRATION_KEY, 'done')
+      return
+    }
+
+    // Copy bookmarks from cameraStore to viewportStore for each airport
+    const updatedConfigs = { ...viewportState.airportViewportConfigs }
+    let hasMigrations = false
+
+    for (const [icao, settings] of Object.entries(airportSettings)) {
+      const cameraSettings = settings as { bookmarks?: Record<number, CameraBookmark> }
+      if (!cameraSettings.bookmarks || Object.keys(cameraSettings.bookmarks).length === 0) {
+        continue
+      }
+
+      // Ensure we have a config for this airport
+      if (!updatedConfigs[icao]) {
+        const mainViewport = createMainViewport()
+        updatedConfigs[icao] = {
+          viewports: [mainViewport],
+          activeViewportId: mainViewport.id
+        }
+      }
+
+      // Merge bookmarks (don't overwrite if viewportStore already has them)
+      if (!updatedConfigs[icao].bookmarks) {
+        updatedConfigs[icao].bookmarks = {}
+      }
+
+      for (const [slotStr, bookmark] of Object.entries(cameraSettings.bookmarks)) {
+        const slot = parseInt(slotStr, 10)
+        if (!updatedConfigs[icao].bookmarks![slot]) {
+          updatedConfigs[icao].bookmarks![slot] = bookmark
+          hasMigrations = true
+        }
+      }
+    }
+
+    if (hasMigrations) {
+      useViewportStore.setState({ airportViewportConfigs: updatedConfigs })
+      console.log('Migrated bookmarks from cameraStore to viewportStore')
+    }
+
+    localStorage.setItem(MIGRATION_KEY, 'done')
+  } catch (e) {
+    console.error('Failed to migrate cameraStore bookmarks:', e)
+    // Mark as done to avoid repeated failures
+    localStorage.setItem(MIGRATION_KEY, 'done')
+  }
 }
 
 export const useViewportStore = create<ViewportStore>()(
@@ -711,7 +797,8 @@ export const useViewportStore = create<ViewportStore>()(
                   cameraState: { ...v.cameraState, followingCallsign: null, preFollowState: null }
                 })),
                 activeViewportId: state.activeViewportId,
-                defaultConfig: airportViewportConfigs[state.currentAirportIcao]?.defaultConfig
+                defaultConfig: airportViewportConfigs[state.currentAirportIcao]?.defaultConfig,
+                bookmarks: airportViewportConfigs[state.currentAirportIcao]?.bookmarks  // Preserve bookmarks
               }
               set({ airportViewportConfigs })
             }
@@ -773,18 +860,18 @@ export const useViewportStore = create<ViewportStore>()(
 
             const savedDefault = state.airportViewportConfigs[icao]?.defaultConfig
             if (savedDefault) {
-              // Restore from saved default
-              set({
-                viewports: savedDefault.viewports.map(v => ({
+              // Restore from saved default, ensuring main viewport keeps fixed ID
+              const normalized = normalizeLoadedViewports(
+                savedDefault.viewports.map(v => ({
                   ...v,
-                  id: generateId(), // Generate new IDs to avoid conflicts
                   cameraState: { ...v.cameraState }
                 })),
-                activeViewportId: state.viewports[0]?.id || ''
+                savedDefault.activeViewportId
+              )
+              set({
+                viewports: normalized.viewports,
+                activeViewportId: normalized.activeViewportId
               })
-              // Fix activeViewportId after generating new IDs
-              const newState = get()
-              set({ activeViewportId: newState.viewports[0]?.id || '' })
             } else {
               // No saved default, reset to single main viewport with defaults
               const mainViewport = createMainViewport()
@@ -800,6 +887,74 @@ export const useViewportStore = create<ViewportStore>()(
             const icao = state.currentAirportIcao
             if (!icao) return false
             return !!state.airportViewportConfigs[icao]?.defaultConfig
+          },
+
+          // Save current active viewport camera state to a bookmark slot (0-99)
+          saveBookmark: (slot: number) => {
+            if (slot < 0 || slot > 99) return
+
+            const state = get()
+            const icao = state.currentAirportIcao
+            if (!icao) return
+
+            const activeViewport = state.viewports.find(v => v.id === state.activeViewportId)
+            if (!activeViewport) return
+
+            const cam = activeViewport.cameraState
+            const bookmark: CameraBookmark = {
+              viewMode: cam.viewMode,
+              heading: cam.heading,
+              pitch: cam.pitch,
+              fov: cam.fov,
+              positionOffsetX: cam.positionOffsetX,
+              positionOffsetY: cam.positionOffsetY,
+              positionOffsetZ: cam.positionOffsetZ,
+              topdownAltitude: cam.topdownAltitude
+            }
+
+            const airportViewportConfigs = { ...state.airportViewportConfigs }
+            if (!airportViewportConfigs[icao]) {
+              airportViewportConfigs[icao] = {
+                viewports: state.viewports,
+                activeViewportId: state.activeViewportId
+              }
+            }
+            if (!airportViewportConfigs[icao].bookmarks) {
+              airportViewportConfigs[icao].bookmarks = {}
+            }
+            airportViewportConfigs[icao].bookmarks![slot] = bookmark
+
+            set({ airportViewportConfigs })
+          },
+
+          // Load a bookmark slot (0-99), returns true if bookmark exists
+          loadBookmark: (slot: number): boolean => {
+            if (slot < 0 || slot > 99) return false
+
+            const state = get()
+            const icao = state.currentAirportIcao
+            if (!icao) return false
+
+            const bookmark = state.airportViewportConfigs[icao]?.bookmarks?.[slot]
+            if (!bookmark) return false
+
+            // Apply bookmark to active viewport
+            set({
+              viewports: updateViewportCameraState(state.viewports, state.activeViewportId, () => ({
+                viewMode: bookmark.viewMode,
+                heading: bookmark.heading,
+                pitch: bookmark.pitch,
+                fov: bookmark.fov,
+                positionOffsetX: bookmark.positionOffsetX,
+                positionOffsetY: bookmark.positionOffsetY,
+                positionOffsetZ: bookmark.positionOffsetZ,
+                topdownAltitude: bookmark.topdownAltitude,
+                followingCallsign: null,  // Stop following when loading bookmark
+                preFollowState: null
+              }))
+            })
+
+            return true
           },
 
           // Reset active viewport's camera
@@ -876,6 +1031,11 @@ export const useViewportStore = create<ViewportStore>()(
               })
             }
           }
+
+          // Migrate bookmarks from cameraStore if not already migrated
+          if (state) {
+            migrateCameraStoreBookmarks(state)
+          }
         }
       }
     )
@@ -901,7 +1061,8 @@ useViewportStore.subscribe(
           cameraState: { ...v.cameraState, followingCallsign: null, preFollowState: null }
         })),
         activeViewportId: state.activeViewportId,
-        defaultConfig: airportViewportConfigs[icao]?.defaultConfig
+        defaultConfig: airportViewportConfigs[icao]?.defaultConfig,
+        bookmarks: airportViewportConfigs[icao]?.bookmarks  // Preserve bookmarks
       }
 
       useViewportStore.setState({ airportViewportConfigs })

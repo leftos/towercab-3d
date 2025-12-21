@@ -4,6 +4,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Save/Load Bookmark and Set Default/To Default buttons now work correctly (camera state was not being saved/restored properly due to internal store mismatch)
+
 ### Changed
 - Windows installer now upgrades existing installations with fewer prompts (no scope or language dialogs)
 - Nearby aircraft distance now uses 3D slant range (includes altitude difference from tower/camera) instead of surface distance only

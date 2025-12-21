@@ -13,7 +13,7 @@ import { useVatsimStore } from './stores/vatsimStore'
 import { useAirportStore } from './stores/airportStore'
 import { useSettingsStore } from './stores/settingsStore'
 import { useWeatherStore } from './stores/weatherStore'
-import { useCameraStore } from './stores/cameraStore'
+import { useViewportStore } from './stores/viewportStore'
 import { useVRStore } from './stores/vrStore'
 import { airportService } from './services/AirportService'
 import { aircraftDimensionsService } from './services/AircraftDimensionsService'
@@ -25,7 +25,7 @@ function App() {
   const currentAirport = useAirportStore((state) => state.currentAirport)
   const cesiumIonToken = useSettingsStore((state) => state.cesiumIonToken)
   const showWeatherEffects = useSettingsStore((state) => state.showWeatherEffects)
-  const followingCallsign = useCameraStore((state) => state.followingCallsign)
+  const followingCallsign = useViewportStore((state) => state.getActiveCameraState().followingCallsign)
   const fetchWeather = useWeatherStore((state) => state.fetchWeather)
   const startAutoRefresh = useWeatherStore((state) => state.startAutoRefresh)
   const startNearestAutoRefresh = useWeatherStore((state) => state.startNearestAutoRefresh)

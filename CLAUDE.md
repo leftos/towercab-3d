@@ -52,12 +52,14 @@ Eight stores manage application state:
 |-------|------|----------------|
 | `vatsimStore` | `stores/vatsimStore.ts` | Polls VATSIM API every 3s, stores pilot data, manages interpolation states |
 | `airportStore` | `stores/airportStore.ts` | Airport database (28,000+ airports) from mwgg/Airports GitHub repo |
-| `cameraStore` | `stores/cameraStore.ts` | Global camera defaults, bookmarks per airport |
-| `viewportStore` | `stores/viewportStore.ts` | Multi-viewport management, per-viewport camera state, inset positions/sizes |
+| `viewportStore` | `stores/viewportStore.ts` | **Primary camera store.** Multi-viewport management, per-viewport camera state, bookmarks, defaults, inset positions/sizes |
+| `cameraStore` | `stores/cameraStore.ts` | **DEPRECATED.** Legacy store kept only for export/import backward compatibility. Do not use for new features. |
 | `settingsStore` | `stores/settingsStore.ts` | Cesium Ion token, display settings, terrain quality, weather settings (persisted to localStorage) |
 | `weatherStore` | `stores/weatherStore.ts` | METAR data fetching, weather state (visibility, clouds, ceiling) |
 | `measureStore` | `stores/measureStore.ts` | Active measurement points, measurement mode state |
 | `vrStore` | `stores/vrStore.ts` | VR session state, WebXR availability, IPD settings |
+
+> **Important:** All camera-related functionality (heading, pitch, fov, follow mode, bookmarks, defaults) should use `viewportStore`, not `cameraStore`. The `cameraStore` is deprecated and only exists for backward compatibility with the export/import service.
 
 ### Aircraft Data Flow
 
@@ -225,7 +227,7 @@ See MODDING.md for manifest format and model requirements. Models are loaded on 
 1. Camera math: `useCesiumCamera.ts`
 2. Input handling: `useCameraInput.ts`
 3. Babylon sync: `useBabylonOverlay.ts`
-4. State management: `viewportStore.ts` (per-viewport) and `cameraStore.ts` (bookmarks)
+4. State management: `viewportStore.ts` (all camera state, bookmarks, defaults)
 
 ### Modifying Weather Effects
 

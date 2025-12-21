@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useSettingsStore } from '../../stores/settingsStore'
-import { useCameraStore } from '../../stores/cameraStore'
 import { useWeatherStore } from '../../stores/weatherStore'
 import { useMeasureStore } from '../../stores/measureStore'
 import { useViewportStore } from '../../stores/viewportStore'
@@ -127,10 +126,10 @@ function ControlsBar() {
     setFov
   } = useActiveViewportCamera()
 
-  // Camera store - only for default saving (shared across viewports)
-  const saveCurrentAsDefault = useCameraStore((state) => state.saveCurrentAsDefault)
-  const resetToDefault = useCameraStore((state) => state.resetToDefault)
-  const hasCustomDefault = useCameraStore((state) => state.hasCustomDefault)
+  // Viewport store - for default saving (shared across viewports)
+  const saveCurrentAsDefault = useViewportStore((state) => state.saveCurrentAsDefault)
+  const resetToDefault = useViewportStore((state) => state.resetToDefault)
+  const hasCustomDefault = useViewportStore((state) => state.hasCustomDefault)
 
   // Measure store
   const isMeasuring = useMeasureStore((state) => state.isActive)
