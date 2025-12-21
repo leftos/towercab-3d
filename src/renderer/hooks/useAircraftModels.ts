@@ -5,11 +5,13 @@ import type { InterpolatedAircraftState } from '../types/vatsim'
 import type { ViewMode } from '../types'
 import { aircraftModelService } from '../services/AircraftModelService'
 import { performanceMonitor } from '../utils/performanceMonitor'
+import { MODEL_DEFAULT_COLOR_RGB, MODEL_COLOR_BLEND_AMOUNT } from '../constants/rendering'
 
 // Model rendering constants
-const MODEL_HEIGHT_OFFSET = 1       // Meters to raise models above ground to prevent clipping
-const MODEL_DEFAULT_COLOR = new Cesium.Color(0.9, 0.9, 0.9, 1.0)  // Light gray tint for MIX mode
-const MODEL_COLOR_BLEND_AMOUNT = 0.15  // Subtle blend to preserve original textures (0=original, 1=full tint)
+const MODEL_HEIGHT_OFFSET = 1  // Meters to raise models above ground to prevent clipping
+
+// Create Cesium.Color from constant RGB values
+const MODEL_DEFAULT_COLOR = new Cesium.Color(...MODEL_DEFAULT_COLOR_RGB, 1.0)
 
 /**
  * Manages aircraft 3D model rendering using Cesium.Model pool

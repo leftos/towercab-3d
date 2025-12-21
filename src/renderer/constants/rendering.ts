@@ -94,6 +94,24 @@ export const CONE_BLUE_COLOR = [0.2, 0.4, 1.0, 1.0] as const
  */
 export const SHADOW_COLOR = [0, 0, 0, 0.3] as const
 
+/**
+ * Default model color RGB values (light gray)
+ *
+ * Used for MIX color blend mode to apply subtle tinting to aircraft models.
+ * Values: 0.0 to 1.0
+ */
+export const MODEL_DEFAULT_COLOR_RGB = [0.9, 0.9, 0.9] as const
+
+/**
+ * Model color blend amount (0-1)
+ *
+ * Controls how much of the default color is mixed with original textures:
+ * - 0.0 = Original textures (no tint)
+ * - 1.0 = Full replacement with default color
+ * - 0.15 = Subtle blend that preserves textures while adding consistent tint
+ */
+export const MODEL_COLOR_BLEND_AMOUNT = 0.15
+
 // ============================================================================
 // RENDERING PERFORMANCE
 // ============================================================================

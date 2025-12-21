@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import * as Cesium from 'cesium'
+import {
+  CONE_POOL_SIZE,
+  MODEL_DEFAULT_COLOR_RGB,
+  MODEL_COLOR_BLEND_AMOUNT
+} from '../constants/rendering'
 
-// Model rendering constants
-const MODEL_DEFAULT_COLOR = new Cesium.Color(0.9, 0.9, 0.9, 1.0)  // Light gray tint for MIX mode
-const MODEL_COLOR_BLEND_AMOUNT = 0.15  // Subtle blend to preserve original textures (0=original, 1=full tint)
-
-// Model pool size - pre-create this many Model primitives at init time
-const CONE_POOL_SIZE = 100
+// Create Cesium.Color from constant RGB values
+const MODEL_DEFAULT_COLOR = new Cesium.Color(...MODEL_DEFAULT_COLOR_RGB, 1.0)
 
 export interface CesiumViewerSettings {
   /** Cesium Ion access token for terrain/imagery */
