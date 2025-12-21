@@ -212,17 +212,34 @@ export interface UseBabylonWeatherResult {
 /**
  * Return type for useBabylonLabels hook.
  *
- * Provides functions to manage aircraft datablock labels.
+ * Provides functions to manage aircraft datablock labels and leader lines.
  */
 export interface UseBabylonLabelsResult {
-  /** Create or update an aircraft label */
-  updateLabel: (callsign: string, position: BABYLON.Vector3, text: string, color?: string) => void
-  /** Remove an aircraft label */
+  /** Create or update an aircraft label with text and colors */
+  updateLabel: (
+    callsign: string,
+    color: { r: number; g: number; b: number },
+    isFollowed: boolean,
+    labelText?: string
+  ) => void
+  /** Update label position and leader line using screen coordinates */
+  updateLabelPosition: (
+    callsign: string,
+    screenX: number,
+    screenY: number,
+    labelOffsetX: number,
+    labelOffsetY: number
+  ) => void
+  /** Remove an aircraft label and dispose resources */
   removeLabel: (callsign: string) => void
-  /** Remove all aircraft labels */
+  /** Remove all aircraft labels and dispose all resources */
   clearAllLabels: () => void
   /** Get label data for a specific aircraft (or undefined if not exists) */
   getLabel: (callsign: string) => AircraftLabel | undefined
+  /** Get array of all current aircraft callsigns with labels */
+  getAircraftCallsigns: () => string[]
+  /** Hide all labels (called at frame start before updating visible ones) */
+  hideAllLabels: () => void
 }
 
 /**
