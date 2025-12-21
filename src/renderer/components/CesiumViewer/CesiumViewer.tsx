@@ -217,7 +217,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   // =========================================================================
   // 5. Ground Aircraft Terrain Sampling (3x per second)
   // =========================================================================
-  const groundAircraftTerrain = useGroundAircraftTerrain(viewer, interpolatedAircraft)
+  const groundAircraftTerrain = useGroundAircraftTerrain(viewer, interpolatedAircraft, groundElevationMeters)
 
   // Inject terrain data into interpolation system for terrain correction
   useEffect(() => {

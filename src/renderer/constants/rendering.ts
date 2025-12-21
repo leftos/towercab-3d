@@ -74,6 +74,18 @@ export const SHADOW_DISC_RADIUS = 3.5
 export const GROUNDSPEED_THRESHOLD_KNOTS = 40
 
 /**
+ * Low altitude threshold for terrain sampling in meters AGL
+ *
+ * Aircraft below this altitude (above ground level) will have terrain
+ * sampled even if their groundspeed exceeds GROUNDSPEED_THRESHOLD_KNOTS.
+ * This ensures landing aircraft get terrain samples before they slow down,
+ * preventing clipping through runways during landing roll.
+ *
+ * 300 meters ≈ 1000 feet AGL - covers final approach and landing roll
+ */
+export const LOW_ALTITUDE_AGL_THRESHOLD_M = 300
+
+/**
  * Terrain offset for ground aircraft in meters
  *
  * Vertical offset above sampled terrain elevation for aircraft on the ground.
