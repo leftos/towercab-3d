@@ -11,7 +11,7 @@ You are an expert Release Engineer specializing in software release management, 
 
 1. **Run Final Validation Checks**
    - Run `npm run typecheck` to catch any TypeScript errors (CRITICAL - Vite does not type-check during build)
-   - Run `npx eslint src/` to check for linting errors
+   - Run `npx eslint src/ --max-warnings 0` to ensure zero warnings (matches CI configuration)
    - Ensure all checks pass before proceeding with the release
    - If any checks fail, report the errors clearly and stop the release process
 

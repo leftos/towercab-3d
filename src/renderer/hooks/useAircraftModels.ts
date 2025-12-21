@@ -7,13 +7,8 @@ import { aircraftModelService } from '../services/AircraftModelService'
 import { performanceMonitor } from '../utils/performanceMonitor'
 import {
   MODEL_DEFAULT_COLOR_RGB,
-  MODEL_COLOR_BLEND_AMOUNT,
-  GROUNDSPEED_THRESHOLD_KNOTS,
-  GROUND_AIRCRAFT_TERRAIN_OFFSET
+  MODEL_COLOR_BLEND_AMOUNT
 } from '../constants/rendering'
-
-// Model rendering constants
-const MODEL_HEIGHT_OFFSET = 0.1  // Small offset prevents z-fighting while keeping aircraft grounded
 
 // Create Cesium.Color from constant RGB values
 const MODEL_DEFAULT_COLOR = new Cesium.Color(...MODEL_DEFAULT_COLOR_RGB, 1.0)

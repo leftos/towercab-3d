@@ -56,7 +56,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   // Terrain offset: difference between ellipsoidal height and MSL elevation
   // This corrects for geoid undulation (varies by location, e.g., -30m at Boston)
   const terrainOffsetRef = useRef<number>(0)
-  const [terrainOffsetReady, setTerrainOffsetReady] = useState(false)
+  const [_terrainOffsetReady, setTerrainOffsetReady] = useState(false)
 
   // Track last reference position to prevent redundant setReferencePosition calls
   // which would otherwise cause infinite render loops
