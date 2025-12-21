@@ -7,11 +7,11 @@ import { useVatsimStore } from '../../stores/vatsimStore'
 import { useWeatherStore } from '../../stores/weatherStore'
 import { useMeasureStore } from '../../stores/measureStore'
 import { useAircraftInterpolation } from '../../hooks/useAircraftInterpolation'
+import { useAircraftFiltering } from '../../hooks/useAircraftFiltering'
 import { useCesiumCamera } from '../../hooks/useCesiumCamera'
 import { useBabylonOverlay, getMemoryCounters } from '../../hooks/useBabylonOverlay'
 import { getTowerPosition } from '../../utils/towerHeight'
 import {
-  calculateDistanceNM,
   createPropellerState,
   updatePropellerState,
   getPropellerAnimationTime,
@@ -92,10 +92,6 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   const cesiumIonToken = useSettingsStore((state) => state.cesiumIonToken)
   const currentAirport = useAirportStore((state) => state.currentAirport)
   const towerHeight = useAirportStore((state) => state.towerHeight)
-  const labelVisibilityDistance = useSettingsStore((state) => state.labelVisibilityDistance)
-  const maxAircraftDisplay = useSettingsStore((state) => state.maxAircraftDisplay)
-  const showGroundTraffic = useSettingsStore((state) => state.showGroundTraffic)
-  const showAirborneTraffic = useSettingsStore((state) => state.showAirborneTraffic)
   const datablockMode = useSettingsStore((state) => state.datablockMode)
   const terrainQuality = useSettingsStore((state) => state.terrainQuality)
   const show3DBuildings = useSettingsStore((state) => state.show3DBuildings)
@@ -154,6 +150,12 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
 
   // Get interpolated aircraft states
   const interpolatedAircraft = useAircraftInterpolation()
+
+  // Get filtered aircraft (synced with AircraftPanel filtering)
+  const { filtered: filteredAircraft, referencePoint } = useAircraftFiltering({
+    includeFollowedRegardlessOfDistance: true,
+    viewportId
+  })
 
   // Initialize camera controls (this hook manages all camera behavior)
   // Pass interpolated aircraft for smooth follow tracking
@@ -713,96 +715,19 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     const viewer = viewerRef.current
     if (!viewer || viewer.isDestroyed()) return
 
-    // Determine the reference point for distance calculations
-    // In orbit mode, use the followed aircraft; otherwise use the tower
-    let refLat: number
-    let refLon: number
-    let refElevationMeters = 0
-    let refAltitudeFeet = 0  // Reference altitude for 3D slant range calculation
-    let isOrbitModeWithoutAirport = false
+    // Use filtered aircraft from shared hook (synced with AircraftPanel)
+    if (!referencePoint) return
 
-    if (followMode === 'orbit' && followingCallsign) {
-      // Try interpolated data first, fall back to raw store data
-      const followedAircraft = interpolatedAircraft.get(followingCallsign)
-      const rawAircraft = useVatsimStore.getState().aircraftStates.get(followingCallsign)
-
-      if (followedAircraft) {
-        refLat = followedAircraft.interpolatedLatitude
-        refLon = followedAircraft.interpolatedLongitude
-        refElevationMeters = followedAircraft.interpolatedAltitude * 0.3048
-        refAltitudeFeet = followedAircraft.interpolatedAltitude
-        isOrbitModeWithoutAirport = !currentAirport
-      } else if (rawAircraft) {
-        // Fallback to raw store data if interpolated not yet available
-        refLat = rawAircraft.latitude
-        refLon = rawAircraft.longitude
-        refElevationMeters = rawAircraft.altitude * 0.3048
-        refAltitudeFeet = rawAircraft.altitude
-        isOrbitModeWithoutAirport = !currentAirport
-      } else if (currentAirport) {
-        const towerPos = getTowerPosition(currentAirport, towerHeight)
-        refLat = towerPos.latitude
-        refLon = towerPos.longitude
-        refElevationMeters = currentAirport.elevation ? currentAirport.elevation * 0.3048 : 0
-        // Tower altitude = ground elevation + tower height (convert tower height from meters to feet)
-        refAltitudeFeet = (currentAirport.elevation || 0) + (towerHeight / 0.3048)
-      } else {
-        return // No reference point available
-      }
-    } else if (currentAirport) {
-      const towerPos = getTowerPosition(currentAirport, towerHeight)
-      refLat = towerPos.latitude
-      refLon = towerPos.longitude
-      refElevationMeters = currentAirport.elevation ? currentAirport.elevation * 0.3048 : 0
-      // Tower altitude = ground elevation + tower height (convert tower height from meters to feet)
-      refAltitudeFeet = (currentAirport.elevation || 0) + (towerHeight / 0.3048)
-    } else {
-      return // Need either an airport or orbit mode with a followed aircraft
-    }
-
+    const refElevationMeters = referencePoint.elevationMeters
     const seenCallsigns = new Set<string>()
 
-    // Sort aircraft by distance and limit count (using 3D slant range)
-    const sortedAircraft = [...interpolatedAircraft.values()]
-      .map((aircraft) => ({
-        ...aircraft,
-        distance: calculateDistanceNM(
-          refLat,
-          refLon,
-          aircraft.interpolatedLatitude,
-          aircraft.interpolatedLongitude,
-          refAltitudeFeet,
-          aircraft.interpolatedAltitude
-        )
-      }))
-      .filter((aircraft) => {
-        // Always include the followed aircraft regardless of distance
-        if (aircraft.callsign === followingCallsign) return true
-
-        // Filter by distance
-        if (aircraft.distance > labelVisibilityDistance) return false
-
-        // Filter by traffic type - use altitude above ground level (AGL) for accurate ground detection
-        // In orbit mode without airport, show all traffic types
-        if (!isOrbitModeWithoutAirport) {
-          // Calculate AGL in feet - use 200ft threshold to account for pressure altitude variations
-          // At high-elevation airports (e.g., KRNO at 4,517ft), absolute altitude would misclassify ground traffic
-          const airportElevationFeet = currentAirport?.elevation || 0
-          const aglFeet = aircraft.interpolatedAltitude - airportElevationFeet
-          const isAirborne = aglFeet > 200
-          if (isAirborne && !showAirborneTraffic) return false
-          if (!isAirborne && !showGroundTraffic) return false
-        }
-
-        return true
-      })
-      .sort((a, b) => a.distance - b.distance)
-      .slice(0, maxAircraftDisplay)
+    // Use filtered and sorted aircraft from hook
+    const sortedAircraft = filteredAircraft
 
     // Get ground elevation for aircraft positioning
     const groundElevationMeters = currentAirport?.elevation
       ? currentAirport.elevation * 0.3048
-      : (isOrbitModeWithoutAirport ? 0 : refElevationMeters)
+      : refElevationMeters
 
     // First pass: Update all aircraft mesh positions
     const aircraftData: Array<{
@@ -1240,16 +1165,11 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
       }
     }
   }, [
-    interpolatedAircraft,
-    // Note: aircraftStates read via getState() - not included to avoid render loops
+    filteredAircraft,
+    referencePoint,
     currentAirport,
     towerHeight,
-    labelVisibilityDistance,
-    maxAircraftDisplay,
-    showGroundTraffic,
-    showAirborneTraffic,
     followingCallsign,
-    followMode,
     babylonOverlay,
     viewMode,
     topdownAltitude,

@@ -66,7 +66,7 @@ The `useBabylonOverlay` hook synchronizes the Babylon.js camera with Cesium's ca
 
 ### State Management (Zustand)
 
-Eight stores manage application state:
+Nine stores manage application state:
 
 | Store | File | Responsibility |
 |-------|------|----------------|
@@ -77,6 +77,7 @@ Eight stores manage application state:
 | `settingsStore` | `stores/settingsStore.ts` | Cesium Ion token, display settings, terrain quality, weather settings (persisted to localStorage) |
 | `weatherStore` | `stores/weatherStore.ts` | METAR data fetching, weather state (visibility, clouds, ceiling) |
 | `measureStore` | `stores/measureStore.ts` | Active measurement points, measurement mode state |
+| `aircraftFilterStore` | `stores/aircraftFilterStore.ts` | Panel filter state (search query, airport traffic filter, weather visibility filter) affecting both list and datablocks |
 | `vrStore` | `stores/vrStore.ts` | VR session state, WebXR availability, IPD settings |
 
 > **Important:** All camera-related functionality (heading, pitch, fov, follow mode, bookmarks, defaults) should use `viewportStore`, not `cameraStore`. The `cameraStore` is deprecated and only exists for backward compatibility with the export/import service.
@@ -86,7 +87,7 @@ Eight stores manage application state:
 1. **Fetch**: `VatsimService` fetches pilot data from VATSIM API (every 3s poll, 15s actual update interval)
 2. **Store**: `vatsimStore` stores raw pilot data and creates aircraft state records for interpolation
 3. **Interpolate**: `useAircraftInterpolation` hook smoothly interpolates positions between API updates
-4. **Filter**: `CesiumViewer` filters aircraft by distance from tower and sorts by proximity
+4. **Filter**: `useAircraftFiltering` hook filters aircraft by distance, traffic type, weather visibility, search query, and airport traffic (used by both `AircraftPanel` and `CesiumViewer` to ensure consistency)
 5. **Render Labels**: Cesium entities display HTML text labels with callsign, altitude, speed
 6. **Render 3D**: Babylon.js overlay renders cone meshes with shadows at interpolated positions
 
@@ -95,6 +96,7 @@ Eight stores manage application state:
 | Hook | File | Purpose |
 |------|------|---------|
 | `useAircraftInterpolation` | `hooks/useAircraftInterpolation.ts` | Smooth position/heading interpolation between 15s API updates |
+| `useAircraftFiltering` | `hooks/useAircraftFiltering.ts` | Shared aircraft filtering logic used by both AircraftPanel and CesiumViewer |
 | `useCesiumCamera` | `hooks/useCesiumCamera.ts` | Tower-based camera controls, follow modes, top-down view (per-viewport) |
 | `useCameraInput` | `hooks/useCameraInput.ts` | Keyboard/mouse input handling for camera (WASD, arrows, mouse drag) |
 | `useActiveViewportCamera` | `hooks/useActiveViewportCamera.ts` | Returns camera state for the currently active viewport |

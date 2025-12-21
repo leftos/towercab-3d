@@ -1,12 +1,11 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useAirportStore } from '../../stores/airportStore'
 import { useSettingsStore } from '../../stores/settingsStore'
-import { useWeatherStore } from '../../stores/weatherStore'
-import { useAircraftInterpolation } from '../../hooks/useAircraftInterpolation'
+import { useAircraftFilterStore } from '../../stores/aircraftFilterStore'
 import { useActiveViewportCamera } from '../../hooks/useActiveViewportCamera'
-import { calculateDistanceNM, calculateBearing } from '../../utils/interpolation'
+import { useAircraftFiltering } from '../../hooks/useAircraftFiltering'
+import { calculateBearing } from '../../utils/interpolation'
 import { formatAltitude, formatGroundspeed, formatHeading } from '../../utils/towerHeight'
-import { getTowerPosition } from '../../utils/towerHeight'
 import './AircraftPanel.css'
 
 type SortOption = 'distance' | 'callsign' | 'altitude' | 'speed'
@@ -24,28 +23,23 @@ interface AircraftListItem {
 }
 
 function AircraftPanel() {
-  const interpolatedStates = useAircraftInterpolation()
   const currentAirport = useAirportStore((state) => state.currentAirport)
-  const towerHeight = useAirportStore((state) => state.towerHeight)
   const showAircraftPanel = useSettingsStore((state) => state.showAircraftPanel)
-  const labelVisibilityDistance = useSettingsStore((state) => state.labelVisibilityDistance)
-
-  // Local state for sorting, searching, filtering, and collapse
-  const [sortOption, setSortOption] = useState<SortOption>('distance')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [isCollapsed, setIsCollapsed] = useState(false)
-  const [filterVisible, setFilterVisible] = useState(false) // Only show weather-visible aircraft
-  const [filterAirportTraffic, setFilterAirportTraffic] = useState(false) // Only show dep/arr at current airport
-
-  // Weather store for visibility filtering
   const showWeatherEffects = useSettingsStore((state) => state.showWeatherEffects)
-  const showCesiumFog = useSettingsStore((state) => state.showCesiumFog)
-  const showClouds = useSettingsStore((state) => state.showClouds)
-  const cloudLayers = useWeatherStore((state) => state.cloudLayers)
-  const currentMetar = useWeatherStore((state) => state.currentMetar)
 
-  // Periodic refresh to update distances/bearings from the mutating interpolated Map
-  // The Map is mutated every frame but doesn't trigger re-renders, so we force a refresh every second
+  // Panel filter state from store (affects both list and datablocks)
+  const searchQuery = useAircraftFilterStore((state) => state.searchQuery)
+  const setSearchQuery = useAircraftFilterStore((state) => state.setSearchQuery)
+  const filterWeatherVisibility = useAircraftFilterStore((state) => state.filterWeatherVisibility)
+  const setFilterWeatherVisibility = useAircraftFilterStore((state) => state.setFilterWeatherVisibility)
+  const filterAirportTraffic = useAircraftFilterStore((state) => state.filterAirportTraffic)
+  const setFilterAirportTraffic = useAircraftFilterStore((state) => state.setFilterAirportTraffic)
+
+  // Local state for sorting and collapse (UI-only, doesn't affect filtering)
+  const [sortOption, setSortOption] = useState<SortOption>('distance')
+  const [isCollapsed, setIsCollapsed] = useState(false)
+
+  // Periodic refresh to update distances/bearings (UI updates automatically via hook reactivity)
   const [refreshTick, setRefreshTick] = useState(0)
   useEffect(() => {
     const interval = setInterval(() => setRefreshTick(t => t + 1), 1000)
@@ -63,151 +57,38 @@ function AircraftPanel() {
     orbitDistance
   } = useActiveViewportCamera()
 
-  // Determine if we're in orbit mode without an airport (following an aircraft globally)
-  const isOrbitModeWithoutAirport = followMode === 'orbit' && followingCallsign && !currentAirport
+  // Use shared filtering hook (affects both list and datablocks)
+  const { filtered, referencePoint, isOrbitModeWithoutAirport } = useAircraftFiltering()
 
-  // Get the followed aircraft data for orbit mode display
-  const followedAircraftData = useMemo(() => {
-    if (!followingCallsign) return null
-    return interpolatedStates.get(followingCallsign) || null
-  }, [followingCallsign, interpolatedStates])
-
-  // Check if an aircraft would be visible based on weather conditions
-  // Similar logic to useBabylonOverlay.isDatablockVisibleByWeather
-  const isVisibleByWeather = (
-    cameraAltitudeAGL: number,
-    aircraftAltitudeAGL: number,
-    distanceMeters: number
-  ): boolean => {
-    // If weather effects are disabled, always visible
-    if (!showWeatherEffects) return true
-
-    // Check visibility range (surface visibility culling)
-    if (currentMetar && showCesiumFog) {
-      const visibilityMeters = currentMetar.visib * 1609.34 // SM to meters
-      if (distanceMeters > visibilityMeters) {
-        return false
-      }
-    }
-
-    // Check cloud ceiling culling (BKN or OVC between camera and aircraft)
-    if (showClouds && cloudLayers.length > 0) {
-      const lowerAlt = Math.min(cameraAltitudeAGL, aircraftAltitudeAGL)
-      const higherAlt = Math.max(cameraAltitudeAGL, aircraftAltitudeAGL)
-
-      for (const layer of cloudLayers) {
-        // BKN = 0.75, OVC = 1.0 - these are "ceilings" that block visibility
-        if (layer.coverage >= 0.75) {
-          if (layer.altitude > lowerAlt && layer.altitude < higherAlt) {
-            return false
-          }
-        }
-      }
-    }
-
-    return true
-  }
-
+  // Calculate bearing and convert to AircraftListItem format with sorting
   const nearbyAircraft = useMemo((): AircraftListItem[] => {
-    // Determine reference point for distance/bearing calculations
-    let refLat: number
-    let refLon: number
-    let groundElevationMeters = 0
-    let refAltitudeFeet = 0  // Reference altitude for 3D slant range calculation
+    if (!referencePoint) return []
 
-    if (isOrbitModeWithoutAirport && followedAircraftData) {
-      // In orbit mode without airport, use followed aircraft as reference
-      refLat = followedAircraftData.interpolatedLatitude
-      refLon = followedAircraftData.interpolatedLongitude
-      refAltitudeFeet = followedAircraftData.interpolatedAltitude
-    } else if (currentAirport) {
-      // Normal mode: use tower position
-      const towerPos = getTowerPosition(currentAirport, towerHeight)
-      refLat = towerPos.latitude
-      refLon = towerPos.longitude
-      groundElevationMeters = currentAirport.elevation ? currentAirport.elevation * 0.3048 : 0
-      // Tower altitude = ground elevation + tower height (convert tower height from meters to feet)
-      refAltitudeFeet = (currentAirport.elevation || 0) + (towerHeight / 0.3048)
-    } else {
-      // No reference point available
-      return []
-    }
-
-    // Tower altitude AGL (camera position for visibility check)
-    const cameraAltitudeAGL = towerHeight
-
-    const query = searchQuery.toLowerCase().trim()
-    const airportIcao = currentAirport?.icao?.toUpperCase()
-
-    const mapped = Array.from(interpolatedStates.values())
-      // In orbit mode without airport, exclude the followed aircraft from the "nearby" list
-      // (it will be shown separately at the top)
-      .filter((aircraft) => !(isOrbitModeWithoutAirport && aircraft.callsign === followingCallsign))
-      .map((aircraft) => {
-        const distance = calculateDistanceNM(
-          refLat,
-          refLon,
-          aircraft.interpolatedLatitude,
-          aircraft.interpolatedLongitude,
-          refAltitudeFeet,
-          aircraft.interpolatedAltitude
-        )
-        const bearing = calculateBearing(
-          refLat,
-          refLon,
-          aircraft.interpolatedLatitude,
-          aircraft.interpolatedLongitude
-        )
-
-        // Calculate altitude AGL in meters for visibility check
-        const altitudeMeters = aircraft.interpolatedAltitude * 0.3048
-        const altitudeAGL = altitudeMeters - groundElevationMeters
-
-        // Calculate distance in meters for visibility check
-        const distanceMeters = distance * 1852 // NM to meters
-
-        return {
-          callsign: aircraft.callsign,
-          aircraftType: aircraft.aircraftType,
-          altitude: aircraft.interpolatedAltitude,
-          groundspeed: aircraft.interpolatedGroundspeed,
-          heading: aircraft.interpolatedHeading,
-          distance,
-          bearing,
-          departure: aircraft.departure,
-          arrival: aircraft.arrival,
-          // Extra fields for filtering (not displayed)
-          _altitudeAGL: altitudeAGL,
-          _distanceMeters: distanceMeters
-        }
-      })
-      .filter((a) => a.distance <= labelVisibilityDistance)
-
-    // Apply weather visibility filter
-    let filtered = filterVisible
-      ? mapped.filter((a) => isVisibleByWeather(cameraAltitudeAGL, a._altitudeAGL, a._distanceMeters))
-      : mapped
-
-    // Apply airport traffic filter (departure or arrival matches current airport)
-    if (filterAirportTraffic && airportIcao) {
-      filtered = filtered.filter((a) =>
-        a.departure?.toUpperCase() === airportIcao ||
-        a.arrival?.toUpperCase() === airportIcao
-      )
-    }
-
-    // Apply search filter
-    filtered = query
-      ? filtered.filter((a) =>
-          a.callsign.toLowerCase().includes(query) ||
-          a.aircraftType?.toLowerCase().includes(query) ||
-          a.departure?.toLowerCase().includes(query) ||
-          a.arrival?.toLowerCase().includes(query)
-        )
+    // In orbit mode without airport, exclude the followed aircraft from the "nearby" list
+    // (it will be shown separately at the top)
+    const aircraftToShow = isOrbitModeWithoutAirport
+      ? filtered.filter((aircraft) => aircraft.callsign !== followingCallsign)
       : filtered
 
-    // Apply sorting
-    const sorted = filtered.sort((a, b) => {
+    const withBearing = aircraftToShow.map((aircraft) => ({
+      callsign: aircraft.callsign,
+      aircraftType: aircraft.aircraftType,
+      altitude: aircraft.interpolatedAltitude,
+      groundspeed: aircraft.interpolatedGroundspeed,
+      heading: aircraft.interpolatedHeading,
+      distance: aircraft.distance,
+      bearing: calculateBearing(
+        referencePoint.lat,
+        referencePoint.lon,
+        aircraft.interpolatedLatitude,
+        aircraft.interpolatedLongitude
+      ),
+      departure: aircraft.departure,
+      arrival: aircraft.arrival
+    }))
+
+    // Apply sorting (UI-only, doesn't affect filtering)
+    const sorted = withBearing.sort((a, b) => {
       switch (sortOption) {
         case 'callsign':
           return a.callsign.localeCompare(b.callsign)
@@ -222,8 +103,14 @@ function AircraftPanel() {
     })
 
     return sorted.slice(0, 50)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [interpolatedStates, currentAirport, towerHeight, labelVisibilityDistance, sortOption, searchQuery, isOrbitModeWithoutAirport, followedAircraftData, followingCallsign, refreshTick, filterVisible, filterAirportTraffic, showWeatherEffects, showCesiumFog, showClouds, cloudLayers, currentMetar])
+  }, [filtered, referencePoint, followingCallsign, isOrbitModeWithoutAirport, sortOption, refreshTick])
+
+  // Get the followed aircraft data for orbit mode display
+  const followedAircraftData = useMemo(() => {
+    if (!followingCallsign) return null
+    // Find in filtered list or use the first match from filtered aircraft
+    return filtered.find((a) => a.callsign === followingCallsign) || null
+  }, [followingCallsign, filtered])
 
   const handleFollowClick = (callsign: string) => {
     if (followingCallsign === callsign) {
@@ -263,15 +150,15 @@ function AircraftPanel() {
             <input
               type="text"
               className="search-input"
-              placeholder="Search callsign, type, route..."
+              placeholder="Search callsign, type, route (affects map)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
             <div className="filter-controls">
               <button
-                className={`filter-btn ${filterVisible ? 'active' : ''}`}
-                onClick={() => setFilterVisible(!filterVisible)}
-                title="Only show aircraft visible through weather (not obscured by clouds or beyond visibility)"
+                className={`filter-btn ${filterWeatherVisibility ? 'active' : ''}`}
+                onClick={() => setFilterWeatherVisibility(!filterWeatherVisibility)}
+                title="Only show aircraft visible through weather (affects both list and map)"
                 disabled={!showWeatherEffects}
               >
                 Visible
@@ -279,7 +166,7 @@ function AircraftPanel() {
               <button
                 className={`filter-btn ${filterAirportTraffic ? 'active' : ''}`}
                 onClick={() => setFilterAirportTraffic(!filterAirportTraffic)}
-                title="Only show aircraft departing from or arriving at this airport"
+                title="Only show aircraft departing from or arriving at this airport (affects both list and map)"
                 disabled={!currentAirport}
               >
                 {currentAirport?.icao || 'Airport'}

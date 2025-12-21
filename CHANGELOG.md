@@ -5,9 +5,13 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Aircraft list now shows the same aircraft as datablocks on the map
+- Ground/airborne traffic toggles now affect both aircraft list and datablocks
 - Shadow banding artifacts no longer visible (ambient occlusion disabled by default)
 
 ### Changed
+- Panel filters (search, airport traffic, weather visibility) now affect both list and datablocks on the map
+- Aircraft panel filters now persist across sessions
 - Improved shadow quality at longer distances (default max range increased from 2km to 10km)
 - Improved shadow rendering performance (reduced default shadow map resolution from 4096 to 2048)
 - Shadow max distance can now be configured up to 20km for advanced users
