@@ -20,11 +20,95 @@ interface CameraControls {
 }
 
 /**
- * Hook for managing Cesium camera controls in tower view mode
- * Camera is fixed at tower position, only orientation changes
- * @param viewer - The Cesium viewer instance
- * @param viewportId - The ID of the viewport this camera controls
- * @param interpolatedAircraft - Map of interpolated aircraft states for smooth follow tracking
+ * Manages Cesium camera state for a specific viewport with tower-based controls
+ * and aircraft following modes.
+ *
+ * ## Responsibilities
+ * - Synchronize Cesium camera with viewport camera state (heading, pitch, FOV)
+ * - Implement tower-based camera positioning with WASD offsets
+ * - Handle aircraft following modes (tower track, orbit)
+ * - Manage smooth camera transitions and animations
+ * - Support top-down orthographic-style view
+ *
+ * ## Dependencies
+ * - Requires: Initialized Cesium.Viewer from useCesiumViewer
+ * - Reads: viewportStore (for camera state)
+ * - Reads: airportStore (for tower location)
+ * - Reads: interpolatedAircraft (for follow target)
+ *
+ * ## Call Order
+ * Must be called AFTER useCesiumViewer but BEFORE useBabylonOverlay:
+ * ```typescript
+ * const viewer = useCesiumViewer(...)
+ * const camera = useCesiumCamera(viewer, viewportId, aircraft) // ← HERE
+ * const babylon = useBabylonOverlay({ cesiumViewer: viewer, ... })
+ * ```
+ *
+ * ## View Modes
+ *
+ * ### 3D Tower View (default)
+ * Camera positioned at tower location, user controls heading/pitch/FOV.
+ * Position offset (WASD) allows moving away from tower center.
+ *
+ * ### Top-Down View
+ * Camera looks straight down from configurable altitude above airport.
+ * Simulates orthographic projection (small FOV at high altitude).
+ * Toggle with 'T' key.
+ *
+ * ## Follow Modes
+ *
+ * ### Tower Mode
+ * - Camera stays at tower position
+ * - Rotates to track aircraft
+ * - Zoom (FOV) adjusts to keep aircraft in view
+ * - Smooth transitions using linear interpolation
+ *
+ * ### Orbit Mode
+ * - Camera orbits around aircraft at fixed distance
+ * - User controls orbit heading and pitch
+ * - Distance configurable (50-5000m)
+ * - Aircraft stays centered in view
+ *
+ * ## State Transitions
+ * ```
+ * NOT_FOLLOWING
+ *   → followAircraft() → ANIMATING_TO_FOLLOW
+ *   → (animation complete) → FOLLOWING
+ *
+ * FOLLOWING
+ *   → stopFollowing(restore=true) → ANIMATING_TO_RESTORE
+ *   → (animation complete) → NOT_FOLLOWING (at saved position)
+ *
+ * FOLLOWING
+ *   → stopFollowing(restore=false) → NOT_FOLLOWING (at current position)
+ * ```
+ *
+ * @param viewer - Initialized Cesium.Viewer instance
+ * @param viewportId - Unique identifier for this viewport
+ * @param interpolatedAircraft - Map of smoothly interpolated aircraft positions (60 Hz updates)
+ *
+ * @returns Camera control functions
+ *
+ * @example
+ * // Basic setup
+ * const viewer = useCesiumViewer(containerRef)
+ * const { interpolatedAircraft } = useAircraftInterpolation()
+ * const camera = useCesiumCamera(viewer, 'main', interpolatedAircraft)
+ *
+ * @example
+ * // Follow an aircraft in tower mode
+ * camera.followAircraft('AAL123')
+ *
+ * // Later, stop following and restore previous view
+ * camera.stopFollowing()
+ *
+ * @example
+ * // Reset camera to default position
+ * camera.resetView()
+ *
+ * @see viewportStore - for camera state persistence
+ * @see docs/coordinate-systems.md - for position calculations
+ * @see docs/architecture.md - for hook call order
  */
 export function useCesiumCamera(
   viewer: Cesium.Viewer | null,

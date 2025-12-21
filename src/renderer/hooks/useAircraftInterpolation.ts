@@ -149,6 +149,115 @@ function updateInterpolation() {
  * SINGLETON PATTERN: Multiple calls to this hook share the same interpolation loop
  * and the same Map instance to prevent duplicate calculations and memory waste.
  */
+/**
+ * Provides smooth 60 Hz aircraft position and orientation interpolation using a
+ * singleton animation loop.
+ *
+ * ## Responsibilities
+ * - Interpolate aircraft positions between 15-second VATSIM API updates
+ * - Calculate smooth heading changes during turns
+ * - Estimate pitch/roll from climb/descent and turn rates
+ * - Extrapolate positions when data is stale
+ * - Maintain singleton animation loop (only ONE loop for entire app)
+ *
+ * ## Singleton Pattern
+ * **CRITICAL:** This hook uses a singleton pattern. Multiple components can call this
+ * hook, but only ONE animation loop runs for the entire application. All instances
+ * share the same interpolated states map.
+ *
+ * Benefits:
+ * - Single source of truth for interpolated positions
+ * - Prevents duplicate calculations (60 Hz * N components = waste)
+ * - Consistent aircraft state across all viewports
+ * - Automatic cleanup when last instance unmounts
+ *
+ * ## Dependencies
+ * - Reads: vatsimStore (for current/previous aircraft states)
+ * - Reads: settingsStore (for orientation emulation settings)
+ * - Writes: Shared interpolatedStates Map (singleton)
+ *
+ * ## Interpolation Algorithm
+ *
+ * ### Position Interpolation
+ * Uses linear interpolation (lerp) between previous and current position:
+ * ```
+ * t = (now - lastUpdate) / (currentUpdate - lastUpdate)
+ * interpolatedPos = lerp(previousPos, currentPos, clamp(t, 0, 1.2))
+ * ```
+ * Note: Allows 20% extrapolation (t > 1.0) for stale data.
+ *
+ * ### Heading Interpolation
+ * Uses spherical interpolation to avoid wrap-around issues:
+ * - Handles 350° → 10° transition smoothly
+ * - Calculates turn rate from heading delta
+ *
+ * ### Pitch/Roll Estimation
+ * Derives orientation from motion:
+ * - Pitch: Based on vertical rate (climb/descent)
+ * - Roll: Based on turn rate (banking in turns)
+ * - Intensity configurable via settings (25% to 150%)
+ *
+ * ## Performance
+ * - Runs at 60 Hz (requestAnimationFrame)
+ * - Processes all aircraft each frame (~100-500 aircraft typical)
+ * - Performance monitored via performanceMonitor.startTimer('interpolation')
+ * - Frame timing logged for followed aircraft
+ *
+ * ## Data Flow
+ * ```
+ * VATSIM API (15s updates)
+ *   ↓
+ * vatsimStore.aircraftStates (current/previous)
+ *   ↓
+ * useAircraftInterpolation (60 Hz singleton loop)
+ *   ↓
+ * sharedInterpolatedStates Map
+ *   ↓
+ * ├─ CesiumViewer (labels, culling)
+ * └─ useBabylonOverlay (3D models, shadows)
+ * ```
+ *
+ * ## Memory Management
+ * - Automatically removes stale aircraft (no longer in VATSIM data)
+ * - Cleans up animation loop when last component unmounts
+ * - Reuses Map entries to minimize allocations
+ *
+ * @returns Shared Map of interpolated aircraft states (callsign → InterpolatedAircraftState)
+ *
+ * @example
+ * // Basic usage (call once per component that needs interpolated data)
+ * const interpolatedAircraft = useAircraftInterpolation()
+ *
+ * // Access interpolated state for specific aircraft
+ * const aircraft = interpolatedAircraft.get('AAL123')
+ * if (aircraft) {
+ *   console.log(aircraft.latitude, aircraft.longitude, aircraft.altitude)
+ *   console.log(aircraft.heading, aircraft.pitch, aircraft.roll)
+ * }
+ *
+ * @example
+ * // Multiple components can call this hook - only ONE loop runs
+ * function ComponentA() {
+ *   const aircraft = useAircraftInterpolation() // Instance 1
+ *   // ...
+ * }
+ *
+ * function ComponentB() {
+ *   const aircraft = useAircraftInterpolation() // Instance 2 (same data!)
+ *   // ...
+ * }
+ *
+ * @example
+ * // Iterate over all interpolated aircraft
+ * const interpolatedAircraft = useAircraftInterpolation()
+ * for (const [callsign, aircraft] of interpolatedAircraft) {
+ *   // Process each aircraft at 60 Hz
+ * }
+ *
+ * @see interpolateAircraftState - core interpolation math
+ * @see vatsimStore - source data for interpolation
+ * @see docs/architecture.md - data flow diagram
+ */
 export function useAircraftInterpolation(): Map<string, InterpolatedAircraftState> {
   // Version counter to trigger re-renders when data changes
   const [, setVersion] = useState(0)

@@ -44,8 +44,136 @@ interface BabylonOverlayOptions {
 }
 
 /**
- * Hook that creates a Babylon.js overlay on top of Cesium for 3D rendering
- * Syncs the Babylon camera with Cesium's camera each frame
+ * Creates a Babylon.js overlay synchronized with Cesium for screen-space elements
+ * and weather effects.
+ *
+ * ## Responsibilities
+ * - Initialize Babylon.js engine and scene as transparent overlay
+ * - Synchronize Babylon camera with Cesium camera using ENU transformations
+ * - Render aircraft datablock labels and leader lines
+ * - Render weather effects (fog dome, cloud layers from METAR)
+ * - Manage ENU (East-North-Up) coordinate system root node
+ * - Handle label culling based on weather visibility
+ *
+ * ## Dependencies
+ * - Requires: Initialized Cesium.Viewer (from useCesiumViewer)
+ * - Requires: HTMLCanvasElement for Babylon rendering
+ * - Reads: weatherStore (for METAR data, visibility, cloud layers)
+ * - Reads: settingsStore (for weather effect toggles)
+ *
+ * ## Call Order
+ * Must be initialized AFTER Cesium viewer and camera are ready:
+ * ```typescript
+ * const viewer = useCesiumViewer(...)
+ * const camera = useCesiumCamera(viewer, viewportId, aircraft)
+ * const babylon = useBabylonOverlay({ cesiumViewer: viewer, canvas }) // ← HERE
+ * ```
+ *
+ * ## Rendering Pipeline
+ *
+ * ### Initialization
+ * 1. Create Babylon.js engine with transparent clear color
+ * 2. Create scene with MSAA 4x anti-aliasing
+ * 3. Create camera (synchronized with Cesium, not user-controlled)
+ * 4. Create GUI AdvancedDynamicTexture for 2D labels
+ * 5. Setup root transform node at tower location (ENU origin)
+ *
+ * ### Per-Frame Update
+ * 1. Sync Babylon camera matrix with Cesium camera (via `syncCamera()`)
+ * 2. Update aircraft labels and leader lines (via `updateAircraftLabel()`)
+ * 3. Update weather effects (fog dome, cloud layers)
+ * 4. Cull labels based on weather visibility
+ * 5. Render scene over Cesium
+ *
+ * ## Coordinate System
+ * Uses **ENU (East-North-Up)** local coordinates:
+ * - Origin: Tower location
+ * - X-axis: East
+ * - Y-axis: Up
+ * - Z-axis: North
+ *
+ * **IMPORTANT:** All positions must be converted from geographic (lat/lon/alt)
+ * to ENU before passing to Babylon.js. See `docs/coordinate-systems.md`.
+ *
+ * ## Weather Effects
+ *
+ * ### Fog Dome
+ * - Semi-transparent hemisphere at METAR visibility distance
+ * - Fresnel effect (more opaque near edges)
+ * - Follows camera position
+ * - Only visible when weather effects enabled
+ *
+ * ### Cloud Layers
+ * - Plane meshes positioned at METAR-reported ceiling altitudes
+ * - Supports up to 4 layers (SCT/BKN/OVC)
+ * - 50km diameter to cover horizon
+ * - Opacity configurable via settings
+ *
+ * ## Label Management
+ *
+ * ### Datablock Labels
+ * - Created as GUI.Rectangle with TextBlock
+ * - Positioned using Babylon screen projection
+ * - Culled by weather (visibility, cloud layers)
+ * - Memory pooling for performance
+ *
+ * ### Leader Lines
+ * - GUI.Line connecting aircraft to label
+ * - Updated each frame to track aircraft position
+ * - Hidden when label is culled
+ *
+ * ## Memory Management
+ * - Mesh pool for cloud planes (4 max)
+ * - Material reuse for weather effects
+ * - Automatic cleanup on unmount
+ * - Memory counters exported via `getMemoryCounters()`
+ *
+ * @param options - Configuration options
+ * @param options.cesiumViewer - Initialized Cesium.Viewer instance
+ * @param options.canvas - HTMLCanvasElement for Babylon rendering (must be overlaid on Cesium)
+ *
+ * @returns Babylon.js API for managing overlays
+ *
+ * @example
+ * // Basic setup
+ * const viewer = useCesiumViewer(containerRef)
+ * const babylonCanvas = useRef<HTMLCanvasElement>(null)
+ * const babylon = useBabylonOverlay({
+ *   cesiumViewer: viewer,
+ *   canvas: babylonCanvas.current
+ * })
+ *
+ * @example
+ * // Setup ENU root node at airport location
+ * useEffect(() => {
+ *   if (currentAirport && babylon.sceneReady) {
+ *     babylon.setupRootNode(
+ *       currentAirport.lon,
+ *       currentAirport.lat,
+ *       currentAirport.elevation
+ *     )
+ *   }
+ * }, [currentAirport, babylon.sceneReady])
+ *
+ * @example
+ * // Update aircraft label
+ * babylon.updateAircraftLabel({
+ *   callsign: 'AAL123',
+ *   position: { x: 1000, y: 500, z: 2000 }, // ENU coordinates
+ *   text: 'AAL123\\nA320\\n350\\n250',
+ *   color: '#00FF00'
+ * })
+ *
+ * @example
+ * // Check if label should be visible based on weather
+ * const visible = babylon.isDatablockVisibleByWeather(
+ *   aircraftDistanceNM,
+ *   aircraftAltitudeFeet
+ * )
+ *
+ * @see docs/coordinate-systems.md - for ENU transformation details
+ * @see docs/architecture.md - for rendering pipeline flow
+ * @see useBabylonCameraSync - for camera synchronization logic
  */
 export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOptions) {
   const engineRef = useRef<BABYLON.Engine | null>(null)
