@@ -10,13 +10,8 @@ import { useAircraftInterpolation } from '../../hooks/useAircraftInterpolation'
 import { useCesiumCamera } from '../../hooks/useCesiumCamera'
 import { useBabylonOverlay, getMemoryCounters } from '../../hooks/useBabylonOverlay'
 import { getTowerPosition } from '../../utils/towerHeight'
-import {
-  createPropellerState,
-  updatePropellerState,
-  getPropellerAnimationTime,
-  calculateDistanceNM,
-  type PropellerState
-} from '../../utils/interpolation'
+import { performanceMonitor } from '../../utils/performanceMonitor'
+import { calculateDistanceNM } from '../../utils/interpolation'
 import { useAircraftFilterStore } from '../../stores/aircraftFilterStore'
 import { getServiceWorkerCacheStats } from '../../utils/serviceWorkerRegistration'
 import { aircraftModelService } from '../../services/AircraftModelService'
@@ -78,10 +73,8 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   const modelPoolLoadingRef = useRef<Set<number>>(new Set())
   const modelPoolReadyRef = useRef<boolean>(false)
 
-  // Propeller animation state: maps callsign to propeller state
-  const propellerStatesRef = useRef<Map<string, PropellerState>>(new Map())
-  // Track which pool models have been configured for manual animation control
-  const modelAnimationsConfiguredRef = useRef<Set<number>>(new Set())
+  // Track previous positions for delta calculation (diagnostic logging)
+  const prevModelPositionsRef = useRef<Map<string, Cesium.Cartesian3>>(new Map())
 
   // Use state for viewer and canvas to trigger re-renders when they're ready
   const [cesiumViewer, setCesiumViewer] = useState<Cesium.Viewer | null>(null)
@@ -288,9 +281,6 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
       }
     }
 
-    // Enable clock animation for model animations (propellers, etc.)
-    viewer.clock.shouldAnimate = true
-
     // In-memory tile cache - reduced for insets (50 vs user setting)
     viewer.scene.globe.tileCacheSize = isInset ? 50 : useSettingsStore.getState().inMemoryTileCacheSize
 
@@ -365,8 +355,6 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     const modelPoolAssignments = modelPoolAssignmentsRef.current
     const modelPoolUrls = modelPoolUrlsRef.current
     const modelPoolLoading = modelPoolLoadingRef.current
-    const modelAnimationsConfigured = modelAnimationsConfiguredRef.current
-    const propellerStates = propellerStatesRef.current
     const babylonCanvas = babylonCanvasRef.current
 
     return () => {
@@ -380,8 +368,6 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
       modelPoolUrls.clear()
       modelPoolLoading.clear()
       modelPoolReadyRef.current = false
-      modelAnimationsConfigured.clear()
-      propellerStates.clear()
 
       // Reset other state
       rootNodeSetupRef.current = false
@@ -714,8 +700,13 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
 
   // Update aircraft entities
   const updateAircraftEntities = useCallback(() => {
+    performanceMonitor.startTimer('aircraftUpdate')
+
     const viewer = viewerRef.current
-    if (!viewer || viewer.isDestroyed()) return
+    if (!viewer || viewer.isDestroyed()) {
+      performanceMonitor.endTimer('aircraftUpdate')
+      return
+    }
 
     // Determine reference point for distance calculations (same logic as useAircraftFiltering)
     let refLat: number | undefined
@@ -955,7 +946,6 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
                 // Add new model to scene and update pool
                 viewer.scene.primitives.add(newModel)
                 modelPoolRef.current.set(poolIndex, newModel)
-                modelAnimationsConfiguredRef.current.delete(poolIndex)
                 modelPoolLoadingRef.current.delete(poolIndex)
               }).catch(err => {
                 console.error(`Failed to load model ${modelInfo.modelUrl}:`, err)
@@ -972,17 +962,28 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
               modelHeight
             )
 
+            // Track position deltas for followed aircraft (diagnostic logging)
+            if (aircraft.callsign === followingCallsign) {
+              const prev = prevModelPositionsRef.current.get(aircraft.callsign)
+              if (prev) {
+                const delta = Cesium.Cartesian3.distance(prev, position)
+                if (delta > 5.0) { // Log significant jumps > 5 meters
+                  const metrics = performanceMonitor.getMetrics()
+                  console.warn(
+                    `[Cesium Model] Position jump for ${aircraft.callsign}: ${delta.toFixed(2)}m | ` +
+                    `FPS: ${Math.round(metrics.fps)} | Frame interval: ${metrics.frameInterval.toFixed(2)}ms | ` +
+                    `Operations: ${metrics.totalFrame.toFixed(2)}ms`
+                  )
+                }
+              }
+              prevModelPositionsRef.current.set(aircraft.callsign, Cesium.Cartesian3.clone(position))
+            }
+
             // Model heading: Cesium models typically face +X, so heading=0 means east
             // Subtract 90 to convert from compass heading (north=0) to model heading
             // Add 180° to flip models that face backwards
             // Pitch: Negate because Cesium's coordinate system is opposite to our convention
             // Roll: Negate for same reason as pitch (due to model orientation)
-
-            // Debug: Sample a few aircraft per frame
-            if (Math.random() < 0.01 && Math.abs(aircraft.interpolatedRoll) > 0.1) {
-              console.log(`Cesium [${aircraft.callsign}] applying pitch:${aircraft.interpolatedPitch.toFixed(1)} roll:${aircraft.interpolatedRoll.toFixed(1)} TR:${aircraft.turnRate.toFixed(1)}`)
-            }
-
             const hpr = new Cesium.HeadingPitchRoll(
               Cesium.Math.toRadians(aircraft.interpolatedHeading - 90 + 180),
               Cesium.Math.toRadians(-aircraft.interpolatedPitch),
@@ -1011,48 +1012,6 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
             } else {
               model.color = MODEL_DEFAULT_COLOR
               model.colorBlendAmount = MODEL_COLOR_BLEND_AMOUNT  // Subtle blend preserves textures
-            }
-
-            // Update propeller animation based on groundspeed
-            let propState = propellerStatesRef.current.get(aircraft.callsign)
-            if (!propState) {
-              propState = createPropellerState()
-              propellerStatesRef.current.set(aircraft.callsign, propState)
-            }
-
-            const newPropState = updatePropellerState(
-              propState,
-              aircraft.interpolatedGroundspeed,
-              !isAirborne
-            )
-            propellerStatesRef.current.set(aircraft.callsign, newPropState)
-
-            // Configure animation on the Model primitive if not already done
-            if (!modelAnimationsConfiguredRef.current.has(poolIndex) && model.ready) {
-              const animations = model.activeAnimations
-              if (animations.length === 0) {
-                // Store propeller state reference on the model for the callback
-                const modelWithState = model as Cesium.Model & { _propStateRef?: { current: PropellerState } }
-                modelWithState._propStateRef = { current: newPropState }
-
-                animations.addAll({
-                  loop: Cesium.ModelAnimationLoop.REPEAT,
-                  animationTime: (duration: number) => {
-                    const state = modelWithState._propStateRef?.current
-                    if (state) {
-                      return getPropellerAnimationTime(state, duration)
-                    }
-                    return 0
-                  }
-                })
-                modelAnimationsConfiguredRef.current.add(poolIndex)
-              }
-            } else {
-              // Update the propeller state reference for the animation callback
-              const modelWithState = model as Cesium.Model & { _propStateRef?: { current: PropellerState } }
-              if (modelWithState._propStateRef) {
-                modelWithState._propStateRef.current = newPropState
-              }
             }
 
             // Show the model
@@ -1250,13 +1209,6 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
       }
     }
 
-    // Clean up propeller states for aircraft no longer visible
-    for (const callsign of propellerStatesRef.current.keys()) {
-      if (!seenCallsigns.has(callsign)) {
-        propellerStatesRef.current.delete(callsign)
-      }
-    }
-
     // Hide unused pool models and clean up references to prevent memory leaks
     for (const [idx, assignedCallsign] of modelPoolAssignmentsRef.current.entries()) {
       if (assignedCallsign !== null && !seenCallsigns.has(assignedCallsign)) {
@@ -1266,20 +1218,13 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
         if (model) {
           model.show = false
 
-          // CRITICAL: Clear the propeller state reference to break closure memory leak
-          const modelWithRef = model as Cesium.Model & { _propStateRef?: { current: PropellerState } }
-          if (modelWithRef._propStateRef) {
-            modelWithRef._propStateRef = undefined
-          }
-
-          // Clear animation configured flag so animations can be reconfigured for next aircraft
-          modelAnimationsConfiguredRef.current.delete(idx)
-
           // Reset model URL tracking (next aircraft may need different model)
           modelPoolUrlsRef.current.set(idx, './b738.glb')
         }
       }
     }
+
+    performanceMonitor.endTimer('aircraftUpdate')
   }, [
     interpolatedAircraft,
     followingCallsign,
@@ -1296,12 +1241,6 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     datablockMode
   ])
 
-  // Update aircraft entities when data changes (outside of Cesium's render loop)
-  // This ensures entities are added before Cesium's next render cycle processes them
-  useEffect(() => {
-    updateAircraftEntities()
-  }, [updateAircraftEntities])
-
   // Sync Babylon overlay and update aircraft on each render frame
   useEffect(() => {
     const viewer = viewerRef.current
@@ -1310,10 +1249,18 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     // Update aircraft and sync Babylon overlay AFTER render when camera position is finalized
     // This runs every frame (~60fps) to ensure smooth interpolated aircraft movement
     const removePostRender = viewer.scene.postRender.addEventListener(() => {
+      performanceMonitor.startFrame()
+
       // Update aircraft positions from interpolated data (mutated every frame by useAircraftInterpolation)
       updateAircraftEntities()
+
+      performanceMonitor.startTimer('babylonSync')
       babylonOverlay.syncCamera()
+      performanceMonitor.endTimer('babylonSync')
+
+      performanceMonitor.startTimer('babylonRender')
       babylonOverlay.render()
+      performanceMonitor.endTimer('babylonRender')
 
       // Update camera position for nearest METAR mode when in orbit mode without airport
       // This enables weather to update based on camera location when flying around freely
@@ -1325,6 +1272,8 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
           updateCameraPosition(lat, lon)
         }
       }
+
+      performanceMonitor.endFrame()
     })
 
     return () => {
