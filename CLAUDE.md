@@ -243,6 +243,26 @@ See MODDING.md for manifest format and model requirements. Models are loaded on 
 3. Inset initialization: `InsetCesiumViewer.tsx`
 4. Drag/resize: `useDragResize.ts`
 
+## Release Process
+
+**Important:** Before creating a release tag, update version numbers in these files:
+
+1. `package.json` - line 3: `"version": "X.X.X-alpha"`
+2. `src-tauri/tauri.conf.json` - line 4: `"version": "X.X.X-alpha"`
+3. `src-tauri/Cargo.toml` - line 3: `version = "X.X.X-alpha"`
+
+All three files must have matching version numbers. The Tauri build uses these to name the installer.
+
+### Release Steps
+
+1. Update version in all three files above
+2. Move `[Unreleased]` entries in CHANGELOG.md to new version header
+3. Commit: `git commit -m "Release vX.X.X-alpha"`
+4. Tag: `git tag vX.X.X-alpha`
+5. Push: `git push && git push --tags`
+
+The `release.yml` workflow will automatically build and upload the installer to the GitHub release.
+
 ## Changelog Maintenance
 
 **Important:** Maintain `CHANGELOG.md` whenever committing changes. This file informs end users about updates between releases.
