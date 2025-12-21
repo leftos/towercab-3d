@@ -416,18 +416,27 @@ export const useViewportStore = create<ViewportStore>()(
           setViewMode: (mode) => {
             const { activeViewportId, viewports } = get()
             set({
-              viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
-                viewMode: mode
-              }))
+              viewports: updateViewportCameraState(viewports, activeViewportId, (state) => {
+                // Tower follow is incompatible with topdown - auto-switch to orbit follow
+                if (mode === 'topdown' && state.followingCallsign && state.followMode === 'tower') {
+                  return { viewMode: mode, followMode: 'orbit' as FollowMode }
+                }
+                return { viewMode: mode }
+              })
             })
           },
 
           toggleViewMode: () => {
             const { activeViewportId, viewports } = get()
             set({
-              viewports: updateViewportCameraState(viewports, activeViewportId, (state) => ({
-                viewMode: state.viewMode === '3d' ? 'topdown' : '3d'
-              }))
+              viewports: updateViewportCameraState(viewports, activeViewportId, (state) => {
+                const newMode = state.viewMode === '3d' ? 'topdown' : '3d'
+                // Tower follow is incompatible with topdown - auto-switch to orbit follow
+                if (newMode === 'topdown' && state.followingCallsign && state.followMode === 'tower') {
+                  return { viewMode: newMode, followMode: 'orbit' as FollowMode }
+                }
+                return { viewMode: newMode }
+              })
             })
           },
 
@@ -564,12 +573,12 @@ export const useViewportStore = create<ViewportStore>()(
                   fov: state.fov,
                   viewMode: state.viewMode
                 }
+                // In topdown mode, use orbit follow (tower follow is incompatible with topdown)
+                // Orbit settings persist across aircraft switches - only resetView() resets them
                 return {
                   followingCallsign: callsign,
+                  followMode: state.viewMode === 'topdown' ? 'orbit' as FollowMode : state.followMode,
                   followZoom: FOLLOW_ZOOM_DEFAULT,
-                  orbitDistance: ORBIT_DISTANCE_DEFAULT,
-                  orbitHeading: ORBIT_HEADING_DEFAULT,
-                  orbitPitch: ORBIT_PITCH_DEFAULT,
                   preFollowState
                 }
               })
@@ -586,13 +595,11 @@ export const useViewportStore = create<ViewportStore>()(
                   fov: state.fov,
                   viewMode: state.viewMode
                 }
+                // Orbit settings persist across aircraft switches - only resetView() resets them
                 return {
                   followingCallsign: callsign,
                   followMode: 'orbit' as FollowMode,
                   followZoom: FOLLOW_ZOOM_DEFAULT,
-                  orbitDistance: ORBIT_DISTANCE_DEFAULT,
-                  orbitHeading: ORBIT_HEADING_DEFAULT,
-                  orbitPitch: ORBIT_PITCH_DEFAULT,
                   preFollowState
                 }
               })
@@ -629,9 +636,13 @@ export const useViewportStore = create<ViewportStore>()(
           setFollowMode: (mode) => {
             const { activeViewportId, viewports } = get()
             set({
-              viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
-                followMode: mode
-              }))
+              viewports: updateViewportCameraState(viewports, activeViewportId, (state) => {
+                // Tower follow is incompatible with topdown - auto-switch to 3D view
+                if (mode === 'tower' && state.viewMode === 'topdown') {
+                  return { followMode: mode, viewMode: '3d' as ViewMode }
+                }
+                return { followMode: mode }
+              })
             })
           },
 
@@ -640,7 +651,12 @@ export const useViewportStore = create<ViewportStore>()(
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, (state) => {
                 if (state.followingCallsign) {
-                  return { followMode: state.followMode === 'tower' ? 'orbit' : 'tower' }
+                  const newFollowMode = state.followMode === 'tower' ? 'orbit' : 'tower'
+                  // Tower follow is incompatible with topdown - auto-switch to 3D view
+                  if (newFollowMode === 'tower' && state.viewMode === 'topdown') {
+                    return { followMode: newFollowMode, viewMode: '3d' as ViewMode }
+                  }
+                  return { followMode: newFollowMode }
                 }
                 return {}
               })

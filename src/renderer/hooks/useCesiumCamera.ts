@@ -299,45 +299,73 @@ export function useCesiumCamera(
         const altitudeMeters = aircraft.interpolatedAltitude  // Already in METERS
 
         if (state.followMode === 'orbit') {
-          // ORBIT MODE: Camera orbits around aircraft
-          const orbitResult = calculateOrbitCameraPosition(
-            aircraftLat,
-            aircraftLon,
-            altitudeMeters,
-            aircraftHeading,
-            state.orbitHeading,
-            state.orbitPitch,
-            state.orbitDistance
-          )
+          // In top-down mode: position camera above aircraft looking straight down
+          if (state.viewMode === 'topdown') {
+            const airportState = useAirportStore.getState()
+            const airportElevation = airportState.currentAirport?.elevation
+              ? feetToMeters(airportState.currentAirport.elevation)
+              : 0
 
-          // Set camera position directly (no smoothing)
-          const targetFov = calculateFollowFov(60, state.followZoom)
+            const cameraPosition = Cesium.Cartesian3.fromDegrees(
+              aircraftLon,
+              aircraftLat,
+              airportElevation + state.topdownAltitude
+            )
 
-          const cameraPosition = Cesium.Cartesian3.fromDegrees(
-            orbitResult.cameraLon,
-            orbitResult.cameraLat,
-            orbitResult.cameraHeight
-          )
-          viewer.camera.setView({
-            destination: cameraPosition,
-            orientation: {
-              heading: Cesium.Math.toRadians(orbitResult.heading),
-              pitch: Cesium.Math.toRadians(orbitResult.pitch),
-              roll: 0
-            }
-          })
-
-          // Set FOV
-          if (viewer.camera.frustum instanceof Cesium.PerspectiveFrustum) {
-            viewer.camera.frustum.fov = Cesium.Math.toRadians(targetFov)
-          }
-
-          // Update store with calculated values (for UI display) - but only if changed
-          if (Math.abs(orbitResult.heading - state.heading) > 0.1 || Math.abs(orbitResult.pitch - state.pitch) > 0.1) {
-            updateCameraState({
-              heading: orbitResult.heading,
-              pitch: orbitResult.pitch
+            viewer.camera.setView({
+              destination: cameraPosition,
+              orientation: {
+                heading: Cesium.Math.toRadians(state.heading),
+                pitch: Cesium.Math.toRadians(-90),
+                roll: 0
+              }
             })
+
+            if (viewer.camera.frustum instanceof Cesium.PerspectiveFrustum) {
+              viewer.camera.frustum.fov = Cesium.Math.toRadians(60)
+            }
+            // Skip normal 3D orbit positioning - we're in top-down mode
+          } else {
+            // ORBIT MODE (3D): Camera orbits around aircraft
+            const orbitResult = calculateOrbitCameraPosition(
+              aircraftLat,
+              aircraftLon,
+              altitudeMeters,
+              aircraftHeading,
+              state.orbitHeading,
+              state.orbitPitch,
+              state.orbitDistance
+            )
+
+            // Set camera position directly (no smoothing)
+            const targetFov = calculateFollowFov(60, state.followZoom)
+
+            const cameraPosition = Cesium.Cartesian3.fromDegrees(
+              orbitResult.cameraLon,
+              orbitResult.cameraLat,
+              orbitResult.cameraHeight
+            )
+            viewer.camera.setView({
+              destination: cameraPosition,
+              orientation: {
+                heading: Cesium.Math.toRadians(orbitResult.heading),
+                pitch: Cesium.Math.toRadians(orbitResult.pitch),
+                roll: 0
+              }
+            })
+
+            // Set FOV
+            if (viewer.camera.frustum instanceof Cesium.PerspectiveFrustum) {
+              viewer.camera.frustum.fov = Cesium.Math.toRadians(targetFov)
+            }
+
+            // Update store with calculated values (for UI display) - but only if changed
+            if (Math.abs(orbitResult.heading - state.heading) > 0.1 || Math.abs(orbitResult.pitch - state.pitch) > 0.1) {
+              updateCameraState({
+                heading: orbitResult.heading,
+                pitch: orbitResult.pitch
+              })
+            }
           }
         } else if (state.followMode === 'tower' && state.viewMode === '3d') {
           // TOWER MODE: Camera stays at tower, rotates to look at aircraft

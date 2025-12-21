@@ -10,6 +10,12 @@ All notable changes to TowerCab 3D will be documented in this file.
 ### Changed
 - Shadow sub-settings now shown as disabled (greyed out) instead of hidden when shadows are off
 - Graphics settings tab no longer dims the viewport, allowing you to see changes in real-time
+- Orbit follow mode now works in 2D top-down view: aircraft stays centered on screen while you can still rotate heading and adjust altitude
+- Orbit camera settings (distance, heading, pitch) now persist when switching between followed aircraft
+
+### Fixed
+- Switching to 2D mode while tower following no longer breaks aircraft centering (auto-switches to orbit follow)
+- Switching to tower follow while in 2D mode now works correctly (auto-switches to 3D view)
 
 ## v0.0.6-alpha (2025-12-21)
 
