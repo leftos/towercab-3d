@@ -1,4 +1,3 @@
-import { useMemo, useState, useEffect } from 'react'
 import { useAircraftFilterStore } from '@/stores/aircraftFilterStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useViewportStore } from '@/stores/viewportStore'
@@ -47,8 +46,14 @@ interface UseAircraftFilteringOptions {
 }
 
 /**
- * Shared aircraft filtering hook used by both AircraftPanel and CesiumViewer.
- * Ensures consistent filtering logic for aircraft list and datablocks.
+ * Shared aircraft filtering hook used by AircraftPanel for UI list updates.
+ *
+ * NOTE: This hook is NOT used by CesiumViewer for rendering because it only
+ * re-executes when React re-renders (typically 1Hz due to refresh tick).
+ * CesiumViewer reads directly from the interpolatedAircraft Map to achieve
+ * 60Hz position updates while applying the same filter settings from stores.
+ *
+ * This hook is perfect for UI components that don't need frame-rate updates.
  *
  * Filtering order:
  * 1. Calculate reference position (tower or followed aircraft)
@@ -65,14 +70,6 @@ export function useAircraftFiltering(options?: UseAircraftFilteringOptions): Fil
 
   // Get interpolated aircraft data
   const interpolatedAircraft = useAircraftInterpolation()
-
-  // Periodic refresh tick to force recalculation (interpolatedAircraft Map is mutated, not replaced)
-  // This prevents infinite loops while still updating the UI at regular intervals
-  const [refreshTick, setRefreshTick] = useState(0)
-  useEffect(() => {
-    const interval = setInterval(() => setRefreshTick((t) => t + 1), 1000)
-    return () => clearInterval(interval)
-  }, [])
 
   // Get global settings
   const labelVisibilityDistance = useSettingsStore((state) => state.labelVisibilityDistance)
@@ -107,8 +104,10 @@ export function useAircraftFiltering(options?: UseAircraftFilteringOptions): Fil
   // Get top-down mode status for cloud culling logic
   const isTopDown = viewport?.cameraState.viewMode === 'topdown'
 
-  return useMemo(() => {
-    // Determine reference point for distance calculations
+  // Calculate filtered aircraft on every call to use fresh interpolated positions (60Hz)
+  // This is intentional - no useMemo - to ensure smooth aircraft movement
+  // The interpolatedAircraft Map is mutated every frame, so we read from it directly
+  // Determine reference point for distance calculations
     let refLat: number | undefined
     let refLon: number | undefined
     let refElevationMeters = 0
@@ -280,26 +279,4 @@ export function useAircraftFiltering(options?: UseAircraftFilteringOptions): Fil
       isOrbitModeWithoutAirport,
       stats
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    refreshTick, // Periodic refresh to recalculate from mutated interpolatedAircraft Map
-    labelVisibilityDistance,
-    showGroundTraffic,
-    showAirborneTraffic,
-    showWeatherEffects,
-    showCesiumFog,
-    showClouds,
-    visibilityScale,
-    towerHeight,
-    maxAircraftDisplay,
-    searchQuery,
-    filterAirportTraffic,
-    filterWeatherVisibility,
-    followingCallsign,
-    currentAirport,
-    currentMetar,
-    cloudLayers,
-    isTopDown,
-    includeFollowedRegardlessOfDistance
-  ])
 }

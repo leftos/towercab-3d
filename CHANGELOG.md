@@ -8,6 +8,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Aircraft list now shows the same aircraft as datablocks on the map
 - Ground/airborne traffic toggles now affect both aircraft list and datablocks
 - Shadow banding artifacts no longer visible (ambient occlusion disabled by default)
+- Aircraft models now update smoothly at 60Hz instead of jerking once per second
+- Aircraft models now render for all aircraft within the sphere radius, while datablocks are filtered separately (fixes missing aircraft models)
 
 ### Changed
 - Panel filters (search, airport traffic, weather visibility) now affect both list and datablocks on the map

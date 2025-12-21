@@ -8,7 +8,7 @@
  * Models from Flightradar24/fr24-3d-models (GPL-2.0, originally from FlightGear)
  */
 
-import { aircraftDimensionsService } from './AircraftDimensionsService'
+import { aircraftDimensionsService, type AircraftDimensions } from './AircraftDimensionsService'
 
 // Available model files (lowercase, without extension)
 // These correspond to .glb files in src/renderer/public/
@@ -326,6 +326,7 @@ export interface ModelInfo {
   scale: { x: number; y: number; z: number }  // Non-uniform scale factors
   matchType: 'exact' | 'mapped' | 'closest' | 'fallback'
   matchedModel?: string  // For debugging: which model was matched
+  dimensions: AircraftDimensions  // Dimensions of the actual model being used
 }
 
 /**
@@ -365,6 +366,21 @@ const AIRLINE_COLORS: Record<string, AirlineLivery> = {
 
 class AircraftModelServiceClass {
   /**
+   * Get dimensions for a model file
+   * @param modelName Model file name (without extension, e.g., "b738")
+   * @returns Dimensions of the model, or B738 fallback if not found
+   */
+  private getModelDimensions(modelName: string): AircraftDimensions {
+    const icao = MODEL_TO_ICAO[modelName]
+    if (icao) {
+      const dims = aircraftDimensionsService.getDimensions(icao)
+      if (dims) return dims
+    }
+    // Fallback to B738 dimensions
+    return { wingspan: 35.78, length: 39.47 }
+  }
+
+  /**
    * Get the model URL and scale for an aircraft type
    * @param aircraftType ICAO aircraft type code (e.g., "B738", "A320")
    * @returns Model URL, scale factor, and match type
@@ -373,10 +389,12 @@ class AircraftModelServiceClass {
     const uniformScale = { x: 1, y: 1, z: 1 }
 
     if (!aircraftType) {
+      const fallbackDims = this.getModelDimensions(FALLBACK_MODEL)
       return {
         modelUrl: `./${FALLBACK_MODEL}.glb`,
         scale: uniformScale,
-        matchType: 'fallback'
+        matchType: 'fallback',
+        dimensions: fallbackDims
       }
     }
 
@@ -385,20 +403,24 @@ class AircraftModelServiceClass {
     // Check explicit mapping first
     const mappedModel = TYPE_TO_MODEL[normalized]
     if (mappedModel && AVAILABLE_MODELS.has(mappedModel)) {
+      const modelDims = this.getModelDimensions(mappedModel)
       return {
         modelUrl: `./${mappedModel}.glb`,
         scale: uniformScale,
-        matchType: normalized.toLowerCase() === mappedModel ? 'exact' : 'mapped'
+        matchType: normalized.toLowerCase() === mappedModel ? 'exact' : 'mapped',
+        dimensions: modelDims
       }
     }
 
     // Try direct match (lowercase)
     const directMatch = normalized.toLowerCase()
     if (AVAILABLE_MODELS.has(directMatch)) {
+      const directDims = this.getModelDimensions(directMatch)
       return {
         modelUrl: `./${directMatch}.glb`,
         scale: uniformScale,
-        matchType: 'exact'
+        matchType: 'exact',
+        dimensions: directDims
       }
     }
 
@@ -406,19 +428,23 @@ class AircraftModelServiceClass {
     const targetDims = aircraftDimensionsService.getDimensions(normalized)
     if (targetDims && targetDims.wingspan && targetDims.length) {
       const { model, scale } = findClosestModel(targetDims.wingspan, targetDims.length)
+      const closestDims = this.getModelDimensions(model)
       return {
         modelUrl: `./${model}.glb`,
         scale,
         matchType: 'closest',
-        matchedModel: model
+        matchedModel: model,
+        dimensions: closestDims
       }
     }
 
     // No dimensions available - use B738 fallback at 1:1 scale
+    const finalFallbackDims = this.getModelDimensions(FALLBACK_MODEL)
     return {
       modelUrl: `./${FALLBACK_MODEL}.glb`,
       scale: uniformScale,
-      matchType: 'fallback'
+      matchType: 'fallback',
+      dimensions: finalFallbackDims
     }
   }
 

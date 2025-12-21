@@ -7,7 +7,6 @@ import { useVatsimStore } from '../../stores/vatsimStore'
 import { useWeatherStore } from '../../stores/weatherStore'
 import { useMeasureStore } from '../../stores/measureStore'
 import { useAircraftInterpolation } from '../../hooks/useAircraftInterpolation'
-import { useAircraftFiltering } from '../../hooks/useAircraftFiltering'
 import { useCesiumCamera } from '../../hooks/useCesiumCamera'
 import { useBabylonOverlay, getMemoryCounters } from '../../hooks/useBabylonOverlay'
 import { getTowerPosition } from '../../utils/towerHeight'
@@ -15,8 +14,10 @@ import {
   createPropellerState,
   updatePropellerState,
   getPropellerAnimationTime,
+  calculateDistanceNM,
   type PropellerState
 } from '../../utils/interpolation'
+import { useAircraftFilterStore } from '../../stores/aircraftFilterStore'
 import { getServiceWorkerCacheStats } from '../../utils/serviceWorkerRegistration'
 import { aircraftModelService } from '../../services/AircraftModelService'
 import './CesiumViewer.css'
@@ -151,11 +152,12 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   // Get interpolated aircraft states
   const interpolatedAircraft = useAircraftInterpolation()
 
-  // Get filtered aircraft (synced with AircraftPanel filtering)
-  const { filtered: filteredAircraft, referencePoint } = useAircraftFiltering({
-    includeFollowedRegardlessOfDistance: true,
-    viewportId
-  })
+  // Get filter settings from stores (for inline filtering at 60Hz)
+  const searchQuery = useAircraftFilterStore((state) => state.searchQuery)
+  const filterAirportTraffic = useAircraftFilterStore((state) => state.filterAirportTraffic)
+  const labelVisibilityDistance = useSettingsStore((state) => state.labelVisibilityDistance)
+  const showGroundTraffic = useSettingsStore((state) => state.showGroundTraffic)
+  const showAirborneTraffic = useSettingsStore((state) => state.showAirborneTraffic)
 
   // Initialize camera controls (this hook manages all camera behavior)
   // Pass interpolated aircraft for smooth follow tracking
@@ -715,21 +717,62 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     const viewer = viewerRef.current
     if (!viewer || viewer.isDestroyed()) return
 
-    // Use filtered aircraft from shared hook (synced with AircraftPanel)
-    if (!referencePoint) return
+    // Determine reference point for distance calculations (same logic as useAircraftFiltering)
+    let refLat: number | undefined
+    let refLon: number | undefined
+    let refAltitudeFeet: number | undefined
+    let refElevationMeters = 0
+    let isOrbitModeWithoutAirport = false
 
-    const refElevationMeters = referencePoint.elevationMeters
+    // Check if in orbit mode without airport (use followed aircraft as reference)
+    if (followingCallsign && !currentAirport && interpolatedAircraft.has(followingCallsign)) {
+      const followedAircraft = interpolatedAircraft.get(followingCallsign)!
+      refLat = followedAircraft.interpolatedLatitude
+      refLon = followedAircraft.interpolatedLongitude
+      refElevationMeters = followedAircraft.interpolatedAltitude * 0.3048
+      refAltitudeFeet = followedAircraft.interpolatedAltitude
+      isOrbitModeWithoutAirport = true
+    } else if (currentAirport) {
+      // Normal mode: use tower position
+      const towerPos = getTowerPosition(currentAirport, towerHeight)
+      refLat = towerPos.latitude
+      refLon = towerPos.longitude
+      refElevationMeters = currentAirport.elevation ? currentAirport.elevation * 0.3048 : 0
+      // Tower altitude = ground elevation + tower height (convert tower height from meters to feet)
+      refAltitudeFeet = (currentAirport.elevation || 0) + (towerHeight / 0.3048)
+    }
+
+    // If no reference point available, bail early
+    if (refLat === undefined || refLon === undefined || refAltitudeFeet === undefined) {
+      return
+    }
+
+    const airportElevationFeet = currentAirport?.elevation || 0
+    const airportIcao = currentAirport?.icao?.toUpperCase()
+    const query = searchQuery.toLowerCase().trim()
+
     const seenCallsigns = new Set<string>()
 
-    // Use filtered and sorted aircraft from hook
-    const sortedAircraft = filteredAircraft
+    // Calculate distance for ALL aircraft in the sphere (reads fresh positions from Map at 60Hz)
+    // interpolatedAircraft already contains only aircraft within aircraftDataRadius
+    const allAircraftWithDistance = Array.from(interpolatedAircraft.values()).map((aircraft) => ({
+      ...aircraft,
+      distance: calculateDistanceNM(
+        refLat!,
+        refLon!,
+        aircraft.interpolatedLatitude,
+        aircraft.interpolatedLongitude,
+        refAltitudeFeet!,
+        aircraft.interpolatedAltitude
+      )
+    }))
 
     // Get ground elevation for aircraft positioning
     const groundElevationMeters = currentAirport?.elevation
       ? currentAirport.elevation * 0.3048
       : refElevationMeters
 
-    // First pass: Update all aircraft mesh positions
+    // First pass: Update ALL aircraft model positions (within sphere)
     const aircraftData: Array<{
       callsign: string
       isAirborne: boolean
@@ -737,11 +780,12 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
       labelText: string
       color: { r: number; g: number; b: number }
       cesiumPosition: Cesium.Cartesian3 | null
+      labelPosition: Cesium.Cartesian3 | null
       altitudeMetersAGL: number
       distanceMeters: number
     }> = []
 
-    for (const aircraft of sortedAircraft) {
+    for (const aircraft of allAircraftWithDistance) {
       seenCallsigns.add(aircraft.callsign)
 
       // Calculate altitude in meters
@@ -752,6 +796,53 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
       const aglMeters = altitudeMeters - groundElevationMeters
       const isAirborne = aglMeters > 60
       const isFollowed = followingCallsign === aircraft.callsign
+
+      // Determine if this aircraft should have a datablock shown
+      // Models are rendered for ALL aircraft, but datablocks are filtered
+      let showDatablock = false
+
+      if (isFollowed) {
+        // Always show followed aircraft datablock
+        showDatablock = true
+      } else {
+        // Apply datablock filters
+        showDatablock = true
+
+        // Distance filter
+        if (aircraft.distance > labelVisibilityDistance) {
+          showDatablock = false
+        }
+
+        // Ground/airborne filter (skip in orbit mode without airport)
+        if (showDatablock && !isOrbitModeWithoutAirport) {
+          const aglFeet = aircraft.interpolatedAltitude - airportElevationFeet
+          const isAirborneCheck = aglFeet > 200
+          if (isAirborneCheck && !showAirborneTraffic) {
+            showDatablock = false
+          }
+          if (!isAirborneCheck && !showGroundTraffic) {
+            showDatablock = false
+          }
+        }
+
+        // Search filter (from panel)
+        if (showDatablock && query) {
+          if (!aircraft.callsign.toLowerCase().includes(query) &&
+              !aircraft.aircraftType?.toLowerCase().includes(query) &&
+              !aircraft.departure?.toLowerCase().includes(query) &&
+              !aircraft.arrival?.toLowerCase().includes(query)) {
+            showDatablock = false
+          }
+        }
+
+        // Airport traffic filter (from panel)
+        if (showDatablock && filterAirportTraffic && airportIcao) {
+          if (aircraft.departure?.toUpperCase() !== airportIcao &&
+              aircraft.arrival?.toUpperCase() !== airportIcao) {
+            showDatablock = false
+          }
+        }
+      }
 
       // Calculate height above ellipsoid
       // Use Math.max to ensure aircraft never go below ground, but can smoothly climb
@@ -808,6 +899,9 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
 
       // Use model from pool - find or assign a pool slot for this aircraft
       if (modelPoolReadyRef.current && terrainOffsetReadyRef.current) {
+        // Get the correct model info for this aircraft type
+        const modelInfo = aircraftModelService.getModelInfo(aircraft.aircraftType)
+
         // Calculate model position with terrain offset correction and height offset to prevent ground clipping
         const modelHeight = heightAboveEllipsoid + terrainOffsetRef.current + MODEL_HEIGHT_OFFSET
 
@@ -833,8 +927,6 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
         if (poolIndex !== -1) {
           const model = modelPoolRef.current.get(poolIndex)
           if (model) {
-            // Get the correct model info for this aircraft type
-            const modelInfo = aircraftModelService.getModelInfo(aircraft.aircraftType)
             const currentModelUrl = modelPoolUrlsRef.current.get(poolIndex)
 
             // If model URL changed, load the new model asynchronously
@@ -961,41 +1053,58 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
             model.show = true
           }
         }
+
+        // Calculate bounding box height for leader line attachment
+        // Height approximated as wingspan/3 (realistic for most aircraft tail heights)
+        const baseModelHeight = modelInfo.dimensions.wingspan / 3
+        const boundingBoxHeight = baseModelHeight * modelInfo.scale.y * viewModeScale
+
+        // Store the Cesium position for screen projection
+        const cesiumPosition = Cesium.Cartesian3.fromDegrees(
+          aircraft.interpolatedLongitude,
+          aircraft.interpolatedLatitude,
+          heightAboveEllipsoid + terrainOffsetRef.current
+        )
+
+        // Create label position at top of bounding box for leader line attachment
+        const labelPosition = Cesium.Cartesian3.fromDegrees(
+          aircraft.interpolatedLongitude,
+          aircraft.interpolatedLatitude,
+          heightAboveEllipsoid + terrainOffsetRef.current + boundingBoxHeight
+        )
+
+        // Calculate aircraft altitude AGL (above ground level) in meters
+        const altitudeMetersAGL = altitudeMeters - groundElevationMeters
+
+        // Distance in meters (aircraft.distance is in NM, 1 NM = 1852 meters)
+        const distanceMeters = aircraft.distance * 1852
+
+        // Only add to aircraftData if datablock should be shown (filtering done at top of loop)
+        if (showDatablock) {
+          aircraftData.push({
+            callsign: aircraft.callsign,
+            isAirborne,
+            isFollowed,
+            labelText,
+            color: babylonColor,
+            cesiumPosition,
+            labelPosition,
+            altitudeMetersAGL,
+            distanceMeters
+          })
+        }
       }
 
-      // Update Babylon overlay for labels (Cesium handles 3D aircraft models)
-      babylonOverlay.updateAircraftLabel(
-        aircraft.callsign,
-        babylonColor,
-        isFollowed,
-        labelText
-      )
-
-      // Store the Cesium position for screen projection
-      const cesiumPosition = modelPoolReadyRef.current && terrainOffsetReadyRef.current
-        ? Cesium.Cartesian3.fromDegrees(
-            aircraft.interpolatedLongitude,
-            aircraft.interpolatedLatitude,
-            heightAboveEllipsoid + terrainOffsetRef.current
-          )
-        : null
-
-      // Calculate aircraft altitude AGL (above ground level) in meters
-      const altitudeMetersAGL = altitudeMeters - groundElevationMeters
-
-      // Distance in meters (aircraft.distance is in NM, 1 NM = 1852 meters)
-      const distanceMeters = aircraft.distance * 1852
-
-      aircraftData.push({
-        callsign: aircraft.callsign,
-        isAirborne,
-        isFollowed,
-        labelText,
-        color: babylonColor,
-        cesiumPosition,
-        altitudeMetersAGL,
-        distanceMeters
-      })
+      // Update Babylon overlay for labels (only if datablock should be shown)
+      // Labels are managed separately and will be shown/hidden in the second pass
+      if (showDatablock) {
+        babylonOverlay.updateAircraftLabel(
+          aircraft.callsign,
+          babylonColor,
+          isFollowed,
+          labelText
+        )
+      }
     }
 
     // Hide all labels first, then show only visible ones
@@ -1042,7 +1151,8 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
         continue // Skip this aircraft - datablock hidden by weather
       }
 
-      const windowPos = Cesium.SceneTransforms.worldToWindowCoordinates(viewer.scene, data.cesiumPosition)
+      if (!data.labelPosition) continue
+      const windowPos = Cesium.SceneTransforms.worldToWindowCoordinates(viewer.scene, data.labelPosition)
       if (!windowPos) continue
 
       // windowPos is in CSS pixels, use it directly as screen position
@@ -1165,11 +1275,15 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
       }
     }
   }, [
-    filteredAircraft,
-    referencePoint,
+    interpolatedAircraft,
+    followingCallsign,
     currentAirport,
     towerHeight,
-    followingCallsign,
+    labelVisibilityDistance,
+    showGroundTraffic,
+    showAirborneTraffic,
+    searchQuery,
+    filterAirportTraffic,
     babylonOverlay,
     viewMode,
     topdownAltitude,
