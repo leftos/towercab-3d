@@ -1,7 +1,27 @@
 // METAR weather service
 // Handles fetching and parsing METAR data from Aviation Weather API
 
+import { invoke } from '@tauri-apps/api/core'
+
 const METAR_API_URL = 'https://aviationweather.gov/api/data/metar'
+
+/**
+ * Fetch a URL using Tauri backend (bypasses CORS) or browser fetch as fallback
+ */
+async function fetchUrl(url: string): Promise<string> {
+  try {
+    // Try Tauri command first (available in desktop mode)
+    const response = await invoke<string>('fetch_url', { url })
+    return response
+  } catch {
+    // Fallback to browser fetch (for serve mode)
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error(`HTTP error: ${response.status}`)
+    }
+    return await response.text()
+  }
+}
 
 export interface MetarCloudLayer {
   cover: string  // SKC, FEW, SCT, BKN, OVC
@@ -64,14 +84,8 @@ class MetarService {
 
     try {
       const url = `${METAR_API_URL}?ids=${normalizedIcao}&format=json`
-      const response = await fetch(url)
-
-      if (!response.ok) {
-        console.warn(`METAR API error for ${normalizedIcao}: ${response.status}`)
-        return cached?.data ?? null
-      }
-
-      const data = await response.json()
+      const responseText = await fetchUrl(url)
+      const data = JSON.parse(responseText)
 
       // API returns an array, take the first (most recent) observation
       if (!Array.isArray(data) || data.length === 0) {
@@ -148,15 +162,8 @@ class MetarService {
       const lon1 = (longitude + lonOffset).toFixed(4)
 
       const url = `${METAR_API_URL}?bbox=${lat0},${lon0},${lat1},${lon1}&format=json`
-
-      const response = await fetch(url)
-
-      if (!response.ok) {
-        console.warn(`Nearest METAR API error: ${response.status}`)
-        return this.nearestCache?.data ?? null
-      }
-
-      const data = await response.json()
+      const responseText = await fetchUrl(url)
+      const data = JSON.parse(responseText)
 
       if (!Array.isArray(data) || data.length === 0) {
         console.warn(`No METAR stations within ${maxDistanceNM}nm of ${latitude.toFixed(2)}, ${longitude.toFixed(2)}`)
