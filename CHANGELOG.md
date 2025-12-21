@@ -32,6 +32,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Removed "Shadow Cascades" setting from graphics options (not user-configurable)
 
 ### Added
+- Landing flare emulation: aircraft now pitch nose-up when approaching the runway, simulating the flare maneuver pilots perform before touchdown
 - Compass direction indicator in top bar showing current camera heading (N/NE/E/SE/S/SW/W/NW)
 - Ambient occlusion (HBAO) is now a configurable graphics setting (disabled by default to prevent banding)
 - Aircraft pitch and roll emulation: aircraft now tilt nose up/down during climbs and descents, and bank into turns based on physics

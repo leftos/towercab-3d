@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useVatsimStore } from '../stores/vatsimStore'
 import { useSettingsStore } from '../stores/settingsStore'
-import { interpolateAircraftState } from '../utils/interpolation'
+import { interpolateAircraftState, calculateFlarePitch } from '../utils/interpolation'
 import { performanceMonitor } from '../utils/performanceMonitor'
 import type { InterpolatedAircraftState, AircraftState } from '../types/vatsim'
 import {
@@ -202,6 +202,22 @@ function updateInterpolation() {
 
     // Apply corrected height to interpolated altitude
     entry.interpolatedAltitude = correctedHeight
+
+    // Apply landing flare pitch adjustment
+    // When aircraft is descending close to the ground, pitch nose up to emulate flare
+    if (orientationEnabled && sampledTerrainHeight !== undefined) {
+      // Calculate altitude above ground level (AGL)
+      // Use reported altitude (not corrected) since terrain height is in ellipsoid coords
+      const altitudeAGL = reportedEllipsoidHeight - sampledTerrainHeight
+
+      entry.interpolatedPitch = calculateFlarePitch(
+        entry.interpolatedPitch,
+        altitudeAGL,
+        entry.verticalRate,  // Already in m/min
+        entry.interpolatedGroundspeed,
+        orientationIntensity
+      )
+    }
   }
 
   // Remove stale entries (aircraft that are no longer in the data)

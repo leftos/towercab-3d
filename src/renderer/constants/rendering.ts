@@ -200,3 +200,51 @@ export const DATABLOCK_LEADER_LINE_HEIGHT_MULTIPLIER = 0.25
  * Default: -2 meters (slightly to the left of aircraft center)
  */
 export const DATABLOCK_HORIZONTAL_OFFSET_M = -10
+
+// ============================================================================
+// LANDING FLARE EMULATION
+// ============================================================================
+
+/**
+ * Altitude AGL (meters) where flare pitch-up begins
+ *
+ * Aircraft below this altitude while descending will begin to pitch up
+ * to simulate the landing flare maneuver. Typical values:
+ * - Small aircraft: 10-20 feet (3-6m)
+ * - Regional jets: 20-30 feet (6-9m)
+ * - Airliners: 30-50 feet (9-15m)
+ *
+ * Default: 15 meters (~50 feet) - suitable for all aircraft types
+ */
+export const FLARE_START_ALTITUDE_METERS = 15
+
+/**
+ * Altitude AGL (meters) where full flare pitch is achieved
+ *
+ * At this altitude, the aircraft will have reached its maximum flare pitch.
+ * Just before touchdown.
+ *
+ * Default: 2 meters (~6 feet)
+ */
+export const FLARE_END_ALTITUDE_METERS = 2
+
+/**
+ * Target nose-up pitch angle during flare (degrees)
+ *
+ * The pitch the aircraft will transition toward during the flare.
+ * Typical landing attitudes are 3-8 degrees nose up.
+ *
+ * Default: 6 degrees
+ */
+export const FLARE_TARGET_PITCH_DEGREES = 6
+
+/**
+ * Minimum descent rate (m/min) to trigger flare
+ *
+ * Prevents flare during level flight at low altitude.
+ * Must be negative (descending). Aircraft must be descending faster
+ * than this rate to trigger the flare.
+ *
+ * Default: -50 m/min (~165 fpm descent)
+ */
+export const FLARE_MIN_DESCENT_RATE = -50

@@ -9,6 +9,13 @@
  */
 
 import type { AircraftState, InterpolatedAircraftState } from '../types/vatsim'
+import {
+  FLARE_START_ALTITUDE_METERS,
+  FLARE_END_ALTITUDE_METERS,
+  FLARE_TARGET_PITCH_DEGREES,
+  FLARE_MIN_DESCENT_RATE,
+  GROUNDSPEED_THRESHOLD_KNOTS
+} from '../constants/rendering'
 
 // Constants for physics-based interpolation
 const NM_TO_DEGREES_LAT = 1 / 60 // 1 NM = 1/60 degree latitude
@@ -261,6 +268,67 @@ function calculateOrientation(
   }
 
   return { pitch, roll }
+}
+
+/**
+ * Calculate flare pitch adjustment for landing aircraft
+ *
+ * When an aircraft is descending and close to the ground, pilots perform a
+ * "flare" maneuver - pitching the nose up to reduce descent rate before touchdown.
+ * This function emulates that behavior by gradually transitioning from the
+ * flight path angle (negative pitch during descent) toward a nose-up attitude.
+ *
+ * @param basePitch - Pitch calculated from flight path angle (degrees)
+ * @param altitudeAGL - Altitude above ground level in meters (null if unknown)
+ * @param verticalRate - Vertical rate in m/min (negative = descending)
+ * @param groundspeedKnots - Current groundspeed in knots
+ * @param orientationIntensity - Intensity multiplier from settings (0.25 to 1.5)
+ * @returns Adjusted pitch in degrees
+ */
+export function calculateFlarePitch(
+  basePitch: number,
+  altitudeAGL: number | null,
+  verticalRate: number,
+  groundspeedKnots: number,
+  orientationIntensity: number
+): number {
+  // Cannot calculate flare without AGL data
+  if (altitudeAGL === null) return basePitch
+
+  // Check flare conditions:
+  // 1. Must be descending (negative vertical rate beyond threshold)
+  // 2. Must be in the flare zone (below start altitude, above ground)
+  // 3. Must be airborne (above groundspeed threshold)
+  const isDescending = verticalRate < FLARE_MIN_DESCENT_RATE
+  const inFlareZone = altitudeAGL > 0 && altitudeAGL < FLARE_START_ALTITUDE_METERS
+  const isAirborne = groundspeedKnots >= GROUNDSPEED_THRESHOLD_KNOTS
+
+  if (!isDescending || !inFlareZone || !isAirborne) {
+    return basePitch
+  }
+
+  // Calculate flare progress (0 = start of flare, 1 = full flare at touchdown)
+  // Progress increases as altitude decreases
+  const range = FLARE_START_ALTITUDE_METERS - FLARE_END_ALTITUDE_METERS
+  const distanceFromEnd = altitudeAGL - FLARE_END_ALTITUDE_METERS
+  const flareProgress = Math.max(0, Math.min(1, 1 - distanceFromEnd / range))
+
+  // Apply smoothstep easing for natural transition
+  const easedProgress = smoothstep(flareProgress)
+
+  // Adjust target pitch based on descent rate
+  // Steeper approaches (more negative vertical rate) require more aggressive flares
+  // Typical approach: -200 to -400 m/min (-650 to -1300 fpm)
+  // Steep approach: -400 to -600 m/min (-1300 to -2000 fpm)
+  const descentMagnitude = Math.abs(verticalRate)
+  const descentFactor = Math.min(1.5, descentMagnitude / 300) // 1.0 at 300 m/min, max 1.5
+  const targetPitch = FLARE_TARGET_PITCH_DEGREES * descentFactor * orientationIntensity
+
+  // Clamp target pitch to realistic maximum (12 degrees)
+  const clampedTargetPitch = Math.min(targetPitch, 12)
+
+  // Blend from current pitch toward target flare pitch
+  return lerp(basePitch, clampedTargetPitch, easedProgress)
 }
 
 /**
