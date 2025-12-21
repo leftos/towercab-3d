@@ -5,26 +5,18 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
-- Fixed shadow banding artifacts by disabling ambient occlusion by default
-- Fixed TypeScript compilation errors in shadow configuration (FXAA, context access)
-- Fixed TypeScript errors in ModService (model file property access)
-- Fixed TypeScript errors in AircraftPanel onClick handler
-- Fixed TypeScript errors in serviceWorkerRegistration (import.meta.env access)
-- Fixed missing type export for PreFollowState
+- Shadow banding artifacts no longer visible (ambient occlusion disabled by default)
 
 ### Changed
-- Increased shadow max distance default from 2000m to 10000m for better quality
-- Reduced shadow map size default from 4096 to 2048 for better performance
-- Disabled shadow fading by default to reduce cascade transition artifacts
-- Made ambient occlusion (HBAO) a configurable setting (disabled by default)
-- Increased shadow max distance slider range to 20000m for advanced users
+- Improved shadow quality at longer distances (default max range increased from 2km to 10km)
+- Improved shadow rendering performance (reduced default shadow map resolution from 4096 to 2048)
+- Shadow max distance can now be configured up to 20km for advanced users
 
 ### Removed
-- Removed shadow cascades setting (not configurable in Cesium 1.136 API)
+- Removed "Shadow Cascades" setting from graphics options (not user-configurable)
 
 ### Added
-- Added type checking to build process (`npm run typecheck`)
-- Added ambient occlusion toggle in graphics settings with banding warning
+- Ambient occlusion (HBAO) is now a configurable graphics setting (disabled by default to prevent banding)
 - Aircraft pitch and roll emulation: aircraft now tilt nose up/down during climbs and descents, and bank into turns based on physics
 - New Display settings for orientation emulation with adjustable intensity (25%-150%)
 

@@ -287,9 +287,27 @@ The `release.yml` workflow will automatically build and upload the installer to 
 
 **Important:** Maintain `CHANGELOG.md` whenever committing changes. This file informs end users about updates between releases.
 
+### What Belongs in CHANGELOG
+
+**DO include:**
+- ✅ New features users can see/use
+- ✅ Bug fixes that affect user experience
+- ✅ Changes to existing features/behavior
+- ✅ Removed features or settings
+- ✅ Performance improvements users will notice
+
+**DO NOT include:**
+- ❌ Internal refactoring or code improvements
+- ❌ TypeScript/compilation fixes (unless they fix a user-visible bug)
+- ❌ Developer tooling changes (build scripts, CI/CD, etc.)
+- ❌ Dependency updates (unless they add user-facing features)
+- ❌ Code quality improvements (linting, type safety, etc.)
+
+**Key principle:** If a user wouldn't notice or care about the change, don't add it to CHANGELOG.
+
 ### Guidelines
 
-1. **Update on every commit**: Add an entry describing what changed in user-friendly terms
+1. **Update only for user-facing changes**: Not every commit needs a changelog entry
 2. **Use simple language**: Write for end users, not developers. Avoid technical jargon
 3. **Group by version**: Use `## [Unreleased]` for pending changes, move to version headers on release
 4. **Categorize changes**: Use these section headers within each version:
@@ -303,6 +321,7 @@ The `release.yml` workflow will automatically build and upload the installer to 
 - Focus on what users will notice, not implementation details
 - Use active voice: "Added dark mode" not "Dark mode was added"
 - Be specific but concise: "Fixed aircraft labels disappearing when zooming out" not "Fixed label bug"
+- Explain the user benefit, not the technical solution
 
 ### Examples
 
@@ -314,10 +333,19 @@ The `release.yml` workflow will automatically build and upload the installer to 
 
 ### Fixed
 - Aircraft no longer appear in the wrong position when first loading an airport
+- Shadow banding artifacts no longer visible (ambient occlusion disabled by default)
+
+### Changed
+- Improved shadow quality at longer distances (increased max range to 10km)
 ```
 
 **Avoid (too technical):**
 ```markdown
+### Fixed
+- Fixed TypeScript compilation errors in CesiumViewer
+- Added type assertion for scene.context._gl access
+- Exported PreFollowState interface from viewportStore
+
 ### Changed
 - Refactored useBabylonOverlay to use ENU transforms
 - Added cameraSyncedRef to prevent race condition in label projection
