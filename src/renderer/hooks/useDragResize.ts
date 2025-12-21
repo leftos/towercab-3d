@@ -85,13 +85,33 @@ export function useDragResize({
   } | null>(null)
   const containerRef = useRef<HTMLElement | null>(null)
 
+  // Track last values we committed to store to avoid echo loops
+  const lastCommittedPositionRef = useRef(initialPosition)
+  const lastCommittedSizeRef = useRef(initialSize)
+
   // Update position/size when props change (e.g., from store)
   useEffect(() => {
-    setPosition(initialPosition)
+    // Only update if props changed meaningfully (not just echoing our commit)
+    const posChanged =
+      Math.abs(initialPosition.x - lastCommittedPositionRef.current.x) > 0.001 ||
+      Math.abs(initialPosition.y - lastCommittedPositionRef.current.y) > 0.001
+
+    if (posChanged) {
+      setPosition(initialPosition)
+      lastCommittedPositionRef.current = initialPosition
+    }
   }, [initialPosition])
 
   useEffect(() => {
-    setSize(initialSize)
+    // Only update if props changed meaningfully (not just echoing our commit)
+    const sizeChanged =
+      Math.abs(initialSize.width - lastCommittedSizeRef.current.width) > 0.001 ||
+      Math.abs(initialSize.height - lastCommittedSizeRef.current.height) > 0.001
+
+    if (sizeChanged) {
+      setSize(initialSize)
+      lastCommittedSizeRef.current = initialSize
+    }
   }, [initialSize])
 
   // Get container dimensions for converting between pixels and normalized values
@@ -217,6 +237,9 @@ export function useDragResize({
   // Handle pointer up (end drag/resize)
   const handlePointerUp = useCallback(() => {
     if (isDragging || isResizing) {
+      // Update refs before calling callback to prevent echo loops
+      lastCommittedPositionRef.current = position
+      lastCommittedSizeRef.current = size
       onDragEnd?.(position, size)
     }
     setIsDragging(false)
