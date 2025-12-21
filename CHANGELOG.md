@@ -4,6 +4,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+## v0.0.5-alpha (2025-12-20)
+
 ### Fixed
 - Save/Load Bookmark and Set Default/To Default buttons now work correctly (camera state was not being saved/restored properly due to internal store mismatch)
 
