@@ -1,5 +1,12 @@
-// Interpolation utilities for smooth aircraft movement
-// Uses physics-based prediction for natural flight simulation appearance
+/**
+ * Interpolation utilities for smooth aircraft movement
+ *
+ * Uses physics-based prediction for natural flight simulation appearance.
+ * Handles geographic coordinates (lat/lon/alt) with great-circle distance calculations.
+ *
+ * @see {@link ../docs/coordinate-systems.md#1-geographic-coordinates} for geographic coordinate system details
+ * @see {@link ../docs/coordinate-systems.md#distance-calculations} for distance calculation implementation notes
+ */
 
 import type { AircraftState, InterpolatedAircraftState } from '../types/vatsim'
 
@@ -476,9 +483,21 @@ export function interpolateAircraftState(
 }
 
 /**
- * Calculate distance between two coordinates in nautical miles.
- * If altitudes are provided (in feet), calculates 3D slant range.
- * Otherwise calculates 2D surface distance.
+ * Calculate distance between two coordinates in nautical miles using haversine formula.
+ *
+ * If altitudes are provided (in feet MSL), calculates 3D slant range.
+ * Otherwise calculates 2D great-circle surface distance.
+ *
+ * @param lat1 - First position latitude in degrees (geographic coordinates)
+ * @param lon1 - First position longitude in degrees (geographic coordinates)
+ * @param lat2 - Second position latitude in degrees (geographic coordinates)
+ * @param lon2 - Second position longitude in degrees (geographic coordinates)
+ * @param alt1Feet - Optional first position altitude in feet MSL
+ * @param alt2Feet - Optional second position altitude in feet MSL
+ * @returns Distance in nautical miles
+ *
+ * @see {@link ../docs/coordinate-systems.md#1-geographic-coordinates} for geographic coordinate system
+ * @see {@link ../docs/coordinate-systems.md#distance-calculations} for implementation notes
  */
 export function calculateDistanceNM(
   lat1: number,

@@ -1,5 +1,11 @@
-// ENU (East-North-Up) coordinate transformation utilities
-// Used for synchronizing Babylon.js camera with Cesium camera
+/**
+ * ENU (East-North-Up) coordinate transformation utilities
+ *
+ * Used for synchronizing Babylon.js camera with Cesium camera by converting
+ * between global ECEF coordinates and local ENU tangent plane coordinates.
+ *
+ * @see {@link ../docs/coordinate-systems.md} for detailed explanation of coordinate systems
+ */
 
 import * as Cesium from 'cesium'
 import * as BABYLON from '@babylonjs/core'
@@ -21,9 +27,12 @@ export interface EnuTransformData {
  * - ECEF (Earth-Centered, Earth-Fixed) - global Cartesian coordinates
  * - ENU (East-North-Up) - local Cartesian coordinates relative to the base point
  *
- * @param lat - Latitude in degrees
- * @param lon - Longitude in degrees
+ * @param lat - Latitude in degrees (geographic coordinates)
+ * @param lon - Longitude in degrees (geographic coordinates)
  * @param height - Height in meters above ellipsoid
+ * @returns Transform data with matrices and Babylon base points
+ *
+ * @see {@link ../docs/coordinate-systems.md#3-enu-east-north-up} for ENU coordinate system details
  */
 export function setupEnuTransforms(lat: number, lon: number, height: number): EnuTransformData {
   // Calculate base point in ECEF coordinates
