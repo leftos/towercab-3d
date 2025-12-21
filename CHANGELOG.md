@@ -2,7 +2,7 @@
 
 All notable changes to TowerCab 3D will be documented in this file.
 
-## [Unreleased]
+## v0.0.4-alpha (2025-12-20)
 
 ### Added
 - Browser mode: run `npm run serve` to launch the app in your default browser instead of as a desktop application (mods not supported in browser mode)
