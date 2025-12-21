@@ -5,6 +5,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Windows installer now upgrades existing installations with fewer prompts (no scope or language dialogs)
 - Nearby aircraft distance now uses 3D slant range (includes altitude difference from tower/camera) instead of surface distance only
 - Renamed "Label Visibility Distance" setting to "Max Nearby Aircraft Range" for clarity
 
