@@ -364,11 +364,17 @@ export function useBabylonLabels(
       label.addControl(text)
 
       // Create leader line
+      // Initialize coordinates off-screen to prevent dot appearing at center
+      // (GUI.Line defaults to center alignment with x1=y1=x2=y2=0)
       const leaderLine = new GUI.Line(`${callsign}_leaderLine`)
       memoryCounters.guiControlsCreated++
       leaderLine.lineWidth = 3
       leaderLine.color = rgbToHex(color.r, color.g, color.b)
       leaderLine.zIndex = 1
+      leaderLine.x1 = -10000
+      leaderLine.y1 = -10000
+      leaderLine.x2 = -10000
+      leaderLine.y2 = -10000
       leaderLine.isVisible = false
       guiTexture.addControl(leaderLine)
 
@@ -398,10 +404,6 @@ export function useBabylonLabels(
     const labelData = aircraftLabelsRef.current.get(callsign)
     if (!labelData) return
 
-    // Show label and leader line
-    labelData.label.isVisible = true
-    labelData.leaderLine.isVisible = true
-
     // Position label with offset from model screen position
     const labelX = screenX + labelOffsetX
     const labelY = screenY + labelOffsetY
@@ -423,7 +425,8 @@ export function useBabylonLabels(
     const dist = Math.sqrt(dirX * dirX + dirY * dirY)
 
     if (dist < 1) {
-      // Too close, hide line
+      // Too close, hide line but show label
+      labelData.label.isVisible = true
       labelData.leaderLine.isVisible = false
       return
     }
@@ -444,11 +447,15 @@ export function useBabylonLabels(
     const endX = screenX - nx * 3
     const endY = screenY - ny * 3
 
-    // GUI Line uses absolute screen coordinates
+    // Set line coordinates BEFORE making visible to prevent flash at (0,0)
     labelData.leaderLine.x1 = startX
     labelData.leaderLine.y1 = startY
     labelData.leaderLine.x2 = endX
     labelData.leaderLine.y2 = endY
+
+    // Now show label and leader line (coordinates already set)
+    labelData.label.isVisible = true
+    labelData.leaderLine.isVisible = true
   }, [])
 
   // Remove aircraft label

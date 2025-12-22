@@ -11,6 +11,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ### Fixed
 - Cloud layers now render correctly as horizontal layers at their METAR-reported altitudes (previously invisible due to camera sync issue)
+- Fixed small dot appearing at center of screen (uninitialized leader line coordinates)
 
 ## v0.0.7-alpha (2025-12-21)
 
