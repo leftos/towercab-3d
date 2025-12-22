@@ -195,3 +195,15 @@ export const TOPDOWN_ALTITUDE_MIN = 500
  * Maximum altitude for top-down view in meters
  */
 export const TOPDOWN_ALTITUDE_MAX = 50000
+
+// ============================================================================
+// TERRAIN COLLISION
+// ============================================================================
+
+/**
+ * Minimum camera height above ground level in meters
+ *
+ * Prevents camera from clipping through terrain.
+ * Camera will be clamped to this height above terrain surface.
+ */
+export const CAMERA_MIN_AGL = 5

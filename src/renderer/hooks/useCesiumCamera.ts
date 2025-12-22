@@ -10,6 +10,7 @@ import {
   applyPositionOffsets,
   feetToMeters
 } from '../utils/cameraGeometry'
+import { CAMERA_MIN_AGL } from '../constants/camera'
 import { useCameraInput } from './useCameraInput'
 import type { InterpolatedAircraftState } from '../types/vatsim'
 
@@ -202,6 +203,32 @@ export function useCesiumCamera(
     return getTowerPosition(currentAirport, towerHeight)
   }, [currentAirport, towerHeight])
 
+  /**
+   * Clamp position to ensure camera stays above terrain
+   * @param position Position with latitude, longitude, height (ellipsoid height)
+   * @returns Position with height clamped to minimum AGL above terrain
+   */
+  const clampToTerrain = useCallback((
+    position: { latitude: number; longitude: number; height: number }
+  ): { latitude: number; longitude: number; height: number } => {
+    if (!viewer || viewer.isDestroyed()) return position
+
+    // Get terrain height at camera position
+    const cartographic = Cesium.Cartographic.fromDegrees(position.longitude, position.latitude)
+    const terrainHeight = viewer.scene.globe.getHeight(cartographic)
+
+    // If terrain hasn't loaded yet, use 0 as fallback
+    const groundHeight = terrainHeight ?? 0
+    const minHeight = groundHeight + CAMERA_MIN_AGL
+
+    // Clamp if below minimum
+    if (position.height < minHeight) {
+      return { ...position, height: minHeight }
+    }
+
+    return position
+  }, [viewer])
+
   // Reset view
   const resetView = useCallback(() => {
     resetViewStore()
@@ -378,11 +405,17 @@ export function useCesiumCamera(
             { x: state.positionOffsetX, y: state.positionOffsetY, z: state.positionOffsetZ }
           )
 
+          // Clamp to terrain
+          const cartographic = Cesium.Cartographic.fromDegrees(offsetPos.longitude, offsetPos.latitude)
+          const terrainHeight = viewer.scene.globe.getHeight(cartographic) ?? 0
+          const minHeight = terrainHeight + CAMERA_MIN_AGL
+          const clampedHeight = Math.max(offsetPos.height, minHeight)
+
           // Calculate bearing and pitch to aircraft
           const lookAt = calculateTowerLookAt(
             offsetPos.latitude,
             offsetPos.longitude,
-            offsetPos.height,
+            clampedHeight,
             aircraftLat,
             aircraftLon,
             altitudeMeters
@@ -391,7 +424,7 @@ export function useCesiumCamera(
           const targetFov = calculateFollowFov(60, state.followZoom)
 
           // Set camera position and orientation
-          const cameraPosition = Cesium.Cartesian3.fromDegrees(offsetPos.longitude, offsetPos.latitude, offsetPos.height)
+          const cameraPosition = Cesium.Cartesian3.fromDegrees(offsetPos.longitude, offsetPos.latitude, clampedHeight)
           viewer.camera.setView({
             destination: cameraPosition,
             orientation: {
@@ -530,7 +563,8 @@ export function useCesiumCamera(
     // Animate smoothly when restoring camera after unfollowing
     if (isEndingFollow && viewMode === '3d') {
       isAnimatingToFollowRef.current = true
-      const cameraPosition = Cesium.Cartesian3.fromDegrees(offsetPos.longitude, offsetPos.latitude, offsetPos.height)
+      const clampedRestorePos = clampToTerrain(offsetPos)
+      const cameraPosition = Cesium.Cartesian3.fromDegrees(clampedRestorePos.longitude, clampedRestorePos.latitude, clampedRestorePos.height)
       const animDuration = 0.5
 
       // Start FOV animation (Cesium flyTo doesn't animate FOV)
@@ -635,13 +669,14 @@ export function useCesiumCamera(
       return
     }
 
-    // 3D tower view mode
+    // 3D tower view mode - clamp to terrain
+    const clampedPos = clampToTerrain(offsetPos)
     let targetHeading = heading
     let targetPitch = pitch
     let targetFov = fov
-    const cameraLat = offsetPos.latitude
-    const cameraLon = offsetPos.longitude
-    const cameraHeight = offsetPos.height
+    const cameraLat = clampedPos.latitude
+    const cameraLon = clampedPos.longitude
+    const cameraHeight = clampedPos.height
 
     // If following an aircraft in tower mode
     if (followingCallsign && followMode === 'tower' && interpolatedAircraft) {
@@ -654,9 +689,9 @@ export function useCesiumCamera(
 
         // TOWER MODE: Camera stays at tower, rotates to look at aircraft
         const lookAt = calculateTowerLookAt(
-          offsetPos.latitude,
-          offsetPos.longitude,
-          offsetPos.height,
+          clampedPos.latitude,
+          clampedPos.longitude,
+          clampedPos.height,
           aircraftLat,
           aircraftLon,
           altitudeMeters
@@ -786,7 +821,8 @@ export function useCesiumCamera(
     setPitch,
     setHeadingInternal,
     setPitchInternal,
-    stopFollowingStore
+    stopFollowingStore,
+    clampToTerrain
   ])
 
   return {

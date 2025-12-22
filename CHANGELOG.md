@@ -4,6 +4,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Camera terrain collision: camera now stays at least 5 meters above terrain, preventing clipping through the ground
+
 ## v0.0.7-alpha (2025-12-21)
 
 ### Added
