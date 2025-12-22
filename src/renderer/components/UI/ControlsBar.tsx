@@ -82,6 +82,11 @@ function ControlsBar() {
   const shadowFadingEnabled = useSettingsStore((state) => state.graphics.shadowFadingEnabled)
   const shadowNormalOffset = useSettingsStore((state) => state.graphics.shadowNormalOffset)
   const aircraftShadowsOnly = useSettingsStore((state) => state.graphics.aircraftShadowsOnly)
+  // New shadow bias settings - use defaults if not yet migrated in localStorage
+  const shadowDepthBias = useSettingsStore((state) => state.graphics.shadowDepthBias) ?? 0.0004
+  const shadowPolygonOffsetFactor = useSettingsStore((state) => state.graphics.shadowPolygonOffsetFactor) ?? 1.1
+  const shadowPolygonOffsetUnits = useSettingsStore((state) => state.graphics.shadowPolygonOffsetUnits) ?? 4.0
+  const cameraNearPlane = useSettingsStore((state) => state.graphics.cameraNearPlane) ?? 0.1
   const updateGraphicsSettings = useSettingsStore((state) => state.updateGraphicsSettings)
 
   // Active viewport camera state (from viewportStore)
@@ -1088,6 +1093,78 @@ function ControlsBar() {
                         </label>
                         <p className="setting-hint">
                           Reduces shadow acne artifacts. Try disabling if you see banding.
+                        </p>
+                      </div>
+
+                      <div className="setting-item">
+                        <label>Shadow Depth Bias</label>
+                        <div className="slider-with-value">
+                          <input
+                            type="range"
+                            min="0.00001"
+                            max="0.01"
+                            step="0.00001"
+                            value={shadowDepthBias}
+                            onChange={(e) => updateGraphicsSettings({ shadowDepthBias: Number(e.target.value) })}
+                          />
+                          <span>{shadowDepthBias.toFixed(5)}</span>
+                        </div>
+                        <p className="setting-hint">
+                          Reduces shadow banding. Increase if you see striped shadows.
+                        </p>
+                      </div>
+
+                      <div className="setting-item">
+                        <label>Polygon Offset Factor</label>
+                        <div className="slider-with-value">
+                          <input
+                            type="range"
+                            min="0.1"
+                            max="5"
+                            step="0.1"
+                            value={shadowPolygonOffsetFactor}
+                            onChange={(e) => updateGraphicsSettings({ shadowPolygonOffsetFactor: Number(e.target.value) })}
+                          />
+                          <span>{shadowPolygonOffsetFactor.toFixed(1)}</span>
+                        </div>
+                        <p className="setting-hint">
+                          Shadow depth offset multiplier based on polygon slope.
+                        </p>
+                      </div>
+
+                      <div className="setting-item">
+                        <label>Polygon Offset Units</label>
+                        <div className="slider-with-value">
+                          <input
+                            type="range"
+                            min="0.1"
+                            max="10"
+                            step="0.1"
+                            value={shadowPolygonOffsetUnits}
+                            onChange={(e) => updateGraphicsSettings({ shadowPolygonOffsetUnits: Number(e.target.value) })}
+                          />
+                          <span>{shadowPolygonOffsetUnits.toFixed(1)}</span>
+                        </div>
+                        <p className="setting-hint">
+                          Constant shadow depth offset.
+                        </p>
+                      </div>
+
+                      <div className="setting-item">
+                        <label>Camera Near Plane</label>
+                        <div className="slider-with-value">
+                          <input
+                            type="range"
+                            min="0.1"
+                            max="10"
+                            step="0.1"
+                            value={cameraNearPlane}
+                            onChange={(e) => updateGraphicsSettings({ cameraNearPlane: Number(e.target.value) })}
+                          />
+                          <span>{cameraNearPlane.toFixed(1)}m</span>
+                        </div>
+                        <p className="setting-hint">
+                          Minimum render distance. Higher values improve shadow/depth precision but clip nearby objects.
                         </p>
                       </div>
                     </div>

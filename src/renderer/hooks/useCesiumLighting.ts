@@ -24,6 +24,12 @@ export interface CesiumLightingSettings {
   shadowNormalOffset: boolean
   /** Only render shadows from aircraft models (terrain won't self-shadow) */
   aircraftShadowsOnly: boolean
+  /** Shadow depth bias for terrain (reduces banding artifacts) */
+  shadowDepthBias: number
+  /** Shadow polygon offset factor (slope-based depth offset) */
+  shadowPolygonOffsetFactor: number
+  /** Shadow polygon offset units (constant depth offset) */
+  shadowPolygonOffsetUnits: number
 }
 
 /**
@@ -82,7 +88,10 @@ export function useCesiumLighting(
     shadowSoftness,
     shadowFadingEnabled,
     shadowNormalOffset,
-    aircraftShadowsOnly
+    aircraftShadowsOnly,
+    shadowDepthBias,
+    shadowPolygonOffsetFactor,
+    shadowPolygonOffsetUnits
   } = settings
 
   // Update lighting and shadows when settings change
@@ -114,6 +123,32 @@ export function useCesiumLighting(
         viewer.terrainShadows = aircraftShadowsOnly
           ? Cesium.ShadowMode.RECEIVE_ONLY
           : Cesium.ShadowMode.ENABLED
+
+        // Configure internal shadow bias settings (undocumented but stable API)
+        // These help reduce shadow banding artifacts
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const shadowMap = viewer.shadowMap as any
+
+        // Update terrain bias (affects terrain self-shadowing)
+        if (shadowMap._terrainBias) {
+          shadowMap._terrainBias.depthBias = shadowDepthBias
+          shadowMap._terrainBias.polygonOffsetFactor = shadowPolygonOffsetFactor
+          shadowMap._terrainBias.polygonOffsetUnits = shadowPolygonOffsetUnits
+        }
+
+        // Update primitive bias (affects aircraft model shadows)
+        if (shadowMap._primitiveBias) {
+          // Use smaller bias for primitives (models are smaller than terrain)
+          shadowMap._primitiveBias.depthBias = shadowDepthBias / 5
+          shadowMap._primitiveBias.polygonOffsetFactor = shadowPolygonOffsetFactor
+          shadowMap._primitiveBias.polygonOffsetUnits = shadowPolygonOffsetUnits
+        }
+
+        // Force shadow map to rebuild render states with new bias values
+        if (typeof shadowMap.debugCreateRenderStates === 'function') {
+          shadowMap.debugCreateRenderStates()
+        }
+        shadowMap.dirty = true
       } else {
         viewer.terrainShadows = Cesium.ShadowMode.DISABLED
       }
@@ -130,6 +165,9 @@ export function useCesiumLighting(
     shadowSoftness,
     shadowFadingEnabled,
     shadowNormalOffset,
-    aircraftShadowsOnly
+    aircraftShadowsOnly,
+    shadowDepthBias,
+    shadowPolygonOffsetFactor,
+    shadowPolygonOffsetUnits
   ])
 }

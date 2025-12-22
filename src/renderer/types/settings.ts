@@ -156,6 +156,31 @@ export interface GraphicsSettings {
 
   /** Only render shadows from aircraft models, not terrain self-shadowing (default: false) */
   aircraftShadowsOnly: boolean
+
+  // Advanced shadow bias settings (for reducing shadow banding)
+  /**
+   * Shadow depth bias for terrain (default: 0.0001)
+   * Increase to reduce shadow banding artifacts (try 0.001 or higher)
+   */
+  shadowDepthBias: number
+
+  /**
+   * Shadow polygon offset factor (default: 1.1)
+   * Multiplier for depth offset based on polygon slope
+   */
+  shadowPolygonOffsetFactor: number
+
+  /**
+   * Shadow polygon offset units (default: 4.0)
+   * Constant depth offset added to shadow depth
+   */
+  shadowPolygonOffsetUnits: number
+
+  /**
+   * Camera near plane distance in meters (default: 0.1)
+   * Higher values improve shadow/depth precision but clip nearby objects
+   */
+  cameraNearPlane: number
 }
 
 /**
@@ -398,7 +423,11 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     shadowSoftness: true,
     shadowFadingEnabled: false,
     shadowNormalOffset: true,
-    aircraftShadowsOnly: false
+    aircraftShadowsOnly: false,
+    shadowDepthBias: 0.0004,
+    shadowPolygonOffsetFactor: 1.1,
+    shadowPolygonOffsetUnits: 4.0,
+    cameraNearPlane: 0.1
   },
   camera: {
     defaultFov: 60,

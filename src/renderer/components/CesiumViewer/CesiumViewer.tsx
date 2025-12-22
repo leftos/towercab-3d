@@ -96,6 +96,12 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   const shadowNormalOffset = useSettingsStore((state) => state.graphics.shadowNormalOffset)
   const aircraftShadowsOnly = useSettingsStore((state) => state.graphics.aircraftShadowsOnly)
   const enableAmbientOcclusion = useSettingsStore((state) => state.graphics.enableAmbientOcclusion)
+  // New shadow bias settings - use defaults if not yet migrated in localStorage
+  const shadowDepthBias = useSettingsStore((state) => state.graphics.shadowDepthBias) ?? 0.0004
+  const shadowPolygonOffsetFactor = useSettingsStore((state) => state.graphics.shadowPolygonOffsetFactor) ?? 1.1
+  const shadowPolygonOffsetUnits = useSettingsStore((state) => state.graphics.shadowPolygonOffsetUnits) ?? 4.0
+  // NOTE: cameraNearPlane effect is disabled (see section 3b below)
+  const _cameraNearPlane = useSettingsStore((state) => state.graphics.cameraNearPlane) ?? 0.1
 
   // Weather store for fog effects and camera position updates
   const fogDensity = useWeatherStore((state) => state.fogDensity)
@@ -208,8 +214,47 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     shadowSoftness,
     shadowFadingEnabled,
     shadowNormalOffset,
-    aircraftShadowsOnly
+    aircraftShadowsOnly,
+    shadowDepthBias,
+    shadowPolygonOffsetFactor,
+    shadowPolygonOffsetUnits
   })
+
+  // =========================================================================
+  // 3b. Camera Near Plane (for depth precision)
+  // =========================================================================
+  // NOTE: Disabled for now - Cesium's frustum needs special handling
+  // The default near plane (0.1m) is already good for most cases
+  // Setting it requires the frustum to be fully initialized with fov/aspectRatio/far
+  // which doesn't happen reliably in all scenarios
+  /*
+  useEffect(() => {
+    if (!viewer) return
+    // Update camera near plane for better depth/shadow precision
+    // Higher values improve precision but clip nearby objects
+    // Defer until after first render when frustum is fully initialized
+    const removeListener = viewer.scene.postRender.addEventListener(() => {
+      removeListener() // Only run once
+      try {
+        const frustum = viewer.camera.frustum
+        if (
+          frustum instanceof Cesium.PerspectiveFrustum &&
+          frustum.fov !== undefined &&
+          frustum.aspectRatio !== undefined &&
+          frustum.far !== undefined
+        ) {
+          frustum.near = cameraNearPlane
+        }
+      } catch (e) {
+        // Frustum not fully initialized yet, ignore
+        console.warn('[Camera Near Plane] Frustum not ready, skipping:', e)
+      }
+    })
+    return () => {
+      removeListener()
+    }
+  }, [viewer, cameraNearPlane])
+  */
 
   // =========================================================================
   // 4. Weather Effects (Fog)

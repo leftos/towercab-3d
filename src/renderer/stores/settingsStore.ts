@@ -75,6 +75,19 @@ export const useSettingsStore = create<SettingsStore>()(
             }),
             ...(updates.shadowDarkness !== undefined && {
               shadowDarkness: Math.max(0, Math.min(1, updates.shadowDarkness))
+            }),
+            // Advanced shadow bias settings
+            ...(updates.shadowDepthBias !== undefined && {
+              shadowDepthBias: Math.max(0.00001, Math.min(0.01, updates.shadowDepthBias))
+            }),
+            ...(updates.shadowPolygonOffsetFactor !== undefined && {
+              shadowPolygonOffsetFactor: Math.max(0.1, Math.min(5.0, updates.shadowPolygonOffsetFactor))
+            }),
+            ...(updates.shadowPolygonOffsetUnits !== undefined && {
+              shadowPolygonOffsetUnits: Math.max(0.1, Math.min(10.0, updates.shadowPolygonOffsetUnits))
+            }),
+            ...(updates.cameraNearPlane !== undefined && {
+              cameraNearPlane: Math.max(0.1, Math.min(10.0, updates.cameraNearPlane))
             })
           }
         })),
@@ -289,7 +302,15 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
       shadowNormalOffset:
         oldSettings.shadowNormalOffset ?? DEFAULT_SETTINGS.graphics.shadowNormalOffset,
       aircraftShadowsOnly:
-        oldSettings.aircraftShadowsOnly ?? DEFAULT_SETTINGS.graphics.aircraftShadowsOnly
+        oldSettings.aircraftShadowsOnly ?? DEFAULT_SETTINGS.graphics.aircraftShadowsOnly,
+      shadowDepthBias:
+        oldSettings.shadowDepthBias ?? DEFAULT_SETTINGS.graphics.shadowDepthBias,
+      shadowPolygonOffsetFactor:
+        oldSettings.shadowPolygonOffsetFactor ?? DEFAULT_SETTINGS.graphics.shadowPolygonOffsetFactor,
+      shadowPolygonOffsetUnits:
+        oldSettings.shadowPolygonOffsetUnits ?? DEFAULT_SETTINGS.graphics.shadowPolygonOffsetUnits,
+      cameraNearPlane:
+        oldSettings.cameraNearPlane ?? DEFAULT_SETTINGS.graphics.cameraNearPlane
     },
     camera: {
       defaultFov: oldSettings.defaultFov ?? DEFAULT_SETTINGS.camera.defaultFov,

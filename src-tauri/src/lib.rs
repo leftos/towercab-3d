@@ -81,7 +81,7 @@ fn set_webview2_args() {
             "--force_high_performance_gpu",
             "--disable-renderer-backgrounding",
             "--disable-backgrounding-occluded-windows",
-            "--enable-features=Vulkan",  // Try Vulkan backend if available
+            "--use-angle=gl",  // Use OpenGL instead of D3D11 for better shadow depth precision
         ].join(" ");
 
         std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", args);
