@@ -28,6 +28,13 @@ A 3D tower cab view application for VATSIM air traffic controllers. View real-ti
 - Drag and resize inset viewports, positions saved per airport
 - Click to activate a viewport for keyboard/mouse control
 
+### Replay System
+- Continuous recording of all VATSIM traffic (snapshots every 15 seconds)
+- Scrub back up to 25 minutes to review past events
+- Playback at 0.5x, 1x, 2x, or 4x speed
+- Export/import replays to share or archive sessions
+- Switch airports during replay to view traffic at any location
+
 ### Camera System
 - **3D Tower View**: Look around from tower perspective with smooth controls
 - **Top-Down View**: Bird's-eye view with pan and zoom (press T to toggle)
@@ -130,6 +137,8 @@ npm run dev
 | **Ctrl+K** | Open global aircraft search |
 | **M** | Toggle measuring tool |
 | **F1** | Toggle performance HUD |
+| **Space** | Play/Pause replay (in Replay mode) |
+| **Left/Right Arrow** | Step backward/forward 15s (in Replay mode) |
 
 ### Mouse Controls
 

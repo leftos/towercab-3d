@@ -186,6 +186,29 @@ export type {
 } from './babylon'
 
 // ============================================================================
+// REPLAY TYPES
+// ============================================================================
+
+export type {
+  // Snapshot types
+  SerializedAircraftState,
+  VatsimSnapshot,
+
+  // Export format
+  ReplayExportData,
+
+  // Playback state
+  PlaybackMode,
+  PlaybackSpeed
+} from './replay'
+
+export {
+  // Serialization utilities
+  serializeAircraftStates,
+  deserializeAircraftStates
+} from './replay'
+
+// ============================================================================
 // TYPE ORGANIZATION NOTES
 // ============================================================================
 

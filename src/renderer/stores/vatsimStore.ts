@@ -2,6 +2,9 @@ import { create } from 'zustand'
 import type { PilotData, VatsimData, AircraftState } from '../types/vatsim'
 import { interpolateAircraftState, calculateDistanceNM } from '../utils/interpolation'
 import { useSettingsStore } from './settingsStore'
+// Note: Intentional coupling - vatsimStore triggers replay snapshots on each VATSIM update.
+// This is simpler than an event system and acceptable since replay depends on vatsim data.
+import { useReplayStore } from './replayStore'
 import { VATSIM_DATA_URL, VATSIM_POLL_INTERVAL, VATSIM_ACTUAL_UPDATE_INTERVAL } from '../constants'
 
 interface ReferencePosition {
@@ -120,6 +123,8 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
       const pilotsFilteredByDistance = filteredPilots.length
 
       // First, create the new aircraft states from filtered VATSIM data
+      // These are the TARGET positions we want to reach over the next interval
+      // Timestamp is set to now + interval (when we expect to arrive)
       const newAircraftStates = new Map<string, AircraftState>()
       for (const pilot of filteredPilots) {
         const state: AircraftState = {
@@ -134,13 +139,14 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
           aircraftType: pilot.flight_plan?.aircraft_short || null,
           departure: pilot.flight_plan?.departure || null,
           arrival: pilot.flight_plan?.arrival || null,
-          timestamp: now
+          timestamp: now + actualInterval  // When we expect to arrive at this position
         }
         newAircraftStates.set(pilot.callsign, state)
       }
 
       // Now build previous states for ALL aircraft in the NEW data
-      // This ensures we always interpolate from current visual position to new VATSIM position
+      // These are the START positions (current visual position)
+      // Timestamp is set to now (when we captured this position)
       const newPreviousStates = new Map<string, AircraftState>()
 
       for (const [callsign, newState] of newAircraftStates) {
@@ -160,13 +166,13 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
             altitude: interpolated.interpolatedAltitude,
             heading: interpolated.interpolatedHeading,
             groundspeed: interpolated.interpolatedGroundspeed,
-            timestamp: now - actualInterval
+            timestamp: now  // When we captured this visual position
           })
         } else {
           // New aircraft - start from its VATSIM position (no interpolation needed)
           newPreviousStates.set(callsign, {
             ...newState,
-            timestamp: now - actualInterval
+            timestamp: now  // When we captured this position
           })
         }
       }
@@ -185,6 +191,35 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
         isLoading: false,
         error: null
       })
+
+      // Build UNFILTERED states for replay snapshot
+      // This ensures replay contains ALL aircraft, not just those within current filter radius
+      const allAircraftStates = new Map<string, AircraftState>()
+
+      for (const pilot of data.pilots) {
+        const state: AircraftState = {
+          callsign: pilot.callsign,
+          cid: pilot.cid,
+          latitude: pilot.latitude,
+          longitude: pilot.longitude,
+          altitude: pilot.altitude * 0.3048,  // Convert VATSIM feet → meters
+          groundspeed: pilot.groundspeed,
+          heading: pilot.heading,
+          transponder: pilot.transponder,
+          aircraftType: pilot.flight_plan?.aircraft_short || null,
+          departure: pilot.flight_plan?.departure || null,
+          arrival: pilot.flight_plan?.arrival || null,
+          timestamp: now
+        }
+        allAircraftStates.set(pilot.callsign, state)
+      }
+
+      // Trigger replay snapshot recording with ALL aircraft
+      useReplayStore.getState().addSnapshot(
+        allAircraftStates,
+        vatsimTimestamp,
+        actualInterval
+      )
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       set({

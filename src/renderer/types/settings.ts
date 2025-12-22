@@ -257,6 +257,13 @@ export interface MemorySettings {
    * Reduces memory usage at busy airports
    */
   aircraftDataRadiusNM: number
+
+  /**
+   * Maximum replay buffer duration in minutes (1-60, default: 15)
+   * Controls how far back you can scrub in time
+   * Each minute uses ~160KB memory (at 100 aircraft)
+   */
+  maxReplayDurationMinutes: number
 }
 
 /**
@@ -446,7 +453,8 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
   memory: {
     inMemoryTileCacheSize: 500,
     diskCacheSizeGB: 2,
-    aircraftDataRadiusNM: 100
+    aircraftDataRadiusNM: 100,
+    maxReplayDurationMinutes: 15
   },
   aircraft: {
     labelVisibilityDistance: 30,

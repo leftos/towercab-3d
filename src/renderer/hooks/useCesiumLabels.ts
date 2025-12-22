@@ -233,8 +233,8 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
       if (datablockMode !== 'none' && showDatablock) {
         const type = aircraft.aircraftType || '????'
         const speedTens = Math.round(aircraft.interpolatedGroundspeed / 10).toString().padStart(2, '0')
-        // Convert altitude to feet for FL display (METERS → FEET)
-        const altitudeFeet = aircraft.interpolatedAltitude / 0.3048
+        // Convert altitude to feet for FL display (METERS → FEET), clamp to 0 minimum
+        const altitudeFeet = Math.max(0, aircraft.interpolatedAltitude / 0.3048)
         const dataLine = isAirborne
           ? `${Math.round(altitudeFeet / 100).toString().padStart(3, '0')} ${speedTens}`
           : speedTens

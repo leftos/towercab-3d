@@ -70,21 +70,9 @@ The `useBabylonOverlay` hook synchronizes the Babylon.js camera with Cesium's ca
 
 ### State Management (Zustand)
 
-Nine stores manage application state:
+Ten Zustand stores in `stores/`. Key ones: `vatsimStore` (VATSIM polling), `viewportStore` (camera state - use this, not deprecated `cameraStore`), `settingsStore` (persisted settings), `replayStore` (replay buffer/playback).
 
-| Store | File | Responsibility |
-|-------|------|----------------|
-| `vatsimStore` | `stores/vatsimStore.ts` | Polls VATSIM API every 3s, stores pilot data, manages interpolation states |
-| `airportStore` | `stores/airportStore.ts` | Airport database (28,000+ airports) from mwgg/Airports GitHub repo |
-| `viewportStore` | `stores/viewportStore.ts` | **Primary camera store.** Multi-viewport management, per-viewport camera state, bookmarks, defaults, inset positions/sizes |
-| `cameraStore` | `stores/cameraStore.ts` | **DEPRECATED.** Legacy store kept only for export/import backward compatibility. Do not use for new features. |
-| `settingsStore` | `stores/settingsStore.ts` | **Grouped settings** organized by domain (cesium, graphics, camera, weather, memory, aircraft, ui). Persisted to localStorage with auto-migration from v1 (flat) to v2 (grouped). |
-| `weatherStore` | `stores/weatherStore.ts` | METAR data fetching, weather state (visibility, clouds, ceiling) |
-| `measureStore` | `stores/measureStore.ts` | Active measurement points, measurement mode state |
-| `aircraftFilterStore` | `stores/aircraftFilterStore.ts` | Panel filter state (search query, airport traffic filter, weather visibility filter) affecting both list and datablocks |
-| `vrStore` | `stores/vrStore.ts` | VR session state, WebXR availability, IPD settings |
-
-> **Important:** All camera-related functionality (heading, pitch, fov, follow mode, bookmarks, defaults) should use `viewportStore`, not `cameraStore`. The `cameraStore` is deprecated and only exists for backward compatibility with the export/import service.
+> **📖 Full store list with relationships:** See `src/renderer/docs/architecture.md`
 
 ### Key Directories
 
@@ -113,6 +101,7 @@ All TypeScript types are centralized in the `types/` directory, organized by dom
 | `types/settings.ts` | Application settings (grouped by domain: cesium, graphics, camera, weather, memory, aircraft, ui) |
 | `types/vatsim.ts` | VATSIM API data structures, pilot/controller data |
 | `types/babylon.ts` | Babylon.js types (labels, weather meshes, scene options, hook return types, ENU transforms) |
+| `types/replay.ts` | Replay system types (snapshots, playback state, serialization, import/export) |
 | `types/index.ts` | Barrel export for all types |
 
 **Usage:**
@@ -154,6 +143,7 @@ Configuration values and magic numbers are centralized in the `constants/` direc
 | `constants/camera.ts` | FOV/pitch/heading limits, orbit mode defaults, follow mode settings, top-down view settings |
 | `constants/api.ts` | External API endpoints (VATSIM, weather, airports), polling intervals, cache TTL |
 | `constants/babylon.ts` | Babylon.js scene/camera settings, cloud/fog parameters, visibility thresholds, lighting values |
+| `constants/replay.ts` | Replay buffer size, snapshot interval, playback speeds, memory estimation |
 | `constants/index.ts` | Barrel export for all constants |
 
 **Usage:**
@@ -321,6 +311,8 @@ The `release.yml` workflow will automatically build and upload the installer to 
 - ❌ Code quality improvements (linting, type safety, etc.)
 
 **Key principle:** If a user wouldn't notice or care about the change, don't add it to CHANGELOG.
+
+**Important:** Don't list "fixes" for features that haven't been released yet. If you're developing a new feature and fix bugs during development, those fixes are just part of the feature - they go under "Added", not "Fixed". The "Fixed" category is only for bugs that existed in a published release.
 
 ### Guidelines
 

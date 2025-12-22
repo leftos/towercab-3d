@@ -472,3 +472,296 @@
   flex: 1;
   justify-content: center;
 }
+
+/* ============================================================================
+   MODE TOGGLE BUTTON
+   ============================================================================ */
+
+.mode-toggle-btn {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  margin-right: 8px;
+}
+
+.mode-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
+}
+
+.mode-toggle-btn.active {
+  background: rgba(255, 152, 0, 0.2);
+  border-color: rgba(255, 152, 0, 0.4);
+  color: #ff9800;
+}
+
+/* Visual indicator when not in live mode */
+.controls-bar.in-replay {
+  border-top-color: rgba(255, 152, 0, 0.4);
+}
+
+.controls-bar.in-replay .mode-toggle-btn {
+  animation: pulse-orange 2s ease-in-out infinite;
+}
+
+@keyframes pulse-orange {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(255, 152, 0, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 8px 2px rgba(255, 152, 0, 0.3);
+  }
+}
+
+/* ============================================================================
+   REPLAY CONTROLS MODE
+   ============================================================================ */
+
+.controls-bar.replay-mode {
+  border-top-color: rgba(255, 152, 0, 0.3);
+}
+
+.replay-controls-left {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.replay-controls-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 200px;
+  margin: 0 16px;
+}
+
+.replay-controls-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Timeline buttons */
+.timeline-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.timeline-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.timeline-btn:active:not(:disabled) {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.timeline-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.step-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
+.play-btn {
+  width: 40px;
+  height: 40px;
+  background: rgba(79, 195, 247, 0.2);
+  border: 1px solid rgba(79, 195, 247, 0.3);
+}
+
+.play-btn:hover:not(:disabled) {
+  background: rgba(79, 195, 247, 0.3);
+  border-color: rgba(79, 195, 247, 0.5);
+}
+
+/* Scrubber */
+.timeline-scrubber {
+  position: relative;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.scrubber-input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.scrubber-input:disabled {
+  cursor: not-allowed;
+}
+
+.scrubber-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(79, 195, 247, 0.6), rgba(79, 195, 247, 0.8));
+  border-radius: 3px;
+  pointer-events: none;
+  transition: width 0.05s linear;
+}
+
+.controls-bar.in-replay .scrubber-progress {
+  background: linear-gradient(90deg, rgba(255, 152, 0, 0.6), rgba(255, 152, 0, 0.8));
+}
+
+.timeline-scrubber:hover .scrubber-progress {
+  height: 8px;
+  top: -1px;
+}
+
+.timeline-scrubber:hover {
+  height: 8px;
+}
+
+/* Time display */
+.timeline-time {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.time-relative {
+  color: rgba(255, 152, 0, 0.9);
+  font-weight: 500;
+}
+
+.time-separator {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.time-absolute {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.time-total {
+  margin-left: auto;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.time-live-indicator {
+  color: #4caf50;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+/* Speed selector */
+.speed-selector {
+  display: flex;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  padding: 2px;
+}
+
+.speed-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  padding: 4px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.speed-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.speed-btn.active {
+  background: rgba(79, 195, 247, 0.3);
+  color: #4fc3f7;
+}
+
+.speed-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Live button */
+.live-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  padding: 6px 16px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.live-btn:hover {
+  background: rgba(76, 175, 80, 0.2);
+  border-color: rgba(76, 175, 80, 0.4);
+  color: #4caf50;
+}
+
+.live-btn.active {
+  background: rgba(76, 175, 80, 0.3);
+  border-color: rgba(76, 175, 80, 0.5);
+  color: #4caf50;
+  box-shadow: 0 0 8px rgba(76, 175, 80, 0.3);
+}
+
+.live-btn.active::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  background: #4caf50;
+  border-radius: 50%;
+  margin-right: 6px;
+  animation: pulse-live 2s ease-in-out infinite;
+}
+
+@keyframes pulse-live {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.8);
+  }
+}

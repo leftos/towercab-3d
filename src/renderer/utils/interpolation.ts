@@ -215,13 +215,18 @@ export function hermiteInterpolatePosition(
  * Calculate interpolation factor based on elapsed time
  * Uses the actual interval between updates, not a constant
  * Returns unbounded factor - caller handles extrapolation (t > 1.0)
+ *
+ * @returns t where:
+ *   - t = 0 when now = previousTimestamp (at start position)
+ *   - t = 1 when now = currentTimestamp (at end position)
+ *   - t > 1 when now > currentTimestamp (extrapolation beyond end)
  */
 export function getInterpolationFactor(
   previousTimestamp: number,
   currentTimestamp: number,
   now: number
 ): number {
-  const elapsed = now - currentTimestamp
+  const elapsed = now - previousTimestamp
   const interval = currentTimestamp - previousTimestamp
 
   // If no previous state or invalid interval, don't interpolate

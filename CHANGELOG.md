@@ -7,21 +7,23 @@ All notable changes to TowerCab 3D will be documented in this file.
 ### Added
 - "Aircraft Shadows Only" graphics setting: renders only shadows cast by aircraft onto the ground, disabling expensive terrain and building self-shadowing for better performance
 - Advanced shadow tuning settings: Shadow Depth Bias, Polygon Offset Factor, and Polygon Offset Units sliders for fine-tuning shadow quality
+- Replay controls integrated into bottom bar: toggle between main controls and replay controls using the button on the far left
+- Replay scrubbing: step backward/forward through 15-second snapshots, play at 0.5x/1x/2x/4x speed, or scrub the timeline
+- Replays can be viewed from any airport location (aircraft are filtered by distance from current view)
 
 ### Fixed
 - Reduced shadow banding artifacts with improved default bias values and OpenGL graphics backend
+- Aircraft now smoothly transition from ground to airborne during takeoff instead of warping/jumping
+- Datablock leader lines now correctly point to the aircraft's visual position on screen
+- Switching to 2D mode while tower following no longer breaks aircraft centering (auto-switches to orbit follow)
+- Switching to tower follow while in 2D mode now works correctly (auto-switches to 3D view)
 
 ### Changed
 - Shadow sub-settings now shown as disabled (greyed out) instead of hidden when shadows are off
 - Graphics settings tab no longer dims the viewport, allowing you to see changes in real-time
 - Orbit follow mode now works in 2D top-down view: aircraft stays centered on screen while you can still rotate heading and adjust altitude
 - Orbit camera settings (distance, heading, pitch) now persist when switching between followed aircraft
-
-### Fixed
-- Aircraft now smoothly transition from ground to airborne during takeoff instead of warping/jumping
-- Datablock leader lines now correctly point to the aircraft's visual position on screen
-- Switching to 2D mode while tower following no longer breaks aircraft centering (auto-switches to orbit follow)
-- Switching to tower follow while in 2D mode now works correctly (auto-switches to 3D view)
+- Replay snapshots now use ~50% less memory (removed redundant previous state storage)
 
 ## v0.0.6-alpha (2025-12-21)
 

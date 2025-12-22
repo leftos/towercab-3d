@@ -356,6 +356,16 @@ vrStore
 └─ Used by:
      ├─ VRButton (show/hide, session control)
      └─ VRScene (WebXR session management)
+
+replayStore
+├─ snapshots: VatsimSnapshot[] (circular buffer, 15s intervals)
+├─ playbackMode: 'live' | 'replay' | 'imported'
+├─ currentIndex, segmentProgress, isPlaying, playbackSpeed
+└─ Used by:
+     ├─ useAircraftDataSource (provides unified data for live/replay)
+     ├─ useReplayPlayback (playback engine)
+     ├─ ControlsBar (replay controls UI)
+     └─ vatsimStore (adds snapshots on VATSIM updates)
 ```
 
 ## Rendering Pipeline

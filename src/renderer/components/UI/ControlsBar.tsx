@@ -1,23 +1,51 @@
-import { useState } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useWeatherStore } from '../../stores/weatherStore'
 import { useMeasureStore } from '../../stores/measureStore'
 import { useViewportStore } from '../../stores/viewportStore'
 import { useAirportStore } from '../../stores/airportStore'
+import { useReplayStore } from '../../stores/replayStore'
 import { useActiveViewportCamera } from '../../hooks/useActiveViewportCamera'
+import { useReplayPlayback } from '../../hooks/useReplayPlayback'
 import { exportAllData, downloadExport } from '../../services/ExportImportService'
+import { estimateReplayMemoryMB, PLAYBACK_SPEEDS } from '../../constants/replay'
+import type { ReplayExportData, PlaybackSpeed } from '../../types/replay'
 import GlobalSearchPanel from './GlobalSearchPanel'
 import VRButton from '../VR/VRButton'
 import ImportModal from './ImportModal'
 import './ControlsBar.css'
 
 type SettingsTab = 'general' | 'display' | 'graphics' | 'performance' | 'help'
+type BarMode = 'controls' | 'replay'
+
+// Replay time formatting helpers
+function formatRelativeTime(totalSeconds: number): string {
+  const seconds = Math.floor(totalSeconds % 60)
+  const minutes = Math.floor(totalSeconds / 60)
+  if (minutes === 0) return `${seconds}s ago`
+  return `${minutes}m ${seconds}s ago`
+}
+
+function formatUTCTime(timestamp: number): string {
+  const date = new Date(timestamp)
+  return date.toISOString().slice(11, 19) + ' UTC'
+}
+
+function formatDuration(totalSeconds: number): string {
+  const seconds = Math.floor(totalSeconds % 60)
+  const minutes = Math.floor(totalSeconds / 60)
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`
+}
 
 function ControlsBar() {
   const [showSettings, setShowSettings] = useState(false)
   const [activeTab, setActiveTab] = useState<SettingsTab>('general')
   const [importStatus, setImportStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [showImportModal, setShowImportModal] = useState(false)
+  const [barMode, setBarMode] = useState<BarMode>('controls')
+
+  // Initialize replay playback engine (needed for replay mode)
+  useReplayPlayback()
 
   // Settings store - General
   const cesiumIonToken = useSettingsStore((state) => state.cesium.cesiumIonToken)
@@ -65,7 +93,39 @@ function ControlsBar() {
   const inMemoryTileCacheSize = useSettingsStore((state) => state.memory.inMemoryTileCacheSize)
   const diskCacheSizeGB = useSettingsStore((state) => state.memory.diskCacheSizeGB)
   const aircraftDataRadiusNM = useSettingsStore((state) => state.memory.aircraftDataRadiusNM)
+  const maxReplayDurationMinutes = useSettingsStore((state) => state.memory.maxReplayDurationMinutes)
   const updateMemorySettings = useSettingsStore((state) => state.updateMemorySettings)
+
+  // Replay store - settings panel
+  const replaySnapshots = useReplayStore((state) => state.snapshots)
+  const importedSnapshots = useReplayStore((state) => state.importedSnapshots)
+  const exportReplay = useReplayStore((state) => state.exportReplay)
+  const importReplay = useReplayStore((state) => state.importReplay)
+  const clearImportedReplay = useReplayStore((state) => state.clearImportedReplay)
+
+  // Replay store - playback controls
+  const playbackMode = useReplayStore((state) => state.playbackMode)
+  const isPlaying = useReplayStore((state) => state.isPlaying)
+  const playbackSpeed = useReplayStore((state) => state.playbackSpeed)
+  const currentIndex = useReplayStore((state) => state.currentIndex)
+  const segmentProgress = useReplayStore((state) => state.segmentProgress)
+  const getTotalDuration = useReplayStore((state) => state.getTotalDuration)
+  const play = useReplayStore((state) => state.play)
+  const pause = useReplayStore((state) => state.pause)
+  const goLive = useReplayStore((state) => state.goLive)
+  const seekTo = useReplayStore((state) => state.seekTo)
+  const stepBackward = useReplayStore((state) => state.stepBackward)
+  const stepForward = useReplayStore((state) => state.stepForward)
+  const setPlaybackSpeed = useReplayStore((state) => state.setPlaybackSpeed)
+
+  // Derive active snapshots for replay
+  const activeSnapshots = playbackMode === 'imported' && importedSnapshots
+    ? importedSnapshots
+    : replaySnapshots
+
+  // Replay file input ref
+  const replayFileInputRef = useRef<HTMLInputElement>(null)
+  const scrubberRef = useRef<HTMLInputElement>(null)
 
   // Settings store - Experimental Graphics (Graphics group)
   const msaaSamples = useSettingsStore((state) => state.graphics.msaaSamples)
@@ -176,151 +236,389 @@ function ControlsBar() {
     setTimeout(() => setImportStatus('idle'), 3000)
   }
 
+  const handleReplayFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    try {
+      const text = await file.text()
+      const data = JSON.parse(text)
+
+      // Validate basic structure before passing to importReplay
+      if (!data || typeof data !== 'object') {
+        console.error('[Replay Import] Invalid file: not a JSON object')
+        alert('Invalid replay file: not a valid JSON object')
+        return
+      }
+
+      const success = importReplay(data as ReplayExportData)
+      if (!success) {
+        alert('Invalid replay file format. Check console for details.')
+      }
+    } catch (error) {
+      const message = error instanceof SyntaxError
+        ? 'Invalid JSON format'
+        : error instanceof Error ? error.message : 'Unknown error'
+      console.error('[Replay Import] Failed to read file:', error)
+      alert(`Failed to read replay file: ${message}`)
+    }
+
+    // Reset input so same file can be selected again
+    e.target.value = ''
+  }
+
+  // ========================================================================
+  // REPLAY CONTROLS
+  // ========================================================================
+
+  const isLive = playbackMode === 'live'
+  const hasSnapshots = activeSnapshots.length >= 2
+  const totalDuration = getTotalDuration()
+
+  // Calculate current timestamp for display
+  const currentSnapshot = activeSnapshots[currentIndex]
+  const currentTimestamp = currentSnapshot?.timestamp || Date.now()
+  const newestSnapshot = activeSnapshots[activeSnapshots.length - 1]
+  const newestTimestamp = newestSnapshot?.timestamp || Date.now()
+  const timeAgo = isLive ? 0 : (newestTimestamp - currentTimestamp) / 1000
+
+  // Scrubber position
+  const scrubberValue = currentIndex + segmentProgress
+  const scrubberMax = Math.max(1, activeSnapshots.length - 1)
+
+  const handleScrubberChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseFloat(e.target.value)
+    const index = Math.floor(value)
+    seekTo(index)
+  }, [seekTo])
+
+  const handlePlayPause = useCallback(() => {
+    if (isPlaying) {
+      pause()
+    } else {
+      play()
+    }
+  }, [isPlaying, play, pause])
+
+  const handleSpeedChange = useCallback((speed: PlaybackSpeed) => {
+    setPlaybackSpeed(speed)
+  }, [setPlaybackSpeed])
+
+  // Keyboard shortcuts for replay (only when in replay mode)
+  useEffect(() => {
+    if (barMode !== 'replay') return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return
+      }
+
+      switch (e.key) {
+        case ' ':
+          e.preventDefault()
+          handlePlayPause()
+          break
+        case 'ArrowLeft':
+          if (!e.ctrlKey && !e.metaKey) {
+            e.preventDefault()
+            stepBackward()
+          }
+          break
+        case 'ArrowRight':
+          if (!e.ctrlKey && !e.metaKey) {
+            e.preventDefault()
+            stepForward()
+          }
+          break
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [barMode, handlePlayPause, stepBackward, stepForward])
+
   return (
     <>
-      <div className="controls-bar">
-        <div className="controls-left">
-          <button className="control-button" onClick={handleResetView} title="Reset View (Shift+R)">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-              <path d="M3 3v5h5" />
+      <div className={`controls-bar ${barMode === 'replay' ? 'replay-mode' : ''} ${isLive ? '' : 'in-replay'}`}>
+        {/* Mode toggle button - always visible on the left */}
+        <button
+          className={`mode-toggle-btn ${barMode === 'replay' ? 'active' : ''}`}
+          onClick={() => setBarMode(barMode === 'controls' ? 'replay' : 'controls')}
+          title={barMode === 'controls' ? 'Show replay controls' : 'Show main controls'}
+        >
+          {barMode === 'controls' ? (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" />
+              <polygon points="10 8 16 12 10 16 10 8" />
             </svg>
-            Reset
-          </button>
-
-          <button className="control-button" onClick={toggleViewMode} title="Toggle View Mode (T)">
-            {viewMode === '3d' ? (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 2L2 7l10 5 10-5-10-5z" />
-                <path d="M2 17l10 5 10-5" />
-                <path d="M2 12l10 5 10-5" />
-              </svg>
-            ) : (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-                <line x1="12" y1="3" x2="12" y2="21" />
-                <line x1="3" y1="12" x2="21" y2="12" />
-              </svg>
-            )}
-            {viewMode === '3d' ? '3D' : '2D'}
-          </button>
-
-          <div className="button-divider" />
-
-          <button
-            className="control-button"
-            onClick={handleSaveAsDefault}
-            title={`Save current ${viewMode === '3d' ? '3D' : '2D'} view as default for this airport`}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-              <polyline points="17 21 17 13 7 13 7 21" />
-              <polyline points="7 3 7 8 15 8" />
-            </svg>
-            Set Default
-          </button>
-
-          <button
-            className={`control-button ${hasCustomDefault() ? 'has-default' : ''}`}
-            onClick={handleResetToDefault}
-            title={`Reset to default ${viewMode === '3d' ? '3D' : '2D'} view for this airport`}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-              <path d="M3 3v5h5" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
-            To Default
-          </button>
-
-          <GlobalSearchPanel />
-
-          <div className="camera-info">
-            {viewMode === 'topdown' ? (
-              <span className="info-item" title="Altitude">
-                ALT {Math.round(topdownAltitude * 3.28084).toLocaleString()}ft
-              </span>
-            ) : (
-              <>
-                <span className="info-item" title="Heading">
-                  HDG {formatAngle(heading)}
-                </span>
-                <span className="info-item" title="Pitch">
-                  PIT {formatPitch(pitch)}
-                </span>
-                <span className="info-item" title="Field of View">
-                  FOV {Math.round(fov)}°
-                </span>
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="controls-center">
-          {followingCallsign ? (
-            <div className="follow-status">
-              <span className="follow-indicator">Following: {followingCallsign}</span>
-              <span className="follow-hint">Scroll to zoom • Esc to stop</span>
-            </div>
           ) : (
-            <div className="zoom-control">
-              <span className="zoom-label">FOV</span>
-              <input
-                type="range"
-                min="10"
-                max="120"
-                value={fov}
-                onChange={(e) => setFov(Number(e.target.value))}
-                className="zoom-slider"
-              />
-              <span className="zoom-value">{Math.round(fov)}°</span>
-            </div>
-          )}
-        </div>
-
-        <div className="controls-right">
-          <button
-            className={`control-button ${isMeasuring ? 'active' : ''}`}
-            onClick={toggleMeasuring}
-            title="Measure distance (M)"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M2 12h4m12 0h4" />
-              <path d="M6 8v8" />
-              <path d="M18 8v8" />
-              <path d="M8 12h8" />
-            </svg>
-            Measure
-          </button>
-
-          {currentAirport && (
-            <button
-              className="control-button"
-              onClick={() => addViewport()}
-              title={insetCount >= 6 ? 'Adding more viewports may impact performance' : 'Add a new inset viewport'}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-                <line x1="12" y1="8" x2="12" y2="16" />
-                <line x1="8" y1="12" x2="16" y2="12" />
-              </svg>
-              Add Inset
-            </button>
-          )}
-
-          <VRButton />
-
-          <button
-            className="control-button"
-            onClick={() => setShowSettings(!showSettings)}
-            title="Settings"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="12" cy="12" r="3" />
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
             </svg>
-          </button>
-        </div>
+          )}
+        </button>
+
+        {barMode === 'controls' ? (
+          <>
+            {/* MAIN CONTROLS MODE */}
+            <div className="controls-left">
+              <button className="control-button" onClick={handleResetView} title="Reset View (Shift+R)">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                  <path d="M3 3v5h5" />
+                </svg>
+                Reset
+              </button>
+
+              <button className="control-button" onClick={toggleViewMode} title="Toggle View Mode (T)">
+                {viewMode === '3d' ? (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                    <path d="M2 17l10 5 10-5" />
+                    <path d="M2 12l10 5 10-5" />
+                  </svg>
+                ) : (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <line x1="12" y1="3" x2="12" y2="21" />
+                    <line x1="3" y1="12" x2="21" y2="12" />
+                  </svg>
+                )}
+                {viewMode === '3d' ? '3D' : '2D'}
+              </button>
+
+              <div className="button-divider" />
+
+              <button
+                className="control-button"
+                onClick={handleSaveAsDefault}
+                title={`Save current ${viewMode === '3d' ? '3D' : '2D'} view as default for this airport`}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                  <polyline points="17 21 17 13 7 13 7 21" />
+                  <polyline points="7 3 7 8 15 8" />
+                </svg>
+                Set Default
+              </button>
+
+              <button
+                className={`control-button ${hasCustomDefault() ? 'has-default' : ''}`}
+                onClick={handleResetToDefault}
+                title={`Reset to default ${viewMode === '3d' ? '3D' : '2D'} view for this airport`}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                  <path d="M3 3v5h5" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+                To Default
+              </button>
+
+              <GlobalSearchPanel />
+
+              <div className="camera-info">
+                {viewMode === 'topdown' ? (
+                  <span className="info-item" title="Altitude">
+                    ALT {Math.round(topdownAltitude * 3.28084).toLocaleString()}ft
+                  </span>
+                ) : (
+                  <>
+                    <span className="info-item" title="Heading">
+                      HDG {formatAngle(heading)}
+                    </span>
+                    <span className="info-item" title="Pitch">
+                      PIT {formatPitch(pitch)}
+                    </span>
+                    <span className="info-item" title="Field of View">
+                      FOV {Math.round(fov)}°
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="controls-center">
+              {followingCallsign ? (
+                <div className="follow-status">
+                  <span className="follow-indicator">Following: {followingCallsign}</span>
+                  <span className="follow-hint">Scroll to zoom • Esc to stop</span>
+                </div>
+              ) : (
+                <div className="zoom-control">
+                  <span className="zoom-label">FOV</span>
+                  <input
+                    type="range"
+                    min="10"
+                    max="120"
+                    value={fov}
+                    onChange={(e) => setFov(Number(e.target.value))}
+                    className="zoom-slider"
+                  />
+                  <span className="zoom-value">{Math.round(fov)}°</span>
+                </div>
+              )}
+            </div>
+
+            <div className="controls-right">
+              <button
+                className={`control-button ${isMeasuring ? 'active' : ''}`}
+                onClick={toggleMeasuring}
+                title="Measure distance (M)"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M2 12h4m12 0h4" />
+                  <path d="M6 8v8" />
+                  <path d="M18 8v8" />
+                  <path d="M8 12h8" />
+                </svg>
+                Measure
+              </button>
+
+              {currentAirport && (
+                <button
+                  className="control-button"
+                  onClick={() => addViewport()}
+                  title={insetCount >= 6 ? 'Adding more viewports may impact performance' : 'Add a new inset viewport'}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <line x1="12" y1="8" x2="12" y2="16" />
+                    <line x1="8" y1="12" x2="16" y2="12" />
+                  </svg>
+                  Add Inset
+                </button>
+              )}
+
+              <VRButton />
+
+              <button
+                className="control-button"
+                onClick={() => setShowSettings(!showSettings)}
+                title="Settings"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                </svg>
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* REPLAY CONTROLS MODE */}
+            <div className="replay-controls-left">
+              <button
+                className="timeline-btn step-btn"
+                onClick={stepBackward}
+                disabled={!hasSnapshots || (!isLive && currentIndex === 0)}
+                title="Step backward (15s)"
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16">
+                  <path fill="currentColor" d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
+                </svg>
+              </button>
+
+              <button
+                className="timeline-btn play-btn"
+                onClick={handlePlayPause}
+                disabled={!hasSnapshots}
+                title={isPlaying ? 'Pause' : 'Play'}
+              >
+                {isPlaying ? (
+                  <svg viewBox="0 0 24 24" width="20" height="20">
+                    <path fill="currentColor" d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" width="20" height="20">
+                    <path fill="currentColor" d="M8 5v14l11-7z" />
+                  </svg>
+                )}
+              </button>
+
+              <button
+                className="timeline-btn step-btn"
+                onClick={stepForward}
+                disabled={!hasSnapshots || isLive || currentIndex >= activeSnapshots.length - 1}
+                title="Step forward (15s)"
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16">
+                  <path fill="currentColor" d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="replay-controls-center">
+              <div className="timeline-scrubber">
+                <input
+                  ref={scrubberRef}
+                  type="range"
+                  min="0"
+                  max={scrubberMax}
+                  step="0.01"
+                  value={scrubberValue}
+                  onChange={handleScrubberChange}
+                  disabled={!hasSnapshots}
+                  className="scrubber-input"
+                />
+                <div
+                  className="scrubber-progress"
+                  style={{ width: `${(scrubberValue / scrubberMax) * 100}%` }}
+                />
+              </div>
+
+              <div className="timeline-time">
+                {isLive ? (
+                  <span className="time-live-indicator">LIVE</span>
+                ) : (
+                  <>
+                    <span className="time-relative">{formatRelativeTime(timeAgo)}</span>
+                    <span className="time-separator">-</span>
+                    <span className="time-absolute">{formatUTCTime(currentTimestamp)}</span>
+                  </>
+                )}
+                <span className="time-total">
+                  Buffer: {formatDuration(totalDuration)}
+                </span>
+              </div>
+            </div>
+
+            <div className="replay-controls-right">
+              <div className="speed-selector">
+                {PLAYBACK_SPEEDS.map((speed) => (
+                  <button
+                    key={speed}
+                    className={`speed-btn ${playbackSpeed === speed ? 'active' : ''}`}
+                    onClick={() => handleSpeedChange(speed as PlaybackSpeed)}
+                    disabled={isLive}
+                  >
+                    {speed}x
+                  </button>
+                ))}
+              </div>
+
+              <button
+                className={`live-btn ${isLive ? 'active' : ''}`}
+                onClick={goLive}
+                title="Return to live"
+              >
+                LIVE
+              </button>
+
+              <button
+                className="control-button"
+                onClick={() => setShowSettings(!showSettings)}
+                title="Settings"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                </svg>
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       {showSettings && (
@@ -1233,6 +1531,78 @@ function ControlsBar() {
                         Only keep aircraft data within this radius of tower.
                       </p>
                     </div>
+                  </div>
+
+                  <div className="settings-section">
+                    <h3>Replay</h3>
+                    <div className="setting-item">
+                      <label>Replay Buffer Duration</label>
+                      <div className="slider-with-value">
+                        <input
+                          type="range"
+                          min="1"
+                          max="60"
+                          step="1"
+                          value={maxReplayDurationMinutes}
+                          onChange={(e) => updateMemorySettings({ maxReplayDurationMinutes: Number(e.target.value) })}
+                        />
+                        <span>{maxReplayDurationMinutes} min</span>
+                      </div>
+                      <p className="setting-hint">
+                        How far back you can scrub. Uses ~{estimateReplayMemoryMB(maxReplayDurationMinutes).toFixed(1)} MB memory.
+                        Currently recording {replaySnapshots.length} snapshots.
+                      </p>
+                    </div>
+
+                    <div className="setting-item">
+                      <div className="import-export-buttons">
+                        <button
+                          className="control-button"
+                          onClick={exportReplay}
+                          disabled={replaySnapshots.length === 0}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                          </svg>
+                          Export Replay
+                        </button>
+                        <button
+                          className="control-button"
+                          onClick={() => replayFileInputRef.current?.click()}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="17 8 12 3 7 8" />
+                            <line x1="12" y1="3" x2="12" y2="15" />
+                          </svg>
+                          Import Replay
+                        </button>
+                        <input
+                          ref={replayFileInputRef}
+                          type="file"
+                          accept=".json"
+                          onChange={handleReplayFileChange}
+                          style={{ display: 'none' }}
+                        />
+                      </div>
+                    </div>
+
+                    {importedSnapshots && (
+                      <div className="setting-item">
+                        <p className="setting-hint" style={{ color: '#ff9800' }}>
+                          Viewing imported replay ({importedSnapshots.length} snapshots)
+                        </p>
+                        <button
+                          className="control-button"
+                          onClick={clearImportedReplay}
+                          style={{ marginTop: '8px' }}
+                        >
+                          Clear Imported Replay
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </>
               )}

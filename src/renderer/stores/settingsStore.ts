@@ -148,6 +148,12 @@ export const useSettingsStore = create<SettingsStore>()(
                 10,
                 Math.min(500, Math.round(updates.aircraftDataRadiusNM))
               )
+            }),
+            ...(updates.maxReplayDurationMinutes !== undefined && {
+              maxReplayDurationMinutes: Math.max(
+                1,
+                Math.min(60, Math.round(updates.maxReplayDurationMinutes))
+              )
             })
           }
         })),
@@ -332,7 +338,9 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
         oldSettings.inMemoryTileCacheSize ?? DEFAULT_SETTINGS.memory.inMemoryTileCacheSize,
       diskCacheSizeGB: oldSettings.diskCacheSizeGB ?? DEFAULT_SETTINGS.memory.diskCacheSizeGB,
       aircraftDataRadiusNM:
-        oldSettings.aircraftDataRadiusNM ?? DEFAULT_SETTINGS.memory.aircraftDataRadiusNM
+        oldSettings.aircraftDataRadiusNM ?? DEFAULT_SETTINGS.memory.aircraftDataRadiusNM,
+      maxReplayDurationMinutes:
+        oldSettings.maxReplayDurationMinutes ?? DEFAULT_SETTINGS.memory.maxReplayDurationMinutes
     },
     aircraft: {
       labelVisibilityDistance:

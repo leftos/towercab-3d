@@ -13,13 +13,14 @@ Welcome to TowerCab 3D, a real-time 3D tower visualization tool for VATSIM air t
 7. [Global Aircraft Search](#global-aircraft-search)
 8. [Bookmark System](#bookmark-system)
 9. [Multi-Viewport System](#multi-viewport-system)
-10. [Measuring Tool](#measuring-tool)
-11. [Weather Effects](#weather-effects)
-12. [VR Support](#vr-support)
-13. [Settings](#settings)
-14. [Modding](#modding)
-15. [Keyboard Shortcuts Reference](#keyboard-shortcuts-reference)
-16. [Troubleshooting](#troubleshooting)
+10. [Replay System](#replay-system)
+11. [Measuring Tool](#measuring-tool)
+12. [Weather Effects](#weather-effects)
+13. [VR Support](#vr-support)
+14. [Settings](#settings)
+15. [Modding](#modding)
+16. [Keyboard Shortcuts Reference](#keyboard-shortcuts-reference)
+17. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -65,16 +66,17 @@ Once configured, you'll see:
 
 ### Controls Bar (Bottom)
 
-The bottom bar is divided into three sections:
+The bottom bar has two modes, toggled by the button on the far left:
+
+#### Main Controls Mode (default)
 
 **Left Section:**
+- **Mode Toggle**: Switch to replay controls
 - **Reset View** (Shift+R): Returns camera to default position
 - **View Toggle** (T): Switches between 3D and top-down views
 - **Set Default**: Saves current view as default for this airport
 - **Reset to Default**: Returns to saved default view
 - **Global Search**: Opens aircraft search (Ctrl+K)
-- **Measure**: Activates distance measuring tool
-- **Add Inset**: Creates a new inset viewport
 - **Camera Info**: Shows current HDG/PIT/FOV (3D) or ALT (top-down)
 
 **Center Section:**
@@ -82,7 +84,29 @@ The bottom bar is divided into three sections:
 - **Following Status**: Shows which aircraft you're following and hints
 
 **Right Section:**
+- **Measure**: Activates distance measuring tool
+- **Add Inset**: Creates a new inset viewport
 - **VR Button**: Enters VR mode (only visible when VR headset detected)
+- **Settings Button**: Opens configuration modal
+
+#### Replay Controls Mode
+
+Switch to this mode to scrub through recorded traffic history:
+
+**Left Section:**
+- **Mode Toggle**: Switch back to main controls
+- **Step Back**: Jump 15 seconds into the past
+- **Play/Pause**: Start or pause playback
+- **Step Forward**: Jump 15 seconds forward
+
+**Center Section:**
+- **Timeline Scrubber**: Drag to seek through the replay buffer
+- **Time Display**: Shows relative time (e.g., "2m 30s ago") and UTC timestamp
+- **Buffer Duration**: Total recording time available
+
+**Right Section:**
+- **Speed Selector**: 0.5x, 1x, 2x, or 4x playback speed
+- **LIVE Button**: Return to real-time data
 - **Settings Button**: Opens configuration modal
 
 ### Aircraft Panel (Right Side)
@@ -427,6 +451,51 @@ Inset viewport positions and sizes are saved per-airport. When you return to an 
 
 ---
 
+## Replay System
+
+TowerCab 3D continuously records VATSIM traffic data, allowing you to scrub back in time and review past events.
+
+### How It Works
+
+- Traffic snapshots are captured every 15 seconds automatically
+- The replay buffer stores up to 25 minutes of history (configurable in Settings > Performance)
+- All aircraft within VATSIM's coverage are recorded, not just those near your current airport
+- You can switch airports while viewing a replay to see traffic at a different location
+
+### Using Replay Controls
+
+1. Click the **mode toggle button** (far left of bottom bar) to switch to Replay mode
+2. Use the playback controls:
+   - **Step Back/Forward**: Jump 15 seconds at a time
+   - **Play/Pause**: Start or pause automatic playback
+   - **Timeline Scrubber**: Drag to seek to any point
+   - **Speed Selector**: Choose 0.5x, 1x, 2x, or 4x speed
+3. Click **LIVE** to return to real-time data
+
+### Keyboard Shortcuts (Replay Mode)
+
+| Key | Action |
+|-----|--------|
+| **Space** | Play/Pause |
+| **Left Arrow** | Step backward 15 seconds |
+| **Right Arrow** | Step forward 15 seconds |
+
+### Export and Import Replays
+
+In Settings > Performance, you can:
+- **Export Replay**: Save the current buffer to a JSON file
+- **Import Replay**: Load a previously saved replay file
+- **Clear Imported**: Return to live recording after importing
+
+### Tips
+
+- The bar border turns orange when viewing historical data (not live)
+- The mode toggle button pulses when you're not viewing live data
+- Replays are filtered by your "Max Nearby Aircraft Range" setting
+- Switching airports during replay shows traffic at the new location
+
+---
+
 ## Measuring Tool
 
 The measuring tool allows you to measure distances on the terrain.
@@ -710,6 +779,14 @@ See [MODDING.md](MODDING.md) for complete modding instructions including:
 | M | Toggle measuring tool |
 | Ctrl+K | Open global aircraft search |
 | F1 | Toggle performance HUD |
+
+### Replay (when in Replay mode)
+
+| Key | Action |
+|-----|--------|
+| Space | Play/Pause |
+| Left Arrow | Step backward 15 seconds |
+| Right Arrow | Step forward 15 seconds |
 
 ### Global
 

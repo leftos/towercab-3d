@@ -160,3 +160,29 @@ export {
   // Unit conversions
   STATUTE_MILES_TO_METERS
 } from './babylon'
+
+// ============================================================================
+// REPLAY CONSTANTS
+// ============================================================================
+
+export {
+  // Snapshot configuration
+  SNAPSHOT_INTERVAL_MS,
+  DEFAULT_REPLAY_DURATION_MINUTES,
+  MIN_REPLAY_DURATION_MINUTES,
+  MAX_REPLAY_DURATION_MINUTES,
+
+  // Playback configuration
+  PLAYBACK_SPEEDS,
+  DEFAULT_PLAYBACK_SPEED,
+  PLAYBACK_UI_UPDATE_INTERVAL_MS,
+
+  // Memory estimates
+  BYTES_PER_AIRCRAFT_STATE,
+  estimateReplayMemoryMB,
+
+  // Export file format
+  REPLAY_EXPORT_VERSION,
+  REPLAY_FILE_EXTENSION,
+  REPLAY_FILE_PREFIX
+} from './replay'

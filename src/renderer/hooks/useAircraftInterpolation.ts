@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { useVatsimStore } from '../stores/vatsimStore'
 import { useSettingsStore } from '../stores/settingsStore'
+import { getAircraftDataSource } from './useAircraftDataSource'
 import { interpolateAircraftState, calculateFlarePitch } from '../utils/interpolation'
 import { performanceMonitor } from '../utils/performanceMonitor'
 import type { InterpolatedAircraftState, AircraftState } from '../types/vatsim'
@@ -42,14 +42,23 @@ const subscribers = new Set<() => void>()
 function updateInterpolation() {
   performanceMonitor.startTimer('interpolation')
 
-  const now = Date.now()
+  // Get aircraft data from unified source (handles live vs replay mode)
+  const source = getAircraftDataSource()
+
+  // Update shared refs from source (for any external code that reads them)
+  sharedAircraftStatesRef.current = source.aircraftStates
+  sharedPreviousStatesRef.current = source.previousStates
+
+  // Use source timestamp as "now" - for live mode this is Date.now(),
+  // for replay mode this is calculated based on segment progress
+  const now = source.timestamp
 
   // Track frame timing for diagnostics
   sharedLastInterpolationTimeRef.current = now
 
   const statesMap = sharedInterpolatedStates
-  const aircraftStates = sharedAircraftStatesRef.current
-  const previousStates = sharedPreviousStatesRef.current
+  const aircraftStates = source.aircraftStates
+  const previousStates = source.previousStates
 
   // Track which callsigns are still active
   const activeCallsigns = new Set<string>()
@@ -290,7 +299,7 @@ export function setInterpolationTerrainData(
  * - Automatic cleanup when last instance unmounts
  *
  * ## Dependencies
- * - Reads: vatsimStore (for current/previous aircraft states)
+ * - Reads: vatsimStore OR replayStore (via getAircraftDataSource abstraction)
  * - Reads: settingsStore (for orientation emulation settings)
  * - Writes: Shared interpolatedStates Map (singleton)
  *
@@ -323,16 +332,21 @@ export function setInterpolationTerrainData(
  *
  * ## Data Flow
  * ```
- * VATSIM API (15s updates)
- *   ↓
- * vatsimStore.aircraftStates (current/previous)
- *   ↓
- * useAircraftInterpolation (60 Hz singleton loop)
- *   ↓
- * sharedInterpolatedStates Map
- *   ↓
- * ├─ CesiumViewer (labels, culling)
- * └─ useBabylonOverlay (3D models, shadows)
+ * LIVE MODE:                          REPLAY MODE:
+ * VATSIM API (15s updates)            replayStore snapshots
+ *   ↓                                    ↓
+ * vatsimStore                         getActiveSnapshots()
+ *   ↓                                    ↓
+ *   └──────────────┬────────────────────┘
+ *                  ↓
+ *        getAircraftDataSource() (unified abstraction)
+ *                  ↓
+ *        useAircraftInterpolation (60 Hz singleton loop)
+ *                  ↓
+ *        sharedInterpolatedStates Map
+ *                  ↓
+ *        ├─ CesiumViewer (labels, culling)
+ *        └─ useBabylonOverlay (3D models, shadows)
  * ```
  *
  * ## Memory Management
@@ -380,36 +394,32 @@ export function useAircraftInterpolation(): Map<string, InterpolatedAircraftStat
   // Version counter to trigger re-renders when data changes
   const [, setVersion] = useState(0)
 
-  // Subscribe to store changes and update shared refs
+  // Subscribe to store changes and manage singleton lifecycle
   useEffect(() => {
     hookInstanceCount++
 
-    const unsubscribeVatsim = useVatsimStore.subscribe((state) => {
-      sharedAircraftStatesRef.current = state.aircraftStates
-      sharedPreviousStatesRef.current = state.previousStates
-    })
-
+    // Subscribe to settings for orientation emulation
     const unsubscribeSettings = useSettingsStore.subscribe((state) => {
       sharedOrientationEnabledRef.current = state.aircraft.orientationEmulation
       sharedOrientationIntensityRef.current = state.aircraft.orientationIntensity
     })
 
-    // Initialize shared refs with current state
-    const vatsimState = useVatsimStore.getState()
-    sharedAircraftStatesRef.current = vatsimState.aircraftStates
-    sharedPreviousStatesRef.current = vatsimState.previousStates
-
+    // Initialize settings refs
     const settingsState = useSettingsStore.getState()
     sharedOrientationEnabledRef.current = settingsState.aircraft.orientationEmulation
     sharedOrientationIntensityRef.current = settingsState.aircraft.orientationIntensity
 
-    // Subscribe this component to updates
+    // Note: We no longer subscribe to vatsimStore here because the animation loop
+    // now calls getAircraftDataSource() each frame, which reads directly from
+    // the appropriate store (vatsimStore for live, replayStore for replay).
+    // This eliminates the 60Hz store subscription issue during replay.
+
+    // Subscribe this component to updates (for React re-renders when aircraft count changes)
     const updateCallback = () => setVersion(v => v + 1)
     subscribers.add(updateCallback)
 
     return () => {
       hookInstanceCount--
-      unsubscribeVatsim()
       unsubscribeSettings()
       subscribers.delete(updateCallback)
 
