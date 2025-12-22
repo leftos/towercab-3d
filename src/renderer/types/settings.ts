@@ -311,6 +311,9 @@ export interface UISettings {
 
   /** Show aircraft panel on right side of screen (default: true) */
   showAircraftPanel: boolean
+
+  /** Show METAR overlay at top of main viewport (default: false, toggle: Ctrl+M) */
+  showMetarOverlay: boolean
 }
 
 /**
@@ -467,6 +470,7 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
   },
   ui: {
     theme: 'dark',
-    showAircraftPanel: true
+    showAircraftPanel: true,
+    showMetarOverlay: false
   }
 }

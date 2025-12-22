@@ -7,6 +7,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 ### Added
 - Camera terrain collision: camera now stays at least 5 meters above terrain, preventing clipping through the ground
 - Cloud layers now have soft fading edges that blend into the sky instead of hard square borders
+- METAR overlay display (Ctrl+M): shows raw METAR at top of screen, color-coded by flight category (green=VFR, blue=MVFR, red=IFR, purple=LIFR)
 
 ### Fixed
 - Cloud layers now render correctly as horizontal layers at their METAR-reported altitudes (previously invisible due to camera sync issue)

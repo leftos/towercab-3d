@@ -7,9 +7,11 @@ import ControlsBar from './components/UI/ControlsBar'
 import AirportSelector from './components/UI/AirportSelector'
 import CommandInput from './components/UI/CommandInput'
 import MeasuringTool from './components/UI/MeasuringTool'
+import MetarOverlay from './components/UI/MetarOverlay'
 import ViewportManager from './components/Viewport/ViewportManager'
 import VRScene from './components/VR/VRScene'
 import { PerformanceHUD } from './components/UI/PerformanceHUD'
+import ModelMatchingModal from './components/UI/ModelMatchingModal'
 import { performanceMonitor } from './utils/performanceMonitor'
 import { useVatsimStore } from './stores/vatsimStore'
 import { useAirportStore } from './stores/airportStore'
@@ -27,6 +29,8 @@ function App() {
   const currentAirport = useAirportStore((state) => state.currentAirport)
   const cesiumIonToken = useSettingsStore((state) => state.cesium.cesiumIonToken)
   const showWeatherEffects = useSettingsStore((state) => state.weather.showWeatherEffects)
+  const showMetarOverlay = useSettingsStore((state) => state.ui.showMetarOverlay)
+  const updateUISettings = useSettingsStore((state) => state.updateUISettings)
   const followingCallsign = useViewportStore((state) => state.getActiveCameraState().followingCallsign)
   const fetchWeather = useWeatherStore((state) => state.fetchWeather)
   const startAutoRefresh = useWeatherStore((state) => state.startAutoRefresh)
@@ -46,6 +50,9 @@ function App() {
 
   // Performance monitor toggle
   const [showPerformanceHUD, setShowPerformanceHUD] = useState(false)
+
+  // Model matching modal toggle
+  const [showModelMatchingModal, setShowModelMatchingModal] = useState(false)
 
   const handleViewerReady = useCallback((viewer: Viewer | null) => {
     setCesiumViewer(viewer)
@@ -130,18 +137,24 @@ function App() {
     }
   }, [currentIcao, showWeatherEffects, isOrbitModeWithoutAirport, fetchWeather, startAutoRefresh, startNearestAutoRefresh, stopAutoRefresh, clearWeather])
 
-  // F1 key to toggle performance HUD
+  // Keyboard shortcuts for overlays
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'F1') {
         e.preventDefault()
         setShowPerformanceHUD(prev => !prev)
+      } else if (e.key === 'F3') {
+        e.preventDefault()
+        setShowModelMatchingModal(prev => !prev)
+      } else if (e.ctrlKey && e.key.toLowerCase() === 'm') {
+        e.preventDefault()
+        updateUISettings({ showMetarOverlay: !showMetarOverlay })
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  }, [showMetarOverlay, updateUISettings])
 
   if (isLoading) {
     return (
@@ -198,6 +211,7 @@ function App() {
 
       {/* Hide normal UI when VR is active */}
       {!isVRActive && <TopBar />}
+      {!isVRActive && <MetarOverlay />}
       <div className="main-content">
         <ViewportManager mainViewportContent={<CesiumViewer onViewerReady={handleViewerReady} />}>
           {!isVRActive && <CommandInput />}
@@ -208,6 +222,9 @@ function App() {
       {!isVRActive && <AirportSelector />}
       {!isVRActive && <MeasuringTool cesiumViewer={cesiumViewer} />}
       <PerformanceHUD visible={showPerformanceHUD} />
+      {!isVRActive && showModelMatchingModal && (
+        <ModelMatchingModal onClose={() => setShowModelMatchingModal(false)} />
+      )}
     </div>
   )
 }
