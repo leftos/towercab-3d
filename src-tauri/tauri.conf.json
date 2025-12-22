@@ -45,7 +45,8 @@
         "installerIcon": "icons/icon.ico",
         "headerImage": null,
         "sidebarImage": null,
-        "displayLanguageSelector": false
+        "displayLanguageSelector": false,
+        "template": "installer.nsi.template"
       }
     },
     "macOS": {
