@@ -1,8 +1,7 @@
 .metar-overlay {
   position: fixed;
   top: 40px; /* Below TopBar */
-  left: 50%;
-  transform: translateX(-50%);
+  left: 8px;
   z-index: 100;
   padding: 6px 12px;
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
