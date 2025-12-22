@@ -121,3 +121,112 @@ export interface Ceiling {
   /** Cloud type that forms the ceiling ('BKN' or 'OVC'), or null */
   type: string | null
 }
+
+// ============================================================================
+// PRECIPITATION TYPES
+// ============================================================================
+
+/**
+ * Type of precipitation from METAR weather codes
+ *
+ * METAR codes mapped to precipitation types:
+ * - RA → rain
+ * - SN → snow
+ * - DZ → drizzle (light rain)
+ * - GR, GS → hail
+ * - PL, SG, IC → ice (frozen precipitation)
+ * - UP → unknown precipitation
+ */
+export type PrecipitationType = 'rain' | 'snow' | 'drizzle' | 'hail' | 'ice' | 'unknown'
+
+/**
+ * Intensity of precipitation from METAR modifier
+ *
+ * METAR uses prefixes to indicate intensity:
+ * - `-` prefix = light (e.g., -RA = light rain)
+ * - no prefix = moderate (e.g., RA = moderate rain)
+ * - `+` prefix = heavy (e.g., +RA = heavy rain)
+ */
+export type PrecipitationIntensity = 'light' | 'moderate' | 'heavy'
+
+/**
+ * Single precipitation type parsed from METAR
+ *
+ * @example
+ * // METAR: "+RASN" = heavy rain and snow
+ * const rain: Precipitation = { type: 'rain', intensity: 'heavy', code: '+RA' }
+ * const snow: Precipitation = { type: 'snow', intensity: 'heavy', code: '+SN' }
+ */
+export interface Precipitation {
+  /** Type of precipitation */
+  type: PrecipitationType
+  /** Intensity from METAR modifier */
+  intensity: PrecipitationIntensity
+  /** Original METAR code (e.g., '+RA', '-SN', 'DZ') */
+  code: string
+}
+
+/**
+ * Complete precipitation state for weather effects rendering
+ *
+ * @example
+ * // Thunderstorm with heavy rain
+ * const state: PrecipitationState = {
+ *   active: true,
+ *   types: [{ type: 'rain', intensity: 'heavy', code: '+RA' }],
+ *   visibilityFactor: 1.5,
+ *   hasThunderstorm: true
+ * }
+ */
+export interface PrecipitationState {
+  /** Whether any precipitation is occurring */
+  active: boolean
+  /** Array of precipitation types (can have multiple, e.g., rain+snow) */
+  types: Precipitation[]
+  /** Visibility-based particle multiplier (lower vis = more particles) */
+  visibilityFactor: number
+  /** Whether thunderstorm (TS) code is present - triggers lightning */
+  hasThunderstorm: boolean
+}
+
+// ============================================================================
+// WIND TYPES
+// ============================================================================
+
+/**
+ * Wind state parsed from METAR
+ *
+ * METAR wind format: DDDSSKT or DDDSSGSSGKT
+ * - DDD = direction in degrees (or VRB for variable)
+ * - SS = speed in knots
+ * - G = gust indicator
+ * - SSG = gust speed in knots
+ *
+ * @example
+ * // METAR: "28009G15KT" = 280° at 9kt gusting 15kt
+ * const wind: WindState = {
+ *   direction: 280,
+ *   speed: 9,
+ *   gustSpeed: 15,
+ *   isVariable: false
+ * }
+ *
+ * @example
+ * // METAR: "VRB05KT" = variable at 5kt
+ * const wind: WindState = {
+ *   direction: 0,
+ *   speed: 5,
+ *   gustSpeed: null,
+ *   isVariable: true
+ * }
+ */
+export interface WindState {
+  /** Wind direction in degrees (0-360, meteorological: direction wind is FROM) */
+  direction: number
+  /** Wind speed in knots */
+  speed: number
+  /** Gust speed in knots, or null if no gusts reported */
+  gustSpeed: number | null
+  /** Whether wind is variable direction (VRB in METAR) */
+  isVariable: boolean
+}

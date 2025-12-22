@@ -83,6 +83,9 @@ function ControlsBar() {
   const cloudOpacity = useSettingsStore((state) => state.weather.cloudOpacity)
   const fogIntensity = useSettingsStore((state) => state.weather.fogIntensity)
   const visibilityScale = useSettingsStore((state) => state.weather.visibilityScale)
+  const showPrecipitation = useSettingsStore((state) => state.weather.showPrecipitation ?? true)
+  const precipitationIntensity = useSettingsStore((state) => state.weather.precipitationIntensity ?? 1.0)
+  const showLightning = useSettingsStore((state) => state.weather.showLightning ?? true)
   const updateWeatherSettings = useSettingsStore((state) => state.updateWeatherSettings)
 
   // Weather store
@@ -1142,6 +1145,48 @@ function ControlsBar() {
                           <p className="setting-hint">
                             Multiplier for fog distance. 2.0 = see twice as far as METAR visibility.
                           </p>
+                        </div>
+
+                        <div className="setting-item">
+                          <label className="checkbox-label">
+                            <input
+                              type="checkbox"
+                              checked={showPrecipitation}
+                              onChange={(e) => updateWeatherSettings({ showPrecipitation: e.target.checked })}
+                            />
+                            Show Precipitation (Rain/Snow)
+                          </label>
+                        </div>
+
+                        <div className="setting-item">
+                          <label>Precipitation Intensity</label>
+                          <div className="slider-with-value">
+                            <input
+                              type="range"
+                              min="0.5"
+                              max="2.0"
+                              step="0.1"
+                              value={precipitationIntensity}
+                              onChange={(e) => updateWeatherSettings({ precipitationIntensity: Number(e.target.value) })}
+                              disabled={!showPrecipitation}
+                            />
+                            <span>{precipitationIntensity.toFixed(1)}x</span>
+                          </div>
+                          <p className="setting-hint">
+                            Particle density for rain and snow effects.
+                          </p>
+                        </div>
+
+                        <div className="setting-item">
+                          <label className="checkbox-label">
+                            <input
+                              type="checkbox"
+                              checked={showLightning}
+                              onChange={(e) => updateWeatherSettings({ showLightning: e.target.checked })}
+                              disabled={!showPrecipitation}
+                            />
+                            Show Lightning (Thunderstorms)
+                          </label>
                         </div>
 
                         <div className="setting-item weather-status">

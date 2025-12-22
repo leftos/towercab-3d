@@ -5,6 +5,8 @@ import { useBabylonWeather } from './useBabylonWeather'
 import { useBabylonLabels } from './useBabylonLabels'
 import { useBabylonRootNode } from './useBabylonRootNode'
 import { useBabylonCameraSync } from './useBabylonCameraSync'
+import { useBabylonPrecipitation } from './useBabylonPrecipitation'
+import { useViewportStore } from '../stores/viewportStore'
 
 /**
  * Orchestrator hook for Babylon.js overlay rendering synchronized with Cesium.
@@ -173,6 +175,10 @@ import { useBabylonCameraSync } from './useBabylonCameraSync'
  * @see docs/architecture.md - Architecture overview
  */
 export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOptions) {
+  // Get view mode for precipitation effects
+  const viewMode = useViewportStore((state) => state.viewports.find(v => v.id === 'main')?.cameraState.viewMode)
+  const isTopDownView = viewMode === 'topdown'
+
   // 1. Initialize scene (engine, scene, camera, GUI, lighting)
   const { engine, scene, camera, guiTexture, sceneReady } = useBabylonScene({
     canvas: canvas!,
@@ -182,10 +188,18 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
 
   // 2. Initialize weather effects (fog dome, cloud layers)
   const { fogDome, getCloudMeshes, isVisibleByWeather } = useBabylonWeather({
-    scene
+    scene,
+    isTopDownView
   })
 
-  // 3. Initialize label management (datablock labels, leader lines)
+  // 3. Initialize precipitation effects (rain, snow, lightning)
+  useBabylonPrecipitation({
+    scene,
+    camera,
+    isTopDownView
+  })
+
+  // 4. Initialize label management (datablock labels, leader lines)
   const {
     updateLabel,
     updateLabelPosition,
@@ -196,13 +210,13 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     guiTexture
   })
 
-  // 4. Initialize ENU root node (coordinate system, transforms)
+  // 5. Initialize ENU root node (coordinate system, transforms)
   const { setupRootNode, getFixedToEnu } = useBabylonRootNode({
     scene,
     cesiumViewer
   })
 
-  // 5. Initialize camera synchronization
+  // 6. Initialize camera synchronization
   const { syncCamera: syncCameraInternal } = useBabylonCameraSync({
     cesiumViewer,
     camera,

@@ -342,14 +342,6 @@ export function useBabylonCameraSync({
         meshData.plane.position.x = camera.position.x
         meshData.plane.position.z = camera.position.z
 
-        // Debug: log cloud and camera positions (throttled)
-        if (Math.random() < 0.01) {
-          console.log('[Cloud Debug]', {
-            cloudY: meshData.plane.position.y.toFixed(1),
-            cameraY: camera.position.y.toFixed(1),
-            separation: (meshData.plane.position.y - camera.position.y).toFixed(1) + 'm'
-          })
-        }
       }
     }
 

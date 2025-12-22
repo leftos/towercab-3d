@@ -124,6 +124,9 @@ export const useSettingsStore = create<SettingsStore>()(
             }),
             ...(updates.visibilityScale !== undefined && {
               visibilityScale: Math.max(0.5, Math.min(2.0, updates.visibilityScale))
+            }),
+            ...(updates.precipitationIntensity !== undefined && {
+              precipitationIntensity: Math.max(0.5, Math.min(2.0, updates.precipitationIntensity))
             })
           }
         })),
@@ -331,7 +334,12 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
       showClouds: oldSettings.showClouds ?? DEFAULT_SETTINGS.weather.showClouds,
       cloudOpacity: oldSettings.cloudOpacity ?? DEFAULT_SETTINGS.weather.cloudOpacity,
       fogIntensity: oldSettings.fogIntensity ?? DEFAULT_SETTINGS.weather.fogIntensity,
-      visibilityScale: oldSettings.visibilityScale ?? DEFAULT_SETTINGS.weather.visibilityScale
+      visibilityScale: oldSettings.visibilityScale ?? DEFAULT_SETTINGS.weather.visibilityScale,
+      showPrecipitation:
+        oldSettings.showPrecipitation ?? DEFAULT_SETTINGS.weather.showPrecipitation,
+      precipitationIntensity:
+        oldSettings.precipitationIntensity ?? DEFAULT_SETTINGS.weather.precipitationIntensity,
+      showLightning: oldSettings.showLightning ?? DEFAULT_SETTINGS.weather.showLightning
     },
     memory: {
       inMemoryTileCacheSize:

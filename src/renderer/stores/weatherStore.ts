@@ -1,7 +1,15 @@
 import { create } from 'zustand'
 import { metarService, type MetarData } from '../services/MetarService'
-import type { CloudLayer } from '../types'
-import { WEATHER_REFRESH_INTERVAL, NEAREST_METAR_THROTTLE, POSITION_CHANGE_THRESHOLD } from '../constants'
+import type { CloudLayer, PrecipitationState, WindState } from '../types'
+import {
+  WEATHER_REFRESH_INTERVAL,
+  NEAREST_METAR_THROTTLE,
+  POSITION_CHANGE_THRESHOLD,
+  PRECIP_VIS_THRESHOLD_HIGH,
+  PRECIP_VIS_THRESHOLD_LOW,
+  PRECIP_VIS_FACTOR_MIN,
+  PRECIP_VIS_FACTOR_MAX
+} from '../constants'
 
 interface WeatherState {
   // Current weather data
@@ -13,6 +21,10 @@ interface WeatherState {
   // Derived weather effects
   fogDensity: number        // 0 to ~0.0003, computed from visibility
   cloudLayers: CloudLayer[] // Processed cloud data
+
+  // Precipitation and wind state (for particle effects)
+  precipitation: PrecipitationState
+  wind: WindState
 
   // Camera position for nearest METAR mode
   cameraPosition: { lat: number; lon: number } | null
@@ -101,6 +113,48 @@ function parseCloudLayers(metar: MetarData): CloudLayer[] {
     .slice(0, 4) // Max 4 cloud layers
 }
 
+/**
+ * Calculate visibility factor for precipitation particles
+ * Lower visibility = more particles (higher factor)
+ */
+function calculateVisibilityFactor(visibSM: number): number {
+  if (visibSM >= PRECIP_VIS_THRESHOLD_HIGH) return PRECIP_VIS_FACTOR_MIN
+  if (visibSM <= PRECIP_VIS_THRESHOLD_LOW) return PRECIP_VIS_FACTOR_MAX
+
+  // Linear interpolation between thresholds
+  const range = PRECIP_VIS_THRESHOLD_HIGH - PRECIP_VIS_THRESHOLD_LOW
+  const t = (visibSM - PRECIP_VIS_THRESHOLD_LOW) / range
+  return PRECIP_VIS_FACTOR_MAX - t * (PRECIP_VIS_FACTOR_MAX - PRECIP_VIS_FACTOR_MIN)
+}
+
+/**
+ * Build precipitation state from METAR data
+ */
+function parsePrecipitationState(metar: MetarData): PrecipitationState {
+  return {
+    active: metar.precipitation.length > 0,
+    types: metar.precipitation,
+    visibilityFactor: calculateVisibilityFactor(metar.visib),
+    hasThunderstorm: metar.hasThunderstorm
+  }
+}
+
+/** Default precipitation state (no precipitation) */
+const DEFAULT_PRECIPITATION: PrecipitationState = {
+  active: false,
+  types: [],
+  visibilityFactor: 1.0,
+  hasThunderstorm: false
+}
+
+/** Default wind state (calm) */
+const DEFAULT_WIND: WindState = {
+  direction: 0,
+  speed: 0,
+  gustSpeed: null,
+  isVariable: false
+}
+
 // Grid size for position-based cache (in degrees, ~6nm)
 const _POSITION_GRID_SIZE = 0.1
 
@@ -112,6 +166,8 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
   error: null,
   fogDensity: 0,
   cloudLayers: [],
+  precipitation: DEFAULT_PRECIPITATION,
+  wind: DEFAULT_WIND,
   cameraPosition: null,
   useNearestMetar: false,
   refreshIntervalId: null,
@@ -129,7 +185,9 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
           isLoading: false,
           error: null,
           fogDensity: visibilityToFogDensity(metar.visib),
-          cloudLayers: parseCloudLayers(metar)
+          cloudLayers: parseCloudLayers(metar),
+          precipitation: parsePrecipitationState(metar),
+          wind: metar.wind
         })
       } else {
         set({
@@ -159,6 +217,8 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
           error: null,
           fogDensity: visibilityToFogDensity(metar.visib),
           cloudLayers: parseCloudLayers(metar),
+          precipitation: parsePrecipitationState(metar),
+          wind: metar.wind,
           cameraPosition: { lat, lon }
         })
       } else {
@@ -266,6 +326,8 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
       error: null,
       fogDensity: 0,
       cloudLayers: [],
+      precipitation: DEFAULT_PRECIPITATION,
+      wind: DEFAULT_WIND,
       cameraPosition: null,
       useNearestMetar: false,
       refreshIntervalId: null

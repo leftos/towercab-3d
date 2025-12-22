@@ -231,6 +231,18 @@ export interface WeatherSettings {
    * 0.5 = half METAR visibility, 1.0 = match METAR, 2.0 = double METAR visibility
    */
   visibilityScale: number
+
+  /** Show rain/snow particle effects based on METAR (default: true) */
+  showPrecipitation: boolean
+
+  /**
+   * Precipitation particle density multiplier (0.5-2.0, default: 1.0)
+   * 0.5 = half density, 1.0 = default, 2.0 = double density
+   */
+  precipitationIntensity: number
+
+  /** Show lightning flashes during thunderstorms (default: true) */
+  showLightning: boolean
 }
 
 /**
@@ -451,7 +463,10 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     showClouds: true,
     cloudOpacity: 0.5,
     fogIntensity: 1.0,
-    visibilityScale: 1.0
+    visibilityScale: 1.0,
+    showPrecipitation: true,
+    precipitationIntensity: 1.0,
+    showLightning: true
   },
   memory: {
     inMemoryTileCacheSize: 500,

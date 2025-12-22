@@ -5,6 +5,11 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Weather effects: Rain and snow particle effects based on METAR precipitation codes (RA, SN, DZ, etc.)
+- Weather effects: Lightning flashes during thunderstorms (TS code in METAR)
+- Weather effects: Wind affects precipitation particles based on METAR wind direction and speed
+- Weather effects: Gusty conditions (G in METAR) cause periodic wind speed variations
+- Weather settings: Show Precipitation toggle, Precipitation Intensity slider, Show Lightning toggle
 - Camera terrain collision: camera now stays at least 5 meters above terrain, preventing clipping through the ground
 - Cloud layers now have soft fading edges that blend into the sky instead of hard square borders
 - METAR overlay display (Ctrl+M): shows raw METAR at top of screen, color-coded by flight category (green=VFR, blue=MVFR, red=IFR, purple=LIFR)
@@ -13,7 +18,6 @@ All notable changes to TowerCab 3D will be documented in this file.
 ### Fixed
 - Cloud layers now render correctly as horizontal layers at their METAR-reported altitudes (previously invisible due to camera sync issue)
 - Fixed small dot appearing at center of screen (uninitialized leader line coordinates)
-- Model matching now correctly handles aircraft types with equipment suffixes (e.g., "B738/L" now matches as exact instead of closest)
 
 ## v0.0.7-alpha (2025-12-21)
 

@@ -2,6 +2,8 @@
 // Handles fetching and parsing METAR data from Aviation Weather API
 
 import { invoke } from '@tauri-apps/api/core'
+import type { Precipitation, PrecipitationType, PrecipitationIntensity, WindState } from '@/types'
+import { METAR_PRECIP_CODES } from '@/constants'
 
 const METAR_API_URL = 'https://aviationweather.gov/api/data/metar'
 
@@ -35,6 +37,9 @@ export interface MetarData {
   fltCat: string          // VFR, MVFR, IFR, LIFR
   obsTime: number         // Observation timestamp (epoch ms)
   rawOb: string           // Raw METAR string
+  precipitation: Precipitation[]  // Parsed precipitation types
+  hasThunderstorm: boolean        // Whether TS code is present
+  wind: WindState                 // Parsed wind data
 }
 
 interface CachedMetar {
@@ -94,6 +99,11 @@ class MetarService {
       }
 
       const raw = data[0]
+      const rawOb = raw.rawOb || ''
+
+      // Parse precipitation and wind from raw METAR
+      const { precipitation, hasThunderstorm } = this.parsePrecipitation(rawOb)
+      const wind = this.parseWind(rawOb)
 
       // Parse the response into our format
       const metar: MetarData = {
@@ -102,7 +112,10 @@ class MetarService {
         clouds: this.parseClouds(raw.clouds),
         fltCat: raw.fltCat || 'VFR',
         obsTime: raw.obsTime ? new Date(raw.obsTime * 1000).getTime() : now,
-        rawOb: raw.rawOb || ''
+        rawOb,
+        precipitation,
+        hasThunderstorm,
+        wind
       }
 
       // Cache the result
@@ -184,6 +197,12 @@ class MetarService {
         }
       }
 
+      const rawOb = nearestStation.rawOb || ''
+
+      // Parse precipitation and wind from raw METAR
+      const { precipitation, hasThunderstorm } = this.parsePrecipitation(rawOb)
+      const wind = this.parseWind(rawOb)
+
       // Parse the response into our format
       const metar: MetarData = {
         icaoId: nearestStation.icaoId || 'UNKNOWN',
@@ -191,7 +210,10 @@ class MetarService {
         clouds: this.parseClouds(nearestStation.clouds),
         fltCat: nearestStation.fltCat || 'VFR',
         obsTime: nearestStation.obsTime ? new Date(nearestStation.obsTime * 1000).getTime() : now,
-        rawOb: nearestStation.rawOb || ''
+        rawOb,
+        precipitation,
+        hasThunderstorm,
+        wind
       }
 
       // Cache the result with position
@@ -244,6 +266,134 @@ class MetarService {
         cover: c.cover.toUpperCase(),
         base: c.base
       }))
+  }
+
+  /**
+   * Parse precipitation from raw METAR string
+   *
+   * METAR precipitation format: optional intensity prefix + weather code(s)
+   * Examples:
+   * - "RA" = moderate rain
+   * - "-SN" = light snow
+   * - "+TSRA" = heavy thunderstorm with rain
+   * - "RASN" = rain and snow mix
+   *
+   * @param rawOb Raw METAR string
+   * @returns Object with precipitation array and thunderstorm flag
+   */
+  private parsePrecipitation(rawOb: string): { precipitation: Precipitation[], hasThunderstorm: boolean } {
+    const precipitations: Precipitation[] = []
+    let hasThunderstorm = false
+
+    // Check for thunderstorm
+    if (/\bTS\b/.test(rawOb) || /[+-]?TS[A-Z]{2}/.test(rawOb)) {
+      hasThunderstorm = true
+    }
+
+    // Match weather groups: optional intensity + 2+ letter codes
+    // Weather appears after visibility, before clouds
+    // Pattern: space + optional intensity (-/+) + weather codes + space or end
+    const weatherPattern = /\s([+-]?)([A-Z]{2,8})(?=\s|$)/g
+    let match
+
+    while ((match = weatherPattern.exec(rawOb)) !== null) {
+      const intensityPrefix = match[1]
+      const codeGroup = match[2]
+
+      // Skip if this is a cloud group (FEW, SCT, BKN, OVC followed by digits)
+      if (/^(FEW|SCT|BKN|OVC|SKC|CLR|NSC|NCD|VV)\d*$/.test(codeGroup)) {
+        continue
+      }
+
+      // Skip runway visual range and other non-weather codes
+      if (/^R\d/.test(codeGroup) || /^\d/.test(codeGroup)) {
+        continue
+      }
+
+      // Determine intensity
+      const intensity: PrecipitationIntensity = intensityPrefix === '-' ? 'light'
+        : intensityPrefix === '+' ? 'heavy'
+        : 'moderate'
+
+      // Parse individual precipitation codes (handle combined like RASN, TSRA)
+      // First strip TS if present since we handle it separately
+      const precipCodes = codeGroup.replace('TS', '')
+
+      for (let i = 0; i < precipCodes.length; i += 2) {
+        const code = precipCodes.substring(i, i + 2)
+        const precipType = METAR_PRECIP_CODES[code] as PrecipitationType | undefined
+
+        if (precipType) {
+          precipitations.push({
+            type: precipType,
+            intensity,
+            code: `${intensityPrefix}${code}`
+          })
+        }
+      }
+    }
+
+    return { precipitation: precipitations, hasThunderstorm }
+  }
+
+  /**
+   * Parse wind from raw METAR string
+   *
+   * METAR wind format: DDDSSKT or DDDSSGSSGKT
+   * Examples:
+   * - "28009KT" = 280° at 9 knots
+   * - "28009G15KT" = 280° at 9 knots gusting 15
+   * - "VRB05KT" = variable at 5 knots
+   * - "00000KT" = calm
+   *
+   * @param rawOb Raw METAR string
+   * @returns WindState object
+   */
+  private parseWind(rawOb: string): WindState {
+    // Default calm wind
+    const defaultWind: WindState = {
+      direction: 0,
+      speed: 0,
+      gustSpeed: null,
+      isVariable: false
+    }
+
+    // Match wind group: direction (3 digits or VRB) + speed (2-3 digits) + optional gust + KT
+    // Also handle MPS (meters per second) by converting
+    const windPattern = /(VRB|\d{3})(\d{2,3})(?:G(\d{2,3}))?(KT|MPS)/
+
+    const match = rawOb.match(windPattern)
+    if (!match) {
+      return defaultWind
+    }
+
+    const [, dirStr, speedStr, gustStr, unit] = match
+
+    // Parse direction
+    const isVariable = dirStr === 'VRB'
+    const direction = isVariable ? 0 : parseInt(dirStr, 10)
+
+    // Parse speed (convert MPS to knots if needed)
+    let speed = parseInt(speedStr, 10)
+    if (unit === 'MPS') {
+      speed = Math.round(speed * 1.94384) // MPS to knots
+    }
+
+    // Parse gust speed if present
+    let gustSpeed: number | null = null
+    if (gustStr) {
+      gustSpeed = parseInt(gustStr, 10)
+      if (unit === 'MPS') {
+        gustSpeed = Math.round(gustSpeed * 1.94384)
+      }
+    }
+
+    return {
+      direction,
+      speed,
+      gustSpeed,
+      isVariable
+    }
   }
 
   /**

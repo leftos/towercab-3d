@@ -89,7 +89,16 @@ export type {
   // Weather classification
   FlightCategory,
   FogDensity,
-  Ceiling
+  Ceiling,
+
+  // Precipitation
+  PrecipitationType,
+  PrecipitationIntensity,
+  Precipitation,
+  PrecipitationState,
+
+  // Wind
+  WindState
 } from './weather'
 
 // ============================================================================
