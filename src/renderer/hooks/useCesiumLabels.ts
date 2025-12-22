@@ -6,8 +6,7 @@ import { aircraftModelService } from '../services/AircraftModelService'
 import { calculateDistanceNM } from '../utils/interpolation'
 import {
   GROUNDSPEED_THRESHOLD_KNOTS,
-  DATABLOCK_HEIGHT_MULTIPLIER,
-  GROUND_AIRCRAFT_TERRAIN_OFFSET
+  DATABLOCK_HEIGHT_MULTIPLIER
 } from '../constants/rendering'
 
 export type DatablockMode = 'none' | 'full' | 'airline'
@@ -127,7 +126,7 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
     followingCallsign,
     currentAirportIcao,
     groundElevationMeters,
-    terrainOffset,
+    terrainOffset: _terrainOffset,
     towerHeight,
     refLat,
     refLon,
@@ -138,7 +137,7 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
     searchQuery,
     filterAirportTraffic,
     isOrbitModeWithoutAirport,
-    groundAircraftTerrain
+    groundAircraftTerrain: _groundAircraftTerrain
   } = params
 
   // Update labels
@@ -268,23 +267,9 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
         babylonColor = { r: 1, g: 0.5, b: 0 } // Orange for ground
       }
 
-      // Calculate positions (altitude is in MSL METERS, convert to ellipsoid height)
-      // ellipsoidHeight = mslAltitude + geoidOffset
-      let heightAboveEllipsoid = altitudeMeters + terrainOffset
-
-      // For ground aircraft, use terrain-sampled height if available
-      if (!isAirborne) {
-        const sampledTerrainHeight = groundAircraftTerrain.get(aircraft.callsign)
-        if (sampledTerrainHeight !== undefined) {
-          // Use sampled terrain height + small offset (matches model positioning)
-          heightAboveEllipsoid = sampledTerrainHeight + GROUND_AIRCRAFT_TERRAIN_OFFSET
-        } else {
-          // Fallback: use MAX of (reported altitude, ground elevation) + terrain offset
-          const reportedEllipsoidHeight = altitudeMeters + terrainOffset
-          const groundEllipsoidHeight = groundElevationMeters + terrainOffset
-          heightAboveEllipsoid = Math.max(reportedEllipsoidHeight, groundEllipsoidHeight) + GROUND_AIRCRAFT_TERRAIN_OFFSET
-        }
-      }
+      // Calculate positions using interpolated altitude (already terrain-corrected)
+      // This ensures labels point to the same position where models are rendered
+      const heightAboveEllipsoid = aircraft.interpolatedAltitude
 
       const cesiumPosition = Cesium.Cartesian3.fromDegrees(
         aircraft.interpolatedLongitude,
@@ -504,8 +489,6 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
     followingCallsign,
     currentAirportIcao,
     groundElevationMeters,
-    groundAircraftTerrain,
-    terrainOffset,
     towerHeight,
     refLat,
     refLon,

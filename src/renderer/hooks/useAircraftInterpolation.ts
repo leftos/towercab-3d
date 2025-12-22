@@ -169,7 +169,7 @@ function updateInterpolation() {
 
       if (!currentTransition || currentTransition.target !== targetHeight) {
         // Initialize new transition from current position to target
-        const sourceHeight = currentTransition?.source ?? targetHeight
+        const sourceHeight = currentTransition?.source ?? entry.interpolatedAltitude
         sharedTransitionHeightsRef.current.set(callsign, {
           source: sourceHeight,
           target: targetHeight,

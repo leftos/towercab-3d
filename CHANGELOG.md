@@ -14,6 +14,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Orbit camera settings (distance, heading, pitch) now persist when switching between followed aircraft
 
 ### Fixed
+- Aircraft now smoothly transition from ground to airborne during takeoff instead of warping/jumping
+- Datablock leader lines now correctly point to the aircraft's visual position on screen
 - Switching to 2D mode while tower following no longer breaks aircraft centering (auto-switches to orbit follow)
 - Switching to tower follow while in 2D mode now works correctly (auto-switches to 3D view)
 
