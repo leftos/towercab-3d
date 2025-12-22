@@ -142,18 +142,18 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
   }, [])
 
   /**
-   * Create a rain particle system with proper capacity
+   * Create a rain particle system using ParticleHelper
    */
   const createRainSystemAsync = useCallback(async (): Promise<BABYLON.ParticleSystem | null> => {
     if (!scene) return null
 
     try {
-      // Create particle system with proper capacity for dense rain
-      const ps = new BABYLON.ParticleSystem('rain', RAIN_PARTICLE_CAPACITY, scene)
+      // Use Babylon's built-in rain particle system (handles assets internally)
+      const set = await BABYLON.ParticleHelper.CreateAsync('rain', scene, false)
+      const systems = set.systems
+      if (systems.length === 0) return null
 
-      // Use a simple procedural texture for rain drops
-      const texture = new BABYLON.Texture('https://assets.babylonjs.com/textures/flare.png', scene)
-      ps.particleTexture = texture
+      const ps = systems[0] as BABYLON.ParticleSystem
 
       // Configure emitter - box above camera
       ps.emitter = new BABYLON.Vector3(0, EMITTER_HEIGHT_ABOVE_CAMERA, 0)
@@ -212,18 +212,18 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
   }, [scene])
 
   /**
-   * Create a snow particle system with proper capacity
+   * Create a snow particle system using ParticleHelper
    */
   const createSnowSystemAsync = useCallback(async (): Promise<BABYLON.ParticleSystem | null> => {
     if (!scene) return null
 
     try {
-      // Create particle system with proper capacity
-      const ps = new BABYLON.ParticleSystem('snow', SNOW_PARTICLE_CAPACITY, scene)
+      // Use Babylon's built-in snow particle system (handles assets internally)
+      const set = await BABYLON.ParticleHelper.CreateAsync('snow', scene, false)
+      const systems = set.systems
+      if (systems.length === 0) return null
 
-      // Use a simple procedural texture for snowflakes
-      const texture = new BABYLON.Texture('https://assets.babylonjs.com/textures/flare.png', scene)
-      ps.particleTexture = texture
+      const ps = systems[0] as BABYLON.ParticleSystem
 
       // Configure emitter box above camera
       ps.emitter = new BABYLON.Vector3(0, EMITTER_HEIGHT_ABOVE_CAMERA, 0)
