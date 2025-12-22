@@ -4,6 +4,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+## v0.0.7-alpha (2025-12-21)
+
 ### Added
 - "Aircraft Shadows Only" graphics setting: renders only shadows cast by aircraft onto the ground, disabling expensive terrain and building self-shadowing for better performance
 - Advanced shadow tuning settings: Shadow Depth Bias, Polygon Offset Factor, and Polygon Offset Units sliders for fine-tuning shadow quality
