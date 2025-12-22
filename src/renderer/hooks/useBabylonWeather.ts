@@ -273,6 +273,7 @@ export function useBabylonWeather(
   const fogDomeRef = useRef<BABYLON.Mesh | null>(null)
   const fogDomeMaterialRef = useRef<BABYLON.StandardMaterial | null>(null)
   const cloudMeshPoolRef = useRef<CloudMeshData[]>([])
+  const cloudFadeTextureRef = useRef<BABYLON.DynamicTexture | null>(null)
 
   // Weather store subscriptions
   const cloudLayers = useWeatherStore((state) => state.cloudLayers)
@@ -290,6 +291,29 @@ export function useBabylonWeather(
   useEffect(() => {
     if (!scene) return
 
+    // Create a radial gradient texture for cloud edge fade-out
+    // This makes clouds fade to transparent at the edges instead of having hard square borders
+    const textureSize = 512
+    const cloudFadeTexture = new BABYLON.DynamicTexture('cloud_fade_texture', textureSize, scene, false)
+    const ctx = cloudFadeTexture.getContext()
+
+    // Create radial gradient: opaque center, transparent edges
+    const centerX = textureSize / 2
+    const centerY = textureSize / 2
+    const innerRadius = 0  // Start fully opaque at center
+    const outerRadius = textureSize / 2  // Fade to transparent at edge
+
+    const gradient = ctx.createRadialGradient(centerX, centerY, innerRadius, centerX, centerY, outerRadius)
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)')      // Center: fully opaque
+    gradient.addColorStop(0.5, 'rgba(255, 255, 255, 1)')    // 50%: still opaque
+    gradient.addColorStop(0.75, 'rgba(255, 255, 255, 0.5)') // 75%: start fading
+    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)')      // Edge: fully transparent
+
+    ctx.fillStyle = gradient
+    ctx.fillRect(0, 0, textureSize, textureSize)
+    cloudFadeTexture.update()
+    cloudFadeTextureRef.current = cloudFadeTexture
+
     // Create cloud plane mesh pool
     for (let i = 0; i < CLOUD_POOL_SIZE; i++) {
       const plane = BABYLON.MeshBuilder.CreatePlane(`cloud_layer_${i}`, {
@@ -300,13 +324,15 @@ export function useBabylonWeather(
       plane.rotation.x = CLOUD_PLANE_ROTATION_X
       plane.isVisible = false
 
-      // Create semi-transparent cloud material
+      // Create semi-transparent cloud material with edge fade
       const material = new BABYLON.StandardMaterial(`cloud_mat_${i}`, scene)
       material.diffuseColor = new BABYLON.Color3(...CLOUD_DIFFUSE_COLOR)
       material.emissiveColor = new BABYLON.Color3(...CLOUD_EMISSIVE_COLOR)
       material.alpha = CLOUD_BASE_ALPHA
       material.backFaceCulling = false
       material.disableLighting = false
+      material.opacityTexture = cloudFadeTexture  // Apply radial fade
+      material.useAlphaFromDiffuseTexture = false
       plane.material = material
 
       cloudMeshPoolRef.current.push({ plane, material })
@@ -346,6 +372,10 @@ export function useBabylonWeather(
         cloudData.plane.dispose()
       }
       cloudMeshPoolRef.current = []
+
+      // Dispose cloud fade texture
+      cloudFadeTextureRef.current?.dispose()
+      cloudFadeTextureRef.current = null
 
       // Dispose fog dome
       fogDomeMaterialRef.current?.dispose()
@@ -455,9 +485,14 @@ export function useBabylonWeather(
     return true
   }, [showWeatherEffects, showCesiumFog, showClouds, currentMetar, cloudLayers, visibilityScale, isTopDownView])
 
+  // Return getter function for cloud meshes to avoid stale closure issue
+  // The mesh creation effect runs after initial render, so returning the ref
+  // contents directly would capture an empty array
+  const getCloudMeshes = useCallback(() => cloudMeshPoolRef.current, [])
+
   return {
     fogDome: fogDomeRef.current,
-    cloudLayers: cloudMeshPoolRef.current,
+    getCloudMeshes,
     isVisibleByWeather
   }
 }

@@ -13,10 +13,19 @@ interface Camera2DState {
   heading: number
 }
 
+interface CloudMeshData {
+  plane: BABYLON.Mesh
+  material: BABYLON.StandardMaterial
+}
+
 interface UseBabylonCameraSyncOptions {
   cesiumViewer: Cesium.Viewer | null
   camera: BABYLON.FreeCamera | null
   fogDome: BABYLON.Mesh | null
+  /** Getter function for cloud meshes - called each frame to get current meshes */
+  getCloudMeshes: () => CloudMeshData[]
+  /** Getter for fixed-to-ENU transformation matrix from useBabylonRootNode */
+  getFixedToEnu: () => Cesium.Matrix4 | null
 }
 
 interface UseBabylonCameraSyncResult {
@@ -223,7 +232,9 @@ interface UseBabylonCameraSyncResult {
 export function useBabylonCameraSync({
   cesiumViewer,
   camera,
-  fogDome
+  fogDome,
+  getCloudMeshes,
+  getFixedToEnu
 }: UseBabylonCameraSyncOptions): UseBabylonCameraSyncResult {
   // ENU transformation data
   const enuDataRef = useRef<EnuTransformData | null>(null)
@@ -288,11 +299,17 @@ export function useBabylonCameraSync({
     if (fogDome) {
       fogDome.position.copyFrom(camera.position)
     }
-  }, [cesiumViewer, camera, fogDome])
+
+    // Hide cloud planes in top-down mode (they would obscure the view)
+    const cloudMeshes = getCloudMeshes()
+    for (const meshData of cloudMeshes) {
+      meshData.plane.isVisible = false
+    }
+  }, [cesiumViewer, camera, fogDome, getCloudMeshes])
 
   // Sync Babylon camera for 3D view
   const syncCamera3D = useCallback((): boolean => {
-    const fixedToEnu = enuDataRef.current?.fixedToEnu
+    const fixedToEnu = getFixedToEnu()
     if (!cesiumViewer || cesiumViewer.isDestroyed() || !camera || !fixedToEnu) return false
 
     // Clear any quaternion so Euler angles work
@@ -317,8 +334,27 @@ export function useBabylonCameraSync({
       fogDome.position.copyFrom(camera.position)
     }
 
+    // Position cloud planes at camera X/Z position (clouds follow camera horizontally)
+    // Y position is already set by useBabylonWeather based on cloud altitude AGL
+    const cloudMeshes = getCloudMeshes()
+    for (const meshData of cloudMeshes) {
+      if (meshData.plane.isVisible) {
+        meshData.plane.position.x = camera.position.x
+        meshData.plane.position.z = camera.position.z
+
+        // Debug: log cloud and camera positions (throttled)
+        if (Math.random() < 0.01) {
+          console.log('[Cloud Debug]', {
+            cloudY: meshData.plane.position.y.toFixed(1),
+            cameraY: camera.position.y.toFixed(1),
+            separation: (meshData.plane.position.y - camera.position.y).toFixed(1) + 'm'
+          })
+        }
+      }
+    }
+
     return true
-  }, [cesiumViewer, camera, fogDome])
+  }, [cesiumViewer, camera, fogDome, getCloudMeshes, getFixedToEnu])
 
   // Main sync camera function - dispatches to 2D or 3D based on view
   const syncCamera = useCallback(() => {

@@ -203,8 +203,8 @@ export interface UseBabylonSceneResult {
 export interface UseBabylonWeatherResult {
   /** Fog dome mesh (or null if not created) */
   fogDome: BABYLON.Mesh | null
-  /** Array of cloud layer mesh data (0-4 layers) */
-  cloudLayers: CloudMeshData[]
+  /** Getter function for cloud layer mesh data (0-4 layers) - use getter to avoid stale closure */
+  getCloudMeshes: () => CloudMeshData[]
   /** Function to check if aircraft label should be visible based on weather */
   isVisibleByWeather: (params: WeatherVisibilityParams) => boolean
 }

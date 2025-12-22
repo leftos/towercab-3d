@@ -181,7 +181,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
   })
 
   // 2. Initialize weather effects (fog dome, cloud layers)
-  const { fogDome, isVisibleByWeather } = useBabylonWeather({
+  const { fogDome, getCloudMeshes, isVisibleByWeather } = useBabylonWeather({
     scene
   })
 
@@ -197,7 +197,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
   })
 
   // 4. Initialize ENU root node (coordinate system, transforms)
-  const { setupRootNode } = useBabylonRootNode({
+  const { setupRootNode, getFixedToEnu } = useBabylonRootNode({
     scene,
     cesiumViewer
   })
@@ -206,7 +206,9 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
   const { syncCamera: syncCameraInternal } = useBabylonCameraSync({
     cesiumViewer,
     camera,
-    fogDome
+    fogDome,
+    getCloudMeshes,
+    getFixedToEnu
   })
 
   // Render one frame: sync camera + render scene
