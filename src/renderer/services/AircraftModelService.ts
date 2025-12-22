@@ -255,6 +255,42 @@ const TYPE_TO_MODEL: Record<string, string> = {
 // Default fallback model when no dimensions available
 const FALLBACK_MODEL = 'b738'
 
+/**
+ * Extract base aircraft type code from FAA format strings
+ * Handles formats like: "B738", "B738/L", "H/B738/L", "B738/G"
+ * Returns the 2-4 character aircraft type code
+ */
+function extractBaseAircraftType(aircraftType: string): string {
+  const trimmed = aircraftType.trim().toUpperCase()
+
+  // If no slash, return as-is
+  if (!trimmed.includes('/')) {
+    return trimmed
+  }
+
+  // Split by slash and find the aircraft type part
+  // Aircraft types are typically 2-4 alphanumeric characters
+  const parts = trimmed.split('/')
+
+  // Common patterns:
+  // "B738/L" -> ["B738", "L"] -> return "B738"
+  // "H/B738/L" -> ["H", "B738", "L"] -> return "B738"
+  // The aircraft type is usually 3-4 chars, while prefix (H/M/L) and suffix are 1-2 chars
+
+  for (const part of parts) {
+    // Aircraft type codes are 2-4 characters and start with a letter
+    if (part.length >= 2 && part.length <= 4 && /^[A-Z]/.test(part)) {
+      // Exclude single-letter wake categories and short equipment codes
+      if (part.length === 1) continue
+      // This looks like an aircraft type
+      return part
+    }
+  }
+
+  // Fallback: return first part
+  return parts[0]
+}
+
 // Cache for model dimensions (populated on first use)
 let modelDimensionsCache: Map<string, { wingspan: number; length: number }> | null = null
 
@@ -398,7 +434,8 @@ class AircraftModelServiceClass {
       }
     }
 
-    const normalized = aircraftType.trim().toUpperCase()
+    // Extract base aircraft type (strips equipment suffixes like "/L" from "B738/L")
+    const normalized = extractBaseAircraftType(aircraftType)
 
     // Check explicit mapping first
     const mappedModel = TYPE_TO_MODEL[normalized]

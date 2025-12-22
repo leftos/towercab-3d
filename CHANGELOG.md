@@ -8,10 +8,12 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Camera terrain collision: camera now stays at least 5 meters above terrain, preventing clipping through the ground
 - Cloud layers now have soft fading edges that blend into the sky instead of hard square borders
 - METAR overlay display (Ctrl+M): shows raw METAR at top of screen, color-coded by flight category (green=VFR, blue=MVFR, red=IFR, purple=LIFR)
+- Model matching debug modal (F3): shows all aircraft in data radius with their matched 3D model, match type (exact/mapped/closest/fallback), and scaling applied
 
 ### Fixed
 - Cloud layers now render correctly as horizontal layers at their METAR-reported altitudes (previously invisible due to camera sync issue)
 - Fixed small dot appearing at center of screen (uninitialized leader line coordinates)
+- Model matching now correctly handles aircraft types with equipment suffixes (e.g., "B738/L" now matches as exact instead of closest)
 
 ## v0.0.7-alpha (2025-12-21)
 
