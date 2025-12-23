@@ -4,6 +4,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+## v0.0.8-alpha (2025-12-22)
+
 ### Added
 - Model brightness control: new Graphics > Model Brightness slider (50-300%) lets you brighten or darken aircraft models without overexposure. Values above 110% create a smooth glow/emissive effect
 - Weather interpolation: weather effects now blend from the 3 nearest METAR stations based on camera position using inverse distance weighting, providing smoother weather transitions as you move between airports

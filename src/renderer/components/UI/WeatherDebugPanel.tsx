@@ -292,7 +292,7 @@ export function WeatherDebugPanel() {
 
         {isDebugOverriding && (
           <div className="weather-debug-status">
-            Override active (METAR won't overwrite)
+            Override active (METAR will not overwrite)
           </div>
         )}
       </div>
