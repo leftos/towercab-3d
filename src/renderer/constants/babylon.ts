@@ -245,7 +245,7 @@ export const CLOUD_NOISE_OCTAVES = 4
  * Noise scale factor - controls "zoom level" of cloud patterns.
  * Higher values = more smaller patches, lower = fewer larger patches.
  */
-export const CLOUD_NOISE_SCALE = 6.0
+export const CLOUD_NOISE_SCALE = 10.0
 
 /**
  * Base persistence for fBm - how much each octave contributes.
