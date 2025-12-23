@@ -233,10 +233,19 @@ See MODDING.md for manifest format and model requirements. Models are loaded on 
 ### Adding a New Setting
 
 1. Add to `types/settings.ts` grouped interface (cesium, graphics, camera, weather, memory, aircraft, or ui)
-2. Update `DEFAULT_SETTINGS` in `settingsStore.ts`
-3. Add corresponding update function validation (if needed)
-4. Add UI control in `ControlsBar.tsx` under the appropriate tab
-5. Settings are auto-persisted to localStorage with migration support
+2. Update `DEFAULT_SETTINGS` in `types/settings.ts`
+3. Add corresponding update function validation in `settingsStore.ts` (if needed)
+4. **IMPORTANT: Increment the `version` number in `settingsStore.ts` and add a migration** that merges the new defaults with existing user settings. Without this, existing users won't get the new settings and values will be `undefined`. Example migration:
+   ```typescript
+   if (version < NEW_VERSION) {
+     const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
+     return {
+       ...state,
+       GROUP_NAME: { ...DEFAULT_SETTINGS.GROUP_NAME, ...state.GROUP_NAME }
+     }
+   }
+   ```
+5. Add UI control in `ControlsBar.tsx` under the appropriate tab
 
 ### Adding a New Keyboard Shortcut
 

@@ -41,6 +41,10 @@ interface WeatherState {
   startNearestAutoRefresh: () => void
   stopAutoRefresh: () => void
   clearWeather: () => void
+
+  // Debug overrides (for development)
+  setPrecipitation: (precipitation: PrecipitationState) => void
+  setWind: (wind: WindState) => void
 }
 
 /**
@@ -154,9 +158,6 @@ const DEFAULT_WIND: WindState = {
   gustSpeed: null,
   isVariable: false
 }
-
-// Grid size for position-based cache (in degrees, ~6nm)
-const _POSITION_GRID_SIZE = 0.1
 
 export const useWeatherStore = create<WeatherState>((set, get) => ({
   // Initial state
@@ -332,5 +333,14 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
       useNearestMetar: false,
       refreshIntervalId: null
     })
+  },
+
+  // Debug overrides - allow dev panel to set weather state directly
+  setPrecipitation: (precipitation: PrecipitationState) => {
+    set({ precipitation })
+  },
+
+  setWind: (wind: WindState) => {
+    set({ wind })
   }
 }))

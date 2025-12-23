@@ -1,0 +1,139 @@
+.weather-debug-toggle {
+  position: fixed;
+  bottom: 60px;
+  left: 10px;
+  width: 32px;
+  height: 32px;
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: bold;
+  cursor: pointer;
+  z-index: 1000;
+}
+
+.weather-debug-toggle:hover {
+  background: rgba(0, 0, 0, 0.9);
+  border-color: #666;
+}
+
+.weather-debug-panel {
+  position: fixed;
+  bottom: 60px;
+  left: 10px;
+  width: 220px;
+  background: rgba(0, 0, 0, 0.85);
+  border: 1px solid #444;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 12px;
+  z-index: 1000;
+  font-family: monospace;
+}
+
+.weather-debug-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid #444;
+  border-radius: 6px 6px 0 0;
+}
+
+.weather-debug-header button {
+  background: none;
+  border: none;
+  color: #aaa;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+}
+
+.weather-debug-header button:hover {
+  color: #fff;
+}
+
+.weather-debug-content {
+  padding: 10px;
+}
+
+.weather-debug-row {
+  margin-bottom: 10px;
+}
+
+.weather-debug-row label {
+  display: block;
+  margin-bottom: 4px;
+  color: #aaa;
+}
+
+.weather-debug-row select,
+.weather-debug-row input[type="range"] {
+  width: 100%;
+}
+
+.weather-debug-row select {
+  background: #222;
+  border: 1px solid #444;
+  color: #fff;
+  padding: 4px;
+  border-radius: 3px;
+}
+
+.weather-debug-row input[type="range"] {
+  -webkit-appearance: none;
+  height: 6px;
+  background: #333;
+  border-radius: 3px;
+}
+
+.weather-debug-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  background: #0af;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.weather-debug-row input[type="checkbox"] {
+  margin-right: 6px;
+}
+
+.weather-debug-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.weather-debug-buttons button {
+  flex: 1;
+  padding: 6px 10px;
+  background: #333;
+  border: 1px solid #555;
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+}
+
+.weather-debug-buttons button:hover {
+  background: #444;
+}
+
+.weather-debug-buttons button.active {
+  background: #0a5;
+  border-color: #0c7;
+}
+
+.weather-debug-status {
+  margin-top: 8px;
+  padding: 4px 8px;
+  background: rgba(0, 170, 85, 0.3);
+  border-radius: 3px;
+  text-align: center;
+  color: #0c7;
+  font-size: 11px;
+}

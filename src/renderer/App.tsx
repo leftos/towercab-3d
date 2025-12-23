@@ -12,6 +12,7 @@ import ViewportManager from './components/Viewport/ViewportManager'
 import VRScene from './components/VR/VRScene'
 import { PerformanceHUD } from './components/UI/PerformanceHUD'
 import ModelMatchingModal from './components/UI/ModelMatchingModal'
+import { WeatherDebugPanel } from './components/UI/WeatherDebugPanel'
 import { performanceMonitor } from './utils/performanceMonitor'
 import { useVatsimStore } from './stores/vatsimStore'
 import { useAirportStore } from './stores/airportStore'
@@ -219,6 +220,7 @@ function App() {
         </ViewportManager>
       </div>
       {!isVRActive && <ControlsBar />}
+      {!isVRActive && import.meta.env.DEV && <WeatherDebugPanel />}
       {!isVRActive && <AirportSelector />}
       {!isVRActive && <MeasuringTool cesiumViewer={cesiumViewer} />}
       <PerformanceHUD visible={showPerformanceHUD} />

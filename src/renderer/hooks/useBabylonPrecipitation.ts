@@ -3,6 +3,8 @@ import * as BABYLON from '@babylonjs/core'
 import { useWeatherStore } from '../stores/weatherStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import type { PrecipitationType } from '@/types'
+// Flare texture URL - using Babylon's CDN
+const FLARE_TEXTURE_URL = 'https://assets.babylonjs.com/textures/flare.png'
 import {
   // Rain
   RAIN_EMIT_RATE_BASE,
@@ -26,17 +28,17 @@ import {
   RAIN_WIND_GRAVITY,
   // Snow
   SNOW_EMIT_RATE_BASE,
-  SNOW_PARTICLE_LIFETIME,
   SNOW_PARTICLE_SIZE_MIN,
   SNOW_PARTICLE_SIZE_MAX,
   SNOW_VELOCITY,
   SNOW_DRIFT_RANGE,
   SNOW_PARTICLE_CAPACITY,
   SNOW_WIND_GRAVITY,
+  SNOW_EMITTER_HEIGHT,
+  SNOW_EMITTER_BOX_HEIGHT,
   // Emitter
   EMITTER_BOX_SIZE,
   EMITTER_HEIGHT_ABOVE_CAMERA,
-  EMITTER_HEIGHT_RANGE,
   // Intensity
   INTENSITY_LIGHT,
   INTENSITY_MODERATE,
@@ -85,10 +87,8 @@ interface ParticleSystemData {
 export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions) {
   const { scene, camera, isTopDownView = false } = options
 
-  // Find hemispheric light from scene (for lightning effects)
-  const hemisphericLight = scene?.lights.find(
-    (l): l is BABYLON.HemisphericLight => l instanceof BABYLON.HemisphericLight
-  ) ?? null
+  // Lightning flash plane reference
+  const lightningPlaneRef = useRef<BABYLON.Mesh | null>(null)
 
   // Particle system references
   const particleSystemsRef = useRef<Map<string, ParticleSystemData>>(new Map())
@@ -114,6 +114,9 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
     originalIntensity: 1.0
   })
 
+  // Lightning timeout refs for cleanup
+  const lightningTimeoutsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set())
+
   // Babylon render observer reference for cleanup
   const renderObserverRef = useRef<BABYLON.Observer<BABYLON.Scene> | null>(null)
 
@@ -125,7 +128,7 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
   const showWeatherEffects = useSettingsStore((state) => state.weather.showWeatherEffects)
   const showPrecipitation = useSettingsStore((state) => state.weather.showPrecipitation)
   const precipitationIntensity = useSettingsStore((state) => state.weather.precipitationIntensity)
-  const showLightning = useSettingsStore((state) => state.weather.showLightning)
+  const showLightning = useSettingsStore((state) => state.weather.showLightning) ?? true
 
   /**
    * Convert meteorological wind direction to particle velocity direction
@@ -142,18 +145,18 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
   }, [])
 
   /**
-   * Create a rain particle system using ParticleHelper
+   * Create a rain particle system with proper capacity
    */
   const createRainSystemAsync = useCallback(async (): Promise<BABYLON.ParticleSystem | null> => {
     if (!scene) return null
 
     try {
-      // Use Babylon's built-in rain particle system (handles assets internally)
-      const set = await BABYLON.ParticleHelper.CreateAsync('rain', scene, false)
-      const systems = set.systems
-      if (systems.length === 0) return null
+      // Create particle system with proper capacity for dense rain
+      const ps = new BABYLON.ParticleSystem('rain', RAIN_PARTICLE_CAPACITY, scene)
 
-      const ps = systems[0] as BABYLON.ParticleSystem
+      // Load texture from CDN
+      const texture = new BABYLON.Texture(FLARE_TEXTURE_URL, scene)
+      ps.particleTexture = texture
 
       // Configure emitter - box above camera
       ps.emitter = new BABYLON.Vector3(0, EMITTER_HEIGHT_ABOVE_CAMERA, 0)
@@ -206,53 +209,60 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
 
       return ps
     } catch (error) {
-      console.error('[Precip] Failed to create rain system:', error)
+      if (import.meta.env.DEV) {
+        console.error('[Precip] Failed to create rain system:', error)
+      }
       return null
     }
   }, [scene])
 
   /**
-   * Create a snow particle system using ParticleHelper
+   * Create a snow particle system with proper capacity
    */
   const createSnowSystemAsync = useCallback(async (): Promise<BABYLON.ParticleSystem | null> => {
     if (!scene) return null
 
     try {
-      // Use Babylon's built-in snow particle system (handles assets internally)
-      const set = await BABYLON.ParticleHelper.CreateAsync('snow', scene, false)
-      const systems = set.systems
-      if (systems.length === 0) return null
+      // Create particle system with proper capacity
+      const ps = new BABYLON.ParticleSystem('snow', SNOW_PARTICLE_CAPACITY, scene)
 
-      const ps = systems[0] as BABYLON.ParticleSystem
+      // Load texture from CDN
+      const texture = new BABYLON.Texture(FLARE_TEXTURE_URL, scene)
+      ps.particleTexture = texture
 
-      // Configure emitter box above camera
-      ps.emitter = new BABYLON.Vector3(0, EMITTER_HEIGHT_ABOVE_CAMERA, 0)
+      // Configure emitter box - MUCH closer to camera than rain
+      // Snow is slow (-3 m/s) so needs to start close to be visible
+      ps.emitter = new BABYLON.Vector3(0, SNOW_EMITTER_HEIGHT, 0)
       ps.minEmitBox = new BABYLON.Vector3(-EMITTER_BOX_SIZE / 2, 0, -EMITTER_BOX_SIZE / 2)
-      ps.maxEmitBox = new BABYLON.Vector3(EMITTER_BOX_SIZE / 2, EMITTER_HEIGHT_RANGE, EMITTER_BOX_SIZE / 2)
+      ps.maxEmitBox = new BABYLON.Vector3(EMITTER_BOX_SIZE / 2, SNOW_EMITTER_BOX_HEIGHT, EMITTER_BOX_SIZE / 2)
 
-      // Adjust particle properties for our scale
-      ps.minLifeTime = SNOW_PARTICLE_LIFETIME * 0.8
-      ps.maxLifeTime = SNOW_PARTICLE_LIFETIME * 1.2
+      // Longer lifetime so slow snow can travel the distance
+      // At -3 m/s, 15 seconds = 45m of travel (enough for 30m emitter height)
+      ps.minLifeTime = 12
+      ps.maxLifeTime = 18
       ps.minSize = SNOW_PARTICLE_SIZE_MIN
       ps.maxSize = SNOW_PARTICLE_SIZE_MAX
 
-      // Set velocity for falling snow with drift
+      // Slow falling snow with drift
       ps.direction1 = new BABYLON.Vector3(-SNOW_DRIFT_RANGE, SNOW_VELOCITY, -SNOW_DRIFT_RANGE)
       ps.direction2 = new BABYLON.Vector3(SNOW_DRIFT_RANGE, SNOW_VELOCITY * 0.8, SNOW_DRIFT_RANGE)
-      ps.minEmitPower = 0.5
-      ps.maxEmitPower = 1.0
+      ps.minEmitPower = 0.8
+      ps.maxEmitPower = 1.2
 
-      // Snow colors - white with slight transparency
-      ps.color1 = new BABYLON.Color4(1.0, 1.0, 1.0, 0.9)
-      ps.color2 = new BABYLON.Color4(0.95, 0.95, 1.0, 0.7)
-      ps.colorDead = new BABYLON.Color4(1.0, 1.0, 1.0, 0.0)
+      // Very light gravity for gentle falling
+      ps.gravity = new BABYLON.Vector3(0, -0.2, 0)
 
-      // Additive blending for visibility
+      // Snow colors - use slight blue tint to be visible against any background
+      ps.color1 = new BABYLON.Color4(0.9, 0.95, 1.0, 1.0)
+      ps.color2 = new BABYLON.Color4(0.85, 0.9, 1.0, 0.9)
+      ps.colorDead = new BABYLON.Color4(0.9, 0.95, 1.0, 0.0)
+
+      // Use additive blending like rain - makes particles glow
       ps.blendMode = BABYLON.ParticleSystem.BLENDMODE_ADD
 
-      // Add rotation for tumbling effect
-      ps.minAngularSpeed = -Math.PI
-      ps.maxAngularSpeed = Math.PI
+      // Add rotation for tumbling effect (snow tumbles, rain doesn't)
+      ps.minAngularSpeed = -Math.PI * 0.5
+      ps.maxAngularSpeed = Math.PI * 0.5
 
       // Set emit rate
       ps.emitRate = SNOW_EMIT_RATE_BASE
@@ -262,7 +272,9 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
 
       return ps
     } catch (error) {
-      console.error('[Precip] Failed to create snow system:', error)
+      if (import.meta.env.DEV) {
+        console.error('[Precip] Failed to create snow system:', error)
+      }
       return null
     }
   }, [scene])
@@ -371,13 +383,17 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
     }
 
     const windVec = windDirToVelocity(windDir * 180 / Math.PI)
-    const horizontalSpeed = ws.currentSpeed * WIND_EFFECT_SCALE
 
     // Get type-specific values
     const isSnowType = type === 'snow' || type === 'ice'
     const baseVelocity = isSnowType ? SNOW_VELOCITY : RAIN_VELOCITY
     const drift = isSnowType ? SNOW_DRIFT_RANGE : RAIN_DRIFT_RANGE
     const gravityStrength = isSnowType ? SNOW_WIND_GRAVITY : RAIN_WIND_GRAVITY
+
+    // Wind effect scale: rain needs high scale (falls fast at -450 m/s)
+    // Snow needs low scale (falls slow at -3 m/s) - just use raw wind speed
+    const windScale = isSnowType ? 1.0 : WIND_EFFECT_SCALE
+    const horizontalSpeed = ws.currentSpeed * windScale
 
     // Update particle initial directions with wind
     ps.direction1 = new BABYLON.Vector3(
@@ -392,10 +408,12 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
     )
 
     // Apply wind to gravity so particles curve in the wind direction
+    // Snow: minimal gravity wind effect, Rain: stronger
+    const gravityWindScale = isSnowType ? 0.3 : 0.5
     ps.gravity = new BABYLON.Vector3(
-      windVec.x * horizontalSpeed * 0.5,
+      windVec.x * horizontalSpeed * gravityWindScale,
       gravityStrength,
-      windVec.z * horizontalSpeed * 0.5
+      windVec.z * horizontalSpeed * gravityWindScale
     )
 
     // For rain: no rotation - stretched billboard handles orientation automatically
@@ -411,39 +429,74 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
   }, [windDirToVelocity])
 
   /**
-   * Handle lightning flash effect
+   * Create lightning flash plane if it doesn't exist
+   */
+  const ensureLightningPlane = useCallback(() => {
+    if (!scene || !camera || lightningPlaneRef.current) return
+
+    // Create a full-screen plane for lightning flash effect
+    const plane = BABYLON.MeshBuilder.CreatePlane('lightningFlash', { size: 1000 }, scene)
+
+    // Create unlit material that's pure white
+    const material = new BABYLON.StandardMaterial('lightningMat', scene)
+    material.emissiveColor = new BABYLON.Color3(1, 1, 1)
+    material.disableLighting = true
+    material.alpha = 0  // Start invisible
+
+    plane.material = material
+    plane.isPickable = false
+    plane.renderingGroupId = 2  // Render on top of everything
+
+    // Parent to camera so it always faces the viewer
+    plane.parent = camera
+    plane.position = new BABYLON.Vector3(0, 0, 50)  // 50 units in front of camera
+
+    lightningPlaneRef.current = plane
+  }, [scene, camera])
+
+  /**
+   * Handle lightning flash effect - creates visible screen flash
    */
   const updateLightning = useCallback(() => {
-    if (!hemisphericLight || !precipitation.hasThunderstorm || !showLightning) {
+    if (!scene || !camera) return
+
+    if (!precipitation.hasThunderstorm || !showLightning) {
       return
     }
+
+    // Ensure flash plane exists
+    ensureLightningPlane()
 
     const ls = lightningStateRef.current
     const now = performance.now()
 
     if (ls.isFlashing) {
-      // Currently flashing - check if flash duration elapsed
-      // Flash is handled by setTimeout, this is just for state tracking
+      // Currently flashing - handled by setTimeout
       return
     }
 
     if (now >= ls.nextFlashTime) {
       // Time for a flash
       ls.isFlashing = true
-      ls.originalIntensity = hemisphericLight.intensity
       ls.flashCount = 0
 
+      const plane = lightningPlaneRef.current
+      const material = plane?.material as BABYLON.StandardMaterial | null
+      const timeouts = lightningTimeoutsRef.current
+
       const doFlash = () => {
-        if (!hemisphericLight) return
+        if (!material) return
 
-        // Flash bright
-        hemisphericLight.intensity = LIGHTNING_FLASH_INTENSITY
+        // Flash bright - make plane visible
+        // Use LIGHTNING_FLASH_INTENSITY to scale alpha (intensity 3.0 -> alpha 0.3)
+        material.alpha = LIGHTNING_FLASH_INTENSITY / 10
 
-        setTimeout(() => {
-          if (!hemisphericLight) return
+        const timeout1 = setTimeout(() => {
+          timeouts.delete(timeout1)
+          if (!material) return
 
-          // Return to normal
-          hemisphericLight.intensity = ls.originalIntensity
+          // Return to invisible
+          material.alpha = 0
           ls.flashCount++
 
           // Check for multi-flash
@@ -451,18 +504,23 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
             Math.random() < LIGHTNING_MULTI_FLASH_PROBABILITY &&
             ls.flashCount < LIGHTNING_MULTI_FLASH_MAX
           ) {
-            setTimeout(doFlash, LIGHTNING_MULTI_FLASH_DELAY_MS)
+            const timeout2 = setTimeout(() => {
+              timeouts.delete(timeout2)
+              doFlash()
+            }, LIGHTNING_MULTI_FLASH_DELAY_MS)
+            timeouts.add(timeout2)
           } else {
             ls.isFlashing = false
             // Schedule next flash
             ls.nextFlashTime = now + (LIGHTNING_INTERVAL_MIN + Math.random() * (LIGHTNING_INTERVAL_MAX - LIGHTNING_INTERVAL_MIN)) * 1000
           }
         }, LIGHTNING_FLASH_DURATION_MS)
+        timeouts.add(timeout1)
       }
 
       doFlash()
     }
-  }, [hemisphericLight, precipitation.hasThunderstorm, showLightning])
+  }, [scene, camera, precipitation.hasThunderstorm, showLightning, ensureLightningPlane])
 
   /**
    * Main update function - called by Babylon's render observable for perfect sync
@@ -477,10 +535,14 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
 
     // Update particle emitter positions to follow camera
     particleSystemsRef.current.forEach((data) => {
-      // Update emitter position - above camera
+      // Different heights for different precipitation types
+      // Rain: 50m above (falls fast), Snow: 30m above (falls slow)
+      const isSnowType = data.type === 'snow' || data.type === 'ice'
+      const emitterHeight = isSnowType ? 30 : 50
+
       const newPos = new BABYLON.Vector3(
         camera.position.x,
-        camera.position.y + 50, // 50m above camera
+        camera.position.y + emitterHeight,
         camera.position.z
       )
       data.system.emitter = newPos
@@ -499,25 +561,64 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
   useEffect(() => {
     if (!scene || !camera) return
 
-    // Capture ref value for cleanup (React hooks exhaustive-deps best practice)
+    // Abort flag for async operations (prevents race conditions)
+    let aborted = false
+
+    // Capture ref values for cleanup (React hooks exhaustive-deps best practice)
     const systems = particleSystemsRef.current
+    const timeouts = lightningTimeoutsRef.current
 
     const shouldShowPrecip = showWeatherEffects && showPrecipitation && precipitation.active && !isTopDownView
+    const shouldShowLightning = showWeatherEffects && showLightning && precipitation.hasThunderstorm && !isTopDownView
 
-    // Dispose existing systems if precipitation should be hidden
+    // DIAGNOSTIC: Log state in both dev and release
+    console.log('[Precip] Effect state:', {
+      hasScene: !!scene,
+      hasCamera: !!camera,
+      showWeatherEffects,
+      showPrecipitation,
+      precipActive: precipitation.active,
+      precipTypes: precipitation.types.map(t => t.type),
+      isTopDownView,
+      shouldShowPrecip,
+      shouldShowLightning
+    })
+
+    /**
+     * Helper to dispose a particle system and its texture
+     */
+    const disposeSystem = (data: ParticleSystemData) => {
+      data.system.stop()
+      // Dispose texture before disposing system
+      if (data.system.particleTexture) {
+        data.system.particleTexture.dispose()
+      }
+      data.system.dispose()
+    }
+
+    // Dispose existing particle systems if precipitation should be hidden
     if (!shouldShowPrecip) {
       particleSystemsRef.current.forEach((data) => {
-        data.system.stop()
-        data.system.dispose()
+        disposeSystem(data)
       })
       particleSystemsRef.current.clear()
+    }
 
-      // Remove render observer
+    // Handle case where we only need lightning (no precipitation)
+    if (!shouldShowPrecip && !shouldShowLightning) {
+      // Remove render observer - nothing to update
       if (renderObserverRef.current) {
         scene.onBeforeRenderObservable.remove(renderObserverRef.current)
         renderObserverRef.current = null
       }
+      return
+    }
 
+    // Register observer for lightning-only case (no precipitation but has thunderstorm)
+    if (!shouldShowPrecip && shouldShowLightning) {
+      if (!renderObserverRef.current) {
+        renderObserverRef.current = scene.onBeforeRenderObservable.add(updatePrecipitation)
+      }
       return
     }
 
@@ -535,31 +636,53 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
     // Remove systems for types no longer active
     particleSystemsRef.current.forEach((data, key) => {
       if (!neededTypes.has(key)) {
-        data.system.stop()
-        data.system.dispose()
+        disposeSystem(data)
         particleSystemsRef.current.delete(key)
       }
     })
 
     // Create or update systems for each precipitation type (async)
     const createSystems = async () => {
+      console.log('[Precip] createSystems called, types:', precipitation.types.length)
+
       for (const precip of precipitation.types) {
+        // Check abort flag before each async operation
+        if (aborted) return
+
         // Determine system key (rain vs snow)
         const systemKey = (precip.type === 'snow' || precip.type === 'ice') ? 'snow' : 'rain'
+        console.log('[Precip] Processing:', systemKey, 'for type:', precip.type)
 
         let data = particleSystemsRef.current.get(systemKey)
 
         if (!data) {
+          console.log('[Precip] Creating new system for:', systemKey)
           // Create new system asynchronously
           const system = systemKey === 'snow'
             ? await createSnowSystemAsync()
             : await createRainSystemAsync()
+
+          // Check abort flag after async operation completes
+          if (aborted) {
+            console.log('[Precip] Aborted after creation')
+            // Dispose the created system since we're aborting
+            if (system) {
+              if (system.particleTexture) {
+                system.particleTexture.dispose()
+              }
+              system.dispose()
+            }
+            return
+          }
 
           if (system) {
             const baseEmitRate = getBaseEmitRate(precip.type)
             data = { system, type: precip.type, baseEmitRate }
             particleSystemsRef.current.set(systemKey, data)
             system.start()
+            console.log('[Precip] System started:', systemKey, 'isStarted:', system.isStarted(), 'activeCount:', system.getActiveCount())
+          } else {
+            console.log('[Precip] System creation returned null for:', systemKey)
           }
         }
 
@@ -568,27 +691,50 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
           const intensityMult = getIntensityMultiplier(precip.intensity)
           const newEmitRate = data.baseEmitRate * intensityMult * precipitation.visibilityFactor * precipitationIntensity
           data.system.emitRate = newEmitRate
+          console.log('[Precip] Updated emitRate:', newEmitRate)
         }
       }
 
+      // Check abort flag before registering observer
+      if (aborted) return
+
       // Register render observer if not already running
-      if (!renderObserverRef.current && particleSystemsRef.current.size > 0) {
+      // Need observer for precipitation particles AND/OR lightning
+      const needsObserver = particleSystemsRef.current.size > 0 || precipitation.hasThunderstorm
+      if (!renderObserverRef.current && needsObserver) {
         renderObserverRef.current = scene.onBeforeRenderObservable.add(updatePrecipitation)
       }
     }
 
     createSystems()
 
-    // Cleanup on unmount
+    // Cleanup on unmount or deps change
     return () => {
+      // Set abort flag to cancel any pending async operations
+      aborted = true
+
       if (renderObserverRef.current && scene && !scene.isDisposed) {
         scene.onBeforeRenderObservable.remove(renderObserverRef.current)
         renderObserverRef.current = null
       }
 
+      // Clear all lightning timeouts
+      timeouts.forEach((timeout) => clearTimeout(timeout))
+      timeouts.clear()
+
+      // Dispose lightning plane and its material
+      if (lightningPlaneRef.current) {
+        const material = lightningPlaneRef.current.material
+        lightningPlaneRef.current.dispose()
+        if (material) {
+          material.dispose()
+        }
+        lightningPlaneRef.current = null
+      }
+
+      // Dispose particle systems and their textures
       systems.forEach((data) => {
-        data.system.stop()
-        data.system.dispose()
+        disposeSystem(data)
       })
       systems.clear()
     }
@@ -597,6 +743,7 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
     camera,
     showWeatherEffects,
     showPrecipitation,
+    showLightning,
     precipitation,
     precipitationIntensity,
     isTopDownView,

@@ -34,7 +34,7 @@ export const RAIN_SCALE_X_MIN = 0.05
 export const RAIN_SCALE_X_MAX = 0.1
 
 /** Rain fall velocity (meters/second, negative = down) - visual speed, not realistic */
-export const RAIN_VELOCITY = -450
+export const RAIN_VELOCITY = -900
 
 /** Rain velocity variance (absolute value subtracted/added to base) */
 export const RAIN_VELOCITY_VARIANCE = 20
@@ -74,16 +74,16 @@ export const RAIN_WIND_GRAVITY = -20
 // ============================================================================
 
 /** Base emit rate for snow particles (particles/second) */
-export const SNOW_EMIT_RATE_BASE = 2000
+export const SNOW_EMIT_RATE_BASE = 8000
 
 /** Snow particle lifetime in seconds */
-export const SNOW_PARTICLE_LIFETIME = 4.0
+export const SNOW_PARTICLE_LIFETIME = 5.0
 
 /** Snow particle minimum size (meters) */
-export const SNOW_PARTICLE_SIZE_MIN = 0.1
+export const SNOW_PARTICLE_SIZE_MIN = 0.15
 
 /** Snow particle maximum size (meters) */
-export const SNOW_PARTICLE_SIZE_MAX = 0.3
+export const SNOW_PARTICLE_SIZE_MAX = 0.4
 
 /** Snow fall velocity (meters/second, negative = down) */
 export const SNOW_VELOCITY = -3
@@ -95,7 +95,7 @@ export const SNOW_DRIFT_RANGE = 1
 export const SNOW_COLOR: readonly [number, number, number, number] = [1.0, 1.0, 1.0, 0.8]
 
 /** Maximum number of snow particles */
-export const SNOW_PARTICLE_CAPACITY = 5000
+export const SNOW_PARTICLE_CAPACITY = 50000
 
 /** Snow wind gravity strength (meters/second²) - how much wind curves snow trajectory */
 export const SNOW_WIND_GRAVITY = -5
@@ -107,24 +107,30 @@ export const SNOW_WIND_GRAVITY = -5
 /** Emitter box width/depth around camera (meters) */
 export const EMITTER_BOX_SIZE = 200
 
-/** Emitter height above camera (meters) */
+/** Rain emitter height above camera (meters) - rain falls fast so can start high */
 export const EMITTER_HEIGHT_ABOVE_CAMERA = 100
 
 /** Emitter height range - particles spawn within this range (meters) */
 export const EMITTER_HEIGHT_RANGE = 50
+
+/** Snow emitter height above camera (meters) - snow falls slow so starts closer */
+export const SNOW_EMITTER_HEIGHT = 30
+
+/** Snow emitter box height range (meters) */
+export const SNOW_EMITTER_BOX_HEIGHT = 20
 
 // ============================================================================
 // INTENSITY MULTIPLIERS
 // ============================================================================
 
 /** Multiplier for light precipitation (-) */
-export const INTENSITY_LIGHT = 0.5
+export const INTENSITY_LIGHT = 0.1
 
 /** Multiplier for moderate precipitation (no modifier) */
 export const INTENSITY_MODERATE = 1.0
 
 /** Multiplier for heavy precipitation (+) */
-export const INTENSITY_HEAVY = 2.0
+export const INTENSITY_HEAVY = 3.0
 
 // ============================================================================
 // VISIBILITY-BASED SCALING
