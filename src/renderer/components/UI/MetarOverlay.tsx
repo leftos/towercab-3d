@@ -75,6 +75,8 @@ export function MetarOverlay() {
 function formatInterpolatedMetar(weather: InterpolatedWeather): string {
   const parts: string[] = []
 
+  parts.push("Interpolated: ")
+
   // Wind: 270/12G18KT or VRB05KT
   const wind = weather.wind
   if (wind.isVariable && wind.speed < 7) {
@@ -83,9 +85,9 @@ function formatInterpolatedMetar(weather: InterpolatedWeather): string {
     const dir = wind.direction.toString().padStart(3, '0')
     const spd = wind.speed.toString().padStart(2, '0')
     if (wind.gustSpeed) {
-      parts.push(`${dir}/${spd}G${wind.gustSpeed}KT`)
+      parts.push(`${dir}${spd}G${wind.gustSpeed}KT`)
     } else {
-      parts.push(`${dir}/${spd}KT`)
+      parts.push(`${dir}${spd}KT`)
     }
   }
 
