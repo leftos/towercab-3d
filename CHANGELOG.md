@@ -14,13 +14,13 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Camera terrain collision: camera now stays at least 5 meters above terrain, preventing clipping through the ground
 - Cloud layers now have soft fading edges that blend into the sky instead of hard square borders
 - Cloud layers slowly rotate to simulate wind drift, with different layers moving at slightly different speeds based on altitude
+- Cloud layers smoothly when METAR updates: altitude changes animate gradually, coverage changes morph existing cloud patterns (FEW becoming SCT adds clouds to existing patches rather than regenerating), and unrelated layers crossfade elegantly
 - METAR overlay display (Ctrl+M): shows raw METAR at top of screen, color-coded by flight category (green=VFR, blue=MVFR, red=IFR, purple=LIFR)
 - Model matching debug modal (F3): shows all aircraft in data radius with their matched 3D model, match type (exact/mapped/closest/fallback), and scaling applied
 
 ### Changed
 - Weather debug panel: Apply button now applies both precipitation and cloud settings together
 - Weather debug panel: overridden settings are now protected from METAR auto-refresh until cleared
-- Cloud layers now transition smoothly when METAR updates: altitude changes animate gradually, coverage changes morph existing cloud patterns (FEW becoming SCT adds clouds to existing patches rather than regenerating), and unrelated layers crossfade elegantly
 
 ### Fixed
 - Cloud layers now render correctly as horizontal layers at their METAR-reported altitudes (previously invisible due to camera sync issue)
