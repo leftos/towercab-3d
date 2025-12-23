@@ -5,6 +5,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Weather interpolation: weather effects now blend from the 3 nearest METAR stations based on camera position using inverse distance weighting, providing smoother weather transitions as you move between airports
+- Auto-airport switching: optional setting to automatically switch to the nearest airport as you move the camera (disabled by default, enable in Settings > General > Camera)
+- METAR overlay now shows interpolation source stations and their weights when weather interpolation is enabled
 - Weather effects
   - Rain and snow particle effects based on METAR precipitation codes (RA, SN, DZ, etc.)
   - Lightning flashes during thunderstorms (TS code in METAR)

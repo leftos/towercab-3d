@@ -230,3 +230,110 @@ export interface WindState {
   /** Whether wind is variable direction (VRB in METAR) */
   isVariable: boolean
 }
+
+// ============================================================================
+// WEATHER INTERPOLATION TYPES
+// ============================================================================
+
+/**
+ * METAR data with distance from a reference point (camera position)
+ *
+ * Used for inverse-distance weighted interpolation when blending
+ * weather from multiple nearby METAR stations.
+ *
+ * @example
+ * const nearbyMetar: DistancedMetar = {
+ *   icao: 'KBOS',
+ *   lat: 42.3656,
+ *   lon: -71.0096,
+ *   distanceNM: 12.5,
+ *   visibility: 6,
+ *   fogDensity: 0.002,
+ *   cloudLayers: [{ altitude: 914, coverage: 0.75, type: 'BKN' }],
+ *   precipitation: { active: false, types: [], visibilityFactor: 1, hasThunderstorm: false },
+ *   wind: { direction: 270, speed: 15, gustSpeed: null, isVariable: false },
+ *   rawMetar: 'KBOS 221854Z 27015KT 6SM BKN030 ...',
+ *   obsTime: 1703266440000
+ * }
+ */
+export interface DistancedMetar {
+  /** ICAO code of the METAR station */
+  icao: string
+  /** Station latitude */
+  lat: number
+  /** Station longitude */
+  lon: number
+  /** Distance from reference point (camera position) in nautical miles */
+  distanceNM: number
+  /** Visibility in statute miles */
+  visibility: number
+  /** Computed fog density (0 to ~0.015) */
+  fogDensity: number
+  /** Parsed cloud layers */
+  cloudLayers: CloudLayer[]
+  /** Precipitation state */
+  precipitation: PrecipitationState
+  /** Wind state */
+  wind: WindState
+  /** Raw METAR string */
+  rawMetar: string
+  /** Observation timestamp (epoch ms) */
+  obsTime: number
+}
+
+/**
+ * Source station info for interpolated weather
+ *
+ * Tracks which METAR stations contributed to the interpolation
+ * and their relative weights.
+ */
+export interface InterpolationSource {
+  /** ICAO code of the source station */
+  icao: string
+  /** Distance from camera position in nautical miles */
+  distanceNM: number
+  /** Interpolation weight (0-1, all weights sum to 1) */
+  weight: number
+}
+
+/**
+ * Interpolated weather result from multiple METAR stations
+ *
+ * All numeric values are distance-weighted averages from the
+ * nearest METAR stations to the camera position.
+ *
+ * Uses inverse distance weighting (IDW): weight = 1/d^2
+ * where d is distance in nautical miles.
+ *
+ * @example
+ * // Blended weather from 3 stations
+ * const weather: InterpolatedWeather = {
+ *   visibility: 7.2,           // Weighted average
+ *   fogDensity: 0.0015,        // Weighted average
+ *   cloudLayers: [...],        // Merged and weighted
+ *   precipitation: {...},      // From nearest station with active precip
+ *   wind: { direction: 265, speed: 12, ... },  // Vector-averaged direction
+ *   sourceStations: [
+ *     { icao: 'KBOS', distanceNM: 5.2, weight: 0.55 },
+ *     { icao: 'KBED', distanceNM: 12.1, weight: 0.30 },
+ *     { icao: 'KOWD', distanceNM: 18.3, weight: 0.15 }
+ *   ],
+ *   calculatedAt: 1703266500000
+ * }
+ */
+export interface InterpolatedWeather {
+  /** Blended visibility in statute miles */
+  visibility: number
+  /** Blended fog density (0 to ~0.015) */
+  fogDensity: number
+  /** Blended cloud layers (altitudes and coverages averaged) */
+  cloudLayers: CloudLayer[]
+  /** Precipitation state (from nearest station with active precipitation) */
+  precipitation: PrecipitationState
+  /** Blended wind (vector-averaged direction, scalar-averaged speed) */
+  wind: WindState
+  /** Source stations used for interpolation with their weights */
+  sourceStations: InterpolationSource[]
+  /** Timestamp when interpolation was calculated (epoch ms) */
+  calculatedAt: number
+}

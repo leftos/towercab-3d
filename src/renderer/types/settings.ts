@@ -197,6 +197,19 @@ export interface CameraSettings {
 
   /** Mouse sensitivity (0.1-2.0 scale, 1.0 = default) */
   mouseSensitivity: number
+
+  /**
+   * Enable automatic airport switching when camera moves (default: false)
+   *
+   * When enabled, the application automatically switches to the nearest
+   * airport as the camera moves. This triggers:
+   * - Airport selection change
+   * - VATSIM aircraft reload for the new area
+   * - Weather data update
+   *
+   * Uses hysteresis to prevent rapid switching when near airport boundaries.
+   */
+  enableAutoAirportSwitch: boolean
 }
 
 /**
@@ -243,6 +256,17 @@ export interface WeatherSettings {
 
   /** Show lightning flashes during thunderstorms (default: true) */
   showLightning: boolean
+
+  /**
+   * Enable weather interpolation from multiple METAR stations (default: true)
+   *
+   * When enabled, weather values (visibility, fog, clouds, wind) are
+   * interpolated from the 3 nearest METAR stations to the camera position
+   * using inverse distance weighting.
+   *
+   * When disabled, weather uses only the current airport's METAR.
+   */
+  enableWeatherInterpolation: boolean
 }
 
 /**
@@ -454,7 +478,8 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
   camera: {
     defaultFov: 60,
     cameraSpeed: 5,
-    mouseSensitivity: 1.0
+    mouseSensitivity: 1.0,
+    enableAutoAirportSwitch: false
   },
   weather: {
     showWeatherEffects: true,
@@ -466,7 +491,8 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     visibilityScale: 1.0,
     showPrecipitation: true,
     precipitationIntensity: 1.0,
-    showLightning: true
+    showLightning: true,
+    enableWeatherInterpolation: true
   },
   memory: {
     inMemoryTileCacheSize: 500,

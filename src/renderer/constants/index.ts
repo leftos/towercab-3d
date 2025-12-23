@@ -284,3 +284,23 @@ export {
   // METAR codes
   METAR_PRECIP_CODES
 } from './precipitation'
+
+// ============================================================================
+// WEATHER INTERPOLATION CONSTANTS
+// ============================================================================
+
+export {
+  // Interpolation settings
+  INTERPOLATION_STATION_COUNT,
+  INTERPOLATION_RADIUS_NM,
+  INTERPOLATION_DISTANCE_POWER,
+  INTERPOLATION_MIN_WEIGHT,
+  CLOUD_ALTITUDE_BAND_FEET,
+  INTERPOLATION_UPDATE_THROTTLE_MS,
+  INTERPOLATION_POSITION_THRESHOLD_DEG,
+
+  // Auto-airport switching
+  AUTO_SWITCH_CHECK_INTERVAL_MS,
+  AUTO_SWITCH_HYSTERESIS_NM,
+  AUTO_SWITCH_MIN_DISTANCE_NM
+} from './weather'

@@ -2,8 +2,8 @@
 // Handles fetching and parsing METAR data from Aviation Weather API
 
 import { invoke } from '@tauri-apps/api/core'
-import type { Precipitation, PrecipitationType, PrecipitationIntensity, WindState } from '@/types'
-import { METAR_PRECIP_CODES } from '@/constants'
+import type { Precipitation, PrecipitationType, PrecipitationIntensity, WindState, CloudLayer, PrecipitationState, DistancedMetar } from '@/types'
+import { METAR_PRECIP_CODES, INTERPOLATION_STATION_COUNT, INTERPOLATION_RADIUS_NM } from '@/constants'
 
 const METAR_API_URL = 'https://aviationweather.gov/api/data/metar'
 
@@ -64,6 +64,56 @@ function haversineDistanceNM(lat1: number, lon1: number, lat2: number, lon2: num
     Math.sin(dLon / 2) * Math.sin(dLon / 2)
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
   return R * c
+}
+
+/**
+ * Convert visibility (statute miles) to fog density
+ * Uses logarithmic scale for natural fog perception
+ * @param visibility Visibility in statute miles
+ * @returns Fog density (0 to ~0.015)
+ */
+function visibilityToFogDensity(visibility: number): number {
+  // Clamp visibility
+  const vis = Math.max(0.25, Math.min(10, visibility))
+
+  // Logarithmic scale for natural perception
+  // At 10 SM: density = 0 (no fog)
+  // At 0.25 SM: density = 0.015 (dense fog)
+  const minVis = 0.25
+  const maxVis = 10
+  const maxDensity = 0.015
+
+  // Normalize on log scale
+  const logMin = Math.log(minVis)
+  const logMax = Math.log(maxVis)
+  const logVis = Math.log(vis)
+  const normalized = (logVis - logMin) / (logMax - logMin)
+
+  return maxDensity * (1 - normalized)
+}
+
+/**
+ * Convert METAR cloud cover code to coverage decimal
+ */
+function cloudCoverToCoverage(cover: string): number {
+  switch (cover.toUpperCase()) {
+    case 'FEW': return 0.25
+    case 'SCT': return 0.50
+    case 'BKN': return 0.75
+    case 'OVC': return 1.0
+    default: return 0
+  }
+}
+
+/**
+ * Convert MetarCloudLayer array to CloudLayer array
+ */
+function convertCloudLayers(metarClouds: MetarCloudLayer[]): CloudLayer[] {
+  return metarClouds.map(c => ({
+    altitude: c.base * 0.3048, // feet to meters
+    coverage: cloudCoverToCoverage(c.cover),
+    type: c.cover
+  }))
 }
 
 class MetarService {
@@ -231,6 +281,119 @@ class MetarService {
     } catch (error) {
       console.warn(`Failed to fetch nearest METAR:`, error)
       return this.nearestCache?.data ?? null
+    }
+  }
+
+  /**
+   * Fetch multiple nearest METARs for weather interpolation
+   *
+   * Returns up to maxStations METARs sorted by distance from the given coordinates.
+   * Each result includes pre-computed fog density and cloud layers for interpolation.
+   *
+   * @param latitude Latitude in decimal degrees
+   * @param longitude Longitude in decimal degrees
+   * @param maxDistanceNM Maximum search radius in nautical miles (default: 100)
+   * @param maxStations Maximum number of stations to return (default: 3)
+   */
+  async fetchNearestMetars(
+    latitude: number,
+    longitude: number,
+    maxDistanceNM: number = INTERPOLATION_RADIUS_NM,
+    maxStations: number = INTERPOLATION_STATION_COUNT
+  ): Promise<DistancedMetar[]> {
+    const now = Date.now()
+
+    try {
+      // Calculate bounding box
+      // 1 degree latitude ≈ 60 nautical miles
+      // 1 degree longitude ≈ 60 * cos(latitude) nautical miles
+      const latOffset = maxDistanceNM / 60
+      const lonOffset = maxDistanceNM / (60 * Math.cos(latitude * Math.PI / 180))
+
+      const lat0 = (latitude - latOffset).toFixed(4)
+      const lon0 = (longitude - lonOffset).toFixed(4)
+      const lat1 = (latitude + latOffset).toFixed(4)
+      const lon1 = (longitude + lonOffset).toFixed(4)
+
+      const url = `${METAR_API_URL}?bbox=${lat0},${lon0},${lat1},${lon1}&format=json`
+      const responseText = await fetchUrl(url)
+      const data = JSON.parse(responseText)
+
+      if (!Array.isArray(data) || data.length === 0) {
+        console.warn(`No METAR stations within ${maxDistanceNM}nm of ${latitude.toFixed(2)}, ${longitude.toFixed(2)}`)
+        return []
+      }
+
+      // Process all stations and calculate distances
+      const stationsWithDistance: Array<{
+        station: typeof data[0]
+        distance: number
+      }> = []
+
+      for (const station of data) {
+        if (typeof station.lat === 'number' && typeof station.lon === 'number') {
+          const distance = haversineDistanceNM(latitude, longitude, station.lat, station.lon)
+          if (distance <= maxDistanceNM) {
+            stationsWithDistance.push({ station, distance })
+          }
+        }
+      }
+
+      // Sort by distance and take top N
+      stationsWithDistance.sort((a, b) => a.distance - b.distance)
+      const topStations = stationsWithDistance.slice(0, maxStations)
+
+      // Convert to DistancedMetar format
+      const results: DistancedMetar[] = topStations.map(({ station, distance }) => {
+        const rawOb = station.rawOb || ''
+        const { precipitation, hasThunderstorm } = this.parsePrecipitation(rawOb)
+        const wind = this.parseWind(rawOb)
+        const visibility = this.parseVisibility(station.visib)
+        const metarClouds = this.parseClouds(station.clouds)
+
+        // Build MetarData for caching
+        const metar: MetarData = {
+          icaoId: station.icaoId || 'UNKNOWN',
+          visib: visibility,
+          clouds: metarClouds,
+          fltCat: station.fltCat || 'VFR',
+          obsTime: station.obsTime ? new Date(station.obsTime * 1000).getTime() : now,
+          rawOb,
+          precipitation,
+          hasThunderstorm,
+          wind
+        }
+
+        // Cache by ICAO for future direct lookups
+        this.cache.set(metar.icaoId, { data: metar, fetchTime: now })
+
+        // Build precipitation state
+        const precipitationState: PrecipitationState = {
+          active: precipitation.length > 0,
+          types: precipitation,
+          visibilityFactor: visibility < 3 ? Math.max(1, 4 - visibility) : 1,
+          hasThunderstorm
+        }
+
+        return {
+          icao: metar.icaoId,
+          lat: station.lat,
+          lon: station.lon,
+          distanceNM: distance,
+          visibility,
+          fogDensity: visibilityToFogDensity(visibility),
+          cloudLayers: convertCloudLayers(metarClouds),
+          precipitation: precipitationState,
+          wind,
+          rawMetar: rawOb,
+          obsTime: metar.obsTime
+        }
+      })
+
+      return results
+    } catch (error) {
+      console.warn(`Failed to fetch nearest METARs:`, error)
+      return []
     }
   }
 

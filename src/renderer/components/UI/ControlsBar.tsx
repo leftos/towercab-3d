@@ -55,6 +55,7 @@ function ControlsBar() {
   const defaultFov = useSettingsStore((state) => state.camera.defaultFov)
   const cameraSpeed = useSettingsStore((state) => state.camera.cameraSpeed)
   const mouseSensitivity = useSettingsStore((state) => state.camera.mouseSensitivity)
+  const enableAutoAirportSwitch = useSettingsStore((state) => state.camera.enableAutoAirportSwitch ?? false)
   const updateCameraSettings = useSettingsStore((state) => state.updateCameraSettings)
 
   // Settings store - Display (Aircraft group)
@@ -86,10 +87,12 @@ function ControlsBar() {
   const showPrecipitation = useSettingsStore((state) => state.weather.showPrecipitation ?? true)
   const precipitationIntensity = useSettingsStore((state) => state.weather.precipitationIntensity ?? 1.0)
   const showLightning = useSettingsStore((state) => state.weather.showLightning ?? true)
+  const enableWeatherInterpolation = useSettingsStore((state) => state.weather.enableWeatherInterpolation ?? true)
   const updateWeatherSettings = useSettingsStore((state) => state.updateWeatherSettings)
 
   // Weather store
   const currentMetar = useWeatherStore((state) => state.currentMetar)
+  const interpolatedWeather = useWeatherStore((state) => state.interpolatedWeather)
   const isLoadingWeather = useWeatherStore((state) => state.isLoading)
 
   // Settings store - Performance (Memory group)
@@ -767,6 +770,20 @@ function ControlsBar() {
                       </div>
                       <p className="setting-hint">Right-click drag sensitivity for camera rotation.</p>
                     </div>
+
+                    <div className="setting-item">
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={enableAutoAirportSwitch}
+                          onChange={(e) => updateCameraSettings({ enableAutoAirportSwitch: e.target.checked })}
+                        />
+                        Auto-Switch to Nearest Airport
+                      </label>
+                      <p className="setting-hint">
+                        Automatically switch to the nearest airport as you move the camera.
+                      </p>
+                    </div>
                   </div>
 
                   <div className="settings-section">
@@ -1051,6 +1068,29 @@ function ControlsBar() {
                       <p className="setting-hint">
                         Fetches real weather data for the current airport.
                       </p>
+                    </div>
+
+                    <div className="setting-item">
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={enableWeatherInterpolation}
+                          onChange={(e) => updateWeatherSettings({ enableWeatherInterpolation: e.target.checked })}
+                          disabled={!showWeatherEffects}
+                        />
+                        Interpolate Weather from Nearby Stations
+                      </label>
+                      <p className="setting-hint">
+                        Blend weather from the 3 nearest METAR stations based on camera position.
+                      </p>
+                      {showWeatherEffects && enableWeatherInterpolation && interpolatedWeather &&
+                        interpolatedWeather.sourceStations.length > 1 && (
+                        <p className="setting-hint" style={{ marginTop: '4px', opacity: 0.8 }}>
+                          Sources: {interpolatedWeather.sourceStations.map(s =>
+                            `${s.icao} (${Math.round(s.weight * 100)}%)`
+                          ).join(', ')}
+                        </p>
+                      )}
                     </div>
 
                     {showWeatherEffects && (

@@ -17,6 +17,7 @@ import { useCesiumWeather } from '../../hooks/useCesiumWeather'
 import { useAircraftModels } from '../../hooks/useAircraftModels'
 import { useCesiumLabels } from '../../hooks/useCesiumLabels'
 import { useGroundAircraftTerrain } from '../../hooks/useGroundAircraftTerrain'
+import { useAutoAirportSwitch } from '../../hooks/useAutoAirportSwitch'
 import { getTowerPosition } from '../../utils/towerHeight'
 import { performanceMonitor } from '../../utils/performanceMonitor'
 import { getServiceWorkerCacheStats } from '../../utils/serviceWorkerRegistration'
@@ -79,6 +80,8 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   const inMemoryTileCacheSize = useSettingsStore((state) => state.memory.inMemoryTileCacheSize)
   const showWeatherEffects = useSettingsStore((state) => state.weather.showWeatherEffects)
   const showCesiumFog = useSettingsStore((state) => state.weather.showCesiumFog)
+  const enableWeatherInterpolation = useSettingsStore((state) => state.weather.enableWeatherInterpolation)
+  const enableAutoAirportSwitch = useSettingsStore((state) => state.camera.enableAutoAirportSwitch)
 
   // Experimental graphics settings
   const msaaSamples = useSettingsStore((state) => state.graphics.msaaSamples)
@@ -107,6 +110,11 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   const fogDensity = useWeatherStore((state) => state.fogDensity)
   const updateCameraPosition = useWeatherStore((state) => state.updateCameraPosition)
   const cloudLayers = useWeatherStore((state) => state.cloudLayers)
+  const setUseInterpolation = useWeatherStore((state) => state.setUseInterpolation)
+  const startInterpolatedAutoRefresh = useWeatherStore((state) => state.startInterpolatedAutoRefresh)
+
+  // Camera geo position state (for auto-airport switching and weather interpolation)
+  const [cameraGeoPosition, setCameraGeoPosition] = useState<{ lat: number; lon: number } | null>(null)
 
   // Measure store for measuring mode
   const isMeasuring = useMeasureStore((state) => state.isActive)
@@ -353,6 +361,22 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   // 9. Camera Controls
   // =========================================================================
   useCesiumCamera(viewer, viewportId, interpolatedAircraft)
+
+  // =========================================================================
+  // 10. Auto-Airport Switching (only on main viewport)
+  // =========================================================================
+  useAutoAirportSwitch({
+    cameraPosition: viewportId === 'main' ? cameraGeoPosition : null,
+    enabled: viewportId === 'main' && enableAutoAirportSwitch
+  })
+
+  // Enable weather interpolation when setting is on
+  useEffect(() => {
+    if (enableWeatherInterpolation && showWeatherEffects) {
+      setUseInterpolation(true)
+      startInterpolatedAutoRefresh()
+    }
+  }, [enableWeatherInterpolation, showWeatherEffects, setUseInterpolation, startInterpolatedAutoRefresh])
 
   // Notify parent when viewer is ready (for VR integration)
   useEffect(() => {
@@ -604,14 +628,39 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
       babylonOverlay.render()
       performanceMonitor.endTimer('babylonRender')
 
-      // Update camera position for nearest METAR mode when in orbit mode without airport
-      // This enables weather to update based on camera location when flying around freely
-      if (showWeatherEffects && followMode === 'orbit' && followingCallsign && !currentAirport) {
+      // Update camera position for weather interpolation and auto-airport switching
+      // Track position when:
+      // 1. Weather interpolation is enabled (camera-based weather)
+      // 2. Orbit mode without airport (legacy nearest METAR mode)
+      // 3. Auto-airport switching is enabled
+      const shouldTrackCamera =
+        (showWeatherEffects && enableWeatherInterpolation) ||
+        (showWeatherEffects && followMode === 'orbit' && followingCallsign && !currentAirport) ||
+        enableAutoAirportSwitch
+
+      if (shouldTrackCamera) {
         const cameraCartographic = viewer.camera.positionCartographic
         if (cameraCartographic) {
           const lat = Cesium.Math.toDegrees(cameraCartographic.latitude)
           const lon = Cesium.Math.toDegrees(cameraCartographic.longitude)
-          updateCameraPosition(lat, lon)
+
+          // Only update state if position changed significantly (~100m threshold)
+          // This prevents React re-renders every frame
+          const POSITION_THRESHOLD_DEG = 0.001
+          const positionChanged = !cameraGeoPosition ||
+            Math.abs(lat - cameraGeoPosition.lat) > POSITION_THRESHOLD_DEG ||
+            Math.abs(lon - cameraGeoPosition.lon) > POSITION_THRESHOLD_DEG
+
+          if (positionChanged) {
+            // Update local state for auto-airport switching
+            setCameraGeoPosition({ lat, lon })
+          }
+
+          // Update weather store for interpolation/nearest METAR
+          // (has its own internal throttling)
+          if (showWeatherEffects) {
+            updateCameraPosition(lat, lon)
+          }
         }
       }
 
@@ -621,7 +670,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     return () => {
       removePostRender()
     }
-  }, [viewer, babylonOverlay, showWeatherEffects, followMode, followingCallsign, currentAirport, updateCameraPosition])
+  }, [viewer, babylonOverlay, showWeatherEffects, enableWeatherInterpolation, enableAutoAirportSwitch, followMode, followingCallsign, currentAirport, updateCameraPosition, cameraGeoPosition])
 
   // Memory diagnostic logging - logs counters every 5 seconds
   useEffect(() => {

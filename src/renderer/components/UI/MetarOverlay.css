@@ -38,3 +38,23 @@
   color: #c084fc;
   text-shadow: 0 0 8px rgba(192, 132, 252, 0.5);
 }
+
+/* Interpolated weather line */
+.metar-interpolated {
+  margin-top: 4px;
+  font-size: 11px;
+  color: rgba(180, 180, 180, 0.9);
+  text-shadow: none;
+  display: flex;
+  gap: 8px;
+}
+
+.metar-interpolated-data {
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.metar-interpolated-sources {
+  opacity: 0.7;
+  font-weight: 400;
+}

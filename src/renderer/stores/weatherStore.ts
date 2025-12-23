@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { metarService, type MetarData } from '../services/MetarService'
-import type { CloudLayer, PrecipitationState, WindState } from '../types'
+import type { CloudLayer, PrecipitationState, WindState, DistancedMetar, InterpolatedWeather } from '../types'
+import { interpolateWeather } from '../utils/weatherInterpolation'
 import {
   WEATHER_REFRESH_INTERVAL,
   NEAREST_METAR_THROTTLE,
@@ -8,7 +9,9 @@ import {
   PRECIP_VIS_THRESHOLD_HIGH,
   PRECIP_VIS_THRESHOLD_LOW,
   PRECIP_VIS_FACTOR_MIN,
-  PRECIP_VIS_FACTOR_MAX
+  PRECIP_VIS_FACTOR_MAX,
+  INTERPOLATION_UPDATE_THROTTLE_MS,
+  INTERPOLATION_POSITION_THRESHOLD_DEG
 } from '../constants'
 
 interface WeatherState {
@@ -30,6 +33,13 @@ interface WeatherState {
   cameraPosition: { lat: number; lon: number } | null
   useNearestMetar: boolean  // true when using position-based weather instead of airport METAR
 
+  // Weather interpolation state
+  nearbyMetars: DistancedMetar[]              // Nearby METAR stations with distance
+  interpolatedWeather: InterpolatedWeather | null  // Interpolated weather from nearby stations
+  lastInterpolationPosition: { lat: number; lon: number } | null  // Position used for last interpolation
+  lastInterpolationTime: number               // Timestamp of last interpolation fetch
+  useInterpolation: boolean                   // true when using interpolated weather
+
   // Auto-refresh state
   refreshIntervalId: ReturnType<typeof setInterval> | null
 
@@ -39,11 +49,14 @@ interface WeatherState {
   // Actions
   fetchWeather: (icao: string) => Promise<void>
   fetchNearestWeather: (lat: number, lon: number) => Promise<void>
+  fetchInterpolatedWeather: (lat: number, lon: number) => Promise<void>
   updateCameraPosition: (lat: number, lon: number) => void
   startAutoRefresh: (icao: string) => void
   startNearestAutoRefresh: () => void
+  startInterpolatedAutoRefresh: () => void
   stopAutoRefresh: () => void
   clearWeather: () => void
+  setUseInterpolation: (useInterpolation: boolean) => void
 
   // Debug overrides (for development)
   setDebugOverriding: (isOverriding: boolean) => void
@@ -180,6 +193,11 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
   wind: DEFAULT_WIND,
   cameraPosition: null,
   useNearestMetar: false,
+  nearbyMetars: [],
+  interpolatedWeather: null,
+  lastInterpolationPosition: null,
+  lastInterpolationTime: 0,
+  useInterpolation: false,
   refreshIntervalId: null,
   isDebugOverriding: false,
 
@@ -273,15 +291,93 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
     }
   },
 
+  fetchInterpolatedWeather: async (lat: number, lon: number) => {
+    const state = get()
+    const now = Date.now()
+
+    // Check if position changed enough to warrant a new fetch
+    if (state.lastInterpolationPosition) {
+      const latDiff = Math.abs(lat - state.lastInterpolationPosition.lat)
+      const lonDiff = Math.abs(lon - state.lastInterpolationPosition.lon)
+
+      // Skip if position hasn't changed much and we have recent data
+      if (latDiff < INTERPOLATION_POSITION_THRESHOLD_DEG &&
+          lonDiff < INTERPOLATION_POSITION_THRESHOLD_DEG &&
+          now - state.lastInterpolationTime < INTERPOLATION_UPDATE_THROTTLE_MS) {
+        return
+      }
+    }
+
+    set({ isLoading: true, error: null, useInterpolation: true })
+
+    try {
+      const nearbyMetars = await metarService.fetchNearestMetars(lat, lon)
+
+      if (nearbyMetars.length > 0) {
+        const interpolated = interpolateWeather(nearbyMetars)
+
+        if (interpolated && !state.isDebugOverriding) {
+          set({
+            nearbyMetars,
+            interpolatedWeather: interpolated,
+            lastInterpolationPosition: { lat, lon },
+            lastInterpolationTime: now,
+            cameraPosition: { lat, lon },
+            lastFetchTime: now,
+            isLoading: false,
+            error: null,
+            // Apply interpolated values to active weather state
+            fogDensity: interpolated.fogDensity,
+            cloudLayers: interpolated.cloudLayers,
+            precipitation: interpolated.precipitation,
+            wind: interpolated.wind
+          })
+        } else if (interpolated) {
+          // Debug override mode - don't overwrite weather effects
+          set({
+            nearbyMetars,
+            interpolatedWeather: interpolated,
+            lastInterpolationPosition: { lat, lon },
+            lastInterpolationTime: now,
+            cameraPosition: { lat, lon },
+            lastFetchTime: now,
+            isLoading: false,
+            error: null,
+            fogDensity: interpolated.fogDensity
+          })
+        }
+      } else {
+        set({
+          nearbyMetars: [],
+          interpolatedWeather: null,
+          isLoading: false,
+          error: 'No nearby METAR stations for interpolation'
+        })
+      }
+    } catch (error) {
+      set({
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to fetch interpolated weather'
+      })
+    }
+  },
+
   updateCameraPosition: (lat: number, lon: number) => {
     const state = get()
     const oldPos = state.cameraPosition
 
-    // Only update and potentially refetch if position changed significantly
-    // or if we don't have weather data yet
+    // Always update camera position
+    set({ cameraPosition: { lat, lon } })
+
+    // Handle interpolation mode
+    if (state.useInterpolation) {
+      // Interpolation handles its own throttling in fetchInterpolatedWeather
+      state.fetchInterpolatedWeather(lat, lon)
+      return
+    }
+
+    // Handle nearest METAR mode (legacy)
     if (!state.useNearestMetar) {
-      // Not in nearest METAR mode, just store position for potential future use
-      set({ cameraPosition: { lat, lon } })
       return
     }
 
@@ -295,9 +391,6 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
         return
       }
     }
-
-    // Position changed significantly, update and fetch
-    set({ cameraPosition: { lat, lon } })
 
     // Throttle fetches - only fetch if last fetch was > NEAREST_METAR_THROTTLE ms ago
     const timeSinceLastFetch = Date.now() - state.lastFetchTime
@@ -344,6 +437,30 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
     set({ refreshIntervalId: intervalId, useNearestMetar: true })
   },
 
+  startInterpolatedAutoRefresh: () => {
+    const state = get()
+
+    // Clear any existing interval
+    if (state.refreshIntervalId) {
+      clearInterval(state.refreshIntervalId)
+    }
+
+    // Start new refresh interval for interpolated weather
+    const intervalId = setInterval(() => {
+      const currentState = get()
+      if (currentState.cameraPosition && currentState.useInterpolation) {
+        // Force refetch by clearing last interpolation time
+        set({ lastInterpolationTime: 0 })
+        currentState.fetchInterpolatedWeather(
+          currentState.cameraPosition.lat,
+          currentState.cameraPosition.lon
+        )
+      }
+    }, WEATHER_REFRESH_INTERVAL)
+
+    set({ refreshIntervalId: intervalId, useInterpolation: true, useNearestMetar: false })
+  },
+
   stopAutoRefresh: () => {
     const state = get()
     if (state.refreshIntervalId) {
@@ -368,8 +485,17 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
       wind: DEFAULT_WIND,
       cameraPosition: null,
       useNearestMetar: false,
+      nearbyMetars: [],
+      interpolatedWeather: null,
+      lastInterpolationPosition: null,
+      lastInterpolationTime: 0,
+      useInterpolation: false,
       refreshIntervalId: null
     })
+  },
+
+  setUseInterpolation: (useInterpolation: boolean) => {
+    set({ useInterpolation, useNearestMetar: false })
   },
 
   // Debug overrides - allow dev panel to set weather state directly

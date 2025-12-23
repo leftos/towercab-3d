@@ -98,7 +98,12 @@ export type {
   PrecipitationState,
 
   // Wind
-  WindState
+  WindState,
+
+  // Weather interpolation
+  DistancedMetar,
+  InterpolationSource,
+  InterpolatedWeather
 } from './weather'
 
 // ============================================================================

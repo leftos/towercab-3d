@@ -258,7 +258,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'settings-store',
-      version: 3, // Incremented for new weather settings (showPrecipitation, precipitationIntensity, showLightning)
+      version: 4, // Incremented for weather interpolation and auto-airport switching
       migrate: (persistedState: unknown, version: number) => {
         // Auto-migrate old flat structure to grouped structure
         if (version < 2) {
@@ -274,6 +274,22 @@ export const useSettingsStore = create<SettingsStore>()(
             weather: {
               ...DEFAULT_SETTINGS.weather,
               ...state.weather
+            }
+          }
+        }
+        // Migrate v3 to v4: add weather interpolation and auto-airport switching
+        if (version < 4) {
+          console.log('[Settings] Migrating v3 to v4: adding weather interpolation and auto-airport switching')
+          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
+          return {
+            ...state,
+            weather: {
+              ...DEFAULT_SETTINGS.weather,
+              ...state.weather
+            },
+            camera: {
+              ...DEFAULT_SETTINGS.camera,
+              ...state.camera
             }
           }
         }
@@ -336,7 +352,8 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
     camera: {
       defaultFov: oldSettings.defaultFov ?? DEFAULT_SETTINGS.camera.defaultFov,
       cameraSpeed: oldSettings.cameraSpeed ?? DEFAULT_SETTINGS.camera.cameraSpeed,
-      mouseSensitivity: oldSettings.mouseSensitivity ?? DEFAULT_SETTINGS.camera.mouseSensitivity
+      mouseSensitivity: oldSettings.mouseSensitivity ?? DEFAULT_SETTINGS.camera.mouseSensitivity,
+      enableAutoAirportSwitch: oldSettings.enableAutoAirportSwitch ?? DEFAULT_SETTINGS.camera.enableAutoAirportSwitch
     },
     weather: {
       showWeatherEffects:
@@ -351,7 +368,8 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
         oldSettings.showPrecipitation ?? DEFAULT_SETTINGS.weather.showPrecipitation,
       precipitationIntensity:
         oldSettings.precipitationIntensity ?? DEFAULT_SETTINGS.weather.precipitationIntensity,
-      showLightning: oldSettings.showLightning ?? oldSettings.weather?.showLightning ?? DEFAULT_SETTINGS.weather.showLightning
+      showLightning: oldSettings.showLightning ?? oldSettings.weather?.showLightning ?? DEFAULT_SETTINGS.weather.showLightning,
+      enableWeatherInterpolation: oldSettings.enableWeatherInterpolation ?? DEFAULT_SETTINGS.weather.enableWeatherInterpolation
     },
     memory: {
       inMemoryTileCacheSize:
