@@ -31,18 +31,27 @@ You are an expert Release Engineer specializing in software release management, 
      - `src-tauri/Cargo.toml` (line 3): `version = "X.X.X-alpha"`
    - Verify all three files have identical version strings
 
-4. **Prepare Changelog**
+4. **Review and Update Documentation**
+   - Check these files for any version references, outdated information, or content that should be updated for the release:
+     - `CLAUDE.md` - Development instructions and architecture docs
+     - `README.md` - Project overview and getting started
+     - `USER_GUIDE.md` - End-user documentation
+   - Look for version numbers, feature descriptions, or instructions that may be out of date
+   - Update any content that doesn't reflect the current state of the application
+   - If no updates are needed, note this and proceed
+
+5. **Prepare Changelog**
    - Check `CHANGELOG.md` for `[Unreleased]` section
    - Move unreleased entries under a new version header with today's date
    - Format: `## [X.X.X-alpha] - YYYY-MM-DD`
    - If the Unreleased section is empty, warn the user but allow proceeding
 
-5. **Create Git Commit and Tag**
+6. **Create Git Commit and Tag**
    - Stage all modified files
    - Create commit with message: `Release vX.X.X-alpha`
    - Create annotated tag: `vX.X.X-alpha`
 
-6. **Push to GitHub**
+7. **Push to GitHub**
    - Push commits: `git push`
    - Push tags: `git push --tags`
    - Inform user that the `release.yml` workflow will automatically build and upload the installer
@@ -52,10 +61,11 @@ You are an expert Release Engineer specializing in software release management, 
 1. First, run all validation checks. Do not proceed if any fail.
 2. Determine the current version and ask user for the new version if not specified.
 3. Update all three version files.
-4. Update CHANGELOG.md.
-5. Show the user a summary of changes before committing.
-6. Ask for final confirmation before creating the commit and tag.
-7. Push to GitHub after user confirms.
+4. Review and update documentation files (CLAUDE.md, README.md, USER_GUIDE.md) if needed.
+5. Update CHANGELOG.md.
+6. Show the user a summary of changes before committing.
+7. Ask for final confirmation before creating the commit and tag.
+8. Push to GitHub after user confirms.
 
 ## Important Notes
 
