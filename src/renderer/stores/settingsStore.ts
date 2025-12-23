@@ -88,6 +88,10 @@ export const useSettingsStore = create<SettingsStore>()(
             }),
             ...(updates.cameraNearPlane !== undefined && {
               cameraNearPlane: Math.max(0.1, Math.min(10.0, updates.cameraNearPlane))
+            }),
+            // Model brightness
+            ...(updates.modelBrightness !== undefined && {
+              modelBrightness: Math.max(0.5, Math.min(3.0, updates.modelBrightness))
             })
           }
         })),
@@ -258,7 +262,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'settings-store',
-      version: 4, // Incremented for weather interpolation and auto-airport switching
+      version: 5, // Incremented for model brightness setting
       migrate: (persistedState: unknown, version: number) => {
         // Auto-migrate old flat structure to grouped structure
         if (version < 2) {
@@ -290,6 +294,18 @@ export const useSettingsStore = create<SettingsStore>()(
             camera: {
               ...DEFAULT_SETTINGS.camera,
               ...state.camera
+            }
+          }
+        }
+        // Migrate v4 to v5: add model brightness setting
+        if (version < 5) {
+          console.log('[Settings] Migrating v4 to v5: adding model brightness setting')
+          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
+          return {
+            ...state,
+            graphics: {
+              ...DEFAULT_SETTINGS.graphics,
+              ...state.graphics
             }
           }
         }
@@ -347,7 +363,9 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
       shadowPolygonOffsetUnits:
         oldSettings.shadowPolygonOffsetUnits ?? DEFAULT_SETTINGS.graphics.shadowPolygonOffsetUnits,
       cameraNearPlane:
-        oldSettings.cameraNearPlane ?? DEFAULT_SETTINGS.graphics.cameraNearPlane
+        oldSettings.cameraNearPlane ?? DEFAULT_SETTINGS.graphics.cameraNearPlane,
+      modelBrightness:
+        oldSettings.modelBrightness ?? DEFAULT_SETTINGS.graphics.modelBrightness
     },
     camera: {
       defaultFov: oldSettings.defaultFov ?? DEFAULT_SETTINGS.camera.defaultFov,

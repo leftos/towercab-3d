@@ -141,6 +141,62 @@ export const MODEL_DEFAULT_COLOR_RGB = [0.9, 0.9, 0.9] as const
  */
 export const MODEL_COLOR_BLEND_AMOUNT = 0.15
 
+/**
+ * Model brightness range (multiplier)
+ * - Minimum: 0.5x (darker models)
+ * - Default: 1.0x (original light gray tint)
+ * - Maximum: 3.0x (brightest with emissive glow)
+ */
+export const MODEL_BRIGHTNESS_MIN = 0.5
+export const MODEL_BRIGHTNESS_MAX = 3.0
+
+/**
+ * Calculate model tint color based on brightness multiplier
+ *
+ * Brightness multiplier adjusts the tint color RGB values:
+ * - 0.5 = [0.45, 0.45, 0.45] (darker gray)
+ * - 1.0 = [0.9, 0.9, 0.9] (default light gray)
+ * - 1.1+ = [1.0, 1.0, 1.0] (white, clamped at 1.0 per channel)
+ * - 3.0 = [1.0, 1.0, 1.0] (white, maximum brightness)
+ *
+ * @param brightness - Brightness multiplier (0.5-3.0)
+ * @returns RGB array suitable for Cesium.Color constructor
+ */
+export function getModelColorRgb(brightness: number): readonly [number, number, number] {
+  const baseColor = 0.9
+  const adjustedValue = Math.min(baseColor * brightness, 1.0) // Clamp at 1.0
+  return [adjustedValue, adjustedValue, adjustedValue] as const
+}
+
+/**
+ * Calculate color blend amount for emissive effect at high brightness
+ *
+ * Creates a glow/emissive effect when brightness exceeds 1.1:
+ * - 0.5-1.1 brightness: blend amount = 0.15 (subtle texture blending)
+ * - 1.1-3.0 brightness: blend amount increases to 1.0 (brightening/glow effect)
+ *
+ * Higher blend amounts make the white tint more opaque, creating a brighter/glowing appearance.
+ *
+ * @param brightness - Brightness multiplier (0.5-3.0)
+ * @returns Color blend amount (0.15-1.0)
+ */
+export function getModelColorBlendAmount(brightness: number): number {
+  const BASE_BLEND_AMOUNT = 0.15
+  const BRIGHTNESS_THRESHOLD = 1.1
+  const MAX_BLEND_AMOUNT = 1.0
+
+  if (brightness <= BRIGHTNESS_THRESHOLD) {
+    return BASE_BLEND_AMOUNT
+  }
+
+  // Map brightness 1.1 -> 0.15, MODEL_BRIGHTNESS_MAX -> 1.0 (full emissive glow)
+  const excessBrightness = brightness - BRIGHTNESS_THRESHOLD
+  const maxExcess = MODEL_BRIGHTNESS_MAX - BRIGHTNESS_THRESHOLD
+  const blendIncrease = (excessBrightness / maxExcess) * (MAX_BLEND_AMOUNT - BASE_BLEND_AMOUNT)
+
+  return Math.min(BASE_BLEND_AMOUNT + blendIncrease, MAX_BLEND_AMOUNT)
+}
+
 // ============================================================================
 // RENDERING PERFORMANCE
 // ============================================================================

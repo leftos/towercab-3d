@@ -153,6 +153,7 @@ function ControlsBar() {
   const shadowPolygonOffsetFactor = useSettingsStore((state) => state.graphics.shadowPolygonOffsetFactor) ?? 1.1
   const shadowPolygonOffsetUnits = useSettingsStore((state) => state.graphics.shadowPolygonOffsetUnits) ?? 4.0
   const cameraNearPlane = useSettingsStore((state) => state.graphics.cameraNearPlane) ?? 0.1
+  const modelBrightness = useSettingsStore((state) => state.graphics.modelBrightness) ?? 1.0
   const updateGraphicsSettings = useSettingsStore((state) => state.updateGraphicsSettings)
 
   // Active viewport camera state (from viewportStore)
@@ -1434,6 +1435,24 @@ function ControlsBar() {
                         </div>
                         <p className="setting-hint">
                           Shadow brightness. 0% = black shadows, 100% = invisible shadows.
+                        </p>
+                      </div>
+
+                      <div className="setting-item">
+                        <label>Model Brightness</label>
+                        <div className="slider-with-value">
+                          <input
+                            type="range"
+                            min="0.5"
+                            max="3.0"
+                            step="0.1"
+                            value={modelBrightness}
+                            onChange={(e) => updateGraphicsSettings({ modelBrightness: Number(e.target.value) })}
+                          />
+                          <span>{(modelBrightness * 100).toFixed(0)}%</span>
+                        </div>
+                        <p className="setting-hint">
+                          Adjust aircraft and tower model brightness. 50% = darker, 100% = default, 300% = brightest.
                         </p>
                       </div>
 

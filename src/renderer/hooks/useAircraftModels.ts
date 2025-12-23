@@ -6,12 +6,10 @@ import type { ViewMode } from '../types'
 import { aircraftModelService } from '../services/AircraftModelService'
 import { performanceMonitor } from '../utils/performanceMonitor'
 import {
-  MODEL_DEFAULT_COLOR_RGB,
-  MODEL_COLOR_BLEND_AMOUNT
+  getModelColorRgb,
+  getModelColorBlendAmount
 } from '../constants/rendering'
-
-// Create Cesium.Color from constant RGB values
-const MODEL_DEFAULT_COLOR = new Cesium.Color(...MODEL_DEFAULT_COLOR_RGB, 1.0)
+import { useSettingsStore } from '../stores/settingsStore'
 
 /**
  * Manages aircraft 3D model rendering using Cesium.Model pool
@@ -89,6 +87,9 @@ export function useAircraftModels(
     modelPoolReady
   } = modelPoolRefs
 
+  // Get model brightness from settings
+  const modelBrightness = useSettingsStore((state) => state.graphics.modelBrightness) ?? 1.0
+
   // Track previous positions for diagnostic logging
   const prevModelPositionsRef = useRef<Map<string, Cesium.Cartesian3>>(new Map())
 
@@ -144,15 +145,20 @@ export function useAircraftModels(
             modelPoolLoading.current.add(poolIndex)
             modelPoolUrls.current.set(poolIndex, modelInfo.modelUrl)
 
+            // Calculate model color and blend amount based on brightness setting
+            const modelColorRgb = getModelColorRgb(modelBrightness)
+            const modelColor = new Cesium.Color(...modelColorRgb, 1.0)
+            const blendAmount = getModelColorBlendAmount(modelBrightness)
+
             // Load new model in background
             Cesium.Model.fromGltfAsync({
               url: modelInfo.modelUrl,
               show: false,
               modelMatrix: model.modelMatrix,  // Copy current transform
               shadows: Cesium.ShadowMode.ENABLED,
-              color: model.color,
+              color: modelColor,
               colorBlendMode: Cesium.ColorBlendMode.MIX,
-              colorBlendAmount: MODEL_COLOR_BLEND_AMOUNT
+              colorBlendAmount: blendAmount
             }).then(newModel => {
               if (viewer.isDestroyed()) return
 
@@ -229,8 +235,11 @@ export function useAircraftModels(
             model.color = Cesium.Color.WHITE
             model.colorBlendAmount = 1.0  // Full white for 2D visibility
           } else {
-            model.color = MODEL_DEFAULT_COLOR
-            model.colorBlendAmount = MODEL_COLOR_BLEND_AMOUNT  // Subtle blend preserves textures
+            // Use brightness-adjusted color and blend amount in 3D mode to preserve textures
+            const modelColorRgb = getModelColorRgb(modelBrightness)
+            const blendAmount = getModelColorBlendAmount(modelBrightness)
+            model.color = new Cesium.Color(...modelColorRgb, 1.0)
+            model.colorBlendAmount = blendAmount
           }
 
           // Show the model
@@ -264,7 +273,8 @@ export function useAircraftModels(
     modelPoolLoading,
     modelPoolReady,
     viewMode,
-    followingCallsign
+    followingCallsign,
+    modelBrightness
   ])
 
   // Set up render loop to update models every frame

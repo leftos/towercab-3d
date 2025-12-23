@@ -105,6 +105,8 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   const shadowPolygonOffsetUnits = useSettingsStore((state) => state.graphics.shadowPolygonOffsetUnits) ?? 4.0
   // NOTE: cameraNearPlane effect is disabled (see section 3b below)
   const _cameraNearPlane = useSettingsStore((state) => state.graphics.cameraNearPlane) ?? 0.1
+  // Model rendering
+  const modelBrightness = useSettingsStore((state) => state.graphics.modelBrightness) ?? 1.0
 
   // Weather store for fog effects, camera position updates, and cloud layers
   const fogDensity = useWeatherStore((state) => state.fogDensity)
@@ -201,7 +203,8 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     shadowSoftness,
     shadowFadingEnabled,
     shadowNormalOffset,
-    inMemoryTileCacheSize
+    inMemoryTileCacheSize,
+    modelBrightness
   })
 
   // =========================================================================

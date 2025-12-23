@@ -181,6 +181,17 @@ export interface GraphicsSettings {
    * Higher values improve shadow/depth precision but clip nearby objects
    */
   cameraNearPlane: number
+
+  // Model rendering
+  /**
+   * Model brightness multiplier (0.5-3.0, default: 1.0)
+   * Controls how bright aircraft and tower models appear:
+   * - 0.5 = 50% darker (darker gray tint)
+   * - 1.0 = Default brightness (light gray)
+   * - 3.0 = 300% brighter (white tint, maximum brightness)
+   * Values above 1.0 brighten textures; values above ~1.1 approach white
+   */
+  modelBrightness: number
 }
 
 /**
@@ -473,7 +484,8 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     shadowDepthBias: 0.0004,
     shadowPolygonOffsetFactor: 1.1,
     shadowPolygonOffsetUnits: 4.0,
-    cameraNearPlane: 0.1
+    cameraNearPlane: 0.1,
+    modelBrightness: 1.0
   },
   camera: {
     defaultFov: 60,

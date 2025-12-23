@@ -5,9 +5,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Model brightness control: new Graphics > Model Brightness slider (50-300%) lets you brighten or darken aircraft models without overexposure. Values above 110% create a smooth glow/emissive effect
 - Weather interpolation: weather effects now blend from the 3 nearest METAR stations based on camera position using inverse distance weighting, providing smoother weather transitions as you move between airports
 - Auto-airport switching: optional setting to automatically switch to the nearest airport as you move the camera (disabled by default, enable in Settings > General > Camera)
-- METAR overlay now shows interpolation source stations and their weights when weather interpolation is enabled
 - Weather effects
   - Rain and snow particle effects based on METAR precipitation codes (RA, SN, DZ, etc.)
   - Lightning flashes during thunderstorms (TS code in METAR)
@@ -15,9 +15,9 @@ All notable changes to TowerCab 3D will be documented in this file.
   - Gusty conditions (G in METAR) cause periodic wind speed variations
   - Show Precipitation toggle, Precipitation Intensity slider, Show Lightning toggle
 - Camera terrain collision: camera now stays at least 5 meters above terrain, preventing clipping through the ground
-- Cloud layers now have soft fading edges that blend into the sky instead of hard square borders
+- Cloud layers now have soft fading edges that blend into the sky instead of hard square borders, and use noise to create distinct clouds dependent on cloud coverage
 - Cloud layers slowly rotate to simulate wind drift, with different layers moving at slightly different speeds based on altitude
-- Cloud layers smoothly when METAR updates: altitude changes animate gradually, coverage changes morph existing cloud patterns (FEW becoming SCT adds clouds to existing patches rather than regenerating), and unrelated layers crossfade elegantly
+- Cloud layers transition smoothly when METAR updates: altitude changes animate gradually, coverage changes morph existing cloud patterns (FEW becoming SCT adds clouds to existing patches rather than regenerating), and unrelated layers crossfade elegantly
 - METAR overlay display (Ctrl+M): shows raw METAR at top of screen, color-coded by flight category (green=VFR, blue=MVFR, red=IFR, purple=LIFR)
 - Model matching debug modal (F3): shows all aircraft in data radius with their matched 3D model, match type (exact/mapped/closest/fallback), and scaling applied
 

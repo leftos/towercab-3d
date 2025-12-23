@@ -2,12 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import * as Cesium from 'cesium'
 import {
   CONE_POOL_SIZE,
-  MODEL_DEFAULT_COLOR_RGB,
-  MODEL_COLOR_BLEND_AMOUNT
+  getModelColorRgb,
+  getModelColorBlendAmount
 } from '../constants/rendering'
-
-// Create Cesium.Color from constant RGB values
-const MODEL_DEFAULT_COLOR = new Cesium.Color(...MODEL_DEFAULT_COLOR_RGB, 1.0)
 
 export interface CesiumViewerSettings {
   /** Cesium Ion access token for terrain/imagery */
@@ -44,6 +41,8 @@ export interface CesiumViewerSettings {
   shadowNormalOffset: boolean
   /** In-memory tile cache size */
   inMemoryTileCacheSize: number
+  /** Model brightness multiplier (0.5-1.5) */
+  modelBrightness: number
 }
 
 export interface ModelPoolRefs {
@@ -137,7 +136,8 @@ export function useCesiumViewer(
     shadowSoftness,
     shadowFadingEnabled,
     shadowNormalOffset,
-    inMemoryTileCacheSize
+    inMemoryTileCacheSize,
+    modelBrightness
   } = settings
 
   const viewerRef = useRef<Cesium.Viewer | null>(null)
@@ -252,6 +252,11 @@ export function useCesiumViewer(
     // Default to B738, will be updated dynamically based on aircraft type
     const defaultModelUrl = './b738.glb'
 
+    // Calculate model color and blend amount based on brightness setting
+    const modelColorRgb = getModelColorRgb(modelBrightness)
+    const modelColor = new Cesium.Color(...modelColorRgb, 1.0)
+    const blendAmount = getModelColorBlendAmount(modelBrightness)
+
     // Load models asynchronously into the pool
     let modelsLoaded = 0
     for (let i = 0; i < CONE_POOL_SIZE; i++) {
@@ -263,9 +268,9 @@ export function useCesiumViewer(
         show: false,
         modelMatrix: Cesium.Matrix4.IDENTITY,
         shadows: Cesium.ShadowMode.ENABLED,
-        color: MODEL_DEFAULT_COLOR,
+        color: modelColor,
         colorBlendMode: Cesium.ColorBlendMode.MIX,
-        colorBlendAmount: MODEL_COLOR_BLEND_AMOUNT
+        colorBlendAmount: blendAmount
       }).then(model => {
         if (newViewer.isDestroyed()) return
         newViewer.scene.primitives.add(model)
@@ -300,6 +305,22 @@ export function useCesiumViewer(
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- graphics settings used at init only; runtime updates handled by separate hooks
   }, [cesiumIonToken, isInset, msaaSamples, viewportId])
+
+  // Update model colors and blend amount when brightness setting changes
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return
+
+    // Calculate new color and blend amount based on brightness
+    const modelColorRgb = getModelColorRgb(modelBrightness)
+    const newModelColor = new Cesium.Color(...modelColorRgb, 1.0)
+    const newBlendAmount = getModelColorBlendAmount(modelBrightness)
+
+    // Update all models in the pool with new color and blend amount
+    modelPoolRef.current.forEach((model) => {
+      model.color = newModelColor
+      model.colorBlendAmount = newBlendAmount
+    })
+  }, [viewer, modelBrightness])
 
   return {
     viewer,
