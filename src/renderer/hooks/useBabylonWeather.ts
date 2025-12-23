@@ -42,12 +42,49 @@ import {
   CLOUD_ROTATION_SPEED,
   CLOUD_ROTATION_SPEED_VARIANCE,
   CLOUD_ROTATION_CHANGE_INTERVAL,
-  CLOUD_ROTATION_TRANSITION_TIME
+  CLOUD_ROTATION_TRANSITION_TIME,
+  CLOUD_LAYER_MATCH_ALTITUDE_THRESHOLD,
+  CLOUD_LAYER_MATCH_COVERAGE_THRESHOLD,
+  CLOUD_LAYER_ALTITUDE_TRANSITION_SPEED,
+  CLOUD_LAYER_COVERAGE_TRANSITION_SPEED,
+  CLOUD_LAYER_FADE_SPEED,
+  CLOUD_LAYER_COVERAGE_REGEN_THRESHOLD
 } from '@/constants'
 
 interface UseBabylonWeatherOptions {
   scene: BABYLON.Scene | null
   isTopDownView?: boolean
+}
+
+/**
+ * Persistent state for a cloud layer that enables smooth transitions.
+ * When METAR updates, layers are matched by altitude proximity and
+ * transitions are animated rather than instantly regenerated.
+ */
+interface CloudLayerState {
+  /** Noise seed for texture generation - persists when layer matches to keep pattern */
+  noiseSeed: number
+  /** Current coverage being displayed (animates toward target) */
+  currentCoverage: number
+  /** Target coverage from METAR data */
+  targetCoverage: number
+  /** Current altitude in meters (animates toward target) */
+  currentAltitude: number
+  /** Target altitude from METAR data */
+  targetAltitude: number
+  /** Current alpha/opacity (for fade in/out transitions) */
+  currentAlpha: number
+  /** Target alpha (1 = visible, 0 = fading out) */
+  targetAlpha: number
+  /** Coverage value last used to generate texture (avoids unnecessary regeneration) */
+  lastRenderedCoverage: number
+  /** Whether this layer is actively in use */
+  active: boolean
+  /** Rotation state for this layer */
+  rotation: {
+    currentSpeed: number
+    targetSpeed: number
+  }
 }
 
 // ============================================================================
@@ -142,7 +179,7 @@ function createPatchyCloudTexture(
   // Coverage determines the noise threshold
   // For BKN/OVC (high coverage), we want mostly solid with small breaks
   // For FEW/SCT (low coverage), we want mostly clear with cloud patches
-  const noiseScale = 10.0
+  const noiseScale = CLOUD_NOISE_SCALE
 
   for (let y = 0; y < textureSize; y++) {
     for (let x = 0; x < textureSize; x++) {
@@ -460,6 +497,8 @@ export function useBabylonWeather(
   const fogDomeRef = useRef<BABYLON.Mesh | null>(null)
   const fogDomeMaterialRef = useRef<BABYLON.StandardMaterial | null>(null)
   const cloudMeshPoolRef = useRef<CloudMeshData[]>([])
+  const cloudLayerStatesRef = useRef<CloudLayerState[]>([])
+  const cloudOpacityRef = useRef(1.0)
 
   // Weather store subscriptions
   const cloudLayers = useWeatherStore((state) => state.cloudLayers)
@@ -472,6 +511,11 @@ export function useBabylonWeather(
   const cloudOpacity = useSettingsStore((state) => state.weather.cloudOpacity)
   const fogIntensity = useSettingsStore((state) => state.weather.fogIntensity)
   const visibilityScale = useSettingsStore((state) => state.weather.visibilityScale)
+
+  // Keep cloudOpacity ref in sync (avoids recreating animation effect when opacity changes)
+  useEffect(() => {
+    cloudOpacityRef.current = cloudOpacity
+  }, [cloudOpacity])
 
   // Create cloud plane mesh pool and fog dome
   useEffect(() => {
@@ -544,78 +588,125 @@ export function useBabylonWeather(
     }
   }, [scene])
 
-  // Update cloud planes based on weather data with patchy textures
+  // Initialize cloud layer states when mesh pool is created
   useEffect(() => {
-    if (cloudMeshPoolRef.current.length === 0 || !scene) return
+    if (cloudMeshPoolRef.current.length === 0) return
 
-    const shouldShowClouds = showWeatherEffects && showClouds && !isTopDownView
-    const pool = cloudMeshPoolRef.current
-
-    for (let i = 0; i < CLOUD_POOL_SIZE; i++) {
-      const meshData = pool[i]
-      if (!meshData) continue
-
-      if (!shouldShowClouds || i >= cloudLayers.length) {
-        meshData.plane.isVisible = false
-        // Dispose texture when layer is hidden to free GPU memory
-        if (meshData.material.diffuseTexture) {
-          meshData.material.diffuseTexture.dispose()
-          meshData.material.diffuseTexture = null
-          meshData.lastCoverage = undefined
-        }
-        continue
+    // Initialize layer states if not already done
+    if (cloudLayerStatesRef.current.length === 0) {
+      for (let i = 0; i < CLOUD_POOL_SIZE; i++) {
+        const initialSpeed = CLOUD_ROTATION_SPEED * (1 + (Math.random() * 2 - 1) * CLOUD_ROTATION_SPEED_VARIANCE)
+        cloudLayerStatesRef.current.push({
+          noiseSeed: Math.random() * 10000,
+          currentCoverage: 0,
+          targetCoverage: 0,
+          currentAltitude: 0,
+          targetAltitude: 0,
+          currentAlpha: 0,
+          targetAlpha: 0,
+          lastRenderedCoverage: -1,
+          active: false,
+          rotation: {
+            currentSpeed: initialSpeed,
+            targetSpeed: initialSpeed
+          }
+        })
       }
-
-      const layer = cloudLayers[i]
-      meshData.plane.position.y = layer.altitude
-      meshData.plane.isVisible = true
-
-      // Always regenerate texture when cloud layers update
-      // This allows testing different random patterns via the debug panel
-      // Dispose old texture if exists
-      if (meshData.material.diffuseTexture) {
-        meshData.material.diffuseTexture.dispose()
-      }
-
-      // Create new patchy texture with random seed for variety
-      const randomSeed = i + Math.random() * 10000
-      const patchyTexture = createPatchyCloudTexture(
-        scene,
-        CLOUD_NOISE_TEXTURE_SIZE,
-        layer.coverage,
-        randomSeed
-      )
-      meshData.material.diffuseTexture = patchyTexture
-
-      // Scale material alpha based on coverage - denser clouds are more opaque
-      // OVC should be completely solid, BKN nearly solid, FEW/SCT more transparent
-      let baseAlpha: number
-      if (layer.coverage >= 0.95) {
-        // OVC: fully opaque - use OPAQUE mode to truly block transparency
-        baseAlpha = 1.0
-        meshData.material.transparencyMode = BABYLON.Material.MATERIAL_OPAQUE
-        meshData.material.needDepthPrePass = true
-        // Disable Babylon lighting - use only emissive for consistent dark gray appearance
-        // This prevents the always-on hemispheric light from making OVC blindingly bright
-        meshData.material.disableLighting = true
-        meshData.material.emissiveColor = new BABYLON.Color3(0.25, 0.25, 0.28)
-        meshData.material.diffuseColor = new BABYLON.Color3(0, 0, 0)
-      } else if (layer.coverage >= 0.6) {
-        // BKN: nearly opaque with alpha blending for gaps
-        baseAlpha = 0.95
-        meshData.material.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND
-        meshData.material.needDepthPrePass = false
-        meshData.material.emissiveColor = new BABYLON.Color3(...CLOUD_EMISSIVE_COLOR)
-      } else {
-        // FEW/SCT: transparent with alpha blending
-        baseAlpha = 0.6 + layer.coverage * 0.4
-        meshData.material.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND
-        meshData.material.needDepthPrePass = false
-        meshData.material.emissiveColor = new BABYLON.Color3(...CLOUD_EMISSIVE_COLOR)
-      }
-      meshData.material.alpha = baseAlpha * cloudOpacity
     }
-  }, [scene, cloudLayers, showWeatherEffects, showClouds, cloudOpacity, isTopDownView])
+  }, [scene])
+
+  // Match new cloud layers to existing states and update targets
+  // This enables smooth transitions instead of instant regeneration
+  useEffect(() => {
+    // Wait for both mesh pool and layer states to be initialized
+    if (cloudMeshPoolRef.current.length === 0 || cloudLayerStatesRef.current.length === 0) return
+
+    const states = cloudLayerStatesRef.current
+    const shouldShowClouds = showWeatherEffects && showClouds && !isTopDownView
+
+    if (!shouldShowClouds || cloudLayers.length === 0) {
+      // Fade out all layers
+      for (const state of states) {
+        if (state.active) {
+          state.targetAlpha = 0
+        }
+      }
+      return
+    }
+
+    // Track which states have been matched to new layers
+    const matchedStates = new Set<number>()
+    const matchedNewLayers = new Set<number>()
+
+    // First pass: match new layers to existing active states by altitude proximity
+    for (let newIdx = 0; newIdx < cloudLayers.length; newIdx++) {
+      const newLayer = cloudLayers[newIdx]
+      let bestMatchIdx = -1
+      let bestMatchScore = Infinity
+
+      for (let stateIdx = 0; stateIdx < states.length; stateIdx++) {
+        const state = states[stateIdx]
+        if (!state.active || matchedStates.has(stateIdx)) continue
+
+        const altitudeDiff = Math.abs(state.currentAltitude - newLayer.altitude)
+        const coverageDiff = Math.abs(state.currentCoverage - newLayer.coverage)
+
+        // Check if within matching thresholds
+        if (altitudeDiff <= CLOUD_LAYER_MATCH_ALTITUDE_THRESHOLD &&
+            coverageDiff <= CLOUD_LAYER_MATCH_COVERAGE_THRESHOLD) {
+          // Score by altitude difference (prefer closer matches)
+          if (altitudeDiff < bestMatchScore) {
+            bestMatchScore = altitudeDiff
+            bestMatchIdx = stateIdx
+          }
+        }
+      }
+
+      if (bestMatchIdx >= 0) {
+        // Match found - update targets, keep noise seed
+        const state = states[bestMatchIdx]
+        state.targetCoverage = newLayer.coverage
+        state.targetAltitude = newLayer.altitude
+        state.targetAlpha = 1
+        matchedStates.add(bestMatchIdx)
+        matchedNewLayers.add(newIdx)
+      }
+    }
+
+    // Second pass: fade out unmatched active states
+    for (let stateIdx = 0; stateIdx < states.length; stateIdx++) {
+      const state = states[stateIdx]
+      if (state.active && !matchedStates.has(stateIdx)) {
+        state.targetAlpha = 0
+      }
+    }
+
+    // Third pass: assign unmatched new layers to inactive states (fade in)
+    for (let newIdx = 0; newIdx < cloudLayers.length; newIdx++) {
+      if (matchedNewLayers.has(newIdx)) continue
+
+      const newLayer = cloudLayers[newIdx]
+
+      // Find an inactive state to use
+      for (let stateIdx = 0; stateIdx < states.length; stateIdx++) {
+        const state = states[stateIdx]
+        if (!state.active && state.targetAlpha === 0 && state.currentAlpha < 0.01) {
+          // Use this inactive slot - generate new seed for new pattern
+          state.noiseSeed = Math.random() * 10000
+          state.currentCoverage = newLayer.coverage
+          state.targetCoverage = newLayer.coverage
+          state.currentAltitude = newLayer.altitude
+          state.targetAltitude = newLayer.altitude
+          state.currentAlpha = 0
+          state.targetAlpha = 1
+          state.lastRenderedCoverage = -1 // Force texture regeneration
+          state.active = true
+          matchedNewLayers.add(newIdx)
+          break
+        }
+      }
+    }
+  }, [cloudLayers, showWeatherEffects, showClouds, isTopDownView])
 
   // Apply fog dome effect
   useEffect(() => {
@@ -663,124 +754,193 @@ export function useBabylonWeather(
     }
   }, [showWeatherEffects, showBabylonFog, currentMetar, fogDensity, fogIntensity, visibilityScale])
 
-  // Slowly rotate cloud planes to simulate cloud drift with variable speed per layer
-  // Layers at similar altitudes have correlated speeds (similar wind at similar heights)
+  // Animate cloud layers: coverage, altitude, alpha, and rotation
+  // Also handles texture regeneration when coverage changes enough
   useEffect(() => {
     if (!scene) return
 
     let lastTime = performance.now()
     let lastSpeedChangeTime = performance.now()
 
-    // Per-layer rotation state
-    interface LayerRotationState {
-      currentSpeed: number
-      targetSpeed: number
+    // Helper to apply material properties based on coverage
+    // Uses cloudOpacityRef.current to avoid effect recreation when opacity slider changes
+    const applyMaterialForCoverage = (material: BABYLON.StandardMaterial, coverage: number, alpha: number) => {
+      const opacity = cloudOpacityRef.current
+      if (coverage >= 0.95) {
+        // OVC: fully opaque
+        material.transparencyMode = BABYLON.Material.MATERIAL_OPAQUE
+        material.needDepthPrePass = true
+        material.disableLighting = true
+        material.emissiveColor = new BABYLON.Color3(0.25, 0.25, 0.28)
+        material.diffuseColor = new BABYLON.Color3(0, 0, 0)
+        material.alpha = alpha * opacity
+      } else if (coverage >= 0.6) {
+        // BKN: nearly opaque with alpha blending
+        material.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND
+        material.needDepthPrePass = false
+        material.disableLighting = false
+        material.emissiveColor = new BABYLON.Color3(...CLOUD_EMISSIVE_COLOR)
+        material.diffuseColor = new BABYLON.Color3(...CLOUD_DIFFUSE_COLOR)
+        const baseAlpha = 0.95
+        material.alpha = baseAlpha * alpha * opacity
+      } else {
+        // FEW/SCT: transparent
+        material.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND
+        material.needDepthPrePass = false
+        material.disableLighting = false
+        material.emissiveColor = new BABYLON.Color3(...CLOUD_EMISSIVE_COLOR)
+        material.diffuseColor = new BABYLON.Color3(...CLOUD_DIFFUSE_COLOR)
+        const baseAlpha = 0.6 + coverage * 0.4
+        material.alpha = baseAlpha * alpha * opacity
+      }
     }
-    const layerStates: LayerRotationState[] = []
 
-    // Initialize states for each layer in the pool
-    for (let i = 0; i < CLOUD_POOL_SIZE; i++) {
-      const initialSpeed = CLOUD_ROTATION_SPEED * (1 + (Math.random() * 2 - 1) * CLOUD_ROTATION_SPEED_VARIANCE)
-      layerStates.push({
-        currentSpeed: initialSpeed,
-        targetSpeed: initialSpeed
-      })
-    }
-
-    // Generate new target speeds for all layers, correlating by altitude proximity
+    // Generate new target rotation speeds for all layers, correlating by altitude
     const pickNewTargetSpeeds = () => {
-      const pool = cloudMeshPoolRef.current
-      if (pool.length === 0) return
+      const states = cloudLayerStatesRef.current
+      if (states.length === 0) return
 
-      // Get altitudes of visible layers
-      const layerAltitudes: { index: number; altitude: number }[] = []
-      for (let i = 0; i < pool.length; i++) {
-        if (pool[i].plane.isVisible) {
-          layerAltitudes.push({ index: i, altitude: pool[i].plane.position.y })
+      // Get active layers with their altitudes
+      const activeStates: { index: number; altitude: number }[] = []
+      for (let i = 0; i < states.length; i++) {
+        if (states[i].active || states[i].currentAlpha > 0.01) {
+          activeStates.push({ index: i, altitude: states[i].currentAltitude })
         }
       }
 
-      if (layerAltitudes.length === 0) return
+      if (activeStates.length === 0) return
 
       // Sort by altitude
-      layerAltitudes.sort((a, b) => a.altitude - b.altitude)
+      activeStates.sort((a, b) => a.altitude - b.altitude)
 
       // Pick a base speed for the lowest layer
       const baseVariance = (Math.random() * 2 - 1) * CLOUD_ROTATION_SPEED_VARIANCE
       const lowestLayerSpeed = CLOUD_ROTATION_SPEED * (1 + baseVariance)
-      layerStates[layerAltitudes[0].index].targetSpeed = lowestLayerSpeed
+      states[activeStates[0].index].rotation.targetSpeed = lowestLayerSpeed
 
       // For each subsequent layer, vary speed based on altitude difference
-      // Layers close together (< 500m) have very similar speeds
-      // Layers far apart (> 2000m) can have very different speeds
-      for (let i = 1; i < layerAltitudes.length; i++) {
-        const prevLayer = layerAltitudes[i - 1]
-        const currLayer = layerAltitudes[i]
-        const altitudeDiff = Math.abs(currLayer.altitude - prevLayer.altitude)
+      for (let i = 1; i < activeStates.length; i++) {
+        const prevState = activeStates[i - 1]
+        const currState = activeStates[i]
+        const altitudeDiff = Math.abs(currState.altitude - prevState.altitude)
 
         // Normalize altitude difference: 0 at 0m, 1 at 2000m+
         const normalizedDiff = Math.min(1, altitudeDiff / 2000)
-
-        // Correlation factor: 1 = same speed, 0 = independent speed
-        // Close layers (normalizedDiff ~0) have high correlation
         const correlation = 1 - normalizedDiff
 
-        // Generate independent random variance for this layer
         const independentVariance = (Math.random() * 2 - 1) * CLOUD_ROTATION_SPEED_VARIANCE
         const independentSpeed = CLOUD_ROTATION_SPEED * (1 + independentVariance)
 
-        // Blend between previous layer's speed and independent speed
-        const prevSpeed = layerStates[prevLayer.index].targetSpeed
-        layerStates[currLayer.index].targetSpeed =
+        const prevSpeed = states[prevState.index].rotation.targetSpeed
+        states[currState.index].rotation.targetSpeed =
           prevSpeed * correlation + independentSpeed * (1 - correlation)
-      }
-
-      // Also set target speeds for non-visible layers (in case they become visible)
-      for (let i = 0; i < pool.length; i++) {
-        if (!pool[i].plane.isVisible) {
-          const variance = (Math.random() * 2 - 1) * CLOUD_ROTATION_SPEED_VARIANCE
-          layerStates[i].targetSpeed = CLOUD_ROTATION_SPEED * (1 + variance)
-        }
       }
     }
 
-    // Pick initial target speeds
-    pickNewTargetSpeeds()
-
     const observer = scene.onBeforeRenderObservable.add(() => {
       const now = performance.now()
-      const deltaSeconds = (now - lastTime) / 1000
+      // Clamp delta time to prevent huge jumps when tab was backgrounded
+      const deltaSeconds = Math.min((now - lastTime) / 1000, 0.1)
       lastTime = now
 
-      // Periodically pick new target speeds
+      // Periodically pick new rotation speeds
       const timeSinceSpeedChange = (now - lastSpeedChangeTime) / 1000
       if (timeSinceSpeedChange > CLOUD_ROTATION_CHANGE_INTERVAL) {
         pickNewTargetSpeeds()
         lastSpeedChangeTime = now
       }
 
-      // Smoothly interpolate each layer's speed and apply rotation
-      const lerpFactor = Math.min(1, deltaSeconds / CLOUD_ROTATION_TRANSITION_TIME)
       const pool = cloudMeshPoolRef.current
+      const states = cloudLayerStatesRef.current
 
-      for (let i = 0; i < pool.length; i++) {
+      for (let i = 0; i < pool.length && i < states.length; i++) {
         const meshData = pool[i]
-        const state = layerStates[i]
+        const state = states[i]
 
-        if (meshData.plane.isVisible) {
-          // Smoothly interpolate toward target speed
-          state.currentSpeed = state.currentSpeed + (state.targetSpeed - state.currentSpeed) * lerpFactor
-
-          // Rotate around Y axis (vertical in Babylon)
-          meshData.plane.rotation.y += state.currentSpeed * deltaSeconds
+        // Animate alpha (fade in/out)
+        if (Math.abs(state.currentAlpha - state.targetAlpha) > 0.001) {
+          const alphaDelta = CLOUD_LAYER_FADE_SPEED * deltaSeconds
+          if (state.currentAlpha < state.targetAlpha) {
+            state.currentAlpha = Math.min(state.targetAlpha, state.currentAlpha + alphaDelta)
+          } else {
+            state.currentAlpha = Math.max(state.targetAlpha, state.currentAlpha - alphaDelta)
+          }
         }
+
+        // Mark as inactive when fully faded out
+        if (state.currentAlpha < 0.01 && state.targetAlpha === 0) {
+          state.active = false
+          meshData.plane.isVisible = false
+          // Dispose texture to free GPU memory
+          if (meshData.material.diffuseTexture) {
+            meshData.material.diffuseTexture.dispose()
+            meshData.material.diffuseTexture = null
+          }
+          continue
+        }
+
+        // Skip if not visible at all
+        if (state.currentAlpha < 0.01 && !state.active) {
+          meshData.plane.isVisible = false
+          continue
+        }
+
+        // Layer is visible - animate properties
+        meshData.plane.isVisible = true
+
+        // Animate altitude
+        if (Math.abs(state.currentAltitude - state.targetAltitude) > 0.1) {
+          const altDelta = CLOUD_LAYER_ALTITUDE_TRANSITION_SPEED * deltaSeconds
+          if (state.currentAltitude < state.targetAltitude) {
+            state.currentAltitude = Math.min(state.targetAltitude, state.currentAltitude + altDelta)
+          } else {
+            state.currentAltitude = Math.max(state.targetAltitude, state.currentAltitude - altDelta)
+          }
+        }
+        meshData.plane.position.y = state.currentAltitude
+
+        // Animate coverage
+        if (Math.abs(state.currentCoverage - state.targetCoverage) > 0.001) {
+          const covDelta = CLOUD_LAYER_COVERAGE_TRANSITION_SPEED * deltaSeconds
+          if (state.currentCoverage < state.targetCoverage) {
+            state.currentCoverage = Math.min(state.targetCoverage, state.currentCoverage + covDelta)
+          } else {
+            state.currentCoverage = Math.max(state.targetCoverage, state.currentCoverage - covDelta)
+          }
+        }
+
+        // Regenerate texture if coverage changed enough (keeps same noise seed for pattern continuity)
+        const coverageChange = Math.abs(state.currentCoverage - state.lastRenderedCoverage)
+        if (coverageChange >= CLOUD_LAYER_COVERAGE_REGEN_THRESHOLD || state.lastRenderedCoverage < 0) {
+          // Dispose old texture
+          if (meshData.material.diffuseTexture) {
+            meshData.material.diffuseTexture.dispose()
+          }
+          // Create new texture with same seed (pattern stays, threshold changes)
+          const patchyTexture = createPatchyCloudTexture(
+            scene,
+            CLOUD_NOISE_TEXTURE_SIZE,
+            state.currentCoverage,
+            state.noiseSeed
+          )
+          meshData.material.diffuseTexture = patchyTexture
+          state.lastRenderedCoverage = state.currentCoverage
+        }
+
+        // Apply material properties
+        applyMaterialForCoverage(meshData.material, state.currentCoverage, state.currentAlpha)
+
+        // Animate rotation
+        const rotLerpFactor = Math.min(1, deltaSeconds / CLOUD_ROTATION_TRANSITION_TIME)
+        state.rotation.currentSpeed += (state.rotation.targetSpeed - state.rotation.currentSpeed) * rotLerpFactor
+        meshData.plane.rotation.y += state.rotation.currentSpeed * deltaSeconds
       }
     })
 
     return () => {
       scene.onBeforeRenderObservable.remove(observer)
     }
-  }, [scene])
+  }, [scene]) // cloudOpacity accessed via ref to avoid effect recreation
 
   // Weather-based visibility culling function
   const isVisibleByWeather = useCallback((params: WeatherVisibilityParams): boolean => {

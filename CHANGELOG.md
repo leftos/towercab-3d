@@ -20,6 +20,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 ### Changed
 - Weather debug panel: Apply button now applies both precipitation and cloud settings together
 - Weather debug panel: overridden settings are now protected from METAR auto-refresh until cleared
+- Cloud layers now transition smoothly when METAR updates: altitude changes animate gradually, coverage changes morph existing cloud patterns (FEW becoming SCT adds clouds to existing patches rather than regenerating), and unrelated layers crossfade elegantly
 
 ### Fixed
 - Cloud layers now render correctly as horizontal layers at their METAR-reported altitudes (previously invisible due to camera sync issue)

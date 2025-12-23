@@ -301,3 +301,44 @@ export const CLOUD_ROTATION_CHANGE_INTERVAL = 300
  * Creates smooth acceleration/deceleration between speeds.
  */
 export const CLOUD_ROTATION_TRANSITION_TIME = 5
+
+// ============================================================================
+// Cloud Layer Transition Configuration
+// ============================================================================
+
+/**
+ * Maximum altitude difference (meters) for matching old layer to new layer.
+ * Layers within this range are considered the "same" layer and will transition.
+ * Layers outside this range will crossfade (old fades out, new fades in).
+ */
+export const CLOUD_LAYER_MATCH_ALTITUDE_THRESHOLD = 500
+
+/**
+ * Maximum coverage difference for matching old layer to new layer.
+ * E.g., FEW (0.1875) to BKN (0.6875) = 0.5 difference, which exceeds 0.4 threshold.
+ */
+export const CLOUD_LAYER_MATCH_COVERAGE_THRESHOLD = 0.4
+
+/**
+ * How fast cloud layer altitude transitions (meters per second).
+ * At 50 m/s, a 1000m altitude change takes 20 seconds.
+ */
+export const CLOUD_LAYER_ALTITUDE_TRANSITION_SPEED = 50
+
+/**
+ * How fast cloud layer coverage transitions (coverage units per second).
+ * At 0.05/s, FEW to SCT (0.25 change) takes 5 seconds.
+ */
+export const CLOUD_LAYER_COVERAGE_TRANSITION_SPEED = 0.05
+
+/**
+ * How fast cloud layers fade in/out (alpha per second).
+ * At 0.2/s, full fade takes 5 seconds.
+ */
+export const CLOUD_LAYER_FADE_SPEED = 0.2
+
+/**
+ * Minimum coverage change before regenerating texture.
+ * Small changes don't need texture regeneration.
+ */
+export const CLOUD_LAYER_COVERAGE_REGEN_THRESHOLD = 0.05
