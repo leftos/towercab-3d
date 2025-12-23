@@ -341,7 +341,6 @@ export function useBabylonCameraSync({
       if (meshData.plane.isVisible) {
         meshData.plane.position.x = camera.position.x
         meshData.plane.position.z = camera.position.z
-
       }
     }
 

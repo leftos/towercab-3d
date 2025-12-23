@@ -103,9 +103,10 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   // NOTE: cameraNearPlane effect is disabled (see section 3b below)
   const _cameraNearPlane = useSettingsStore((state) => state.graphics.cameraNearPlane) ?? 0.1
 
-  // Weather store for fog effects and camera position updates
+  // Weather store for fog effects, camera position updates, and cloud layers
   const fogDensity = useWeatherStore((state) => state.fogDensity)
   const updateCameraPosition = useWeatherStore((state) => state.updateCameraPosition)
+  const cloudLayers = useWeatherStore((state) => state.cloudLayers)
 
   // Measure store for measuring mode
   const isMeasuring = useMeasureStore((state) => state.isActive)
@@ -219,6 +220,31 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     shadowPolygonOffsetFactor,
     shadowPolygonOffsetUnits
   })
+
+  // =========================================================================
+  // 3c. Hide Stars When OVC Cloud Layer Present
+  // =========================================================================
+  // Babylon.js clouds render on a transparent canvas overlay, so they can't
+  // truly block Cesium's stars. Instead, we hide Cesium's skyBox when there's
+  // an OVC (overcast) cloud layer that would obscure the sky.
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return
+
+    // Check if any cloud layer is OVC (coverage >= 0.95)
+    const hasOvcLayer = cloudLayers.some(layer => layer.coverage >= 0.95)
+
+    // Toggle Cesium's star rendering
+    if (viewer.scene.skyBox) {
+      viewer.scene.skyBox.show = !hasOvcLayer
+    }
+    // Also toggle sun/moon for consistency
+    if (viewer.scene.sun) {
+      viewer.scene.sun.show = !hasOvcLayer
+    }
+    if (viewer.scene.moon) {
+      viewer.scene.moon.show = !hasOvcLayer
+    }
+  }, [viewer, cloudLayers])
 
   // =========================================================================
   // 3b. Camera Near Plane (for depth precision)

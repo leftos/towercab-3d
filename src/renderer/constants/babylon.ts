@@ -224,3 +224,80 @@ export const DIRECTIONAL_LIGHT_INTENSITY = 0.6
  * Used for METAR visibility conversions.
  */
 export const STATUTE_MILES_TO_METERS = 1609.34
+
+// ============================================================================
+// Cloud Patchiness Configuration (Noise-Based)
+// ============================================================================
+
+/**
+ * Size of the noise texture for cloud patchiness (pixels).
+ * Higher values = finer detail but more memory.
+ */
+export const CLOUD_NOISE_TEXTURE_SIZE = 512
+
+/**
+ * Number of octaves for fractal Brownian motion (fBm) noise.
+ * More octaves = more detail but slightly slower generation.
+ */
+export const CLOUD_NOISE_OCTAVES = 4
+
+/**
+ * Noise scale factor - controls "zoom level" of cloud patterns.
+ * Higher values = more smaller patches, lower = fewer larger patches.
+ */
+export const CLOUD_NOISE_SCALE = 6.0
+
+/**
+ * Base persistence for fBm - how much each octave contributes.
+ */
+export const CLOUD_NOISE_PERSISTENCE = 0.5
+
+/**
+ * Threshold offset for cloud coverage calculation.
+ * Set to 0 so noise threshold directly matches coverage percentage.
+ */
+export const CLOUD_COVERAGE_THRESHOLD_OFFSET = 0
+
+/**
+ * Edge softness for cloud transparency (0-1).
+ * Lower values = sharper edges, clearer gaps between clouds.
+ */
+export const CLOUD_EDGE_SOFTNESS = 0.05
+
+/**
+ * Radial fade start point (0-1 from center).
+ * Where the radial edge fade begins.
+ */
+export const CLOUD_RADIAL_FADE_START = 0.5
+
+/**
+ * Radial fade end point (0-1 from center).
+ * Where the radial edge fade reaches full transparency.
+ */
+export const CLOUD_RADIAL_FADE_END = 1.0
+
+/**
+ * Cloud rotation base speed in radians per second.
+ * Very slow rotation to simulate cloud drift without being distracting.
+ * At 0.002 rad/s, a full rotation takes ~52 minutes.
+ */
+export const CLOUD_ROTATION_SPEED = 0.002
+
+/**
+ * Cloud rotation speed variance (multiplier range around base speed).
+ * Speed will vary from baseSpeed * (1 - variance) to baseSpeed * (1 + variance).
+ * At 0.5, speed ranges from 50% to 150% of base speed.
+ */
+export const CLOUD_ROTATION_SPEED_VARIANCE = 0.5
+
+/**
+ * How often to change cloud rotation speed (in seconds).
+ * Lower values = more frequent speed changes.
+ */
+export const CLOUD_ROTATION_CHANGE_INTERVAL = 300
+
+/**
+ * How long it takes to transition to a new rotation speed (in seconds).
+ * Creates smooth acceleration/deceleration between speeds.
+ */
+export const CLOUD_ROTATION_TRANSITION_TIME = 5

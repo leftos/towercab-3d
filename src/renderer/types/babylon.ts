@@ -47,6 +47,8 @@ export interface CloudMeshData {
   plane: BABYLON.Mesh
   /** Semi-transparent material with configurable opacity */
   material: BABYLON.StandardMaterial
+  /** Last coverage value used to generate the opacity texture (for caching) */
+  lastCoverage?: number
 }
 
 // ============================================================================

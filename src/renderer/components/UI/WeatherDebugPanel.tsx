@@ -1,10 +1,28 @@
 import { useState } from 'react'
 import { useWeatherStore } from '@/stores/weatherStore'
-import type { PrecipitationType } from '@/types'
+import type { PrecipitationType, CloudLayer } from '@/types'
 import './WeatherDebugPanel.css'
 
 type PrecipIntensity = 'none' | 'light' | 'moderate' | 'heavy'
 type PrecipType = 'rain' | 'snow'
+type CloudCoverage = 'CLR' | 'FEW' | 'SCT' | 'BKN' | 'OVC'
+
+interface DebugCloudLayer {
+  coverage: CloudCoverage
+  altitudeHundreds: number // Altitude in hundreds of feet AGL
+}
+
+/** Convert coverage code to numeric value */
+function coverageToValue(coverage: CloudCoverage): number {
+  const map: Record<CloudCoverage, number> = {
+    'CLR': 0,
+    'FEW': 0.1875,
+    'SCT': 0.4375,
+    'BKN': 0.6875,
+    'OVC': 1.0
+  }
+  return map[coverage]
+}
 
 /**
  * Dev-only panel for overriding METAR weather settings
@@ -18,11 +36,18 @@ export function WeatherDebugPanel() {
   const [windGust, setWindGust] = useState(0)
   const [windDirection, setWindDirection] = useState(270)
   const [hasThunderstorm, setHasThunderstorm] = useState(false)
-  const [isOverriding, setIsOverriding] = useState(false)
+
+  // Cloud layer override state
+  const [cloudLayersOverride, setCloudLayersOverride] = useState<DebugCloudLayer[]>([])
 
   const setPrecipitation = useWeatherStore((state) => state.setPrecipitation)
   const setWind = useWeatherStore((state) => state.setWind)
+  const setCloudLayers = useWeatherStore((state) => state.setCloudLayers)
+  const setDebugOverriding = useWeatherStore((state) => state.setDebugOverriding)
+  const isDebugOverriding = useWeatherStore((state) => state.isDebugOverriding)
+  const currentCloudLayers = useWeatherStore((state) => state.cloudLayers)
 
+  // Apply all weather overrides (precipitation, wind, and clouds)
   const applyOverride = () => {
     // Build precipitation data
     const types: { type: PrecipitationType; intensity: 'light' | 'moderate' | 'heavy'; code: string }[] = []
@@ -54,24 +79,53 @@ export function WeatherDebugPanel() {
       isVariable: false
     })
 
-    setIsOverriding(true)
+    // Apply cloud layers
+    const layers: CloudLayer[] = cloudLayersOverride
+      .filter(l => l.coverage !== 'CLR')
+      .map(l => ({
+        type: l.coverage,
+        coverage: coverageToValue(l.coverage),
+        altitude: l.altitudeHundreds * 100 * 0.3048 // Convert hundreds of feet to meters
+      }))
+      .sort((a, b) => a.altitude - b.altitude)
+
+    console.log('[WeatherDebug] Setting cloud layers:', layers)
+    setCloudLayers(layers)
+
+    // Enable debug override mode to prevent METAR updates from overwriting
+    setDebugOverriding(true)
   }
 
   const clearOverride = () => {
-    // Reset to no precipitation
-    setPrecipitation({
-      active: false,
-      types: [],
-      hasThunderstorm: false,
-      visibilityFactor: 1.0
-    })
-    setWind({
-      speed: 0,
-      direction: 0,
-      gustSpeed: null,
-      isVariable: false
-    })
-    setIsOverriding(false)
+    // Clear local UI state
+    setPrecipIntensity('none')
+    setHasThunderstorm(false)
+    setWindSpeed(10)
+    setWindGust(0)
+    setWindDirection(270)
+    setCloudLayersOverride([])
+
+    // Disable debug override mode - this will restore weather from METAR
+    setDebugOverriding(false)
+  }
+
+  // Cloud layer management
+  const addCloudLayer = () => {
+    if (cloudLayersOverride.length >= 4) return // Max 4 layers
+    setCloudLayersOverride([
+      ...cloudLayersOverride,
+      { coverage: 'SCT', altitudeHundreds: 30 }
+    ])
+  }
+
+  const removeCloudLayer = (index: number) => {
+    setCloudLayersOverride(cloudLayersOverride.filter((_, i) => i !== index))
+  }
+
+  const updateCloudLayer = (index: number, updates: Partial<DebugCloudLayer>) => {
+    setCloudLayersOverride(cloudLayersOverride.map((layer, i) =>
+      i === index ? { ...layer, ...updates } : layer
+    ))
   }
 
   if (!isOpen) {
@@ -165,9 +219,68 @@ export function WeatherDebugPanel() {
           </label>
         </div>
 
+        {/* Cloud Layers Section */}
+        <div className="weather-debug-section">
+          <div className="weather-debug-section-header">
+            <span>Cloud Layers</span>
+            <button
+              onClick={addCloudLayer}
+              disabled={cloudLayersOverride.length >= 4}
+              title="Add cloud layer"
+            >
+              +
+            </button>
+          </div>
+
+          {/* Current METAR clouds display */}
+          {!isDebugOverriding && currentCloudLayers.length > 0 && (
+            <div className="weather-debug-metar-clouds">
+              <span className="weather-debug-label">From METAR:</span>
+              {currentCloudLayers.map((layer, i) => (
+                <span key={i} className="weather-debug-cloud-tag">
+                  {layer.type}{String(Math.round(layer.altitude / 0.3048 / 100)).padStart(3, '0')}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Override cloud layers */}
+          {cloudLayersOverride.map((layer, index) => (
+            <div key={index} className="weather-debug-cloud-layer">
+              <select
+                value={layer.coverage}
+                onChange={(e) => updateCloudLayer(index, { coverage: e.target.value as CloudCoverage })}
+              >
+                <option value="CLR">CLR</option>
+                <option value="FEW">FEW</option>
+                <option value="SCT">SCT</option>
+                <option value="BKN">BKN</option>
+                <option value="OVC">OVC</option>
+              </select>
+              <input
+                type="number"
+                min="1"
+                max="500"
+                value={layer.altitudeHundreds}
+                onChange={(e) => updateCloudLayer(index, { altitudeHundreds: Number(e.target.value) })}
+                title="Altitude in hundreds of feet AGL"
+              />
+              <span className="weather-debug-altitude-label">00 ft</span>
+              <button
+                onClick={() => removeCloudLayer(index)}
+                className="weather-debug-remove"
+                title="Remove layer"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {/* Unified Apply/Clear buttons at the bottom */}
         <div className="weather-debug-buttons">
           <button
-            className={isOverriding ? 'active' : ''}
+            className={isDebugOverriding ? 'active' : ''}
             onClick={applyOverride}
           >
             Apply
@@ -177,9 +290,9 @@ export function WeatherDebugPanel() {
           </button>
         </div>
 
-        {isOverriding && (
+        {isDebugOverriding && (
           <div className="weather-debug-status">
-            Override active
+            Override active (METAR won't overwrite)
           </div>
         )}
       </div>

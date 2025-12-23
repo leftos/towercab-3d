@@ -33,6 +33,9 @@ interface WeatherState {
   // Auto-refresh state
   refreshIntervalId: ReturnType<typeof setInterval> | null
 
+  // Debug override mode - when true, METAR updates don't overwrite precipitation/wind/clouds
+  isDebugOverriding: boolean
+
   // Actions
   fetchWeather: (icao: string) => Promise<void>
   fetchNearestWeather: (lat: number, lon: number) => Promise<void>
@@ -43,8 +46,10 @@ interface WeatherState {
   clearWeather: () => void
 
   // Debug overrides (for development)
+  setDebugOverriding: (isOverriding: boolean) => void
   setPrecipitation: (precipitation: PrecipitationState) => void
   setWind: (wind: WindState) => void
+  setCloudLayers: (cloudLayers: CloudLayer[]) => void
 }
 
 /**
@@ -85,18 +90,22 @@ function visibilityToFogDensity(visibSM: number): number {
 }
 
 /**
- * Convert cloud cover code to opacity value
+ * Convert cloud cover code to coverage value.
+ * Returns the midpoint of the okta range for stable texture caching.
+ * Visual variety comes from the noise seed in texture generation.
  */
 function coverageToOpacity(cover: string): number {
+  // Use midpoint of each okta range for stable/deterministic values
+  // This ensures texture caching works (coverage doesn't change between METAR refetches)
   const coverageMap: Record<string, number> = {
-    'FEW': 0.25,   // 1-2 oktas
-    'SCT': 0.50,   // 3-4 oktas (scattered)
-    'BKN': 0.75,   // 5-7 oktas (broken)
-    'OVC': 1.00,   // 8 oktas (overcast)
-    'SKC': 0,      // Sky clear
-    'CLR': 0,      // Clear below 12,000ft
-    'NSC': 0,      // No significant cloud
-    'NCD': 0,      // No cloud detected
+    'FEW': 0.1875,  // 1-2 oktas, midpoint of 1.5/8
+    'SCT': 0.4375,  // 3-4 oktas, midpoint of 3.5/8
+    'BKN': 0.6875,  // 5-6 oktas, midpoint of 5.5/8
+    'OVC': 1.0,     // 8 oktas (full coverage)
+    'SKC': 0,       // Sky clear
+    'CLR': 0,       // Clear below 12,000ft
+    'NSC': 0,       // No significant cloud
+    'NCD': 0,       // No cloud detected
   }
   return coverageMap[cover.toUpperCase()] ?? 0
 }
@@ -172,6 +181,7 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
   cameraPosition: null,
   useNearestMetar: false,
   refreshIntervalId: null,
+  isDebugOverriding: false,
 
   fetchWeather: async (icao: string) => {
     set({ isLoading: true, error: null, useNearestMetar: false })
@@ -180,16 +190,29 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
       const metar = await metarService.fetchMetar(icao)
 
       if (metar) {
-        set({
-          currentMetar: metar,
-          lastFetchTime: Date.now(),
-          isLoading: false,
-          error: null,
-          fogDensity: visibilityToFogDensity(metar.visib),
-          cloudLayers: parseCloudLayers(metar),
-          precipitation: parsePrecipitationState(metar),
-          wind: metar.wind
-        })
+        const state = get()
+        // When debug override is active, only update METAR data and fog density
+        // Don't overwrite precipitation, wind, or cloud layers
+        if (state.isDebugOverriding) {
+          set({
+            currentMetar: metar,
+            lastFetchTime: Date.now(),
+            isLoading: false,
+            error: null,
+            fogDensity: visibilityToFogDensity(metar.visib)
+          })
+        } else {
+          set({
+            currentMetar: metar,
+            lastFetchTime: Date.now(),
+            isLoading: false,
+            error: null,
+            fogDensity: visibilityToFogDensity(metar.visib),
+            cloudLayers: parseCloudLayers(metar),
+            precipitation: parsePrecipitationState(metar),
+            wind: metar.wind
+          })
+        }
       } else {
         set({
           isLoading: false,
@@ -211,17 +234,31 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
       const metar = await metarService.fetchNearestMetar(lat, lon, 100)
 
       if (metar) {
-        set({
-          currentMetar: metar,
-          lastFetchTime: Date.now(),
-          isLoading: false,
-          error: null,
-          fogDensity: visibilityToFogDensity(metar.visib),
-          cloudLayers: parseCloudLayers(metar),
-          precipitation: parsePrecipitationState(metar),
-          wind: metar.wind,
-          cameraPosition: { lat, lon }
-        })
+        const state = get()
+        // When debug override is active, only update METAR data and fog density
+        // Don't overwrite precipitation, wind, or cloud layers
+        if (state.isDebugOverriding) {
+          set({
+            currentMetar: metar,
+            lastFetchTime: Date.now(),
+            isLoading: false,
+            error: null,
+            fogDensity: visibilityToFogDensity(metar.visib),
+            cameraPosition: { lat, lon }
+          })
+        } else {
+          set({
+            currentMetar: metar,
+            lastFetchTime: Date.now(),
+            isLoading: false,
+            error: null,
+            fogDensity: visibilityToFogDensity(metar.visib),
+            cloudLayers: parseCloudLayers(metar),
+            precipitation: parsePrecipitationState(metar),
+            wind: metar.wind,
+            cameraPosition: { lat, lon }
+          })
+        }
       } else {
         set({
           isLoading: false,
@@ -336,11 +373,30 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
   },
 
   // Debug overrides - allow dev panel to set weather state directly
+  setDebugOverriding: (isOverriding: boolean) => {
+    set({ isDebugOverriding: isOverriding })
+    // When clearing override, restore weather data from current METAR
+    if (!isOverriding) {
+      const state = get()
+      if (state.currentMetar) {
+        set({
+          cloudLayers: parseCloudLayers(state.currentMetar),
+          precipitation: parsePrecipitationState(state.currentMetar),
+          wind: state.currentMetar.wind
+        })
+      }
+    }
+  },
+
   setPrecipitation: (precipitation: PrecipitationState) => {
     set({ precipitation })
   },
 
   setWind: (wind: WindState) => {
     set({ wind })
+  },
+
+  setCloudLayers: (cloudLayers: CloudLayer[]) => {
+    set({ cloudLayers })
   }
 }))

@@ -31,12 +31,199 @@ import {
   FOG_FRESNEL_BIAS_LOW_MIN,
   FOG_FRESNEL_BIAS_MODERATE,
   CLOUD_CEILING_COVERAGE_THRESHOLD,
-  STATUTE_MILES_TO_METERS
+  STATUTE_MILES_TO_METERS,
+  CLOUD_NOISE_TEXTURE_SIZE,
+  CLOUD_NOISE_OCTAVES,
+  CLOUD_NOISE_SCALE,
+  CLOUD_NOISE_PERSISTENCE,
+  CLOUD_EDGE_SOFTNESS,
+  CLOUD_RADIAL_FADE_START,
+  CLOUD_RADIAL_FADE_END,
+  CLOUD_ROTATION_SPEED,
+  CLOUD_ROTATION_SPEED_VARIANCE,
+  CLOUD_ROTATION_CHANGE_INTERVAL,
+  CLOUD_ROTATION_TRANSITION_TIME
 } from '@/constants'
 
 interface UseBabylonWeatherOptions {
   scene: BABYLON.Scene | null
   isTopDownView?: boolean
+}
+
+// ============================================================================
+// Noise Generation Functions for Patchy Clouds
+// ============================================================================
+
+/**
+ * Simple hash function for pseudo-random number generation.
+ * Used as the basis for procedural noise.
+ */
+function hash(x: number, y: number): number {
+  const n = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453
+  return n - Math.floor(n)
+}
+
+/**
+ * Smooth noise interpolation at a point using bilinear interpolation.
+ */
+function smoothNoise(x: number, y: number): number {
+  const x0 = Math.floor(x)
+  const y0 = Math.floor(y)
+  const fx = x - x0
+  const fy = y - y0
+
+  // Smoothstep interpolation for smoother transitions
+  const sx = fx * fx * (3 - 2 * fx)
+  const sy = fy * fy * (3 - 2 * fy)
+
+  // Sample corners
+  const n00 = hash(x0, y0)
+  const n10 = hash(x0 + 1, y0)
+  const n01 = hash(x0, y0 + 1)
+  const n11 = hash(x0 + 1, y0 + 1)
+
+  // Bilinear interpolation
+  const nx0 = n00 * (1 - sx) + n10 * sx
+  const nx1 = n01 * (1 - sx) + n11 * sx
+  return nx0 * (1 - sy) + nx1 * sy
+}
+
+/**
+ * Fractal Brownian Motion (fBm) noise - layered noise for natural cloud patterns.
+ * Combines multiple octaves of noise at different frequencies.
+ */
+function fbmNoise(x: number, y: number, octaves: number, persistence: number): number {
+  let total = 0
+  let amplitude = 1
+  let maxValue = 0
+  let frequency = 1
+
+  for (let i = 0; i < octaves; i++) {
+    total += smoothNoise(x * frequency, y * frequency) * amplitude
+    maxValue += amplitude
+    amplitude *= persistence
+    frequency *= 2
+  }
+
+  return total / maxValue // Normalize to 0-1
+}
+
+/**
+ * Generate a patchy cloud opacity texture using fBm noise.
+ * Coverage determines how much of the noise becomes visible cloud vs transparent gap.
+ *
+ * @param scene - Babylon.js scene
+ * @param textureSize - Size of the texture in pixels
+ * @param coverage - Cloud coverage (0-1, from METAR oktas)
+ * @param seed - Random seed for unique patterns per layer
+ * @returns DynamicTexture with patchy cloud pattern and radial edge fade
+ */
+function createPatchyCloudTexture(
+  scene: BABYLON.Scene,
+  textureSize: number,
+  coverage: number,
+  seed: number = 0
+): BABYLON.DynamicTexture {
+  const texture = new BABYLON.DynamicTexture(
+    `cloud_patchy_${seed}_${coverage.toFixed(3)}`,
+    textureSize,
+    scene,
+    true // generateMipMaps - prevents jagged edges when stretched over large plane
+  )
+  const ctx = texture.getContext() as CanvasRenderingContext2D
+
+  const imageData = ctx.createImageData(textureSize, textureSize)
+  const data = imageData.data
+
+  const centerX = textureSize / 2
+  const centerY = textureSize / 2
+  const maxRadius = textureSize / 2
+
+  // Coverage determines the noise threshold
+  // For BKN/OVC (high coverage), we want mostly solid with small breaks
+  // For FEW/SCT (low coverage), we want mostly clear with cloud patches
+  const noiseScale = 10.0
+
+  for (let y = 0; y < textureSize; y++) {
+    for (let x = 0; x < textureSize; x++) {
+      const idx = (y * textureSize + x) * 4
+
+      // Generate fBm noise value with seed offset for variety between layers
+      const nx = (x / textureSize) * noiseScale + seed * 100
+      const ny = (y / textureSize) * noiseScale + seed * 100
+      const noiseValue = fbmNoise(nx, ny, CLOUD_NOISE_OCTAVES, CLOUD_NOISE_PERSISTENCE)
+
+      // Calculate cloud opacity based on coverage level
+      let cloudAlpha: number
+      if (coverage >= 0.95) {
+        // OVC: completely solid, no breaks at all
+        cloudAlpha = 1.0
+      } else if (coverage >= 0.6) {
+        // BKN: mostly solid with visible breaks where noise is low
+        // Use higher gap threshold to ensure visible sky breaks
+        // For BKN (0.6875): gap threshold ≈ 0.45, so ~40% of texture is gaps
+        const gapThreshold = (1.0 - coverage) + 0.15
+        if (noiseValue < gapThreshold) {
+          // Clear gap - fully transparent for visible sky
+          cloudAlpha = 0.0
+        } else if (noiseValue < gapThreshold + 0.1) {
+          // Soft edge transition
+          cloudAlpha = (noiseValue - gapThreshold) / 0.1
+        } else {
+          cloudAlpha = 1.0
+        }
+      } else {
+        // FEW/SCT: patches of cloud where noise is high
+        // Higher coverage = lower threshold = more cloud patches
+        const threshold = 0.5 + 0.2 * (1.0 - 2.0 * coverage)
+        if (noiseValue > threshold) {
+          const edge = (noiseValue - threshold) / CLOUD_EDGE_SOFTNESS
+          cloudAlpha = Math.min(1.0, edge)
+        } else {
+          cloudAlpha = 0.0
+        }
+      }
+
+      // Apply radial fade (clouds fade to transparent at edges)
+      // But for high coverage, delay the fade start so center area is fully covered
+      const dx = x - centerX
+      const dy = y - centerY
+      const distance = Math.sqrt(dx * dx + dy * dy) / maxRadius
+
+      // Coverage determines fade start:
+      // - OVC (0.95+): softer edge starting at 0.5 for gradual horizon fade
+      // - BKN (0.6+): later fade at 0.7 for mostly solid center
+      // - FEW/SCT: default fade start
+      let fadeStart: number
+      if (coverage >= 0.95) {
+        fadeStart = 0.5  // OVC: soft gradual edge
+      } else if (coverage >= 0.6) {
+        fadeStart = 0.7  // BKN: later start, mostly solid
+      } else {
+        fadeStart = CLOUD_RADIAL_FADE_START  // FEW/SCT: default
+      }
+      let radialFade = 1.0
+      if (distance > fadeStart) {
+        radialFade = 1.0 - (distance - fadeStart) / (CLOUD_RADIAL_FADE_END - fadeStart)
+        radialFade = Math.max(0, Math.min(1, radialFade))
+      }
+
+      // Combine patchy cloud with radial fade
+      const finalAlpha = cloudAlpha * radialFade
+
+      // Write RGBA - white color with alpha for transparency
+      data[idx] = 255     // R
+      data[idx + 1] = 255 // G
+      data[idx + 2] = 255 // B
+      data[idx + 3] = Math.round(finalAlpha * 255) // A
+    }
+  }
+
+  ctx.putImageData(imageData, 0, 0)
+  texture.hasAlpha = true
+  texture.update()
+
+  return texture
 }
 
 /**
@@ -273,7 +460,6 @@ export function useBabylonWeather(
   const fogDomeRef = useRef<BABYLON.Mesh | null>(null)
   const fogDomeMaterialRef = useRef<BABYLON.StandardMaterial | null>(null)
   const cloudMeshPoolRef = useRef<CloudMeshData[]>([])
-  const cloudFadeTextureRef = useRef<BABYLON.DynamicTexture | null>(null)
 
   // Weather store subscriptions
   const cloudLayers = useWeatherStore((state) => state.cloudLayers)
@@ -291,30 +477,7 @@ export function useBabylonWeather(
   useEffect(() => {
     if (!scene) return
 
-    // Create a radial gradient texture for cloud edge fade-out
-    // This makes clouds fade to transparent at the edges instead of having hard square borders
-    const textureSize = 512
-    const cloudFadeTexture = new BABYLON.DynamicTexture('cloud_fade_texture', textureSize, scene, false)
-    const ctx = cloudFadeTexture.getContext()
-
-    // Create radial gradient: opaque center, transparent edges
-    const centerX = textureSize / 2
-    const centerY = textureSize / 2
-    const innerRadius = 0  // Start fully opaque at center
-    const outerRadius = textureSize / 2  // Fade to transparent at edge
-
-    const gradient = ctx.createRadialGradient(centerX, centerY, innerRadius, centerX, centerY, outerRadius)
-    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)')      // Center: fully opaque
-    gradient.addColorStop(0.5, 'rgba(255, 255, 255, 1)')    // 50%: still opaque
-    gradient.addColorStop(0.75, 'rgba(255, 255, 255, 0.5)') // 75%: start fading
-    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)')      // Edge: fully transparent
-
-    ctx.fillStyle = gradient
-    ctx.fillRect(0, 0, textureSize, textureSize)
-    cloudFadeTexture.update()
-    cloudFadeTextureRef.current = cloudFadeTexture
-
-    // Create cloud plane mesh pool
+    // Create cloud plane mesh pool (opacity textures are set dynamically based on coverage)
     for (let i = 0; i < CLOUD_POOL_SIZE; i++) {
       const plane = BABYLON.MeshBuilder.CreatePlane(`cloud_layer_${i}`, {
         size: CLOUD_PLANE_DIAMETER
@@ -324,15 +487,14 @@ export function useBabylonWeather(
       plane.rotation.x = CLOUD_PLANE_ROTATION_X
       plane.isVisible = false
 
-      // Create semi-transparent cloud material with edge fade
+      // Create semi-transparent cloud material (diffuseTexture with alpha set in update effect)
       const material = new BABYLON.StandardMaterial(`cloud_mat_${i}`, scene)
       material.diffuseColor = new BABYLON.Color3(...CLOUD_DIFFUSE_COLOR)
       material.emissiveColor = new BABYLON.Color3(...CLOUD_EMISSIVE_COLOR)
       material.alpha = CLOUD_BASE_ALPHA
       material.backFaceCulling = false
       material.disableLighting = false
-      material.opacityTexture = cloudFadeTexture  // Apply radial fade
-      material.useAlphaFromDiffuseTexture = false
+      material.useAlphaFromDiffuseTexture = true  // Use alpha channel from diffuseTexture
       plane.material = material
 
       cloudMeshPoolRef.current.push({ plane, material })
@@ -366,16 +528,13 @@ export function useBabylonWeather(
     fogDomeMaterialRef.current = fogDomeMaterial
 
     return () => {
-      // Dispose cloud planes
+      // Dispose cloud planes and their individual diffuse textures
       for (const cloudData of cloudMeshPoolRef.current) {
+        cloudData.material.diffuseTexture?.dispose()
         cloudData.material?.dispose()
         cloudData.plane.dispose()
       }
       cloudMeshPoolRef.current = []
-
-      // Dispose cloud fade texture
-      cloudFadeTextureRef.current?.dispose()
-      cloudFadeTextureRef.current = null
 
       // Dispose fog dome
       fogDomeMaterialRef.current?.dispose()
@@ -385,9 +544,9 @@ export function useBabylonWeather(
     }
   }, [scene])
 
-  // Update cloud planes based on weather data
+  // Update cloud planes based on weather data with patchy textures
   useEffect(() => {
-    if (cloudMeshPoolRef.current.length === 0) return
+    if (cloudMeshPoolRef.current.length === 0 || !scene) return
 
     const shouldShowClouds = showWeatherEffects && showClouds && !isTopDownView
     const pool = cloudMeshPoolRef.current
@@ -398,15 +557,65 @@ export function useBabylonWeather(
 
       if (!shouldShowClouds || i >= cloudLayers.length) {
         meshData.plane.isVisible = false
+        // Dispose texture when layer is hidden to free GPU memory
+        if (meshData.material.diffuseTexture) {
+          meshData.material.diffuseTexture.dispose()
+          meshData.material.diffuseTexture = null
+          meshData.lastCoverage = undefined
+        }
         continue
       }
 
       const layer = cloudLayers[i]
       meshData.plane.position.y = layer.altitude
       meshData.plane.isVisible = true
-      meshData.material.alpha = layer.coverage * cloudOpacity
+
+      // Always regenerate texture when cloud layers update
+      // This allows testing different random patterns via the debug panel
+      // Dispose old texture if exists
+      if (meshData.material.diffuseTexture) {
+        meshData.material.diffuseTexture.dispose()
+      }
+
+      // Create new patchy texture with random seed for variety
+      const randomSeed = i + Math.random() * 10000
+      const patchyTexture = createPatchyCloudTexture(
+        scene,
+        CLOUD_NOISE_TEXTURE_SIZE,
+        layer.coverage,
+        randomSeed
+      )
+      meshData.material.diffuseTexture = patchyTexture
+
+      // Scale material alpha based on coverage - denser clouds are more opaque
+      // OVC should be completely solid, BKN nearly solid, FEW/SCT more transparent
+      let baseAlpha: number
+      if (layer.coverage >= 0.95) {
+        // OVC: fully opaque - use OPAQUE mode to truly block transparency
+        baseAlpha = 1.0
+        meshData.material.transparencyMode = BABYLON.Material.MATERIAL_OPAQUE
+        meshData.material.needDepthPrePass = true
+        // Disable Babylon lighting - use only emissive for consistent dark gray appearance
+        // This prevents the always-on hemispheric light from making OVC blindingly bright
+        meshData.material.disableLighting = true
+        meshData.material.emissiveColor = new BABYLON.Color3(0.25, 0.25, 0.28)
+        meshData.material.diffuseColor = new BABYLON.Color3(0, 0, 0)
+      } else if (layer.coverage >= 0.6) {
+        // BKN: nearly opaque with alpha blending for gaps
+        baseAlpha = 0.95
+        meshData.material.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND
+        meshData.material.needDepthPrePass = false
+        meshData.material.emissiveColor = new BABYLON.Color3(...CLOUD_EMISSIVE_COLOR)
+      } else {
+        // FEW/SCT: transparent with alpha blending
+        baseAlpha = 0.6 + layer.coverage * 0.4
+        meshData.material.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND
+        meshData.material.needDepthPrePass = false
+        meshData.material.emissiveColor = new BABYLON.Color3(...CLOUD_EMISSIVE_COLOR)
+      }
+      meshData.material.alpha = baseAlpha * cloudOpacity
     }
-  }, [cloudLayers, showWeatherEffects, showClouds, cloudOpacity, isTopDownView])
+  }, [scene, cloudLayers, showWeatherEffects, showClouds, cloudOpacity, isTopDownView])
 
   // Apply fog dome effect
   useEffect(() => {
@@ -453,6 +662,125 @@ export function useBabylonWeather(
       fogDome.isVisible = false
     }
   }, [showWeatherEffects, showBabylonFog, currentMetar, fogDensity, fogIntensity, visibilityScale])
+
+  // Slowly rotate cloud planes to simulate cloud drift with variable speed per layer
+  // Layers at similar altitudes have correlated speeds (similar wind at similar heights)
+  useEffect(() => {
+    if (!scene) return
+
+    let lastTime = performance.now()
+    let lastSpeedChangeTime = performance.now()
+
+    // Per-layer rotation state
+    interface LayerRotationState {
+      currentSpeed: number
+      targetSpeed: number
+    }
+    const layerStates: LayerRotationState[] = []
+
+    // Initialize states for each layer in the pool
+    for (let i = 0; i < CLOUD_POOL_SIZE; i++) {
+      const initialSpeed = CLOUD_ROTATION_SPEED * (1 + (Math.random() * 2 - 1) * CLOUD_ROTATION_SPEED_VARIANCE)
+      layerStates.push({
+        currentSpeed: initialSpeed,
+        targetSpeed: initialSpeed
+      })
+    }
+
+    // Generate new target speeds for all layers, correlating by altitude proximity
+    const pickNewTargetSpeeds = () => {
+      const pool = cloudMeshPoolRef.current
+      if (pool.length === 0) return
+
+      // Get altitudes of visible layers
+      const layerAltitudes: { index: number; altitude: number }[] = []
+      for (let i = 0; i < pool.length; i++) {
+        if (pool[i].plane.isVisible) {
+          layerAltitudes.push({ index: i, altitude: pool[i].plane.position.y })
+        }
+      }
+
+      if (layerAltitudes.length === 0) return
+
+      // Sort by altitude
+      layerAltitudes.sort((a, b) => a.altitude - b.altitude)
+
+      // Pick a base speed for the lowest layer
+      const baseVariance = (Math.random() * 2 - 1) * CLOUD_ROTATION_SPEED_VARIANCE
+      const lowestLayerSpeed = CLOUD_ROTATION_SPEED * (1 + baseVariance)
+      layerStates[layerAltitudes[0].index].targetSpeed = lowestLayerSpeed
+
+      // For each subsequent layer, vary speed based on altitude difference
+      // Layers close together (< 500m) have very similar speeds
+      // Layers far apart (> 2000m) can have very different speeds
+      for (let i = 1; i < layerAltitudes.length; i++) {
+        const prevLayer = layerAltitudes[i - 1]
+        const currLayer = layerAltitudes[i]
+        const altitudeDiff = Math.abs(currLayer.altitude - prevLayer.altitude)
+
+        // Normalize altitude difference: 0 at 0m, 1 at 2000m+
+        const normalizedDiff = Math.min(1, altitudeDiff / 2000)
+
+        // Correlation factor: 1 = same speed, 0 = independent speed
+        // Close layers (normalizedDiff ~0) have high correlation
+        const correlation = 1 - normalizedDiff
+
+        // Generate independent random variance for this layer
+        const independentVariance = (Math.random() * 2 - 1) * CLOUD_ROTATION_SPEED_VARIANCE
+        const independentSpeed = CLOUD_ROTATION_SPEED * (1 + independentVariance)
+
+        // Blend between previous layer's speed and independent speed
+        const prevSpeed = layerStates[prevLayer.index].targetSpeed
+        layerStates[currLayer.index].targetSpeed =
+          prevSpeed * correlation + independentSpeed * (1 - correlation)
+      }
+
+      // Also set target speeds for non-visible layers (in case they become visible)
+      for (let i = 0; i < pool.length; i++) {
+        if (!pool[i].plane.isVisible) {
+          const variance = (Math.random() * 2 - 1) * CLOUD_ROTATION_SPEED_VARIANCE
+          layerStates[i].targetSpeed = CLOUD_ROTATION_SPEED * (1 + variance)
+        }
+      }
+    }
+
+    // Pick initial target speeds
+    pickNewTargetSpeeds()
+
+    const observer = scene.onBeforeRenderObservable.add(() => {
+      const now = performance.now()
+      const deltaSeconds = (now - lastTime) / 1000
+      lastTime = now
+
+      // Periodically pick new target speeds
+      const timeSinceSpeedChange = (now - lastSpeedChangeTime) / 1000
+      if (timeSinceSpeedChange > CLOUD_ROTATION_CHANGE_INTERVAL) {
+        pickNewTargetSpeeds()
+        lastSpeedChangeTime = now
+      }
+
+      // Smoothly interpolate each layer's speed and apply rotation
+      const lerpFactor = Math.min(1, deltaSeconds / CLOUD_ROTATION_TRANSITION_TIME)
+      const pool = cloudMeshPoolRef.current
+
+      for (let i = 0; i < pool.length; i++) {
+        const meshData = pool[i]
+        const state = layerStates[i]
+
+        if (meshData.plane.isVisible) {
+          // Smoothly interpolate toward target speed
+          state.currentSpeed = state.currentSpeed + (state.targetSpeed - state.currentSpeed) * lerpFactor
+
+          // Rotate around Y axis (vertical in Babylon)
+          meshData.plane.rotation.y += state.currentSpeed * deltaSeconds
+        }
+      }
+    })
+
+    return () => {
+      scene.onBeforeRenderObservable.remove(observer)
+    }
+  }, [scene])
 
   // Weather-based visibility culling function
   const isVisibleByWeather = useCallback((params: WeatherVisibilityParams): boolean => {
