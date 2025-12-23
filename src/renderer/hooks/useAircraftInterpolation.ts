@@ -32,8 +32,13 @@ const sharedGroundElevationMetersRef = { current: 0 }
 
 // Terrain correction transition state (for smooth ground/air transitions)
 const sharedSmoothedTerrainHeightsRef = { current: new Map<string, number>() }
-const sharedPrevGroundStateRef = { current: new Map<string, boolean>() }
+const sharedPrevClampStateRef = { current: new Map<string, boolean>() }
 const sharedTransitionHeightsRef = { current: new Map<string, { source: number; target: number; progress: number }>() }
+
+// Nosewheel lowering transition state (for smooth pitch after landing)
+// Tracks the last flare pitch to smoothly transition to ground pitch after touchdown
+const sharedNosewheelTransitionRef = { current: new Map<string, { sourcePitch: number; progress: number }>() }
+const sharedWasInFlareRef = { current: new Map<string, boolean>() }
 
 // Store subscribers for triggering re-renders
 const subscribers = new Set<() => void>()
@@ -168,11 +173,12 @@ function updateInterpolation() {
       sharedSmoothedTerrainHeightsRef.current.delete(callsign)
     }
 
-    // Smooth transition when switching between ground/airborne states
+    // Smooth transition when switching between clamped/unclamped states
+    // Track shouldClampToTerrain changes (not just isOnGround) to handle landing transition
     let correctedHeight = targetHeight
-    const prevGroundState = sharedPrevGroundStateRef.current.get(callsign)
+    const prevClampState = sharedPrevClampStateRef.current.get(callsign)
 
-    if (prevGroundState !== undefined && prevGroundState !== isOnGround) {
+    if (prevClampState !== undefined && prevClampState !== shouldClampToTerrain) {
       // State changed! Start a transition
       const currentTransition = sharedTransitionHeightsRef.current.get(callsign)
 
@@ -190,8 +196,9 @@ function updateInterpolation() {
     // Apply ongoing transition if exists
     const transition = sharedTransitionHeightsRef.current.get(callsign)
     if (transition && transition.progress < 1.0) {
-      // Lerp from source to target over ~7 frames (0.12 seconds at 60fps)
-      const lerpFactor = 0.15
+      // Lerp from source to target over ~15 frames (~0.25 seconds at 60fps)
+      // Slower transition for smoother landing appearance
+      const lerpFactor = 0.07
       transition.progress = Math.min(1.0, transition.progress + lerpFactor)
       correctedHeight = transition.source + (transition.target - transition.source) * transition.progress
 
@@ -207,7 +214,7 @@ function updateInterpolation() {
     }
 
     // Update previous state
-    sharedPrevGroundStateRef.current.set(callsign, isOnGround)
+    sharedPrevClampStateRef.current.set(callsign, shouldClampToTerrain)
 
     // Apply corrected height to interpolated altitude
     entry.interpolatedAltitude = correctedHeight
@@ -219,6 +226,10 @@ function updateInterpolation() {
       // Use reported altitude (not corrected) since terrain height is in ellipsoid coords
       const altitudeAGL = reportedEllipsoidHeight - sampledTerrainHeight
 
+      // Get the base pitch (without flare) for reference
+      const basePitch = entry.interpolatedPitch
+
+      // Apply flare pitch calculation
       entry.interpolatedPitch = calculateFlarePitch(
         entry.interpolatedPitch,
         altitudeAGL,
@@ -226,6 +237,50 @@ function updateInterpolation() {
         entry.interpolatedGroundspeed,
         orientationIntensity
       )
+
+      // Determine if aircraft is currently in flare conditions
+      // (checked AFTER applying flare so we can capture the flare pitch)
+      const isDescending = entry.verticalRate < -50  // m/min
+      const inFlareZone = altitudeAGL > 0 && altitudeAGL < 15  // meters
+      const isAirborne = entry.interpolatedGroundspeed >= GROUNDSPEED_THRESHOLD_KNOTS
+      const isInFlare = isDescending && inFlareZone && isAirborne
+
+      // Track flare state for nosewheel lowering transition
+      const wasInFlare = sharedWasInFlareRef.current.get(callsign) ?? false
+      const nosewheelTransition = sharedNosewheelTransitionRef.current.get(callsign)
+
+      if (wasInFlare && !isInFlare && !nosewheelTransition) {
+        // Just exited flare! Start nosewheel lowering transition
+        // Capture the flare pitch we had LAST frame (before conditions failed)
+        // Since flare pitch was applied this frame too, use it as the starting point
+        const lastFlarePitch = entry.interpolatedPitch
+        sharedNosewheelTransitionRef.current.set(callsign, {
+          sourcePitch: lastFlarePitch > basePitch ? lastFlarePitch : basePitch + 4, // Fallback to slight nose-up
+          progress: 0
+        })
+      }
+
+      // Apply ongoing nosewheel lowering transition
+      if (nosewheelTransition && nosewheelTransition.progress < 1.0) {
+        // Gradually lower nose over ~1 second at 60fps (~60 frames)
+        // smoothstep easing for natural deceleration
+        const lerpFactor = 0.017
+        nosewheelTransition.progress = Math.min(1.0, nosewheelTransition.progress + lerpFactor)
+
+        // smoothstep: x^2 * (3 - 2x) for smooth acceleration/deceleration
+        const easedProgress = nosewheelTransition.progress * nosewheelTransition.progress * (3 - 2 * nosewheelTransition.progress)
+
+        // Blend from flare pitch to base pitch (physics-based pitch for current motion)
+        entry.interpolatedPitch = nosewheelTransition.sourcePitch * (1 - easedProgress) + basePitch * easedProgress
+
+        // Clean up completed transitions
+        if (nosewheelTransition.progress >= 1.0) {
+          sharedNosewheelTransitionRef.current.delete(callsign)
+        }
+      }
+
+      // Update flare state for next frame
+      sharedWasInFlareRef.current.set(callsign, isInFlare)
     }
   }
 
@@ -233,6 +288,12 @@ function updateInterpolation() {
   for (const callsign of statesMap.keys()) {
     if (!activeCallsigns.has(callsign)) {
       statesMap.delete(callsign)
+      // Clean up transition state for removed aircraft
+      sharedSmoothedTerrainHeightsRef.current.delete(callsign)
+      sharedPrevClampStateRef.current.delete(callsign)
+      sharedTransitionHeightsRef.current.delete(callsign)
+      sharedNosewheelTransitionRef.current.delete(callsign)
+      sharedWasInFlareRef.current.delete(callsign)
     }
   }
 
