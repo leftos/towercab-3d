@@ -153,15 +153,28 @@ export function useCesiumViewer(
   // Initialize Cesium viewer
   // This effect re-runs when MSAA changes, recreating the viewer with new settings
   useEffect(() => {
-    if (!containerRef.current || viewerRef.current) return
+    // Require a valid Cesium Ion token before creating the viewer
+    // Without a token, terrain and imagery loading will fail
+    if (!containerRef.current || !cesiumIonToken) return
+
+    // If viewer already exists, destroy it before recreating
+    // This handles token changes (e.g., user entering token after first launch)
+    if (viewerRef.current) {
+      viewerRef.current.destroy()
+      viewerRef.current = null
+      setViewer(null)
+      modelPoolRef.current.clear()
+      modelPoolAssignmentsRef.current.clear()
+      modelPoolUrlsRef.current.clear()
+      modelPoolLoadingRef.current.clear()
+      modelPoolReadyRef.current = false
+    }
 
     // Log MSAA setting for debugging
     const effectiveMsaa = isInset ? 2 : msaaSamples
 
     // Set Ion access token
-    if (cesiumIonToken) {
-      Cesium.Ion.defaultAccessToken = cesiumIonToken
-    }
+    Cesium.Ion.defaultAccessToken = cesiumIonToken
 
     // Create viewer with default terrain and imagery
     // Insets use reduced quality for performance

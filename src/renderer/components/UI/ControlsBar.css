@@ -765,3 +765,45 @@
     transform: scale(0.8);
   }
 }
+
+/* ============================================================================
+   CESIUM ION TOKEN INPUT
+   ============================================================================ */
+
+.token-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.token-input-row .token-input {
+  flex: 1;
+}
+
+.token-save-button {
+  padding: 8px 16px;
+  background: #4fc3f7;
+  color: #000;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.token-save-button:hover:not(:disabled) {
+  background: #81d4fa;
+}
+
+.token-save-button:disabled {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.3);
+  cursor: not-allowed;
+}
+
+.token-save-button.saved {
+  background: #4caf50;
+  color: #fff;
+}

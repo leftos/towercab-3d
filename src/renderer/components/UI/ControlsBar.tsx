@@ -46,6 +46,10 @@ function ControlsBar() {
   const [showImportModal, setShowImportModal] = useState(false)
   const [barMode, setBarMode] = useState<BarMode>('controls')
 
+  // Local state for Cesium Ion token input (only saved on button click)
+  const [tokenInput, setTokenInput] = useState('')
+  const [tokenSaved, setTokenSaved] = useState(false)
+
   // Initialize replay playback engine (needed for replay mode)
   useReplayPlayback()
 
@@ -185,6 +189,21 @@ function ControlsBar() {
   const insetCount = useViewportStore((state) => state.viewports.length - 1)
   const addViewport = useViewportStore((state) => state.addViewport)
   const currentAirport = useAirportStore((state) => state.currentAirport)
+
+  // Sync token input with store value when settings panel opens or store changes
+  useEffect(() => {
+    setTokenInput(cesiumIonToken)
+    setTokenSaved(false)
+  }, [cesiumIonToken, showSettings])
+
+  // Save token handler - only updates store when button is clicked
+  const handleSaveToken = useCallback(() => {
+    if (tokenInput.trim() && tokenInput !== cesiumIonToken) {
+      updateCesiumSettings({ cesiumIonToken: tokenInput.trim() })
+      setTokenSaved(true)
+      setTimeout(() => setTokenSaved(false), 2000)
+    }
+  }, [tokenInput, cesiumIonToken, updateCesiumSettings])
 
   const handleResetView = () => {
     resetView()
@@ -682,13 +701,22 @@ function ControlsBar() {
                     <h3>Cesium Ion</h3>
                     <div className="setting-item">
                       <label>API Token</label>
-                      <input
-                        type="text"
-                        value={cesiumIonToken}
-                        onChange={(e) => updateCesiumSettings({ cesiumIonToken: e.target.value })}
-                        placeholder="Enter your Cesium Ion access token"
-                        className="text-input"
-                      />
+                      <div className="token-input-row">
+                        <input
+                          type="text"
+                          value={tokenInput}
+                          onChange={(e) => setTokenInput(e.target.value)}
+                          placeholder="Enter your Cesium Ion access token"
+                          className="text-input token-input"
+                        />
+                        <button
+                          className={`token-save-button ${tokenSaved ? 'saved' : ''}`}
+                          onClick={handleSaveToken}
+                          disabled={!tokenInput.trim() || tokenInput === cesiumIonToken}
+                        >
+                          {tokenSaved ? 'Saved!' : 'Save'}
+                        </button>
+                      </div>
                       <p className="setting-hint">
                         Get a free token at{' '}
                         <a
@@ -698,6 +726,7 @@ function ControlsBar() {
                         >
                           ion.cesium.com
                         </a>
+                        . Changes require saving to take effect.
                       </p>
                     </div>
                   </div>
