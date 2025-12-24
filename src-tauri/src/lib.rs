@@ -5,12 +5,57 @@ use std::sync::Mutex;
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
+#[cfg(windows)]
+use std::os::windows::io::AsRawHandle;
 use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
 use serde::{Deserialize, Serialize};
 
+#[cfg(windows)]
+use windows_sys::Win32::Foundation::CloseHandle;
+#[cfg(windows)]
+use windows_sys::Win32::System::JobObjects::{
+    AssignProcessToJobObject, CreateJobObjectW, SetInformationJobObject,
+    JobObjectExtendedLimitInformation, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+    JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+};
+
+/// Wrapper for a Windows HANDLE that is Send-safe
+/// Job handles are thread-safe kernel objects, safe to send between threads
+#[cfg(windows)]
+struct SendableHandle(*mut std::ffi::c_void);
+
+#[cfg(windows)]
+unsafe impl Send for SendableHandle {}
+
+/// Wrapper for a process and its associated job object (Windows)
+/// The job object ensures all child processes are killed when we terminate
+struct ProcessWithJob {
+    child: Child,
+    #[cfg(windows)]
+    job_handle: SendableHandle,
+}
+
+impl Drop for ProcessWithJob {
+    fn drop(&mut self) {
+        #[cfg(windows)]
+        {
+            // Closing the job handle terminates all processes in the job
+            // due to JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE flag
+            if !self.job_handle.0.is_null() {
+                unsafe { CloseHandle(self.job_handle.0) };
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            // On non-Windows, explicitly kill the child process
+            let _ = self.child.kill();
+        }
+    }
+}
+
 // Global storage for the FSLTL converter process so we can cancel it
-static FSLTL_CONVERTER_PROCESS: Mutex<Option<Child>> = Mutex::new(None);
+static FSLTL_CONVERTER_PROCESS: Mutex<Option<ProcessWithJob>> = Mutex::new(None);
 
 /// Get the path to a mod type directory (aircraft or towers)
 #[tauri::command]
@@ -330,65 +375,84 @@ fn start_fsltl_conversion(
 
     // Kill any existing converter process first
     if let Ok(mut guard) = FSLTL_CONVERTER_PROCESS.lock() {
-        if let Some(mut child) = guard.take() {
-            let _ = child.kill();
+        if let Some(proc) = guard.take() {
+            drop(proc); // Drop closes the job handle, killing all processes
         }
     }
 
-    // Start and store the new process
+    // Start the new process
     let child = cmd.spawn()
         .map_err(|e| format!("Failed to start converter: {}", e))?;
 
+    // On Windows, create a job object and assign the process to it
+    // This ensures all child processes (gltf-transform, etc.) are killed together
+    #[cfg(windows)]
+    let process_with_job = {
+        let job_handle = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
+        if job_handle.is_null() {
+            return Err("Failed to create job object".to_string());
+        }
+
+        // Configure job to kill all processes when the job handle is closed
+        let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = unsafe { std::mem::zeroed() };
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+
+        let success = unsafe {
+            SetInformationJobObject(
+                job_handle,
+                JobObjectExtendedLimitInformation,
+                &info as *const _ as *const _,
+                std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+            )
+        };
+
+        if success == 0 {
+            unsafe { CloseHandle(job_handle) };
+            return Err("Failed to configure job object".to_string());
+        }
+
+        // Assign the process to the job
+        let process_handle = child.as_raw_handle();
+        let success = unsafe { AssignProcessToJobObject(job_handle, process_handle) };
+
+        if success == 0 {
+            unsafe { CloseHandle(job_handle) };
+            return Err("Failed to assign process to job object".to_string());
+        }
+
+        ProcessWithJob { child, job_handle: SendableHandle(job_handle) }
+    };
+
+    #[cfg(not(windows))]
+    let process_with_job = ProcessWithJob { child };
+
     if let Ok(mut guard) = FSLTL_CONVERTER_PROCESS.lock() {
-        *guard = Some(child);
+        *guard = Some(process_with_job);
     }
 
     Ok(())
 }
 
 /// Cancel the running FSLTL conversion process
-/// Uses taskkill /T to kill the entire process tree (needed for PyInstaller executables)
+/// On Windows, closes the job object which terminates all child processes
 #[tauri::command]
 fn cancel_fsltl_conversion() -> Result<(), String> {
     if let Ok(mut guard) = FSLTL_CONVERTER_PROCESS.lock() {
-        if let Some(child) = guard.take() {
-            let pid = child.id();
+        if let Some(mut proc) = guard.take() {
+            let pid = proc.child.id();
 
-            // Use taskkill with /T flag to kill the entire process tree
-            // This is necessary because PyInstaller creates a child process
-            #[cfg(target_os = "windows")]
+            // On Windows, closing the job handle (via Drop) terminates all processes in the job
+            // On other platforms, we just kill the parent process
+            #[cfg(not(windows))]
             {
-                let result = Command::new("taskkill")
-                    .args(["/F", "/T", "/PID", &pid.to_string()])
-                    .output();
-
-                match result {
-                    Ok(output) => {
-                        if output.status.success() {
-                            println!("[FSLTL] Converter process tree killed (PID {})", pid);
-                            return Ok(());
-                        } else {
-                            let stderr = String::from_utf8_lossy(&output.stderr);
-                            // Process may have already exited - not an error
-                            if stderr.contains("not found") {
-                                println!("[FSLTL] Process already exited (PID {})", pid);
-                                return Ok(());
-                            }
-                            return Err(format!("taskkill failed: {}", stderr));
-                        }
-                    }
-                    Err(e) => return Err(format!("Failed to run taskkill: {}", e)),
-                }
+                let _ = proc.child.kill();
             }
 
-            // Fallback for non-Windows (just kill the parent)
-            #[cfg(not(target_os = "windows"))]
-            {
-                let mut child = child;
-                child.kill().map_err(|e| format!("Failed to kill converter: {}", e))?;
-                println!("[FSLTL] Converter process cancelled (PID {})", pid);
-                return Ok(());
-            }
+            // Wait for the child process to fully exit
+            let _ = proc.child.wait();
+
+            println!("[FSLTL] Converter process tree terminated (PID {})", pid);
+            return Ok(());
         }
     }
     Err("No conversion process running".to_string())
@@ -474,6 +538,17 @@ pub fn run() {
                 )?;
             }
             Ok(())
+        })
+        .on_window_event(|_window, event| {
+            // Kill FSLTL converter process when app window is closed
+            if let tauri::WindowEvent::Destroyed = event {
+                if let Ok(mut guard) = FSLTL_CONVERTER_PROCESS.lock() {
+                    // Taking and dropping the ProcessWithJob terminates all child processes:
+                    // - Windows: closes job handle (JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE)
+                    // - Other: Drop impl calls child.kill()
+                    let _ = guard.take();
+                }
+            }
         })
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![

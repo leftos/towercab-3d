@@ -21,7 +21,6 @@ import { useSettingsStore } from './stores/settingsStore'
 import { useWeatherStore } from './stores/weatherStore'
 import { useViewportStore } from './stores/viewportStore'
 import { useVRStore } from './stores/vrStore'
-import { useFsltlConversionStore } from './stores/fsltlConversionStore'
 import { airportService } from './services/AirportService'
 import { aircraftDimensionsService } from './services/AircraftDimensionsService'
 import { fsltlService } from './services/FSLTLService'
@@ -187,21 +186,6 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [showMetarOverlay, updateUISettings])
 
-  // Cleanup FSLTL conversion on app close
-  useEffect(() => {
-    const cleanup = useFsltlConversionStore.getState().cleanup
-
-    const handleBeforeUnload = () => {
-      cleanup()
-    }
-
-    window.addEventListener('beforeunload', handleBeforeUnload)
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload)
-      // Also cleanup on unmount (shouldn't happen, but for safety)
-      cleanup()
-    }
-  }, [])
 
   if (isLoading) {
     return (
