@@ -12,7 +12,7 @@ All notable changes to TowerCab 3D will be documented in this file.
   - Automatic model matching by airline ICAO code from callsign (e.g., UAL123 → United livery)
   - Fallback to base/generic liveries when airline-specific model unavailable
   - Converted models persist in IndexedDB registry for instant loading
-  - Landing gear animations for FSLTL models: gear automatically extends below 5,000ft or when on ground, retracts above 25,000ft or when faster than 250kt
+  - Landing gear animations for FSLTL models: gear extends when descending below 2,000ft AGL, retracts when climbing above 500ft AGL
 
 ## v0.0.8-alpha (2025-12-22)
 

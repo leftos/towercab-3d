@@ -8,11 +8,15 @@
  * - 0.0 = Gear fully retracted (up)
  * - 1.0 = Gear fully extended (down)
  *
- * ## Gear State Logic
- * Aircraft should have gear DOWN when:
+ * ## Gear State Logic (with hysteresis)
+ * Gear EXTENDS when:
  * - On the ground
- * - Below 5,000 ft AGL (approach phase)
- * - Below 25,000 ft AND ground speed < 250 knots
+ * - Descending below 2,000 ft AGL
+ *
+ * Gear RETRACTS when:
+ * - Climbing above 500 ft AGL
+ *
+ * The hysteresis prevents gear cycling during level flight near thresholds.
  *
  * @see https://cesium.com/blog/2019/06/05/timeline-independent-animations/
  */
@@ -24,21 +28,24 @@ export type GearState = 'up' | 'extending' | 'down' | 'retracting'
 
 /** Configuration for gear animation behavior */
 export interface GearAnimationConfig {
-  /** Altitude below which gear is always down (feet MSL) */
-  alwaysDownAltitude: number
-  /** Maximum altitude for gear extension (feet MSL) */
-  maxExtensionAltitude: number
-  /** Maximum speed for gear extension (knots) */
-  maxExtensionSpeed: number
+  /** Altitude below which gear extends when descending (feet AGL) */
+  extendAltitude: number
+  /** Altitude above which gear retracts when climbing (feet AGL) */
+  retractAltitude: number
+  /** Vertical rate threshold to consider aircraft "descending" (ft/min, negative) */
+  descentRateThreshold: number
+  /** Vertical rate threshold to consider aircraft "climbing" (ft/min, positive) */
+  climbRateThreshold: number
   /** Time for gear to fully extend/retract (seconds) */
   transitionTime: number
 }
 
 /** Default gear animation configuration */
 export const DEFAULT_GEAR_CONFIG: GearAnimationConfig = {
-  alwaysDownAltitude: 5000,      // Below 5000ft, always gear down
-  maxExtensionAltitude: 25000,   // Can't extend above 25000ft
-  maxExtensionSpeed: 250,        // Can't extend above 250kt
+  extendAltitude: 2000,          // Extend gear when descending below 2000ft AGL
+  retractAltitude: 500,          // Retract gear when climbing above 500ft AGL
+  descentRateThreshold: -100,    // ft/min - consider descending if < -100 ft/min
+  climbRateThreshold: 100,       // ft/min - consider climbing if > 100 ft/min
   transitionTime: 5.0            // 5 seconds to extend/retract
 }
 
@@ -80,16 +87,23 @@ function getGearState(callsign: string): GearAnimationState {
 /**
  * Determine target gear state based on aircraft conditions
  *
- * @param altitude - Altitude in feet MSL
- * @param groundSpeed - Ground speed in knots
+ * Uses hysteresis to prevent gear cycling:
+ * - Gear extends when descending below extendAltitude (2000ft default)
+ * - Gear retracts when climbing above retractAltitude (500ft default)
+ * - Between thresholds, gear maintains current state
+ *
+ * @param altitude - Altitude in feet AGL
+ * @param verticalRate - Vertical rate in feet per minute (positive = climbing)
  * @param isOnGround - Whether aircraft is on the ground
+ * @param currentGearDown - Current gear state (true = down, false = up)
  * @param config - Gear animation configuration
  * @returns Target gear progress (0 = up, 1 = down)
  */
 export function calculateTargetGearProgress(
   altitude: number,
-  groundSpeed: number,
+  verticalRate: number,
   isOnGround: boolean,
+  currentGearDown: boolean,
   config: GearAnimationConfig = DEFAULT_GEAR_CONFIG
 ): number {
   // Always gear down when on ground
@@ -97,18 +111,26 @@ export function calculateTargetGearProgress(
     return 1.0
   }
 
-  // Always gear down below approach altitude
-  if (altitude < config.alwaysDownAltitude) {
+  const isDescending = verticalRate < config.descentRateThreshold
+  const isClimbing = verticalRate > config.climbRateThreshold
+
+  // Extend gear when descending below extend altitude
+  if (altitude < config.extendAltitude && isDescending) {
     return 1.0
   }
 
-  // Gear down if below max extension altitude AND below max extension speed
-  if (altitude < config.maxExtensionAltitude && groundSpeed < config.maxExtensionSpeed) {
+  // Retract gear when climbing above retract altitude
+  if (altitude > config.retractAltitude && isClimbing) {
+    return 0.0
+  }
+
+  // Very low altitude - always gear down for safety
+  if (altitude < config.retractAltitude) {
     return 1.0
   }
 
-  // Otherwise gear up
-  return 0.0
+  // Between thresholds or level flight - maintain current state (hysteresis)
+  return currentGearDown ? 1.0 : 0.0
 }
 
 /**
@@ -116,8 +138,8 @@ export function calculateTargetGearProgress(
  * Should be called each frame for aircraft with animations
  *
  * @param callsign - Aircraft callsign
- * @param altitude - Current altitude in feet MSL
- * @param groundSpeed - Current ground speed in knots
+ * @param altitude - Current altitude in feet AGL
+ * @param verticalRate - Vertical rate in feet per minute (positive = climbing)
  * @param isOnGround - Whether aircraft is on ground
  * @param currentTime - Current time in milliseconds (Date.now())
  * @param config - Gear animation configuration
@@ -126,13 +148,14 @@ export function calculateTargetGearProgress(
 export function updateGearAnimation(
   callsign: string,
   altitude: number,
-  groundSpeed: number,
+  verticalRate: number,
   isOnGround: boolean,
   currentTime: number,
   config: GearAnimationConfig = DEFAULT_GEAR_CONFIG
 ): number {
   const state = getGearState(callsign)
-  const targetProgress = calculateTargetGearProgress(altitude, groundSpeed, isOnGround, config)
+  const currentGearDown = state.progress > 0.5  // Consider gear "down" if more than halfway
+  const targetProgress = calculateTargetGearProgress(altitude, verticalRate, isOnGround, currentGearDown, config)
 
   // Check if target changed
   if (Math.abs(targetProgress - state.targetProgress) > 0.01) {
@@ -165,9 +188,15 @@ export function updateGearAnimation(
   return state.progress
 }
 
+/** Track which models have been initialized with gear animations */
+const initializedModels = new WeakSet<Cesium.Model>()
+
 /**
  * Apply gear animation to a Cesium model
  * Finds and controls landing gear animations by name
+ *
+ * FSLTL models use pattern: custom_anim_GEAR_ANIMATION_POSITION_X_NN
+ * where X is 0 (nose), 1 (left main), 2 (right main)
  *
  * @param model - Cesium Model instance
  * @param gearProgress - Gear progress (0 = up, 1 = down)
@@ -183,88 +212,69 @@ export function applyGearAnimation(
   // Clamp progress to valid range
   const progress = Math.max(0, Math.min(1, gearProgress))
 
-  // Try to find gear animation by common names
-  const gearAnimationNames = [
+  // Keywords that identify gear-related animations
+  const gearKeywords = [
+    'GEAR_ANIMATION_POSITION',  // FSLTL pattern
     'LandingGear',
     'landing_gear',
     'Gear',
     'gear',
-    'LG',
-    'lg',
-    // MSFS-specific names
-    'LANDING_GEAR_Center',
-    'LANDING_GEAR_Left',
-    'LANDING_GEAR_Right',
-    'c_gear',
-    'l_gear',
-    'r_gear'
+    'LG'
   ]
 
-  // Get all animations and find gear-related ones
-  try {
-    // If no animations are playing, try to add one
-    if (model.activeAnimations.length === 0) {
-      // Try each potential gear animation name
-      for (const name of gearAnimationNames) {
-        try {
-          const anim = model.activeAnimations.add({
-            name: name,
-            loop: Cesium.ModelAnimationLoop.NONE,
-            multiplier: 0 // Don't play automatically
-          })
-          if (anim) {
-            // Successfully added, set the time
-            setAnimationProgress(anim, progress)
-            break
-          }
-        } catch {
-          // Animation name not found, try next
-        }
-      }
+  // Initialize gear animations if not already done
+  if (!initializedModels.has(model)) {
+    initializedModels.add(model)
 
-      // If still no animations, try adding by index
-      if (model.activeAnimations.length === 0) {
-        try {
-          const anim = model.activeAnimations.add({
-            index: 0,
-            loop: Cesium.ModelAnimationLoop.NONE,
-            multiplier: 0
-          })
-          if (anim) {
-            setAnimationProgress(anim, progress)
-          }
-        } catch {
-          // No animations available
-        }
-      }
-    } else {
-      // Update existing animations
-      for (let i = 0; i < model.activeAnimations.length; i++) {
-        const anim = model.activeAnimations.get(i)
+    // Try to find and add all gear animations by iterating through indices
+    // FSLTL models typically have 15-25 animations; we check first 50 to be safe
+    for (let idx = 0; idx < 50; idx++) {
+      try {
+        const anim = model.activeAnimations.add({
+          index: idx,
+          loop: Cesium.ModelAnimationLoop.NONE,
+          multiplier: 0  // Don't play automatically
+        })
         if (anim) {
-          setAnimationProgress(anim, progress)
+          // Check if this is a gear animation
+          const isGearAnim = gearKeywords.some(kw =>
+            anim.name.toUpperCase().includes(kw.toUpperCase())
+          )
+          if (!isGearAnim) {
+            // Not a gear animation, remove it
+            model.activeAnimations.remove(anim)
+          }
         }
+      } catch {
+        // Index out of range or other error - stop trying
+        break
       }
     }
-  } catch (error) {
-    // Model may not have animations, silently ignore
-    console.debug('[GearAnimation] Could not apply animation:', error)
+  }
+
+  // Update all active gear animations to the target progress
+  for (let i = 0; i < model.activeAnimations.length; i++) {
+    const anim = model.activeAnimations.get(i)
+    if (anim) {
+      setAnimationProgress(anim, progress)
+    }
   }
 }
 
 /**
  * Set animation to a specific progress point
  * @param animation - Cesium ModelAnimation
- * @param progress - Progress from 0 to 1
+ * @param progress - Progress from 0 to 1 (0 = gear up/retracted, 1 = gear down/extended)
  */
 function setAnimationProgress(animation: Cesium.ModelAnimation, progress: number): void {
   // Use animationTime callback to set specific frame
-  // The callback receives (duration, seconds) and should return the animation time
-  const targetTime = progress // Normalized 0-1
+  // The callback receives (duration, seconds) and should return the animation time in seconds
+  // FSLTL gear animations: progress 0 = gear up (start), progress 1 = gear down (end)
+  const targetProgress = progress
 
-  animation.animationTime = function(_duration: number, _seconds: number): number {
-    // Return normalized time (0-1 maps to full animation duration)
-    return targetTime
+  animation.animationTime = function(duration: number, _seconds: number): number {
+    // Scale progress (0-1) to animation duration (0-duration seconds)
+    return targetProgress * duration
   }
 }
 

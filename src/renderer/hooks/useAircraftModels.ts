@@ -261,11 +261,14 @@ export function useAircraftModels(
             // Convert altitude from meters to feet for gear animation logic
             const altitudeFeet = aircraft.interpolatedAltitude * 3.28084
 
+            // Convert vertical rate from meters/min to feet/min
+            const verticalRateFpm = aircraft.verticalRate * 3.28084
+
             // Update gear animation state and get current progress
             const gearProgress = updateGearAnimation(
               aircraft.callsign,
               altitudeFeet,
-              aircraft.interpolatedGroundspeed,  // Already in knots
+              verticalRateFpm,
               isOnGround,
               Date.now()
             )
