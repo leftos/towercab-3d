@@ -4,6 +4,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+## [0.0.9-alpha] - 2025-12-24
+
 ### Added
 - FSLTL aircraft model support: import airline-specific liveries from the FSLTL (FS Live Traffic Liveries) package
   - In-app conversion panel in Settings > General > FSLTL Aircraft Models
@@ -18,7 +20,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Camera jitter when following aircraft in tower or orbit mode
 - Weather interpolation no longer updates every 2 seconds with a stationary camera (fixed throttle logic that was causing cloud flickering)
 
-## v0.0.8-alpha (2025-12-22)
+## [0.0.8-alpha] - 2025-12-22
 
 ### Added
 - Model brightness control: new Graphics > Model Brightness slider (50-300%) lets you brighten or darken aircraft models without overexposure. Values above 110% create a smooth glow/emissive effect
