@@ -5,10 +5,18 @@
  * When a specific model exists, it's used at 1:1 scale.
  * When no model exists, finds the closest match by FAA dimensions and applies scaling.
  *
+ * Model Matching Priority:
+ * 1. FSLTL models with exact airline+type match
+ * 2. FSLTL models with base livery (no specific airline)
+ * 3. Built-in models with exact/mapped match
+ * 4. Built-in models with closest size match (scaled)
+ * 5. Fallback to B738
+ *
  * Models from Flightradar24/fr24-3d-models (GPL-2.0, originally from FlightGear)
  */
 
 import { aircraftDimensionsService, type AircraftDimensions } from './AircraftDimensionsService'
+import { fsltlService } from './FSLTLService'
 
 // Available model files (lowercase, without extension)
 // These correspond to .glb files in src/renderer/public/
@@ -360,9 +368,13 @@ function findClosestModel(
 export interface ModelInfo {
   modelUrl: string
   scale: { x: number; y: number; z: number }  // Non-uniform scale factors
-  matchType: 'exact' | 'mapped' | 'closest' | 'fallback'
+  matchType: 'exact' | 'mapped' | 'closest' | 'fallback' | 'fsltl' | 'fsltl-base'
   matchedModel?: string  // For debugging: which model was matched
   dimensions: AircraftDimensions  // Dimensions of the actual model being used
+  /** Additional heading rotation in degrees (180 for FSLTL models) */
+  rotationOffset?: number
+  /** Whether the model has animations (landing gear, etc.) */
+  hasAnimations?: boolean
 }
 
 /**
@@ -419,9 +431,10 @@ class AircraftModelServiceClass {
   /**
    * Get the model URL and scale for an aircraft type
    * @param aircraftType ICAO aircraft type code (e.g., "B738", "A320")
+   * @param callsign Optional callsign for airline-specific FSLTL model matching
    * @returns Model URL, scale factor, and match type
    */
-  getModelInfo(aircraftType: string | null | undefined): ModelInfo {
+  getModelInfo(aircraftType: string | null | undefined, callsign?: string | null): ModelInfo {
     const uniformScale = { x: 1, y: 1, z: 1 }
 
     if (!aircraftType) {
@@ -437,7 +450,24 @@ class AircraftModelServiceClass {
     // Extract base aircraft type (strips equipment suffixes like "/L" from "B738/L")
     const normalized = extractBaseAircraftType(aircraftType)
 
-    // Check explicit mapping first
+    // 1. Check FSLTL for airline+type or base type match
+    const airlineCode = this.extractAirlineCode(callsign)
+    const fsltlModel = fsltlService.findBestModel(normalized, airlineCode)
+    if (fsltlModel) {
+      // Get dimensions from FAA database for scaling reference
+      const targetDims = aircraftDimensionsService.getDimensions(normalized)
+      return {
+        modelUrl: fsltlModel.modelPath,
+        scale: uniformScale, // FSLTL models are properly scaled
+        matchType: fsltlModel.airlineCode ? 'fsltl' : 'fsltl-base',
+        matchedModel: fsltlModel.modelName,
+        dimensions: targetDims ?? { wingspan: 35.78, length: 39.47 },
+        rotationOffset: 180, // FSLTL models face opposite direction
+        hasAnimations: fsltlModel.hasAnimations
+      }
+    }
+
+    // 2. Check explicit mapping for built-in models
     const mappedModel = TYPE_TO_MODEL[normalized]
     if (mappedModel && AVAILABLE_MODELS.has(mappedModel)) {
       const modelDims = this.getModelDimensions(mappedModel)
@@ -449,7 +479,7 @@ class AircraftModelServiceClass {
       }
     }
 
-    // Try direct match (lowercase)
+    // 3. Try direct match (lowercase)
     const directMatch = normalized.toLowerCase()
     if (AVAILABLE_MODELS.has(directMatch)) {
       const directDims = this.getModelDimensions(directMatch)
@@ -461,7 +491,7 @@ class AircraftModelServiceClass {
       }
     }
 
-    // No direct model - try to find closest match by dimensions
+    // 4. No direct model - try to find closest match by dimensions
     const targetDims = aircraftDimensionsService.getDimensions(normalized)
     if (targetDims && targetDims.wingspan && targetDims.length) {
       const { model, scale } = findClosestModel(targetDims.wingspan, targetDims.length)
@@ -475,7 +505,7 @@ class AircraftModelServiceClass {
       }
     }
 
-    // No dimensions available - use B738 fallback at 1:1 scale
+    // 5. No dimensions available - use B738 fallback at 1:1 scale
     const finalFallbackDims = this.getModelDimensions(FALLBACK_MODEL)
     return {
       modelUrl: `./${FALLBACK_MODEL}.glb`,

@@ -113,8 +113,8 @@ export function useAircraftModels(
       // (includes terrain sampling, ground/air transitions, and all offsets)
       const modelHeight = aircraft.interpolatedAltitude
 
-      // Get the correct model info for this aircraft type
-      const modelInfo = aircraftModelService.getModelInfo(aircraft.aircraftType)
+      // Get the correct model info for this aircraft type (and callsign for FSLTL livery matching)
+      const modelInfo = aircraftModelService.getModelInfo(aircraft.aircraftType, aircraft.callsign)
 
       // Find existing pool slot for this callsign, or get an unused one
       let poolIndex = -1
@@ -207,10 +207,12 @@ export function useAircraftModels(
           // Model heading: Cesium models typically face +X, so heading=0 means east
           // Subtract 90 to convert from compass heading (north=0) to model heading
           // Add 180° to flip models that face backwards
+          // Add rotationOffset for models that face different directions (e.g., FSLTL = 180°)
           // Pitch: Negate because Cesium's coordinate system is opposite to our convention
           // Roll: Negate for same reason as pitch (due to model orientation)
+          const rotationOffset = modelInfo.rotationOffset ?? 0
           const hpr = new Cesium.HeadingPitchRoll(
-            Cesium.Math.toRadians(aircraft.interpolatedHeading - 90 + 180),
+            Cesium.Math.toRadians(aircraft.interpolatedHeading - 90 + 180 + rotationOffset),
             Cesium.Math.toRadians(-aircraft.interpolatedPitch),
             Cesium.Math.toRadians(-aircraft.interpolatedRoll)
           )
@@ -287,4 +289,21 @@ export function useAircraftModels(
       removeListener()
     }
   }, [viewer, updateAircraftModels])
+
+  // Listen for FSLTL model updates to clear URL cache
+  // This forces models to re-fetch from AircraftModelService which will pick up new FSLTL models
+  useEffect(() => {
+    const handleFsltlUpdate = () => {
+      console.log('[useAircraftModels] FSLTL models updated, clearing URL cache')
+      // Clear all URL mappings to force model refresh on next frame
+      for (const [idx] of modelPoolUrls.current.entries()) {
+        modelPoolUrls.current.set(idx, '')
+      }
+    }
+
+    window.addEventListener('fsltl-models-updated', handleFsltlUpdate)
+    return () => {
+      window.removeEventListener('fsltl-models-updated', handleFsltlUpdate)
+    }
+  }, [modelPoolUrls])
 }

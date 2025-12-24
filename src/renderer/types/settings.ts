@@ -364,6 +364,47 @@ export interface UISettings {
 }
 
 /**
+ * Texture downscaling options for FSLTL conversion
+ *
+ * Controls the maximum texture resolution when converting FSLTL models:
+ * - 'full': Original 4K textures (largest file size, ~40+ GB total)
+ * - '2k': 2048px max dimension (high quality, ~10-15 GB)
+ * - '1k': 1024px max dimension (balanced, ~3-5 GB, recommended)
+ * - '512': 512px max dimension (smallest, ~1-2 GB)
+ */
+export type FSLTLTextureScale = 'full' | '2k' | '1k' | '512'
+
+/**
+ * FSLTL (FS Live Traffic Liveries) settings
+ *
+ * Settings for importing and managing FSLTL aircraft models with airline liveries.
+ * FSLTL provides high-quality aircraft models with real-world airline liveries
+ * that can be converted for use in TowerCab 3D.
+ */
+export interface FSLTLSettings {
+  /**
+   * Path to fsltl-traffic-base package folder
+   * User must select this folder containing the FSLTL package
+   * (typically in MSFS Community folder)
+   */
+  sourcePath: string | null
+
+  /**
+   * Custom output path for converted models
+   * null = use app's mods folder (recommended)
+   * Custom path useful when app is in Program Files without write permission
+   */
+  outputPath: string | null
+
+  /**
+   * Texture downscaling preference for conversion
+   * Lower values = smaller files but less detail
+   * Default: '1k' (balanced quality/size)
+   */
+  textureScale: FSLTLTextureScale
+}
+
+/**
  * Main settings store interface (NEW grouped structure)
  *
  * This is the target structure for Phase 5 migration.
@@ -408,6 +449,9 @@ export interface SettingsStore {
   /** UI appearance settings */
   ui: UISettings
 
+  /** FSLTL aircraft model settings */
+  fsltl: FSLTLSettings
+
   // Actions (will be added in Phase 5)
   /** Update Cesium settings (partial update) */
   updateCesiumSettings: (updates: Partial<CesiumSettings>) => void
@@ -429,6 +473,9 @@ export interface SettingsStore {
 
   /** Update UI settings (partial update) */
   updateUISettings: (updates: Partial<UISettings>) => void
+
+  /** Update FSLTL settings (partial update) */
+  updateFSLTLSettings: (updates: Partial<FSLTLSettings>) => void
 
   /** Reset all settings to defaults */
   resetToDefaults: () => void
@@ -454,6 +501,7 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
   updateMemorySettings: unknown
   updateAircraftSettings: unknown
   updateUISettings: unknown
+  updateFSLTLSettings: unknown
   resetToDefaults: unknown
   exportSettings: unknown
   importSettings: unknown
@@ -525,5 +573,10 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     theme: 'dark',
     showAircraftPanel: true,
     showMetarOverlay: false
+  },
+  fsltl: {
+    sourcePath: null,
+    outputPath: null,
+    textureScale: '1k'
   }
 }

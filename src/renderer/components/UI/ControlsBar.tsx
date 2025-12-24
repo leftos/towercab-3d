@@ -13,6 +13,7 @@ import type { ReplayExportData, PlaybackSpeed } from '../../types/replay'
 import GlobalSearchPanel from './GlobalSearchPanel'
 import VRButton from '../VR/VRButton'
 import ImportModal from './ImportModal'
+import FSLTLImportPanel from './FSLTLImportPanel'
 import './ControlsBar.css'
 
 type SettingsTab = 'general' | 'display' | 'graphics' | 'performance' | 'help'
@@ -785,6 +786,10 @@ function ControlsBar() {
                         Automatically switch to the nearest airport as you move the camera.
                       </p>
                     </div>
+                  </div>
+
+                  <div className="settings-section">
+                    <FSLTLImportPanel />
                   </div>
 
                   <div className="settings-section">

@@ -8,7 +8,8 @@ import type {
   WeatherSettings,
   MemorySettings,
   AircraftSettings,
-  UISettings
+  UISettings,
+  FSLTLSettings
 } from '../types/settings'
 import { DEFAULT_SETTINGS } from '../types/settings'
 
@@ -188,6 +189,11 @@ export const useSettingsStore = create<SettingsStore>()(
           ui: { ...state.ui, ...updates }
         })),
 
+      updateFSLTLSettings: (updates: Partial<FSLTLSettings>) =>
+        set((state) => ({
+          fsltl: { ...state.fsltl, ...updates }
+        })),
+
       // ========================================================================
       // RESET TO DEFAULTS
       // ========================================================================
@@ -207,7 +213,8 @@ export const useSettingsStore = create<SettingsStore>()(
           weather: state.weather,
           memory: state.memory,
           aircraft: state.aircraft,
-          ui: state.ui
+          ui: state.ui,
+          fsltl: state.fsltl
         }
         return JSON.stringify(settings, null, 2)
       },
@@ -252,6 +259,9 @@ export const useSettingsStore = create<SettingsStore>()(
           if (imported.ui && typeof imported.ui === 'object') {
             updates.ui = { ...DEFAULT_SETTINGS.ui, ...imported.ui }
           }
+          if (imported.fsltl && typeof imported.fsltl === 'object') {
+            updates.fsltl = { ...DEFAULT_SETTINGS.fsltl, ...imported.fsltl }
+          }
 
           set(updates)
           return true
@@ -262,7 +272,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'settings-store',
-      version: 5, // Incremented for model brightness setting
+      version: 6, // Incremented for FSLTL settings
       migrate: (persistedState: unknown, version: number) => {
         // Auto-migrate old flat structure to grouped structure
         if (version < 2) {
@@ -306,6 +316,18 @@ export const useSettingsStore = create<SettingsStore>()(
             graphics: {
               ...DEFAULT_SETTINGS.graphics,
               ...state.graphics
+            }
+          }
+        }
+        // Migrate v5 to v6: add FSLTL settings
+        if (version < 6) {
+          console.log('[Settings] Migrating v5 to v6: adding FSLTL settings')
+          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
+          return {
+            ...state,
+            fsltl: {
+              ...DEFAULT_SETTINGS.fsltl,
+              ...state.fsltl
             }
           }
         }
@@ -417,6 +439,11 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
       theme: oldSettings.theme ?? DEFAULT_SETTINGS.ui.theme,
       showAircraftPanel: oldSettings.showAircraftPanel ?? DEFAULT_SETTINGS.ui.showAircraftPanel,
       showMetarOverlay: oldSettings.showMetarOverlay ?? DEFAULT_SETTINGS.ui.showMetarOverlay
+    },
+    fsltl: {
+      sourcePath: oldSettings.fsltl?.sourcePath ?? DEFAULT_SETTINGS.fsltl.sourcePath,
+      outputPath: oldSettings.fsltl?.outputPath ?? DEFAULT_SETTINGS.fsltl.outputPath,
+      textureScale: oldSettings.fsltl?.textureScale ?? DEFAULT_SETTINGS.fsltl.textureScale
     }
   }
 }

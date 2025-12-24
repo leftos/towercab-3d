@@ -117,6 +117,7 @@ export type {
   DatablockMode,
   TimeMode,
   Theme,
+  FSLTLTextureScale,
 
   // Settings groups
   CesiumSettings,
@@ -126,6 +127,7 @@ export type {
   MemorySettings,
   AircraftSettings,
   UISettings,
+  FSLTLSettings,
 
   // Main settings store (NEW grouped structure for Phase 5)
   SettingsStore
@@ -135,6 +137,46 @@ export {
   // Default settings values
   DEFAULT_SETTINGS
 } from './settings'
+
+// ============================================================================
+// FSLTL (FS Live Traffic Liveries) TYPES
+// ============================================================================
+
+export type {
+  // Texture scaling
+  TextureScale,
+
+  // Model types
+  FSLTLModel,
+  FSLTLAircraftInfo,
+  FSLTLAirlineInfo,
+  FSLTLTypeInfo,
+
+  // VMR parsing
+  VMRRule,
+
+  // Conversion progress
+  ConversionProgress,
+
+  // Registry
+  FSLTLRegistry,
+  FSLTLRegistryJSON
+} from './fsltl'
+
+export {
+  // Texture scale mapping
+  TEXTURE_SCALE_PIXELS,
+
+  // Default values
+  DEFAULT_FSLTL_SETTINGS,
+  DEFAULT_CONVERSION_PROGRESS,
+
+  // Registry utilities
+  registryToJSON,
+  registryFromJSON,
+  createEmptyRegistry,
+  parseModelName
+} from './fsltl'
 
 // ============================================================================
 // MODDING TYPES
@@ -262,6 +304,10 @@ export {
  * 8. **Babylon.js types** → `babylon.ts`
  *    - Babylon rendering, labels, weather effects, ENU transforms
  *    - Used by: useBabylonOverlay, useBabylonScene, useBabylonWeather, useBabylonLabels
+ *
+ * 9. **FSLTL types** → `fsltl.ts`
+ *    - FSLTL model conversion, registry, VMR parsing
+ *    - Used by: FSLTLService, AircraftModelService, FSLTLImportPanel
  *
  * Always add comprehensive JSDoc comments with:
  * - Purpose and description
