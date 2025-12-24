@@ -7,9 +7,15 @@ import { aircraftModelService } from '../services/AircraftModelService'
 import { performanceMonitor } from '../utils/performanceMonitor'
 import {
   getModelColorRgb,
-  getModelColorBlendAmount
+  getModelColorBlendAmount,
+  GROUNDSPEED_THRESHOLD_KNOTS
 } from '../constants/rendering'
 import { useSettingsStore } from '../stores/settingsStore'
+import {
+  updateGearAnimation,
+  applyGearAnimation,
+  clearGearState
+} from '../utils/gearAnimationController'
 
 /**
  * Manages aircraft 3D model rendering using Cesium.Model pool
@@ -246,6 +252,27 @@ export function useAircraftModels(
 
           // Show the model
           model.show = true
+
+          // Apply landing gear animation if model has animations
+          if (modelInfo.hasAnimations && model.ready) {
+            // Determine if aircraft is on ground based on groundspeed threshold
+            const isOnGround = aircraft.interpolatedGroundspeed < GROUNDSPEED_THRESHOLD_KNOTS
+
+            // Convert altitude from meters to feet for gear animation logic
+            const altitudeFeet = aircraft.interpolatedAltitude * 3.28084
+
+            // Update gear animation state and get current progress
+            const gearProgress = updateGearAnimation(
+              aircraft.callsign,
+              altitudeFeet,
+              aircraft.interpolatedGroundspeed,  // Already in knots
+              isOnGround,
+              Date.now()
+            )
+
+            // Apply the animation progress to the model
+            applyGearAnimation(model, gearProgress)
+          }
         }
       }
     }
@@ -253,6 +280,9 @@ export function useAircraftModels(
     // Hide unused pool models and clean up references to prevent memory leaks
     for (const [idx, assignedCallsign] of modelPoolAssignments.current.entries()) {
       if (assignedCallsign !== null && !seenCallsigns.has(assignedCallsign)) {
+        // Clean up gear animation state for this aircraft
+        clearGearState(assignedCallsign)
+
         // Release this slot and hide the model
         modelPoolAssignments.current.set(idx, null)
         const model = modelPool.current.get(idx)
