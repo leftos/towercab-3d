@@ -13,7 +13,9 @@
     {
       "identifier": "fs:scope",
       "allow": [
-        "$RESOURCE/**"
+        "$RESOURCE/**",
+        "$EXE/../mods/**",
+        "$EXE/mods/**"
       ]
     },
     "window-state:allow-restore-state",

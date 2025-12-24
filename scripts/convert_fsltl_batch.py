@@ -23,6 +23,7 @@ Usage:
 
 import argparse
 import json
+import re
 import struct
 from pathlib import Path
 from PIL import Image
@@ -30,6 +31,87 @@ import numpy as np
 import io
 import sys
 import traceback
+import time
+import os
+import subprocess
+import tempfile
+import urllib.request
+import zipfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
+
+# Global texconv.exe path (downloaded on first use)
+_texconv_path: Path | None = None
+_texconv_lock = threading.Lock()
+
+def get_texconv_path() -> Path | None:
+    """Get path to texconv.exe bundled with the application."""
+    global _texconv_path
+
+    with _texconv_lock:
+        if _texconv_path and _texconv_path.exists():
+            return _texconv_path
+
+        # When running as PyInstaller bundle, check next to the executable
+        if getattr(sys, 'frozen', False):
+            exe_dir = Path(sys.executable).parent
+            check_paths = [
+                exe_dir / "texconv.exe",
+            ]
+        else:
+            # Development mode - check script directory
+            script_dir = Path(__file__).parent
+            check_paths = [
+                script_dir / "texconv.exe",
+                Path("texconv.exe"),
+            ]
+
+        for check_path in check_paths:
+            if check_path.exists():
+                _texconv_path = check_path
+                return _texconv_path
+
+        print("ERROR: texconv.exe not found. It should be bundled with the converter.")
+        return None
+
+
+def convert_dds_with_texconv(dds_path: Path, target_size: int | None = None) -> bytes | None:
+    """Convert DDS to PNG using Microsoft's texconv.exe."""
+    texconv = get_texconv_path()
+    if not texconv:
+        return None
+
+    # Create temp directory for output
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        output_file = tmpdir_path / (dds_path.stem + ".png")
+
+        # Run texconv to convert DDS -> PNG
+        try:
+            result = subprocess.run(
+                [str(texconv), "-ft", "png", "-o", str(tmpdir_path), "-y", str(dds_path)],
+                capture_output=True,
+                timeout=30
+            )
+            if result.returncode != 0 or not output_file.exists():
+                return None
+
+            # Read and optionally resize
+            img = Image.open(output_file)
+            if img.mode != 'RGBA':
+                img = img.convert('RGBA')
+
+            if target_size is not None and max(img.size) > target_size:
+                ratio = target_size / max(img.size)
+                new_size = (int(img.width * ratio), int(img.height * ratio))
+                img = img.resize(new_size, Image.LANCZOS)
+
+            buffer = io.BytesIO()
+            img.save(buffer, format='PNG', optimize=True)
+            return buffer.getvalue()
+        except Exception:
+            return None
+
 
 # Texture scale limits
 TEXTURE_SCALE_MAP = {
@@ -41,22 +123,39 @@ TEXTURE_SCALE_MAP = {
 
 
 def convert_dds_to_png(dds_path: Path, target_size: int | None = None) -> bytes:
-    """Convert DDS file to PNG bytes, optionally resizing."""
-    img = Image.open(dds_path)
+    """Convert DDS file to PNG bytes, optionally resizing.
 
-    # Convert to RGBA if needed
-    if img.mode != 'RGBA':
-        img = img.convert('RGBA')
+    Uses PIL for common formats, falls back to texconv.exe for BC7 and other advanced formats.
+    """
+    # First try PIL (faster for supported formats)
+    try:
+        img = Image.open(dds_path)
+        # PIL succeeded - process the image
+        if img.mode != 'RGBA':
+            img = img.convert('RGBA')
 
-    # Resize if target_size is specified and image is larger
-    if target_size is not None and max(img.size) > target_size:
-        ratio = target_size / max(img.size)
-        new_size = (int(img.width * ratio), int(img.height * ratio))
-        img = img.resize(new_size, Image.LANCZOS)
+        if target_size is not None and max(img.size) > target_size:
+            ratio = target_size / max(img.size)
+            new_size = (int(img.width * ratio), int(img.height * ratio))
+            img = img.resize(new_size, Image.LANCZOS)
 
-    buffer = io.BytesIO()
-    img.save(buffer, format='PNG', optimize=True)
-    return buffer.getvalue()
+        buffer = io.BytesIO()
+        img.save(buffer, format='PNG', optimize=True)
+        return buffer.getvalue()
+
+    except NotImplementedError:
+        # Unsupported DDS format (e.g., BC7/DXGI format 78)
+        # Fall back to texconv.exe
+        result = convert_dds_with_texconv(dds_path, target_size)
+        if result:
+            return result
+
+        # texconv also failed - create placeholder
+        print(f"  Warning: Could not convert {dds_path.name}, using placeholder")
+        img = Image.new('RGBA', (64, 64), (128, 128, 128, 255))
+        buffer = io.BytesIO()
+        img.save(buffer, format='PNG')
+        return buffer.getvalue()
 
 
 def find_texture_file(texture_name: str, model_dir: Path, texture_dirs: list[Path]) -> Path | None:
@@ -173,6 +272,9 @@ def convert_single_gltf(gltf_path: Path, output_path: Path, texture_dirs: list[P
         uv_start = len(new_uv_data)
         for i in range(count):
             pos = offset + i * stride
+            # Bounds check to prevent buffer over-read
+            if pos + 4 > len(bin_data):
+                raise ValueError(f"UV accessor reads past buffer end at position {pos} (buffer size: {len(bin_data)})")
             raw_bytes = bytes(bin_data[pos:pos+4])
             u = float(np.frombuffer(raw_bytes[0:2], dtype=np.float16)[0])
             v = float(np.frombuffer(raw_bytes[2:4], dtype=np.float16)[0])
@@ -321,47 +423,231 @@ def convert_single_gltf(gltf_path: Path, output_path: Path, texture_dirs: list[P
     }
 
 
-def find_model_gltf(aircraft_dir: Path) -> tuple[Path | None, list[Path]]:
+def parse_aircraft_cfg(aircraft_dir: Path) -> dict:
+    """
+    Parse aircraft.cfg to extract base_container, model, and texture info.
+    Returns dict with 'base_container', 'model', 'texture' keys.
+    """
+    cfg_path = aircraft_dir / "aircraft.cfg"
+    if not cfg_path.exists():
+        return {}
+
+    result = {}
+    try:
+        content = cfg_path.read_text(encoding='utf-8', errors='ignore')
+        for line in content.splitlines():
+            line = line.strip()
+            if '=' in line:
+                key, _, value = line.partition('=')
+                key = key.strip().lower()
+                value = value.strip().strip('"').strip("'")
+                if key == 'base_container':
+                    result['base_container'] = value
+                elif key == 'model':
+                    result['model'] = value
+                elif key == 'texture':
+                    result['texture'] = value
+    except Exception:
+        pass
+    return result
+
+
+def get_gltf_vertex_count(gltf_path: Path) -> int:
+    """Get approximate vertex count from a GLTF file."""
+    try:
+        with open(gltf_path, 'r', encoding='utf-8') as f:
+            gltf = json.load(f)
+
+        total_vertices = 0
+        accessors = gltf.get('accessors', [])
+        for mesh in gltf.get('meshes', []):
+            for prim in mesh.get('primitives', []):
+                pos_idx = prim.get('attributes', {}).get('POSITION')
+                if pos_idx is not None and pos_idx < len(accessors):
+                    total_vertices += accessors[pos_idx].get('count', 0)
+        return total_vertices
+    except:
+        return 0
+
+
+# Vertex threshold: if a model exceeds this, try a higher LOD for better performance
+# 40K verts is more than enough detail for tower cab viewing (even in orbit mode)
+MAX_PREFERRED_VERTICES = 40000
+
+
+def find_gltf_in_model_dir(model_dir: Path) -> Path | None:
+    """Find GLTF file in a model directory, balancing quality and performance."""
+    # Get all GLTF files
+    all_gltf = list(model_dir.glob("*.gltf")) + list(model_dir.glob("*.GLTF"))
+    if not all_gltf:
+        return None
+
+    # Filter out interior models (we want exterior only)
+    exterior_gltf = [f for f in all_gltf if 'INTERIOR' not in f.stem.upper()]
+    if not exterior_gltf:
+        exterior_gltf = all_gltf  # Fall back to all if no exterior found
+
+    # Sort by LOD number (lowest first = highest quality)
+    def lod_sort_key(path: Path):
+        name = path.stem.upper()
+        match = re.search(r'LOD(\d+)', name)
+        if match:
+            return (0, int(match.group(1)))
+        return (1, 0)  # No LOD number (sort after LOD files)
+
+    exterior_gltf.sort(key=lod_sort_key)
+
+    # Pick the best LOD that's under the vertex threshold
+    # This handles Asobo models (LOD03=118K verts) by stepping up to LOD04 (31K verts)
+    for gltf_file in exterior_gltf:
+        vertex_count = get_gltf_vertex_count(gltf_file)
+        if vertex_count <= MAX_PREFERRED_VERTICES or gltf_file == exterior_gltf[-1]:
+            # Either under threshold, or it's our last option
+            if vertex_count > MAX_PREFERRED_VERTICES:
+                print(f"  Note: Using {gltf_file.name} ({vertex_count:,} verts) - no lower-poly LOD available")
+            return gltf_file
+
+    return exterior_gltf[0]  # Fallback (shouldn't reach here)
+
+
+def find_model_gltf(aircraft_dir: Path) -> tuple[Path | None, list[Path], Path | None]:
     """
     Find the GLTF file and texture directories for an aircraft.
-    Returns (gltf_path, texture_dirs)
+    Handles both base models and livery variants.
+
+    Returns (gltf_path, texture_dirs, base_dir)
+    - For base models: gltf from aircraft_dir, textures from aircraft_dir
+    - For liveries: gltf from base model, textures from livery folder (priority) + base folder
     """
-    # Find model directory (usually model.* or MODEL.*)
+    # First, try to find GLTF directly in this folder (base model)
     model_dirs = list(aircraft_dir.glob("model*")) + list(aircraft_dir.glob("MODEL*"))
 
     for model_dir in model_dirs:
         if model_dir.is_dir():
-            # Look for LOD0 GLTF file
-            gltf_files = list(model_dir.glob("*LOD0.gltf")) + list(model_dir.glob("*LOD0.GLTF"))
-            if gltf_files:
-                # Find texture directories
+            gltf_file = find_gltf_in_model_dir(model_dir)
+            if gltf_file:
+                # This is a base model - use textures from here
                 texture_dirs = list(aircraft_dir.glob("TEXTURE*")) + list(aircraft_dir.glob("texture*"))
-                return gltf_files[0], texture_dirs
+                return gltf_file, texture_dirs, None
 
-    return None, []
+    # No GLTF found - check if this is a livery referencing a base model
+    cfg = parse_aircraft_cfg(aircraft_dir)
+    base_container = cfg.get('base_container', '')
+    texture_suffix = cfg.get('texture', '')
+
+    if base_container:
+        # Resolve base container path (e.g., "..\FSLTL_A20N" -> parent/FSLTL_A20N)
+        base_path = (aircraft_dir / base_container).resolve()
+        if base_path.exists():
+            # Find GLTF in base model
+            base_model_dirs = list(base_path.glob("model*")) + list(base_path.glob("MODEL*"))
+            for model_dir in base_model_dirs:
+                if model_dir.is_dir():
+                    gltf_file = find_gltf_in_model_dir(model_dir)
+                    if gltf_file:
+                        # Texture priority: livery textures first, then base textures
+                        texture_dirs = []
+
+                        # Add livery-specific texture folders
+                        if texture_suffix:
+                            livery_tex = list(aircraft_dir.glob(f"texture.{texture_suffix}")) + \
+                                        list(aircraft_dir.glob(f"TEXTURE.{texture_suffix}")) + \
+                                        list(aircraft_dir.glob(f"texture{texture_suffix}")) + \
+                                        list(aircraft_dir.glob(f"TEXTURE{texture_suffix}"))
+                            texture_dirs.extend(livery_tex)
+
+                        # Also add any texture folder in livery dir
+                        texture_dirs.extend(list(aircraft_dir.glob("texture*")) + list(aircraft_dir.glob("TEXTURE*")))
+
+                        # Add base model textures as fallback
+                        texture_dirs.extend(list(base_path.glob("TEXTURE*")) + list(base_path.glob("texture*")))
+
+                        return gltf_file, texture_dirs, base_path
+
+    return None, [], None
 
 
 def parse_model_name(model_name: str) -> tuple[str, str | None]:
     """
     Parse FSLTL model name into aircraft type and airline code.
-    e.g., "FSLTL_B738_AAL" -> ("B738", "AAL")
-          "FSLTL_B738_ZZZZ" -> ("B738", None)  # base livery
+
+    Handles both standard and FAIB-prefixed names:
+    - "FSLTL_B738_AAL" -> ("B738", "AAL")
+    - "FSLTL_B738_ZZZZ" -> ("B738", None)  # base livery
+    - "FSLTL_FAIB_A320_UAL" -> ("A320", "UAL")
+    - "FSLTL_B738_AAL_NC" -> ("B738", "AAL")  # extra suffix ignored
+
+    This logic matches the TypeScript parseModelName in src/renderer/types/fsltl.ts
     """
-    parts = model_name.split('_')
-    if len(parts) >= 2:
-        aircraft_type = parts[1]
-        airline_code = parts[2] if len(parts) > 2 else None
-        # ZZZZ is the generic/base livery code
-        if airline_code == 'ZZZZ':
+    # Remove FSLTL_ prefix if present
+    name = model_name
+    if name.startswith('FSLTL_'):
+        name = name[6:]  # Remove 'FSLTL_'
+
+    # Remove optional FAIB_ prefix (some models have this intermediary)
+    if name.startswith('FAIB_'):
+        name = name[5:]  # Remove 'FAIB_'
+
+    parts = name.split('_')
+    if len(parts) >= 1:
+        aircraft_type = parts[0].strip()
+        airline_code = parts[1].strip() if len(parts) > 1 else None
+        # ZZZZ or ZZZ is the generic/base livery code
+        if airline_code in ('ZZZZ', 'ZZZ', ''):
             airline_code = None
+        # Handle dash-separated names like "UAL-United" - take code before dash
+        elif airline_code and '-' in airline_code:
+            airline_code = airline_code.split('-')[0].strip()
         return aircraft_type, airline_code
-    return model_name, None
+    return model_name.strip(), None
 
 
 def write_progress(progress_file: Path, progress: dict):
     """Write progress to JSON file."""
     with open(progress_file, 'w') as f:
         json.dump(progress, f)
+
+
+def convert_model_task(args_tuple):
+    """Worker function to convert a single model. Returns result dict."""
+    model_name, source_path, output_path, texture_scale, texture_scale_name = args_tuple
+
+    try:
+        # Find aircraft directory
+        aircraft_dir = source_path / "SimObjects" / "Airplanes" / model_name
+        if not aircraft_dir.exists():
+            raise FileNotFoundError(f"Aircraft directory not found: {aircraft_dir}")
+
+        # Find GLTF and textures (handles both base models and liveries)
+        gltf_path, texture_dirs, base_dir = find_model_gltf(aircraft_dir)
+        if gltf_path is None:
+            raise FileNotFoundError(f"No GLTF file found for {model_name} (checked base_container if livery)")
+
+        # Determine output path
+        aircraft_type, airline_code = parse_model_name(model_name)
+        if airline_code:
+            model_output = output_path / aircraft_type / airline_code / "model.glb"
+        else:
+            model_output = output_path / aircraft_type / "base" / "model.glb"
+
+        # Convert
+        result = convert_single_gltf(gltf_path, model_output, texture_dirs, texture_scale)
+        result['model_name'] = model_name
+        result['output_path'] = str(model_output)
+        result['aircraft_type'] = aircraft_type
+        result['airline_code'] = airline_code
+        result['texture_scale_name'] = texture_scale_name
+        result['is_livery'] = base_dir is not None
+
+        return result
+
+    except Exception as e:
+        return {
+            'model_name': model_name,
+            'success': False,
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }
 
 
 def main():
@@ -372,100 +658,169 @@ def main():
                         help='Texture scaling (default: 1k)')
     parser.add_argument('--progress-file', help='Path to write progress JSON')
     parser.add_argument('--models', help='Comma-separated list of model names to convert')
+    parser.add_argument('--models-file', help='Path to file containing model names (one per line)')
+    parser.add_argument('--workers', type=int, default=0, help='Number of parallel workers (0=auto)')
+    parser.add_argument('--sample', action='store_true',
+                        help='Sample mode: convert only one livery per aircraft type (for testing)')
+    parser.add_argument('--log-file', help='Write output to log file instead of console')
     args = parser.parse_args()
+
+    # Set up logging to file if requested
+    if args.log_file:
+        log_file = open(args.log_file, 'w', encoding='utf-8')
+        sys.stdout = log_file
+        sys.stderr = log_file
+        print(f"Logging to: {args.log_file}")
 
     source_path = Path(args.source)
     output_path = Path(args.output)
     texture_scale = TEXTURE_SCALE_MAP[args.texture_scale]
     progress_file = Path(args.progress_file) if args.progress_file else None
 
-    # Parse model list
-    if args.models:
+    # Ensure output directory exists
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    # Parse model list (priority: --models-file > --models > all)
+    if args.models_file:
+        models_file_path = Path(args.models_file)
+        models_to_convert = [
+            line.strip() for line in models_file_path.read_text().splitlines()
+            if line.strip() and not line.startswith('#')
+        ]
+    elif args.models:
         models_to_convert = [m.strip() for m in args.models.split(',') if m.strip()]
     else:
         # Convert all models if none specified
+        # Includes both base models (with GLTF) and liveries (referencing base via aircraft.cfg)
         airplanes_path = source_path / "SimObjects" / "Airplanes"
-        models_to_convert = [
+        models_to_convert = sorted([
             d.name for d in airplanes_path.iterdir()
             if d.is_dir() and d.name.startswith('FSLTL_')
-        ]
+        ])
 
+    # Sample mode: keep only one livery per aircraft type
+    if args.sample and models_to_convert:
+        seen_types = set()
+        sampled_models = []
+        for model_name in models_to_convert:
+            aircraft_type, _ = parse_model_name(model_name)
+            if aircraft_type not in seen_types:
+                seen_types.add(aircraft_type)
+                sampled_models.append(model_name)
+        print(f"Sample mode: reduced {len(models_to_convert)} models to {len(sampled_models)} (one per aircraft type)")
+        models_to_convert = sampled_models
+
+    # Determine worker count
+    if args.workers <= 0:
+        # Auto: use CPU count, but cap at 8 to avoid memory issues
+        num_workers = min(os.cpu_count() or 4, 8)
+    else:
+        num_workers = args.workers
+
+    print(f"Converting {len(models_to_convert)} models using {num_workers} workers...")
+
+    # Thread-safe progress tracking
+    progress_lock = threading.Lock()
     progress = {
-        'status': 'scanning',
+        'status': 'converting',
         'total': len(models_to_convert),
         'completed': 0,
         'current': None,
-        'errors': []
+        'errors': [],
+        'converted': []
     }
 
+    # Write initial progress immediately
     if progress_file:
         write_progress(progress_file, progress)
 
-    progress['status'] = 'converting'
-    results = []
+    last_progress_write = time.time()
+    PROGRESS_WRITE_INTERVAL = 0.5  # Write every 500ms for responsive UI
 
-    for i, model_name in enumerate(models_to_convert):
-        progress['current'] = model_name
-        if progress_file:
-            write_progress(progress_file, progress)
+    def update_progress():
+        """Write progress if enough time has passed."""
+        nonlocal last_progress_write
+        now = time.time()
+        if progress_file and (now - last_progress_write) >= PROGRESS_WRITE_INTERVAL:
+            with progress_lock:
+                write_progress(progress_file, progress)
+            last_progress_write = now
 
-        try:
-            # Find aircraft directory
-            aircraft_dir = source_path / "SimObjects" / "Airplanes" / model_name
-            if not aircraft_dir.exists():
-                raise FileNotFoundError(f"Aircraft directory not found: {aircraft_dir}")
+    # Prepare task arguments
+    tasks = [
+        (model_name, source_path, output_path, texture_scale, args.texture_scale)
+        for model_name in models_to_convert
+    ]
 
-            # Find GLTF and textures
-            gltf_path, texture_dirs = find_model_gltf(aircraft_dir)
-            if gltf_path is None:
-                raise FileNotFoundError(f"No GLTF file found in {aircraft_dir}")
+    # Process in parallel
+    completed_count = 0
+    with ThreadPoolExecutor(max_workers=num_workers) as executor:
+        # Submit all tasks
+        future_to_model = {
+            executor.submit(convert_model_task, task): task[0]
+            for task in tasks
+        }
 
-            # Determine output path
-            aircraft_type, airline_code = parse_model_name(model_name)
-            if airline_code:
-                model_output = output_path / aircraft_type / airline_code / "model.glb"
-            else:
-                model_output = output_path / aircraft_type / "base" / "model.glb"
+        # Process results as they complete
+        for future in as_completed(future_to_model):
+            model_name = future_to_model[future]
+            completed_count += 1
 
-            # Convert
-            result = convert_single_gltf(gltf_path, model_output, texture_dirs, texture_scale)
-            result['model_name'] = model_name
-            result['output_path'] = str(model_output)
-            results.append(result)
+            try:
+                result = future.result()
 
-            print(f"[{i+1}/{len(models_to_convert)}] Converted {model_name} -> {model_output.name} "
-                  f"({result['output_size'] / 1024 / 1024:.2f} MB)")
+                with progress_lock:
+                    progress['completed'] = completed_count
+                    progress['current'] = model_name
 
-        except Exception as e:
-            error_msg = f"{model_name}: {str(e)}"
-            progress['errors'].append(error_msg)
-            results.append({
-                'model_name': model_name,
-                'success': False,
-                'error': str(e)
-            })
-            print(f"[{i+1}/{len(models_to_convert)}] Error converting {model_name}: {e}")
-            traceback.print_exc()
+                    if result.get('success'):
+                        progress['converted'].append({
+                            'modelName': result['model_name'],
+                            'modelPath': result['output_path'],
+                            'aircraftType': result['aircraft_type'],
+                            'airlineCode': result['airline_code'],
+                            'textureSize': result['texture_scale_name'],
+                            'hasAnimations': result.get('has_animations', False),
+                            'fileSize': result.get('output_size', 0),
+                            'convertedAt': int(time.time() * 1000)
+                        })
+                        size_mb = result.get('output_size', 0) / 1024 / 1024
+                        print(f"[{completed_count}/{len(models_to_convert)}] {model_name} ({size_mb:.2f} MB)")
+                    else:
+                        error_msg = f"{model_name}: {result.get('error', 'Unknown error')}"
+                        progress['errors'].append(error_msg)
+                        print(f"[{completed_count}/{len(models_to_convert)}] ERROR: {model_name}: {result.get('error')}")
+                        if result.get('traceback'):
+                            print(result['traceback'])
 
-        progress['completed'] = i + 1
-        if progress_file:
-            write_progress(progress_file, progress)
+                update_progress()
+
+            except Exception as e:
+                with progress_lock:
+                    progress['completed'] = completed_count
+                    progress['errors'].append(f"{model_name}: {str(e)}")
+                print(f"[{completed_count}/{len(models_to_convert)}] EXCEPTION: {model_name}: {e}")
+                traceback.print_exc()
+                update_progress()
 
     # Final status
-    progress['status'] = 'complete' if not progress['errors'] else 'error'
-    progress['current'] = None
+    with progress_lock:
+        progress['status'] = 'complete' if not progress['errors'] else 'error'
+        progress['current'] = None
     if progress_file:
         write_progress(progress_file, progress)
 
     # Summary
-    successful = sum(1 for r in results if r.get('success'))
-    failed = len(results) - successful
+    successful = len(progress['converted'])
+    failed = len(progress['errors'])
     print(f"\nConversion complete: {successful} successful, {failed} failed")
 
     if progress['errors']:
-        print("\nErrors:")
-        for error in progress['errors']:
+        print(f"\nErrors ({len(progress['errors'])}):")
+        for error in progress['errors'][:10]:
             print(f"  - {error}")
+        if len(progress['errors']) > 10:
+            print(f"  ... and {len(progress['errors']) - 10} more")
 
     return 0 if not failed else 1
 

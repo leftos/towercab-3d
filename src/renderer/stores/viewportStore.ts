@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist, subscribeWithSelector } from 'zustand/middleware'
 import type { ViewMode, FollowMode, ViewportLayout, ViewportCameraState, Viewport, CameraBookmark } from '../types'
+import { useVatsimStore } from './vatsimStore'
 import {
   HEADING_DEFAULT,
   PITCH_DEFAULT,
@@ -583,6 +584,13 @@ export const useViewportStore = create<ViewportStore>()(
                 }
               })
             })
+
+            // Immediately update reference position to trigger VATSIM re-filter
+            const vatsimStore = useVatsimStore.getState()
+            const aircraftState = vatsimStore.aircraftStates.get(callsign)
+            if (aircraftState) {
+              vatsimStore.setReferencePosition(aircraftState.latitude, aircraftState.longitude)
+            }
           },
 
           followAircraftInOrbit: (callsign) => {
@@ -604,6 +612,13 @@ export const useViewportStore = create<ViewportStore>()(
                 }
               })
             })
+
+            // Immediately update reference position to trigger VATSIM re-filter
+            const vatsimStore = useVatsimStore.getState()
+            const aircraftState = vatsimStore.aircraftStates.get(callsign)
+            if (aircraftState) {
+              vatsimStore.setReferencePosition(aircraftState.latitude, aircraftState.longitude)
+            }
           },
 
           stopFollowing: (restoreCamera = true) => {

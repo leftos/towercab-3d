@@ -157,6 +157,7 @@ export type {
 
   // Conversion progress
   ConversionProgress,
+  ConvertedModelInfo,
 
   // Registry
   FSLTLRegistry,

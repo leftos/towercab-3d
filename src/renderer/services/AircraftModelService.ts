@@ -15,6 +15,7 @@
  * Models from Flightradar24/fr24-3d-models (GPL-2.0, originally from FlightGear)
  */
 
+import { convertFileSrc } from '@tauri-apps/api/core'
 import { aircraftDimensionsService, type AircraftDimensions } from './AircraftDimensionsService'
 import { fsltlService } from './FSLTLService'
 
@@ -375,6 +376,8 @@ export interface ModelInfo {
   rotationOffset?: number
   /** Whether the model has animations (landing gear, etc.) */
   hasAnimations?: boolean
+  /** VMR variation name (e.g., "FSLTL_FAIB_B738_American") for FSLTL matches */
+  vmrVariationName?: string
 }
 
 /**
@@ -456,14 +459,19 @@ class AircraftModelServiceClass {
     if (fsltlModel) {
       // Get dimensions from FAA database for scaling reference
       const targetDims = aircraftDimensionsService.getDimensions(normalized)
+      // Get the VMR variation name that was matched (stored by findBestModel)
+      const vmrVariationName = fsltlService.lastMatchVariationName ?? undefined
+      // Convert file path to Tauri asset URL for webview access
+      const modelUrl = convertFileSrc(fsltlModel.modelPath)
       return {
-        modelUrl: fsltlModel.modelPath,
+        modelUrl,
         scale: uniformScale, // FSLTL models are properly scaled
         matchType: fsltlModel.airlineCode ? 'fsltl' : 'fsltl-base',
         matchedModel: fsltlModel.modelName,
         dimensions: targetDims ?? { wingspan: 35.78, length: 39.47 },
-        rotationOffset: 180, // FSLTL models face opposite direction
-        hasAnimations: fsltlModel.hasAnimations
+        rotationOffset: 180, // FSLTL models face same direction as built-in models
+        hasAnimations: fsltlModel.hasAnimations,
+        vmrVariationName
       }
     }
 
@@ -505,7 +513,23 @@ class AircraftModelServiceClass {
       }
     }
 
-    // 5. No dimensions available - use B738 fallback at 1:1 scale
+    // 5. Last resort: Try FSLTL airline-only match (any aircraft type for this airline)
+    // This helps when aircraft type is unknown but we know the airline
+    const airlineFallback = fsltlService.findModelByAirline(airlineCode)
+    if (airlineFallback) {
+      const modelUrl = convertFileSrc(airlineFallback.modelPath)
+      return {
+        modelUrl,
+        scale: uniformScale,
+        matchType: 'fsltl-base', // Using base match type since it's not exact
+        matchedModel: airlineFallback.modelName,
+        dimensions: { wingspan: 35.78, length: 39.47 }, // Fallback B738 dimensions
+        rotationOffset: 0,
+        hasAnimations: airlineFallback.hasAnimations
+      }
+    }
+
+    // 6. Final fallback - use B738 built-in at 1:1 scale
     const finalFallbackDims = this.getModelDimensions(FALLBACK_MODEL)
     return {
       modelUrl: `./${FALLBACK_MODEL}.glb`,

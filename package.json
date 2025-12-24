@@ -9,8 +9,9 @@
     "vite:build": "vite build",
     "vite:preview": "vite preview",
     "typecheck": "tsc -p tsconfig.web.json --noEmit",
+    "build:converter": "python scripts/build_converter.py",
     "dev": "tauri dev",
-    "build": "npm run typecheck && tauri build",
+    "build": "npm run typecheck && npm run build:converter && tauri build",
     "tauri": "tauri"
   },
   "keywords": [

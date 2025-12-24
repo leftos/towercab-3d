@@ -105,8 +105,10 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
 
       // Filter pilots by distance if we have a reference position
       // This prevents storing data for aircraft that are far away
-      let filteredPilots = data.pilots
+      // If no reference position is set (no airport selected, not following aircraft),
+      // don't store any aircraft data - there's no point interpolating/rendering them
       const totalPilotsFromApi = data.pilots.length
+      let filteredPilots: PilotData[] = []
 
       if (referencePosition) {
         filteredPilots = data.pilots.filter(pilot => {
@@ -281,6 +283,8 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
       return
     }
 
+    const now = Date.now()
+
     // Filter pilots by distance from reference position
     const filteredPilots = allPilots.filter(pilot => {
       const distance = calculateDistanceNM(
@@ -298,12 +302,32 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
 
     for (const pilot of filteredPilots) {
       const callsign = pilot.callsign
+
       // Preserve existing interpolation state if available
       if (aircraftStates.has(callsign)) {
         newAircraftStates.set(callsign, aircraftStates.get(callsign)!)
-      }
-      if (previousStates.has(callsign)) {
-        newPreviousStates.set(callsign, previousStates.get(callsign)!)
+        if (previousStates.has(callsign)) {
+          newPreviousStates.set(callsign, previousStates.get(callsign)!)
+        }
+      } else {
+        // Create new state for aircraft that just became visible
+        // This ensures they appear immediately without waiting for the next VATSIM fetch
+        const state: AircraftState = {
+          callsign: pilot.callsign,
+          cid: pilot.cid,
+          latitude: pilot.latitude,
+          longitude: pilot.longitude,
+          altitude: pilot.altitude * 0.3048,  // Convert VATSIM feet → meters
+          groundspeed: pilot.groundspeed,
+          heading: pilot.heading,
+          transponder: pilot.transponder,
+          aircraftType: pilot.flight_plan?.aircraft_short || null,
+          departure: pilot.flight_plan?.departure || null,
+          arrival: pilot.flight_plan?.arrival || null,
+          timestamp: now
+        }
+        newAircraftStates.set(callsign, state)
+        newPreviousStates.set(callsign, { ...state })  // Same position for immediate display
       }
     }
 

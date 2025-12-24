@@ -15,8 +15,9 @@ async function fetchUrl(url: string): Promise<string> {
     // Try Tauri command first (available in desktop mode)
     const response = await invoke<string>('fetch_url', { url })
     return response
-  } catch {
+  } catch (err) {
     // Fallback to browser fetch (for serve mode)
+    console.warn('[MetarService] Tauri fetch_url failed, falling back to browser fetch:', err)
     const response = await fetch(url)
     if (!response.ok) {
       throw new Error(`HTTP error: ${response.status}`)

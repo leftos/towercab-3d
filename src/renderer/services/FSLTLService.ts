@@ -58,6 +58,13 @@ class FSLTLServiceClass {
   /** All unique type codes from VMR */
   private allTypes = new Set<string>()
 
+  /**
+   * Type aliases extracted from VMR default rules
+   * Maps ICAO type codes to FSLTL model types (e.g., B38M → B738)
+   * Derived from ModelName in default rules: TypeCode="B38M" ModelName="FSLTL_B738_ZZZZ"
+   */
+  private typeAliases = new Map<string, string>()
+
   /** Registry of converted models */
   private registry: FSLTLRegistry = createEmptyRegistry()
 
@@ -72,6 +79,9 @@ class FSLTLServiceClass {
 
   /** Event listeners for model updates */
   private updateListeners: Array<() => void> = []
+
+  /** Last storage error (for UI feedback) */
+  private _lastStorageError: string | null = null
 
   // ==========================================================================
   // INITIALIZATION
@@ -106,15 +116,73 @@ class FSLTLServiceClass {
     this.airlineRules.clear()
     this.allAirlines.clear()
     this.allTypes.clear()
+    this.typeAliases.clear()
 
-    // Parse XML using regex (avoid full XML parser for performance)
+    // Parse XML using DOMParser for robust handling of edge cases
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(vmrContent, 'text/xml')
+
+    // Check for parsing errors
+    const parseError = doc.querySelector('parsererror')
+    if (parseError) {
+      console.error('[FSLTLService] XML parsing error:', parseError.textContent)
+      // Fall back to regex for malformed XML
+      this.parseVMRContentFallback(vmrContent)
+      return
+    }
+
+    const rules = doc.querySelectorAll('ModelMatchRule')
+
+    for (const ruleEl of rules) {
+      const typeCode = ruleEl.getAttribute('TypeCode')?.toUpperCase()
+      const modelName = ruleEl.getAttribute('ModelName')
+      const callsignPrefix = ruleEl.getAttribute('CallsignPrefix')?.toUpperCase()
+
+      if (!typeCode || !modelName) continue
+
+      const modelNames = modelName.split('//')
+
+      const rule: VMRRule = {
+        typeCode,
+        modelNames,
+        callsignPrefix: callsignPrefix || undefined
+      }
+
+      this.allTypes.add(typeCode)
+
+      if (callsignPrefix) {
+        // Airline-specific rule
+        this.allAirlines.add(callsignPrefix)
+        const key = `${callsignPrefix}_${typeCode}`
+        this.airlineRules.set(key, rule)
+      } else {
+        // Default rule (no callsign prefix)
+        this.defaultRules.set(typeCode, rule)
+
+        // Extract type alias from default rule
+        // E.g., TypeCode="B38M" ModelName="FSLTL_B738_ZZZZ" → B38M → B738
+        const firstModelName = modelNames[0]
+        const { aircraftType: modelType } = parseModelName(firstModelName)
+        if (modelType && modelType !== typeCode) {
+          this.typeAliases.set(typeCode, modelType)
+        }
+      }
+    }
+
+    this.vmrLoaded = true
+    console.log(`[FSLTLService] Parsed VMR: ${this.defaultRules.size} default rules, ${this.airlineRules.size} airline rules, ${this.allAirlines.size} airlines, ${this.allTypes.size} types, ${this.typeAliases.size} type aliases`)
+  }
+
+  /**
+   * Fallback regex-based parsing for malformed XML
+   */
+  private parseVMRContentFallback(vmrContent: string): void {
     const ruleRegex = /<ModelMatchRule\s+([^>]+)\s*\/>/g
     let match: RegExpExecArray | null
 
     while ((match = ruleRegex.exec(vmrContent)) !== null) {
       const attrs = match[1]
 
-      // Extract attributes
       const typeCodeMatch = attrs.match(/TypeCode\s*=\s*"([^"]+)"/)
       const modelNameMatch = attrs.match(/ModelName\s*=\s*"([^"]+)"/)
       const callsignMatch = attrs.match(/CallsignPrefix\s*=\s*"([^"]+)"/)
@@ -134,18 +202,23 @@ class FSLTLServiceClass {
       this.allTypes.add(typeCode)
 
       if (callsignPrefix) {
-        // Airline-specific rule
         this.allAirlines.add(callsignPrefix)
         const key = `${callsignPrefix}_${typeCode}`
         this.airlineRules.set(key, rule)
       } else {
-        // Default rule (no callsign prefix)
         this.defaultRules.set(typeCode, rule)
+
+        // Extract type alias from default rule
+        const firstModelName = modelNames[0]
+        const { aircraftType: modelType } = parseModelName(firstModelName)
+        if (modelType && modelType !== typeCode) {
+          this.typeAliases.set(typeCode, modelType)
+        }
       }
     }
 
     this.vmrLoaded = true
-    console.log(`[FSLTLService] Parsed VMR: ${this.defaultRules.size} default rules, ${this.airlineRules.size} airline rules, ${this.allAirlines.size} airlines, ${this.allTypes.size} types`)
+    console.log(`[FSLTLService] Parsed VMR (fallback): ${this.defaultRules.size} default rules, ${this.airlineRules.size} airline rules, ${this.typeAliases.size} type aliases`)
   }
 
   /**
@@ -263,43 +336,170 @@ class FSLTLServiceClass {
   // ==========================================================================
 
   /**
+   * Result from findBestModel including variation name for display
+   */
+  public lastMatchVariationName: string | null = null
+
+  /**
    * Find best matching FSLTL model for aircraft type and airline
    *
-   * Priority:
-   * 1. Exact airline + type match (converted)
-   * 2. Base type match (converted, _ZZZZ suffix)
-   * 3. null (no FSLTL model available)
+   * Uses VMR rules to determine if a match exists, then looks up
+   * converted models in the registry by aircraft type + airline code.
    *
-   * @param aircraftType - ICAO aircraft type code (e.g., "B738")
+   * Priority:
+   * 1. VMR airline-specific rule: exact airline + type match (uses type aliasing)
+   * 2. VMR default rule: type match with base livery (uses type aliasing)
+   * 3. Direct registry lookup: if no VMR rules, check registry directly
+   * 4. null: no FSLTL model available
+   *
+   * @param aircraftType - ICAO aircraft type code (e.g., "B738", "B38M")
    * @param airlineCode - ICAO airline code from callsign (e.g., "AAL"), or null
    * @returns Best matching FSLTLModel or null
    */
   findBestModel(aircraftType: string | null, airlineCode: string | null): FSLTLModel | null {
     if (!aircraftType) return null
 
+    this.lastMatchVariationName = null
+
     const normalizedType = aircraftType.toUpperCase()
     const normalizedAirline = airlineCode?.toUpperCase()
 
-    // 1. Try exact airline + type match
-    if (normalizedAirline) {
-      // Check if we have a converted model for this airline + type
-      const models = this.registry.byAircraftType.get(normalizedType)
-      if (models) {
-        const airlineMatch = models.find(m => m.airlineCode === normalizedAirline)
-        if (airlineMatch) return airlineMatch
+    // Apply type aliasing (e.g., B38M → B738)
+    const baseType = this.typeAliases.get(normalizedType) ?? normalizedType
+
+    // Debug: log search parameters (only once per type/airline combo)
+    const debugKey = `${normalizedType}_${normalizedAirline || 'null'}`
+    if (!this._debugLoggedTypes) this._debugLoggedTypes = new Set()
+    const shouldLog = !this._debugLoggedTypes.has(debugKey)
+    if (shouldLog) {
+      this._debugLoggedTypes.add(debugKey)
+      console.log(`[FSLTL] findBestModel: type=${normalizedType} (baseType=${baseType}), airline=${normalizedAirline}, vmrLoaded=${this.vmrLoaded}, registrySize=${this.registry.models.size}`)
+    }
+
+    // Get all models for this base aircraft type
+    // If aliased, also check original type since models may be registered under either
+    let modelsForType = this.registry.byAircraftType.get(baseType)
+    if (!modelsForType && baseType !== normalizedType) {
+      modelsForType = this.registry.byAircraftType.get(normalizedType)
+      if (shouldLog && modelsForType) {
+        console.log(`[FSLTL]   No models for aliased type ${baseType}, but found ${modelsForType.length} for original type ${normalizedType}`)
       }
     }
 
-    // 2. Try base type match (no specific airline)
-    const baseModels = this.registry.byAircraftType.get(normalizedType)
-    if (baseModels) {
-      const baseMatch = baseModels.find(m => !m.airlineCode)
-      if (baseMatch) return baseMatch
+    // 1. Try VMR airline-specific rule first
+    if (normalizedAirline) {
+      const airlineRuleKey = `${normalizedAirline}_${normalizedType}`
+      const airlineRule = this.airlineRules.get(airlineRuleKey)
+      if (shouldLog) {
+        console.log(`[FSLTL]   Airline rule ${airlineRuleKey}: ${airlineRule ? 'found' : 'not found'}`)
+      }
+      if (airlineRule) {
+        // VMR says this airline has a livery for this type
+        // Look up by type + airline in registry
+        if (modelsForType) {
+          const airlineMatch = modelsForType.find(m => m.airlineCode === normalizedAirline)
+          if (airlineMatch) {
+            // Store the VMR variation name for display
+            this.lastMatchVariationName = airlineRule.modelNames[0]
+            if (shouldLog) {
+              console.log(`[FSLTL]   Found airline match: ${airlineMatch.modelName} (variation: ${this.lastMatchVariationName})`)
+            }
+            return airlineMatch
+          }
+        }
+        if (shouldLog) {
+          console.log(`[FSLTL]   Airline rule exists but model not converted for ${normalizedAirline}`)
+        }
+      }
     }
 
-    // 3. No match
+    // 2. Try VMR default rule (base livery for this type)
+    const defaultRule = this.defaultRules.get(normalizedType)
+    if (shouldLog) {
+      console.log(`[FSLTL]   Default rule ${normalizedType}: ${defaultRule ? 'found' : 'not found'}`)
+    }
+    if (defaultRule) {
+      // Look up base livery in registry
+      if (modelsForType) {
+        const baseMatch = modelsForType.find(m => !m.airlineCode)
+        if (baseMatch) {
+          this.lastMatchVariationName = defaultRule.modelNames[0]
+          if (shouldLog) {
+            console.log(`[FSLTL]   Found base match: ${baseMatch.modelName} (variation: ${this.lastMatchVariationName})`)
+          }
+          return baseMatch
+        }
+      }
+      if (shouldLog) {
+        console.log(`[FSLTL]   Default rule exists but base model not converted`)
+      }
+    }
+
+    // 3. Fallback: Direct registry lookup by type
+    // This handles cases where models exist but VMR wasn't loaded
+    // or VMR doesn't have rules for this exact combination
+    if (modelsForType) {
+      // First try airline match (even without VMR rule - maybe model was manually converted)
+      if (normalizedAirline) {
+        const airlineMatch = modelsForType.find(m => m.airlineCode === normalizedAirline)
+        if (airlineMatch) {
+          if (shouldLog) {
+            console.log(`[FSLTL]   Found airline match via direct lookup: ${airlineMatch.modelName}`)
+          }
+          return airlineMatch
+        }
+      }
+
+      // Then try base livery
+      const baseMatch = modelsForType.find(m => !m.airlineCode)
+      if (baseMatch) {
+        if (shouldLog) {
+          console.log(`[FSLTL]   Found base match via direct lookup: ${baseMatch.modelName}`)
+        }
+        return baseMatch
+      }
+
+      // Finally, return any model for this type
+      if (modelsForType.length > 0) {
+        const anyMatch = modelsForType[0]
+        if (shouldLog) {
+          console.log(`[FSLTL]   Found any match via direct lookup: ${anyMatch.modelName}`)
+        }
+        return anyMatch
+      }
+    }
+
+    // 4. No match
+    if (shouldLog) {
+      console.log(`[FSLTL]   No FSLTL match found`)
+    }
     return null
   }
+
+  /**
+   * Find any FSLTL model for an airline, regardless of aircraft type.
+   * Used as a last-resort fallback when aircraft type is unknown but airline is known.
+   *
+   * @param airlineCode - ICAO airline code (e.g., "AAL")
+   * @returns Any FSLTLModel for this airline, or null
+   */
+  findModelByAirline(airlineCode: string | null): FSLTLModel | null {
+    if (!airlineCode) return null
+
+    const normalizedAirline = airlineCode.toUpperCase()
+    const modelsForAirline = this.registry.byAirline.get(normalizedAirline)
+
+    if (modelsForAirline && modelsForAirline.length > 0) {
+      // Return the first available model for this airline
+      console.log(`[FSLTL] findModelByAirline: Found ${modelsForAirline.length} models for ${normalizedAirline}, using ${modelsForAirline[0].modelName}`)
+      return modelsForAirline[0]
+    }
+
+    return null
+  }
+
+  // Debug tracking to avoid log spam
+  private _debugLoggedTypes?: Set<string>
 
   /**
    * Check if VMR has a rule for this airline + type combo
@@ -442,7 +642,9 @@ class FSLTLServiceClass {
         }
       })
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown storage error'
       console.error('[FSLTLService] Failed to load registry:', error)
+      this._lastStorageError = `Failed to load converted models: ${errorMsg}`
       this.registry = createEmptyRegistry()
     }
   }
@@ -467,13 +669,30 @@ class FSLTLServiceClass {
 
         request.onsuccess = () => {
           db.close()
+          this._lastStorageError = null  // Clear error on success
           console.log(`[FSLTLService] Saved ${this.registry.models.size} models to IndexedDB`)
           resolve()
         }
       })
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown storage error'
       console.error('[FSLTLService] Failed to save registry:', error)
+      this._lastStorageError = `Failed to save converted models: ${errorMsg}`
     }
+  }
+
+  /**
+   * Get last storage error (null if no error)
+   */
+  getLastStorageError(): string | null {
+    return this._lastStorageError
+  }
+
+  /**
+   * Clear last storage error
+   */
+  clearStorageError(): void {
+    this._lastStorageError = null
   }
 
   // ==========================================================================

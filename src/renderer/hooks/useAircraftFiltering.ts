@@ -6,6 +6,7 @@ import { useWeatherStore } from '@/stores/weatherStore'
 import { calculateDistanceNM } from '@/utils/interpolation'
 import { getTowerPosition } from '@/utils/towerHeight'
 import { GROUNDSPEED_THRESHOLD_KNOTS } from '@/constants/rendering'
+import { isOrbitWithoutAirport } from '@/utils/viewingContext'
 import type { InterpolatedAircraftState } from '@/types/vatsim'
 
 interface FilteredAircraftWithDistance extends InterpolatedAircraftState {
@@ -274,6 +275,7 @@ export function useAircraftFiltering(
   const viewportId = options?.viewportId ?? activeViewportId
   const viewport = viewports.find((v) => v.id === viewportId)
   const followingCallsign = viewport?.cameraState.followingCallsign ?? null
+  const followMode = viewport?.cameraState.followMode ?? 'tower'
 
   const currentAirport = useAirportStore((state) => state.currentAirport)
 
@@ -295,8 +297,8 @@ export function useAircraftFiltering(
     let isOrbitModeWithoutAirport = false
 
     // Check if in orbit mode without airport (use followed aircraft as reference)
-    if (followingCallsign && !currentAirport && interpolatedAircraft.has(followingCallsign)) {
-      const followedAircraft = interpolatedAircraft.get(followingCallsign)!
+    if (isOrbitWithoutAirport(currentAirport, followMode, followingCallsign) && interpolatedAircraft.has(followingCallsign!)) {
+      const followedAircraft = interpolatedAircraft.get(followingCallsign!)!
       refLat = followedAircraft.interpolatedLatitude
       refLon = followedAircraft.interpolatedLongitude
       refElevationMeters = followedAircraft.interpolatedAltitude  // Already in METERS

@@ -2,41 +2,38 @@
  * FSLTL Import Panel
  *
  * UI component for managing FSLTL aircraft model import and conversion.
- * Allows users to:
- * - Select FSLTL source folder (fsltl-traffic-base)
- * - Choose texture quality/scaling
- * - Select specific airlines and aircraft types to convert
- * - Monitor conversion progress
+ * Simplified interface: select source folder, choose output location, convert all.
  *
  * @see FSLTLService - Backend service for model matching
  * @see fsltlApi - Tauri API wrapper for file operations
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { open as openExternal } from '@tauri-apps/plugin-shell'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { fsltlService } from '../../services/FSLTLService'
 import * as fsltlApi from '../../services/fsltlApi'
-import type { ConversionProgress, FSLTLAirlineInfo, FSLTLTypeInfo } from '../../types/fsltl'
+import type { ConversionProgress } from '../../types/fsltl'
 import './FSLTLImportPanel.css'
 
-type PanelState = 'setup' | 'selection' | 'converting' | 'complete'
+type PanelState = 'setup' | 'ready' | 'converting' | 'complete'
 
 function FSLTLImportPanel() {
   // Settings
   const fsltlSettings = useSettingsStore((state) => state.fsltl)
   const updateFSLTLSettings = useSettingsStore((state) => state.updateFSLTLSettings)
 
+  // Ref to track polling interval for cleanup
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
   // Panel state
   const [panelState, setPanelState] = useState<PanelState>('setup')
   const [error, setError] = useState<string | null>(null)
   const [isValidating, setIsValidating] = useState(false)
 
-  // VMR and selection state
-  const [vmrLoaded, setVmrLoaded] = useState(false)
-  const [airlines, setAirlines] = useState<FSLTLAirlineInfo[]>([])
-  const [types, setTypes] = useState<FSLTLTypeInfo[]>([])
-  const [selectedAirlines, setSelectedAirlines] = useState<Set<string>>(new Set())
-  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set())
+  // Output path state
+  const [outputPath, setOutputPath] = useState<string | null>(null)
+  const [defaultOutputPath, setDefaultOutputPath] = useState<string | null>(null)
 
   // Conversion progress
   const [progress, setProgress] = useState<ConversionProgress>({
@@ -46,41 +43,48 @@ function FSLTLImportPanel() {
     current: null,
     errors: []
   })
+  const [conversionStartTime, setConversionStartTime] = useState<number | null>(null)
 
   // Stats
   const [convertedCount, setConvertedCount] = useState(0)
-  const [outputPath, setOutputPath] = useState<string | null>(null)
+  const [availableCount, setAvailableCount] = useState(0)
 
-  // Initialize on mount - intentionally runs once with captured values
+  // Initialize on mount
   useEffect(() => {
     const sourcePath = fsltlSettings.sourcePath
+    const savedOutputPath = fsltlSettings.outputPath
+
     const init = async () => {
       try {
-        // Get output path
-        const path = await fsltlApi.getFsltlOutputPath()
-        setOutputPath(path)
+        // Get default output path
+        const [defaultPath] = await fsltlApi.getFsltlDefaultOutputPath()
+        setDefaultOutputPath(defaultPath)
+
+        // Use saved output path or default
+        const effectiveOutputPath = savedOutputPath || defaultPath
+        setOutputPath(effectiveOutputPath)
 
         // Initialize FSLTL service (loads registry from IndexedDB)
         await fsltlService.initialize()
         setConvertedCount(fsltlService.getModelCount())
 
-        // If source path is already set, validate and load VMR
+        // If source path is already set, validate it and load VMR rules
         if (sourcePath) {
           const isValid = await fsltlApi.validateFsltlSource(sourcePath)
           if (isValid) {
-            const vmrPath = `${sourcePath}/FSLTL_Rules.vmr`
-            const vmrContent = await fsltlApi.readTextFile(vmrPath)
-            fsltlService.parseVMRContent(vmrContent)
-            setAirlines(fsltlService.getAvailableAirlines())
-            setTypes(fsltlService.getAvailableTypes())
-            setVmrLoaded(true)
+            // Load VMR rules for model matching
+            try {
+              const vmrContent = await fsltlApi.readVmrFile(sourcePath)
+              fsltlService.parseVMRContent(vmrContent)
+              console.log('[FSLTLImportPanel] Loaded VMR rules from saved source path')
+            } catch (vmrErr) {
+              console.warn('[FSLTLImportPanel] Failed to load VMR:', vmrErr)
+            }
 
-            // Pre-select common types
-            const commonTypes = ['A320', 'B738', 'B737', 'A321', 'A319', 'E190', 'CRJ9']
-            const preselected = new Set(commonTypes.filter(t =>
-              fsltlService.getAvailableTypes().some(info => info.typeCode === t)
-            ))
-            setSelectedTypes(preselected)
+            // Count available models
+            const aircraft = await fsltlApi.listFsltlAircraft(sourcePath)
+            setAvailableCount(aircraft.length)
+            setPanelState('ready')
           }
         }
       } catch (err) {
@@ -91,30 +95,17 @@ function FSLTLImportPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Load and parse VMR file
-  const loadVMR = useCallback(async (sourcePath: string) => {
-    try {
-      const vmrPath = `${sourcePath}/FSLTL_Rules.vmr`
-      const vmrContent = await fsltlApi.readTextFile(vmrPath)
-      fsltlService.parseVMRContent(vmrContent)
-
-      setAirlines(fsltlService.getAvailableAirlines())
-      setTypes(fsltlService.getAvailableTypes())
-      setVmrLoaded(true)
-
-      // Pre-select common types
-      const commonTypes = ['A320', 'B738', 'B737', 'A321', 'A319', 'E190', 'CRJ9']
-      const preselected = new Set(commonTypes.filter(t =>
-        fsltlService.getAvailableTypes().some(info => info.typeCode === t)
-      ))
-      setSelectedTypes(preselected)
-    } catch (err) {
-      console.error('[FSLTLImportPanel] Failed to load VMR:', err)
-      setError('Failed to load FSLTL rules file')
+  // Cleanup polling interval on unmount
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current)
+        pollIntervalRef.current = null
+      }
     }
   }, [])
 
-  // Handle folder selection
+  // Handle source folder selection
   const handleBrowseSource = async () => {
     try {
       setError(null)
@@ -131,8 +122,21 @@ function FSLTLImportPanel() {
       }
 
       updateFSLTLSettings({ sourcePath: folder })
-      await loadVMR(folder)
-      setPanelState('selection')
+
+      // Load VMR rules for model matching
+      try {
+        const vmrContent = await fsltlApi.readVmrFile(folder)
+        fsltlService.parseVMRContent(vmrContent)
+        console.log('[FSLTLImportPanel] Loaded VMR rules')
+      } catch (vmrErr) {
+        console.warn('[FSLTLImportPanel] Failed to load VMR:', vmrErr)
+      }
+
+      // Count available models
+      const aircraft = await fsltlApi.listFsltlAircraft(folder)
+      setAvailableCount(aircraft.length)
+
+      setPanelState('ready')
       setIsValidating(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to select folder')
@@ -140,125 +144,182 @@ function FSLTLImportPanel() {
     }
   }
 
-  // Toggle airline selection
-  const handleToggleAirline = (code: string) => {
-    setSelectedAirlines(prev => {
-      const next = new Set(prev)
-      if (next.has(code)) {
-        next.delete(code)
-      } else {
-        next.add(code)
+  // Handle output folder selection
+  const handleBrowseOutput = async () => {
+    try {
+      setError(null)
+      const folder = await fsltlApi.pickFolder()
+      if (!folder) return
+
+      setOutputPath(folder)
+      updateFSLTLSettings({ outputPath: folder })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to select folder')
+    }
+  }
+
+  // Reset output to default
+  const handleResetOutputPath = () => {
+    if (defaultOutputPath) {
+      setOutputPath(defaultOutputPath)
+      updateFSLTLSettings({ outputPath: null })
+    }
+  }
+
+  // Cancel running conversion
+  const handleCancelConversion = async () => {
+    try {
+      // Stop polling
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current)
+        pollIntervalRef.current = null
       }
-      return next
-    })
+
+      // Kill the converter process
+      await fsltlApi.cancelFsltlConversion()
+
+      setProgress({
+        status: 'idle',
+        total: 0,
+        completed: 0,
+        current: null,
+        errors: []
+      })
+      setPanelState('ready')
+    } catch (err) {
+      console.warn('[FSLTLImportPanel] Cancel failed (process may have already finished):', err)
+      // Still reset state even if cancel fails
+      setPanelState('ready')
+    }
   }
 
-  // Toggle type selection
-  const handleToggleType = (typeCode: string) => {
-    setSelectedTypes(prev => {
-      const next = new Set(prev)
-      if (next.has(typeCode)) {
-        next.delete(typeCode)
-      } else {
-        next.add(typeCode)
-      }
-      return next
-    })
-  }
-
-  // Select/deselect all airlines
-  const handleSelectAllAirlines = () => {
-    setSelectedAirlines(new Set(airlines.map(a => a.code)))
-  }
-  const handleClearAirlines = () => {
-    setSelectedAirlines(new Set())
-  }
-
-  // Select/deselect all types
-  const handleSelectAllTypes = () => {
-    setSelectedTypes(new Set(types.map(t => t.typeCode)))
-  }
-  const handleClearTypes = () => {
-    setSelectedTypes(new Set())
-  }
-
-  // Get models to convert based on selection
-  const getSelectedModels = (): string[] => {
-    return fsltlService.getModelsToConvert(
-      Array.from(selectedAirlines),
-      Array.from(selectedTypes)
-    )
-  }
-
-  // Start conversion
+  // Start conversion (converts ALL models)
   const handleStartConversion = async () => {
     if (!fsltlSettings.sourcePath || !outputPath) return
-
-    const models = getSelectedModels()
-    if (models.length === 0) {
-      setError('No models selected. Select at least one airline or type.')
-      return
-    }
 
     try {
       setError(null)
       setPanelState('converting')
 
-      // Create temp progress file path
-      const progressFile = `${outputPath}/conversion_progress.json`
+      // Create unique progress file path with timestamp
+      // Use backslash for Windows path separator
+      const timestamp = Date.now()
+      const progressFile = `${outputPath}\\conversion_progress_${timestamp}.json`
 
-      // Start conversion
+      // Track start time for ETA calculation
+      setConversionStartTime(Date.now())
+
+      // Start conversion with empty models array = convert all
       await fsltlApi.startFsltlConversion(
         fsltlSettings.sourcePath,
         outputPath,
         fsltlSettings.textureScale,
-        models,
+        [], // Empty = convert all
         progressFile
       )
 
+      console.log('[FSLTLImportPanel] Started conversion, polling progress file:', progressFile)
+
       // Poll for progress
-      const pollInterval = setInterval(async () => {
+      pollIntervalRef.current = setInterval(async () => {
         try {
           const currentProgress = await fsltlApi.readConversionProgress(progressFile)
+          console.log('[FSLTLImportPanel] Progress:', currentProgress.completed, '/', currentProgress.total, currentProgress.status)
           setProgress(currentProgress)
 
           if (currentProgress.status === 'complete' || currentProgress.status === 'error') {
-            clearInterval(pollInterval)
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current)
+              pollIntervalRef.current = null
+            }
 
-            // Reload registry and trigger model refresh
-            await fsltlService.loadRegistry()
+            // Register newly converted models
+            if (currentProgress.converted && currentProgress.converted.length > 0) {
+              const newModels = currentProgress.converted.map(info => ({
+                aircraftType: info.aircraftType,
+                airlineCode: info.airlineCode,
+                modelName: info.modelName,
+                modelPath: info.modelPath,
+                textureSize: info.textureSize,
+                hasAnimations: info.hasAnimations,
+                fileSize: info.fileSize,
+                convertedAt: info.convertedAt
+              }))
+              fsltlService.registerModels(newModels)
+              console.log(`[FSLTLImportPanel] Registered ${newModels.length} new models`)
+            }
+
+            // Clean up progress file
+            try {
+              await fsltlApi.deleteFile(progressFile)
+            } catch {
+              // Ignore cleanup errors
+            }
+
+            // Update count and trigger model refresh
             setConvertedCount(fsltlService.getModelCount())
             fsltlService.triggerModelRefresh()
 
             setPanelState('complete')
           }
-        } catch {
-          // Progress file may not exist yet
+        } catch (pollErr) {
+          // Progress file may not exist yet - log for debugging
+          console.log('[FSLTLImportPanel] Poll error (may be normal):', pollErr)
         }
       }, 1000)
 
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start conversion')
-      setPanelState('selection')
+      const errorMessage = err instanceof Error ? err.message : String(err)
+      console.error('[FSLTLImportPanel] Conversion start failed:', errorMessage)
+      setError(`Failed to start conversion: ${errorMessage}`)
+      setPanelState('ready')
     }
   }
 
-  // Estimate disk space
-  const estimateDiskSpace = (): string => {
-    const count = getSelectedModels().length
+  // Estimate disk space for all models
+  const getEstimatedDiskSpace = () => {
+    const count = availableCount
     // Rough estimate: ~5MB per model at 1K textures, scales with quality
     const baseSize = 5
-    const qualityMultiplier = {
+    const qualityMultiplier: Record<string, number> = {
       'full': 4,
       '2k': 2,
       '1k': 1,
       '512': 0.5
     }
-    const sizeMB = count * baseSize * qualityMultiplier[fsltlSettings.textureScale]
+    const sizeMB = count * baseSize * (qualityMultiplier[fsltlSettings.textureScale] ?? 1)
     if (sizeMB >= 1024) {
       return `~${(sizeMB / 1024).toFixed(1)} GB`
     }
     return `~${Math.round(sizeMB)} MB`
+  }
+
+  const isCustomOutputPath = outputPath !== defaultOutputPath && fsltlSettings.outputPath !== null
+
+  // Calculate ETA based on progress
+  const getEtaString = () => {
+    if (!conversionStartTime || progress.completed === 0 || progress.total === 0) {
+      return 'Calculating...'
+    }
+
+    const elapsedMs = Date.now() - conversionStartTime
+    const msPerModel = elapsedMs / progress.completed
+    const remaining = progress.total - progress.completed
+    const remainingMs = remaining * msPerModel
+
+    // Format time
+    const totalSeconds = Math.round(remainingMs / 1000)
+    if (totalSeconds < 60) {
+      return `~${totalSeconds}s remaining`
+    }
+    const minutes = Math.floor(totalSeconds / 60)
+    const seconds = totalSeconds % 60
+    if (minutes < 60) {
+      return `~${minutes}m ${seconds}s remaining`
+    }
+    const hours = Math.floor(minutes / 60)
+    const mins = minutes % 60
+    return `~${hours}h ${mins}m remaining`
   }
 
   return (
@@ -282,8 +343,45 @@ function FSLTLImportPanel() {
         </div>
         <p className="setting-hint">
           Select the fsltl-traffic-base folder from your MSFS Community folder.
+          Get FSLTL from <a
+            href="#"
+            onClick={(e) => { e.preventDefault(); openExternal('https://fslivetrafficliveries.com/') }}
+            className="external-link"
+          >fslivetrafficliveries.com</a>
         </p>
       </div>
+
+      {/* Output Path - only show when source is valid */}
+      {panelState !== 'setup' && (
+        <div className="fsltl-section">
+          <label>Output Location</label>
+          <div className="fsltl-path-row">
+            <span className="fsltl-path" title={outputPath || ''}>
+              {outputPath || 'Not set'}
+            </span>
+            <button
+              className="control-button"
+              onClick={handleBrowseOutput}
+              disabled={panelState === 'converting'}
+            >
+              Change...
+            </button>
+            {isCustomOutputPath && (
+              <button
+                className="control-button"
+                onClick={handleResetOutputPath}
+                disabled={panelState === 'converting'}
+                title="Reset to default location"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+          <p className="setting-hint">
+            Where converted GLB models will be saved. Default is the app&apos;s mods folder.
+          </p>
+        </div>
+      )}
 
       {/* Texture Quality */}
       <div className="fsltl-section">
@@ -300,76 +398,20 @@ function FSLTLImportPanel() {
         </select>
       </div>
 
-      {/* Selection Panel */}
-      {vmrLoaded && panelState === 'selection' && (
+      {/* Ready Panel - Show convert button */}
+      {panelState === 'ready' && (
         <>
-          {/* Aircraft Types */}
-          <div className="fsltl-section">
-            <div className="fsltl-section-header">
-              <label>Aircraft Types ({selectedTypes.size} selected)</label>
-              <div className="fsltl-selection-buttons">
-                <button onClick={handleSelectAllTypes}>All</button>
-                <button onClick={handleClearTypes}>None</button>
-              </div>
-            </div>
-            <div className="fsltl-checkbox-grid">
-              {types.slice(0, 20).map(type => (
-                <label key={type.typeCode} className="fsltl-checkbox-item">
-                  <input
-                    type="checkbox"
-                    checked={selectedTypes.has(type.typeCode)}
-                    onChange={() => handleToggleType(type.typeCode)}
-                  />
-                  <span>{type.typeCode}</span>
-                  <span className="fsltl-item-count">({type.airlines.length})</span>
-                </label>
-              ))}
-              {types.length > 20 && (
-                <span className="fsltl-more">+{types.length - 20} more</span>
-              )}
-            </div>
-          </div>
-
-          {/* Airlines */}
-          <div className="fsltl-section">
-            <div className="fsltl-section-header">
-              <label>Airlines ({selectedAirlines.size} selected)</label>
-              <div className="fsltl-selection-buttons">
-                <button onClick={handleSelectAllAirlines}>All</button>
-                <button onClick={handleClearAirlines}>None</button>
-              </div>
-            </div>
-            <div className="fsltl-checkbox-grid">
-              {airlines.slice(0, 30).map(airline => (
-                <label key={airline.code} className="fsltl-checkbox-item">
-                  <input
-                    type="checkbox"
-                    checked={selectedAirlines.has(airline.code)}
-                    onChange={() => handleToggleAirline(airline.code)}
-                  />
-                  <span>{airline.code}</span>
-                  <span className="fsltl-item-count">({airline.variantCount})</span>
-                </label>
-              ))}
-              {airlines.length > 30 && (
-                <span className="fsltl-more">+{airlines.length - 30} more</span>
-              )}
-            </div>
-          </div>
-
-          {/* Conversion Stats */}
           <div className="fsltl-stats">
-            <span>Selected: {getSelectedModels().length} models</span>
-            <span>Est. size: {estimateDiskSpace()}</span>
+            <span>Available: {availableCount} models</span>
+            <span>Est. size: {getEstimatedDiskSpace()}</span>
           </div>
 
-          {/* Convert Button */}
           <button
             className="control-button primary fsltl-convert-button"
             onClick={handleStartConversion}
-            disabled={getSelectedModels().length === 0}
+            disabled={availableCount === 0}
           >
-            Convert Selected Models
+            Convert All Models
           </button>
         </>
       )}
@@ -386,11 +428,20 @@ function FSLTLImportPanel() {
           <div className="fsltl-progress-text">
             Converting: {progress.completed} / {progress.total}
           </div>
+          <div className="fsltl-progress-eta">
+            {getEtaString()}
+          </div>
           {progress.current && (
             <div className="fsltl-progress-current">
               {progress.current}
             </div>
           )}
+          <button
+            className="control-button fsltl-cancel-button"
+            onClick={handleCancelConversion}
+          >
+            Cancel
+          </button>
         </div>
       )}
 
@@ -406,16 +457,16 @@ function FSLTLImportPanel() {
           <p>Conversion complete! {progress.completed} models converted.</p>
           <button
             className="control-button"
-            onClick={() => setPanelState('selection')}
+            onClick={() => setPanelState('ready')}
           >
-            Convert More
+            Done
           </button>
         </div>
       )}
 
       {/* Status */}
       <div className="fsltl-status">
-        <span>Converted models: {convertedCount}</span>
+        <span>Converted models available: {convertedCount}</span>
       </div>
 
       {/* Error Display */}

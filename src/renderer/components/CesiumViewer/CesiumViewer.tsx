@@ -20,6 +20,7 @@ import { useGroundAircraftTerrain } from '../../hooks/useGroundAircraftTerrain'
 import { useAutoAirportSwitch } from '../../hooks/useAutoAirportSwitch'
 import { getTowerPosition } from '../../utils/towerHeight'
 import { performanceMonitor } from '../../utils/performanceMonitor'
+import { hasViewingContext, isOrbitFollowing, isOrbitWithoutAirport } from '../../utils/viewingContext'
 import { getServiceWorkerCacheStats } from '../../utils/serviceWorkerRegistration'
 import { getMemoryCounters } from '../../hooks/useBabylonOverlay'
 import './CesiumViewer.css'
@@ -105,8 +106,8 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   const shadowPolygonOffsetUnits = useSettingsStore((state) => state.graphics.shadowPolygonOffsetUnits) ?? 4.0
   // NOTE: cameraNearPlane effect is disabled (see section 3b below)
   const _cameraNearPlane = useSettingsStore((state) => state.graphics.cameraNearPlane) ?? 0.1
-  // Model rendering
-  const modelBrightness = useSettingsStore((state) => state.graphics.modelBrightness) ?? 1.0
+  // Model rendering - separate brightness for built-in and FSLTL models
+  const builtinModelBrightness = useSettingsStore((state) => state.graphics.builtinModelBrightness) ?? 1.7
 
   // Weather store for fog effects, camera position updates, and cloud layers
   const fogDensity = useWeatherStore((state) => state.fogDensity)
@@ -165,8 +166,8 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   let isOrbitModeWithoutAirport = false
 
   // Check if in orbit mode without airport (use followed aircraft as reference)
-  if (followingCallsign && !currentAirport && interpolatedAircraft.has(followingCallsign)) {
-    const followedAircraft = interpolatedAircraft.get(followingCallsign)!
+  if (isOrbitWithoutAirport(currentAirport, followMode, followingCallsign) && interpolatedAircraft.has(followingCallsign!)) {
+    const followedAircraft = interpolatedAircraft.get(followingCallsign!)!
     refLat = followedAircraft.interpolatedLatitude
     refLon = followedAircraft.interpolatedLongitude
     groundElevationMeters = followedAircraft.interpolatedAltitude
@@ -204,7 +205,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     shadowFadingEnabled,
     shadowNormalOffset,
     inMemoryTileCacheSize,
-    modelBrightness
+    modelBrightness: builtinModelBrightness  // Initial pool uses built-in brightness
   })
 
   // =========================================================================
@@ -320,7 +321,8 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     modelPoolRefs,
     interpolatedAircraft,
     viewMode,
-    followingCallsign
+    followingCallsign,
+    groundElevationMeters
   )
 
   // =========================================================================
@@ -554,7 +556,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     }
 
     // For orbit mode without airport, use default offset (will be recalculated per-aircraft as needed)
-    if (followMode === 'orbit' && followingCallsign) {
+    if (isOrbitFollowing(followMode, followingCallsign)) {
       terrainOffsetRef.current = 0
       setTerrainOffsetReady(true)
       return
@@ -592,7 +594,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     }
 
     // If in orbit mode following an aircraft without airport, use aircraft position as root
-    if (followMode === 'orbit' && followingCallsign) {
+    if (isOrbitFollowing(followMode, followingCallsign) && followingCallsign) {
       // Try interpolated data first, fall back to raw store data (read directly to avoid reactive dependency)
       const interpolated = interpolatedAircraft.get(followingCallsign)
       const rawAircraft = useVatsimStore.getState().aircraftStates.get(followingCallsign)
@@ -638,7 +640,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
       // 3. Auto-airport switching is enabled
       const shouldTrackCamera =
         (showWeatherEffects && enableWeatherInterpolation) ||
-        (showWeatherEffects && followMode === 'orbit' && followingCallsign && !currentAirport) ||
+        (showWeatherEffects && isOrbitWithoutAirport(currentAirport, followMode, followingCallsign)) ||
         enableAutoAirportSwitch
 
       if (shouldTrackCamera) {
@@ -661,7 +663,8 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
 
           // Update weather store for interpolation/nearest METAR
           // (has its own internal throttling)
-          if (showWeatherEffects) {
+          // Only fetch weather when viewing a specific location (not globe from space)
+          if (showWeatherEffects && hasViewingContext(currentAirport, followMode, followingCallsign)) {
             updateCameraPosition(lat, lon)
           }
         }

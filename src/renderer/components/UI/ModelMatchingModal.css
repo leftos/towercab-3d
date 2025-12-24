@@ -61,6 +61,12 @@
   color: rgba(255, 255, 255, 0.7);
 }
 
+.model-matching-table .variation-indicator {
+  color: #81c784;
+  margin-left: 4px;
+  cursor: help;
+}
+
 .model-matching-table .scale-value {
   font-family: 'Consolas', 'Monaco', monospace;
   font-size: 12px;

@@ -103,6 +103,21 @@ export const GROUND_AIRCRAFT_TERRAIN_OFFSET = 0.1
  */
 export const FLYING_AIRCRAFT_TERRAIN_OFFSET = 5
 
+/**
+ * Additional height offset for FSLTL models in meters
+ *
+ * FSLTL models have their origin at ground level (gear touching ground),
+ * but may need a small additional offset to prevent ground clipping due to:
+ * - Model geometry extending below the origin point
+ * - Terrain mesh resolution differences
+ * - Slight variations in model scales
+ *
+ * This offset is added on top of GROUND_AIRCRAFT_TERRAIN_OFFSET for FSLTL models.
+ *
+ * Default: 1.0m - lifts models slightly to prevent clipping
+ */
+export const FSLTL_MODEL_HEIGHT_OFFSET = 1.0
+
 // ============================================================================
 // COLORS (RGBA)
 // ============================================================================
@@ -195,6 +210,35 @@ export function getModelColorBlendAmount(brightness: number): number {
   const blendIncrease = (excessBrightness / maxExcess) * (MAX_BLEND_AMOUNT - BASE_BLEND_AMOUNT)
 
   return Math.min(BASE_BLEND_AMOUNT + blendIncrease, MAX_BLEND_AMOUNT)
+}
+
+/**
+ * Calculate color blend amount for FSLTL models (preserves livery textures)
+ *
+ * FSLTL models have custom liveries that should be visible by default.
+ * Only apply color blending when brightness is increased for the glow effect.
+ *
+ * - 0.5-1.1 brightness: blend amount = 0 (preserve original livery textures)
+ * - 1.1-3.0 brightness: blend amount increases to 1.0 (brightening/glow effect)
+ *
+ * @param brightness - Brightness multiplier (0.5-3.0)
+ * @returns Color blend amount (0-1.0)
+ */
+export function getFsltlModelColorBlendAmount(brightness: number): number {
+  const BRIGHTNESS_THRESHOLD = 1.1
+  const MAX_BLEND_AMOUNT = 1.0
+
+  if (brightness <= BRIGHTNESS_THRESHOLD) {
+    // No color blend - preserve original livery textures
+    return 0
+  }
+
+  // Map brightness 1.1 -> 0, MODEL_BRIGHTNESS_MAX -> 1.0 (full emissive glow)
+  const excessBrightness = brightness - BRIGHTNESS_THRESHOLD
+  const maxExcess = MODEL_BRIGHTNESS_MAX - BRIGHTNESS_THRESHOLD
+  const blendAmount = (excessBrightness / maxExcess) * MAX_BLEND_AMOUNT
+
+  return Math.min(blendAmount, MAX_BLEND_AMOUNT)
 }
 
 // ============================================================================

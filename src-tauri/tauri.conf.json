@@ -23,14 +23,22 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; connect-src 'self' http: https: wss:; worker-src 'self' blob:"
+      "csp": "default-src 'self' asset: http://asset.localhost https://asset.localhost; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost https://asset.localhost data: blob: http: https:; connect-src 'self' asset: http://asset.localhost https://asset.localhost http: https: wss:; worker-src 'self' blob:",
+      "assetProtocol": {
+        "enable": true,
+        "scope": {
+          "allow": ["**/*"],
+          "deny": []
+        }
+      }
     }
   },
   "bundle": {
     "active": true,
     "targets": ["nsis"],
     "resources": [
-      "resources/fsltl_converter.exe"
+      "resources/fsltl_converter.exe",
+      "resources/texconv.exe"
     ],
     "icon": [
       "icons/32x32.png",

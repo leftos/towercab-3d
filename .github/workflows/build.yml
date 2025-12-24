@@ -43,11 +43,25 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: pip install Pillow pyinstaller
+
       - name: Install npm dependencies
         run: npm ci
 
       - name: Run ESLint
         run: npx eslint src/ --max-warnings 0
+
+      - name: Run TypeScript type check
+        run: npm run typecheck
+
+      - name: Build FSLTL converter
+        run: npm run build:converter
 
       - name: Build frontend
         run: npm run vite:build

@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Ion, Viewer } from 'cesium'
+import { open as openExternal } from '@tauri-apps/plugin-shell'
 import CesiumViewer from './components/CesiumViewer/CesiumViewer'
 import TopBar from './components/UI/TopBar'
 import AircraftPanel from './components/UI/AircraftPanel'
@@ -22,17 +23,23 @@ import { useViewportStore } from './stores/viewportStore'
 import { useVRStore } from './stores/vrStore'
 import { airportService } from './services/AirportService'
 import { aircraftDimensionsService } from './services/AircraftDimensionsService'
+import { fsltlService } from './services/FSLTLService'
+import * as fsltlApi from './services/fsltlApi'
 import { migrateFromElectron, isMigrationComplete } from './services/MigrationService'
+import { isOrbitWithoutAirport } from './utils/viewingContext'
 
 function App() {
   const startPolling = useVatsimStore((state) => state.startPolling)
   const loadAirports = useAirportStore((state) => state.loadAirports)
   const currentAirport = useAirportStore((state) => state.currentAirport)
   const cesiumIonToken = useSettingsStore((state) => state.cesium.cesiumIonToken)
+  const updateCesiumSettings = useSettingsStore((state) => state.updateCesiumSettings)
+  const fsltlSourcePath = useSettingsStore((state) => state.fsltl.sourcePath)
   const showWeatherEffects = useSettingsStore((state) => state.weather.showWeatherEffects)
   const showMetarOverlay = useSettingsStore((state) => state.ui.showMetarOverlay)
   const updateUISettings = useSettingsStore((state) => state.updateUISettings)
   const followingCallsign = useViewportStore((state) => state.getActiveCameraState().followingCallsign)
+  const followMode = useViewportStore((state) => state.getActiveCameraState().followMode)
   const fetchWeather = useWeatherStore((state) => state.fetchWeather)
   const startAutoRefresh = useWeatherStore((state) => state.startAutoRefresh)
   const startNearestAutoRefresh = useWeatherStore((state) => state.startNearestAutoRefresh)
@@ -54,6 +61,10 @@ function App() {
 
   // Model matching modal toggle
   const [showModelMatchingModal, setShowModelMatchingModal] = useState(false)
+
+  // Cesium token prompt
+  const [showTokenPrompt, setShowTokenPrompt] = useState(false)
+  const [tokenInput, setTokenInput] = useState('')
 
   const handleViewerReady = useCallback((viewer: Viewer | null) => {
     setCesiumViewer(viewer)
@@ -84,6 +95,19 @@ function App() {
         // Load aircraft dimensions data (non-blocking)
         aircraftDimensionsService.load()
 
+        // Initialize FSLTL service (loads registry and VMR rules if source path is set)
+        setLoadingStatus('Loading aircraft models...')
+        await fsltlService.initialize()
+        if (fsltlSourcePath) {
+          try {
+            const vmrContent = await fsltlApi.readVmrFile(fsltlSourcePath)
+            fsltlService.parseVMRContent(vmrContent)
+            console.log('[App] Loaded FSLTL VMR rules')
+          } catch (err) {
+            console.warn('[App] Failed to load FSLTL VMR (source may not exist):', err)
+          }
+        }
+
         // Start VATSIM data polling
         setLoadingStatus('Connecting to VATSIM...')
         startPolling()
@@ -92,6 +116,11 @@ function App() {
         checkVRSupport()
 
         setIsLoading(false)
+
+        // Show token prompt if no Cesium Ion token is set
+        if (!cesiumIonToken) {
+          setShowTokenPrompt(true)
+        }
 
         // Start performance logging to console
         performanceMonitor.startLogging()
@@ -106,12 +135,12 @@ function App() {
     return () => {
       performanceMonitor.stopLogging()
     }
-  }, [cesiumIonToken, startPolling, loadAirports, checkVRSupport])
+  }, [cesiumIonToken, fsltlSourcePath, startPolling, loadAirports, checkVRSupport])
 
   // Fetch weather data when airport changes or weather effects are enabled
-  // When no airport is selected but following an aircraft, use nearest METAR mode
+  // When no airport is selected but orbit-following an aircraft, use nearest METAR mode
   const currentIcao = currentAirport?.icao
-  const isOrbitModeWithoutAirport = !currentAirport && followingCallsign
+  const orbitWithoutAirport = isOrbitWithoutAirport(currentAirport, followMode, followingCallsign)
 
   useEffect(() => {
     if (!showWeatherEffects) {
@@ -124,7 +153,7 @@ function App() {
       // Airport selected - use airport's METAR
       fetchWeather(currentIcao)
       startAutoRefresh(currentIcao)
-    } else if (isOrbitModeWithoutAirport) {
+    } else if (orbitWithoutAirport) {
       // No airport but following aircraft - use nearest METAR mode
       // The actual position updates will come from CesiumViewer
       startNearestAutoRefresh()
@@ -136,7 +165,7 @@ function App() {
     return () => {
       stopAutoRefresh()
     }
-  }, [currentIcao, showWeatherEffects, isOrbitModeWithoutAirport, fetchWeather, startAutoRefresh, startNearestAutoRefresh, stopAutoRefresh, clearWeather])
+  }, [currentIcao, showWeatherEffects, orbitWithoutAirport, fetchWeather, startAutoRefresh, startNearestAutoRefresh, stopAutoRefresh, clearWeather])
 
   // Keyboard shortcuts for overlays
   useEffect(() => {
@@ -226,6 +255,159 @@ function App() {
       <PerformanceHUD visible={showPerformanceHUD} />
       {!isVRActive && showModelMatchingModal && (
         <ModelMatchingModal onClose={() => setShowModelMatchingModal(false)} />
+      )}
+
+      {/* Cesium Ion Token Prompt */}
+      {showTokenPrompt && (
+        <div className="token-prompt-overlay">
+          <div className="token-prompt-modal">
+            <h2>Cesium Ion Access Token Required</h2>
+            <p>
+              TowerCab 3D uses Cesium Ion for terrain and satellite imagery.
+              You need a free access token to continue.
+            </p>
+            <ol>
+              <li>
+                <a
+                  href="#"
+                  onClick={(e) => { e.preventDefault(); openExternal('https://ion.cesium.com/signup/') }}
+                  className="external-link"
+                >
+                  Create a free Cesium Ion account
+                </a>
+              </li>
+              <li>
+                <a
+                  href="#"
+                  onClick={(e) => { e.preventDefault(); openExternal('https://ion.cesium.com/tokens') }}
+                  className="external-link"
+                >
+                  Go to Access Tokens
+                </a>
+                {' '}and copy your default token
+              </li>
+              <li>Paste it below:</li>
+            </ol>
+            <input
+              type="text"
+              value={tokenInput}
+              onChange={(e) => setTokenInput(e.target.value)}
+              placeholder="Paste your Cesium Ion access token here"
+              className="token-input"
+            />
+            <div className="token-prompt-buttons">
+              <button
+                className="token-button secondary"
+                onClick={() => setShowTokenPrompt(false)}
+              >
+                Skip for now
+              </button>
+              <button
+                className="token-button primary"
+                onClick={() => {
+                  if (tokenInput.trim()) {
+                    updateCesiumSettings({ cesiumIonToken: tokenInput.trim() })
+                    Ion.defaultAccessToken = tokenInput.trim()
+                  }
+                  setShowTokenPrompt(false)
+                }}
+                disabled={!tokenInput.trim()}
+              >
+                Save Token
+              </button>
+            </div>
+          </div>
+          <style>{`
+            .token-prompt-overlay {
+              position: fixed;
+              top: 0;
+              left: 0;
+              right: 0;
+              bottom: 0;
+              background: rgba(0, 0, 0, 0.8);
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              z-index: 10000;
+            }
+            .token-prompt-modal {
+              background: #1a1a2e;
+              border: 1px solid #333;
+              border-radius: 8px;
+              padding: 24px;
+              max-width: 500px;
+              width: 90%;
+              color: #fff;
+            }
+            .token-prompt-modal h2 {
+              margin: 0 0 16px 0;
+              font-size: 20px;
+              color: #4fc3f7;
+            }
+            .token-prompt-modal p {
+              margin: 0 0 16px 0;
+              color: rgba(255, 255, 255, 0.8);
+              line-height: 1.5;
+            }
+            .token-prompt-modal ol {
+              margin: 0 0 16px 0;
+              padding-left: 20px;
+              color: rgba(255, 255, 255, 0.8);
+              line-height: 1.8;
+            }
+            .token-prompt-modal .external-link {
+              color: #4fc3f7;
+              text-decoration: none;
+            }
+            .token-prompt-modal .external-link:hover {
+              text-decoration: underline;
+            }
+            .token-input {
+              width: 100%;
+              padding: 10px 12px;
+              border: 1px solid #444;
+              border-radius: 4px;
+              background: #0a0a0f;
+              color: #fff;
+              font-size: 14px;
+              margin-bottom: 16px;
+              box-sizing: border-box;
+            }
+            .token-input:focus {
+              outline: none;
+              border-color: #4fc3f7;
+            }
+            .token-prompt-buttons {
+              display: flex;
+              gap: 12px;
+              justify-content: flex-end;
+            }
+            .token-button {
+              padding: 8px 16px;
+              border-radius: 4px;
+              font-size: 14px;
+              cursor: pointer;
+              border: none;
+            }
+            .token-button.primary {
+              background: #4fc3f7;
+              color: #000;
+            }
+            .token-button.primary:disabled {
+              opacity: 0.5;
+              cursor: not-allowed;
+            }
+            .token-button.secondary {
+              background: transparent;
+              border: 1px solid #444;
+              color: #aaa;
+            }
+            .token-button.secondary:hover {
+              border-color: #666;
+              color: #fff;
+            }
+          `}</style>
+        </div>
       )}
     </div>
   )

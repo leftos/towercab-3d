@@ -23,7 +23,8 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
     return pilots
       .map((pilot) => {
         const aircraftType = pilot.flight_plan?.aircraft_faa || null
-        const modelInfo = aircraftModelService.getModelInfo(aircraftType)
+        // Pass callsign to enable FSLTL airline-specific livery matching
+        const modelInfo = aircraftModelService.getModelInfo(aircraftType, pilot.callsign)
         return {
           callsign: pilot.callsign,
           aircraftType: aircraftType || 'N/A',
@@ -50,10 +51,46 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
     }
   }
 
-  // Extract model name from URL (e.g., "./b738.glb" -> "b738")
-  const getModelName = (modelUrl: string): string => {
-    const match = modelUrl.match(/\.\/(.+)\.glb$/)
-    return match ? match[1] : modelUrl
+  // Extract display-friendly model name from URL
+  // Built-in: "./b738.glb" -> "b738"
+  // FSLTL: "...fsltl/B738/AAL/model.glb" or "...fsltl%5CB738%5CAAL%5Cmodel.glb" -> "B738/AAL"
+  // FSLTL base: "...fsltl/B738/base/model.glb" -> "B738"
+  const getModelName = (modelInfo: ModelInfo): { name: string; variationName?: string } => {
+    const modelUrl = modelInfo.modelUrl
+
+    // Decode URL-encoded characters (e.g., %5C -> \, %3A -> :)
+    const decodedUrl = decodeURIComponent(modelUrl)
+
+    // Check for FSLTL path pattern (contains fsltl folder)
+    // Handle both forward and back slashes, and asset:// protocol URLs
+    const fsltlMatch = decodedUrl.match(/fsltl[/\\]([^/\\]+)[/\\]([^/\\]+)[/\\]model\.glb$/i)
+    if (fsltlMatch) {
+      const [, aircraftType, variant] = fsltlMatch
+      // If variant is "base", just show the type
+      const name = variant.toLowerCase() === 'base' ? aircraftType : `${aircraftType}/${variant}`
+      return { name, variationName: modelInfo.vmrVariationName }
+    }
+
+    // Built-in model pattern
+    const builtInMatch = decodedUrl.match(/\.\/(.+)\.glb$/)
+    return { name: builtInMatch ? builtInMatch[1] : modelUrl }
+  }
+
+  // Map internal match types to user-friendly display names
+  const getMatchTypeDisplay = (matchType: string): { label: string; className: string } => {
+    switch (matchType) {
+      case 'exact':
+      case 'fsltl':
+        return { label: 'exact', className: 'exact' }
+      case 'mapped':
+      case 'fsltl-base':
+        return { label: 'mapped', className: 'mapped' }
+      case 'closest':
+        return { label: 'closest', className: 'closest' }
+      case 'fallback':
+      default:
+        return { label: 'fallback', className: 'fallback' }
+    }
   }
 
   return (
@@ -89,14 +126,24 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
               <tbody>
                 {aircraftData.map((aircraft) => {
                   const scale = formatScale(aircraft.modelInfo.scale)
+                  const matchDisplay = getMatchTypeDisplay(aircraft.modelInfo.matchType)
+                  const modelDisplay = getModelName(aircraft.modelInfo)
                   return (
                     <tr key={aircraft.callsign}>
                       <td className="callsign">{aircraft.callsign}</td>
                       <td className="type-code">{aircraft.aircraftType}</td>
-                      <td className="model-name">{getModelName(aircraft.modelInfo.modelUrl)}</td>
+                      <td
+                        className="model-name"
+                        title={modelDisplay.variationName ? `VMR: ${modelDisplay.variationName}` : undefined}
+                      >
+                        {modelDisplay.name}
+                        {modelDisplay.variationName && (
+                          <span className="variation-indicator" title={modelDisplay.variationName}>*</span>
+                        )}
+                      </td>
                       <td>
-                        <span className={`match-badge ${aircraft.modelInfo.matchType}`}>
-                          {aircraft.modelInfo.matchType}
+                        <span className={`match-badge ${matchDisplay.className}`}>
+                          {matchDisplay.label}
                         </span>
                       </td>
                       <td className={`scale-value ${scale.isScaled ? 'scaled' : ''}`}>

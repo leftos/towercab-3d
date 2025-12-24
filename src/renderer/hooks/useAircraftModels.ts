@@ -8,13 +8,16 @@ import { performanceMonitor } from '../utils/performanceMonitor'
 import {
   getModelColorRgb,
   getModelColorBlendAmount,
-  GROUNDSPEED_THRESHOLD_KNOTS
+  getFsltlModelColorBlendAmount,
+  GROUNDSPEED_THRESHOLD_KNOTS,
+  FSLTL_MODEL_HEIGHT_OFFSET
 } from '../constants/rendering'
 import { useSettingsStore } from '../stores/settingsStore'
 import {
   updateGearAnimation,
   applyGearAnimation,
-  clearGearState
+  clearGearState,
+  initializeGearState
 } from '../utils/gearAnimationController'
 
 /**
@@ -55,12 +58,9 @@ import {
  * @param viewer - Initialized Cesium.Viewer instance
  * @param modelPoolRefs - Model pool state from useCesiumViewer
  * @param interpolatedAircraft - Map of smoothly interpolated aircraft positions
- * @param terrainOffsetRef - Geoid offset for this airport location
- * @param terrainOffsetReady - Whether terrain offset has been calculated
  * @param viewMode - Current view mode ('3d' or 'topdown')
  * @param followingCallsign - Callsign of followed aircraft (for diagnostic logging)
- * @param groundElevationMeters - Ground elevation in meters MSL (for ground aircraft positioning)
- * @param groundAircraftTerrain - Map of terrain heights (ellipsoid) sampled 3x per second
+ * @param groundElevationMeters - Ground elevation in meters MSL (for gear AGL calculation)
  *
  * @example
  * ```tsx
@@ -71,10 +71,9 @@ import {
  *   viewer,
  *   modelPoolRefs,
  *   interpolatedAircraft,
- *   terrainOffsetRef,
- *   terrainOffsetReady,
  *   viewMode,
- *   followingCallsign
+ *   followingCallsign,
+ *   groundElevationMeters
  * )
  * ```
  */
@@ -83,7 +82,8 @@ export function useAircraftModels(
   modelPoolRefs: ModelPoolRefs,
   interpolatedAircraft: Map<string, InterpolatedAircraftState>,
   viewMode: ViewMode,
-  followingCallsign: string | null
+  followingCallsign: string | null,
+  groundElevationMeters: number
 ) {
   const {
     modelPool,
@@ -93,11 +93,21 @@ export function useAircraftModels(
     modelPoolReady
   } = modelPoolRefs
 
-  // Get model brightness from settings
-  const modelBrightness = useSettingsStore((state) => state.graphics.modelBrightness) ?? 1.0
+  // Get model brightness from settings - separate for built-in and FSLTL models
+  const builtinModelBrightness = useSettingsStore((state) => state.graphics.builtinModelBrightness) ?? 1.7
+  const fsltlModelBrightness = useSettingsStore((state) => state.graphics.fsltlModelBrightness) ?? 1.0
 
   // Track previous positions for diagnostic logging
   const prevModelPositionsRef = useRef<Map<string, Cesium.Cartesian3>>(new Map())
+
+  // Track which pool slots have FSLTL models (for color blend logic)
+  const modelPoolIsFsltlRef = useRef<Map<number, boolean>>(new Map())
+
+  // Track animation counts per model URL (populated via gltfCallback during model loading)
+  const modelAnimationCountsRef = useRef<Map<string, number>>(new Map())
+
+  // Track which callsigns have been logged for gear debugging (persists across frames)
+  const gearDebugLoggedRef = useRef<Set<string>>(new Set())
 
   // Update aircraft models
   const updateAircraftModels = useCallback(() => {
@@ -115,12 +125,15 @@ export function useAircraftModels(
     for (const aircraft of interpolatedAircraft.values()) {
       seenCallsigns.add(aircraft.callsign)
 
-      // Model height: interpolatedAltitude is already terrain-corrected by interpolation system
-      // (includes terrain sampling, ground/air transitions, and all offsets)
-      const modelHeight = aircraft.interpolatedAltitude
-
       // Get the correct model info for this aircraft type (and callsign for FSLTL livery matching)
       const modelInfo = aircraftModelService.getModelInfo(aircraft.aircraftType, aircraft.callsign)
+
+      // Model height: interpolatedAltitude is already terrain-corrected by interpolation system
+      // (includes terrain sampling, ground/air transitions, and all offsets)
+      // FSLTL models need additional offset to prevent ground clipping
+      const isFsltlModel = modelInfo.matchType === 'fsltl' || modelInfo.matchType === 'fsltl-base'
+      const heightOffset = isFsltlModel ? FSLTL_MODEL_HEIGHT_OFFSET + 4.0 : 0
+      const modelHeight = aircraft.interpolatedAltitude + heightOffset
 
       // Find existing pool slot for this callsign, or get an unused one
       let poolIndex = -1
@@ -136,6 +149,14 @@ export function useAircraftModels(
           if (assignedCallsign === null) {
             poolIndex = idx
             modelPoolAssignments.current.set(idx, aircraft.callsign)
+
+            // Initialize gear state based on aircraft's current conditions
+            // This ensures aircraft spawning in flight have gear up, while ground aircraft have gear down
+            const isOnGround = aircraft.interpolatedGroundspeed < GROUNDSPEED_THRESHOLD_KNOTS
+            const altitudeAglMeters = aircraft.interpolatedAltitude - groundElevationMeters
+            const altitudeAglFeet = altitudeAglMeters * 3.28084
+            const verticalRateFpm = aircraft.verticalRate * 3.28084
+            initializeGearState(aircraft.callsign, altitudeAglFeet, verticalRateFpm, isOnGround)
             break
           }
         }
@@ -151,20 +172,38 @@ export function useAircraftModels(
             modelPoolLoading.current.add(poolIndex)
             modelPoolUrls.current.set(poolIndex, modelInfo.modelUrl)
 
+            // Track if this is an FSLTL model (for color blend logic)
+            const isFsltlModel = modelInfo.matchType.startsWith('fsltl')
+            modelPoolIsFsltlRef.current.set(poolIndex, isFsltlModel)
+
             // Calculate model color and blend amount based on brightness setting
-            const modelColorRgb = getModelColorRgb(modelBrightness)
+            // FSLTL models use their own brightness slider to preserve livery colors
+            const effectiveBrightness = isFsltlModel ? fsltlModelBrightness : builtinModelBrightness
+            const modelColorRgb = getModelColorRgb(effectiveBrightness)
             const modelColor = new Cesium.Color(...modelColorRgb, 1.0)
-            const blendAmount = getModelColorBlendAmount(modelBrightness)
+            const blendAmount = isFsltlModel
+              ? getFsltlModelColorBlendAmount(effectiveBrightness)
+              : getModelColorBlendAmount(effectiveBrightness)
 
             // Load new model in background
+            // Use gltfCallback to capture animation count for gear animation system
+            const modelUrl = modelInfo.modelUrl
             Cesium.Model.fromGltfAsync({
-              url: modelInfo.modelUrl,
+              url: modelUrl,
               show: false,
               modelMatrix: model.modelMatrix,  // Copy current transform
               shadows: Cesium.ShadowMode.ENABLED,
               color: modelColor,
               colorBlendMode: Cesium.ColorBlendMode.MIX,
-              colorBlendAmount: blendAmount
+              colorBlendAmount: blendAmount,
+              gltfCallback: (gltf) => {
+                // Capture animation count from parsed glTF
+                const animCount = gltf.animations?.length ?? 0
+                modelAnimationCountsRef.current.set(modelUrl, animCount)
+                if (animCount > 0) {
+                  console.log(`[Model Load] ${modelUrl}: ${animCount} animations found`)
+                }
+              }
             }).then(newModel => {
               if (viewer.isDestroyed()) return
 
@@ -178,6 +217,12 @@ export function useAircraftModels(
               viewer.scene.primitives.add(newModel)
               modelPool.current.set(poolIndex, newModel)
               modelPoolLoading.current.delete(poolIndex)
+
+              // Reset gear debug log so we log again with the new model's state
+              const assignedCallsign = modelPoolAssignments.current.get(poolIndex)
+              if (assignedCallsign) {
+                gearDebugLoggedRef.current.delete(assignedCallsign)
+              }
             }).catch(err => {
               console.error(`Failed to load model ${modelInfo.modelUrl}:`, err)
               modelPoolLoading.current.delete(poolIndex)
@@ -238,14 +283,20 @@ export function useAircraftModels(
           // Apply the transformation
           model.modelMatrix = modelMatrix
 
-          // Apply color blend - full white in topdown, subtle tint in 3D to preserve textures
+          // Apply color blend - full white in topdown, preserve textures in 3D
+          // FSLTL models get no blend by default in 3D mode to show their liveries
+          const isFsltlModel = modelPoolIsFsltlRef.current.get(poolIndex) ?? false
           if (viewMode === 'topdown') {
+            // Always white in top-down view for visibility (both FSLTL and built-in)
             model.color = Cesium.Color.WHITE
-            model.colorBlendAmount = 1.0  // Full white for 2D visibility
+            model.colorBlendAmount = 1.0
           } else {
-            // Use brightness-adjusted color and blend amount in 3D mode to preserve textures
-            const modelColorRgb = getModelColorRgb(modelBrightness)
-            const blendAmount = getModelColorBlendAmount(modelBrightness)
+            // In 3D mode: FSLTL models show liveries, built-in models get subtle tint
+            const effectiveBrightness = isFsltlModel ? fsltlModelBrightness : builtinModelBrightness
+            const modelColorRgb = getModelColorRgb(effectiveBrightness)
+            const blendAmount = isFsltlModel
+              ? getFsltlModelColorBlendAmount(effectiveBrightness)
+              : getModelColorBlendAmount(effectiveBrightness)
             model.color = new Cesium.Color(...modelColorRgb, 1.0)
             model.colorBlendAmount = blendAmount
           }
@@ -253,13 +304,29 @@ export function useAircraftModels(
           // Show the model
           model.show = true
 
-          // Apply landing gear animation if model has animations
-          if (modelInfo.hasAnimations && model.ready) {
+          // Apply landing gear animation for FSLTL models
+          // We check for FSLTL match type instead of hasAnimations flag because:
+          // 1. Old converted models may not have hasAnimations set correctly
+          // 2. The applyGearAnimation function handles models without animations gracefully
+          const isFsltlForGear = modelInfo.matchType === 'fsltl' || modelInfo.matchType === 'fsltl-base'
+
+          // Skip gear animation if model is still loading (the current model in pool is a placeholder)
+          const isModelLoading = modelPoolLoading.current.has(poolIndex)
+
+          // Debug: Log gear animation status (once per callsign, persists across frames)
+          if (!gearDebugLoggedRef.current.has(aircraft.callsign)) {
+            gearDebugLoggedRef.current.add(aircraft.callsign)
+            console.log(`[Gear] ${aircraft.callsign}: matchType=${modelInfo.matchType}, isFsltl=${isFsltlForGear}, hasAnimations=${modelInfo.hasAnimations ?? 'undefined'}, modelReady=${model.ready}, loading=${isModelLoading}`)
+          }
+
+          if (isFsltlForGear && model.ready && !isModelLoading) {
             // Determine if aircraft is on ground based on groundspeed threshold
             const isOnGround = aircraft.interpolatedGroundspeed < GROUNDSPEED_THRESHOLD_KNOTS
 
-            // Convert altitude from meters to feet for gear animation logic
-            const altitudeFeet = aircraft.interpolatedAltitude * 3.28084
+            // Calculate AGL (above ground level) by subtracting ground elevation from aircraft altitude
+            // Both values are in meters MSL, so the difference gives us AGL
+            const altitudeAglMeters = aircraft.interpolatedAltitude - groundElevationMeters
+            const altitudeAglFeet = altitudeAglMeters * 3.28084
 
             // Convert vertical rate from meters/min to feet/min
             const verticalRateFpm = aircraft.verticalRate * 3.28084
@@ -267,14 +334,21 @@ export function useAircraftModels(
             // Update gear animation state and get current progress
             const gearProgress = updateGearAnimation(
               aircraft.callsign,
-              altitudeFeet,
+              altitudeAglFeet,
               verticalRateFpm,
               isOnGround,
               Date.now()
             )
 
+            // Debug: Log gear state for ground aircraft
+            if (isOnGround && gearProgress < 0.99) {
+              console.log(`[Gear] ${aircraft.callsign}: ON GROUND but gearProgress=${gearProgress.toFixed(2)} (altAGL=${altitudeAglFeet.toFixed(0)}ft, vRate=${verticalRateFpm.toFixed(0)}fpm)`)
+            }
+
             // Apply the animation progress to the model
-            applyGearAnimation(model, gearProgress)
+            // Pass known animation count from gltfCallback for reliable animation access
+            const knownAnimCount = modelAnimationCountsRef.current.get(modelInfo.modelUrl)
+            applyGearAnimation(model, gearProgress, aircraft.callsign, modelInfo.modelUrl, knownAnimCount)
           }
         }
       }
@@ -285,9 +359,11 @@ export function useAircraftModels(
       if (assignedCallsign !== null && !seenCallsigns.has(assignedCallsign)) {
         // Clean up gear animation state for this aircraft
         clearGearState(assignedCallsign)
+        gearDebugLoggedRef.current.delete(assignedCallsign)
 
         // Release this slot and hide the model
         modelPoolAssignments.current.set(idx, null)
+        modelPoolIsFsltlRef.current.delete(idx)
         const model = modelPool.current.get(idx)
         if (model) {
           model.show = false
@@ -309,7 +385,9 @@ export function useAircraftModels(
     modelPoolReady,
     viewMode,
     followingCallsign,
-    modelBrightness
+    builtinModelBrightness,
+    fsltlModelBrightness,
+    groundElevationMeters
   ])
 
   // Set up render loop to update models every frame

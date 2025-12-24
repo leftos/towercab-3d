@@ -48,6 +48,15 @@ export async function getFsltlOutputPath(): Promise<string> {
 }
 
 /**
+ * Get smart default output path for FSLTL models
+ * Tries mods folder first, falls back to APPDATA if not writable
+ * @returns Tuple of [path, isWritable]
+ */
+export async function getFsltlDefaultOutputPath(): Promise<[string, boolean]> {
+  return invoke<[string, boolean]>('get_fsltl_default_output_path')
+}
+
+/**
  * Validate that a path is a valid FSLTL source directory
  * Checks for FSLTL_Rules.vmr and SimObjects/Airplanes folder
  * @param sourcePath - Path to check
@@ -99,6 +108,15 @@ export async function startFsltlConversion(
 }
 
 /**
+ * Cancel the running FSLTL conversion process
+ * Kills the converter subprocess if one is running
+ * @throws Error if no conversion is in progress
+ */
+export async function cancelFsltlConversion(): Promise<void> {
+  return invoke<void>('cancel_fsltl_conversion')
+}
+
+/**
  * Read the current conversion progress from the progress file
  * @param progressFile - Path to the progress JSON file
  * @returns Current conversion progress
@@ -118,4 +136,22 @@ export async function checkFsltlModelExists(
   modelName: string
 ): Promise<boolean> {
   return invoke<boolean>('check_fsltl_model_exists', { outputPath, modelName })
+}
+
+/**
+ * Delete a file from disk
+ * @param path - Absolute path to the file to delete
+ */
+export async function deleteFile(path: string): Promise<void> {
+  return invoke<void>('delete_file', { path })
+}
+
+/**
+ * Read the FSLTL_Rules.vmr file from an FSLTL source directory
+ * @param sourcePath - Path to fsltl-traffic-base
+ * @returns VMR file contents as string
+ */
+export async function readVmrFile(sourcePath: string): Promise<string> {
+  const vmrPath = `${sourcePath}\\FSLTL_Rules.vmr`
+  return invoke<string>('read_text_file', { path: vmrPath })
 }

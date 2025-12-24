@@ -571,19 +571,6 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
     const shouldShowPrecip = showWeatherEffects && showPrecipitation && precipitation.active && !isTopDownView
     const shouldShowLightning = showWeatherEffects && showLightning && precipitation.hasThunderstorm && !isTopDownView
 
-    // DIAGNOSTIC: Log state in both dev and release
-    console.log('[Precip] Effect state:', {
-      hasScene: !!scene,
-      hasCamera: !!camera,
-      showWeatherEffects,
-      showPrecipitation,
-      precipActive: precipitation.active,
-      precipTypes: precipitation.types.map(t => t.type),
-      isTopDownView,
-      shouldShowPrecip,
-      shouldShowLightning
-    })
-
     /**
      * Helper to dispose a particle system and its texture
      */
@@ -643,20 +630,16 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
 
     // Create or update systems for each precipitation type (async)
     const createSystems = async () => {
-      console.log('[Precip] createSystems called, types:', precipitation.types.length)
-
       for (const precip of precipitation.types) {
         // Check abort flag before each async operation
         if (aborted) return
 
         // Determine system key (rain vs snow)
         const systemKey = (precip.type === 'snow' || precip.type === 'ice') ? 'snow' : 'rain'
-        console.log('[Precip] Processing:', systemKey, 'for type:', precip.type)
 
         let data = particleSystemsRef.current.get(systemKey)
 
         if (!data) {
-          console.log('[Precip] Creating new system for:', systemKey)
           // Create new system asynchronously
           const system = systemKey === 'snow'
             ? await createSnowSystemAsync()
@@ -664,7 +647,6 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
 
           // Check abort flag after async operation completes
           if (aborted) {
-            console.log('[Precip] Aborted after creation')
             // Dispose the created system since we're aborting
             if (system) {
               if (system.particleTexture) {
@@ -680,9 +662,6 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
             data = { system, type: precip.type, baseEmitRate }
             particleSystemsRef.current.set(systemKey, data)
             system.start()
-            console.log('[Precip] System started:', systemKey, 'isStarted:', system.isStarted(), 'activeCount:', system.getActiveCount())
-          } else {
-            console.log('[Precip] System creation returned null for:', systemKey)
           }
         }
 
@@ -691,7 +670,6 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
           const intensityMult = getIntensityMultiplier(precip.intensity)
           const newEmitRate = data.baseEmitRate * intensityMult * precipitation.visibilityFactor * precipitationIntensity
           data.system.emitRate = newEmitRate
-          console.log('[Precip] Updated emitRate:', newEmitRate)
         }
       }
 

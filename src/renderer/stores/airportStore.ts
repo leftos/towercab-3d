@@ -4,6 +4,7 @@ import type { Airport } from '../types/airport'
 import { getEstimatedTowerHeight } from '../types/airport'
 import { useCameraStore } from './cameraStore'
 import { useViewportStore } from './viewportStore'
+import { useVatsimStore } from './vatsimStore'
 
 interface AirportStore {
   // Data
@@ -69,6 +70,10 @@ export const useAirportStore = create<AirportStore>()(
 
           // Update viewport store (saves/loads viewport configurations per airport)
           useViewportStore.getState().setCurrentAirport(icao)
+
+          // Immediately update VATSIM reference position to trigger re-filter
+          // This ensures aircraft near the new airport are visible right away
+          useVatsimStore.getState().setReferencePosition(airport.lat, airport.lon)
         }
       },
 

@@ -2,7 +2,7 @@
  * Landing Gear Animation Controller
  *
  * Controls landing gear animations for Cesium glTF models based on aircraft state.
- * Uses Cesium's animationTime callback to set specific animation frames.
+ * Uses direct node transforms (model.getNode().matrix) for reliable animation control.
  *
  * ## Animation Progress
  * - 0.0 = Gear fully retracted (up)
@@ -18,10 +18,17 @@
  *
  * The hysteresis prevents gear cycling during level flight near thresholds.
  *
- * @see https://cesium.com/blog/2019/06/05/timeline-independent-animations/
+ * ## Implementation Notes
+ * We bypass Cesium's built-in animation system (which has issues with animationTime
+ * callbacks) and instead parse glTF animation data directly, then apply node
+ * transforms via model.getNode().matrix. This approach is based on the
+ * Cesium-ModelAnimationPlayer library.
+ *
+ * @see https://github.com/ProminentEdge/Cesium-ModelAnimationPlayer
  */
 
 import * as Cesium from 'cesium'
+import { parseAnimationSetFromUrl, applyGearAnimationsPercent, type AnimationSet } from './gltfAnimationParser'
 
 /** Gear animation state */
 export type GearState = 'up' | 'extending' | 'down' | 'retracting'
@@ -46,7 +53,7 @@ export const DEFAULT_GEAR_CONFIG: GearAnimationConfig = {
   retractAltitude: 500,          // Retract gear when climbing above 500ft AGL
   descentRateThreshold: -100,    // ft/min - consider descending if < -100 ft/min
   climbRateThreshold: 100,       // ft/min - consider climbing if > 100 ft/min
-  transitionTime: 5.0            // 5 seconds to extend/retract
+  transitionTime: 12.0           // 12 seconds to extend/retract (realistic timing)
 }
 
 /** Per-aircraft gear animation state */
@@ -82,6 +89,55 @@ function getGearState(callsign: string): GearAnimationState {
     gearStates.set(callsign, state)
   }
   return state
+}
+
+/**
+ * Initialize gear state for a newly-appeared aircraft based on its current conditions.
+ *
+ * Unlike getGearState() which always defaults to gear-down, this function sets the
+ * initial gear position based on the aircraft's current state:
+ * - Ground aircraft: gear down
+ * - Low altitude or descending aircraft: gear down
+ * - High altitude cruising/climbing aircraft: gear up
+ *
+ * This prevents unrealistic scenarios like aircraft spawning at cruise altitude
+ * with gear down.
+ *
+ * @param callsign - Aircraft callsign
+ * @param altitude - Current altitude in feet AGL
+ * @param verticalRate - Vertical rate in feet per minute (positive = climbing)
+ * @param isOnGround - Whether aircraft is on the ground
+ * @param config - Gear animation configuration
+ */
+export function initializeGearState(
+  callsign: string,
+  altitude: number,
+  verticalRate: number,
+  isOnGround: boolean,
+  config: GearAnimationConfig = DEFAULT_GEAR_CONFIG
+): void {
+  // Determine initial gear assumption based on altitude
+  // High altitude aircraft should start with gear UP to avoid unrealistic visuals
+  // Low altitude or ground aircraft should start with gear DOWN
+  const assumeGearDown = isOnGround || altitude < config.extendAltitude
+
+  // Calculate what the gear state should be based on current aircraft conditions
+  const initialProgress = calculateTargetGearProgress(
+    altitude,
+    verticalRate,
+    isOnGround,
+    assumeGearDown,
+    config
+  )
+
+  const state: GearAnimationState = {
+    progress: initialProgress,
+    targetProgress: initialProgress,
+    transitionStartTime: 0,
+    transitionStartProgress: initialProgress,
+    isTransitioning: false
+  }
+  gearStates.set(callsign, state)
 }
 
 /**
@@ -188,94 +244,65 @@ export function updateGearAnimation(
   return state.progress
 }
 
-/** Track which models have been initialized with gear animations */
-const initializedModels = new WeakSet<Cesium.Model>()
+/** Animation sets that have been loaded or are pending */
+const animationSetsLoading = new Set<string>()
+const animationSets = new Map<string, AnimationSet>()
 
 /**
- * Apply gear animation to a Cesium model
- * Finds and controls landing gear animations by name
+ * Apply gear animation to a Cesium model using direct node transforms.
+ *
+ * This bypasses Cesium's built-in animation system (which doesn't work reliably
+ * with animationTime callbacks) and instead:
+ * 1. Parses the glTF animation data directly
+ * 2. Interpolates keyframes based on gear progress
+ * 3. Applies transforms directly via model.getNode().matrix
  *
  * FSLTL models use pattern: custom_anim_GEAR_ANIMATION_POSITION_X_NN
  * where X is 0 (nose), 1 (left main), 2 (right main)
  *
  * @param model - Cesium Model instance
  * @param gearProgress - Gear progress (0 = up, 1 = down)
+ * @param callsign - Aircraft callsign (for tracking initialization state)
+ * @param modelUrl - Model URL (to detect model swaps requiring reinitialization)
+ * @param knownAnimationCount - Optional animation count (unused, kept for API compatibility)
  */
 export function applyGearAnimation(
   model: Cesium.Model,
-  gearProgress: number
+  gearProgress: number,
+  callsign: string,
+  modelUrl: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  knownAnimationCount?: number
 ): void {
-  if (!model.ready || !model.activeAnimations) {
+  if (!model.ready) {
     return
   }
 
   // Clamp progress to valid range
   const progress = Math.max(0, Math.min(1, gearProgress))
 
-  // Keywords that identify gear-related animations
-  const gearKeywords = [
-    'GEAR_ANIMATION_POSITION',  // FSLTL pattern
-    'LandingGear',
-    'landing_gear',
-    'Gear',
-    'gear',
-    'LG'
-  ]
+  // Check if animations need to be loaded for this model URL
+  if (!animationSets.has(modelUrl) && !animationSetsLoading.has(modelUrl)) {
+    animationSetsLoading.add(modelUrl)
 
-  // Initialize gear animations if not already done
-  if (!initializedModels.has(model)) {
-    initializedModels.add(model)
-
-    // Try to find and add all gear animations by iterating through indices
-    // FSLTL models typically have 15-25 animations; we check first 50 to be safe
-    for (let idx = 0; idx < 50; idx++) {
-      try {
-        const anim = model.activeAnimations.add({
-          index: idx,
-          loop: Cesium.ModelAnimationLoop.NONE,
-          multiplier: 0  // Don't play automatically
-        })
-        if (anim) {
-          // Check if this is a gear animation
-          const isGearAnim = gearKeywords.some(kw =>
-            anim.name.toUpperCase().includes(kw.toUpperCase())
-          )
-          if (!isGearAnim) {
-            // Not a gear animation, remove it
-            model.activeAnimations.remove(anim)
-          }
-        }
-      } catch {
-        // Index out of range or other error - stop trying
-        break
+    // Start async parse of animation data
+    parseAnimationSetFromUrl(modelUrl).then(animSet => {
+      animationSetsLoading.delete(modelUrl)
+      if (animSet) {
+        animationSets.set(modelUrl, animSet)
       }
-    }
+    })
+    return
   }
 
-  // Update all active gear animations to the target progress
-  for (let i = 0; i < model.activeAnimations.length; i++) {
-    const anim = model.activeAnimations.get(i)
-    if (anim) {
-      setAnimationProgress(anim, progress)
-    }
+  // Get cached animation set
+  const animSet = animationSets.get(modelUrl)
+  if (!animSet) {
+    return // Still loading or no animations
   }
-}
 
-/**
- * Set animation to a specific progress point
- * @param animation - Cesium ModelAnimation
- * @param progress - Progress from 0 to 1 (0 = gear up/retracted, 1 = gear down/extended)
- */
-function setAnimationProgress(animation: Cesium.ModelAnimation, progress: number): void {
-  // Use animationTime callback to set specific frame
-  // The callback receives (duration, seconds) and should return the animation time in seconds
-  // FSLTL gear animations: progress 0 = gear up (start), progress 1 = gear down (end)
-  const targetProgress = progress
-
-  animation.animationTime = function(duration: number, _seconds: number): number {
-    // Scale progress (0-1) to animation duration (0-duration seconds)
-    return targetProgress * duration
-  }
+  // Apply gear animations using direct node transforms
+  applyGearAnimationsPercent(model, animSet, progress)
 }
 
 /**
@@ -299,6 +326,8 @@ export function clearGearState(callsign: string): void {
  */
 export function clearAllGearStates(): void {
   gearStates.clear()
+  animationSets.clear()
+  animationSetsLoading.clear()
 }
 
 /**

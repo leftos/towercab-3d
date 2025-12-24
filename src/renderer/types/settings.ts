@@ -184,14 +184,25 @@ export interface GraphicsSettings {
 
   // Model rendering
   /**
-   * Model brightness multiplier (0.5-3.0, default: 1.0)
-   * Controls how bright aircraft and tower models appear:
+   * Brightness multiplier for built-in (FR24) models (0.5-3.0, default: 1.7)
+   * Controls how bright the default aircraft models appear:
    * - 0.5 = 50% darker (darker gray tint)
-   * - 1.0 = Default brightness (light gray)
+   * - 1.0 = Default texture brightness
+   * - 1.7 = 170% brighter (default for built-in models)
    * - 3.0 = 300% brighter (white tint, maximum brightness)
    * Values above 1.0 brighten textures; values above ~1.1 approach white
    */
-  modelBrightness: number
+  builtinModelBrightness: number
+
+  /**
+   * Brightness multiplier for FSLTL models (0.5-3.0, default: 1.0)
+   * Controls how bright imported FSLTL aircraft models appear:
+   * - 0.5 = 50% darker (darker gray tint)
+   * - 1.0 = Default texture brightness (preserves livery colors)
+   * - 3.0 = 300% brighter (white tint, maximum brightness)
+   * Values above 1.0 brighten textures; values above ~1.1 approach white
+   */
+  fsltlModelBrightness: number
 }
 
 /**
@@ -533,7 +544,8 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     shadowPolygonOffsetFactor: 1.1,
     shadowPolygonOffsetUnits: 4.0,
     cameraNearPlane: 0.1,
-    modelBrightness: 1.0
+    builtinModelBrightness: 1.7,
+    fsltlModelBrightness: 1.0
   },
   camera: {
     defaultFov: 60,

@@ -68,6 +68,20 @@ export const DEFAULT_FSLTL_SETTINGS: FSLTLSettings = {
 }
 
 /**
+ * Metadata for a successfully converted model (from progress file)
+ */
+export interface ConvertedModelInfo {
+  modelName: string
+  modelPath: string
+  aircraftType: string
+  airlineCode: string | null
+  textureSize: TextureScale
+  hasAnimations: boolean
+  fileSize: number
+  convertedAt: number
+}
+
+/**
  * Conversion progress state
  */
 export interface ConversionProgress {
@@ -81,6 +95,8 @@ export interface ConversionProgress {
   current: string | null
   /** List of error messages */
   errors: string[]
+  /** List of successfully converted models with metadata */
+  converted?: ConvertedModelInfo[]
 }
 
 /**
@@ -91,7 +107,8 @@ export const DEFAULT_CONVERSION_PROGRESS: ConversionProgress = {
   total: 0,
   completed: 0,
   current: null,
-  errors: []
+  errors: [],
+  converted: []
 }
 
 /**

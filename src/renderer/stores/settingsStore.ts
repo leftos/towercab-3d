@@ -90,9 +90,12 @@ export const useSettingsStore = create<SettingsStore>()(
             ...(updates.cameraNearPlane !== undefined && {
               cameraNearPlane: Math.max(0.1, Math.min(10.0, updates.cameraNearPlane))
             }),
-            // Model brightness
-            ...(updates.modelBrightness !== undefined && {
-              modelBrightness: Math.max(0.5, Math.min(3.0, updates.modelBrightness))
+            // Model brightness - separate sliders for built-in and FSLTL models
+            ...(updates.builtinModelBrightness !== undefined && {
+              builtinModelBrightness: Math.max(0.5, Math.min(3.0, updates.builtinModelBrightness))
+            }),
+            ...(updates.fsltlModelBrightness !== undefined && {
+              fsltlModelBrightness: Math.max(0.5, Math.min(3.0, updates.fsltlModelBrightness))
             })
           }
         })),
@@ -272,7 +275,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'settings-store',
-      version: 6, // Incremented for FSLTL settings
+      version: 7, // Incremented for separate model brightness sliders
       migrate: (persistedState: unknown, version: number) => {
         // Auto-migrate old flat structure to grouped structure
         if (version < 2) {
@@ -331,6 +334,23 @@ export const useSettingsStore = create<SettingsStore>()(
             }
           }
         }
+        // Migrate v6 to v7: split modelBrightness into builtinModelBrightness and fsltlModelBrightness
+        if (version < 7) {
+          console.log('[Settings] Migrating v6 to v7: splitting model brightness into built-in and FSLTL')
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const state = persistedState as any
+          const oldBrightness = state.graphics?.modelBrightness ?? 1.0
+          return {
+            ...state,
+            graphics: {
+              ...DEFAULT_SETTINGS.graphics,
+              ...state.graphics,
+              // Use old brightness for built-in, default for FSLTL
+              builtinModelBrightness: oldBrightness,
+              fsltlModelBrightness: DEFAULT_SETTINGS.graphics.fsltlModelBrightness
+            }
+          }
+        }
         return persistedState as SettingsStore
       }
     }
@@ -386,8 +406,10 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
         oldSettings.shadowPolygonOffsetUnits ?? DEFAULT_SETTINGS.graphics.shadowPolygonOffsetUnits,
       cameraNearPlane:
         oldSettings.cameraNearPlane ?? DEFAULT_SETTINGS.graphics.cameraNearPlane,
-      modelBrightness:
-        oldSettings.modelBrightness ?? DEFAULT_SETTINGS.graphics.modelBrightness
+      builtinModelBrightness:
+        oldSettings.builtinModelBrightness ?? oldSettings.modelBrightness ?? DEFAULT_SETTINGS.graphics.builtinModelBrightness,
+      fsltlModelBrightness:
+        oldSettings.fsltlModelBrightness ?? DEFAULT_SETTINGS.graphics.fsltlModelBrightness
     },
     camera: {
       defaultFov: oldSettings.defaultFov ?? DEFAULT_SETTINGS.camera.defaultFov,

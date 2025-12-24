@@ -6,18 +6,31 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 TowerCab 3D is a Tauri 2 desktop application that provides a 3D tower cab view for VATSIM air traffic controllers. It displays real-time aircraft positions on a 3D globe with satellite imagery and terrain, featuring smooth camera controls, aircraft following modes, and extensive customization options.
 
+## Documentation Lookup
+
+When looking up documentation for libraries (Cesium, Babylon.js, React, etc.), always use the Context7 MCP tool first:
+1. Call `mcp__context7__resolve-library-id` to find the library ID
+2. Call `mcp__context7__get-library-docs` with a topic to get relevant docs
+
+Only resort to WebSearch/WebFetch if Context7 doesn't have the information needed.
+
 ## Development Commands
 
 ```bash
-npm install        # Install dependencies
-npm run dev        # Start development mode with hot reload (Tauri desktop app)
-npm run serve      # Run in browser mode (opens http://localhost:5173 in default browser)
-npm run build      # Build for production (outputs Windows installer to src-tauri/target/release/bundle/)
-npm run vite:dev   # Frontend only (internal, used by Tauri)
-npm run vite:build # Build frontend only (internal, used by Tauri)
+npm install           # Install dependencies
+npm run dev           # Start development mode with hot reload (Tauri desktop app)
+npm run serve         # Run in browser mode (opens http://localhost:5173 in default browser)
+npm run build         # Build for production (outputs Windows installer to src-tauri/target/release/bundle/)
+npm run build:converter  # Build FSLTL converter executable (requires Python + PyInstaller)
+npm run vite:dev      # Frontend only (internal, used by Tauri)
+npm run vite:build    # Build frontend only (internal, used by Tauri)
 ```
 
+**Note:** The `npm run build` command automatically runs `build:converter` to create the FSLTL model converter executable. This requires Python 3 with Pillow installed. PyInstaller is auto-installed if missing.
+
 **Note for Claude:** Only the user can run `npm run dev` as it launches the Tauri app with a GUI. Ask the user to run this command and report back any errors.
+
+**Windows Warning:** Never use `2>nul` to suppress stderr in terminal commands. On Windows, this creates a file literally named `nul` which is extremely difficult to delete (requires special tools or booting from Linux). Use `2>$null` in PowerShell or simply omit stderr redirection.
 
 **Important:** Always run ESLint and TypeScript checks before committing changes:
 
