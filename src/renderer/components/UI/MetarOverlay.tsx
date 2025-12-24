@@ -105,15 +105,15 @@ function formatInterpolatedMetar(weather: InterpolatedWeather): string {
     parts.push('<1/4SM')
   }
 
+  // Precipitation indicator (before clouds, matching real METAR format)
+  if (weather.precipitation.active && weather.precipitation.types.length > 0) {
+    parts.push(weather.precipitation.types.map(p => p.code).join(' '))
+  }
+
   // Clouds - show significant layers
   const clouds = formatCloudLayers(weather.cloudLayers)
   if (clouds) {
     parts.push(clouds)
-  }
-
-  // Precipitation indicator
-  if (weather.precipitation.active && weather.precipitation.types.length > 0) {
-    parts.push(weather.precipitation.types.join(''))
   }
 
   return parts.join(' ')

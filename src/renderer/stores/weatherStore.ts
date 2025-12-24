@@ -10,7 +10,6 @@ import {
   PRECIP_VIS_THRESHOLD_LOW,
   PRECIP_VIS_FACTOR_MIN,
   PRECIP_VIS_FACTOR_MAX,
-  INTERPOLATION_UPDATE_THROTTLE_MS,
   INTERPOLATION_POSITION_THRESHOLD_DEG
 } from '../constants'
 
@@ -181,6 +180,51 @@ const DEFAULT_WIND: WindState = {
   isVariable: false
 }
 
+/**
+ * Compare two cloud layer arrays for equality
+ * Uses tolerance for floating point values
+ */
+function cloudLayersEqual(a: CloudLayer[], b: CloudLayer[]): boolean {
+  if (a.length !== b.length) return false
+  return a.every((layer, i) =>
+    Math.abs(layer.altitude - b[i].altitude) < 10 &&
+    Math.abs(layer.coverage - b[i].coverage) < 0.05 &&
+    layer.type === b[i].type
+  )
+}
+
+/**
+ * Compare two wind states for equality
+ */
+function windEqual(a: WindState, b: WindState): boolean {
+  return a.direction === b.direction &&
+    a.speed === b.speed &&
+    a.gustSpeed === b.gustSpeed &&
+    a.isVariable === b.isVariable
+}
+
+/**
+ * Compare two precipitation states for equality
+ */
+function precipitationEqual(a: PrecipitationState, b: PrecipitationState): boolean {
+  if (a.active !== b.active) return false
+  if (a.hasThunderstorm !== b.hasThunderstorm) return false
+  if (a.types.length !== b.types.length) return false
+  return a.types.every((t, i) => t.code === b.types[i].code)
+}
+
+/**
+ * Check if two interpolated weather results are effectively the same
+ * Used to skip state updates when values haven't meaningfully changed
+ */
+function interpolatedWeatherEqual(a: InterpolatedWeather, b: InterpolatedWeather): boolean {
+  return Math.abs(a.visibility - b.visibility) < 0.1 &&
+    Math.abs(a.fogDensity - b.fogDensity) < 0.0001 &&
+    cloudLayersEqual(a.cloudLayers, b.cloudLayers) &&
+    windEqual(a.wind, b.wind) &&
+    precipitationEqual(a.precipitation, b.precipitation)
+}
+
 export const useWeatherStore = create<WeatherState>((set, get) => ({
   // Initial state
   currentMetar: null,
@@ -296,14 +340,16 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
     const now = Date.now()
 
     // Check if position changed enough to warrant a new fetch
+    // Time-based refresh is handled separately by auto-refresh (5 minute interval)
+    // This prevents unnecessary API calls and state updates when camera is stationary
     if (state.lastInterpolationPosition) {
       const latDiff = Math.abs(lat - state.lastInterpolationPosition.lat)
       const lonDiff = Math.abs(lon - state.lastInterpolationPosition.lon)
 
-      // Skip if position hasn't changed much and we have recent data
+      // Skip if position hasn't changed much - no need for time check here
+      // Auto-refresh handles periodic updates, this is for position-based updates only
       if (latDiff < INTERPOLATION_POSITION_THRESHOLD_DEG &&
-          lonDiff < INTERPOLATION_POSITION_THRESHOLD_DEG &&
-          now - state.lastInterpolationTime < INTERPOLATION_UPDATE_THROTTLE_MS) {
+          lonDiff < INTERPOLATION_POSITION_THRESHOLD_DEG) {
         return
       }
     }
@@ -317,6 +363,20 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
         const interpolated = interpolateWeather(nearbyMetars)
 
         if (interpolated && !state.isDebugOverriding) {
+          // Check if values actually changed - skip update if identical
+          // This prevents unnecessary React re-renders and cloud layer matching
+          if (state.interpolatedWeather && interpolatedWeatherEqual(interpolated, state.interpolatedWeather)) {
+            // Values unchanged, just update position/timestamp without triggering weather re-render
+            set({
+              lastInterpolationPosition: { lat, lon },
+              lastInterpolationTime: now,
+              cameraPosition: { lat, lon },
+              lastFetchTime: now,
+              isLoading: false
+            })
+            return
+          }
+
           set({
             nearbyMetars,
             interpolatedWeather: interpolated,
