@@ -4,6 +4,15 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- FSLTL aircraft model support: import airline-specific liveries from the FSLTL (FS Live Traffic Liveries) package
+  - In-app conversion panel in Settings > General > FSLTL Aircraft Models
+  - Select specific airlines and aircraft types to convert (saves disk space)
+  - Texture quality options: Full 4K, 2K, 1K (recommended), 512px
+  - Automatic model matching by airline ICAO code from callsign (e.g., UAL123 → United livery)
+  - Fallback to base/generic liveries when airline-specific model unavailable
+  - Converted models persist in IndexedDB registry for instant loading
+
 ## v0.0.8-alpha (2025-12-22)
 
 ### Added
