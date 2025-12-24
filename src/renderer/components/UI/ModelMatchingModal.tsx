@@ -85,12 +85,19 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
       case 'mapped':
       case 'fsltl-base':
         return { label: 'mapped', className: 'mapped' }
+      case 'fsltl-vmr':
+        return { label: 'vmr', className: 'mapped' }
       case 'closest':
         return { label: 'closest', className: 'closest' }
       case 'fallback':
       default:
         return { label: 'fallback', className: 'fallback' }
     }
+  }
+
+  // Check if scale should be shown (only for 'closest' matches that have non-uniform scaling)
+  const shouldShowScale = (modelInfo: ModelInfo): boolean => {
+    return modelInfo.matchType === 'closest'
   }
 
   return (
@@ -125,9 +132,10 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
               </thead>
               <tbody>
                 {aircraftData.map((aircraft) => {
-                  const scale = formatScale(aircraft.modelInfo.scale)
                   const matchDisplay = getMatchTypeDisplay(aircraft.modelInfo.matchType)
                   const modelDisplay = getModelName(aircraft.modelInfo)
+                  const showScale = shouldShowScale(aircraft.modelInfo)
+                  const scale = showScale ? formatScale(aircraft.modelInfo.scale) : null
                   return (
                     <tr key={aircraft.callsign}>
                       <td className="callsign">{aircraft.callsign}</td>
@@ -146,8 +154,8 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
                           {matchDisplay.label}
                         </span>
                       </td>
-                      <td className={`scale-value ${scale.isScaled ? 'scaled' : ''}`}>
-                        {scale.text}
+                      <td className={`scale-value ${scale?.isScaled ? 'scaled' : ''}`}>
+                        {scale ? scale.text : ''}
                       </td>
                     </tr>
                   )

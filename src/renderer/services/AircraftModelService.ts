@@ -370,7 +370,7 @@ function findClosestModel(
 export interface ModelInfo {
   modelUrl: string
   scale: { x: number; y: number; z: number }  // Non-uniform scale factors
-  matchType: 'exact' | 'mapped' | 'closest' | 'fallback' | 'fsltl' | 'fsltl-base'
+  matchType: 'exact' | 'mapped' | 'closest' | 'fallback' | 'fsltl' | 'fsltl-vmr' | 'fsltl-base'
   matchedModel?: string  // For debugging: which model was matched
   dimensions: AircraftDimensions  // Dimensions of the actual model being used
   /** Additional heading rotation in degrees (180 for FSLTL models) */
@@ -441,7 +441,21 @@ class AircraftModelServiceClass {
   getModelInfo(aircraftType: string | null | undefined, callsign?: string | null): ModelInfo {
     const uniformScale = { x: 1, y: 1, z: 1 }
 
+    // If no aircraft type, try FSLTL B738 fallback before built-in
     if (!aircraftType) {
+      const fsltlB738Fallback = fsltlService.getB738Fallback()
+      if (fsltlB738Fallback) {
+        const modelUrl = convertFileSrc(fsltlB738Fallback.modelPath)
+        return {
+          modelUrl,
+          scale: uniformScale,
+          matchType: 'fallback',
+          matchedModel: fsltlB738Fallback.modelName,
+          dimensions: { wingspan: 35.78, length: 39.47 }, // B738 dimensions
+          rotationOffset: 180,
+          hasAnimations: fsltlB738Fallback.hasAnimations
+        }
+      }
       const fallbackDims = this.getModelDimensions(FALLBACK_MODEL)
       return {
         modelUrl: `./${FALLBACK_MODEL}.glb`,
@@ -464,10 +478,23 @@ class AircraftModelServiceClass {
       const vmrVariationName = fsltlService.lastMatchVariationName ?? undefined
       // Convert file path to Tauri asset URL for webview access
       const modelUrl = convertFileSrc(fsltlModel.modelPath)
+
+      // Determine match type: exact if model type matches requested type, vmr if mapped
+      // VMR mapping occurs when the model's aircraft type differs from what was requested
+      // (e.g., requested B753 but VMR maps to B739)
+      let matchType: 'fsltl' | 'fsltl-vmr' | 'fsltl-base'
+      if (fsltlModel.airlineCode) {
+        // Airline-specific match: check if type was mapped
+        matchType = fsltlModel.aircraftType.toUpperCase() === normalized ? 'fsltl' : 'fsltl-vmr'
+      } else {
+        // Base livery match
+        matchType = 'fsltl-base'
+      }
+
       return {
         modelUrl,
         scale: uniformScale, // FSLTL models are properly scaled
-        matchType: fsltlModel.airlineCode ? 'fsltl' : 'fsltl-base',
+        matchType,
         matchedModel: fsltlModel.modelName,
         dimensions: targetDims ?? { wingspan: 35.78, length: 39.47 },
         rotationOffset: 180, // FSLTL models face same direction as built-in models
@@ -485,7 +512,7 @@ class AircraftModelServiceClass {
       return {
         modelUrl,
         scale: uniformScale,
-        matchType: 'fsltl-base',
+        matchType: 'fallback',
         matchedModel: fsltlB738Fallback.modelName,
         dimensions: { wingspan: 35.78, length: 39.47 }, // B738 dimensions
         rotationOffset: 180,
