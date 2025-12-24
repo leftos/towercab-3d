@@ -391,10 +391,12 @@ export function useAircraftModels(
   ])
 
   // Set up render loop to update models every frame
+  // Use preRender (not postRender) so aircraft positions are set BEFORE the frame renders,
+  // matching the camera follow calculations which also happen in preRender
   useEffect(() => {
     if (!viewer) return
 
-    const removeListener = viewer.scene.postRender.addEventListener(updateAircraftModels)
+    const removeListener = viewer.scene.preRender.addEventListener(updateAircraftModels)
 
     return () => {
       removeListener()

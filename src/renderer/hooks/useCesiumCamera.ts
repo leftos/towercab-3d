@@ -496,58 +496,10 @@ export function useCesiumCamera(
     prevHeadingRef.current = heading
     prevPitchRef.current = pitch
 
-    // Handle orbit mode following without requiring an airport
-    if (followingCallsign && followMode === 'orbit' && interpolatedAircraft) {
-      const aircraft = interpolatedAircraft.get(followingCallsign)
-      if (aircraft) {
-        // Use interpolated positions for smooth tracking
-        const aircraftLat = aircraft.interpolatedLatitude
-        const aircraftLon = aircraft.interpolatedLongitude
-        const altitudeMeters = aircraft.interpolatedAltitude  // Already in METERS
-
-        // Calculate orbit camera position and orientation
-        const orbitResult = calculateOrbitCameraPosition(
-          aircraftLat,
-          aircraftLon,
-          altitudeMeters,
-          aircraft.interpolatedHeading,
-          orbitHeading,
-          orbitPitch,
-          orbitDistance
-        )
-
-        // Set camera position directly (no smoothing)
-        const targetFov = calculateFollowFov(60, followZoom)
-
-        // Update store with calculated values (for UI display)
-        setHeadingInternal(orbitResult.heading)
-        setPitchInternal(orbitResult.pitch)
-
-        // Set camera position
-        const cameraPosition = Cesium.Cartesian3.fromDegrees(
-          orbitResult.cameraLon,
-          orbitResult.cameraLat,
-          orbitResult.cameraHeight
-        )
-        viewer.camera.setView({
-          destination: cameraPosition,
-          orientation: {
-            heading: Cesium.Math.toRadians(orbitResult.heading),
-            pitch: Cesium.Math.toRadians(orbitResult.pitch),
-            roll: 0
-          }
-        })
-
-        // Set FOV
-        if (viewer.camera.frustum instanceof Cesium.PerspectiveFrustum) {
-          viewer.camera.frustum.fov = Cesium.Math.toRadians(targetFov)
-        }
-        return
-      }
-      // Aircraft not found in interpolated map yet - don't stop following here.
-      // The preRender handler will keep checking, and the aircraft may appear
-      // after the next animation frame. Let the user manually stop following
-      // or wait for the aircraft to appear.
+    // Orbit mode following is handled entirely by preRender for smooth updates
+    // This effect only needs to early-return to avoid conflicting camera updates
+    if (followingCallsign && followMode === 'orbit') {
+      // preRender handler manages camera position during active orbit following
       return
     }
 
@@ -745,12 +697,13 @@ export function useCesiumCamera(
           return
         }
 
-        // Update store with calculated values (for UI display)
-        setHeadingInternal(lookAt.heading)
-        setPitchInternal(lookAt.pitch)
+        // preRender handler manages camera position during active tower following
+        // Only the animation on start (above) is handled here
+        return
       }
       // If aircraft not found, don't stop following immediately - it may appear
       // after the next animation frame. The preRender handler keeps checking.
+      return
     }
 
     // Set camera position and orientation

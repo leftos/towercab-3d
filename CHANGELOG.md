@@ -14,6 +14,9 @@ All notable changes to TowerCab 3D will be documented in this file.
   - Converted models persist in IndexedDB registry for instant loading
   - Landing gear animations for FSLTL models: gear extends when descending below 2,000ft AGL, retracts when climbing above 500ft AGL
 
+### Fixed
+- Camera jitter when following aircraft in tower or orbit mode
+
 ## v0.0.8-alpha (2025-12-22)
 
 ### Added
