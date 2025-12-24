@@ -70,11 +70,9 @@ export function useTerrainQuality(
 
     // Only flush cache if the user actually changed the terrain quality setting
     if (lastTerrainQualityRef.current !== terrainQuality) {
-      const oldError = getScreenSpaceError(lastTerrainQualityRef.current)
       const originalCacheSize = viewer.scene.globe.tileCacheSize
 
       qualityChangeInProgressRef.current = true
-      console.log(`Terrain quality changing: SSE ${oldError} -> ${newError}, flushing tiles first...`)
 
       // CRITICAL: Evict tiles BEFORE changing quality to prevent memory spike
       // Step 1: Hide globe to stop new tile requests
@@ -109,7 +107,6 @@ export function useTerrainQuality(
           viewer.scene.globe.show = true
 
           qualityChangeInProgressRef.current = false
-          console.log(`Terrain quality changed to SSE ${newError}, cache restored after ${renderCount} eviction cycles`)
         }
       }
 

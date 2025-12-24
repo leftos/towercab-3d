@@ -106,9 +106,6 @@ export function useAircraftModels(
   // Track animation counts per model URL (populated via gltfCallback during model loading)
   const modelAnimationCountsRef = useRef<Map<string, number>>(new Map())
 
-  // Track which callsigns have been logged for gear debugging (persists across frames)
-  const gearDebugLoggedRef = useRef<Set<string>>(new Set())
-
   // Update aircraft models
   const updateAircraftModels = useCallback(() => {
     if (!viewer || !modelPoolReady.current) return
@@ -200,9 +197,6 @@ export function useAircraftModels(
                 // Capture animation count from parsed glTF
                 const animCount = gltf.animations?.length ?? 0
                 modelAnimationCountsRef.current.set(modelUrl, animCount)
-                if (animCount > 0) {
-                  console.log(`[Model Load] ${modelUrl}: ${animCount} animations found`)
-                }
               }
             }).then(newModel => {
               if (viewer.isDestroyed()) return
@@ -217,12 +211,6 @@ export function useAircraftModels(
               viewer.scene.primitives.add(newModel)
               modelPool.current.set(poolIndex, newModel)
               modelPoolLoading.current.delete(poolIndex)
-
-              // Reset gear debug log so we log again with the new model's state
-              const assignedCallsign = modelPoolAssignments.current.get(poolIndex)
-              if (assignedCallsign) {
-                gearDebugLoggedRef.current.delete(assignedCallsign)
-              }
             }).catch(err => {
               console.error(`Failed to load model ${modelInfo.modelUrl}:`, err)
               modelPoolLoading.current.delete(poolIndex)
@@ -313,12 +301,6 @@ export function useAircraftModels(
           // Skip gear animation if model is still loading (the current model in pool is a placeholder)
           const isModelLoading = modelPoolLoading.current.has(poolIndex)
 
-          // Debug: Log gear animation status (once per callsign, persists across frames)
-          if (!gearDebugLoggedRef.current.has(aircraft.callsign)) {
-            gearDebugLoggedRef.current.add(aircraft.callsign)
-            console.log(`[Gear] ${aircraft.callsign}: matchType=${modelInfo.matchType}, isFsltl=${isFsltlForGear}, hasAnimations=${modelInfo.hasAnimations ?? 'undefined'}, modelReady=${model.ready}, loading=${isModelLoading}`)
-          }
-
           if (isFsltlForGear && model.ready && !isModelLoading) {
             // Determine if aircraft is on ground based on groundspeed threshold
             const isOnGround = aircraft.interpolatedGroundspeed < GROUNDSPEED_THRESHOLD_KNOTS
@@ -340,11 +322,6 @@ export function useAircraftModels(
               Date.now()
             )
 
-            // Debug: Log gear state for ground aircraft
-            if (isOnGround && gearProgress < 0.99) {
-              console.log(`[Gear] ${aircraft.callsign}: ON GROUND but gearProgress=${gearProgress.toFixed(2)} (altAGL=${altitudeAglFeet.toFixed(0)}ft, vRate=${verticalRateFpm.toFixed(0)}fpm)`)
-            }
-
             // Apply the animation progress to the model
             // Pass known animation count from gltfCallback for reliable animation access
             const knownAnimCount = modelAnimationCountsRef.current.get(modelInfo.modelUrl)
@@ -359,7 +336,6 @@ export function useAircraftModels(
       if (assignedCallsign !== null && !seenCallsigns.has(assignedCallsign)) {
         // Clean up gear animation state for this aircraft
         clearGearState(assignedCallsign)
-        gearDebugLoggedRef.current.delete(assignedCallsign)
 
         // Release this slot and hide the model
         modelPoolAssignments.current.set(idx, null)
@@ -407,7 +383,6 @@ export function useAircraftModels(
   // This forces models to re-fetch from AircraftModelService which will pick up new FSLTL models
   useEffect(() => {
     const handleFsltlUpdate = () => {
-      console.log('[useAircraftModels] FSLTL models updated, clearing URL cache')
       // Clear all URL mappings to force model refresh on next frame
       for (const [idx] of modelPoolUrls.current.entries()) {
         modelPoolUrls.current.set(idx, '')

@@ -536,12 +536,6 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
         Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, positions).then((updatedPositions) => {
           const terrainHeight = updatedPositions[0].height
           terrainOffsetRef.current = terrainHeight - groundElevationMsl
-          console.log(
-            `[Terrain Offset] Airport: ${currentAirport.icao} | ` +
-            `AirportElevMSL: ${groundElevationMsl.toFixed(1)}m | ` +
-            `TerrainHeightEllipsoid: ${terrainHeight.toFixed(1)}m | ` +
-            `Offset (geoid): ${terrainOffsetRef.current.toFixed(1)}m`
-          )
           setTerrainOffsetReady(true)
         }).catch(() => {
           terrainOffsetRef.current = 0

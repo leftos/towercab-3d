@@ -367,32 +367,17 @@ class FSLTLServiceClass {
     // Apply type aliasing (e.g., B38M → B738)
     const baseType = this.typeAliases.get(normalizedType) ?? normalizedType
 
-    // Debug: log search parameters (only once per type/airline combo)
-    const debugKey = `${normalizedType}_${normalizedAirline || 'null'}`
-    if (!this._debugLoggedTypes) this._debugLoggedTypes = new Set()
-    const shouldLog = !this._debugLoggedTypes.has(debugKey)
-    if (shouldLog) {
-      this._debugLoggedTypes.add(debugKey)
-      console.log(`[FSLTL] findBestModel: type=${normalizedType} (baseType=${baseType}), airline=${normalizedAirline}, vmrLoaded=${this.vmrLoaded}, registrySize=${this.registry.models.size}`)
-    }
-
     // Get all models for this base aircraft type
     // If aliased, also check original type since models may be registered under either
     let modelsForType = this.registry.byAircraftType.get(baseType)
     if (!modelsForType && baseType !== normalizedType) {
       modelsForType = this.registry.byAircraftType.get(normalizedType)
-      if (shouldLog && modelsForType) {
-        console.log(`[FSLTL]   No models for aliased type ${baseType}, but found ${modelsForType.length} for original type ${normalizedType}`)
-      }
     }
 
     // 1. Try VMR airline-specific rule first
     if (normalizedAirline) {
       const airlineRuleKey = `${normalizedAirline}_${normalizedType}`
       const airlineRule = this.airlineRules.get(airlineRuleKey)
-      if (shouldLog) {
-        console.log(`[FSLTL]   Airline rule ${airlineRuleKey}: ${airlineRule ? 'found' : 'not found'}`)
-      }
       if (airlineRule) {
         // VMR says this airline has a livery for this type
         // Look up by type + airline in registry
@@ -401,37 +386,22 @@ class FSLTLServiceClass {
           if (airlineMatch) {
             // Store the VMR variation name for display
             this.lastMatchVariationName = airlineRule.modelNames[0]
-            if (shouldLog) {
-              console.log(`[FSLTL]   Found airline match: ${airlineMatch.modelName} (variation: ${this.lastMatchVariationName})`)
-            }
             return airlineMatch
           }
-        }
-        if (shouldLog) {
-          console.log(`[FSLTL]   Airline rule exists but model not converted for ${normalizedAirline}`)
         }
       }
     }
 
     // 2. Try VMR default rule (base livery for this type)
     const defaultRule = this.defaultRules.get(normalizedType)
-    if (shouldLog) {
-      console.log(`[FSLTL]   Default rule ${normalizedType}: ${defaultRule ? 'found' : 'not found'}`)
-    }
     if (defaultRule) {
       // Look up base livery in registry
       if (modelsForType) {
         const baseMatch = modelsForType.find(m => !m.airlineCode)
         if (baseMatch) {
           this.lastMatchVariationName = defaultRule.modelNames[0]
-          if (shouldLog) {
-            console.log(`[FSLTL]   Found base match: ${baseMatch.modelName} (variation: ${this.lastMatchVariationName})`)
-          }
           return baseMatch
         }
-      }
-      if (shouldLog) {
-        console.log(`[FSLTL]   Default rule exists but base model not converted`)
       }
     }
 
@@ -443,9 +413,6 @@ class FSLTLServiceClass {
       if (normalizedAirline) {
         const airlineMatch = modelsForType.find(m => m.airlineCode === normalizedAirline)
         if (airlineMatch) {
-          if (shouldLog) {
-            console.log(`[FSLTL]   Found airline match via direct lookup: ${airlineMatch.modelName}`)
-          }
           return airlineMatch
         }
       }
@@ -453,26 +420,16 @@ class FSLTLServiceClass {
       // Then try base livery
       const baseMatch = modelsForType.find(m => !m.airlineCode)
       if (baseMatch) {
-        if (shouldLog) {
-          console.log(`[FSLTL]   Found base match via direct lookup: ${baseMatch.modelName}`)
-        }
         return baseMatch
       }
 
       // Finally, return any model for this type
       if (modelsForType.length > 0) {
-        const anyMatch = modelsForType[0]
-        if (shouldLog) {
-          console.log(`[FSLTL]   Found any match via direct lookup: ${anyMatch.modelName}`)
-        }
-        return anyMatch
+        return modelsForType[0]
       }
     }
 
     // 4. No match
-    if (shouldLog) {
-      console.log(`[FSLTL]   No FSLTL match found`)
-    }
     return null
   }
 
@@ -491,15 +448,11 @@ class FSLTLServiceClass {
 
     if (modelsForAirline && modelsForAirline.length > 0) {
       // Return the first available model for this airline
-      console.log(`[FSLTL] findModelByAirline: Found ${modelsForAirline.length} models for ${normalizedAirline}, using ${modelsForAirline[0].modelName}`)
       return modelsForAirline[0]
     }
 
     return null
   }
-
-  // Debug tracking to avoid log spam
-  private _debugLoggedTypes?: Set<string>
 
   /**
    * Check if VMR has a rule for this airline + type combo

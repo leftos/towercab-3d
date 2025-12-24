@@ -69,7 +69,6 @@ export function WeatherDebugPanel() {
       hasThunderstorm,
       visibilityFactor: precipIntensity === 'heavy' ? 2.0 : precipIntensity === 'moderate' ? 1.0 : 0.5
     }
-    console.log('[WeatherDebug] Setting precipitation:', precipState)
     setPrecipitation(precipState)
 
     setWind({
@@ -89,7 +88,6 @@ export function WeatherDebugPanel() {
       }))
       .sort((a, b) => a.altitude - b.altitude)
 
-    console.log('[WeatherDebug] Setting cloud layers:', layers)
     setCloudLayers(layers)
 
     // Enable debug override mode to prevent METAR updates from overwriting
