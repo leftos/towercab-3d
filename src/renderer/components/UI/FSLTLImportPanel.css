@@ -205,8 +205,20 @@
   color: #f44336 !important;
 }
 
-.fsltl-cancel-button:hover {
+.fsltl-cancel-button:hover:not(:disabled) {
   background: rgba(244, 67, 54, 0.3) !important;
+}
+
+.fsltl-cancel-button:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.fsltl-cancelling-hint {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-style: italic;
 }
 
 .fsltl-complete-section {

@@ -2,6 +2,9 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, Child};
 use std::sync::Mutex;
+
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
 use serde::{Deserialize, Serialize};
@@ -320,6 +323,10 @@ fn start_fsltl_conversion(
             .map_err(|e| format!("Failed to write models list: {}", e))?;
         cmd.args(["--models-file", &models_file.to_string_lossy()]);
     }
+
+    // Hide console window on Windows (CREATE_NO_WINDOW = 0x08000000)
+    #[cfg(windows)]
+    cmd.creation_flags(0x08000000);
 
     // Kill any existing converter process first
     if let Ok(mut guard) = FSLTL_CONVERTER_PROCESS.lock() {

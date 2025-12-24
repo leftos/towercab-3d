@@ -4,50 +4,56 @@
  * UI component for managing FSLTL aircraft model import and conversion.
  * Simplified interface: select source folder, choose output location, convert all.
  *
+ * Conversion state is managed by fsltlConversionStore to persist across
+ * Settings panel open/close.
+ *
  * @see FSLTLService - Backend service for model matching
  * @see fsltlApi - Tauri API wrapper for file operations
+ * @see fsltlConversionStore - Conversion state management
  */
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { open as openExternal } from '@tauri-apps/plugin-shell'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { useFsltlConversionStore, getConversionEta } from '../../stores/fsltlConversionStore'
 import { fsltlService } from '../../services/FSLTLService'
 import * as fsltlApi from '../../services/fsltlApi'
-import type { ConversionProgress } from '../../types/fsltl'
 import './FSLTLImportPanel.css'
-
-type PanelState = 'setup' | 'ready' | 'converting' | 'complete'
 
 function FSLTLImportPanel() {
   // Settings
   const fsltlSettings = useSettingsStore((state) => state.fsltl)
   const updateFSLTLSettings = useSettingsStore((state) => state.updateFSLTLSettings)
 
-  // Ref to track polling interval for cleanup
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Conversion state from store (persists across Settings open/close)
+  const conversionState = useFsltlConversionStore((state) => state.conversionState)
+  const progress = useFsltlConversionStore((state) => state.progress)
+  const conversionStartTime = useFsltlConversionStore((state) => state.conversionStartTime)
+  const isCancelling = useFsltlConversionStore((state) => state.isCancelling)
+  const storeError = useFsltlConversionStore((state) => state.error)
+  const startConversion = useFsltlConversionStore((state) => state.startConversion)
+  const updateProgress = useFsltlConversionStore((state) => state.updateProgress)
+  const completeConversion = useFsltlConversionStore((state) => state.completeConversion)
+  const cancelConversion = useFsltlConversionStore((state) => state.cancelConversion)
+  const setStoreError = useFsltlConversionStore((state) => state.setError)
+  const resetConversion = useFsltlConversionStore((state) => state.reset)
+  const setPollInterval = useFsltlConversionStore((state) => state.setPollInterval)
 
-  // Panel state
-  const [panelState, setPanelState] = useState<PanelState>('setup')
-  const [error, setError] = useState<string | null>(null)
+  // Local UI state (not conversion-related)
+  const [localError, setLocalError] = useState<string | null>(null)
   const [isValidating, setIsValidating] = useState(false)
+  const [isSourceValid, setIsSourceValid] = useState(false)
 
   // Output path state
   const [outputPath, setOutputPath] = useState<string | null>(null)
   const [defaultOutputPath, setDefaultOutputPath] = useState<string | null>(null)
 
-  // Conversion progress
-  const [progress, setProgress] = useState<ConversionProgress>({
-    status: 'idle',
-    total: 0,
-    completed: 0,
-    current: null,
-    errors: []
-  })
-  const [conversionStartTime, setConversionStartTime] = useState<number | null>(null)
-
   // Stats
   const [convertedCount, setConvertedCount] = useState(0)
   const [availableCount, setAvailableCount] = useState(0)
+
+  // Combined error display
+  const error = localError || storeError
 
   // Initialize on mount
   useEffect(() => {
@@ -72,6 +78,8 @@ function FSLTLImportPanel() {
         if (sourcePath) {
           const isValid = await fsltlApi.validateFsltlSource(sourcePath)
           if (isValid) {
+            setIsSourceValid(true)
+
             // Load VMR rules for model matching
             try {
               const vmrContent = await fsltlApi.readVmrFile(sourcePath)
@@ -84,7 +92,6 @@ function FSLTLImportPanel() {
             // Count available models
             const aircraft = await fsltlApi.listFsltlAircraft(sourcePath)
             setAvailableCount(aircraft.length)
-            setPanelState('ready')
           }
         }
       } catch (err) {
@@ -95,20 +102,10 @@ function FSLTLImportPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Cleanup polling interval on unmount
-  useEffect(() => {
-    return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current)
-        pollIntervalRef.current = null
-      }
-    }
-  }, [])
-
   // Handle source folder selection
   const handleBrowseSource = async () => {
     try {
-      setError(null)
+      setLocalError(null)
       const folder = await fsltlApi.pickFolder()
       if (!folder) return
 
@@ -116,7 +113,7 @@ function FSLTLImportPanel() {
       const isValid = await fsltlApi.validateFsltlSource(folder)
 
       if (!isValid) {
-        setError('Invalid FSLTL folder. Must contain FSLTL_Rules.vmr and SimObjects/Airplanes')
+        setLocalError('Invalid FSLTL folder. Must contain FSLTL_Rules.vmr and SimObjects/Airplanes')
         setIsValidating(false)
         return
       }
@@ -136,10 +133,10 @@ function FSLTLImportPanel() {
       const aircraft = await fsltlApi.listFsltlAircraft(folder)
       setAvailableCount(aircraft.length)
 
-      setPanelState('ready')
+      setIsSourceValid(true)
       setIsValidating(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to select folder')
+      setLocalError(err instanceof Error ? err.message : 'Failed to select folder')
       setIsValidating(false)
     }
   }
@@ -147,14 +144,14 @@ function FSLTLImportPanel() {
   // Handle output folder selection
   const handleBrowseOutput = async () => {
     try {
-      setError(null)
+      setLocalError(null)
       const folder = await fsltlApi.pickFolder()
       if (!folder) return
 
       setOutputPath(folder)
       updateFSLTLSettings({ outputPath: folder })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to select folder')
+      setLocalError(err instanceof Error ? err.message : 'Failed to select folder')
     }
   }
 
@@ -167,47 +164,25 @@ function FSLTLImportPanel() {
   }
 
   // Cancel running conversion
-  const handleCancelConversion = async () => {
-    try {
-      // Stop polling
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current)
-        pollIntervalRef.current = null
-      }
-
-      // Kill the converter process
-      await fsltlApi.cancelFsltlConversion()
-
-      setProgress({
-        status: 'idle',
-        total: 0,
-        completed: 0,
-        current: null,
-        errors: []
-      })
-      setPanelState('ready')
-    } catch (err) {
-      console.warn('[FSLTLImportPanel] Cancel failed (process may have already finished):', err)
-      // Still reset state even if cancel fails
-      setPanelState('ready')
-    }
-  }
+  const handleCancelConversion = useCallback(async () => {
+    await cancelConversion()
+  }, [cancelConversion])
 
   // Start conversion (converts ALL models)
-  const handleStartConversion = async () => {
+  const handleStartConversion = useCallback(async () => {
     if (!fsltlSettings.sourcePath || !outputPath) return
 
     try {
-      setError(null)
-      setPanelState('converting')
+      setLocalError(null)
+      setStoreError(null)
 
       // Create unique progress file path with timestamp
       // Use backslash for Windows path separator
       const timestamp = Date.now()
       const progressFile = `${outputPath}\\conversion_progress_${timestamp}.json`
 
-      // Track start time for ETA calculation
-      setConversionStartTime(Date.now())
+      // Start conversion in store
+      startConversion(progressFile)
 
       // Start conversion with empty models array = convert all
       await fsltlApi.startFsltlConversion(
@@ -221,18 +196,13 @@ function FSLTLImportPanel() {
       console.log('[FSLTLImportPanel] Started conversion, polling progress file:', progressFile)
 
       // Poll for progress
-      pollIntervalRef.current = setInterval(async () => {
+      const intervalId = setInterval(async () => {
         try {
           const currentProgress = await fsltlApi.readConversionProgress(progressFile)
           console.log('[FSLTLImportPanel] Progress:', currentProgress.completed, '/', currentProgress.total, currentProgress.status)
-          setProgress(currentProgress)
+          updateProgress(currentProgress)
 
           if (currentProgress.status === 'complete' || currentProgress.status === 'error') {
-            if (pollIntervalRef.current) {
-              clearInterval(pollIntervalRef.current)
-              pollIntervalRef.current = null
-            }
-
             // Register newly converted models
             if (currentProgress.converted && currentProgress.converted.length > 0) {
               const newModels = currentProgress.converted.map(info => ({
@@ -260,7 +230,7 @@ function FSLTLImportPanel() {
             setConvertedCount(fsltlService.getModelCount())
             fsltlService.triggerModelRefresh()
 
-            setPanelState('complete')
+            completeConversion()
           }
         } catch (pollErr) {
           // Progress file may not exist yet - log for debugging
@@ -268,13 +238,16 @@ function FSLTLImportPanel() {
         }
       }, 1000)
 
+      // Store interval ID for cleanup
+      setPollInterval(intervalId)
+
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err)
       console.error('[FSLTLImportPanel] Conversion start failed:', errorMessage)
-      setError(`Failed to start conversion: ${errorMessage}`)
-      setPanelState('ready')
+      setStoreError(`Failed to start conversion: ${errorMessage}`)
+      resetConversion()
     }
-  }
+  }, [fsltlSettings.sourcePath, fsltlSettings.textureScale, outputPath, startConversion, updateProgress, completeConversion, setPollInterval, setStoreError, resetConversion])
 
   // Estimate disk space for all models
   const getEstimatedDiskSpace = () => {
@@ -296,31 +269,10 @@ function FSLTLImportPanel() {
 
   const isCustomOutputPath = outputPath !== defaultOutputPath && fsltlSettings.outputPath !== null
 
-  // Calculate ETA based on progress
-  const getEtaString = () => {
-    if (!conversionStartTime || progress.completed === 0 || progress.total === 0) {
-      return 'Calculating...'
-    }
-
-    const elapsedMs = Date.now() - conversionStartTime
-    const msPerModel = elapsedMs / progress.completed
-    const remaining = progress.total - progress.completed
-    const remainingMs = remaining * msPerModel
-
-    // Format time
-    const totalSeconds = Math.round(remainingMs / 1000)
-    if (totalSeconds < 60) {
-      return `~${totalSeconds}s remaining`
-    }
-    const minutes = Math.floor(totalSeconds / 60)
-    const seconds = totalSeconds % 60
-    if (minutes < 60) {
-      return `~${minutes}m ${seconds}s remaining`
-    }
-    const hours = Math.floor(minutes / 60)
-    const mins = minutes % 60
-    return `~${hours}h ${mins}m remaining`
-  }
+  // Derive panel display state from store state
+  const isConverting = conversionState === 'converting'
+  const isComplete = conversionState === 'complete'
+  const isReady = isSourceValid && !isConverting && !isComplete
 
   return (
     <div className="fsltl-import-panel">
@@ -336,7 +288,7 @@ function FSLTLImportPanel() {
           <button
             className="control-button"
             onClick={handleBrowseSource}
-            disabled={isValidating || panelState === 'converting'}
+            disabled={isValidating || isConverting}
           >
             {isValidating ? 'Validating...' : 'Browse...'}
           </button>
@@ -352,7 +304,7 @@ function FSLTLImportPanel() {
       </div>
 
       {/* Output Path - only show when source is valid */}
-      {panelState !== 'setup' && (
+      {isSourceValid && (
         <div className="fsltl-section">
           <label>Output Location</label>
           <div className="fsltl-path-row">
@@ -362,7 +314,7 @@ function FSLTLImportPanel() {
             <button
               className="control-button"
               onClick={handleBrowseOutput}
-              disabled={panelState === 'converting'}
+              disabled={isConverting}
             >
               Change...
             </button>
@@ -370,7 +322,7 @@ function FSLTLImportPanel() {
               <button
                 className="control-button"
                 onClick={handleResetOutputPath}
-                disabled={panelState === 'converting'}
+                disabled={isConverting}
                 title="Reset to default location"
               >
                 Reset
@@ -389,7 +341,7 @@ function FSLTLImportPanel() {
         <select
           value={fsltlSettings.textureScale}
           onChange={(e) => updateFSLTLSettings({ textureScale: e.target.value as 'full' | '2k' | '1k' | '512' })}
-          disabled={panelState === 'converting'}
+          disabled={isConverting}
         >
           <option value="full">Full (4K) - Largest files</option>
           <option value="2k">2K - High quality</option>
@@ -399,7 +351,7 @@ function FSLTLImportPanel() {
       </div>
 
       {/* Ready Panel - Show convert button */}
-      {panelState === 'ready' && (
+      {isReady && (
         <>
           <div className="fsltl-stats">
             <span>Available: {availableCount} models</span>
@@ -417,7 +369,7 @@ function FSLTLImportPanel() {
       )}
 
       {/* Progress Panel */}
-      {panelState === 'converting' && (
+      {isConverting && (
         <div className="fsltl-progress-section">
           <div className="fsltl-progress-bar">
             <div
@@ -429,7 +381,7 @@ function FSLTLImportPanel() {
             Converting: {progress.completed} / {progress.total}
           </div>
           <div className="fsltl-progress-eta">
-            {getEtaString()}
+            {getConversionEta(conversionStartTime, progress.completed, progress.total)}
           </div>
           {progress.current && (
             <div className="fsltl-progress-current">
@@ -439,14 +391,20 @@ function FSLTLImportPanel() {
           <button
             className="control-button fsltl-cancel-button"
             onClick={handleCancelConversion}
+            disabled={isCancelling}
           >
-            Cancel
+            {isCancelling ? 'Stopping...' : 'Cancel'}
           </button>
+          {isCancelling && (
+            <div className="fsltl-cancelling-hint">
+              Please wait, finishing current model...
+            </div>
+          )}
         </div>
       )}
 
       {/* Complete Panel */}
-      {panelState === 'complete' && (
+      {isComplete && (
         <div className="fsltl-complete-section">
           <div className="fsltl-success-icon">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#4caf50" strokeWidth="2">
@@ -457,7 +415,7 @@ function FSLTLImportPanel() {
           <p>Conversion complete! {progress.completed} models converted.</p>
           <button
             className="control-button"
-            onClick={() => setPanelState('ready')}
+            onClick={resetConversion}
           >
             Done
           </button>
