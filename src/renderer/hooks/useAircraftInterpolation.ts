@@ -7,7 +7,11 @@ import type { InterpolatedAircraftState, AircraftState } from '../types/vatsim'
 import {
   GROUNDSPEED_THRESHOLD_KNOTS,
   GROUND_AIRCRAFT_TERRAIN_OFFSET,
-  FLYING_AIRCRAFT_TERRAIN_OFFSET
+  FLYING_AIRCRAFT_TERRAIN_OFFSET,
+  TERRAIN_SMOOTHING_LERP_FACTOR,
+  HEIGHT_TRANSITION_LERP_FACTOR,
+  NOSEWHEEL_LOWERING_LERP_FACTOR,
+  FALLBACK_FLARE_PITCH_DEGREES
 } from '../constants/rendering'
 
 // SINGLETON: Shared interpolated states map and animation loop
@@ -39,6 +43,8 @@ const sharedTransitionHeightsRef = { current: new Map<string, { source: number; 
 // Tracks the last flare pitch to smoothly transition to ground pitch after touchdown
 const sharedNosewheelTransitionRef = { current: new Map<string, { sourcePitch: number; progress: number }>() }
 const sharedWasInFlareRef = { current: new Map<string, boolean>() }
+// Store the actual flare pitch from the previous frame for accurate nosewheel transition
+const sharedLastFlarePitchRef = { current: new Map<string, number>() }
 
 // Store subscribers for triggering re-renders
 const subscribers = new Set<() => void>()
@@ -155,8 +161,7 @@ function updateInterpolation() {
     if (shouldClampToTerrain && sampledTerrainHeight !== undefined) {
       // Clamp to terrain: use terrain-sampled height (smoothed for consistency)
       const currentSmoothed = sharedSmoothedTerrainHeightsRef.current.get(callsign) ?? sampledTerrainHeight
-      const lerpFactor = 0.2
-      const newSmoothed = currentSmoothed + (sampledTerrainHeight - currentSmoothed) * lerpFactor
+      const newSmoothed = currentSmoothed + (sampledTerrainHeight - currentSmoothed) * TERRAIN_SMOOTHING_LERP_FACTOR
       sharedSmoothedTerrainHeightsRef.current.set(callsign, newSmoothed)
 
       // Target height: smoothed terrain + offset
@@ -184,7 +189,10 @@ function updateInterpolation() {
 
       if (!currentTransition || currentTransition.target !== targetHeight) {
         // Initialize new transition from current position to target
-        const sourceHeight = currentTransition?.source ?? entry.interpolatedAltitude
+        // If mid-transition, calculate current interpolated height (not original source)
+        const sourceHeight = currentTransition
+          ? currentTransition.source + (currentTransition.target - currentTransition.source) * currentTransition.progress
+          : entry.interpolatedAltitude
         sharedTransitionHeightsRef.current.set(callsign, {
           source: sourceHeight,
           target: targetHeight,
@@ -198,8 +206,7 @@ function updateInterpolation() {
     if (transition && transition.progress < 1.0) {
       // Lerp from source to target over ~15 frames (~0.25 seconds at 60fps)
       // Slower transition for smoother landing appearance
-      const lerpFactor = 0.07
-      transition.progress = Math.min(1.0, transition.progress + lerpFactor)
+      transition.progress = Math.min(1.0, transition.progress + HEIGHT_TRANSITION_LERP_FACTOR)
       correctedHeight = transition.source + (transition.target - transition.source) * transition.progress
 
       // Update target if it changed during transition
@@ -221,10 +228,18 @@ function updateInterpolation() {
 
     // Apply landing flare pitch adjustment
     // When aircraft is descending close to the ground, pitch nose up to emulate flare
+    // NOTE: Calculate AGL BEFORE terrain correction is applied to entry.interpolatedAltitude
     if (orientationEnabled && sampledTerrainHeight !== undefined) {
       // Calculate altitude above ground level (AGL)
       // Use reported altitude (not corrected) since terrain height is in ellipsoid coords
       const altitudeAGL = reportedEllipsoidHeight - sampledTerrainHeight
+
+      // Determine if aircraft is currently in flare conditions BEFORE applying flare
+      // This allows us to capture the actual flare pitch when aircraft is in flare
+      const isDescending = entry.verticalRate < -50  // m/min
+      const inFlareZone = altitudeAGL > 0 && altitudeAGL < 15  // meters
+      const isAirborne = entry.interpolatedGroundspeed >= GROUNDSPEED_THRESHOLD_KNOTS
+      const isInFlare = isDescending && inFlareZone && isAirborne
 
       // Get the base pitch (without flare) for reference
       const basePitch = entry.interpolatedPitch
@@ -238,12 +253,10 @@ function updateInterpolation() {
         orientationIntensity
       )
 
-      // Determine if aircraft is currently in flare conditions
-      // (checked AFTER applying flare so we can capture the flare pitch)
-      const isDescending = entry.verticalRate < -50  // m/min
-      const inFlareZone = altitudeAGL > 0 && altitudeAGL < 15  // meters
-      const isAirborne = entry.interpolatedGroundspeed >= GROUNDSPEED_THRESHOLD_KNOTS
-      const isInFlare = isDescending && inFlareZone && isAirborne
+      // If currently in flare, store the actual flare pitch for nosewheel transition
+      if (isInFlare) {
+        sharedLastFlarePitchRef.current.set(callsign, entry.interpolatedPitch)
+      }
 
       // Track flare state for nosewheel lowering transition
       const wasInFlare = sharedWasInFlareRef.current.get(callsign) ?? false
@@ -251,21 +264,21 @@ function updateInterpolation() {
 
       if (wasInFlare && !isInFlare && !nosewheelTransition) {
         // Just exited flare! Start nosewheel lowering transition
-        // Capture the flare pitch we had LAST frame (before conditions failed)
-        // Since flare pitch was applied this frame too, use it as the starting point
-        const lastFlarePitch = entry.interpolatedPitch
+        // Use the stored flare pitch from when we were actually in flare
+        const lastFlarePitch = sharedLastFlarePitchRef.current.get(callsign) ?? (basePitch + FALLBACK_FLARE_PITCH_DEGREES)
         sharedNosewheelTransitionRef.current.set(callsign, {
-          sourcePitch: lastFlarePitch > basePitch ? lastFlarePitch : basePitch + 4, // Fallback to slight nose-up
+          sourcePitch: lastFlarePitch,
           progress: 0
         })
+        // Clean up stored flare pitch
+        sharedLastFlarePitchRef.current.delete(callsign)
       }
 
       // Apply ongoing nosewheel lowering transition
       if (nosewheelTransition && nosewheelTransition.progress < 1.0) {
         // Gradually lower nose over ~1 second at 60fps (~60 frames)
         // smoothstep easing for natural deceleration
-        const lerpFactor = 0.017
-        nosewheelTransition.progress = Math.min(1.0, nosewheelTransition.progress + lerpFactor)
+        nosewheelTransition.progress = Math.min(1.0, nosewheelTransition.progress + NOSEWHEEL_LOWERING_LERP_FACTOR)
 
         // smoothstep: x^2 * (3 - 2x) for smooth acceleration/deceleration
         const easedProgress = nosewheelTransition.progress * nosewheelTransition.progress * (3 - 2 * nosewheelTransition.progress)
@@ -294,6 +307,7 @@ function updateInterpolation() {
       sharedTransitionHeightsRef.current.delete(callsign)
       sharedNosewheelTransitionRef.current.delete(callsign)
       sharedWasInFlareRef.current.delete(callsign)
+      sharedLastFlarePitchRef.current.delete(callsign)
     }
   }
 

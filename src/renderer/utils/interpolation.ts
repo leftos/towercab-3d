@@ -14,7 +14,8 @@ import {
   FLARE_END_ALTITUDE_METERS,
   FLARE_TARGET_PITCH_DEGREES,
   FLARE_MIN_DESCENT_RATE,
-  GROUNDSPEED_THRESHOLD_KNOTS
+  GROUNDSPEED_THRESHOLD_KNOTS,
+  TURN_RATE_DECAY_MS
 } from '../constants/rendering'
 
 // Constants for physics-based interpolation
@@ -424,7 +425,7 @@ export function interpolateAircraftState(
       interpolatedGroundspeed = current.groundspeed
 
       const stationaryTurnRate = calculateTurnRate(previous.heading, current.heading, interval)
-      const turnDecay = Math.exp(-extrapolationMs / 10000)
+      const turnDecay = Math.exp(-extrapolationMs / TURN_RATE_DECAY_MS)
       const extrapolatedTurnDeg = stationaryTurnRate * (extrapolationMs / 1000) * turnDecay
       interpolatedHeading = normalizeAngle(current.heading + extrapolatedTurnDeg)
 
@@ -479,7 +480,7 @@ export function interpolateAircraftState(
 
     // Continue the turn at the same rate (decaying slightly over time)
     // This prevents sudden heading stops and makes turns look natural
-    const turnDecay = Math.exp(-extrapolationMs / 10000) // Decay over ~10 seconds
+    const turnDecay = Math.exp(-extrapolationMs / TURN_RATE_DECAY_MS)
     const extrapolatedTurnDeg = turnRate * (extrapolationMs / 1000) * turnDecay
     interpolatedHeading = normalizeAngle(current.heading + extrapolatedTurnDeg)
 
@@ -530,9 +531,8 @@ export function interpolateAircraftState(
     )
 
     // Smoothly interpolate orientation synchronized with position
-    // Orientation completes transition at the same time as position (when next VATSIM data arrives)
-    const orientationSmoothingFactor = 1.0
-    const tOrientation = Math.min(1.0, t / orientationSmoothingFactor)
+    // Clamp t to 1.0 for orientation (don't extrapolate pitch/roll beyond final values)
+    const tOrientation = Math.min(1.0, t)
 
     // Use smootherstep (even gentler than smoothstep) for very gradual transitions
     const easedT = smootherstep(tOrientation)

@@ -348,3 +348,57 @@ export const FLARE_TARGET_PITCH_DEGREES = 6
  * Default: -50 m/min (~165 fpm descent)
  */
 export const FLARE_MIN_DESCENT_RATE = -50
+
+// ============================================================================
+// INTERPOLATION TIMING
+// ============================================================================
+
+/**
+ * Decay time constant for turn rate extrapolation in milliseconds
+ *
+ * When extrapolating aircraft position beyond known data, turn rate
+ * decays exponentially with this time constant. Higher values = slower decay.
+ *
+ * Default: 10000ms (10 seconds) - turn rate halves roughly every 7 seconds
+ */
+export const TURN_RATE_DECAY_MS = 10000
+
+/**
+ * Lerp factor for terrain height smoothing
+ *
+ * Controls how quickly sampled terrain height is blended with previous value.
+ * Lower values = smoother but slower response to terrain changes.
+ *
+ * Default: 0.2 (20% blend per frame at 60fps ≈ 0.5s settling time)
+ */
+export const TERRAIN_SMOOTHING_LERP_FACTOR = 0.2
+
+/**
+ * Lerp factor for ground/air height transitions
+ *
+ * Controls transition speed when aircraft switches between ground clamping
+ * and reported altitude. Lower values = slower, smoother transitions.
+ *
+ * Default: 0.07 (~15 frames / 0.25 seconds at 60fps)
+ */
+export const HEIGHT_TRANSITION_LERP_FACTOR = 0.07
+
+/**
+ * Lerp factor for nosewheel lowering animation
+ *
+ * Controls how quickly the nose lowers after touchdown (flare to ground pitch).
+ * Lower values = slower, more realistic nosewheel lowering.
+ *
+ * Default: 0.017 (~60 frames / 1 second at 60fps)
+ */
+export const NOSEWHEEL_LOWERING_LERP_FACTOR = 0.017
+
+/**
+ * Fallback flare pitch when no stored flare pitch is available (degrees)
+ *
+ * Used when starting nosewheel transition but no actual flare pitch was captured.
+ * Added to base pitch as a reasonable nose-up attitude estimate.
+ *
+ * Default: 4 degrees
+ */
+export const FALLBACK_FLARE_PITCH_DEGREES = 4
