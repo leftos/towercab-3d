@@ -16,6 +16,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ### Fixed
 - Camera jitter when following aircraft in tower or orbit mode
+- Weather interpolation no longer updates every 2 seconds with a stationary camera (fixed throttle logic that was causing cloud flickering)
 
 ## v0.0.8-alpha (2025-12-22)
 

@@ -455,6 +455,29 @@ class FSLTLServiceClass {
   }
 
   /**
+   * Get the FSLTL B738 base livery model for generic fallback.
+   * B738 is the most common aircraft type and works well as a universal fallback.
+   *
+   * @returns FSLTL B738 base model, or null if not available
+   */
+  getB738Fallback(): FSLTLModel | null {
+    // Look for B738 base livery (no airline code)
+    const b738Models = this.registry.byAircraftType.get('B738')
+    if (b738Models) {
+      const baseModel = b738Models.find(m => !m.airlineCode)
+      if (baseModel) return baseModel
+    }
+    return null
+  }
+
+  /**
+   * Check if any FSLTL models are installed
+   */
+  hasModels(): boolean {
+    return this.registry.models.size > 0
+  }
+
+  /**
    * Check if VMR has a rule for this airline + type combo
    * (even if not converted yet)
    */
