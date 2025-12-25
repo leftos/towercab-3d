@@ -60,3 +60,6 @@ coverage/
 # FSLTL Converter executables (built/copied by build_converter.py)
 src-tauri/resources/fsltl_converter.exe
 src-tauri/resources/texconv.exe
+
+# Tauri signed build script
+build-signed.ps1
