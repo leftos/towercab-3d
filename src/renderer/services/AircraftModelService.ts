@@ -5,13 +5,14 @@
  * When a specific model exists, it's used at 1:1 scale.
  * When no model exists, finds the closest match by FAA dimensions and applies scaling.
  *
- * Model Matching Priority (FSLTL preferred when installed):
- * 1. FSLTL models with exact airline+type match
- * 2. FSLTL models with base livery (no specific airline)
+ * Model Matching Priority:
+ * 1. Custom VMR rules (user mods) - airline+type or type-only
+ * 2. FSLTL models with exact airline+type match
  * 3. FSLTL B738 base model (generic fallback - shape matters more than livery)
  * 4. Built-in models with exact/mapped match (only if no FSLTL B738)
- * 5. Built-in models with closest size match (scaled)
- * 6. Fallback to built-in B738
+ * 5. Built-in models with direct match (lowercase)
+ * 6. Built-in models with closest size match (scaled)
+ * 7. Fallback to built-in B738
  *
  * Models from Flightradar24/fr24-3d-models (GPL-2.0, originally from FlightGear)
  */
@@ -19,6 +20,7 @@
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { aircraftDimensionsService, type AircraftDimensions } from './AircraftDimensionsService'
 import { fsltlService } from './FSLTLService'
+import { customVMRService } from './CustomVMRService'
 
 // Available model files (lowercase, without extension)
 // These correspond to .glb files in src/renderer/public/
@@ -370,10 +372,10 @@ function findClosestModel(
 export interface ModelInfo {
   modelUrl: string
   scale: { x: number; y: number; z: number }  // Non-uniform scale factors
-  matchType: 'exact' | 'mapped' | 'closest' | 'fallback' | 'fsltl' | 'fsltl-vmr' | 'fsltl-base'
+  matchType: 'exact' | 'mapped' | 'closest' | 'fallback' | 'fsltl' | 'fsltl-vmr' | 'fsltl-base' | 'custom-vmr'
   matchedModel?: string  // For debugging: which model was matched
   dimensions: AircraftDimensions  // Dimensions of the actual model being used
-  /** Additional heading rotation in degrees (180 for FSLTL models) */
+  /** Additional heading rotation in degrees (180 for FSLTL models, custom for mods) */
   rotationOffset?: number
   /** Whether the model has animations (landing gear, etc.) */
   hasAnimations?: boolean
@@ -467,9 +469,28 @@ class AircraftModelServiceClass {
 
     // Extract base aircraft type (strips equipment suffixes like "/L" from "B738/L")
     const normalized = extractBaseAircraftType(aircraftType)
-
-    // 1. Check FSLTL for airline+type or base type match
     const airlineCode = this.extractAirlineCode(callsign)
+
+    // 1. Check custom VMR rules (highest priority - user mods)
+    const customVMRMatch = customVMRService.findBestModel(normalized, airlineCode)
+    if (customVMRMatch) {
+      // Get dimensions from FAA database for the aircraft type
+      const targetDims = aircraftDimensionsService.getDimensions(normalized)
+      return {
+        modelUrl: customVMRMatch.modelPath,
+        scale: {
+          x: customVMRMatch.scale,
+          y: customVMRMatch.scale,
+          z: customVMRMatch.scale
+        },
+        matchType: 'custom-vmr',
+        matchedModel: customVMRMatch.modelName,
+        dimensions: targetDims ?? { wingspan: 35.78, length: 39.47 },
+        rotationOffset: customVMRMatch.rotationOffset?.y
+      }
+    }
+
+    // 2. Check FSLTL for airline+type or base type match
     const fsltlModel = fsltlService.findBestModel(normalized, airlineCode)
     if (fsltlModel) {
       // Get dimensions from FAA database for scaling reference
@@ -503,7 +524,7 @@ class AircraftModelServiceClass {
       }
     }
 
-    // 2. Try FSLTL B738 base model as generic fallback
+    // 3. Try FSLTL B738 base model as generic fallback
     // Shape/size is more important than airline livery, so prefer a generic B738
     // over an airline-specific model of a completely different aircraft type
     const fsltlB738Fallback = fsltlService.getB738Fallback()
@@ -522,7 +543,7 @@ class AircraftModelServiceClass {
 
     // === Built-in models (only used when no FSLTL B738 available) ===
 
-    // 3. Check explicit mapping for built-in models
+    // 4. Check explicit mapping for built-in models
     const mappedModel = TYPE_TO_MODEL[normalized]
     if (mappedModel && AVAILABLE_MODELS.has(mappedModel)) {
       const modelDims = this.getModelDimensions(mappedModel)
@@ -534,7 +555,7 @@ class AircraftModelServiceClass {
       }
     }
 
-    // 4. Try direct match (lowercase)
+    // 5. Try direct match (lowercase)
     const directMatch = normalized.toLowerCase()
     if (AVAILABLE_MODELS.has(directMatch)) {
       const directDims = this.getModelDimensions(directMatch)
@@ -546,7 +567,7 @@ class AircraftModelServiceClass {
       }
     }
 
-    // 5. No direct model - try to find closest match by dimensions
+    // 6. No direct model - try to find closest match by dimensions
     const targetDims = aircraftDimensionsService.getDimensions(normalized)
     if (targetDims && targetDims.wingspan && targetDims.length) {
       const { model, scale } = findClosestModel(targetDims.wingspan, targetDims.length)
@@ -560,7 +581,7 @@ class AircraftModelServiceClass {
       }
     }
 
-    // 6. Final fallback - use B738 built-in at 1:1 scale
+    // 7. Final fallback - use B738 built-in at 1:1 scale
     const finalFallbackDims = this.getModelDimensions(FALLBACK_MODEL)
     return {
       modelUrl: `./${FALLBACK_MODEL}.glb`,

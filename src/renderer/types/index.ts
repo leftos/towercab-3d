@@ -193,7 +193,11 @@ export type {
 
   // Mod registry
   LoadedMod,
-  ModRegistry
+  ModRegistry,
+
+  // Custom VMR (Visual Model Rules)
+  CustomVMRRule,
+  CustomVMRMatch
 } from './mod'
 
 export {

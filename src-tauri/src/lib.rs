@@ -103,6 +103,49 @@ fn read_mod_manifest(path: String) -> Result<serde_json::Value, String> {
         .map_err(|e| format!("Failed to parse manifest JSON: {}", e))
 }
 
+/// List all VMR (Visual Model Rules) files in the mods directory
+/// Scans both mods/ root and mods/aircraft/ for .vmr files
+#[tauri::command]
+fn list_vmr_files(app: tauri::AppHandle) -> Result<Vec<String>, String> {
+    let resource_path = app
+        .path()
+        .resource_dir()
+        .map_err(|e| format!("Failed to get resource directory: {}", e))?;
+
+    let mut vmr_files = Vec::new();
+    let mods_root = resource_path.join("mods");
+
+    // Helper to scan a directory for .vmr files
+    let scan_dir = |dir: &PathBuf, files: &mut Vec<String>| {
+        if dir.exists() {
+            if let Ok(entries) = fs::read_dir(dir) {
+                for entry in entries.filter_map(|e| e.ok()) {
+                    let path = entry.path();
+                    if path.is_file() {
+                        if let Some(ext) = path.extension() {
+                            if ext.to_string_lossy().to_lowercase() == "vmr" {
+                                files.push(path.to_string_lossy().to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    // Scan mods/ root
+    scan_dir(&mods_root, &mut vmr_files);
+
+    // Scan mods/aircraft/
+    let aircraft_path = mods_root.join("aircraft");
+    scan_dir(&aircraft_path, &mut vmr_files);
+
+    // Sort for consistent load order
+    vmr_files.sort();
+
+    Ok(vmr_files)
+}
+
 /// Fetch a URL and return the response as text (bypasses CORS)
 #[tauri::command]
 async fn fetch_url(url: String) -> Result<String, String> {
@@ -171,6 +214,24 @@ async fn pick_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
 fn read_text_file(path: String) -> Result<String, String> {
     fs::read_to_string(&path)
         .map_err(|e| format!("Failed to read file {}: {}", path, e))
+}
+
+/// Load and parse a model manifest.json file from a model directory
+/// Returns the manifest JSON or null if file doesn't exist
+#[tauri::command]
+fn load_model_manifest(model_path: String) -> Result<Option<serde_json::Value>, String> {
+    let manifest_file = PathBuf::from(&model_path).join("manifest.json");
+
+    if !manifest_file.exists() {
+        return Ok(None);
+    }
+
+    let content = fs::read_to_string(&manifest_file)
+        .map_err(|e| format!("Failed to read manifest at {:?}: {}", manifest_file, e))?;
+
+    serde_json::from_str(&content)
+        .map(Some)
+        .map_err(|e| format!("Failed to parse manifest JSON: {}", e))
 }
 
 /// Write a text file to disk
@@ -573,11 +634,13 @@ pub fn run() {
             get_mods_path,
             list_mod_directories,
             read_mod_manifest,
+            list_vmr_files,
             fetch_url,
             // FSLTL commands
             pick_folder,
             read_text_file,
             write_text_file,
+            load_model_manifest,
             get_fsltl_output_path,
             get_fsltl_default_output_path,
             validate_fsltl_source,

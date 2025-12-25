@@ -4,6 +4,21 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- VMR (Visual Model Rules) file support for custom aircraft model matching
+  - Define custom model rules in XML format (.vmr files) placed in mods/ folder
+  - Support for airline-specific liveries using CallsignPrefix attribute
+  - Support for model alternatives (fallback models with // separator)
+  - Manifest.json support in model folders for scale and rotation offset customization
+  - Pre-loading of manifests during startup for fast synchronous lookups
+
+### Changed
+- VMR rules now take highest priority in model matching (before FSLTL and built-in models)
+- Model matching now validates file existence before returning model paths
+
+### Fixed
+- VMR XML parsing now handles both self-closing tags and open/close tag formats
+
 ## [0.0.12-alpha] - 2025-12-24
 
 ### Added

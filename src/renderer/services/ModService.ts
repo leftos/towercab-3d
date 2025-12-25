@@ -8,6 +8,7 @@ import type {
 } from '../types/mod'
 import { isSupportedModelFormat, getModelFormat, SUPPORTED_MODEL_FORMATS } from '../types/mod'
 import { modApi, isTauri } from '../utils/tauriApi'
+import { customVMRService } from './CustomVMRService'
 
 class ModService {
   private registry: ModRegistry = {
@@ -30,7 +31,10 @@ class ModService {
     }
 
     try {
-      // Load aircraft mods
+      // Load custom VMR files first (highest priority for model matching)
+      await customVMRService.loadVMRFiles()
+
+      // Load aircraft mods (manifest.json based)
       await this.loadModsOfType('aircraft')
 
       // Load tower mods

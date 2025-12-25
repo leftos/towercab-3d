@@ -34,7 +34,27 @@ export const modApi = {
    * Read a mod manifest JSON file
    */
   readModManifest: <T = unknown>(path: string): Promise<T> =>
-    invoke<T>('read_mod_manifest', { path })
+    invoke<T>('read_mod_manifest', { path }),
+
+  /**
+   * List all VMR (Visual Model Rules) files in the mods directory
+   * Scans both mods/ root and mods/aircraft/ for .vmr files
+   */
+  listVMRFiles: (): Promise<string[]> =>
+    invoke<string[]>('list_vmr_files'),
+
+  /**
+   * Read a text file (used for reading VMR files)
+   */
+  readTextFile: (path: string): Promise<string> =>
+    invoke<string>('read_text_file', { path }),
+
+  /**
+   * Load and parse a model manifest.json file
+   * Returns manifest data or null if file doesn't exist or is invalid
+   */
+  loadModelManifest: <T = unknown>(modelPath: string): Promise<T | null> =>
+    invoke<T | null>('load_model_manifest', { modelPath })
 }
 
 /**

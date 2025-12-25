@@ -760,11 +760,22 @@ Replace the default cone mesh with realistic aircraft models. Mods match by ICAO
 
 Add custom control tower models for specific airports. Mods match by ICAO airport code (e.g., KJFK, EGLL).
 
+### VMR Model Matching Rules
+
+For advanced users, VMR (Visual Model Rules) files allow you to define custom model matching rules:
+
+1. Create a `.vmr` file in the `mods/` folder
+2. Define rules mapping aircraft types and airlines to your model folders
+3. Restart the application to load your VMR rules
+
+VMR files use the same XML format as Microsoft Flight Simulator traffic, making them easy to create if you're familiar with that system.
+
 ### Full Documentation
 
 See [MODDING.md](MODDING.md) for complete modding instructions including:
 - Manifest file format
 - Model requirements and guidelines
+- VMR file format and examples
 - Blender export settings
 - Troubleshooting tips
 

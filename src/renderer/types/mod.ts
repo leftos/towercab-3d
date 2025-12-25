@@ -59,6 +59,46 @@ export interface ModRegistry {
   towers: Map<string, LoadedMod<TowerModManifest>>  // keyed by airport ICAO
 }
 
+// =============================================================================
+// VMR (Visual Model Rules) Types
+// =============================================================================
+
+/**
+ * A rule parsed from a custom VMR file in the mods folder
+ *
+ * VMR files use XML format compatible with MSFS:
+ * ```xml
+ * <ModelMatchRule TypeCode="B738" ModelName="MyB738_Base" />
+ * <ModelMatchRule CallsignPrefix="AAL" TypeCode="B738" ModelName="MyB738_American" />
+ * ```
+ */
+export interface CustomVMRRule {
+  /** ICAO type code (e.g., "B738", "A320") */
+  typeCode: string
+  /** Model folder name(s) relative to mods/aircraft/, alternatives separated by "//" in VMR */
+  modelNames: string[]
+  /** Callsign prefix for airline-specific rules (e.g., "AAL"), undefined for default rules */
+  callsignPrefix?: string
+}
+
+/**
+ * A matched model from custom VMR rules
+ */
+export interface CustomVMRMatch {
+  /** Path to the model file (Tauri asset URL) */
+  modelPath: string
+  /** Original VMR model name (folder name) */
+  modelName: string
+  /** Aircraft type from VMR rule */
+  aircraftType: string
+  /** Airline code if airline-specific, null for base livery */
+  airlineCode: string | null
+  /** Scale factor (from manifest if present, else 1.0) */
+  scale: number
+  /** Rotation offset in degrees (from manifest if present) */
+  rotationOffset?: { x: number; y: number; z: number }
+}
+
 // Default mod manifest templates
 export const DEFAULT_AIRCRAFT_MOD: Partial<AircraftModManifest> = {
   scale: 1.0,

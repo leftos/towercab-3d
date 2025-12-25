@@ -321,6 +321,146 @@ manifest.json:
 }
 ```
 
+## VMR Model Matching Rules
+
+For advanced users, VMR (Visual Model Rules) files allow you to define custom model matching rules. This is the same format used by Microsoft Flight Simulator for traffic liveries.
+
+VMR files enable:
+- Mapping specific airlines to specific livery models
+- Creating type aliases (e.g., B38M MAX 8 uses your B738 model)
+- Defining fallback alternatives for random selection
+
+### Creating a VMR File
+
+1. Create a file with `.vmr` extension in `mods/` or `mods/aircraft/`
+2. Use XML format with `<ModelMatchRule>` elements
+3. Reference model folders by name (folders in `mods/aircraft/`)
+4. Restart the application to load new VMR rules
+
+### VMR Format
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<ModelMatchRuleSet>
+  <!-- Base livery for B738 (no airline specified) -->
+  <ModelMatchRule TypeCode="B738" ModelName="MyB738_Base" />
+
+  <!-- Airline-specific liveries -->
+  <ModelMatchRule CallsignPrefix="AAL" TypeCode="B738" ModelName="MyB738_American" />
+  <ModelMatchRule CallsignPrefix="UAL" TypeCode="B738" ModelName="MyB738_United" />
+  <ModelMatchRule CallsignPrefix="SWA" TypeCode="B738" ModelName="MyB738_Southwest" />
+
+  <!-- Type alias: B38M (737 MAX 8) uses B738 model -->
+  <ModelMatchRule TypeCode="B38M" ModelName="MyB738_Base" />
+
+  <!-- Multiple alternatives (first available is used) -->
+  <ModelMatchRule CallsignPrefix="DAL" TypeCode="B738" ModelName="MyB738_Delta_New//MyB738_Delta_Old" />
+</ModelMatchRuleSet>
+```
+
+### Attributes
+
+| Attribute | Required | Description |
+|-----------|----------|-------------|
+| `TypeCode` | Yes | ICAO aircraft type code (e.g., "B738", "A320", "CRJ9") |
+| `ModelName` | Yes | Model folder name in `mods/aircraft/`. Use `//` to specify alternatives |
+| `CallsignPrefix` | No | ICAO airline code (e.g., "AAL", "UAL"). Omit for default/base livery |
+
+### Model Matching Priority
+
+When VMR rules are present, they take **highest priority** over other model sources:
+
+1. **Custom VMR** - Airline+type specific match
+2. **Custom VMR** - Type-only (base livery)
+3. **FSLTL** - Converted airline models
+4. **FSLTL** - Base liveries
+5. **Custom Mods** - manifest.json based (no VMR)
+6. **Built-in** - Default models
+
+### Example Folder Structure
+
+```
+mods/
+├── my_liveries.vmr           # Your custom VMR rules
+└── aircraft/
+    ├── MyB738_Base/
+    │   └── model.glb
+    ├── MyB738_American/
+    │   └── model.glb
+    ├── MyB738_United/
+    │   └── model.glb
+    └── MyB738_Southwest/
+        └── model.glb
+```
+
+### VMR Model Folders
+
+Each model folder referenced in your VMR file should contain:
+- A model file named `model.glb` (or other supported format)
+- Optionally, a `manifest.json` for scale/rotation adjustments
+
+**Minimal folder (just the model):**
+```
+MyB738_American/
+└── model.glb
+```
+
+**With manifest for customization:**
+```
+MyB738_American/
+├── model.glb
+└── manifest.json
+```
+
+**manifest.json** (optional - used by VMR models for scale and rotation adjustments):
+```json
+{
+  "name": "American Airlines B738",
+  "author": "Your Name",
+  "version": "1.0.0",
+  "modelFile": "model.glb",
+  "aircraftTypes": ["B738"],
+  "scale": 1.0,
+  "rotationOffset": {
+    "x": 0,
+    "y": 180,
+    "z": 0
+  }
+}
+```
+
+**Manifest Fields for VMR Models:**
+- `scale` (number): Scale factor applied to the model (1.0 = original size)
+- `rotationOffset` (object): Rotation adjustments in degrees:
+  - `x`: Pitch (nose up/down)
+  - `y`: Yaw (heading rotation)
+  - `z`: Roll (bank angle)
+
+All other fields are informational and don't affect rendering. If `manifest.json` is missing, the model uses default scale (1.0) and no rotation offset.
+
+### Tips
+
+- Model folders only need a `model.glb` file - manifests are optional
+- **Load Order**: VMR files are discovered and loaded alphabetically by filename. When multiple files define rules for the same aircraft type, the first file (alphabetically) takes priority. Within a single VMR file, rules are matched in order: airline-specific rules first, then type-only rules.
+- **Multiple VMR Files**: You can organize rules across multiple `.vmr` files. Use numeric prefixes if you need explicit priority (e.g., `00_base_models.vmr`, `10_overrides.vmr`)
+- **Manifest Support**: Each model folder can optionally include a `manifest.json` with `scale` and `rotationOffset` properties for fine-tuning model appearance
+- Use the F3 debug overlay to verify which model is being matched
+- Airline codes are 3-letter ICAO codes (e.g., "AAL" not "AA")
+
+### Common Airline Codes
+
+| Code | Airline |
+|------|---------|
+| AAL | American Airlines |
+| UAL | United Airlines |
+| DAL | Delta Air Lines |
+| SWA | Southwest Airlines |
+| JBU | JetBlue Airways |
+| ASA | Alaska Airlines |
+| BAW | British Airways |
+| DLH | Lufthansa |
+| AFR | Air France |
+
 ## Community Resources
 
 - Share your mods with the VATSIM community
