@@ -336,3 +336,12 @@ export function clearAllGearStates(): void {
 export function getGearStateDebug(callsign: string): GearAnimationState | undefined {
   return gearStates.get(callsign)
 }
+
+/**
+ * Get current gear progress for an aircraft (0 = retracted, 1 = extended)
+ * Returns 1.0 (gear down) as default if no state exists
+ */
+export function getCurrentGearProgress(callsign: string): number {
+  const state = gearStates.get(callsign)
+  return state?.progress ?? 1.0
+}

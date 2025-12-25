@@ -5,6 +5,10 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Dynamic ground clamping for aircraft models based on actual geometry
+  - Aircraft now sit at the correct height on the ground based on their 3D model bounds
+  - Accounts for landing gear animation state (gear up vs gear down)
+  - Different aircraft types (A380 vs CRJ200) automatically get correct positioning
 - FSLTL models are now auto-discovered from the output folder on startup
   - Point to any folder containing converted models and they'll be loaded automatically
   - No need to re-convert models when changing the output path

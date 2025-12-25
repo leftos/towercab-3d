@@ -17,8 +17,13 @@ import {
   updateGearAnimation,
   applyGearAnimation,
   clearGearState,
-  initializeGearState
+  initializeGearState,
+  getCurrentGearProgress
 } from '../utils/gearAnimationController'
+import {
+  getModelGroundData,
+  parseGroundDataFromUrl
+} from '../utils/gltfAnimationParser'
 
 /**
  * Manages aircraft 3D model rendering using Cesium.Model pool
@@ -106,6 +111,9 @@ export function useAircraftModels(
   // Track animation counts per model URL (populated via gltfCallback during model loading)
   const modelAnimationCountsRef = useRef<Map<string, number>>(new Map())
 
+  // Track URLs that have failed to load (avoid repeated error logging)
+  const failedModelUrlsRef = useRef<Set<string>>(new Set())
+
   // Update aircraft models
   const updateAircraftModels = useCallback(() => {
     if (!viewer || !modelPoolReady.current) return
@@ -127,9 +135,23 @@ export function useAircraftModels(
 
       // Model height: interpolatedAltitude is already terrain-corrected by interpolation system
       // (includes terrain sampling, ground/air transitions, and all offsets)
-      // FSLTL models need additional offset to prevent ground clipping
+      // Compute dynamic ground offset based on model geometry and gear state
       const isFsltlModel = modelInfo.matchType === 'fsltl' || modelInfo.matchType === 'fsltl-base'
-      const heightOffset = isFsltlModel ? FSLTL_MODEL_HEIGHT_OFFSET + 4.0 : 0
+      const groundData = getModelGroundData(modelInfo.modelUrl)
+      let heightOffset: number
+      if (groundData) {
+        // Interpolate between gear-up and gear-down min-Y based on current gear state
+        const gearProgress = getCurrentGearProgress(aircraft.callsign)
+        const minY = groundData.gearUpMinY + (groundData.gearDownMinY - groundData.gearUpMinY) * gearProgress
+        // Negate minY to get offset: if model extends 2m below origin (minY=-2), raise by +2m
+        // Multiply by model Y scale since ground data is in model space
+        heightOffset = -minY * modelInfo.scale.y
+      } else {
+        // Fallback to static offset if ground data not yet computed
+        heightOffset = isFsltlModel ? FSLTL_MODEL_HEIGHT_OFFSET + 4.0 : 0
+        // Trigger async parsing of ground data for next frame
+        parseGroundDataFromUrl(modelInfo.modelUrl)
+      }
       const modelHeight = aircraft.interpolatedAltitude + heightOffset
 
       // Find existing pool slot for this callsign, or get an unused one
@@ -212,7 +234,11 @@ export function useAircraftModels(
               modelPool.current.set(poolIndex, newModel)
               modelPoolLoading.current.delete(poolIndex)
             }).catch(err => {
-              console.error(`Failed to load model ${modelInfo.modelUrl}:`, err)
+              // Only log error once per URL to avoid console spam
+              if (!failedModelUrlsRef.current.has(modelUrl)) {
+                failedModelUrlsRef.current.add(modelUrl)
+                console.warn(`[Models] Failed to load ${modelUrl}:`, err.message || err)
+              }
               modelPoolLoading.current.delete(poolIndex)
               // Reset URL to trigger retry on next frame
               modelPoolUrls.current.set(poolIndex, './b738.glb')
