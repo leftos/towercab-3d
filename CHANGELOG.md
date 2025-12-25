@@ -4,6 +4,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- Overcast (OVC) cloud layers now use curved dome geometry instead of flat planes, creating a more realistic sky appearance with gradual darkening toward the horizon
+
 ## [0.0.9-alpha] - 2025-12-24
 
 ### Added

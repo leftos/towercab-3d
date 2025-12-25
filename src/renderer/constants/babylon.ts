@@ -342,3 +342,51 @@ export const CLOUD_LAYER_FADE_SPEED = 0.2
  * Small changes don't need texture regeneration.
  */
 export const CLOUD_LAYER_COVERAGE_REGEN_THRESHOLD = 0.05
+
+// ============================================================================
+// Overcast Dome Configuration
+// ============================================================================
+
+/**
+ * Coverage threshold above which to use dome geometry instead of flat plane.
+ * OVC (overcast) = 1.0, BKN (broken) = 0.75
+ * Using 0.9 to catch OVC but not BKN.
+ */
+export const CLOUD_DOME_COVERAGE_THRESHOLD = 0.9
+
+/**
+ * Radius of the overcast dome in meters.
+ * Should match or exceed CLOUD_PLANE_DIAMETER / 2 for consistency.
+ */
+export const CLOUD_DOME_RADIUS = 25000
+
+/**
+ * Number of segments for dome mesh (affects smoothness).
+ * Higher = smoother but more polygons.
+ */
+export const CLOUD_DOME_SEGMENTS = 48
+
+/**
+ * How much the dome curves down at the horizon (0-1).
+ * 0 = flat plane, 1 = full hemisphere.
+ * Very small values (0.01-0.03) give subtle curvature without blocking view.
+ */
+export const CLOUD_DOME_CURVATURE = 0.02
+
+/**
+ * Horizon darkening factor for overcast dome (0-1).
+ * Higher = darker at horizon edges.
+ */
+export const CLOUD_DOME_HORIZON_DARKENING = 0.4
+
+/**
+ * Fresnel bias for cloud dome material.
+ * Controls base opacity at center vs edges.
+ */
+export const CLOUD_DOME_FRESNEL_BIAS = 0.6
+
+/**
+ * Fresnel power for cloud dome material.
+ * Controls sharpness of edge opacity falloff.
+ */
+export const CLOUD_DOME_FRESNEL_POWER = 1.5

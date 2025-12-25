@@ -48,7 +48,14 @@ import {
   CLOUD_LAYER_ALTITUDE_TRANSITION_SPEED,
   CLOUD_LAYER_COVERAGE_TRANSITION_SPEED,
   CLOUD_LAYER_FADE_SPEED,
-  CLOUD_LAYER_COVERAGE_REGEN_THRESHOLD
+  CLOUD_LAYER_COVERAGE_REGEN_THRESHOLD,
+  CLOUD_DOME_COVERAGE_THRESHOLD,
+  CLOUD_DOME_RADIUS,
+  CLOUD_DOME_SEGMENTS,
+  CLOUD_DOME_CURVATURE,
+  CLOUD_DOME_HORIZON_DARKENING,
+  CLOUD_DOME_FRESNEL_BIAS,
+  CLOUD_DOME_FRESNEL_POWER
 } from '@/constants'
 
 interface UseBabylonWeatherOptions {
@@ -85,6 +92,10 @@ interface CloudLayerState {
     currentSpeed: number
     targetSpeed: number
   }
+  /** Whether this layer should use dome geometry (for OVC coverage) */
+  useDome: boolean
+  /** Whether dome texture has been generated for current state */
+  domeTextureGenerated: boolean
 }
 
 // ============================================================================
@@ -253,6 +264,209 @@ function createPatchyCloudTexture(
       data[idx + 1] = 255 // G
       data[idx + 2] = 255 // B
       data[idx + 3] = Math.round(finalAlpha * 255) // A
+    }
+  }
+
+  ctx.putImageData(imageData, 0, 0)
+  texture.hasAlpha = true
+  texture.update()
+
+  return texture
+}
+
+/**
+ * Creates a dome/hemisphere mesh for overcast cloud layers.
+ * The dome curves downward toward the horizon, creating a more realistic
+ * overcast sky appearance compared to a flat plane.
+ *
+ * @param name - Mesh name
+ * @param scene - Babylon.js scene
+ * @returns Dome mesh positioned at origin
+ */
+function createCloudDomeMesh(name: string, scene: BABYLON.Scene): BABYLON.Mesh {
+  const segments = CLOUD_DOME_SEGMENTS
+  const radius = CLOUD_DOME_RADIUS
+  const curvature = CLOUD_DOME_CURVATURE
+
+  // Create custom mesh with vertices
+  const positions: number[] = []
+  const indices: number[] = []
+  const uvs: number[] = []
+  const normals: number[] = []
+
+  // Generate dome vertices in concentric rings
+  // Ring 0 is center, ring segments is the outer edge
+  for (let ring = 0; ring <= segments; ring++) {
+    const ringRadius = (ring / segments) * radius
+    const ringT = ring / segments // 0 at center, 1 at edge
+
+    // Calculate Y offset based on curvature - lower at edges
+    // Use smooth curve that drops more at the horizon
+    const yOffset = -ringRadius * curvature * ringT
+
+    const ringSegments = ring === 0 ? 1 : segments * 2
+
+    for (let seg = 0; seg < ringSegments; seg++) {
+      const angle = (seg / ringSegments) * Math.PI * 2
+
+      let x: number, z: number
+      if (ring === 0) {
+        x = 0
+        z = 0
+      } else {
+        x = Math.cos(angle) * ringRadius
+        z = Math.sin(angle) * ringRadius
+      }
+
+      positions.push(x, yOffset, z)
+
+      // UV mapping: radial from center
+      const u = 0.5 + (x / radius) * 0.5
+      const v = 0.5 + (z / radius) * 0.5
+      uvs.push(u, v)
+
+      // Normal pointing up (will be adjusted by curvature)
+      const normalY = 1 / Math.sqrt(1 + curvature * curvature * ringT * ringT)
+      const normalRadial = curvature * ringT * normalY
+      if (ring === 0) {
+        normals.push(0, 1, 0)
+      } else {
+        const nx = -normalRadial * Math.cos(angle)
+        const nz = -normalRadial * Math.sin(angle)
+        normals.push(nx, normalY, nz)
+      }
+    }
+  }
+
+  // Generate indices for triangles
+  let currentVertexOffset = 0
+
+  // Center triangle fan (ring 0 to ring 1)
+  const ring1Segments = segments * 2
+  for (let seg = 0; seg < ring1Segments; seg++) {
+    const nextSeg = (seg + 1) % ring1Segments
+    indices.push(0, 1 + seg, 1 + nextSeg)
+  }
+  currentVertexOffset = 1 + ring1Segments
+
+  // Subsequent rings
+  for (let ring = 1; ring < segments; ring++) {
+    const thisRingSegments = segments * 2
+    const nextRingSegments = segments * 2
+    const thisRingStart = currentVertexOffset - thisRingSegments
+    const nextRingStart = currentVertexOffset
+
+    for (let seg = 0; seg < thisRingSegments; seg++) {
+      const nextSeg = (seg + 1) % thisRingSegments
+
+      const thisA = thisRingStart + seg
+      const thisB = thisRingStart + nextSeg
+      const nextA = nextRingStart + seg
+      const nextB = nextRingStart + nextSeg
+
+      // Two triangles per quad
+      indices.push(thisA, nextA, thisB)
+      indices.push(thisB, nextA, nextB)
+    }
+
+    currentVertexOffset += nextRingSegments
+  }
+
+  // Create the mesh
+  const mesh = new BABYLON.Mesh(name, scene)
+  const vertexData = new BABYLON.VertexData()
+
+  vertexData.positions = positions
+  vertexData.indices = indices
+  vertexData.uvs = uvs
+  vertexData.normals = normals
+
+  vertexData.applyToMesh(mesh)
+
+  // Cloud dome should be visible from below (looking up at clouds)
+  mesh.sideOrientation = BABYLON.Mesh.DOUBLESIDE
+
+  return mesh
+}
+
+/**
+ * Creates an overcast dome texture with horizon darkening gradient.
+ * Unlike patchy clouds, overcast creates a more uniform appearance with
+ * subtle variation and darkening toward the edges to simulate atmospheric depth.
+ *
+ * @param scene - Babylon.js scene
+ * @param textureSize - Size of the texture in pixels
+ * @param seed - Random seed for subtle variation
+ * @returns DynamicTexture with overcast pattern and horizon gradient
+ */
+function createOvercastDomeTexture(
+  scene: BABYLON.Scene,
+  textureSize: number,
+  seed: number = 0
+): BABYLON.DynamicTexture {
+  const texture = new BABYLON.DynamicTexture(
+    `cloud_overcast_dome_${seed}`,
+    textureSize,
+    scene,
+    true
+  )
+  const ctx = texture.getContext() as CanvasRenderingContext2D
+
+  const imageData = ctx.createImageData(textureSize, textureSize)
+  const data = imageData.data
+
+  const centerX = textureSize / 2
+  const centerY = textureSize / 2
+  const maxRadius = textureSize / 2
+
+  for (let y = 0; y < textureSize; y++) {
+    for (let x = 0; x < textureSize; x++) {
+      const idx = (y * textureSize + x) * 4
+
+      // Distance from center (0 at center, 1 at edge)
+      const dx = x - centerX
+      const dy = y - centerY
+      const distance = Math.sqrt(dx * dx + dy * dy) / maxRadius
+
+      // Subtle noise for texture variation (very low amplitude for overcast)
+      const nx = (x / textureSize) * 4 + seed * 100
+      const ny = (y / textureSize) * 4 + seed * 100
+      const noise = fbmNoise(nx, ny, 3, 0.5) * 0.15 // Subtle variation
+
+      // Horizon darkening: darker at edges, lighter at center
+      // This simulates looking through more atmosphere at shallow angles
+      const horizonDarkening = distance * distance * CLOUD_DOME_HORIZON_DARKENING
+
+      // Base gray value (lighter at center, darker at horizon)
+      const baseGray = 0.85 - horizonDarkening + noise * 0.1
+
+      // Clamp to valid range
+      const gray = Math.max(0.3, Math.min(1.0, baseGray))
+
+      // Alpha: gradual fade from center to edge
+      // Start fading early so the dome doesn't block the horizon view
+      // Use smooth curve: fully opaque at center, fully transparent at edge
+      let alpha: number
+      if (distance < 0.3) {
+        // Center area: fully opaque
+        alpha = 1.0
+      } else if (distance < 0.7) {
+        // Gradual fade zone
+        const fadeT = (distance - 0.3) / 0.4
+        alpha = 1.0 - fadeT * fadeT * 0.7 // Quadratic fade, max 70% reduction
+      } else {
+        // Outer edge: rapid fade to transparent
+        const edgeT = (distance - 0.7) / 0.3
+        alpha = 0.3 * (1.0 - edgeT)
+        alpha = Math.max(0, alpha)
+      }
+
+      // Write RGB with gray value, full alpha
+      const colorValue = Math.round(gray * 255)
+      data[idx] = colorValue     // R
+      data[idx + 1] = colorValue // G
+      data[idx + 2] = Math.round(gray * 1.02 * 255) // B slightly higher for cool tint
+      data[idx + 3] = Math.round(alpha * 255)       // A
     }
   }
 
@@ -523,6 +737,7 @@ export function useBabylonWeather(
 
     // Create cloud plane mesh pool (opacity textures are set dynamically based on coverage)
     for (let i = 0; i < CLOUD_POOL_SIZE; i++) {
+      // Create flat plane for FEW/SCT/BKN coverage
       const plane = BABYLON.MeshBuilder.CreatePlane(`cloud_layer_${i}`, {
         size: CLOUD_PLANE_DIAMETER
       }, scene)
@@ -541,7 +756,30 @@ export function useBabylonWeather(
       material.useAlphaFromDiffuseTexture = true  // Use alpha channel from diffuseTexture
       plane.material = material
 
-      cloudMeshPoolRef.current.push({ plane, material })
+      // Create dome mesh for OVC (overcast) coverage
+      const dome = createCloudDomeMesh(`cloud_dome_${i}`, scene)
+      dome.isVisible = false
+
+      // Create dome material with fresnel effect for more realistic overcast appearance
+      const domeMaterial = new BABYLON.StandardMaterial(`cloud_dome_mat_${i}`, scene)
+      domeMaterial.diffuseColor = new BABYLON.Color3(0.75, 0.75, 0.78) // Slightly darker gray
+      domeMaterial.emissiveColor = new BABYLON.Color3(0.35, 0.35, 0.38)
+      domeMaterial.specularColor = new BABYLON.Color3(0, 0, 0)
+      domeMaterial.alpha = 1.0
+      domeMaterial.backFaceCulling = false
+      domeMaterial.disableLighting = true // Use emissive for uniform lighting
+      domeMaterial.useAlphaFromDiffuseTexture = true
+
+      // Fresnel effect: more opaque at glancing angles (horizon), more transparent overhead
+      domeMaterial.opacityFresnelParameters = new BABYLON.FresnelParameters()
+      domeMaterial.opacityFresnelParameters.bias = CLOUD_DOME_FRESNEL_BIAS
+      domeMaterial.opacityFresnelParameters.power = CLOUD_DOME_FRESNEL_POWER
+      domeMaterial.opacityFresnelParameters.leftColor = new BABYLON.Color3(1, 1, 1)  // Opaque at edges
+      domeMaterial.opacityFresnelParameters.rightColor = new BABYLON.Color3(0.7, 0.7, 0.7) // Slightly transparent center
+
+      dome.material = domeMaterial
+
+      cloudMeshPoolRef.current.push({ plane, dome, material, domeMaterial, usingDome: false })
     }
 
     // Create fog dome
@@ -572,11 +810,14 @@ export function useBabylonWeather(
     fogDomeMaterialRef.current = fogDomeMaterial
 
     return () => {
-      // Dispose cloud planes and their individual diffuse textures
+      // Dispose cloud planes, domes, and their individual diffuse textures
       for (const cloudData of cloudMeshPoolRef.current) {
         cloudData.material.diffuseTexture?.dispose()
         cloudData.material?.dispose()
         cloudData.plane.dispose()
+        cloudData.domeMaterial.diffuseTexture?.dispose()
+        cloudData.domeMaterial?.dispose()
+        cloudData.dome.dispose()
       }
       cloudMeshPoolRef.current = []
 
@@ -609,7 +850,9 @@ export function useBabylonWeather(
           rotation: {
             currentSpeed: initialSpeed,
             targetSpeed: initialSpeed
-          }
+          },
+          useDome: false,
+          domeTextureGenerated: false
         })
       }
     }
@@ -871,22 +1114,26 @@ export function useBabylonWeather(
         if (state.currentAlpha < 0.01 && state.targetAlpha === 0) {
           state.active = false
           meshData.plane.isVisible = false
-          // Dispose texture to free GPU memory
+          meshData.dome.isVisible = false
+          // Dispose textures to free GPU memory
           if (meshData.material.diffuseTexture) {
             meshData.material.diffuseTexture.dispose()
             meshData.material.diffuseTexture = null
           }
+          if (meshData.domeMaterial.diffuseTexture) {
+            meshData.domeMaterial.diffuseTexture.dispose()
+            meshData.domeMaterial.diffuseTexture = null
+          }
+          state.domeTextureGenerated = false
           continue
         }
 
         // Skip if not visible at all
         if (state.currentAlpha < 0.01 && !state.active) {
           meshData.plane.isVisible = false
+          meshData.dome.isVisible = false
           continue
         }
-
-        // Layer is visible - animate properties
-        meshData.plane.isVisible = true
 
         // Animate altitude
         if (Math.abs(state.currentAltitude - state.targetAltitude) > 0.1) {
@@ -897,7 +1144,6 @@ export function useBabylonWeather(
             state.currentAltitude = Math.max(state.targetAltitude, state.currentAltitude - altDelta)
           }
         }
-        meshData.plane.position.y = state.currentAltitude
 
         // Animate coverage
         if (Math.abs(state.currentCoverage - state.targetCoverage) > 0.001) {
@@ -909,31 +1155,83 @@ export function useBabylonWeather(
           }
         }
 
-        // Regenerate texture if coverage changed enough (keeps same noise seed for pattern continuity)
-        const coverageChange = Math.abs(state.currentCoverage - state.lastRenderedCoverage)
-        if (coverageChange >= CLOUD_LAYER_COVERAGE_REGEN_THRESHOLD || state.lastRenderedCoverage < 0) {
-          // Dispose old texture
-          if (meshData.material.diffuseTexture) {
-            meshData.material.diffuseTexture.dispose()
+        // Determine if we should use dome or plane based on coverage
+        const shouldUseDome = state.currentCoverage >= CLOUD_DOME_COVERAGE_THRESHOLD
+
+        // Handle geometry switching
+        if (shouldUseDome !== state.useDome) {
+          // Switching geometry type
+          state.useDome = shouldUseDome
+          if (shouldUseDome) {
+            // Switching to dome - need to generate dome texture
+            state.domeTextureGenerated = false
+          } else {
+            // Switching to plane - reset last rendered coverage to force texture regen
+            state.lastRenderedCoverage = -1
           }
-          // Create new texture with same seed (pattern stays, threshold changes)
-          const patchyTexture = createPatchyCloudTexture(
-            scene,
-            CLOUD_NOISE_TEXTURE_SIZE,
-            state.currentCoverage,
-            state.noiseSeed
-          )
-          meshData.material.diffuseTexture = patchyTexture
-          state.lastRenderedCoverage = state.currentCoverage
         }
 
-        // Apply material properties
-        applyMaterialForCoverage(meshData.material, state.currentCoverage, state.currentAlpha)
+        if (shouldUseDome) {
+          // Use dome for OVC (overcast)
+          meshData.plane.isVisible = false
+          meshData.dome.isVisible = true
+          meshData.dome.position.y = state.currentAltitude
 
-        // Animate rotation
-        const rotLerpFactor = Math.min(1, deltaSeconds / CLOUD_ROTATION_TRANSITION_TIME)
-        state.rotation.currentSpeed += (state.rotation.targetSpeed - state.rotation.currentSpeed) * rotLerpFactor
-        meshData.plane.rotation.y += state.rotation.currentSpeed * deltaSeconds
+          // Generate dome texture if needed
+          if (!state.domeTextureGenerated) {
+            if (meshData.domeMaterial.diffuseTexture) {
+              meshData.domeMaterial.diffuseTexture.dispose()
+            }
+            const domeTexture = createOvercastDomeTexture(
+              scene,
+              CLOUD_NOISE_TEXTURE_SIZE,
+              state.noiseSeed
+            )
+            meshData.domeMaterial.diffuseTexture = domeTexture
+            state.domeTextureGenerated = true
+          }
+
+          // Apply dome material properties
+          const opacity = cloudOpacityRef.current
+          meshData.domeMaterial.alpha = state.currentAlpha * opacity
+
+          // Animate dome rotation (slower than plane)
+          const rotLerpFactor = Math.min(1, deltaSeconds / CLOUD_ROTATION_TRANSITION_TIME)
+          state.rotation.currentSpeed += (state.rotation.targetSpeed - state.rotation.currentSpeed) * rotLerpFactor
+          meshData.dome.rotation.y += state.rotation.currentSpeed * deltaSeconds * 0.5 // Slower rotation for dome
+
+        } else {
+          // Use plane for FEW/SCT/BKN
+          meshData.dome.isVisible = false
+          meshData.plane.isVisible = true
+          meshData.plane.position.y = state.currentAltitude
+
+          // Regenerate texture if coverage changed enough (keeps same noise seed for pattern continuity)
+          const coverageChange = Math.abs(state.currentCoverage - state.lastRenderedCoverage)
+          if (coverageChange >= CLOUD_LAYER_COVERAGE_REGEN_THRESHOLD || state.lastRenderedCoverage < 0) {
+            // Dispose old texture
+            if (meshData.material.diffuseTexture) {
+              meshData.material.diffuseTexture.dispose()
+            }
+            // Create new texture with same seed (pattern stays, threshold changes)
+            const patchyTexture = createPatchyCloudTexture(
+              scene,
+              CLOUD_NOISE_TEXTURE_SIZE,
+              state.currentCoverage,
+              state.noiseSeed
+            )
+            meshData.material.diffuseTexture = patchyTexture
+            state.lastRenderedCoverage = state.currentCoverage
+          }
+
+          // Apply material properties
+          applyMaterialForCoverage(meshData.material, state.currentCoverage, state.currentAlpha)
+
+          // Animate rotation
+          const rotLerpFactor = Math.min(1, deltaSeconds / CLOUD_ROTATION_TRANSITION_TIME)
+          state.rotation.currentSpeed += (state.rotation.targetSpeed - state.rotation.currentSpeed) * rotLerpFactor
+          meshData.plane.rotation.y += state.rotation.currentSpeed * deltaSeconds
+        }
       }
     })
 

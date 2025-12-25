@@ -38,17 +38,25 @@ export interface AircraftLabel {
 /**
  * Cloud layer mesh and material data for weather visualization.
  *
- * Each cloud layer is represented as a large horizontal plane mesh positioned
- * at the METAR-reported cloud altitude. The material controls opacity based on
- * cloud coverage (SCT/BKN/OVC).
+ * Each cloud layer can be rendered as either:
+ * - A flat horizontal plane (for FEW/SCT/BKN coverage with gaps)
+ * - A curved dome mesh (for OVC overcast creating realistic sky appearance)
+ *
+ * The active mesh is determined by coverage level - OVC uses dome, others use plane.
  */
 export interface CloudMeshData {
-  /** Horizontal plane mesh representing the cloud layer */
+  /** Horizontal plane mesh for partial cloud coverage (FEW/SCT/BKN) */
   plane: BABYLON.Mesh
-  /** Semi-transparent material with configurable opacity */
+  /** Curved dome mesh for overcast coverage (OVC) - creates realistic overcast sky */
+  dome: BABYLON.Mesh
+  /** Semi-transparent material with configurable opacity (shared or separate) */
   material: BABYLON.StandardMaterial
+  /** Separate material for dome with fresnel effect */
+  domeMaterial: BABYLON.StandardMaterial
   /** Last coverage value used to generate the opacity texture (for caching) */
   lastCoverage?: number
+  /** Whether the dome mesh is currently active (vs plane) */
+  usingDome?: boolean
 }
 
 // ============================================================================

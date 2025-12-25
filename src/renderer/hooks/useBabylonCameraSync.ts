@@ -15,7 +15,9 @@ interface Camera2DState {
 
 interface CloudMeshData {
   plane: BABYLON.Mesh
+  dome: BABYLON.Mesh
   material: BABYLON.StandardMaterial
+  domeMaterial: BABYLON.StandardMaterial
 }
 
 interface UseBabylonCameraSyncOptions {
