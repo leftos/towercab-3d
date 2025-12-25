@@ -82,6 +82,12 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      - name: Run ESLint
+        run: npx eslint src/ --max-warnings 0
+
+      - name: Run TypeScript type check
+        run: npm run typecheck
+
       - name: Build FSLTL converter
         run: npm run build:converter
 
