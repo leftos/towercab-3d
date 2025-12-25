@@ -4,6 +4,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- Modals (Settings, Import, Model Matching) no longer close when clicking outside; use the X button or Escape key to close
+
 ## [0.0.11-alpha] - 2025-12-24
 
 ### Changed

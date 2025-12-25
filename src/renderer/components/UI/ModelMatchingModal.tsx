@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useEffect } from 'react'
 import { useVatsimStore } from '../../stores/vatsimStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { aircraftModelService, type ModelInfo } from '../../services/AircraftModelService'
@@ -100,8 +100,17 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
     return modelInfo.matchType === 'closest'
   }
 
+  // Close modal on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
+
   return (
-    <div className="settings-modal-overlay" onClick={onClose}>
+    <div className="settings-modal-overlay">
       <div className="settings-modal model-matching-modal" onClick={(e) => e.stopPropagation()}>
         <div className="settings-header">
           <h2>Model Matching</h2>

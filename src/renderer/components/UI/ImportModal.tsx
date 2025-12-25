@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from 'react'
+import { useState, useRef, useMemo, useEffect } from 'react'
 import {
   ExportData,
   readImportFile,
@@ -103,8 +103,17 @@ function ImportModal({ onClose, onSuccess, onElectronImport }: ImportModalProps)
     }
   }
 
+  // Close modal on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
+
   return (
-    <div className="settings-modal-overlay" onClick={onClose}>
+    <div className="settings-modal-overlay">
       <div className="settings-modal import-modal" onClick={(e) => e.stopPropagation()}>
         <div className="settings-header">
           <h2>

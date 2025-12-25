@@ -196,6 +196,16 @@ function ControlsBar() {
     setTokenSaved(false)
   }, [cesiumIonToken, showSettings])
 
+  // Close settings modal on Escape key
+  useEffect(() => {
+    if (!showSettings) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowSettings(false)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [showSettings])
+
   // Save token handler - only updates store when button is clicked
   const handleSaveToken = useCallback(() => {
     if (tokenInput.trim() && tokenInput !== cesiumIonToken) {
@@ -651,7 +661,7 @@ function ControlsBar() {
       </div>
 
       {showSettings && (
-        <div className={`settings-modal-overlay ${activeTab === 'graphics' ? 'no-blur' : ''}`} onClick={() => setShowSettings(false)}>
+        <div className={`settings-modal-overlay ${activeTab === 'graphics' ? 'no-blur' : ''}`}>
           <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
             <div className="settings-header">
               <h2>Settings</h2>
