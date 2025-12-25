@@ -12,7 +12,13 @@
     "build:converter": "python scripts/build_converter.py",
     "dev": "tauri dev",
     "build": "npm run typecheck && npm run build:converter && tauri build",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "check": "node scripts/check.js",
+    "check:lint": "node scripts/check.js --lint",
+    "check:types": "node scripts/check.js --types",
+    "check:rust": "node scripts/check.js --rust",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix"
   },
   "keywords": [
     "vatsim",
