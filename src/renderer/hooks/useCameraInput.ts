@@ -202,7 +202,7 @@ export function useCameraInput(
   const moveForward = useViewportStore((state) => state.moveForward)
   const moveRight = useViewportStore((state) => state.moveRight)
   const moveUp = useViewportStore((state) => state.moveUp)
-  const resetView = useViewportStore((state) => state.resetView)
+  const resetToDefault = useViewportStore((state) => state.resetToDefault)
   const resetPosition = useViewportStore((state) => state.resetPosition)
   const stopFollowing = useViewportStore((state) => state.stopFollowing)
   const setActiveViewport = useViewportStore((state) => state.setActiveViewport)
@@ -402,7 +402,7 @@ export function useCameraInput(
           return
         case 'R':
         case 'Home':
-          resetView()
+          resetToDefault()
           return
         case 'o':
         case 'O':
@@ -561,7 +561,7 @@ export function useCameraInput(
     moveRight,
     moveUp,
     toggleViewMode,
-    resetView,
+    resetToDefault,
     resetPosition,
     stopFollowing,
     onBreakTowerFollow

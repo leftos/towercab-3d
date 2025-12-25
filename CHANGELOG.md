@@ -4,6 +4,14 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+## [0.0.11-alpha] - 2025-12-24
+
+### Changed
+- Shift+R and Home keys now reset to your saved default view for the airport instead of hardcoded app defaults
+
+### Fixed
+- FSLTL converter not found in installed builds (was looking in wrong directory)
+
 ## [0.0.10-alpha] - 2025-12-24
 
 ### Changed

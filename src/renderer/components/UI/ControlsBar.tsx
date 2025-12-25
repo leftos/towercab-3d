@@ -1801,7 +1801,7 @@ function ControlsBar() {
                       </div>
                       <div className="shortcut">
                         <span className="keys">Shift+R / Home</span>
-                        <span className="action">Reset everything</span>
+                        <span className="action">Reset to default view</span>
                       </div>
                     </div>
                   </div>

@@ -299,7 +299,9 @@ fn get_converter_path(app: tauri::AppHandle) -> Result<String, String> {
     let dev_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/fsltl_converter.exe");
 
     let possible_paths = [
-        resource_path.join("fsltl_converter.exe"),
+        // Production: bundled resources preserve directory structure
+        resource_path.join("resources").join("fsltl_converter.exe"),
+        // Dev mode: relative to src-tauri/
         dev_path,
     ];
 
@@ -321,9 +323,9 @@ fn start_fsltl_conversion(
     progress_file: String,
 ) -> Result<(), String> {
     // Try multiple locations for the converter:
-    // 1. Resource directory (production build)
+    // 1. Resource directory (production build - bundled resources preserve directory structure)
     // 2. src-tauri/resources (dev mode)
-    // 3. Current working directory
+    // 3. Fallback paths
     let resource_path = app
         .path()
         .resource_dir()
@@ -333,8 +335,11 @@ fn start_fsltl_conversion(
     let dev_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/fsltl_converter.exe");
 
     let possible_paths = [
-        resource_path.join("fsltl_converter.exe"),
+        // Production: bundled resources preserve directory structure
+        resource_path.join("resources").join("fsltl_converter.exe"),
+        // Dev mode: relative to src-tauri/
         dev_path,
+        // Fallback paths
         PathBuf::from("src-tauri/resources/fsltl_converter.exe"),
         PathBuf::from("fsltl_converter.exe"),
     ];
