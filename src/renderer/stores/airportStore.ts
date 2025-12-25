@@ -1,10 +1,12 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Airport } from '../types/airport'
+import type { CustomTowerPosition } from '../types/mod'
 import { getEstimatedTowerHeight } from '../types/airport'
 import { useCameraStore } from './cameraStore'
 import { useViewportStore } from './viewportStore'
 import { useVatsimStore } from './vatsimStore'
+import { modService } from '../services/ModService'
 
 interface AirportStore {
   // Data
@@ -14,6 +16,8 @@ interface AirportStore {
   // Current selection
   currentAirport: Airport | null
   towerHeight: number  // meters above ground
+  customTowerPosition: CustomTowerPosition | null  // Custom tower position from tower mod or tower-positions.json
+  customHeading: number | null  // Custom default heading in degrees, or null to use app default
 
   // Recent airports (persisted)
   recentAirports: string[]  // ICAO codes
@@ -39,6 +43,8 @@ export const useAirportStore = create<AirportStore>()(
       isLoaded: false,
       currentAirport: null,
       towerHeight: 35,
+      customTowerPosition: null,
+      customHeading: null,
       recentAirports: [],
       isAirportSelectorOpen: false,
 
@@ -58,9 +64,38 @@ export const useAirportStore = create<AirportStore>()(
 
         if (airport) {
           const towerHeight = getEstimatedTowerHeight(airport)
+
+          // Check for custom tower position from tower mod or tower-positions.json
+          // Priority: tower mod cabPosition > tower-positions.json
+          let customTowerPosition: CustomTowerPosition | null = null
+          let customHeading: number | null = null
+
+          // Check tower mod first (higher priority)
+          const towerMod = modService.getTowerModel(icao)
+          if (towerMod?.manifest.cabPosition) {
+            customTowerPosition = {
+              lat: towerMod.manifest.cabPosition.lat,
+              lon: towerMod.manifest.cabPosition.lon,
+              aglHeight: towerMod.manifest.cabPosition.aglHeight,
+              heading: towerMod.manifest.cabHeading ?? 0
+            }
+            customHeading = towerMod.manifest.cabHeading ?? 0
+          }
+
+          // Fall back to tower-positions.json if no tower mod position
+          if (!customTowerPosition) {
+            const customPos = modService.getCustomTowerPosition(icao)
+            if (customPos) {
+              customTowerPosition = customPos
+              customHeading = customPos.heading ?? 0
+            }
+          }
+
           set({
             currentAirport: airport,
             towerHeight,
+            customTowerPosition,
+            customHeading,
             isAirportSelectorOpen: false
           })
           addToRecent(icao)

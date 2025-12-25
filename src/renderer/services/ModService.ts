@@ -4,7 +4,8 @@ import type {
   AircraftModManifest,
   TowerModManifest,
   LoadedMod,
-  ModRegistry
+  ModRegistry,
+  CustomTowerPosition
 } from '../types/mod'
 import { isSupportedModelFormat, getModelFormat, SUPPORTED_MODEL_FORMATS } from '../types/mod'
 import { modApi, isTauri } from '../utils/tauriApi'
@@ -15,6 +16,7 @@ class ModService {
     aircraft: new Map(),
     towers: new Map()
   }
+  private customTowerPositions: Map<string, CustomTowerPosition> = new Map()
   private loaded = false
 
   /**
@@ -39,6 +41,9 @@ class ModService {
 
       // Load tower mods
       await this.loadModsOfType('towers')
+
+      // Load custom tower positions from tower-positions.json
+      await this.loadCustomTowerPositions()
 
       this.loaded = true
     } catch (error) {
@@ -98,6 +103,64 @@ class ModService {
 
     const modelUrl = `${basePath}/${manifest.modelFile}`
     this.registerTowerMod(manifest, modelUrl, basePath)
+  }
+
+  /**
+   * Load custom tower positions from tower-positions.json
+   */
+  private async loadCustomTowerPositions(): Promise<void> {
+    try {
+      const json = await modApi.readTowerPositions()
+
+      // json is an object mapping ICAO codes to CustomTowerPosition objects
+      for (const [icao, position] of Object.entries(json)) {
+        const customPos = position as CustomTowerPosition
+
+        // Validate required fields
+        if (typeof customPos.lat === 'number' &&
+            typeof customPos.lon === 'number' &&
+            typeof customPos.aglHeight === 'number') {
+          const position: CustomTowerPosition = {
+            lat: customPos.lat,
+            lon: customPos.lon,
+            aglHeight: customPos.aglHeight,
+            heading: customPos.heading ?? 0  // Default to 0 if not specified
+          }
+
+          // Validate and preserve optional positionOffset
+          if (customPos.positionOffset) {
+            if (typeof customPos.positionOffset.latMeters === 'number' &&
+                typeof customPos.positionOffset.lonMeters === 'number') {
+              position.positionOffset = {
+                latMeters: customPos.positionOffset.latMeters,
+                lonMeters: customPos.positionOffset.lonMeters
+              }
+            } else {
+              console.warn(`Invalid positionOffset for ${icao}: latMeters and lonMeters must be numbers`)
+            }
+          }
+
+          this.customTowerPositions.set(icao.toUpperCase(), position)
+        } else {
+          console.warn(`Invalid tower position for ${icao}: missing required fields (lat, lon, aglHeight)`)
+        }
+      }
+
+      const count = this.customTowerPositions.size
+      if (count > 0) {
+        console.log(`Loaded ${count} custom tower positions from tower-positions.json`)
+      }
+    } catch (error) {
+      console.warn('Failed to load tower-positions.json:', error)
+      // Not a fatal error - app continues with defaults
+    }
+  }
+
+  /**
+   * Get custom tower position for a specific airport
+   */
+  getCustomTowerPosition(icao: string): CustomTowerPosition | undefined {
+    return this.customTowerPositions.get(icao.toUpperCase())
   }
 
   /**

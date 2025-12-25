@@ -129,8 +129,62 @@ Create a `manifest.json` file in your tower mod folder:
 | `modelFile` | string | Yes | Path to the 3D model file |
 | `airports` | string[] | Yes | ICAO airport codes this tower applies to |
 | `scale` | number | Yes | Scale factor |
-| `heightOffset` | number | No | Additional height offset in meters |
-| `positionOffset` | object | No | Position offset in degrees lat/lon |
+| `heightOffset` | number | No | Additional height offset in meters (for 3D model) |
+| `position` | object | No | Absolute lat/lon for 3D model placement |
+| `positionOffset` | object | No | Fine-tuning position offset in meters (latMeters/lonMeters, applied to `position` or airport center) |
+| `cabPosition` | object | No | Camera/tower cab position (lat, lon, aglHeight) - sets default viewing position |
+| `cabHeading` | number | No | Default camera heading in degrees (0=north, 90=east) |
+
+### Position Configuration
+
+Tower mods can now specify custom positions in two ways:
+
+**Using absolute position (recommended):**
+```json
+{
+  "position": {
+    "lat": 40.6413,
+    "lon": -73.7781
+  },
+  "positionOffset": {
+    "latMeters": 5.5,
+    "lonMeters": -2.3
+  }
+}
+```
+The `positionOffset` (in meters) is applied on top of the absolute position for precise fine-tuning. This provides meter-level accuracy that lat/lon degrees cannot offer.
+
+**Using offset only (legacy, still supported):**
+```json
+{
+  "positionOffset": {
+    "latMeters": 10,
+    "lonMeters": 5
+  }
+}
+```
+The offset is applied to the airport center location.
+
+### Camera/Cab Position Configuration
+
+You can now specify where the tower cab (camera viewpoint) should be positioned independently of the 3D model:
+
+```json
+{
+  "cabPosition": {
+    "lat": 40.6413,
+    "lon": -73.7781,
+    "aglHeight": 97
+  },
+  "cabHeading": 45
+}
+```
+
+- `cabPosition.lat/lon`: Camera position (separate from 3D model position)
+- `cabPosition.aglHeight`: Height above ground level in meters
+- `cabHeading`: Default camera heading (0=north, 90=east, etc.)
+
+When these are set, they become the default camera position for that airport (used on first visit or when pressing Shift+Home).
 
 ### Model Guidelines
 
@@ -138,6 +192,113 @@ Create a `manifest.json` file in your tower mod folder:
 2. **Origin**: Place at ground level, center of the tower base
 3. **Scale**: Model should be in meters
 4. **Detail**: Include cab windows and basic structure
+
+## Custom Tower Positions (tower-positions.json)
+
+Instead of creating a full tower mod, you can define custom camera positions for airports using a simple JSON file. This is useful for setting up preferred viewing angles without needing a 3D model.
+
+### File Location and Format
+
+Create a `tower-positions.json` file in the `mods/` directory:
+
+```
+mods/
+├── tower-positions.json
+└── towers/
+    └── ...
+```
+
+### tower-positions.json Format
+
+```json
+{
+  "KJFK": {
+    "lat": 40.6413,
+    "lon": -73.7781,
+    "aglHeight": 97,
+    "heading": 45
+  },
+  "KLAX": {
+    "lat": 33.9416,
+    "lon": -118.4085,
+    "aglHeight": 84,
+    "heading": 270,
+    "positionOffset": {
+      "latMeters": 2.5,
+      "lonMeters": -1.8
+    }
+  },
+  "EGLL": {
+    "lat": 51.4700,
+    "lon": -0.4543,
+    "aglHeight": 87
+  }
+}
+```
+
+### Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `lat` | number | Yes | Latitude of the tower cab position |
+| `lon` | number | Yes | Longitude of the tower cab position |
+| `aglHeight` | number | Yes | Height above ground level in meters |
+| `heading` | number | No | Default camera heading in degrees (0=north, 90=east, 180=south, 270=west). Defaults to 0 if omitted |
+| `positionOffset` | object | No | Fine-tuning position offset in meters (latMeters/lonMeters) for precise adjustment |
+
+### When Custom Positions Are Applied
+
+Custom positions from `tower-positions.json` are applied as "app defaults" for the camera viewpoint. They are used:
+
+1. **First visit to airport**: If you've never visited an airport before, the custom position is used
+2. **Shift+Home reset**: When you press Shift+Home (reset to app defaults), the custom position is restored
+3. **User data takes priority**: If you've saved a custom default or have auto-saved position data for the airport, those take precedence
+
+### Priority Order
+
+For camera position, the system uses this priority (highest to lowest):
+
+1. **User-saved default** - Explicitly saved by clicking "Save" in the app
+2. **Last position** - Auto-saved every 5 seconds
+3. **Tower mod cabPosition** - From a tower mod manifest.json
+4. **tower-positions.json** - From this file
+5. **Hardcoded app default** - Built-in values
+
+### Examples
+
+**Setting up for multiple US airports:**
+
+```json
+{
+  "KJFK": {
+    "lat": 40.6413,
+    "lon": -73.7781,
+    "aglHeight": 97,
+    "heading": 0
+  },
+  "KLAX": {
+    "lat": 33.9416,
+    "lon": -118.4085,
+    "aglHeight": 84,
+    "heading": 270
+  },
+  "KORD": {
+    "lat": 41.9742,
+    "lon": -87.9073,
+    "aglHeight": 81,
+    "heading": 180
+  }
+}
+```
+
+**Determining heading values:**
+
+- `0` or `360` = North (default)
+- `90` = East
+- `180` = South
+- `270` = West
+
+Use values between 0-360 for intermediate directions (e.g., `45` for northeast).
 
 ## Creating Models
 
@@ -268,7 +429,7 @@ manifest.json:
 }
 ```
 
-### Tower Mod with Position Offset
+### Tower Mod with Custom Position
 
 ```
 mods/towers/KLAX/
@@ -286,12 +447,24 @@ manifest.json:
   "airports": ["KLAX"],
   "scale": 1.0,
   "heightOffset": 5,
+  "position": {
+    "lat": 33.9416,
+    "lon": -118.4085
+  },
   "positionOffset": {
-    "lat": 0.0001,
-    "lon": -0.0002
-  }
+    "latMeters": 2.5,
+    "lonMeters": -1.8
+  },
+  "cabPosition": {
+    "lat": 33.9416,
+    "lon": -118.4085,
+    "aglHeight": 84
+  },
+  "cabHeading": 270
 }
 ```
+
+The `position` field specifies where the 3D model renders (in lat/lon), `positionOffset` provides meter-level fine-tuning, and `cabPosition` specifies where the camera views from. The `cabHeading` sets the initial viewing direction.
 
 ### SketchUp Tower Mod (Collada)
 

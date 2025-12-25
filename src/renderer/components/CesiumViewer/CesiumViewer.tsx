@@ -73,6 +73,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   const cesiumIonToken = useSettingsStore((state) => state.cesium.cesiumIonToken)
   const currentAirport = useAirportStore((state) => state.currentAirport)
   const towerHeight = useAirportStore((state) => state.towerHeight)
+  const customTowerPosition = useAirportStore((state) => state.customTowerPosition)
   const datablockMode = useSettingsStore((state) => state.aircraft.datablockMode)
   const terrainQuality = useSettingsStore((state) => state.cesium.terrainQuality)
   const show3DBuildings = useSettingsStore((state) => state.cesium.show3DBuildings)
@@ -175,7 +176,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     isOrbitModeWithoutAirport = true
   } else if (currentAirport) {
     // Normal mode: use tower position
-    const towerPos = getTowerPosition(currentAirport, towerHeight)
+    const towerPos = getTowerPosition(currentAirport, towerHeight, customTowerPosition ?? undefined)
     refLat = towerPos.latitude
     refLon = towerPos.longitude
     groundElevationMeters = currentAirport.elevation ? currentAirport.elevation * 0.3048 : 0
@@ -443,7 +444,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
 
     if (timeMode === 'fixed' && currentAirport) {
       // Calculate the specified local time at the tower location
-      const towerPos = getTowerPosition(currentAirport, towerHeight)
+      const towerPos = getTowerPosition(currentAirport, towerHeight, customTowerPosition ?? undefined)
       const now = new Date()
 
       // Start with UTC midnight of today
@@ -527,7 +528,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
 
     // For airport mode, calculate terrain offset at tower position
     if (currentAirport) {
-      const towerPos = getTowerPosition(currentAirport, towerHeight)
+      const towerPos = getTowerPosition(currentAirport, towerHeight, customTowerPosition ?? undefined)
       const groundElevationMsl = currentAirport.elevation ? currentAirport.elevation * 0.3048 : 0
 
       // Sample terrain to calculate offset between MSL and actual terrain height
@@ -578,7 +579,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
 
     // If we have an airport, use tower position as root
     if (currentAirport) {
-      const towerPos = getTowerPosition(currentAirport, towerHeight)
+      const towerPos = getTowerPosition(currentAirport, towerHeight, customTowerPosition ?? undefined)
       babylonOverlay.setupRootNode(towerPos.latitude, towerPos.longitude, towerPos.height)
       rootNodeSetupRef.current = true
 

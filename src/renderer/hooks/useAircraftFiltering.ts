@@ -263,6 +263,7 @@ export function useAircraftFiltering(
   const maxAircraftDisplay = useSettingsStore((state) => state.aircraft.maxAircraftDisplay)
 
   const towerHeight = useAirportStore((state) => state.towerHeight)
+  const customTowerPosition = useAirportStore((state) => state.customTowerPosition)
 
   // Get panel filter states
   const searchQuery = useAircraftFilterStore((state) => state.searchQuery)
@@ -306,7 +307,7 @@ export function useAircraftFiltering(
       isOrbitModeWithoutAirport = true
     } else if (currentAirport) {
       // Normal mode: use tower position
-      const towerPos = getTowerPosition(currentAirport, towerHeight)
+      const towerPos = getTowerPosition(currentAirport, towerHeight, customTowerPosition ?? undefined)
       refLat = towerPos.latitude
       refLon = towerPos.longitude
       refElevationMeters = currentAirport.elevation ? currentAirport.elevation * 0.3048 : 0

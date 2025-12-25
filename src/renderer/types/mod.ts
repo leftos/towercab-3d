@@ -41,12 +41,43 @@ export interface TowerModManifest {
   modelFile: string  // relative path to model file (.glb, .gltf, .obj, .dae, .stl)
   airports: string[]  // ICAO codes this tower applies to, e.g., ["KJFK", "KLAX"]
   scale: number  // scale factor for the model
-  heightOffset?: number  // additional height offset in meters
+  heightOffset?: number  // additional height offset in meters (for 3D model)
+  position?: {
+    lat: number  // absolute latitude for 3D model position
+    lon: number  // absolute longitude for 3D model position
+  }
   positionOffset?: {
-    lat: number  // offset in degrees
-    lon: number  // offset in degrees
+    latMeters: number  // offset in meters (applied to latitude)
+    lonMeters: number  // offset in meters (applied to longitude)
+  }
+  // Camera/cab position override (optional) - allows specifying where the tower cab viewpoint should be
+  cabPosition?: {
+    lat: number  // latitude of camera position
+    lon: number  // longitude of camera position
+    aglHeight: number  // height above ground level in meters
+  }
+  cabHeading?: number  // default camera heading in degrees (0=north, 90=east)
+}
+
+/**
+ * Custom tower position from tower-positions.json
+ * Allows users to define custom camera positions for airports
+ */
+export interface CustomTowerPosition {
+  lat: number  // latitude of camera position
+  lon: number  // longitude of camera position
+  aglHeight: number  // height above ground level in meters
+  heading?: number  // default camera heading in degrees (0=north, 90=east), defaults to 0
+  positionOffset?: {
+    latMeters: number  // fine-tuning offset in meters (applied to latitude)
+    lonMeters: number  // fine-tuning offset in meters (applied to longitude)
   }
 }
+
+/**
+ * Map of ICAO codes to custom tower positions from tower-positions.json
+ */
+export type CustomTowerPositions = Record<string, CustomTowerPosition>
 
 export interface LoadedMod<T extends AircraftModManifest | TowerModManifest> {
   manifest: T
@@ -108,5 +139,6 @@ export const DEFAULT_AIRCRAFT_MOD: Partial<AircraftModManifest> = {
 export const DEFAULT_TOWER_MOD: Partial<TowerModManifest> = {
   scale: 1.0,
   heightOffset: 0,
-  positionOffset: { lat: 0, lon: 0 }
+  positionOffset: { latMeters: 0, lonMeters: 0 },
+  cabHeading: 0  // default to north
 }

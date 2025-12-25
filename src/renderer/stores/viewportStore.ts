@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist, subscribeWithSelector } from 'zustand/middleware'
 import type { ViewMode, FollowMode, ViewportLayout, ViewportCameraState, Viewport, CameraBookmark } from '../types'
 import { useVatsimStore } from './vatsimStore'
+import { useAirportStore } from './airportStore'
 import {
   HEADING_DEFAULT,
   PITCH_DEFAULT,
@@ -42,9 +43,9 @@ interface AirportViewportConfig {
   bookmarks?: { [slot: number]: CameraBookmark }
 }
 
-const createDefaultCameraState = (): ViewportCameraState => ({
+const createDefaultCameraState = (customHeading?: number): ViewportCameraState => ({
   viewMode: '3d',
-  heading: HEADING_DEFAULT,
+  heading: customHeading ?? HEADING_DEFAULT,
   pitch: PITCH_DEFAULT,
   fov: FOV_DEFAULT,
   positionOffsetX: 0,
@@ -64,10 +65,10 @@ const createDefaultCameraState = (): ViewportCameraState => ({
 const MAIN_VIEWPORT_ID = 'main'
 
 // Create main viewport (full screen)
-const createMainViewport = (): Viewport => ({
+const createMainViewport = (customHeading?: number): Viewport => ({
   id: MAIN_VIEWPORT_ID,
   layout: { x: 0, y: 0, width: 1, height: 1, zIndex: 0 },
-  cameraState: createDefaultCameraState(),
+  cameraState: createDefaultCameraState(customHeading),
   label: 'Main'
 })
 
@@ -794,7 +795,9 @@ export const useViewportStore = create<ViewportStore>()(
               })
             } else {
               // Create fresh main viewport for new airport
-              const mainViewport = createMainViewport()
+              // Apply custom heading from tower mod or tower-positions.json if available
+              const customHeading = useAirportStore.getState().customHeading ?? undefined
+              const mainViewport = createMainViewport(customHeading)
               set({
                 currentAirportIcao: normalizedIcao,
                 viewports: [mainViewport],
@@ -860,7 +863,9 @@ export const useViewportStore = create<ViewportStore>()(
 
           resetToAppDefault: () => {
             // Always reset to app defaults, ignoring any user-saved default
-            const mainViewport = createMainViewport()
+            // But use custom heading if available from tower mod or tower-positions.json
+            const customHeading = useAirportStore.getState().customHeading ?? undefined
+            const mainViewport = createMainViewport(customHeading)
             set({
               viewports: [mainViewport],
               activeViewportId: mainViewport.id

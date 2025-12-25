@@ -146,6 +146,29 @@ fn list_vmr_files(app: tauri::AppHandle) -> Result<Vec<String>, String> {
     Ok(vmr_files)
 }
 
+/// Read custom tower positions from mods/tower-positions.json
+/// Returns the parsed JSON as a serde_json::Value
+#[tauri::command]
+fn read_tower_positions(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    let resource_path = app
+        .path()
+        .resource_dir()
+        .map_err(|e| format!("Failed to get resource directory: {}", e))?;
+
+    let tower_positions_path = resource_path.join("mods").join("tower-positions.json");
+
+    // If file doesn't exist, return empty object
+    if !tower_positions_path.exists() {
+        return Ok(serde_json::json!({}));
+    }
+
+    let content = fs::read_to_string(&tower_positions_path)
+        .map_err(|e| format!("Failed to read tower-positions.json: {}", e))?;
+
+    serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse tower-positions.json: {}", e))
+}
+
 /// Fetch a URL and return the response as text (bypasses CORS)
 #[tauri::command]
 async fn fetch_url(url: String) -> Result<String, String> {
@@ -635,6 +658,7 @@ pub fn run() {
             list_mod_directories,
             read_mod_manifest,
             list_vmr_files,
+            read_tower_positions,
             fetch_url,
             // FSLTL commands
             pick_folder,

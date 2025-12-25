@@ -5,6 +5,17 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Custom tower cab positions: Define default camera positions for airports via mods/tower-positions.json
+  - Specify latitude, longitude, height above ground, and initial heading per airport
+  - Tower-positions.json provides "app default" positions (used on first airport visit or Shift+Home reset)
+  - Optional meter-level position fine-tuning with positionOffset (latMeters/lonMeters)
+- Tower mod manifest enhancements (cabPosition and cabHeading fields)
+  - Tower mods can now specify camera position independently of 3D model placement
+  - Meter-level position offset support (latMeters/lonMeters) for precision adjustments
+  - cabPosition and cabHeading become the default when set (higher priority than tower-positions.json)
+- Tower mod manifest position field improvements
+  - Added absolute position field for 3D model placement (more intuitive than offset-only)
+  - positionOffset now uses meter units (latMeters/lonMeters) instead of degrees for fine-tuning precision
 - VMR (Visual Model Rules) file support for custom aircraft model matching
   - Define custom model rules in XML format (.vmr files) placed in mods/ folder
   - Support for airline-specific liveries using CallsignPrefix attribute

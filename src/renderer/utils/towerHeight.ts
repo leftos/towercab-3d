@@ -30,20 +30,48 @@ export function getTowerHeight(airport: Airport): number {
 
 /**
  * Get tower position (lat, lon, height in meters MSL)
+ * @param airport - Airport data
+ * @param customHeight - Optional height in meters above ground level (AGL). If provided, used instead of estimated height.
+ * @param customPosition - Optional custom position {lat, lon, aglHeight, positionOffset?}. If provided, used instead of airport center.
+ * @returns Tower position in {latitude, longitude, height} where height is MSL (meters)
  */
 export function getTowerPosition(
   airport: Airport,
-  customHeight?: number
+  customHeight?: number,
+  customPosition?: { lat: number; lon: number; aglHeight: number; positionOffset?: { latMeters: number; lonMeters: number } }
 ): { latitude: number; longitude: number; height: number } {
-  const towerHeight = customHeight ?? getTowerHeight(airport)
+  // Use custom position if provided, otherwise use airport center
+  let latitude = customPosition?.lat ?? airport.lat
+  let longitude = customPosition?.lon ?? airport.lon
 
-  // Convert airport elevation from feet to meters and add tower height
+  // Apply meter-based position offset if provided
+  if (customPosition?.positionOffset) {
+    // Convert meter offset to degrees (1 degree of latitude ≈ 111,320 meters)
+    const metersPerDegreeLat = 111320
+    latitude += customPosition.positionOffset.latMeters / metersPerDegreeLat
+
+    // For longitude, account for latitude (cos factor)
+    const metersPerDegreeLon = metersPerDegreeLat * Math.cos(latitude * (Math.PI / 180))
+    longitude += customPosition.positionOffset.lonMeters / metersPerDegreeLon
+  }
+
+  // Determine AGL height: custom position's aglHeight, custom height param, or estimated
+  let aglHeight: number
+  if (customPosition?.aglHeight !== undefined) {
+    aglHeight = customPosition.aglHeight
+  } else if (customHeight !== undefined) {
+    aglHeight = customHeight
+  } else {
+    aglHeight = getTowerHeight(airport)
+  }
+
+  // Convert airport elevation from feet to meters and add AGL height
   const elevationMeters = airport.elevation * 0.3048
-  const totalHeight = elevationMeters + towerHeight
+  const totalHeight = elevationMeters + aglHeight
 
   return {
-    latitude: airport.lat,
-    longitude: airport.lon,
+    latitude,
+    longitude,
     height: totalHeight
   }
 }

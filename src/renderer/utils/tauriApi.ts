@@ -54,7 +54,15 @@ export const modApi = {
    * Returns manifest data or null if file doesn't exist or is invalid
    */
   loadModelManifest: <T = unknown>(modelPath: string): Promise<T | null> =>
-    invoke<T | null>('load_model_manifest', { modelPath })
+    invoke<T | null>('load_model_manifest', { modelPath }),
+
+  /**
+   * Read custom tower positions from mods/tower-positions.json
+   * Returns an object mapping ICAO codes to CustomTowerPosition objects
+   * Returns empty object if file doesn't exist
+   */
+  readTowerPositions: (): Promise<Record<string, unknown>> =>
+    invoke<Record<string, unknown>>('read_tower_positions')
 }
 
 /**

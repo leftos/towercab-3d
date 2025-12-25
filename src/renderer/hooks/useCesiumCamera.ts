@@ -198,10 +198,11 @@ export function useCesiumCamera(
   useCameraInput(viewer, viewportId, { onBreakTowerFollow: handleBreakTowerFollow })
 
   // Get tower position
+  const customTowerPosition = useAirportStore((state) => state.customTowerPosition)
   const getTowerPos = useCallback(() => {
     if (!currentAirport) return null
-    return getTowerPosition(currentAirport, towerHeight)
-  }, [currentAirport, towerHeight])
+    return getTowerPosition(currentAirport, towerHeight, customTowerPosition ?? undefined)
+  }, [currentAirport, towerHeight, customTowerPosition])
 
   /**
    * Clamp position to ensure camera stays above terrain
@@ -399,7 +400,7 @@ export function useCesiumCamera(
           const airportState = useAirportStore.getState()
           if (!airportState.currentAirport) return
 
-          const towerPos = getTowerPosition(airportState.currentAirport, airportState.towerHeight)
+          const towerPos = getTowerPosition(airportState.currentAirport, airportState.towerHeight, airportState.customTowerPosition ?? undefined)
           const offsetPos = applyPositionOffsets(
             { latitude: towerPos.latitude, longitude: towerPos.longitude, height: towerPos.height },
             { x: state.positionOffsetX, y: state.positionOffsetY, z: state.positionOffsetZ }
