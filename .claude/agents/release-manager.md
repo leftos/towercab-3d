@@ -82,7 +82,7 @@ You are an expert Release Engineer specializing in software release management, 
 - All three version files MUST have matching version numbers
 - The tag format is `vX.X.X-alpha` (with 'v' prefix)
 - After pushing, remind the user that GitHub Actions will handle building the installer
-- **Pre-release Detection**: The release workflow automatically marks releases as pre-release if the version contains `-alpha`, `-beta`, or `-RC` suffixes
+- **Pre-release Handling**: Releases are NOT marked as pre-releases by default (this breaks the auto-updater). If the user explicitly requests a pre-release, after pushing the tag, wait for the GitHub Actions workflow to complete, then mark the release as pre-release using: `gh api repos/leftos/towercab-3d/releases/latest -X PATCH -f prerelease=true`
 
 ## Error Handling
 
