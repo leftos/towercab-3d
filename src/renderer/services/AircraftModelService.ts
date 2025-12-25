@@ -8,11 +8,16 @@
  * Model Matching Priority:
  * 1. Custom VMR rules (user mods) - airline+type or type-only
  * 2. FSLTL models with exact airline+type match
- * 3. FSLTL B738 base model (generic fallback - shape matters more than livery)
- * 4. Built-in models with exact/mapped match (only if no FSLTL B738)
- * 5. Built-in models with direct match (lowercase)
- * 6. Built-in models with closest size match (scaled)
- * 7. Fallback to built-in B738
+ * 3. FSLTL closest airline model (scaled) - same airline, different but similar type
+ * 4. Built-in models with exact/mapped match
+ * 5. Built-in models with closest size match (scaled)
+ * 6. FSLTL closest base model (scaled) - any FSLTL model close in size
+ * 7. FSLTL B738 base model (generic fallback)
+ * 8. Fallback to built-in B738
+ *
+ * The goal is to prioritize visual similarity (shape + size) over generic fallbacks.
+ * For airlines, we prefer a scaled version of their actual livery over a generic B738.
+ * For GA aircraft, we prefer a scaled small aircraft over a giant airliner.
  *
  * Models from Flightradar24/fr24-3d-models (GPL-2.0, originally from FlightGear)
  */
@@ -524,24 +529,24 @@ class AircraftModelServiceClass {
       }
     }
 
-    // 3. Try FSLTL B738 base model as generic fallback
-    // Shape/size is more important than airline livery, so prefer a generic B738
-    // over an airline-specific model of a completely different aircraft type
-    const fsltlB738Fallback = fsltlService.getB738Fallback()
-    if (fsltlB738Fallback) {
-      const modelUrl = convertFileSrc(fsltlB738Fallback.modelPath)
-      return {
-        modelUrl,
-        scale: uniformScale,
-        matchType: 'fallback',
-        matchedModel: fsltlB738Fallback.modelName,
-        dimensions: { wingspan: 35.78, length: 39.47 }, // B738 dimensions
-        rotationOffset: 180,
-        hasAnimations: fsltlB738Fallback.hasAnimations
+    // 3. Try FSLTL closest airline model (scaled) - same airline, different but similar type
+    // E.g., AAL flying B753 but we only have AAL B738 - scale that instead of generic B738
+    if (airlineCode) {
+      const closestAirlineModel = fsltlService.findClosestModelForAirline(normalized, airlineCode)
+      if (closestAirlineModel) {
+        const targetDims = aircraftDimensionsService.getDimensions(normalized)
+        const modelUrl = convertFileSrc(closestAirlineModel.model.modelPath)
+        return {
+          modelUrl,
+          scale: closestAirlineModel.scale,
+          matchType: 'closest',
+          matchedModel: closestAirlineModel.model.modelName,
+          dimensions: targetDims ?? { wingspan: 35.78, length: 39.47 },
+          rotationOffset: 180,
+          hasAnimations: closestAirlineModel.model.hasAnimations
+        }
       }
     }
-
-    // === Built-in models (only used when no FSLTL B738 available) ===
 
     // 4. Check explicit mapping for built-in models
     const mappedModel = TYPE_TO_MODEL[normalized]
@@ -567,7 +572,7 @@ class AircraftModelServiceClass {
       }
     }
 
-    // 6. No direct model - try to find closest match by dimensions
+    // 6. No direct built-in model - try to find closest built-in match by dimensions
     const targetDims = aircraftDimensionsService.getDimensions(normalized)
     if (targetDims && targetDims.wingspan && targetDims.length) {
       const { model, scale } = findClosestModel(targetDims.wingspan, targetDims.length)
@@ -581,7 +586,38 @@ class AircraftModelServiceClass {
       }
     }
 
-    // 7. Final fallback - use B738 built-in at 1:1 scale
+    // 7. Try FSLTL closest base model (scaled) - any FSLTL model close in size
+    // This helps GA aircraft when we have FSLTL models but no built-in small planes
+    const closestFsltlModel = fsltlService.findClosestModel(normalized)
+    if (closestFsltlModel) {
+      const modelUrl = convertFileSrc(closestFsltlModel.model.modelPath)
+      return {
+        modelUrl,
+        scale: closestFsltlModel.scale,
+        matchType: 'closest',
+        matchedModel: closestFsltlModel.model.modelName,
+        dimensions: targetDims ?? { wingspan: 35.78, length: 39.47 },
+        rotationOffset: 180,
+        hasAnimations: closestFsltlModel.model.hasAnimations
+      }
+    }
+
+    // 8. Try FSLTL B738 base model as generic fallback
+    const fsltlB738Fallback = fsltlService.getB738Fallback()
+    if (fsltlB738Fallback) {
+      const modelUrl = convertFileSrc(fsltlB738Fallback.modelPath)
+      return {
+        modelUrl,
+        scale: uniformScale,
+        matchType: 'fallback',
+        matchedModel: fsltlB738Fallback.modelName,
+        dimensions: { wingspan: 35.78, length: 39.47 }, // B738 dimensions
+        rotationOffset: 180,
+        hasAnimations: fsltlB738Fallback.hasAnimations
+      }
+    }
+
+    // 9. Final fallback - use B738 built-in at 1:1 scale
     const finalFallbackDims = this.getModelDimensions(FALLBACK_MODEL)
     return {
       modelUrl: `./${FALLBACK_MODEL}.glb`,

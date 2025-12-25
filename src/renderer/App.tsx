@@ -114,15 +114,15 @@ function App() {
         try {
           // Use saved output path or get default
           let outputPath = fsltlOutputPath
+          console.log(`[App] FSLTL outputPath from settings: ${outputPath}`)
           if (!outputPath) {
             const [defaultPath] = await fsltlApi.getFsltlDefaultOutputPath()
             outputPath = defaultPath
+            console.log(`[App] Using default FSLTL path: ${outputPath}`)
           }
           if (outputPath) {
             const scannedCount = await fsltlService.scanAndRebuildRegistry(outputPath)
-            if (scannedCount > 0) {
-              console.log(`[App] Loaded ${scannedCount} FSLTL models from ${outputPath}`)
-            }
+            console.log(`[App] Scanned ${scannedCount} FSLTL models from ${outputPath}`)
           }
         } catch (err) {
           console.warn('[App] Failed to scan FSLTL models:', err)

@@ -5,6 +5,10 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Improved aircraft model matching for airlines with limited liveries
+  - Airlines now use their closest available aircraft type when an exact match doesn't exist (e.g., FedEx B738 uses FedEx B738F with scaling)
+  - Freighter variant dimensions now resolve correctly (B738F uses B738 dimensions)
+  - GA aircraft now match to similar-sized models with scaling instead of falling back to B738
 - Follow mode UI now displays current zoom level (tower mode) or distance (orbit mode)
   - Shows numeric value with valid range for quick reference
   - Updated hints show "O to switch" between follow modes

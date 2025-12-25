@@ -32,6 +32,7 @@ import type {
   FSLTLAirlineInfo,
   FSLTLTypeInfo
 } from '../types/fsltl'
+import { aircraftDimensionsService } from './AircraftDimensionsService'
 import {
   createEmptyRegistry,
   registryFromJSON,
@@ -393,31 +394,28 @@ class FSLTLServiceClass {
     }
 
     // 2. Try VMR default rule (base livery for this type)
-    const defaultRule = this.defaultRules.get(normalizedType)
-    if (defaultRule) {
-      // Look up base livery in registry
-      if (modelsForType) {
-        const baseMatch = modelsForType.find(m => !m.airlineCode)
-        if (baseMatch) {
-          this.lastMatchVariationName = defaultRule.modelNames[0]
-          return baseMatch
+    // BUT: If an airline code was provided, skip base livery here - let the caller
+    // try closest-match first to find an airline-specific model of similar size
+    // (e.g., FDX flying B738 should try FDX's B738F before falling back to generic B738)
+    if (!normalizedAirline) {
+      const defaultRule = this.defaultRules.get(normalizedType)
+      if (defaultRule) {
+        // Look up base livery in registry
+        if (modelsForType) {
+          const baseMatch = modelsForType.find(m => !m.airlineCode)
+          if (baseMatch) {
+            this.lastMatchVariationName = defaultRule.modelNames[0]
+            return baseMatch
+          }
         }
       }
     }
 
-    // 3. Fallback: Direct registry lookup by type
+    // 3. Fallback: Direct registry lookup by type (only when no airline specified)
     // This handles cases where models exist but VMR wasn't loaded
     // or VMR doesn't have rules for this exact combination
-    if (modelsForType) {
-      // First try airline match (even without VMR rule - maybe model was manually converted)
-      if (normalizedAirline) {
-        const airlineMatch = modelsForType.find(m => m.airlineCode === normalizedAirline)
-        if (airlineMatch) {
-          return airlineMatch
-        }
-      }
-
-      // Then try base livery
+    if (!normalizedAirline && modelsForType) {
+      // Try base livery
       const baseMatch = modelsForType.find(m => !m.airlineCode)
       if (baseMatch) {
         return baseMatch
@@ -429,7 +427,7 @@ class FSLTLServiceClass {
       }
     }
 
-    // 4. No match
+    // 4. No match - let caller try closest-match or other fallbacks
     return null
   }
 
@@ -467,6 +465,121 @@ class FSLTLServiceClass {
       const baseModel = b738Models.find(m => !m.airlineCode)
       if (baseModel) return baseModel
     }
+    return null
+  }
+
+  /**
+   * Find the closest FSLTL model for an airline by dimensions.
+   * When an airline doesn't have the exact aircraft type, this finds the
+   * most similar model they DO have and returns scale factors to match.
+   *
+   * @param targetType - The requested aircraft type (e.g., "B753")
+   * @param airlineCode - The airline code (e.g., "AAL")
+   * @param maxSizeDifference - Maximum allowed size difference ratio (default 0.5 = 50%)
+   * @returns Closest model with scale factors, or null if no suitable match
+   */
+  findClosestModelForAirline(
+    targetType: string,
+    airlineCode: string,
+    maxSizeDifference = 0.5
+  ): { model: FSLTLModel; scale: { x: number; y: number; z: number }; distance: number } | null {
+    const normalizedAirline = airlineCode.toUpperCase()
+    const modelsForAirline = this.registry.byAirline.get(normalizedAirline)
+
+    if (!modelsForAirline || modelsForAirline.length === 0) return null
+
+    // Get target dimensions
+    const targetDims = aircraftDimensionsService.getDimensions(targetType)
+    if (!targetDims || !targetDims.wingspan || !targetDims.length) return null
+
+    let bestMatch: FSLTLModel | null = null
+    let bestDistance = Infinity
+    let bestScale = { x: 1, y: 1, z: 1 }
+
+    for (const model of modelsForAirline) {
+      // Get dimensions for this model's aircraft type
+      const modelDims = aircraftDimensionsService.getDimensions(model.aircraftType)
+      if (!modelDims || !modelDims.wingspan || !modelDims.length) continue
+
+      // Calculate normalized Euclidean distance
+      const wingspanDiff = (modelDims.wingspan - targetDims.wingspan) / targetDims.wingspan
+      const lengthDiff = (modelDims.length - targetDims.length) / targetDims.length
+      const distance = Math.sqrt(wingspanDiff * wingspanDiff + lengthDiff * lengthDiff)
+
+      if (distance < bestDistance) {
+        bestDistance = distance
+        bestMatch = model
+
+        // Calculate non-uniform scale factors
+        const wingspanScale = targetDims.wingspan / modelDims.wingspan
+        const lengthScale = targetDims.length / modelDims.length
+        bestScale = {
+          x: wingspanScale,
+          y: (wingspanScale + lengthScale) / 2,
+          z: lengthScale
+        }
+      }
+    }
+
+    // Check if the best match is within acceptable size difference
+    if (bestMatch && bestDistance <= maxSizeDifference) {
+      return { model: bestMatch, scale: bestScale, distance: bestDistance }
+    }
+
+    return null
+  }
+
+  /**
+   * Find the closest FSLTL model across ALL available models by dimensions.
+   * Used as a fallback when no airline-specific match exists.
+   *
+   * @param targetType - The requested aircraft type
+   * @param maxSizeDifference - Maximum allowed size difference ratio (default 0.5 = 50%)
+   * @returns Closest model with scale factors, or null if no suitable match
+   */
+  findClosestModel(
+    targetType: string,
+    maxSizeDifference = 0.5
+  ): { model: FSLTLModel; scale: { x: number; y: number; z: number }; distance: number } | null {
+    // Get target dimensions
+    const targetDims = aircraftDimensionsService.getDimensions(targetType)
+    if (!targetDims || !targetDims.wingspan || !targetDims.length) return null
+
+    let bestMatch: FSLTLModel | null = null
+    let bestDistance = Infinity
+    let bestScale = { x: 1, y: 1, z: 1 }
+
+    // Iterate through all registered models
+    for (const model of this.registry.models.values()) {
+      // Prefer base liveries over airline-specific for generic matching
+      // Skip airline-specific models in this pass
+      if (model.airlineCode) continue
+
+      const modelDims = aircraftDimensionsService.getDimensions(model.aircraftType)
+      if (!modelDims || !modelDims.wingspan || !modelDims.length) continue
+
+      const wingspanDiff = (modelDims.wingspan - targetDims.wingspan) / targetDims.wingspan
+      const lengthDiff = (modelDims.length - targetDims.length) / targetDims.length
+      const distance = Math.sqrt(wingspanDiff * wingspanDiff + lengthDiff * lengthDiff)
+
+      if (distance < bestDistance) {
+        bestDistance = distance
+        bestMatch = model
+
+        const wingspanScale = targetDims.wingspan / modelDims.wingspan
+        const lengthScale = targetDims.length / modelDims.length
+        bestScale = {
+          x: wingspanScale,
+          y: (wingspanScale + lengthScale) / 2,
+          z: lengthScale
+        }
+      }
+    }
+
+    if (bestMatch && bestDistance <= maxSizeDifference) {
+      return { model: bestMatch, scale: bestScale, distance: bestDistance }
+    }
+
     return null
   }
 

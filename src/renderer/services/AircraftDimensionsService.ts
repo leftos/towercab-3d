@@ -68,6 +68,14 @@ class AircraftDimensionsServiceClass {
     const dims = this.dimensions.get(normalized)
     if (dims) return dims
 
+    // Try stripping freighter suffix (B738F -> B738, A306F -> A306)
+    // Freighter variants have same dimensions as passenger versions
+    if (normalized.endsWith('F') && normalized.length >= 4) {
+      const passengerVariant = normalized.slice(0, -1)
+      const freighterDims = this.dimensions.get(passengerVariant)
+      if (freighterDims) return freighterDims
+    }
+
     // Try without trailing numbers (e.g., "B7378" -> "B737")
     // Some flight plans include variant suffixes
     if (normalized.length > 4) {
