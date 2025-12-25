@@ -727,6 +727,64 @@ class FSLTLServiceClass {
   }
 
   // ==========================================================================
+  // MODEL SCANNING
+  // ==========================================================================
+
+  /**
+   * Scan an output directory for existing converted models and rebuild the registry.
+   * This allows picking up models that were converted externally or with a different output path.
+   *
+   * @param outputPath - Path to scan for model.glb files
+   * @returns Number of models found and registered
+   */
+  async scanAndRebuildRegistry(outputPath: string): Promise<number> {
+    // Dynamic import to avoid circular dependency issues
+    const { scanFsltlModels } = await import('./fsltlApi')
+
+    try {
+      console.log(`[FSLTLService] Scanning ${outputPath} for existing models...`)
+
+      const scannedModels = await scanFsltlModels(outputPath)
+
+      if (scannedModels.length === 0) {
+        console.log('[FSLTLService] No models found in output directory')
+        return 0
+      }
+
+      // Clear existing registry and rebuild from scanned models
+      this.registry = createEmptyRegistry()
+
+      for (const scanned of scannedModels) {
+        const model: FSLTLModel = {
+          aircraftType: scanned.aircraftType,
+          airlineCode: scanned.airlineCode,
+          modelName: scanned.modelName,
+          modelPath: scanned.modelPath,
+          textureSize: '1k', // Default, we don't know the original size
+          hasAnimations: scanned.hasAnimations,
+          fileSize: scanned.fileSize,
+          convertedAt: Date.now() // Use current time since we don't know original
+        }
+
+        this.registerModel(model)
+      }
+
+      // Save the rebuilt registry to IndexedDB
+      await this.saveRegistry()
+
+      console.log(`[FSLTLService] Rebuilt registry with ${scannedModels.length} models from disk`)
+
+      // Notify listeners that models have changed
+      this.triggerModelRefresh()
+
+      return scannedModels.length
+    } catch (error) {
+      console.error('[FSLTLService] Failed to scan models:', error)
+      throw error
+    }
+  }
+
+  // ==========================================================================
   // UTILITY
   // ==========================================================================
 

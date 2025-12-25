@@ -5,6 +5,10 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- FSLTL models are now auto-discovered from the output folder on startup
+  - Point to any folder containing converted models and they'll be loaded automatically
+  - No need to re-convert models when changing the output path
+  - Changing the output folder in Settings immediately scans for existing models
 - Custom tower cab positions: Define default camera positions for airports via mods/tower-positions.json
   - Specify latitude, longitude, height above ground, and initial heading per airport
   - Tower-positions.json provides "app default" positions (used on first airport visit or Shift+Home reset)

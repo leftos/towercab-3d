@@ -589,6 +589,128 @@ fn delete_file(path: String) -> Result<(), String> {
         .map_err(|e| format!("Failed to delete file {}: {}", path, e))
 }
 
+/// Scanned model info from existing FSLTL output directory
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScannedFSLTLModel {
+    pub model_name: String,
+    pub model_path: String,
+    pub aircraft_type: String,
+    pub airline_code: Option<String>,
+    pub has_animations: bool,
+    pub file_size: u64,
+}
+
+/// Scan an FSLTL output directory for existing converted models
+/// Returns info about all model.glb files found
+/// Directory structure: outputPath/TYPE/AIRLINE/model.glb or outputPath/TYPE/base/model.glb
+#[tauri::command]
+fn scan_fsltl_models(output_path: String) -> Result<Vec<ScannedFSLTLModel>, String> {
+    let base_path = PathBuf::from(&output_path);
+
+    if !base_path.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut models = Vec::new();
+
+    // Iterate through aircraft type directories (e.g., B738, A320)
+    let type_dirs = fs::read_dir(&base_path)
+        .map_err(|e| format!("Failed to read output directory: {}", e))?;
+
+    for type_entry in type_dirs.filter_map(|e| e.ok()) {
+        let type_path = type_entry.path();
+        if !type_path.is_dir() {
+            continue;
+        }
+
+        let aircraft_type = match type_entry.file_name().into_string() {
+            Ok(name) => name,
+            Err(_) => continue,
+        };
+
+        // Skip hidden/system directories
+        if aircraft_type.starts_with('.') || aircraft_type.starts_with('_') {
+            continue;
+        }
+
+        // Iterate through airline directories (e.g., UAL, SWA, base)
+        let airline_dirs = match fs::read_dir(&type_path) {
+            Ok(dirs) => dirs,
+            Err(_) => continue,
+        };
+
+        for airline_entry in airline_dirs.filter_map(|e| e.ok()) {
+            let airline_path = airline_entry.path();
+            if !airline_path.is_dir() {
+                continue;
+            }
+
+            let airline_folder = match airline_entry.file_name().into_string() {
+                Ok(name) => name,
+                Err(_) => continue,
+            };
+
+            // Check for model.glb
+            let model_file = airline_path.join("model.glb");
+            if !model_file.exists() {
+                continue;
+            }
+
+            // Get file size
+            let file_size = fs::metadata(&model_file)
+                .map(|m| m.len())
+                .unwrap_or(0);
+
+            // Determine airline code (None if "base" folder)
+            let airline_code = if airline_folder.to_lowercase() == "base" {
+                None
+            } else {
+                Some(airline_folder.clone())
+            };
+
+            // Build model name like FSLTL_B738_AAL or FSLTL_B738_ZZZZ
+            let model_name = if let Some(ref code) = airline_code {
+                format!("FSLTL_{}_{}", aircraft_type, code)
+            } else {
+                format!("FSLTL_{}_ZZZZ", aircraft_type)
+            };
+
+            // Check for animations by reading manifest.json if it exists
+            let has_animations = {
+                let manifest_path = airline_path.join("manifest.json");
+                if manifest_path.exists() {
+                    if let Ok(content) = fs::read_to_string(&manifest_path) {
+                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                            json.get("hasAnimations")
+                                .and_then(|v| v.as_bool())
+                                .unwrap_or(false)
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            };
+
+            models.push(ScannedFSLTLModel {
+                model_name,
+                model_path: normalize_path_string(&model_file),
+                aircraft_type: aircraft_type.clone(),
+                airline_code,
+                has_animations,
+                file_size,
+            });
+        }
+    }
+
+    println!("[FSLTL] Scanned {} existing models from {}", models.len(), output_path);
+    Ok(models)
+}
+
 /// Set WebView2 browser arguments for GPU optimization
 fn set_webview2_args() {
     #[cfg(target_os = "windows")]
@@ -675,6 +797,7 @@ pub fn run() {
             read_conversion_progress,
             check_fsltl_model_exists,
             delete_file,
+            scan_fsltl_models,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

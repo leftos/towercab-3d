@@ -37,6 +37,7 @@ function App() {
   const cesiumIonToken = useSettingsStore((state) => state.cesium.cesiumIonToken)
   const updateCesiumSettings = useSettingsStore((state) => state.updateCesiumSettings)
   const fsltlSourcePath = useSettingsStore((state) => state.fsltl.sourcePath)
+  const fsltlOutputPath = useSettingsStore((state) => state.fsltl.outputPath)
   const showWeatherEffects = useSettingsStore((state) => state.weather.showWeatherEffects)
   const showMetarOverlay = useSettingsStore((state) => state.ui.showMetarOverlay)
   const updateUISettings = useSettingsStore((state) => state.updateUISettings)
@@ -107,6 +108,26 @@ function App() {
         // Initialize FSLTL service (loads registry and VMR rules if source path is set)
         setLoadingStatus('Loading aircraft models...')
         await fsltlService.initialize()
+
+        // Scan output directory for existing models and rebuild registry
+        // This ensures models are loaded even if they were converted with a different path
+        try {
+          // Use saved output path or get default
+          let outputPath = fsltlOutputPath
+          if (!outputPath) {
+            const [defaultPath] = await fsltlApi.getFsltlDefaultOutputPath()
+            outputPath = defaultPath
+          }
+          if (outputPath) {
+            const scannedCount = await fsltlService.scanAndRebuildRegistry(outputPath)
+            if (scannedCount > 0) {
+              console.log(`[App] Loaded ${scannedCount} FSLTL models from ${outputPath}`)
+            }
+          }
+        } catch (err) {
+          console.warn('[App] Failed to scan FSLTL models:', err)
+        }
+
         if (fsltlSourcePath) {
           try {
             const vmrContent = await fsltlApi.readVmrFile(fsltlSourcePath)
@@ -144,7 +165,7 @@ function App() {
     return () => {
       performanceMonitor.stopLogging()
     }
-  }, [cesiumIonToken, fsltlSourcePath, startPolling, loadAirports, checkVRSupport])
+  }, [cesiumIonToken, fsltlSourcePath, fsltlOutputPath, startPolling, loadAirports, checkVRSupport])
 
   // Fetch weather data when airport changes or weather effects are enabled
   // When no airport is selected but orbit-following an aircraft, use nearest METAR mode

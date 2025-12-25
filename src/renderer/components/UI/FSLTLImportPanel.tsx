@@ -72,6 +72,18 @@ function FSLTLImportPanel() {
 
         // Initialize FSLTL service (loads registry from IndexedDB)
         await fsltlService.initialize()
+
+        // Scan output directory for existing models and rebuild registry
+        // This ensures we pick up models even if the output path changed
+        if (effectiveOutputPath) {
+          try {
+            const scannedCount = await fsltlService.scanAndRebuildRegistry(effectiveOutputPath)
+            console.log(`[FSLTLImportPanel] Scanned ${scannedCount} models from output path`)
+          } catch (scanErr) {
+            console.warn('[FSLTLImportPanel] Failed to scan output path:', scanErr)
+          }
+        }
+
         setConvertedCount(fsltlService.getModelCount())
 
         // If source path is already set, validate it and load VMR rules
@@ -150,6 +162,17 @@ function FSLTLImportPanel() {
 
       setOutputPath(folder)
       updateFSLTLSettings({ outputPath: folder })
+
+      // Scan the new output path for existing models
+      try {
+        const scannedCount = await fsltlService.scanAndRebuildRegistry(folder)
+        setConvertedCount(fsltlService.getModelCount())
+        if (scannedCount > 0) {
+          console.log(`[FSLTLImportPanel] Found ${scannedCount} existing models in new output path`)
+        }
+      } catch (scanErr) {
+        console.warn('[FSLTLImportPanel] Failed to scan new output path:', scanErr)
+      }
     } catch (err) {
       setLocalError(err instanceof Error ? err.message : 'Failed to select folder')
     }

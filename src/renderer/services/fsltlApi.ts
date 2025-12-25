@@ -155,3 +155,24 @@ export async function readVmrFile(sourcePath: string): Promise<string> {
   const vmrPath = `${sourcePath}\\FSLTL_Rules.vmr`
   return invoke<string>('read_text_file', { path: vmrPath })
 }
+
+/**
+ * Scanned model info returned from scan_fsltl_models
+ */
+export interface ScannedFSLTLModel {
+  modelName: string
+  modelPath: string
+  aircraftType: string
+  airlineCode: string | null
+  hasAnimations: boolean
+  fileSize: number
+}
+
+/**
+ * Scan an FSLTL output directory for existing converted models
+ * @param outputPath - Path to scan for model.glb files
+ * @returns Array of scanned model info
+ */
+export async function scanFsltlModels(outputPath: string): Promise<ScannedFSLTLModel[]> {
+  return invoke<ScannedFSLTLModel[]>('scan_fsltl_models', { outputPath })
+}
