@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useViewportStore } from '../../stores/viewportStore'
+import { useUIFeedbackStore } from '../../stores/uiFeedbackStore'
 import './CommandInput.css'
 
 /**
@@ -7,43 +8,50 @@ import './CommandInput.css'
  *
  * Commands:
  * - `.XX.` - Save camera bookmark to slot XX (00-99)
+ * - `.XX.NAME.` - Save named camera bookmark to slot XX (00-99)
  * - `.XX` - Load camera bookmark from slot XX (00-99)
  */
 function CommandInput() {
   const [isActive, setIsActive] = useState(false)
   const [inputBuffer, setInputBuffer] = useState('')
-  const [feedback, setFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
-  const feedbackTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const saveBookmark = useViewportStore((state) => state.saveBookmark)
   const loadBookmark = useViewportStore((state) => state.loadBookmark)
   const currentAirportIcao = useViewportStore((state) => state.currentAirportIcao)
 
-  // Show feedback message briefly
-  const showFeedback = useCallback((message: string, type: 'success' | 'error') => {
-    if (feedbackTimeoutRef.current) {
-      clearTimeout(feedbackTimeoutRef.current)
-    }
-    setFeedback({ message, type })
-    feedbackTimeoutRef.current = setTimeout(() => {
-      setFeedback(null)
-    }, 2000)
-  }, [])
+  const feedback = useUIFeedbackStore((state) => state.feedback)
+  const showFeedback = useUIFeedbackStore((state) => state.showFeedback)
+  const setCommandInputActive = useUIFeedbackStore((state) => state.setCommandInputActive)
+
+  // Sync isActive state with the global store so other components can check it
+  useEffect(() => {
+    setCommandInputActive(isActive)
+  }, [isActive, setCommandInputActive])
 
   // Process the command when Enter is pressed
   const processCommand = useCallback((command: string) => {
-    // Match save bookmark pattern: .XX. (e.g., .00., .42., .99.)
-    const saveMatch = command.match(/^\.(\d{1,2})\.?$/)
-    if (saveMatch && command.endsWith('.')) {
-      const slot = parseInt(saveMatch[1], 10)
-      if (slot >= 0 && slot <= 99) {
-        if (!currentAirportIcao) {
-          showFeedback('No airport selected', 'error')
+    // Match save bookmark pattern with optional name: .XX. or .XX.NAME.
+    // Pattern: .{1-2 digits}.{optional name ending with period}
+    if (command.endsWith('.')) {
+      const saveMatch = command.match(/^\.(\d{1,2})\.(.*)$/)
+      if (saveMatch) {
+        const slot = parseInt(saveMatch[1], 10)
+        const namePart = saveMatch[2]
+
+        // Name is everything before the final period (which we know exists)
+        const name = namePart.slice(0, -1).trim() || undefined
+
+        if (slot >= 0 && slot <= 99) {
+          if (!currentAirportIcao) {
+            showFeedback('No airport selected', 'error')
+            return
+          }
+          saveBookmark(slot, name)
+          const slotStr = slot.toString().padStart(2, '0')
+          const displayName = name ? ` "${name}"` : ''
+          showFeedback(`Saved bookmark .${slotStr}${displayName}`, 'success')
           return
         }
-        saveBookmark(slot)
-        showFeedback(`Saved bookmark .${slot.toString().padStart(2, '0')}`, 'success')
-        return
       }
     }
 
@@ -125,19 +133,34 @@ function CommandInput() {
           return
         }
 
-        // Only allow digits and period for bookmark commands
-        if (/^[\d.]$/.test(key)) {
-          // Limit buffer length to prevent abuse
-          if (inputBuffer.length < 10) {
+        // Check if we're in "name typing" mode (after .XX.)
+        const isTypingName = /^\.(\d{1,2})\./.test(inputBuffer)
+
+        if (isTypingName) {
+          // In name typing mode, allow most printable characters
+          // Only disallow control keys (handled above) and limit length
+          if (key.length === 1 && inputBuffer.length < 50) {
             setInputBuffer(prev => prev + key)
+            event.preventDefault()
+            return
           }
-          event.preventDefault()
-          return
+        } else {
+          // Not in name mode: only allow digits and period for slot selection
+          if (/^[\d.]$/.test(key)) {
+            // Limit buffer length to prevent abuse
+            if (inputBuffer.length < 10) {
+              setInputBuffer(prev => prev + key)
+            }
+            event.preventDefault()
+            return
+          }
         }
 
-        // Any other key cancels
-        setIsActive(false)
-        setInputBuffer('')
+        // Any other key cancels (unless we're typing a name)
+        if (!isTypingName) {
+          setIsActive(false)
+          setInputBuffer('')
+        }
       }
     }
 
@@ -146,15 +169,6 @@ function CommandInput() {
       window.removeEventListener('keydown', handleKeyDown)
     }
   }, [isActive, inputBuffer, processCommand])
-
-  // Clean up timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (feedbackTimeoutRef.current) {
-        clearTimeout(feedbackTimeoutRef.current)
-      }
-    }
-  }, [])
 
   // Don't render if not active and no feedback
   if (!isActive && !feedback) {

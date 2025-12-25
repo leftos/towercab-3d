@@ -6,6 +6,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ### Added
 - Shift+Home keyboard shortcut resets to app default view, ignoring any saved user default
+- Named bookmarks: save bookmarks with custom names using `.XX.NAME.` format (e.g., `.01.1L/1R FINAL.`)
+- Quick bookmark recall: Ctrl+0-9 instantly loads bookmarks 0-9
+- Bookmark Manager (Ctrl+B): modal to view all 100 bookmarks, load, rename, and delete them with full keyboard navigation (arrow keys, Enter to load, R to rename, Del to delete)
 
 ### Changed
 - Modals (Settings, Import, Model Matching) no longer close when clicking outside; use the X button or Escape key to close

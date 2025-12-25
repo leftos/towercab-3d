@@ -167,12 +167,14 @@ export interface ViewportCameraState {
  * Camera bookmark state (subset of ViewportCameraState)
  *
  * Bookmarks capture only the camera view parameters, not follow state.
- * Used by the bookmark system (99 slots per airport).
+ * Used by the bookmark system (100 slots per airport, 0-99).
  *
  * @see viewportStore.saveBookmark
  * @see viewportStore.loadBookmark
  */
 export interface CameraBookmark {
+  /** Optional user-defined name for the bookmark */
+  name?: string
   /** View mode (3D or top-down) */
   viewMode: ViewMode
   /** Camera heading in degrees (0-360) */

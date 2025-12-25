@@ -21,6 +21,7 @@ import { useSettingsStore } from './stores/settingsStore'
 import { useWeatherStore } from './stores/weatherStore'
 import { useViewportStore } from './stores/viewportStore'
 import { useVRStore } from './stores/vrStore'
+import { useUIFeedbackStore } from './stores/uiFeedbackStore'
 import { airportService } from './services/AirportService'
 import { aircraftDimensionsService } from './services/AircraftDimensionsService'
 import { fsltlService } from './services/FSLTLService'
@@ -49,6 +50,13 @@ function App() {
   // VR state
   const isVRActive = useVRStore((state) => state.isVRActive)
   const checkVRSupport = useVRStore((state) => state.checkVRSupport)
+
+  // Bookmark shortcuts
+  const loadBookmark = useViewportStore((state) => state.loadBookmark)
+  const currentAirportIcao = useViewportStore((state) => state.currentAirportIcao)
+  const showFeedback = useUIFeedbackStore((state) => state.showFeedback)
+  const pushModal = useUIFeedbackStore((state) => state.pushModal)
+  const popModal = useUIFeedbackStore((state) => state.popModal)
 
   const [isLoading, setIsLoading] = useState(true)
   const [loadingStatus, setLoadingStatus] = useState('Initializing...')
@@ -167,9 +175,36 @@ function App() {
     }
   }, [currentIcao, showWeatherEffects, orbitWithoutAirport, fetchWeather, startAutoRefresh, startNearestAutoRefresh, stopAutoRefresh, clearWeather])
 
-  // Keyboard shortcuts for overlays
+  // Register modals with UI feedback store for keyboard blocking
+  useEffect(() => {
+    if (showModelMatchingModal) {
+      pushModal()
+      return () => popModal()
+    }
+  }, [showModelMatchingModal, pushModal, popModal])
+
+  useEffect(() => {
+    if (showTokenPrompt) {
+      pushModal()
+      return () => popModal()
+    }
+  }, [showTokenPrompt, pushModal, popModal])
+
+  // Keyboard shortcuts for overlays and bookmarks
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Skip if typing in input field
+      if (e.target instanceof HTMLInputElement ||
+          e.target instanceof HTMLTextAreaElement ||
+          e.target instanceof HTMLSelectElement) {
+        return
+      }
+
+      // Skip if any modal or command input is active
+      if (useUIFeedbackStore.getState().isInputBlocked()) {
+        return
+      }
+
       if (e.key === 'F1') {
         e.preventDefault()
         setShowPerformanceHUD(prev => !prev)
@@ -179,12 +214,28 @@ function App() {
       } else if (e.ctrlKey && e.key.toLowerCase() === 'm') {
         e.preventDefault()
         updateUISettings({ showMetarOverlay: !showMetarOverlay })
+      } else if (e.ctrlKey && e.key >= '0' && e.key <= '9') {
+        // Ctrl+0-9: Quick load bookmarks 0-9
+        e.preventDefault()
+        const slot = parseInt(e.key, 10)
+
+        if (!currentAirportIcao) {
+          showFeedback('No airport selected', 'error')
+          return
+        }
+
+        const success = loadBookmark(slot)
+        if (success) {
+          showFeedback(`Loaded bookmark .${slot}`, 'success')
+        } else {
+          showFeedback(`No bookmark at .${slot}`, 'error')
+        }
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [showMetarOverlay, updateUISettings])
+  }, [showMetarOverlay, updateUISettings, currentAirportIcao, loadBookmark, showFeedback])
 
 
   if (isLoading) {

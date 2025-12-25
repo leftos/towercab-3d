@@ -6,6 +6,7 @@ import { useMeasureStore } from '../../stores/measureStore'
 import { useViewportStore } from '../../stores/viewportStore'
 import { useAirportStore } from '../../stores/airportStore'
 import { useReplayStore } from '../../stores/replayStore'
+import { useUIFeedbackStore } from '../../stores/uiFeedbackStore'
 import { useActiveViewportCamera } from '../../hooks/useActiveViewportCamera'
 import { useReplayPlayback } from '../../hooks/useReplayPlayback'
 import { exportAllData, downloadExport } from '../../services/ExportImportService'
@@ -15,6 +16,7 @@ import GlobalSearchPanel from './GlobalSearchPanel'
 import VRButton from '../VR/VRButton'
 import ImportModal from './ImportModal'
 import FSLTLImportPanel from './FSLTLImportPanel'
+import BookmarkManagerModal from './BookmarkManagerModal'
 import './ControlsBar.css'
 
 type SettingsTab = 'general' | 'display' | 'graphics' | 'performance' | 'help'
@@ -44,6 +46,7 @@ function ControlsBar() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('general')
   const [importStatus, setImportStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [showImportModal, setShowImportModal] = useState(false)
+  const [showBookmarkModal, setShowBookmarkModal] = useState(false)
   const [barMode, setBarMode] = useState<BarMode>('controls')
 
   // Local state for Cesium Ion token input (only saved on button click)
@@ -189,6 +192,8 @@ function ControlsBar() {
   const insetCount = useViewportStore((state) => state.viewports.length - 1)
   const addViewport = useViewportStore((state) => state.addViewport)
   const currentAirport = useAirportStore((state) => state.currentAirport)
+  const pushModal = useUIFeedbackStore((state) => state.pushModal)
+  const popModal = useUIFeedbackStore((state) => state.popModal)
 
   // Sync token input with store value when settings panel opens or store changes
   useEffect(() => {
@@ -205,6 +210,52 @@ function ControlsBar() {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [showSettings])
+
+  // Register modals with UI feedback store for keyboard blocking
+  useEffect(() => {
+    if (showSettings) {
+      pushModal()
+      return () => popModal()
+    }
+  }, [showSettings, pushModal, popModal])
+
+  useEffect(() => {
+    if (showBookmarkModal) {
+      pushModal()
+      return () => popModal()
+    }
+  }, [showBookmarkModal, pushModal, popModal])
+
+  useEffect(() => {
+    if (showImportModal) {
+      pushModal()
+      return () => popModal()
+    }
+  }, [showImportModal, pushModal, popModal])
+
+  // Ctrl+B to open bookmark manager
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Skip if typing in input field
+      if (e.target instanceof HTMLInputElement ||
+          e.target instanceof HTMLTextAreaElement ||
+          e.target instanceof HTMLSelectElement) {
+        return
+      }
+
+      // Skip if any modal or command input is active
+      if (useUIFeedbackStore.getState().isInputBlocked()) {
+        return
+      }
+
+      if (e.ctrlKey && e.key.toLowerCase() === 'b' && currentAirport) {
+        e.preventDefault()
+        setShowBookmarkModal(prev => !prev)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [currentAirport])
 
   // Save token handler - only updates store when button is clicked
   const handleSaveToken = useCallback(() => {
@@ -514,6 +565,19 @@ function ControlsBar() {
                 </svg>
                 Measure
               </button>
+
+              {currentAirport && (
+                <button
+                  className={`control-button ${showBookmarkModal ? 'active' : ''}`}
+                  onClick={() => setShowBookmarkModal(!showBookmarkModal)}
+                  title="Manage bookmarks (Ctrl+B)"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+                  </svg>
+                  Bookmarks
+                </button>
+              )}
 
               {currentAirport && (
                 <button
@@ -1841,6 +1905,32 @@ function ControlsBar() {
                       </div>
                     </div>
                   </div>
+
+                  <div className="settings-section">
+                    <h3>Bookmarks</h3>
+                    <div className="shortcuts-list">
+                      <div className="shortcut">
+                        <span className="keys">.XX</span>
+                        <span className="action">Load bookmark (e.g., .00, .42)</span>
+                      </div>
+                      <div className="shortcut">
+                        <span className="keys">.XX.</span>
+                        <span className="action">Save bookmark (e.g., .00., .42.)</span>
+                      </div>
+                      <div className="shortcut">
+                        <span className="keys">.XX.NAME.</span>
+                        <span className="action">Save named bookmark</span>
+                      </div>
+                      <div className="shortcut">
+                        <span className="keys">Ctrl+0-9</span>
+                        <span className="action">Quick load bookmarks 0-9</span>
+                      </div>
+                      <div className="shortcut">
+                        <span className="keys">Ctrl+B</span>
+                        <span className="action">Open bookmark manager</span>
+                      </div>
+                    </div>
+                  </div>
                 </>
               )}
             </div>
@@ -1854,6 +1944,13 @@ function ControlsBar() {
           onClose={() => setShowImportModal(false)}
           onSuccess={handleImportSuccess}
           onElectronImport={handleImportFromElectron}
+        />
+      )}
+
+      {/* Bookmark Manager Modal */}
+      {showBookmarkModal && (
+        <BookmarkManagerModal
+          onClose={() => setShowBookmarkModal(false)}
         />
       )}
     </>

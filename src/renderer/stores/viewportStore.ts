@@ -199,8 +199,11 @@ interface ViewportStore {
   hasCustomDefault: () => boolean
 
   // Bookmark actions (0-99)
-  saveBookmark: (slot: number) => void
+  saveBookmark: (slot: number, name?: string) => void
   loadBookmark: (slot: number) => boolean  // Returns true if bookmark exists
+  deleteBookmark: (slot: number) => void
+  renameBookmark: (slot: number, name: string | undefined) => void
+  getBookmarks: () => { [slot: number]: CameraBookmark } | undefined
 
   // Reset
   resetView: () => void
@@ -872,7 +875,7 @@ export const useViewportStore = create<ViewportStore>()(
           },
 
           // Save current active viewport camera state to a bookmark slot (0-99)
-          saveBookmark: (slot: number) => {
+          saveBookmark: (slot: number, name?: string) => {
             if (slot < 0 || slot > 99) return
 
             const state = get()
@@ -884,6 +887,7 @@ export const useViewportStore = create<ViewportStore>()(
 
             const cam = activeViewport.cameraState
             const bookmark: CameraBookmark = {
+              name,
               viewMode: cam.viewMode,
               heading: cam.heading,
               pitch: cam.pitch,
@@ -937,6 +941,52 @@ export const useViewportStore = create<ViewportStore>()(
             })
 
             return true
+          },
+
+          // Delete a bookmark slot (0-99)
+          deleteBookmark: (slot: number) => {
+            if (slot < 0 || slot > 99) return
+
+            const state = get()
+            const icao = state.currentAirportIcao
+            if (!icao) return
+
+            const config = state.airportViewportConfigs[icao]
+            if (!config?.bookmarks?.[slot]) return
+
+            const airportViewportConfigs = { ...state.airportViewportConfigs }
+            const newBookmarks = { ...config.bookmarks }
+            delete newBookmarks[slot]
+            airportViewportConfigs[icao] = { ...config, bookmarks: newBookmarks }
+
+            set({ airportViewportConfigs })
+          },
+
+          // Rename a bookmark without re-saving camera state
+          renameBookmark: (slot: number, name: string | undefined) => {
+            if (slot < 0 || slot > 99) return
+
+            const state = get()
+            const icao = state.currentAirportIcao
+            if (!icao) return
+
+            const config = state.airportViewportConfigs[icao]
+            if (!config?.bookmarks?.[slot]) return
+
+            const airportViewportConfigs = { ...state.airportViewportConfigs }
+            const newBookmarks = { ...config.bookmarks }
+            newBookmarks[slot] = { ...newBookmarks[slot], name }
+            airportViewportConfigs[icao] = { ...config, bookmarks: newBookmarks }
+
+            set({ airportViewportConfigs })
+          },
+
+          // Get all bookmarks for current airport
+          getBookmarks: () => {
+            const state = get()
+            const icao = state.currentAirportIcao
+            if (!icao) return undefined
+            return state.airportViewportConfigs[icao]?.bookmarks
           },
 
           // Reset active viewport's camera

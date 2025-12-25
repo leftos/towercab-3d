@@ -2,6 +2,7 @@ import { useEffect, useRef, useMemo } from 'react'
 import * as Cesium from 'cesium'
 import { useViewportStore } from '../stores/viewportStore'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useUIFeedbackStore } from '../stores/uiFeedbackStore'
 import {
   createVelocityState,
   MOVEMENT_CONFIG,
@@ -388,6 +389,11 @@ export function useCameraInput(
       // Ignore if typing in an input
       if (event.target instanceof HTMLInputElement ||
           event.target instanceof HTMLTextAreaElement) {
+        return
+      }
+
+      // Ignore if any modal or command input is active
+      if (useUIFeedbackStore.getState().isInputBlocked()) {
         return
       }
 
