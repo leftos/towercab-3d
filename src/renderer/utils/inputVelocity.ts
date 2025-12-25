@@ -215,6 +215,9 @@ export function calculateTargetVelocities(
 /**
  * Apply wheel impulse to velocity state
  * Returns the decayed wheel impulse value
+ *
+ * If the impulse direction is opposite to existing velocity, the velocity
+ * is reset to zero first, providing immediate response when changing scroll direction.
  */
 export function applyWheelImpulse(
   velocity: VelocityState,
@@ -231,12 +234,30 @@ export function applyWheelImpulse(
   const inOrbitMode = followingCallsign !== null && followMode === 'orbit'
 
   if (viewMode === 'topdown') {
+    // Cancel existing velocity if scrolling in opposite direction
+    if (Math.sign(impulseAmount) !== Math.sign(velocity.altitude) && velocity.altitude !== 0) {
+      velocity.altitude = 0
+    }
     velocity.altitude += impulseAmount * 3  // Scale up for altitude
   } else if (inOrbitMode) {
+    // Cancel existing velocity if scrolling in opposite direction
+    if (Math.sign(impulseAmount) !== Math.sign(velocity.orbitDistance) && velocity.orbitDistance !== 0) {
+      velocity.orbitDistance = 0
+    }
     velocity.orbitDistance += impulseAmount * 1.2
   } else if (followingCallsign) {
-    velocity.zoom -= impulseAmount * 0.002  // Inverted and scaled for follow zoom
+    // Tower follow mode: adjust follow zoom (inverted so scroll down = zoom in)
+    // Scale factor tuned so one scroll notch changes zoom by ~0.1-0.2x
+    const effectiveImpulse = -impulseAmount * 0.05
+    if (Math.sign(effectiveImpulse) !== Math.sign(velocity.zoom) && velocity.zoom !== 0) {
+      velocity.zoom = 0
+    }
+    velocity.zoom += effectiveImpulse
   } else {
+    // Cancel existing velocity if scrolling in opposite direction
+    if (Math.sign(impulseAmount) !== Math.sign(velocity.zoom) && velocity.zoom !== 0) {
+      velocity.zoom = 0
+    }
     velocity.zoom += impulseAmount * 0.08
   }
 

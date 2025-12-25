@@ -462,6 +462,21 @@
   color: rgba(255, 255, 255, 0.5);
 }
 
+.follow-zoom-info {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.follow-range {
+  font-size: 11px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.4);
+}
+
 /* Import/Export buttons */
 .import-export-buttons {
   display: flex;

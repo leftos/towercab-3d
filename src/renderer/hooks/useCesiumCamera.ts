@@ -8,7 +8,8 @@ import {
   calculateTowerLookAt,
   calculateFollowFov,
   applyPositionOffsets,
-  feetToMeters
+  feetToMeters,
+  calculateHorizontalDistance
 } from '../utils/cameraGeometry'
 import { CAMERA_MIN_AGL } from '../constants/camera'
 import { useCameraInput } from './useCameraInput'
@@ -365,19 +366,50 @@ export function useCesiumCamera(
               state.orbitDistance
             )
 
+            // Clamp orbit camera to terrain to prevent ground clipping
+            const orbitCartographic = Cesium.Cartographic.fromDegrees(
+              orbitResult.cameraLon,
+              orbitResult.cameraLat
+            )
+            const orbitTerrainHeight = viewer.scene.globe.getHeight(orbitCartographic) ?? 0
+            const orbitMinHeight = orbitTerrainHeight + CAMERA_MIN_AGL
+            const clampedOrbitHeight = Math.max(orbitResult.cameraHeight, orbitMinHeight)
+            const wasOrbitClamped = clampedOrbitHeight > orbitResult.cameraHeight
+
+            // Recalculate pitch if height was clamped (camera is now higher than intended)
+            let finalPitch = orbitResult.pitch
+            let effectiveOrbitPitch = state.orbitPitch
+            if (wasOrbitClamped) {
+              // Recalculate pitch to still look at aircraft from clamped position
+              const horizontalDist = calculateHorizontalDistance(
+                orbitResult.cameraLat,
+                orbitResult.cameraLon,
+                aircraftLat,
+                aircraftLon
+              )
+              const altDiff = altitudeMeters - clampedOrbitHeight
+              finalPitch = Math.atan2(altDiff, horizontalDist) * 180 / Math.PI
+
+              // Calculate what orbitPitch corresponds to the clamped height
+              // orbitPitch = asin((cameraHeight - aircraftAlt) / orbitDistance)
+              const heightDiff = clampedOrbitHeight - altitudeMeters
+              const clampedRatio = Math.max(-1, Math.min(1, heightDiff / state.orbitDistance))
+              effectiveOrbitPitch = Math.asin(clampedRatio) * 180 / Math.PI
+            }
+
             // Set camera position directly (no smoothing)
             const targetFov = calculateFollowFov(60, state.followZoom)
 
             const cameraPosition = Cesium.Cartesian3.fromDegrees(
               orbitResult.cameraLon,
               orbitResult.cameraLat,
-              orbitResult.cameraHeight
+              clampedOrbitHeight
             )
             viewer.camera.setView({
               destination: cameraPosition,
               orientation: {
                 heading: Cesium.Math.toRadians(orbitResult.heading),
-                pitch: Cesium.Math.toRadians(orbitResult.pitch),
+                pitch: Cesium.Math.toRadians(finalPitch),
                 roll: 0
               }
             })
@@ -387,12 +419,22 @@ export function useCesiumCamera(
               viewer.camera.frustum.fov = Cesium.Math.toRadians(targetFov)
             }
 
-            // Update store with calculated values (for UI display) - but only if changed
-            if (Math.abs(orbitResult.heading - state.heading) > 0.1 || Math.abs(orbitResult.pitch - state.pitch) > 0.1) {
-              updateCameraState({
-                heading: orbitResult.heading,
-                pitch: orbitResult.pitch
-              })
+            // Update store with calculated values
+            // Update heading/pitch for UI display, and orbitPitch if terrain-clamped
+            const updates: Partial<typeof state> = {}
+            if (Math.abs(orbitResult.heading - state.heading) > 0.1) {
+              updates.heading = orbitResult.heading
+            }
+            if (Math.abs(finalPitch - state.pitch) > 0.1) {
+              updates.pitch = finalPitch
+            }
+            // When terrain-clamped, update orbitPitch to reflect effective value
+            // This prevents the camera from "snapping" when the constraint is released
+            if (wasOrbitClamped && Math.abs(effectiveOrbitPitch - state.orbitPitch) > 0.5) {
+              updates.orbitPitch = effectiveOrbitPitch
+            }
+            if (Object.keys(updates).length > 0) {
+              updateCameraState(updates)
             }
           }
         } else if (state.followMode === 'tower' && state.viewMode === '3d') {

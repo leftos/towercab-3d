@@ -12,6 +12,20 @@ import {
   calculateTargetVelocities,
   applyWheelImpulse
 } from '../utils/inputVelocity'
+import {
+  PITCH_MIN,
+  PITCH_MAX,
+  FOV_MIN,
+  FOV_MAX,
+  ORBIT_PITCH_MIN,
+  ORBIT_PITCH_MAX,
+  ORBIT_DISTANCE_MIN,
+  ORBIT_DISTANCE_MAX,
+  TOPDOWN_ALTITUDE_MIN,
+  TOPDOWN_ALTITUDE_MAX,
+  FOLLOW_ZOOM_MIN,
+  FOLLOW_ZOOM_MAX
+} from '../constants'
 
 interface UseCameraInputOptions {
   /** Callback when user manually breaks out of tower follow mode */
@@ -186,9 +200,14 @@ export function useCameraInput(
   // Camera state values (from this viewport)
   const viewMode = cameraState?.viewMode ?? '3d'
   const heading = cameraState?.heading ?? 0
+  const pitch = cameraState?.pitch ?? -15
+  const fov = cameraState?.fov ?? 60
   const topdownAltitude = cameraState?.topdownAltitude ?? 5000
   const followingCallsign = cameraState?.followingCallsign ?? null
   const followMode = cameraState?.followMode ?? 'tower'
+  const followZoom = cameraState?.followZoom ?? 1
+  const orbitPitch = cameraState?.orbitPitch ?? 15
+  const orbitDistance = cameraState?.orbitDistance ?? 500
 
   // Viewport store actions (operate on active viewport)
   const toggleViewMode = useViewportStore((state) => state.toggleViewMode)
@@ -228,8 +247,13 @@ export function useCameraInput(
   const viewModeRef = useRef(viewMode)
   const topdownAltitudeRef = useRef(topdownAltitude)
   const headingRef = useRef(heading)
+  const pitchRef = useRef(pitch)
+  const fovRef = useRef(fov)
   const followingCallsignRef = useRef(followingCallsign)
   const followModeRef = useRef(followMode)
+  const followZoomRef = useRef(followZoom)
+  const orbitPitchRef = useRef(orbitPitch)
+  const orbitDistanceRef = useRef(orbitDistance)
   const mouseSensitivityRef = useRef(mouseSensitivity)
   const isActiveRef = useRef(activeViewportId === viewportId)
   const viewportIdRef = useRef(viewportId)
@@ -238,8 +262,13 @@ export function useCameraInput(
   viewModeRef.current = viewMode
   topdownAltitudeRef.current = topdownAltitude
   headingRef.current = heading
+  pitchRef.current = pitch
+  fovRef.current = fov
   followingCallsignRef.current = followingCallsign
   followModeRef.current = followMode
+  followZoomRef.current = followZoom
+  orbitPitchRef.current = orbitPitch
+  orbitDistanceRef.current = orbitDistance
   mouseSensitivityRef.current = mouseSensitivity
   isActiveRef.current = activeViewportId === viewportId
   viewportIdRef.current = viewportId
@@ -253,8 +282,9 @@ export function useCameraInput(
 
     // Left-click drag start (for panning in top-down view)
     handler.setInputAction((movement: { position: Cesium.Cartesian2 }) => {
-      // Activate this viewport on click
+      // Activate this viewport on click - update ref immediately so keyboard works without waiting for re-render
       setActiveViewport(viewportIdRef.current)
+      isActiveRef.current = true
       if (viewModeRef.current === 'topdown') {
         isLeftDraggingRef.current = true
         lastMousePosRef.current = { x: movement.position.x, y: movement.position.y }
@@ -268,8 +298,9 @@ export function useCameraInput(
 
     // Right-click drag start
     handler.setInputAction((movement: { position: Cesium.Cartesian2 }) => {
-      // Activate this viewport on click
+      // Activate this viewport on click - update ref immediately so keyboard works without waiting for re-render
       setActiveViewport(viewportIdRef.current)
+      isActiveRef.current = true
       isDraggingRef.current = true
       lastMousePosRef.current = { x: movement.position.x, y: movement.position.y }
 
@@ -281,8 +312,9 @@ export function useCameraInput(
 
     // Middle-click drag start
     handler.setInputAction((movement: { position: Cesium.Cartesian2 }) => {
-      // Activate this viewport on click
+      // Activate this viewport on click - update ref immediately so keyboard works without waiting for re-render
       setActiveViewport(viewportIdRef.current)
+      isActiveRef.current = true
       isDraggingRef.current = true
       lastMousePosRef.current = { x: movement.position.x, y: movement.position.y }
 
@@ -500,6 +532,62 @@ export function useCameraInput(
       vel.orbitDistance = accelerateVelocity(vel.orbitDistance, targets.orbitDistance, MOVEMENT_CONFIG.MAX_ORBIT_DIST_SPEED, dt)
       vel.altitude = accelerateVelocity(vel.altitude, targets.altitude, MOVEMENT_CONFIG.MAX_ALTITUDE_SPEED, dt)
 
+      // Reset velocity to zero when at a boundary to prevent momentum buildup
+      // This stops the "rubberbanding" effect when hitting limits
+      const currentPitch = pitchRef.current
+      const currentFov = fovRef.current
+      const currentOrbitPitch = orbitPitchRef.current
+      const currentOrbitDistance = orbitDistanceRef.current
+      const currentAltitude = topdownAltitudeRef.current
+
+      // Pitch boundaries
+      if ((currentPitch <= PITCH_MIN + 0.5 && vel.pitch < 0) ||
+          (currentPitch >= PITCH_MAX - 0.5 && vel.pitch > 0)) {
+        vel.pitch = 0
+      }
+
+      // Zoom velocity boundaries depend on current mode
+      const inOrbitMode = followingCallsignRef.current && followModeRef.current === 'orbit'
+      const inTowerFollow = followingCallsignRef.current && followModeRef.current === 'tower'
+
+      if (inTowerFollow) {
+        // Follow zoom boundaries (tower follow mode)
+        const currentFollowZoom = followZoomRef.current
+        if ((currentFollowZoom <= FOLLOW_ZOOM_MIN + 0.01 && vel.zoom < 0) ||
+            (currentFollowZoom >= FOLLOW_ZOOM_MAX - 0.01 && vel.zoom > 0)) {
+          vel.zoom = 0
+          wheelImpulseRef.current = 0  // Also clear wheel impulse to stop momentum
+        }
+      } else if (!inOrbitMode && !followingCallsignRef.current) {
+        // FOV boundaries (normal 3D mode, not following)
+        if ((currentFov <= FOV_MIN + 0.5 && vel.zoom < 0) ||
+            (currentFov >= FOV_MAX - 0.5 && vel.zoom > 0)) {
+          vel.zoom = 0
+          wheelImpulseRef.current = 0  // Also clear wheel impulse to stop momentum
+        }
+      }
+      // Note: orbit mode uses orbitDistance for zoom, which is already checked above
+
+      // Orbit pitch boundaries
+      if ((currentOrbitPitch <= ORBIT_PITCH_MIN + 0.5 && vel.orbitPitch < 0) ||
+          (currentOrbitPitch >= ORBIT_PITCH_MAX - 0.5 && vel.orbitPitch > 0)) {
+        vel.orbitPitch = 0
+      }
+
+      // Orbit distance boundaries
+      if ((currentOrbitDistance <= ORBIT_DISTANCE_MIN + 1 && vel.orbitDistance < 0) ||
+          (currentOrbitDistance >= ORBIT_DISTANCE_MAX - 1 && vel.orbitDistance > 0)) {
+        vel.orbitDistance = 0
+        wheelImpulseRef.current = 0  // Also clear wheel impulse to stop momentum
+      }
+
+      // Top-down altitude boundaries
+      if ((currentAltitude <= TOPDOWN_ALTITUDE_MIN + 1 && vel.altitude < 0) ||
+          (currentAltitude >= TOPDOWN_ALTITUDE_MAX - 1 && vel.altitude > 0)) {
+        vel.altitude = 0
+        wheelImpulseRef.current = 0  // Also clear wheel impulse to stop momentum
+      }
+
       // Apply velocities
       const threshold = MOVEMENT_CONFIG.VELOCITY_THRESHOLD
 
@@ -520,7 +608,7 @@ export function useCameraInput(
       }
       if (Math.abs(vel.zoom) > threshold) {
         if (followingCallsignRef.current && followModeRef.current !== 'orbit') {
-          adjustFollowZoom(vel.zoom * dt * 0.05)  // Scale down for follow zoom
+          adjustFollowZoom(vel.zoom * dt)  // Tower follow mode zoom
         } else {
           adjustFov(vel.zoom * dt)
         }

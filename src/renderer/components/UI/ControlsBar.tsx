@@ -180,6 +180,9 @@ function ControlsBar() {
     fov,
     topdownAltitude,
     followingCallsign,
+    followMode,
+    followZoom,
+    orbitDistance,
     resetView,
     setFov
   } = useActiveViewportCamera()
@@ -538,7 +541,18 @@ function ControlsBar() {
               {followingCallsign ? (
                 <div className="follow-status">
                   <span className="follow-indicator">Following: {followingCallsign}</span>
-                  <span className="follow-hint">Scroll to zoom • Esc to stop</span>
+                  {followMode === 'tower' ? (
+                    <span className="follow-zoom-info">
+                      Zoom: {followZoom.toFixed(1)}x
+                      <span className="follow-range">(0.5–5.0)</span>
+                    </span>
+                  ) : (
+                    <span className="follow-zoom-info">
+                      Distance: {orbitDistance >= 1000 ? `${(orbitDistance / 1000).toFixed(1)}km` : `${Math.round(orbitDistance)}m`}
+                      <span className="follow-range">(50m–5km)</span>
+                    </span>
+                  )}
+                  <span className="follow-hint">Scroll to {followMode === 'tower' ? 'zoom' : 'adjust'} • O to switch • Esc to stop</span>
                 </div>
               ) : (
                 <div className="zoom-control">

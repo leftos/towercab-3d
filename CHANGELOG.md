@@ -5,6 +5,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Follow mode UI now displays current zoom level (tower mode) or distance (orbit mode)
+  - Shows numeric value with valid range for quick reference
+  - Updated hints show "O to switch" between follow modes
 - Orbit follow mode now remembers zoom distance and camera angle globally
   - Settings persist across aircraft, airports, and app restarts
   - New viewports automatically use your last-used orbit settings
@@ -39,6 +42,11 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Model matching now validates file existence before returning model paths
 
 ### Fixed
+- Camera no longer rubberbands or builds up momentum when hitting limits (pitch, zoom, distance, altitude)
+- Orbit camera no longer clips through terrain when close to the ground
+  - Camera automatically stays above terrain with minimum altitude
+  - Pitch recalculates to keep aircraft in view when height-constrained
+- Scroll wheel now responds immediately when changing direction (cancels existing momentum)
 - VMR XML parsing now handles both self-closing tags and open/close tag formats
 
 ## [0.0.12-alpha] - 2025-12-24
