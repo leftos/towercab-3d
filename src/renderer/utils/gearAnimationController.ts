@@ -116,10 +116,21 @@ export function initializeGearState(
   isOnGround: boolean,
   config: GearAnimationConfig = DEFAULT_GEAR_CONFIG
 ): void {
-  // Determine initial gear assumption based on altitude
-  // High altitude aircraft should start with gear UP to avoid unrealistic visuals
-  // Low altitude or ground aircraft should start with gear DOWN
-  const assumeGearDown = isOnGround || altitude < config.extendAltitude
+  // For NEW aircraft (verticalRate=0 indicates no history), be more conservative about gear state.
+  // VATSIM can report high groundspeed for ground aircraft (landing roll, stale data, reconnects),
+  // and altitude may be miscalculated before terrain sampling completes.
+  //
+  // Conservative approach: if vertical rate is 0 (new aircraft) and altitude isn't clearly
+  // at cruise level (>3000ft), assume gear should be DOWN. This prevents the jarring visual
+  // of ground aircraft spawning with gear up.
+  const isNewAircraft = Math.abs(verticalRate) < 1 // No vertical rate history
+  const clearlyCruising = altitude > 3000 // Well above pattern altitude
+
+  // For new aircraft, only assume gear UP if clearly at cruise altitude
+  // For aircraft with vertical rate history, use normal logic
+  const assumeGearDown = isNewAircraft
+    ? !clearlyCruising
+    : (isOnGround || altitude < config.extendAltitude)
 
   // Calculate what the gear state should be based on current aircraft conditions
   const initialProgress = calculateTargetGearProgress(
