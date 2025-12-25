@@ -83,7 +83,7 @@ The `useBabylonOverlay` hook synchronizes the Babylon.js camera with Cesium's ca
 
 ### State Management (Zustand)
 
-Ten Zustand stores in `stores/`. Key ones: `vatsimStore` (VATSIM polling), `viewportStore` (camera state - use this, not deprecated `cameraStore`), `settingsStore` (persisted settings), `replayStore` (replay buffer/playback).
+Thirteen Zustand stores in `stores/`. Key ones: `vatsimStore` (VATSIM polling), `viewportStore` (camera state - use this, not deprecated `cameraStore`), `settingsStore` (persisted settings), `replayStore` (replay buffer/playback), `fsltlConversionStore` (FSLTL model conversion), `updateStore` (auto-update system), `uiFeedbackStore` (UI notifications).
 
 > **📖 Full store list with relationships:** See `src/renderer/docs/architecture.md`
 
@@ -108,13 +108,16 @@ All TypeScript types are centralized in the `types/` directory, organized by dom
 
 | File | Purpose |
 |------|---------|
+| `types/airport.ts` | Airport data structures, tower height calculation |
+| `types/babylon.ts` | Babylon.js types (labels, weather meshes, scene options, hook return types, ENU transforms) |
 | `types/camera.ts` | Camera state, view modes, follow modes, bookmarks |
-| `types/viewport.ts` | Viewport layout, multi-viewport configuration, inset positioning |
-| `types/weather.ts` | METAR data, cloud layers, fog density, flight categories |
+| `types/fsltl.ts` | FSLTL model conversion types, airline mapping, texture quality |
+| `types/mod.ts` | Modding system types (aircraft/tower manifest formats) |
+| `types/replay.ts` | Replay system types (snapshots, playback state, serialization, import/export) |
 | `types/settings.ts` | Application settings (grouped by domain: cesium, graphics, camera, weather, memory, aircraft, ui) |
 | `types/vatsim.ts` | VATSIM API data structures, pilot/controller data |
-| `types/babylon.ts` | Babylon.js types (labels, weather meshes, scene options, hook return types, ENU transforms) |
-| `types/replay.ts` | Replay system types (snapshots, playback state, serialization, import/export) |
+| `types/viewport.ts` | Viewport layout, multi-viewport configuration, inset positioning |
+| `types/weather.ts` | METAR data, cloud layers, fog density, flight categories, precipitation |
 | `types/index.ts` | Barrel export for all types |
 
 **Usage:**
@@ -152,11 +155,13 @@ Configuration values and magic numbers are centralized in the `constants/` direc
 
 | File | Purpose |
 |------|---------|
-| `constants/rendering.ts` | Aircraft model pool sizes, shadow configuration, positioning offsets, colors |
-| `constants/camera.ts` | FOV/pitch/heading limits, orbit mode defaults, follow mode settings, top-down view settings |
 | `constants/api.ts` | External API endpoints (VATSIM, weather, airports), polling intervals, cache TTL |
-| `constants/babylon.ts` | Babylon.js scene/camera settings, cloud/fog parameters, visibility thresholds, lighting values |
+| `constants/babylon.ts` | Babylon.js scene/camera settings, visibility thresholds, lighting values |
+| `constants/camera.ts` | FOV/pitch/heading limits, orbit mode defaults, follow mode settings, top-down view settings |
+| `constants/precipitation.ts` | Rain/snow particle parameters, wind effects, lightning flash timing |
+| `constants/rendering.ts` | Aircraft model pool sizes, shadow configuration, positioning offsets, colors |
 | `constants/replay.ts` | Replay buffer size, snapshot interval, playback speeds, memory estimation |
+| `constants/weather.ts` | Cloud/fog parameters, layer geometry, animation speeds |
 | `constants/index.ts` | Barrel export for all constants |
 
 **Usage:**

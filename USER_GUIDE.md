@@ -30,12 +30,14 @@ Welcome to TowerCab 3D, a real-time 3D tower visualization tool for VATSIM air t
 
 1. **Launch the application** - Run `npm run dev` for development or use the installed application.
 
-2. **Configure Cesium Ion Token**
+2. **Auto-Update Check** - The app automatically checks for updates on startup and every 4 hours. When an update is available, a notification bar appears with download progress and a restart prompt. You can also manually check for updates in Settings > Help > Updates.
+
+3. **Configure Cesium Ion Token**
    - Click the **Settings** button (gear icon) in the bottom-right corner
    - Enter your Cesium Ion access token (get one free at [cesium.com/ion](https://cesium.com/ion))
    - The globe will load once a valid token is entered
 
-3. **Select an Airport**
+4. **Select an Airport**
    - Click the airport button in the top-left corner
    - Search for an airport by ICAO code, IATA code, name, or city
    - Click an airport to fly there and start viewing traffic
@@ -369,16 +371,25 @@ Each result shows:
 
 ## Bookmark System
 
-Save and restore camera positions using the bookmark system. Each airport has 99 bookmark slots (numbered 00-99).
+Save and restore camera positions using the bookmark system. Each airport has 100 bookmark slots (numbered 00-99).
 
 ### Saving a Bookmark
 
 1. Position your camera exactly as desired
-2. Type `.XX.` where XX is a number from 00-99 (e.g., `.00.`, `.15.`, `.99.`)
+2. Type `.XX.` where XX is a number from 00-99 (e.g., `.00.`, `.15.`)
 3. Press **Enter**
 4. A confirmation message appears briefly
 
 **Example:** Type `.00.` and press Enter to save to slot 00.
+
+### Saving a Named Bookmark (Optional)
+
+You can optionally add a custom name when saving:
+
+1. Type `.XX.NAME.` where XX is the slot number and NAME is your label (e.g., `.00.RWY 27 FINAL.`, `.15.TOWER VIEW.`)
+2. Press **Enter**
+
+**Example:** Type `.00.1L/1R FINAL.` and press Enter to save to slot 00 with name "1L/1R FINAL".
 
 ### Loading a Bookmark
 
@@ -387,6 +398,23 @@ Save and restore camera positions using the bookmark system. Each airport has 99
 3. Camera instantly moves to the saved position
 
 **Example:** Type `.00` and press Enter to load slot 00.
+
+### Quick Bookmark Recall
+
+Press **Ctrl+0** through **Ctrl+9** to instantly load bookmarks 0-9 without typing.
+
+### Bookmark Manager (Ctrl+B)
+
+Press **Ctrl+B** to open the Bookmark Manager modal:
+
+**Features:**
+- View all 100 bookmarks for the current airport
+- See bookmark names and which slots are occupied
+- Navigate with arrow keys
+- Press **Enter** to load selected bookmark
+- Press **R** to rename a bookmark
+- Press **Del** to delete a bookmark
+- Press **Escape** or click X to close
 
 ### What Gets Saved
 
@@ -696,9 +724,27 @@ The Help tab includes:
 
 ## Modding
 
-TowerCab 3D supports custom 3D models for aircraft and towers.
+TowerCab 3D supports custom 3D models for aircraft and towers, plus FSLTL airline liveries.
 
-### Installing Mods
+### FSLTL Aircraft Models
+
+Import airline-specific liveries from the FS Live Traffic Liveries (FSLTL) package:
+
+1. Click **Settings** (gear icon)
+2. Go to **General > FSLTL Aircraft Models**
+3. Click **Select FSLTL Directory** and choose your FSLTL installation folder
+4. Select which airlines and aircraft types to convert
+5. Choose texture quality (Full 4K, 2K, 1K recommended, or 512px)
+6. Click **Start Conversion**
+7. Models are stored in IndexedDB and automatically matched by airline ICAO code
+
+**Features:**
+- Airline-specific liveries matched by callsign (e.g., UAL123 uses United livery)
+- Fallback to generic/base liveries when airline model unavailable
+- Landing gear animations (extends below 2,000ft AGL, retracts above 500ft)
+- Converted models persist across sessions
+
+### Installing Custom Mods
 
 1. Place mod folders in the `mods/` directory:
    - Aircraft: `mods/aircraft/{TYPE}/`
@@ -778,7 +824,11 @@ See [MODDING.md](MODDING.md) for complete modding instructions including:
 |-----|--------|
 | M | Toggle measuring tool |
 | Ctrl+K | Open global aircraft search |
+| Ctrl+B | Open bookmark manager |
+| Ctrl+0-9 | Load bookmarks 0-9 instantly |
+| Ctrl+M | Toggle METAR overlay display |
 | F1 | Toggle performance HUD |
+| F3 | Open model matching debug modal |
 
 ### Replay (when in Replay mode)
 

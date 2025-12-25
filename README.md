@@ -4,6 +4,23 @@ A 3D tower cab view application for VATSIM air traffic controllers. View real-ti
 
 ![TowerCab 3D](resources/screenshot.png)
 
+## Table of Contents
+
+- [Features](#features)
+- [Requirements](#requirements)
+- [Quick Start](#quick-start)
+- [Controls](#controls)
+- [Building for Production](#building-for-production)
+- [Project Structure](#project-structure)
+- [Technology Stack](#technology-stack)
+- [Data Sources](#data-sources)
+- [Settings Reference](#settings-reference)
+- [Performance Tips](#performance-tips)
+- [Troubleshooting](#troubleshooting)
+- [CI/CD](#cicd)
+- [License](#license)
+- [Acknowledgments](#acknowledgments)
+
 ## Features
 
 ### Live VATSIM Integration
@@ -40,7 +57,9 @@ A 3D tower cab view application for VATSIM air traffic controllers. View real-ti
 - **Top-Down View**: Bird's-eye view with pan and zoom (press T to toggle)
 - **Aircraft Following**: Two modes - Tower (camera stays at tower) or Orbit (camera circles aircraft)
 - **WASD Movement**: Move camera position relative to tower
-- **Bookmark System**: Save up to 99 camera positions per airport
+- **Bookmark System**: Save up to 100 camera positions per airport with custom names
+- **Quick Bookmarks**: Ctrl+0-9 for instant recall of first 10 bookmarks
+- **Bookmark Manager**: Ctrl+B opens full bookmark management modal
 
 ### Aircraft Panel
 - Nearby aircraft list with real-time updates
@@ -68,6 +87,7 @@ A 3D tower cab view application for VATSIM air traffic controllers. View real-ti
 ### Modding Support
 - Custom aircraft 3D models (glTF/GLB format)
 - Custom tower models for specific airports
+- FSLTL (FS Live Traffic Liveries) model import with airline-specific liveries
 - See [MODDING.md](MODDING.md) for details
 
 ## Requirements
@@ -83,7 +103,8 @@ A 3D tower cab view application for VATSIM air traffic controllers. View real-ti
 1. Download the latest Windows installer from [GitHub Releases](https://github.com/leftos/towercab-3d/releases)
 2. Run the installer and follow the prompts
 3. Launch TowerCab 3D from the Start Menu or desktop shortcut
-4. Continue to [Get a Cesium Ion Token](#2-get-a-cesium-ion-token) below
+4. The app will automatically check for updates on startup and notify you when new versions are available
+5. Continue to [Get a Cesium Ion Token](#2-get-a-cesium-ion-token) below
 
 ### Option B: Run from Source (Development)
 
@@ -135,8 +156,12 @@ npm run dev
 | **O** | Toggle follow mode (Tower/Orbit) when following |
 | **Escape** | Stop following / close modals |
 | **Ctrl+K** | Open global aircraft search |
+| **Ctrl+B** | Open bookmark manager |
+| **Ctrl+0-9** | Load bookmarks 0-9 instantly |
+| **Ctrl+M** | Toggle METAR overlay display |
 | **M** | Toggle measuring tool |
 | **F1** | Toggle performance HUD |
+| **F3** | Open model matching debug modal |
 | **Space** | Play/Pause replay (in Replay mode) |
 | **Left/Right Arrow** | Step backward/forward 15s (in Replay mode) |
 
@@ -152,8 +177,11 @@ npm run dev
 ### Bookmark System
 
 Save and restore camera positions quickly:
-- Type `.00.` through `.99.` and press Enter to **save** to a slot
-- Type `.00` through `.99` and press Enter to **load** from a slot
+- Type `.XX.` to **save** to slot XX (e.g., `.00.`, `.15.`)
+- Type `.XX.NAME.` to **save** with a custom name (e.g., `.00.RWY 27.`, `.15.TOWER.`)
+- Type `.XX` and press Enter to **load** from a slot
+- Press **Ctrl+0-9** for instant recall of bookmarks 0-9
+- Press **Ctrl+B** to open the Bookmark Manager with full keyboard navigation
 - Bookmarks are saved per-airport
 
 ## Building for Production

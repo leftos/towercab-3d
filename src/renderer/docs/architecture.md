@@ -349,6 +349,29 @@ aircraftFilterStore
      ├─ useAircraftFiltering (list filtering for UI)
      └─ AircraftPanel (filter controls)
 
+fsltlConversionStore
+├─ conversionProgress: ConversionProgress
+├─ selectedAirlines: Set<string>
+├─ selectedAircraftTypes: Set<string>
+└─ Used by:
+     ├─ FSLTLConversionPanel (conversion UI)
+     └─ AircraftModelService (model loading)
+
+updateStore
+├─ updateAvailable: boolean
+├─ downloadProgress: number
+├─ updateInfo: UpdateInfo | null
+└─ Used by:
+     ├─ UpdateNotification (update banner)
+     └─ Settings Help tab (manual update check)
+
+uiFeedbackStore
+├─ toasts: Toast[]
+├─ notifications: Notification[]
+└─ Used by:
+     ├─ ToastContainer (toast display)
+     └─ Various components (show feedback)
+
 vrStore
 ├─ isVRSupported: boolean
 ├─ isVRActive: boolean
@@ -646,15 +669,19 @@ src/renderer/
 │   └─ Babylon hooks (useBabylonOverlay, useBabylonCameraSync, etc.)
 │
 ├─ stores/
-│   ├─ airportStore.ts
-│   ├─ viewportStore.ts (PRIMARY CAMERA STORE)
-│   ├─ settingsStore.ts
-│   ├─ vatsimStore.ts
-│   ├─ weatherStore.ts
-│   ├─ measureStore.ts
 │   ├─ aircraftFilterStore.ts
+│   ├─ airportStore.ts
+│   ├─ cameraStore.ts (DEPRECATED)
+│   ├─ fsltlConversionStore.ts
+│   ├─ measureStore.ts
+│   ├─ replayStore.ts
+│   ├─ settingsStore.ts
+│   ├─ uiFeedbackStore.ts
+│   ├─ updateStore.ts
+│   ├─ vatsimStore.ts
+│   ├─ viewportStore.ts (PRIMARY CAMERA STORE)
 │   ├─ vrStore.ts
-│   └─ cameraStore.ts (DEPRECATED)
+│   └─ weatherStore.ts
 │
 ├─ services/
 │   ├─ VatsimService.ts (API client)
@@ -668,18 +695,25 @@ src/renderer/
 │   └─ performanceMonitor.ts (FPS tracking)
 │
 ├─ types/
+│   ├─ airport.ts (Airport data structures, tower height)
+│   ├─ babylon.ts (labels, weather meshes, scene options, hook return types, ENU transforms)
 │   ├─ camera.ts (ViewMode, FollowMode, CameraState, etc.)
-│   ├─ viewport.ts (Viewport, ViewportLayout, etc.)
-│   ├─ vatsim.ts (Pilot, AircraftState, InterpolatedAircraftState)
-│   ├─ weather.ts (CloudLayer, FlightCategory, etc.)
+│   ├─ fsltl.ts (FSLTL conversion types, airline mapping)
+│   ├─ mod.ts (modding system types, manifest formats)
+│   ├─ replay.ts (replay snapshots, playback state)
 │   ├─ settings.ts (grouped settings interfaces)
-│   └─ babylon.ts (labels, weather meshes, scene options, hook return types, ENU transforms)
+│   ├─ vatsim.ts (Pilot, AircraftState, InterpolatedAircraftState)
+│   ├─ viewport.ts (Viewport, ViewportLayout, etc.)
+│   └─ weather.ts (CloudLayer, FlightCategory, precipitation, etc.)
 │
 ├─ constants/
-│   ├─ rendering.ts (model pool, shadows, colors)
-│   ├─ camera.ts (FOV/pitch limits, speeds)
 │   ├─ api.ts (endpoints, poll intervals)
-│   └─ babylon.ts (scene/camera settings, fog/cloud params, visibility thresholds, lighting)
+│   ├─ babylon.ts (scene/camera settings, visibility thresholds, lighting)
+│   ├─ camera.ts (FOV/pitch limits, speeds)
+│   ├─ precipitation.ts (rain/snow particles, wind effects)
+│   ├─ rendering.ts (model pool, shadows, colors)
+│   ├─ replay.ts (buffer size, snapshot interval)
+│   └─ weather.ts (cloud/fog params, layer geometry, animation)
 │
 └─ docs/
     ├─ coordinate-systems.md (this helped you!)
