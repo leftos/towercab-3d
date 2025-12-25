@@ -5,6 +5,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Orbit follow mode now remembers zoom distance and camera angle globally
+  - Settings persist across aircraft, airports, and app restarts
+  - New viewports automatically use your last-used orbit settings
 - Dynamic ground clamping for aircraft models based on actual geometry
   - Aircraft now sit at the correct height on the ground based on their 3D model bounds
   - Accounts for landing gear animation state (gear up vs gear down)

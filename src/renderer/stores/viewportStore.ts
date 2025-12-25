@@ -43,7 +43,17 @@ interface AirportViewportConfig {
   bookmarks?: { [slot: number]: CameraBookmark }
 }
 
-const createDefaultCameraState = (customHeading?: number): ViewportCameraState => ({
+// Global orbit settings that persist across all airports (last used values)
+interface GlobalOrbitSettings {
+  distance: number
+  heading: number
+  pitch: number
+}
+
+const createDefaultCameraState = (
+  customHeading?: number,
+  globalOrbit?: GlobalOrbitSettings
+): ViewportCameraState => ({
   viewMode: '3d',
   heading: customHeading ?? HEADING_DEFAULT,
   pitch: PITCH_DEFAULT,
@@ -56,19 +66,22 @@ const createDefaultCameraState = (customHeading?: number): ViewportCameraState =
   followMode: 'tower',
   followZoom: FOLLOW_ZOOM_DEFAULT,
   preFollowState: null,
-  orbitDistance: ORBIT_DISTANCE_DEFAULT,
-  orbitHeading: ORBIT_HEADING_DEFAULT,
-  orbitPitch: ORBIT_PITCH_DEFAULT
+  orbitDistance: globalOrbit?.distance ?? ORBIT_DISTANCE_DEFAULT,
+  orbitHeading: globalOrbit?.heading ?? ORBIT_HEADING_DEFAULT,
+  orbitPitch: globalOrbit?.pitch ?? ORBIT_PITCH_DEFAULT
 })
 
 // Main viewport always uses this fixed ID so CesiumViewer can find it
 const MAIN_VIEWPORT_ID = 'main'
 
 // Create main viewport (full screen)
-const createMainViewport = (customHeading?: number): Viewport => ({
+const createMainViewport = (
+  customHeading?: number,
+  globalOrbit?: GlobalOrbitSettings
+): Viewport => ({
   id: MAIN_VIEWPORT_ID,
   layout: { x: 0, y: 0, width: 1, height: 1, zIndex: 0 },
-  cameraState: createDefaultCameraState(customHeading),
+  cameraState: createDefaultCameraState(customHeading, globalOrbit),
   label: 'Main'
 })
 
@@ -147,6 +160,8 @@ interface ViewportStore {
   activeViewportId: string
   currentAirportIcao: string | null
   airportViewportConfigs: Record<string, AirportViewportConfig>
+  // Global orbit settings - persist last used values across all airports
+  globalOrbitSettings: GlobalOrbitSettings
 
   // Viewport management
   addViewport: (layout?: Partial<ViewportLayout>, copyFromViewportId?: string) => string
@@ -325,6 +340,11 @@ export const useViewportStore = create<ViewportStore>()(
           activeViewportId: initialMainViewport.id,
           currentAirportIcao: null,
           airportViewportConfigs: {},
+          globalOrbitSettings: {
+            distance: ORBIT_DISTANCE_DEFAULT,
+            heading: ORBIT_HEADING_DEFAULT,
+            pitch: ORBIT_PITCH_DEFAULT
+          },
 
           // Viewport management
           addViewport: (layout, copyFromViewportId) => {
@@ -333,7 +353,8 @@ export const useViewportStore = create<ViewportStore>()(
             const defaultLayout = getNextInsetPosition(state.viewports)
 
             // Get camera state to copy from (either specified viewport or main)
-            let cameraState = createDefaultCameraState()
+            // Use global orbit settings when creating fresh camera state
+            let cameraState = createDefaultCameraState(undefined, state.globalOrbitSettings)
             if (copyFromViewportId) {
               const sourceViewport = state.viewports.find(v => v.id === copyFromViewportId)
               if (sourceViewport) {
@@ -702,61 +723,76 @@ export const useViewportStore = create<ViewportStore>()(
             })
           },
 
-          // Orbit mode actions
+          // Orbit mode actions - also save to globalOrbitSettings for persistence
           setOrbitDistance: (distance) => {
             const clamped = Math.max(ORBIT_DISTANCE_MIN, Math.min(ORBIT_DISTANCE_MAX, distance))
-            const { activeViewportId, viewports } = get()
+            const { activeViewportId, viewports, globalOrbitSettings } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
                 orbitDistance: clamped
-              }))
+              })),
+              globalOrbitSettings: { ...globalOrbitSettings, distance: clamped }
             })
           },
 
           adjustOrbitDistance: (delta) => {
-            const { activeViewportId, viewports } = get()
+            const { activeViewportId, viewports, globalOrbitSettings } = get()
+            const activeViewport = viewports.find(v => v.id === activeViewportId)
+            const currentDistance = activeViewport?.cameraState.orbitDistance ?? globalOrbitSettings.distance
+            const newDistance = Math.max(ORBIT_DISTANCE_MIN, Math.min(ORBIT_DISTANCE_MAX, currentDistance + delta))
             set({
-              viewports: updateViewportCameraState(viewports, activeViewportId, (state) => ({
-                orbitDistance: Math.max(ORBIT_DISTANCE_MIN, Math.min(ORBIT_DISTANCE_MAX, state.orbitDistance + delta))
-              }))
+              viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
+                orbitDistance: newDistance
+              })),
+              globalOrbitSettings: { ...globalOrbitSettings, distance: newDistance }
             })
           },
 
           setOrbitHeading: (heading) => {
             const normalized = ((heading % 360) + 360) % 360
-            const { activeViewportId, viewports } = get()
+            const { activeViewportId, viewports, globalOrbitSettings } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
                 orbitHeading: normalized
-              }))
+              })),
+              globalOrbitSettings: { ...globalOrbitSettings, heading: normalized }
             })
           },
 
           adjustOrbitHeading: (delta) => {
-            const { activeViewportId, viewports } = get()
+            const { activeViewportId, viewports, globalOrbitSettings } = get()
+            const activeViewport = viewports.find(v => v.id === activeViewportId)
+            const currentHeading = activeViewport?.cameraState.orbitHeading ?? globalOrbitSettings.heading
+            const newHeading = ((currentHeading + delta) % 360 + 360) % 360
             set({
-              viewports: updateViewportCameraState(viewports, activeViewportId, (state) => ({
-                orbitHeading: ((state.orbitHeading + delta) % 360 + 360) % 360
-              }))
+              viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
+                orbitHeading: newHeading
+              })),
+              globalOrbitSettings: { ...globalOrbitSettings, heading: newHeading }
             })
           },
 
           setOrbitPitch: (pitch) => {
             const clamped = Math.max(ORBIT_PITCH_MIN, Math.min(ORBIT_PITCH_MAX, pitch))
-            const { activeViewportId, viewports } = get()
+            const { activeViewportId, viewports, globalOrbitSettings } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
                 orbitPitch: clamped
-              }))
+              })),
+              globalOrbitSettings: { ...globalOrbitSettings, pitch: clamped }
             })
           },
 
           adjustOrbitPitch: (delta) => {
-            const { activeViewportId, viewports } = get()
+            const { activeViewportId, viewports, globalOrbitSettings } = get()
+            const activeViewport = viewports.find(v => v.id === activeViewportId)
+            const currentPitch = activeViewport?.cameraState.orbitPitch ?? globalOrbitSettings.pitch
+            const newPitch = Math.max(ORBIT_PITCH_MIN, Math.min(ORBIT_PITCH_MAX, currentPitch + delta))
             set({
-              viewports: updateViewportCameraState(viewports, activeViewportId, (state) => ({
-                orbitPitch: Math.max(ORBIT_PITCH_MIN, Math.min(ORBIT_PITCH_MAX, state.orbitPitch + delta))
-              }))
+              viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
+                orbitPitch: newPitch
+              })),
+              globalOrbitSettings: { ...globalOrbitSettings, pitch: newPitch }
             })
           },
 
@@ -796,8 +832,9 @@ export const useViewportStore = create<ViewportStore>()(
             } else {
               // Create fresh main viewport for new airport
               // Apply custom heading from tower mod or tower-positions.json if available
+              // Use global orbit settings for consistency across airports
               const customHeading = useAirportStore.getState().customHeading ?? undefined
-              const mainViewport = createMainViewport(customHeading)
+              const mainViewport = createMainViewport(customHeading, state.globalOrbitSettings)
               set({
                 currentAirportIcao: normalizedIcao,
                 viewports: [mainViewport],
@@ -853,7 +890,8 @@ export const useViewportStore = create<ViewportStore>()(
               })
             } else {
               // No saved default, reset to single main viewport with defaults
-              const mainViewport = createMainViewport()
+              // Use global orbit settings for consistency
+              const mainViewport = createMainViewport(undefined, state.globalOrbitSettings)
               set({
                 viewports: [mainViewport],
                 activeViewportId: mainViewport.id
@@ -864,8 +902,10 @@ export const useViewportStore = create<ViewportStore>()(
           resetToAppDefault: () => {
             // Always reset to app defaults, ignoring any user-saved default
             // But use custom heading if available from tower mod or tower-positions.json
+            // Use global orbit settings for consistency across airports
+            const state = get()
             const customHeading = useAirportStore.getState().customHeading ?? undefined
-            const mainViewport = createMainViewport(customHeading)
+            const mainViewport = createMainViewport(customHeading, state.globalOrbitSettings)
             set({
               viewports: [mainViewport],
               activeViewportId: mainViewport.id
@@ -1049,7 +1089,8 @@ export const useViewportStore = create<ViewportStore>()(
         name: 'viewport-store',
         partialize: (state) => ({
           airportViewportConfigs: state.airportViewportConfigs,
-          currentAirportIcao: state.currentAirportIcao
+          currentAirportIcao: state.currentAirportIcao,
+          globalOrbitSettings: state.globalOrbitSettings
         }),
         onRehydrateStorage: () => (state) => {
           // After rehydration, load the saved viewport config for the current airport
