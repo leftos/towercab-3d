@@ -463,7 +463,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
       viewer.clock.currentTime = Cesium.JulianDate.now()
       viewer.clock.shouldAnimate = true
     }
-  }, [viewer, timeMode, fixedTimeHour, currentAirport, towerHeight])
+  }, [viewer, timeMode, fixedTimeHour, currentAirport, towerHeight, customTowerPosition])
 
   // Manage OSM 3D Buildings tileset
   // Skip loading buildings for inset viewports to reduce memory usage and prevent WebGL context issues
@@ -559,7 +559,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
 
     // No airport and not in orbit mode - reset
     setTerrainOffsetReady(false)
-  }, [viewer, currentAirport, towerHeight, followMode, followingCallsign])
+  }, [viewer, currentAirport, towerHeight, customTowerPosition, followMode, followingCallsign])
 
   // Setup Babylon root node when airport changes OR when in orbit mode without airport
   // Also set reference position for VATSIM distance filtering
