@@ -195,6 +195,7 @@ interface ViewportStore {
   // Default view actions
   saveCurrentAsDefault: () => void
   resetToDefault: () => void
+  resetToAppDefault: () => void  // Reset to app defaults, ignoring user-saved default
   hasCustomDefault: () => boolean
 
   // Bookmark actions (0-99)
@@ -852,6 +853,15 @@ export const useViewportStore = create<ViewportStore>()(
                 activeViewportId: mainViewport.id
               })
             }
+          },
+
+          resetToAppDefault: () => {
+            // Always reset to app defaults, ignoring any user-saved default
+            const mainViewport = createMainViewport()
+            set({
+              viewports: [mainViewport],
+              activeViewportId: mainViewport.id
+            })
           },
 
           hasCustomDefault: () => {

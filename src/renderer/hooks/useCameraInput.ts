@@ -59,7 +59,8 @@ interface UseCameraInputOptions {
  * - **R/F**: Zoom (decrease/increase FOV)
  * - **T**: Toggle view mode (3D ⟷ top-down)
  * - **R**: Reset position offsets to zero
- * - **Shift+R / Home**: Reset entire view to defaults
+ * - **Shift+R / Home**: Reset view to user's saved default
+ * - **Shift+Home**: Reset view to app defaults (ignoring user-saved default)
  * - **O**: Toggle follow mode (tower ⟷ orbit) when following aircraft
  * - **Esc**: Stop following aircraft
  *
@@ -203,6 +204,7 @@ export function useCameraInput(
   const moveRight = useViewportStore((state) => state.moveRight)
   const moveUp = useViewportStore((state) => state.moveUp)
   const resetToDefault = useViewportStore((state) => state.resetToDefault)
+  const resetToAppDefault = useViewportStore((state) => state.resetToAppDefault)
   const resetPosition = useViewportStore((state) => state.resetPosition)
   const stopFollowing = useViewportStore((state) => state.stopFollowing)
   const setActiveViewport = useViewportStore((state) => state.setActiveViewport)
@@ -401,8 +403,14 @@ export function useCameraInput(
           resetPosition()
           return
         case 'R':
-        case 'Home':
           resetToDefault()
+          return
+        case 'Home':
+          if (event.shiftKey) {
+            resetToAppDefault()
+          } else {
+            resetToDefault()
+          }
           return
         case 'o':
         case 'O':
@@ -562,6 +570,7 @@ export function useCameraInput(
     moveUp,
     toggleViewMode,
     resetToDefault,
+    resetToAppDefault,
     resetPosition,
     stopFollowing,
     onBreakTowerFollow

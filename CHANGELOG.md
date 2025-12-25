@@ -4,6 +4,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Shift+Home keyboard shortcut resets to app default view, ignoring any saved user default
+
 ### Changed
 - Modals (Settings, Import, Model Matching) no longer close when clicking outside; use the X button or Escape key to close
 
