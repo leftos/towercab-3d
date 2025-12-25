@@ -6,6 +6,11 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ### Changed
 - Overcast (OVC) cloud layers now use curved dome geometry instead of flat planes, creating a more realistic sky appearance with gradual darkening toward the horizon
+- Model Matching panel: VMR-mapped matches (e.g., B753 mapped to B739/UAL) now show "vmr" instead of "exact"
+- Model Matching panel: Scale column now only shows values for closest matches where scaling was applied
+
+### Fixed
+- Aircraft with unknown type (N/A) now use FSLTL B738 base model as fallback instead of built-in model
 
 ## [0.0.9-alpha] - 2025-12-24
 
