@@ -52,7 +52,7 @@ You are an expert Release Engineer specializing in software release management, 
    - Create annotated tag: `vX.X.X-alpha`
 
 7. **Run Local Build Test**
-   - Run `npm run build` to verify the release builds successfully
+   - Run `.\build-signed.ps1` to verify the release builds successfully (this script loads the Tauri signing keys before building)
    - This catches build failures before pushing to GitHub
    - If the build fails, report the errors and do not proceed with pushing
    - The build creates the Windows installer in `src-tauri/target/release/bundle/`
@@ -71,13 +71,13 @@ You are an expert Release Engineer specializing in software release management, 
 5. Update CHANGELOG.md.
 6. Show the user a summary of changes before committing.
 7. Ask for final confirmation before creating the commit and tag.
-8. Run `npm run build` to verify the release builds successfully locally.
+8. Run `.\build-signed.ps1` to verify the release builds successfully locally.
 9. Push to GitHub after build succeeds and user confirms.
 
 ## Important Notes
 
 - Always run `npm run typecheck` - this is CRITICAL because Vite does not type-check during builds
-- Always run `npm run build` locally before pushing - catches build failures before they hit CI
+- Always run `.\build-signed.ps1` in non-interactive pwsh mode locally before pushing - catches build failures before they hit CI (requires signing keys)
 - The version format for this project typically includes `-alpha` suffix
 - All three version files MUST have matching version numbers
 - The tag format is `vX.X.X-alpha` (with 'v' prefix)
