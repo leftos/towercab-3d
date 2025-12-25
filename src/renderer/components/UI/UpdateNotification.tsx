@@ -1,7 +1,6 @@
 import { useEffect, useCallback } from 'react'
 import { useUpdateStore } from '../../stores/updateStore'
 import {
-  checkForUpdates,
   downloadAndInstallUpdate,
   restartApp,
   startAutoUpdateCheck,
