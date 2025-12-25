@@ -306,11 +306,22 @@ All three files must have matching version numbers. The Tauri build uses these t
 
 1. Update version in all three files above
 2. Move `[Unreleased]` entries in CHANGELOG.md to new version header
-3. Commit: `git commit -m "Release vX.X.X-alpha"`
-4. Tag: `git tag vX.X.X-alpha`
-5. Push: `git push && git push --tags`
+3. Run `npm run typecheck` to verify no type errors
+4. Commit: `git commit -m "Release vX.X.X-alpha"`
+5. Tag: `git tag vX.X.X-alpha`
+6. Push: `git push && git push --tags`
 
 The `release.yml` workflow will automatically build and upload the installer to the GitHub release.
+
+### Using the Release Manager Agent
+
+When the user requests a release, use the `release-manager` agent with clear instructions to complete the entire process without stopping for confirmation:
+
+```
+Release vX.X.X-alpha. Complete the entire release process without stopping for confirmation - the user has already approved this release.
+```
+
+Do not stop to ask "Would you like me to proceed?" - the user's request to release is the approval.
 
 ## Changelog Maintenance
 
