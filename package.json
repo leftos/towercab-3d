@@ -1,6 +1,6 @@
 {
   "name": "towercab-3d",
-  "version": "0.0.9-alpha",
+  "version": "0.0.10-alpha",
   "description": "3D Tower Cab View for VATSIM Controllers",
   "type": "module",
   "scripts": {

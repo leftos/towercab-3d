@@ -4,6 +4,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+## [0.0.10-alpha] - 2025-12-24
+
 ### Changed
 - Overcast (OVC) cloud layers now use curved dome geometry instead of flat planes, creating a more realistic sky appearance with gradual darkening toward the horizon
 - Model Matching panel: VMR-mapped matches (e.g., B753 mapped to B739/UAL) now show "vmr" instead of "exact"
