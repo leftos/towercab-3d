@@ -10,6 +10,8 @@ import { useUIFeedbackStore } from '../../stores/uiFeedbackStore'
 import { useActiveViewportCamera } from '../../hooks/useActiveViewportCamera'
 import { useReplayPlayback } from '../../hooks/useReplayPlayback'
 import { exportAllData, downloadExport } from '../../services/ExportImportService'
+import { checkForUpdates } from '../../services/UpdateService'
+import { useUpdateStore } from '../../stores/updateStore'
 import { estimateReplayMemoryMB, PLAYBACK_SPEEDS } from '../../constants/replay'
 import type { ReplayExportData, PlaybackSpeed } from '../../types/replay'
 import GlobalSearchPanel from './GlobalSearchPanel'
@@ -101,6 +103,9 @@ function ControlsBar() {
 
   // Weather store
   const currentMetar = useWeatherStore((state) => state.currentMetar)
+
+  // Update store
+  const updateStatus = useUpdateStore((state) => state.status)
   const interpolatedWeather = useWeatherStore((state) => state.interpolatedWeather)
   const isLoadingWeather = useWeatherStore((state) => state.isLoading)
 
@@ -1930,6 +1935,22 @@ function ControlsBar() {
                         <span className="action">Open bookmark manager</span>
                       </div>
                     </div>
+                  </div>
+
+                  <div className="settings-section">
+                    <h3>Updates</h3>
+                    <div className="setting-row">
+                      <button
+                        className="control-button"
+                        onClick={() => checkForUpdates()}
+                        disabled={updateStatus === 'checking' || updateStatus === 'downloading'}
+                      >
+                        {updateStatus === 'checking' ? 'Checking...' : 'Check for Updates'}
+                      </button>
+                    </div>
+                    <p className="setting-hint" style={{ marginTop: '8px' }}>
+                      Current version: v{APP_VERSION}
+                    </p>
                   </div>
                 </>
               )}

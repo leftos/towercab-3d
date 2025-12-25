@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "TowerCab 3D",
-  "version": "0.0.11-alpha",
+  "version": "0.0.12-alpha",
   "identifier": "com.towercab.viewer",
   "build": {
     "frontendDist": "../dist",
@@ -36,6 +36,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "createUpdaterArtifacts": true,
     "resources": [
       "resources/fsltl_converter.exe",
       "resources/texconv.exe"
@@ -62,6 +63,17 @@
     },
     "macOS": {
       "minimumSystemVersion": "10.13"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDkyNUNCNDY2QzIyN0Y4NDAKUldSQStDZkNaclJja3E0cEczOEdheDhZcXdrZUkvbnZycGlwYjhkUTN1WUNGVTB1SkVMSlRjRzYK",
+      "endpoints": [
+        "https://github.com/leftos/towercab-3d/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

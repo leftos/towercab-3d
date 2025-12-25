@@ -1,6 +1,6 @@
 {
   "name": "towercab-3d",
-  "version": "0.0.11-alpha",
+  "version": "0.0.12-alpha",
   "description": "3D Tower Cab View for VATSIM Controllers",
   "type": "module",
   "scripts": {
@@ -47,7 +47,9 @@
     "@babylonjs/loaders": "^8.42.0",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-fs": "^2.4.4",
+    "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-shell": "^2",
+    "@tauri-apps/plugin-updater": "^2.9.0",
     "cesium": "^1.136.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",

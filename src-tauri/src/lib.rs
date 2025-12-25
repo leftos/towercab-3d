@@ -534,6 +534,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_window_state::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -542,6 +543,18 @@ pub fn run() {
                         .build(),
                 )?;
             }
+
+            // Register updater plugin (desktop only)
+            #[cfg(desktop)]
+            app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
+
+            // Set window title with version from config
+            if let Some(window) = app.get_webview_window("main") {
+                let version = app.config().version.clone().unwrap_or_else(|| "dev".to_string());
+                let title = format!("TowerCab 3D v{}", version);
+                let _ = window.set_title(&title);
+            }
+
             Ok(())
         })
         .on_window_event(|_window, event| {

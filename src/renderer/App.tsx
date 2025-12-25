@@ -9,6 +9,7 @@ import AirportSelector from './components/UI/AirportSelector'
 import CommandInput from './components/UI/CommandInput'
 import MeasuringTool from './components/UI/MeasuringTool'
 import MetarOverlay from './components/UI/MetarOverlay'
+import UpdateNotification from './components/UI/UpdateNotification'
 import ViewportManager from './components/Viewport/ViewportManager'
 import VRScene from './components/VR/VRScene'
 import { PerformanceHUD } from './components/UI/PerformanceHUD'
@@ -293,6 +294,7 @@ function App() {
 
       {/* Hide normal UI when VR is active */}
       {!isVRActive && <TopBar />}
+      {!isVRActive && <UpdateNotification />}
       {!isVRActive && <MetarOverlay />}
       <div className="main-content">
         <ViewportManager mainViewportContent={<CesiumViewer onViewerReady={handleViewerReady} />}>

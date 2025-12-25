@@ -1,6 +1,10 @@
 import { resolve, join } from 'node:path'
-import { createReadStream, existsSync } from 'node:fs'
+import { createReadStream, existsSync, readFileSync } from 'node:fs'
 import { defineConfig } from 'vite'
+
+// Read version from package.json
+const packageJson = JSON.parse(readFileSync(resolve('package.json'), 'utf-8'))
+const appVersion = packageJson.version
 import react from '@vitejs/plugin-react'
 import { viteStaticCopy } from 'vite-plugin-static-copy'
 import type { Plugin } from 'vite'
@@ -43,7 +47,8 @@ export default defineConfig({
   root: resolve('src/renderer'),
 
   define: {
-    CESIUM_BASE_URL: JSON.stringify(`/${cesiumBaseUrl}`)
+    CESIUM_BASE_URL: JSON.stringify(`/${cesiumBaseUrl}`),
+    APP_VERSION: JSON.stringify(appVersion)
   },
 
   resolve: {

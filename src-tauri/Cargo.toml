@@ -1,6 +1,6 @@
 [package]
 name = "towercab-3d"
-version = "0.0.11-alpha"
+version = "0.0.12-alpha"
 description = "3D Tower Cab View for VATSIM Controllers"
 authors = [""]
 license = "GPL-2.0"
@@ -27,6 +27,8 @@ tauri-plugin-fs = "2"
 tauri-plugin-window-state = "2"
 tauri-plugin-http = "2"
 tauri-plugin-dialog = "2"
+tauri-plugin-process = "2"
+tauri-plugin-updater = "2"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_System_JobObjects", "Win32_System_Threading", "Win32_Foundation", "Win32_Security"] }

@@ -323,6 +323,12 @@ Release vX.X.X-alpha. Complete the entire release process without stopping for c
 
 Do not stop to ask "Would you like me to proceed?" - the user's request to release is the approval.
 
+## Preserving Agent Output
+
+When invoking agents (Plan, Explore, code-reviewer, etc.) that produce plans, analysis, or recommendations you intend to act on, **save the results to a temporary `.md` file** (e.g., `agent-plan.md`, `review-notes.md`). This prevents loss during "compact conversation" operations that summarize older messages.
+
+Delete the temporary file once you've completed the work addressing the agent's output.
+
 ## Changelog Maintenance
 
 **Important:** Maintain `CHANGELOG.md` whenever committing changes. This file informs end users about updates between releases.

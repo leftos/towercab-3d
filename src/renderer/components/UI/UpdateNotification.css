@@ -1,0 +1,108 @@
+.update-notification {
+  position: fixed;
+  top: 32px; /* Below TopBar */
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(26, 26, 46, 0.95);
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 12px 20px;
+  z-index: 9000;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.update-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: #fff;
+}
+
+.update-message {
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.update-message.error {
+  color: #ff6b6b;
+}
+
+.progress-text {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+}
+
+.update-button {
+  padding: 6px 14px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s;
+}
+
+.update-button.primary {
+  background: #4fc3f7;
+  color: #000;
+}
+
+.update-button.primary:hover {
+  background: #29b6f6;
+}
+
+.update-button.secondary {
+  background: transparent;
+  border: 1px solid #555;
+  color: #aaa;
+}
+
+.update-button.secondary:hover {
+  border-color: #777;
+  color: #fff;
+}
+
+.progress-bar {
+  width: 150px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: #4fc3f7;
+  transition: width 0.2s ease-out;
+}
+
+/* Different states */
+.update-available {
+  border-color: #4fc3f7;
+}
+
+.update-downloading {
+  border-color: #ff9800;
+}
+
+.update-ready {
+  border-color: #4caf50;
+}
+
+.update-error {
+  border-color: #ff6b6b;
+}
