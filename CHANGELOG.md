@@ -5,6 +5,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Press Enter in airport picker to select the top result without tabbing
 - Default datablock direction setting in Settings > Aircraft
   - Choose the default position (1-9 numpad style) for datablocks on new airports
   - Press 5+Enter to reset all datablocks to this default

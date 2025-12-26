@@ -41,6 +41,13 @@ function AirportSelector() {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       setOpen(false)
+    } else if (e.key === 'Enter') {
+      // Select top result from search, or top recent airport if no query
+      if (query.trim() && results.length > 0) {
+        handleSelect(results[0].icao)
+      } else if (!query.trim() && recentAirportDetails.length > 0) {
+        handleSelect(recentAirportDetails[0].icao)
+      }
     }
   }
 
