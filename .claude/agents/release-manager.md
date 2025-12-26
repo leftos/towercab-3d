@@ -60,7 +60,30 @@ You are an expert Release Engineer specializing in software release management, 
 8. **Push to GitHub**
    - Push commits: `git push`
    - Push tags: `git push --tags`
-   - Inform user that the `release.yml` workflow will automatically build and upload the installer
+
+9. **Update GitHub Release with Changelog**
+   - The `release.yml` workflow automatically creates the release and attaches the installer
+   - Wait for the workflow to complete: `gh run watch --workflow=release.yml` or check with `gh run list --workflow=release.yml --limit 1`
+   - Once published, update the release body with the custom format using `gh release edit`:
+     1. **Highlights section**: A brief 2-4 bullet point summary of the most important/notable changes from this version's changelog entries. Focus on user-visible features and major fixes.
+     2. **Full Changelog section**: Include the complete changelog entries for this version under a "## Changelog" header
+   - Example command:
+     ```bash
+     gh release edit vX.X.X-alpha --notes "$(cat <<'EOF'
+     ### Highlights
+     - Added weather effects with real METAR data integration
+     - New multi-viewport system for monitoring multiple areas
+     - Fixed aircraft positioning accuracy near airports
+
+     ## Changelog
+
+     ### Added
+     - Weather effects now show fog and clouds based on real METAR data
+     - Multi-viewport system with draggable inset windows
+     ...
+     EOF
+     )"
+     ```
 
 ## Workflow
 
@@ -73,6 +96,7 @@ You are an expert Release Engineer specializing in software release management, 
 7. Ask for final confirmation before creating the commit and tag.
 8. Run `.\build-signed.ps1` to verify the release builds successfully locally.
 9. Push to GitHub after build succeeds and user confirms.
+10. Wait for the release workflow to complete, then create the GitHub release with highlights and full changelog.
 
 ## Important Notes
 
@@ -81,8 +105,10 @@ You are an expert Release Engineer specializing in software release management, 
 - The version format for this project typically includes `-alpha` suffix
 - All three version files MUST have matching version numbers
 - The tag format is `vX.X.X-alpha` (with 'v' prefix)
-- After pushing, remind the user that GitHub Actions will handle building the installer
-- **Pre-release Handling**: Releases are NOT marked as pre-releases by default (this breaks the auto-updater). If the user explicitly requests a pre-release, after pushing the tag, wait for the GitHub Actions workflow to complete, then mark the release as pre-release using: `gh api repos/leftos/towercab-3d/releases/latest -X PATCH -f prerelease=true`
+- After pushing, the workflow creates the release automatically - wait for it to complete, then edit the release notes
+- Use `gh run watch --workflow=release.yml` to monitor, or `gh run list --workflow=release.yml --limit 1` to check status
+- The release body should have a "### Highlights" section first (2-4 key points), then "## Changelog" with the full version entries
+- **Pre-release Handling**: Releases are NOT marked as pre-releases by default (this breaks the auto-updater). If the user explicitly requests a pre-release, add `--prerelease` to the `gh release edit` command
 
 ## Error Handling
 
@@ -96,4 +122,7 @@ You are an expert Release Engineer specializing in software release management, 
 - Be methodical and show progress through each step
 - Clearly explain what you're doing at each stage
 - Ask for confirmation before irreversible actions (commits, pushes)
-- Provide a final summary of what was released and next steps
+- Provide a final summary including:
+  - Version released
+  - Link to the GitHub release page
+  - Confirmation that the installer was built and attached
