@@ -37,6 +37,10 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Default camera pitch changed from -15° to -10° for a more level view
 
 ### Fixed
+- Fixed tower positions not fully applying on first visit to an airport
+  - 3D view now uses custom lat/lon/height from tower-positions
+  - 2D view now uses custom center point and altitude from tower-positions
+  - Previously only heading was applied; other settings required manual reset (Shift+Home)
 - Fixed tower positions and mods not loading on app startup
 - Fixed aircraft on takeoff roll showing no phase (yellow) instead of "Rolling"
   - Runway surface detection now works regardless of speed (V1/VR can exceed 150 kts)

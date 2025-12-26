@@ -72,7 +72,8 @@ interface GlobalOrbitSettings {
 
 const createDefaultCameraState = (
   customHeading?: number,
-  globalOrbit?: GlobalOrbitSettings
+  globalOrbit?: GlobalOrbitSettings,
+  topdownAltitude?: number
 ): ViewportCameraState => ({
   viewMode: '3d',
   heading: customHeading ?? HEADING_DEFAULT,
@@ -81,7 +82,7 @@ const createDefaultCameraState = (
   positionOffsetX: 0,
   positionOffsetY: 0,
   positionOffsetZ: 0,
-  topdownAltitude: TOPDOWN_ALTITUDE_DEFAULT,
+  topdownAltitude: topdownAltitude ?? TOPDOWN_ALTITUDE_DEFAULT,
   followingCallsign: null,
   followMode: 'tower',
   followZoom: FOLLOW_ZOOM_DEFAULT,
@@ -98,11 +99,12 @@ const MAIN_VIEWPORT_ID = 'main'
 // Create main viewport (full screen)
 const createMainViewport = (
   customHeading?: number,
-  globalOrbit?: GlobalOrbitSettings
+  globalOrbit?: GlobalOrbitSettings,
+  topdownAltitude?: number
 ): Viewport => ({
   id: MAIN_VIEWPORT_ID,
   layout: { x: 0, y: 0, width: 1, height: 1, zIndex: 0 },
-  cameraState: createDefaultCameraState(customHeading, globalOrbit),
+  cameraState: createDefaultCameraState(customHeading, globalOrbit, topdownAltitude),
   label: 'Main'
 })
 
@@ -893,9 +895,12 @@ export const useViewportStore = create<ViewportStore>()(
             } else {
               // Create fresh main viewport for new airport
               // Apply custom heading from tower mod or tower-positions.json if available
+              // Also apply 2D altitude from tower-positions if available
               // Use global orbit settings for consistency across airports
               const customHeading = useAirportStore.getState().customHeading ?? undefined
-              const mainViewport = createMainViewport(customHeading, state.globalOrbitSettings)
+              const position2d = modService.get2dPosition(normalizedIcao)
+              const topdownAltitude = position2d?.altitude
+              const mainViewport = createMainViewport(customHeading, state.globalOrbitSettings, topdownAltitude)
               set({
                 currentAirportIcao: normalizedIcao,
                 viewports: [mainViewport],

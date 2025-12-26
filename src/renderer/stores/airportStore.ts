@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Airport } from '../types/airport'
-import type { View3dPosition } from '../types/mod'
+import type { View3dPosition, ResolvedView2dPosition } from '../types/mod'
 import { getEstimatedTowerHeight } from '../types/airport'
 import { useCameraStore } from './cameraStore'
 import { useViewportStore } from './viewportStore'
@@ -17,6 +17,7 @@ interface AirportStore {
   currentAirport: Airport | null
   towerHeight: number  // meters above ground
   customTowerPosition: View3dPosition | null  // Custom 3D tower position from tower mod or tower-positions
+  custom2dPosition: ResolvedView2dPosition | null  // Custom 2D view position from tower-positions (center point, altitude, heading)
   customHeading: number | null  // Custom default heading in degrees, or null to use app default
 
   // Recent airports (persisted)
@@ -44,6 +45,7 @@ export const useAirportStore = create<AirportStore>()(
       currentAirport: null,
       towerHeight: 35,
       customTowerPosition: null,
+      custom2dPosition: null,
       customHeading: null,
       recentAirports: [],
       isAirportSelectorOpen: false,
@@ -63,8 +65,6 @@ export const useAirportStore = create<AirportStore>()(
         const airport = airports.get(icao.toUpperCase())
 
         if (airport) {
-          const towerHeight = getEstimatedTowerHeight(airport)
-
           // Check for custom tower position from tower mod or tower-positions.json
           // Priority: tower mod cabPosition > tower-positions.json
           let customTowerPosition: View3dPosition | null = null
@@ -92,10 +92,17 @@ export const useAirportStore = create<AirportStore>()(
             }
           }
 
+          // Get 2D view position from tower-positions (separate from 3D)
+          const custom2dPosition = modService.get2dPosition(icao) ?? null
+
+          // Use custom 3D aglHeight if available, otherwise estimate from airport type
+          const towerHeight = customTowerPosition?.aglHeight ?? getEstimatedTowerHeight(airport)
+
           set({
             currentAirport: airport,
             towerHeight,
             customTowerPosition,
+            custom2dPosition,
             customHeading,
             isAirportSelectorOpen: false
           })

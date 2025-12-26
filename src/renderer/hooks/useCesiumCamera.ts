@@ -198,8 +198,9 @@ export function useCesiumCamera(
   // Use camera input hook for keyboard/mouse handling
   useCameraInput(viewer, viewportId, { onBreakTowerFollow: handleBreakTowerFollow })
 
-  // Get tower position
+  // Get tower position (3D) and custom 2D center position
   const customTowerPosition = useAirportStore((state) => state.customTowerPosition)
+  const custom2dPosition = useAirportStore((state) => state.custom2dPosition)
   const getTowerPos = useCallback(() => {
     if (!currentAirport) return null
     return getTowerPosition(currentAirport, towerHeight, customTowerPosition ?? undefined)
@@ -601,9 +602,10 @@ export function useCesiumCamera(
       // Top-down view: camera above looking straight down
       const airportElevation = currentAirport?.elevation ? feetToMeters(currentAirport.elevation) : 0
 
-      // Determine camera center point - follow aircraft if active, otherwise use tower/offset
-      let centerLat = offsetPos.latitude
-      let centerLon = offsetPos.longitude
+      // Determine camera center point - follow aircraft if active, otherwise use 2D position or tower/offset
+      // Priority: following aircraft > custom 2D position > tower position with offsets
+      let centerLat: number
+      let centerLon: number
 
       if (followingCallsign && interpolatedAircraft) {
         const aircraft = interpolatedAircraft.get(followingCallsign)
@@ -615,7 +617,32 @@ export function useCesiumCamera(
           )
           centerLat = aircraftOffsetPos.latitude
           centerLon = aircraftOffsetPos.longitude
+        } else {
+          // Aircraft not found, fall back to 2D position or tower
+          if (custom2dPosition?.lat !== undefined && custom2dPosition?.lon !== undefined) {
+            const pos2dOffset = applyPositionOffsets(
+              { latitude: custom2dPosition.lat, longitude: custom2dPosition.lon, height: 0 },
+              { x: positionOffsetX, y: positionOffsetY, z: 0 }
+            )
+            centerLat = pos2dOffset.latitude
+            centerLon = pos2dOffset.longitude
+          } else {
+            centerLat = offsetPos.latitude
+            centerLon = offsetPos.longitude
+          }
         }
+      } else if (custom2dPosition?.lat !== undefined && custom2dPosition?.lon !== undefined) {
+        // Use custom 2D center position if defined, with position offsets applied
+        const pos2dOffset = applyPositionOffsets(
+          { latitude: custom2dPosition.lat, longitude: custom2dPosition.lon, height: 0 },
+          { x: positionOffsetX, y: positionOffsetY, z: 0 }
+        )
+        centerLat = pos2dOffset.latitude
+        centerLon = pos2dOffset.longitude
+      } else {
+        // Fall back to tower position with offsets
+        centerLat = offsetPos.latitude
+        centerLon = offsetPos.longitude
       }
 
       const cameraPosition = Cesium.Cartesian3.fromDegrees(
@@ -818,7 +845,8 @@ export function useCesiumCamera(
     setHeadingInternal,
     setPitchInternal,
     stopFollowingStore,
-    clampToTerrain
+    clampToTerrain,
+    custom2dPosition
   ])
 
   return {

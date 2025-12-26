@@ -203,7 +203,11 @@ export type {
 
   // Custom VMR (Visual Model Rules)
   CustomVMRRule,
-  CustomVMRMatch
+  CustomVMRMatch,
+
+  // Tower position types
+  View3dPosition,
+  ResolvedView2dPosition
 } from './mod'
 
 export {
