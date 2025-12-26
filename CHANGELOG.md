@@ -4,6 +4,11 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+## [0.0.15-alpha] - 2025-12-25
+
+### Fixed
+- Fixed numpy not being bundled properly in fsltl_converter.exe, leading to conversion failures
+
 ## [0.0.14-alpha] - 2025-12-25
 
 ### Added

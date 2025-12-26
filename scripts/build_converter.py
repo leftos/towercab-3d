@@ -44,21 +44,26 @@ def main():
         print("[build_converter] Pillow not found. Installing...")
         subprocess.check_call([sys.executable, "-m", "pip", "install", "Pillow"])
 
-    # Build the executable
+    try:
+        import numpy
+        print(f"[build_converter] NumPy available: {numpy.__version__}")
+    except ImportError:
+        print("[build_converter] NumPy not found. Installing...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "numpy"])
+
+    # Build the executable using the spec file
     print(f"[build_converter] Building {converter_script.name}...")
 
-    # PyInstaller command
+    spec_file = script_dir / "fsltl_converter.spec"
+
+    # PyInstaller command - use spec file which has all hidden imports defined
     cmd = [
         sys.executable, "-m", "PyInstaller",
-        "--onefile",                          # Single executable
-        "--name", "fsltl_converter",          # Output name
         "--distpath", str(output_dir),        # Output directory
         "--workpath", str(project_root / "build" / "pyinstaller"),  # Work directory
-        "--specpath", str(project_root / "build" / "pyinstaller"),  # Spec file location
         "--clean",                            # Clean before building
         "--noconfirm",                        # Don't ask for confirmation
-        "--console",                          # Console application (for logging)
-        str(converter_script)
+        str(spec_file)                        # Use spec file for hidden imports
     ]
 
     print(f"[build_converter] Running: {' '.join(cmd)}")

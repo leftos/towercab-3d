@@ -771,6 +771,21 @@ def convert_model_task(args_tuple):
 
 
 def main():
+    # Quick self-test before full argument parsing (allows --self-test without other required args)
+    if '--self-test' in sys.argv:
+        print("Self-test: Checking bundled dependencies...")
+        print(f"  Python: {sys.version}")
+        print(f"  PIL: {Image.__version__ if hasattr(Image, '__version__') else 'OK'}")
+        print(f"  NumPy: {np.__version__}")
+        print(f"  Struct: OK")
+        print(f"  Concurrent.futures: OK")
+        # Quick numpy operation test
+        arr = np.array([1, 2, 3], dtype=np.float32)
+        assert arr.sum() == 6.0, "NumPy operation failed"
+        print(f"  NumPy operations: OK")
+        print("Self-test PASSED: All dependencies working correctly.")
+        return 0
+
     parser = argparse.ArgumentParser(description='Convert FSLTL models to GLB')
     parser.add_argument('--source', required=True, help='Path to fsltl-traffic-base')
     parser.add_argument('--output', required=True, help='Output directory for converted models')
@@ -783,6 +798,7 @@ def main():
     parser.add_argument('--sample', action='store_true',
                         help='Sample mode: convert only one livery per aircraft type (for testing)')
     parser.add_argument('--log-file', help='Write output to log file instead of console')
+    parser.add_argument('--self-test', action='store_true', help='Test that all dependencies are bundled correctly')
     args = parser.parse_args()
 
     # Set up logging to file if requested
