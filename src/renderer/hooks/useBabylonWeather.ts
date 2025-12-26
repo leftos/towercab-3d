@@ -713,6 +713,7 @@ export function useBabylonWeather(
   const cloudMeshPoolRef = useRef<CloudMeshData[]>([])
   const cloudLayerStatesRef = useRef<CloudLayerState[]>([])
   const cloudOpacityRef = useRef(1.0)
+  const prevIsTopDownViewRef = useRef<boolean | undefined>(undefined)
 
   // Weather store subscriptions
   const cloudLayers = useWeatherStore((state) => state.cloudLayers)
@@ -951,13 +952,54 @@ export function useBabylonWeather(
     }
   }, [cloudLayers, showWeatherEffects, showClouds, isTopDownView])
 
+  // Instantly hide/show weather effects when switching between 3D and 2D view modes
+  // (no gradual fade - user expects immediate response to view mode toggle)
+  useEffect(() => {
+    const wasTopDown = prevIsTopDownViewRef.current
+    prevIsTopDownViewRef.current = isTopDownView
+
+    // Skip on initial mount (no previous value to compare)
+    if (wasTopDown === undefined) return
+
+    // Only act on actual view mode changes
+    if (wasTopDown === isTopDownView) return
+
+    const pool = cloudMeshPoolRef.current
+    const states = cloudLayerStatesRef.current
+
+    if (isTopDownView) {
+      // Switching to top-down: instantly hide all cloud meshes
+      for (let i = 0; i < pool.length && i < states.length; i++) {
+        pool[i].plane.isVisible = false
+        pool[i].dome.isVisible = false
+        // Set currentAlpha to target to prevent fade animation when switching back
+        states[i].currentAlpha = states[i].targetAlpha
+      }
+    } else {
+      // Switching to 3D view: instantly show cloud meshes that should be visible
+      // The animation loop will handle proper material setup on next frame
+      for (let i = 0; i < pool.length && i < states.length; i++) {
+        if (states[i].active && states[i].targetAlpha > 0) {
+          // Instantly set alpha to target
+          states[i].currentAlpha = states[i].targetAlpha
+          // Show appropriate mesh based on coverage
+          if (states[i].useDome) {
+            pool[i].dome.isVisible = true
+          } else {
+            pool[i].plane.isVisible = true
+          }
+        }
+      }
+    }
+  }, [isTopDownView])
+
   // Apply fog dome effect
   useEffect(() => {
     const fogDome = fogDomeRef.current
     const fogMaterial = fogDomeMaterialRef.current
     if (!fogDome || !fogMaterial) return
 
-    const shouldShowFog = showWeatherEffects && showBabylonFog && currentMetar && fogDensity > 0
+    const shouldShowFog = showWeatherEffects && showBabylonFog && currentMetar && fogDensity > 0 && !isTopDownView
 
     if (shouldShowFog && currentMetar) {
       const visibilityMeters = currentMetar.visib * STATUTE_MILES_TO_METERS
@@ -995,7 +1037,7 @@ export function useBabylonWeather(
     } else {
       fogDome.isVisible = false
     }
-  }, [showWeatherEffects, showBabylonFog, currentMetar, fogDensity, fogIntensity, visibilityScale])
+  }, [showWeatherEffects, showBabylonFog, currentMetar, fogDensity, fogIntensity, visibilityScale, isTopDownView])
 
   // Animate cloud layers: coverage, altitude, alpha, and rotation
   // Also handles texture regeneration when coverage changes enough

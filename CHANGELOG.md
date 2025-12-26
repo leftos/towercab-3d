@@ -70,6 +70,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Model matching now validates file existence before returning model paths
 
 ### Fixed
+- Weather effects (clouds, fog) now instantly hide/show when switching between 3D and 2D view modes
 - FSLTL converter now reads model.CFG to find the correct base model variant
   - Fixes airline livery textures not loading (e.g., DAL A321 appearing white)
   - Sharklet vs non-sharklet variants now use correct texture filenames
