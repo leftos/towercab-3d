@@ -12,6 +12,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ### Changed
 - Leader lines now have more separation from aircraft icons in 2D top-down view
+- Increased terrain/imagery tile cache for smoother panning
+  - Default cache raised from 500 to 2000 tiles (configurable up to 5000)
+  - Tiles stay in memory longer when panning around the airport area
 
 ### Fixed
 - Fixed camera zooming out when clicking follow on an aircraft

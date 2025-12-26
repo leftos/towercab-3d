@@ -234,6 +234,22 @@ export function useCesiumViewer(
     // In-memory tile cache - reduced for insets (50 vs user setting)
     newViewer.scene.globe.tileCacheSize = isInset ? 50 : inMemoryTileCacheSize
 
+    // Patch Cesium's tile eviction to be less aggressive (main viewport only)
+    // Cesium's TileReplacementQueue.trimTiles() evicts tiles every frame when
+    // the count exceeds tileCacheSize. By overriding it to use 10x the limit,
+    // we dramatically reduce eviction frequency and keep more tiles in memory.
+    if (!isInset) {
+      const surface = (newViewer.scene.globe as unknown as { _surface?: { _tileReplacementQueue?: { trimTiles: (max: number) => void } } })._surface
+      if (surface?._tileReplacementQueue) {
+        const queue = surface._tileReplacementQueue
+        const originalTrimTiles = queue.trimTiles.bind(queue)
+        queue.trimTiles = function(maximumTiles: number) {
+          // Use 10x the limit to dramatically reduce eviction
+          originalTrimTiles(maximumTiles * 10)
+        }
+      }
+    }
+
     // Tile quality - insets use higher screen space error (lower quality) for performance
     if (isInset) {
       newViewer.scene.globe.maximumScreenSpaceError = 16  // Lower quality tiles

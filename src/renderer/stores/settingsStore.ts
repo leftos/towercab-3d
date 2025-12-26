@@ -148,7 +148,7 @@ export const useSettingsStore = create<SettingsStore>()(
             ...(updates.inMemoryTileCacheSize !== undefined && {
               inMemoryTileCacheSize: Math.max(
                 50,
-                Math.min(500, Math.round(updates.inMemoryTileCacheSize))
+                Math.min(5000, Math.round(updates.inMemoryTileCacheSize))
               )
             }),
             ...(updates.diskCacheSizeGB !== undefined && {
@@ -275,7 +275,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'settings-store',
-      version: 11, // Incremented for enableFsltlModels setting
+      version: 12, // Incremented for increased tile cache default
       migrate: (persistedState: unknown, version: number) => {
         // Auto-migrate old flat structure to grouped structure
         if (version < 2) {
@@ -396,6 +396,22 @@ export const useSettingsStore = create<SettingsStore>()(
             fsltl: {
               ...DEFAULT_SETTINGS.fsltl,
               ...state.fsltl
+            }
+          }
+        }
+        // Migrate v11 to v12: increase default tile cache from 500 to 2000
+        if (version < 12) {
+          console.log('[Settings] Migrating v11 to v12: increasing default tile cache size')
+          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
+          // Only update if user was using the old default (500)
+          const currentCache = state.memory?.inMemoryTileCacheSize ?? 500
+          return {
+            ...state,
+            memory: {
+              ...DEFAULT_SETTINGS.memory,
+              ...state.memory,
+              // If user was at old max (500), bump to new default (2000)
+              inMemoryTileCacheSize: currentCache >= 500 ? 2000 : currentCache
             }
           }
         }

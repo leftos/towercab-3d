@@ -298,8 +298,9 @@ export interface WeatherSettings {
  */
 export interface MemorySettings {
   /**
-   * In-memory tile cache size (50-500 tiles, default: 500)
+   * In-memory tile cache size (50-5000 tiles, default: 2000)
    * Higher values = smoother panning but more RAM usage
+   * With trimTiles patch, effective cache is 10x this value
    */
   inMemoryTileCacheSize: number
 
@@ -611,7 +612,7 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     enableWeatherInterpolation: true
   },
   memory: {
-    inMemoryTileCacheSize: 500,
+    inMemoryTileCacheSize: 2000,
     diskCacheSizeGB: 2,
     aircraftDataRadiusNM: 100,
     maxReplayDurationMinutes: 15
