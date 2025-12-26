@@ -850,11 +850,21 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
 
       const callsign = findAircraftAtPosition(click.position)
       if (callsign) {
-        datablockStore.setAircraftPosition(callsign, datablockStore.pendingDirection)
-        useUIFeedbackStore.getState().showFeedback(
-          `${callsign} datablock → position ${datablockStore.pendingDirection}`,
-          'success'
-        )
+        // Key 5 means "reset to default" - clear per-aircraft override
+        if (datablockStore.pendingDirection === 5) {
+          datablockStore.clearAircraftOverride(callsign)
+          const appDefault = useSettingsStore.getState().aircraft.defaultDatablockDirection
+          useUIFeedbackStore.getState().showFeedback(
+            `${callsign} datablock reset to default (${appDefault})`,
+            'success'
+          )
+        } else {
+          datablockStore.setAircraftPosition(callsign, datablockStore.pendingDirection)
+          useUIFeedbackStore.getState().showFeedback(
+            `${callsign} datablock → position ${datablockStore.pendingDirection}`,
+            'success'
+          )
+        }
       }
       // Clear pending direction whether we found an aircraft or not
       datablockStore.setPendingDirection(null)

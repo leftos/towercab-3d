@@ -3,7 +3,7 @@ import * as Cesium from 'cesium'
 import { useViewportStore } from '../stores/viewportStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useUIFeedbackStore } from '../stores/uiFeedbackStore'
-import { useDatablockPositionStore, type DatablockPosition } from '../stores/datablockPositionStore'
+import { useDatablockPositionStore, type PendingDirection } from '../stores/datablockPositionStore'
 import {
   createVelocityState,
   MOVEMENT_CONFIG,
@@ -488,16 +488,24 @@ export function useCameraInput(
       }
 
       // Handle numpad keys 1-9 for datablock positioning (without modifiers)
-      // Skip 5 - it's the center reference point, not a valid position
+      // Key 5 means "reset to app default"
       if (!event.ctrlKey && !event.altKey && !event.shiftKey) {
         const numKey = parseInt(key)
-        if (numKey >= 1 && numKey <= 9 && numKey !== 5) {
+        if (numKey >= 1 && numKey <= 9) {
           const datablockStore = useDatablockPositionStore.getState()
-          datablockStore.setPendingDirection(numKey as DatablockPosition)
-          useUIFeedbackStore.getState().showFeedback(
-            `Datablock position ${numKey}: Enter=all, Click=aircraft, Esc=cancel`,
-            'success'
-          )
+          datablockStore.setPendingDirection(numKey as PendingDirection)
+          if (numKey === 5) {
+            const appDefault = useSettingsStore.getState().aircraft.defaultDatablockDirection
+            useUIFeedbackStore.getState().showFeedback(
+              `Reset to default (${appDefault}): Enter=all, Click=aircraft, Esc=cancel`,
+              'success'
+            )
+          } else {
+            useUIFeedbackStore.getState().showFeedback(
+              `Datablock position ${numKey}: Enter=all, Click=aircraft, Esc=cancel`,
+              'success'
+            )
+          }
           return
         }
       }
@@ -506,11 +514,21 @@ export function useCameraInput(
       if (key === 'Enter') {
         const datablockStore = useDatablockPositionStore.getState()
         if (datablockStore.pendingDirection) {
-          useViewportStore.getState().setDatablockPosition(datablockStore.pendingDirection)
-          useUIFeedbackStore.getState().showFeedback(
-            `All datablocks moved to position ${datablockStore.pendingDirection}`,
-            'success'
-          )
+          // Key 5 means "reset to app default"
+          if (datablockStore.pendingDirection === 5) {
+            const appDefault = useSettingsStore.getState().aircraft.defaultDatablockDirection
+            useViewportStore.getState().setDatablockPosition(appDefault)
+            useUIFeedbackStore.getState().showFeedback(
+              `All datablocks reset to default (position ${appDefault})`,
+              'success'
+            )
+          } else {
+            useViewportStore.getState().setDatablockPosition(datablockStore.pendingDirection)
+            useUIFeedbackStore.getState().showFeedback(
+              `All datablocks moved to position ${datablockStore.pendingDirection}`,
+              'success'
+            )
+          }
           datablockStore.setPendingDirection(null)
           return
         }

@@ -120,6 +120,7 @@ export type {
   TerrainQuality,
   ShadowQuality,
   DatablockMode,
+  DatablockDirection,
   TimeMode,
   Theme,
   FSLTLTextureScale,

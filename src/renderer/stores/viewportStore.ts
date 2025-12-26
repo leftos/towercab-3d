@@ -3,6 +3,7 @@ import { persist, subscribeWithSelector } from 'zustand/middleware'
 import type { ViewMode, FollowMode, ViewportLayout, ViewportCameraState, Viewport, CameraBookmark } from '../types'
 import { useVatsimStore } from './vatsimStore'
 import { useAirportStore } from './airportStore'
+import { useSettingsStore } from './settingsStore'
 import { useDatablockPositionStore, type DatablockPosition } from './datablockPositionStore'
 import { modService } from '../services/ModService'
 import {
@@ -1156,12 +1157,14 @@ export const useViewportStore = create<ViewportStore>()(
             set({ airportViewportConfigs })
           },
 
-          // Get global datablock position for current airport (default: 7 = top-left)
+          // Get global datablock position for current airport (uses app default for new airports)
           getDatablockPosition: (): DatablockPosition => {
             const state = get()
             const icao = state.currentAirportIcao
-            if (!icao) return 7
-            const pos = state.airportViewportConfigs[icao]?.datablockPosition ?? 7
+            // Get app default from settings
+            const appDefault = useSettingsStore.getState().aircraft.defaultDatablockDirection
+            if (!icao) return appDefault
+            const pos = state.airportViewportConfigs[icao]?.datablockPosition ?? appDefault
             return pos
           },
 

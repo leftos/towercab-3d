@@ -4,12 +4,13 @@ import { useUIFeedbackStore } from '../../stores/uiFeedbackStore'
 import { useDatablockPositionStore } from '../../stores/datablockPositionStore'
 import './CommandInput.css'
 
-/** Map numpad position to direction label (5 is reference only, not a valid position) */
+/** Map numpad position to direction label (5 = reset to default) */
 const POSITION_LABELS: Record<number, string> = {
   7: 'Top-Left',
   8: 'Top',
   9: 'Top-Right',
   4: 'Left',
+  5: 'Default',
   6: 'Right',
   1: 'Bottom-Left',
   2: 'Bottom',

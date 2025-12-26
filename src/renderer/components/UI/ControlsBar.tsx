@@ -94,6 +94,7 @@ function ControlsBar() {
   const orientationIntensity = useSettingsStore((state) => state.aircraft.orientationIntensity)
   const autoAvoidOverlaps = useSettingsStore((state) => state.aircraft.autoAvoidOverlaps)
   const leaderDistance = useSettingsStore((state) => state.aircraft.leaderDistance)
+  const defaultDatablockDirection = useSettingsStore((state) => state.aircraft.defaultDatablockDirection)
   const updateAircraftSettings = useSettingsStore((state) => state.updateAircraftSettings)
   const showAircraftPanel = useSettingsStore((state) => state.ui.showAircraftPanel)
 
@@ -1222,6 +1223,26 @@ function ControlsBar() {
                       </div>
                       <p className="setting-hint">
                         Length of leader lines connecting datablocks to aircraft. 1=short, 5=long.
+                      </p>
+                    </div>
+
+                    <div className="setting-item">
+                      <label>Default Datablock Direction</label>
+                      <select
+                        value={defaultDatablockDirection}
+                        onChange={(e) => updateAircraftSettings({ defaultDatablockDirection: Number(e.target.value) as 1 | 2 | 3 | 4 | 6 | 7 | 8 | 9 })}
+                      >
+                        <option value={7}>7 - Top-Left</option>
+                        <option value={8}>8 - Top</option>
+                        <option value={9}>9 - Top-Right</option>
+                        <option value={4}>4 - Left</option>
+                        <option value={6}>6 - Right</option>
+                        <option value={1}>1 - Bottom-Left</option>
+                        <option value={2}>2 - Bottom</option>
+                        <option value={3}>3 - Bottom-Right</option>
+                      </select>
+                      <p className="setting-hint">
+                        Default position for datablocks on new airports. Press 5+Enter to reset all datablocks to this default.
                       </p>
                     </div>
                   </div>

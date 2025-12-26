@@ -275,7 +275,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'settings-store',
-      version: 13, // Incremented for askToContributePositions UI setting
+      version: 14, // Incremented for defaultDatablockDirection aircraft setting
       migrate: (persistedState: unknown, version: number) => {
         // Auto-migrate old flat structure to grouped structure
         if (version < 2) {
@@ -427,6 +427,18 @@ export const useSettingsStore = create<SettingsStore>()(
             }
           }
         }
+        // Migrate v13 to v14: add defaultDatablockDirection setting
+        if (version < 14) {
+          console.log('[Settings] Migrating v13 to v14: adding defaultDatablockDirection setting')
+          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
+          return {
+            ...state,
+            aircraft: {
+              ...DEFAULT_SETTINGS.aircraft,
+              ...state.aircraft
+            }
+          }
+        }
         return persistedState as SettingsStore
       }
     }
@@ -537,7 +549,9 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
       autoAvoidOverlaps:
         oldSettings.autoAvoidOverlaps ?? DEFAULT_SETTINGS.aircraft.autoAvoidOverlaps,
       leaderDistance:
-        oldSettings.leaderDistance ?? DEFAULT_SETTINGS.aircraft.leaderDistance
+        oldSettings.leaderDistance ?? DEFAULT_SETTINGS.aircraft.leaderDistance,
+      defaultDatablockDirection:
+        oldSettings.defaultDatablockDirection ?? DEFAULT_SETTINGS.aircraft.defaultDatablockDirection
     },
     ui: {
       theme: oldSettings.theme ?? DEFAULT_SETTINGS.ui.theme,

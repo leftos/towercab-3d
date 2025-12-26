@@ -56,6 +56,18 @@ export type ShadowQuality = 'low' | 'medium' | 'high' | 'ultra'
 export type DatablockMode = 'full' | 'airline' | 'none'
 
 /**
+ * Datablock position direction (numpad-style)
+ *
+ * Controls where aircraft labels appear relative to the aircraft:
+ * - 7=top-left, 8=top-center, 9=top-right
+ * - 4=left, 6=right
+ * - 1=bottom-left, 2=bottom-center, 3=bottom-right
+ *
+ * Note: Position 5 is excluded as it represents the center reference point.
+ */
+export type DatablockDirection = 1 | 2 | 3 | 4 | 6 | 7 | 8 | 9
+
+/**
  * Time mode for sun position and lighting
  *
  * - 'real': Use real-time based on current system clock
@@ -390,6 +402,22 @@ export interface AircraftSettings {
    * - 5 = Very Long (25px gap)
    */
   leaderDistance: 1 | 2 | 3 | 4 | 5
+
+  /**
+   * Default datablock direction (numpad-style position, default: 7)
+   *
+   * Sets the default position for aircraft labels for all new airports
+   * and when using the "5" key to reset to default.
+   *
+   * Position mapping:
+   * - 7=top-left, 8=top-center, 9=top-right
+   * - 4=left, 6=right
+   * - 1=bottom-left, 2=bottom-center, 3=bottom-right
+   *
+   * Press 5+Enter to reset all datablocks to this default.
+   * Press 5+click to reset a specific aircraft's datablock to this default.
+   */
+  defaultDatablockDirection: DatablockDirection
 }
 
 /**
@@ -630,7 +658,8 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     orientationIntensity: 1.0,
     pinFollowedAircraftToTop: true,
     autoAvoidOverlaps: true,
-    leaderDistance: 2
+    leaderDistance: 2,
+    defaultDatablockDirection: 7
   },
   ui: {
     theme: 'dark',

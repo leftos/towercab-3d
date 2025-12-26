@@ -5,6 +5,10 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Default datablock direction setting in Settings > Aircraft
+  - Choose the default position (1-9 numpad style) for datablocks on new airports
+  - Press 5+Enter to reset all datablocks to this default
+  - Press 5+click on an aircraft to reset just that aircraft's datablock to the default
 - Shareable tower positions with "Save/Load App Default" buttons
   - Hold Shift to see buttons change from "Save/Load My Default" to "Save/Load App Default"
   - Shift+click "Save App Default" saves current view to `mods/tower-positions/{ICAO}.json`

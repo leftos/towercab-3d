@@ -7,16 +7,19 @@
  *
  * Position mapping (numpad style):
  *   7=top-left    8=top-center    9=top-right
- *   4=left        (5=reference)   6=right
+ *   4=left        (5=default)     6=right
  *   1=bottom-left 2=bottom-center 3=bottom-right
  *
- * Note: 5 is not a valid position - it's the center reference point
+ * Note: Position 5 is special - it means "reset to app default"
  */
 
 import { create } from 'zustand'
 
 /** Numpad-style position (1-9, excluding 5 which is center reference) */
 export type DatablockPosition = 1 | 2 | 3 | 4 | 6 | 7 | 8 | 9
+
+/** Pending direction input (includes 5 for "reset to default") */
+export type PendingDirection = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
 
 interface DatablockPositionStore {
   /**
@@ -29,11 +32,12 @@ interface DatablockPositionStore {
   /**
    * Pending direction for input mode
    * Set when user presses 1-9, cleared on Enter/click/Escape
+   * Value 5 means "reset to app default"
    */
-  pendingDirection: DatablockPosition | null
+  pendingDirection: PendingDirection | null
 
   // Actions
-  setPendingDirection: (direction: DatablockPosition | null) => void
+  setPendingDirection: (direction: PendingDirection | null) => void
   setAircraftPosition: (callsign: string, position: DatablockPosition) => void
   clearAircraftOverride: (callsign: string) => void
   clearAllOverrides: () => void
