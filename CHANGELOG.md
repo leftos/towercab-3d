@@ -14,6 +14,10 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Fixed FR24 aircraft models floating above ground due to incorrect ground offset detection
 - Fixed leader lines connecting from wrong corners on datablocks
 - Fixed issue where FSLTL Converter would fail early with no indication that it failed and why
+- Fixed flight phase detection for aircraft on runways
+  - Aircraft crossing runways now show "Taxi" instead of incorrectly showing "Rolling"
+  - Aircraft on early takeoff roll no longer incorrectly show "Pushback"
+  - Go-arounds now correctly show "Rolling" (accelerating) instead of "Roll Out" (decelerating)
 
 ## [0.0.13-alpha] - 2025-12-25
 

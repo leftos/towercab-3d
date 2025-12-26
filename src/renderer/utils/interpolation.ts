@@ -381,6 +381,7 @@ export function interpolateAircraftState(
       interpolatedRoll: 0,
       verticalRate: 0,
       turnRate: 0,
+      acceleration: 0,
       track: current.heading,  // Default to heading when no movement data
       isInterpolated: false
     }
@@ -389,9 +390,11 @@ export function interpolateAircraftState(
   const interval = current.timestamp - previous.timestamp
   const t = getInterpolationFactor(previous.timestamp, current.timestamp, now)
 
-  // Calculate turn rate and vertical rate for this segment
+  // Calculate turn rate, vertical rate, and acceleration for this segment
   const turnRate = calculateTurnRate(previous.heading, current.heading, interval)
   const verticalRate = interval > 0 ? (current.altitude - previous.altitude) / interval : 0
+  // Acceleration in knots per second (interval is in ms)
+  const acceleration = interval > 0 ? (current.groundspeed - previous.groundspeed) / (interval / 1000) : 0
 
   let interpolatedLat: number
   let interpolatedLon: number
@@ -613,6 +616,7 @@ export function interpolateAircraftState(
     interpolatedRoll: roll,
     verticalRate: verticalRate * 60000,  // Convert m/ms to m/min
     turnRate: turnRate,
+    acceleration: acceleration,
     track: track,
     isInterpolated: true
   }

@@ -95,7 +95,6 @@ const LONG_FINAL_NM = 6
 const PATTERN_ALTITUDE_FT = 2000  // Typical patterns are 1000-1500ft AGL, use 2000 for margin
 const PATTERN_DISTANCE_NM = 5
 const GROUND_ALTITUDE_AGL_FT = 300
-const TAXI_SPEED_KTS = 40
 const PUSHBACK_MAX_SPEED_KTS = 8  // Pushback is typically 2-5 kts
 const STOPPED_SPEED_KTS = 1       // Below 1 kt is truly stopped
 const RUNWAY_ALIGNMENT_DEG = 25  // Generous for wind correction/crab angle
@@ -571,21 +570,42 @@ function detectFlightPhase(
   // === GROUND PHASES ===
   if (isOnGround) {
     if (onRunwaySurface) {
-      if (speedKts > TAXI_SPEED_KTS) {
-        // Moving fast on runway - is this departure or landing roll?
-        // Use flight plan: if arriving here, it's landing roll; if departing, it's departure roll
+      // Must be aligned with runway for departure/landing roll, otherwise crossing
+      const isAlignedWithRwy = nearestRwy?.isAligned ?? false
+
+      if (!isAlignedWithRwy) {
+        // Crossing the runway (not aligned with runway heading)
+        return { phase: 'active_taxi', runway: null, runwayDistance: null }
+      }
+
+      if (speedKts < STOPPED_SPEED_KTS) {
+        // Stopped on runway = lined up
+        return { phase: 'lined_up', runway: runwayIdent, runwayDistance: runwayDistanceNm }
+      }
+
+      // Moving on runway - use acceleration to determine departure vs landing roll
+      // Positive acceleration = accelerating = takeoff roll
+      // Negative acceleration = decelerating = landing roll
+      // This handles go-arounds (accelerating on destination runway) correctly
+      const accel = aircraft.acceleration  // knots per second
+      const ACCEL_THRESHOLD = 0.5  // Minimum acceleration to be considered significant
+
+      if (accel > ACCEL_THRESHOLD) {
+        // Accelerating = takeoff roll (even if this is the arrival airport - could be go-around)
+        return { phase: 'departure_roll', runway: runwayIdent, runwayDistance: runwayDistanceNm }
+      } else if (accel < -ACCEL_THRESHOLD) {
+        // Decelerating = landing roll
+        return { phase: 'landing_roll', runway: runwayIdent, runwayDistance: runwayDistanceNm }
+      } else {
+        // Acceleration near zero - use flight plan as fallback
         if (isArrivingHere) {
           return { phase: 'landing_roll', runway: runwayIdent, runwayDistance: runwayDistanceNm }
         } else if (isDepartingHere) {
           return { phase: 'departure_roll', runway: runwayIdent, runwayDistance: runwayDistanceNm }
         } else {
-          // No clear flight plan - assume landing if speed is decreasing would require tracking
-          // For now, default to departure (active on runway)
+          // No clear signal - default to departure (lined up for takeoff)
           return { phase: 'departure_roll', runway: runwayIdent, runwayDistance: runwayDistanceNm }
         }
-      } else if (speedKts < STOPPED_SPEED_KTS) {
-        // Stopped on runway = lined up
-        return { phase: 'lined_up', runway: runwayIdent, runwayDistance: runwayDistanceNm }
       }
     }
 
@@ -596,6 +616,7 @@ function detectFlightPhase(
 
     // Check for pushback: moving slowly with track opposite to heading
     // Pushback: aircraft faces one direction but moves backwards
+    // Note: Only check when NOT on runway surface (handled above)
     if (speedKts > 0.3 && speedKts < PUSHBACK_MAX_SPEED_KTS) {
       const trackHeadingDiff = Math.abs(headingDifference(track, heading))
       // If track is 120-180° from heading, aircraft is moving backwards

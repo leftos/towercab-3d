@@ -154,6 +154,12 @@ export interface InterpolatedAircraftState extends AircraftState {
   verticalRate: number          // Vertical rate in METERS/MINUTE
   turnRate: number              // degrees/sec
   /**
+   * Ground acceleration in knots per second.
+   * Positive = accelerating, negative = decelerating.
+   * Useful for distinguishing takeoff roll (accelerating) from landing roll (decelerating).
+   */
+  acceleration: number
+  /**
    * Ground track (direction of movement) in degrees (0-360).
    * Calculated from position change. Differs from heading during:
    * - Pushback (track ≈ heading + 180°)
