@@ -4,6 +4,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+## [0.0.14-alpha] - 2025-12-25
+
 ### Added
 - FSLTL Models toggle in Settings to enable/disable converted FSLTL aircraft models
   - Toggle only appears after models have been converted (not shown for new users)
