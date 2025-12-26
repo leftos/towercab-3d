@@ -42,6 +42,22 @@ export const AVIATION_WEATHER_URL = 'https://aviationweather.gov/api/data/metar'
  */
 export const AIRPORTS_DB_URL = 'https://raw.githubusercontent.com/mwgg/Airports/master/airports.json'
 
+/**
+ * OurAirports runway data URL
+ *
+ * Comprehensive runway data for airports worldwide including:
+ * - Threshold coordinates (lat/lon for both ends)
+ * - Runway headings (true)
+ * - Dimensions (length, width)
+ * - Surface type and operational status
+ *
+ * Data format: CSV (~3MB, ~45,000 runways)
+ * Updated: Weekly
+ *
+ * @see https://ourairports.com/data/
+ */
+export const RUNWAYS_DB_URL = 'https://davidmegginson.github.io/ourairports-data/runways.csv'
+
 // ============================================================================
 // VATSIM POLLING CONFIGURATION
 // ============================================================================

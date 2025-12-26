@@ -500,3 +500,83 @@
   font-weight: 600;
   color: rgba(255, 255, 255, 0.9);
 }
+
+/* ============================================================================
+   SMART SORT - Phase badges and priority tiers
+   ============================================================================ */
+
+/* Callsign group for inline phase badge */
+.callsign-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Phase badge */
+.phase-badge {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.phase-badge .runway-ident {
+  opacity: 0.7;
+  font-weight: 500;
+}
+
+/* Priority tier colors for badges */
+.phase-badge.priority-critical {
+  background: rgba(244, 67, 54, 0.25);
+  color: #ef5350;
+  border: 1px solid rgba(244, 67, 54, 0.4);
+}
+
+.phase-badge.priority-high {
+  background: rgba(255, 152, 0, 0.25);
+  color: #ffb74d;
+  border: 1px solid rgba(255, 152, 0, 0.4);
+}
+
+.phase-badge.priority-medium {
+  background: rgba(255, 235, 59, 0.2);
+  color: #fff176;
+  border: 1px solid rgba(255, 235, 59, 0.3);
+}
+
+.phase-badge.priority-low {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* Priority tier accent on aircraft items */
+.aircraft-item.priority-critical {
+  border-left: 3px solid #ef5350;
+}
+
+.aircraft-item.priority-high {
+  border-left: 3px solid #ffb74d;
+}
+
+.aircraft-item.priority-medium {
+  border-left: 3px solid #fff176;
+}
+
+.aircraft-item.priority-low {
+  border-left: 3px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Clickable aircraft row for look-at */
+.aircraft-item.clickable {
+  cursor: pointer;
+}
+
+.aircraft-item.clickable:hover {
+  background: rgba(255, 255, 255, 0.12);
+}

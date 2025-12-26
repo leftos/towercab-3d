@@ -68,7 +68,8 @@ const createDefaultCameraState = (
   preFollowState: null,
   orbitDistance: globalOrbit?.distance ?? ORBIT_DISTANCE_DEFAULT,
   orbitHeading: globalOrbit?.heading ?? ORBIT_HEADING_DEFAULT,
-  orbitPitch: globalOrbit?.pitch ?? ORBIT_PITCH_DEFAULT
+  orbitPitch: globalOrbit?.pitch ?? ORBIT_PITCH_DEFAULT,
+  lookAtTarget: null
 })
 
 // Main viewport always uses this fixed ID so CesiumViewer can find it
@@ -186,6 +187,10 @@ interface ViewportStore {
   moveRight: (distance: number) => void
   moveUp: (distance: number) => void
   resetPosition: () => void
+
+  // Look-at animation (smooth pan to target heading/pitch)
+  setLookAtTarget: (heading: number, pitch: number) => void
+  clearLookAtTarget: () => void
 
   // Follow actions
   followAircraft: (callsign: string) => void
@@ -585,6 +590,27 @@ export const useViewportStore = create<ViewportStore>()(
                 positionOffsetX: 0,
                 positionOffsetY: 0,
                 positionOffsetZ: 0
+              }))
+            })
+          },
+
+          // Look-at animation
+          setLookAtTarget: (heading, pitch) => {
+            const normalizedHeading = ((heading % 360) + 360) % 360
+            const clampedPitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, pitch))
+            const { activeViewportId, viewports } = get()
+            set({
+              viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
+                lookAtTarget: { heading: normalizedHeading, pitch: clampedPitch }
+              }))
+            })
+          },
+
+          clearLookAtTarget: () => {
+            const { activeViewportId, viewports } = get()
+            set({
+              viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
+                lookAtTarget: null
               }))
             })
           },

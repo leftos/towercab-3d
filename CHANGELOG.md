@@ -5,6 +5,17 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Smart sort for aircraft panel with flight phase detection
+  - Automatically categorizes aircraft by phase: Short Final, Final, Rolling, Roll Out, Go Around, Lined Up, Hold Short, Pattern, Pushback, Taxi, Stopped, Climbing, Inbound
+  - Shows associated runway when applicable (e.g., "Short Final 25L")
+  - Distinguishes parallel runways (07L vs 07R) using lateral offset from centerline
+  - Phase badges now display for all sort modes, not just Smart sort
+- Go-around and missed approach detection
+  - Detects aircraft that were recently on approach or landing roll and are now climbing aggressively
+  - Highest priority in the list since it's an unexpected event requiring controller attention
+- Click-to-look feature for aircraft panel
+  - Click any aircraft in the list to smoothly pan the camera to center on it
+  - Correctly calculates bearing from actual camera position (including WASD offsets)
 - Aircraft with unknown type but known airline now show airline-specific liveries
   - Searches B738, A320, B739, A321, A319, B737, A20N, A21N, A19N, B38M, B39M, B73X for matching airline livery
   - Example: JetBlue flight with N/A type shows JBU A320 livery instead of generic white B738

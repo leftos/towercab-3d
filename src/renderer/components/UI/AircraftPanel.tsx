@@ -2,14 +2,25 @@ import { useMemo, useState, useEffect } from 'react'
 import { useAirportStore } from '../../stores/airportStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAircraftFilterStore } from '../../stores/aircraftFilterStore'
+import { useRunwayStore } from '../../stores/runwayStore'
 import { useActiveViewportCamera } from '../../hooks/useActiveViewportCamera'
 import { useAircraftInterpolation } from '../../hooks/useAircraftInterpolation'
 import { useAircraftFiltering } from '../../hooks/useAircraftFiltering'
 import { calculateBearing } from '../../utils/interpolation'
-import { formatAltitude, formatGroundspeed, formatHeading } from '../../utils/towerHeight'
+import { formatAltitude, formatGroundspeed, formatHeading, getTowerPosition } from '../../utils/towerHeight'
+import { applyPositionOffsets } from '../../utils/cameraGeometry'
+import {
+  calculateSmartSort,
+  clearPhaseHistory,
+  getPhaseLabel,
+  getTierClass,
+  type FlightPhase,
+  type PriorityTier,
+  type SmartSortContext
+} from '../../utils/smartSort'
 import './AircraftPanel.css'
 
-type SortOption = 'distance' | 'callsign' | 'altitude' | 'speed'
+type SortOption = 'smart' | 'distance' | 'callsign' | 'altitude' | 'speed'
 
 interface AircraftListItem {
   callsign: string
@@ -21,6 +32,11 @@ interface AircraftListItem {
   bearing: number
   departure: string | null
   arrival: string | null
+  // Smart sort fields
+  phase: FlightPhase | null
+  tier: PriorityTier | null
+  runway: string | null
+  score: number
 }
 
 function AircraftPanel() {
@@ -36,8 +52,12 @@ function AircraftPanel() {
   const filterAirportTraffic = useAircraftFilterStore((state) => state.filterAirportTraffic)
   const setFilterAirportTraffic = useAircraftFilterStore((state) => state.setFilterAirportTraffic)
 
+  // Runway data for smart sort
+  const getRunwaysWithCoordinates = useRunwayStore((state) => state.getRunwaysWithCoordinates)
+  const runwaysLoaded = useRunwayStore((state) => state.isLoaded)
+
   // Local state for sorting and collapse (UI-only, doesn't affect filtering)
-  const [sortOption, setSortOption] = useState<SortOption>('distance')
+  const [sortOption, setSortOption] = useState<SortOption>('smart')
   const [isCollapsed, setIsCollapsed] = useState(false)
 
   // Periodic refresh to update distances/bearings (UI updates automatically via hook reactivity)
@@ -47,7 +67,15 @@ function AircraftPanel() {
     return () => clearInterval(interval)
   }, [])
 
-  // Active viewport camera for follow functionality
+  // Clear phase history when airport changes to prevent memory leaks
+  useEffect(() => {
+    clearPhaseHistory()
+  }, [currentAirport?.icao])
+
+  // Tower height for look-at pitch calculation
+  const towerHeight = useAirportStore((state) => state.towerHeight)
+
+  // Active viewport camera for follow functionality and look-at
   const {
     followingCallsign,
     followAircraft,
@@ -55,8 +83,15 @@ function AircraftPanel() {
     followMode,
     toggleFollowMode,
     followZoom,
-    orbitDistance
+    orbitDistance,
+    setLookAtTarget,
+    positionOffsetX,
+    positionOffsetY,
+    positionOffsetZ
   } = useActiveViewportCamera()
+
+  // Custom tower position for bearing calculation
+  const customTowerPosition = useAirportStore((state) => state.customTowerPosition)
 
   // Get interpolated aircraft data (shared single source)
   const interpolatedAircraft = useAircraftInterpolation()
@@ -64,26 +99,61 @@ function AircraftPanel() {
   // Use shared filtering hook (affects both list and datablocks)
   const { filtered, referencePoint } = useAircraftFiltering(interpolatedAircraft)
 
+  // Build smart sort context when airport is selected
+  const smartSortContext = useMemo((): SmartSortContext | null => {
+    if (!currentAirport || !runwaysLoaded) return null
+    const runways = getRunwaysWithCoordinates(currentAirport.icao)
+    return {
+      airportLat: currentAirport.lat,
+      airportLon: currentAirport.lon,
+      airportElevationFt: currentAirport.elevation,
+      runways,
+      icao: currentAirport.icao
+    }
+  }, [currentAirport, runwaysLoaded, getRunwaysWithCoordinates])
+
   // Calculate bearing and convert to AircraftListItem format with sorting
   const nearbyAircraft = useMemo((): AircraftListItem[] => {
     if (!referencePoint) return []
 
-    const withBearing = filtered.map((aircraft) => ({
-      callsign: aircraft.callsign,
-      aircraftType: aircraft.aircraftType,
-      altitude: aircraft.interpolatedAltitude,  // Keep in METERS (formatAltitude handles conversion)
-      groundspeed: aircraft.interpolatedGroundspeed,
-      heading: aircraft.interpolatedHeading,
-      distance: aircraft.distance,
-      bearing: calculateBearing(
-        referencePoint.lat,
-        referencePoint.lon,
-        aircraft.interpolatedLatitude,
-        aircraft.interpolatedLongitude
-      ),
-      departure: aircraft.departure,
-      arrival: aircraft.arrival
-    }))
+    // Always calculate flight phase data when airport context available
+    // (phase info is useful regardless of sort mode)
+    const smartSortMap = new Map<string, { phase: FlightPhase; tier: PriorityTier; runway: string | null; score: number }>()
+    if (smartSortContext) {
+      const smartResults = calculateSmartSort(filtered, smartSortContext)
+      for (const result of smartResults) {
+        smartSortMap.set(result.callsign, {
+          phase: result.phase,
+          tier: result.tier,
+          runway: result.runway,
+          score: result.score
+        })
+      }
+    }
+
+    const withBearing = filtered.map((aircraft) => {
+      const smartData = smartSortMap.get(aircraft.callsign)
+      return {
+        callsign: aircraft.callsign,
+        aircraftType: aircraft.aircraftType,
+        altitude: aircraft.interpolatedAltitude,  // Keep in METERS (formatAltitude handles conversion)
+        groundspeed: aircraft.interpolatedGroundspeed,
+        heading: aircraft.interpolatedHeading,
+        distance: aircraft.distance,
+        bearing: calculateBearing(
+          referencePoint.lat,
+          referencePoint.lon,
+          aircraft.interpolatedLatitude,
+          aircraft.interpolatedLongitude
+        ),
+        departure: aircraft.departure,
+        arrival: aircraft.arrival,
+        phase: smartData?.phase || null,
+        tier: smartData?.tier || null,
+        runway: smartData?.runway || null,
+        score: smartData?.score || 0
+      }
+    })
 
     // Apply sorting (UI-only, doesn't affect filtering)
     const sorted = withBearing.sort((a, b) => {
@@ -93,6 +163,8 @@ function AircraftPanel() {
 
       // Apply normal sorting for non-followed aircraft
       switch (sortOption) {
+        case 'smart':
+          return b.score - a.score // Highest priority first
         case 'callsign':
           return a.callsign.localeCompare(b.callsign)
         case 'altitude':
@@ -107,7 +179,7 @@ function AircraftPanel() {
 
     return sorted.slice(0, 50)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refreshTick intentionally forces periodic recalculation of distances/bearings
-  }, [filtered, referencePoint, followingCallsign, sortOption, refreshTick])
+  }, [filtered, referencePoint, followingCallsign, sortOption, refreshTick, smartSortContext])
 
 
   const handleFollowClick = (callsign: string) => {
@@ -116,6 +188,62 @@ function AircraftPanel() {
     } else {
       followAircraft(callsign)
     }
+  }
+
+  /**
+   * Look at an aircraft without engaging follow mode.
+   * Smoothly animates the camera heading and pitch to center the aircraft on screen.
+   * Uses the actual camera position (tower + WASD offsets) to calculate accurate bearing.
+   */
+  const handleLookAt = (aircraft: AircraftListItem) => {
+    if (!currentAirport) return
+
+    // Get the aircraft's current interpolated position (real-time, not cached)
+    const currentAircraft = interpolatedAircraft.get(aircraft.callsign)
+    if (!currentAircraft) return
+
+    // Calculate actual camera position (tower + WASD offsets)
+    // This matches how useCesiumCamera calculates the camera position
+    const towerPos = getTowerPosition(currentAirport, towerHeight, customTowerPosition ?? undefined)
+    const cameraPos = applyPositionOffsets(
+      { latitude: towerPos.latitude, longitude: towerPos.longitude, height: towerPos.height },
+      { x: positionOffsetX, y: positionOffsetY, z: positionOffsetZ }
+    )
+
+    // Calculate bearing from actual camera position to aircraft
+    const bearing = calculateBearing(
+      cameraPos.latitude,
+      cameraPos.longitude,
+      currentAircraft.interpolatedLatitude,
+      currentAircraft.interpolatedLongitude
+    )
+
+    // Guard against invalid or very close distances (< 0.05nm ≈ 100m)
+    // At this range, pitch calculation becomes unreliable
+    if (!aircraft.distance || !isFinite(aircraft.distance) || aircraft.distance < 0.05) {
+      // Just set heading target, keep current pitch target as 0
+      setLookAtTarget(bearing, 0)
+      return
+    }
+
+    // Calculate pitch based on altitude difference and distance
+    // Camera is at tower height (which includes airport elevation in MSL)
+    const cameraAltitudeMeters = cameraPos.height
+    const aircraftAltitudeMeters = currentAircraft.interpolatedAltitude // Already in meters
+    const altitudeDiffMeters = aircraftAltitudeMeters - cameraAltitudeMeters
+
+    // Convert distance from nm to meters
+    const distanceMeters = aircraft.distance * 1852
+
+    // Calculate pitch angle (atan2 gives radians, convert to degrees)
+    const pitchRad = Math.atan2(altitudeDiffMeters, distanceMeters)
+    const pitchDeg = pitchRad * (180 / Math.PI)
+
+    // Clamp pitch to reasonable range
+    const clampedPitch = Math.max(-60, Math.min(60, pitchDeg))
+
+    // Set the look-at target for smooth animation
+    setLookAtTarget(bearing, clampedPitch)
   }
 
   if (!showAircraftPanel) return null
@@ -177,6 +305,7 @@ function AircraftPanel() {
                 value={sortOption}
                 onChange={(e) => setSortOption(e.target.value as SortOption)}
               >
+                <option value="smart">Smart</option>
                 <option value="distance">Distance</option>
                 <option value="callsign">Callsign</option>
                 <option value="altitude">Altitude</option>
@@ -221,18 +350,33 @@ function AircraftPanel() {
         ) : (
           nearbyAircraft.map((aircraft) => {
             const isFollowing = followingCallsign === aircraft.callsign
+            const phaseLabel = aircraft.phase ? getPhaseLabel(aircraft.phase) : null
+            const tierClass = aircraft.tier ? getTierClass(aircraft.tier) : ''
             return (
               <div
                 key={aircraft.callsign}
-                className={`aircraft-item ${isFollowing ? 'following' : ''}`}
+                className={`aircraft-item ${isFollowing ? 'following' : ''} ${tierClass} clickable`}
+                onClick={() => handleLookAt(aircraft)}
+                title="Click to look at aircraft"
               >
                 <div className="aircraft-header">
-                  <span className="callsign">{aircraft.callsign}</span>
+                  <div className="callsign-group">
+                    <span className="callsign">{aircraft.callsign}</span>
+                    {phaseLabel && (
+                      <span className={`phase-badge ${tierClass}`}>
+                        {phaseLabel}
+                        {aircraft.runway && <span className="runway-ident"> {aircraft.runway}</span>}
+                      </span>
+                    )}
+                  </div>
                   <div className="aircraft-header-right">
                     <span className="aircraft-type">{aircraft.aircraftType || '???'}</span>
                     <button
                       className={`follow-btn ${isFollowing ? 'active' : ''}`}
-                      onClick={() => handleFollowClick(aircraft.callsign)}
+                      onClick={(e) => {
+                        e.stopPropagation() // Don't trigger look-at
+                        handleFollowClick(aircraft.callsign)
+                      }}
                       title={isFollowing ? 'Stop following' : 'Follow aircraft'}
                     >
                       {isFollowing ? (

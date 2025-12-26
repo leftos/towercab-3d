@@ -153,6 +153,14 @@ export interface InterpolatedAircraftState extends AircraftState {
   interpolatedRoll: number      // Degrees, positive = right wing down
   verticalRate: number          // Vertical rate in METERS/MINUTE
   turnRate: number              // degrees/sec
+  /**
+   * Ground track (direction of movement) in degrees (0-360).
+   * Calculated from position change. Differs from heading during:
+   * - Pushback (track ≈ heading + 180°)
+   * - Crosswind (crab angle)
+   * - Stationary (defaults to heading when not moving)
+   */
+  track: number
   // True if we have previous state data for interpolation, false if showing raw data
   isInterpolated: boolean
 }

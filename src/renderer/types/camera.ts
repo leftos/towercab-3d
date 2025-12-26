@@ -161,6 +161,14 @@ export interface ViewportCameraState {
    * Limited to ±89 to prevent gimbal lock
    */
   orbitPitch: number
+
+  /**
+   * Target for smooth camera pan animation
+   * When set, the camera input system will smoothly animate heading/pitch toward this target.
+   * Set when clicking an aircraft in the list to center it on screen.
+   * Cleared when animation completes or user manually moves camera.
+   */
+  lookAtTarget: { heading: number; pitch: number } | null
 }
 
 /**

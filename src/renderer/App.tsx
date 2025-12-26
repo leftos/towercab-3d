@@ -23,6 +23,7 @@ import { useWeatherStore } from './stores/weatherStore'
 import { useViewportStore } from './stores/viewportStore'
 import { useVRStore } from './stores/vrStore'
 import { useUIFeedbackStore } from './stores/uiFeedbackStore'
+import { useRunwayStore } from './stores/runwayStore'
 import { airportService } from './services/AirportService'
 import { aircraftDimensionsService } from './services/AircraftDimensionsService'
 import { fsltlService } from './services/FSLTLService'
@@ -101,6 +102,9 @@ function App() {
         setLoadingStatus('Loading airport database...')
         const airports = await airportService.loadAirports()
         loadAirports(Object.fromEntries(airports))
+
+        // Load runway database (non-blocking, used for smart sort)
+        useRunwayStore.getState().loadRunways()
 
         // Load aircraft dimensions data (non-blocking)
         aircraftDimensionsService.load()

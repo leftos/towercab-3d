@@ -208,6 +208,7 @@ export function useCameraInput(
   const followZoom = cameraState?.followZoom ?? 1
   const orbitPitch = cameraState?.orbitPitch ?? 15
   const orbitDistance = cameraState?.orbitDistance ?? 500
+  const lookAtTarget = cameraState?.lookAtTarget ?? null
 
   // Viewport store actions (operate on active viewport)
   const toggleViewMode = useViewportStore((state) => state.toggleViewMode)
@@ -228,6 +229,9 @@ export function useCameraInput(
   const resetPosition = useViewportStore((state) => state.resetPosition)
   const stopFollowing = useViewportStore((state) => state.stopFollowing)
   const setActiveViewport = useViewportStore((state) => state.setActiveViewport)
+  const setHeading = useViewportStore((state) => state.setHeading)
+  const setPitch = useViewportStore((state) => state.setPitch)
+  const clearLookAtTarget = useViewportStore((state) => state.clearLookAtTarget)
 
   // Mouse drag state
   const isDraggingRef = useRef(false)
@@ -257,6 +261,7 @@ export function useCameraInput(
   const mouseSensitivityRef = useRef(mouseSensitivity)
   const isActiveRef = useRef(activeViewportId === viewportId)
   const viewportIdRef = useRef(viewportId)
+  const lookAtTargetRef = useRef(lookAtTarget)
 
   // Keep refs updated
   viewModeRef.current = viewMode
@@ -272,6 +277,7 @@ export function useCameraInput(
   mouseSensitivityRef.current = mouseSensitivity
   isActiveRef.current = activeViewportId === viewportId
   viewportIdRef.current = viewportId
+  lookAtTargetRef.current = lookAtTarget
 
   // Mouse drag controls for panning/tilting using Cesium's event handler
   useEffect(() => {
@@ -304,6 +310,11 @@ export function useCameraInput(
       isDraggingRef.current = true
       lastMousePosRef.current = { x: movement.position.x, y: movement.position.y }
 
+      // Cancel any ongoing look-at animation when user manually moves camera
+      if (lookAtTargetRef.current) {
+        clearLookAtTarget()
+      }
+
       // In tower follow mode, stop following when user starts dragging
       if (followingCallsignRef.current && followModeRef.current === 'tower') {
         onBreakTowerFollow?.()
@@ -317,6 +328,11 @@ export function useCameraInput(
       isActiveRef.current = true
       isDraggingRef.current = true
       lastMousePosRef.current = { x: movement.position.x, y: movement.position.y }
+
+      // Cancel any ongoing look-at animation when user manually moves camera
+      if (lookAtTargetRef.current) {
+        clearLookAtTarget()
+      }
 
       // In tower follow mode, stop following when user starts dragging
       if (followingCallsignRef.current && followModeRef.current === 'tower') {
@@ -386,7 +402,7 @@ export function useCameraInput(
       handler.destroy()
       canvas.removeEventListener('contextmenu', handleContextMenu)
     }
-  }, [viewer, adjustHeading, adjustPitch, adjustOrbitHeading, adjustOrbitPitch, moveForward, moveRight, onBreakTowerFollow, setActiveViewport])
+  }, [viewer, adjustHeading, adjustPitch, adjustOrbitHeading, adjustOrbitPitch, moveForward, moveRight, onBreakTowerFollow, setActiveViewport, clearLookAtTarget])
 
   // Mouse wheel for zoom - adds impulse for smooth scrolling
   useEffect(() => {
@@ -588,8 +604,54 @@ export function useCameraInput(
         wheelImpulseRef.current = 0  // Also clear wheel impulse to stop momentum
       }
 
-      // Apply velocities
+      // Velocity threshold for applying movements
       const threshold = MOVEMENT_CONFIG.VELOCITY_THRESHOLD
+
+      // Smooth look-at animation toward target heading/pitch
+      // This runs independently of velocity-based input
+      const target = lookAtTargetRef.current
+      if (target) {
+        // Check if user is actively trying to move camera via keyboard
+        // If so, cancel the look-at animation
+        if (Math.abs(vel.heading) > threshold || Math.abs(vel.pitch) > threshold) {
+          clearLookAtTarget()
+        } else {
+          const currentH = headingRef.current
+          const currentP = pitchRef.current
+
+          // Calculate heading delta (handle 360° wrap)
+          let deltaH = target.heading - currentH
+          // Normalize to [-180, 180] to take shortest path
+          if (deltaH > 180) deltaH -= 360
+          if (deltaH < -180) deltaH += 360
+
+          const deltaP = target.pitch - currentP
+
+          // Threshold for "close enough" (degrees)
+          const reachedThreshold = 0.5
+
+          if (Math.abs(deltaH) < reachedThreshold && Math.abs(deltaP) < reachedThreshold) {
+            // Snap to exact target and clear
+            setHeading(target.heading)
+            setPitch(target.pitch)
+            clearLookAtTarget()
+          } else {
+            // Smooth exponential interpolation (easing)
+            // Higher value = faster animation
+            const easeSpeed = 8.0
+            const t = 1 - Math.exp(-easeSpeed * dt)
+
+            // Apply interpolated movement
+            const newHeading = currentH + deltaH * t
+            const newPitch = currentP + deltaP * t
+
+            setHeading(newHeading)
+            setPitch(newPitch)
+          }
+        }
+      }
+
+      // Apply velocities
 
       if (Math.abs(vel.forward) > threshold) {
         moveForward(vel.forward * dt)
@@ -667,7 +729,10 @@ export function useCameraInput(
     resetToAppDefault,
     resetPosition,
     stopFollowing,
-    onBreakTowerFollow
+    onBreakTowerFollow,
+    setHeading,
+    setPitch,
+    clearLookAtTarget
   ])
 }
 

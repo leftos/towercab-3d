@@ -381,6 +381,7 @@ export function interpolateAircraftState(
       interpolatedRoll: 0,
       verticalRate: 0,
       turnRate: 0,
+      track: current.heading,  // Default to heading when no movement data
       isInterpolated: false
     }
   }
@@ -540,6 +541,21 @@ export function interpolateAircraftState(
     roll = lerp(prevOrientation.roll, currOrientation.roll, easedT)
   }
 
+  // Calculate ground track (direction of movement) from position change
+  // If aircraft is essentially stationary, default to heading
+  let track = interpolatedHeading
+  const positionDeltaForTrack = Math.abs(previous.latitude - current.latitude) +
+                                Math.abs(previous.longitude - current.longitude)
+  // Use very small threshold (~0.5m) to detect slow pushback movement
+  if (positionDeltaForTrack > 0.000005) {
+    track = calculateBearing(
+      previous.latitude,
+      previous.longitude,
+      current.latitude,
+      current.longitude
+    )
+  }
+
   return {
     ...current,
     interpolatedLatitude: interpolatedLat,
@@ -551,6 +567,7 @@ export function interpolateAircraftState(
     interpolatedRoll: roll,
     verticalRate: verticalRate * 60000,  // Convert m/ms to m/min
     turnRate: turnRate,
+    track: track,
     isInterpolated: true
   }
 }

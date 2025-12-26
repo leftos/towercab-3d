@@ -68,7 +68,12 @@ export type {
 
   // Tower configuration
   TowerConfig,
-  AirportType
+  AirportType,
+
+  // Runway data (for smart sort)
+  RunwayEnd,
+  Runway,
+  RawRunwayCSV
 } from './airport'
 
 export {

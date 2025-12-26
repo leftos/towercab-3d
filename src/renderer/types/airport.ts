@@ -1,5 +1,82 @@
 // Airport data types
-// Source: github.com/mwgg/Airports
+// Source: github.com/mwgg/Airports (basic airport data)
+// Source: ourairports.com (runway data)
+
+// ============================================================================
+// RUNWAY TYPES
+// ============================================================================
+
+/**
+ * Runway threshold/end point data
+ * Each runway has two ends (low and high, based on heading number)
+ */
+export interface RunwayEnd {
+  /** Runway designator (e.g., "09L", "27R", "04") */
+  ident: string
+  /** Latitude in degrees */
+  lat: number
+  /** Longitude in degrees */
+  lon: number
+  /** True heading in degrees (0-360) */
+  headingTrue: number
+  /** Elevation in feet MSL */
+  elevationFt: number
+  /** Displaced threshold distance in feet (0 if none) */
+  displacedThresholdFt: number
+}
+
+/**
+ * Complete runway data for smart sort calculations
+ */
+export interface Runway {
+  /** Combined runway designator (e.g., "09L/27R") */
+  ident: string
+  /** Low-numbered end (e.g., 09L for 09L/27R) */
+  lowEnd: RunwayEnd
+  /** High-numbered end (e.g., 27R for 09L/27R) */
+  highEnd: RunwayEnd
+  /** Runway length in feet */
+  lengthFt: number
+  /** Runway width in feet */
+  widthFt: number
+  /** Surface type (ASPH, CONC, GRVL, TURF, etc.) */
+  surface: string
+  /** Whether the runway is lighted */
+  lighted: boolean
+  /** Whether the runway is closed */
+  closed: boolean
+}
+
+/**
+ * Raw runway data from OurAirports CSV
+ * @internal Used during parsing only
+ */
+export interface RawRunwayCSV {
+  id: string
+  airport_ref: string
+  airport_ident: string
+  length_ft: string
+  width_ft: string
+  surface: string
+  lighted: string
+  closed: string
+  le_ident: string
+  le_latitude_deg: string
+  le_longitude_deg: string
+  le_elevation_ft: string
+  le_heading_degT: string
+  le_displaced_threshold_ft: string
+  he_ident: string
+  he_latitude_deg: string
+  he_longitude_deg: string
+  he_elevation_ft: string
+  he_heading_degT: string
+  he_displaced_threshold_ft: string
+}
+
+// ============================================================================
+// AIRPORT TYPES
+// ============================================================================
 
 export interface Airport {
   icao: string
