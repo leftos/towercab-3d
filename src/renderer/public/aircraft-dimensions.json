@@ -113,7 +113,7 @@
   },
   "AC11": {
     "length": 7.59,
-    "wingspan": 10.0
+    "wingspan": 10
   },
   "AC50": {
     "length": 11.22,
@@ -150,6 +150,10 @@
   "AN12": {
     "length": 34.02,
     "wingspan": 38.04
+  },
+  "AN2": {
+    "length": 12.4,
+    "wingspan": 18.2
   },
   "AN72": {
     "length": 28.07,
@@ -401,7 +405,7 @@
   },
   "BE19": {
     "length": 7.83,
-    "wingspan": 10.0
+    "wingspan": 10
   },
   "BE20": {
     "length": 13.35,
@@ -409,11 +413,11 @@
   },
   "BE23": {
     "length": 7.83,
-    "wingspan": 10.0
+    "wingspan": 10
   },
   "BE24": {
     "length": 7.83,
-    "wingspan": 10.0
+    "wingspan": 10
   },
   "BE30": {
     "length": 14.23,
@@ -541,7 +545,7 @@
   },
   "C172": {
     "length": 8.29,
-    "wingspan": 11.0
+    "wingspan": 11
   },
   "C175": {
     "length": 7.62,
@@ -577,7 +581,7 @@
   },
   "C207": {
     "length": 9.6,
-    "wingspan": 11.0
+    "wingspan": 11
   },
   "C208": {
     "length": 11.46,
@@ -593,7 +597,7 @@
   },
   "C240": {
     "length": 7.68,
-    "wingspan": 11.0
+    "wingspan": 11
   },
   "C25A": {
     "length": 14.54,
@@ -637,7 +641,7 @@
   },
   "C400": {
     "length": 7.67,
-    "wingspan": 11.0
+    "wingspan": 11
   },
   "C402": {
     "length": 11.09,
@@ -717,11 +721,11 @@
   },
   "C700": {
     "length": 22.31,
-    "wingspan": 21.0
+    "wingspan": 21
   },
   "C72R": {
     "length": 8.29,
-    "wingspan": 11.0
+    "wingspan": 11
   },
   "C750": {
     "length": 22.04,
@@ -749,7 +753,7 @@
   },
   "CL35": {
     "length": 20.91,
-    "wingspan": 21.0
+    "wingspan": 21
   },
   "CL41": {
     "length": 9.75,
@@ -765,11 +769,11 @@
   },
   "COL3": {
     "length": 7.68,
-    "wingspan": 11.0
+    "wingspan": 11
   },
   "COL4": {
     "length": 7.68,
-    "wingspan": 11.0
+    "wingspan": 11
   },
   "COUR": {
     "length": 9.45,
@@ -901,7 +905,7 @@
   },
   "E170": {
     "length": 29.9,
-    "wingspan": 26.0
+    "wingspan": 26
   },
   "E190": {
     "length": 36.24,
@@ -945,7 +949,7 @@
   },
   "E75L": {
     "length": 32.31,
-    "wingspan": 31.0
+    "wingspan": 31
   },
   "E75S": {
     "length": 31.67,
@@ -1115,6 +1119,10 @@
     "length": 46.6,
     "wingspan": 50.51
   },
+  "J3": {
+    "length": 6.83,
+    "wingspan": 10.74
+  },
   "J328": {
     "length": 21.24,
     "wingspan": 20.97
@@ -1209,11 +1217,11 @@
   },
   "M20P": {
     "length": 8.17,
-    "wingspan": 11.0
+    "wingspan": 11
   },
   "M20T": {
     "length": 8.17,
-    "wingspan": 11.0
+    "wingspan": 11
   },
   "M5": {
     "length": 7.16,
@@ -1279,9 +1287,17 @@
     "length": 7.53,
     "wingspan": 10.79
   },
+  "P28S": {
+    "length": 7.1,
+    "wingspan": 9.14
+  },
   "P28T": {
     "length": 7.53,
     "wingspan": 10.79
+  },
+  "P28U": {
+    "length": 7.1,
+    "wingspan": 9.14
   },
   "P3": {
     "length": 35.36,
@@ -1428,7 +1444,7 @@
     "wingspan": 32.92
   },
   "RJ1H": {
-    "length": 31.0,
+    "length": 31,
     "wingspan": 26.33
   },
   "RJ85": {
@@ -1545,7 +1561,7 @@
   },
   "TOBA": {
     "length": 7.74,
-    "wingspan": 10.0
+    "wingspan": 10
   },
   "V22": {
     "length": 19.2,
