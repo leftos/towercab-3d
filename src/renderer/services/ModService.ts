@@ -8,11 +8,13 @@ import type {
   CustomTowerPosition,
   LegacyTowerPosition,
   View3dPosition,
-  View2dPosition
+  View2dPosition,
+  ResolvedView2dPosition
 } from '../types/mod'
 import { isSupportedModelFormat, getModelFormat, SUPPORTED_MODEL_FORMATS, isLegacyTowerPosition, convertLegacyToNewFormat } from '../types/mod'
-import { modApi, isTauri } from '../utils/tauriApi'
+import { modApi } from '../utils/tauriApi'
 import { customVMRService } from './CustomVMRService'
+import { VNAS_RANGE_TO_ALTITUDE_MULTIPLIER, TOPDOWN_ALTITUDE_DEFAULT } from '../constants/camera'
 
 class ModService {
   private registry: ModRegistry = {
@@ -28,12 +30,6 @@ class ModService {
    */
   async loadMods(): Promise<void> {
     if (this.loaded) return
-
-    // Only load mods in Tauri environment
-    if (!isTauri()) {
-      this.loaded = true
-      return
-    }
 
     try {
       // Load custom VMR files first (highest priority for model matching)
@@ -139,9 +135,7 @@ class ModService {
                 lat: v3d.lat,
                 lon: v3d.lon,
                 aglHeight: v3d.aglHeight,
-                heading: v3d.heading,
-                latOffsetMeters: v3d.latOffsetMeters,
-                lonOffsetMeters: v3d.lonOffsetMeters
+                heading: v3d.heading
               }
             } else {
               console.warn(`Invalid view3d for ${icao}: missing required fields (lat, lon, aglHeight)`)
@@ -151,15 +145,30 @@ class ModService {
           // Validate and store view2d if present
           if (parsed.view2d) {
             const v2d = parsed.view2d as View2dPosition
+            // Compute altitude: use direct altitude if provided, otherwise convert from vNasRange
+            let altitude: number | undefined
             if (typeof v2d.altitude === 'number') {
+              altitude = v2d.altitude
+            } else if (typeof v2d.vNasRange === 'number') {
+              altitude = v2d.vNasRange * VNAS_RANGE_TO_ALTITUDE_MULTIPLIER
+            }
+
+            if (altitude !== undefined) {
               position.view2d = {
-                altitude: v2d.altitude,
-                heading: v2d.heading,
-                latOffsetMeters: v2d.latOffsetMeters,
-                lonOffsetMeters: v2d.lonOffsetMeters
+                lat: v2d.lat,
+                lon: v2d.lon,
+                altitude,
+                vNasRange: v2d.vNasRange,  // Preserve raw value for reference
+                heading: v2d.heading
               }
             } else {
-              console.warn(`Invalid view2d for ${icao}: missing required field (altitude)`)
+              // view2d exists but has no altitude info - use heading only with default altitude
+              if (typeof v2d.heading === 'number') {
+                position.view2d = {
+                  altitude: TOPDOWN_ALTITUDE_DEFAULT,
+                  heading: v2d.heading
+                }
+              }
             }
           }
 
@@ -172,10 +181,6 @@ class ModService {
         }
       }
 
-      const count = this.customTowerPositions.size
-      if (count > 0) {
-        console.log(`Loaded ${count} custom tower positions from mods/tower-positions/`)
-      }
     } catch (error) {
       console.warn('Failed to load tower positions:', error)
       // Not a fatal error - app continues with defaults
@@ -194,17 +199,16 @@ class ModService {
    * Returns undefined if no 3D position is defined
    */
   get3dPosition(icao: string): View3dPosition | undefined {
-    const position = this.customTowerPositions.get(icao.toUpperCase())
-    return position?.view3d
+    return this.customTowerPositions.get(icao.toUpperCase())?.view3d
   }
 
   /**
    * Get 2D view position for a specific airport
    * Returns undefined if no 2D position is defined
+   * Note: altitude is always resolved (from direct value or vNasRange conversion)
    */
-  get2dPosition(icao: string): View2dPosition | undefined {
-    const position = this.customTowerPositions.get(icao.toUpperCase())
-    return position?.view2d
+  get2dPosition(icao: string): ResolvedView2dPosition | undefined {
+    return this.customTowerPositions.get(icao.toUpperCase())?.view2d
   }
 
   /**

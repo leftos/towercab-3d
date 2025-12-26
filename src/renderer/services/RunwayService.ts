@@ -10,6 +10,7 @@
 
 import type { Runway, RunwayEnd, RawRunwayCSV } from '../types/airport'
 import { RUNWAYS_DB_URL } from '../constants/api'
+import { loadDataWithFallback } from '../utils/dataLoader'
 
 class RunwayService {
   /** Index of runways by airport ICAO code */
@@ -41,14 +42,9 @@ class RunwayService {
 
   private async doLoad(): Promise<void> {
     try {
-      console.log('[RunwayService] Fetching runway database...')
-      const response = await fetch(RUNWAYS_DB_URL)
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch runways: ${response.status}`)
-      }
-
-      const csvText = await response.text()
+      console.log('[RunwayService] Loading runway database...')
+      // Try to fetch fresh data, fall back to bundled runways.csv
+      const csvText = await loadDataWithFallback(RUNWAYS_DB_URL, 'runways.csv')
       const runwayCount = this.parseCSV(csvText).length
 
       console.log(`[RunwayService] Parsed ${runwayCount} runways`)

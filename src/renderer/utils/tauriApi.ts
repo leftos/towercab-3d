@@ -11,7 +11,7 @@ import { getVersion } from '@tauri-apps/api/app'
  * Check if running in Tauri environment
  */
 export function isTauri(): boolean {
-  return '__TAURI__' in window
+  return '__TAURI__' in window || '__TAURI_INTERNALS__' in window
 }
 
 /**
@@ -77,14 +77,12 @@ export const modApi = {
       lon: number
       aglHeight: number
       heading?: number
-      latOffsetMeters?: number
-      lonOffsetMeters?: number
     }
     view2d?: {
+      lat?: number
+      lon?: number
       altitude: number
       heading?: number
-      latOffsetMeters?: number
-      lonOffsetMeters?: number
     }
   }): Promise<void> =>
     invoke<void>('update_tower_position', { icao, position })

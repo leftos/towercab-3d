@@ -29,6 +29,7 @@ import { aircraftDimensionsService } from './services/AircraftDimensionsService'
 import { fsltlService } from './services/FSLTLService'
 import * as fsltlApi from './services/fsltlApi'
 import { migrateFromElectron, isMigrationComplete } from './services/MigrationService'
+import { modService } from './services/ModService'
 import { isOrbitWithoutAirport } from './utils/viewingContext'
 
 function App() {
@@ -97,6 +98,10 @@ function App() {
         if (cesiumIonToken) {
           Ion.defaultAccessToken = cesiumIonToken
         }
+
+        // Load mods (tower positions, custom aircraft, etc.)
+        setLoadingStatus('Loading mods...')
+        await modService.loadMods()
 
         // Load airport database
         setLoadingStatus('Loading airport database...')

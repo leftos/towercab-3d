@@ -131,36 +131,22 @@ Create a `manifest.json` file in your tower mod folder:
 | `scale` | number | Yes | Scale factor |
 | `heightOffset` | number | No | Additional height offset in meters (for 3D model) |
 | `position` | object | No | Absolute lat/lon for 3D model placement |
-| `latOffsetMeters` | number | No | Fine-tuning offset in meters (north positive) |
-| `lonOffsetMeters` | number | No | Fine-tuning offset in meters (east positive) |
 | `cabPosition` | object | No | Camera/tower cab position (lat, lon, aglHeight) - sets default viewing position |
 | `cabHeading` | number | No | Default camera heading in degrees (0=north, 90=east) |
 
 ### Position Configuration
 
-Tower mods can now specify custom positions in two ways:
+Tower mods specify custom positions using absolute lat/lon coordinates:
 
-**Using absolute position (recommended):**
 ```json
 {
   "position": {
-    "lat": 40.6413,
-    "lon": -73.7781
-  },
-  "latOffsetMeters": 5.5,
-  "lonOffsetMeters": -2.3
+    "lat": 40.6413111,
+    "lon": -73.7781234
+  }
 }
 ```
-The offset fields (in meters) are applied on top of the absolute position for precise fine-tuning. This provides meter-level accuracy that lat/lon degrees cannot offer.
-
-**Using offset only (positions relative to airport center):**
-```json
-{
-  "latOffsetMeters": 10,
-  "lonOffsetMeters": 5
-}
-```
-The offset is applied to the airport center location.
+JSON supports double-precision floats (~15 significant digits), providing sub-millimeter accuracy.
 
 ### Camera/Cab Position Configuration
 
@@ -217,18 +203,16 @@ Each airport file supports separate 3D and 2D view settings:
 ```json
 {
   "view3d": {
-    "lat": 40.6413,
-    "lon": -73.7781,
+    "lat": 40.6413111,
+    "lon": -73.7781234,
     "aglHeight": 97,
-    "heading": 45,
-    "latOffsetMeters": 2.5,
-    "lonOffsetMeters": -1.8
+    "heading": 45
   },
   "view2d": {
+    "lat": 40.6413111,
+    "lon": -73.7781234,
     "altitude": 5000,
-    "heading": 0,
-    "latOffsetMeters": 0,
-    "lonOffsetMeters": 0
+    "heading": 0
   }
 }
 ```
@@ -239,21 +223,19 @@ Both `view3d` and `view2d` are optional. If only one is provided, the other uses
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `lat` | number | Yes | Latitude of the tower cab position |
-| `lon` | number | Yes | Longitude of the tower cab position |
+| `lat` | number | Yes | Latitude of the tower cab position (double precision) |
+| `lon` | number | Yes | Longitude of the tower cab position (double precision) |
 | `aglHeight` | number | Yes | Height above ground level in meters |
 | `heading` | number | No | Default camera heading in degrees (0=north). Defaults to 0 |
-| `latOffsetMeters` | number | No | Fine-tuning offset in meters (north positive) |
-| `lonOffsetMeters` | number | No | Fine-tuning offset in meters (east positive) |
 
 ### 2D View Fields (`view2d`)
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
+| `lat` | number | No | Latitude of view center (defaults to airport center) |
+| `lon` | number | No | Longitude of view center (defaults to airport center) |
 | `altitude` | number | Yes | Altitude above ground in meters (controls zoom, 500-50000) |
 | `heading` | number | No | View rotation in degrees (0=north-up). Defaults to 0 |
-| `latOffsetMeters` | number | No | Fine-tuning offset in meters (north positive) |
-| `lonOffsetMeters` | number | No | Fine-tuning offset in meters (east positive) |
 
 ### Saving Positions from the App
 
@@ -266,7 +248,7 @@ The easiest way to create position files is using the app:
 
 ### Fallback Behavior
 
-- If only `view3d` is defined and you're in 2D mode: Uses 3D heading and offsets with default altitude
+- If only `view3d` is defined and you're in 2D mode: Uses 3D heading with default altitude
 - If only `view2d` is defined and you're in 3D mode: Uses built-in 3D defaults
 - If neither is defined: Uses built-in app defaults
 
@@ -312,12 +294,10 @@ For camera position, the system uses this priority (highest to lowest):
 ```json
 {
   "view3d": {
-    "lat": 33.9416,
-    "lon": -118.4085,
+    "lat": 33.9416234,
+    "lon": -118.4085567,
     "aglHeight": 84,
-    "heading": 270,
-    "latOffsetMeters": 2.5,
-    "lonOffsetMeters": -1.8
+    "heading": 270
   }
 }
 ```
@@ -503,21 +483,19 @@ manifest.json:
   "scale": 1.0,
   "heightOffset": 5,
   "position": {
-    "lat": 33.9416,
-    "lon": -118.4085
+    "lat": 33.9416234,
+    "lon": -118.4085567
   },
-  "latOffsetMeters": 2.5,
-  "lonOffsetMeters": -1.8,
   "cabPosition": {
-    "lat": 33.9416,
-    "lon": -118.4085,
+    "lat": 33.9416234,
+    "lon": -118.4085567,
     "aglHeight": 84
   },
   "cabHeading": 270
 }
 ```
 
-The `position` field specifies where the 3D model renders (in lat/lon), `latOffsetMeters`/`lonOffsetMeters` provide meter-level fine-tuning, and `cabPosition` specifies where the camera views from. The `cabHeading` sets the initial viewing direction.
+The `position` field specifies where the 3D model renders (with double-precision lat/lon), and `cabPosition` specifies where the camera views from. The `cabHeading` sets the initial viewing direction.
 
 ### SketchUp Tower Mod (Collada)
 

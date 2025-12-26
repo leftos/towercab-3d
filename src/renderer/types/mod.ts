@@ -46,13 +46,6 @@ export interface TowerModManifest {
     lat: number  // absolute latitude for 3D model position
     lon: number  // absolute longitude for 3D model position
   }
-  /** @deprecated Use latOffsetMeters/lonOffsetMeters instead */
-  positionOffset?: {
-    latMeters: number  // offset in meters (applied to latitude)
-    lonMeters: number  // offset in meters (applied to longitude)
-  }
-  latOffsetMeters?: number  // fine-tuning offset in meters (north positive)
-  lonOffsetMeters?: number  // fine-tuning offset in meters (east positive)
   // Camera/cab position override (optional) - allows specifying where the tower cab viewpoint should be
   cabPosition?: {
     lat: number  // latitude of camera position
@@ -64,34 +57,59 @@ export interface TowerModManifest {
 
 /**
  * 3D view position settings for tower-positions
+ *
+ * Uses double-precision lat/lon for sub-meter accuracy.
+ * JSON double-precision floats have ~15 significant digits, providing
+ * sub-millimeter precision at any latitude.
  */
 export interface View3dPosition {
-  lat: number  // latitude of camera position
-  lon: number  // longitude of camera position
+  lat: number  // latitude of camera position (double precision)
+  lon: number  // longitude of camera position (double precision)
   aglHeight: number  // height above ground level in meters
   heading?: number  // default camera heading in degrees (0=north, 90=east), defaults to 0
-  latOffsetMeters?: number  // fine-tuning offset in meters (north positive)
-  lonOffsetMeters?: number  // fine-tuning offset in meters (east positive)
 }
 
 /**
- * 2D topdown view position settings for tower-positions
+ * 2D topdown view position settings for tower-positions (raw JSON format)
+ *
+ * Uses absolute lat/lon for position center.
+ * Either `altitude` or `vNasRange` should be provided:
+ * - `altitude`: Direct altitude in meters (for manual definitions)
+ * - `vNasRange`: Raw vNAS defaultZoomRange value (converted to altitude at runtime)
  */
 export interface View2dPosition {
-  altitude: number  // altitude above ground in meters (controls zoom level, 500-50000m)
+  lat?: number  // latitude of view center (double precision)
+  lon?: number  // longitude of view center (double precision)
+  altitude?: number  // altitude above ground in meters (controls zoom level, 500-50000m)
+  vNasRange?: number  // raw vNAS defaultZoomRange value (converted to altitude at runtime)
   heading?: number  // view rotation in degrees (0=north-up), defaults to 0
-  latOffsetMeters?: number  // fine-tuning offset in meters (north positive)
-  lonOffsetMeters?: number  // fine-tuning offset in meters (east positive)
+}
+
+/**
+ * Resolved 2D view position with guaranteed altitude
+ *
+ * This is the processed version returned by ModService.get2dPosition()
+ * where altitude is always computed (from vNasRange or direct value).
+ */
+export interface ResolvedView2dPosition {
+  lat?: number  // latitude of view center (double precision)
+  lon?: number  // longitude of view center (double precision)
+  altitude: number  // altitude above ground in meters (always computed)
+  vNasRange?: number  // raw vNAS value if sourced from vNAS data
+  heading?: number  // view rotation in degrees (0=north-up), defaults to 0
 }
 
 /**
  * Custom tower position from mods/tower-positions/{ICAO}.json
  * Supports separate 3D and 2D view defaults, both optional
  * If only 3D is provided, 2D uses the 3D position with default topdown altitude
+ *
+ * Note: view2d uses ResolvedView2dPosition because altitude is always
+ * computed at load time (either from direct value or vNasRange conversion).
  */
 export interface CustomTowerPosition {
   view3d?: View3dPosition  // 3D view camera position
-  view2d?: View2dPosition  // 2D topdown view settings
+  view2d?: ResolvedView2dPosition  // 2D topdown view settings (altitude always resolved)
 }
 
 /**
@@ -104,13 +122,6 @@ export interface LegacyTowerPosition {
   lon: number
   aglHeight: number
   heading?: number
-  /** @deprecated Use latOffsetMeters/lonOffsetMeters instead */
-  positionOffset?: {
-    latMeters: number
-    lonMeters: number
-  }
-  latOffsetMeters?: number
-  lonOffsetMeters?: number
 }
 
 /**
@@ -135,9 +146,7 @@ export function convertLegacyToNewFormat(legacy: LegacyTowerPosition): CustomTow
       lat: legacy.lat,
       lon: legacy.lon,
       aglHeight: legacy.aglHeight,
-      heading: legacy.heading,
-      latOffsetMeters: legacy.latOffsetMeters ?? legacy.positionOffset?.latMeters,
-      lonOffsetMeters: legacy.lonOffsetMeters ?? legacy.positionOffset?.lonMeters
+      heading: legacy.heading
     }
   }
 }
@@ -202,7 +211,5 @@ export const DEFAULT_AIRCRAFT_MOD: Partial<AircraftModManifest> = {
 export const DEFAULT_TOWER_MOD: Partial<TowerModManifest> = {
   scale: 1.0,
   heightOffset: 0,
-  latOffsetMeters: 0,
-  lonOffsetMeters: 0,
   cabHeading: 0  // default to north
 }

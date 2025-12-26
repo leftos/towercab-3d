@@ -345,13 +345,15 @@ function ControlsBar() {
 
         // Build the complete file content (preserving the other view if it exists)
         const fileContent: {
-          view3d?: { lat: number; lon: number; aglHeight: number; heading?: number; latOffsetMeters?: number; lonOffsetMeters?: number }
-          view2d?: { altitude: number; heading?: number; latOffsetMeters?: number; lonOffsetMeters?: number }
+          view3d?: { lat: number; lon: number; aglHeight: number; heading?: number }
+          view2d?: { lat: number; lon: number; altitude: number; heading?: number }
         } = {}
 
         if (isTopdown) {
           // Save 2D topdown position
           const shareablePos = calculateShareable2dPosition(
+            currentAirport.lat,
+            currentAirport.lon,
             topdownAltitude,
             existing2d ?? null,
             positionOffsetX,
@@ -365,17 +367,15 @@ function ControlsBar() {
               lat: existing3d.lat,
               lon: existing3d.lon,
               aglHeight: existing3d.aglHeight,
-              heading: existing3d.heading,
-              latOffsetMeters: existing3d.latOffsetMeters,
-              lonOffsetMeters: existing3d.lonOffsetMeters
+              heading: existing3d.heading
             }
           }
 
           fileContent.view2d = {
+            lat: shareablePos.lat,
+            lon: shareablePos.lon,
             altitude: shareablePos.altitude,
-            heading: shareablePos.heading,
-            latOffsetMeters: shareablePos.latOffsetMeters !== 0 ? shareablePos.latOffsetMeters : undefined,
-            lonOffsetMeters: shareablePos.lonOffsetMeters !== 0 ? shareablePos.lonOffsetMeters : undefined
+            heading: shareablePos.heading
           }
 
           await modApi.updateTowerPosition(icao, { view2d: fileContent.view2d })
@@ -397,18 +397,16 @@ function ControlsBar() {
             lat: shareablePos.lat,
             lon: shareablePos.lon,
             aglHeight: shareablePos.aglHeight,
-            heading: shareablePos.heading,
-            latOffsetMeters: shareablePos.latOffsetMeters !== 0 ? shareablePos.latOffsetMeters : undefined,
-            lonOffsetMeters: shareablePos.lonOffsetMeters !== 0 ? shareablePos.lonOffsetMeters : undefined
+            heading: shareablePos.heading
           }
 
           // Preserve existing 2D if present
           if (existing2d) {
             fileContent.view2d = {
+              lat: existing2d.lat ?? currentAirport.lat,
+              lon: existing2d.lon ?? currentAirport.lon,
               altitude: existing2d.altitude,
-              heading: existing2d.heading,
-              latOffsetMeters: existing2d.latOffsetMeters,
-              lonOffsetMeters: existing2d.lonOffsetMeters
+              heading: existing2d.heading
             }
           }
 

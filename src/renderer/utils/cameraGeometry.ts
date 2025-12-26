@@ -243,46 +243,43 @@ export function degreesLonToMeters(degrees: number, latitude: number): number {
 
 /**
  * Result from calculating shareable 3D tower position
+ * Uses absolute lat/lon with double-precision for sub-meter accuracy.
  */
 export interface Shareable3dPosition {
-  /** Base latitude (airport center or custom tower position) */
+  /** Absolute latitude (double precision) */
   lat: number
-  /** Base longitude (airport center or custom tower position) */
+  /** Absolute longitude (double precision) */
   lon: number
   /** Height above ground level in meters */
   aglHeight: number
   /** Camera heading in degrees */
   heading: number
-  /** East-West offset in meters from base position */
-  lonOffsetMeters: number
-  /** North-South offset in meters from base position */
-  latOffsetMeters: number
 }
 
 /**
  * Result from calculating shareable 2D topdown position
+ * Uses absolute lat/lon with double-precision for sub-meter accuracy.
  */
 export interface Shareable2dPosition {
+  /** Absolute latitude (double precision) */
+  lat: number
+  /** Absolute longitude (double precision) */
+  lon: number
   /** Altitude above ground in meters (controls zoom level) */
   altitude: number
   /** View rotation heading in degrees (0 = north-up) */
   heading: number
-  /** East-West offset in meters from airport center */
-  lonOffsetMeters: number
-  /** North-South offset in meters from airport center */
-  latOffsetMeters: number
 }
 
 /**
  * Calculate the shareable 3D tower position for saving to tower-positions/{ICAO}.json
  *
- * Stores the airport's base tower position as lat/lon, with WASD camera offsets
- * stored as meter values for precise positioning. This allows the position to be
- * shared across different machines while maintaining meter-level accuracy.
+ * Computes absolute lat/lon by applying WASD offsets to the base position.
+ * Uses double-precision for sub-meter accuracy.
  *
- * @param airportLat - Airport center latitude
- * @param airportLon - Airport center longitude
- * @param towerHeight - Tower cab height above ground in meters
+ * @param airportLat - Airport center latitude (fallback if no existing position)
+ * @param airportLon - Airport center longitude (fallback if no existing position)
+ * @param towerHeight - Tower cab height above ground in meters (fallback)
  * @param existingPosition - Existing 3D position if defined (from tower-positions file)
  * @param positionOffsetX - WASD offset X (east positive) in meters
  * @param positionOffsetY - WASD offset Y (north positive) in meters
@@ -297,8 +294,6 @@ export function calculateShareable3dPosition(
     lat: number
     lon: number
     aglHeight: number
-    latOffsetMeters?: number
-    lonOffsetMeters?: number
   } | null,
   positionOffsetX: number,
   positionOffsetY: number,
@@ -306,46 +301,31 @@ export function calculateShareable3dPosition(
   heading: number
 ): Shareable3dPosition {
   // Use existing position as base if available, otherwise airport center
-  let baseLat: number
-  let baseLon: number
-  let baseAglHeight: number
-  let existingLatOffsetMeters = 0
-  let existingLonOffsetMeters = 0
+  const baseLat = existingPosition?.lat ?? airportLat
+  const baseLon = existingPosition?.lon ?? airportLon
+  const baseAglHeight = existingPosition?.aglHeight ?? towerHeight
 
-  if (existingPosition) {
-    baseLat = existingPosition.lat
-    baseLon = existingPosition.lon
-    baseAglHeight = existingPosition.aglHeight
-    existingLatOffsetMeters = existingPosition.latOffsetMeters ?? 0
-    existingLonOffsetMeters = existingPosition.lonOffsetMeters ?? 0
-  } else {
-    baseLat = airportLat
-    baseLon = airportLon
-    baseAglHeight = towerHeight
-  }
-
-  // Combine existing offset with WASD offsets
-  // positionOffsetY is north/south (positive = north), which is latMeters
-  // positionOffsetX is east/west (positive = east), which is lonMeters
-  const totalLatOffsetMeters = existingLatOffsetMeters + positionOffsetY
-  const totalLonOffsetMeters = existingLonOffsetMeters + positionOffsetX
-
-  // Add Z offset to height
-  const finalAglHeight = baseAglHeight + positionOffsetZ
+  // Convert meter offsets to degrees and add to base position
+  // positionOffsetY is north/south (positive = north)
+  // positionOffsetX is east/west (positive = east)
+  const latOffsetDegrees = positionOffsetY / METERS_PER_DEGREE_LAT
+  const lonOffsetDegrees = positionOffsetX / (METERS_PER_DEGREE_LAT * Math.cos(baseLat * Math.PI / 180))
 
   return {
-    lat: baseLat,
-    lon: baseLon,
-    aglHeight: finalAglHeight,
-    heading: ((heading % 360) + 360) % 360, // Normalize to 0-360
-    latOffsetMeters: totalLatOffsetMeters,
-    lonOffsetMeters: totalLonOffsetMeters
+    lat: baseLat + latOffsetDegrees,
+    lon: baseLon + lonOffsetDegrees,
+    aglHeight: baseAglHeight + positionOffsetZ,
+    heading: ((heading % 360) + 360) % 360 // Normalize to 0-360
   }
 }
 
 /**
  * Calculate the shareable 2D topdown position for saving to tower-positions/{ICAO}.json
  *
+ * Computes absolute lat/lon by applying WASD offsets to the base position.
+ *
+ * @param airportLat - Airport center latitude (base position)
+ * @param airportLon - Airport center longitude (base position)
  * @param topdownAltitude - Current topdown altitude in meters
  * @param existingPosition - Existing 2D position if defined (from tower-positions file)
  * @param positionOffsetX - WASD offset X (east positive) in meters
@@ -353,30 +333,32 @@ export function calculateShareable3dPosition(
  * @param heading - View rotation heading in degrees
  */
 export function calculateShareable2dPosition(
+  airportLat: number,
+  airportLon: number,
   topdownAltitude: number,
   existingPosition: {
+    lat?: number
+    lon?: number
     altitude: number
     heading?: number
-    latOffsetMeters?: number
-    lonOffsetMeters?: number
   } | null,
   positionOffsetX: number,
   positionOffsetY: number,
   heading: number
 ): Shareable2dPosition {
-  // Use existing offsets as base if available
-  const existingLatOffsetMeters = existingPosition?.latOffsetMeters ?? 0
-  const existingLonOffsetMeters = existingPosition?.lonOffsetMeters ?? 0
+  // Use existing position as base if available, otherwise airport center
+  const baseLat = existingPosition?.lat ?? airportLat
+  const baseLon = existingPosition?.lon ?? airportLon
 
-  // Combine existing offset with current WASD offsets
-  const totalLatOffsetMeters = existingLatOffsetMeters + positionOffsetY
-  const totalLonOffsetMeters = existingLonOffsetMeters + positionOffsetX
+  // Convert meter offsets to degrees and add to base position
+  const latOffsetDegrees = positionOffsetY / METERS_PER_DEGREE_LAT
+  const lonOffsetDegrees = positionOffsetX / (METERS_PER_DEGREE_LAT * Math.cos(baseLat * Math.PI / 180))
 
   return {
+    lat: baseLat + latOffsetDegrees,
+    lon: baseLon + lonOffsetDegrees,
     altitude: topdownAltitude,
-    heading: ((heading % 360) + 360) % 360, // Normalize to 0-360
-    latOffsetMeters: totalLatOffsetMeters,
-    lonOffsetMeters: totalLonOffsetMeters
+    heading: ((heading % 360) + 360) % 360 // Normalize to 0-360
   }
 }
 

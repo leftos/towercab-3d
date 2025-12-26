@@ -17,9 +17,9 @@ All notable changes to TowerCab 3D will be documented in this file.
   - Prompts for confirmation when overwriting existing app default
 - Separate 3D and 2D view defaults for tower positions
   - Each airport can have independent settings for 3D tower view and 2D topdown view
-  - Save 3D position from 3D view, save 2D position from 2D view
-  - If only 3D is defined, 2D mode uses 3D offsets with default altitude
-  - Load App Default (Shift+Home) respects current view mode
+  - Save/Load My Default (normal click) is now view-mode-specific
+  - Save/Load App Default (Shift+click) is also view-mode-specific
+  - If only 3D is defined, 2D mode uses 3D heading with default altitude
 - Easy GitHub contribution for tower positions
   - After saving an App Default, a dialog offers to contribute to the project
   - Click "Contribute to GitHub" to open browser with file content pre-filled
@@ -32,6 +32,10 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Tower positions now stored as individual files per airport (`mods/tower-positions/KJFK.json`) instead of single `tower-positions.json`
   - Easier to share and accept contributions for specific airports
   - Legacy single-file format still supported for backward compatibility
+- Default camera pitch changed from -15° to -10° for a more level view
+
+### Fixed
+- Fixed tower positions and mods not loading on app startup
 
 ## [0.0.15-alpha] - 2025-12-25
 

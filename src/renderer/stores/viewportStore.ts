@@ -34,14 +34,29 @@ const generateId = () => crypto.randomUUID()
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
 const AUTO_SAVE_DELAY = 5000 // 5 seconds
 
+// View-mode-specific camera defaults (what the user saved)
+interface ViewModeDefaults {
+  heading: number
+  pitch: number
+  fov: number
+  positionOffsetX: number
+  positionOffsetY: number
+  positionOffsetZ: number
+  topdownAltitude?: number  // Only for 2D
+}
+
 // Per-airport viewport configuration (persisted)
 interface AirportViewportConfig {
   viewports: Viewport[]
   activeViewportId: string
+  // Legacy full viewport config (deprecated, kept for migration)
   defaultConfig?: {
     viewports: Viewport[]
     activeViewportId: string
   }
+  // New: Separate defaults for 3D and 2D modes
+  default3d?: ViewModeDefaults
+  default2d?: ViewModeDefaults
   // Camera bookmarks (0-99) - shared across all viewports for this airport
   bookmarks?: { [slot: number]: CameraBookmark }
   // Global datablock position (1-9 numpad style) - default is 7 (top-left)
@@ -895,6 +910,9 @@ export const useViewportStore = create<ViewportStore>()(
             const icao = state.currentAirportIcao
             if (!icao) return
 
+            const activeViewport = state.viewports.find(v => v.id === state.activeViewportId)
+            if (!activeViewport) return
+
             const airportViewportConfigs = { ...state.airportViewportConfigs }
             if (!airportViewportConfigs[icao]) {
               airportViewportConfigs[icao] = {
@@ -903,13 +921,22 @@ export const useViewportStore = create<ViewportStore>()(
               }
             }
 
-            // Save complete viewport configuration as default
-            airportViewportConfigs[icao].defaultConfig = {
-              viewports: state.viewports.map(v => ({
-                ...v,
-                cameraState: { ...v.cameraState, followingCallsign: null, preFollowState: null }
-              })),
-              activeViewportId: state.activeViewportId
+            const cam = activeViewport.cameraState
+            const defaults: ViewModeDefaults = {
+              heading: cam.heading,
+              pitch: cam.pitch,
+              fov: cam.fov,
+              positionOffsetX: cam.positionOffsetX,
+              positionOffsetY: cam.positionOffsetY,
+              positionOffsetZ: cam.positionOffsetZ,
+              topdownAltitude: cam.topdownAltitude
+            }
+
+            // Save to the appropriate view mode slot
+            if (cam.viewMode === 'topdown') {
+              airportViewportConfigs[icao].default2d = defaults
+            } else {
+              airportViewportConfigs[icao].default3d = defaults
             }
 
             set({ airportViewportConfigs })
@@ -920,99 +947,145 @@ export const useViewportStore = create<ViewportStore>()(
             const icao = state.currentAirportIcao
             if (!icao) return
 
-            const savedDefault = state.airportViewportConfigs[icao]?.defaultConfig
-            if (savedDefault) {
-              // Restore from saved default, ensuring main viewport keeps fixed ID
-              const normalized = normalizeLoadedViewports(
-                savedDefault.viewports.map(v => ({
-                  ...v,
-                  cameraState: { ...v.cameraState }
-                })),
-                savedDefault.activeViewportId
+            const activeViewport = state.viewports.find(v => v.id === state.activeViewportId)
+            if (!activeViewport) return
+
+            const config = state.airportViewportConfigs[icao]
+            const currentViewMode = activeViewport.cameraState.viewMode
+            const savedDefaults = currentViewMode === 'topdown' ? config?.default2d : config?.default3d
+
+            if (savedDefaults) {
+              // Apply saved defaults for the current view mode (doesn't change view mode)
+              const updatedViewports = updateViewportCameraState(
+                state.viewports,
+                state.activeViewportId,
+                () => {
+                  const updates: Partial<ViewportCameraState> = {
+                    heading: savedDefaults.heading,
+                    pitch: savedDefaults.pitch,
+                    fov: savedDefaults.fov,
+                    positionOffsetX: savedDefaults.positionOffsetX,
+                    positionOffsetY: savedDefaults.positionOffsetY,
+                    positionOffsetZ: savedDefaults.positionOffsetZ
+                  }
+                  // Include topdown altitude for 2D mode
+                  if (currentViewMode === 'topdown' && savedDefaults.topdownAltitude !== undefined) {
+                    updates.topdownAltitude = savedDefaults.topdownAltitude
+                  }
+                  return updates
+                }
               )
-              set({
-                viewports: normalized.viewports,
-                activeViewportId: normalized.activeViewportId
-              })
+              set({ viewports: updatedViewports })
             } else {
-              // No saved default, reset to single main viewport with defaults
-              // Use global orbit settings for consistency
-              const mainViewport = createMainViewport(undefined, state.globalOrbitSettings)
-              set({
-                viewports: [mainViewport],
-                activeViewportId: mainViewport.id
-              })
+              // No user-saved default for this view mode, fall back to app default
+              get().resetToAppDefault()
             }
           },
 
           resetToAppDefault: () => {
-            // Reset to app defaults based on current view mode
+            // Reset active viewport to app defaults based on current view mode
             // Uses view-specific settings from tower-positions if available
+            // Only updates the active viewport's camera state, preserves other viewports
             const state = get()
             const icao = state.currentAirportIcao
+            if (!icao) return
+
             const activeViewport = state.viewports.find(v => v.id === state.activeViewportId)
-            const currentViewMode = activeViewport?.cameraState.viewMode ?? '3d'
+            if (!activeViewport) return
+
+            const currentViewMode = activeViewport.cameraState.viewMode
 
             // Get view-specific defaults from tower-positions
-            const position3d = icao ? modService.get3dPosition(icao) : undefined
-            const position2d = icao ? modService.get2dPosition(icao) : undefined
+            const position3d = modService.get3dPosition(icao)
+            const position2d = modService.get2dPosition(icao)
 
-            // Get custom heading from airport store (tower mod takes priority)
-            const customHeading = useAirportStore.getState().customHeading ?? undefined
+            // Update airportStore with tower position data so camera uses it
+            if (position3d) {
+              useAirportStore.setState({
+                customTowerPosition: position3d,
+                customHeading: position3d.heading ?? 0,
+                towerHeight: position3d.aglHeight
+              })
+            }
+
+            // Build the new camera state for the active viewport
+            let newCameraState: Partial<ViewportCameraState>
 
             if (currentViewMode === 'topdown') {
               // Reset 2D topdown view
-              // If we have 2D settings, use them; otherwise derive from 3D or use defaults
-              const mainViewport = createMainViewport(customHeading, state.globalOrbitSettings)
-              mainViewport.cameraState.viewMode = 'topdown'
-
               if (position2d) {
-                // Use saved 2D settings
-                mainViewport.cameraState.topdownAltitude = position2d.altitude
-                mainViewport.cameraState.heading = position2d.heading ?? HEADING_DEFAULT
-                mainViewport.cameraState.positionOffsetX = position2d.lonOffsetMeters ?? 0
-                mainViewport.cameraState.positionOffsetY = position2d.latOffsetMeters ?? 0
+                newCameraState = {
+                  positionOffsetX: 0,
+                  positionOffsetY: 0,
+                  positionOffsetZ: 0,
+                  heading: position2d.heading ?? HEADING_DEFAULT,
+                  topdownAltitude: position2d.altitude,
+                  pitch: PITCH_DEFAULT,
+                  fov: FOV_DEFAULT
+                }
               } else if (position3d) {
                 // Derive 2D from 3D: use 3D heading but default altitude
-                mainViewport.cameraState.heading = position3d.heading ?? HEADING_DEFAULT
-                mainViewport.cameraState.positionOffsetX = position3d.lonOffsetMeters ?? 0
-                mainViewport.cameraState.positionOffsetY = position3d.latOffsetMeters ?? 0
-                mainViewport.cameraState.topdownAltitude = TOPDOWN_ALTITUDE_DEFAULT
+                newCameraState = {
+                  positionOffsetX: 0,
+                  positionOffsetY: 0,
+                  positionOffsetZ: 0,
+                  heading: position3d.heading ?? HEADING_DEFAULT,
+                  topdownAltitude: TOPDOWN_ALTITUDE_DEFAULT,
+                  pitch: PITCH_DEFAULT,
+                  fov: FOV_DEFAULT
+                }
               } else {
                 // Pure defaults
-                mainViewport.cameraState.topdownAltitude = TOPDOWN_ALTITUDE_DEFAULT
-                mainViewport.cameraState.heading = customHeading ?? HEADING_DEFAULT
+                newCameraState = {
+                  positionOffsetX: 0,
+                  positionOffsetY: 0,
+                  positionOffsetZ: 0,
+                  heading: HEADING_DEFAULT,
+                  topdownAltitude: TOPDOWN_ALTITUDE_DEFAULT,
+                  pitch: PITCH_DEFAULT,
+                  fov: FOV_DEFAULT
+                }
               }
-
-              set({
-                viewports: [mainViewport],
-                activeViewportId: mainViewport.id
-              })
             } else {
               // Reset 3D view
-              // Use 3D settings from tower-positions if available
-              const heading = position3d?.heading ?? customHeading ?? undefined
-              const mainViewport = createMainViewport(heading, state.globalOrbitSettings)
-
-              if (position3d) {
-                // Apply position offsets from 3D settings
-                mainViewport.cameraState.positionOffsetX = position3d.lonOffsetMeters ?? 0
-                mainViewport.cameraState.positionOffsetY = position3d.latOffsetMeters ?? 0
-                mainViewport.cameraState.positionOffsetZ = 0 // Z offset is already baked into aglHeight
+              const heading = position3d?.heading ?? HEADING_DEFAULT
+              newCameraState = {
+                positionOffsetX: 0,
+                positionOffsetY: 0,
+                positionOffsetZ: 0,
+                heading,
+                pitch: PITCH_DEFAULT,
+                fov: FOV_DEFAULT
               }
-
-              set({
-                viewports: [mainViewport],
-                activeViewportId: mainViewport.id
-              })
             }
+
+            // Update only the active viewport's camera state
+            const updatedViewports = updateViewportCameraState(
+              state.viewports,
+              state.activeViewportId,
+              () => newCameraState
+            )
+
+            set({ viewports: updatedViewports })
           },
 
           hasCustomDefault: () => {
             const state = get()
             const icao = state.currentAirportIcao
             if (!icao) return false
-            return !!state.airportViewportConfigs[icao]?.defaultConfig
+
+            const activeViewport = state.viewports.find(v => v.id === state.activeViewportId)
+            if (!activeViewport) return false
+
+            const config = state.airportViewportConfigs[icao]
+            const currentViewMode = activeViewport.cameraState.viewMode
+
+            // Check for view-mode-specific saved default
+            if (currentViewMode === 'topdown') {
+              return !!config?.default2d
+            } else {
+              return !!config?.default3d
+            }
           },
 
           // Save current active viewport camera state to a bookmark slot (0-99)

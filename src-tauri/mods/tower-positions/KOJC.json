@@ -1,0 +1,12 @@
+{
+  "view3d": {
+    "lat": 38.8481,
+    "lon": -94.74116,
+    "aglHeight": 26.8,
+    "heading": 155.6
+  },
+  "view2d": {
+    "heading": 0,
+    "vNasRange": 150
+  }
+}

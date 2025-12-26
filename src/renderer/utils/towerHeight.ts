@@ -42,27 +42,11 @@ export function getTowerPosition(
     lat: number
     lon: number
     aglHeight: number
-    latOffsetMeters?: number
-    lonOffsetMeters?: number
   }
 ): { latitude: number; longitude: number; height: number } {
   // Use custom position if provided, otherwise use airport center
-  let latitude = view3dPosition?.lat ?? airport.lat
-  let longitude = view3dPosition?.lon ?? airport.lon
-
-  // Apply meter-based position offset if provided
-  const latOffsetMeters = view3dPosition?.latOffsetMeters ?? 0
-  const lonOffsetMeters = view3dPosition?.lonOffsetMeters ?? 0
-
-  if (latOffsetMeters !== 0 || lonOffsetMeters !== 0) {
-    // Convert meter offset to degrees (1 degree of latitude ≈ 111,320 meters)
-    const metersPerDegreeLat = 111320
-    latitude += latOffsetMeters / metersPerDegreeLat
-
-    // For longitude, account for latitude (cos factor)
-    const metersPerDegreeLon = metersPerDegreeLat * Math.cos(latitude * (Math.PI / 180))
-    longitude += lonOffsetMeters / metersPerDegreeLon
-  }
+  const latitude = view3dPosition?.lat ?? airport.lat
+  const longitude = view3dPosition?.lon ?? airport.lon
 
   // Determine AGL height: custom position's aglHeight, custom height param, or estimated
   let aglHeight: number

@@ -20,7 +20,7 @@
  */
 
 import { convertFileSrc } from '@tauri-apps/api/core'
-import { modApi, isTauri } from '../utils/tauriApi'
+import { modApi } from '../utils/tauriApi'
 import type { CustomVMRRule, CustomVMRMatch } from '../types/mod'
 
 /** Rule entry with base path for model resolution */
@@ -57,10 +57,6 @@ class CustomVMRServiceClass {
    */
   async loadVMRFiles(): Promise<void> {
     if (this.loaded) return
-    if (!isTauri()) {
-      this.loaded = true
-      return
-    }
 
     try {
       const vmrPaths = await modApi.listVMRFiles()

@@ -83,9 +83,9 @@ export const PITCH_MAX = 90
 /**
  * Default camera pitch in degrees
  *
- * -15 = looking slightly downward (tower view default)
+ * -10 = looking slightly downward (tower view default)
  */
-export const PITCH_DEFAULT = -15
+export const PITCH_DEFAULT = -10
 
 // ============================================================================
 // HEADING
@@ -195,6 +195,19 @@ export const TOPDOWN_ALTITUDE_MIN = 500
  * Maximum altitude for top-down view in meters
  */
 export const TOPDOWN_ALTITUDE_MAX = 50000
+
+// ============================================================================
+// VNAS DATA CONVERSION
+// ============================================================================
+
+/**
+ * Multiplier to convert vNAS defaultZoomRange to 2D view altitude (meters)
+ *
+ * The vNAS zoom range units are in hundreds of feet.
+ *
+ * Adjust this value to tune all vNAS-derived altitudes at once.
+ */
+export const VNAS_RANGE_TO_ALTITUDE_MULTIPLIER = 30.48 // 100 feet in meters
 
 // ============================================================================
 // TERRAIN COLLISION

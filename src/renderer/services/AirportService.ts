@@ -2,8 +2,8 @@
 // Loads and manages airport data
 
 import type { Airport, AirportDatabase } from '../types/airport'
-
-const AIRPORTS_URL = 'https://raw.githubusercontent.com/mwgg/Airports/master/airports.json'
+import { AIRPORTS_DB_URL } from '../constants/api'
+import { loadJsonWithFallback } from '../utils/dataLoader'
 
 class AirportService {
   private airports: Map<string, Airport> = new Map()
@@ -11,7 +11,7 @@ class AirportService {
   private loading = false
 
   /**
-   * Load airports from the remote database
+   * Load airports from the remote database with bundled fallback
    */
   async loadAirports(): Promise<Map<string, Airport>> {
     if (this.loaded) return this.airports
@@ -31,12 +31,11 @@ class AirportService {
     this.loading = true
 
     try {
-      const response = await fetch(AIRPORTS_URL)
-      if (!response.ok) {
-        throw new Error(`Failed to fetch airports: ${response.status}`)
-      }
-
-      const data: AirportDatabase = await response.json()
+      // Try to fetch fresh data, fall back to bundled airports.json
+      const data: AirportDatabase = await loadJsonWithFallback(
+        AIRPORTS_DB_URL,
+        'airports.json'
+      )
 
       for (const [icao, airport] of Object.entries(data)) {
         // Normalize the data

@@ -57,27 +57,33 @@ impl Drop for ProcessWithJob {
 // Global storage for the FSLTL converter process so we can cancel it
 static FSLTL_CONVERTER_PROCESS: Mutex<Option<ProcessWithJob>> = Mutex::new(None);
 
+/// Find the mods root directory, checking multiple locations
+/// Returns the first path that exists, or the first candidate if none exist
+fn find_mods_root(app: &tauri::AppHandle) -> PathBuf {
+    let resource_path = app.path().resource_dir().unwrap_or_default();
+    let mods_path = resource_path.join("mods");
+
+    if mods_path.exists() {
+        mods_path
+    } else {
+        // Fallback to resource path (will be created if needed)
+        mods_path
+    }
+}
+
 /// Get the path to a mod type directory (aircraft or towers)
 #[tauri::command]
 fn get_mods_path(app: tauri::AppHandle, mod_type: String) -> Result<String, String> {
-    let resource_path = app
-        .path()
-        .resource_dir()
-        .map_err(|e| format!("Failed to get resource directory: {}", e))?;
-
-    let mods_path = resource_path.join("mods").join(&mod_type);
+    let mods_root = find_mods_root(&app);
+    let mods_path = mods_root.join(&mod_type);
     Ok(mods_path.to_string_lossy().to_string())
 }
 
 /// List all mod directories for a given type (aircraft or towers)
 #[tauri::command]
 fn list_mod_directories(app: tauri::AppHandle, mod_type: String) -> Result<Vec<String>, String> {
-    let resource_path = app
-        .path()
-        .resource_dir()
-        .map_err(|e| format!("Failed to get resource directory: {}", e))?;
-
-    let mods_path = resource_path.join("mods").join(&mod_type);
+    let mods_root = find_mods_root(&app);
+    let mods_path = mods_root.join(&mod_type);
 
     if !mods_path.exists() {
         return Ok(Vec::new());
@@ -107,13 +113,9 @@ fn read_mod_manifest(path: String) -> Result<serde_json::Value, String> {
 /// Scans both mods/ root and mods/aircraft/ for .vmr files
 #[tauri::command]
 fn list_vmr_files(app: tauri::AppHandle) -> Result<Vec<String>, String> {
-    let resource_path = app
-        .path()
-        .resource_dir()
-        .map_err(|e| format!("Failed to get resource directory: {}", e))?;
+    let mods_root = find_mods_root(&app);
 
     let mut vmr_files = Vec::new();
-    let mods_root = resource_path.join("mods");
 
     // Helper to scan a directory for .vmr files
     let scan_dir = |dir: &PathBuf, files: &mut Vec<String>| {
@@ -152,15 +154,11 @@ fn list_vmr_files(app: tauri::AppHandle) -> Result<Vec<String>, String> {
 /// Returns the merged JSON as a serde_json::Value
 #[tauri::command]
 fn read_tower_positions(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
-    let resource_path = app
-        .path()
-        .resource_dir()
-        .map_err(|e| format!("Failed to get resource directory: {}", e))?;
-
+    let mods_root = find_mods_root(&app);
     let mut positions: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
 
-    // First, read legacy tower-positions.json if it exists (lower priority)
-    let legacy_path = resource_path.join("mods").join("tower-positions.json");
+    // Read legacy tower-positions.json if it exists (lower priority)
+    let legacy_path = mods_root.join("tower-positions.json");
     if legacy_path.exists() {
         if let Ok(content) = fs::read_to_string(&legacy_path) {
             if let Ok(legacy_positions) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&content) {
@@ -171,14 +169,13 @@ fn read_tower_positions(app: tauri::AppHandle) -> Result<serde_json::Value, Stri
         }
     }
 
-    // Then, read individual files from tower-positions/ folder (higher priority, overwrites legacy)
-    let tower_positions_dir = resource_path.join("mods").join("tower-positions");
+    // Read individual files from tower-positions/ folder (higher priority, overwrites legacy)
+    let tower_positions_dir = mods_root.join("tower-positions");
     if tower_positions_dir.exists() && tower_positions_dir.is_dir() {
         if let Ok(entries) = fs::read_dir(&tower_positions_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.extension().map_or(false, |ext| ext.eq_ignore_ascii_case("json")) {
-                    // Extract ICAO from filename (e.g., "KSFO.json" -> "KSFO")
                     if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
                         if let Ok(content) = fs::read_to_string(&path) {
                             if let Ok(pos) = serde_json::from_str::<serde_json::Value>(&content) {
@@ -246,12 +243,8 @@ fn update_tower_position(
     icao: String,
     position: TowerPositionEntry,
 ) -> Result<(), String> {
-    let resource_path = app
-        .path()
-        .resource_dir()
-        .map_err(|e| format!("Failed to get resource directory: {}", e))?;
-
-    let tower_positions_dir = resource_path.join("mods").join("tower-positions");
+    let mods_root = find_mods_root(&app);
+    let tower_positions_dir = mods_root.join("tower-positions");
 
     // Create tower-positions directory if it doesn't exist
     fs::create_dir_all(&tower_positions_dir)
@@ -289,7 +282,6 @@ fn update_tower_position(
     fs::write(&file_path, output)
         .map_err(|e| format!("Failed to write position file: {}", e))?;
 
-    println!("[TowerPositions] Saved position for {} to {:?}", icao, file_path);
     Ok(())
 }
 
@@ -422,12 +414,8 @@ fn normalize_path_string(path: &PathBuf) -> String {
 /// Returns (default_path, is_writable)
 #[tauri::command]
 fn get_fsltl_default_output_path(app: tauri::AppHandle) -> Result<(String, bool), String> {
-    let resource_path = app
-        .path()
-        .resource_dir()
-        .map_err(|e| format!("Failed to get resource directory: {}", e))?;
-
-    let mods_path = resource_path.join("mods").join("aircraft").join("fsltl");
+    let mods_root = find_mods_root(&app);
+    let mods_path = mods_root.join("aircraft").join("fsltl");
 
     // Try to create and check if mods path is writable
     if let Ok(_) = fs::create_dir_all(&mods_path) {
