@@ -63,3 +63,6 @@ src-tauri/resources/texconv.exe
 
 # Tauri signed build script
 build-signed.ps1
+
+# Local planning docs (not for public repo)
+docs/private/
