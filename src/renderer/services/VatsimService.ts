@@ -1,6 +1,7 @@
 // VATSIM data service
 // Handles fetching and parsing VATSIM network data
 
+import { isTauri } from '@/utils/tauriApi'
 import type { VatsimData, PilotData } from '../types/vatsim'
 
 const VATSIM_DATA_URL = 'https://data.vatsim.net/v3/vatsim-data.json'
@@ -21,7 +22,12 @@ class VatsimService {
       return this.lastData
     }
 
-    const response = await fetch(VATSIM_DATA_URL)
+    // In browser mode, use CORS proxy; in Tauri mode, fetch directly
+    const url = isTauri()
+      ? VATSIM_DATA_URL
+      : `/api/proxy?url=${encodeURIComponent(VATSIM_DATA_URL)}`
+
+    const response = await fetch(url)
     if (!response.ok) {
       throw new Error(`VATSIM API error: ${response.status} ${response.statusText}`)
     }

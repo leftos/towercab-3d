@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
-import { open as openExternal } from '@tauri-apps/plugin-shell'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
 import { exportAllData, downloadExport } from '../../services/ExportImportService'
+import { shellApi } from '../../utils/tauriApi'
 import FSLTLImportPanel from './FSLTLImportPanel'
 import './ControlsBar.css'
 
@@ -11,9 +12,11 @@ interface SettingsGeneralTabProps {
 }
 
 function SettingsGeneralTab({ onShowImportModal, importStatus }: SettingsGeneralTabProps) {
-  // Settings store - General
-  const cesiumIonToken = useSettingsStore((state) => state.cesium.cesiumIonToken)
-  const updateCesiumSettings = useSettingsStore((state) => state.updateCesiumSettings)
+  // Cesium token from global settings (shared across browsers)
+  const cesiumIonToken = useGlobalSettingsStore((state) => state.cesiumIonToken)
+  const setCesiumIonToken = useGlobalSettingsStore((state) => state.setCesiumIonToken)
+
+  // Settings store - Local settings
   const theme = useSettingsStore((state) => state.ui.theme)
   const updateUISettings = useSettingsStore((state) => state.updateUISettings)
   const defaultFov = useSettingsStore((state) => state.camera.defaultFov)
@@ -32,13 +35,14 @@ function SettingsGeneralTab({ onShowImportModal, importStatus }: SettingsGeneral
     setTokenSaved(false)
   }, [cesiumIonToken])
 
-  const handleSaveToken = useCallback(() => {
+  const handleSaveToken = useCallback(async () => {
     if (tokenInput.trim() && tokenInput !== cesiumIonToken) {
-      updateCesiumSettings({ cesiumIonToken: tokenInput.trim() })
+      // Save to global settings (host file system)
+      await setCesiumIonToken(tokenInput.trim())
       setTokenSaved(true)
       setTimeout(() => setTokenSaved(false), 2000)
     }
-  }, [tokenInput, cesiumIonToken, updateCesiumSettings])
+  }, [tokenInput, cesiumIonToken, setCesiumIonToken])
 
   const handleExportSettings = () => {
     const data = exportAllData()
@@ -71,7 +75,7 @@ function SettingsGeneralTab({ onShowImportModal, importStatus }: SettingsGeneral
             Get a free token at{' '}
             <a
               href="#"
-              onClick={(e) => { e.preventDefault(); openExternal('https://ion.cesium.com/tokens') }}
+              onClick={(e) => { e.preventDefault(); shellApi.openExternal('https://ion.cesium.com/tokens') }}
               className="external-link"
             >
               ion.cesium.com

@@ -10,6 +10,9 @@ use std::os::windows::io::AsRawHandle;
 use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
 use serde::{Deserialize, Serialize};
+use tokio::sync::broadcast;
+
+mod server;
 
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::CloseHandle;
@@ -56,6 +59,9 @@ impl Drop for ProcessWithJob {
 
 // Global storage for the FSLTL converter process so we can cancel it
 static FSLTL_CONVERTER_PROCESS: Mutex<Option<ProcessWithJob>> = Mutex::new(None);
+
+// Global storage for the HTTP server shutdown channel
+static HTTP_SERVER_SHUTDOWN: Mutex<Option<broadcast::Sender<()>>> = Mutex::new(None);
 
 /// Find the mods root directory, checking multiple locations
 /// Returns the first path that exists, or the first candidate if none exist
@@ -192,7 +198,7 @@ fn read_tower_positions(app: tauri::AppHandle) -> Result<serde_json::Value, Stri
 }
 
 /// 3D view position settings for tower-positions
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct View3dPosition {
     pub lat: f64,
@@ -209,7 +215,7 @@ pub struct View3dPosition {
 }
 
 /// 2D topdown view position settings for tower-positions
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct View2dPosition {
     /// Altitude above ground in meters (controls zoom level, 500-50000m)
@@ -284,6 +290,254 @@ fn update_tower_position(
 
     Ok(())
 }
+
+// =============================================================================
+// GLOBAL SETTINGS (shared across all browsers/devices)
+// =============================================================================
+
+/// FSLTL configuration within global settings
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlobalFsltlSettings {
+    pub source_path: Option<String>,
+    pub output_path: Option<String>,
+    pub texture_scale: String,
+    pub enable_fsltl_models: bool,
+}
+
+/// Airport configuration within global settings
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlobalAirportSettings {
+    pub default_icao: String,
+    #[serde(default)]
+    pub recent_airports: Vec<String>,
+}
+
+/// Server configuration within global settings
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlobalServerSettings {
+    pub port: u16,
+    pub enabled: bool,
+}
+
+/// Global settings stored on host file system (shared across all browsers)
+/// These settings are persisted to global-settings.json in the app data directory
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlobalSettings {
+    pub cesium_ion_token: String,
+    pub fsltl: GlobalFsltlSettings,
+    pub airports: GlobalAirportSettings,
+    pub server: GlobalServerSettings,
+}
+
+impl Default for GlobalSettings {
+    fn default() -> Self {
+        GlobalSettings {
+            cesium_ion_token: String::new(),
+            fsltl: GlobalFsltlSettings {
+                source_path: None,
+                output_path: None,
+                texture_scale: "1k".to_string(),
+                enable_fsltl_models: true,
+            },
+            airports: GlobalAirportSettings {
+                default_icao: String::new(),
+                recent_airports: Vec::new(),
+            },
+            server: GlobalServerSettings {
+                port: 8765,
+                enabled: false,
+            },
+        }
+    }
+}
+
+/// Get the path to the global settings file
+fn get_global_settings_file(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let app_data = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
+
+    // Ensure directory exists
+    fs::create_dir_all(&app_data)
+        .map_err(|e| format!("Failed to create app data directory: {}", e))?;
+
+    Ok(app_data.join("global-settings.json"))
+}
+
+/// Get the path to the global settings file (for diagnostics)
+#[tauri::command]
+fn get_global_settings_path(app: tauri::AppHandle) -> Result<String, String> {
+    let path = get_global_settings_file(&app)?;
+    Ok(normalize_path_string(&path))
+}
+
+/// Read global settings from disk
+/// Returns default settings if file doesn't exist
+#[tauri::command]
+fn read_global_settings(app: tauri::AppHandle) -> Result<GlobalSettings, String> {
+    let settings_file = get_global_settings_file(&app)?;
+
+    if !settings_file.exists() {
+        // Return defaults if file doesn't exist yet
+        return Ok(GlobalSettings::default());
+    }
+
+    let content = fs::read_to_string(&settings_file)
+        .map_err(|e| format!("Failed to read global settings: {}", e))?;
+
+    // Parse with defaults for missing fields (for forward compatibility)
+    let settings: GlobalSettings = serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse global settings: {}", e))?;
+
+    Ok(settings)
+}
+
+/// Write global settings to disk
+#[tauri::command]
+fn write_global_settings(app: tauri::AppHandle, settings: GlobalSettings) -> Result<(), String> {
+    let settings_file = get_global_settings_file(&app)?;
+
+    let content = serde_json::to_string_pretty(&settings)
+        .map_err(|e| format!("Failed to serialize global settings: {}", e))?;
+
+    fs::write(&settings_file, content)
+        .map_err(|e| format!("Failed to write global settings: {}", e))?;
+
+    println!("[Settings] Global settings saved to {:?}", settings_file);
+    Ok(())
+}
+
+// =============================================================================
+// HTTP SERVER FOR REMOTE BROWSER ACCESS
+// =============================================================================
+
+/// Server status info
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerStatus {
+    pub running: bool,
+    pub port: u16,
+    pub local_url: Option<String>,
+    pub lan_url: Option<String>,
+}
+
+/// Get the LAN IP address for display
+fn get_lan_ip() -> Option<String> {
+    // Try to get the local IP address
+    #[cfg(windows)]
+    {
+        use std::process::Command;
+        // Use hostname command to get IP
+        if let Ok(output) = Command::new("hostname")
+            .creation_flags(0x08000000) // CREATE_NO_WINDOW
+            .output()
+        {
+            let hostname = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            // Try to resolve hostname to IP
+            use std::net::ToSocketAddrs;
+            if let Ok(mut addrs) = format!("{}:0", hostname).to_socket_addrs() {
+                while let Some(addr) = addrs.next() {
+                    if let std::net::SocketAddr::V4(v4) = addr {
+                        let ip = v4.ip().to_string();
+                        if !ip.starts_with("127.") {
+                            return Some(ip);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback: try to connect to a public DNS and get the local address
+    use std::net::UdpSocket;
+    if let Ok(socket) = UdpSocket::bind("0.0.0.0:0") {
+        if socket.connect("8.8.8.8:80").is_ok() {
+            if let Ok(addr) = socket.local_addr() {
+                return Some(addr.ip().to_string());
+            }
+        }
+    }
+
+    None
+}
+
+/// Start the HTTP server for remote browser access
+#[tauri::command]
+async fn start_http_server(app: tauri::AppHandle, port: u16) -> Result<ServerStatus, String> {
+    // Check if server is already running
+    {
+        let guard = HTTP_SERVER_SHUTDOWN.lock().map_err(|e| e.to_string())?;
+        if guard.is_some() {
+            return Err("Server is already running".to_string());
+        }
+    }
+
+    // Start the server
+    let shutdown_tx = server::start_server(app, port).await?;
+
+    // Store the shutdown channel
+    {
+        let mut guard = HTTP_SERVER_SHUTDOWN.lock().map_err(|e| e.to_string())?;
+        *guard = Some(shutdown_tx);
+    }
+
+    let lan_ip = get_lan_ip();
+    Ok(ServerStatus {
+        running: true,
+        port,
+        local_url: Some(format!("http://localhost:{}", port)),
+        lan_url: lan_ip.map(|ip| format!("http://{}:{}", ip, port)),
+    })
+}
+
+/// Stop the HTTP server
+#[tauri::command]
+fn stop_http_server() -> Result<(), String> {
+    let mut guard = HTTP_SERVER_SHUTDOWN.lock().map_err(|e| e.to_string())?;
+
+    if let Some(shutdown_tx) = guard.take() {
+        let _ = shutdown_tx.send(());
+        println!("[Server] Shutdown signal sent");
+        Ok(())
+    } else {
+        Err("Server is not running".to_string())
+    }
+}
+
+/// Get the current HTTP server status
+#[tauri::command]
+fn get_http_server_status() -> ServerStatus {
+    let is_running = HTTP_SERVER_SHUTDOWN
+        .lock()
+        .map(|guard| guard.is_some())
+        .unwrap_or(false);
+
+    if is_running {
+        let lan_ip = get_lan_ip();
+        ServerStatus {
+            running: true,
+            port: 8765, // Default port - TODO: read from settings
+            local_url: Some("http://localhost:8765".to_string()),
+            lan_url: lan_ip.map(|ip| format!("http://{}:8765", ip)),
+        }
+    } else {
+        ServerStatus {
+            running: false,
+            port: 8765,
+            local_url: None,
+            lan_url: None,
+        }
+    }
+}
+
+// =============================================================================
+// URL FETCHING (CORS bypass)
+// =============================================================================
 
 /// Fetch a URL and return the response as text (bypasses CORS)
 #[tauri::command]
@@ -717,6 +971,8 @@ fn delete_file(path: String) -> Result<(), String> {
 pub struct ScannedFSLTLModel {
     pub model_name: String,
     pub model_path: String,
+    /// Relative path usable with /api/fsltl/* endpoint (e.g., "B738/AAL/model.glb")
+    pub relative_path: String,
     pub aircraft_type: String,
     pub airline_code: Option<String>,
     pub has_animations: bool,
@@ -818,9 +1074,13 @@ fn scan_fsltl_models(output_path: String) -> Result<Vec<ScannedFSLTLModel>, Stri
                 }
             };
 
+            // Relative path for HTTP API access (e.g., "B738/AAL/model.glb")
+            let relative_path = format!("{}/{}/model.glb", aircraft_type, airline_folder);
+
             models.push(ScannedFSLTLModel {
                 model_name,
                 model_path: normalize_path_string(&model_file),
+                relative_path,
                 aircraft_type: aircraft_type.clone(),
                 airline_code,
                 has_animations,
@@ -883,6 +1143,48 @@ pub fn run() {
                 let _ = window.set_title(&title);
             }
 
+            // Auto-start HTTP server if enabled in global settings or via env var
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                // Check for TOWERCAB_AUTO_SERVER env var (used by npm run dev:server)
+                let force_start = std::env::var("TOWERCAB_AUTO_SERVER").is_ok();
+
+                // Load settings to get port (and check enabled flag if not force-starting)
+                let (should_start, port) = if let Ok(settings_file) = get_global_settings_file(&app_handle) {
+                    if settings_file.exists() {
+                        if let Ok(content) = std::fs::read_to_string(&settings_file) {
+                            if let Ok(settings) = serde_json::from_str::<GlobalSettings>(&content) {
+                                (force_start || settings.server.enabled, settings.server.port)
+                            } else {
+                                (force_start, 8765) // Default port
+                            }
+                        } else {
+                            (force_start, 8765)
+                        }
+                    } else {
+                        (force_start, 8765)
+                    }
+                } else {
+                    (force_start, 8765)
+                };
+
+                if should_start {
+                    println!("[Server] Auto-starting HTTP server on port {}{}", port,
+                        if force_start { " (via TOWERCAB_AUTO_SERVER)" } else { "" });
+                    match server::start_server(app_handle.clone(), port).await {
+                        Ok(shutdown_tx) => {
+                            if let Ok(mut guard) = HTTP_SERVER_SHUTDOWN.lock() {
+                                *guard = Some(shutdown_tx);
+                            }
+                            println!("[Server] Auto-started successfully");
+                        }
+                        Err(e) => {
+                            eprintln!("[Server] Auto-start failed: {}", e);
+                        }
+                    }
+                }
+            });
+
             Ok(())
         })
         .on_window_event(|_window, event| {
@@ -904,6 +1206,14 @@ pub fn run() {
             list_vmr_files,
             read_tower_positions,
             update_tower_position,
+            // Global settings commands
+            get_global_settings_path,
+            read_global_settings,
+            write_global_settings,
+            // HTTP server commands
+            start_http_server,
+            stop_http_server,
+            get_http_server_status,
             fetch_url,
             // FSLTL commands
             pick_folder,

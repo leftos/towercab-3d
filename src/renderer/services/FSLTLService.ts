@@ -41,6 +41,18 @@ import {
   DEFAULT_CONVERSION_PROGRESS
 } from '../types/fsltl'
 import { useSettingsStore } from '../stores/settingsStore'
+import { isTauri } from '../utils/tauriApi'
+
+/** Model info returned from /api/fsltl/models endpoint */
+interface ApiFsltlModel {
+  modelName: string
+  modelPath: string
+  relativePath: string
+  aircraftType: string
+  airlineCode: string | null
+  hasAnimations: boolean
+  fileSize: number
+}
 
 // IndexedDB database name and store
 const DB_NAME = 'towercab-fsltl'
@@ -712,9 +724,15 @@ class FSLTLServiceClass {
   }
 
   /**
-   * Load registry from IndexedDB
+   * Load registry from IndexedDB (Tauri mode) or HTTP API (browser mode)
    */
   async loadRegistry(): Promise<void> {
+    // In browser mode, fetch from HTTP API instead of IndexedDB
+    if (!isTauri()) {
+      await this.loadRegistryFromAPI()
+      return
+    }
+
     try {
       const db = await this.openDB()
       const transaction = db.transaction(STORE_NAME, 'readonly')
@@ -748,6 +766,47 @@ class FSLTLServiceClass {
       const errorMsg = error instanceof Error ? error.message : 'Unknown storage error'
       console.error('[FSLTLService] Failed to load registry:', error)
       this._lastStorageError = `Failed to load converted models: ${errorMsg}`
+      this.registry = createEmptyRegistry()
+    }
+  }
+
+  /**
+   * Load models from HTTP API (browser mode only)
+   * Fetches the list of FSLTL models from the host and registers them
+   */
+  private async loadRegistryFromAPI(): Promise<void> {
+    try {
+      const response = await fetch('/api/fsltl/models')
+      if (!response.ok) {
+        console.warn('[FSLTLService] Failed to fetch FSLTL models from API:', response.status)
+        this.registry = createEmptyRegistry()
+        return
+      }
+
+      const apiModels: ApiFsltlModel[] = await response.json()
+      this.registry = createEmptyRegistry()
+
+      for (const apiModel of apiModels) {
+        // Convert API model to internal FSLTLModel format
+        // Use relativePath to construct HTTP URL for the model
+        const model: FSLTLModel = {
+          aircraftType: apiModel.aircraftType,
+          airlineCode: apiModel.airlineCode, // Already string | null
+          modelName: apiModel.modelName,
+          // Use HTTP path for browser mode - served by /api/fsltl/*
+          modelPath: `/api/fsltl/${apiModel.relativePath}`,
+          textureSize: '1k', // Default, not tracked in API
+          hasAnimations: apiModel.hasAnimations,
+          fileSize: apiModel.fileSize,
+          convertedAt: Date.now()
+        }
+
+        this.registerModel(model)
+      }
+
+      console.log(`[FSLTLService] Loaded ${this.registry.models.size} models from HTTP API`)
+    } catch (error) {
+      console.error('[FSLTLService] Error fetching FSLTL models from API:', error)
       this.registry = createEmptyRegistry()
     }
   }

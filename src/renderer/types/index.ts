@@ -136,12 +136,18 @@ export type {
   FSLTLSettings,
 
   // Main settings store (NEW grouped structure for Phase 5)
-  SettingsStore
+  SettingsStore,
+
+  // Global settings (stored on host file system, shared across browsers)
+  GlobalSettings
 } from './settings'
 
 export {
   // Default settings values
-  DEFAULT_SETTINGS
+  DEFAULT_SETTINGS,
+
+  // Default global settings values
+  DEFAULT_GLOBAL_SETTINGS
 } from './settings'
 
 // ============================================================================

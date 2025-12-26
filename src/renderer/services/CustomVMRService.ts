@@ -19,9 +19,15 @@
  * ```
  */
 
-import { convertFileSrc } from '@tauri-apps/api/core'
-import { modApi } from '../utils/tauriApi'
+import { convertToAssetUrlSync, modApi, isTauri } from '../utils/tauriApi'
 import type { CustomVMRRule, CustomVMRMatch } from '../types/mod'
+
+/** VMR rule from HTTP API */
+interface ApiVmrRule {
+  typeCode: string
+  modelName: string
+  callsignPrefix: string | null
+}
 
 /** Rule entry with base path for model resolution */
 interface RuleEntry {
@@ -59,23 +65,29 @@ class CustomVMRServiceClass {
     if (this.loaded) return
 
     try {
-      const vmrPaths = await modApi.listVMRFiles()
+      if (isTauri()) {
+        // Tauri mode: load VMR files directly from disk
+        const vmrPaths = await modApi.listVMRFiles()
 
-      for (const vmrPath of vmrPaths) {
-        try {
-          const content = await modApi.readTextFile(vmrPath)
-          const basePath = this.getBasePath(vmrPath)
-          this.parseVMRContent(content, vmrPath, basePath)
-          // Pre-load manifests for all models in this VMR file
-          await this.preloadManifestsForVMR(basePath)
-          this.loadedFiles.push(vmrPath)
-        } catch (error) {
-          console.warn(`[CustomVMRService] Failed to load VMR: ${vmrPath}`, error)
+        for (const vmrPath of vmrPaths) {
+          try {
+            const content = await modApi.readTextFile(vmrPath)
+            const basePath = this.getBasePath(vmrPath)
+            this.parseVMRContent(content, vmrPath, basePath)
+            // Pre-load manifests for all models in this VMR file
+            await this.preloadManifestsForVMR(basePath)
+            this.loadedFiles.push(vmrPath)
+          } catch (error) {
+            console.warn(`[CustomVMRService] Failed to load VMR: ${vmrPath}`, error)
+          }
         }
+      } else {
+        // Browser mode: fetch pre-parsed VMR rules from HTTP API
+        await this.loadVMRRulesFromAPI()
       }
 
       this.loaded = true
-      if (this.loadedFiles.length > 0) {
+      if (this.defaultRules.size > 0 || this.airlineRules.size > 0) {
         console.log(
           `[CustomVMRService] Loaded ${this.loadedFiles.length} VMR file(s), ` +
           `${this.defaultRules.size} default rules, ${this.airlineRules.size} airline rules`
@@ -84,6 +96,57 @@ class CustomVMRServiceClass {
     } catch (error) {
       console.error('[CustomVMRService] Failed to load VMR files:', error)
       this.loaded = true
+    }
+  }
+
+  /**
+   * Load VMR rules from HTTP API (browser mode)
+   * The server returns pre-parsed rules from all VMR files
+   */
+  private async loadVMRRulesFromAPI(): Promise<void> {
+    try {
+      const response = await fetch('/api/vmr-rules')
+      if (!response.ok) {
+        console.warn('[CustomVMRService] Failed to fetch VMR rules from API:', response.status)
+        return
+      }
+
+      const rules: ApiVmrRule[] = await response.json()
+      // Base path for models served via HTTP API
+      const basePath = '/api/mods/aircraft'
+
+      for (const apiRule of rules) {
+        const typeCode = apiRule.typeCode.toUpperCase()
+        const modelNames = apiRule.modelName.split('//').filter(name => name.trim())
+        const callsignPrefix = apiRule.callsignPrefix?.toUpperCase()
+
+        if (modelNames.length === 0) continue
+
+        const rule: CustomVMRRule = {
+          typeCode,
+          modelNames,
+          callsignPrefix
+        }
+
+        if (callsignPrefix) {
+          const key = `${callsignPrefix}_${typeCode}`
+          if (!this.airlineRules.has(key)) {
+            this.airlineRules.set(key, { rule, basePath })
+          }
+        } else {
+          if (!this.defaultRules.has(typeCode)) {
+            this.defaultRules.set(typeCode, { rule, basePath })
+          }
+        }
+      }
+
+      // Pre-load manifests for all models
+      if (rules.length > 0) {
+        await this.preloadManifestsForVMR(basePath)
+        this.loadedFiles.push('(HTTP API)')
+      }
+    } catch (error) {
+      console.warn('[CustomVMRService] Error fetching VMR rules from API:', error)
     }
   }
 
@@ -248,14 +311,41 @@ class CustomVMRServiceClass {
    * Load a manifest file and store it in the cache
    * Handles missing files and parse errors gracefully
    *
-   * @param modelFolderPath Path to model folder (e.g., mods/aircraft/MyModel)
+   * @param modelFolderPath Path to model folder (e.g., mods/aircraft/MyModel or /api/mods/aircraft/MyModel)
    */
   private async loadManifestIntoCache(modelFolderPath: string): Promise<void> {
     try {
-      const manifest = await modApi.loadModelManifest<Record<string, unknown>>(modelFolderPath)
+      let manifest: Record<string, unknown> | null = null
+
+      if (modelFolderPath.startsWith('/api/')) {
+        // Browser mode: fetch manifest via HTTP
+        const manifestUrl = `${modelFolderPath}/manifest.json`
+        const response = await fetch(manifestUrl)
+        if (response.ok) {
+          manifest = await response.json()
+        }
+      } else {
+        // Tauri mode: use modApi
+        manifest = await modApi.loadModelManifest<Record<string, unknown>>(modelFolderPath)
+      }
+
+      if (!manifest) {
+        // No manifest found - but model.glb might still exist
+        // Check if model exists via HTTP in browser mode
+        if (modelFolderPath.startsWith('/api/')) {
+          const modelUrl = `${modelFolderPath}/model.glb`
+          const modelCheck = await fetch(modelUrl, { method: 'HEAD' })
+          this.manifestCache.set(modelFolderPath, {
+            fileExists: modelCheck.ok
+          })
+        } else {
+          this.manifestCache.set(modelFolderPath, { fileExists: false })
+        }
+        return
+      }
 
       // Validate manifest structure
-      // Using 'as any' is necessary here because loadModelManifest returns untyped JSON
+      // Using 'as any' is necessary here because manifest is untyped JSON
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const scale = typeof (manifest as any)?.scale === 'number' ? (manifest as any).scale : undefined
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -352,8 +442,14 @@ class CustomVMRServiceClass {
         continue // File doesn't exist, try next
       }
 
+      // In browser mode, basePath is already an HTTP path (/api/mods/aircraft)
+      // In Tauri mode, convert file path to asset URL
+      const finalModelPath = basePath.startsWith('/api/')
+        ? modelPath
+        : convertToAssetUrlSync(modelPath)
+
       return {
-        modelPath: convertFileSrc(modelPath),
+        modelPath: finalModelPath,
         modelName: trimmedName,
         aircraftType: rule.typeCode,
         airlineCode: null,  // Set by caller if airline-specific

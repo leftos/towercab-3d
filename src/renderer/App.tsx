@@ -1,12 +1,13 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Ion, Viewer } from 'cesium'
-import { open as openExternal } from '@tauri-apps/plugin-shell'
+import { shellApi } from './utils/tauriApi'
 import CesiumViewer from './components/CesiumViewer/CesiumViewer'
 import TopBar from './components/UI/TopBar'
 import AircraftPanel from './components/UI/AircraftPanel'
 import ControlsBar from './components/UI/ControlsBar'
 import AirportSelector from './components/UI/AirportSelector'
 import CommandInput from './components/UI/CommandInput'
+import TouchControls from './components/UI/TouchControls'
 import MeasuringTool from './components/UI/MeasuringTool'
 import MetarOverlay from './components/UI/MetarOverlay'
 import UpdateNotification from './components/UI/UpdateNotification'
@@ -19,6 +20,7 @@ import { performanceMonitor } from './utils/performanceMonitor'
 import { useVatsimStore } from './stores/vatsimStore'
 import { useAirportStore } from './stores/airportStore'
 import { useSettingsStore } from './stores/settingsStore'
+import { useGlobalSettingsStore, initializeGlobalSettings } from './stores/globalSettingsStore'
 import { useWeatherStore } from './stores/weatherStore'
 import { useViewportStore } from './stores/viewportStore'
 import { useVRStore } from './stores/vrStore'
@@ -36,10 +38,12 @@ function App() {
   const startPolling = useVatsimStore((state) => state.startPolling)
   const loadAirports = useAirportStore((state) => state.loadAirports)
   const currentAirport = useAirportStore((state) => state.currentAirport)
-  const cesiumIonToken = useSettingsStore((state) => state.cesium.cesiumIonToken)
-  const updateCesiumSettings = useSettingsStore((state) => state.updateCesiumSettings)
-  const fsltlSourcePath = useSettingsStore((state) => state.fsltl.sourcePath)
-  const fsltlOutputPath = useSettingsStore((state) => state.fsltl.outputPath)
+  // Cesium token and FSLTL settings come from global settings (shared across browsers)
+  const cesiumIonToken = useGlobalSettingsStore((state) => state.cesiumIonToken)
+  const setCesiumIonToken = useGlobalSettingsStore((state) => state.setCesiumIonToken)
+  const globalSettingsInitialized = useGlobalSettingsStore((state) => state.initialized)
+  const fsltlSourcePath = useGlobalSettingsStore((state) => state.fsltl.sourcePath)
+  const fsltlOutputPath = useGlobalSettingsStore((state) => state.fsltl.outputPath)
   const showWeatherEffects = useSettingsStore((state) => state.weather.showWeatherEffects)
   const showMetarOverlay = useSettingsStore((state) => state.ui.showMetarOverlay)
   const updateUISettings = useSettingsStore((state) => state.updateUISettings)
@@ -85,6 +89,11 @@ function App() {
   useEffect(() => {
     async function initialize() {
       try {
+        // Initialize global settings first (loads from host file system)
+        // This also migrates cesiumIonToken and FSLTL settings from localStorage
+        setLoadingStatus('Loading settings...')
+        await initializeGlobalSettings()
+
         // Migrate settings from Electron version (one-time, on first launch)
         if (!isMigrationComplete()) {
           setLoadingStatus('Checking for previous installation...')
@@ -94,9 +103,10 @@ function App() {
           }
         }
 
-        // Set Cesium Ion access token
-        if (cesiumIonToken) {
-          Ion.defaultAccessToken = cesiumIonToken
+        // Set Cesium Ion access token (from global settings)
+        const token = useGlobalSettingsStore.getState().cesiumIonToken
+        if (token) {
+          Ion.defaultAccessToken = token
         }
 
         // Load mods (tower positions, custom aircraft, etc.)
@@ -156,8 +166,9 @@ function App() {
 
         setIsLoading(false)
 
-        // Show token prompt if no Cesium Ion token is set
-        if (!cesiumIonToken) {
+        // Show token prompt if no Cesium Ion token is set (check global settings)
+        const globalToken = useGlobalSettingsStore.getState().cesiumIonToken
+        if (!globalToken) {
           setShowTokenPrompt(true)
         }
 
@@ -174,7 +185,8 @@ function App() {
     return () => {
       performanceMonitor.stopLogging()
     }
-  }, [cesiumIonToken, fsltlSourcePath, fsltlOutputPath, startPolling, loadAirports, checkVRSupport])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startPolling, loadAirports, checkVRSupport])
 
   // Fetch weather data when airport changes or weather effects are enabled
   // When no airport is selected but orbit-following an aircraft, use nearest METAR mode
@@ -333,6 +345,7 @@ function App() {
         </ViewportManager>
       </div>
       {!isVRActive && <ControlsBar />}
+      {!isVRActive && <TouchControls />}
       {!isVRActive && import.meta.env.DEV && <WeatherDebugPanel />}
       {!isVRActive && <AirportSelector />}
       {!isVRActive && <MeasuringTool cesiumViewer={cesiumViewer} />}
@@ -354,7 +367,7 @@ function App() {
               <li>
                 <a
                   href="#"
-                  onClick={(e) => { e.preventDefault(); openExternal('https://ion.cesium.com/signup/') }}
+                  onClick={(e) => { e.preventDefault(); shellApi.openExternal('https://ion.cesium.com/signup/') }}
                   className="external-link"
                 >
                   Create a free Cesium Ion account
@@ -363,7 +376,7 @@ function App() {
               <li>
                 <a
                   href="#"
-                  onClick={(e) => { e.preventDefault(); openExternal('https://ion.cesium.com/tokens') }}
+                  onClick={(e) => { e.preventDefault(); shellApi.openExternal('https://ion.cesium.com/tokens') }}
                   className="external-link"
                 >
                   Go to Access Tokens
@@ -388,9 +401,10 @@ function App() {
               </button>
               <button
                 className="token-button primary"
-                onClick={() => {
+                onClick={async () => {
                   if (tokenInput.trim()) {
-                    updateCesiumSettings({ cesiumIonToken: tokenInput.trim() })
+                    // Save to global settings (host file system)
+                    await setCesiumIonToken(tokenInput.trim())
                     Ion.defaultAccessToken = tokenInput.trim()
                   }
                   setShowTokenPrompt(false)

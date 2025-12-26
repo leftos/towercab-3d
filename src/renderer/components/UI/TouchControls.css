@@ -1,0 +1,353 @@
+/**
+ * Touch Controls Styles
+ *
+ * Styles for virtual joystick and touch-friendly controls on iPad/mobile
+ */
+
+/* Toggle button to show/hide touch controls */
+.touch-controls-toggle {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.touch-controls-toggle:hover,
+.touch-controls-toggle.active {
+  background: rgba(0, 0, 0, 0.8);
+  border-color: rgba(0, 200, 255, 0.6);
+}
+
+/* Main container for touch controls */
+.touch-controls-container {
+  position: fixed;
+  bottom: 80px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 20px;
+  pointer-events: none;
+  z-index: 999;
+}
+
+.touch-controls-left,
+.touch-controls-right {
+  pointer-events: auto;
+}
+
+/* Virtual Joystick */
+.virtual-joystick {
+  position: relative;
+  width: 140px;
+  height: 140px;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+}
+
+.joystick-base {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.4);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.joystick-knob {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: rgba(0, 200, 255, 0.6);
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  transition: transform 0.05s ease-out;
+}
+
+.joystick-labels {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: bold;
+}
+
+.joystick-label-up {
+  position: absolute;
+  top: 5px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.joystick-label-down {
+  position: absolute;
+  bottom: 5px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.joystick-label-left {
+  position: absolute;
+  left: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.joystick-label-right {
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* Right side control buttons */
+.touch-controls-right {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.touch-control-button {
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.touch-control-button:active {
+  background: rgba(0, 200, 255, 0.3);
+  border-color: rgba(0, 200, 255, 0.6);
+  transform: scale(0.95);
+}
+
+.touch-button-icon {
+  font-size: 20px;
+  font-weight: bold;
+  line-height: 1;
+}
+
+.touch-button-label {
+  font-size: 10px;
+  margin-top: 4px;
+  opacity: 0.7;
+}
+
+/* Command Input Modal */
+.touch-command-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 20px;
+}
+
+.touch-command-modal {
+  background: rgba(30, 30, 40, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
+  padding: 20px;
+  width: 100%;
+  max-width: 360px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+.touch-command-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  font-size: 18px;
+  font-weight: bold;
+  color: white;
+}
+
+.touch-command-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: white;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.touch-command-close:active {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.touch-command-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.touch-command-input-wrapper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 0 12px;
+}
+
+.touch-command-prefix {
+  color: rgba(0, 200, 255, 0.8);
+  font-size: 18px;
+  font-weight: bold;
+  font-family: monospace;
+}
+
+.touch-command-input {
+  flex: 1;
+  background: none;
+  border: none;
+  color: white;
+  font-size: 18px;
+  font-family: monospace;
+  padding: 12px 8px;
+  outline: none;
+}
+
+.touch-command-input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.touch-command-submit {
+  padding: 12px 20px;
+  background: rgba(0, 200, 255, 0.3);
+  border: 1px solid rgba(0, 200, 255, 0.5);
+  border-radius: 8px;
+  color: white;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.touch-command-submit:active {
+  background: rgba(0, 200, 255, 0.5);
+}
+
+/* Quick bookmark slots */
+.touch-command-quickslots {
+  margin-bottom: 16px;
+}
+
+.touch-command-quickslots-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 8px;
+}
+
+.touch-command-quickslots-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+
+.touch-command-quickslot {
+  padding: 10px 0;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  color: white;
+  font-size: 14px;
+  font-family: monospace;
+  cursor: pointer;
+}
+
+.touch-command-quickslot:active {
+  background: rgba(0, 200, 255, 0.3);
+  border-color: rgba(0, 200, 255, 0.5);
+}
+
+/* Help text */
+.touch-command-help {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.6;
+}
+
+.touch-command-help p {
+  margin: 4px 0;
+}
+
+.touch-command-help strong {
+  color: rgba(0, 200, 255, 0.8);
+  font-family: monospace;
+}
+
+/* Hide on landscape orientation on phones (too cramped) */
+@media (max-height: 500px) and (orientation: landscape) {
+  .touch-controls-container {
+    bottom: 10px;
+  }
+
+  .virtual-joystick {
+    width: 100px;
+    height: 100px;
+  }
+
+  .joystick-base {
+    width: 80px;
+    height: 80px;
+  }
+
+  .joystick-knob {
+    width: 35px;
+    height: 35px;
+  }
+
+  .touch-control-button {
+    width: 50px;
+    height: 50px;
+  }
+
+  .touch-button-label {
+    display: none;
+  }
+}

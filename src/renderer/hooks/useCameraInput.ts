@@ -27,6 +27,7 @@ import {
   FOLLOW_ZOOM_MIN,
   FOLLOW_ZOOM_MAX
 } from '../constants'
+import { useTouchInput } from './useTouchInput'
 
 interface UseCameraInputOptions {
   /** Callback when user manually breaks out of tower follow mode */
@@ -791,6 +792,9 @@ export function useCameraInput(
     setPitch,
     clearLookAtTarget
   ])
+
+  // Touch input support for iPad/mobile devices
+  useTouchInput(viewer, viewportId, { onBreakTowerFollow })
 }
 
 export default useCameraInput

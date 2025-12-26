@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useMemo } from 'react'
 import * as Cesium from 'cesium'
 import { useAirportStore } from '../../stores/airportStore'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
 import { useViewportStore } from '../../stores/viewportStore'
 import { useVatsimStore } from '../../stores/vatsimStore'
 import { useWeatherStore } from '../../stores/weatherStore'
@@ -72,7 +73,8 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   const babylonCanvasCreatedRef = useRef(false)
 
   // Store state
-  const cesiumIonToken = useSettingsStore((state) => state.cesium.cesiumIonToken)
+  // Cesium token from global settings (shared across browsers)
+  const cesiumIonToken = useGlobalSettingsStore((state) => state.cesiumIonToken)
   const currentAirport = useAirportStore((state) => state.currentAirport)
   const towerHeight = useAirportStore((state) => state.towerHeight)
   const customTowerPosition = useAirportStore((state) => state.customTowerPosition)

@@ -1,8 +1,9 @@
 // Update service for checking and installing app updates
 // Uses Tauri's updater plugin with GitHub Releases
+// Note: Updates are only available in Tauri (desktop) mode, not in browser mode
 
-import { check, Update } from '@tauri-apps/plugin-updater'
-import { relaunch } from '@tauri-apps/plugin-process'
+import type { Update } from '@tauri-apps/plugin-updater'
+import { isTauri } from '@/utils/tauriApi'
 import { useUpdateStore } from '@/stores/updateStore'
 
 // Auto-check interval: 4 hours in milliseconds
@@ -18,8 +19,15 @@ let autoCheckTimer: ReturnType<typeof setInterval> | null = null
 /**
  * Check for available updates
  * @returns true if an update is available
+ * Note: Only works in Tauri (desktop) mode
  */
 export async function checkForUpdates(): Promise<boolean> {
+  // Updates not available in browser mode
+  if (!isTauri()) {
+    console.log('[Update] Skipping update check (browser mode)')
+    return false
+  }
+
   const store = useUpdateStore.getState()
 
   // Don't check if already downloading or ready
@@ -31,6 +39,8 @@ export async function checkForUpdates(): Promise<boolean> {
     store.setStatus('checking')
     store.setError(null)
 
+    // Dynamic import of Tauri updater plugin
+    const { check } = await import('@tauri-apps/plugin-updater')
     const update = await check()
 
     if (update) {
@@ -60,6 +70,11 @@ export async function checkForUpdates(): Promise<boolean> {
  * Download and install the available update
  */
 export async function downloadAndInstallUpdate(): Promise<void> {
+  if (!isTauri()) {
+    console.warn('[Update] Cannot download updates in browser mode')
+    return
+  }
+
   const store = useUpdateStore.getState()
 
   if (!currentUpdate) {
@@ -99,12 +114,19 @@ export async function downloadAndInstallUpdate(): Promise<void> {
 
 /**
  * Restart the app to apply the update
+ * Note: Only works in Tauri (desktop) mode
  */
 export async function restartApp(): Promise<void> {
+  if (!isTauri()) {
+    console.warn('[Update] Cannot restart app in browser mode')
+    return
+  }
+
   const store = useUpdateStore.getState()
 
   try {
     console.log('[Update] Restarting app...')
+    const { relaunch } = await import('@tauri-apps/plugin-process')
     await relaunch()
   } catch (error) {
     console.error('[Update] Failed to restart app:', error)

@@ -482,6 +482,115 @@ export interface UISettings {
  */
 export type FSLTLTextureScale = 'full' | '2k' | '1k' | '512'
 
+// ============================================================================
+// Global Settings (stored on host file system, shared across all browsers)
+// ============================================================================
+
+/**
+ * Global settings stored on the host file system
+ *
+ * These settings are persisted to a JSON file on the host PC and are
+ * shared across all browsers/devices that connect to the app. This enables
+ * remote browser access (e.g., iPad) to use the same Cesium token and
+ * FSLTL configuration as the host.
+ *
+ * Unlike local settings (stored in browser localStorage), global settings:
+ * - Are available immediately when connecting from any browser
+ * - Don't require re-entering Cesium token on new devices
+ * - Reference file paths that only make sense on the host PC
+ *
+ * @see globalSettingsStore - Store that manages these settings
+ * @see settingsStore - Local settings that complement global settings
+ */
+export interface GlobalSettings {
+  /**
+   * Cesium Ion access token for terrain/imagery
+   * User-provided, free tier available at https://cesium.com/ion/
+   */
+  cesiumIonToken: string
+
+  /**
+   * FSLTL model configuration
+   * Paths reference the host file system
+   */
+  fsltl: {
+    /**
+     * Path to fsltl-traffic-base package folder on host
+     * Typically in MSFS Community folder
+     */
+    sourcePath: string | null
+
+    /**
+     * Custom output path for converted models on host
+     * null = use app's mods folder
+     */
+    outputPath: string | null
+
+    /**
+     * Texture downscaling preference for conversion
+     */
+    textureScale: FSLTLTextureScale
+
+    /**
+     * Enable use of converted FSLTL models
+     */
+    enableFsltlModels: boolean
+  }
+
+  /**
+   * Default airport configuration
+   */
+  airports: {
+    /**
+     * Default airport ICAO code to load on startup
+     * Empty string = no default (user selects)
+     */
+    defaultIcao: string
+
+    /**
+     * Recently visited airports (ICAO codes)
+     * Shared across all browser sessions
+     */
+    recentAirports: string[]
+  }
+
+  /**
+   * Remote access server configuration
+   */
+  server: {
+    /**
+     * HTTP server port for remote access (default: 8765)
+     */
+    port: number
+
+    /**
+     * Enable remote access server on startup (default: false)
+     */
+    enabled: boolean
+  }
+}
+
+/**
+ * Default global settings values
+ */
+export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
+  cesiumIonToken: '',
+  fsltl: {
+    sourcePath: null,
+    outputPath: null,
+    textureScale: '1k',
+    enableFsltlModels: true
+  },
+  airports: {
+    defaultIcao: '',
+    recentAirports: []
+  },
+  server: {
+    port: 8765,
+    enabled: false
+  }
+}
+
 /**
  * FSLTL (FS Live Traffic Liveries) settings
  *

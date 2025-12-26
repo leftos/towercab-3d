@@ -11,6 +11,7 @@
     "typecheck": "tsc -p tsconfig.web.json --noEmit",
     "build:converter": "python scripts/build_converter.py",
     "dev": "tauri dev",
+    "dev:server": "set TOWERCAB_AUTO_SERVER=1 && tauri dev",
     "build": "npm run typecheck && npm run build:converter && tauri build",
     "tauri": "tauri",
     "check": "node scripts/check.js",

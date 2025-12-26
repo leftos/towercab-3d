@@ -13,17 +13,17 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { open as openExternal } from '@tauri-apps/plugin-shell'
-import { useSettingsStore } from '../../stores/settingsStore'
+import { shellApi } from '../../utils/tauriApi'
+import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
 import { useFsltlConversionStore, getConversionEta } from '../../stores/fsltlConversionStore'
 import { fsltlService } from '../../services/FSLTLService'
 import * as fsltlApi from '../../services/fsltlApi'
 import './FSLTLImportPanel.css'
 
 function FSLTLImportPanel() {
-  // Settings
-  const fsltlSettings = useSettingsStore((state) => state.fsltl)
-  const updateFSLTLSettings = useSettingsStore((state) => state.updateFSLTLSettings)
+  // FSLTL settings from global settings (shared across browsers)
+  const fsltlSettings = useGlobalSettingsStore((state) => state.fsltl)
+  const updateFSLTLSettings = useGlobalSettingsStore((state) => state.updateFsltl)
 
   // Conversion state from store (persists across Settings open/close)
   const conversionState = useFsltlConversionStore((state) => state.conversionState)
@@ -381,7 +381,7 @@ function FSLTLImportPanel() {
           Select the fsltl-traffic-base folder from your MSFS Community folder.
           Get FSLTL from <a
             href="#"
-            onClick={(e) => { e.preventDefault(); openExternal('https://fslivetrafficliveries.com/') }}
+            onClick={(e) => { e.preventDefault(); shellApi.openExternal('https://fslivetrafficliveries.com/') }}
             className="external-link"
           >fslivetrafficliveries.com</a>
         </p>

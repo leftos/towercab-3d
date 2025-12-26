@@ -1,4 +1,4 @@
-import { open as openExternal } from '@tauri-apps/plugin-shell'
+import { shellApi } from '../../utils/tauriApi'
 import { useSettingsStore } from '../../stores/settingsStore'
 import './ControlsBar.css'
 
@@ -24,7 +24,7 @@ function ContributeDialog({ data, onClose }: ContributeDialogProps) {
     const filename = `contributions/tower-positions/${data.icao}.json`
     const githubUrl = `https://github.com/leftos/towercab-3d/new/main?filename=${filename}&value=${encodedContent}`
 
-    await openExternal(githubUrl)
+    await shellApi.openExternal(githubUrl)
     onClose()
   }
 

@@ -4,10 +4,11 @@ import SettingsGeneralTab from './SettingsGeneralTab'
 import SettingsDisplayTab from './SettingsDisplayTab'
 import SettingsGraphicsTab from './SettingsGraphicsTab'
 import SettingsPerformanceTab from './SettingsPerformanceTab'
+import SettingsServerTab from './SettingsServerTab'
 import SettingsHelpTab from './SettingsHelpTab'
 import './ControlsBar.css'
 
-type SettingsTab = 'general' | 'display' | 'graphics' | 'performance' | 'help'
+type SettingsTab = 'general' | 'display' | 'graphics' | 'performance' | 'server' | 'help'
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -77,6 +78,12 @@ function SettingsModal({ isOpen, onClose, onShowImportModal, importStatus }: Set
             Performance
           </button>
           <button
+            className={`tab-button ${activeTab === 'server' ? 'active' : ''}`}
+            onClick={() => setActiveTab('server')}
+          >
+            Server
+          </button>
+          <button
             className={`tab-button ${activeTab === 'help' ? 'active' : ''}`}
             onClick={() => setActiveTab('help')}
           >
@@ -94,6 +101,7 @@ function SettingsModal({ isOpen, onClose, onShowImportModal, importStatus }: Set
           {activeTab === 'display' && <SettingsDisplayTab />}
           {activeTab === 'graphics' && <SettingsGraphicsTab />}
           {activeTab === 'performance' && <SettingsPerformanceTab />}
+          {activeTab === 'server' && <SettingsServerTab />}
           {activeTab === 'help' && <SettingsHelpTab />}
         </div>
       </div>

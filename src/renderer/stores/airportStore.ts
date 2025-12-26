@@ -1,11 +1,11 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 import type { Airport } from '../types/airport'
 import type { View3dPosition, ResolvedView2dPosition } from '../types/mod'
 import { getEstimatedTowerHeight } from '../types/airport'
 import { useCameraStore } from './cameraStore'
 import { useViewportStore } from './viewportStore'
 import { useVatsimStore } from './vatsimStore'
+import { useGlobalSettingsStore } from './globalSettingsStore'
 import { modService } from '../services/ModService'
 
 interface AirportStore {
@@ -20,9 +20,6 @@ interface AirportStore {
   custom2dPosition: ResolvedView2dPosition | null  // Custom 2D view position from tower-positions (center point, altitude, heading)
   customHeading: number | null  // Custom default heading in degrees, or null to use app default
 
-  // Recent airports (persisted)
-  recentAirports: string[]  // ICAO codes
-
   // UI state
   isAirportSelectorOpen: boolean
 
@@ -32,23 +29,29 @@ interface AirportStore {
   searchAirports: (query: string) => Airport[]
   addToRecent: (icao: string) => void
   setAirportSelectorOpen: (open: boolean) => void
+
+  // Computed (from globalSettingsStore)
+  readonly recentAirports: string[]
 }
 
 const MAX_RECENT_AIRPORTS = 10
 
 export const useAirportStore = create<AirportStore>()(
-  persist(
-    (set, get) => ({
-      // Initial state
-      airports: new Map(),
-      isLoaded: false,
-      currentAirport: null,
-      towerHeight: 35,
-      customTowerPosition: null,
-      custom2dPosition: null,
-      customHeading: null,
-      recentAirports: [],
-      isAirportSelectorOpen: false,
+  (set, get) => ({
+    // Initial state
+    airports: new Map(),
+    isLoaded: false,
+    currentAirport: null,
+    towerHeight: 35,
+    customTowerPosition: null,
+    custom2dPosition: null,
+    customHeading: null,
+    isAirportSelectorOpen: false,
+
+    // recentAirports is now stored in globalSettingsStore
+    get recentAirports() {
+      return useGlobalSettingsStore.getState().airports.recentAirports
+    },
 
       // Load airport database
       loadAirports: (data: Record<string, Airport>) => {
@@ -155,9 +158,10 @@ export const useAirportStore = create<AirportStore>()(
         })
       },
 
-      // Add airport to recent list
+      // Add airport to recent list (saves to global settings)
       addToRecent: (icao: string) => {
-        const { recentAirports } = get()
+        const globalSettings = useGlobalSettingsStore.getState()
+        const recentAirports = globalSettings.airports.recentAirports
         const normalizedIcao = icao.toUpperCase()
 
         // Remove if already exists
@@ -166,19 +170,13 @@ export const useAirportStore = create<AirportStore>()(
         // Add to front and limit size
         const updated = [normalizedIcao, ...filtered].slice(0, MAX_RECENT_AIRPORTS)
 
-        set({ recentAirports: updated })
+        // Save to global settings (async, fire-and-forget)
+        globalSettings.updateAirports({ recentAirports: updated })
       },
 
       // Toggle airport selector
       setAirportSelectorOpen: (open: boolean) => {
         set({ isAirportSelectorOpen: open })
       }
-    }),
-    {
-      name: 'airport-store',
-      partialize: (state) => ({
-        recentAirports: state.recentAirports
-      })
-    }
-  )
+    })
 )

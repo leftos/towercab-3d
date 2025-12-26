@@ -22,7 +22,7 @@
  * Models from Flightradar24/fr24-3d-models (GPL-2.0, originally from FlightGear)
  */
 
-import { convertFileSrc } from '@tauri-apps/api/core'
+import { convertToAssetUrlSync } from '../utils/tauriApi'
 import { aircraftDimensionsService, type AircraftDimensions } from './AircraftDimensionsService'
 import { fsltlService } from './FSLTLService'
 import { customVMRService } from './CustomVMRService'
@@ -464,7 +464,7 @@ class AircraftModelServiceClass {
         for (const fallbackType of FALLBACK_TYPES) {
           const airlineModel = fsltlService.findBestModel(fallbackType, airlineCode)
           if (airlineModel) {
-            const modelUrl = convertFileSrc(airlineModel.modelPath)
+            const modelUrl = convertToAssetUrlSync(airlineModel.modelPath)
             const dims = aircraftDimensionsService.getDimensions(fallbackType)
             return {
               modelUrl,
@@ -482,7 +482,7 @@ class AircraftModelServiceClass {
       // Fall back to generic B738
       const fsltlB738Fallback = fsltlService.getB738Fallback()
       if (fsltlB738Fallback) {
-        const modelUrl = convertFileSrc(fsltlB738Fallback.modelPath)
+        const modelUrl = convertToAssetUrlSync(fsltlB738Fallback.modelPath)
         return {
           modelUrl,
           scale: uniformScale,
@@ -533,7 +533,7 @@ class AircraftModelServiceClass {
       // Get the VMR variation name that was matched (stored by findBestModel)
       const vmrVariationName = fsltlService.lastMatchVariationName ?? undefined
       // Convert file path to Tauri asset URL for webview access
-      const modelUrl = convertFileSrc(fsltlModel.modelPath)
+      const modelUrl = convertToAssetUrlSync(fsltlModel.modelPath)
 
       // Determine match type: exact if model type matches requested type, vmr if mapped
       // VMR mapping occurs when the model's aircraft type differs from what was requested
@@ -565,7 +565,7 @@ class AircraftModelServiceClass {
       const closestAirlineModel = fsltlService.findClosestModelForAirline(normalized, airlineCode)
       if (closestAirlineModel) {
         const targetDims = aircraftDimensionsService.getDimensions(normalized)
-        const modelUrl = convertFileSrc(closestAirlineModel.model.modelPath)
+        const modelUrl = convertToAssetUrlSync(closestAirlineModel.model.modelPath)
         return {
           modelUrl,
           scale: closestAirlineModel.scale,
@@ -620,7 +620,7 @@ class AircraftModelServiceClass {
     // This helps GA aircraft when we have FSLTL models but no built-in small planes
     const closestFsltlModel = fsltlService.findClosestModel(normalized)
     if (closestFsltlModel) {
-      const modelUrl = convertFileSrc(closestFsltlModel.model.modelPath)
+      const modelUrl = convertToAssetUrlSync(closestFsltlModel.model.modelPath)
       return {
         modelUrl,
         scale: closestFsltlModel.scale,
@@ -635,7 +635,7 @@ class AircraftModelServiceClass {
     // 8. Try FSLTL B738 base model as generic fallback
     const fsltlB738Fallback = fsltlService.getB738Fallback()
     if (fsltlB738Fallback) {
-      const modelUrl = convertFileSrc(fsltlB738Fallback.modelPath)
+      const modelUrl = convertToAssetUrlSync(fsltlB738Fallback.modelPath)
       return {
         modelUrl,
         scale: uniformScale,

@@ -2,23 +2,24 @@
 // Handles fetching and parsing METAR data from Aviation Weather API
 
 import { invoke } from '@tauri-apps/api/core'
+import { isTauri } from '@/utils/tauriApi'
 import type { Precipitation, PrecipitationType, PrecipitationIntensity, WindState, CloudLayer, PrecipitationState, DistancedMetar } from '@/types'
 import { METAR_PRECIP_CODES, INTERPOLATION_STATION_COUNT, INTERPOLATION_RADIUS_NM } from '@/constants'
 
 const METAR_API_URL = 'https://aviationweather.gov/api/data/metar'
 
 /**
- * Fetch a URL using Tauri backend (bypasses CORS) or browser fetch as fallback
+ * Fetch a URL using Tauri backend (bypasses CORS) or CORS proxy in browser mode
  */
 async function fetchUrl(url: string): Promise<string> {
-  try {
-    // Try Tauri command first (available in desktop mode)
+  if (isTauri()) {
+    // Use Tauri command (available in desktop mode)
     const response = await invoke<string>('fetch_url', { url })
     return response
-  } catch (err) {
-    // Fallback to browser fetch (for serve mode)
-    console.warn('[MetarService] Tauri fetch_url failed, falling back to browser fetch:', err)
-    const response = await fetch(url)
+  } else {
+    // In browser mode, use the CORS proxy endpoint
+    const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}`
+    const response = await fetch(proxyUrl)
     if (!response.ok) {
       throw new Error(`HTTP error: ${response.status}`)
     }
