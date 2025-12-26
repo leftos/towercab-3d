@@ -17,6 +17,7 @@ import { calculateShareable3dPosition, calculateShareable2dPosition } from '../.
 import { modService } from '../../services/ModService'
 import { modApi } from '../../utils/tauriApi'
 import type { ReplayExportData, PlaybackSpeed } from '../../types/replay'
+import type { AircraftTintColor } from '../../types/settings'
 import GlobalSearchPanel from './GlobalSearchPanel'
 import VRButton from '../VR/VRButton'
 import ImportModal from './ImportModal'
@@ -172,6 +173,7 @@ function ControlsBar() {
   const enableLogDepth = useSettingsStore((state) => state.graphics.enableLogDepth)
   const enableGroundAtmosphere = useSettingsStore((state) => state.graphics.enableGroundAtmosphere)
   const enableAmbientOcclusion = useSettingsStore((state) => state.graphics.enableAmbientOcclusion)
+  const enableAircraftSilhouettes = useSettingsStore((state) => state.graphics.enableAircraftSilhouettes)
   const enableShadows = useSettingsStore((state) => state.graphics.enableShadows)
   const shadowMapSize = useSettingsStore((state) => state.graphics.shadowMapSize)
   const shadowMaxDistance = useSettingsStore((state) => state.graphics.shadowMaxDistance)
@@ -187,6 +189,7 @@ function ControlsBar() {
   const cameraNearPlane = useSettingsStore((state) => state.graphics.cameraNearPlane) ?? 0.1
   const builtinModelBrightness = useSettingsStore((state) => state.graphics.builtinModelBrightness) ?? 1.7
   const fsltlModelBrightness = useSettingsStore((state) => state.graphics.fsltlModelBrightness) ?? 1.0
+  const builtinModelTintColor = useSettingsStore((state) => state.graphics.builtinModelTintColor) ?? 'lightBlue'
   const updateGraphicsSettings = useSettingsStore((state) => state.updateGraphicsSettings)
 
   // Active viewport camera state (from viewportStore)
@@ -1710,6 +1713,20 @@ function ControlsBar() {
                       <label>
                         <input
                           type="checkbox"
+                          checked={enableAircraftSilhouettes}
+                          onChange={(e) => updateGraphicsSettings({ enableAircraftSilhouettes: e.target.checked })}
+                        />
+                        Aircraft Outlines
+                      </label>
+                      <p className="setting-hint">
+                        Adds black edge outlines to built-in (FR24) aircraft models. ⚠️ High GPU cost (~20%) - use Aircraft Tint instead for better performance.
+                      </p>
+                    </div>
+
+                    <div className="setting-item">
+                      <label>
+                        <input
+                          type="checkbox"
                           checked={enableLighting}
                           onChange={(e) => updateCesiumSettings({ enableLighting: e.target.checked })}
                         />
@@ -1818,6 +1835,24 @@ function ControlsBar() {
                         </div>
                         <p className="setting-hint">
                           Brightness for built-in (FR24) models. Default: 170%.
+                        </p>
+                      </div>
+
+                      <div className="setting-item">
+                        <label>Built-in Model Tint</label>
+                        <select
+                          value={builtinModelTintColor}
+                          onChange={(e) => updateGraphicsSettings({ builtinModelTintColor: e.target.value as AircraftTintColor })}
+                        >
+                          <option value="white">White (Original)</option>
+                          <option value="lightBlue">Light Blue</option>
+                          <option value="tan">Tan/Beige</option>
+                          <option value="yellow">Yellow</option>
+                          <option value="orange">Orange</option>
+                          <option value="lightGray">Light Gray</option>
+                        </select>
+                        <p className="setting-hint">
+                          Tint color for built-in models. Light Blue contrasts with terrain for better visibility.
                         </p>
                       </div>
 

@@ -166,37 +166,74 @@ export const MODEL_BRIGHTNESS_MIN = 0.5
 export const MODEL_BRIGHTNESS_MAX = 3.0
 
 /**
- * Calculate model tint color based on brightness multiplier
+ * Aircraft tint color RGB values
  *
- * Brightness multiplier adjusts the tint color RGB values:
- * - 0.5 = [0.45, 0.45, 0.45] (darker gray)
- * - 1.0 = [0.9, 0.9, 0.9] (default light gray)
- * - 1.1+ = [1.0, 1.0, 1.0] (white, clamped at 1.0 per channel)
- * - 3.0 = [1.0, 1.0, 1.0] (white, maximum brightness)
+ * Maps tint color preset names to RGB values (0-1 range).
+ * These are the base colors before brightness adjustment.
+ */
+export const AIRCRAFT_TINT_COLORS: Record<string, readonly [number, number, number]> = {
+  white: [0.95, 0.95, 0.95],      // Pure white (original)
+  lightBlue: [0.7, 0.85, 1.0],    // Light blue - contrasts with terrain
+  tan: [0.95, 0.9, 0.8],          // Tan/beige - contrasts with sky
+  yellow: [1.0, 0.95, 0.7],       // Yellow - high visibility
+  orange: [1.0, 0.8, 0.5],        // Orange - very high visibility
+  lightGray: [0.85, 0.85, 0.85]   // Light gray - subtle, neutral
+} as const
+
+/**
+ * Calculate model tint color based on brightness multiplier and tint color preset
+ *
+ * For white tint (original behavior):
+ * - Brightness multiplier adjusts RGB values (0.5-3.0 → darker to glow)
+ *
+ * For colored tints:
+ * - Returns the tint color directly without brightness multiplication
+ * - This preserves the color hue (prevents wash-out at high brightness)
+ * - Brightness is applied via blend amount instead (see getBuiltinModelColorBlendAmount)
  *
  * @param brightness - Brightness multiplier (0.5-3.0)
+ * @param tintColor - Tint color preset name (default: 'white')
  * @returns RGB array suitable for Cesium.Color constructor
  */
-export function getModelColorRgb(brightness: number): readonly [number, number, number] {
-  const baseColor = 0.9
-  const adjustedValue = Math.min(baseColor * brightness, 1.0) // Clamp at 1.0
-  return [adjustedValue, adjustedValue, adjustedValue] as const
+export function getModelColorRgb(
+  brightness: number,
+  tintColor: string = 'white'
+): readonly [number, number, number] {
+  const baseColors = AIRCRAFT_TINT_COLORS[tintColor] ?? AIRCRAFT_TINT_COLORS.white
+
+  // For non-white tints, return color directly without brightness multiplication
+  // This preserves the tint hue - brightness affects visibility via blend amount
+  if (tintColor !== 'white') {
+    return baseColors
+  }
+
+  // For white tint, brightness multiplies to create glow effect (original behavior)
+  return [
+    Math.min(baseColors[0] * brightness, 1.0),
+    Math.min(baseColors[1] * brightness, 1.0),
+    Math.min(baseColors[2] * brightness, 1.0)
+  ] as const
 }
 
 /**
- * Calculate color blend amount for emissive effect at high brightness
+ * Calculate color blend amount for built-in models
  *
- * Creates a glow/emissive effect when brightness exceeds 1.1:
+ * For white tint (original behavior):
  * - 0.5-1.1 brightness: blend amount = 0.15 (subtle texture blending)
  * - 1.1-3.0 brightness: blend amount increases to 1.0 (brightening/glow effect)
  *
- * Higher blend amounts make the white tint more opaque, creating a brighter/glowing appearance.
+ * For colored tints:
+ * - Uses higher base blend (0.5) so the tint color is clearly visible
+ * - Brightness still increases blend toward 1.0 for glow effect
  *
  * @param brightness - Brightness multiplier (0.5-3.0)
- * @returns Color blend amount (0.15-1.0)
+ * @param tintColor - Tint color preset name (default: 'white')
+ * @returns Color blend amount (0.15-1.0 for white, 0.5-1.0 for colors)
  */
-export function getModelColorBlendAmount(brightness: number): number {
-  const BASE_BLEND_AMOUNT = 0.15
+export function getModelColorBlendAmount(brightness: number, tintColor: string = 'white'): number {
+  // Colored tints need higher base blend to be visible
+  // White tint uses lower blend for subtle brightening effect
+  const BASE_BLEND_AMOUNT = tintColor !== 'white' ? 0.5 : 0.15
   const BRIGHTNESS_THRESHOLD = 1.1
   const MAX_BLEND_AMOUNT = 1.0
 
@@ -204,7 +241,7 @@ export function getModelColorBlendAmount(brightness: number): number {
     return BASE_BLEND_AMOUNT
   }
 
-  // Map brightness 1.1 -> 0.15, MODEL_BRIGHTNESS_MAX -> 1.0 (full emissive glow)
+  // Map brightness above threshold to higher blend (toward glow effect)
   const excessBrightness = brightness - BRIGHTNESS_THRESHOLD
   const maxExcess = MODEL_BRIGHTNESS_MAX - BRIGHTNESS_THRESHOLD
   const blendIncrease = (excessBrightness / maxExcess) * (MAX_BLEND_AMOUNT - BASE_BLEND_AMOUNT)

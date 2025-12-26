@@ -23,6 +23,8 @@ export interface CesiumViewerSettings {
   enableFxaa: boolean
   /** Enable ambient occlusion */
   enableAmbientOcclusion: boolean
+  /** Enable silhouette outlines for built-in aircraft models */
+  enableAircraftSilhouettes: boolean
   /** Enable ground atmosphere effects */
   enableGroundAtmosphere: boolean
   /** Enable shadows */
@@ -56,6 +58,13 @@ export interface ModelPoolRefs {
   modelPoolLoading: React.MutableRefObject<Set<number>>
   /** Flag indicating all pool models are loaded */
   modelPoolReady: React.MutableRefObject<boolean>
+}
+
+export interface SilhouetteRefs {
+  /** Edge detection stage for aircraft silhouettes (update .selected array with models) */
+  edgeDetection: React.MutableRefObject<Cesium.PostProcessStage | null>
+  /** Silhouette composite stage (toggle .enabled to show/hide) */
+  silhouetteStage: React.MutableRefObject<Cesium.PostProcessStageComposite | null>
 }
 
 /**
@@ -118,6 +127,7 @@ export function useCesiumViewer(
 ): {
   viewer: Cesium.Viewer | null
   modelPoolRefs: ModelPoolRefs
+  silhouetteRefs: SilhouetteRefs
 } {
   const {
     cesiumIonToken,
@@ -128,6 +138,7 @@ export function useCesiumViewer(
     enableHdr,
     enableFxaa,
     enableAmbientOcclusion,
+    enableAircraftSilhouettes,
     enableGroundAtmosphere,
     enableShadows,
     shadowMapSize,
@@ -150,6 +161,10 @@ export function useCesiumViewer(
   const modelPoolLoadingRef = useRef<Set<number>>(new Set())
   const modelPoolReadyRef = useRef<boolean>(false)
 
+  // Silhouette refs for aircraft outline rendering
+  const edgeDetectionRef = useRef<Cesium.PostProcessStage | null>(null)
+  const silhouetteStageRef = useRef<Cesium.PostProcessStageComposite | null>(null)
+
   // Initialize Cesium viewer
   // This effect re-runs when MSAA changes, recreating the viewer with new settings
   useEffect(() => {
@@ -168,6 +183,8 @@ export function useCesiumViewer(
       modelPoolUrlsRef.current.clear()
       modelPoolLoadingRef.current.clear()
       modelPoolReadyRef.current = false
+      edgeDetectionRef.current = null
+      silhouetteStageRef.current = null
     }
 
     // Log MSAA setting for debugging
@@ -205,6 +222,23 @@ export function useCesiumViewer(
     newViewer.scene.highDynamicRange = enableHdr
     newViewer.scene.postProcessStages.fxaa.enabled = enableFxaa
     newViewer.scene.postProcessStages.ambientOcclusion.enabled = enableAmbientOcclusion
+
+    // Aircraft silhouette outlines - creates edge detection for built-in models
+    // The selected array will be populated by useAircraftModels with built-in models only
+    if (!isInset) {
+      const edgeDetection = Cesium.PostProcessStageLibrary.createEdgeDetectionStage()
+      edgeDetection.uniforms.color = Cesium.Color.BLACK
+      edgeDetection.uniforms.length = 0.5  // Outline width in pixels
+      edgeDetection.selected = []  // Will be populated by useAircraftModels
+
+      const silhouetteStage = newViewer.scene.postProcessStages.add(
+        Cesium.PostProcessStageLibrary.createSilhouetteStage([edgeDetection])
+      ) as Cesium.PostProcessStageComposite
+      silhouetteStage.enabled = enableAircraftSilhouettes
+
+      edgeDetectionRef.current = edgeDetection
+      silhouetteStageRef.current = silhouetteStage
+    }
 
     // Improve texture quality - helps reduce mipmap banding
     newViewer.scene.globe.showGroundAtmosphere = enableGroundAtmosphere
@@ -331,6 +365,10 @@ export function useCesiumViewer(
       modelPoolUrls.clear()
       modelPoolLoading.clear()
       modelPoolReadyRef.current = false
+
+      // Reset silhouette refs
+      edgeDetectionRef.current = null
+      silhouetteStageRef.current = null
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- graphics settings used at init only; runtime updates handled by separate hooks
   }, [cesiumIonToken, isInset, msaaSamples, viewportId])
@@ -351,6 +389,13 @@ export function useCesiumViewer(
     })
   }, [viewer, modelBrightness])
 
+  // Update silhouette enabled state when setting changes
+  useEffect(() => {
+    if (silhouetteStageRef.current) {
+      silhouetteStageRef.current.enabled = enableAircraftSilhouettes
+    }
+  }, [enableAircraftSilhouettes])
+
   return {
     viewer,
     modelPoolRefs: {
@@ -359,6 +404,10 @@ export function useCesiumViewer(
       modelPoolUrls: modelPoolUrlsRef,
       modelPoolLoading: modelPoolLoadingRef,
       modelPoolReady: modelPoolReadyRef
+    },
+    silhouetteRefs: {
+      edgeDetection: edgeDetectionRef,
+      silhouetteStage: silhouetteStageRef
     }
   }
 }

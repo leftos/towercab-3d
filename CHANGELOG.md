@@ -5,6 +5,13 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Built-in Model Tint setting in Graphics options
+  - Choose from White (original), Light Blue, Tan, Yellow, Orange, or Light Gray
+  - Colored tints help built-in (FR24) aircraft stand out against satellite imagery
+  - Default: Light Blue for better terrain contrast
+- Aircraft Outlines option in Graphics settings (disabled by default)
+  - Adds black edge outlines to built-in models using Cesium silhouette post-processing
+  - High GPU cost (~20%) - use tint color instead for better performance
 - App now ships with tower cab camera position defaults based on vNAS and FAA data
 - Press Enter in airport picker to select the top result without tabbing
 - Default datablock direction setting in Settings > Aircraft

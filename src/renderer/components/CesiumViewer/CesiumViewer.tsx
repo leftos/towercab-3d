@@ -103,6 +103,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   const shadowNormalOffset = useSettingsStore((state) => state.graphics.shadowNormalOffset)
   const aircraftShadowsOnly = useSettingsStore((state) => state.graphics.aircraftShadowsOnly)
   const enableAmbientOcclusion = useSettingsStore((state) => state.graphics.enableAmbientOcclusion)
+  const enableAircraftSilhouettes = useSettingsStore((state) => state.graphics.enableAircraftSilhouettes)
   // New shadow bias settings - use defaults if not yet migrated in localStorage
   const shadowDepthBias = useSettingsStore((state) => state.graphics.shadowDepthBias) ?? 0.0004
   const shadowPolygonOffsetFactor = useSettingsStore((state) => state.graphics.shadowPolygonOffsetFactor) ?? 1.1
@@ -190,7 +191,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   // =========================================================================
   // 1. Core Cesium Viewer Initialization
   // =========================================================================
-  const { viewer, modelPoolRefs } = useCesiumViewer(containerRef, viewportId, {
+  const { viewer, modelPoolRefs, silhouetteRefs } = useCesiumViewer(containerRef, viewportId, {
     cesiumIonToken,
     isInset,
     msaaSamples,
@@ -199,6 +200,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     enableHdr,
     enableFxaa,
     enableAmbientOcclusion,
+    enableAircraftSilhouettes,
     enableGroundAtmosphere,
     enableShadows,
     shadowMapSize,
@@ -325,7 +327,8 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     interpolatedAircraft,
     viewMode,
     followingCallsign,
-    groundElevationMeters
+    groundElevationMeters,
+    silhouetteRefs
   )
 
   // =========================================================================

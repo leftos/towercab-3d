@@ -275,7 +275,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'settings-store',
-      version: 14, // Incremented for defaultDatablockDirection aircraft setting
+      version: 16, // Incremented for builtinModelTintColor graphics setting
       migrate: (persistedState: unknown, version: number) => {
         // Auto-migrate old flat structure to grouped structure
         if (version < 2) {
@@ -439,6 +439,30 @@ export const useSettingsStore = create<SettingsStore>()(
             }
           }
         }
+        // Migrate v14 to v15: add enableAircraftSilhouettes setting
+        if (version < 15) {
+          console.log('[Settings] Migrating v14 to v15: adding enableAircraftSilhouettes setting')
+          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
+          return {
+            ...state,
+            graphics: {
+              ...DEFAULT_SETTINGS.graphics,
+              ...state.graphics
+            }
+          }
+        }
+        // Migrate v15 to v16: add builtinModelTintColor setting
+        if (version < 16) {
+          console.log('[Settings] Migrating v15 to v16: adding builtinModelTintColor setting')
+          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
+          return {
+            ...state,
+            graphics: {
+              ...DEFAULT_SETTINGS.graphics,
+              ...state.graphics
+            }
+          }
+        }
         return persistedState as SettingsStore
       }
     }
@@ -474,6 +498,8 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
         oldSettings.enableGroundAtmosphere ?? DEFAULT_SETTINGS.graphics.enableGroundAtmosphere,
       enableAmbientOcclusion:
         oldSettings.enableAmbientOcclusion ?? DEFAULT_SETTINGS.graphics.enableAmbientOcclusion,
+      enableAircraftSilhouettes:
+        oldSettings.enableAircraftSilhouettes ?? DEFAULT_SETTINGS.graphics.enableAircraftSilhouettes,
       enableShadows: oldSettings.enableShadows ?? DEFAULT_SETTINGS.graphics.enableShadows,
       shadowMapSize: oldSettings.shadowMapSize ?? DEFAULT_SETTINGS.graphics.shadowMapSize,
       shadowMaxDistance:
@@ -496,6 +522,8 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
         oldSettings.cameraNearPlane ?? DEFAULT_SETTINGS.graphics.cameraNearPlane,
       builtinModelBrightness:
         oldSettings.builtinModelBrightness ?? oldSettings.modelBrightness ?? DEFAULT_SETTINGS.graphics.builtinModelBrightness,
+      builtinModelTintColor:
+        oldSettings.builtinModelTintColor ?? DEFAULT_SETTINGS.graphics.builtinModelTintColor,
       fsltlModelBrightness:
         oldSettings.fsltlModelBrightness ?? DEFAULT_SETTINGS.graphics.fsltlModelBrightness
     },

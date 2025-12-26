@@ -84,6 +84,20 @@ export type TimeMode = 'real' | 'fixed'
 export type Theme = 'light' | 'dark'
 
 /**
+ * Aircraft tint color preset for built-in (FR24) models
+ *
+ * Controls the tint color applied to white built-in aircraft models
+ * to improve visibility against various backgrounds:
+ * - 'white': Pure white (default, blends with bright backgrounds)
+ * - 'lightBlue': Light blue tint (contrasts with terrain)
+ * - 'tan': Tan/beige tint (contrasts with sky)
+ * - 'yellow': Yellow tint (high visibility)
+ * - 'orange': Orange tint (very high visibility)
+ * - 'lightGray': Light gray (subtle, neutral)
+ */
+export type AircraftTintColor = 'white' | 'lightBlue' | 'tan' | 'yellow' | 'orange' | 'lightGray'
+
+/**
  * Cesium-specific configuration
  *
  * Settings related to the Cesium globe, terrain, and lighting system.
@@ -143,6 +157,16 @@ export interface GraphicsSettings {
    * Adds contact shadows but can cause visible banding artifacts (default: false)
    */
   enableAmbientOcclusion: boolean
+
+  /**
+   * Enable silhouette outlines for built-in (FR24) aircraft models (default: false)
+   * Adds black edge outlines to white aircraft models to improve visibility
+   * against bright terrain and sky backgrounds.
+   * Note: Only affects built-in models; FSLTL models with liveries are not outlined.
+   * Warning: Significant GPU performance impact (~20% on high-end GPUs) due to
+   * full-screen post-processing shader.
+   */
+  enableAircraftSilhouettes: boolean
 
   // Shadows
   /** Enable terrain and model shadows (default: true) */
@@ -205,6 +229,14 @@ export interface GraphicsSettings {
    * Values above 1.0 brighten textures; values above ~1.1 approach white
    */
   builtinModelBrightness: number
+
+  /**
+   * Tint color for built-in (FR24) models (default: 'lightBlue')
+   * Controls the color tint applied to white aircraft models to improve
+   * visibility against various backgrounds. Works in combination with
+   * builtinModelBrightness.
+   */
+  builtinModelTintColor: AircraftTintColor
 
   /**
    * Brightness multiplier for FSLTL models (0.5-3.0, default: 1.0)
@@ -608,6 +640,7 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     enableLogDepth: true,
     enableGroundAtmosphere: true,
     enableAmbientOcclusion: false,
+    enableAircraftSilhouettes: false,
     enableShadows: true,
     shadowMapSize: 2048,
     shadowMaxDistance: 10000,
@@ -621,6 +654,7 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     shadowPolygonOffsetUnits: 4.0,
     cameraNearPlane: 0.1,
     builtinModelBrightness: 1.7,
+    builtinModelTintColor: 'lightBlue',
     fsltlModelBrightness: 1.0
   },
   camera: {

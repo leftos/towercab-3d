@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react'
 import * as Cesium from 'cesium'
-import type { ModelPoolRefs } from './useCesiumViewer'
+import type { ModelPoolRefs, SilhouetteRefs } from './useCesiumViewer'
 import type { InterpolatedAircraftState } from '../types/vatsim'
 import type { ViewMode } from '../types'
 import { aircraftModelService } from '../services/AircraftModelService'
@@ -66,10 +66,11 @@ import {
  * @param viewMode - Current view mode ('3d' or 'topdown')
  * @param followingCallsign - Callsign of followed aircraft (for diagnostic logging)
  * @param groundElevationMeters - Ground elevation in meters MSL (for gear AGL calculation)
+ * @param silhouetteRefs - Silhouette stage refs for outline rendering (null for inset viewports)
  *
  * @example
  * ```tsx
- * const { viewer, modelPoolRefs } = useCesiumViewer(...)
+ * const { viewer, modelPoolRefs, silhouetteRefs } = useCesiumViewer(...)
  * const interpolatedAircraft = useAircraftInterpolation()
  *
  * useAircraftModels(
@@ -78,7 +79,8 @@ import {
  *   interpolatedAircraft,
  *   viewMode,
  *   followingCallsign,
- *   groundElevationMeters
+ *   groundElevationMeters,
+ *   silhouetteRefs
  * )
  * ```
  */
@@ -88,7 +90,8 @@ export function useAircraftModels(
   interpolatedAircraft: Map<string, InterpolatedAircraftState>,
   viewMode: ViewMode,
   followingCallsign: string | null,
-  groundElevationMeters: number
+  groundElevationMeters: number,
+  silhouetteRefs: SilhouetteRefs | null
 ) {
   const {
     modelPool,
@@ -98,9 +101,10 @@ export function useAircraftModels(
     modelPoolReady
   } = modelPoolRefs
 
-  // Get model brightness from settings - separate for built-in and FSLTL models
+  // Get model brightness and tint color from settings - separate for built-in and FSLTL models
   const builtinModelBrightness = useSettingsStore((state) => state.graphics.builtinModelBrightness) ?? 1.7
   const fsltlModelBrightness = useSettingsStore((state) => state.graphics.fsltlModelBrightness) ?? 1.0
+  const builtinModelTintColor = useSettingsStore((state) => state.graphics.builtinModelTintColor) ?? 'lightBlue'
 
   // Track previous positions for diagnostic logging
   const prevModelPositionsRef = useRef<Map<string, Cesium.Cartesian3>>(new Map())
@@ -200,12 +204,14 @@ export function useAircraftModels(
 
             // Calculate model color and blend amount based on brightness setting
             // FSLTL models use their own brightness slider to preserve livery colors
+            // Built-in models use the configurable tint color for visibility
             const effectiveBrightness = isFsltlModel ? fsltlModelBrightness : builtinModelBrightness
-            const modelColorRgb = getModelColorRgb(effectiveBrightness)
+            const tintColor = isFsltlModel ? 'white' : builtinModelTintColor
+            const modelColorRgb = getModelColorRgb(effectiveBrightness, tintColor)
             const modelColor = new Cesium.Color(...modelColorRgb, 1.0)
             const blendAmount = isFsltlModel
               ? getFsltlModelColorBlendAmount(effectiveBrightness)
-              : getModelColorBlendAmount(effectiveBrightness)
+              : getModelColorBlendAmount(effectiveBrightness, tintColor)
 
             // Load new model in background
             // Use gltfCallback to capture animation count for gear animation system
@@ -308,12 +314,13 @@ export function useAircraftModels(
             model.color = Cesium.Color.WHITE
             model.colorBlendAmount = 1.0
           } else {
-            // In 3D mode: FSLTL models show liveries, built-in models get subtle tint
+            // In 3D mode: FSLTL models show liveries, built-in models get configurable tint
             const effectiveBrightness = isFsltlModel ? fsltlModelBrightness : builtinModelBrightness
-            const modelColorRgb = getModelColorRgb(effectiveBrightness)
+            const tintColor = isFsltlModel ? 'white' : builtinModelTintColor
+            const modelColorRgb = getModelColorRgb(effectiveBrightness, tintColor)
             const blendAmount = isFsltlModel
               ? getFsltlModelColorBlendAmount(effectiveBrightness)
-              : getModelColorBlendAmount(effectiveBrightness)
+              : getModelColorBlendAmount(effectiveBrightness, tintColor)
             model.color = new Cesium.Color(...modelColorRgb, 1.0)
             model.colorBlendAmount = blendAmount
           }
@@ -379,6 +386,23 @@ export function useAircraftModels(
       }
     }
 
+    // Update silhouette selected array with only built-in (non-FSLTL) visible models
+    // This enables edge detection outlines only for the white FR24 models
+    const edgeDetection = silhouetteRefs?.edgeDetection.current
+    if (edgeDetection) {
+      const builtinModels: Cesium.Model[] = []
+      for (const [idx, assignedCallsign] of modelPoolAssignments.current.entries()) {
+        if (assignedCallsign !== null) {
+          const model = modelPool.current.get(idx)
+          const isFsltl = modelPoolIsFsltlRef.current.get(idx) ?? false
+          if (model && model.show && !isFsltl) {
+            builtinModels.push(model)
+          }
+        }
+      }
+      edgeDetection.selected = builtinModels
+    }
+
     performanceMonitor.endTimer('aircraftUpdate')
   }, [
     viewer,
@@ -392,7 +416,9 @@ export function useAircraftModels(
     followingCallsign,
     builtinModelBrightness,
     fsltlModelBrightness,
-    groundElevationMeters
+    builtinModelTintColor,
+    groundElevationMeters,
+    silhouetteRefs
   ])
 
   // Set up render loop to update models every frame
