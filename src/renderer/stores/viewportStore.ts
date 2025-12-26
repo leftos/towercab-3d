@@ -635,10 +635,15 @@ export const useViewportStore = create<ViewportStore>()(
                 }
                 // In topdown mode, use orbit follow (tower follow is incompatible with topdown)
                 // Orbit settings persist across aircraft switches - only resetView() resets them
+                // Preserve current zoom level: followZoom = baseFov / currentFov
+                // If already following, keep current followZoom; otherwise calculate from FOV
+                const preservedFollowZoom = state.followingCallsign
+                  ? state.followZoom
+                  : Math.max(0.5, Math.min(5.0, FOV_DEFAULT / state.fov))
                 return {
                   followingCallsign: callsign,
                   followMode: state.viewMode === 'topdown' ? 'orbit' as FollowMode : state.followMode,
-                  followZoom: FOLLOW_ZOOM_DEFAULT,
+                  followZoom: preservedFollowZoom,
                   preFollowState
                 }
               })
@@ -663,10 +668,15 @@ export const useViewportStore = create<ViewportStore>()(
                   viewMode: state.viewMode
                 }
                 // Orbit settings persist across aircraft switches - only resetView() resets them
+                // Preserve current zoom level: followZoom = baseFov / currentFov
+                // If already following, keep current followZoom; otherwise calculate from FOV
+                const preservedFollowZoom = state.followingCallsign
+                  ? state.followZoom
+                  : Math.max(0.5, Math.min(5.0, FOV_DEFAULT / state.fov))
                 return {
                   followingCallsign: callsign,
                   followMode: 'orbit' as FollowMode,
-                  followZoom: FOLLOW_ZOOM_DEFAULT,
+                  followZoom: preservedFollowZoom,
                   preFollowState
                 }
               })

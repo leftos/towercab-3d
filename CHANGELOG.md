@@ -14,6 +14,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Leader lines now have more separation from aircraft icons in 2D top-down view
 
 ### Fixed
+- Fixed camera zooming out when clicking follow on an aircraft
+  - Camera now preserves your current zoom level when entering follow mode
 - Fixed FR24 aircraft models floating above ground due to incorrect ground offset detection
 - Fixed leader lines connecting from wrong corners on datablocks
 - Fixed issue where FSLTL Converter would fail early with no indication that it failed and why
