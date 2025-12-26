@@ -562,6 +562,10 @@ export async function parseGroundDataFromUrl(glbUrl: string): Promise<ModelGroun
 
 /**
  * Parse ground data from a GLB array buffer
+ *
+ * Handles both glTF 2.0 (arrays, Y-up) and glTF 1.0 (objects, Z-up) formats.
+ * FR24/FlightGear models use glTF 1.0 with Z as vertical axis.
+ * FSLTL models use glTF 2.0 with Y as vertical axis.
  */
 function parseGroundDataFromArrayBuffer(arrayBuffer: ArrayBuffer): ModelGroundData | null {
   try {
@@ -574,6 +578,16 @@ function parseGroundDataFromArrayBuffer(arrayBuffer: ArrayBuffer): ModelGroundDa
     const jsonText = decoder.decode(jsonDataChunk)
     const gltfJson = JSON.parse(jsonText)
 
+    // Detect glTF version: 1.0 uses object-based collections, 2.0 uses arrays
+    const isGltf1 = gltfJson.meshes && !Array.isArray(gltfJson.meshes)
+
+    if (isGltf1) {
+      // glTF 1.0 format (FR24/FlightGear models)
+      // These use Z-up coordinate system and object-based collections
+      return parseGroundDataGltf1(gltfJson)
+    }
+
+    // glTF 2.0 format (FSLTL models)
     // Get binary data chunk for animation parsing
     const binOffset = 20 + jsonChunkLength
     const binDv = new DataView(arrayBuffer, binOffset, 4)
@@ -595,6 +609,121 @@ function parseGroundDataFromArrayBuffer(arrayBuffer: ArrayBuffer): ModelGroundDa
   } catch (error) {
     console.error('[GroundData] Failed to parse GLB:', error)
     return null
+  }
+}
+
+/**
+ * Parse ground data from glTF 1.0 format (FR24/FlightGear models)
+ *
+ * glTF 1.0 uses:
+ * - Object-based collections (meshes/accessors are objects with named keys)
+ * - No landing gear animations (static models)
+ *
+ * Note: FR24 models are inconsistent in their coordinate systems.
+ * We detect the vertical axis by counting which axis has the most primitives
+ * with "reasonable" vertical bounds (min between -10 and 0, range < 20m).
+ * This works because most aircraft parts (fuselage, tail, gear) have small
+ * vertical extent, while only wings have large lateral extent.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function parseGroundDataGltf1(gltfJson: any): ModelGroundData | null {
+  const meshes = gltfJson.meshes || {}
+  const accessors = gltfJson.accessors || {}
+
+  // Count primitives with "reasonable" vertical bounds per axis
+  // Landing gear is typically 2-6m below origin, fuselage height ~6-18m
+  const axisCounts = [0, 0, 0]  // X, Y, Z
+  const axisMinValues: [number[], number[], number[]] = [[], [], []]
+
+  // Iterate over all meshes (object with named keys)
+  for (const meshName of Object.keys(meshes)) {
+    const mesh = meshes[meshName]
+    if (!mesh.primitives) continue
+
+    for (const primitive of mesh.primitives) {
+      const posAccessorName = primitive.attributes?.POSITION
+      if (!posAccessorName) continue
+
+      const posAccessor = accessors[posAccessorName]
+      if (!posAccessor?.min || !posAccessor?.max) continue
+
+      // Check each axis for reasonable vertical bounds
+      for (let axis = 0; axis < 3; axis++) {
+        const min = posAccessor.min[axis]
+        const max = posAccessor.max[axis]
+        const range = max - min
+
+        // Reasonable vertical bounds: min between -5 and 0, range < 15m
+        // Tighter threshold (-5m) excludes fuselage belly and focuses on
+        // landing gear-like geometry. FR24 models often don't have explicit
+        // landing gear, so we use the lower parts of wings/nacelles.
+        if (min >= -5 && min < 0 && range < 15) {
+          axisCounts[axis]++
+          axisMinValues[axis].push(min)
+        }
+      }
+    }
+  }
+
+  // Pick the axis with most primitives having reasonable bounds
+  let bestAxis = 0
+  let bestCount = axisCounts[0]
+  for (let i = 1; i < 3; i++) {
+    if (axisCounts[i] > bestCount) {
+      bestCount = axisCounts[i]
+      bestAxis = i
+    }
+  }
+
+  // Get the minimum value across all reasonable primitives for the best axis
+  const minValues = axisMinValues[bestAxis]
+  if (minValues.length === 0) {
+    // Fallback: no reasonable bounds found, use global minimum of smallest range axis
+    let globalMinX = Infinity, globalMaxX = -Infinity
+    let globalMinY = Infinity, globalMaxY = -Infinity
+    let globalMinZ = Infinity, globalMaxZ = -Infinity
+
+    for (const meshName of Object.keys(meshes)) {
+      const mesh = meshes[meshName]
+      if (!mesh.primitives) continue
+      for (const primitive of mesh.primitives) {
+        const posAccessorName = primitive.attributes?.POSITION
+        if (!posAccessorName) continue
+        const posAccessor = accessors[posAccessorName]
+        if (!posAccessor?.min || !posAccessor?.max) continue
+        globalMinX = Math.min(globalMinX, posAccessor.min[0])
+        globalMaxX = Math.max(globalMaxX, posAccessor.max[0])
+        globalMinY = Math.min(globalMinY, posAccessor.min[1])
+        globalMaxY = Math.max(globalMaxY, posAccessor.max[1])
+        globalMinZ = Math.min(globalMinZ, posAccessor.min[2])
+        globalMaxZ = Math.max(globalMaxZ, posAccessor.max[2])
+      }
+    }
+
+    const ranges = [globalMaxX - globalMinX, globalMaxY - globalMinY, globalMaxZ - globalMinZ]
+    const mins = [globalMinX, globalMinY, globalMinZ]
+    let smallestRangeAxis = 0
+    for (let i = 1; i < 3; i++) {
+      if (ranges[i] < ranges[smallestRangeAxis]) smallestRangeAxis = i
+    }
+    // Cap to -4m max for FR24 models
+    const MAX_FR24_GROUND_OFFSET = -4
+    const cappedMin = Math.max(mins[smallestRangeAxis], MAX_FR24_GROUND_OFFSET)
+    return { gearUpMinY: cappedMin, gearDownMinY: cappedMin }
+  }
+
+  const minVertical = Math.min(...minValues)
+
+  // FR24 models have no gear animations, so both states are the same
+  // Cap the offset to -4m max - FR24 models don't have detailed landing gear,
+  // so large offsets (like -6m from fuselage belly) are incorrect.
+  // Typical landing gear extends 2-4m below fuselage.
+  const MAX_FR24_GROUND_OFFSET = -4
+  const cappedMinVertical = Math.max(minVertical, MAX_FR24_GROUND_OFFSET)
+
+  return {
+    gearUpMinY: cappedMinVertical,
+    gearDownMinY: cappedMinVertical
   }
 }
 

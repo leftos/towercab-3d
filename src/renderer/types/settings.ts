@@ -446,6 +446,17 @@ export interface FSLTLSettings {
    * Default: '1k' (balanced quality/size)
    */
   textureScale: FSLTLTextureScale
+
+  /**
+   * Enable use of converted FSLTL models (default: true)
+   *
+   * When enabled, the app uses converted FSLTL models with airline liveries
+   * when available. When disabled, falls back to built-in (FR24) models only.
+   *
+   * Useful for testing or comparing model appearance without having to
+   * remove or rename the converted model files.
+   */
+  enableFsltlModels: boolean
 }
 
 /**
@@ -625,6 +636,7 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
   fsltl: {
     sourcePath: null,
     outputPath: null,
-    textureScale: '1k'
+    textureScale: '1k',
+    enableFsltlModels: true
   }
 }

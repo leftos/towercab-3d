@@ -218,12 +218,30 @@ function FSLTLImportPanel() {
 
       console.log('[FSLTLImportPanel] Started conversion, polling progress file:', progressFile)
 
-      // Poll for progress
+      // Poll for progress with failure detection
+      let pollFailureCount = 0
+      const MAX_POLL_FAILURES = 10 // Allow 10 seconds for converter to start
       const intervalId = setInterval(async () => {
         try {
           const currentProgress = await fsltlApi.readConversionProgress(progressFile)
+          pollFailureCount = 0 // Reset on successful read
           console.log('[FSLTLImportPanel] Progress:', currentProgress.completed, '/', currentProgress.total, currentProgress.status)
           updateProgress(currentProgress)
+
+          // Check for startup error (converter failed before starting work)
+          if (currentProgress.startup_error) {
+            console.error('[FSLTLImportPanel] Converter startup error:', currentProgress.startup_error)
+            setStoreError(`Converter failed to start:\n${currentProgress.startup_error}`)
+            resetConversion()
+
+            // Clean up progress file
+            try {
+              await fsltlApi.deleteFile(progressFile)
+            } catch {
+              // Ignore cleanup errors
+            }
+            return
+          }
 
           if (currentProgress.status === 'complete' || currentProgress.status === 'error') {
             // Register newly converted models
@@ -242,6 +260,11 @@ function FSLTLImportPanel() {
               console.log(`[FSLTLImportPanel] Registered ${newModels.length} new models`)
             }
 
+            // Show errors if status is error
+            if (currentProgress.status === 'error' && currentProgress.errors.length > 0) {
+              console.error('[FSLTLImportPanel] Conversion errors:', currentProgress.errors)
+            }
+
             // Clean up progress file
             try {
               await fsltlApi.deleteFile(progressFile)
@@ -256,8 +279,22 @@ function FSLTLImportPanel() {
             completeConversion()
           }
         } catch (pollErr) {
-          // Progress file may not exist yet - log for debugging
-          console.log('[FSLTLImportPanel] Poll error (may be normal):', pollErr)
+          // Progress file doesn't exist yet or read failed
+          pollFailureCount++
+          console.log(`[FSLTLImportPanel] Poll attempt ${pollFailureCount}/${MAX_POLL_FAILURES}:`, pollErr)
+
+          if (pollFailureCount >= MAX_POLL_FAILURES) {
+            // Converter appears to have died without creating progress file
+            console.error('[FSLTLImportPanel] Converter failed to start (no progress file after', MAX_POLL_FAILURES, 'seconds)')
+            setStoreError(
+              'Converter process failed to start. This may be caused by:\n' +
+              '• Missing dependencies (numpy, Pillow)\n' +
+              '• Corrupted converter executable\n' +
+              '• Antivirus blocking the process\n\n' +
+              'Try running "npm run build:converter" to rebuild.'
+            )
+            resetConversion()
+          }
         }
       }, 1000)
 
@@ -300,6 +337,25 @@ function FSLTLImportPanel() {
   return (
     <div className="fsltl-import-panel">
       <h3>FSLTL Aircraft Models</h3>
+
+      {/* Enable/Disable Toggle */}
+      <div className="fsltl-section">
+        <label className="setting-checkbox-label">
+          <input
+            type="checkbox"
+            checked={fsltlSettings.enableFsltlModels}
+            onChange={(e) => {
+              updateFSLTLSettings({ enableFsltlModels: e.target.checked })
+              // Trigger model refresh when toggling so aircraft update immediately
+              fsltlService.triggerModelRefresh()
+            }}
+          />
+          <span>Use FSLTL Models</span>
+        </label>
+        <p className="setting-hint">
+          When disabled, falls back to built-in (FR24) models. Useful for testing.
+        </p>
+      </div>
 
       {/* Source Path */}
       <div className="fsltl-section">

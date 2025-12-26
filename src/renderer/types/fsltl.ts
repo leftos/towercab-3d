@@ -97,6 +97,8 @@ export interface ConversionProgress {
   errors: string[]
   /** List of successfully converted models with metadata */
   converted?: ConvertedModelInfo[]
+  /** Startup error details if converter failed to initialize */
+  startup_error?: string
 }
 
 /**

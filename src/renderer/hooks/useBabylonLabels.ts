@@ -404,9 +404,11 @@ export function useBabylonLabels(
     const labelData = aircraftLabelsRef.current.get(callsign)
     if (!labelData) return
 
-    // Get label dimensions for calculations
-    const labelW = labelData.label.widthInPixels || 80
-    const labelH = labelData.label.heightInPixels || 24
+    // Get label dimensions for calculations, accounting for scale (followed aircraft are 1.2x)
+    const scaleX = labelData.label.scaleX ?? 1
+    const scaleY = labelData.label.scaleY ?? 1
+    const labelW = (labelData.label.widthInPixels || 80) * scaleX
+    const labelH = (labelData.label.heightInPixels || 24) * scaleY
 
     // Check if aircraft is at least marginally within viewport
     // If aircraft is completely off-screen, hide the label entirely

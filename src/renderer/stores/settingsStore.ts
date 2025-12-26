@@ -275,7 +275,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'settings-store',
-      version: 10, // Incremented for leaderDistance setting
+      version: 11, // Incremented for enableFsltlModels setting
       migrate: (persistedState: unknown, version: number) => {
         // Auto-migrate old flat structure to grouped structure
         if (version < 2) {
@@ -384,6 +384,18 @@ export const useSettingsStore = create<SettingsStore>()(
             aircraft: {
               ...DEFAULT_SETTINGS.aircraft,
               ...state.aircraft
+            }
+          }
+        }
+        // Migrate v10 to v11: add enableFsltlModels setting
+        if (version < 11) {
+          console.log('[Settings] Migrating v10 to v11: adding enableFsltlModels setting')
+          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
+          return {
+            ...state,
+            fsltl: {
+              ...DEFAULT_SETTINGS.fsltl,
+              ...state.fsltl
             }
           }
         }
@@ -507,7 +519,8 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
     fsltl: {
       sourcePath: oldSettings.fsltl?.sourcePath ?? DEFAULT_SETTINGS.fsltl.sourcePath,
       outputPath: oldSettings.fsltl?.outputPath ?? DEFAULT_SETTINGS.fsltl.outputPath,
-      textureScale: oldSettings.fsltl?.textureScale ?? DEFAULT_SETTINGS.fsltl.textureScale
+      textureScale: oldSettings.fsltl?.textureScale ?? DEFAULT_SETTINGS.fsltl.textureScale,
+      enableFsltlModels: oldSettings.fsltl?.enableFsltlModels ?? DEFAULT_SETTINGS.fsltl.enableFsltlModels
     }
   }
 }

@@ -253,6 +253,9 @@
   border-radius: 4px;
   color: #f44336;
   font-size: 11px;
+  white-space: pre-wrap;
+  max-height: 200px;
+  overflow-y: auto;
 }
 
 .fsltl-error ul {

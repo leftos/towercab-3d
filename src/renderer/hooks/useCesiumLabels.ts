@@ -8,10 +8,7 @@ import { calculateDatablockOffset } from '../utils/screenProjection'
 import { useDatablockPositionStore } from '../stores/datablockPositionStore'
 import { useViewportStore } from '../stores/viewportStore'
 import { useSettingsStore } from '../stores/settingsStore'
-import {
-  GROUNDSPEED_THRESHOLD_KNOTS,
-  DATABLOCK_HEIGHT_MULTIPLIER
-} from '../constants/rendering'
+import { GROUNDSPEED_THRESHOLD_KNOTS } from '../constants/rendering'
 
 export type DatablockMode = 'none' | 'full' | 'airline'
 
@@ -358,40 +355,26 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
         continue // Skip this aircraft - datablock hidden by weather
       }
 
-      // Estimate aircraft height (tail height ≈ 33% of wingspan for most aircraft)
-      const aircraftHeightMeters = data.wingspanMeters * 0.33
-
       // Project aircraft position to screen (base/center of aircraft)
       const aircraftWindowPos = Cesium.SceneTransforms.worldToWindowCoordinates(viewer.scene, data.cesiumPosition)
       if (!aircraftWindowPos) continue
 
-      // Project the TOP of the aircraft to screen space for leader line endpoint
+      // Project a point slightly above the aircraft for leader line attachment
+      // Use 12m offset to account for: ground offset (~5m) + fuselage height (~6m)
+      const LEADER_ATTACH_HEIGHT_METERS = 12
       const aircraftTopPosition = Cesium.Cartesian3.fromDegrees(
         data.longitude,
         data.latitude,
-        data.heightAboveEllipsoid + aircraftHeightMeters
+        data.heightAboveEllipsoid + LEADER_ATTACH_HEIGHT_METERS
       )
       const aircraftTopWindowPos = Cesium.SceneTransforms.worldToWindowCoordinates(viewer.scene, aircraftTopPosition)
       if (!aircraftTopWindowPos) continue
 
-      // Calculate wingspan in screen-space pixels for proportional label offset
-      // Project a point offset by wingspan meters to get screen-space wingspan
-      const wingspanOffset = Cesium.Cartesian3.fromDegrees(
-        data.longitude + (data.wingspanMeters * 0.000009), // ~wingspan meters east
-        data.latitude,
-        data.heightAboveEllipsoid
-      )
-      const wingspanWindowPos = Cesium.SceneTransforms.worldToWindowCoordinates(viewer.scene, wingspanOffset)
-      const wingspanPixels = wingspanWindowPos
-        ? Math.abs(wingspanWindowPos.x - aircraftWindowPos.x)
-        : 30 // Fallback if projection fails
-
-      // Apply screen-space offsets:
-      // - Vertical: Move up by wingspan * DATABLOCK_HEIGHT_MULTIPLIER
-      // - Horizontal: Move left by 30 pixels (closer to aircraft for better visibility)
+      // Fixed screen-space offsets for label positioning
+      // These provide consistent label distance regardless of zoom level
       const viewModeScale = viewMode === 'topdown' ? 0.5 : 1.0
-      const verticalOffsetPixels = wingspanPixels * DATABLOCK_HEIGHT_MULTIPLIER * viewModeScale
-      const horizontalOffsetPixels = 30 // Reduced from 50px to bring datablock closer
+      const verticalOffsetPixels = 25 * viewModeScale
+      const horizontalOffsetPixels = 25
 
       const aircraftScreenPos = { x: aircraftWindowPos.x, y: aircraftWindowPos.y }
 
@@ -430,9 +413,11 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
       }
 
       // Screen position for label (includes base offsets)
+      // Use leaderEndpointY as the reference Y so label offset is relative to
+      // the same point the leader line connects to (top/middle/bottom of aircraft)
       const screenPos = {
         x: aircraftScreenPos.x + offsetX,
-        y: aircraftScreenPos.y + offsetY
+        y: leaderEndpointY + offsetY
       }
 
       // Only apply overlap detection if the setting is enabled

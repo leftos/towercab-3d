@@ -21,24 +21,76 @@ Usage:
         --models "FSLTL_B738_AAL,FSLTL_A320_UAL"
 """
 
-import argparse
-import json
-import re
-import struct
-from pathlib import Path
-from PIL import Image
-import numpy as np
-import io
+# IMPORTANT: Parse progress file arg FIRST before any imports that might fail
+# This allows us to write errors to the progress file if imports fail
 import sys
-import traceback
-import time
-import os
-import subprocess
-import tempfile
-import urllib.request
-import zipfile
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import threading
+import json
+from pathlib import Path
+
+def _get_progress_file_from_args():
+    """Extract --progress-file from sys.argv before full argument parsing."""
+    for i, arg in enumerate(sys.argv):
+        if arg == '--progress-file' and i + 1 < len(sys.argv):
+            return Path(sys.argv[i + 1])
+        if arg.startswith('--progress-file='):
+            return Path(arg.split('=', 1)[1])
+    return None
+
+def _write_startup_error(progress_file: Path | None, error_msg: str, details: str = ""):
+    """Write an error to the progress file and print to stderr."""
+    full_error = f"{error_msg}\n{details}" if details else error_msg
+    print(f"STARTUP ERROR: {full_error}", file=sys.stderr)
+
+    if progress_file:
+        try:
+            progress_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(progress_file, 'w') as f:
+                json.dump({
+                    'status': 'error',
+                    'total': 0,
+                    'completed': 0,
+                    'current': None,
+                    'errors': [error_msg],
+                    'converted': [],
+                    'startup_error': full_error
+                }, f)
+        except Exception as e:
+            print(f"Failed to write error to progress file: {e}", file=sys.stderr)
+
+# Get progress file path BEFORE importing potentially failing modules
+_progress_file_path = _get_progress_file_from_args()
+
+# Now try to import everything else, catching any failures
+try:
+    import argparse
+    import re
+    import struct
+    from PIL import Image
+    import numpy as np
+    import io
+    import traceback
+    import time
+    import os
+    import subprocess
+    import tempfile
+    import urllib.request
+    import zipfile
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import threading
+except ImportError as e:
+    _write_startup_error(
+        _progress_file_path,
+        f"Failed to import required module: {e.name}",
+        f"Full error: {e}\n\nThis usually means the converter was not built correctly.\nPlease run 'npm run build:converter' to rebuild."
+    )
+    sys.exit(1)
+except Exception as e:
+    _write_startup_error(
+        _progress_file_path,
+        f"Unexpected error during startup: {type(e).__name__}",
+        traceback.format_exc()
+    )
+    sys.exit(1)
 
 # Global texconv.exe path (downloaded on first use)
 _texconv_path: Path | None = None
@@ -894,4 +946,13 @@ def main():
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except Exception as e:
+        # Catch any uncaught exception and write to progress file
+        _write_startup_error(
+            _progress_file_path,
+            f"Converter crashed: {type(e).__name__}: {e}",
+            traceback.format_exc()
+        )
+        sys.exit(1)

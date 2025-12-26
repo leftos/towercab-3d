@@ -136,19 +136,22 @@ export function useAircraftModels(
       // Model height: interpolatedAltitude is already terrain-corrected by interpolation system
       // (includes terrain sampling, ground/air transitions, and all offsets)
       // Compute dynamic ground offset based on model geometry and gear state
-      const isFsltlModel = modelInfo.matchType === 'fsltl' || modelInfo.matchType === 'fsltl-base'
+      const isFsltlModel = modelInfo.matchType === 'fsltl' || modelInfo.matchType === 'fsltl-base' ||
+                           modelInfo.matchType === 'fsltl-vmr' || modelInfo.matchType === 'custom-vmr'
       const groundData = getModelGroundData(modelInfo.modelUrl)
       let heightOffset: number
       if (groundData) {
         // Interpolate between gear-up and gear-down min-Y based on current gear state
         const gearProgress = getCurrentGearProgress(aircraft.callsign)
         const minY = groundData.gearUpMinY + (groundData.gearDownMinY - groundData.gearUpMinY) * gearProgress
-        // Negate minY to get offset: if model extends 2m below origin (minY=-2), raise by +2m
+        // Negate minY to get offset: if model extends below origin (minY=-2), raise by +2m
         // Multiply by model Y scale since ground data is in model space
+        // Note: For glTF 1.0 (FR24) models, gltfAnimationParser uses Z as vertical axis
         heightOffset = -minY * modelInfo.scale.y
       } else {
         // Fallback to static offset if ground data not yet computed
-        heightOffset = isFsltlModel ? FSLTL_MODEL_HEIGHT_OFFSET + 4.0 : 0
+        // Use conservative offset until we can parse the actual model bounds
+        heightOffset = isFsltlModel ? FSLTL_MODEL_HEIGHT_OFFSET + 4.0 : 3.0
         // Trigger async parsing of ground data for next frame
         parseGroundDataFromUrl(modelInfo.modelUrl)
       }

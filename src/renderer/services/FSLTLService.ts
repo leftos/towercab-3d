@@ -40,6 +40,7 @@ import {
   parseModelName,
   DEFAULT_CONVERSION_PROGRESS
 } from '../types/fsltl'
+import { useSettingsStore } from '../stores/settingsStore'
 
 // IndexedDB database name and store
 const DB_NAME = 'towercab-fsltl'
@@ -95,6 +96,13 @@ class FSLTLServiceClass {
     if (this.registryLoaded) return
     await this.loadRegistry()
     this.registryLoaded = true
+  }
+
+  /**
+   * Check if FSLTL models are enabled in settings
+   */
+  private isEnabled(): boolean {
+    return useSettingsStore.getState().fsltl.enableFsltlModels
   }
 
   // ==========================================================================
@@ -358,7 +366,7 @@ class FSLTLServiceClass {
    * @returns Best matching FSLTLModel or null
    */
   findBestModel(aircraftType: string | null, airlineCode: string | null): FSLTLModel | null {
-    if (!aircraftType) return null
+    if (!aircraftType || !this.isEnabled()) return null
 
     this.lastMatchVariationName = null
 
@@ -439,7 +447,7 @@ class FSLTLServiceClass {
    * @returns Any FSLTLModel for this airline, or null
    */
   findModelByAirline(airlineCode: string | null): FSLTLModel | null {
-    if (!airlineCode) return null
+    if (!airlineCode || !this.isEnabled()) return null
 
     const normalizedAirline = airlineCode.toUpperCase()
     const modelsForAirline = this.registry.byAirline.get(normalizedAirline)
@@ -459,6 +467,8 @@ class FSLTLServiceClass {
    * @returns FSLTL B738 base model, or null if not available
    */
   getB738Fallback(): FSLTLModel | null {
+    if (!this.isEnabled()) return null
+
     // Look for B738 base livery (no airline code)
     const b738Models = this.registry.byAircraftType.get('B738')
     if (b738Models) {
@@ -483,6 +493,8 @@ class FSLTLServiceClass {
     airlineCode: string,
     maxSizeDifference = 0.5
   ): { model: FSLTLModel; scale: { x: number; y: number; z: number }; distance: number } | null {
+    if (!this.isEnabled()) return null
+
     const normalizedAirline = airlineCode.toUpperCase()
     const modelsForAirline = this.registry.byAirline.get(normalizedAirline)
 
@@ -541,6 +553,8 @@ class FSLTLServiceClass {
     targetType: string,
     maxSizeDifference = 0.5
   ): { model: FSLTLModel; scale: { x: number; y: number; z: number }; distance: number } | null {
+    if (!this.isEnabled()) return null
+
     // Get target dimensions
     const targetDims = aircraftDimensionsService.getDimensions(targetType)
     if (!targetDims || !targetDims.wingspan || !targetDims.length) return null

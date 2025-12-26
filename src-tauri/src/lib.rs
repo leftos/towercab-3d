@@ -530,14 +530,24 @@ fn cancel_fsltl_conversion() -> Result<(), String> {
         if let Some(mut proc) = guard.take() {
             let pid = proc.child.id();
 
-            // On Windows, closing the job handle (via Drop) terminates all processes in the job
-            // On other platforms, we just kill the parent process
+            // Close job handle FIRST to kill all processes in the job
+            // The JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE flag terminates all processes
+            // when the handle is closed
+            #[cfg(windows)]
+            {
+                if !proc.job_handle.0.is_null() {
+                    unsafe { CloseHandle(proc.job_handle.0) };
+                    proc.job_handle.0 = std::ptr::null_mut(); // Prevent double-close in Drop
+                }
+            }
+
+            // On non-Windows, explicitly kill the parent process
             #[cfg(not(windows))]
             {
                 let _ = proc.child.kill();
             }
 
-            // Wait for the child process to fully exit
+            // Now wait for the child process to fully exit (should be quick since we killed it)
             let _ = proc.child.wait();
 
             println!("[FSLTL] Converter process tree terminated (PID {})", pid);
