@@ -160,12 +160,16 @@ See MODDING.md for manifest format and model requirements. Models are loaded on 
      }
    }
    ```
-5. Add UI control in `ControlsBar.tsx` under the appropriate tab
+5. Add UI control in appropriate settings tab component:
+   - General settings → `SettingsGeneralTab.tsx`
+   - Display settings → `SettingsDisplayTab.tsx`
+   - Graphics settings → `SettingsGraphicsTab.tsx` (container) or specialized component in `settings/` subdirectory
+   - Performance settings → `SettingsPerformanceTab.tsx`
 
 ### Adding a New Keyboard Shortcut
 
 1. Add key handler in `useCameraInput.ts` (for camera-related) or `App.tsx` (for global shortcuts)
-2. Update keyboard reference in Settings Help tab
+2. Update keyboard reference in `SettingsHelpTab.tsx`
 
 ### Modifying Aircraft Rendering
 

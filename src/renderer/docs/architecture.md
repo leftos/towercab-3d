@@ -483,12 +483,46 @@ App.tsx (root)
 │        └─ InsetCesiumViewer (delayed initialization)
 │             └─ CesiumViewer (isInset=true)
 │
-├─ ControlsBar (bottom HUD)
-│   ├─ Camera controls (heading/pitch indicators)
-│   ├─ FOV slider
-│   ├─ View mode toggle (3D/TopDown)
-│   ├─ Follow status display
-│   └─ Bookmark buttons (.00-.99)
+├─ ControlsBar (bottom HUD, ~530 LOC)
+│   ├─ Mode toggle (Main Controls / Replay Controls)
+│   ├─ Main Controls Mode
+│   │   ├─ Camera info (HDG/PIT/FOV or ALT)
+│   │   ├─ View mode toggle (3D/TopDown)
+│   │   ├─ Follow status display
+│   │   ├─ Set/Reset default buttons
+│   │   └─ Add inset viewport button
+│   ├─ Replay Controls Mode (imported from ReplayControls.tsx)
+│   │   ├─ Playback controls (play/pause/step)
+│   │   ├─ Timeline scrubber
+│   │   └─ Speed selector
+│   ├─ Settings button (opens SettingsModal)
+│   ├─ Measure button
+│   └─ VR button (when available)
+│
+├─ SettingsModal (tabbed modal container)
+│   ├─ SettingsGeneralTab
+│   │   ├─ Cesium Ion token
+│   │   ├─ Theme, FOV, camera/mouse speed
+│   │   └─ Import/Export settings
+│   ├─ SettingsDisplayTab
+│   │   ├─ Label visibility distance
+│   │   ├─ Datablock display mode
+│   │   ├─ Aircraft panel toggles
+│   │   └─ Orientation emulation settings
+│   ├─ SettingsGraphicsTab (container, delegates to specialized components)
+│   │   ├─ TerrainSettings (terrain quality, 3D buildings)
+│   │   ├─ LightingSettings (time of day mode)
+│   │   ├─ WeatherSettings (fog, clouds, precipitation)
+│   │   └─ AdvancedGraphicsSettings (MSAA, shadows, ambient occlusion)
+│   ├─ SettingsPerformanceTab
+│   │   ├─ Tile cache sizes
+│   │   ├─ Aircraft data radius
+│   │   └─ Replay buffer settings
+│   └─ SettingsHelpTab
+│       └─ Keyboard shortcuts reference
+│
+├─ ContributeDialog (tower position contribution prompt)
+│   └─ GitHub integration for sharing custom positions
 │
 ├─ AircraftPanel (right sidebar, collapsible)
 │   ├─ Filter controls (search, airport traffic, distance)
@@ -503,12 +537,6 @@ App.tsx (root)
 │   ├─ Bookmark save/load (.XX syntax)
 │   └─ Command history
 │
-├─ SettingsModal
-│   ├─ Cesium Ion token
-│   ├─ Graphics settings (shadows, fog, MSAA, etc.)
-│   ├─ Display settings (datablock mode, label distance)
-│   └─ Memory settings (tile cache sizes)
-│
 ├─ MeasuringTool (overlay when active)
 │   └─ Distance measurements on terrain
 │
@@ -516,6 +544,71 @@ App.tsx (root)
     ├─ Babylon WebXR session
     └─ Stereo Cesium background planes (left/right eye)
 ```
+
+## UI Component Decomposition
+
+### ControlsBar Refactoring
+
+ControlsBar was refactored from a monolithic 2,308-line component into a modular system (~530 LOC orchestrator):
+
+```
+ControlsBar.tsx (530 LOC - main orchestrator)
+    ├─ Imports specialized components based on mode
+    ├─ Mode toggle state management
+    └─ Delegates rendering to:
+         ├─ ReplayControls.tsx (208 LOC)
+         │    ├─ Playback controls (play/pause/step)
+         │    ├─ Timeline scrubber with time display
+         │    └─ Speed selector and LIVE button
+         │
+         ├─ SettingsModal.tsx (89 LOC - tab container)
+         │    ├─ Modal wrapper with tab navigation
+         │    └─ Renders active tab component
+         │
+         ├─ SettingsGeneralTab.tsx (203 LOC)
+         │    ├─ Cesium Ion token input
+         │    ├─ Theme, camera, mouse settings
+         │    └─ Import/Export functionality
+         │
+         ├─ SettingsDisplayTab.tsx (209 LOC)
+         │    ├─ Label visibility controls
+         │    ├─ Datablock display options
+         │    ├─ Aircraft panel toggles
+         │    └─ Orientation emulation settings
+         │
+         ├─ SettingsGraphicsTab.tsx (18 LOC - container)
+         │    └─ Composes specialized graphics components:
+         │         ├─ TerrainSettings.tsx (44 LOC)
+         │         ├─ LightingSettings.tsx (52 LOC)
+         │         ├─ WeatherSettings.tsx (213 LOC)
+         │         └─ AdvancedGraphicsSettings.tsx (412 LOC)
+         │
+         ├─ SettingsPerformanceTab.tsx (180 LOC)
+         │    ├─ Tile cache configuration
+         │    ├─ Data radius settings
+         │    └─ Replay buffer management
+         │
+         ├─ SettingsHelpTab.tsx (130 LOC)
+         │    └─ Keyboard shortcuts reference table
+         │
+         └─ ContributeDialog.tsx (73 LOC)
+              └─ GitHub contribution prompt for tower positions
+```
+
+**Utilities Created:**
+- `utils/formatting.ts` (42 LOC): Shared time/angle formatting functions (`formatTime`, `formatAngle`)
+
+**Key Changes:**
+- FOV slider removed from controls bar (users use mouse wheel)
+- Heading display no longer shows degree symbol (aviation convention)
+- Settings organized into logical tabs matching user mental models
+
+**Benefits:**
+- 77% reduction in main file size (2,308 → 530 LOC)
+- Settings grouped by category for better UX
+- Easier to locate and modify specific settings
+- Reduced cognitive load for developers and AI agents
+- Reusable formatting utilities
 
 ## Babylon.js Hook Decomposition
 
@@ -675,7 +768,22 @@ src/renderer/
 ├─ components/
 │   ├─ CesiumViewer/
 │   │   └─ CesiumViewer.tsx (659 LOC, orchestrates hooks)
-│   ├─ UI/ (TopBar, ControlsBar, panels, modals)
+│   ├─ UI/
+│   │   ├─ ControlsBar.tsx (530 LOC, main controls orchestrator)
+│   │   ├─ ReplayControls.tsx (208 LOC, replay UI mode)
+│   │   ├─ SettingsModal.tsx (89 LOC, tabbed modal container)
+│   │   ├─ SettingsGeneralTab.tsx (203 LOC)
+│   │   ├─ SettingsDisplayTab.tsx (209 LOC)
+│   │   ├─ SettingsGraphicsTab.tsx (18 LOC, delegates to settings/ components)
+│   │   ├─ SettingsPerformanceTab.tsx (180 LOC)
+│   │   ├─ SettingsHelpTab.tsx (130 LOC)
+│   │   ├─ ContributeDialog.tsx (73 LOC)
+│   │   ├─ settings/
+│   │   │   ├─ TerrainSettings.tsx (44 LOC)
+│   │   │   ├─ LightingSettings.tsx (52 LOC)
+│   │   │   ├─ WeatherSettings.tsx (213 LOC)
+│   │   │   └─ AdvancedGraphicsSettings.tsx (412 LOC)
+│   │   └─ ... (other UI components)
 │   └─ Viewport/ (ViewportManager, ViewportContainer, InsetCesiumViewer)
 │
 ├─ hooks/
@@ -708,6 +816,7 @@ src/renderer/
 │
 ├─ utils/
 │   ├─ enuTransforms.ts (coordinate conversions)
+│   ├─ formatting.ts (time/angle formatting utilities)
 │   ├─ interpolation.ts (physics-based aircraft movement)
 │   ├─ towerHeight.ts (tower position calculation)
 │   └─ performanceMonitor.ts (FPS tracking)
@@ -734,7 +843,7 @@ src/renderer/
 │   └─ weather.ts (cloud/fog params, layer geometry, animation)
 │
 └─ docs/
-    ├─ coordinate-systems.md (this helped you!)
+    ├─ coordinate-systems.md (detailed coordinate system documentation)
     └─ architecture.md (you are here)
 ```
 

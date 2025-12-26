@@ -82,7 +82,6 @@ The bottom bar has two modes, toggled by the button on the far left:
 - **Camera Info**: Shows current HDG/PIT/FOV (3D) or ALT (top-down)
 
 **Center Section:**
-- **FOV Slider**: Adjusts field of view (10-120 degrees)
 - **Following Status**: Shows which aircraft you're following and hints
 
 **Right Section:**
@@ -171,7 +170,6 @@ TowerCab 3D offers two primary view modes:
 | **Mouse Wheel Down** | Zoom out (increase FOV) | Decrease altitude |
 | **+ or =** | Zoom in | Increase altitude |
 | **-** | Zoom out | Decrease altitude |
-| **FOV Slider** | Precise FOV adjustment | - |
 
 ### Reset Controls
 
