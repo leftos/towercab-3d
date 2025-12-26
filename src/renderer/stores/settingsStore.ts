@@ -275,7 +275,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'settings-store',
-      version: 7, // Incremented for separate model brightness sliders
+      version: 8, // Incremented for pinFollowedAircraftToTop setting
       migrate: (persistedState: unknown, version: number) => {
         // Auto-migrate old flat structure to grouped structure
         if (version < 2) {
@@ -348,6 +348,18 @@ export const useSettingsStore = create<SettingsStore>()(
               // Use old brightness for built-in, default for FSLTL
               builtinModelBrightness: oldBrightness,
               fsltlModelBrightness: DEFAULT_SETTINGS.graphics.fsltlModelBrightness
+            }
+          }
+        }
+        // Migrate v7 to v8: add pinFollowedAircraftToTop setting
+        if (version < 8) {
+          console.log('[Settings] Migrating v7 to v8: adding pinFollowedAircraftToTop setting')
+          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
+          return {
+            ...state,
+            aircraft: {
+              ...DEFAULT_SETTINGS.aircraft,
+              ...state.aircraft
             }
           }
         }
@@ -455,7 +467,9 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
       orientationEmulation:
         oldSettings.orientationEmulation ?? DEFAULT_SETTINGS.aircraft.orientationEmulation,
       orientationIntensity:
-        oldSettings.orientationIntensity ?? DEFAULT_SETTINGS.aircraft.orientationIntensity
+        oldSettings.orientationIntensity ?? DEFAULT_SETTINGS.aircraft.orientationIntensity,
+      pinFollowedAircraftToTop:
+        oldSettings.pinFollowedAircraftToTop ?? DEFAULT_SETTINGS.aircraft.pinFollowedAircraftToTop
     },
     ui: {
       theme: oldSettings.theme ?? DEFAULT_SETTINGS.ui.theme,

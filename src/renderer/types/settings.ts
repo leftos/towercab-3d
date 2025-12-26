@@ -356,6 +356,14 @@ export interface AircraftSettings {
    * 1.0 = realistic physics, <1.0 = reduced, >1.0 = exaggerated
    */
   orientationIntensity: number
+
+  /**
+   * Pin followed aircraft to the top of the nearby aircraft list (default: true)
+   *
+   * When enabled, the aircraft you're currently following will always appear
+   * at the top of the list regardless of the sort order.
+   */
+  pinFollowedAircraftToTop: boolean
 }
 
 /**
@@ -579,7 +587,8 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     showAirborneTraffic: true,
     datablockMode: 'full',
     orientationEmulation: true,
-    orientationIntensity: 1.0
+    orientationIntensity: 1.0,
+    pinFollowedAircraftToTop: true
   },
   ui: {
     theme: 'dark',

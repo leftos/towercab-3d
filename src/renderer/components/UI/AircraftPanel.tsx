@@ -43,6 +43,7 @@ function AircraftPanel() {
   const currentAirport = useAirportStore((state) => state.currentAirport)
   const showAircraftPanel = useSettingsStore((state) => state.ui.showAircraftPanel)
   const showWeatherEffects = useSettingsStore((state) => state.weather.showWeatherEffects)
+  const pinFollowedAircraftToTop = useSettingsStore((state) => state.aircraft.pinFollowedAircraftToTop)
 
   // Panel filter state from store (affects both list and datablocks)
   const searchQuery = useAircraftFilterStore((state) => state.searchQuery)
@@ -157,9 +158,11 @@ function AircraftPanel() {
 
     // Apply sorting (UI-only, doesn't affect filtering)
     const sorted = withBearing.sort((a, b) => {
-      // Pin followed aircraft to the top
-      if (a.callsign === followingCallsign) return -1
-      if (b.callsign === followingCallsign) return 1
+      // Pin followed aircraft to the top (if enabled)
+      if (pinFollowedAircraftToTop) {
+        if (a.callsign === followingCallsign) return -1
+        if (b.callsign === followingCallsign) return 1
+      }
 
       // Apply normal sorting for non-followed aircraft
       switch (sortOption) {
@@ -179,7 +182,7 @@ function AircraftPanel() {
 
     return sorted.slice(0, 50)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refreshTick intentionally forces periodic recalculation of distances/bearings
-  }, [filtered, referencePoint, followingCallsign, sortOption, refreshTick, smartSortContext])
+  }, [filtered, referencePoint, followingCallsign, sortOption, refreshTick, smartSortContext, pinFollowedAircraftToTop])
 
 
   const handleFollowClick = (callsign: string) => {

@@ -5,6 +5,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Setting to control whether followed aircraft is pinned to the top of the aircraft list (enabled by default)
 - Smart sort for aircraft panel with flight phase detection
   - Automatically categorizes aircraft by phase: Short Final, Final, Rolling, Roll Out, Go Around, Lined Up, Hold Short, Pattern, Pushback, Taxi, Stopped, Climbing, Inbound
   - Shows associated runway when applicable (e.g., "Short Final 25L")
