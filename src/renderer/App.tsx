@@ -9,6 +9,7 @@ import AirportSelector from './components/UI/AirportSelector'
 import CommandInput from './components/UI/CommandInput'
 import TouchControls from './components/UI/TouchControls'
 import DeviceOptimizationPrompt from './components/UI/DeviceOptimizationPrompt'
+import RemoteIndicator from './components/UI/RemoteIndicator'
 import MeasuringTool from './components/UI/MeasuringTool'
 import MetarOverlay from './components/UI/MetarOverlay'
 import UpdateNotification from './components/UI/UpdateNotification'
@@ -337,6 +338,7 @@ function App() {
 
       {/* Hide normal UI when VR is active */}
       {!isVRActive && <TopBar />}
+      {!isVRActive && <RemoteIndicator />}
       {!isVRActive && <UpdateNotification />}
       {!isVRActive && <MetarOverlay />}
       <div className="main-content">

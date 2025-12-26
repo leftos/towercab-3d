@@ -18,9 +18,54 @@ import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
 import { useFsltlConversionStore, getConversionEta } from '../../stores/fsltlConversionStore'
 import { fsltlService } from '../../services/FSLTLService'
 import * as fsltlApi from '../../services/fsltlApi'
+import { isRemoteMode } from '../../utils/remoteMode'
 import './FSLTLImportPanel.css'
 
+/**
+ * Remote mode view for FSLTL settings
+ * Shows read-only status of FSLTL models (conversion must happen on host)
+ */
+function FSLTLImportPanelRemote() {
+  const fsltlSettings = useGlobalSettingsStore((state) => state.fsltl)
+  const [modelCount, setModelCount] = useState(0)
+
+  useEffect(() => {
+    // Initialize service to get model count from API
+    fsltlService.initialize().then(() => {
+      setModelCount(fsltlService.getModelCount())
+    })
+  }, [])
+
+  return (
+    <div className="fsltl-import-panel">
+      <h3>FSLTL Aircraft Models</h3>
+
+      <div className="fsltl-remote-notice">
+        <p>
+          FSLTL model conversion must be done on the host PC.
+          Connect from the desktop app to configure model conversion.
+        </p>
+      </div>
+
+      <div className="fsltl-section">
+        <label>Status</label>
+        <div className="fsltl-status-row">
+          <span className="fsltl-status-value">
+            {modelCount > 0 ? `${modelCount} models available` : 'No models converted'}
+          </span>
+          <span className={`fsltl-status-badge ${fsltlSettings.enableFsltlModels ? 'enabled' : 'disabled'}`}>
+            {fsltlSettings.enableFsltlModels ? 'Enabled' : 'Disabled'}
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function FSLTLImportPanel() {
+  // Check remote mode (value is constant for entire session)
+  const inRemoteMode = isRemoteMode()
+
   // FSLTL settings from global settings (shared across browsers)
   const fsltlSettings = useGlobalSettingsStore((state) => state.fsltl)
   const updateFSLTLSettings = useGlobalSettingsStore((state) => state.updateFsltl)
@@ -55,8 +100,10 @@ function FSLTLImportPanel() {
   // Combined error display
   const error = localError || storeError
 
-  // Initialize on mount
+  // Initialize on mount (skip in remote mode)
   useEffect(() => {
+    if (inRemoteMode) return
+
     const sourcePath = fsltlSettings.sourcePath
     const savedOutputPath = fsltlSettings.outputPath
 
@@ -336,6 +383,11 @@ function FSLTLImportPanel() {
   const isConverting = conversionState === 'converting'
   const isComplete = conversionState === 'complete'
   const isReady = isSourceValid && !isConverting && !isComplete
+
+  // Show remote mode view if running in browser
+  if (inRemoteMode) {
+    return <FSLTLImportPanelRemote />
+  }
 
   return (
     <div className="fsltl-import-panel">

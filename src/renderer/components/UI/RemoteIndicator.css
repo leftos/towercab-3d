@@ -1,0 +1,110 @@
+/**
+ * Remote Indicator Styles
+ */
+
+.remote-indicator {
+  position: fixed;
+  top: 40px;
+  right: 10px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+
+.remote-indicator__status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.remote-indicator__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse 2s infinite;
+}
+
+.remote-indicator--connected .remote-indicator__dot {
+  background: #4caf50;
+  animation: none;
+}
+
+.remote-indicator--checking .remote-indicator__dot {
+  background: #ff9800;
+  animation: pulse 1s infinite;
+}
+
+.remote-indicator--disconnected .remote-indicator__dot {
+  background: #f44336;
+  animation: none;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.remote-indicator__label {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.remote-indicator--connected .remote-indicator__label {
+  color: #4caf50;
+}
+
+.remote-indicator--checking .remote-indicator__label {
+  color: #ff9800;
+}
+
+.remote-indicator--disconnected .remote-indicator__label {
+  color: #f44336;
+}
+
+.remote-indicator__host {
+  color: rgba(255, 255, 255, 0.5);
+  font-family: monospace;
+  font-size: 10px;
+}
+
+.remote-indicator__reconnect {
+  margin-top: 4px;
+  padding: 4px 10px;
+  background: rgba(244, 67, 54, 0.2);
+  border: 1px solid rgba(244, 67, 54, 0.5);
+  border-radius: 4px;
+  color: #f44336;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.remote-indicator__reconnect:hover {
+  background: rgba(244, 67, 54, 0.3);
+}
+
+.remote-indicator__reconnect:active {
+  transform: scale(0.95);
+}
+
+.remote-indicator__time {
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 9px;
+}

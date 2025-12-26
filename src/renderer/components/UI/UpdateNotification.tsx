@@ -6,6 +6,7 @@ import {
   startAutoUpdateCheck,
   stopAutoUpdateCheck
 } from '../../services/UpdateService'
+import { isRemoteMode } from '../../utils/remoteMode'
 import './UpdateNotification.css'
 
 /**
@@ -18,19 +19,24 @@ import './UpdateNotification.css'
  * - Errors
  *
  * Automatically checks for updates on startup and every 4 hours.
+ * Hidden in remote mode (updates are handled by the host PC).
  */
 function UpdateNotification() {
+  // Check remote mode outside of hooks (this value never changes during runtime)
+  const inRemoteMode = isRemoteMode()
+
   const status = useUpdateStore((state) => state.status)
   const updateInfo = useUpdateStore((state) => state.updateInfo)
   const progress = useUpdateStore((state) => state.progress)
   const error = useUpdateStore((state) => state.error)
   const reset = useUpdateStore((state) => state.reset)
 
-  // Start auto-update check on mount
+  // Start auto-update check on mount (only in Tauri mode)
   useEffect(() => {
+    if (inRemoteMode) return
     startAutoUpdateCheck(5000) // 5 second delay on startup
     return () => stopAutoUpdateCheck()
-  }, [])
+  }, [inRemoteMode])
 
   const handleDownload = useCallback(() => {
     downloadAndInstallUpdate()
@@ -44,8 +50,9 @@ function UpdateNotification() {
     reset()
   }, [reset])
 
+  // Don't render in remote mode - updates are handled by host
   // Don't render for idle, checking, or up-to-date states
-  if (status === 'idle' || status === 'checking' || status === 'up-to-date') {
+  if (inRemoteMode || status === 'idle' || status === 'checking' || status === 'up-to-date') {
     return null
   }
 
