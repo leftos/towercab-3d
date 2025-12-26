@@ -38,6 +38,8 @@ const sharedGroundElevationMetersRef = { current: 0 }
 const sharedSmoothedTerrainHeightsRef = { current: new Map<string, number>() }
 const sharedPrevClampStateRef = { current: new Map<string, boolean>() }
 const sharedTransitionHeightsRef = { current: new Map<string, { source: number; target: number; progress: number }>() }
+// Store previous frame's corrected height for accurate transition source
+const sharedPrevCorrectedHeightRef = { current: new Map<string, number>() }
 
 // Nosewheel lowering transition state (for smooth pitch after landing)
 // Tracks the last flare pitch to smoothly transition to ground pitch after touchdown
@@ -171,11 +173,30 @@ function updateInterpolation() {
       const groundEllipsoidHeight = groundElevationMeters + terrainOffset
       targetHeight = Math.max(reportedEllipsoidHeight, groundEllipsoidHeight) + GROUND_AIRCRAFT_TERRAIN_OFFSET
     } else {
-      // Truly airborne: use reported altitude + terrain offset + flying offset
-      targetHeight = reportedEllipsoidHeight + FLYING_AIRCRAFT_TERRAIN_OFFSET
+      // Moving fast (>= 40 kts) but not necessarily airborne yet
+      // Scale the flying offset based on actual altitude above ground
+      // This prevents the 5m jump when aircraft is still on the runway during takeoff roll
+      let flyingOffset = FLYING_AIRCRAFT_TERRAIN_OFFSET
+      if (sampledTerrainHeight !== undefined) {
+        const altitudeAGL = reportedEllipsoidHeight - sampledTerrainHeight
+        // Gradually increase offset from 0.1m (ground) to 5m (fully airborne at 30m AGL)
+        // This creates a smooth visual transition during takeoff/landing
+        const transitionProgress = Math.min(1.0, Math.max(0, altitudeAGL / 30))
+        flyingOffset = GROUND_AIRCRAFT_TERRAIN_OFFSET +
+          (FLYING_AIRCRAFT_TERRAIN_OFFSET - GROUND_AIRCRAFT_TERRAIN_OFFSET) * transitionProgress
+      }
+      targetHeight = reportedEllipsoidHeight + flyingOffset
 
       // Clean up smoothed terrain height for aircraft that are truly airborne
-      sharedSmoothedTerrainHeightsRef.current.delete(callsign)
+      if (sampledTerrainHeight !== undefined) {
+        const altitudeAGL = reportedEllipsoidHeight - sampledTerrainHeight
+        if (altitudeAGL > 50) {
+          // Only clean up once truly airborne (50m+ AGL)
+          sharedSmoothedTerrainHeightsRef.current.delete(callsign)
+        }
+      } else {
+        sharedSmoothedTerrainHeightsRef.current.delete(callsign)
+      }
     }
 
     // Smooth transition when switching between clamped/unclamped states
@@ -189,10 +210,18 @@ function updateInterpolation() {
 
       if (!currentTransition || currentTransition.target !== targetHeight) {
         // Initialize new transition from current position to target
-        // If mid-transition, calculate current interpolated height (not original source)
-        const sourceHeight = currentTransition
-          ? currentTransition.source + (currentTransition.target - currentTransition.source) * currentTransition.progress
-          : entry.interpolatedAltitude
+        // Use the PREVIOUS FRAME's corrected height as source (not raw interpolated altitude)
+        // This prevents visual jumps when transitioning between ground/airborne states
+        let sourceHeight: number
+        if (currentTransition) {
+          // Mid-transition: calculate current interpolated height
+          sourceHeight = currentTransition.source +
+            (currentTransition.target - currentTransition.source) * currentTransition.progress
+        } else {
+          // New transition: use previous frame's corrected height if available
+          const prevCorrectedHeight = sharedPrevCorrectedHeightRef.current.get(callsign)
+          sourceHeight = prevCorrectedHeight ?? entry.interpolatedAltitude
+        }
         sharedTransitionHeightsRef.current.set(callsign, {
           source: sourceHeight,
           target: targetHeight,
@@ -225,6 +254,9 @@ function updateInterpolation() {
 
     // Apply corrected height to interpolated altitude
     entry.interpolatedAltitude = correctedHeight
+
+    // Store corrected height for next frame (used as transition source when state changes)
+    sharedPrevCorrectedHeightRef.current.set(callsign, correctedHeight)
 
     // Apply landing flare pitch adjustment
     // When aircraft is descending close to the ground, pitch nose up to emulate flare
@@ -305,6 +337,7 @@ function updateInterpolation() {
       sharedSmoothedTerrainHeightsRef.current.delete(callsign)
       sharedPrevClampStateRef.current.delete(callsign)
       sharedTransitionHeightsRef.current.delete(callsign)
+      sharedPrevCorrectedHeightRef.current.delete(callsign)
       sharedNosewheelTransitionRef.current.delete(callsign)
       sharedWasInFlareRef.current.delete(callsign)
       sharedLastFlarePitchRef.current.delete(callsign)

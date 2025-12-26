@@ -21,6 +21,9 @@ All notable changes to TowerCab 3D will be documented in this file.
   - Aircraft crossing runways now show "Taxi" instead of incorrectly showing "Rolling"
   - Aircraft on early takeoff roll no longer incorrectly show "Pushback"
   - Go-arounds now correctly show "Rolling" (accelerating) instead of "Roll Out" (decelerating)
+- Fixed aircraft jumping up in the air when accelerating past 40 knots on takeoff roll
+  - Height offset now scales gradually from ground level to flying height based on actual altitude above ground
+  - Transition now uses previous frame's corrected height as source for smooth animation
 
 ## [0.0.13-alpha] - 2025-12-25
 
