@@ -447,15 +447,36 @@ export function interpolateAircraftState(
     // Use Hermite spline interpolation for smooth curved paths
     // This guarantees we arrive at the target position at t=1.0 with no jumps
 
-    // Get curved position and heading using Hermite splines
+    // Calculate actual ground track (direction of movement) from position change
+    // This differs from heading during pushback, turning taxi, or towing
+    const actualTrack = calculateBearing(
+      previous.latitude,
+      previous.longitude,
+      current.latitude,
+      current.longitude
+    )
+
+    // Determine if aircraft is on the ground (low groundspeed)
+    // Ground aircraft cannot move sideways - use track for interpolation direction
+    // Airborne aircraft can legitimately crab into wind - use heading
+    const avgGroundspeed = (previous.groundspeed + current.groundspeed) / 2
+    const isGroundMovement = avgGroundspeed < GROUNDSPEED_THRESHOLD_KNOTS
+
+    // For ground movement, use track (actual movement direction) for tangent calculation
+    // This prevents "sideways drift" artifacts during taxi and pushback
+    // For airborne, use heading so crosswind crab looks realistic
+    const tangentDirectionPrev = isGroundMovement ? actualTrack : previous.heading
+    const tangentDirectionCurr = isGroundMovement ? actualTrack : current.heading
+
+    // Get curved position using Hermite splines with corrected tangent directions
     const hermiteResult = hermiteInterpolatePosition(
       previous.latitude,
       previous.longitude,
-      previous.heading,
+      tangentDirectionPrev,
       previous.groundspeed,
       current.latitude,
       current.longitude,
-      current.heading,
+      tangentDirectionCurr,
       current.groundspeed,
       t,
       interval
@@ -463,7 +484,10 @@ export function interpolateAircraftState(
 
     interpolatedLat = hermiteResult.lat
     interpolatedLon = hermiteResult.lon
-    interpolatedHeading = hermiteResult.heading
+
+    // Always interpolate heading separately (for model orientation)
+    // This ensures the aircraft model faces the correct direction regardless of movement
+    interpolatedHeading = lerpAngle(previous.heading, current.heading, t)
 
     // Use LINEAR interpolation for altitude to maintain consistent climb/descent rate
     // (smoothstep causes slowdown at ends which looks wrong for steady climbs/descents)
@@ -473,11 +497,22 @@ export function interpolateAircraftState(
 
   } else {
     // EXTRAPOLATION PHASE (t > 1.0) - Dead reckoning
-    // Use heading and groundspeed to predict position
+    // Use heading/track and groundspeed to predict position
 
     // Time elapsed since we reached the "current" position (at t=1.0)
     // NOT total time since current.timestamp - that would cause a jump!
     const extrapolationMs = (t - 1.0) * interval
+
+    // Calculate actual track from last known movement
+    const lastTrack = calculateBearing(
+      previous.latitude,
+      previous.longitude,
+      current.latitude,
+      current.longitude
+    )
+
+    // Determine if this is ground movement
+    const isGroundMovement = current.groundspeed < GROUNDSPEED_THRESHOLD_KNOTS
 
     // Continue the turn at the same rate (decaying slightly over time)
     // This prevents sudden heading stops and makes turns look natural
@@ -485,14 +520,25 @@ export function interpolateAircraftState(
     const extrapolatedTurnDeg = turnRate * (extrapolationMs / 1000) * turnDecay
     interpolatedHeading = normalizeAngle(current.heading + extrapolatedTurnDeg)
 
-    // Use average heading during extrapolation for smoother arcs
-    const avgExtrapolationHeading = lerpAngle(current.heading, interpolatedHeading, 0.5)
+    // For dead reckoning direction:
+    // - Ground aircraft: use last known track (direction of actual movement)
+    // - Airborne: use extrapolated heading (allows for continued turns)
+    let deadReckonDirection: number
+    if (isGroundMovement) {
+      // Ground aircraft continue in the direction they were moving
+      // Apply same turn rate decay to track for turning taxi
+      const extrapolatedTrack = normalizeAngle(lastTrack + extrapolatedTurnDeg)
+      deadReckonDirection = lerpAngle(lastTrack, extrapolatedTrack, 0.5)
+    } else {
+      // Airborne aircraft use heading-based dead reckoning
+      deadReckonDirection = lerpAngle(current.heading, interpolatedHeading, 0.5)
+    }
 
-    // Dead reckon position from last known position using heading and speed
+    // Dead reckon position from last known position
     const deadReckonedPos = deadReckonPosition(
       current.latitude,
       current.longitude,
-      avgExtrapolationHeading,
+      deadReckonDirection,
       current.groundspeed,
       extrapolationMs
     )
