@@ -24,8 +24,8 @@ A 3D tower cab view application for VATSIM air traffic controllers. View real-ti
 ## Features
 
 ### Live VATSIM Integration
-- Real-time aircraft positions from VATSIM network (updated every ~15 seconds)
-- Smooth interpolation between updates for fluid aircraft movement
+- Real-time aircraft positions from VATSIM network (polled every 3 seconds, VATSIM updates ~15 seconds)
+- Smooth 60 Hz interpolation for fluid aircraft movement
 - Global aircraft search (Ctrl+K) to find and follow any aircraft on the network
 - Connection status indicator with pilot count
 - Compass direction indicator showing camera heading
@@ -64,8 +64,13 @@ A 3D tower cab view application for VATSIM air traffic controllers. View real-ti
 ### Aircraft Panel
 - Nearby aircraft list with real-time updates
 - Filter by callsign, aircraft type, or route
-- Sort by distance, callsign, altitude, or speed
+- Sort by distance (from tower or camera), callsign, altitude, speed, or smart sort
+- Smart sort categorizes by flight phase (Short Final, Rolling, Taxi, etc.) with runway detection
+- Datablock repositioning with numpad-style directions (1-9)
+- Auto-rearrange to prevent label overlaps (optional)
+- Adjustable leader line length (1-5)
 - One-click following with mode selection
+- Click-to-look: click any aircraft to pan camera to center on it
 
 ### Airport Selection
 - Search 28,000+ airports by ICAO, IATA, name, or city

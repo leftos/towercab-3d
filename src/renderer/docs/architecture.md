@@ -389,6 +389,22 @@ replayStore
      ├─ useReplayPlayback (playback engine)
      ├─ ControlsBar (replay controls UI)
      └─ vatsimStore (adds snapshots on VATSIM updates)
+
+datablockPositionStore
+├─ globalPosition: number (1-9 numpad-style, default 9 = top-right)
+├─ perAircraftPositions: Map<callsign, number>
+├─ autoRearrange: boolean
+└─ Used by:
+     ├─ useBabylonLabels (datablock positioning)
+     ├─ useCesiumLabels (label positioning)
+     └─ CommandInput (numpad position commands)
+
+runwayStore
+├─ runways: Runway[]
+├─ currentAirport: string | null
+└─ Used by:
+     ├─ useAircraftFiltering (flight phase detection, runway association)
+     └─ AircraftPanel (smart sort, runway badges)
 ```
 
 ## Rendering Pipeline
@@ -672,9 +688,11 @@ src/renderer/
 │   ├─ aircraftFilterStore.ts
 │   ├─ airportStore.ts
 │   ├─ cameraStore.ts (DEPRECATED)
+│   ├─ datablockPositionStore.ts
 │   ├─ fsltlConversionStore.ts
 │   ├─ measureStore.ts
 │   ├─ replayStore.ts
+│   ├─ runwayStore.ts
 │   ├─ settingsStore.ts
 │   ├─ uiFeedbackStore.ts
 │   ├─ updateStore.ts

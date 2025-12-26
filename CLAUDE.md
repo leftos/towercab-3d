@@ -63,130 +63,54 @@ The build script now automatically runs typecheck first, so production builds wi
 
 ## Architecture
 
-> **📖 Detailed Documentation:** See `src/renderer/docs/architecture.md` for comprehensive diagrams of data flow, rendering pipeline, multi-viewport system, and hook dependencies.
+See `src/renderer/docs/architecture.md` for detailed documentation including:
+- Data flow diagrams (VATSIM, weather, settings)
+- Store relationships (15 Zustand stores)
+- Hook dependencies and call order
+- Rendering pipeline (Cesium + Babylon.js)
+- Component hierarchy
+- Coordinate system transformations (see also `coordinate-systems.md`)
 
-> **📐 Coordinate Systems:** See `src/renderer/docs/coordinate-systems.md` for detailed explanation of geographic, Cartesian3, and ENU coordinate transformations.
-
-### Dual Rendering System
-
-The application uses two 3D rendering engines simultaneously:
-
-- **CesiumJS** (`cesium ^1.136.0`): Renders the globe, terrain, satellite imagery, and aircraft 3D models via Cesium Ion
-- **Babylon.js** (`@babylonjs/core ^8.42.0`): Renders screen-space datablock labels, leader lines, weather effects (fog dome, cloud layers), measuring tool visualizations, and VR stereo display as a transparent overlay on top of Cesium
-
-The `useBabylonOverlay` hook synchronizes the Babylon.js camera with Cesium's camera each frame for correct screen-space label positioning. Weather effects use ENU (East-North-Up) coordinate transformations relative to a root node positioned at the tower location.
-
-### Process Architecture (Tauri)
-
-- **Rust backend** (`src-tauri/`): Window management, native OS integration via Tauri 2
-- **Frontend** (`src/renderer/`): React 19 application with Cesium/Babylon visualization
-
-### State Management (Zustand)
-
-Thirteen Zustand stores in `stores/`. Key ones: `vatsimStore` (VATSIM polling), `viewportStore` (camera state - use this, not deprecated `cameraStore`), `settingsStore` (persisted settings), `replayStore` (replay buffer/playback), `fsltlConversionStore` (FSLTL model conversion), `updateStore` (auto-update system), `uiFeedbackStore` (UI notifications).
-
-> **📖 Full store list with relationships:** See `src/renderer/docs/architecture.md`
-
-### Key Directories
-
-- **`hooks/`**: React hooks for Cesium, Babylon, camera, aircraft interpolation, and input handling
-- **`components/`**: UI components (TopBar, ControlsBar, panels) and viewers (CesiumViewer, ViewportManager)
-- **`stores/`**: Zustand state management (see table above)
-- **`services/`**: API clients (VatsimService, WeatherService, AircraftModelService)
-- **`types/`**: Centralized TypeScript interfaces organized by domain
-- **`constants/`**: Configuration values and magic numbers
-
-> **📖 For detailed hook dependencies, data flows, and component hierarchy:** See `src/renderer/docs/architecture.md`
+**Quick reference:** Tauri 2 desktop app with React 19 frontend. Dual rendering: CesiumJS (globe/terrain/aircraft) + Babylon.js overlay (labels/weather). Use `viewportStore` for camera state (not deprecated `cameraStore`).
 
 ## Path Alias
 
 `@/` maps to `src/renderer/` (configured in vite.config.ts)
 
-## Type System Organization
+## Code Organization
 
-All TypeScript types are centralized in the `types/` directory, organized by domain:
+### Types (`types/`)
 
-| File | Purpose |
-|------|---------|
-| `types/airport.ts` | Airport data structures, tower height calculation |
-| `types/babylon.ts` | Babylon.js types (labels, weather meshes, scene options, hook return types, ENU transforms) |
-| `types/camera.ts` | Camera state, view modes, follow modes, bookmarks |
-| `types/fsltl.ts` | FSLTL model conversion types, airline mapping, texture quality |
-| `types/mod.ts` | Modding system types (aircraft/tower manifest formats) |
-| `types/replay.ts` | Replay system types (snapshots, playback state, serialization, import/export) |
-| `types/settings.ts` | Application settings (grouped by domain: cesium, graphics, camera, weather, memory, aircraft, ui) |
-| `types/vatsim.ts` | VATSIM API data structures, pilot/controller data |
-| `types/viewport.ts` | Viewport layout, multi-viewport configuration, inset positioning |
-| `types/weather.ts` | METAR data, cloud layers, fog density, flight categories, precipitation |
-| `types/index.ts` | Barrel export for all types |
-
-**Usage:**
-```typescript
-// Import types from centralized location
-import type { ViewportCameraState, FollowMode, ViewMode } from '@/types'
-
-// Or use path alias
-import type { CloudLayer, FogDensity } from '@/types'
-
-// All types include comprehensive JSDoc with examples
-const camera: ViewportCameraState = {
-  heading: 0,
-  pitch: -15,
-  fov: 60,
-  // ...
-}
-```
-
-**When to add a type:**
-- Data structures shared across multiple files
-- Complex interfaces with reusable properties
-- Enums or union types for state machines
-- API response/request shapes
-
-**Best practices:**
-- Use `import type` for type-only imports (better tree-shaking)
-- Add JSDoc documentation for complex types
-- Include state machine diagrams for modes/states
-- Document units (degrees, meters, etc.) in comments
-
-## Constants Organization
-
-Configuration values and magic numbers are centralized in the `constants/` directory for easy discovery and maintenance:
+All TypeScript types centralized by domain. Import via `import type { ... } from '@/types'`:
 
 | File | Purpose |
 |------|---------|
-| `constants/api.ts` | External API endpoints (VATSIM, weather, airports), polling intervals, cache TTL |
-| `constants/babylon.ts` | Babylon.js scene/camera settings, visibility thresholds, lighting values |
-| `constants/camera.ts` | FOV/pitch/heading limits, orbit mode defaults, follow mode settings, top-down view settings |
-| `constants/precipitation.ts` | Rain/snow particle parameters, wind effects, lightning flash timing |
-| `constants/rendering.ts` | Aircraft model pool sizes, shadow configuration, positioning offsets, colors |
-| `constants/replay.ts` | Replay buffer size, snapshot interval, playback speeds, memory estimation |
-| `constants/weather.ts` | Cloud/fog parameters, layer geometry, animation speeds |
-| `constants/index.ts` | Barrel export for all constants |
+| `airport.ts` | Airport data, tower height |
+| `babylon.ts` | Labels, weather meshes, ENU transforms |
+| `camera.ts` | Camera state, view/follow modes, bookmarks |
+| `fsltl.ts` | FSLTL conversion, airline mapping |
+| `mod.ts` | Modding manifest formats |
+| `replay.ts` | Replay snapshots, playback state |
+| `settings.ts` | App settings (cesium, graphics, camera, weather, memory, aircraft, ui) |
+| `vatsim.ts` | VATSIM API structures |
+| `viewport.ts` | Viewport layout, multi-viewport config |
+| `weather.ts` | METAR, clouds, fog, precipitation |
 
-**Usage:**
-```typescript
-// Import specific constants
-import { FOV_DEFAULT, VATSIM_POLL_INTERVAL } from '@/constants'
+### Constants (`constants/`)
 
-// Or import from domain-specific file
-import { ORBIT_DISTANCE_MIN, ORBIT_DISTANCE_MAX } from '@/constants/camera'
+Configuration values and limits. Import via `import { ... } from '@/constants'`:
 
-// All constants are documented with JSDoc
-const distance = Math.max(ORBIT_DISTANCE_MIN, Math.min(ORBIT_DISTANCE_MAX, value))
-```
+| File | Purpose |
+|------|---------|
+| `api.ts` | Endpoints, poll intervals, cache TTL |
+| `babylon.ts` | Scene settings, visibility thresholds |
+| `camera.ts` | FOV/pitch limits, orbit defaults |
+| `precipitation.ts` | Rain/snow particles, wind effects |
+| `rendering.ts` | Model pool, shadows, colors |
+| `replay.ts` | Buffer size, playback speeds |
+| `weather.ts` | Cloud/fog parameters |
 
-**When to add a constant:**
-- Configuration values used in multiple places
-- Numeric limits or thresholds
-- API endpoints or URLs
-- Timing intervals (polling, refresh, throttle)
-- Default values for settings
-
-**Naming convention:**
-- Use `SCREAMING_SNAKE_CASE` for constants
-- Suffix pattern: `FEATURE_PROPERTY_QUALIFIER` (e.g., `FOV_DEFAULT`, `ORBIT_DISTANCE_MAX`)
-- Group related constants with common prefixes
+Use `SCREAMING_SNAKE_CASE` (e.g., `FOV_DEFAULT`, `ORBIT_DISTANCE_MAX`).
 
 ## External Dependencies
 
@@ -194,33 +118,6 @@ const distance = Math.max(ORBIT_DISTANCE_MIN, Math.min(ORBIT_DISTANCE_MAX, value
 - **VATSIM API**: `https://data.vatsim.net/v3/vatsim-data.json` (polled every 3 seconds)
 - **Airport Database**: Fetched from `mwgg/Airports` GitHub raw JSON on startup
 - **Aviation Weather API**: `https://aviationweather.gov/api/data/metar` for METAR weather data (5-minute refresh)
-
-## Key Systems
-
-### Multi-Viewport
-- **Main Viewport**: Full-screen Cesium viewer (always present)
-- **Inset Viewports**: Draggable/resizable overlay windows with independent cameras
-- **Active Viewport**: Cyan border indicates which viewport receives input
-
-### Weather (METAR-based)
-- Cesium fog reduces terrain draw distance based on visibility
-- Babylon.js renders fog dome and cloud layer meshes
-- Labels hidden beyond visibility or behind clouds
-
-### Camera
-- **View Modes**: 3D Tower View (heading/pitch/FOV) or Top-Down View (altitude adjustable)
-- **Follow Modes**: Tower (camera at tower, rotates to track) or Orbit (camera orbits aircraft)
-- **Bookmarks**: 99 slots per airport (`.00`-`.99`). Save: `.XX.` + Enter. Load: `.XX` + Enter.
-
-> **📖 For detailed camera state, data flows, and coordinate transforms:** See `src/renderer/docs/architecture.md`
-
-## Performance Features
-
-- **Service Worker Caching**: Tile caching with configurable disk size (0.1-10 GB)
-- **In-Memory Tile Cache**: Configurable 50-500 tiles
-- **Distance-Based Filtering**: Aircraft data filtered by radius from airport
-- **Terrain Quality Levels**: 5 levels (Low to Ultra) affecting tile detail
-- **MSAA 4x**: Anti-aliasing on Babylon overlay
 
 ## Modding System
 
