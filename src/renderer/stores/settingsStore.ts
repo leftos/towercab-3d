@@ -275,7 +275,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'settings-store',
-      version: 8, // Incremented for pinFollowedAircraftToTop setting
+      version: 10, // Incremented for leaderDistance setting
       migrate: (persistedState: unknown, version: number) => {
         // Auto-migrate old flat structure to grouped structure
         if (version < 2) {
@@ -354,6 +354,30 @@ export const useSettingsStore = create<SettingsStore>()(
         // Migrate v7 to v8: add pinFollowedAircraftToTop setting
         if (version < 8) {
           console.log('[Settings] Migrating v7 to v8: adding pinFollowedAircraftToTop setting')
+          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
+          return {
+            ...state,
+            aircraft: {
+              ...DEFAULT_SETTINGS.aircraft,
+              ...state.aircraft
+            }
+          }
+        }
+        // Migrate v8 to v9: add autoAvoidOverlaps setting
+        if (version < 9) {
+          console.log('[Settings] Migrating v8 to v9: adding autoAvoidOverlaps setting')
+          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
+          return {
+            ...state,
+            aircraft: {
+              ...DEFAULT_SETTINGS.aircraft,
+              ...state.aircraft
+            }
+          }
+        }
+        // Migrate v9 to v10: add leaderDistance setting
+        if (version < 10) {
+          console.log('[Settings] Migrating v9 to v10: adding leaderDistance setting')
           const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
           return {
             ...state,
@@ -469,7 +493,11 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
       orientationIntensity:
         oldSettings.orientationIntensity ?? DEFAULT_SETTINGS.aircraft.orientationIntensity,
       pinFollowedAircraftToTop:
-        oldSettings.pinFollowedAircraftToTop ?? DEFAULT_SETTINGS.aircraft.pinFollowedAircraftToTop
+        oldSettings.pinFollowedAircraftToTop ?? DEFAULT_SETTINGS.aircraft.pinFollowedAircraftToTop,
+      autoAvoidOverlaps:
+        oldSettings.autoAvoidOverlaps ?? DEFAULT_SETTINGS.aircraft.autoAvoidOverlaps,
+      leaderDistance:
+        oldSettings.leaderDistance ?? DEFAULT_SETTINGS.aircraft.leaderDistance
     },
     ui: {
       theme: oldSettings.theme ?? DEFAULT_SETTINGS.ui.theme,

@@ -4,6 +4,10 @@ import type { InterpolatedAircraftState } from '../types/vatsim'
 import type { ViewMode } from '../types'
 import { aircraftModelService } from '../services/AircraftModelService'
 import { calculateDistanceNM } from '../utils/interpolation'
+import { calculateDatablockOffset } from '../utils/screenProjection'
+import { useDatablockPositionStore } from '../stores/datablockPositionStore'
+import { useViewportStore } from '../stores/viewportStore'
+import { useSettingsStore } from '../stores/settingsStore'
 import {
   GROUNDSPEED_THRESHOLD_KNOTS,
   DATABLOCK_HEIGHT_MULTIPLIER
@@ -327,7 +331,9 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
     const labelWidth = 90
     const labelHeight = 36
     const coneRadius = viewMode === 'topdown' ? 15 : 15
-    const labelGap = viewMode === 'topdown' ? 3 : 10
+    // Leader distance setting: 1=short, 2=normal (default), 3=medium, 4=long, 5=very long
+    const leaderDistance = useSettingsStore.getState().aircraft.leaderDistance ?? 2
+    const labelGap = viewMode === 'topdown' ? leaderDistance * 10 : leaderDistance * 10
 
     const labelPositions: Array<{
       callsign: string
@@ -389,69 +395,168 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
 
       const aircraftScreenPos = { x: aircraftWindowPos.x, y: aircraftWindowPos.y }
 
-      // Default offset: top-left of cone + height multiplier for vertical separation
-      let offsetX = -labelWidth - labelGap - horizontalOffsetPixels
-      let offsetY = -labelHeight - labelGap - verticalOffsetPixels
+      // Get custom position (per-aircraft override → global default)
+      const datablockPositionStore = useDatablockPositionStore.getState()
+      const viewportStore = useViewportStore.getState()
+      const autoAvoidOverlaps = useSettingsStore.getState().aircraft.autoAvoidOverlaps ?? true
 
-      // Screen position for overlap detection (includes base offsets)
+      const perAircraftPos = datablockPositionStore.getAircraftPosition(data.callsign)
+      const globalPos = viewportStore.getDatablockPosition()
+      const customPosition = perAircraftPos ?? globalPos
+
+      // Calculate offset based on numpad-style position (1-9)
+      const baseOffset = calculateDatablockOffset(customPosition, labelWidth, labelHeight, labelGap)
+      let offsetX = baseOffset.offsetX
+      let offsetY = baseOffset.offsetY
+
+      // Determine row (0=bottom, 1=middle, 2=top) and column (0=left, 1=center, 2=right)
+      const positionRow = Math.floor((customPosition - 1) / 3)
+      const positionCol = (customPosition - 1) % 3
+
+      // Calculate leader line endpoint based on position row
+      // Top row (7,8,9): connect to top of aircraft
+      // Middle row (4,6): connect to center of aircraft
+      // Bottom row (1,2,3): connect to bottom of aircraft
+      let leaderEndpointY: number
+      if (positionRow === 2) {
+        // Top - use top of aircraft bounding box
+        leaderEndpointY = aircraftTopWindowPos.y
+      } else if (positionRow === 1) {
+        // Middle - use center between top and base
+        leaderEndpointY = (aircraftTopWindowPos.y + aircraftWindowPos.y) / 2
+      } else {
+        // Bottom - use base of aircraft
+        leaderEndpointY = aircraftWindowPos.y
+      }
+
+      // Screen position for label (includes base offsets)
       const screenPos = {
         x: aircraftScreenPos.x + offsetX,
         y: aircraftScreenPos.y + offsetY
       }
 
-      // Check for overlap with cone itself (cone is at aircraft position, not label attachment point)
-      const labelLeft = screenPos.x
-      const labelTop = screenPos.y
-      const labelRight = labelLeft + labelWidth
-      const labelBottom = labelTop + labelHeight
+      // Only apply overlap detection if the setting is enabled
+      if (autoAvoidOverlaps) {
+        // Check for overlap with cone itself (cone is at aircraft position, not label attachment point)
+        const labelLeft = screenPos.x
+        const labelTop = screenPos.y
+        const labelRight = labelLeft + labelWidth
+        const labelBottom = labelTop + labelHeight
 
-      if (labelRight > aircraftScreenPos.x - coneRadius && labelLeft < aircraftScreenPos.x + coneRadius &&
-          labelBottom > aircraftScreenPos.y - coneRadius && labelTop < aircraftScreenPos.y + coneRadius) {
-        // Adjust offsets to avoid cone overlap
-        offsetX = -labelWidth - coneRadius - labelGap - horizontalOffsetPixels
-        offsetY = -labelHeight - coneRadius - labelGap - verticalOffsetPixels
-        // Recalculate screenPos with new offsets
-        screenPos.x = aircraftScreenPos.x + offsetX
-        screenPos.y = aircraftScreenPos.y + offsetY
-      }
+        if (labelRight > aircraftScreenPos.x - coneRadius && labelLeft < aircraftScreenPos.x + coneRadius &&
+            labelBottom > aircraftScreenPos.y - coneRadius && labelTop < aircraftScreenPos.y + coneRadius) {
+          // Adjust offsets to avoid cone overlap while respecting user's chosen direction
+          // Use position column/row to determine direction, not offset sign
+          // col: 0=left, 1=center, 2=right; row: 0=bottom, 1=middle, 2=top
 
-      // Check for overlap with other labels
-      for (const existing of labelPositions) {
-        const existingLeft = existing.labelX
-        const existingTop = existing.labelY
-        const existingRight = existingLeft + labelWidth
-        const existingBottom = existingTop + labelHeight
+          // For horizontal adjustment based on column
+          if (positionCol === 2) {
+            // Right column - push right
+            offsetX = coneRadius + labelGap
+          } else if (positionCol === 0) {
+            // Left column - push left
+            offsetX = -labelWidth - coneRadius - labelGap - horizontalOffsetPixels
+          } else {
+            // Center column - maintain horizontal centering, just push out minimally
+            offsetX = -labelWidth / 2
+          }
 
-        if (screenPos.x < existingRight + 5 && screenPos.x + labelWidth > existingLeft - 5 &&
-            screenPos.y < existingBottom + 5 && screenPos.y + labelHeight > existingTop - 5) {
-          // Try alternative positions relative to aircraft (including height offset)
-          const alternatives = [
-            { x: labelGap, y: -labelHeight - labelGap - verticalOffsetPixels },
-            { x: -labelWidth - labelGap - horizontalOffsetPixels, y: labelGap },
-            { x: labelGap, y: labelGap },
-            { x: -labelWidth - labelGap - horizontalOffsetPixels, y: -labelHeight - labelGap - 30 - verticalOffsetPixels },
-            { x: labelGap + 30, y: -labelHeight - labelGap - verticalOffsetPixels },
-          ]
+          // For vertical adjustment based on row
+          if (positionRow === 0) {
+            // Bottom row - push down
+            offsetY = coneRadius + labelGap
+          } else if (positionRow === 2) {
+            // Top row - push up
+            offsetY = -labelHeight - coneRadius - labelGap - verticalOffsetPixels
+          } else {
+            // Middle row - maintain vertical centering
+            offsetY = -labelHeight / 2
+          }
 
-          for (const alt of alternatives) {
-            const testX = aircraftScreenPos.x + alt.x
-            const testY = aircraftScreenPos.y + alt.y
-            let overlaps = false
+          // Recalculate screenPos with new offsets
+          screenPos.x = aircraftScreenPos.x + offsetX
+          screenPos.y = aircraftScreenPos.y + offsetY
+        }
 
-            for (const check of labelPositions) {
-              if (testX < check.labelX + labelWidth + 5 && testX + labelWidth > check.labelX - 5 &&
-                  testY < check.labelY + labelHeight + 5 && testY + labelHeight > check.labelY - 5) {
-                overlaps = true
-                break
-              }
+        // Check for overlap with other labels
+        for (const existing of labelPositions) {
+          const existingLeft = existing.labelX
+          const existingTop = existing.labelY
+          const existingRight = existingLeft + labelWidth
+          const existingBottom = existingTop + labelHeight
+
+          if (screenPos.x < existingRight + 5 && screenPos.x + labelWidth > existingLeft - 5 &&
+              screenPos.y < existingBottom + 5 && screenPos.y + labelHeight > existingTop - 5) {
+            // Try alternative positions, prioritizing the user's chosen direction
+            // Use position column/row: col 2=right, row 2=top
+            const pushRight = positionCol === 2
+            const pushUp = positionRow === 2
+
+            // Build alternatives list based on user's preferred direction
+            const rightX = labelGap
+            const leftX = -labelWidth - labelGap - horizontalOffsetPixels
+            const upY = -labelHeight - labelGap - verticalOffsetPixels
+            const downY = labelGap
+            const centerX = -labelWidth / 2
+            const centerY = -labelHeight / 2
+
+            // For centered positions, try to maintain centering in that axis
+            let alternatives: Array<{ x: number; y: number }>
+            if (positionCol === 1) {
+              // Horizontally centered - prioritize maintaining centerX
+              alternatives = [
+                { x: centerX, y: pushUp ? upY - 30 : downY + 30 },
+                { x: centerX, y: pushUp ? downY : upY },
+                { x: rightX, y: pushUp ? upY : downY },
+                { x: leftX, y: pushUp ? upY : downY },
+              ]
+            } else if (positionRow === 1) {
+              // Vertically centered - prioritize maintaining centerY
+              alternatives = [
+                { x: pushRight ? rightX + 30 : leftX - 30, y: centerY },
+                { x: pushRight ? leftX : rightX, y: centerY },
+                { x: pushRight ? rightX : leftX, y: upY },
+                { x: pushRight ? rightX : leftX, y: downY },
+              ]
+            } else {
+              // Corner positions
+              alternatives = pushRight
+                ? [
+                    { x: rightX, y: pushUp ? upY : downY },
+                    { x: rightX + 30, y: pushUp ? upY : downY },
+                    { x: rightX, y: pushUp ? downY : upY },
+                    { x: leftX, y: pushUp ? upY : downY },
+                    { x: leftX, y: pushUp ? downY : upY },
+                  ]
+                : [
+                    { x: leftX, y: pushUp ? upY : downY },
+                    { x: leftX - 30, y: pushUp ? upY : downY },
+                    { x: leftX, y: pushUp ? downY : upY },
+                    { x: rightX, y: pushUp ? upY : downY },
+                    { x: rightX, y: pushUp ? downY : upY },
+                  ]
             }
 
-            if (!overlaps) {
-              offsetX = alt.x
-              offsetY = alt.y
-              screenPos.x = aircraftScreenPos.x + offsetX
-              screenPos.y = aircraftScreenPos.y + offsetY
-              break
+            for (const alt of alternatives) {
+              const testX = aircraftScreenPos.x + alt.x
+              const testY = aircraftScreenPos.y + alt.y
+              let overlaps = false
+
+              for (const check of labelPositions) {
+                if (testX < check.labelX + labelWidth + 5 && testX + labelWidth > check.labelX - 5 &&
+                    testY < check.labelY + labelHeight + 5 && testY + labelHeight > check.labelY - 5) {
+                  overlaps = true
+                  break
+                }
+              }
+
+              if (!overlaps) {
+                offsetX = alt.x
+                offsetY = alt.y
+                screenPos.x = aircraftScreenPos.x + offsetX
+                screenPos.y = aircraftScreenPos.y + offsetY
+                break
+              }
             }
           }
         }
@@ -459,8 +564,8 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
 
       labelPositions.push({
         callsign: data.callsign,
-        coneX: aircraftTopWindowPos.x,
-        coneY: aircraftTopWindowPos.y, // Point to top of aircraft bounding box in screen space
+        coneX: aircraftWindowPos.x, // Center X of aircraft
+        coneY: leaderEndpointY, // Y based on position row (top/middle/bottom)
         labelX: screenPos.x,
         labelY: screenPos.y,
         offsetX,

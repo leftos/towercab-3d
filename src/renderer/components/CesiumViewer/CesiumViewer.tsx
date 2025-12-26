@@ -7,6 +7,8 @@ import { useVatsimStore } from '../../stores/vatsimStore'
 import { useWeatherStore } from '../../stores/weatherStore'
 import { useMeasureStore } from '../../stores/measureStore'
 import { useAircraftFilterStore } from '../../stores/aircraftFilterStore'
+import { useDatablockPositionStore } from '../../stores/datablockPositionStore'
+import { useUIFeedbackStore } from '../../stores/uiFeedbackStore'
 import { useAircraftInterpolation, setInterpolationTerrainData } from '../../hooks/useAircraftInterpolation'
 import { useCesiumCamera } from '../../hooks/useCesiumCamera'
 import { useBabylonOverlay } from '../../hooks/useBabylonOverlay'
@@ -811,6 +813,55 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
       window.removeEventListener('keydown', handleKeyDown)
     }
   }, [viewer, isMeasuring, measurements, pendingPoint, setPendingPoint, setPreviewPoint, completeMeasurement, cancelPendingMeasurement, removeMeasurement])
+
+  // Datablock SLEW mode - click on aircraft to move its label position
+  const pendingDirection = useDatablockPositionStore((state) => state.pendingDirection)
+
+  useEffect(() => {
+    if (!viewer || !pendingDirection) return
+
+    const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas)
+
+    // Helper to find aircraft near click position
+    const findAircraftAtPosition = (screenPos: Cesium.Cartesian2): string | null => {
+      const threshold = 30 // pixels
+
+      for (const [callsign, aircraft] of interpolatedAircraft) {
+        const position = Cesium.Cartesian3.fromDegrees(
+          aircraft.interpolatedLongitude,
+          aircraft.interpolatedLatitude,
+          aircraft.interpolatedAltitude
+        )
+        const windowPos = Cesium.SceneTransforms.worldToWindowCoordinates(viewer.scene, position)
+        if (!windowPos) continue
+
+        const dx = windowPos.x - screenPos.x
+        const dy = windowPos.y - screenPos.y
+        if (Math.sqrt(dx * dx + dy * dy) < threshold) {
+          return callsign
+        }
+      }
+      return null
+    }
+
+    handler.setInputAction((click: { position: Cesium.Cartesian2 }) => {
+      const datablockStore = useDatablockPositionStore.getState()
+      if (!datablockStore.pendingDirection) return
+
+      const callsign = findAircraftAtPosition(click.position)
+      if (callsign) {
+        datablockStore.setAircraftPosition(callsign, datablockStore.pendingDirection)
+        useUIFeedbackStore.getState().showFeedback(
+          `${callsign} datablock → position ${datablockStore.pendingDirection}`,
+          'success'
+        )
+      }
+      // Clear pending direction whether we found an aircraft or not
+      datablockStore.setPendingDirection(null)
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK)
+
+    return () => handler.destroy()
+  }, [viewer, pendingDirection, interpolatedAircraft])
 
   return (
     <div className={`cesium-viewer-container ${isInset ? 'inset' : ''}`} ref={containerRef} />

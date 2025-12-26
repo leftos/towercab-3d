@@ -77,6 +77,8 @@ function ControlsBar() {
   const showAirborneTraffic = useSettingsStore((state) => state.aircraft.showAirborneTraffic)
   const orientationEmulation = useSettingsStore((state) => state.aircraft.orientationEmulation)
   const orientationIntensity = useSettingsStore((state) => state.aircraft.orientationIntensity)
+  const autoAvoidOverlaps = useSettingsStore((state) => state.aircraft.autoAvoidOverlaps)
+  const leaderDistance = useSettingsStore((state) => state.aircraft.leaderDistance)
   const updateAircraftSettings = useSettingsStore((state) => state.updateAircraftSettings)
   const showAircraftPanel = useSettingsStore((state) => state.ui.showAircraftPanel)
 
@@ -1010,6 +1012,37 @@ function ControlsBar() {
                           None (hide labels, show cones only)
                         </label>
                       </div>
+                    </div>
+
+                    <div className="setting-item">
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={autoAvoidOverlaps}
+                          onChange={(e) => updateAircraftSettings({ autoAvoidOverlaps: e.target.checked })}
+                        />
+                        Auto-rearrange to Avoid Overlaps
+                      </label>
+                      <p className="setting-hint">
+                        Automatically shift datablocks to prevent them from overlapping each other.
+                      </p>
+                    </div>
+
+                    <div className="setting-item">
+                      <label>Leader Line Length</label>
+                      <div className="slider-with-value">
+                        <input
+                          type="range"
+                          min="1"
+                          max="5"
+                          value={leaderDistance}
+                          onChange={(e) => updateAircraftSettings({ leaderDistance: Number(e.target.value) as 1 | 2 | 3 | 4 | 5 })}
+                        />
+                        <span>{leaderDistance}</span>
+                      </div>
+                      <p className="setting-hint">
+                        Length of leader lines connecting datablocks to aircraft. 1=short, 5=long.
+                      </p>
                     </div>
                   </div>
 
@@ -1949,6 +1982,31 @@ function ControlsBar() {
                         <span className="action">Open bookmark manager</span>
                       </div>
                     </div>
+                  </div>
+
+                  <div className="settings-section">
+                    <h3>Datablock Position</h3>
+                    <div className="shortcuts-list">
+                      <div className="shortcut">
+                        <span className="keys">1-9</span>
+                        <span className="action">Select position (numpad layout)</span>
+                      </div>
+                      <div className="shortcut">
+                        <span className="keys">Enter</span>
+                        <span className="action">Apply to all datablocks</span>
+                      </div>
+                      <div className="shortcut">
+                        <span className="keys">Click aircraft</span>
+                        <span className="action">Apply to that aircraft only</span>
+                      </div>
+                      <div className="shortcut">
+                        <span className="keys">Escape</span>
+                        <span className="action">Cancel position selection</span>
+                      </div>
+                    </div>
+                    <p className="setting-hint" style={{ marginTop: '8px' }}>
+                      Position layout: 7=top-left, 8=top, 9=top-right, 4=left, 5=center, 6=right, 1=bottom-left, 2=bottom, 3=bottom-right
+                    </p>
                   </div>
 
                   <div className="settings-section">

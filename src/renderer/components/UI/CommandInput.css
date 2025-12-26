@@ -57,3 +57,24 @@
 .command-feedback.error {
   color: #ff6b6b;
 }
+
+/* Datablock position mode */
+.command-input-bar.datablock-mode {
+  border-color: rgba(0, 255, 255, 0.5);
+  gap: 12px;
+}
+
+.command-input-bar.datablock-mode .command-prompt {
+  color: #00ffff;
+}
+
+.datablock-position {
+  color: #00ffff;
+  font-weight: bold;
+}
+
+.datablock-hint {
+  color: #888;
+  font-size: 12px;
+  margin-left: auto;
+}

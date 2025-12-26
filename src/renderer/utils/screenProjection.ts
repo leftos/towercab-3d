@@ -1,5 +1,7 @@
 // Screen projection and label positioning utilities
 
+import type { DatablockPosition } from '../stores/datablockPositionStore'
+
 /**
  * Screen position with visibility flag
  */
@@ -251,4 +253,70 @@ export function calculateLeaderLineEndpoints(
   const endY = coneY + Math.sin(angle) * coneRadius
 
   return { startX, startY, endX, endY }
+}
+
+/**
+ * Calculate label offset based on numpad-style position (1-9)
+ *
+ * Position mapping:
+ *   7=top-left    8=top-center    9=top-right
+ *   4=left        5=center        6=right
+ *   1=bottom-left 2=bottom-center 3=bottom-right
+ *
+ * The offset positions the label relative to the aircraft screen position.
+ * For positions 7,8,9 (top row), the label is above the aircraft.
+ * For positions 1,2,3 (bottom row), the label is below the aircraft.
+ *
+ * @param position - Numpad-style position (1-9)
+ * @param labelWidth - Width of the label in pixels
+ * @param labelHeight - Height of the label in pixels
+ * @param gap - Gap between label and aircraft in pixels
+ * @returns Offset to apply to aircraft screen position to get label position
+ */
+export function calculateDatablockOffset(
+  position: DatablockPosition,
+  labelWidth: number,
+  labelHeight: number,
+  gap: number
+): { offsetX: number; offsetY: number } {
+  // Map position to row/column
+  // row: 0=bottom (1,2,3), 1=middle (4,5,6), 2=top (7,8,9)
+  // col: 0=left (1,4,7), 1=center (2,5,8), 2=right (3,6,9)
+  const row = Math.floor((position - 1) / 3)
+  const col = (position - 1) % 3
+
+  let offsetX: number
+  let offsetY: number
+
+  // Horizontal positioning
+  switch (col) {
+    case 0: // Left (positions 1, 4, 7)
+      offsetX = -labelWidth - gap
+      break
+    case 1: // Center (positions 2, 5, 8)
+      offsetX = -labelWidth / 2
+      break
+    case 2: // Right (positions 3, 6, 9)
+      offsetX = gap
+      break
+    default:
+      offsetX = -labelWidth - gap
+  }
+
+  // Vertical positioning
+  switch (row) {
+    case 0: // Bottom (positions 1, 2, 3)
+      offsetY = gap
+      break
+    case 1: // Middle (positions 4, 5, 6)
+      offsetY = -labelHeight / 2
+      break
+    case 2: // Top (positions 7, 8, 9)
+      offsetY = -labelHeight - gap
+      break
+    default:
+      offsetY = -labelHeight - gap
+  }
+
+  return { offsetX, offsetY }
 }

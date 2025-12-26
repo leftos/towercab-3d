@@ -364,6 +364,31 @@ export interface AircraftSettings {
    * at the top of the list regardless of the sort order.
    */
   pinFollowedAircraftToTop: boolean
+
+  /**
+   * Automatically rearrange datablocks to avoid overlaps (default: true)
+   *
+   * When enabled, labels that would overlap are automatically repositioned
+   * to alternative positions to prevent text from overlapping.
+   *
+   * When disabled, labels use their exact position (numpad position or default)
+   * and may overlap each other.
+   */
+  autoAvoidOverlaps: boolean
+
+  /**
+   * Leader line distance (1-5, default: 2)
+   *
+   * Controls the length of the leader lines connecting datablocks to aircraft.
+   * Higher values = longer lines, more separation between label and aircraft.
+   *
+   * - 1 = Short (5px gap)
+   * - 2 = Normal (10px gap, default)
+   * - 3 = Medium (15px gap)
+   * - 4 = Long (20px gap)
+   * - 5 = Very Long (25px gap)
+   */
+  leaderDistance: 1 | 2 | 3 | 4 | 5
 }
 
 /**
@@ -588,7 +613,9 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     datablockMode: 'full',
     orientationEmulation: true,
     orientationIntensity: 1.0,
-    pinFollowedAircraftToTop: true
+    pinFollowedAircraftToTop: true,
+    autoAvoidOverlaps: true,
+    leaderDistance: 2
   },
   ui: {
     theme: 'dark',

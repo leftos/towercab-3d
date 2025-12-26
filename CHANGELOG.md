@@ -5,6 +5,13 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Datablock repositioning using numpad-style directions (1-9)
+  - Press 1-9 then Enter to move all datablocks to that position (e.g., 9+Enter for top-right)
+  - Press 1-9 then click an aircraft to move just that aircraft's datablock (SLEW mode)
+  - Position 5 is excluded (center reference point only)
+  - Global position saved per airport; per-aircraft overrides are session-only
+- Leader Line Length setting (1-5) controls distance between datablocks and aircraft
+- Auto-rearrange datablocks setting to prevent label overlaps (enabled by default)
 - Setting to control whether followed aircraft is pinned to the top of the aircraft list (enabled by default)
 - Smart sort for aircraft panel with flight phase detection
   - Automatically categorizes aircraft by phase: Short Final, Final, Rolling, Roll Out, Go Around, Lined Up, Hold Short, Pattern, Pushback, Taxi, Stopped, Climbing, Inbound

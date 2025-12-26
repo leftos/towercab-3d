@@ -1,7 +1,20 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useViewportStore } from '../../stores/viewportStore'
 import { useUIFeedbackStore } from '../../stores/uiFeedbackStore'
+import { useDatablockPositionStore } from '../../stores/datablockPositionStore'
 import './CommandInput.css'
+
+/** Map numpad position to direction label (5 is reference only, not a valid position) */
+const POSITION_LABELS: Record<number, string> = {
+  7: 'Top-Left',
+  8: 'Top',
+  9: 'Top-Right',
+  4: 'Left',
+  6: 'Right',
+  1: 'Bottom-Left',
+  2: 'Bottom',
+  3: 'Bottom-Right'
+}
 
 /**
  * CommandInput component - provides a terminal-style command input overlay
@@ -10,6 +23,8 @@ import './CommandInput.css'
  * - `.XX.` - Save camera bookmark to slot XX (00-99)
  * - `.XX.NAME.` - Save named camera bookmark to slot XX (00-99)
  * - `.XX` - Load camera bookmark from slot XX (00-99)
+ *
+ * Also displays the datablock position indicator when numpad keys 1-9 are pressed
  */
 function CommandInput() {
   const [isActive, setIsActive] = useState(false)
@@ -22,6 +37,9 @@ function CommandInput() {
   const feedback = useUIFeedbackStore((state) => state.feedback)
   const showFeedback = useUIFeedbackStore((state) => state.showFeedback)
   const setCommandInputActive = useUIFeedbackStore((state) => state.setCommandInputActive)
+
+  // Datablock position mode
+  const pendingDirection = useDatablockPositionStore((state) => state.pendingDirection)
 
   // Sync isActive state with the global store so other components can check it
   useEffect(() => {
@@ -170,8 +188,8 @@ function CommandInput() {
     }
   }, [isActive, inputBuffer, processCommand])
 
-  // Don't render if not active and no feedback
-  if (!isActive && !feedback) {
+  // Don't render if not active, no feedback, and no pending direction
+  if (!isActive && !feedback && !pendingDirection) {
     return null
   }
 
@@ -182,6 +200,17 @@ function CommandInput() {
           <span className="command-prompt">&gt;</span>
           <span className="command-text">{inputBuffer}</span>
           <span className="command-cursor">_</span>
+        </div>
+      )}
+      {pendingDirection && (
+        <div className="command-input-bar datablock-mode">
+          <span className="command-prompt">Datablock</span>
+          <span className="command-text datablock-position">
+            {pendingDirection} ({POSITION_LABELS[pendingDirection]})
+          </span>
+          <span className="datablock-hint">
+            Enter=All | Click=Aircraft | Esc=Cancel
+          </span>
         </div>
       )}
       {feedback && (

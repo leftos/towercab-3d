@@ -3,6 +3,7 @@ import * as Cesium from 'cesium'
 import { useViewportStore } from '../stores/viewportStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useUIFeedbackStore } from '../stores/uiFeedbackStore'
+import { useDatablockPositionStore, type DatablockPosition } from '../stores/datablockPositionStore'
 import {
   createVelocityState,
   MOVEMENT_CONFIG,
@@ -472,9 +473,47 @@ export function useCameraInput(
             toggleFollowMode()
           }
           return
-        case 'Escape':
+        case 'Escape': {
+          // First check if we're in datablock position mode
+          const datablockStore = useDatablockPositionStore.getState()
+          if (datablockStore.pendingDirection) {
+            datablockStore.setPendingDirection(null)
+            useUIFeedbackStore.getState().showFeedback('Datablock positioning cancelled', 'error')
+            return
+          }
+          // Otherwise stop following
           stopFollowing()
           return
+        }
+      }
+
+      // Handle numpad keys 1-9 for datablock positioning (without modifiers)
+      // Skip 5 - it's the center reference point, not a valid position
+      if (!event.ctrlKey && !event.altKey && !event.shiftKey) {
+        const numKey = parseInt(key)
+        if (numKey >= 1 && numKey <= 9 && numKey !== 5) {
+          const datablockStore = useDatablockPositionStore.getState()
+          datablockStore.setPendingDirection(numKey as DatablockPosition)
+          useUIFeedbackStore.getState().showFeedback(
+            `Datablock position ${numKey}: Enter=all, Click=aircraft, Esc=cancel`,
+            'success'
+          )
+          return
+        }
+      }
+
+      // Handle Enter when pending direction exists (apply global position)
+      if (key === 'Enter') {
+        const datablockStore = useDatablockPositionStore.getState()
+        if (datablockStore.pendingDirection) {
+          useViewportStore.getState().setDatablockPosition(datablockStore.pendingDirection)
+          useUIFeedbackStore.getState().showFeedback(
+            `All datablocks moved to position ${datablockStore.pendingDirection}`,
+            'success'
+          )
+          datablockStore.setPendingDirection(null)
+          return
+        }
       }
 
       // Track continuous movement keys

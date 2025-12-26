@@ -404,16 +404,43 @@ export function useBabylonLabels(
     const labelData = aircraftLabelsRef.current.get(callsign)
     if (!labelData) return
 
+    // Get label dimensions for calculations
+    const labelW = labelData.label.widthInPixels || 80
+    const labelH = labelData.label.heightInPixels || 24
+
+    // Check if aircraft is at least marginally within viewport
+    // If aircraft is completely off-screen, hide the label entirely
+    if (guiTexture) {
+      const size = guiTexture.getSize()
+      if (size.width > 0 && size.height > 0) {
+        const aircraftMargin = 50 // Aircraft must be within 50px of viewport edge
+        if (screenX < -aircraftMargin || screenX > size.width + aircraftMargin ||
+            screenY < -aircraftMargin || screenY > size.height + aircraftMargin) {
+          // Aircraft is off-screen, hide label
+          labelData.label.isVisible = false
+          labelData.leaderLine.isVisible = false
+          return
+        }
+      }
+    }
+
     // Position label with offset from model screen position
-    const labelX = screenX + labelOffsetX
-    const labelY = screenY + labelOffsetY
+    let labelX = screenX + labelOffsetX
+    let labelY = screenY + labelOffsetY
+
+    // Clamp label position to viewport boundaries (keep fully visible)
+    // Only apply clamping if guiTexture has valid dimensions
+    if (guiTexture) {
+      const size = guiTexture.getSize()
+      if (size.width > 0 && size.height > 0) {
+        const margin = 5 // Small margin from edge
+        labelX = Math.max(margin, Math.min(labelX, size.width - labelW - margin))
+        labelY = Math.max(margin, Math.min(labelY, size.height - labelH - margin))
+      }
+    }
 
     labelData.label.left = labelX
     labelData.label.top = labelY
-
-    // Get label dimensions for line endpoint calculation
-    const labelW = labelData.label.widthInPixels || 80
-    const labelH = labelData.label.heightInPixels || 24
 
     // Line from label center to model screen position
     const labelCenterX = labelX + labelW / 2
@@ -456,7 +483,7 @@ export function useBabylonLabels(
     // Now show label and leader line (coordinates already set)
     labelData.label.isVisible = true
     labelData.leaderLine.isVisible = true
-  }, [])
+  }, [guiTexture])
 
   // Remove aircraft label
   const removeLabel = useCallback((callsign: string) => {

@@ -3,6 +3,7 @@ import { persist, subscribeWithSelector } from 'zustand/middleware'
 import type { ViewMode, FollowMode, ViewportLayout, ViewportCameraState, Viewport, CameraBookmark } from '../types'
 import { useVatsimStore } from './vatsimStore'
 import { useAirportStore } from './airportStore'
+import { useDatablockPositionStore, type DatablockPosition } from './datablockPositionStore'
 import {
   HEADING_DEFAULT,
   PITCH_DEFAULT,
@@ -41,6 +42,8 @@ interface AirportViewportConfig {
   }
   // Camera bookmarks (0-99) - shared across all viewports for this airport
   bookmarks?: { [slot: number]: CameraBookmark }
+  // Global datablock position (1-9 numpad style) - default is 7 (top-left)
+  datablockPosition?: DatablockPosition
 }
 
 // Global orbit settings that persist across all airports (last used values)
@@ -225,6 +228,10 @@ interface ViewportStore {
   deleteBookmark: (slot: number) => void
   renameBookmark: (slot: number, name: string | undefined) => void
   getBookmarks: () => { [slot: number]: CameraBookmark } | undefined
+
+  // Datablock position actions
+  setDatablockPosition: (position: DatablockPosition) => void
+  getDatablockPosition: () => DatablockPosition
 
   // Reset
   resetView: () => void
@@ -837,7 +844,8 @@ export const useViewportStore = create<ViewportStore>()(
                 })),
                 activeViewportId: state.activeViewportId,
                 defaultConfig: airportViewportConfigs[state.currentAirportIcao]?.defaultConfig,
-                bookmarks: airportViewportConfigs[state.currentAirportIcao]?.bookmarks  // Preserve bookmarks
+                bookmarks: airportViewportConfigs[state.currentAirportIcao]?.bookmarks,  // Preserve bookmarks
+                datablockPosition: airportViewportConfigs[state.currentAirportIcao]?.datablockPosition  // Preserve datablock position
               }
               set({ airportViewportConfigs })
             }
@@ -1060,6 +1068,42 @@ export const useViewportStore = create<ViewportStore>()(
             return state.airportViewportConfigs[icao]?.bookmarks
           },
 
+          // Set global datablock position for current airport (clears per-aircraft overrides)
+          setDatablockPosition: (position: DatablockPosition) => {
+            const state = get()
+            const icao = state.currentAirportIcao
+            if (!icao) {
+              return
+            }
+
+            // Clear all per-aircraft overrides when setting global position
+            useDatablockPositionStore.getState().clearAllOverrides()
+
+            // Create immutable update for proper state change detection
+            const existingConfig = state.airportViewportConfigs[icao] ?? {
+              viewports: state.viewports,
+              activeViewportId: state.activeViewportId
+            }
+            const airportViewportConfigs = {
+              ...state.airportViewportConfigs,
+              [icao]: {
+                ...existingConfig,
+                datablockPosition: position
+              }
+            }
+
+            set({ airportViewportConfigs })
+          },
+
+          // Get global datablock position for current airport (default: 7 = top-left)
+          getDatablockPosition: (): DatablockPosition => {
+            const state = get()
+            const icao = state.currentAirportIcao
+            if (!icao) return 7
+            const pos = state.airportViewportConfigs[icao]?.datablockPosition ?? 7
+            return pos
+          },
+
           // Reset active viewport's camera
           resetView: () => {
             const { activeViewportId, viewports } = get()
@@ -1166,7 +1210,8 @@ useViewportStore.subscribe(
         })),
         activeViewportId: state.activeViewportId,
         defaultConfig: airportViewportConfigs[icao]?.defaultConfig,
-        bookmarks: airportViewportConfigs[icao]?.bookmarks  // Preserve bookmarks
+        bookmarks: airportViewportConfigs[icao]?.bookmarks,  // Preserve bookmarks
+        datablockPosition: airportViewportConfigs[icao]?.datablockPosition  // Preserve datablock position
       }
 
       useViewportStore.setState({ airportViewportConfigs })
