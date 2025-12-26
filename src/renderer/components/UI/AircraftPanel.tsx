@@ -6,7 +6,7 @@ import { useRunwayStore } from '../../stores/runwayStore'
 import { useActiveViewportCamera } from '../../hooks/useActiveViewportCamera'
 import { useAircraftInterpolation } from '../../hooks/useAircraftInterpolation'
 import { useAircraftFiltering } from '../../hooks/useAircraftFiltering'
-import { calculateBearing } from '../../utils/interpolation'
+import { calculateBearing, calculateDistanceNM } from '../../utils/interpolation'
 import { formatAltitude, formatGroundspeed, formatHeading, getTowerPosition } from '../../utils/towerHeight'
 import { applyPositionOffsets } from '../../utils/cameraGeometry'
 import {
@@ -20,7 +20,7 @@ import {
 } from '../../utils/smartSort'
 import './AircraftPanel.css'
 
-type SortOption = 'smart' | 'distance' | 'callsign' | 'altitude' | 'speed'
+type SortOption = 'smart' | 'distance' | 'cameraDistance' | 'callsign' | 'altitude' | 'speed'
 
 interface AircraftListItem {
   callsign: string
@@ -29,6 +29,7 @@ interface AircraftListItem {
   groundspeed: number
   heading: number
   distance: number
+  cameraDistance: number // Distance from camera position (includes WASD offsets)
   bearing: number
   departure: string | null
   arrival: string | null
@@ -117,6 +118,21 @@ function AircraftPanel() {
   const nearbyAircraft = useMemo((): AircraftListItem[] => {
     if (!referencePoint) return []
 
+    // Calculate camera position (tower + WASD offsets) for camera distance sorting
+    let cameraLat = referencePoint.lat
+    let cameraLon = referencePoint.lon
+    let cameraAltMeters = referencePoint.elevationMeters + towerHeight
+    if (currentAirport) {
+      const towerPos = getTowerPosition(currentAirport, towerHeight, customTowerPosition ?? undefined)
+      const cameraPos = applyPositionOffsets(
+        { latitude: towerPos.latitude, longitude: towerPos.longitude, height: towerPos.height },
+        { x: positionOffsetX, y: positionOffsetY, z: positionOffsetZ }
+      )
+      cameraLat = cameraPos.latitude
+      cameraLon = cameraPos.longitude
+      cameraAltMeters = cameraPos.height
+    }
+
     // Always calculate flight phase data when airport context available
     // (phase info is useful regardless of sort mode)
     const smartSortMap = new Map<string, { phase: FlightPhase; tier: PriorityTier; runway: string | null; score: number }>()
@@ -141,6 +157,14 @@ function AircraftPanel() {
         groundspeed: aircraft.interpolatedGroundspeed,
         heading: aircraft.interpolatedHeading,
         distance: aircraft.distance,
+        cameraDistance: calculateDistanceNM(
+          cameraLat,
+          cameraLon,
+          aircraft.interpolatedLatitude,
+          aircraft.interpolatedLongitude,
+          cameraAltMeters,
+          aircraft.interpolatedAltitude
+        ),
         bearing: calculateBearing(
           referencePoint.lat,
           referencePoint.lon,
@@ -174,15 +198,17 @@ function AircraftPanel() {
           return b.altitude - a.altitude // Highest first
         case 'speed':
           return b.groundspeed - a.groundspeed // Fastest first
+        case 'cameraDistance':
+          return a.cameraDistance - b.cameraDistance // Closest to camera first
         case 'distance':
         default:
-          return a.distance - b.distance // Closest first
+          return a.distance - b.distance // Closest to airport first
       }
     })
 
     return sorted.slice(0, 50)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refreshTick intentionally forces periodic recalculation of distances/bearings
-  }, [filtered, referencePoint, followingCallsign, sortOption, refreshTick, smartSortContext, pinFollowedAircraftToTop])
+  }, [filtered, referencePoint, followingCallsign, sortOption, refreshTick, smartSortContext, pinFollowedAircraftToTop, currentAirport, towerHeight, customTowerPosition, positionOffsetX, positionOffsetY, positionOffsetZ])
 
 
   const handleFollowClick = (callsign: string) => {
@@ -309,7 +335,8 @@ function AircraftPanel() {
                 onChange={(e) => setSortOption(e.target.value as SortOption)}
               >
                 <option value="smart">Smart</option>
-                <option value="distance">Distance</option>
+                <option value="distance">Distance (Airport)</option>
+                <option value="cameraDistance">Distance (Camera)</option>
                 <option value="callsign">Callsign</option>
                 <option value="altitude">Altitude</option>
                 <option value="speed">Speed</option>
