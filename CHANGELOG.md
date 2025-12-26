@@ -38,6 +38,11 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ### Fixed
 - Fixed tower positions and mods not loading on app startup
+- Fixed aircraft on takeoff roll showing no phase (yellow) instead of "Rolling"
+  - Runway surface detection now works regardless of speed (V1/VR can exceed 150 kts)
+- Fixed pushback aircraft incorrectly showing as "Taxi"
+  - Lowered track-heading threshold from 120° to 90° to catch curved pushbacks
+  - Fixed track calculation for very slow movement (was defaulting to heading)
 
 ## [0.0.15-alpha] - 2025-12-25
 

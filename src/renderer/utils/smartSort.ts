@@ -561,54 +561,68 @@ function detectFlightPhase(
   const isArrivingHere = arrivalIcao === currentIcao
   const isDepartingHere = departureIcao === currentIcao
 
-  // Determine if aircraft is on the ground
-  const isOnGround = aglFt < GROUND_ALTITUDE_AGL_FT && speedKts < 80
-
-  // Check if on a runway
+  // Check if on a runway surface (checked BEFORE speed-based ground check)
   const onRunwaySurface = nearestRwy && context.runways.some(r => isOnRunway(lat, lon, r))
 
-  // === GROUND PHASES ===
-  if (isOnGround) {
-    if (onRunwaySurface) {
-      // Must be aligned with runway for departure/landing roll, otherwise crossing
-      const isAlignedWithRwy = nearestRwy?.isAligned ?? false
+  // === RUNWAY SURFACE PHASES ===
+  // Check this FIRST regardless of speed - aircraft on takeoff roll can exceed 80+ kts
+  // before liftoff, but they're still on the runway and need proper phase detection
+  if (onRunwaySurface && aglFt < GROUND_ALTITUDE_AGL_FT) {
+    // Must be aligned with runway for departure/landing roll, otherwise crossing
+    const isAlignedWithRwy = nearestRwy?.isAligned ?? false
 
-      if (!isAlignedWithRwy) {
-        // Crossing the runway (not aligned with runway heading)
-        return { phase: 'active_taxi', runway: null, runwayDistance: null }
-      }
+    if (!isAlignedWithRwy) {
+      // Crossing the runway (not aligned with runway heading)
+      return { phase: 'active_taxi', runway: null, runwayDistance: null }
+    }
 
-      if (speedKts < STOPPED_SPEED_KTS) {
-        // Stopped on runway = lined up
-        return { phase: 'lined_up', runway: runwayIdent, runwayDistance: runwayDistanceNm }
-      }
+    if (speedKts < STOPPED_SPEED_KTS) {
+      // Stopped on runway = lined up
+      return { phase: 'lined_up', runway: runwayIdent, runwayDistance: runwayDistanceNm }
+    }
 
-      // Moving on runway - use acceleration to determine departure vs landing roll
-      // Positive acceleration = accelerating = takeoff roll
-      // Negative acceleration = decelerating = landing roll
-      // This handles go-arounds (accelerating on destination runway) correctly
-      const accel = aircraft.acceleration  // knots per second
-      const ACCEL_THRESHOLD = 0.5  // Minimum acceleration to be considered significant
+    // Moving on runway - use acceleration to determine departure vs landing roll
+    // Positive acceleration = accelerating = takeoff roll
+    // Negative acceleration = decelerating = landing roll
+    // This handles go-arounds (accelerating on destination runway) correctly
+    const accel = aircraft.acceleration  // knots per second
+    const ACCEL_THRESHOLD = 0.5  // Minimum acceleration to be considered significant
 
-      if (accel > ACCEL_THRESHOLD) {
-        // Accelerating = takeoff roll (even if this is the arrival airport - could be go-around)
-        return { phase: 'departure_roll', runway: runwayIdent, runwayDistance: runwayDistanceNm }
-      } else if (accel < -ACCEL_THRESHOLD) {
-        // Decelerating = landing roll
-        return { phase: 'landing_roll', runway: runwayIdent, runwayDistance: runwayDistanceNm }
-      } else {
-        // Acceleration near zero - use flight plan as fallback
+    if (accel > ACCEL_THRESHOLD) {
+      // Accelerating = takeoff roll (even if this is the arrival airport - could be go-around)
+      return { phase: 'departure_roll', runway: runwayIdent, runwayDistance: runwayDistanceNm }
+    } else if (accel < -ACCEL_THRESHOLD) {
+      // Decelerating = landing roll
+      return { phase: 'landing_roll', runway: runwayIdent, runwayDistance: runwayDistanceNm }
+    } else {
+      // Acceleration near zero - use speed + flight plan as fallback
+      // High speed (>60 kts) on runway is almost certainly a roll, not stopped
+      if (speedKts > 60) {
+        // At high speed, use flight plan to determine direction
         if (isArrivingHere) {
           return { phase: 'landing_roll', runway: runwayIdent, runwayDistance: runwayDistanceNm }
-        } else if (isDepartingHere) {
-          return { phase: 'departure_roll', runway: runwayIdent, runwayDistance: runwayDistanceNm }
         } else {
-          // No clear signal - default to departure (lined up for takeoff)
           return { phase: 'departure_roll', runway: runwayIdent, runwayDistance: runwayDistanceNm }
         }
       }
+      // Lower speed with neutral acceleration - use flight plan
+      if (isArrivingHere) {
+        return { phase: 'landing_roll', runway: runwayIdent, runwayDistance: runwayDistanceNm }
+      } else if (isDepartingHere) {
+        return { phase: 'departure_roll', runway: runwayIdent, runwayDistance: runwayDistanceNm }
+      } else {
+        // No clear signal - default to departure (lined up for takeoff)
+        return { phase: 'departure_roll', runway: runwayIdent, runwayDistance: runwayDistanceNm }
+      }
     }
+  }
 
+  // === OTHER GROUND PHASES (not on runway) ===
+  // Use speed < 40 kts as ground indicator for non-runway operations
+  // Aircraft rarely taxi faster than 30-40 kts; runway ops handled above
+  const isOnGround = aglFt < GROUND_ALTITUDE_AGL_FT && speedKts < 40
+
+  if (isOnGround) {
     // Near runway threshold but not on it
     if (nearestRwy && nearestRwy.distanceFt < HOLDING_SHORT_DISTANCE_FT && speedKts < STOPPED_SPEED_KTS) {
       return { phase: 'holding_short', runway: runwayIdent, runwayDistance: runwayDistanceNm }
@@ -616,11 +630,11 @@ function detectFlightPhase(
 
     // Check for pushback: moving slowly with track opposite to heading
     // Pushback: aircraft faces one direction but moves backwards
-    // Note: Only check when NOT on runway surface (handled above)
     if (speedKts > 0.3 && speedKts < PUSHBACK_MAX_SPEED_KTS) {
       const trackHeadingDiff = Math.abs(headingDifference(track, heading))
-      // If track is 120-180° from heading, aircraft is moving backwards
-      if (trackHeadingDiff > 120) {
+      // If track is 90-180° from heading, aircraft is moving backwards or sideways
+      // Use 90° threshold to catch curved pushbacks (not just straight back)
+      if (trackHeadingDiff > 90) {
         return { phase: 'pushback', runway: null, runwayDistance: null }
       }
     }

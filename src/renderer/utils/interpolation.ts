@@ -595,8 +595,9 @@ export function interpolateAircraftState(
   let track = interpolatedHeading
   const positionDeltaForTrack = Math.abs(previous.latitude - current.latitude) +
                                 Math.abs(previous.longitude - current.longitude)
-  // Use very small threshold (~0.5m) to detect slow pushback movement
-  if (positionDeltaForTrack > 0.000005) {
+  // Use very small threshold (~0.25m) to detect slow pushback movement
+  // At 0.3 kts over 3 seconds = ~0.45m, need threshold below this
+  if (positionDeltaForTrack > 0.0000025) {
     track = calculateBearing(
       previous.latitude,
       previous.longitude,
