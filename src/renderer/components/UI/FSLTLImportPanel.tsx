@@ -258,6 +258,9 @@ function FSLTLImportPanel() {
               }))
               fsltlService.registerModels(newModels)
               console.log(`[FSLTLImportPanel] Registered ${newModels.length} new models`)
+
+              // Auto-enable FSLTL models after successful conversion
+              updateFSLTLSettings({ enableFsltlModels: true })
             }
 
             // Show errors if status is error
@@ -307,7 +310,7 @@ function FSLTLImportPanel() {
       setStoreError(`Failed to start conversion: ${errorMessage}`)
       resetConversion()
     }
-  }, [fsltlSettings.sourcePath, fsltlSettings.textureScale, outputPath, startConversion, updateProgress, completeConversion, setPollInterval, setStoreError, resetConversion])
+  }, [fsltlSettings.sourcePath, fsltlSettings.textureScale, outputPath, startConversion, updateProgress, completeConversion, setPollInterval, setStoreError, resetConversion, updateFSLTLSettings])
 
   // Estimate disk space for all models
   const getEstimatedDiskSpace = () => {
@@ -338,24 +341,26 @@ function FSLTLImportPanel() {
     <div className="fsltl-import-panel">
       <h3>FSLTL Aircraft Models</h3>
 
-      {/* Enable/Disable Toggle */}
-      <div className="fsltl-section">
-        <label className="setting-checkbox-label">
-          <input
-            type="checkbox"
-            checked={fsltlSettings.enableFsltlModels}
-            onChange={(e) => {
-              updateFSLTLSettings({ enableFsltlModels: e.target.checked })
-              // Trigger model refresh when toggling so aircraft update immediately
-              fsltlService.triggerModelRefresh()
-            }}
-          />
-          <span>Use FSLTL Models</span>
-        </label>
-        <p className="setting-hint">
-          When disabled, falls back to built-in (FR24) models. Useful for testing.
-        </p>
-      </div>
+      {/* Enable/Disable Toggle - only show if converted models are available */}
+      {convertedCount > 0 && (
+        <div className="fsltl-section">
+          <label className="setting-checkbox-label">
+            <input
+              type="checkbox"
+              checked={fsltlSettings.enableFsltlModels}
+              onChange={(e) => {
+                updateFSLTLSettings({ enableFsltlModels: e.target.checked })
+                // Trigger model refresh when toggling so aircraft update immediately
+                fsltlService.triggerModelRefresh()
+              }}
+            />
+            <span>Use FSLTL Models</span>
+          </label>
+          <p className="setting-hint">
+            When disabled, falls back to built-in (FR24) models. Useful for testing.
+          </p>
+        </div>
+      )}
 
       {/* Source Path */}
       <div className="fsltl-section">

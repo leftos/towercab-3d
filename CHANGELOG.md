@@ -6,6 +6,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ### Added
 - FSLTL Models toggle in Settings to enable/disable converted FSLTL aircraft models
+  - Toggle only appears after models have been converted (not shown for new users)
+  - Automatically enabled after a successful conversion
+- "Distance (Camera)" sort option in aircraft panel - sorts by distance from your current camera position instead of the airport
 
 ### Changed
 - Leader lines now have more separation from aircraft icons in 2D top-down view
