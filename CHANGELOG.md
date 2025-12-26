@@ -4,6 +4,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+## [0.0.13-alpha] - 2025-12-25
+
 ### Added
 - Datablock repositioning using numpad-style directions (1-9)
   - Press 1-9 then Enter to move all datablocks to that position (e.g., 9+Enter for top-right)
