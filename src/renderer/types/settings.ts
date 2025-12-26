@@ -469,6 +469,15 @@ export interface UISettings {
 
   /** Prompt to contribute tower positions to GitHub after saving (default: true) */
   askToContributePositions: boolean
+
+  /**
+   * Whether the device optimization prompt has been dismissed (default: false)
+   *
+   * When a touch device (iPad/tablet) is detected for the first time, the user
+   * is prompted to apply optimized settings. This flag tracks whether the prompt
+   * was dismissed so it doesn't show again.
+   */
+  deviceOptimizationPromptDismissed: boolean
 }
 
 /**
@@ -808,7 +817,8 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     theme: 'dark',
     showAircraftPanel: true,
     showMetarOverlay: false,
-    askToContributePositions: true
+    askToContributePositions: true,
+    deviceOptimizationPromptDismissed: false
   },
   fsltl: {
     sourcePath: null,

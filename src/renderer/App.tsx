@@ -8,6 +8,7 @@ import ControlsBar from './components/UI/ControlsBar'
 import AirportSelector from './components/UI/AirportSelector'
 import CommandInput from './components/UI/CommandInput'
 import TouchControls from './components/UI/TouchControls'
+import DeviceOptimizationPrompt from './components/UI/DeviceOptimizationPrompt'
 import MeasuringTool from './components/UI/MeasuringTool'
 import MetarOverlay from './components/UI/MetarOverlay'
 import UpdateNotification from './components/UI/UpdateNotification'
@@ -507,6 +508,9 @@ function App() {
           `}</style>
         </div>
       )}
+
+      {/* Device Optimization Prompt for touch devices */}
+      {!isVRActive && <DeviceOptimizationPrompt />}
     </div>
   )
 }

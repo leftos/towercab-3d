@@ -1,7 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type {
-  SettingsStore,
   CesiumSettings,
   GraphicsSettings,
   CameraSettings,
@@ -12,6 +11,118 @@ import type {
   FSLTLSettings
 } from '../types/settings'
 import { DEFAULT_SETTINGS } from '../types/settings'
+
+// ============================================================================
+// Preset System Types and Constants
+// ============================================================================
+
+/**
+ * Available settings presets
+ *
+ * - 'desktop': High quality for desktop PCs (default settings)
+ * - 'ipad': Optimized for iPad/tablet with reduced GPU/memory usage
+ * - 'mobile': Low quality for phones or low-end devices
+ */
+export type SettingsPreset = 'desktop' | 'ipad' | 'mobile'
+
+/**
+ * Partial settings that a preset can override
+ */
+interface PresetSettings {
+  graphics?: Partial<GraphicsSettings>
+  memory?: Partial<MemorySettings>
+  cesium?: Partial<CesiumSettings>
+}
+
+/**
+ * Settings presets for different device types
+ *
+ * Presets only override specific settings - other settings are preserved.
+ * This allows users to customize non-performance settings while using a preset.
+ */
+export const SETTINGS_PRESETS: Record<SettingsPreset, PresetSettings> = {
+  desktop: {
+    graphics: {
+      msaaSamples: 4,
+      enableShadows: true,
+      shadowMapSize: 2048,
+      enableAmbientOcclusion: false,
+      enableFxaa: true
+    },
+    memory: {
+      inMemoryTileCacheSize: 2000,
+      maxReplayDurationMinutes: 15
+    },
+    cesium: {
+      terrainQuality: 3,
+      show3DBuildings: false
+    }
+  },
+  ipad: {
+    graphics: {
+      msaaSamples: 2,
+      enableShadows: false,
+      shadowMapSize: 1024,
+      enableAmbientOcclusion: false,
+      enableFxaa: true,
+      enableAircraftSilhouettes: false
+    },
+    memory: {
+      inMemoryTileCacheSize: 500,
+      maxReplayDurationMinutes: 5
+    },
+    cesium: {
+      terrainQuality: 2,
+      show3DBuildings: false
+    }
+  },
+  mobile: {
+    graphics: {
+      msaaSamples: 1,
+      enableShadows: false,
+      shadowMapSize: 1024,
+      enableAmbientOcclusion: false,
+      enableFxaa: false,
+      enableAircraftSilhouettes: false,
+      enableHdr: false
+    },
+    memory: {
+      inMemoryTileCacheSize: 200,
+      maxReplayDurationMinutes: 3
+    },
+    cesium: {
+      terrainQuality: 1,
+      show3DBuildings: false
+    }
+  }
+}
+
+/**
+ * Extended SettingsStore interface with preset support
+ */
+interface SettingsStoreWithPresets {
+  cesium: CesiumSettings
+  graphics: GraphicsSettings
+  camera: CameraSettings
+  weather: WeatherSettings
+  memory: MemorySettings
+  aircraft: AircraftSettings
+  ui: UISettings
+  fsltl: FSLTLSettings
+
+  updateCesiumSettings: (updates: Partial<CesiumSettings>) => void
+  updateGraphicsSettings: (updates: Partial<GraphicsSettings>) => void
+  updateCameraSettings: (updates: Partial<CameraSettings>) => void
+  updateWeatherSettings: (updates: Partial<WeatherSettings>) => void
+  updateMemorySettings: (updates: Partial<MemorySettings>) => void
+  updateAircraftSettings: (updates: Partial<AircraftSettings>) => void
+  updateUISettings: (updates: Partial<UISettings>) => void
+  updateFSLTLSettings: (updates: Partial<FSLTLSettings>) => void
+  resetToDefaults: () => void
+  exportSettings: () => string
+  importSettings: (json: string) => boolean
+  applyPreset: (preset: SettingsPreset) => void
+}
 
 /**
  * Settings store with grouped structure
@@ -40,7 +151,7 @@ import { DEFAULT_SETTINGS } from '../types/settings'
  * updateGraphicsSettings({ enableShadows: false })
  * ```
  */
-export const useSettingsStore = create<SettingsStore>()(
+export const useSettingsStore = create<SettingsStoreWithPresets>()(
   persist(
     (set, get) => ({
       ...DEFAULT_SETTINGS,
@@ -271,11 +382,27 @@ export const useSettingsStore = create<SettingsStore>()(
         } catch {
           return false
         }
+      },
+
+      // ========================================================================
+      // PRESETS
+      // ========================================================================
+
+      applyPreset: (presetName: SettingsPreset) => {
+        const preset = SETTINGS_PRESETS[presetName]
+        if (!preset) return
+
+        // Apply preset values on top of current settings (preserves non-preset values)
+        set((state) => ({
+          graphics: { ...state.graphics, ...preset.graphics },
+          memory: { ...state.memory, ...preset.memory },
+          cesium: { ...state.cesium, ...preset.cesium }
+        }))
       }
     }),
     {
       name: 'settings-store',
-      version: 16, // Incremented for builtinModelTintColor graphics setting
+      version: 17, // Incremented for deviceOptimizationPromptDismissed UI setting
       migrate: (persistedState: unknown, version: number) => {
         // Auto-migrate old flat structure to grouped structure
         if (version < 2) {
@@ -463,7 +590,19 @@ export const useSettingsStore = create<SettingsStore>()(
             }
           }
         }
-        return persistedState as SettingsStore
+        // Migrate v16 to v17: add deviceOptimizationPromptDismissed setting
+        if (version < 17) {
+          console.log('[Settings] Migrating v16 to v17: adding deviceOptimizationPromptDismissed setting')
+          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
+          return {
+            ...state,
+            ui: {
+              ...DEFAULT_SETTINGS.ui,
+              ...state.ui
+            }
+          }
+        }
+        return persistedState as SettingsStoreWithPresets
       }
     }
   )
@@ -585,7 +724,8 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
       theme: oldSettings.theme ?? DEFAULT_SETTINGS.ui.theme,
       showAircraftPanel: oldSettings.showAircraftPanel ?? DEFAULT_SETTINGS.ui.showAircraftPanel,
       showMetarOverlay: oldSettings.showMetarOverlay ?? DEFAULT_SETTINGS.ui.showMetarOverlay,
-      askToContributePositions: oldSettings.askToContributePositions ?? DEFAULT_SETTINGS.ui.askToContributePositions
+      askToContributePositions: oldSettings.askToContributePositions ?? DEFAULT_SETTINGS.ui.askToContributePositions,
+      deviceOptimizationPromptDismissed: oldSettings.deviceOptimizationPromptDismissed ?? DEFAULT_SETTINGS.ui.deviceOptimizationPromptDismissed
     },
     fsltl: {
       sourcePath: oldSettings.fsltl?.sourcePath ?? DEFAULT_SETTINGS.fsltl.sourcePath,
