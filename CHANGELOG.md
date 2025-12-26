@@ -5,6 +5,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- App now ships with tower cab camera position defaults based on vNAS and FAA data
 - Press Enter in airport picker to select the top result without tabbing
 - Default datablock direction setting in Settings > Aircraft
   - Choose the default position (1-9 numpad style) for datablocks on new airports
