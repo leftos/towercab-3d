@@ -1,9 +1,11 @@
 import { useRef, useCallback } from 'react'
 import * as GUI from '@babylonjs/gui'
 import type { AircraftLabel, UseBabylonLabelsResult } from '@/types'
+import { LEADER_LINE_END_GAP_3D_PX, LEADER_LINE_END_GAP_2D_PX } from '@/constants/rendering'
 
 interface UseBabylonLabelsOptions {
   guiTexture: GUI.AdvancedDynamicTexture | null
+  isTopDownView?: boolean
 }
 
 // Memory diagnostic counters for label management
@@ -314,7 +316,7 @@ function rgbToHex(r: number, g: number, b: number): string {
 export function useBabylonLabels(
   options: UseBabylonLabelsOptions
 ): UseBabylonLabelsResult {
-  const { guiTexture } = options
+  const { guiTexture, isTopDownView = false } = options
 
   const aircraftLabelsRef = useRef<Map<string, AircraftLabel>>(new Map())
 
@@ -472,9 +474,10 @@ export function useBabylonLabels(
     const startX = labelCenterX + nx * tEdge
     const startY = labelCenterY + ny * tEdge
 
-    // Line ends near model (leave small gap)
-    const endX = screenX - nx * 3
-    const endY = screenY - ny * 3
+    // Line ends near model (leave small gap - larger in 2D top-down view)
+    const endGap = isTopDownView ? LEADER_LINE_END_GAP_2D_PX : LEADER_LINE_END_GAP_3D_PX
+    const endX = screenX - nx * endGap
+    const endY = screenY - ny * endGap
 
     // Set line coordinates BEFORE making visible to prevent flash at (0,0)
     labelData.leaderLine.x1 = startX
@@ -485,7 +488,7 @@ export function useBabylonLabels(
     // Now show label and leader line (coordinates already set)
     labelData.label.isVisible = true
     labelData.leaderLine.isVisible = true
-  }, [guiTexture])
+  }, [guiTexture, isTopDownView])
 
   // Remove aircraft label
   const removeLabel = useCallback((callsign: string) => {

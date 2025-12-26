@@ -7,6 +7,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 ### Added
 - FSLTL Models toggle in Settings to enable/disable converted FSLTL aircraft models
 
+### Changed
+- Leader lines now have more separation from aircraft icons in 2D top-down view
+
 ### Fixed
 - Fixed FR24 aircraft models floating above ground due to incorrect ground offset detection
 - Fixed leader lines connecting from wrong corners on datablocks

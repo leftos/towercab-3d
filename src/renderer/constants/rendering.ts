@@ -301,6 +301,22 @@ export const DATABLOCK_LEADER_LINE_HEIGHT_MULTIPLIER = 0.25
  */
 export const DATABLOCK_HORIZONTAL_OFFSET_M = -10
 
+/**
+ * Gap in pixels between leader line end and aircraft position (3D view)
+ *
+ * Small gap to prevent the line from overlapping the aircraft model/cone.
+ * Used in 3D tower view mode.
+ */
+export const LEADER_LINE_END_GAP_3D_PX = 3
+
+/**
+ * Gap in pixels between leader line end and aircraft position (2D top-down view)
+ *
+ * Larger gap for 2D view because aircraft icons appear larger and need more separation.
+ * Used in top-down view mode.
+ */
+export const LEADER_LINE_END_GAP_2D_PX = 12
+
 // ============================================================================
 // LANDING FLARE EMULATION
 // ============================================================================

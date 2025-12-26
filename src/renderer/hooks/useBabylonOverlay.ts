@@ -207,7 +207,8 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     getAircraftCallsigns,
     hideAllLabels
   } = useBabylonLabels({
-    guiTexture
+    guiTexture,
+    isTopDownView
   })
 
   // 5. Initialize ENU root node (coordinate system, transforms)
