@@ -5,6 +5,11 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Aircraft with unknown type but known airline now show airline-specific liveries
+  - Searches B738, A320, B739, A321, A319, B737, A20N, A21N, A19N, B38M, B39M, B73X for matching airline livery
+  - Example: JetBlue flight with N/A type shows JBU A320 livery instead of generic white B738
+- Added C400 (Cessna 400/Corvalis TT) to aircraft dimensions database
+  - Now matches to similar-sized GA aircraft (P28A) instead of falling back to B738
 - Improved aircraft model matching for airlines with limited liveries
   - Airlines now use their closest available aircraft type when an exact match doesn't exist (e.g., FedEx B738 uses FedEx B738F with scaling)
   - Freighter variant dimensions now resolve correctly (B738F uses B738 dimensions)
@@ -46,6 +51,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Model matching now validates file existence before returning model paths
 
 ### Fixed
+- FSLTL converter now reads model.CFG to find the correct base model variant
+  - Fixes airline livery textures not loading (e.g., DAL A321 appearing white)
+  - Sharklet vs non-sharklet variants now use correct texture filenames
 - Camera no longer rubberbands or builds up momentum when hitting limits (pitch, zoom, distance, altitude)
 - Orbit camera no longer clips through terrain when close to the ground
   - Camera automatically stays above terrain with minimum altitude

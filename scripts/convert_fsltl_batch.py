@@ -452,6 +452,53 @@ def parse_aircraft_cfg(aircraft_dir: Path) -> dict:
     return result
 
 
+def parse_model_cfg(model_cfg_path: Path) -> Path | None:
+    """
+    Parse a model.CFG file to extract the base GLTF path.
+
+    MSFS livery folders have a MODEL.xxx/model.CFG that specifies which
+    base model to use via [models] normal=..\\..\\FSLTL_A321\\model.CFM_S\\FAIB_A321S_CFM.xml
+
+    Returns the path to the GLTF file (derived from the .xml path) or None.
+    """
+    if not model_cfg_path.exists():
+        return None
+
+    try:
+        content = model_cfg_path.read_text(encoding='utf-8', errors='ignore')
+        for line in content.splitlines():
+            line = line.strip()
+            if line.lower().startswith('normal='):
+                # Extract path after 'normal='
+                rel_path = line.partition('=')[2].strip()
+                if rel_path:
+                    # Convert backslashes to forward slashes
+                    rel_path = rel_path.replace('\\', '/')
+                    # The path points to an .xml file, but we want the GLTF
+                    # e.g., model.CFM_S/FAIB_A321S_CFM.xml -> model.CFM_S/FAIB_A321S_CFM_LOD0.gltf
+                    if rel_path.endswith('.xml'):
+                        gltf_base = rel_path[:-4]  # Remove .xml
+                        # Resolve relative to model.CFG's parent directory
+                        abs_path = (model_cfg_path.parent / gltf_base).resolve()
+                        # Try to find the GLTF in that directory
+                        gltf_dir = abs_path.parent
+                        gltf_stem = abs_path.name
+                        if gltf_dir.exists():
+                            # Look for LOD0 first, then any LOD
+                            for suffix in ['_LOD0.gltf', '_LOD0.GLTF']:
+                                candidate = gltf_dir / f"{gltf_stem}{suffix}"
+                                if candidate.exists():
+                                    return candidate
+                            # Fall back to any GLTF with matching prefix
+                            for gltf_file in gltf_dir.glob(f"{gltf_stem}*.gltf"):
+                                return gltf_file
+                            for gltf_file in gltf_dir.glob(f"{gltf_stem}*.GLTF"):
+                                return gltf_file
+    except Exception:
+        pass
+    return None
+
+
 def get_gltf_vertex_count(gltf_path: Path) -> int:
     """Get approximate vertex count from a GLTF file."""
     try:
@@ -522,6 +569,19 @@ def find_model_gltf(aircraft_dir: Path) -> tuple[Path | None, list[Path], Path |
     # First, try to find GLTF directly in this folder (base model)
     model_dirs = list(aircraft_dir.glob("model*")) + list(aircraft_dir.glob("MODEL*"))
 
+    # Check if any model dir has a model.CFG pointing to a base GLTF
+    # This is how MSFS liveries specify which variant to use (e.g., CFM vs IAE engines)
+    gltf_from_cfg = None
+    for model_dir in model_dirs:
+        if model_dir.is_dir():
+            model_cfg = model_dir / "model.CFG"
+            if not model_cfg.exists():
+                model_cfg = model_dir / "model.cfg"
+            if model_cfg.exists():
+                gltf_from_cfg = parse_model_cfg(model_cfg)
+                if gltf_from_cfg:
+                    break
+
     for model_dir in model_dirs:
         if model_dir.is_dir():
             gltf_file = find_gltf_in_model_dir(model_dir)
@@ -539,30 +599,38 @@ def find_model_gltf(aircraft_dir: Path) -> tuple[Path | None, list[Path], Path |
         # Resolve base container path (e.g., "..\FSLTL_A20N" -> parent/FSLTL_A20N)
         base_path = (aircraft_dir / base_container).resolve()
         if base_path.exists():
-            # Find GLTF in base model
-            base_model_dirs = list(base_path.glob("model*")) + list(base_path.glob("MODEL*"))
-            for model_dir in base_model_dirs:
-                if model_dir.is_dir():
-                    gltf_file = find_gltf_in_model_dir(model_dir)
-                    if gltf_file:
-                        # Texture priority: livery textures first, then base textures
-                        texture_dirs = []
+            # If we found a specific GLTF from model.CFG, use it
+            # Otherwise fall back to searching all model directories
+            gltf_file = gltf_from_cfg
 
-                        # Add livery-specific texture folders
-                        if texture_suffix:
-                            livery_tex = list(aircraft_dir.glob(f"texture.{texture_suffix}")) + \
-                                        list(aircraft_dir.glob(f"TEXTURE.{texture_suffix}")) + \
-                                        list(aircraft_dir.glob(f"texture{texture_suffix}")) + \
-                                        list(aircraft_dir.glob(f"TEXTURE{texture_suffix}"))
-                            texture_dirs.extend(livery_tex)
+            if gltf_file is None:
+                # Fall back: search all model directories in base path
+                base_model_dirs = list(base_path.glob("model*")) + list(base_path.glob("MODEL*"))
+                for model_dir in base_model_dirs:
+                    if model_dir.is_dir():
+                        gltf_file = find_gltf_in_model_dir(model_dir)
+                        if gltf_file:
+                            break
 
-                        # Also add any texture folder in livery dir
-                        texture_dirs.extend(list(aircraft_dir.glob("texture*")) + list(aircraft_dir.glob("TEXTURE*")))
+            if gltf_file:
+                # Texture priority: livery textures first, then base textures
+                texture_dirs = []
 
-                        # Add base model textures as fallback
-                        texture_dirs.extend(list(base_path.glob("TEXTURE*")) + list(base_path.glob("texture*")))
+                # Add livery-specific texture folders
+                if texture_suffix:
+                    livery_tex = list(aircraft_dir.glob(f"texture.{texture_suffix}")) + \
+                                list(aircraft_dir.glob(f"TEXTURE.{texture_suffix}")) + \
+                                list(aircraft_dir.glob(f"texture{texture_suffix}")) + \
+                                list(aircraft_dir.glob(f"TEXTURE{texture_suffix}"))
+                    texture_dirs.extend(livery_tex)
 
-                        return gltf_file, texture_dirs, base_path
+                # Also add any texture folder in livery dir
+                texture_dirs.extend(list(aircraft_dir.glob("texture*")) + list(aircraft_dir.glob("TEXTURE*")))
+
+                # Add base model textures as fallback
+                texture_dirs.extend(list(base_path.glob("TEXTURE*")) + list(base_path.glob("texture*")))
+
+                return gltf_file, texture_dirs, base_path
 
     return None, [], None
 

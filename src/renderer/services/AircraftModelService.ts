@@ -447,9 +447,39 @@ class AircraftModelServiceClass {
    */
   getModelInfo(aircraftType: string | null | undefined, callsign?: string | null): ModelInfo {
     const uniformScale = { x: 1, y: 1, z: 1 }
+    const b738Dims = { wingspan: 35.78, length: 39.47 }
 
-    // If no aircraft type, try FSLTL B738 fallback before built-in
+    // If no aircraft type, try airline-specific narrowbody fallback, then generic B738
+    // Common narrowbody types to search for airline liveries (in preference order)
+    const FALLBACK_TYPES = [
+      'B738', 'A320', 'B739', 'A321', 'A319', 'B737',
+      'A20N', 'A21N', 'A19N', 'B38M', 'B39M', 'B73X'
+    ]
+
     if (!aircraftType) {
+      const airlineCode = this.extractAirlineCode(callsign)
+
+      // Try airline-specific narrowbody models (e.g., JBU A320 for JetBlue)
+      if (airlineCode) {
+        for (const fallbackType of FALLBACK_TYPES) {
+          const airlineModel = fsltlService.findBestModel(fallbackType, airlineCode)
+          if (airlineModel) {
+            const modelUrl = convertFileSrc(airlineModel.modelPath)
+            const dims = aircraftDimensionsService.getDimensions(fallbackType)
+            return {
+              modelUrl,
+              scale: uniformScale,
+              matchType: 'fallback',
+              matchedModel: airlineModel.modelName,
+              dimensions: dims ?? b738Dims,
+              rotationOffset: 180,
+              hasAnimations: airlineModel.hasAnimations
+            }
+          }
+        }
+      }
+
+      // Fall back to generic B738
       const fsltlB738Fallback = fsltlService.getB738Fallback()
       if (fsltlB738Fallback) {
         const modelUrl = convertFileSrc(fsltlB738Fallback.modelPath)
@@ -458,7 +488,7 @@ class AircraftModelServiceClass {
           scale: uniformScale,
           matchType: 'fallback',
           matchedModel: fsltlB738Fallback.modelName,
-          dimensions: { wingspan: 35.78, length: 39.47 }, // B738 dimensions
+          dimensions: b738Dims,
           rotationOffset: 180,
           hasAnimations: fsltlB738Fallback.hasAnimations
         }
