@@ -4,6 +4,31 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Shareable tower positions with "Save/Load App Default" buttons
+  - Hold Shift to see buttons change from "Save/Load My Default" to "Save/Load App Default"
+  - Shift+click "Save App Default" saves current view to `mods/tower-positions/{ICAO}.json`
+  - Shift+click "Load App Default" loads from tower-positions folder or built-in defaults
+  - Normal click saves/loads your personal default (stored locally)
+  - Prompts for confirmation when overwriting existing app default
+- Separate 3D and 2D view defaults for tower positions
+  - Each airport can have independent settings for 3D tower view and 2D topdown view
+  - Save 3D position from 3D view, save 2D position from 2D view
+  - If only 3D is defined, 2D mode uses 3D offsets with default altitude
+  - Load App Default (Shift+Home) respects current view mode
+- Easy GitHub contribution for tower positions
+  - After saving an App Default, a dialog offers to contribute to the project
+  - Click "Contribute to GitHub" to open browser with file content pre-filled
+  - No Git knowledge required - GitHub handles fork and PR automatically
+  - Click "Don't Ask Again" to disable the prompt (can re-enable in settings later)
+- Visual feedback on Save/Load Default buttons
+  - Buttons briefly turn green and show "Saved!" or "Loaded!" when triggered
+
+### Changed
+- Tower positions now stored as individual files per airport (`mods/tower-positions/KJFK.json`) instead of single `tower-positions.json`
+  - Easier to share and accept contributions for specific airports
+  - Legacy single-file format still supported for backward compatibility
+
 ## [0.0.15-alpha] - 2025-12-25
 
 ### Fixed

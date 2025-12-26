@@ -13,6 +13,9 @@ import { exportAllData, downloadExport } from '../../services/ExportImportServic
 import { checkForUpdates } from '../../services/UpdateService'
 import { useUpdateStore } from '../../stores/updateStore'
 import { estimateReplayMemoryMB, PLAYBACK_SPEEDS } from '../../constants/replay'
+import { calculateShareable3dPosition, calculateShareable2dPosition } from '../../utils/cameraGeometry'
+import { modService } from '../../services/ModService'
+import { modApi } from '../../utils/tauriApi'
 import type { ReplayExportData, PlaybackSpeed } from '../../types/replay'
 import GlobalSearchPanel from './GlobalSearchPanel'
 import VRButton from '../VR/VRButton'
@@ -51,6 +54,17 @@ function ControlsBar() {
   const [showBookmarkModal, setShowBookmarkModal] = useState(false)
   const [barMode, setBarMode] = useState<BarMode>('controls')
 
+  // Contribution dialog state
+  const [contributeDialogData, setContributeDialogData] = useState<{
+    icao: string
+    viewLabel: string
+    fileContent: Record<string, unknown>
+  } | null>(null)
+
+  // Visual feedback for save/load default buttons
+  const [defaultSaved, setDefaultSaved] = useState(false)
+  const [defaultLoaded, setDefaultLoaded] = useState(false)
+
   // Local state for Cesium Ion token input (only saved on button click)
   const [tokenInput, setTokenInput] = useState('')
   const [tokenSaved, setTokenSaved] = useState(false)
@@ -62,6 +76,7 @@ function ControlsBar() {
   const cesiumIonToken = useSettingsStore((state) => state.cesium.cesiumIonToken)
   const updateCesiumSettings = useSettingsStore((state) => state.updateCesiumSettings)
   const theme = useSettingsStore((state) => state.ui.theme)
+  const askToContributePositions = useSettingsStore((state) => state.ui.askToContributePositions)
   const updateUISettings = useSettingsStore((state) => state.updateUISettings)
   const defaultFov = useSettingsStore((state) => state.camera.defaultFov)
   const cameraSpeed = useSettingsStore((state) => state.camera.cameraSpeed)
@@ -185,6 +200,9 @@ function ControlsBar() {
     followMode,
     followZoom,
     orbitDistance,
+    positionOffsetX,
+    positionOffsetY,
+    positionOffsetZ,
     resetView,
     setFov
   } = useActiveViewportCamera()
@@ -192,7 +210,11 @@ function ControlsBar() {
   // Viewport store - for default saving (shared across viewports)
   const saveCurrentAsDefault = useViewportStore((state) => state.saveCurrentAsDefault)
   const resetToDefault = useViewportStore((state) => state.resetToDefault)
+  const resetToAppDefault = useViewportStore((state) => state.resetToAppDefault)
   const hasCustomDefault = useViewportStore((state) => state.hasCustomDefault)
+
+  // Track Shift key state for button label updates
+  const [shiftPressed, setShiftPressed] = useState(false)
 
   // Measure store
   const isMeasuring = useMeasureStore((state) => state.isActive)
@@ -202,8 +224,25 @@ function ControlsBar() {
   const insetCount = useViewportStore((state) => state.viewports.length - 1)
   const addViewport = useViewportStore((state) => state.addViewport)
   const currentAirport = useAirportStore((state) => state.currentAirport)
+  const towerHeight = useAirportStore((state) => state.towerHeight)
   const pushModal = useUIFeedbackStore((state) => state.pushModal)
   const popModal = useUIFeedbackStore((state) => state.popModal)
+
+  // Track Shift key for button label updates
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setShiftPressed(true)
+    }
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setShiftPressed(false)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+    }
+  }, [])
 
   // Sync token input with store value when settings panel opens or store changes
   useEffect(() => {
@@ -280,12 +319,135 @@ function ControlsBar() {
     resetView()
   }
 
-  const handleSaveAsDefault = () => {
-    saveCurrentAsDefault()
+  const handleSaveAsDefault = async (e: React.MouseEvent) => {
+    // Shift+click saves to tower-positions/{ICAO}.json for sharing
+    if (e.shiftKey && currentAirport) {
+      const icao = currentAirport.icao.toUpperCase()
+      const isTopdown = viewMode === 'topdown'
+      const viewLabel = isTopdown ? '2D' : '3D'
+
+      // Get existing positions for this airport
+      const existing3d = modService.get3dPosition(icao)
+      const existing2d = modService.get2dPosition(icao)
+
+      try {
+        // Check if this specific view already has a saved position
+        const hasExisting = isTopdown ? !!existing2d : !!existing3d
+
+        if (hasExisting) {
+          // Show confirmation dialog
+          const confirmed = window.confirm(
+            `A ${viewLabel} tower position for ${icao} already exists.\n\nDo you want to overwrite it?`
+          )
+          if (!confirmed) return
+        }
+
+        // Build the complete file content (preserving the other view if it exists)
+        const fileContent: {
+          view3d?: { lat: number; lon: number; aglHeight: number; heading?: number; latOffsetMeters?: number; lonOffsetMeters?: number }
+          view2d?: { altitude: number; heading?: number; latOffsetMeters?: number; lonOffsetMeters?: number }
+        } = {}
+
+        if (isTopdown) {
+          // Save 2D topdown position
+          const shareablePos = calculateShareable2dPosition(
+            topdownAltitude,
+            existing2d ?? null,
+            positionOffsetX,
+            positionOffsetY,
+            heading
+          )
+
+          // Preserve existing 3D if present
+          if (existing3d) {
+            fileContent.view3d = {
+              lat: existing3d.lat,
+              lon: existing3d.lon,
+              aglHeight: existing3d.aglHeight,
+              heading: existing3d.heading,
+              latOffsetMeters: existing3d.latOffsetMeters,
+              lonOffsetMeters: existing3d.lonOffsetMeters
+            }
+          }
+
+          fileContent.view2d = {
+            altitude: shareablePos.altitude,
+            heading: shareablePos.heading,
+            latOffsetMeters: shareablePos.latOffsetMeters !== 0 ? shareablePos.latOffsetMeters : undefined,
+            lonOffsetMeters: shareablePos.lonOffsetMeters !== 0 ? shareablePos.lonOffsetMeters : undefined
+          }
+
+          await modApi.updateTowerPosition(icao, { view2d: fileContent.view2d })
+          console.log(`[TowerPositions] Saved 2D position for ${icao}:`, shareablePos)
+        } else {
+          // Save 3D position
+          const shareablePos = calculateShareable3dPosition(
+            currentAirport.lat,
+            currentAirport.lon,
+            towerHeight,
+            existing3d ?? null,
+            positionOffsetX,
+            positionOffsetY,
+            positionOffsetZ,
+            heading
+          )
+
+          fileContent.view3d = {
+            lat: shareablePos.lat,
+            lon: shareablePos.lon,
+            aglHeight: shareablePos.aglHeight,
+            heading: shareablePos.heading,
+            latOffsetMeters: shareablePos.latOffsetMeters !== 0 ? shareablePos.latOffsetMeters : undefined,
+            lonOffsetMeters: shareablePos.lonOffsetMeters !== 0 ? shareablePos.lonOffsetMeters : undefined
+          }
+
+          // Preserve existing 2D if present
+          if (existing2d) {
+            fileContent.view2d = {
+              altitude: existing2d.altitude,
+              heading: existing2d.heading,
+              latOffsetMeters: existing2d.latOffsetMeters,
+              lonOffsetMeters: existing2d.lonOffsetMeters
+            }
+          }
+
+          await modApi.updateTowerPosition(icao, { view3d: fileContent.view3d })
+          console.log(`[TowerPositions] Saved 3D position for ${icao}:`, shareablePos)
+        }
+
+        // Show visual feedback
+        setDefaultSaved(true)
+        setTimeout(() => setDefaultSaved(false), 1500)
+
+        // Offer to contribute to GitHub (if setting is enabled)
+        if (askToContributePositions) {
+          setContributeDialogData({ icao, viewLabel, fileContent })
+        }
+      } catch (error) {
+        console.error('[TowerPositions] Failed to save shareable position:', error)
+        alert(`Failed to save tower position: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      }
+    } else {
+      // Normal click saves to local settings
+      saveCurrentAsDefault()
+      // Show visual feedback
+      setDefaultSaved(true)
+      setTimeout(() => setDefaultSaved(false), 1500)
+    }
   }
 
-  const handleResetToDefault = () => {
-    resetToDefault()
+  const handleResetToDefault = (e: React.MouseEvent) => {
+    if (e.shiftKey) {
+      // Shift+click loads app default (from tower-positions/{ICAO}.json if exists, otherwise built-in default)
+      // View-mode aware: uses view3d or view2d settings based on current view mode
+      resetToAppDefault()
+    } else {
+      // Normal click loads user's saved default
+      resetToDefault()
+    }
+    // Show visual feedback
+    setDefaultLoaded(true)
+    setTimeout(() => setDefaultLoaded(false), 1500)
   }
 
   const formatAngle = (angle: number) => {
@@ -334,6 +496,31 @@ function ControlsBar() {
   const handleImportSuccess = () => {
     setImportStatus('success')
     setTimeout(() => setImportStatus('idle'), 3000)
+  }
+
+  // Contribution dialog handlers
+  const handleContribute = async () => {
+    if (!contributeDialogData) return
+    const { icao, fileContent } = contributeDialogData
+
+    // Clean up undefined values for cleaner JSON
+    const cleanContent = JSON.parse(JSON.stringify(fileContent))
+    const jsonContent = JSON.stringify(cleanContent, null, 2)
+    const encodedContent = encodeURIComponent(jsonContent)
+    const filename = `contributions/tower-positions/${icao}.json`
+    const githubUrl = `https://github.com/leftos/towercab-3d/new/main?filename=${filename}&value=${encodedContent}`
+
+    await openExternal(githubUrl)
+    setContributeDialogData(null)
+  }
+
+  const handleDontAskAgain = () => {
+    updateUISettings({ askToContributePositions: false })
+    setContributeDialogData(null)
+  }
+
+  const handleSkipContribute = () => {
+    setContributeDialogData(null)
   }
 
   const handleReplayFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -491,29 +678,33 @@ function ControlsBar() {
               <div className="button-divider" />
 
               <button
-                className="control-button"
+                className={`control-button wide ${defaultSaved ? 'feedback-success' : ''}`}
                 onClick={handleSaveAsDefault}
-                title={`Save current ${viewMode === '3d' ? '3D' : '2D'} view as default for this airport`}
+                title={shiftPressed
+                  ? `Save ${viewMode === '3d' ? '3D' : '2D'} view to mods/tower-positions/ (shareable)`
+                  : `Save current ${viewMode === '3d' ? '3D' : '2D'} view as your personal default for this airport`}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
                   <polyline points="17 21 17 13 7 13 7 21" />
                   <polyline points="7 3 7 8 15 8" />
                 </svg>
-                Set Default
+                {defaultSaved ? 'Saved!' : (shiftPressed ? 'Save App Default' : 'Save My Default')}
               </button>
 
               <button
-                className={`control-button ${hasCustomDefault() ? 'has-default' : ''}`}
+                className={`control-button wide ${defaultLoaded ? 'feedback-success' : ''} ${hasCustomDefault() ? 'has-default' : ''}`}
                 onClick={handleResetToDefault}
-                title={`Reset to default ${viewMode === '3d' ? '3D' : '2D'} view for this airport`}
+                title={shiftPressed
+                  ? `Load ${viewMode === '3d' ? '3D' : '2D'} app default from mods/tower-positions/ (Shift+Home)`
+                  : `Load your saved ${viewMode === '3d' ? '3D' : '2D'} default for this airport (Home)`}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
                   <path d="M3 3v5h5" />
                   <circle cx="12" cy="12" r="3" />
                 </svg>
-                To Default
+                {defaultLoaded ? 'Loaded!' : (shiftPressed ? 'Load App Default' : 'Load My Default')}
               </button>
 
               <GlobalSearchPanel />
@@ -557,18 +748,7 @@ function ControlsBar() {
                   <span className="follow-hint">Scroll to {followMode === 'tower' ? 'zoom' : 'adjust'} • O to switch • Esc to stop</span>
                 </div>
               ) : (
-                <div className="zoom-control">
-                  <span className="zoom-label">FOV</span>
-                  <input
-                    type="range"
-                    min="10"
-                    max="120"
-                    value={fov}
-                    onChange={(e) => setFov(Number(e.target.value))}
-                    className="zoom-slider"
-                  />
-                  <span className="zoom-value">{Math.round(fov)}°</span>
-                </div>
+                <br/>
               )}
             </div>
 
@@ -2045,6 +2225,45 @@ function ControlsBar() {
         <BookmarkManagerModal
           onClose={() => setShowBookmarkModal(false)}
         />
+      )}
+
+      {/* Contribution Dialog */}
+      {contributeDialogData && (
+        <div className="settings-modal-overlay" onClick={handleSkipContribute}>
+          <div className="settings-modal contribute-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="settings-header">
+              <h2>Share Tower Position</h2>
+              <button className="close-button" onClick={handleSkipContribute}>
+                &times;
+              </button>
+            </div>
+            <div className="settings-content">
+              <div className="settings-section">
+                <p style={{ marginBottom: '16px', lineHeight: 1.5 }}>
+                  {contributeDialogData.viewLabel} tower position saved to{' '}
+                  <code style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px' }}>
+                    mods/tower-positions/{contributeDialogData.icao}.json
+                  </code>
+                </p>
+                <p style={{ marginBottom: '20px', lineHeight: 1.5 }}>
+                  Would you like to contribute this position to the project on GitHub?
+                  This helps other users get accurate tower positions for {contributeDialogData.icao}.
+                </p>
+                <div className="contribute-dialog-buttons">
+                  <button className="control-button primary" onClick={handleContribute}>
+                    Contribute to GitHub
+                  </button>
+                  <button className="control-button" onClick={handleSkipContribute}>
+                    Skip
+                  </button>
+                  <button className="control-button secondary" onClick={handleDontAskAgain}>
+                    Don&apos;t Ask Again
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </>
   )

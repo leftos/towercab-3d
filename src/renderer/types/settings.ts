@@ -406,6 +406,9 @@ export interface UISettings {
 
   /** Show METAR overlay at top of main viewport (default: false, toggle: Ctrl+M) */
   showMetarOverlay: boolean
+
+  /** Prompt to contribute tower positions to GitHub after saving (default: true) */
+  askToContributePositions: boolean
 }
 
 /**
@@ -632,7 +635,8 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
   ui: {
     theme: 'dark',
     showAircraftPanel: true,
-    showMetarOverlay: false
+    showMetarOverlay: false,
+    askToContributePositions: true
   },
   fsltl: {
     sourcePath: null,

@@ -131,7 +131,8 @@ Create a `manifest.json` file in your tower mod folder:
 | `scale` | number | Yes | Scale factor |
 | `heightOffset` | number | No | Additional height offset in meters (for 3D model) |
 | `position` | object | No | Absolute lat/lon for 3D model placement |
-| `positionOffset` | object | No | Fine-tuning position offset in meters (latMeters/lonMeters, applied to `position` or airport center) |
+| `latOffsetMeters` | number | No | Fine-tuning offset in meters (north positive) |
+| `lonOffsetMeters` | number | No | Fine-tuning offset in meters (east positive) |
 | `cabPosition` | object | No | Camera/tower cab position (lat, lon, aglHeight) - sets default viewing position |
 | `cabHeading` | number | No | Default camera heading in degrees (0=north, 90=east) |
 
@@ -146,21 +147,17 @@ Tower mods can now specify custom positions in two ways:
     "lat": 40.6413,
     "lon": -73.7781
   },
-  "positionOffset": {
-    "latMeters": 5.5,
-    "lonMeters": -2.3
-  }
+  "latOffsetMeters": 5.5,
+  "lonOffsetMeters": -2.3
 }
 ```
-The `positionOffset` (in meters) is applied on top of the absolute position for precise fine-tuning. This provides meter-level accuracy that lat/lon degrees cannot offer.
+The offset fields (in meters) are applied on top of the absolute position for precise fine-tuning. This provides meter-level accuracy that lat/lon degrees cannot offer.
 
-**Using offset only (legacy, still supported):**
+**Using offset only (positions relative to airport center):**
 ```json
 {
-  "positionOffset": {
-    "latMeters": 10,
-    "lonMeters": 5
-  }
+  "latOffsetMeters": 10,
+  "lonOffsetMeters": 5
 }
 ```
 The offset is applied to the airport center location.
@@ -193,100 +190,134 @@ When these are set, they become the default camera position for that airport (us
 3. **Scale**: Model should be in meters
 4. **Detail**: Include cab windows and basic structure
 
-## Custom Tower Positions (tower-positions.json)
+## Custom Tower Positions
 
-Instead of creating a full tower mod, you can define custom camera positions for airports using a simple JSON file. This is useful for setting up preferred viewing angles without needing a 3D model.
+Instead of creating a full tower mod, you can define custom camera positions for airports using simple JSON files. This is useful for setting up preferred viewing angles without needing a 3D model.
 
 ### File Location and Format
 
-Create a `tower-positions.json` file in the `mods/` directory:
+Create individual JSON files for each airport in the `mods/tower-positions/` directory:
 
 ```
 mods/
-├── tower-positions.json
+├── tower-positions/
+│   ├── KJFK.json
+│   ├── KLAX.json
+│   └── EGLL.json
 └── towers/
     └── ...
 ```
 
-### tower-positions.json Format
+Each file is named after the ICAO code (case-insensitive).
+
+### Tower Position File Format
+
+Each airport file supports separate 3D and 2D view settings:
 
 ```json
 {
-  "KJFK": {
+  "view3d": {
     "lat": 40.6413,
     "lon": -73.7781,
     "aglHeight": 97,
-    "heading": 45
+    "heading": 45,
+    "latOffsetMeters": 2.5,
+    "lonOffsetMeters": -1.8
   },
-  "KLAX": {
-    "lat": 33.9416,
-    "lon": -118.4085,
-    "aglHeight": 84,
-    "heading": 270,
-    "positionOffset": {
-      "latMeters": 2.5,
-      "lonMeters": -1.8
-    }
-  },
-  "EGLL": {
-    "lat": 51.4700,
-    "lon": -0.4543,
-    "aglHeight": 87
+  "view2d": {
+    "altitude": 5000,
+    "heading": 0,
+    "latOffsetMeters": 0,
+    "lonOffsetMeters": 0
   }
 }
 ```
 
-### Fields
+Both `view3d` and `view2d` are optional. If only one is provided, the other uses defaults.
+
+### 3D View Fields (`view3d`)
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `lat` | number | Yes | Latitude of the tower cab position |
 | `lon` | number | Yes | Longitude of the tower cab position |
 | `aglHeight` | number | Yes | Height above ground level in meters |
-| `heading` | number | No | Default camera heading in degrees (0=north, 90=east, 180=south, 270=west). Defaults to 0 if omitted |
-| `positionOffset` | object | No | Fine-tuning position offset in meters (latMeters/lonMeters) for precise adjustment |
+| `heading` | number | No | Default camera heading in degrees (0=north). Defaults to 0 |
+| `latOffsetMeters` | number | No | Fine-tuning offset in meters (north positive) |
+| `lonOffsetMeters` | number | No | Fine-tuning offset in meters (east positive) |
+
+### 2D View Fields (`view2d`)
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `altitude` | number | Yes | Altitude above ground in meters (controls zoom, 500-50000) |
+| `heading` | number | No | View rotation in degrees (0=north-up). Defaults to 0 |
+| `latOffsetMeters` | number | No | Fine-tuning offset in meters (north positive) |
+| `lonOffsetMeters` | number | No | Fine-tuning offset in meters (east positive) |
+
+### Saving Positions from the App
+
+The easiest way to create position files is using the app:
+
+1. Navigate to an airport and position the camera
+2. **Shift+Click "Save My Default"** to save to `mods/tower-positions/{ICAO}.json`
+3. The file is saved based on current view mode (3D or 2D)
+4. Repeat in both view modes to save both 3D and 2D positions
+
+### Fallback Behavior
+
+- If only `view3d` is defined and you're in 2D mode: Uses 3D heading and offsets with default altitude
+- If only `view2d` is defined and you're in 3D mode: Uses built-in 3D defaults
+- If neither is defined: Uses built-in app defaults
 
 ### When Custom Positions Are Applied
 
-Custom positions from `tower-positions.json` are applied as "app defaults" for the camera viewpoint. They are used:
+Custom positions are applied as "app defaults" for the camera viewpoint:
 
-1. **First visit to airport**: If you've never visited an airport before, the custom position is used
-2. **Shift+Home reset**: When you press Shift+Home (reset to app defaults), the custom position is restored
-3. **User data takes priority**: If you've saved a custom default or have auto-saved position data for the airport, those take precedence
+1. **First visit to airport**: Custom position is used for that view mode
+2. **Shift+Home reset**: Custom position for current view mode is restored
+3. **User data takes priority**: User-saved defaults and auto-saved positions take precedence
 
 ### Priority Order
 
 For camera position, the system uses this priority (highest to lowest):
 
-1. **User-saved default** - Explicitly saved by clicking "Save" in the app
+1. **User-saved default** - Explicitly saved by clicking "Save My Default"
 2. **Last position** - Auto-saved every 5 seconds
 3. **Tower mod cabPosition** - From a tower mod manifest.json
-4. **tower-positions.json** - From this file
+4. **tower-positions/{ICAO}.json** - From individual position files
 5. **Hardcoded app default** - Built-in values
 
 ### Examples
 
-**Setting up for multiple US airports:**
+**KJFK.json - JFK Tower with both views:**
 
 ```json
 {
-  "KJFK": {
+  "view3d": {
     "lat": 40.6413,
     "lon": -73.7781,
     "aglHeight": 97,
-    "heading": 0
+    "heading": 45
   },
-  "KLAX": {
+  "view2d": {
+    "altitude": 3000,
+    "heading": 0
+  }
+}
+```
+
+**KLAX.json - LAX Tower with 3D only:**
+
+```json
+{
+  "view3d": {
     "lat": 33.9416,
     "lon": -118.4085,
     "aglHeight": 84,
-    "heading": 270
-  },
-  "KORD": {
-    "lat": 41.9742,
-    "lon": -87.9073,
-    "aglHeight": 81,
-    "heading": 180
+    "heading": 270,
+    "latOffsetMeters": 2.5,
+    "lonOffsetMeters": -1.8
   }
 }
 ```
@@ -299,6 +330,30 @@ For camera position, the system uses this priority (highest to lowest):
 - `270` = West
 
 Use values between 0-360 for intermediate directions (e.g., `45` for northeast).
+
+### Backward Compatibility
+
+The legacy single-file format (`mods/tower-positions.json`) is still supported but deprecated. If both exist, individual files in `tower-positions/` take priority over entries in the legacy file.
+
+### Contributing Tower Positions
+
+You can easily share your tower positions with the community:
+
+1. **From the app**: After saving with Shift+Click, you'll be asked if you want to contribute to GitHub
+2. **Type "yes"** to open your browser to GitHub's file creation page
+3. **The file content is pre-filled** - just review and click "Propose new file"
+4. GitHub will automatically create a fork and pull request for you
+
+No Git knowledge required! The app handles everything for you.
+
+**Tip**: Type "never" to disable this prompt permanently. You can re-enable it in Settings later.
+
+**Manual contribution**: If you prefer, you can also:
+1. Copy your `mods/tower-positions/{ICAO}.json` file
+2. Go to the [GitHub repository](https://github.com/leftos/towercab-3d)
+3. Navigate to `contributions/tower-positions/`
+4. Click "Add file" → "Upload files"
+5. Submit a pull request
 
 ## Creating Models
 
@@ -451,10 +506,8 @@ manifest.json:
     "lat": 33.9416,
     "lon": -118.4085
   },
-  "positionOffset": {
-    "latMeters": 2.5,
-    "lonMeters": -1.8
-  },
+  "latOffsetMeters": 2.5,
+  "lonOffsetMeters": -1.8,
   "cabPosition": {
     "lat": 33.9416,
     "lon": -118.4085,
@@ -464,7 +517,7 @@ manifest.json:
 }
 ```
 
-The `position` field specifies where the 3D model renders (in lat/lon), `positionOffset` provides meter-level fine-tuning, and `cabPosition` specifies where the camera views from. The `cabHeading` sets the initial viewing direction.
+The `position` field specifies where the 3D model renders (in lat/lon), `latOffsetMeters`/`lonOffsetMeters` provide meter-level fine-tuning, and `cabPosition` specifies where the camera views from. The `cabHeading` sets the initial viewing direction.
 
 ### SketchUp Tower Mod (Collada)
 

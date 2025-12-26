@@ -275,7 +275,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'settings-store',
-      version: 12, // Incremented for increased tile cache default
+      version: 13, // Incremented for askToContributePositions UI setting
       migrate: (persistedState: unknown, version: number) => {
         // Auto-migrate old flat structure to grouped structure
         if (version < 2) {
@@ -415,6 +415,18 @@ export const useSettingsStore = create<SettingsStore>()(
             }
           }
         }
+        // Migrate v12 to v13: add askToContributePositions UI setting
+        if (version < 13) {
+          console.log('[Settings] Migrating v12 to v13: adding askToContributePositions setting')
+          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
+          return {
+            ...state,
+            ui: {
+              ...DEFAULT_SETTINGS.ui,
+              ...state.ui
+            }
+          }
+        }
         return persistedState as SettingsStore
       }
     }
@@ -530,7 +542,8 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
     ui: {
       theme: oldSettings.theme ?? DEFAULT_SETTINGS.ui.theme,
       showAircraftPanel: oldSettings.showAircraftPanel ?? DEFAULT_SETTINGS.ui.showAircraftPanel,
-      showMetarOverlay: oldSettings.showMetarOverlay ?? DEFAULT_SETTINGS.ui.showMetarOverlay
+      showMetarOverlay: oldSettings.showMetarOverlay ?? DEFAULT_SETTINGS.ui.showMetarOverlay,
+      askToContributePositions: oldSettings.askToContributePositions ?? DEFAULT_SETTINGS.ui.askToContributePositions
     },
     fsltl: {
       sourcePath: oldSettings.fsltl?.sourcePath ?? DEFAULT_SETTINGS.fsltl.sourcePath,

@@ -57,12 +57,37 @@ export const modApi = {
     invoke<T | null>('load_model_manifest', { modelPath }),
 
   /**
-   * Read custom tower positions from mods/tower-positions.json
-   * Returns an object mapping ICAO codes to CustomTowerPosition objects
-   * Returns empty object if file doesn't exist
+   * Read custom tower positions from mods/tower-positions/*.json files
+   * Falls back to legacy mods/tower-positions.json for backward compatibility
+   * Returns an object mapping ICAO codes to position objects
+   * Returns empty object if no files exist
    */
   readTowerPositions: (): Promise<Record<string, unknown>> =>
-    invoke<Record<string, unknown>>('read_tower_positions')
+    invoke<Record<string, unknown>>('read_tower_positions'),
+
+  /**
+   * Update a tower position in mods/tower-positions/{ICAO}.json
+   * Creates the file if it doesn't exist
+   * Preserves existing view settings when only updating one view
+   * This is intended for Shift+Save Default to export shareable positions
+   */
+  updateTowerPosition: (icao: string, position: {
+    view3d?: {
+      lat: number
+      lon: number
+      aglHeight: number
+      heading?: number
+      latOffsetMeters?: number
+      lonOffsetMeters?: number
+    }
+    view2d?: {
+      altitude: number
+      heading?: number
+      latOffsetMeters?: number
+      lonOffsetMeters?: number
+    }
+  }): Promise<void> =>
+    invoke<void>('update_tower_position', { icao, position })
 }
 
 /**

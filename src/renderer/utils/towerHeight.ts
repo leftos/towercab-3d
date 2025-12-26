@@ -29,36 +29,45 @@ export function getTowerHeight(airport: Airport): number {
 }
 
 /**
- * Get tower position (lat, lon, height in meters MSL)
+ * Get tower position (lat, lon, height in meters MSL) for 3D view
  * @param airport - Airport data
  * @param customHeight - Optional height in meters above ground level (AGL). If provided, used instead of estimated height.
- * @param customPosition - Optional custom position {lat, lon, aglHeight, positionOffset?}. If provided, used instead of airport center.
+ * @param view3dPosition - Optional custom 3D view position from tower-positions file
  * @returns Tower position in {latitude, longitude, height} where height is MSL (meters)
  */
 export function getTowerPosition(
   airport: Airport,
   customHeight?: number,
-  customPosition?: { lat: number; lon: number; aglHeight: number; positionOffset?: { latMeters: number; lonMeters: number } }
+  view3dPosition?: {
+    lat: number
+    lon: number
+    aglHeight: number
+    latOffsetMeters?: number
+    lonOffsetMeters?: number
+  }
 ): { latitude: number; longitude: number; height: number } {
   // Use custom position if provided, otherwise use airport center
-  let latitude = customPosition?.lat ?? airport.lat
-  let longitude = customPosition?.lon ?? airport.lon
+  let latitude = view3dPosition?.lat ?? airport.lat
+  let longitude = view3dPosition?.lon ?? airport.lon
 
   // Apply meter-based position offset if provided
-  if (customPosition?.positionOffset) {
+  const latOffsetMeters = view3dPosition?.latOffsetMeters ?? 0
+  const lonOffsetMeters = view3dPosition?.lonOffsetMeters ?? 0
+
+  if (latOffsetMeters !== 0 || lonOffsetMeters !== 0) {
     // Convert meter offset to degrees (1 degree of latitude ≈ 111,320 meters)
     const metersPerDegreeLat = 111320
-    latitude += customPosition.positionOffset.latMeters / metersPerDegreeLat
+    latitude += latOffsetMeters / metersPerDegreeLat
 
     // For longitude, account for latitude (cos factor)
     const metersPerDegreeLon = metersPerDegreeLat * Math.cos(latitude * (Math.PI / 180))
-    longitude += customPosition.positionOffset.lonMeters / metersPerDegreeLon
+    longitude += lonOffsetMeters / metersPerDegreeLon
   }
 
   // Determine AGL height: custom position's aglHeight, custom height param, or estimated
   let aglHeight: number
-  if (customPosition?.aglHeight !== undefined) {
-    aglHeight = customPosition.aglHeight
+  if (view3dPosition?.aglHeight !== undefined) {
+    aglHeight = view3dPosition.aglHeight
   } else if (customHeight !== undefined) {
     aglHeight = customHeight
   } else {

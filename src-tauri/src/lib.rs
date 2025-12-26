@@ -146,8 +146,10 @@ fn list_vmr_files(app: tauri::AppHandle) -> Result<Vec<String>, String> {
     Ok(vmr_files)
 }
 
-/// Read custom tower positions from mods/tower-positions.json
-/// Returns the parsed JSON as a serde_json::Value
+/// Read custom tower positions from mods/tower-positions/*.json files
+/// Each file is named {ICAO}.json (case-insensitive)
+/// Also reads legacy mods/tower-positions.json for backward compatibility
+/// Returns the merged JSON as a serde_json::Value
 #[tauri::command]
 fn read_tower_positions(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     let resource_path = app
@@ -155,18 +157,140 @@ fn read_tower_positions(app: tauri::AppHandle) -> Result<serde_json::Value, Stri
         .resource_dir()
         .map_err(|e| format!("Failed to get resource directory: {}", e))?;
 
-    let tower_positions_path = resource_path.join("mods").join("tower-positions.json");
+    let mut positions: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
 
-    // If file doesn't exist, return empty object
-    if !tower_positions_path.exists() {
-        return Ok(serde_json::json!({}));
+    // First, read legacy tower-positions.json if it exists (lower priority)
+    let legacy_path = resource_path.join("mods").join("tower-positions.json");
+    if legacy_path.exists() {
+        if let Ok(content) = fs::read_to_string(&legacy_path) {
+            if let Ok(legacy_positions) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&content) {
+                for (icao, pos) in legacy_positions {
+                    positions.insert(icao.to_uppercase(), pos);
+                }
+            }
+        }
     }
 
-    let content = fs::read_to_string(&tower_positions_path)
-        .map_err(|e| format!("Failed to read tower-positions.json: {}", e))?;
+    // Then, read individual files from tower-positions/ folder (higher priority, overwrites legacy)
+    let tower_positions_dir = resource_path.join("mods").join("tower-positions");
+    if tower_positions_dir.exists() && tower_positions_dir.is_dir() {
+        if let Ok(entries) = fs::read_dir(&tower_positions_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().map_or(false, |ext| ext.eq_ignore_ascii_case("json")) {
+                    // Extract ICAO from filename (e.g., "KSFO.json" -> "KSFO")
+                    if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                        if let Ok(content) = fs::read_to_string(&path) {
+                            if let Ok(pos) = serde_json::from_str::<serde_json::Value>(&content) {
+                                positions.insert(stem.to_uppercase(), pos);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
-    serde_json::from_str(&content)
-        .map_err(|e| format!("Failed to parse tower-positions.json: {}", e))
+    Ok(serde_json::Value::Object(positions))
+}
+
+/// 3D view position settings for tower-positions
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct View3dPosition {
+    pub lat: f64,
+    pub lon: f64,
+    pub agl_height: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub heading: Option<f64>,
+    /// Fine-tuning offset in meters (north positive)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lat_offset_meters: Option<f64>,
+    /// Fine-tuning offset in meters (east positive)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lon_offset_meters: Option<f64>,
+}
+
+/// 2D topdown view position settings for tower-positions
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct View2dPosition {
+    /// Altitude above ground in meters (controls zoom level, 500-50000m)
+    pub altitude: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub heading: Option<f64>,
+    /// Fine-tuning offset in meters (north positive)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lat_offset_meters: Option<f64>,
+    /// Fine-tuning offset in meters (east positive)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lon_offset_meters: Option<f64>,
+}
+
+/// Tower position entry with separate 3D and 2D view settings
+/// Both views are optional - if only one is provided, the other uses defaults
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TowerPositionEntry {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub view_3d: Option<View3dPosition>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub view_2d: Option<View2dPosition>,
+}
+
+/// Update a single tower position in mods/tower-positions/{ICAO}.json
+/// Creates the directory and file if they don't exist
+#[tauri::command]
+fn update_tower_position(
+    app: tauri::AppHandle,
+    icao: String,
+    position: TowerPositionEntry,
+) -> Result<(), String> {
+    let resource_path = app
+        .path()
+        .resource_dir()
+        .map_err(|e| format!("Failed to get resource directory: {}", e))?;
+
+    let tower_positions_dir = resource_path.join("mods").join("tower-positions");
+
+    // Create tower-positions directory if it doesn't exist
+    fs::create_dir_all(&tower_positions_dir)
+        .map_err(|e| format!("Failed to create tower-positions directory: {}", e))?;
+
+    // Write to individual file named {ICAO}.json
+    let file_path = tower_positions_dir.join(format!("{}.json", icao.to_uppercase()));
+
+    // If file exists, merge with existing data (preserve other view if only updating one)
+    let mut entry = if file_path.exists() {
+        let content = fs::read_to_string(&file_path)
+            .map_err(|e| format!("Failed to read existing position file: {}", e))?;
+        serde_json::from_str::<TowerPositionEntry>(&content).unwrap_or(TowerPositionEntry {
+            view_3d: None,
+            view_2d: None,
+        })
+    } else {
+        TowerPositionEntry {
+            view_3d: None,
+            view_2d: None,
+        }
+    };
+
+    // Update only the views that are provided
+    if position.view_3d.is_some() {
+        entry.view_3d = position.view_3d;
+    }
+    if position.view_2d.is_some() {
+        entry.view_2d = position.view_2d;
+    }
+
+    // Write to file with pretty formatting
+    let output = serde_json::to_string_pretty(&entry)
+        .map_err(|e| format!("Failed to serialize position: {}", e))?;
+    fs::write(&file_path, output)
+        .map_err(|e| format!("Failed to write position file: {}", e))?;
+
+    println!("[TowerPositions] Saved position for {} to {:?}", icao, file_path);
+    Ok(())
 }
 
 /// Fetch a URL and return the response as text (bypasses CORS)
@@ -791,6 +915,7 @@ pub fn run() {
             read_mod_manifest,
             list_vmr_files,
             read_tower_positions,
+            update_tower_position,
             fetch_url,
             // FSLTL commands
             pick_folder,

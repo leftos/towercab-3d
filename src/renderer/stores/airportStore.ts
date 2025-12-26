@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Airport } from '../types/airport'
-import type { CustomTowerPosition } from '../types/mod'
+import type { View3dPosition } from '../types/mod'
 import { getEstimatedTowerHeight } from '../types/airport'
 import { useCameraStore } from './cameraStore'
 import { useViewportStore } from './viewportStore'
@@ -16,7 +16,7 @@ interface AirportStore {
   // Current selection
   currentAirport: Airport | null
   towerHeight: number  // meters above ground
-  customTowerPosition: CustomTowerPosition | null  // Custom tower position from tower mod or tower-positions.json
+  customTowerPosition: View3dPosition | null  // Custom 3D tower position from tower mod or tower-positions
   customHeading: number | null  // Custom default heading in degrees, or null to use app default
 
   // Recent airports (persisted)
@@ -67,7 +67,7 @@ export const useAirportStore = create<AirportStore>()(
 
           // Check for custom tower position from tower mod or tower-positions.json
           // Priority: tower mod cabPosition > tower-positions.json
-          let customTowerPosition: CustomTowerPosition | null = null
+          let customTowerPosition: View3dPosition | null = null
           let customHeading: number | null = null
 
           // Check tower mod first (higher priority)
@@ -82,12 +82,13 @@ export const useAirportStore = create<AirportStore>()(
             customHeading = towerMod.manifest.cabHeading ?? 0
           }
 
-          // Fall back to tower-positions.json if no tower mod position
+          // Fall back to tower-positions if no tower mod position
           if (!customTowerPosition) {
-            const customPos = modService.getCustomTowerPosition(icao)
-            if (customPos) {
-              customTowerPosition = customPos
-              customHeading = customPos.heading ?? 0
+            // Get 3D view position from tower-positions
+            const view3dPos = modService.get3dPosition(icao)
+            if (view3dPos) {
+              customTowerPosition = view3dPos
+              customHeading = view3dPos.heading ?? 0
             }
           }
 

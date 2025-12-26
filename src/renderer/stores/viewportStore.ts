@@ -4,6 +4,7 @@ import type { ViewMode, FollowMode, ViewportLayout, ViewportCameraState, Viewpor
 import { useVatsimStore } from './vatsimStore'
 import { useAirportStore } from './airportStore'
 import { useDatablockPositionStore, type DatablockPosition } from './datablockPositionStore'
+import { modService } from '../services/ModService'
 import {
   HEADING_DEFAULT,
   PITCH_DEFAULT,
@@ -944,16 +945,66 @@ export const useViewportStore = create<ViewportStore>()(
           },
 
           resetToAppDefault: () => {
-            // Always reset to app defaults, ignoring any user-saved default
-            // But use custom heading if available from tower mod or tower-positions.json
-            // Use global orbit settings for consistency across airports
+            // Reset to app defaults based on current view mode
+            // Uses view-specific settings from tower-positions if available
             const state = get()
+            const icao = state.currentAirportIcao
+            const activeViewport = state.viewports.find(v => v.id === state.activeViewportId)
+            const currentViewMode = activeViewport?.cameraState.viewMode ?? '3d'
+
+            // Get view-specific defaults from tower-positions
+            const position3d = icao ? modService.get3dPosition(icao) : undefined
+            const position2d = icao ? modService.get2dPosition(icao) : undefined
+
+            // Get custom heading from airport store (tower mod takes priority)
             const customHeading = useAirportStore.getState().customHeading ?? undefined
-            const mainViewport = createMainViewport(customHeading, state.globalOrbitSettings)
-            set({
-              viewports: [mainViewport],
-              activeViewportId: mainViewport.id
-            })
+
+            if (currentViewMode === 'topdown') {
+              // Reset 2D topdown view
+              // If we have 2D settings, use them; otherwise derive from 3D or use defaults
+              const mainViewport = createMainViewport(customHeading, state.globalOrbitSettings)
+              mainViewport.cameraState.viewMode = 'topdown'
+
+              if (position2d) {
+                // Use saved 2D settings
+                mainViewport.cameraState.topdownAltitude = position2d.altitude
+                mainViewport.cameraState.heading = position2d.heading ?? HEADING_DEFAULT
+                mainViewport.cameraState.positionOffsetX = position2d.lonOffsetMeters ?? 0
+                mainViewport.cameraState.positionOffsetY = position2d.latOffsetMeters ?? 0
+              } else if (position3d) {
+                // Derive 2D from 3D: use 3D heading but default altitude
+                mainViewport.cameraState.heading = position3d.heading ?? HEADING_DEFAULT
+                mainViewport.cameraState.positionOffsetX = position3d.lonOffsetMeters ?? 0
+                mainViewport.cameraState.positionOffsetY = position3d.latOffsetMeters ?? 0
+                mainViewport.cameraState.topdownAltitude = TOPDOWN_ALTITUDE_DEFAULT
+              } else {
+                // Pure defaults
+                mainViewport.cameraState.topdownAltitude = TOPDOWN_ALTITUDE_DEFAULT
+                mainViewport.cameraState.heading = customHeading ?? HEADING_DEFAULT
+              }
+
+              set({
+                viewports: [mainViewport],
+                activeViewportId: mainViewport.id
+              })
+            } else {
+              // Reset 3D view
+              // Use 3D settings from tower-positions if available
+              const heading = position3d?.heading ?? customHeading ?? undefined
+              const mainViewport = createMainViewport(heading, state.globalOrbitSettings)
+
+              if (position3d) {
+                // Apply position offsets from 3D settings
+                mainViewport.cameraState.positionOffsetX = position3d.lonOffsetMeters ?? 0
+                mainViewport.cameraState.positionOffsetY = position3d.latOffsetMeters ?? 0
+                mainViewport.cameraState.positionOffsetZ = 0 // Z offset is already baked into aglHeight
+              }
+
+              set({
+                viewports: [mainViewport],
+                activeViewportId: mainViewport.id
+              })
+            }
           },
 
           hasCustomDefault: () => {

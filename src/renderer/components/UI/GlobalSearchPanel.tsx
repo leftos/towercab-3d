@@ -115,7 +115,7 @@ function GlobalSearchPanel() {
           <circle cx="11" cy="11" r="8" />
           <path d="M21 21l-4.35-4.35" />
         </svg>
-        <span className="search-btn-text">Search All</span>
+        <span className="search-btn-text">Search Flights</span>
         <span className="search-shortcut">Ctrl+K</span>
       </button>
 

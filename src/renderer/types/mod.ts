@@ -46,10 +46,13 @@ export interface TowerModManifest {
     lat: number  // absolute latitude for 3D model position
     lon: number  // absolute longitude for 3D model position
   }
+  /** @deprecated Use latOffsetMeters/lonOffsetMeters instead */
   positionOffset?: {
     latMeters: number  // offset in meters (applied to latitude)
     lonMeters: number  // offset in meters (applied to longitude)
   }
+  latOffsetMeters?: number  // fine-tuning offset in meters (north positive)
+  lonOffsetMeters?: number  // fine-tuning offset in meters (east positive)
   // Camera/cab position override (optional) - allows specifying where the tower cab viewpoint should be
   cabPosition?: {
     lat: number  // latitude of camera position
@@ -60,24 +63,84 @@ export interface TowerModManifest {
 }
 
 /**
- * Custom tower position from tower-positions.json
- * Allows users to define custom camera positions for airports
+ * 3D view position settings for tower-positions
  */
-export interface CustomTowerPosition {
+export interface View3dPosition {
   lat: number  // latitude of camera position
   lon: number  // longitude of camera position
   aglHeight: number  // height above ground level in meters
   heading?: number  // default camera heading in degrees (0=north, 90=east), defaults to 0
-  positionOffset?: {
-    latMeters: number  // fine-tuning offset in meters (applied to latitude)
-    lonMeters: number  // fine-tuning offset in meters (applied to longitude)
-  }
+  latOffsetMeters?: number  // fine-tuning offset in meters (north positive)
+  lonOffsetMeters?: number  // fine-tuning offset in meters (east positive)
 }
 
 /**
- * Map of ICAO codes to custom tower positions from tower-positions.json
+ * 2D topdown view position settings for tower-positions
  */
-export type CustomTowerPositions = Record<string, CustomTowerPosition>
+export interface View2dPosition {
+  altitude: number  // altitude above ground in meters (controls zoom level, 500-50000m)
+  heading?: number  // view rotation in degrees (0=north-up), defaults to 0
+  latOffsetMeters?: number  // fine-tuning offset in meters (north positive)
+  lonOffsetMeters?: number  // fine-tuning offset in meters (east positive)
+}
+
+/**
+ * Custom tower position from mods/tower-positions/{ICAO}.json
+ * Supports separate 3D and 2D view defaults, both optional
+ * If only 3D is provided, 2D uses the 3D position with default topdown altitude
+ */
+export interface CustomTowerPosition {
+  view3d?: View3dPosition  // 3D view camera position
+  view2d?: View2dPosition  // 2D topdown view settings
+}
+
+/**
+ * Legacy tower position format (single view, backward compatible)
+ * Used for reading old tower-positions.json files
+ * @deprecated Use CustomTowerPosition with view3d/view2d instead
+ */
+export interface LegacyTowerPosition {
+  lat: number
+  lon: number
+  aglHeight: number
+  heading?: number
+  /** @deprecated Use latOffsetMeters/lonOffsetMeters instead */
+  positionOffset?: {
+    latMeters: number
+    lonMeters: number
+  }
+  latOffsetMeters?: number
+  lonOffsetMeters?: number
+}
+
+/**
+ * Map of ICAO codes to custom tower positions
+ * Values can be either new format (CustomTowerPosition) or legacy format (LegacyTowerPosition)
+ */
+export type CustomTowerPositions = Record<string, CustomTowerPosition | LegacyTowerPosition>
+
+/**
+ * Check if a tower position is in legacy format
+ */
+export function isLegacyTowerPosition(pos: CustomTowerPosition | LegacyTowerPosition): pos is LegacyTowerPosition {
+  return 'lat' in pos && 'lon' in pos && 'aglHeight' in pos
+}
+
+/**
+ * Convert legacy tower position to new format (as 3D view only)
+ */
+export function convertLegacyToNewFormat(legacy: LegacyTowerPosition): CustomTowerPosition {
+  return {
+    view3d: {
+      lat: legacy.lat,
+      lon: legacy.lon,
+      aglHeight: legacy.aglHeight,
+      heading: legacy.heading,
+      latOffsetMeters: legacy.latOffsetMeters ?? legacy.positionOffset?.latMeters,
+      lonOffsetMeters: legacy.lonOffsetMeters ?? legacy.positionOffset?.lonMeters
+    }
+  }
+}
 
 export interface LoadedMod<T extends AircraftModManifest | TowerModManifest> {
   manifest: T
@@ -139,6 +202,7 @@ export const DEFAULT_AIRCRAFT_MOD: Partial<AircraftModManifest> = {
 export const DEFAULT_TOWER_MOD: Partial<TowerModManifest> = {
   scale: 1.0,
   heightOffset: 0,
-  positionOffset: { latMeters: 0, lonMeters: 0 },
+  latOffsetMeters: 0,
+  lonOffsetMeters: 0,
   cabHeading: 0  // default to north
 }

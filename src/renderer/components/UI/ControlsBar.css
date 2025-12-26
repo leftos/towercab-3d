@@ -33,7 +33,7 @@
 .control-button {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 2px;
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 6px;
@@ -47,6 +47,16 @@
 .control-button:hover {
   background: rgba(255, 255, 255, 0.15);
   border-color: rgba(255, 255, 255, 0.3);
+}
+
+.control-button.wide {
+  min-width: 145px;
+}
+
+.control-button.feedback-success {
+  background: rgba(76, 175, 80, 0.3);
+  border-color: #4caf50;
+  color: #4caf50;
 }
 
 .control-button.active {
@@ -448,22 +458,23 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 0px;
+  padding: 4px 14px;
 }
 
 .follow-indicator {
-  font-size: 14px;
+  font-size: 10px;
   font-weight: 600;
   color: #4fc3f7;
 }
 
 .follow-hint {
-  font-size: 11px;
+  font-size: 10px;
   color: rgba(255, 255, 255, 0.5);
 }
 
 .follow-zoom-info {
-  font-size: 13px;
+  font-size: 10px;
   font-weight: 500;
   color: rgba(255, 255, 255, 0.9);
   display: flex;
@@ -821,4 +832,43 @@
 .token-save-button.saved {
   background: #4caf50;
   color: #fff;
+}
+
+/* Contribution Dialog */
+.contribute-dialog {
+  width: 420px;
+  max-width: 90vw;
+}
+
+.contribute-dialog-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.contribute-dialog-buttons .control-button {
+  justify-content: center;
+  padding: 12px 16px;
+}
+
+.contribute-dialog-buttons .control-button.primary {
+  background: #4caf50;
+  border-color: #4caf50;
+}
+
+.contribute-dialog-buttons .control-button.primary:hover {
+  background: #66bb6a;
+  border-color: #66bb6a;
+}
+
+.contribute-dialog-buttons .control-button.secondary {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+}
+
+.contribute-dialog-buttons .control-button.secondary:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
 }
