@@ -4,6 +4,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+## v0.0.17-alpha - 2025-12-27
+
 ### Added
 - WASD keys now exit orbit mode while keeping camera pointed at the aircraft
   - Pressing any WASD key in orbit mode calculates heading/pitch from tower to aircraft
@@ -12,16 +14,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 - METAR overlay now displays interpolated weather in orbit follow mode without an airport selected
   - Shows blended weather data from nearby stations with flight category color coding
   - Displays source stations and their contribution weights
-- Aircraft lighting effects for better night/low-visibility visibility
-  - Beacon lights: Red strobe on top of aircraft fuselage (flashing)
-  - Navigation lights: Red (left) and green (right) on wingtips
-  - Landing/taxi lights: White forward-facing lights on ground/low aircraft
-  - Rendered as glowing billboards that properly integrate with 3D scene depth
-  - Distance-based culling (only shows nearest 50 aircraft within range)
-  - LOD: Only beacon visible at far distances, all lights visible up close
-  - Night-only mode option (based on sun elevation)
-  - Configurable visibility distance (2-20 NM) in Settings > Advanced Graphics
-- Data source indicators in aircraft panels
+- Data source indicators in aircraft panels (pending vNAS integration)
   - Nearby Aircraft panel header shows "1s" (green) when receiving vNAS live updates, or "15s" when using standard VATSIM polling
   - Individual aircraft show a green dot next to their callsign when receiving 1Hz live updates
   - Flight Search panel (Ctrl+K) shows the same indicators in the footer and per-result
