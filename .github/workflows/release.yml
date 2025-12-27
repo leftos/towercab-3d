@@ -91,6 +91,21 @@ jobs:
       - name: Build FSLTL converter
         run: npm run build:converter
 
+      - name: Check vNAS availability and configure Git
+        id: vnas-check
+        env:
+          VNAS_TOKEN: ${{ secrets.VNAS_REPO_TOKEN }}
+        run: |
+          if [ -n "$VNAS_TOKEN" ]; then
+            echo "vnas_available=true" >> $GITHUB_OUTPUT
+            git config --global url."https://${VNAS_TOKEN}@github.com/".insteadOf "https://github.com/"
+            echo "vNAS repo access configured"
+          else
+            echo "vnas_available=false" >> $GITHUB_OUTPUT
+            echo "Building without vNAS (no VNAS_REPO_TOKEN secret)"
+          fi
+        shell: bash
+
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
@@ -99,7 +114,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           releaseId: ${{ needs.create-release.outputs.release_id }}
-          args: --target ${{ matrix.target }}
+          args: --target ${{ matrix.target }} ${{ steps.vnas-check.outputs.vnas_available == 'true' && '--features vnas' || '' }}
 
   publish-release:
     needs: [create-release, build-tauri]

@@ -20,13 +20,23 @@ Only resort to WebSearch/WebFetch if Context7 doesn't have the information neede
 
 ```bash
 npm install           # Install dependencies
-npm run dev           # Start desktop app with HTTP server on :8765 (access from iPad/browsers)
+npm run dev           # Start desktop app (without vNAS)
+npm run dev:vnas      # Start desktop app with vNAS 1Hz updates (requires private repo access)
 npm run serve         # Development: frontend only in browser (no Tauri, no mods)
-npm run build         # Build for production (outputs Windows installer to src-tauri/target/release/bundle/)
+npm run build         # Build for production without vNAS
+npm run build:vnas    # Build for production with vNAS (requires private repo access)
 npm run build:converter  # Build FSLTL converter executable (requires Python + PyInstaller)
 npm run vite:dev      # Frontend only (internal, used by Tauri)
 npm run vite:build    # Build frontend only (internal, used by Tauri)
 ```
+
+### vNAS Integration
+
+The optional `vnas` feature enables 1Hz real-time aircraft updates via the private `towercab-3d-vnas` crate. Without it, the app uses 15-second VATSIM HTTP polling.
+
+- **Public contributors:** Use `npm run dev` and `npm run build` - no private repo access needed
+- **With vNAS access:** Use `npm run dev:vnas` and `npm run build:vnas`
+- **Signed builds:** `.\build-signed.ps1` (with vNAS) or `.\build-signed.ps1 -NoVnas`
 
 **Note:** The `npm run build` command automatically runs `build:converter` to create the FSLTL model converter executable. This requires Python 3 with Pillow installed. PyInstaller is auto-installed if missing.
 
