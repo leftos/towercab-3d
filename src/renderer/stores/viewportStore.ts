@@ -1235,6 +1235,23 @@ export const useViewportStore = create<ViewportStore>()(
             }
           }
 
+          // Apply persisted globalOrbitSettings to all viewports
+          // This ensures last-used orbit distance/heading/pitch persists across app restarts
+          if (state?.globalOrbitSettings) {
+            const { distance, heading, pitch } = state.globalOrbitSettings
+            useViewportStore.setState((current) => ({
+              viewports: current.viewports.map(v => ({
+                ...v,
+                cameraState: {
+                  ...v.cameraState,
+                  orbitDistance: distance,
+                  orbitHeading: heading,
+                  orbitPitch: pitch
+                }
+              }))
+            }))
+          }
+
           // Migrate bookmarks from cameraStore if not already migrated
           if (state) {
             migrateCameraStoreBookmarks(
