@@ -414,7 +414,40 @@ function FSLTLImportPanel() {
         </div>
       )}
 
-      {/* Source Path */}
+      {/* Converted Models Location - always visible, shown first for returning users */}
+      <div className="fsltl-section">
+        <label>Converted Models Location</label>
+        <div className="fsltl-path-row">
+          <span className="fsltl-path" title={outputPath || ''}>
+            {outputPath || 'Not set'}
+          </span>
+          <button
+            className="control-button"
+            onClick={handleBrowseOutput}
+            disabled={isConverting}
+          >
+            Browse...
+          </button>
+          {isCustomOutputPath && (
+            <button
+              className="control-button"
+              onClick={handleResetOutputPath}
+              disabled={isConverting}
+              title="Reset to default location"
+            >
+              Reset
+            </button>
+          )}
+        </div>
+        <p className="setting-hint">
+          {isSourceValid
+            ? 'Where converted GLB models will be saved.'
+            : 'Select a folder with previously converted models, or set up the source below to convert new ones.'
+          }
+        </p>
+      </div>
+
+      {/* Source Path - for conversion */}
       <div className="fsltl-section">
         <label>FSLTL Package Location</label>
         <div className="fsltl-path-row">
@@ -430,7 +463,7 @@ function FSLTLImportPanel() {
           </button>
         </div>
         <p className="setting-hint">
-          Select the fsltl-traffic-base folder from your MSFS Community folder.
+          To convert new models, select the fsltl-traffic-base folder from your MSFS Community folder.
           Get FSLTL from <a
             href="#"
             onClick={(e) => { e.preventDefault(); shellApi.openExternal('https://fslivetrafficliveries.com/') }}
@@ -439,52 +472,22 @@ function FSLTLImportPanel() {
         </p>
       </div>
 
-      {/* Output Path - only show when source is valid */}
+      {/* Texture Quality - only show when source is valid (for conversion) */}
       {isSourceValid && (
         <div className="fsltl-section">
-          <label>Output Location</label>
-          <div className="fsltl-path-row">
-            <span className="fsltl-path" title={outputPath || ''}>
-              {outputPath || 'Not set'}
-            </span>
-            <button
-              className="control-button"
-              onClick={handleBrowseOutput}
-              disabled={isConverting}
-            >
-              Change...
-            </button>
-            {isCustomOutputPath && (
-              <button
-                className="control-button"
-                onClick={handleResetOutputPath}
-                disabled={isConverting}
-                title="Reset to default location"
-              >
-                Reset
-              </button>
-            )}
-          </div>
-          <p className="setting-hint">
-            Where converted GLB models will be saved. Default is the app&apos;s mods folder.
-          </p>
+          <label>Texture Quality</label>
+          <select
+            value={fsltlSettings.textureScale}
+            onChange={(e) => updateFSLTLSettings({ textureScale: e.target.value as 'full' | '2k' | '1k' | '512' })}
+            disabled={isConverting}
+          >
+            <option value="full">Full (4K) - Largest files</option>
+            <option value="2k">2K - High quality</option>
+            <option value="1k">1K - Balanced (recommended)</option>
+            <option value="512">512px - Smallest files</option>
+          </select>
         </div>
       )}
-
-      {/* Texture Quality */}
-      <div className="fsltl-section">
-        <label>Texture Quality</label>
-        <select
-          value={fsltlSettings.textureScale}
-          onChange={(e) => updateFSLTLSettings({ textureScale: e.target.value as 'full' | '2k' | '1k' | '512' })}
-          disabled={isConverting}
-        >
-          <option value="full">Full (4K) - Largest files</option>
-          <option value="2k">2K - High quality</option>
-          <option value="1k">1K - Balanced (recommended)</option>
-          <option value="512">512px - Smallest files</option>
-        </select>
-      </div>
 
       {/* Ready Panel - Show convert button */}
       {isReady && (

@@ -4,6 +4,12 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- Aircraft panel now hidden when no airport is selected and no flight is being followed
+- FSLTL settings panel reorganized to show converted models location first
+  - Can now browse for a folder with previously converted models without setting up a source path
+  - Conversion-related options (source folder, texture quality) shown below for new conversions
+
 ## [0.0.16-alpha] - 2025-12-27
 
 ### Added
