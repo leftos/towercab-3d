@@ -286,7 +286,7 @@ function App() {
     return (
       <div className="loading-screen">
         <div className="loading-content">
-          <h1>TowerCab 3D</h1>
+          <img src="/logo.png" alt="TowerCab 3D" className="loading-logo" />
           <div className="loading-spinner"></div>
           <p>{loadingStatus}</p>
         </div>
@@ -303,11 +303,10 @@ function App() {
             text-align: center;
             color: white;
           }
-          .loading-content h1 {
-            font-size: 32px;
-            font-weight: 700;
+          .loading-logo {
+            width: 128px;
+            height: 128px;
             margin-bottom: 24px;
-            color: #4fc3f7;
           }
           .loading-spinner {
             width: 40px;
