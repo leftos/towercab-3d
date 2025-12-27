@@ -5,16 +5,59 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Aircraft lighting effects for better night/low-visibility visibility
+  - Beacon lights: Red strobe on top of aircraft fuselage (flashing)
+  - Navigation lights: Red (left) and green (right) on wingtips
+  - Landing/taxi lights: White forward-facing lights on ground/low aircraft
+  - Rendered as glowing billboards that properly integrate with 3D scene depth
+  - Distance-based culling (only shows nearest 50 aircraft within range)
+  - LOD: Only beacon visible at far distances, all lights visible up close
+  - Night-only mode option (based on sun elevation)
+  - Configurable visibility distance (2-20 NM) in Settings > Advanced Graphics
 - Data source indicators in aircraft panels
   - Nearby Aircraft panel header shows "1s" (green) when receiving vNAS live updates, or "15s" when using standard VATSIM polling
   - Individual aircraft show a green dot next to their callsign when receiving 1Hz live updates
   - Flight Search panel (Ctrl+K) shows the same indicators in the footer and per-result
+- Weather particle pre-warming for instant visibility
+  - Rain/snow effects now appear immediately when switching from 2D to 3D view
+  - Also pre-warms when camera jumps to a new location (flyTo, following new aircraft)
+- Max framerate limiter in Settings > Graphics > Rendering
+  - Limit rendering to 30, 60, 120, 144 FPS or unlimited
+  - Reduces GPU usage and heat on high-refresh-rate displays
+- Aircraft night visibility boost in Settings > Graphics > Lighting
+  - Increases aircraft brightness at night to stay visible against darkened terrain
+  - Adjustable from 1.0x (no boost) to 3.0x (very bright)
+- Performance HUD improvements (F1)
+  - Shows Cesium primitive count and tile loading status
+  - More accurate Cesium render timing measurement
+- Weather smoothing for gradual transitions
+  - Fog and cloud layers now fade smoothly when METAR updates
+  - Prevents abrupt weather changes when switching airports
+- Clouds visible from above when flying above cloud layer
+  - Camera flying above clouds sees white cloud tops instead of looking through them
+  - Smooth transition between below-cloud and above-cloud views
 
 ### Changed
 - Aircraft panel now hidden when no airport is selected and no flight is being followed
+- 2D top-down view improvements
+  - Aircraft models now display at full size (previously scaled to 50%)
+  - Only aircraft cast shadows in top-down view (terrain shadows disabled for cleaner look)
 - FSLTL settings panel reorganized to show converted models location first
   - Can now browse for a folder with previously converted models without setting up a source path
   - Conversion-related options (source folder, texture quality) shown below for new conversions
+- Longer airport transition animation (5 seconds) for smoother terrain streaming
+- Graphics settings reorganized into collapsible sections (Rendering, Model Appearance, Shadows)
+
+### Fixed
+- Fixed follow mode not working for aircraft outside the current 200nm filter range
+  - Now uses all pilots list instead of filtered aircraft states
+- Fixed pushback detection being too restrictive
+  - Aircraft moving sideways or backward now correctly detected regardless of speed
+- Fixed aircraft orientation interpolation causing delayed pitch/roll response
+  - Now uses smoothstep instead of smootherstep for more responsive transitions
+- Fixed ground detection relying only on groundspeed
+  - Now also considers altitude above ground (below 10m = on ground)
+  - Fixes edge cases during takeoff roll and landing
 
 ## [0.0.16-alpha] - 2025-12-27
 
