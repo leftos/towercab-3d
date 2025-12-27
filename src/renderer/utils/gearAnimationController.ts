@@ -50,7 +50,7 @@ export interface GearAnimationConfig {
 /** Default gear animation configuration */
 export const DEFAULT_GEAR_CONFIG: GearAnimationConfig = {
   extendAltitude: 2000,          // Extend gear when descending below 2000ft AGL
-  retractAltitude: 500,          // Retract gear when climbing above 500ft AGL
+  retractAltitude: 150,          // Retract gear when climbing above 150ft AGL
   descentRateThreshold: -100,    // ft/min - consider descending if < -100 ft/min
   climbRateThreshold: 100,       // ft/min - consider climbing if > 100 ft/min
   transitionTime: 12.0           // 12 seconds to extend/retract (realistic timing)
