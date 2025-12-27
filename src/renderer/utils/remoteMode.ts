@@ -17,12 +17,16 @@ export function isRemoteMode(): boolean {
 }
 
 /**
- * Get the API base URL
- * In Tauri mode: empty string (relative URLs work with Tauri commands)
+ * Get the API base URL for HTTP requests
  * In remote mode: the origin of the current page (e.g., http://192.168.1.100:8765)
+ * In Tauri mode: always use localhost:8765 since Vite dev server is on different port
  */
 export function getApiBaseUrl(): string {
-  return isRemoteMode() ? window.location.origin : ''
+  if (isRemoteMode()) {
+    return window.location.origin
+  }
+  // In Tauri mode, the page may be served by Vite (5173) but HTTP server is on 8765
+  return 'http://localhost:8765'
 }
 
 /**

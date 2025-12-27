@@ -7,6 +7,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-shell'
 import { getVersion } from '@tauri-apps/api/app'
 import type { GlobalSettings } from '@/types'
+import { getApiBaseUrl } from './remoteMode'
 
 /**
  * Check if running in Tauri environment
@@ -351,16 +352,19 @@ export function convertToAssetUrlSync(filePath: string): string {
   // Always use HTTP URLs - fetch() doesn't support asset:// even in Tauri
   const normalized = filePath.replace(/\\/g, '/')
 
+  // Get the API base URL (handles Tauri vs remote mode)
+  const baseUrl = getApiBaseUrl()
+
   // For FSLTL
   const fsltlMatch = normalized.match(/[/\\]([A-Z0-9]{3,4})[/\\]([A-Z0-9_]+)[/\\](model\.glb)$/i)
   if (fsltlMatch) {
-    return `/api/fsltl/${fsltlMatch[1]}/${fsltlMatch[2]}/${fsltlMatch[3]}`
+    return `${baseUrl}/api/fsltl/${fsltlMatch[1]}/${fsltlMatch[2]}/${fsltlMatch[3]}`
   }
 
   // For mods
   const modsMatch = normalized.match(/mods[/\\](aircraft|towers)[/\\](.+)$/i)
   if (modsMatch) {
-    return `/api/mods/${modsMatch[1]}/${modsMatch[2]}`
+    return `${baseUrl}/api/mods/${modsMatch[1]}/${modsMatch[2]}`
   }
 
   // Fallback: return path as-is
