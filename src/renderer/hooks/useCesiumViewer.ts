@@ -225,19 +225,45 @@ export function useCesiumViewer(
 
     // Aircraft silhouette outlines - creates edge detection for built-in models
     // The selected array will be populated by useAircraftModels with built-in models only
-    if (!isInset) {
-      const edgeDetection = Cesium.PostProcessStageLibrary.createEdgeDetectionStage()
-      edgeDetection.uniforms.color = Cesium.Color.BLACK
-      edgeDetection.uniforms.length = 0.5  // Outline width in pixels
-      edgeDetection.selected = []  // Will be populated by useAircraftModels
+    // Deferred with multiple render frames to avoid shader cache initialization race condition
+    // (Cesium bug: "Cannot set properties of undefined (setting 'czm_edge_detection_combine')")
+    if (!isInset && enableAircraftSilhouettes) {
+      let frameCount = 0
+      const initSilhouetteStage = () => {
+        // Wait for several frames to ensure WebGL context and shader cache are ready
+        frameCount++
+        if (frameCount < 5) {
+          requestAnimationFrame(initSilhouetteStage)
+          return
+        }
 
-      const silhouetteStage = newViewer.scene.postProcessStages.add(
-        Cesium.PostProcessStageLibrary.createSilhouetteStage([edgeDetection])
-      ) as Cesium.PostProcessStageComposite
-      silhouetteStage.enabled = enableAircraftSilhouettes
+        // Verify scene is still valid and context has shader cache
+        const context = (newViewer.scene as unknown as { context?: { _shaderCache?: unknown } }).context
+        if (!context?._shaderCache) {
+          console.warn('[useCesiumViewer] Shader cache not ready, skipping silhouette stage')
+          return
+        }
 
-      edgeDetectionRef.current = edgeDetection
-      silhouetteStageRef.current = silhouetteStage
+        try {
+          const edgeDetection = Cesium.PostProcessStageLibrary.createEdgeDetectionStage()
+          edgeDetection.uniforms.color = Cesium.Color.BLACK
+          edgeDetection.uniforms.length = 0.5  // Outline width in pixels
+          edgeDetection.selected = []  // Will be populated by useAircraftModels
+
+          const silhouetteStage = newViewer.scene.postProcessStages.add(
+            Cesium.PostProcessStageLibrary.createSilhouetteStage([edgeDetection])
+          ) as Cesium.PostProcessStageComposite
+          silhouetteStage.enabled = true
+
+          edgeDetectionRef.current = edgeDetection
+          silhouetteStageRef.current = silhouetteStage
+        } catch (err) {
+          console.warn('[useCesiumViewer] Failed to create silhouette stage:', err)
+        }
+      }
+
+      // Start deferred initialization after viewer is set up
+      requestAnimationFrame(initSilhouetteStage)
     }
 
     // Improve texture quality - helps reduce mipmap banding
