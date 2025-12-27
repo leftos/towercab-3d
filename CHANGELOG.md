@@ -5,6 +5,13 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Back to Menu button in the control bar (arrow icon, next to Settings)
+  - Returns to the airport selection screen with a confirmation prompt
+  - Your camera position and settings for the current airport are saved automatically
+- Controls are now disabled when no airport is selected
+  - Reset View, Toggle 3D/2D, Set Default, To Default, Bookmarks, and Add Inset are disabled
+  - Camera info shows "--" instead of values when no reference point exists
+  - Keyboard shortcuts (T, r, R, Home) also respect these conditions
 - Datablock font size setting in Settings > Display > Aircraft Display
   - Adjust font size from 8px to 20px (default: 12px)
   - Larger sizes are easier to read but may overlap more

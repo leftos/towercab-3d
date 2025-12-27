@@ -7,6 +7,7 @@ import { useReplayStore } from '../../stores/replayStore'
 import { useUIFeedbackStore } from '../../stores/uiFeedbackStore'
 import { useActiveViewportCamera } from '../../hooks/useActiveViewportCamera'
 import { calculateShareable3dPosition, calculateShareable2dPosition } from '../../utils/cameraGeometry'
+import { hasViewingContext } from '../../utils/viewingContext'
 import { modService } from '../../services/ModService'
 import { modApi } from '../../utils/tauriApi'
 import GlobalSearchPanel from './GlobalSearchPanel'
@@ -24,6 +25,7 @@ function ControlsBar() {
   const [showSettings, setShowSettings] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
   const [showBookmarkModal, setShowBookmarkModal] = useState(false)
+  const [showExitConfirm, setShowExitConfirm] = useState(false)
   const [barMode, setBarMode] = useState<BarMode>('controls')
   const [importStatus, setImportStatus] = useState<'idle' | 'success' | 'error'>('idle')
 
@@ -73,8 +75,12 @@ function ControlsBar() {
   const addViewport = useViewportStore((state) => state.addViewport)
   const currentAirport = useAirportStore((state) => state.currentAirport)
   const towerHeight = useAirportStore((state) => state.towerHeight)
+  const deselectAirport = useAirportStore((state) => state.deselectAirport)
   const pushModal = useUIFeedbackStore((state) => state.pushModal)
   const popModal = useUIFeedbackStore((state) => state.popModal)
+
+  // Determine if we have a valid reference point (airport or orbit-following)
+  const hasReference = hasViewingContext(currentAirport, followMode, followingCallsign)
 
   // Replay store - for isLive indicator
   const playbackMode = useReplayStore((state) => state.playbackMode)
@@ -110,6 +116,13 @@ function ControlsBar() {
       return () => popModal()
     }
   }, [showImportModal, pushModal, popModal])
+
+  useEffect(() => {
+    if (showExitConfirm) {
+      pushModal()
+      return () => popModal()
+    }
+  }, [showExitConfirm, pushModal, popModal])
 
   // Ctrl+B to open bookmark manager
   useEffect(() => {
@@ -331,7 +344,12 @@ function ControlsBar() {
           <>
             {/* MAIN CONTROLS MODE */}
             <div className="controls-left">
-              <button className="control-button" onClick={handleResetView} title="Reset View (Shift+R)">
+              <button
+                className="control-button"
+                onClick={handleResetView}
+                title="Reset View (Shift+R)"
+                disabled={!hasReference}
+              >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
                   <path d="M3 3v5h5" />
@@ -339,7 +357,12 @@ function ControlsBar() {
                 Reset
               </button>
 
-              <button className="control-button" onClick={toggleViewMode} title="Toggle View Mode (T)">
+              <button
+                className="control-button"
+                onClick={toggleViewMode}
+                title="Toggle View Mode (T)"
+                disabled={!hasReference}
+              >
                 {viewMode === '3d' ? (
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M12 2L2 7l10 5 10-5-10-5z" />
@@ -360,6 +383,7 @@ function ControlsBar() {
                 className={`control-button ${defaultSaved ? 'success' : ''}`}
                 onClick={handleSaveAsDefault}
                 title={shiftPressed ? "Save to tower-positions file (for sharing)" : "Set Default View"}
+                disabled={!currentAirport}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
@@ -370,9 +394,9 @@ function ControlsBar() {
               </button>
 
               <button
-                className={`control-button ${defaultLoaded ? 'success' : ''} ${!hasCustomDefault() && !shiftPressed ? 'disabled' : ''}`}
+                className={`control-button ${defaultLoaded ? 'success' : ''} ${(!currentAirport || (!hasCustomDefault() && !shiftPressed)) ? 'disabled' : ''}`}
                 onClick={handleResetToDefault}
-                disabled={!hasCustomDefault() && !shiftPressed}
+                disabled={!currentAirport || (!hasCustomDefault() && !shiftPressed)}
                 title={shiftPressed ? "Load app default (from tower-positions file)" : "Load your saved default view"}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -388,22 +412,22 @@ function ControlsBar() {
                 {viewMode === 'topdown' ? (
                   <>
                     <span className="info-item" title="Heading">
-                      HDG {formatHeading(heading)}
+                      HDG {hasReference ? formatHeading(heading) : '--'}
                     </span>
                     <span className="info-item" title="Above Ground Level">
-                      AGL {Math.round(topdownAltitude).toLocaleString()}ft
+                      AGL {hasReference ? `${Math.round(topdownAltitude).toLocaleString()}ft` : '--'}
                     </span>
                   </>
                 ) : (
                   <>
                     <span className="info-item" title="Heading">
-                      HDG {formatHeading(heading)}
+                      HDG {hasReference ? formatHeading(heading) : '--'}
                     </span>
                     <span className="info-item" title="Pitch">
-                      PIT {formatPitch(pitch)}
+                      PIT {hasReference ? formatPitch(pitch) : '--'}
                     </span>
                     <span className="info-item" title="Field of View">
-                      FOV {Math.round(fov)}°
+                      FOV {hasReference ? `${Math.round(fov)}°` : '--'}
                     </span>
                   </>
                 )}
@@ -446,6 +470,7 @@ function ControlsBar() {
                 className="control-button"
                 onClick={() => setShowBookmarkModal(!showBookmarkModal)}
                 title="Bookmark Manager (Ctrl+B)"
+                disabled={!currentAirport}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M4 6h16M4 12h16M4 18h16" />
@@ -457,6 +482,7 @@ function ControlsBar() {
                 className="control-button"
                 onClick={() => addViewport()}
                 title={`Add Inset Viewport (${insetCount} active)`}
+                disabled={!currentAirport}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
@@ -466,6 +492,18 @@ function ControlsBar() {
               </button>
 
               <VRButton />
+
+              {currentAirport && (
+                <button
+                  className="control-button"
+                  onClick={() => setShowExitConfirm(true)}
+                  title="Back to Main Menu"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7" />
+                  </svg>
+                </button>
+              )}
 
               <button
                 className="control-button"
@@ -514,6 +552,33 @@ function ControlsBar() {
           data={contributeDialogData}
           onClose={() => setContributeDialogData(null)}
         />
+      )}
+
+      {/* Exit Airport Confirmation Modal */}
+      {showExitConfirm && (
+        <div className="modal-overlay" onClick={() => setShowExitConfirm(false)}>
+          <div className="modal exit-confirm-modal" onClick={e => e.stopPropagation()}>
+            <h3>Leave {currentAirport?.icao}?</h3>
+            <p>Return to the airport selection screen?</p>
+            <div className="modal-buttons">
+              <button
+                className="modal-button cancel"
+                onClick={() => setShowExitConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="modal-button confirm"
+                onClick={() => {
+                  setShowExitConfirm(false)
+                  deselectAirport()
+                }}
+              >
+                Leave Airport
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   )

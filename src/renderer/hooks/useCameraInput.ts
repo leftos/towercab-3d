@@ -3,7 +3,9 @@ import * as Cesium from 'cesium'
 import { useViewportStore } from '../stores/viewportStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useUIFeedbackStore } from '../stores/uiFeedbackStore'
+import { useAirportStore } from '../stores/airportStore'
 import { useDatablockPositionStore, type PendingDirection } from '../stores/datablockPositionStore'
+import { hasViewingContext } from '../utils/viewingContext'
 import {
   createVelocityState,
   MOVEMENT_CONFIG,
@@ -265,6 +267,10 @@ export function useCameraInput(
   const viewportIdRef = useRef(viewportId)
   const lookAtTargetRef = useRef(lookAtTarget)
 
+  // Reference point tracking (airport or orbit-following)
+  const currentAirportRef = useRef(useAirportStore.getState().currentAirport)
+  const hasReferenceRef = useRef(hasViewingContext(currentAirportRef.current, followMode, followingCallsign))
+
   // Keep refs updated
   viewModeRef.current = viewMode
   topdownAltitudeRef.current = topdownAltitude
@@ -280,6 +286,8 @@ export function useCameraInput(
   isActiveRef.current = activeViewportId === viewportId
   viewportIdRef.current = viewportId
   lookAtTargetRef.current = lookAtTarget
+  currentAirportRef.current = useAirportStore.getState().currentAirport
+  hasReferenceRef.current = hasViewingContext(currentAirportRef.current, followMode, followingCallsign)
 
   // Mouse drag controls for panning/tilting using Cesium's event handler
   useEffect(() => {
@@ -453,19 +461,31 @@ export function useCameraInput(
       switch (key) {
         case 't':
         case 'T':
-          toggleViewMode()
+          // Only toggle view mode if we have a reference point (airport or orbit-following)
+          if (hasReferenceRef.current) {
+            toggleViewMode()
+          }
           return
         case 'r':
-          resetPosition()
+          // Only reset position if we have a reference point
+          if (hasReferenceRef.current) {
+            resetPosition()
+          }
           return
         case 'R':
-          resetToDefault()
+          // Only reset to default if we have an airport selected (defaults are per-airport)
+          if (currentAirportRef.current) {
+            resetToDefault()
+          }
           return
         case 'Home':
-          if (event.shiftKey) {
-            resetToAppDefault()
-          } else {
-            resetToDefault()
+          // Only load defaults if we have an airport selected (defaults are per-airport)
+          if (currentAirportRef.current) {
+            if (event.shiftKey) {
+              resetToAppDefault()
+            } else {
+              resetToDefault()
+            }
           }
           return
         case 'o':

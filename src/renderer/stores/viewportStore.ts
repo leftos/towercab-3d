@@ -119,7 +119,7 @@ interface ViewportStore {
   adjustOrbitPitch: (delta: number) => void
 
   // Airport-specific actions
-  setCurrentAirport: (icao: string) => void
+  setCurrentAirport: (icao: string | null) => void
 
   // Default view actions
   saveCurrentAsDefault: () => void
@@ -737,6 +737,27 @@ export const useViewportStore = create<ViewportStore>()(
           // Airport-specific actions
           setCurrentAirport: (icao) => {
             const state = get()
+
+            // Handle null - deselecting airport (returning to main menu)
+            if (icao === null) {
+              // Save current viewport config before deselecting
+              if (state.currentAirportIcao) {
+                const airportViewportConfigs = { ...state.airportViewportConfigs }
+                airportViewportConfigs[state.currentAirportIcao] = {
+                  viewports: state.viewports.map(v => ({
+                    ...v,
+                    cameraState: { ...v.cameraState, followingCallsign: null, preFollowState: null }
+                  })),
+                  activeViewportId: state.activeViewportId,
+                  defaultConfig: airportViewportConfigs[state.currentAirportIcao]?.defaultConfig,
+                  bookmarks: airportViewportConfigs[state.currentAirportIcao]?.bookmarks,
+                  datablockPosition: airportViewportConfigs[state.currentAirportIcao]?.datablockPosition
+                }
+                set({ airportViewportConfigs, currentAirportIcao: null })
+              }
+              return
+            }
+
             const normalizedIcao = icao.toUpperCase()
 
             // Save current viewport config before switching (if we have an airport)

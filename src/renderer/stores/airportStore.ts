@@ -25,6 +25,7 @@ interface AirportStore {
   // Actions
   loadAirports: (data: Record<string, Airport>) => void
   selectAirport: (icao: string) => void
+  deselectAirport: () => void
   searchAirports: (query: string) => Airport[]
   addToRecent: (icao: string) => void
   setAirportSelectorOpen: (open: boolean) => void
@@ -59,6 +60,19 @@ export const useAirportStore = create<AirportStore>()(
           airports.set(icao.toUpperCase(), airport)
         }
         set({ airports, isLoaded: true })
+      },
+
+      // Deselect current airport (return to main menu)
+      deselectAirport: () => {
+        set({
+          currentAirport: null,
+          customTowerPosition: null,
+          custom2dPosition: null,
+          customHeading: null,
+          isAirportSelectorOpen: true  // Reopen the airport selector
+        })
+        // Clear current airport in viewport store too
+        useViewportStore.getState().setCurrentAirport(null)
       },
 
       // Select an airport
