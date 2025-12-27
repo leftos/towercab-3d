@@ -5,12 +5,20 @@
  * live VATSIM mode and replay mode. This abstraction allows the interpolation
  * system to remain agnostic about where the data comes from.
  *
- * In LIVE mode: Returns vatsimStore's aircraftStates/previousStates
- * In REPLAY/IMPORTED mode: Returns cached deserialized snapshot data from replayStore
+ * ## Data Sources
+ *
+ * In LIVE mode:
+ *   - Primary: vNAS (1Hz real-time updates, ~30NM radius from subscribed facility)
+ *   - Fallback: VATSIM HTTP polling (15-second updates, global)
+ *   - Aircraft in vNAS range use vNAS data; others use VATSIM data
+ *
+ * In REPLAY/IMPORTED mode:
+ *   - Returns cached deserialized snapshot data from replayStore
  */
 
 import { useReplayStore } from '../stores/replayStore'
 import { useVatsimStore } from '../stores/vatsimStore'
+import { useVnasStore } from '../stores/vnasStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { SNAPSHOT_INTERVAL_MS } from '../constants/replay'
 import { calculateDistanceNM } from '../utils/interpolation'
@@ -153,8 +161,41 @@ export function getAircraftDataSource(): AircraftDataSource {
   const { playbackMode, currentIndex, segmentProgress, getActiveSnapshots } = replayState
 
   if (playbackMode === 'live') {
-    // LIVE MODE: Use vatsimStore directly
+    // LIVE MODE: Merge vNAS (1Hz) and VATSIM (15s) data
+    // vNAS data takes priority for aircraft within its subscription range
     const vatsimState = useVatsimStore.getState()
+    const vnasState = useVnasStore.getState()
+
+    // If vNAS is connected and has data, merge with VATSIM
+    if (vnasState.status.state === 'connected' && vnasState.aircraftStates.size > 0) {
+      // Start with VATSIM data as base
+      const mergedAircraftStates = new Map(vatsimState.aircraftStates)
+      const mergedPreviousStates = new Map(vatsimState.previousStates)
+
+      // Overlay vNAS data (higher frequency, more current)
+      for (const [callsign, state] of vnasState.aircraftStates) {
+        mergedAircraftStates.set(callsign, state)
+      }
+      for (const [callsign, state] of vnasState.previousStates) {
+        mergedPreviousStates.set(callsign, state)
+      }
+
+      // Use vNAS update interval (1 second) for aircraft with vNAS data
+      // but fall back to VATSIM interval for overall timing
+      const updateInterval = vnasState.aircraftStates.size > 0
+        ? 1000 // vNAS is 1Hz
+        : (vatsimState.lastUpdateInterval || SNAPSHOT_INTERVAL_MS)
+
+      return {
+        aircraftStates: mergedAircraftStates,
+        previousStates: mergedPreviousStates,
+        timestamp: Date.now(),
+        updateInterval,
+        playbackMode: 'live'
+      }
+    }
+
+    // vNAS not connected - use VATSIM data only
     return {
       aircraftStates: vatsimState.aircraftStates,
       previousStates: vatsimState.previousStates,

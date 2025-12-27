@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 
 mod server;
+mod vnas;
 
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::CloseHandle;
@@ -1263,6 +1264,9 @@ pub fn run() {
                 let _ = window.set_title(&title);
             }
 
+            // Initialize vNAS state
+            vnas::init_vnas_state(app.handle());
+
             // Auto-start HTTP server if enabled in global settings or via env var
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -1351,6 +1355,15 @@ pub fn run() {
             check_fsltl_model_exists,
             delete_file,
             scan_fsltl_models,
+            // vNAS commands
+            vnas::vnas_get_status,
+            vnas::vnas_start_auth,
+            vnas::vnas_complete_auth,
+            vnas::vnas_connect,
+            vnas::vnas_subscribe,
+            vnas::vnas_disconnect,
+            vnas::vnas_is_connected,
+            vnas::vnas_is_authenticated,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

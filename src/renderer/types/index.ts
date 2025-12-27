@@ -59,6 +59,20 @@ export type {
 } from './vatsim'
 
 // ============================================================================
+// vNAS (Virtual Network ATC System) TYPES
+// ============================================================================
+
+export type {
+  // vNAS connection types
+  VnasEnvironment,
+  VnasSessionState,
+  VnasStatus,
+
+  // vNAS aircraft data (1Hz real-time updates)
+  VnasAircraft
+} from './vnas'
+
+// ============================================================================
 // AIRPORT TYPES
 // ============================================================================
 

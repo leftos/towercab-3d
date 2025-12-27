@@ -10,13 +10,14 @@ use std::sync::Arc;
 
 use axum::{
     body::Body,
-    extract::{ConnectInfo, Path, Query, State},
+    extract::{ConnectInfo, Path, Query, State, WebSocketUpgrade, ws::{Message, WebSocket}},
     http::{header, HeaderValue, Request, Response, StatusCode},
     middleware::{self, Next},
     response::IntoResponse,
     routing::{get, put},
     Json, Router,
 };
+use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
@@ -29,6 +30,19 @@ use crate::{
     GlobalSettings, ScannedFSLTLModel, TowerPositionEntry,
 };
 
+/// vNAS aircraft update for WebSocket broadcast
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VnasAircraftBroadcast {
+    pub callsign: String,
+    pub lat: f64,
+    pub lon: f64,
+    pub altitude: f64,
+    pub heading: f64,
+    pub type_code: Option<String>,
+    pub timestamp: u64,
+}
+
 /// Shared state for the HTTP server
 pub struct ServerState {
     /// Tauri app handle for accessing app directories
@@ -39,6 +53,8 @@ pub struct ServerState {
     pub auth_token: Option<String>,
     /// Whether to require connections from local network only
     pub require_local_network: bool,
+    /// Broadcast channel for vNAS aircraft updates (to relay to WebSocket clients)
+    pub vnas_tx: broadcast::Sender<Vec<VnasAircraftBroadcast>>,
 }
 
 /// Check if an IP address is from a local/private network
@@ -149,11 +165,15 @@ pub async fn start_server(
         println!("[Server] Restricted to local network only");
     }
 
+    // Create vNAS broadcast channel for relaying aircraft updates to WebSocket clients
+    let (vnas_tx, _) = broadcast::channel::<Vec<VnasAircraftBroadcast>>(256);
+
     let state = Arc::new(ServerState {
         app_handle,
         dist_path,
         auth_token,
         require_local_network,
+        vnas_tx,
     });
 
     // Build the router
@@ -299,6 +319,8 @@ fn create_router(state: Arc<ServerState>) -> Router {
         .route("/api/tower-positions/{icao}", put(update_tower_position))
         .route("/api/vmr-rules", get(get_vmr_rules))
         .route("/api/proxy", get(proxy_request))
+        // vNAS WebSocket endpoint for real-time aircraft updates
+        .route("/api/vnas/ws", get(vnas_websocket_handler))
         // Static file serving (must be last - catches all other routes)
         .fallback(get(serve_static))
         // Apply auth middleware (checks auth token and local network requirement)
@@ -741,6 +763,86 @@ async fn proxy_request(
     );
 
     Ok(resp)
+}
+
+// =============================================================================
+// vNAS WebSocket Handler
+// =============================================================================
+
+/// WebSocket handler for vNAS aircraft updates
+///
+/// Remote browsers connect to this WebSocket to receive real-time aircraft
+/// position updates from vNAS. The Tauri backend broadcasts updates to this
+/// endpoint, which then relays them to all connected WebSocket clients.
+///
+/// ## Message Format
+/// Server sends JSON arrays of VnasAircraftBroadcast objects at 1Hz:
+/// ```json
+/// [{"callsign":"DAL123","lat":42.0,"lon":-71.0,"altitude":10000,"heading":90,"typeCode":"B738","timestamp":1234567890}]
+/// ```
+///
+/// ## TODO
+/// This is a placeholder implementation. The actual vNAS data flow requires:
+/// 1. vNAS OAuth credentials from VATSIM tech team
+/// 2. Wiring up towercab-3d-vnas crate
+/// 3. Broadcasting updates from vnas.rs to server.rs
+async fn vnas_websocket_handler(
+    ws: WebSocketUpgrade,
+    State(state): State<Arc<ServerState>>,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| handle_vnas_websocket(socket, state))
+}
+
+/// Handle a vNAS WebSocket connection
+async fn handle_vnas_websocket(socket: WebSocket, state: Arc<ServerState>) {
+    let (mut sender, mut receiver) = socket.split();
+
+    // Subscribe to vNAS broadcast channel
+    let mut vnas_rx = state.vnas_tx.subscribe();
+
+    println!("[vNAS WS] Client connected");
+
+    // Spawn a task to forward vNAS updates to the WebSocket
+    let send_task = tokio::spawn(async move {
+        while let Ok(aircraft) = vnas_rx.recv().await {
+            // Serialize and send to WebSocket
+            match serde_json::to_string(&aircraft) {
+                Ok(json) => {
+                    if sender.send(Message::Text(json)).await.is_err() {
+                        break; // Client disconnected
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[vNAS WS] Serialization error: {}", e);
+                }
+            }
+        }
+    });
+
+    // Handle incoming messages (mostly for keepalive/ping-pong)
+    while let Some(msg) = receiver.next().await {
+        match msg {
+            Ok(Message::Ping(data)) => {
+                // Ping/pong handled automatically by axum
+                println!("[vNAS WS] Received ping: {:?}", data);
+            }
+            Ok(Message::Close(_)) => {
+                println!("[vNAS WS] Client requested close");
+                break;
+            }
+            Ok(_) => {
+                // Ignore other message types (we don't expect client messages)
+            }
+            Err(e) => {
+                eprintln!("[vNAS WS] Error: {}", e);
+                break;
+            }
+        }
+    }
+
+    // Clean up
+    send_task.abort();
+    println!("[vNAS WS] Client disconnected");
 }
 
 // =============================================================================
