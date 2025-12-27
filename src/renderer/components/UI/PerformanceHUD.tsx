@@ -80,6 +80,21 @@ export function PerformanceHUD({ visible }: PerformanceHUDProps) {
       </div>
 
       <div className="performance-row">
+        <span className="performance-label">  Primitives:</span>
+        <span className="performance-value">{metrics.cesiumPrimitives}</span>
+      </div>
+
+      <div className="performance-row">
+        <span className="performance-label">  Tiles:</span>
+        <span className="performance-value">
+          {metrics.cesiumTilesLoaded} loaded
+          {metrics.cesiumTilesLoading > 0 && (
+            <span style={{ color: '#ff0' }}> +{metrics.cesiumTilesLoading} loading</span>
+          )}
+        </span>
+      </div>
+
+      <div className="performance-row">
         <span className="performance-label">Our Operations:</span>
         <span className="performance-value">
           {formatMs(metrics.totalFrame)}ms

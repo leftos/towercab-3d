@@ -9,6 +9,9 @@ export interface PerformanceMetrics {
   babylonSync: number
   babylonRender: number
   cesiumRender: number
+  cesiumPrimitives: number
+  cesiumTilesLoaded: number
+  cesiumTilesLoading: number
   totalFrame: number
   fps: number
   frameInterval: number
@@ -22,10 +25,16 @@ class PerformanceMonitor {
     babylonSync: 0,
     babylonRender: 0,
     cesiumRender: 0,
+    cesiumPrimitives: 0,
+    cesiumTilesLoaded: 0,
+    cesiumTilesLoading: 0,
     totalFrame: 0,
     fps: 0,
     frameInterval: 0
   }
+
+  // Cesium preRender timestamp for accurate render timing
+  private cesiumPreRenderTime = 0
 
   private frameStartTime = 0
   private lastFrameTime = 0
@@ -74,6 +83,32 @@ class PerformanceMonitor {
   }
 
   /**
+   * Called at Cesium scene.preRender to start timing Cesium's render phase
+   */
+  markCesiumPreRender(): void {
+    this.cesiumPreRenderTime = performance.now()
+  }
+
+  /**
+   * Called at Cesium scene.postRender to end timing Cesium's render phase
+   * Also updates Cesium scene statistics
+   */
+  markCesiumPostRender(primitiveCount?: number, tilesLoaded?: number, tilesLoading?: number): void {
+    if (this.cesiumPreRenderTime > 0) {
+      this.metrics.cesiumRender = performance.now() - this.cesiumPreRenderTime
+    }
+    if (primitiveCount !== undefined) {
+      this.metrics.cesiumPrimitives = primitiveCount
+    }
+    if (tilesLoaded !== undefined) {
+      this.metrics.cesiumTilesLoaded = tilesLoaded
+    }
+    if (tilesLoading !== undefined) {
+      this.metrics.cesiumTilesLoading = tilesLoading
+    }
+  }
+
+  /**
    * Mark the start of a new frame
    */
   startFrame(): void {
@@ -91,9 +126,7 @@ class PerformanceMonitor {
       const avgFrameTime = this.frameTimes.reduce((a, b) => a + b, 0) / this.frameTimes.length
       this.metrics.fps = avgFrameTime > 0 ? 1000 / avgFrameTime : 0
       this.metrics.frameInterval = avgFrameTime
-
-      // Calculate Cesium rendering time (frame interval minus our operations)
-      this.metrics.cesiumRender = Math.max(0, avgFrameTime - this.metrics.totalFrame)
+      // Note: cesiumRender is now measured directly via markCesiumPreRender/markCesiumPostRender
     }
   }
 
@@ -130,6 +163,7 @@ class PerformanceMonitor {
       const output = [
         `[Performance Monitor] ${Math.round(m.fps)} FPS | ${m.frameInterval.toFixed(2)}ms interval`,
         `  Cesium Render:  ${m.cesiumRender.toFixed(2)}ms (${((m.cesiumRender / frameTotal) * 100).toFixed(1)}% of frame)`,
+        `    • Primitives: ${m.cesiumPrimitives} | Tiles: ${m.cesiumTilesLoaded} loaded, ${m.cesiumTilesLoading} loading`,
         `  Our Operations: ${m.totalFrame.toFixed(2)}ms (${((m.totalFrame / frameTotal) * 100).toFixed(1)}% of frame)`,
         `    • Interpolation:   ${m.interpolation.toFixed(2)}ms (${((m.interpolation / opsTotal) * 100).toFixed(1)}% of ops)`,
         `    • Aircraft Update: ${m.aircraftUpdate.toFixed(2)}ms (${((m.aircraftUpdate / opsTotal) * 100).toFixed(1)}% of ops)`,
@@ -172,12 +206,16 @@ class PerformanceMonitor {
       babylonSync: 0,
       babylonRender: 0,
       cesiumRender: 0,
+      cesiumPrimitives: 0,
+      cesiumTilesLoaded: 0,
+      cesiumTilesLoading: 0,
       totalFrame: 0,
       fps: 0,
       frameInterval: 0
     }
     this.frameTimes = []
     this.timers.clear()
+    this.cesiumPreRenderTime = 0
   }
 }
 
