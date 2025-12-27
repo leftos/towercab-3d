@@ -127,28 +127,91 @@ async function runTypeCheck(quiet = false) {
 }
 
 /**
- * Run Cargo check for Rust backend
+ * Run a command and capture output (for checking error messages)
+ */
+function runCommandWithOutput(command, args, options = {}) {
+  return new Promise((resolve) => {
+    let stdout = '';
+    let stderr = '';
+
+    const proc = spawn(command, args, {
+      cwd: ROOT_DIR,
+      shell: true,
+      ...options,
+    });
+
+    proc.stdout?.on('data', (data) => {
+      stdout += data.toString();
+      process.stdout.write(data);
+    });
+
+    proc.stderr?.on('data', (data) => {
+      stderr += data.toString();
+      process.stderr.write(data);
+    });
+
+    proc.on('close', (code) => {
+      resolve({ success: code === 0, code, stdout, stderr });
+    });
+
+    proc.on('error', (err) => {
+      console.error(`Failed to start: ${command}`, err.message);
+      resolve({ success: false, code: 1, stdout, stderr });
+    });
+  });
+}
+
+/**
+ * Run Cargo check for Rust backend (both with and without vnas feature)
  */
 async function runCargoCheck(quiet = false) {
   logHeader('Cargo (Rust)');
 
   // Use RUSTFLAGS to deny warnings
   const env = { ...process.env, RUSTFLAGS: '-D warnings' };
-  const args = ['check'];
-  if (quiet) args.push('--quiet');
+  const baseArgs = ['check'];
+  if (quiet) baseArgs.push('--quiet');
 
-  const result = await runCommand('cargo', args, {
+  // Check without vnas feature (public build)
+  log('Checking without vnas feature...', colors.blue);
+  const resultWithout = await runCommand('cargo', baseArgs, {
     cwd: join(ROOT_DIR, 'src-tauri'),
     env,
   });
 
-  if (result.success) {
-    logSuccess('Cargo check passed (no errors or warnings)');
-  } else {
-    logError('Cargo check found errors or warnings');
+  if (!resultWithout.success) {
+    logError('Cargo check (without vnas) found errors or warnings');
+    return resultWithout;
+  }
+  logSuccess('Cargo check (without vnas) passed');
+
+  // Check with vnas feature (private build)
+  console.log();
+  log('Checking with vnas feature...', colors.blue);
+  const argsWithVnas = [...baseArgs, '--features', 'vnas'];
+  const resultWith = await runCommandWithOutput('cargo', argsWithVnas, {
+    cwd: join(ROOT_DIR, 'src-tauri'),
+    env,
+  });
+
+  if (resultWith.success) {
+    logSuccess('Cargo check (with vnas) passed');
+    return { success: true, code: 0 };
   }
 
-  return result;
+  // Check if failure is due to missing private repo access
+  const output = resultWith.stdout + resultWith.stderr;
+  if (output.includes('towercab-3d-vnas') &&
+      (output.includes('failed to authenticate') ||
+       output.includes('could not read') ||
+       output.includes('failed to fetch'))) {
+    logWarning('Cargo check (with vnas) skipped - no access to private repo');
+    log('  This is expected for public contributors', colors.yellow);
+    return { success: true, code: 0 }; // Don't fail the build
+  }
+
+  logError('Cargo check (with vnas) found errors or warnings');
+  return { success: false, code: 1 };
 }
 
 /**
