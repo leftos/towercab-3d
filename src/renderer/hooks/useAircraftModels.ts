@@ -12,6 +12,10 @@ import {
   GROUNDSPEED_THRESHOLD_KNOTS,
   FSLTL_MODEL_HEIGHT_OFFSET
 } from '../constants/rendering'
+import {
+  SUN_ELEVATION_DAY,
+  SUN_ELEVATION_NIGHT
+} from '../constants/lighting'
 import { useSettingsStore } from '../stores/settingsStore'
 import {
   updateGearAnimation,
@@ -67,11 +71,13 @@ import {
  * @param followingCallsign - Callsign of followed aircraft (for diagnostic logging)
  * @param groundElevationMeters - Ground elevation in meters MSL (for gear AGL calculation)
  * @param silhouetteRefs - Silhouette stage refs for outline rendering (null for inset viewports)
+ * @param sunElevation - Sun elevation angle in degrees (for night visibility boost)
  *
  * @example
  * ```tsx
  * const { viewer, modelPoolRefs, silhouetteRefs } = useCesiumViewer(...)
  * const interpolatedAircraft = useAircraftInterpolation()
+ * const sunElevation = useSunElevation(viewer, { timeMode, fixedTimeHour })
  *
  * useAircraftModels(
  *   viewer,
@@ -80,7 +86,8 @@ import {
  *   viewMode,
  *   followingCallsign,
  *   groundElevationMeters,
- *   silhouetteRefs
+ *   silhouetteRefs,
+ *   sunElevation
  * )
  * ```
  */
@@ -91,7 +98,8 @@ export function useAircraftModels(
   viewMode: ViewMode,
   followingCallsign: string | null,
   groundElevationMeters: number,
-  silhouetteRefs: SilhouetteRefs | null
+  silhouetteRefs: SilhouetteRefs | null,
+  sunElevation: number | null
 ) {
   const {
     modelPool,
@@ -105,6 +113,8 @@ export function useAircraftModels(
   const builtinModelBrightness = useSettingsStore((state) => state.graphics.builtinModelBrightness) ?? 1.7
   const fsltlModelBrightness = useSettingsStore((state) => state.graphics.fsltlModelBrightness) ?? 1.0
   const builtinModelTintColor = useSettingsStore((state) => state.graphics.builtinModelTintColor) ?? 'lightBlue'
+  const enableNightDarkening = useSettingsStore((state) => state.graphics.enableNightDarkening) ?? true
+  const aircraftNightVisibility = useSettingsStore((state) => state.graphics.aircraftNightVisibility) ?? 1.5
 
   // Track previous positions for diagnostic logging
   const prevModelPositionsRef = useRef<Map<string, Cesium.Cartesian3>>(new Map())
@@ -127,8 +137,19 @@ export function useAircraftModels(
     // Track which callsigns we've seen this frame (for cleanup)
     const seenCallsigns = new Set<string>()
 
-    // Calculate view mode scale (smaller in topdown for better overview)
-    const viewModeScale = viewMode === 'topdown' ? 0.5 : 1.0
+    // View mode scale - keep at full size in both modes for visibility
+    const viewModeScale = 1.0
+
+    // Calculate night visibility light boost
+    // When night darkening is enabled and sun is below horizon, boost aircraft brightness
+    // using model.lightColor to make them more visible against darkened imagery
+    let nightLightBoost: number | null = null
+    if (enableNightDarkening && viewMode === '3d' && sunElevation !== null && sunElevation < SUN_ELEVATION_DAY) {
+      // Interpolate from 1.0 (at horizon) to full boost (at full night)
+      const nightProgress = Math.min(1.0, (SUN_ELEVATION_DAY - sunElevation) / (SUN_ELEVATION_DAY - SUN_ELEVATION_NIGHT))
+      // Apply boost: 1.0 at day, aircraftNightVisibility at night
+      nightLightBoost = 1.0 + (aircraftNightVisibility - 1.0) * nightProgress
+    }
 
     // Update each aircraft model
     for (const aircraft of interpolatedAircraft.values()) {
@@ -286,13 +307,12 @@ export function useAircraftModels(
           // Subtract 90 to convert from compass heading (north=0) to model heading
           // Add 180° to flip models that face backwards
           // Add rotationOffset for models that face different directions (e.g., FSLTL = 180°)
-          // Pitch: Negate because Cesium's coordinate system is opposite to our convention
-          // Roll: Negate for same reason as pitch (due to model orientation)
+          // Pitch/Roll: Use values directly - positive pitch = nose up, positive roll = right bank
           const rotationOffset = modelInfo.rotationOffset ?? 0
           const hpr = new Cesium.HeadingPitchRoll(
             Cesium.Math.toRadians(aircraft.interpolatedHeading - 90 + 180 + rotationOffset),
-            Cesium.Math.toRadians(-aircraft.interpolatedPitch),
-            Cesium.Math.toRadians(-aircraft.interpolatedRoll)
+            Cesium.Math.toRadians(aircraft.interpolatedPitch),
+            Cesium.Math.toRadians(aircraft.interpolatedRoll)
           )
 
           // Create base transformation matrix (translation + rotation)
@@ -335,6 +355,15 @@ export function useAircraftModels(
 
           // Show the model
           model.show = true
+
+          // Apply night visibility boost via lightColor
+          // This makes aircraft brighter than the darkened scene without washing out textures
+          if (nightLightBoost !== null && nightLightBoost > 1.0) {
+            model.lightColor = new Cesium.Cartesian3(nightLightBoost, nightLightBoost, nightLightBoost)
+          } else {
+            // Reset to normal scene lighting (1.0, 1.0, 1.0 = white light, normal intensity)
+            model.lightColor = new Cesium.Cartesian3(1.0, 1.0, 1.0)
+          }
 
           // Apply landing gear animation for FSLTL models
           // We check for FSLTL match type instead of hasAnimations flag because:
@@ -426,7 +455,10 @@ export function useAircraftModels(
     fsltlModelBrightness,
     builtinModelTintColor,
     groundElevationMeters,
-    silhouetteRefs
+    silhouetteRefs,
+    enableNightDarkening,
+    aircraftNightVisibility,
+    sunElevation
   ])
 
   // Set up render loop to update models every frame

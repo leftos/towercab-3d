@@ -120,6 +120,8 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   // Night darkening settings
   const enableNightDarkening = useSettingsStore((state) => state.graphics.enableNightDarkening) ?? true
   const nightDarkeningIntensity = useSettingsStore((state) => state.graphics.nightDarkeningIntensity) ?? 0.7
+  // Performance settings
+  const maxFramerate = useSettingsStore((state) => state.graphics.maxFramerate) ?? 60
 
   // Weather store for fog effects, camera position updates, and cloud layers
   const fogDensity = useWeatherStore((state) => state.fogDensity)
@@ -231,6 +233,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   // =========================================================================
   useCesiumLighting(viewer, {
     isInset,
+    viewMode,
     enableLighting,
     enableGroundAtmosphere,
     enableShadows,
@@ -348,7 +351,8 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     viewMode,
     followingCallsign,
     groundElevationMeters,
-    silhouetteRefs
+    silhouetteRefs,
+    sunElevation
   )
 
   // =========================================================================
@@ -467,6 +471,15 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     if (!viewer) return
     viewer.scene.globe.tileCacheSize = inMemoryTileCacheSize
   }, [viewer, inMemoryTileCacheSize])
+
+  // Apply target frame rate limit (0 = unlimited)
+  useEffect(() => {
+    if (!viewer) return
+    // Cesium's targetFrameRate: undefined means unlimited (uses requestAnimationFrame)
+    // A number limits the frame rate to that value
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(viewer as any).targetFrameRate = maxFramerate > 0 ? maxFramerate : undefined
+  }, [viewer, maxFramerate])
 
   // Time of day control (real time vs fixed time)
   useEffect(() => {
@@ -645,9 +658,23 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   useEffect(() => {
     if (!viewer) return
 
+    // Mark preRender for accurate Cesium render timing
+    const removePreRender = viewer.scene.preRender.addEventListener(() => {
+      performanceMonitor.markCesiumPreRender()
+    })
+
     // Update aircraft and sync Babylon overlay AFTER render when camera position is finalized
     // This runs every frame (~60fps) to ensure smooth interpolated aircraft movement
     const removePostRender = viewer.scene.postRender.addEventListener(() => {
+      // Record Cesium render time and scene statistics
+      const primitiveCount = viewer.scene.primitives.length
+      const globe = viewer.scene.globe
+      // Access tile loading stats via internal surface (may not be available in all Cesium versions)
+      const surface = (globe as unknown as { _surface?: { tileProvider?: { _tilesToRenderByTextureCount?: unknown[] } } })._surface
+      const tilesLoaded = surface?.tileProvider?._tilesToRenderByTextureCount?.length ?? 0
+      const tilesLoading = (globe as unknown as { _tilesLoading?: number })._tilesLoading ?? 0
+      performanceMonitor.markCesiumPostRender(primitiveCount, tilesLoaded, tilesLoading)
+
       performanceMonitor.startFrame()
 
       performanceMonitor.startTimer('babylonSync')
@@ -699,6 +726,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     })
 
     return () => {
+      removePreRender()
       removePostRender()
     }
   }, [viewer, babylonOverlay, showWeatherEffects, enableWeatherInterpolation, enableAutoAirportSwitch, followMode, followingCallsign, currentAirport, updateCameraPosition, cameraGeoPosition])

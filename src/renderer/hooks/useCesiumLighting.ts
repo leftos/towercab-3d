@@ -1,9 +1,12 @@
 import { useEffect } from 'react'
 import * as Cesium from 'cesium'
+import type { ViewMode } from '@/types'
 
 export interface CesiumLightingSettings {
   /** Whether this is an inset viewport (disables shadows for performance) */
   isInset: boolean
+  /** Current view mode ('3d' or 'topdown') - shadows disabled in topdown */
+  viewMode?: ViewMode
   /** Enable realistic sun-based lighting on terrain */
   enableLighting: boolean
   /** Enable ground atmosphere effects */
@@ -79,6 +82,7 @@ export function useCesiumLighting(
 ) {
   const {
     isInset,
+    viewMode,
     enableLighting,
     enableGroundAtmosphere,
     enableShadows,
@@ -104,10 +108,26 @@ export function useCesiumLighting(
     // Update lighting
     viewer.scene.globe.enableLighting = enableLighting
 
-    // Update shadows - disabled for insets, configurable for main viewport
+    // Update shadows - disabled for insets, aircraft-only for topdown, configurable for main 3D viewport
+    const isTopDown = viewMode === 'topdown'
     if (isInset) {
       viewer.shadows = false
       viewer.terrainShadows = Cesium.ShadowMode.DISABLED
+    } else if (isTopDown) {
+      // In top-down view: show aircraft shadows only (terrain receives but doesn't cast)
+      viewer.shadows = enableShadows
+      if (enableShadows) {
+        viewer.shadowMap.softShadows = shadowSoftness
+        viewer.shadowMap.size = shadowMapSize
+        viewer.shadowMap.maximumDistance = shadowMaxDistance
+        viewer.shadowMap.darkness = shadowDarkness
+        viewer.shadowMap.fadingEnabled = shadowFadingEnabled
+        viewer.shadowMap.normalOffset = shadowNormalOffset
+        // RECEIVE_ONLY: terrain receives shadows from aircraft but doesn't self-shadow
+        viewer.terrainShadows = Cesium.ShadowMode.RECEIVE_ONLY
+      } else {
+        viewer.terrainShadows = Cesium.ShadowMode.DISABLED
+      }
     } else {
       viewer.shadows = enableShadows
       if (enableShadows) {
@@ -156,6 +176,7 @@ export function useCesiumLighting(
   }, [
     viewer,
     isInset,
+    viewMode,
     enableLighting,
     enableGroundAtmosphere,
     enableShadows,
