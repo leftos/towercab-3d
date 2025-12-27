@@ -86,7 +86,6 @@ export function createCloudDomeMesh(name: string, scene: BABYLON.Scene): BABYLON
   let currentOffset = 1 // Start after center vertex
   for (let ring = 1; ring < segments; ring++) {
     const currentRingSegments = segments * 2
-    const nextRingSegments = segments * 2
     const nextOffset = currentOffset + currentRingSegments
 
     for (let seg = 0; seg < currentRingSegments; seg++) {

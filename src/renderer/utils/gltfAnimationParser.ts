@@ -12,66 +12,36 @@
 
 import * as Cesium from 'cesium'
 
-/** Single animation keyframe with time and value */
-export interface AnimationKey {
-  time: number
-  value: number[]
-}
+// Re-export types for external consumers
+export type {
+  AnimationKey,
+  AnimationTrack,
+  Animation,
+  NodeData,
+  AnimationSet,
+  MeshBounds,
+  ExtendedNodeData,
+  ModelGroundData
+} from './gltf'
 
-/** Animation track for a single node (translation, rotation, scale) */
-export interface AnimationTrack {
-  translationKeys: AnimationKey[]
-  rotationKeys: AnimationKey[]
-  scaleKeys: AnimationKey[]
-}
+import type {
+  Animation,
+  AnimationTrack,
+  AnimationSet,
+  NodeData,
+  ModelGroundData
+} from './gltf'
 
-/** Single animation with name, duration, and tracks per node */
-export interface Animation {
-  name: string
-  duration: number
-  tracks: Map<string, AnimationTrack>
-}
+import {
+  getKeysAtTime,
+  parseExtendedNodes,
+  computeMinYAtGearState,
+  parseGroundDataGltf1
+} from './gltf'
 
-/** Node data from glTF including original transforms */
-export interface NodeData {
-  name: string
-  translation: number[]
-  rotation: number[]
-  scale: number[]
-  invRotation: Cesium.Quaternion
-  invRotationMatrix: Cesium.Matrix3
-}
-
-/** Complete animation set for a model */
-export interface AnimationSet {
-  animations: Animation[]
-  nodes: Map<string, NodeData>
-}
-
-/** Mesh bounding box from glTF POSITION accessor min/max */
-export interface MeshBounds {
-  min: [number, number, number]
-  max: [number, number, number]
-}
-
-/** Extended node data including hierarchy and mesh bounds */
-export interface ExtendedNodeData {
-  index: number
-  name: string
-  parentIndex: number | null
-  childIndices: number[]
-  meshIndex: number | null
-  localMatrix: number[]  // 4x4 matrix as 16 floats (column-major)
-  meshBounds: MeshBounds | null  // Bounds of attached mesh in local space
-}
-
-/** Ground offset data computed from model geometry */
-export interface ModelGroundData {
-  /** Lowest Y coordinate when gear is retracted (0%), in model space */
-  gearUpMinY: number
-  /** Lowest Y coordinate when gear is extended (100%), in model space */
-  gearDownMinY: number
-}
+// =============================================================================
+// Caches
+// =============================================================================
 
 /** Cache of parsed animation sets by model URL */
 const animationSetCache = new Map<string, AnimationSet>()
@@ -90,6 +60,10 @@ const pendingGroundDataParses = new Map<string, Promise<ModelGroundData | null>>
 
 /** URLs that failed to fetch (avoid repeated fetch attempts) */
 const failedGroundDataUrls = new Set<string>()
+
+// =============================================================================
+// Animation Set Parsing
+// =============================================================================
 
 /**
  * Parse animation set from a GLB URL
@@ -273,7 +247,7 @@ function parseAnimations(gltfJson: any, binData: ArrayBuffer): Animation[] {
           value.push(outputData[j * componentCount + k])
         }
 
-        const key: AnimationKey = { time, value }
+        const key = { time, value }
 
         if (dofType === 'translation') {
           track.translationKeys.push(key)
@@ -291,31 +265,9 @@ function parseAnimations(gltfJson: any, binData: ArrayBuffer): Animation[] {
   return animations
 }
 
-/**
- * Get two keyframes surrounding a given time for interpolation
- */
-function getKeysAtTime(keys: AnimationKey[], time: number): [AnimationKey, AnimationKey] | null {
-  if (keys.length === 0) return null
-
-  // Before first key - clamp to first
-  if (keys[0].time > time) {
-    return [keys[0], keys[0]]
-  }
-
-  // After last key - clamp to last
-  if (time > keys[keys.length - 1].time) {
-    return [keys[keys.length - 1], keys[keys.length - 1]]
-  }
-
-  // Find surrounding keys
-  for (let i = 0; i < keys.length - 1; i++) {
-    if (keys[i].time <= time && keys[i + 1].time >= time) {
-      return [keys[i], keys[i + 1]]
-    }
-  }
-
-  return null
-}
+// =============================================================================
+// Animation Application (Cesium-specific)
+// =============================================================================
 
 /**
  * Apply animation at a specific percent (0-1) to a Cesium Model
@@ -478,6 +430,10 @@ export function applyGearAnimationsPercent(
   return appliedCount
 }
 
+// =============================================================================
+// Cache Management
+// =============================================================================
+
 /**
  * Clear cached animation set for a URL
  */
@@ -495,9 +451,9 @@ export function clearAnimationCache(url?: string): void {
   }
 }
 
-// ============================================================================
+// =============================================================================
 // Ground Data Computation
-// ============================================================================
+// =============================================================================
 
 /**
  * Get cached ground data for a model URL, or null if not yet computed
@@ -583,7 +539,6 @@ function parseGroundDataFromArrayBuffer(arrayBuffer: ArrayBuffer): ModelGroundDa
 
     if (isGltf1) {
       // glTF 1.0 format (FR24/FlightGear models)
-      // These use Z-up coordinate system and object-based collections
       return parseGroundDataGltf1(gltfJson)
     }
 
@@ -610,504 +565,4 @@ function parseGroundDataFromArrayBuffer(arrayBuffer: ArrayBuffer): ModelGroundDa
     console.error('[GroundData] Failed to parse GLB:', error)
     return null
   }
-}
-
-/**
- * Parse ground data from glTF 1.0 format (FR24/FlightGear models)
- *
- * glTF 1.0 uses:
- * - Object-based collections (meshes/accessors are objects with named keys)
- * - No landing gear animations (static models)
- *
- * Note: FR24 models are inconsistent in their coordinate systems.
- * We detect the vertical axis by counting which axis has the most primitives
- * with "reasonable" vertical bounds (min between -10 and 0, range < 20m).
- * This works because most aircraft parts (fuselage, tail, gear) have small
- * vertical extent, while only wings have large lateral extent.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function parseGroundDataGltf1(gltfJson: any): ModelGroundData | null {
-  const meshes = gltfJson.meshes || {}
-  const accessors = gltfJson.accessors || {}
-
-  // Count primitives with "reasonable" vertical bounds per axis
-  // Landing gear is typically 2-6m below origin, fuselage height ~6-18m
-  const axisCounts = [0, 0, 0]  // X, Y, Z
-  const axisMinValues: [number[], number[], number[]] = [[], [], []]
-
-  // Iterate over all meshes (object with named keys)
-  for (const meshName of Object.keys(meshes)) {
-    const mesh = meshes[meshName]
-    if (!mesh.primitives) continue
-
-    for (const primitive of mesh.primitives) {
-      const posAccessorName = primitive.attributes?.POSITION
-      if (!posAccessorName) continue
-
-      const posAccessor = accessors[posAccessorName]
-      if (!posAccessor?.min || !posAccessor?.max) continue
-
-      // Check each axis for reasonable vertical bounds
-      for (let axis = 0; axis < 3; axis++) {
-        const min = posAccessor.min[axis]
-        const max = posAccessor.max[axis]
-        const range = max - min
-
-        // Reasonable vertical bounds: min between -5 and 0, range < 15m
-        // Tighter threshold (-5m) excludes fuselage belly and focuses on
-        // landing gear-like geometry. FR24 models often don't have explicit
-        // landing gear, so we use the lower parts of wings/nacelles.
-        if (min >= -5 && min < 0 && range < 15) {
-          axisCounts[axis]++
-          axisMinValues[axis].push(min)
-        }
-      }
-    }
-  }
-
-  // Pick the axis with most primitives having reasonable bounds
-  let bestAxis = 0
-  let bestCount = axisCounts[0]
-  for (let i = 1; i < 3; i++) {
-    if (axisCounts[i] > bestCount) {
-      bestCount = axisCounts[i]
-      bestAxis = i
-    }
-  }
-
-  // Get the minimum value across all reasonable primitives for the best axis
-  const minValues = axisMinValues[bestAxis]
-  if (minValues.length === 0) {
-    // Fallback: no reasonable bounds found, use global minimum of smallest range axis
-    let globalMinX = Infinity, globalMaxX = -Infinity
-    let globalMinY = Infinity, globalMaxY = -Infinity
-    let globalMinZ = Infinity, globalMaxZ = -Infinity
-
-    for (const meshName of Object.keys(meshes)) {
-      const mesh = meshes[meshName]
-      if (!mesh.primitives) continue
-      for (const primitive of mesh.primitives) {
-        const posAccessorName = primitive.attributes?.POSITION
-        if (!posAccessorName) continue
-        const posAccessor = accessors[posAccessorName]
-        if (!posAccessor?.min || !posAccessor?.max) continue
-        globalMinX = Math.min(globalMinX, posAccessor.min[0])
-        globalMaxX = Math.max(globalMaxX, posAccessor.max[0])
-        globalMinY = Math.min(globalMinY, posAccessor.min[1])
-        globalMaxY = Math.max(globalMaxY, posAccessor.max[1])
-        globalMinZ = Math.min(globalMinZ, posAccessor.min[2])
-        globalMaxZ = Math.max(globalMaxZ, posAccessor.max[2])
-      }
-    }
-
-    const ranges = [globalMaxX - globalMinX, globalMaxY - globalMinY, globalMaxZ - globalMinZ]
-    const mins = [globalMinX, globalMinY, globalMinZ]
-    let smallestRangeAxis = 0
-    for (let i = 1; i < 3; i++) {
-      if (ranges[i] < ranges[smallestRangeAxis]) smallestRangeAxis = i
-    }
-    // Cap to -4m max for FR24 models
-    const MAX_FR24_GROUND_OFFSET = -4
-    const cappedMin = Math.max(mins[smallestRangeAxis], MAX_FR24_GROUND_OFFSET)
-    return { gearUpMinY: cappedMin, gearDownMinY: cappedMin }
-  }
-
-  const minVertical = Math.min(...minValues)
-
-  // FR24 models have no gear animations, so both states are the same
-  // Cap the offset to -4m max - FR24 models don't have detailed landing gear,
-  // so large offsets (like -6m from fuselage belly) are incorrect.
-  // Typical landing gear extends 2-4m below fuselage.
-  const MAX_FR24_GROUND_OFFSET = -4
-  const cappedMinVertical = Math.max(minVertical, MAX_FR24_GROUND_OFFSET)
-
-  return {
-    gearUpMinY: cappedMinVertical,
-    gearDownMinY: cappedMinVertical
-  }
-}
-
-/**
- * Parse extended node data including hierarchy and mesh bounds
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function parseExtendedNodes(gltfJson: any): Map<number, ExtendedNodeData> {
-  const nodes = new Map<number, ExtendedNodeData>()
-
-  if (!gltfJson.nodes) return nodes
-
-  // First pass: create nodes with basic data
-  for (let i = 0; i < gltfJson.nodes.length; i++) {
-    const node = gltfJson.nodes[i]
-    const name = node.name || `node_${i}`
-
-    // Compute local matrix from TRS or use provided matrix
-    let localMatrix: number[]
-    if (node.matrix) {
-      localMatrix = node.matrix
-    } else {
-      // Build matrix from TRS
-      const t = node.translation || [0, 0, 0]
-      const r = node.rotation || [0, 0, 0, 1]
-      const s = node.scale || [1, 1, 1]
-      localMatrix = matrixFromTRS(t, r, s)
-    }
-
-    // Get mesh bounds if this node has a mesh
-    let meshBounds: MeshBounds | null = null
-    if (node.mesh !== undefined && gltfJson.meshes && gltfJson.meshes[node.mesh]) {
-      meshBounds = getMeshBounds(gltfJson, node.mesh)
-    }
-
-    nodes.set(i, {
-      index: i,
-      name,
-      parentIndex: null,  // Will be set in second pass
-      childIndices: node.children || [],
-      meshIndex: node.mesh ?? null,
-      localMatrix,
-      meshBounds
-    })
-  }
-
-  // Second pass: set parent indices
-  for (const [idx, node] of nodes) {
-    for (const childIdx of node.childIndices) {
-      const childNode = nodes.get(childIdx)
-      if (childNode) {
-        childNode.parentIndex = idx
-      }
-    }
-  }
-
-  return nodes
-}
-
-/**
- * Get combined mesh bounds from all primitives of a mesh
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getMeshBounds(gltfJson: any, meshIndex: number): MeshBounds | null {
-  const mesh = gltfJson.meshes[meshIndex]
-  if (!mesh || !mesh.primitives) return null
-
-  let minX = Infinity, minY = Infinity, minZ = Infinity
-  let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
-
-  for (const primitive of mesh.primitives) {
-    if (primitive.attributes?.POSITION === undefined) continue
-
-    const posAccessor = gltfJson.accessors[primitive.attributes.POSITION]
-    if (!posAccessor || !posAccessor.min || !posAccessor.max) continue
-
-    // glTF POSITION accessors must have min/max per spec
-    minX = Math.min(minX, posAccessor.min[0])
-    minY = Math.min(minY, posAccessor.min[1])
-    minZ = Math.min(minZ, posAccessor.min[2])
-    maxX = Math.max(maxX, posAccessor.max[0])
-    maxY = Math.max(maxY, posAccessor.max[1])
-    maxZ = Math.max(maxZ, posAccessor.max[2])
-  }
-
-  if (!isFinite(minX)) return null
-
-  return {
-    min: [minX, minY, minZ],
-    max: [maxX, maxY, maxZ]
-  }
-}
-
-/**
- * Compute the minimum Y coordinate across all meshes at a specific gear state
- */
-function computeMinYAtGearState(
-  nodes: Map<number, ExtendedNodeData>,
-  gearAnimations: Animation[],
-  gearProgress: number,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  gltfJson: any
-): number {
-  // Get gear animation transforms at the specified progress
-  const animatedTransforms = computeGearAnimationTransforms(gearAnimations, gearProgress, gltfJson)
-
-  let globalMinY = Infinity
-
-  // For each node with a mesh, compute world-space bounds
-  for (const [nodeIdx, node] of nodes) {
-    if (!node.meshBounds) continue
-
-    // Get world matrix for this node (walking up the hierarchy)
-    const worldMatrix = getWorldMatrix(nodeIdx, nodes, animatedTransforms)
-
-    // Transform the 8 corners of the bounding box
-    const corners = getBoundingBoxCorners(node.meshBounds)
-    for (const corner of corners) {
-      const worldCorner = transformPoint(corner, worldMatrix)
-      globalMinY = Math.min(globalMinY, worldCorner[1])  // Y is up in glTF
-    }
-  }
-
-  return isFinite(globalMinY) ? globalMinY : 0
-}
-
-/**
- * Compute animation transforms for gear-related nodes at a specific progress
- */
-function computeGearAnimationTransforms(
-  gearAnimations: Animation[],
-  progress: number,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  gltfJson: any
-): Map<string, number[]> {
-  const transforms = new Map<string, number[]>()
-
-  for (const animation of gearAnimations) {
-    const targetTime = animation.duration * progress
-
-    for (const [nodeName, track] of animation.tracks) {
-      // Find node index by name
-      let nodeIndex = -1
-      for (let i = 0; i < gltfJson.nodes.length; i++) {
-        const node = gltfJson.nodes[i]
-        const name = node.name || `node_${i}`
-        if (name === nodeName) {
-          nodeIndex = i
-          break
-        }
-      }
-      if (nodeIndex === -1) continue
-
-      const node = gltfJson.nodes[nodeIndex]
-
-      // Get base TRS from node
-      const baseT = node.translation || [0, 0, 0]
-      const baseR = node.rotation || [0, 0, 0, 1]
-      const baseS = node.scale || [1, 1, 1]
-
-      // Interpolate animation values
-      const t = interpolateVec3(track.translationKeys, targetTime) || baseT
-      const r = interpolateQuat(track.rotationKeys, targetTime) || baseR
-      const s = interpolateVec3(track.scaleKeys, targetTime) || baseS
-
-      // Build animated matrix
-      const animatedMatrix = matrixFromTRS(t, r, s)
-      transforms.set(nodeName, animatedMatrix)
-    }
-  }
-
-  return transforms
-}
-
-/**
- * Get the world matrix for a node by walking up the hierarchy
- */
-function getWorldMatrix(
-  nodeIndex: number,
-  nodes: Map<number, ExtendedNodeData>,
-  animatedTransforms: Map<string, number[]>
-): number[] {
-  const node = nodes.get(nodeIndex)
-  if (!node) return identityMatrix()
-
-  // Check if this node has an animated transform
-  const localMatrix = animatedTransforms.get(node.name) || node.localMatrix
-
-  if (node.parentIndex === null) {
-    return localMatrix
-  }
-
-  // Recursively get parent's world matrix
-  const parentWorld = getWorldMatrix(node.parentIndex, nodes, animatedTransforms)
-
-  // Multiply: parent * local = world
-  return multiplyMatrices(parentWorld, localMatrix)
-}
-
-/**
- * Get the 8 corners of a bounding box
- */
-function getBoundingBoxCorners(bounds: MeshBounds): [number, number, number][] {
-  const [minX, minY, minZ] = bounds.min
-  const [maxX, maxY, maxZ] = bounds.max
-
-  return [
-    [minX, minY, minZ],
-    [maxX, minY, minZ],
-    [minX, maxY, minZ],
-    [maxX, maxY, minZ],
-    [minX, minY, maxZ],
-    [maxX, minY, maxZ],
-    [minX, maxY, maxZ],
-    [maxX, maxY, maxZ]
-  ]
-}
-
-/**
- * Transform a point by a 4x4 matrix (column-major)
- */
-function transformPoint(point: [number, number, number], matrix: number[]): [number, number, number] {
-  const [x, y, z] = point
-  // Column-major: m[col*4 + row]
-  const w = matrix[3] * x + matrix[7] * y + matrix[11] * z + matrix[15]
-  // Guard against division by zero (degenerate matrix)
-  const safeW = Math.abs(w) < 1e-10 ? 1 : w
-  return [
-    (matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12]) / safeW,
-    (matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13]) / safeW,
-    (matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14]) / safeW
-  ]
-}
-
-/**
- * Create a 4x4 matrix from translation, rotation (quaternion), and scale
- */
-function matrixFromTRS(t: number[], r: number[], s: number[]): number[] {
-  // Quaternion to rotation matrix
-  const [qx, qy, qz, qw] = r
-  const xx = qx * qx, yy = qy * qy, zz = qz * qz
-  const xy = qx * qy, xz = qx * qz, yz = qy * qz
-  const wx = qw * qx, wy = qw * qy, wz = qw * qz
-
-  const r00 = 1 - 2 * (yy + zz)
-  const r01 = 2 * (xy - wz)
-  const r02 = 2 * (xz + wy)
-  const r10 = 2 * (xy + wz)
-  const r11 = 1 - 2 * (xx + zz)
-  const r12 = 2 * (yz - wx)
-  const r20 = 2 * (xz - wy)
-  const r21 = 2 * (yz + wx)
-  const r22 = 1 - 2 * (xx + yy)
-
-  // Apply scale to rotation matrix, then add translation
-  // Column-major order
-  return [
-    r00 * s[0], r10 * s[0], r20 * s[0], 0,
-    r01 * s[1], r11 * s[1], r21 * s[1], 0,
-    r02 * s[2], r12 * s[2], r22 * s[2], 0,
-    t[0], t[1], t[2], 1
-  ]
-}
-
-/**
- * Multiply two 4x4 matrices (column-major)
- */
-function multiplyMatrices(a: number[], b: number[]): number[] {
-  const result = new Array(16).fill(0)
-  for (let col = 0; col < 4; col++) {
-    for (let row = 0; row < 4; row++) {
-      let sum = 0
-      for (let k = 0; k < 4; k++) {
-        sum += a[k * 4 + row] * b[col * 4 + k]
-      }
-      result[col * 4 + row] = sum
-    }
-  }
-  return result
-}
-
-/**
- * Create an identity 4x4 matrix
- */
-function identityMatrix(): number[] {
-  return [
-    1, 0, 0, 0,
-    0, 1, 0, 0,
-    0, 0, 1, 0,
-    0, 0, 0, 1
-  ]
-}
-
-/**
- * Interpolate Vec3 keyframes at a specific time
- */
-function interpolateVec3(keys: AnimationKey[], time: number): number[] | null {
-  if (keys.length === 0) return null
-
-  // Before first key
-  if (time <= keys[0].time) {
-    return keys[0].value
-  }
-
-  // After last key
-  if (time >= keys[keys.length - 1].time) {
-    return keys[keys.length - 1].value
-  }
-
-  // Find surrounding keys
-  for (let i = 0; i < keys.length - 1; i++) {
-    if (keys[i].time <= time && keys[i + 1].time >= time) {
-      const t = (time - keys[i].time) / (keys[i + 1].time - keys[i].time)
-      const a = keys[i].value
-      const b = keys[i + 1].value
-      return [
-        a[0] + (b[0] - a[0]) * t,
-        a[1] + (b[1] - a[1]) * t,
-        a[2] + (b[2] - a[2]) * t
-      ]
-    }
-  }
-
-  return null
-}
-
-/**
- * Interpolate quaternion keyframes at a specific time (spherical linear interpolation)
- */
-function interpolateQuat(keys: AnimationKey[], time: number): number[] | null {
-  if (keys.length === 0) return null
-
-  // Before first key
-  if (time <= keys[0].time) {
-    return keys[0].value
-  }
-
-  // After last key
-  if (time >= keys[keys.length - 1].time) {
-    return keys[keys.length - 1].value
-  }
-
-  // Find surrounding keys
-  for (let i = 0; i < keys.length - 1; i++) {
-    if (keys[i].time <= time && keys[i + 1].time >= time) {
-      const t = (time - keys[i].time) / (keys[i + 1].time - keys[i].time)
-      return slerpQuat(keys[i].value, keys[i + 1].value, t)
-    }
-  }
-
-  return null
-}
-
-/**
- * Spherical linear interpolation between two quaternions
- */
-function slerpQuat(a: number[], b: number[], t: number): number[] {
-  // Compute dot product
-  let dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3]
-
-  // If negative dot, negate one quaternion to take shorter path
-  const bSign = dot < 0 ? -1 : 1
-  dot = Math.abs(dot)
-
-  // If quaternions are very close, use linear interpolation
-  if (dot > 0.9995) {
-    return [
-      a[0] + t * (bSign * b[0] - a[0]),
-      a[1] + t * (bSign * b[1] - a[1]),
-      a[2] + t * (bSign * b[2] - a[2]),
-      a[3] + t * (bSign * b[3] - a[3])
-    ]
-  }
-
-  // Spherical interpolation
-  const theta = Math.acos(dot)
-  const sinTheta = Math.sin(theta)
-  const wa = Math.sin((1 - t) * theta) / sinTheta
-  const wb = Math.sin(t * theta) / sinTheta * bSign
-
-  return [
-    wa * a[0] + wb * b[0],
-    wa * a[1] + wb * b[1],
-    wa * a[2] + wb * b[2],
-    wa * a[3] + wb * b[3]
-  ]
 }

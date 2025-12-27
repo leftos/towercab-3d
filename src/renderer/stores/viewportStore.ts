@@ -33,7 +33,6 @@ import {
   type GlobalOrbitSettings,
   type ViewModeDefaults,
   type AirportViewportConfig,
-  MAIN_VIEWPORT_ID,
   generateId,
   createDefaultCameraState,
   createMainViewport,
@@ -46,7 +45,6 @@ import {
 import {
   toGlobalViewportSettings,
   scheduleGlobalSync,
-  getIsLoadingFromGlobal,
   setIsLoadingFromGlobal,
   mergeGlobalAirportConfig
 } from './viewport/globalSettingsSync'
