@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react'
 import { useAirportStore } from '../../stores/airportStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAircraftFilterStore } from '../../stores/aircraftFilterStore'
@@ -40,11 +40,22 @@ interface AircraftListItem {
   score: number
 }
 
+// Minimum and maximum panel dimensions
+const MIN_PANEL_WIDTH = 180
+const MAX_PANEL_WIDTH = 500
+const MIN_PANEL_HEIGHT = 200
+const MAX_PANEL_HEIGHT = 1200
+
 function AircraftPanel() {
   const currentAirport = useAirportStore((state) => state.currentAirport)
   const showAircraftPanel = useSettingsStore((state) => state.ui.showAircraftPanel)
   const showWeatherEffects = useSettingsStore((state) => state.weather.showWeatherEffects)
   const pinFollowedAircraftToTop = useSettingsStore((state) => state.aircraft.pinFollowedAircraftToTop)
+
+  // Panel dimensions from settings
+  const panelWidth = useSettingsStore((state) => state.ui.aircraftPanelWidth)
+  const panelHeight = useSettingsStore((state) => state.ui.aircraftPanelHeight)
+  const updateUISettings = useSettingsStore((state) => state.updateUISettings)
 
   // Panel filter state from store (affects both list and datablocks)
   const searchQuery = useAircraftFilterStore((state) => state.searchQuery)
@@ -61,6 +72,54 @@ function AircraftPanel() {
   // Local state for sorting and collapse (UI-only, doesn't affect filtering)
   const [sortOption, setSortOption] = useState<SortOption>('smart')
   const [isCollapsed, setIsCollapsed] = useState(false)
+
+  // Resize state
+  const [isResizing, setIsResizing] = useState<'width' | 'height' | 'corner' | null>(null)
+  const resizeStartRef = useRef<{ startX: number; startY: number; startWidth: number; startHeight: number } | null>(null)
+
+  // Resize handlers using pointer events (works for both mouse and touch)
+  const handleResizeStart = useCallback((
+    e: React.PointerEvent,
+    direction: 'width' | 'height' | 'corner'
+  ) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsResizing(direction)
+    resizeStartRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      startWidth: panelWidth,
+      startHeight: panelHeight || 400 // Use 400 as default if height is 0 (auto)
+    }
+    // Capture pointer to continue receiving events even if pointer leaves element
+    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+  }, [panelWidth, panelHeight])
+
+  const handleResizeMove = useCallback((e: React.PointerEvent) => {
+    if (!isResizing || !resizeStartRef.current) return
+
+    const { startX, startY, startWidth, startHeight } = resizeStartRef.current
+    const deltaX = startX - e.clientX // Inverted because dragging left should increase width
+    const deltaY = e.clientY - startY
+
+    if (isResizing === 'width' || isResizing === 'corner') {
+      const newWidth = Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, startWidth + deltaX))
+      updateUISettings({ aircraftPanelWidth: newWidth })
+    }
+
+    if (isResizing === 'height' || isResizing === 'corner') {
+      const newHeight = Math.max(MIN_PANEL_HEIGHT, Math.min(MAX_PANEL_HEIGHT, startHeight + deltaY))
+      updateUISettings({ aircraftPanelHeight: newHeight })
+    }
+  }, [isResizing, updateUISettings])
+
+  const handleResizeEnd = useCallback((e: React.PointerEvent) => {
+    if (isResizing) {
+      ;(e.target as HTMLElement).releasePointerCapture(e.pointerId)
+      setIsResizing(null)
+      resizeStartRef.current = null
+    }
+  }, [isResizing])
 
   // Periodic refresh to update distances/bearings (UI updates automatically via hook reactivity)
   const [refreshTick, setRefreshTick] = useState(0)
@@ -277,8 +336,51 @@ function AircraftPanel() {
 
   if (!showAircraftPanel) return null
 
+  // Calculate panel style with dynamic dimensions
+  const panelStyle: React.CSSProperties = {
+    width: panelWidth,
+    ...(panelHeight > 0 && !isCollapsed ? { height: panelHeight, maxHeight: 'none' } : {})
+  }
+
   return (
-    <div className={`aircraft-panel ${isCollapsed ? 'collapsed' : ''}`}>
+    <div
+      className={`aircraft-panel ${isCollapsed ? 'collapsed' : ''} ${isResizing ? 'resizing' : ''}`}
+      style={panelStyle}
+    >
+      {/* Left edge resize handle (for width) */}
+      <div
+        className="resize-handle resize-handle-left"
+        onPointerDown={(e) => handleResizeStart(e, 'width')}
+        onPointerMove={handleResizeMove}
+        onPointerUp={handleResizeEnd}
+        onPointerCancel={handleResizeEnd}
+        title="Drag to resize width"
+      />
+
+      {/* Bottom edge resize handle (for height) */}
+      {!isCollapsed && (
+        <div
+          className="resize-handle resize-handle-bottom"
+          onPointerDown={(e) => handleResizeStart(e, 'height')}
+          onPointerMove={handleResizeMove}
+          onPointerUp={handleResizeEnd}
+          onPointerCancel={handleResizeEnd}
+          title="Drag to resize height"
+        />
+      )}
+
+      {/* Bottom-left corner resize handle (for both) */}
+      {!isCollapsed && (
+        <div
+          className="resize-handle resize-handle-corner"
+          onPointerDown={(e) => handleResizeStart(e, 'corner')}
+          onPointerMove={handleResizeMove}
+          onPointerUp={handleResizeEnd}
+          onPointerCancel={handleResizeEnd}
+          title="Drag to resize"
+        />
+      )}
+
       <div className="panel-header">
         <h3>Nearby Aircraft</h3>
         <div className="header-right">

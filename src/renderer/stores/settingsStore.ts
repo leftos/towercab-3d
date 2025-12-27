@@ -405,7 +405,7 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
     }),
     {
       name: 'settings-store',
-      version: 18, // Incremented for joystickSensitivity camera setting
+      version: 19, // Incremented for aircraftPanelWidth/Height UI settings
       migrate: (persistedState: unknown, version: number) => {
         // Auto-migrate old flat structure to grouped structure
         if (version < 2) {
@@ -617,6 +617,18 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
             }
           }
         }
+        // Migrate v18 to v19: add aircraftPanelWidth/Height UI settings
+        if (version < 19) {
+          console.log('[Settings] Migrating v18 to v19: adding aircraft panel dimension settings')
+          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
+          return {
+            ...state,
+            ui: {
+              ...DEFAULT_SETTINGS.ui,
+              ...state.ui
+            }
+          }
+        }
         return persistedState as SettingsStoreWithPresets
       }
     }
@@ -741,7 +753,9 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
       showAircraftPanel: oldSettings.showAircraftPanel ?? DEFAULT_SETTINGS.ui.showAircraftPanel,
       showMetarOverlay: oldSettings.showMetarOverlay ?? DEFAULT_SETTINGS.ui.showMetarOverlay,
       askToContributePositions: oldSettings.askToContributePositions ?? DEFAULT_SETTINGS.ui.askToContributePositions,
-      deviceOptimizationPromptDismissed: oldSettings.deviceOptimizationPromptDismissed ?? DEFAULT_SETTINGS.ui.deviceOptimizationPromptDismissed
+      deviceOptimizationPromptDismissed: oldSettings.deviceOptimizationPromptDismissed ?? DEFAULT_SETTINGS.ui.deviceOptimizationPromptDismissed,
+      aircraftPanelWidth: oldSettings.aircraftPanelWidth ?? DEFAULT_SETTINGS.ui.aircraftPanelWidth,
+      aircraftPanelHeight: oldSettings.aircraftPanelHeight ?? DEFAULT_SETTINGS.ui.aircraftPanelHeight
     },
     fsltl: {
       sourcePath: oldSettings.fsltl?.sourcePath ?? DEFAULT_SETTINGS.fsltl.sourcePath,

@@ -2,7 +2,7 @@
   position: fixed;
   top: 58px;
   right: 10px;
-  width: 280px;
+  /* width is controlled via inline style for resizing */
   max-height: calc(100vh - 120px);
   background: rgba(20, 20, 30, 0.95);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -579,4 +579,140 @@
 
 .aircraft-item.clickable:hover {
   background: rgba(255, 255, 255, 0.12);
+}
+
+/* ============================================================================
+   RESIZE HANDLES - Touch-friendly drag handles for resizing panel
+   ============================================================================ */
+
+/* Common resize handle styles */
+.resize-handle {
+  position: absolute;
+  z-index: 100;
+  touch-action: none; /* Prevent browser scroll/zoom during drag */
+  -webkit-tap-highlight-color: transparent;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+/* Show resize handles on hover or when resizing */
+.aircraft-panel:hover .resize-handle,
+.aircraft-panel.resizing .resize-handle {
+  opacity: 1;
+}
+
+/* Left edge resize handle (for width) */
+.resize-handle-left {
+  left: -8px;
+  top: 0;
+  bottom: 0;
+  width: 16px;
+  cursor: ew-resize;
+}
+
+/* Visual indicator for left handle */
+.resize-handle-left::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 40px;
+  background: rgba(79, 195, 247, 0.6);
+  border-radius: 2px;
+}
+
+/* Bottom edge resize handle (for height) */
+.resize-handle-bottom {
+  left: 0;
+  right: 0;
+  bottom: -8px;
+  height: 16px;
+  cursor: ns-resize;
+}
+
+/* Visual indicator for bottom handle */
+.resize-handle-bottom::after {
+  content: '';
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40px;
+  height: 4px;
+  background: rgba(79, 195, 247, 0.6);
+  border-radius: 2px;
+}
+
+/* Bottom-left corner resize handle (for both dimensions) */
+.resize-handle-corner {
+  left: -8px;
+  bottom: -8px;
+  width: 24px;
+  height: 24px;
+  cursor: nesw-resize;
+}
+
+/* Visual indicator for corner handle */
+.resize-handle-corner::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  width: 12px;
+  height: 12px;
+  border-left: 3px solid rgba(79, 195, 247, 0.6);
+  border-bottom: 3px solid rgba(79, 195, 247, 0.6);
+  border-radius: 0 0 0 4px;
+}
+
+/* Highlight handles when actively resizing */
+.aircraft-panel.resizing .resize-handle::after {
+  background: rgba(79, 195, 247, 0.9);
+}
+
+.aircraft-panel.resizing .resize-handle-corner::after {
+  border-color: rgba(79, 195, 247, 0.9);
+}
+
+/* Make handles larger on touch devices for easier targeting */
+@media (pointer: coarse) {
+  .resize-handle-left {
+    left: -16px;
+    width: 32px;
+  }
+
+  .resize-handle-bottom {
+    bottom: -16px;
+    height: 32px;
+  }
+
+  .resize-handle-corner {
+    left: -16px;
+    bottom: -16px;
+    width: 40px;
+    height: 40px;
+  }
+
+  /* Always show handles on touch devices */
+  .aircraft-panel .resize-handle {
+    opacity: 0.7;
+  }
+
+  .resize-handle-left::after {
+    height: 60px;
+    width: 6px;
+  }
+
+  .resize-handle-bottom::after {
+    width: 60px;
+    height: 6px;
+  }
+
+  .resize-handle-corner::after {
+    width: 18px;
+    height: 18px;
+    border-width: 4px;
+  }
 }

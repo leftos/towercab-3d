@@ -484,6 +484,23 @@ export interface UISettings {
    * was dismissed so it doesn't show again.
    */
   deviceOptimizationPromptDismissed: boolean
+
+  /**
+   * Aircraft panel width in pixels (180-500, default: 280)
+   *
+   * The width of the nearby aircraft list panel on the right side of the screen.
+   * Users can resize by dragging the left edge of the panel.
+   */
+  aircraftPanelWidth: number
+
+  /**
+   * Aircraft panel height in pixels (200-1200, default: 0 = auto)
+   *
+   * The height of the nearby aircraft list panel.
+   * Users can resize by dragging the bottom edge of the panel.
+   * 0 means auto height (fills available space up to max-height).
+   */
+  aircraftPanelHeight: number
 }
 
 /**
@@ -934,7 +951,9 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     showAircraftPanel: true,
     showMetarOverlay: false,
     askToContributePositions: true,
-    deviceOptimizationPromptDismissed: false
+    deviceOptimizationPromptDismissed: false,
+    aircraftPanelWidth: 280,
+    aircraftPanelHeight: 0
   },
   fsltl: {
     sourcePath: null,
