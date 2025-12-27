@@ -16,6 +16,9 @@ import { useBabylonOverlay } from '../../hooks/useBabylonOverlay'
 import { useCesiumViewer } from '../../hooks/useCesiumViewer'
 import { useTerrainQuality } from '../../hooks/useTerrainQuality'
 import { useCesiumLighting } from '../../hooks/useCesiumLighting'
+import { useSunElevation } from '../../hooks/useSunElevation'
+import { useCesiumNightDarkening } from '../../hooks/useCesiumNightDarkening'
+import { useBabylonNightLighting } from '../../hooks/useBabylonNightLighting'
 import { useCesiumWeather } from '../../hooks/useCesiumWeather'
 import { useAircraftModels } from '../../hooks/useAircraftModels'
 import { useCesiumLabels } from '../../hooks/useCesiumLabels'
@@ -114,6 +117,9 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   const _cameraNearPlane = useSettingsStore((state) => state.graphics.cameraNearPlane) ?? 0.1
   // Model rendering - separate brightness for built-in and FSLTL models
   const builtinModelBrightness = useSettingsStore((state) => state.graphics.builtinModelBrightness) ?? 1.7
+  // Night darkening settings
+  const enableNightDarkening = useSettingsStore((state) => state.graphics.enableNightDarkening) ?? true
+  const nightDarkeningIntensity = useSettingsStore((state) => state.graphics.nightDarkeningIntensity) ?? 0.7
 
   // Weather store for fog effects, camera position updates, and cloud layers
   const fogDensity = useWeatherStore((state) => state.fogDensity)
@@ -241,6 +247,18 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   })
 
   // =========================================================================
+  // 3a. Night-Time Darkening (requires enableLighting)
+  // =========================================================================
+  // Calculate sun elevation angle at camera position
+  const sunElevation = useSunElevation(viewer, { timeMode, fixedTimeHour })
+
+  // Darken satellite imagery based on sun position
+  useCesiumNightDarkening(viewer, sunElevation, {
+    enabled: enableNightDarkening && enableLighting, // Only works with lighting enabled
+    intensity: nightDarkeningIntensity
+  })
+
+  // =========================================================================
   // 3c. Hide Stars When OVC Cloud Layer Present
   // =========================================================================
   // Babylon.js clouds render on a transparent canvas overlay, so they can't
@@ -344,6 +362,11 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   const babylonOverlay = useBabylonOverlay({
     cesiumViewer: viewer,
     canvas: babylonCanvas
+  })
+
+  // Adjust Babylon.js lighting based on sun position
+  useBabylonNightLighting(babylonOverlay?.scene ?? null, sunElevation, {
+    enabled: enableNightDarkening && enableLighting
   })
 
   useCesiumLabels({

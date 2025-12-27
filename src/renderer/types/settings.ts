@@ -247,6 +247,24 @@ export interface GraphicsSettings {
    * Values above 1.0 brighten textures; values above ~1.1 approach white
    */
   fsltlModelBrightness: number
+
+  // Night-time effects
+  /**
+   * Enable night-time imagery darkening based on sun position (default: true)
+   * When enabled, satellite imagery is automatically darkened at night with
+   * smooth transitions through civil, nautical, and astronomical twilight.
+   */
+  enableNightDarkening: boolean
+
+  /**
+   * Night darkening intensity (0.0-1.0, default: 0.7)
+   * Controls how much to darken the imagery at night:
+   * - 0.0 = No darkening (imagery stays bright at night)
+   * - 0.5 = Moderate darkening
+   * - 0.7 = Realistic darkening (default)
+   * - 1.0 = Maximum darkening (very dark nights)
+   */
+  nightDarkeningIntensity: number
 }
 
 /**
@@ -913,7 +931,9 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     cameraNearPlane: 0.1,
     builtinModelBrightness: 1.7,
     builtinModelTintColor: 'lightBlue',
-    fsltlModelBrightness: 1.0
+    fsltlModelBrightness: 1.0,
+    enableNightDarkening: true,
+    nightDarkeningIntensity: 0.7
   },
   camera: {
     defaultFov: 60,

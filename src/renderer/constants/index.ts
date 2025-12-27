@@ -314,3 +314,30 @@ export {
   AUTO_SWITCH_HYSTERESIS_NM,
   AUTO_SWITCH_MIN_DISTANCE_NM
 } from './weather'
+
+// ============================================================================
+// LIGHTING / NIGHT DARKENING CONSTANTS
+// ============================================================================
+
+export {
+  // Sun elevation thresholds
+  SUN_ELEVATION_DAY,
+  SUN_ELEVATION_CIVIL_TWILIGHT,
+  SUN_ELEVATION_NAUTICAL_TWILIGHT,
+  SUN_ELEVATION_NIGHT,
+
+  // Imagery brightness values
+  NIGHT_BRIGHTNESS_MIN,
+  NIGHT_BRIGHTNESS_TWILIGHT,
+  NIGHT_BRIGHTNESS_CIVIL,
+  NIGHT_GAMMA_BOOST,
+
+  // Babylon.js night lighting multipliers
+  BABYLON_NIGHT_HEMISPHERIC_MULT,
+  BABYLON_NIGHT_DIRECTIONAL_MULT,
+  BABYLON_NIGHT_FOG_EMISSIVE_MULT,
+  BABYLON_NIGHT_CLOUD_EMISSIVE_MULT,
+
+  // Performance
+  SUN_POSITION_UPDATE_INTERVAL
+} from './lighting'

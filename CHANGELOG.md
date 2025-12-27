@@ -5,6 +5,12 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Night-time imagery darkening
+  - Satellite imagery automatically darkens at night based on sun position
+  - Smooth transitions through civil, nautical, and astronomical twilight
+  - Adjustable darkening intensity (0-100%) in Settings > Graphics > Lighting
+  - Works in both real-time and fixed time modes
+  - Babylon.js overlay lighting also dims for consistent weather appearance
 - Back to Menu button in the control bar (arrow icon, next to Settings)
   - Returns to the airport selection screen with a confirmation prompt
   - Your camera position and settings for the current airport are saved automatically

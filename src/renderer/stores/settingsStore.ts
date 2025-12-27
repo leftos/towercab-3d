@@ -408,7 +408,7 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
     }),
     {
       name: 'settings-store',
-      version: 20, // Incremented for datablockFontSize aircraft setting
+      version: 21, // Incremented for night darkening graphics settings
       migrate: (persistedState: unknown, version: number) => {
         // Auto-migrate old flat structure to grouped structure
         if (version < 2) {
@@ -644,6 +644,18 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
             }
           }
         }
+        // Migrate v20 to v21: add night darkening settings
+        if (version < 21) {
+          console.log('[Settings] Migrating v20 to v21: adding night darkening settings')
+          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
+          return {
+            ...state,
+            graphics: {
+              ...DEFAULT_SETTINGS.graphics,
+              ...state.graphics
+            }
+          }
+        }
         return persistedState as SettingsStoreWithPresets
       }
     }
@@ -706,7 +718,11 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
       builtinModelTintColor:
         oldSettings.builtinModelTintColor ?? DEFAULT_SETTINGS.graphics.builtinModelTintColor,
       fsltlModelBrightness:
-        oldSettings.fsltlModelBrightness ?? DEFAULT_SETTINGS.graphics.fsltlModelBrightness
+        oldSettings.fsltlModelBrightness ?? DEFAULT_SETTINGS.graphics.fsltlModelBrightness,
+      enableNightDarkening:
+        oldSettings.enableNightDarkening ?? DEFAULT_SETTINGS.graphics.enableNightDarkening,
+      nightDarkeningIntensity:
+        oldSettings.nightDarkeningIntensity ?? DEFAULT_SETTINGS.graphics.nightDarkeningIntensity
     },
     camera: {
       defaultFov: oldSettings.defaultFov ?? DEFAULT_SETTINGS.camera.defaultFov,
