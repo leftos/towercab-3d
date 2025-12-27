@@ -9,6 +9,7 @@ function LightingSettings() {
   const enableLighting = useSettingsStore((state) => state.cesium.enableLighting)
   const enableNightDarkening = useSettingsStore((state) => state.graphics.enableNightDarkening)
   const nightDarkeningIntensity = useSettingsStore((state) => state.graphics.nightDarkeningIntensity)
+  const aircraftNightVisibility = useSettingsStore((state) => state.graphics.aircraftNightVisibility)
   const updateCesiumSettings = useSettingsStore((state) => state.updateCesiumSettings)
   const updateGraphicsSettings = useSettingsStore((state) => state.updateGraphicsSettings)
 
@@ -74,23 +75,43 @@ function LightingSettings() {
       </div>
 
       {enableNightDarkening && enableLighting && (
-        <div className="setting-item">
-          <label>Darkening Intensity</label>
-          <div className="slider-with-value">
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.1"
-              value={nightDarkeningIntensity}
-              onChange={(e) => updateGraphicsSettings({ nightDarkeningIntensity: Number(e.target.value) })}
-            />
-            <span>{Math.round(nightDarkeningIntensity * 100)}%</span>
+        <>
+          <div className="setting-item">
+            <label>Darkening Intensity</label>
+            <div className="slider-with-value">
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.1"
+                value={nightDarkeningIntensity}
+                onChange={(e) => updateGraphicsSettings({ nightDarkeningIntensity: Number(e.target.value) })}
+              />
+              <span>{Math.round(nightDarkeningIntensity * 100)}%</span>
+            </div>
+            <p className="setting-hint">
+              Higher values make nights darker.
+            </p>
           </div>
-          <p className="setting-hint">
-            Higher values make nights darker.
-          </p>
-        </div>
+
+          <div className="setting-item">
+            <label>Aircraft Night Visibility</label>
+            <div className="slider-with-value">
+              <input
+                type="range"
+                min="1"
+                max="3"
+                step="0.1"
+                value={aircraftNightVisibility}
+                onChange={(e) => updateGraphicsSettings({ aircraftNightVisibility: Number(e.target.value) })}
+              />
+              <span>{aircraftNightVisibility.toFixed(1)}x</span>
+            </div>
+            <p className="setting-hint">
+              Boosts aircraft brightness at night. 1.0 = no boost, 1.5 = moderate, 2.0+ = bright.
+            </p>
+          </div>
+        </>
       )}
     </CollapsibleSection>
   )

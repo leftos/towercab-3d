@@ -265,6 +265,28 @@ export interface GraphicsSettings {
    * - 1.0 = Maximum darkening (very dark nights)
    */
   nightDarkeningIntensity: number
+
+  /**
+   * Aircraft night visibility boost (1.0-3.0, default: 1.5)
+   * Increases aircraft model brightness at night to improve visibility
+   * when imagery is darkened. Uses model light color override to boost
+   * perceived lighting without washing out textures.
+   * - 1.0 = No boost (aircraft darken with scene)
+   * - 1.5 = Moderate boost (default, good visibility)
+   * - 2.0 = Strong boost (very visible)
+   * - 3.0 = Maximum boost (aircraft appear lit)
+   */
+  aircraftNightVisibility: number
+
+  // Performance
+  /**
+   * Maximum frame rate limit (default: 60)
+   * Limits the rendering frame rate to reduce GPU usage and heat.
+   * Set to 0 for unlimited (uses display refresh rate).
+   * Common values: 30, 60, 120, 144, 0 (unlimited)
+   */
+  maxFramerate: number
+
 }
 
 /**
@@ -933,7 +955,9 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     builtinModelTintColor: 'lightBlue',
     fsltlModelBrightness: 1.0,
     enableNightDarkening: true,
-    nightDarkeningIntensity: 0.7
+    nightDarkeningIntensity: 0.7,
+    aircraftNightVisibility: 1.5,
+    maxFramerate: 60
   },
   camera: {
     defaultFov: 60,

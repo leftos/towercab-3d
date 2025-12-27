@@ -408,255 +408,229 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
     }),
     {
       name: 'settings-store',
-      version: 21, // Incremented for night darkening graphics settings
+      version: 24, // Added aircraft night visibility setting
       migrate: (persistedState: unknown, version: number) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let state: any = persistedState
+
         // Auto-migrate old flat structure to grouped structure
         if (version < 2) {
           console.log('[Settings] Migrating from flat structure (v1) to grouped structure (v2)')
-          return migrateOldSettings(persistedState)
+          state = migrateOldSettings(state)
         }
+
         // Migrate v2 to v3: add missing weather precipitation settings
         if (version < 3) {
           console.log('[Settings] Migrating v2 to v3: adding precipitation settings')
-          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
-          return {
+          state = {
             ...state,
-            weather: {
-              ...DEFAULT_SETTINGS.weather,
-              ...state.weather
-            }
+            weather: { ...DEFAULT_SETTINGS.weather, ...state.weather }
           }
         }
+
         // Migrate v3 to v4: add weather interpolation and auto-airport switching
         if (version < 4) {
           console.log('[Settings] Migrating v3 to v4: adding weather interpolation and auto-airport switching')
-          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
-          return {
+          state = {
             ...state,
-            weather: {
-              ...DEFAULT_SETTINGS.weather,
-              ...state.weather
-            },
-            camera: {
-              ...DEFAULT_SETTINGS.camera,
-              ...state.camera
-            }
+            weather: { ...DEFAULT_SETTINGS.weather, ...state.weather },
+            camera: { ...DEFAULT_SETTINGS.camera, ...state.camera }
           }
         }
+
         // Migrate v4 to v5: add model brightness setting
         if (version < 5) {
           console.log('[Settings] Migrating v4 to v5: adding model brightness setting')
-          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
-          return {
+          state = {
             ...state,
-            graphics: {
-              ...DEFAULT_SETTINGS.graphics,
-              ...state.graphics
-            }
+            graphics: { ...DEFAULT_SETTINGS.graphics, ...state.graphics }
           }
         }
+
         // Migrate v5 to v6: add FSLTL settings
         if (version < 6) {
           console.log('[Settings] Migrating v5 to v6: adding FSLTL settings')
-          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
-          return {
+          state = {
             ...state,
-            fsltl: {
-              ...DEFAULT_SETTINGS.fsltl,
-              ...state.fsltl
-            }
+            fsltl: { ...DEFAULT_SETTINGS.fsltl, ...state.fsltl }
           }
         }
+
         // Migrate v6 to v7: split modelBrightness into builtinModelBrightness and fsltlModelBrightness
         if (version < 7) {
           console.log('[Settings] Migrating v6 to v7: splitting model brightness into built-in and FSLTL')
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const state = persistedState as any
           const oldBrightness = state.graphics?.modelBrightness ?? 1.0
-          return {
+          state = {
             ...state,
             graphics: {
               ...DEFAULT_SETTINGS.graphics,
               ...state.graphics,
-              // Use old brightness for built-in, default for FSLTL
               builtinModelBrightness: oldBrightness,
               fsltlModelBrightness: DEFAULT_SETTINGS.graphics.fsltlModelBrightness
             }
           }
         }
+
         // Migrate v7 to v8: add pinFollowedAircraftToTop setting
         if (version < 8) {
           console.log('[Settings] Migrating v7 to v8: adding pinFollowedAircraftToTop setting')
-          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
-          return {
+          state = {
             ...state,
-            aircraft: {
-              ...DEFAULT_SETTINGS.aircraft,
-              ...state.aircraft
-            }
+            aircraft: { ...DEFAULT_SETTINGS.aircraft, ...state.aircraft }
           }
         }
+
         // Migrate v8 to v9: add autoAvoidOverlaps setting
         if (version < 9) {
           console.log('[Settings] Migrating v8 to v9: adding autoAvoidOverlaps setting')
-          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
-          return {
+          state = {
             ...state,
-            aircraft: {
-              ...DEFAULT_SETTINGS.aircraft,
-              ...state.aircraft
-            }
+            aircraft: { ...DEFAULT_SETTINGS.aircraft, ...state.aircraft }
           }
         }
+
         // Migrate v9 to v10: add leaderDistance setting
         if (version < 10) {
           console.log('[Settings] Migrating v9 to v10: adding leaderDistance setting')
-          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
-          return {
+          state = {
             ...state,
-            aircraft: {
-              ...DEFAULT_SETTINGS.aircraft,
-              ...state.aircraft
-            }
+            aircraft: { ...DEFAULT_SETTINGS.aircraft, ...state.aircraft }
           }
         }
+
         // Migrate v10 to v11: add enableFsltlModels setting
         if (version < 11) {
           console.log('[Settings] Migrating v10 to v11: adding enableFsltlModels setting')
-          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
-          return {
+          state = {
             ...state,
-            fsltl: {
-              ...DEFAULT_SETTINGS.fsltl,
-              ...state.fsltl
-            }
+            fsltl: { ...DEFAULT_SETTINGS.fsltl, ...state.fsltl }
           }
         }
+
         // Migrate v11 to v12: increase default tile cache from 500 to 2000
         if (version < 12) {
           console.log('[Settings] Migrating v11 to v12: increasing default tile cache size')
-          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
-          // Only update if user was using the old default (500)
           const currentCache = state.memory?.inMemoryTileCacheSize ?? 500
-          return {
+          state = {
             ...state,
             memory: {
               ...DEFAULT_SETTINGS.memory,
               ...state.memory,
-              // If user was at old max (500), bump to new default (2000)
               inMemoryTileCacheSize: currentCache >= 500 ? 2000 : currentCache
             }
           }
         }
+
         // Migrate v12 to v13: add askToContributePositions UI setting
         if (version < 13) {
           console.log('[Settings] Migrating v12 to v13: adding askToContributePositions setting')
-          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
-          return {
+          state = {
             ...state,
-            ui: {
-              ...DEFAULT_SETTINGS.ui,
-              ...state.ui
-            }
+            ui: { ...DEFAULT_SETTINGS.ui, ...state.ui }
           }
         }
+
         // Migrate v13 to v14: add defaultDatablockDirection setting
         if (version < 14) {
           console.log('[Settings] Migrating v13 to v14: adding defaultDatablockDirection setting')
-          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
-          return {
+          state = {
             ...state,
-            aircraft: {
-              ...DEFAULT_SETTINGS.aircraft,
-              ...state.aircraft
-            }
+            aircraft: { ...DEFAULT_SETTINGS.aircraft, ...state.aircraft }
           }
         }
+
         // Migrate v14 to v15: add enableAircraftSilhouettes setting
         if (version < 15) {
           console.log('[Settings] Migrating v14 to v15: adding enableAircraftSilhouettes setting')
-          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
-          return {
+          state = {
             ...state,
-            graphics: {
-              ...DEFAULT_SETTINGS.graphics,
-              ...state.graphics
-            }
+            graphics: { ...DEFAULT_SETTINGS.graphics, ...state.graphics }
           }
         }
+
         // Migrate v15 to v16: add builtinModelTintColor setting
         if (version < 16) {
           console.log('[Settings] Migrating v15 to v16: adding builtinModelTintColor setting')
-          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
-          return {
+          state = {
             ...state,
-            graphics: {
-              ...DEFAULT_SETTINGS.graphics,
-              ...state.graphics
-            }
+            graphics: { ...DEFAULT_SETTINGS.graphics, ...state.graphics }
           }
         }
+
         // Migrate v16 to v17: add deviceOptimizationPromptDismissed setting
         if (version < 17) {
           console.log('[Settings] Migrating v16 to v17: adding deviceOptimizationPromptDismissed setting')
-          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
-          return {
+          state = {
             ...state,
-            ui: {
-              ...DEFAULT_SETTINGS.ui,
-              ...state.ui
-            }
+            ui: { ...DEFAULT_SETTINGS.ui, ...state.ui }
           }
         }
+
         // Migrate v17 to v18: add joystickSensitivity setting
         if (version < 18) {
           console.log('[Settings] Migrating v17 to v18: adding joystickSensitivity setting')
-          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
-          return {
+          state = {
             ...state,
-            camera: {
-              ...DEFAULT_SETTINGS.camera,
-              ...state.camera
-            }
+            camera: { ...DEFAULT_SETTINGS.camera, ...state.camera }
           }
         }
+
         // Migrate v18 to v19: add aircraftPanelWidth/Height UI settings
         if (version < 19) {
           console.log('[Settings] Migrating v18 to v19: adding aircraft panel dimension settings')
-          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
-          return {
+          state = {
             ...state,
-            ui: {
-              ...DEFAULT_SETTINGS.ui,
-              ...state.ui
-            }
+            ui: { ...DEFAULT_SETTINGS.ui, ...state.ui }
           }
         }
+
         // Migrate v19 to v20: add datablockFontSize setting
         if (version < 20) {
           console.log('[Settings] Migrating v19 to v20: adding datablockFontSize setting')
-          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
-          return {
+          state = {
             ...state,
-            aircraft: {
-              ...DEFAULT_SETTINGS.aircraft,
-              ...state.aircraft
-            }
+            aircraft: { ...DEFAULT_SETTINGS.aircraft, ...state.aircraft }
           }
         }
+
         // Migrate v20 to v21: add night darkening settings
         if (version < 21) {
           console.log('[Settings] Migrating v20 to v21: adding night darkening settings')
-          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
-          return {
+          state = {
             ...state,
-            graphics: {
-              ...DEFAULT_SETTINGS.graphics,
-              ...state.graphics
-            }
+            graphics: { ...DEFAULT_SETTINGS.graphics, ...state.graphics }
           }
         }
-        return persistedState as SettingsStoreWithPresets
+
+        // Migrate v22 to v23: repair broken migrations (early returns prevented chaining)
+        if (version < 23) {
+          console.log('[Settings] Migrating v22 to v23: repairing settings with defaults')
+        }
+
+        // Migrate v23 to v24: add aircraft night visibility setting
+        if (version < 24) {
+          console.log('[Settings] Migrating v23 to v24: adding aircraft night visibility setting')
+          state = {
+            ...state,
+            graphics: { ...DEFAULT_SETTINGS.graphics, ...state.graphics }
+          }
+        }
+
+        // Repair step: ensure all settings groups have defaults filled in
+        // This catches any settings that were missed by migrations
+        const repaired = {
+          ...state,
+          cesium: { ...DEFAULT_SETTINGS.cesium, ...state.cesium },
+          graphics: { ...DEFAULT_SETTINGS.graphics, ...state.graphics },
+          camera: { ...DEFAULT_SETTINGS.camera, ...state.camera },
+          weather: { ...DEFAULT_SETTINGS.weather, ...state.weather },
+          memory: { ...DEFAULT_SETTINGS.memory, ...state.memory },
+          fsltl: { ...DEFAULT_SETTINGS.fsltl, ...state.fsltl },
+          aircraft: { ...DEFAULT_SETTINGS.aircraft, ...state.aircraft },
+          ui: { ...DEFAULT_SETTINGS.ui, ...state.ui }
+        }
+
+        return repaired as SettingsStoreWithPresets
       }
     }
   )
@@ -722,7 +696,11 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
       enableNightDarkening:
         oldSettings.enableNightDarkening ?? DEFAULT_SETTINGS.graphics.enableNightDarkening,
       nightDarkeningIntensity:
-        oldSettings.nightDarkeningIntensity ?? DEFAULT_SETTINGS.graphics.nightDarkeningIntensity
+        oldSettings.nightDarkeningIntensity ?? DEFAULT_SETTINGS.graphics.nightDarkeningIntensity,
+      aircraftNightVisibility:
+        oldSettings.aircraftNightVisibility ?? DEFAULT_SETTINGS.graphics.aircraftNightVisibility,
+      maxFramerate:
+        oldSettings.maxFramerate ?? DEFAULT_SETTINGS.graphics.maxFramerate
     },
     camera: {
       defaultFov: oldSettings.defaultFov ?? DEFAULT_SETTINGS.camera.defaultFov,
