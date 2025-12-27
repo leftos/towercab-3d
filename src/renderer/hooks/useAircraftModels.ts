@@ -198,18 +198,22 @@ export function useAircraftModels(
             modelPoolLoading.current.add(poolIndex)
             modelPoolUrls.current.set(poolIndex, modelInfo.modelUrl)
 
-            // Track if this is an FSLTL model (for color blend logic)
-            const isFsltlModel = modelInfo.matchType.startsWith('fsltl')
-            modelPoolIsFsltlRef.current.set(poolIndex, isFsltlModel)
+            // Track if this is an FSLTL or custom VMR model (for color blend logic)
+            // These models have custom liveries and should use FSLTL brightness/no tint
+            const isFsltlOrVmrModel = modelInfo.matchType === 'fsltl' ||
+              modelInfo.matchType === 'fsltl-base' ||
+              modelInfo.matchType === 'fsltl-vmr' ||
+              modelInfo.matchType === 'custom-vmr'
+            modelPoolIsFsltlRef.current.set(poolIndex, isFsltlOrVmrModel)
 
             // Calculate model color and blend amount based on brightness setting
-            // FSLTL models use their own brightness slider to preserve livery colors
+            // FSLTL/VMR models use their own brightness slider to preserve livery colors
             // Built-in models use the configurable tint color for visibility
-            const effectiveBrightness = isFsltlModel ? fsltlModelBrightness : builtinModelBrightness
-            const tintColor = isFsltlModel ? 'white' : builtinModelTintColor
+            const effectiveBrightness = isFsltlOrVmrModel ? fsltlModelBrightness : builtinModelBrightness
+            const tintColor = isFsltlOrVmrModel ? 'white' : builtinModelTintColor
             const modelColorRgb = getModelColorRgb(effectiveBrightness, tintColor)
             const modelColor = new Cesium.Color(...modelColorRgb, 1.0)
-            const blendAmount = isFsltlModel
+            const blendAmount = isFsltlOrVmrModel
               ? getFsltlModelColorBlendAmount(effectiveBrightness)
               : getModelColorBlendAmount(effectiveBrightness, tintColor)
 
@@ -307,18 +311,22 @@ export function useAircraftModels(
           model.modelMatrix = modelMatrix
 
           // Apply color blend - full white in topdown, preserve textures in 3D
-          // FSLTL models get no blend by default in 3D mode to show their liveries
-          const isFsltlModel = modelPoolIsFsltlRef.current.get(poolIndex) ?? false
+          // FSLTL/VMR models get no blend by default in 3D mode to show their liveries
+          // Compute directly from modelInfo rather than relying on ref (more reliable)
+          const isFsltlOrVmr = modelInfo.matchType === 'fsltl' ||
+            modelInfo.matchType === 'fsltl-base' ||
+            modelInfo.matchType === 'fsltl-vmr' ||
+            modelInfo.matchType === 'custom-vmr'
           if (viewMode === 'topdown') {
             // Always white in top-down view for visibility (both FSLTL and built-in)
             model.color = Cesium.Color.WHITE
             model.colorBlendAmount = 1.0
           } else {
-            // In 3D mode: FSLTL models show liveries, built-in models get configurable tint
-            const effectiveBrightness = isFsltlModel ? fsltlModelBrightness : builtinModelBrightness
-            const tintColor = isFsltlModel ? 'white' : builtinModelTintColor
+            // In 3D mode: FSLTL/VMR models show liveries, built-in models get configurable tint
+            const effectiveBrightness = isFsltlOrVmr ? fsltlModelBrightness : builtinModelBrightness
+            const tintColor = isFsltlOrVmr ? 'white' : builtinModelTintColor
             const modelColorRgb = getModelColorRgb(effectiveBrightness, tintColor)
-            const blendAmount = isFsltlModel
+            const blendAmount = isFsltlOrVmr
               ? getFsltlModelColorBlendAmount(effectiveBrightness)
               : getModelColorBlendAmount(effectiveBrightness, tintColor)
             model.color = new Cesium.Color(...modelColorRgb, 1.0)
