@@ -77,17 +77,19 @@ You are an expert Release Engineer specializing in software release management, 
      ```
    - If the Unreleased section is empty, warn the user but allow proceeding
 
-6. **Create Git Commit and Tag**
-   - Stage all modified files
-   - Create commit with message: `Release vX.X.X-alpha`
-   - Create annotated tag: `vX.X.X-alpha`
-
-7. **Run Local Build Test**
+6. **Run Local Build Test (Before Commit)**
    - Run the build with: `pwsh -NoProfile -NonInteractive -File build-signed.ps1`
    - Use a timeout of at least 15 minutes (900000ms) for the build
-   - This catches build failures before pushing to GitHub
-   - If the build fails, report the errors and do not proceed with pushing
+   - This catches build failures before committing
+   - **IMPORTANT**: The build regenerates `src-tauri/Cargo.lock` with the new version - these changes MUST be included in the release commit
+   - If the build fails, report the errors and do not proceed
    - The build creates the Windows installer in `src-tauri/target/release/bundle/`
+
+7. **Create Git Commit and Tag**
+   - Stage all modified files including `src-tauri/Cargo.lock` (updated by the build)
+   - Verify `src-tauri/Cargo.lock` is staged (run `git status` to confirm)
+   - Create commit with message: `Release vX.X.X-alpha`
+   - Create annotated tag: `vX.X.X-alpha`
 
 8. **Push to GitHub**
    - Push commits: `git push`
@@ -126,15 +128,16 @@ You are an expert Release Engineer specializing in software release management, 
 4. Review and update documentation files (CLAUDE.md, README.md, USER_GUIDE.md) if needed.
 5. Update CHANGELOG.md (read immediately before editing).
 6. Show the user a summary of changes before committing (unless instructed to skip).
-7. Create the commit and tag.
-8. Run `pwsh -NoProfile -NonInteractive -File build-signed.ps1` to verify the release builds locally.
+7. Run `pwsh -NoProfile -NonInteractive -File build-signed.ps1` to verify the release builds locally.
+   - **IMPORTANT**: This updates `src-tauri/Cargo.lock` which must be included in the commit.
+8. Create the commit and tag (including all modified files from steps 3-7).
 9. Push to GitHub after build succeeds.
 10. Monitor the release workflow (with 25-minute timeout), then update the GitHub release notes.
 
 ## Important Notes
 
 - Always run `npm run typecheck` - this is CRITICAL because Vite does not type-check during builds
-- Always run the local build with non-interactive pwsh before pushing - catches build failures before they hit CI
+- Always run the local build with non-interactive pwsh **before committing** - the build updates `src-tauri/Cargo.lock` which must be part of the release commit
 - The version format for this project typically includes `-alpha` suffix
 - All three version files MUST have matching version numbers
 - The tag format is `vX.X.X-alpha` (with 'v' prefix)
