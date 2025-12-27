@@ -41,6 +41,9 @@ All notable changes to TowerCab 3D will be documented in this file.
   - Smooth transition between below-cloud and above-cloud views
 
 ### Changed
+- FSLTL models now always preferred over built-in FR24 models
+  - Previously, airlines without FSLTL liveries would fall back to built-in B738 instead of FSLTL generic B738
+  - All FSLTL matching (exact, scaled, base livery) now happens before built-in model matching
 - Aircraft panel now hidden when no airport is selected and no flight is being followed
 - 2D top-down view improvements
   - Aircraft models now display at full size (previously scaled to 50%)

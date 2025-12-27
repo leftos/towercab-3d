@@ -9,11 +9,14 @@
  * 1. Custom VMR rules (user mods) - airline+type or type-only
  * 2. FSLTL models with exact airline+type match
  * 3. FSLTL closest airline model (scaled) - same airline, different but similar type
- * 4. Built-in models with exact/mapped match
- * 5. Built-in models with closest size match (scaled)
- * 6. FSLTL closest base model (scaled) - any FSLTL model close in size
- * 7. FSLTL B738 base model (generic fallback)
- * 8. Fallback to built-in B738
+ * 4. FSLTL base livery for exact type (no airline-specific)
+ * 5. FSLTL closest base model (scaled) - any FSLTL model close in size
+ * 6. Built-in models with exact/mapped match
+ * 7. Built-in models with direct lowercase match
+ * 8. Built-in models with closest size match (scaled)
+ * 9. FSLTL airline-specific fallback from common types
+ * 10. FSLTL B738 base model (generic fallback)
+ * 11. Fallback to built-in B738
  *
  * The goal is to prioritize visual similarity (shape + size) over generic fallbacks.
  * For airlines, we prefer a scaled version of their actual livery over a generic B738.
@@ -578,7 +581,41 @@ class AircraftModelServiceClass {
       }
     }
 
-    // 4. Check explicit mapping for built-in models
+    // 4. Try FSLTL base livery for exact type match (before built-in models)
+    // Even when an airline was requested but doesn't have this type, prefer FSLTL base over built-in
+    const fsltlBaseModel = fsltlService.findBestModel(normalized, null)
+    if (fsltlBaseModel) {
+      const targetDims = aircraftDimensionsService.getDimensions(normalized)
+      const modelUrl = convertToAssetUrlSync(fsltlBaseModel.modelPath)
+      return {
+        modelUrl,
+        scale: uniformScale,
+        matchType: 'fsltl-base',
+        matchedModel: fsltlBaseModel.modelName,
+        dimensions: targetDims ?? { wingspan: 35.78, length: 39.47 },
+        rotationOffset: 180,
+        hasAnimations: fsltlBaseModel.hasAnimations
+      }
+    }
+
+    // 5. Try FSLTL closest base model (scaled) - any FSLTL model close in size
+    // This helps GA aircraft when we have FSLTL models but no built-in small planes
+    const closestFsltlModel = fsltlService.findClosestModel(normalized)
+    if (closestFsltlModel) {
+      const targetDims = aircraftDimensionsService.getDimensions(normalized)
+      const modelUrl = convertToAssetUrlSync(closestFsltlModel.model.modelPath)
+      return {
+        modelUrl,
+        scale: closestFsltlModel.scale,
+        matchType: 'closest',
+        matchedModel: closestFsltlModel.model.modelName,
+        dimensions: targetDims ?? { wingspan: 35.78, length: 39.47 },
+        rotationOffset: 180,
+        hasAnimations: closestFsltlModel.model.hasAnimations
+      }
+    }
+
+    // 6. Check explicit mapping for built-in models (after FSLTL exhausted)
     const mappedModel = TYPE_TO_MODEL[normalized]
     if (mappedModel && AVAILABLE_MODELS.has(mappedModel)) {
       const modelDims = this.getModelDimensions(mappedModel)
@@ -590,7 +627,7 @@ class AircraftModelServiceClass {
       }
     }
 
-    // 5. Try direct match (lowercase)
+    // 7. Try direct match (lowercase)
     const directMatch = normalized.toLowerCase()
     if (AVAILABLE_MODELS.has(directMatch)) {
       const directDims = this.getModelDimensions(directMatch)
@@ -602,7 +639,7 @@ class AircraftModelServiceClass {
       }
     }
 
-    // 6. No direct built-in model - try to find closest built-in match by dimensions
+    // 8. No direct built-in model - try to find closest built-in match by dimensions
     const targetDims = aircraftDimensionsService.getDimensions(normalized)
     if (targetDims && targetDims.wingspan && targetDims.length) {
       const { model, scale } = findClosestModel(targetDims.wingspan, targetDims.length)
@@ -616,23 +653,7 @@ class AircraftModelServiceClass {
       }
     }
 
-    // 7. Try FSLTL closest base model (scaled) - any FSLTL model close in size
-    // This helps GA aircraft when we have FSLTL models but no built-in small planes
-    const closestFsltlModel = fsltlService.findClosestModel(normalized)
-    if (closestFsltlModel) {
-      const modelUrl = convertToAssetUrlSync(closestFsltlModel.model.modelPath)
-      return {
-        modelUrl,
-        scale: closestFsltlModel.scale,
-        matchType: 'closest',
-        matchedModel: closestFsltlModel.model.modelName,
-        dimensions: targetDims ?? { wingspan: 35.78, length: 39.47 },
-        rotationOffset: 180,
-        hasAnimations: closestFsltlModel.model.hasAnimations
-      }
-    }
-
-    // 8. Try FSLTL airline-specific fallback from common narrowbody types
+    // 9. Try FSLTL airline-specific fallback from common narrowbody types
     // E.g., AAL flying an unknown type should use AAL's B738 livery, not generic B738
     if (airlineCode) {
       const airlineFallback = fsltlService.getAirlineFallback(airlineCode)
@@ -651,7 +672,7 @@ class AircraftModelServiceClass {
       }
     }
 
-    // 9. Try FSLTL B738 base model as generic fallback
+    // 10. Try FSLTL B738 base model as generic fallback
     const fsltlB738Fallback = fsltlService.getB738Fallback()
     if (fsltlB738Fallback) {
       const modelUrl = convertToAssetUrlSync(fsltlB738Fallback.modelPath)
@@ -666,7 +687,7 @@ class AircraftModelServiceClass {
       }
     }
 
-    // 10. Final fallback - use B738 built-in at 1:1 scale
+    // 11. Final fallback - use B738 built-in at 1:1 scale
     const finalFallbackDims = this.getModelDimensions(FALLBACK_MODEL)
     return {
       modelUrl: `./${FALLBACK_MODEL}.glb`,
