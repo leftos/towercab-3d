@@ -340,8 +340,7 @@ export async function convertToAssetUrl(
 
 /**
  * Synchronous version for cases where async isn't possible
- * In browser mode, this just returns the path as-is (won't work for loading)
- * Use the async version when possible
+ * Always uses HTTP URLs since fetch() doesn't support asset:// protocol
  */
 export function convertToAssetUrlSync(filePath: string): string {
   // If path is already an HTTP URL, return as-is
@@ -349,15 +348,7 @@ export function convertToAssetUrlSync(filePath: string): string {
     return filePath
   }
 
-  if (isTauri()) {
-    // In Tauri mode, manually construct the asset URL
-    // This is what convertFileSrc does internally
-    const encoded = encodeURIComponent(filePath.replace(/\\/g, '/'))
-    return `asset://localhost/${encoded}`
-  }
-
-  // In browser mode, we need the model type to construct the URL
-  // Try to detect from the path
+  // Always use HTTP URLs - fetch() doesn't support asset:// even in Tauri
   const normalized = filePath.replace(/\\/g, '/')
 
   // For FSLTL
