@@ -8,7 +8,7 @@ import { useAircraftInterpolation } from '../../hooks/useAircraftInterpolation'
 import { useAircraftFiltering } from '../../hooks/useAircraftFiltering'
 import { calculateBearing, calculateDistanceNM } from '../../utils/interpolation'
 import { formatAltitude, formatGroundspeed, formatHeading, getTowerPosition } from '../../utils/towerHeight'
-import { applyPositionOffsets } from '../../utils/cameraGeometry'
+import { applyPositionOffsets, calculatePitchToTarget } from '../../utils/cameraGeometry'
 import {
   calculateSmartSort,
   clearPhaseHistory,
@@ -306,29 +306,19 @@ function AircraftPanel() {
       currentAircraft.interpolatedLongitude
     )
 
-    // Guard against invalid or very close distances (< 0.05nm ≈ 100m)
-    // At this range, pitch calculation becomes unreliable
-    if (!aircraft.distance || !isFinite(aircraft.distance) || aircraft.distance < 0.05) {
-      // Just set heading target, keep current pitch target as 0
-      setLookAtTarget(bearing, 0)
-      return
-    }
-
-    // Calculate pitch based on altitude difference and distance
-    // Camera is at tower height (which includes airport elevation in MSL)
-    const cameraAltitudeMeters = cameraPos.height
-    const aircraftAltitudeMeters = currentAircraft.interpolatedAltitude // Already in meters
-    const altitudeDiffMeters = aircraftAltitudeMeters - cameraAltitudeMeters
-
-    // Convert distance from nm to meters
-    const distanceMeters = aircraft.distance * 1852
-
-    // Calculate pitch angle (atan2 gives radians, convert to degrees)
-    const pitchRad = Math.atan2(altitudeDiffMeters, distanceMeters)
-    const pitchDeg = pitchRad * (180 / Math.PI)
+    // Calculate pitch using the same function as follow mode
+    // This properly calculates horizontal distance from camera to aircraft
+    const pitch = calculatePitchToTarget(
+      cameraPos.latitude,
+      cameraPos.longitude,
+      cameraPos.height,
+      currentAircraft.interpolatedLatitude,
+      currentAircraft.interpolatedLongitude,
+      currentAircraft.interpolatedAltitude
+    )
 
     // Clamp pitch to reasonable range
-    const clampedPitch = Math.max(-60, Math.min(60, pitchDeg))
+    const clampedPitch = Math.max(-60, Math.min(60, pitch))
 
     // Set the look-at target for smooth animation
     setLookAtTarget(bearing, clampedPitch)

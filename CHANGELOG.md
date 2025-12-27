@@ -92,6 +92,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Fixed pushback aircraft incorrectly showing as "Taxi"
   - Lowered track-heading threshold from 120° to 90° to catch curved pushbacks
   - Fixed track calculation for very slow movement (was defaulting to heading)
+- Fixed click-to-look not adjusting camera pitch to center the aircraft
+  - Clicking on an aircraft in the panel now tilts the camera up/down to point at the aircraft
+  - Previously only heading was adjusted; pitch stayed unchanged
 
 ## [0.0.15-alpha] - 2025-12-25
 
