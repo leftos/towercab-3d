@@ -1,5 +1,6 @@
 import { useSettingsStore } from '../../../stores/settingsStore'
 import { useWeatherStore } from '../../../stores/weatherStore'
+import CollapsibleSection from './CollapsibleSection'
 import '../ControlsBar.css'
 
 function WeatherSettings() {
@@ -23,8 +24,7 @@ function WeatherSettings() {
   const isLoadingWeather = useWeatherStore((state) => state.isLoading)
 
   return (
-    <div className="settings-section">
-      <h3>Weather (METAR)</h3>
+    <CollapsibleSection title="Weather (METAR)">
       <div className="setting-item">
         <label>
           <input
@@ -214,7 +214,7 @@ function WeatherSettings() {
           </div>
         </>
       )}
-    </div>
+    </CollapsibleSection>
   )
 }
 

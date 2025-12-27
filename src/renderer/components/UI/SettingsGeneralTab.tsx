@@ -4,6 +4,7 @@ import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
 import { exportAllData, downloadExport } from '../../services/ExportImportService'
 import { shellApi } from '../../utils/tauriApi'
 import FSLTLImportPanel from './FSLTLImportPanel'
+import CollapsibleSection from './settings/CollapsibleSection'
 import './ControlsBar.css'
 
 interface SettingsGeneralTabProps {
@@ -52,8 +53,7 @@ function SettingsGeneralTab({ onShowImportModal, importStatus }: SettingsGeneral
 
   return (
     <>
-      <div className="settings-section">
-        <h3>Cesium Ion</h3>
+      <CollapsibleSection title="Cesium Ion">
         <div className="setting-item">
           <label>API Token</label>
           <div className="token-input-row">
@@ -84,10 +84,9 @@ function SettingsGeneralTab({ onShowImportModal, importStatus }: SettingsGeneral
             . Changes require saving to take effect.
           </p>
         </div>
-      </div>
+      </CollapsibleSection>
 
-      <div className="settings-section">
-        <h3>Appearance</h3>
+      <CollapsibleSection title="Appearance">
         <div className="setting-item">
           <label>Theme</label>
           <div className="radio-group">
@@ -113,10 +112,9 @@ function SettingsGeneralTab({ onShowImportModal, importStatus }: SettingsGeneral
             </label>
           </div>
         </div>
-      </div>
+      </CollapsibleSection>
 
-      <div className="settings-section">
-        <h3>Camera</h3>
+      <CollapsibleSection title="Camera">
         <div className="setting-item">
           <label>Default FOV</label>
           <div className="slider-with-value">
@@ -191,14 +189,11 @@ function SettingsGeneralTab({ onShowImportModal, importStatus }: SettingsGeneral
             Automatically switch to the nearest airport as you move the camera.
           </p>
         </div>
-      </div>
+      </CollapsibleSection>
 
-      <div className="settings-section">
-        <FSLTLImportPanel />
-      </div>
+      <FSLTLImportPanel />
 
-      <div className="settings-section">
-        <h3>Import / Export Settings</h3>
+      <CollapsibleSection title="Import / Export Settings">
         <p className="setting-hint" style={{ marginBottom: '12px' }}>
           Migrating from the Electron version? Use Import to transfer your settings.
         </p>
@@ -230,7 +225,7 @@ function SettingsGeneralTab({ onShowImportModal, importStatus }: SettingsGeneral
             </p>
           )}
         </div>
-      </div>
+      </CollapsibleSection>
     </>
   )
 }

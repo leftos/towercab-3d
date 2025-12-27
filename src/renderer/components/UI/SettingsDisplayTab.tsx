@@ -1,4 +1,5 @@
 import { useSettingsStore } from '../../stores/settingsStore'
+import CollapsibleSection from './settings/CollapsibleSection'
 import './ControlsBar.css'
 
 function SettingsDisplayTab() {
@@ -20,8 +21,7 @@ function SettingsDisplayTab() {
 
   return (
     <>
-      <div className="settings-section">
-        <h3>Aircraft Display</h3>
+      <CollapsibleSection title="Aircraft Display">
         <div className="setting-item">
           <label>Max Nearby Aircraft Range</label>
           <div className="slider-with-value">
@@ -139,10 +139,9 @@ function SettingsDisplayTab() {
             Default position for datablocks on new airports. Press 5+Enter to reset all datablocks to this default.
           </p>
         </div>
-      </div>
+      </CollapsibleSection>
 
-      <div className="settings-section">
-        <h3>Aircraft</h3>
+      <CollapsibleSection title="Aircraft">
         <div className="setting-item">
           <label>Max Aircraft Display</label>
           <div className="slider-with-value">
@@ -214,10 +213,9 @@ function SettingsDisplayTab() {
             </p>
           </div>
         )}
-      </div>
+      </CollapsibleSection>
 
-      <div className="settings-section">
-        <h3>UI</h3>
+      <CollapsibleSection title="UI">
         <div className="setting-item">
           <label>
             <input
@@ -228,7 +226,7 @@ function SettingsDisplayTab() {
             Show Aircraft Panel
           </label>
         </div>
-      </div>
+      </CollapsibleSection>
     </>
   )
 }

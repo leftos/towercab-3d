@@ -3,6 +3,7 @@ import { useSettingsStore } from '../../stores/settingsStore'
 import { useReplayStore } from '../../stores/replayStore'
 import { estimateReplayMemoryMB } from '../../constants/replay'
 import type { ReplayExportData } from '../../types/replay'
+import CollapsibleSection from './settings/CollapsibleSection'
 import './ControlsBar.css'
 
 function SettingsPerformanceTab() {
@@ -55,8 +56,7 @@ function SettingsPerformanceTab() {
 
   return (
     <>
-      <div className="settings-section">
-        <h3>Tile Cache</h3>
+      <CollapsibleSection title="Tile Cache">
         <div className="setting-item">
           <label>In-Memory Tile Cache</label>
           <div className="slider-with-value">
@@ -92,10 +92,9 @@ function SettingsPerformanceTab() {
             IndexedDB cache for satellite/terrain tiles.
           </p>
         </div>
-      </div>
+      </CollapsibleSection>
 
-      <div className="settings-section">
-        <h3>Data</h3>
+      <CollapsibleSection title="Data">
         <div className="setting-item">
           <label>Aircraft Data Radius</label>
           <div className="slider-with-value">
@@ -113,10 +112,9 @@ function SettingsPerformanceTab() {
             Only keep aircraft data within this radius of tower.
           </p>
         </div>
-      </div>
+      </CollapsibleSection>
 
-      <div className="settings-section">
-        <h3>Replay</h3>
+      <CollapsibleSection title="Replay">
         <div className="setting-item">
           <label>Replay Buffer Duration</label>
           <div className="slider-with-value">
@@ -185,7 +183,7 @@ function SettingsPerformanceTab() {
             </button>
           </div>
         )}
-      </div>
+      </CollapsibleSection>
     </>
   )
 }

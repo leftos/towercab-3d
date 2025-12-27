@@ -5,6 +5,10 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Collapsible settings sections
+  - Each section in the Settings panel can now be expanded/collapsed
+  - All sections collapsed by default for a cleaner overview of each tab
+  - Click section header to expand and see the settings within
 - Night-time imagery darkening
   - Satellite imagery automatically darkens at night based on sun position
   - Smooth transitions through civil, nautical, and astronomical twilight

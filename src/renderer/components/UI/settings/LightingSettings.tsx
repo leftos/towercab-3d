@@ -1,5 +1,6 @@
 import { useSettingsStore } from '../../../stores/settingsStore'
 import { formatTimeHour } from '../../../utils/formatting'
+import CollapsibleSection from './CollapsibleSection'
 import '../ControlsBar.css'
 
 function LightingSettings() {
@@ -12,8 +13,7 @@ function LightingSettings() {
   const updateGraphicsSettings = useSettingsStore((state) => state.updateGraphicsSettings)
 
   return (
-    <div className="settings-section">
-      <h3>Lighting</h3>
+    <CollapsibleSection title="Lighting">
       <div className="setting-item">
         <label>Time of Day</label>
         <div className="radio-group">
@@ -92,7 +92,7 @@ function LightingSettings() {
           </p>
         </div>
       )}
-    </div>
+    </CollapsibleSection>
   )
 }
 

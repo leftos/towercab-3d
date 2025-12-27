@@ -240,6 +240,39 @@
   margin: 0 0 12px 0;
 }
 
+/* Collapsible section styles */
+.settings-section.collapsible .collapsible-header {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+  transition: color 0.15s ease;
+}
+
+.settings-section.collapsible .collapsible-header:hover {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.settings-section.collapsible.collapsed .collapsible-header {
+  margin-bottom: 0;
+}
+
+.collapsible-chevron {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease;
+}
+
+.settings-section.collapsible.expanded .collapsible-chevron {
+  transform: rotate(90deg);
+}
+
+.collapsible-content {
+  animation: slideDown 0.15s ease-out;
+}
+
 .setting-item {
   margin-bottom: 16px;
 }
@@ -790,6 +823,17 @@
   50% {
     opacity: 0.5;
     transform: scale(0.8);
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 

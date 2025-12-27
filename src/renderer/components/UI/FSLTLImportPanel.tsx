@@ -19,6 +19,7 @@ import { useFsltlConversionStore, getConversionEta } from '../../stores/fsltlCon
 import { fsltlService } from '../../services/FSLTLService'
 import * as fsltlApi from '../../services/fsltlApi'
 import { isRemoteMode } from '../../utils/remoteMode'
+import CollapsibleSection from './settings/CollapsibleSection'
 import './FSLTLImportPanel.css'
 
 /**
@@ -37,28 +38,28 @@ function FSLTLImportPanelRemote() {
   }, [])
 
   return (
-    <div className="fsltl-import-panel">
-      <h3>FSLTL Aircraft Models</h3>
+    <CollapsibleSection title="FSLTL Aircraft Models">
+      <div className="fsltl-import-panel">
+        <div className="fsltl-remote-notice">
+          <p>
+            FSLTL model conversion must be done on the host PC.
+            Connect from the desktop app to configure model conversion.
+          </p>
+        </div>
 
-      <div className="fsltl-remote-notice">
-        <p>
-          FSLTL model conversion must be done on the host PC.
-          Connect from the desktop app to configure model conversion.
-        </p>
-      </div>
-
-      <div className="fsltl-section">
-        <label>Status</label>
-        <div className="fsltl-status-row">
-          <span className="fsltl-status-value">
-            {modelCount > 0 ? `${modelCount} models available` : 'No models converted'}
-          </span>
-          <span className={`fsltl-status-badge ${fsltlSettings.enableFsltlModels ? 'enabled' : 'disabled'}`}>
-            {fsltlSettings.enableFsltlModels ? 'Enabled' : 'Disabled'}
-          </span>
+        <div className="fsltl-section">
+          <label>Status</label>
+          <div className="fsltl-status-row">
+            <span className="fsltl-status-value">
+              {modelCount > 0 ? `${modelCount} models available` : 'No models converted'}
+            </span>
+            <span className={`fsltl-status-badge ${fsltlSettings.enableFsltlModels ? 'enabled' : 'disabled'}`}>
+              {fsltlSettings.enableFsltlModels ? 'Enabled' : 'Disabled'}
+            </span>
+          </div>
         </div>
       </div>
-    </div>
+    </CollapsibleSection>
   )
 }
 
@@ -390,10 +391,9 @@ function FSLTLImportPanel() {
   }
 
   return (
-    <div className="fsltl-import-panel">
-      <h3>FSLTL Aircraft Models</h3>
-
-      {/* Enable/Disable Toggle - only show if converted models are available */}
+    <CollapsibleSection title="FSLTL Aircraft Models">
+      <div className="fsltl-import-panel">
+        {/* Enable/Disable Toggle - only show if converted models are available */}
       {convertedCount > 0 && (
         <div className="fsltl-section">
           <label className="setting-checkbox-label">
@@ -583,7 +583,8 @@ function FSLTLImportPanel() {
           </ul>
         </div>
       )}
-    </div>
+      </div>
+    </CollapsibleSection>
   )
 }
 

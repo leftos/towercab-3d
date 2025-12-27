@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
 import { httpServerApi, type ServerStatus, isTauri } from '../../utils/tauriApi'
+import CollapsibleSection from './settings/CollapsibleSection'
 import './ControlsBar.css'
 
 function SettingsServerTab() {
@@ -48,20 +49,18 @@ function SettingsServerTab() {
   // Show message for browser mode
   if (!isTauri()) {
     return (
-      <div className="settings-section">
-        <h3>Remote Browser Access</h3>
+      <CollapsibleSection title="Remote Browser Access" defaultExpanded>
         <p className="setting-hint">
           You are currently viewing TowerCab 3D in remote browser mode.
           Server settings can only be configured from the desktop application.
         </p>
-      </div>
+      </CollapsibleSection>
     )
   }
 
   return (
     <>
-      <div className="settings-section">
-        <h3>Remote Browser Access</h3>
+      <CollapsibleSection title="Remote Browser Access">
         <p className="setting-hint" style={{ marginBottom: '12px' }}>
           Enable the HTTP server to access TowerCab 3D from other devices (iPad, phone, etc.) on your local network.
         </p>
@@ -148,7 +147,7 @@ function SettingsServerTab() {
             </p>
           </div>
         )}
-      </div>
+      </CollapsibleSection>
     </>
   )
 }

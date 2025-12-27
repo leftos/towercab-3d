@@ -1,5 +1,6 @@
 import { useSettingsStore } from '../../../stores/settingsStore'
 import type { AircraftTintColor } from '../../../types/settings'
+import CollapsibleSection from './CollapsibleSection'
 import '../ControlsBar.css'
 
 function AdvancedGraphicsSettings() {
@@ -32,8 +33,7 @@ function AdvancedGraphicsSettings() {
   const updateCesiumSettings = useSettingsStore((state) => state.updateCesiumSettings)
 
   return (
-    <div className="settings-section">
-      <h3>Advanced Graphics (Experimental)</h3>
+    <CollapsibleSection title="Advanced Graphics (Experimental)">
       <p className="setting-hint" style={{ marginBottom: '12px' }}>
         Adjust these settings to troubleshoot terrain texture banding or visual artifacts.
       </p>
@@ -408,7 +408,7 @@ function AdvancedGraphicsSettings() {
           </p>
         </div>
       </div>
-    </div>
+    </CollapsibleSection>
   )
 }
 

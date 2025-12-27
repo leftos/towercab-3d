@@ -1,5 +1,6 @@
 import { useUpdateStore } from '../../stores/updateStore'
 import { checkForUpdates } from '../../services/UpdateService'
+import CollapsibleSection from './settings/CollapsibleSection'
 import './ControlsBar.css'
 
 function SettingsHelpTab() {
@@ -7,8 +8,7 @@ function SettingsHelpTab() {
 
   return (
     <>
-      <div className="settings-section">
-        <h3>Camera Controls</h3>
+      <CollapsibleSection title="Camera Controls">
         <div className="shortcuts-list">
           <div className="shortcut">
             <span className="keys">Right-click + Drag</span>
@@ -39,10 +39,9 @@ function SettingsHelpTab() {
             <span className="action">Reset to default view</span>
           </div>
         </div>
-      </div>
+      </CollapsibleSection>
 
-      <div className="settings-section">
-        <h3>Aircraft Following</h3>
+      <CollapsibleSection title="Aircraft Following">
         <div className="shortcuts-list">
           <div className="shortcut">
             <span className="keys">Click target icon</span>
@@ -65,10 +64,9 @@ function SettingsHelpTab() {
             <span className="action">Stop following</span>
           </div>
         </div>
-      </div>
+      </CollapsibleSection>
 
-      <div className="settings-section">
-        <h3>Bookmarks</h3>
+      <CollapsibleSection title="Bookmarks">
         <div className="shortcuts-list">
           <div className="shortcut">
             <span className="keys">.XX</span>
@@ -91,10 +89,9 @@ function SettingsHelpTab() {
             <span className="action">Open bookmark manager</span>
           </div>
         </div>
-      </div>
+      </CollapsibleSection>
 
-      <div className="settings-section">
-        <h3>Datablock Position</h3>
+      <CollapsibleSection title="Datablock Position">
         <div className="shortcuts-list">
           <div className="shortcut">
             <span className="keys">1-9</span>
@@ -116,10 +113,9 @@ function SettingsHelpTab() {
         <p className="setting-hint" style={{ marginTop: '8px' }}>
           Position layout: 7=top-left, 8=top, 9=top-right, 4=left, 5=center, 6=right, 1=bottom-left, 2=bottom, 3=bottom-right
         </p>
-      </div>
+      </CollapsibleSection>
 
-      <div className="settings-section">
-        <h3>Updates</h3>
+      <CollapsibleSection title="Updates">
         <div className="setting-row">
           <button
             className="control-button"
@@ -132,7 +128,7 @@ function SettingsHelpTab() {
         <p className="setting-hint" style={{ marginTop: '8px' }}>
           Current version: v{APP_VERSION}
         </p>
-      </div>
+      </CollapsibleSection>
     </>
   )
 }

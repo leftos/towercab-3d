@@ -1,4 +1,5 @@
 import { useSettingsStore } from '../../../stores/settingsStore'
+import CollapsibleSection from './CollapsibleSection'
 import '../ControlsBar.css'
 
 function TerrainSettings() {
@@ -7,8 +8,7 @@ function TerrainSettings() {
   const updateCesiumSettings = useSettingsStore((state) => state.updateCesiumSettings)
 
   return (
-    <div className="settings-section">
-      <h3>Terrain</h3>
+    <CollapsibleSection title="Terrain">
       <div className="setting-item">
         <label>Terrain Quality</label>
         <div className="slider-with-value">
@@ -40,7 +40,7 @@ function TerrainSettings() {
           Display OpenStreetMap 3D buildings. May impact performance.
         </p>
       </div>
-    </div>
+    </CollapsibleSection>
   )
 }
 
