@@ -1,7 +1,9 @@
 import TerrainSettings from './settings/TerrainSettings'
 import LightingSettings from './settings/LightingSettings'
 import WeatherSettings from './settings/WeatherSettings'
-import AdvancedGraphicsSettings from './settings/AdvancedGraphicsSettings'
+import RenderingSettings from './settings/RenderingSettings'
+import ModelAppearanceSettings from './settings/ModelAppearanceSettings'
+import ShadowSettings from './settings/ShadowSettings'
 import './ControlsBar.css'
 
 function SettingsGraphicsTab() {
@@ -10,7 +12,9 @@ function SettingsGraphicsTab() {
       <TerrainSettings />
       <LightingSettings />
       <WeatherSettings />
-      <AdvancedGraphicsSettings />
+      <RenderingSettings />
+      <ModelAppearanceSettings />
+      <ShadowSettings />
     </>
   )
 }
