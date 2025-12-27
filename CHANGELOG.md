@@ -4,6 +4,10 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Orbit follow mode now remembers zoom distance and camera angle across app restarts
+  - Previously reset to 500m default on every app launch
+
 ## v0.0.17-alpha - 2025-12-27
 
 ### Added

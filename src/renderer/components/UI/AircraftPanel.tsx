@@ -473,9 +473,7 @@ function AircraftPanel() {
             {followMode === 'tower' ? 'Tower' : 'Orbit'}
           </button>
           <div className="zoom-control">
-            {followMode === 'orbit' ? (
-              <span className="zoom-label">Dist: {orbitDistance}m</span>
-            ) : (
+            {followMode !== 'orbit' && (
               <span className="zoom-label">Zoom: {followZoom.toFixed(1)}x</span>
             )}
           </div>
