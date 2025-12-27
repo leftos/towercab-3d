@@ -34,6 +34,8 @@ import { useTouchInput } from './useTouchInput'
 interface UseCameraInputOptions {
   /** Callback when user manually breaks out of tower follow mode */
   onBreakTowerFollow?: () => void
+  /** Callback when user escapes orbit mode via WASD */
+  onEscapeOrbitMode?: () => void
 }
 
 /**
@@ -129,7 +131,8 @@ interface UseCameraInputOptions {
  *
  * ### Follow Orbit Mode
  * - Camera orbits around aircraft
- * - WASD/arrows adjust orbit distance
+ * - WASD escapes orbit mode (stops following, keeps view pointed at aircraft)
+ * - Arrow keys adjust orbit heading/pitch
  * - Mouse drag adjusts orbit heading/pitch
  * - Wheel adjusts orbit distance
  *
@@ -185,7 +188,7 @@ export function useCameraInput(
   viewportId: string,
   options: UseCameraInputOptions = {}
 ): void {
-  const { onBreakTowerFollow } = options
+  const { onBreakTowerFollow, onEscapeOrbitMode } = options
 
   // Settings store
   const mouseSensitivity = useSettingsStore((state) => state.camera.mouseSensitivity)
@@ -563,6 +566,13 @@ export function useCameraInput(
         if ((key.startsWith('Arrow')) && followingCallsignRef.current && followModeRef.current === 'tower') {
           onBreakTowerFollow?.()
         }
+
+        // Escape orbit mode when WASD is pressed (WASD has no other function in orbit mode)
+        const wasdKey = key.toLowerCase()
+        if ((wasdKey === 'w' || wasdKey === 's' || wasdKey === 'a' || wasdKey === 'd') &&
+            followingCallsignRef.current && followModeRef.current === 'orbit') {
+          onEscapeOrbitMode?.()
+        }
       }
     }
 
@@ -808,6 +818,7 @@ export function useCameraInput(
     resetPosition,
     stopFollowing,
     onBreakTowerFollow,
+    onEscapeOrbitMode,
     setHeading,
     setPitch,
     clearLookAtTarget

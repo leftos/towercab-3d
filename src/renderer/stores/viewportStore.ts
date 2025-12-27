@@ -104,6 +104,8 @@ interface ViewportStore {
   followAircraft: (callsign: string) => void
   followAircraftInOrbit: (callsign: string) => void
   stopFollowing: (restoreCamera?: boolean) => void
+  /** Stop following and set specific heading/pitch (used when escaping orbit mode) */
+  stopFollowingWithView: (heading: number, pitch: number) => void
   clearPreFollowState: () => void
   setFollowMode: (mode: FollowMode) => void
   toggleFollowMode: () => void
@@ -602,6 +604,18 @@ export const useViewportStore = create<ViewportStore>()(
                 }
                 return { followingCallsign: null, preFollowState: null }
               })
+            })
+          },
+
+          stopFollowingWithView: (heading, pitch) => {
+            const { activeViewportId, viewports } = get()
+            set({
+              viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
+                followingCallsign: null,
+                preFollowState: null,
+                heading,
+                pitch
+              }))
             })
           },
 

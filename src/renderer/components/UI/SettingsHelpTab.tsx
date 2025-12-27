@@ -56,6 +56,10 @@ function SettingsHelpTab() {
             <span className="action">Toggle orbit mode</span>
           </div>
           <div className="shortcut">
+            <span className="keys">WASD (orbit mode)</span>
+            <span className="action">Exit orbit, look at aircraft</span>
+          </div>
+          <div className="shortcut">
             <span className="keys">Scroll (following)</span>
             <span className="action">Adjust zoom/distance</span>
           </div>

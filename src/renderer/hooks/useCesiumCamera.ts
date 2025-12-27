@@ -119,6 +119,7 @@ export function useCesiumCamera(
 ): CameraControls {
   const currentAirport = useAirportStore((state) => state.currentAirport)
   const towerHeight = useAirportStore((state) => state.towerHeight)
+  const customTowerPosition = useAirportStore((state) => state.customTowerPosition)
 
   // Viewport store - find this viewport's camera state
   const viewports = useViewportStore((state) => state.viewports)
@@ -151,6 +152,7 @@ export function useCesiumCamera(
   const resetViewStore = useViewportStore((state) => state.resetView)
   const followAircraftStore = useViewportStore((state) => state.followAircraft)
   const stopFollowingStore = useViewportStore((state) => state.stopFollowing)
+  const stopFollowingWithViewStore = useViewportStore((state) => state.stopFollowingWithView)
   const clearPreFollowState = useViewportStore((state) => state.clearPreFollowState)
 
   // Track whether heading/pitch updates came from internal calculations
@@ -195,11 +197,47 @@ export function useCesiumCamera(
     stopFollowingStore(false)
   }, [clearPreFollowState, stopFollowingStore])
 
+  // Callback for when user escapes orbit mode via WASD
+  // Calculates heading/pitch from tower to aircraft so camera keeps looking at the aircraft
+  const handleEscapeOrbitMode = useCallback(() => {
+    if (!currentAirport || !followingCallsign || !interpolatedAircraft) return
+
+    // Get followed aircraft position
+    const aircraft = interpolatedAircraft.get(followingCallsign)
+    if (!aircraft) {
+      // Aircraft not found, just stop following without restoring view
+      stopFollowingStore(false)
+      return
+    }
+
+    // Get tower position
+    const towerPos = getTowerPosition(currentAirport, towerHeight, customTowerPosition ?? undefined)
+    if (!towerPos) {
+      stopFollowingStore(false)
+      return
+    }
+
+    // Calculate heading and pitch from tower to aircraft
+    const lookAt = calculateTowerLookAt(
+      towerPos.latitude,
+      towerPos.longitude,
+      towerPos.height,
+      aircraft.latitude,
+      aircraft.longitude,
+      feetToMeters(aircraft.altitude)
+    )
+
+    // Stop following with the calculated view direction
+    stopFollowingWithViewStore(lookAt.heading, lookAt.pitch)
+  }, [currentAirport, followingCallsign, interpolatedAircraft, towerHeight, customTowerPosition, stopFollowingStore, stopFollowingWithViewStore])
+
   // Use camera input hook for keyboard/mouse handling
-  useCameraInput(viewer, viewportId, { onBreakTowerFollow: handleBreakTowerFollow })
+  useCameraInput(viewer, viewportId, {
+    onBreakTowerFollow: handleBreakTowerFollow,
+    onEscapeOrbitMode: handleEscapeOrbitMode
+  })
 
   // Get tower position (3D) and custom 2D center position
-  const customTowerPosition = useAirportStore((state) => state.customTowerPosition)
   const custom2dPosition = useAirportStore((state) => state.custom2dPosition)
   const getTowerPos = useCallback(() => {
     if (!currentAirport) return null

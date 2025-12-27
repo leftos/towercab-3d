@@ -5,6 +5,10 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- WASD keys now exit orbit mode while keeping camera pointed at the aircraft
+  - Pressing any WASD key in orbit mode calculates heading/pitch from tower to aircraft
+  - Camera remains at tower position looking at where the aircraft was
+  - Provides a quick way to break out of orbit without snapping back to pre-follow view
 - METAR overlay now displays interpolated weather in orbit follow mode without an airport selected
   - Shows blended weather data from nearby stations with flight category color coding
   - Displays source stations and their contribution weights
