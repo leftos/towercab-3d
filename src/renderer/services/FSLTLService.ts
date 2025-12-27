@@ -413,7 +413,17 @@ class FSLTLServiceClass {
       }
     }
 
-    // 2. Try VMR default rule (base livery for this type)
+    // 2. Direct registry lookup for airline + type (when VMR rule wasn't found)
+    // This handles cases where models exist but VMR wasn't loaded or doesn't have
+    // rules for this exact combination
+    if (normalizedAirline && modelsForType) {
+      const airlineMatch = modelsForType.find(m => m.airlineCode === normalizedAirline)
+      if (airlineMatch) {
+        return airlineMatch
+      }
+    }
+
+    // 3. Try VMR default rule (base livery for this type)
     // BUT: If an airline code was provided, skip base livery here - let the caller
     // try closest-match first to find an airline-specific model of similar size
     // (e.g., FDX flying B738 should try FDX's B738F before falling back to generic B738)
@@ -431,7 +441,7 @@ class FSLTLServiceClass {
       }
     }
 
-    // 3. Fallback: Direct registry lookup by type (only when no airline specified)
+    // 4. Fallback: Direct registry lookup by type (only when no airline specified)
     // This handles cases where models exist but VMR wasn't loaded
     // or VMR doesn't have rules for this exact combination
     if (!normalizedAirline && modelsForType) {
@@ -447,7 +457,7 @@ class FSLTLServiceClass {
       }
     }
 
-    // 4. No match - let caller try closest-match or other fallbacks
+    // 5. No match - let caller try closest-match or other fallbacks
     return null
   }
 
@@ -487,6 +497,38 @@ class FSLTLServiceClass {
       const baseModel = b738Models.find(m => !m.airlineCode)
       if (baseModel) return baseModel
     }
+    return null
+  }
+
+  /**
+   * Get an airline-specific fallback model from common narrowbody types.
+   * When the requested aircraft type isn't available, this finds any model
+   * for the airline from common fallback types (B738, A320, etc.).
+   *
+   * @param airlineCode - ICAO airline code (e.g., "AAL")
+   * @returns Airline-specific model from fallback types, or null if none available
+   */
+  getAirlineFallback(airlineCode: string | null): FSLTLModel | null {
+    if (!airlineCode || !this.isEnabled()) return null
+
+    const normalizedAirline = airlineCode.toUpperCase()
+
+    // Common narrowbody types to search for airline liveries (in preference order)
+    const FALLBACK_TYPES = [
+      'B738', 'A320', 'B739', 'A321', 'A319', 'B737',
+      'A20N', 'A21N', 'A19N', 'B38M', 'B39M', 'B73X'
+    ]
+
+    for (const type of FALLBACK_TYPES) {
+      const modelsForType = this.registry.byAircraftType.get(type)
+      if (modelsForType) {
+        const airlineMatch = modelsForType.find(m => m.airlineCode === normalizedAirline)
+        if (airlineMatch) {
+          return airlineMatch
+        }
+      }
+    }
+
     return null
   }
 

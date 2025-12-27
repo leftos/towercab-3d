@@ -68,6 +68,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Default camera pitch changed from -15° to -10° for a more level view
 
 ### Fixed
+- Fixed datablocks and leader lines stretching when resizing the window horizontally
+- Fixed FSLTL models not matching when airline+type combination exists but VMR rule is missing
+- Fixed aircraft with invalid/unknown type codes (e.g., A32N instead of A20N) now showing airline-specific livery instead of generic white B738
 - Fixed tower positions not fully applying on first visit to an airport
   - 3D view now uses custom lat/lon/height from tower-positions
   - 2D view now uses custom center point and altitude from tower-positions

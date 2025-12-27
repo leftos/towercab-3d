@@ -263,16 +263,38 @@ export function useBabylonScene(
     const dirLight = new BABYLON.DirectionalLight('dirLight', new BABYLON.Vector3(-1, -2, -1), scene)
     dirLight.intensity = DIRECTIONAL_LIGHT_INTENSITY
 
-    // Handle resize
+    // Handle resize - update canvas dimensions and trigger engine resize
     const handleResize = () => {
       const rect = canvas.getBoundingClientRect()
-      canvas.width = rect.width * devicePixelRatio
-      canvas.height = rect.height * devicePixelRatio
-      engine.resize()
+      if (rect.width === 0 || rect.height === 0) return
+
+      const newWidth = rect.width * devicePixelRatio
+      const newHeight = rect.height * devicePixelRatio
+
+      // Only resize if dimensions actually changed
+      if (canvas.width !== newWidth || canvas.height !== newHeight) {
+        canvas.width = newWidth
+        canvas.height = newHeight
+        engine.resize()
+
+        // Force the GUI texture to update its internal dimensions to match the new canvas size
+        // This prevents label stretching and leader line misalignment after window resize
+        guiTexture.scaleTo(newWidth, newHeight)
+      }
     }
+
+    // Use ResizeObserver for more reliable detection of container size changes
+    // This catches cases where the container resizes without triggering window resize
+    const resizeObserver = new ResizeObserver(() => {
+      handleResize()
+    })
+    resizeObserver.observe(canvas)
+
+    // Also listen to window resize as a fallback
     window.addEventListener('resize', handleResize)
 
     return () => {
+      resizeObserver.disconnect()
       window.removeEventListener('resize', handleResize)
 
       guiTexture.dispose()

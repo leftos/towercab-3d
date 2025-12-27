@@ -632,7 +632,26 @@ class AircraftModelServiceClass {
       }
     }
 
-    // 8. Try FSLTL B738 base model as generic fallback
+    // 8. Try FSLTL airline-specific fallback from common narrowbody types
+    // E.g., AAL flying an unknown type should use AAL's B738 livery, not generic B738
+    if (airlineCode) {
+      const airlineFallback = fsltlService.getAirlineFallback(airlineCode)
+      if (airlineFallback) {
+        const modelUrl = convertToAssetUrlSync(airlineFallback.modelPath)
+        const fallbackDims = aircraftDimensionsService.getDimensions(airlineFallback.aircraftType)
+        return {
+          modelUrl,
+          scale: uniformScale,
+          matchType: 'fallback',
+          matchedModel: airlineFallback.modelName,
+          dimensions: fallbackDims ?? b738Dims,
+          rotationOffset: 180,
+          hasAnimations: airlineFallback.hasAnimations
+        }
+      }
+    }
+
+    // 9. Try FSLTL B738 base model as generic fallback
     const fsltlB738Fallback = fsltlService.getB738Fallback()
     if (fsltlB738Fallback) {
       const modelUrl = convertToAssetUrlSync(fsltlB738Fallback.modelPath)
@@ -641,13 +660,13 @@ class AircraftModelServiceClass {
         scale: uniformScale,
         matchType: 'fallback',
         matchedModel: fsltlB738Fallback.modelName,
-        dimensions: { wingspan: 35.78, length: 39.47 }, // B738 dimensions
+        dimensions: b738Dims,
         rotationOffset: 180,
         hasAnimations: fsltlB738Fallback.hasAnimations
       }
     }
 
-    // 9. Final fallback - use B738 built-in at 1:1 scale
+    // 10. Final fallback - use B738 built-in at 1:1 scale
     const finalFallbackDims = this.getModelDimensions(FALLBACK_MODEL)
     return {
       modelUrl: `./${FALLBACK_MODEL}.glb`,
