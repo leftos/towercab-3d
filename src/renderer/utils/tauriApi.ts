@@ -317,7 +317,7 @@ export async function convertToAssetUrl(
   // For FSLTL: look for pattern after common FSLTL output folder patterns
   if (type === 'fsltl') {
     // Try to find the type/airline/model.glb structure
-    const fsltlMatch = normalized.match(/[/\\]([A-Z0-9]{3,4})[/\\]([A-Z0-9_]+)[/\\](model\.glb)$/i)
+    const fsltlMatch = normalized.match(/[/\\]([A-Z0-9]{3,5})[/\\]([A-Z0-9_]+)[/\\](model\.glb)$/i)
     if (fsltlMatch) {
       return `/api/fsltl/${fsltlMatch[1]}/${fsltlMatch[2]}/${fsltlMatch[3]}`
     }
@@ -341,22 +341,29 @@ export async function convertToAssetUrl(
 
 /**
  * Synchronous version for cases where async isn't possible
- * Always uses HTTP URLs since fetch() doesn't support asset:// protocol
+ * In Tauri mode: uses asset protocol for direct file access
+ * In browser mode: uses HTTP API URLs
  */
 export function convertToAssetUrlSync(filePath: string): string {
-  // If path is already an HTTP URL, return as-is
-  if (filePath.startsWith('/api/') || filePath.startsWith('http://') || filePath.startsWith('https://')) {
+  // If path is already an HTTP URL or asset URL, return as-is
+  if (filePath.startsWith('/api/') || filePath.startsWith('http://') || filePath.startsWith('https://') || filePath.startsWith('asset://')) {
     return filePath
   }
 
-  // Always use HTTP URLs - fetch() doesn't support asset:// even in Tauri
-  const normalized = filePath.replace(/\\/g, '/')
+  // In Tauri mode, use the internal convertFileSrc (it's synchronous)
+  if (isTauri()) {
+    const internals = (window as unknown as { __TAURI_INTERNALS__?: { convertFileSrc: (path: string, protocol?: string) => string } }).__TAURI_INTERNALS__
+    if (internals?.convertFileSrc) {
+      return internals.convertFileSrc(filePath)
+    }
+  }
 
-  // Get the API base URL (handles Tauri vs remote mode)
+  // In browser/remote mode, use HTTP API URLs
+  const normalized = filePath.replace(/\\/g, '/')
   const baseUrl = getApiBaseUrl()
 
   // For FSLTL
-  const fsltlMatch = normalized.match(/[/\\]([A-Z0-9]{3,4})[/\\]([A-Z0-9_]+)[/\\](model\.glb)$/i)
+  const fsltlMatch = normalized.match(/[/\\]([A-Z0-9]{3,5})[/\\]([A-Z0-9_]+)[/\\](model\.glb)$/i)
   if (fsltlMatch) {
     return `${baseUrl}/api/fsltl/${fsltlMatch[1]}/${fsltlMatch[2]}/${fsltlMatch[3]}`
   }
