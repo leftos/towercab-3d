@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import * as Cesium from 'cesium'
-import { SUN_POSITION_UPDATE_INTERVAL } from '@/constants'
+import { SUN_POSITION_UPDATE_INTERVAL, PARTICLE_PREWARM_JUMP_THRESHOLD } from '@/constants'
 import type { TimeMode } from '@/types/settings'
 
 export interface SunElevationOptions {
@@ -28,8 +28,9 @@ export interface SunElevationOptions {
  *
  * ## Performance
  * Sun position is only recalculated every 30 seconds since the sun moves slowly.
- * However, when timeMode or fixedTimeHour changes, an immediate recalculation
- * is triggered to provide responsive feedback when adjusting time settings.
+ * However, immediate recalculation is triggered when:
+ * - timeMode or fixedTimeHour settings change
+ * - Camera position jumps significantly (>500m, e.g., airport switch)
  *
  * @param viewer - Initialized Cesium.Viewer instance
  * @param options - Optional time settings that trigger immediate recalculation when changed
@@ -50,6 +51,7 @@ export function useSunElevation(
   const { timeMode, fixedTimeHour } = options ?? {}
   const [sunElevation, setSunElevation] = useState<number | null>(null)
   const lastUpdateRef = useRef<number>(0)
+  const lastCameraPositionRef = useRef<Cesium.Cartesian3 | null>(null)
 
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) {
@@ -130,15 +132,29 @@ export function useSunElevation(
     const initialElevation = calculateSunElevation()
     setSunElevation(initialElevation)
     lastUpdateRef.current = Date.now()
+    lastCameraPositionRef.current = Cesium.Cartesian3.clone(viewer.scene.camera.positionWC)
 
     // Set up periodic recalculation
-    // Using postRender to check if enough time has passed
+    // Using postRender to check if enough time has passed or camera jumped significantly
     const removeListener = viewer.scene.postRender.addEventListener(() => {
       const now = Date.now()
-      if (now - lastUpdateRef.current >= SUN_POSITION_UPDATE_INTERVAL) {
+      const currentCameraPosition = viewer.scene.camera.positionWC
+
+      // Check if camera jumped significantly (e.g., airport switch)
+      let cameraJumped = false
+      if (lastCameraPositionRef.current) {
+        const distance = Cesium.Cartesian3.distance(lastCameraPositionRef.current, currentCameraPosition)
+        if (distance > PARTICLE_PREWARM_JUMP_THRESHOLD) {
+          cameraJumped = true
+        }
+      }
+
+      // Recalculate if time elapsed OR camera jumped
+      if (cameraJumped || now - lastUpdateRef.current >= SUN_POSITION_UPDATE_INTERVAL) {
         const elevation = calculateSunElevation()
         setSunElevation(elevation)
         lastUpdateRef.current = now
+        lastCameraPositionRef.current = Cesium.Cartesian3.clone(currentCameraPosition)
       }
     })
 

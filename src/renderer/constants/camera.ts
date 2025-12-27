@@ -220,3 +220,15 @@ export const VNAS_RANGE_TO_ALTITUDE_MULTIPLIER = 30.48 // 100 feet in meters
  * Camera will be clamped to this height above terrain surface.
  */
 export const CAMERA_MIN_AGL = 5
+
+// ============================================================================
+// AIRPORT TRANSITION
+// ============================================================================
+
+/**
+ * Duration of fly-to animation when switching airports (seconds)
+ *
+ * Longer durations allow terrain tiles to stream progressively
+ * and give a smoother transition between airports.
+ */
+export const AIRPORT_FLYTO_DURATION = 5.0

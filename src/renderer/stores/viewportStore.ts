@@ -545,10 +545,11 @@ export const useViewportStore = create<ViewportStore>()(
             })
 
             // Immediately update reference position to trigger VATSIM re-filter
+            // Use allPilots (unfiltered) since the aircraft might not be in aircraftStates yet
             const vatsimStore = useVatsimStore.getState()
-            const aircraftState = vatsimStore.aircraftStates.get(callsign)
-            if (aircraftState) {
-              vatsimStore.setReferencePosition(aircraftState.latitude, aircraftState.longitude)
+            const pilot = vatsimStore.allPilots.find(p => p.callsign === callsign)
+            if (pilot) {
+              vatsimStore.setReferencePosition(pilot.latitude, pilot.longitude)
             }
           },
 
@@ -578,10 +579,11 @@ export const useViewportStore = create<ViewportStore>()(
             })
 
             // Immediately update reference position to trigger VATSIM re-filter
+            // Use allPilots (unfiltered) since the aircraft might not be in aircraftStates yet
             const vatsimStore = useVatsimStore.getState()
-            const aircraftState = vatsimStore.aircraftStates.get(callsign)
-            if (aircraftState) {
-              vatsimStore.setReferencePosition(aircraftState.latitude, aircraftState.longitude)
+            const pilot = vatsimStore.allPilots.find(p => p.callsign === callsign)
+            if (pilot) {
+              vatsimStore.setReferencePosition(pilot.latitude, pilot.longitude)
             }
           },
 

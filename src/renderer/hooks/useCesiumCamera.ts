@@ -11,7 +11,7 @@ import {
   feetToMeters,
   calculateHorizontalDistance
 } from '../utils/cameraGeometry'
-import { CAMERA_MIN_AGL } from '../constants/camera'
+import { CAMERA_MIN_AGL, AIRPORT_FLYTO_DURATION } from '../constants/camera'
 import { useCameraInput } from './useCameraInput'
 import type { InterpolatedAircraftState } from '../types/vatsim'
 
@@ -661,7 +661,7 @@ export function useCesiumCamera(
             pitch: Cesium.Math.toRadians(-90),
             roll: 0
           },
-          duration: 2.0,
+          duration: AIRPORT_FLYTO_DURATION,
           complete: () => {
             isFlyingToAirportRef.current = false
             if (viewer.camera.frustum instanceof Cesium.PerspectiveFrustum) {
@@ -793,7 +793,7 @@ export function useCesiumCamera(
           pitch: Cesium.Math.toRadians(targetPitch),
           roll: 0
         },
-        duration: 2.0, // 2 second flight gives terrain time to stream
+        duration: AIRPORT_FLYTO_DURATION,
         complete: () => {
           isFlyingToAirportRef.current = false
           // Set FOV after flight completes
