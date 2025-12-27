@@ -21,6 +21,12 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+.panel-header .header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .panel-header h3 {
   margin: 0;
   font-size: 14px;
@@ -715,4 +721,39 @@
     height: 18px;
     border-width: 4px;
   }
+}
+
+/* ============================================================================
+   DATA SOURCE INDICATORS - Show live (1Hz) vs fallback (15s) updates
+   ============================================================================ */
+
+/* Badge shown in panel header */
+.data-source-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.3px;
+}
+
+.data-source-badge.live {
+  background: rgba(0, 204, 119, 0.2);
+  color: #0c7;
+  border: 1px solid rgba(0, 204, 119, 0.4);
+}
+
+.data-source-badge.fallback {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* Small dot indicator shown next to individual aircraft callsigns */
+.live-indicator {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
 }

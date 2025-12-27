@@ -4,6 +4,12 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Data source indicators in aircraft panels
+  - Nearby Aircraft panel header shows "1s" (green) when receiving vNAS live updates, or "15s" when using standard VATSIM polling
+  - Individual aircraft show a green dot next to their callsign when receiving 1Hz live updates
+  - Flight Search panel (Ctrl+K) shows the same indicators in the footer and per-result
+
 ### Changed
 - Aircraft panel now hidden when no airport is selected and no flight is being followed
 - FSLTL settings panel reorganized to show converted models location first

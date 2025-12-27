@@ -3,6 +3,7 @@ import { useAirportStore } from '../../stores/airportStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAircraftFilterStore } from '../../stores/aircraftFilterStore'
 import { useRunwayStore } from '../../stores/runwayStore'
+import { useVnasStore } from '../../stores/vnasStore'
 import { useActiveViewportCamera } from '../../hooks/useActiveViewportCamera'
 import { useAircraftInterpolation } from '../../hooks/useAircraftInterpolation'
 import { useAircraftFiltering } from '../../hooks/useAircraftFiltering'
@@ -38,6 +39,8 @@ interface AircraftListItem {
   tier: PriorityTier | null
   runway: string | null
   score: number
+  // Data source indicator
+  isLive: boolean // True if receiving 1Hz vNAS updates
 }
 
 // Minimum and maximum panel dimensions
@@ -68,6 +71,10 @@ function AircraftPanel() {
   // Runway data for smart sort
   const getRunwaysWithCoordinates = useRunwayStore((state) => state.getRunwaysWithCoordinates)
   const runwaysLoaded = useRunwayStore((state) => state.isLoaded)
+
+  // vNAS state for live update indicator
+  const vnasConnected = useVnasStore((state) => state.status.state === 'connected')
+  const vnasAircraftStates = useVnasStore((state) => state.aircraftStates)
 
   // Local state for sorting and collapse (UI-only, doesn't affect filtering)
   const [sortOption, setSortOption] = useState<SortOption>('smart')
@@ -235,7 +242,8 @@ function AircraftPanel() {
         phase: smartData?.phase || null,
         tier: smartData?.tier || null,
         runway: smartData?.runway || null,
-        score: smartData?.score || 0
+        score: smartData?.score || 0,
+        isLive: vnasAircraftStates.has(aircraft.callsign)
       }
     })
 
@@ -267,7 +275,7 @@ function AircraftPanel() {
 
     return sorted.slice(0, 50)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refreshTick intentionally forces periodic recalculation of distances/bearings
-  }, [filtered, referencePoint, followingCallsign, sortOption, refreshTick, smartSortContext, pinFollowedAircraftToTop, currentAirport, towerHeight, customTowerPosition, positionOffsetX, positionOffsetY, positionOffsetZ])
+  }, [filtered, referencePoint, followingCallsign, sortOption, refreshTick, smartSortContext, pinFollowedAircraftToTop, currentAirport, towerHeight, customTowerPosition, positionOffsetX, positionOffsetY, positionOffsetZ, vnasAircraftStates])
 
 
   const handleFollowClick = (callsign: string) => {
@@ -372,7 +380,22 @@ function AircraftPanel() {
       )}
 
       <div className="panel-header">
-        <h3>Nearby Aircraft</h3>
+        <div className="header-left">
+          <h3>Nearby Aircraft</h3>
+          {vnasConnected && (
+            <span className="data-source-badge live" title="Receiving 1Hz live updates via vNAS">
+              <svg width="6" height="6" viewBox="0 0 6 6">
+                <circle cx="3" cy="3" r="3" fill="currentColor" />
+              </svg>
+              1s
+            </span>
+          )}
+          {!vnasConnected && (
+            <span className="data-source-badge fallback" title="Using 15-second VATSIM polling">
+              15s
+            </span>
+          )}
+        </div>
         <div className="header-right">
           <span className="aircraft-count">{nearbyAircraft.length}</span>
           <button
@@ -483,6 +506,13 @@ function AircraftPanel() {
               >
                 <div className="aircraft-header">
                   <div className="callsign-group">
+                    {aircraft.isLive && (
+                      <span className="live-indicator" title="1Hz live updates">
+                        <svg width="6" height="6" viewBox="0 0 6 6">
+                          <circle cx="3" cy="3" r="3" fill="#0c7" />
+                        </svg>
+                      </span>
+                    )}
                     <span className="callsign">{aircraft.callsign}</span>
                     {phaseLabel && (
                       <span className={`phase-badge ${tierClass}`}>

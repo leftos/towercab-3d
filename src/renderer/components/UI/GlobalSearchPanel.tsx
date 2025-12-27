@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useVatsimStore } from '../../stores/vatsimStore'
+import { useVnasStore } from '../../stores/vnasStore'
 import { useActiveViewportCamera } from '../../hooks/useActiveViewportCamera'
 import './GlobalSearchPanel.css'
 
@@ -11,6 +12,7 @@ interface SearchResult {
   arrival: string | null
   altitude: number
   groundspeed: number
+  isLive: boolean
 }
 
 function GlobalSearchPanel() {
@@ -20,6 +22,10 @@ function GlobalSearchPanel() {
 
   const allPilots = useVatsimStore((state) => state.allPilots)
   const { followAircraftInOrbit, followingCallsign } = useActiveViewportCamera()
+
+  // vNAS state for live update indicator
+  const vnasConnected = useVnasStore((state) => state.status.state === 'connected')
+  const vnasAircraftStates = useVnasStore((state) => state.aircraftStates)
 
   // Focus input when opened
   useEffect(() => {
@@ -67,7 +73,8 @@ function GlobalSearchPanel() {
           departure,
           arrival,
           altitude: pilot.altitude,  // Keep in METERS
-          groundspeed: pilot.groundspeed
+          groundspeed: pilot.groundspeed,
+          isLive: vnasAircraftStates.has(pilot.callsign)
         })
       }
 
@@ -83,7 +90,7 @@ function GlobalSearchPanel() {
       if (!aStartsWithQuery && bStartsWithQuery) return 1
       return a.callsign.localeCompare(b.callsign)
     })
-  }, [query, allPilots])
+  }, [query, allPilots, vnasAircraftStates])
 
   const handleSelect = useCallback((callsign: string) => {
     followAircraftInOrbit(callsign)
@@ -159,6 +166,13 @@ function GlobalSearchPanel() {
                     onClick={() => handleSelect(result.callsign)}
                   >
                     <div className="result-main">
+                      {result.isLive && (
+                        <span className="live-indicator" title="1Hz live updates">
+                          <svg width="6" height="6" viewBox="0 0 6 6">
+                            <circle cx="3" cy="3" r="3" fill="#0c7" />
+                          </svg>
+                        </span>
+                      )}
                       <span className="result-callsign">{result.callsign}</span>
                       <span className="result-type">{result.aircraftType || '???'}</span>
                     </div>
@@ -178,8 +192,24 @@ function GlobalSearchPanel() {
             </div>
 
             <div className="search-footer">
-              <span className="footer-hint">Press Enter to follow in orbit mode</span>
-              <span className="footer-hint">Esc to close</span>
+              <div className="footer-left">
+                {vnasConnected ? (
+                  <span className="data-source-badge live" title="Receiving 1Hz live updates via vNAS">
+                    <svg width="6" height="6" viewBox="0 0 6 6">
+                      <circle cx="3" cy="3" r="3" fill="currentColor" />
+                    </svg>
+                    1s updates
+                  </span>
+                ) : (
+                  <span className="data-source-badge fallback" title="Using 15-second VATSIM polling">
+                    15s updates
+                  </span>
+                )}
+              </div>
+              <div className="footer-right">
+                <span className="footer-hint">Enter to follow</span>
+                <span className="footer-hint">Esc to close</span>
+              </div>
             </div>
           </div>
         </div>,
