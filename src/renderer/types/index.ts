@@ -31,7 +31,8 @@ export type {
   // Viewport layout
   ViewportLayout,
   Viewport,
-  AirportViewportConfig
+  AirportViewportConfig,
+  ViewModeDefaults
 } from './viewport'
 
 // ============================================================================

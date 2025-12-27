@@ -148,6 +148,19 @@ export interface Viewport {
  *
  * @internal Used by viewportStore for persistence
  */
+/**
+ * Camera defaults for a specific view mode (3D or 2D/topdown)
+ */
+export interface ViewModeDefaults {
+  heading: number
+  pitch: number
+  fov: number
+  positionOffsetX: number
+  positionOffsetY: number
+  positionOffsetZ: number
+  topdownAltitude?: number  // Only for 2D mode
+}
+
 export interface AirportViewportConfig {
   /** All viewports for this airport */
   viewports: Viewport[]
@@ -156,7 +169,7 @@ export interface AirportViewportConfig {
   activeViewportId: string
 
   /**
-   * Optional saved default configuration
+   * Optional saved default configuration (legacy, kept for migration)
    * Set by "Save as Default" button, restored by "Reset to Default"
    */
   defaultConfig?: {
@@ -164,10 +177,19 @@ export interface AirportViewportConfig {
     activeViewportId: string
   }
 
+  /** Defaults for 3D view mode */
+  default3d?: ViewModeDefaults
+
+  /** Defaults for 2D/topdown view mode */
+  default2d?: ViewModeDefaults
+
   /**
    * Camera bookmarks (0-99 slots)
    * Shared across all viewports for this airport
    * Saved/loaded via .XX. syntax in CommandInput
    */
   bookmarks?: { [slot: number]: import('./camera').CameraBookmark }
+
+  /** Global datablock position (numpad style, excludes 5 which is center/reset) */
+  datablockPosition?: 1 | 2 | 3 | 4 | 6 | 7 | 8 | 9
 }

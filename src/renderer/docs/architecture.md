@@ -386,10 +386,6 @@ viewportStore (PRIMARY CAMERA STORE)
      ├─ ViewportManager (render viewports)
      └─ ControlsBar (display camera state, bookmark buttons)
 
-cameraStore (DEPRECATED)
-├─ Only used for export/import backward compatibility
-└─ DO NOT use for new features
-
 settingsStore
 ├─ Cesium Ion token
 ├─ Terrain quality (1-5)
@@ -882,7 +878,6 @@ src/renderer/
 ├─ stores/
 │   ├─ aircraftFilterStore.ts
 │   ├─ airportStore.ts
-│   ├─ cameraStore.ts (DEPRECATED)
 │   ├─ datablockPositionStore.ts
 │   ├─ fsltlConversionStore.ts
 │   ├─ globalSettingsStore.ts (NEW - shared across devices)

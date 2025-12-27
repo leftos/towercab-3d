@@ -4,10 +4,11 @@
  */
 
 import { useSettingsStore } from '../stores/settingsStore'
-import { useCameraStore } from '../stores/cameraStore'
 import { useViewportStore } from '../stores/viewportStore'
+import type { AirportViewportConfig } from '@/types'
 
 export interface ExportedAirportData {
+  // Legacy camera format (for backward compatibility with old exports)
   camera?: {
     '3d'?: unknown
     'topdown'?: unknown
@@ -16,11 +17,8 @@ export interface ExportedAirportData {
     defaultTopdown?: unknown
     bookmarks?: Record<number, unknown>
   }
-  viewports?: {
-    viewports?: unknown[]
-    activeViewportId?: string
-    defaultConfig?: unknown
-  }
+  // Current viewports format
+  viewports?: AirportViewportConfig
 }
 
 export interface ExportData {
@@ -42,7 +40,6 @@ export interface ImportOptions {
  */
 export function exportAllData(selectedAirports?: string[]): ExportData {
   const settingsState = useSettingsStore.getState()
-  const cameraState = useCameraStore.getState()
   const viewportState = useViewportStore.getState()
 
   // Get global settings (exclude functions)
@@ -53,39 +50,27 @@ export function exportAllData(selectedAirports?: string[]): ExportData {
     }
   }
 
-  // Get all airport ICAOs from both stores
-  const allAirports = new Set<string>([
-    ...Object.keys(cameraState.airportSettings),
-    ...Object.keys(viewportState.airportViewportConfigs)
-  ])
+  // Get all airport ICAOs from viewportStore
+  const allAirports = Object.keys(viewportState.airportViewportConfigs)
 
   // Filter to selected airports if specified
   const airportsToExport = selectedAirports
-    ? [...allAirports].filter(icao => selectedAirports.includes(icao))
-    : [...allAirports]
+    ? allAirports.filter(icao => selectedAirports.includes(icao))
+    : allAirports
 
   // Build airport data
   const airports: Record<string, ExportedAirportData> = {}
   for (const icao of airportsToExport) {
-    const airportData: ExportedAirportData = {}
-
-    if (cameraState.airportSettings[icao]) {
-      airportData.camera = cameraState.airportSettings[icao]
-    }
-
-    if (viewportState.airportViewportConfigs[icao]) {
-      airportData.viewports = viewportState.airportViewportConfigs[icao]
-    }
-
-    if (Object.keys(airportData).length > 0) {
-      airports[icao] = airportData
+    const config = viewportState.airportViewportConfigs[icao]
+    if (config) {
+      airports[icao] = { viewports: config }
     }
   }
 
   return {
-    version: 1,
+    version: 2, // Bumped version for new format without legacy camera data
     exportDate: new Date().toISOString(),
-    appVersion: '0.0.4', // Update this when version changes
+    appVersion: '0.0.15', // Current version
     globalSettings,
     airports
   }
@@ -152,6 +137,7 @@ export function validateExportData(data: unknown): data is ExportData {
 
 /**
  * Import data with options
+ * Supports both legacy format (version 1 with camera data) and new format (version 2+ with viewports)
  */
 export function importData(data: ExportData, options: ImportOptions): {
   success: boolean
@@ -172,25 +158,26 @@ export function importData(data: ExportData, options: ImportOptions): {
 
     // Import selected airports
     if (options.selectedAirports.length > 0) {
-      const cameraStore = useCameraStore.getState()
       const viewportStore = useViewportStore.getState()
 
       for (const icao of options.selectedAirports) {
         const airportData = data.airports[icao]
         if (!airportData) continue
 
-        // Import camera settings
-        if (airportData.camera) {
-          const newAirportSettings = { ...cameraStore.airportSettings }
+        const newViewportConfigs = { ...viewportStore.airportViewportConfigs }
 
-          if (options.mergeMode === 'merge' && newAirportSettings[icao]) {
-            // Merge: preserve existing bookmarks, add new ones
-            const existing = newAirportSettings[icao]
-            const imported = airportData.camera as typeof existing
+        // Handle viewport settings (current format)
+        if (airportData.viewports) {
+          if (options.mergeMode === 'merge' && newViewportConfigs[icao]) {
+            // Merge: keep existing default if no new one, merge bookmarks
+            const existing = newViewportConfigs[icao]
+            const imported = airportData.viewports
 
-            newAirportSettings[icao] = {
-              ...existing,
+            newViewportConfigs[icao] = {
               ...imported,
+              defaultConfig: imported.defaultConfig || existing.defaultConfig,
+              default3d: imported.default3d || existing.default3d,
+              default2d: imported.default2d || existing.default2d,
               bookmarks: {
                 ...(existing.bookmarks || {}),
                 ...(imported.bookmarks || {})
@@ -198,33 +185,44 @@ export function importData(data: ExportData, options: ImportOptions): {
             }
           } else {
             // Replace: overwrite completely
-            newAirportSettings[icao] = airportData.camera as typeof newAirportSettings[string]
+            newViewportConfigs[icao] = airportData.viewports
+          }
+        }
+        // Handle legacy camera format (version 1 exports)
+        else if (airportData.camera) {
+          const legacyCamera = airportData.camera
+          // Convert legacy camera settings to viewport config format
+          const legacyConfig: AirportViewportConfig = {
+            viewports: [],
+            activeViewportId: 'main',
+            bookmarks: legacyCamera.bookmarks as AirportViewportConfig['bookmarks']
           }
 
-          useCameraStore.setState({ airportSettings: newAirportSettings })
-        }
-
-        // Import viewport settings
-        if (airportData.viewports) {
-          const newViewportConfigs = { ...viewportStore.airportViewportConfigs }
+          // Map legacy defaults to new format
+          if (legacyCamera.default3d) {
+            legacyConfig.default3d = legacyCamera.default3d as AirportViewportConfig['default3d']
+          }
+          if (legacyCamera.defaultTopdown) {
+            legacyConfig.default2d = legacyCamera.defaultTopdown as AirportViewportConfig['default2d']
+          }
 
           if (options.mergeMode === 'merge' && newViewportConfigs[icao]) {
-            // Merge: keep existing default if no new one
             const existing = newViewportConfigs[icao]
-            const imported = airportData.viewports as typeof existing
-
             newViewportConfigs[icao] = {
-              ...imported,
-              defaultConfig: imported.defaultConfig || existing.defaultConfig
+              ...existing,
+              bookmarks: {
+                ...(existing.bookmarks || {}),
+                ...(legacyConfig.bookmarks || {})
+              },
+              default3d: legacyConfig.default3d || existing.default3d,
+              default2d: legacyConfig.default2d || existing.default2d
             }
           } else {
-            // Replace: overwrite completely
-            newViewportConfigs[icao] = airportData.viewports as typeof newViewportConfigs[string]
+            newViewportConfigs[icao] = legacyConfig
           }
-
-          useViewportStore.setState({ airportViewportConfigs: newViewportConfigs })
         }
 
+        useViewportStore.setState({ airportViewportConfigs: newViewportConfigs })
         importedAirports.push(icao)
       }
     }

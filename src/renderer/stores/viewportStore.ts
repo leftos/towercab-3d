@@ -1,7 +1,6 @@
 import { create } from 'zustand'
 import { persist, subscribeWithSelector } from 'zustand/middleware'
-import type { ViewMode, FollowMode, ViewportLayout, ViewportCameraState, Viewport, CameraBookmark, GlobalViewportSettings, GlobalAirportViewportConfig, GlobalCameraBookmark, GlobalViewModeDefaults } from '../types'
-import { DEFAULT_GLOBAL_VIEWPORT_SETTINGS } from '../types'
+import type { ViewMode, FollowMode, ViewportLayout, ViewportCameraState, Viewport, CameraBookmark } from '../types'
 import { useVatsimStore } from './vatsimStore'
 import { useAirportStore } from './airportStore'
 import { useSettingsStore } from './settingsStore'
@@ -20,164 +19,51 @@ import {
   TOPDOWN_ALTITUDE_DEFAULT,
   TOPDOWN_ALTITUDE_MIN,
   TOPDOWN_ALTITUDE_MAX,
-  ORBIT_DISTANCE_DEFAULT,
   ORBIT_DISTANCE_MIN,
   ORBIT_DISTANCE_MAX,
+  ORBIT_DISTANCE_DEFAULT,
   ORBIT_HEADING_DEFAULT,
   ORBIT_PITCH_DEFAULT,
   ORBIT_PITCH_MIN,
   ORBIT_PITCH_MAX
 } from '../constants'
 
-// Generate unique IDs using native crypto API
-const generateId = () => crypto.randomUUID()
+// Import extracted modules
+import {
+  type GlobalOrbitSettings,
+  type ViewModeDefaults,
+  type AirportViewportConfig,
+  MAIN_VIEWPORT_ID,
+  generateId,
+  createDefaultCameraState,
+  createMainViewport,
+  normalizeLoadedViewports,
+  getNextInsetPosition,
+  updateViewportCameraState,
+  scheduleAutoSave
+} from './viewport/viewportHelpers'
 
-// Debounce timer for auto-save
-let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
-const AUTO_SAVE_DELAY = 5000 // 5 seconds
+import {
+  toGlobalViewportSettings,
+  scheduleGlobalSync,
+  getIsLoadingFromGlobal,
+  setIsLoadingFromGlobal,
+  mergeGlobalAirportConfig
+} from './viewport/globalSettingsSync'
 
-// View-mode-specific camera defaults (what the user saved)
-interface ViewModeDefaults {
-  heading: number
-  pitch: number
-  fov: number
-  positionOffsetX: number
-  positionOffsetY: number
-  positionOffsetZ: number
-  topdownAltitude?: number  // Only for 2D
-}
+import {
+  migrateCameraStoreBookmarks,
+  migrateToGlobalSettings
+} from './viewport/viewportMigrations'
 
-// Per-airport viewport configuration (persisted)
-interface AirportViewportConfig {
-  viewports: Viewport[]
-  activeViewportId: string
-  // Legacy full viewport config (deprecated, kept for migration)
-  defaultConfig?: {
-    viewports: Viewport[]
-    activeViewportId: string
-  }
-  // New: Separate defaults for 3D and 2D modes
-  default3d?: ViewModeDefaults
-  default2d?: ViewModeDefaults
-  // Camera bookmarks (0-99) - shared across all viewports for this airport
-  bookmarks?: { [slot: number]: CameraBookmark }
-  // Global datablock position (1-9 numpad style) - default is 7 (top-left)
-  datablockPosition?: DatablockPosition
-}
+import { DEFAULT_GLOBAL_VIEWPORT_SETTINGS } from '../types'
 
-// Global orbit settings that persist across all airports (last used values)
-interface GlobalOrbitSettings {
-  distance: number
-  heading: number
-  pitch: number
-}
+// Re-export types for consumers
+export type { GlobalOrbitSettings, ViewModeDefaults, AirportViewportConfig }
 
-const createDefaultCameraState = (
-  customHeading?: number,
-  globalOrbit?: GlobalOrbitSettings,
-  topdownAltitude?: number
-): ViewportCameraState => ({
-  viewMode: '3d',
-  heading: customHeading ?? HEADING_DEFAULT,
-  pitch: PITCH_DEFAULT,
-  fov: FOV_DEFAULT,
-  positionOffsetX: 0,
-  positionOffsetY: 0,
-  positionOffsetZ: 0,
-  topdownAltitude: topdownAltitude ?? TOPDOWN_ALTITUDE_DEFAULT,
-  followingCallsign: null,
-  followMode: 'tower',
-  followZoom: FOLLOW_ZOOM_DEFAULT,
-  preFollowState: null,
-  orbitDistance: globalOrbit?.distance ?? ORBIT_DISTANCE_DEFAULT,
-  orbitHeading: globalOrbit?.heading ?? ORBIT_HEADING_DEFAULT,
-  orbitPitch: globalOrbit?.pitch ?? ORBIT_PITCH_DEFAULT,
-  lookAtTarget: null
-})
-
-// Main viewport always uses this fixed ID so CesiumViewer can find it
-const MAIN_VIEWPORT_ID = 'main'
-
-// Create main viewport (full screen)
-const createMainViewport = (
-  customHeading?: number,
-  globalOrbit?: GlobalOrbitSettings,
-  topdownAltitude?: number
-): Viewport => ({
-  id: MAIN_VIEWPORT_ID,
-  layout: { x: 0, y: 0, width: 1, height: 1, zIndex: 0 },
-  cameraState: createDefaultCameraState(customHeading, globalOrbit, topdownAltitude),
-  label: 'Main'
-})
-
-// Normalize viewports loaded from storage to ensure main viewport has fixed ID
-// This handles migration from old configs that used UUIDs for main viewport
-const normalizeLoadedViewports = (
-  viewports: Viewport[],
-  activeViewportId: string
-): { viewports: Viewport[]; activeViewportId: string } => {
-  if (viewports.length === 0) {
-    const main = createMainViewport()
-    return { viewports: [main], activeViewportId: MAIN_VIEWPORT_ID }
-  }
-
-  // Get the old main viewport ID before normalization
-  const oldMainId = viewports[0].id
-
-  // Ensure first viewport (main) has the fixed ID
-  const normalizedViewports = viewports.map((v, i) => {
-    if (i === 0 && v.id !== MAIN_VIEWPORT_ID) {
-      return { ...v, id: MAIN_VIEWPORT_ID }
-    }
-    return v
-  })
-
-  // Update activeViewportId if it was pointing to the old main ID
-  const normalizedActiveId = activeViewportId === oldMainId
-    ? MAIN_VIEWPORT_ID
-    : activeViewportId
-
-  return { viewports: normalizedViewports, activeViewportId: normalizedActiveId }
-}
-
-// Calculate smart default position for new insets
-const getNextInsetPosition = (existingViewports: Viewport[]): ViewportLayout => {
-  const defaultPositions = [
-    { x: 0.74, y: 0.02, width: 0.24, height: 0.30 }, // Top-right
-    { x: 0.02, y: 0.02, width: 0.24, height: 0.30 }, // Top-left
-    { x: 0.74, y: 0.68, width: 0.24, height: 0.30 }, // Bottom-right
-    { x: 0.02, y: 0.68, width: 0.24, height: 0.30 }, // Bottom-left
-  ]
-
-  const insets = existingViewports.filter(v => v.layout.width < 0.5)
-  const usedPositions = insets.map(v => ({ x: v.layout.x, y: v.layout.y }))
-
-  // Find first unused default position
-  for (const pos of defaultPositions) {
-    const isUsed = usedPositions.some(
-      used => Math.abs(used.x - pos.x) < 0.1 && Math.abs(used.y - pos.y) < 0.1
-    )
-    if (!isUsed) {
-      const maxZIndex = Math.max(0, ...existingViewports.map(v => v.layout.zIndex))
-      return { ...pos, zIndex: maxZIndex + 1 }
-    }
-  }
-
-  // All default positions used, offset from last inset
-  const lastInset = insets[insets.length - 1]
-  const maxZIndex = Math.max(0, ...existingViewports.map(v => v.layout.zIndex))
-  if (lastInset) {
-    return {
-      x: Math.min(0.74, lastInset.layout.x + 0.02),
-      y: Math.min(0.68, lastInset.layout.y + 0.02),
-      width: 0.24,
-      height: 0.30,
-      zIndex: maxZIndex + 1
-    }
-  }
-
-  return { ...defaultPositions[0], zIndex: maxZIndex + 1 }
-}
+// =============================================================================
+// ViewportStore Interface
+// =============================================================================
 
 interface ViewportStore {
   // State
@@ -265,204 +151,9 @@ interface ViewportStore {
   getViewportById: (id: string) => Viewport | undefined
 }
 
-// Helper to update a viewport's camera state
-const updateViewportCameraState = (
-  viewports: Viewport[],
-  viewportId: string,
-  updater: (state: ViewportCameraState) => Partial<ViewportCameraState>
-): Viewport[] => {
-  return viewports.map(viewport => {
-    if (viewport.id !== viewportId) return viewport
-    const updates = updater(viewport.cameraState)
-    return {
-      ...viewport,
-      cameraState: { ...viewport.cameraState, ...updates }
-    }
-  })
-}
-
-// Schedule a debounced auto-save
-const scheduleAutoSave = (saveFunc: () => void) => {
-  if (autoSaveTimer) {
-    clearTimeout(autoSaveTimer)
-  }
-  autoSaveTimer = setTimeout(() => {
-    saveFunc()
-    autoSaveTimer = null
-  }, AUTO_SAVE_DELAY)
-}
-
-// Debounce timer for syncing to global settings
-let globalSyncTimer: ReturnType<typeof setTimeout> | null = null
-const GLOBAL_SYNC_DELAY = 2000 // 2 seconds
-
-// Flag to prevent bidirectional sync loops
-// When true, changes originated from global settings and should not be synced back
-let isLoadingFromGlobal = false
-
-// Schedule a debounced sync to globalSettingsStore
-const scheduleGlobalSync = (syncFunc: () => void) => {
-  // Don't schedule sync if we're currently loading from global (prevents sync loops)
-  if (isLoadingFromGlobal) {
-    return
-  }
-  if (globalSyncTimer) {
-    clearTimeout(globalSyncTimer)
-  }
-  globalSyncTimer = setTimeout(() => {
-    syncFunc()
-    globalSyncTimer = null
-  }, GLOBAL_SYNC_DELAY)
-}
-
 // =============================================================================
-// Conversion functions between local and global formats
+// Sync Functions (use extracted modules)
 // =============================================================================
-
-/**
- * Convert local ViewModeDefaults to global format
- */
-const toGlobalViewModeDefaults = (local: ViewModeDefaults): GlobalViewModeDefaults => ({
-  heading: local.heading,
-  pitch: local.pitch,
-  fov: local.fov,
-  positionOffsetX: local.positionOffsetX,
-  positionOffsetY: local.positionOffsetY,
-  positionOffsetZ: local.positionOffsetZ,
-  topdownAltitude: local.topdownAltitude
-})
-
-/**
- * Convert global ViewModeDefaults to local format
- */
-const fromGlobalViewModeDefaults = (global: GlobalViewModeDefaults): ViewModeDefaults => ({
-  heading: global.heading,
-  pitch: global.pitch,
-  fov: global.fov,
-  positionOffsetX: global.positionOffsetX,
-  positionOffsetY: global.positionOffsetY,
-  positionOffsetZ: global.positionOffsetZ,
-  topdownAltitude: global.topdownAltitude
-})
-
-/**
- * Convert local CameraBookmark to global format
- */
-const toGlobalCameraBookmark = (local: CameraBookmark): GlobalCameraBookmark => ({
-  name: local.name,
-  heading: local.heading,
-  pitch: local.pitch,
-  fov: local.fov,
-  positionOffsetX: local.positionOffsetX,
-  positionOffsetY: local.positionOffsetY,
-  positionOffsetZ: local.positionOffsetZ,
-  viewMode: local.viewMode,
-  topdownAltitude: local.topdownAltitude
-})
-
-/**
- * Validate and convert viewMode string to ViewMode type
- */
-const validateViewMode = (viewMode: string): ViewMode => {
-  if (viewMode === '3d' || viewMode === 'topdown') {
-    return viewMode
-  }
-  console.warn(`[ViewportStore] Invalid viewMode "${viewMode}", defaulting to "3d"`)
-  return '3d'
-}
-
-/**
- * Convert global CameraBookmark to local format
- */
-const fromGlobalCameraBookmark = (global: GlobalCameraBookmark): CameraBookmark => ({
-  name: global.name,
-  heading: global.heading,
-  pitch: global.pitch,
-  fov: global.fov,
-  positionOffsetX: global.positionOffsetX,
-  positionOffsetY: global.positionOffsetY,
-  positionOffsetZ: global.positionOffsetZ,
-  viewMode: validateViewMode(global.viewMode),
-  topdownAltitude: global.topdownAltitude ?? TOPDOWN_ALTITUDE_DEFAULT
-})
-
-/**
- * Convert local AirportViewportConfig to global format
- * Only exports the persisted fields (defaults, bookmarks, datablockPosition)
- */
-const toGlobalAirportConfig = (local: AirportViewportConfig): GlobalAirportViewportConfig => {
-  const global: GlobalAirportViewportConfig = {}
-
-  if (local.default3d) {
-    global.default3d = toGlobalViewModeDefaults(local.default3d)
-  }
-  if (local.default2d) {
-    global.default2d = toGlobalViewModeDefaults(local.default2d)
-  }
-  if (local.bookmarks && Object.keys(local.bookmarks).length > 0) {
-    global.bookmarks = {}
-    for (const [slotStr, bookmark] of Object.entries(local.bookmarks)) {
-      const slot = parseInt(slotStr, 10)
-      if (!isNaN(slot)) {
-        global.bookmarks[slot] = toGlobalCameraBookmark(bookmark)
-      }
-    }
-  }
-  if (local.datablockPosition !== undefined) {
-    global.datablockPosition = local.datablockPosition
-  }
-
-  return global
-}
-
-/**
- * Merge global AirportViewportConfig into local config
- * Preserves local viewport state while updating persisted fields
- */
-const mergeGlobalAirportConfig = (
-  local: AirportViewportConfig | undefined,
-  global: GlobalAirportViewportConfig
-): Partial<AirportViewportConfig> => {
-  const updates: Partial<AirportViewportConfig> = {}
-
-  if (global.default3d) {
-    updates.default3d = fromGlobalViewModeDefaults(global.default3d)
-  }
-  if (global.default2d) {
-    updates.default2d = fromGlobalViewModeDefaults(global.default2d)
-  }
-  if (global.bookmarks && Object.keys(global.bookmarks).length > 0) {
-    updates.bookmarks = {}
-    for (const [slot, bookmark] of Object.entries(global.bookmarks)) {
-      const slotNum = parseInt(slot, 10)
-      if (!isNaN(slotNum)) {
-        updates.bookmarks[slotNum] = fromGlobalCameraBookmark(bookmark)
-      }
-    }
-  }
-  if (global.datablockPosition !== undefined) {
-    updates.datablockPosition = global.datablockPosition as DatablockPosition
-  }
-
-  return updates
-}
-
-/**
- * Convert all local airport configs to global format
- */
-const toGlobalViewportSettings = (
-  airportConfigs: Record<string, AirportViewportConfig>,
-  orbitSettings: GlobalOrbitSettings,
-  currentAirportIcao: string | null
-): GlobalViewportSettings => ({
-  airportConfigs: Object.fromEntries(
-    Object.entries(airportConfigs)
-      .map(([icao, config]) => [icao, toGlobalAirportConfig(config)])
-      .filter(([, config]) => Object.keys(config as object).length > 0)
-  ),
-  orbitSettings,
-  lastAirportIcao: currentAirportIcao
-})
 
 /**
  * Sync viewportStore state to globalSettingsStore
@@ -475,7 +166,6 @@ const syncToGlobalSettings = () => {
     state.currentAirportIcao
   )
 
-  // Use setViewports for a complete replacement
   useGlobalSettingsStore.getState().setViewports(globalSettings).catch(err => {
     console.error('[ViewportStore] Failed to sync to global settings:', err)
   })
@@ -487,19 +177,16 @@ const syncToGlobalSettings = () => {
 const loadFromGlobalSettings = () => {
   const globalState = useGlobalSettingsStore.getState()
 
-  // Only proceed if global settings are initialized
   if (!globalState.initialized) {
     console.log('[ViewportStore] Global settings not initialized yet, skipping load')
     return
   }
 
   try {
-    // Set flag to prevent sync loop (loading from global shouldn't trigger sync back to global)
-    isLoadingFromGlobal = true
+    setIsLoadingFromGlobal(true)
 
     const globalViewports = globalState.viewports || DEFAULT_GLOBAL_VIEWPORT_SETTINGS
 
-    // Validate that airportConfigs is an object
     if (!globalViewports.airportConfigs || typeof globalViewports.airportConfigs !== 'object') {
       console.warn('[ViewportStore] Global settings has invalid airportConfigs, skipping load')
       return
@@ -508,9 +195,7 @@ const loadFromGlobalSettings = () => {
     const state = useViewportStore.getState()
     const updatedConfigs = { ...state.airportViewportConfigs }
 
-    // Merge global configs into local configs
     for (const [icao, globalConfig] of Object.entries(globalViewports.airportConfigs)) {
-      // Validate that globalConfig is an object
       if (!globalConfig || typeof globalConfig !== 'object') {
         console.warn(`[ViewportStore] Invalid config for ${icao}, skipping`)
         continue
@@ -520,10 +205,8 @@ const loadFromGlobalSettings = () => {
       const mergedUpdates = mergeGlobalAirportConfig(localConfig, globalConfig)
 
       if (localConfig) {
-        // Merge into existing config
         updatedConfigs[icao] = { ...localConfig, ...mergedUpdates }
       } else {
-        // Create new config with just the global data
         const orbitSettings = globalViewports.orbitSettings && typeof globalViewports.orbitSettings === 'object'
           ? globalViewports.orbitSettings
           : undefined
@@ -536,12 +219,10 @@ const loadFromGlobalSettings = () => {
       }
     }
 
-    // Validate orbitSettings before using
     const orbitSettings = globalViewports.orbitSettings && typeof globalViewports.orbitSettings === 'object'
       ? globalViewports.orbitSettings
       : state.globalOrbitSettings
 
-    // Update state
     useViewportStore.setState({
       airportViewportConfigs: updatedConfigs,
       globalOrbitSettings: orbitSettings
@@ -551,116 +232,8 @@ const loadFromGlobalSettings = () => {
   } catch (error) {
     console.error('[ViewportStore] Failed to load from global settings:', error)
   } finally {
-    // Always clear the flag, even if an error occurred
-    isLoadingFromGlobal = false
+    setIsLoadingFromGlobal(false)
   }
-}
-
-// Migrate bookmarks from cameraStore to viewportStore (one-time migration)
-const migrateCameraStoreBookmarks = (viewportState: ViewportStore) => {
-  const MIGRATION_KEY = 'viewport-store-bookmark-migration-v1'
-  if (localStorage.getItem(MIGRATION_KEY)) {
-    return // Already migrated
-  }
-
-  try {
-    // Get cameraStore data from localStorage
-    const cameraStoreRaw = localStorage.getItem('camera-store')
-    if (!cameraStoreRaw) {
-      localStorage.setItem(MIGRATION_KEY, 'done')
-      return
-    }
-
-    const cameraStoreData = JSON.parse(cameraStoreRaw)
-    const airportSettings = cameraStoreData?.state?.airportSettings
-    if (!airportSettings || typeof airportSettings !== 'object') {
-      localStorage.setItem(MIGRATION_KEY, 'done')
-      return
-    }
-
-    // Copy bookmarks from cameraStore to viewportStore for each airport
-    const updatedConfigs = { ...viewportState.airportViewportConfigs }
-    let hasMigrations = false
-
-    for (const [icao, settings] of Object.entries(airportSettings)) {
-      const cameraSettings = settings as { bookmarks?: Record<number, CameraBookmark> }
-      if (!cameraSettings.bookmarks || Object.keys(cameraSettings.bookmarks).length === 0) {
-        continue
-      }
-
-      // Ensure we have a config for this airport
-      if (!updatedConfigs[icao]) {
-        const mainViewport = createMainViewport()
-        updatedConfigs[icao] = {
-          viewports: [mainViewport],
-          activeViewportId: mainViewport.id
-        }
-      }
-
-      // Merge bookmarks (don't overwrite if viewportStore already has them)
-      if (!updatedConfigs[icao].bookmarks) {
-        updatedConfigs[icao].bookmarks = {}
-      }
-
-      for (const [slotStr, bookmark] of Object.entries(cameraSettings.bookmarks)) {
-        const slot = parseInt(slotStr, 10)
-        if (!updatedConfigs[icao].bookmarks![slot]) {
-          updatedConfigs[icao].bookmarks![slot] = bookmark
-          hasMigrations = true
-        }
-      }
-    }
-
-    if (hasMigrations) {
-      useViewportStore.setState({ airportViewportConfigs: updatedConfigs })
-      console.log('Migrated bookmarks from cameraStore to viewportStore')
-      // Sync to global settings
-      scheduleGlobalSync(syncToGlobalSettings)
-    }
-
-    localStorage.setItem(MIGRATION_KEY, 'done')
-  } catch (e) {
-    console.error('Failed to migrate cameraStore bookmarks:', e)
-    // Mark as done to avoid repeated failures
-    localStorage.setItem(MIGRATION_KEY, 'done')
-  }
-}
-
-// Migrate viewport data from localStorage to global settings (one-time migration)
-const migrateToGlobalSettings = () => {
-  const MIGRATION_KEY = 'viewport-store-global-migration-v1'
-  if (localStorage.getItem(MIGRATION_KEY)) {
-    return // Already migrated
-  }
-
-  const globalState = useGlobalSettingsStore.getState()
-  if (!globalState.initialized) {
-    // Global settings not ready yet, will be called again later
-    return
-  }
-
-  // Check if global settings already has viewport data
-  const hasGlobalData = globalState.viewports &&
-    Object.keys(globalState.viewports.airportConfigs).length > 0
-
-  if (hasGlobalData) {
-    // Global settings already has data, don't overwrite
-    localStorage.setItem(MIGRATION_KEY, 'done')
-    console.log('[ViewportStore] Global settings already has viewport data, skipping migration')
-    return
-  }
-
-  // Get local viewport data
-  const state = useViewportStore.getState()
-  const hasLocalData = Object.keys(state.airportViewportConfigs).length > 0
-
-  if (hasLocalData) {
-    console.log('[ViewportStore] Migrating viewport data to global settings...')
-    syncToGlobalSettings()
-  }
-
-  localStorage.setItem(MIGRATION_KEY, 'done')
-  console.log('[ViewportStore] Migration to global settings complete')
 }
 
 export const useViewportStore = create<ViewportStore>()(
@@ -1629,23 +1202,32 @@ export const useViewportStore = create<ViewportStore>()(
 
           // Migrate bookmarks from cameraStore if not already migrated
           if (state) {
-            migrateCameraStoreBookmarks(state)
+            migrateCameraStoreBookmarks(
+              () => useViewportStore.getState(),
+              (newState) => useViewportStore.setState(newState),
+              syncToGlobalSettings
+            )
           }
 
           // After rehydration, try to migrate to global settings and/or load from global
           // This runs after globalSettingsStore is initialized
           const globalState = useGlobalSettingsStore.getState()
-          if (globalState.initialized) {
-            // Global settings already initialized, sync immediately
-            migrateToGlobalSettings()
+          const runMigrations = () => {
+            migrateToGlobalSettings(
+              () => useGlobalSettingsStore.getState(),
+              () => useViewportStore.getState(),
+              syncToGlobalSettings
+            )
             loadFromGlobalSettings()
+          }
+
+          if (globalState.initialized) {
+            runMigrations()
           } else {
-            // Wait for global settings to initialize via subscription
             const unsubscribe = useGlobalSettingsStore.subscribe((newState) => {
               if (newState.initialized) {
                 unsubscribe()
-                migrateToGlobalSettings()
-                loadFromGlobalSettings()
+                runMigrations()
               }
             })
           }

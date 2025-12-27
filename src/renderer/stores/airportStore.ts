@@ -2,7 +2,6 @@ import { create } from 'zustand'
 import type { Airport } from '../types/airport'
 import type { View3dPosition, ResolvedView2dPosition } from '../types/mod'
 import { getEstimatedTowerHeight } from '../types/airport'
-import { useCameraStore } from './cameraStore'
 import { useViewportStore } from './viewportStore'
 import { useVatsimStore } from './vatsimStore'
 import { useGlobalSettingsStore } from './globalSettingsStore'
@@ -110,9 +109,6 @@ export const useAirportStore = create<AirportStore>()(
             isAirportSelectorOpen: false
           })
           addToRecent(icao)
-
-          // Update camera store with new airport (loads saved camera settings)
-          useCameraStore.getState().setCurrentAirport(icao)
 
           // Update viewport store (saves/loads viewport configurations per airport)
           useViewportStore.getState().setCurrentAirport(icao)
