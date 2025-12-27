@@ -343,7 +343,7 @@ function App() {
       <div className="main-content">
         <ViewportManager mainViewportContent={<CesiumViewer onViewerReady={handleViewerReady} />}>
           {!isVRActive && <CommandInput />}
-          {!isVRActive && <AircraftPanel />}
+          {!isVRActive && (currentAirport || followingCallsign) && <AircraftPanel />}
         </ViewportManager>
       </div>
       {!isVRActive && <ControlsBar />}
