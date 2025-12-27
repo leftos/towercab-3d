@@ -21,7 +21,8 @@ export type {
   AnimationSet,
   MeshBounds,
   ExtendedNodeData,
-  ModelGroundData
+  ModelGroundData,
+  ModelWingData
 } from './gltf'
 
 import type {
@@ -29,14 +30,17 @@ import type {
   AnimationTrack,
   AnimationSet,
   NodeData,
-  ModelGroundData
+  ModelGroundData,
+  ModelWingData
 } from './gltf'
 
 import {
   getKeysAtTime,
   parseExtendedNodes,
   computeMinYAtGearState,
-  parseGroundDataGltf1
+  parseGroundDataGltf1,
+  computeWingData,
+  parseWingDataGltf1
 } from './gltf'
 
 // =============================================================================
@@ -60,6 +64,16 @@ const pendingGroundDataParses = new Map<string, Promise<ModelGroundData | null>>
 
 /** URLs that failed to fetch (avoid repeated fetch attempts) */
 const failedGroundDataUrls = new Set<string>()
+
+/** Cache of wing data by model URL */
+const wingDataCache = new Map<string, ModelWingData>()
+
+/** Pending wing data parse promises */
+const pendingWingDataParses = new Map<string, Promise<ModelWingData | null>>()
+
+/** URLs that failed to fetch for wing data */
+const failedWingDataUrls = new Set<string>()
+
 
 // =============================================================================
 // Animation Set Parsing
@@ -441,12 +455,16 @@ export function clearAnimationCache(url?: string): void {
   if (url) {
     animationSetCache.delete(url)
     groundDataCache.delete(url)
+    wingDataCache.delete(url)
     failedGroundDataUrls.delete(url)
+    failedWingDataUrls.delete(url)
     failedAnimationUrls.delete(url)
   } else {
     animationSetCache.clear()
     groundDataCache.clear()
+    wingDataCache.clear()
     failedGroundDataUrls.clear()
+    failedWingDataUrls.clear()
     failedAnimationUrls.clear()
   }
 }
@@ -566,3 +584,102 @@ function parseGroundDataFromArrayBuffer(arrayBuffer: ArrayBuffer): ModelGroundDa
     return null
   }
 }
+
+// =============================================================================
+// Wing Data Computation
+// =============================================================================
+
+/**
+ * Get cached wing data for a model URL, or null if not yet computed
+ */
+export function getModelWingData(modelUrl: string): ModelWingData | null {
+  return wingDataCache.get(modelUrl) ?? null
+}
+
+/**
+ * Parse wing data from a GLB URL
+ * Results are cached by URL to avoid re-parsing
+ */
+export async function parseWingDataFromUrl(glbUrl: string): Promise<ModelWingData | null> {
+  // Check cache first
+  if (wingDataCache.has(glbUrl)) {
+    return wingDataCache.get(glbUrl)!
+  }
+
+  // Skip URLs that have already failed
+  if (failedWingDataUrls.has(glbUrl)) {
+    return null
+  }
+
+  // Check if already parsing
+  if (pendingWingDataParses.has(glbUrl)) {
+    return pendingWingDataParses.get(glbUrl)!
+  }
+
+  // Start parsing
+  const parsePromise = (async () => {
+    try {
+      const response = await fetch(glbUrl)
+      if (!response.ok) {
+        if (!glbUrl.includes('asset.localhost')) {
+          console.warn(`[WingData] Failed to fetch ${glbUrl}: ${response.statusText}`)
+        }
+        failedWingDataUrls.add(glbUrl)
+        return null
+      }
+
+      const arrayBuffer = await response.arrayBuffer()
+      const wingData = parseWingDataFromArrayBuffer(arrayBuffer)
+
+      if (wingData) {
+        wingDataCache.set(glbUrl, wingData)
+      }
+
+      return wingData
+    } catch (error) {
+      console.error(`[WingData] Error parsing ${glbUrl}:`, error)
+      failedWingDataUrls.add(glbUrl)
+      return null
+    } finally {
+      pendingWingDataParses.delete(glbUrl)
+    }
+  })()
+
+  pendingWingDataParses.set(glbUrl, parsePromise)
+  return parsePromise
+}
+
+/**
+ * Parse wing data from a GLB array buffer
+ */
+function parseWingDataFromArrayBuffer(arrayBuffer: ArrayBuffer): ModelWingData | null {
+  try {
+    // Parse glTF JSON from GLB
+    const dv = new DataView(arrayBuffer, 12, 4)
+    const jsonChunkLength = dv.getUint32(0, true)
+
+    const jsonDataChunk = arrayBuffer.slice(20, 20 + jsonChunkLength)
+    const decoder = new TextDecoder('UTF-8')
+    const jsonText = decoder.decode(jsonDataChunk)
+    const gltfJson = JSON.parse(jsonText)
+
+    // Detect glTF version: 1.0 uses object-based collections, 2.0 uses arrays
+    const isGltf1 = gltfJson.meshes && !Array.isArray(gltfJson.meshes)
+
+    if (isGltf1) {
+      // glTF 1.0 format (FR24/FlightGear models)
+      return parseWingDataGltf1(gltfJson)
+    }
+
+    // glTF 2.0 format (FSLTL models)
+    // Parse extended node data with hierarchy and mesh bounds
+    const extendedNodes = parseExtendedNodes(gltfJson)
+
+    // Compute wing positions from model geometry
+    return computeWingData(extendedNodes)
+  } catch (error) {
+    console.error('[WingData] Failed to parse GLB:', error)
+    return null
+  }
+}
+

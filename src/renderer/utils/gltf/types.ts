@@ -66,3 +66,15 @@ export interface ModelGroundData {
   /** Lowest Y coordinate when gear is extended (100%), in model space */
   gearDownMinY: number
 }
+
+/** Wing position data computed from model geometry */
+export interface ModelWingData {
+  /** Y coordinate (height) at left wingtip (maximum negative X), in model space */
+  leftWingY: number
+  /** Y coordinate (height) at right wingtip (maximum positive X), in model space */
+  rightWingY: number
+  /** X coordinate of left wingtip (negative value) */
+  leftWingX: number
+  /** X coordinate of right wingtip (positive value) */
+  rightWingX: number
+}

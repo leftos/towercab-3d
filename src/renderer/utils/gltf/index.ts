@@ -13,7 +13,8 @@ export type {
   AnimationSet,
   MeshBounds,
   ExtendedNodeData,
-  ModelGroundData
+  ModelGroundData,
+  ModelWingData
 } from './types'
 
 // Matrix math utilities
@@ -33,12 +34,14 @@ export {
   slerpQuat
 } from './animationInterpolation'
 
-// Ground data computation
+// Ground and wing data computation
 export {
   parseExtendedNodes,
   getMeshBounds,
   computeMinYAtGearState,
   computeGearAnimationTransforms,
   getWorldMatrix,
-  parseGroundDataGltf1
+  parseGroundDataGltf1,
+  computeWingData,
+  parseWingDataGltf1
 } from './groundDataComputation'

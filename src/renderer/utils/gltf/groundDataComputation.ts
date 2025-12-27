@@ -5,7 +5,7 @@
  * Handles both glTF 1.0 (FR24/FlightGear) and glTF 2.0 (FSLTL) formats.
  */
 
-import type { Animation, ExtendedNodeData, MeshBounds, ModelGroundData } from './types'
+import type { Animation, ExtendedNodeData, MeshBounds, ModelGroundData, ModelWingData } from './types'
 import { interpolateVec3, interpolateQuat } from './animationInterpolation'
 import {
   matrixFromTRS,
@@ -316,5 +316,182 @@ export function parseGroundDataGltf1(gltfJson: any): ModelGroundData | null {
   return {
     gearUpMinY: cappedMinVertical,
     gearDownMinY: cappedMinVertical
+  }
+}
+
+/**
+ * Compute wing tip positions from model geometry
+ *
+ * Finds the extreme X positions (left/right wingtips) and records their Y coordinates.
+ * This is used to position navigation lights at the correct height on the wings.
+ *
+ * For glTF 2.0 models (FSLTL), we transform mesh bounds to world space.
+ * For glTF 1.0 models (FR24), we use local bounds directly.
+ *
+ * Nav lights are on top of the wings, so we track the MAXIMUM Y at each wingtip X.
+ */
+export function computeWingData(
+  nodes: Map<number, ExtendedNodeData>
+): ModelWingData | null {
+  // Track extreme X positions and the maximum Y at those positions
+  // We use a tolerance to find corners "near" the wingtip X
+  let leftMostX = Infinity
+  let rightMostX = -Infinity
+  let leftWingMaxY = -Infinity
+  let rightWingMaxY = -Infinity
+
+  // No animations needed for wing computation - wings don't animate
+  const noAnimations = new Map<string, number[]>()
+
+  // First pass: find extreme X positions
+  for (const [nodeIdx, node] of nodes) {
+    if (!node.meshBounds) continue
+
+    const worldMatrix = getWorldMatrix(nodeIdx, nodes, noAnimations)
+    const corners = getBoundingBoxCorners(node.meshBounds)
+
+    for (const corner of corners) {
+      const worldCorner = transformPoint(corner, worldMatrix)
+      const x = worldCorner[0]
+
+      if (x < leftMostX) leftMostX = x
+      if (x > rightMostX) rightMostX = x
+    }
+  }
+
+  if (!isFinite(leftMostX) || !isFinite(rightMostX)) {
+    return null
+  }
+
+  // Tolerance for finding corners "at" the wingtip (within 0.5m of extreme)
+  const tolerance = 0.5
+
+  // Second pass: find maximum Y at each wingtip
+  for (const [nodeIdx, node] of nodes) {
+    if (!node.meshBounds) continue
+
+    const worldMatrix = getWorldMatrix(nodeIdx, nodes, noAnimations)
+    const corners = getBoundingBoxCorners(node.meshBounds)
+
+    for (const corner of corners) {
+      const worldCorner = transformPoint(corner, worldMatrix)
+      const x = worldCorner[0]
+      const y = worldCorner[1]
+
+      // Check if this corner is at the left wingtip
+      if (x <= leftMostX + tolerance) {
+        leftWingMaxY = Math.max(leftWingMaxY, y)
+      }
+
+      // Check if this corner is at the right wingtip
+      if (x >= rightMostX - tolerance) {
+        rightWingMaxY = Math.max(rightWingMaxY, y)
+      }
+    }
+  }
+
+  // Validate we found reasonable wing data
+  if (!isFinite(leftWingMaxY) || !isFinite(rightWingMaxY)) {
+    return null
+  }
+
+  // Wings should be reasonably symmetric - sanity check
+  const wingspan = rightMostX - leftMostX
+  if (wingspan < 5 || wingspan > 100) {
+    // Wingspan less than 5m or more than 100m is suspicious
+    return null
+  }
+
+  return {
+    leftWingX: leftMostX,
+    rightWingX: rightMostX,
+    leftWingY: leftWingMaxY,
+    rightWingY: rightWingMaxY
+  }
+}
+
+/**
+ * Parse wing data from glTF 1.0 format (FR24/FlightGear models)
+ *
+ * Similar to parseGroundDataGltf1, handles the object-based format.
+ * Uses two-pass approach: first find extreme X positions, then find max Y at those positions.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function parseWingDataGltf1(gltfJson: any): ModelWingData | null {
+  const meshes = gltfJson.meshes || {}
+  const accessors = gltfJson.accessors || {}
+
+  let leftMostX = Infinity
+  let rightMostX = -Infinity
+  let leftWingMaxY = -Infinity
+  let rightWingMaxY = -Infinity
+
+  // First pass: find extreme X positions
+  for (const meshName of Object.keys(meshes)) {
+    const mesh = meshes[meshName]
+    if (!mesh.primitives) continue
+
+    for (const primitive of mesh.primitives) {
+      const posAccessorName = primitive.attributes?.POSITION
+      if (!posAccessorName) continue
+
+      const posAccessor = accessors[posAccessorName]
+      if (!posAccessor?.min || !posAccessor?.max) continue
+
+      if (posAccessor.min[0] < leftMostX) leftMostX = posAccessor.min[0]
+      if (posAccessor.max[0] > rightMostX) rightMostX = posAccessor.max[0]
+    }
+  }
+
+  if (!isFinite(leftMostX) || !isFinite(rightMostX)) {
+    return null
+  }
+
+  // Tolerance for finding primitives "at" the wingtip
+  const tolerance = 0.5
+
+  // Second pass: find maximum Y at each wingtip
+  for (const meshName of Object.keys(meshes)) {
+    const mesh = meshes[meshName]
+    if (!mesh.primitives) continue
+
+    for (const primitive of mesh.primitives) {
+      const posAccessorName = primitive.attributes?.POSITION
+      if (!posAccessorName) continue
+
+      const posAccessor = accessors[posAccessorName]
+      if (!posAccessor?.min || !posAccessor?.max) continue
+
+      const minX = posAccessor.min[0]
+      const maxX = posAccessor.max[0]
+      const maxY = posAccessor.max[1]
+
+      // Check if this primitive reaches the left wingtip
+      if (minX <= leftMostX + tolerance) {
+        leftWingMaxY = Math.max(leftWingMaxY, maxY)
+      }
+
+      // Check if this primitive reaches the right wingtip
+      if (maxX >= rightMostX - tolerance) {
+        rightWingMaxY = Math.max(rightWingMaxY, maxY)
+      }
+    }
+  }
+
+  // Validate we found reasonable wing data
+  if (!isFinite(leftWingMaxY) || !isFinite(rightWingMaxY)) {
+    return null
+  }
+
+  const wingspan = rightMostX - leftMostX
+  if (wingspan < 5 || wingspan > 100) {
+    return null
+  }
+
+  return {
+    leftWingX: leftMostX,
+    rightWingX: rightMostX,
+    leftWingY: leftWingMaxY,
+    rightWingY: rightWingMaxY
   }
 }
