@@ -66,6 +66,27 @@ jobs:
       - name: Build frontend
         run: npm run vite:build
 
+      - name: Check vNAS availability and configure Git
+        id: vnas-check
+        env:
+          VNAS_TOKEN: ${{ secrets.VNAS_REPO_TOKEN }}
+        run: |
+          if [ -n "$VNAS_TOKEN" ]; then
+            echo "vnas_available=true" >> $GITHUB_OUTPUT
+            git config --global url."https://${VNAS_TOKEN}@github.com/".insteadOf "https://github.com/"
+            echo "vNAS repo access configured"
+          else
+            echo "vnas_available=false" >> $GITHUB_OUTPUT
+            echo "Building without vNAS (no VNAS_REPO_TOKEN secret)"
+            # Remove vNAS from Cargo.lock to prevent auth failures
+            # Cargo will skip the optional dependency when feature is not enabled
+            cd src-tauri
+            sed -i '/towercab-3d-vnas/d' Cargo.lock
+            sed -i '/Leftos\/towercab-3d-vnas/d' Cargo.lock
+            echo "Removed vNAS references from Cargo.lock"
+          fi
+        shell: bash
+
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
@@ -73,7 +94,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          args: --target ${{ matrix.target }}
+          args: --target ${{ matrix.target }} ${{ steps.vnas-check.outputs.vnas_available == 'true' && '--features vnas' || '' }}
 
       - name: Upload artifacts (Windows)
         if: matrix.platform == 'windows-latest'
