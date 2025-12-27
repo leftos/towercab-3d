@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { VnasAircraft, VnasStatus, VnasEnvironment, VnasSessionState } from '../types/vnas'
+import type { VnasAircraft, VnasStatus, VnasEnvironment } from '../types/vnas'
 import type { AircraftState } from '../types/vatsim'
 import { isRemoteMode } from '../utils/remoteMode'
 
@@ -39,6 +39,8 @@ interface VnasStore {
   handleAircraftUpdate: (aircraft: VnasAircraft) => void
   handleBatchUpdate: (aircraft: VnasAircraft[]) => void
   getStatus: () => Promise<VnasStatus>
+  checkAvailability: () => Promise<boolean>
+  isAvailable: () => boolean
   isConnected: () => boolean
   isAuthenticated: () => boolean
 
@@ -51,7 +53,8 @@ const DEFAULT_STATUS: VnasStatus = {
   state: 'disconnected',
   environment: 'live',
   facilityId: null,
-  error: null
+  error: null,
+  available: true  // Assume available until we check
 }
 
 export const useVnasStore = create<VnasStore>((set, get) => ({
@@ -318,6 +321,37 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       console.error('Failed to get vNAS status:', error)
       return get().status
     }
+  },
+
+  /**
+   * Check if vNAS feature is available in the backend.
+   */
+  checkAvailability: async (): Promise<boolean> => {
+    if (isRemoteMode()) {
+      return false // vNAS not available in remote mode yet
+    }
+
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+      const available = await invoke<boolean>('vnas_is_available')
+      set(state => ({
+        status: {
+          ...state.status,
+          available
+        }
+      }))
+      return available
+    } catch (error) {
+      console.error('Failed to check vNAS availability:', error)
+      return false
+    }
+  },
+
+  /**
+   * Check if vNAS feature is available (synchronous, uses cached value).
+   */
+  isAvailable: (): boolean => {
+    return get().status.available
   },
 
   /**

@@ -18,6 +18,7 @@ import VRScene from './components/VR/VRScene'
 import { PerformanceHUD } from './components/UI/PerformanceHUD'
 import ModelMatchingModal from './components/UI/ModelMatchingModal'
 import { WeatherDebugPanel } from './components/UI/WeatherDebugPanel'
+import { VnasPanel } from './components/UI/VnasPanel'
 import { performanceMonitor } from './utils/performanceMonitor'
 import { useVatsimStore } from './stores/vatsimStore'
 import { useAirportStore } from './stores/airportStore'
@@ -348,6 +349,7 @@ function App() {
       {!isVRActive && <ControlsBar />}
       {!isVRActive && <TouchControls />}
       {!isVRActive && import.meta.env.DEV && <WeatherDebugPanel />}
+      {!isVRActive && import.meta.env.DEV && <VnasPanel />}
       {!isVRActive && <AirportSelector />}
       {!isVRActive && <MeasuringTool cesiumViewer={cesiumViewer} />}
       <PerformanceHUD visible={showPerformanceHUD} />

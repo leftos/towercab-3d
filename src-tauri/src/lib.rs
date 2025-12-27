@@ -1378,6 +1378,7 @@ pub fn run() {
             scan_fsltl_models,
             // vNAS commands
             vnas::vnas_get_status,
+            vnas::vnas_is_available,
             vnas::vnas_start_auth,
             vnas::vnas_complete_auth,
             vnas::vnas_connect,

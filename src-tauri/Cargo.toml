@@ -41,8 +41,13 @@ futures-util = { version = "0.3", features = ["sink"] }  # For WebSocket stream 
 # Synchronization primitives for vNAS state
 parking_lot = "0.12"
 
-# vNAS integration for real-time aircraft updates
-towercab-3d-vnas = { git = "https://github.com/Leftos/towercab-3d-vnas", branch = "master" }
+# vNAS integration for real-time aircraft updates (optional, requires private repo access)
+towercab-3d-vnas = { git = "https://github.com/Leftos/towercab-3d-vnas", branch = "master", optional = true }
+
+[features]
+# Enable vNAS real-time updates (requires access to private towercab-3d-vnas repo)
+# Without this feature, the app falls back to VATSIM HTTP polling (15-second updates)
+vnas = ["dep:towercab-3d-vnas"]
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_System_JobObjects", "Win32_System_Threading", "Win32_Foundation", "Win32_Security"] }

@@ -1,0 +1,172 @@
+/* vNAS Panel - Dev-only panel for vNAS connection management */
+
+.vnas-panel-toggle {
+  position: fixed;
+  bottom: 100px;
+  left: 10px;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.7);
+  border: 2px solid #444;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: bold;
+  cursor: pointer;
+  z-index: 1000;
+  font-family: monospace;
+}
+
+.vnas-panel-toggle:hover {
+  background: rgba(0, 0, 0, 0.9);
+  border-color: #666;
+}
+
+.vnas-panel {
+  position: fixed;
+  bottom: 100px;
+  left: 10px;
+  width: 240px;
+  background: rgba(0, 0, 0, 0.85);
+  border: 1px solid #444;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 12px;
+  z-index: 1000;
+  font-family: monospace;
+}
+
+.vnas-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid #444;
+  border-radius: 6px 6px 0 0;
+}
+
+.vnas-panel-header button {
+  background: none;
+  border: none;
+  color: #aaa;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+}
+
+.vnas-panel-header button:hover {
+  color: #fff;
+}
+
+.vnas-panel-content {
+  padding: 10px;
+}
+
+.vnas-panel-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.vnas-panel-row label {
+  color: #aaa;
+  font-size: 11px;
+}
+
+.vnas-panel-row select {
+  background: #222;
+  border: 1px solid #444;
+  color: #fff;
+  padding: 4px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+}
+
+.vnas-status-badge {
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: bold;
+}
+
+.vnas-status-badge.available {
+  background: rgba(0, 170, 85, 0.3);
+  color: #0c7;
+}
+
+.vnas-status-badge.unavailable {
+  background: rgba(100, 100, 100, 0.3);
+  color: #888;
+}
+
+.vnas-status-indicator {
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.vnas-facility {
+  font-size: 11px;
+  color: #0af;
+  font-weight: bold;
+}
+
+.vnas-panel-error {
+  margin-top: 8px;
+  padding: 6px 8px;
+  background: rgba(200, 50, 50, 0.3);
+  border-radius: 3px;
+  color: #f88;
+  font-size: 11px;
+  word-break: break-word;
+}
+
+.vnas-panel-button {
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #333;
+  border: 1px solid #555;
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 11px;
+  font-family: monospace;
+}
+
+.vnas-panel-button:hover:not(:disabled) {
+  background: #444;
+}
+
+.vnas-panel-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.vnas-panel-button.primary {
+  background: #057;
+  border-color: #08a;
+}
+
+.vnas-panel-button.primary:hover:not(:disabled) {
+  background: #069;
+}
+
+.vnas-panel-button.danger {
+  background: #522;
+  border-color: #744;
+}
+
+.vnas-panel-button.danger:hover:not(:disabled) {
+  background: #633;
+}
+
+.vnas-panel-note {
+  margin-top: 10px;
+  padding: 6px 8px;
+  background: rgba(100, 100, 100, 0.2);
+  border-radius: 3px;
+  color: #888;
+  font-size: 10px;
+  line-height: 1.4;
+}

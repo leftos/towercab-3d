@@ -16,6 +16,7 @@ export type VnasSessionState =
   | 'joiningSession'
   | 'subscribing'
   | 'connected'
+  | 'unavailable'  // vNAS feature not compiled in
 
 /**
  * Aircraft position update from vNAS (1Hz updates)
@@ -43,4 +44,6 @@ export interface VnasStatus {
   environment: VnasEnvironment
   facilityId: string | null
   error: string | null
+  /** Whether vNAS feature is compiled into the backend */
+  available: boolean
 }
