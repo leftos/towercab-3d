@@ -5,6 +5,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- METAR overlay now displays interpolated weather in orbit follow mode without an airport selected
+  - Shows blended weather data from nearby stations with flight category color coding
+  - Displays source stations and their contribution weights
 - Aircraft lighting effects for better night/low-visibility visibility
   - Beacon lights: Red strobe on top of aircraft fuselage (flashing)
   - Navigation lights: Red (left) and green (right) on wingtips
