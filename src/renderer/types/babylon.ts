@@ -45,14 +45,18 @@ export interface AircraftLabel {
  * The active mesh is determined by coverage level - OVC uses dome, others use plane.
  */
 export interface CloudMeshData {
-  /** Horizontal plane mesh for partial cloud coverage (FEW/SCT/BKN) */
+  /** Horizontal plane mesh for partial cloud coverage (FEW/SCT/BKN) - viewed from below */
   plane: BABYLON.Mesh
-  /** Curved dome mesh for overcast coverage (OVC) - creates realistic overcast sky */
+  /** Curved dome mesh for overcast coverage (OVC) - creates realistic overcast sky from below */
   dome: BABYLON.Mesh
-  /** Semi-transparent material with configurable opacity (shared or separate) */
+  /** Horizontal plane mesh for above-cloud view - shows cloud tops when camera is above */
+  abovePlane: BABYLON.Mesh
+  /** Semi-transparent material with configurable opacity (for plane from below) */
   material: BABYLON.StandardMaterial
-  /** Separate material for dome with fresnel effect */
+  /** Separate material for dome with fresnel effect (for below view) */
   domeMaterial: BABYLON.StandardMaterial
+  /** Material for above-cloud plane (lighter colors, cloud tops appearance) */
+  aboveMaterial: BABYLON.StandardMaterial
   /** Last coverage value used to generate the opacity texture (for caching) */
   lastCoverage?: number
   /** Whether the dome mesh is currently active (vs plane) */

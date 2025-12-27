@@ -377,7 +377,7 @@ export const CLOUD_DOME_CURVATURE = 0.02
  * Horizon darkening factor for overcast dome (0-1).
  * Higher = darker at horizon edges.
  */
-export const CLOUD_DOME_HORIZON_DARKENING = 0.4
+export const CLOUD_DOME_HORIZON_DARKENING = 0.12
 
 /**
  * Fresnel bias for cloud dome material.
@@ -390,3 +390,37 @@ export const CLOUD_DOME_FRESNEL_BIAS = 0.6
  * Controls sharpness of edge opacity falloff.
  */
 export const CLOUD_DOME_FRESNEL_POWER = 1.5
+
+/**
+ * Altitude buffer for switching between dome/plane and above-cloud flat plane (meters).
+ * Camera must be this far above/below the cloud layer to fully switch views.
+ * The transition zone is 2x this value centered on the cloud altitude.
+ */
+export const CLOUD_ABOVE_TRANSITION_BUFFER = 200
+
+/**
+ * Fresnel bias for cloud dome when viewed from above (transition zone).
+ * Lower value = more opaque, better visibility from above.
+ */
+export const CLOUD_DOME_FRESNEL_BIAS_ABOVE = 0.15
+
+/**
+ * Fresnel power for cloud dome when viewed from above.
+ * Lower value = gentler opacity falloff.
+ */
+export const CLOUD_DOME_FRESNEL_POWER_ABOVE = 1.0
+
+/**
+ * Diffuse color for above-cloud plane (clouds from above appear whiter).
+ */
+export const CLOUD_ABOVE_DIFFUSE_COLOR: [number, number, number] = [0.95, 0.95, 0.97]
+
+/**
+ * Emissive color for above-cloud plane (self-illumination for uniform look).
+ */
+export const CLOUD_ABOVE_EMISSIVE_COLOR: [number, number, number] = [0.85, 0.85, 0.88]
+
+/**
+ * Base alpha for above-cloud plane.
+ */
+export const CLOUD_ABOVE_BASE_ALPHA = 0.9

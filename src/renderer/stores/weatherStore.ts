@@ -45,6 +45,9 @@ interface WeatherState {
   // Debug override mode - when true, METAR updates don't overwrite precipitation/wind/clouds
   isDebugOverriding: boolean
 
+  // Instant update flag - when true, smoothing should be bypassed for immediate visual update
+  instantUpdatePending: boolean
+
   // Actions
   fetchWeather: (icao: string) => Promise<void>
   fetchNearestWeather: (lat: number, lon: number) => Promise<void>
@@ -62,6 +65,10 @@ interface WeatherState {
   setPrecipitation: (precipitation: PrecipitationState) => void
   setWind: (wind: WindState) => void
   setCloudLayers: (cloudLayers: CloudLayer[]) => void
+  /** Trigger instant update (bypasses smoothing), returns true if flag was set */
+  triggerInstantUpdate: () => void
+  /** Consume instant update flag, returns true if flag was pending */
+  consumeInstantUpdate: () => boolean
 }
 
 /**
@@ -244,6 +251,7 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
   useInterpolation: false,
   refreshIntervalId: null,
   isDebugOverriding: false,
+  instantUpdatePending: false,
 
   fetchWeather: async (icao: string) => {
     set({ isLoading: true, error: null, useNearestMetar: false })
@@ -584,5 +592,18 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
 
   setCloudLayers: (cloudLayers: CloudLayer[]) => {
     set({ cloudLayers })
+  },
+
+  triggerInstantUpdate: () => {
+    set({ instantUpdatePending: true })
+  },
+
+  consumeInstantUpdate: () => {
+    const state = get()
+    if (state.instantUpdatePending) {
+      set({ instantUpdatePending: false })
+      return true
+    }
+    return false
   }
 }))

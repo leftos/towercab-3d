@@ -280,6 +280,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
 
     // Root node setup (ENU coordinate system)
     setupRootNode,
+    getFixedToEnu,
 
     // Label management (adapted to match legacy useCesiumLabels interface)
     updateAircraftLabel,

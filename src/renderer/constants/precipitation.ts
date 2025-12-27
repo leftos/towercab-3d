@@ -73,8 +73,8 @@ export const RAIN_WIND_GRAVITY = -20
 // SNOW PARTICLE CONFIGURATION
 // ============================================================================
 
-/** Base emit rate for snow particles (particles/second) */
-export const SNOW_EMIT_RATE_BASE = 8000
+/** Base emit rate for snow particles (particles/second) - lower than rain due to longer lifetime */
+export const SNOW_EMIT_RATE_BASE = 1500
 
 /** Snow particle lifetime in seconds */
 export const SNOW_PARTICLE_LIFETIME = 5.0
@@ -153,10 +153,10 @@ export const PRECIP_VIS_FACTOR_MAX = 2.0
 // ============================================================================
 
 /** Minimum interval between lightning flashes (seconds) */
-export const LIGHTNING_INTERVAL_MIN = 5
+export const LIGHTNING_INTERVAL_MIN = 30
 
 /** Maximum interval between lightning flashes (seconds) */
-export const LIGHTNING_INTERVAL_MAX = 15
+export const LIGHTNING_INTERVAL_MAX = 90
 
 /** Duration of a single lightning flash (milliseconds) */
 export const LIGHTNING_FLASH_DURATION_MS = 100

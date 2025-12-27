@@ -1,11 +1,14 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useState } from 'react'
 import * as BABYLON from '@babylonjs/core'
 import { useWeatherStore } from '../stores/weatherStore'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useAirportStore } from '../stores/airportStore'
 import type { PrecipitationType } from '@/types'
 // Flare texture URL - using Babylon's CDN
 const FLARE_TEXTURE_URL = 'https://assets.babylonjs.com/textures/flare.png'
 import {
+  // Pre-warm jump detection
+  PARTICLE_PREWARM_JUMP_THRESHOLD,
   // Rain
   RAIN_EMIT_RATE_BASE,
   RAIN_PARTICLE_LIFETIME_MIN,
@@ -59,7 +62,13 @@ import {
   GUST_DURATION_MIN,
   GUST_DURATION_MAX,
   GUST_RAMP_FRACTION,
-  VARIABLE_WIND_VARIANCE
+  VARIABLE_WIND_VARIANCE,
+  // Precipitation smoothing
+  PRECIPITATION_FADE_TIME,
+  PRECIPITATION_ONSET_DELAY,
+  PRECIPITATION_CESSATION_DELAY,
+  THUNDERSTORM_ONSET_DELAY,
+  THUNDERSTORM_CESSATION_DELAY
 } from '@/constants'
 
 interface UseBabylonPrecipitationOptions {
@@ -120,6 +129,44 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
   // Babylon render observer reference for cleanup
   const renderObserverRef = useRef<BABYLON.Observer<BABYLON.Scene> | null>(null)
 
+  // Track previous camera position for jump detection
+  const lastCameraPosRef = useRef<BABYLON.Vector3 | null>(null)
+
+  // Counter to force particle system recreation (incremented when camera jumps)
+  // Using state so that changing it triggers the effect to re-run
+  const [recreateCounter, setRecreateCounter] = useState(0)
+
+  // Track the last recreateCounter value to detect changes within the effect
+  const lastRecreateCounterRef = useRef(0)
+
+  // Precipitation smoothing state - smooth transitions for fade in/out
+  const precipSmoothingRef = useRef({
+    // Current smoothed intensity factor (0 = off, 1 = full)
+    currentIntensity: 0,
+    // Target intensity (0 or 1 based on active state)
+    targetIntensity: 0,
+    // Hysteresis timers for onset/cessation delay
+    precipOnsetTime: null as number | null,
+    precipCessationTime: null as number | null,
+    // Whether precipitation is logically active (after hysteresis)
+    precipActive: false,
+    // Thunderstorm smoothing
+    thunderstormOnsetTime: null as number | null,
+    thunderstormCessationTime: null as number | null,
+    thunderstormActive: false,
+    thunderstormFactor: 0,
+    // Initialization flag
+    initialized: false
+  })
+
+  // Track current airport to detect airport switches (reset smoothing on switch)
+  const currentAirportIcao = useAirportStore((state) => state.currentAirport?.icao ?? null)
+  const prevAirportIcaoRef = useRef<string | null>(null)
+
+  // Track camera position to detect position jumps (reset smoothing on teleport)
+  const cameraPosition = useWeatherStore((state) => state.cameraPosition)
+  const prevCameraPositionRef = useRef<{ lat: number; lon: number } | null>(null)
+
   // Weather store subscriptions
   const precipitation = useWeatherStore((state) => state.precipitation)
   const wind = useWeatherStore((state) => state.wind)
@@ -129,6 +176,57 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
   const showPrecipitation = useSettingsStore((state) => state.weather.showPrecipitation)
   const precipitationIntensity = useSettingsStore((state) => state.weather.precipitationIntensity)
   const showLightning = useSettingsStore((state) => state.weather.showLightning) ?? true
+
+  // Detect airport changes and reset smoothing (instant weather changes when switching airports)
+  useEffect(() => {
+    if (currentAirportIcao !== prevAirportIcaoRef.current) {
+      prevAirportIcaoRef.current = currentAirportIcao
+
+      // Reset precipitation smoothing - snap to current state (no transition)
+      const smoothing = precipSmoothingRef.current
+      smoothing.precipActive = precipitation.active
+      smoothing.currentIntensity = precipitation.active ? 1 : 0
+      smoothing.targetIntensity = smoothing.currentIntensity
+      smoothing.precipOnsetTime = null
+      smoothing.precipCessationTime = null
+
+      // Reset thunderstorm smoothing
+      smoothing.thunderstormActive = precipitation.hasThunderstorm
+      smoothing.thunderstormFactor = precipitation.hasThunderstorm ? 1 : 0
+      smoothing.thunderstormOnsetTime = null
+      smoothing.thunderstormCessationTime = null
+    }
+  }, [currentAirportIcao, precipitation.active, precipitation.hasThunderstorm])
+
+  // Detect camera position jumps and reset smoothing (instant weather when teleporting)
+  // Threshold: ~5 nautical miles (0.083 degrees latitude ≈ 5nm)
+  const POSITION_JUMP_THRESHOLD_DEG = 0.083
+  useEffect(() => {
+    if (!cameraPosition) return
+
+    const prev = prevCameraPositionRef.current
+    if (prev) {
+      const latDiff = Math.abs(cameraPosition.lat - prev.lat)
+      const lonDiff = Math.abs(cameraPosition.lon - prev.lon) * Math.cos((cameraPosition.lat * Math.PI) / 180)
+      const distance = Math.sqrt(latDiff * latDiff + lonDiff * lonDiff)
+
+      if (distance > POSITION_JUMP_THRESHOLD_DEG) {
+        // Position jumped significantly - reset precipitation smoothing
+        const smoothing = precipSmoothingRef.current
+        smoothing.precipActive = precipitation.active
+        smoothing.currentIntensity = precipitation.active ? 1 : 0
+        smoothing.targetIntensity = smoothing.currentIntensity
+        smoothing.precipOnsetTime = null
+        smoothing.precipCessationTime = null
+        smoothing.thunderstormActive = precipitation.hasThunderstorm
+        smoothing.thunderstormFactor = precipitation.hasThunderstorm ? 1 : 0
+        smoothing.thunderstormOnsetTime = null
+        smoothing.thunderstormCessationTime = null
+      }
+    }
+
+    prevCameraPositionRef.current = { ...cameraPosition }
+  }, [cameraPosition, precipitation.active, precipitation.hasThunderstorm])
 
   /**
    * Convert meteorological wind direction to particle velocity direction
@@ -204,6 +302,13 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
       // Set emit rate
       ps.emitRate = RAIN_EMIT_RATE_BASE
 
+      // Pre-warm the particle system so particles appear instantly when enabled
+      // (e.g., when switching from 2D to 3D view, or flying to a new location)
+      // Rain falls fast at ~450m/s, needs enough cycles to fill the 50m height
+      // 150 cycles at 16ms = ~2.4 seconds of simulation (covers full particle volume)
+      ps.preWarmCycles = 150
+      ps.preWarmStepOffset = 16
+
       // Ensure particles render on top
       ps.renderingGroupId = 1
 
@@ -266,6 +371,12 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
 
       // Set emit rate
       ps.emitRate = SNOW_EMIT_RATE_BASE
+
+      // Pre-warm the particle system so particles appear instantly when enabled
+      // Snow falls much slower than rain (~3m/s), needs many more cycles to fill the volume
+      // 300 cycles at 50ms step = ~15 seconds of simulation (fills the 30m emitter height)
+      ps.preWarmCycles = 300
+      ps.preWarmStepOffset = 50
 
       // Render on top
       ps.renderingGroupId = 1
@@ -456,11 +567,16 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
 
   /**
    * Handle lightning flash effect - creates visible screen flash
+   * Uses smoothed thunderstorm state to prevent sudden lightning changes
    */
   const updateLightning = useCallback(() => {
     if (!scene || !camera) return
 
-    if (!precipitation.hasThunderstorm || !showLightning) {
+    const smoothing = precipSmoothingRef.current
+
+    // Use smoothed thunderstorm state for more gradual onset/cessation
+    // Only show lightning if thunderstorm factor is above threshold
+    if (smoothing.thunderstormFactor < 0.5 || !showLightning) {
       return
     }
 
@@ -488,8 +604,9 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
         if (!material) return
 
         // Flash bright - make plane visible
-        // Use LIGHTNING_FLASH_INTENSITY to scale alpha (intensity 3.0 -> alpha 0.3)
-        material.alpha = LIGHTNING_FLASH_INTENSITY / 10
+        // Scale intensity by thunderstorm factor for gradual ramp-up
+        const scaledIntensity = (LIGHTNING_FLASH_INTENSITY / 10) * smoothing.thunderstormFactor
+        material.alpha = scaledIntensity
 
         const timeout1 = setTimeout(() => {
           timeouts.delete(timeout1)
@@ -520,7 +637,7 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
 
       doFlash()
     }
-  }, [scene, camera, precipitation.hasThunderstorm, showLightning, ensureLightningPlane])
+  }, [scene, camera, showLightning, ensureLightningPlane])
 
   /**
    * Main update function - called by Babylon's render observable for perfect sync
@@ -528,12 +645,112 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
   const updatePrecipitation = useCallback(() => {
     if (!scene || !camera) return
 
+    // Check for camera position jumps (flyTo, following, etc.)
+    // When camera moves more than threshold in one update, trigger particle recreation
+    const lastPos = lastCameraPosRef.current
+    if (lastPos) {
+      const distance = BABYLON.Vector3.Distance(camera.position, lastPos)
+      if (distance > PARTICLE_PREWARM_JUMP_THRESHOLD) {
+        // Large position jump detected - increment counter to trigger effect re-run
+        // This disposes and recreates particle systems with pre-warming
+        setRecreateCounter(c => c + 1)
+      }
+    }
+    // Update last camera position
+    lastCameraPosRef.current = camera.position.clone()
+
     const deltaTime = scene.getEngine().getDeltaTime() / 1000
+    const now = performance.now()
+    const smoothing = precipSmoothingRef.current
+
+    // === PRECIPITATION SMOOTHING ===
+    // Handle hysteresis for onset/cessation
+    if (precipitation.active) {
+      // Precipitation is reported
+      if (!smoothing.precipActive && smoothing.precipOnsetTime === null) {
+        smoothing.precipOnsetTime = now
+      }
+      smoothing.precipCessationTime = null
+    } else {
+      // No precipitation reported
+      if (smoothing.precipActive && smoothing.precipCessationTime === null) {
+        smoothing.precipCessationTime = now
+      }
+      smoothing.precipOnsetTime = null
+    }
+
+    // Check onset delay
+    if (smoothing.precipOnsetTime !== null) {
+      const elapsed = (now - smoothing.precipOnsetTime) / 1000
+      if (elapsed >= PRECIPITATION_ONSET_DELAY) {
+        smoothing.precipActive = true
+        smoothing.precipOnsetTime = null
+      }
+    }
+
+    // Check cessation delay
+    if (smoothing.precipCessationTime !== null) {
+      const elapsed = (now - smoothing.precipCessationTime) / 1000
+      if (elapsed >= PRECIPITATION_CESSATION_DELAY) {
+        smoothing.precipActive = false
+        smoothing.precipCessationTime = null
+      }
+    }
+
+    // Handle thunderstorm hysteresis
+    if (precipitation.hasThunderstorm) {
+      if (!smoothing.thunderstormActive && smoothing.thunderstormOnsetTime === null) {
+        smoothing.thunderstormOnsetTime = now
+      }
+      smoothing.thunderstormCessationTime = null
+    } else {
+      if (smoothing.thunderstormActive && smoothing.thunderstormCessationTime === null) {
+        smoothing.thunderstormCessationTime = now
+      }
+      smoothing.thunderstormOnsetTime = null
+    }
+
+    if (smoothing.thunderstormOnsetTime !== null) {
+      const elapsed = (now - smoothing.thunderstormOnsetTime) / 1000
+      if (elapsed >= THUNDERSTORM_ONSET_DELAY) {
+        smoothing.thunderstormActive = true
+        smoothing.thunderstormOnsetTime = null
+      }
+    }
+
+    if (smoothing.thunderstormCessationTime !== null) {
+      const elapsed = (now - smoothing.thunderstormCessationTime) / 1000
+      if (elapsed >= THUNDERSTORM_CESSATION_DELAY) {
+        smoothing.thunderstormActive = false
+        smoothing.thunderstormCessationTime = null
+      }
+    }
+
+    // Set target intensity based on hysteresis-processed active state
+    smoothing.targetIntensity = smoothing.precipActive ? 1 : 0
+
+    // Smooth intensity factor toward target (exponential smoothing)
+    const fadeLerpFactor = 1 - Math.exp(-deltaTime / (PRECIPITATION_FADE_TIME / 3))
+    if (Math.abs(smoothing.currentIntensity - smoothing.targetIntensity) > 0.01) {
+      smoothing.currentIntensity += (smoothing.targetIntensity - smoothing.currentIntensity) * fadeLerpFactor
+    } else {
+      smoothing.currentIntensity = smoothing.targetIntensity
+    }
+
+    // Smooth thunderstorm factor
+    const targetThunder = smoothing.thunderstormActive ? 1 : 0
+    if (Math.abs(smoothing.thunderstormFactor - targetThunder) > 0.01) {
+      smoothing.thunderstormFactor += (targetThunder - smoothing.thunderstormFactor) * fadeLerpFactor
+    } else {
+      smoothing.thunderstormFactor = targetThunder
+    }
+
+    smoothing.initialized = true
 
     // Update wind state (gust simulation)
     updateWindState(deltaTime)
 
-    // Update particle emitter positions to follow camera
+    // Update particle emitter positions and apply smoothed intensity
     particleSystemsRef.current.forEach((data) => {
       // Different heights for different precipitation types
       // Rain: 50m above (falls fast), Snow: 30m above (falls slow)
@@ -549,11 +766,15 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
 
       // Apply wind effects
       applyWindToSystem(data.system, data.type)
+
+      // Apply smoothed intensity to emit rate
+      // This creates gradual fade in/out of precipitation
+      data.system.emitRate = data.baseEmitRate * smoothing.currentIntensity
     })
 
     // Update lightning
     updateLightning()
-  }, [scene, camera, updateWindState, applyWindToSystem, updateLightning])
+  }, [scene, camera, precipitation.active, precipitation.hasThunderstorm, updateWindState, applyWindToSystem, updateLightning])
 
   /**
    * Main effect: create/update/dispose particle systems based on weather
@@ -583,8 +804,14 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
       data.system.dispose()
     }
 
-    // Dispose existing particle systems if precipitation should be hidden
-    if (!shouldShowPrecip) {
+    // Check if recreateCounter changed (camera jump detected)
+    const counterChanged = recreateCounter !== lastRecreateCounterRef.current
+    lastRecreateCounterRef.current = recreateCounter
+
+    // Dispose existing particle systems if:
+    // 1) Precipitation should be hidden, OR
+    // 2) Counter changed (camera jumped) - forces recreation with pre-warming
+    if (!shouldShowPrecip || counterChanged) {
       particleSystemsRef.current.forEach((data) => {
         disposeSystem(data)
       })
@@ -725,6 +952,7 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
     precipitation,
     precipitationIntensity,
     isTopDownView,
+    recreateCounter,
     createRainSystemAsync,
     createSnowSystemAsync,
     getBaseEmitRate,

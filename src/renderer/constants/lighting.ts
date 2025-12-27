@@ -96,3 +96,14 @@ export const BABYLON_NIGHT_CLOUD_EMISSIVE_MULT = 0.4
  * Immediate recalculation is triggered when time settings change
  */
 export const SUN_POSITION_UPDATE_INTERVAL = 30000 // 30 seconds
+
+// =============================================================================
+// Weather Particle Pre-warming Constants
+// =============================================================================
+
+/**
+ * Camera position jump threshold (meters)
+ * When camera moves more than this distance in a single update,
+ * particle systems are recreated with pre-warming
+ */
+export const PARTICLE_PREWARM_JUMP_THRESHOLD = 500

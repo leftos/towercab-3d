@@ -73,3 +73,75 @@ export const AUTO_SWITCH_HYSTERESIS_NM = 5
  * Prevents switching when very close to current airport
  */
 export const AUTO_SWITCH_MIN_DISTANCE_NM = 2
+
+// ============================================================================
+// WEATHER SMOOTHING / HYSTERESIS
+// ============================================================================
+
+/**
+ * Transition time for visibility changes (seconds)
+ * Controls how fast fog opacity/scale responds to METAR updates
+ * Higher = smoother but slower to respond to real weather changes
+ */
+export const VISIBILITY_TRANSITION_TIME = 8.0
+
+/**
+ * Transition time for fog density changes (seconds)
+ */
+export const FOG_DENSITY_TRANSITION_TIME = 8.0
+
+/**
+ * Transition time for wind direction changes (seconds)
+ * Uses circular interpolation to handle wrap-around at 360°
+ */
+export const WIND_DIRECTION_TRANSITION_TIME = 5.0
+
+/**
+ * Transition time for wind speed changes (seconds)
+ */
+export const WIND_SPEED_TRANSITION_TIME = 3.0
+
+/**
+ * Transition time for precipitation intensity fade in/out (seconds)
+ * Controls how fast rain/snow particles ramp up or down
+ */
+export const PRECIPITATION_FADE_TIME = 4.0
+
+/**
+ * Hysteresis threshold for precipitation activation (seconds)
+ * Precipitation must be reported for this long before showing
+ * Prevents flickering when hovering near boundary between stations
+ */
+export const PRECIPITATION_ONSET_DELAY = 2.0
+
+/**
+ * Hysteresis threshold for precipitation deactivation (seconds)
+ * Precipitation must be absent for this long before hiding
+ */
+export const PRECIPITATION_CESSATION_DELAY = 5.0
+
+/**
+ * Hysteresis threshold for thunderstorm activation (seconds)
+ */
+export const THUNDERSTORM_ONSET_DELAY = 1.0
+
+/**
+ * Hysteresis threshold for thunderstorm deactivation (seconds)
+ */
+export const THUNDERSTORM_CESSATION_DELAY = 8.0
+
+/**
+ * Minimum visibility change (statute miles) to trigger transition
+ * Changes smaller than this are applied instantly
+ */
+export const VISIBILITY_CHANGE_THRESHOLD = 0.1
+
+/**
+ * Minimum wind direction change (degrees) to trigger transition
+ */
+export const WIND_DIRECTION_CHANGE_THRESHOLD = 5
+
+/**
+ * Minimum wind speed change (knots) to trigger transition
+ */
+export const WIND_SPEED_CHANGE_THRESHOLD = 2

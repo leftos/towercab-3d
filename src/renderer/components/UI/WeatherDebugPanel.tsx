@@ -44,6 +44,7 @@ export function WeatherDebugPanel() {
   const setWind = useWeatherStore((state) => state.setWind)
   const setCloudLayers = useWeatherStore((state) => state.setCloudLayers)
   const setDebugOverriding = useWeatherStore((state) => state.setDebugOverriding)
+  const triggerInstantUpdate = useWeatherStore((state) => state.triggerInstantUpdate)
   const isDebugOverriding = useWeatherStore((state) => state.isDebugOverriding)
   const currentCloudLayers = useWeatherStore((state) => state.cloudLayers)
 
@@ -92,6 +93,9 @@ export function WeatherDebugPanel() {
 
     // Enable debug override mode to prevent METAR updates from overwriting
     setDebugOverriding(true)
+
+    // Trigger instant update to bypass smoothing
+    triggerInstantUpdate()
   }
 
   const clearOverride = () => {

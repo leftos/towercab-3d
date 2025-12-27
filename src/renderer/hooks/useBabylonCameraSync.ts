@@ -13,11 +13,18 @@ interface Camera2DState {
   heading: number
 }
 
+// Distance threshold for repositioning cloud layers (meters)
+// Clouds are repositioned when camera moves this far from the last cloud center
+// This prevents the "following" visual artifact while ensuring continuous coverage
+const CLOUD_REPOSITION_THRESHOLD = 10000 // 10km
+
 interface CloudMeshData {
   plane: BABYLON.Mesh
   dome: BABYLON.Mesh
+  abovePlane: BABYLON.Mesh
   material: BABYLON.StandardMaterial
   domeMaterial: BABYLON.StandardMaterial
+  aboveMaterial: BABYLON.StandardMaterial
 }
 
 interface UseBabylonCameraSyncOptions {
@@ -248,6 +255,9 @@ export function useBabylonCameraSync({
   // Terrain offset: difference between MSL elevation and actual Cesium terrain height
   const terrainOffsetRef = useRef<number>(0)
 
+  // Last position where clouds were centered (for threshold-based repositioning)
+  const cloudCenterRef = useRef<{ x: number; z: number }>({ x: 0, z: 0 })
+
   // Setup ENU transforms for a given base position
   const setupBasePosition = useCallback((lat: number, lon: number, height: number) => {
     enuDataRef.current = setupEnuTransforms(lat, lon, height)
@@ -336,14 +346,38 @@ export function useBabylonCameraSync({
       fogDome.position.copyFrom(camera.position)
     }
 
-    // Position cloud planes at camera X/Z position (clouds follow camera horizontally)
-    // Y position is already set by useBabylonWeather based on cloud altitude AGL
-    const cloudMeshes = getCloudMeshes()
-    for (const meshData of cloudMeshes) {
-      if (meshData.plane.isVisible) {
-        meshData.plane.position.x = camera.position.x
-        meshData.plane.position.z = camera.position.z
+    // Cloud layer positioning: reposition only when camera moves significantly
+    // This prevents the "following clouds" visual artifact while ensuring continuous coverage
+    const cameraX = camera.position.x
+    const cameraZ = camera.position.z
+    const cloudCenter = cloudCenterRef.current
+
+    // Calculate distance from camera to current cloud center
+    const dx = cameraX - cloudCenter.x
+    const dz = cameraZ - cloudCenter.z
+    const distanceFromCloudCenter = Math.sqrt(dx * dx + dz * dz)
+
+    // Reposition clouds if camera has moved beyond threshold
+    const shouldRepositionClouds = distanceFromCloudCenter > CLOUD_REPOSITION_THRESHOLD
+
+    // Reposition all cloud meshes when threshold exceeded
+    // View-dependent visibility is handled by useBabylonWeather
+    if (shouldRepositionClouds) {
+      const cloudMeshes = getCloudMeshes()
+      for (const meshData of cloudMeshes) {
+        // Reposition all cloud geometries (plane, dome, abovePlane)
+        meshData.plane.position.x = cameraX
+        meshData.plane.position.z = cameraZ
+        meshData.dome.position.x = cameraX
+        meshData.dome.position.z = cameraZ
+        meshData.abovePlane.position.x = cameraX
+        meshData.abovePlane.position.z = cameraZ
       }
+    }
+
+    // Update cloud center reference if we repositioned
+    if (shouldRepositionClouds) {
+      cloudCenterRef.current = { x: cameraX, z: cameraZ }
     }
 
     return true

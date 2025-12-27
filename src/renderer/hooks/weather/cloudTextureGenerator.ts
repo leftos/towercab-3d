@@ -176,15 +176,16 @@ export function createOvercastDomeTexture(
       const ny = (y / textureSize) * 4 + seed * 100
       const noise = fbmNoise(nx, ny, 3, 0.5) * 0.15 // Subtle variation
 
-      // Horizon darkening: darker at edges, lighter at center
+      // Horizon darkening: slightly darker at edges, lighter at center
       // This simulates looking through more atmosphere at shallow angles
       const horizonDarkening = distance * distance * CLOUD_DOME_HORIZON_DARKENING
 
-      // Base gray value (lighter at center, darker at horizon)
-      const baseGray = 0.85 - horizonDarkening + noise * 0.1
+      // Base gray value (lighter at center, slightly darker at horizon)
+      // Overcast clouds should appear light gray/white, not dark
+      const baseGray = 0.92 - horizonDarkening + noise * 0.08
 
-      // Clamp to valid range
-      const gray = Math.max(0.3, Math.min(1.0, baseGray))
+      // Clamp to valid range (don't let it get too dark)
+      const gray = Math.max(0.7, Math.min(1.0, baseGray))
 
       // Alpha: gradual fade from center to edge
       // Start fading early so the dome doesn't block the horizon view
@@ -210,6 +211,117 @@ export function createOvercastDomeTexture(
       data[idx + 1] = colorValue // G
       data[idx + 2] = Math.round(gray * 1.02 * 255) // B slightly higher for cool tint
       data[idx + 3] = Math.round(alpha * 255)       // A
+    }
+  }
+
+  ctx.putImageData(imageData, 0, 0)
+  texture.hasAlpha = true
+  texture.update()
+
+  return texture
+}
+
+/**
+ * Creates a texture for viewing clouds from above (cloud tops).
+ * Cloud tops appear as bright white/light gray with a fluffy appearance.
+ *
+ * @param scene - Babylon.js scene
+ * @param textureSize - Size of the texture in pixels
+ * @param coverage - Cloud coverage (0-1, from METAR oktas)
+ * @param seed - Random seed for pattern variation
+ * @returns DynamicTexture with cloud top pattern
+ */
+export function createAboveCloudTexture(
+  scene: BABYLON.Scene,
+  textureSize: number,
+  coverage: number,
+  seed: number = 0
+): BABYLON.DynamicTexture {
+  const texture = new BABYLON.DynamicTexture(
+    `cloud_above_${seed}_${coverage.toFixed(3)}`,
+    textureSize,
+    scene,
+    true
+  )
+  const ctx = texture.getContext() as CanvasRenderingContext2D
+
+  const imageData = ctx.createImageData(textureSize, textureSize)
+  const data = imageData.data
+
+  const centerX = textureSize / 2
+  const centerY = textureSize / 2
+  const maxRadius = textureSize / 2
+
+  // Cloud tops use similar logic to below-cloud but with lighter colors
+  // and a different noise pattern (more "pillowy" look)
+  const noiseScale = CLOUD_NOISE_SCALE * 0.8 // Slightly larger features from above
+
+  for (let y = 0; y < textureSize; y++) {
+    for (let x = 0; x < textureSize; x++) {
+      const idx = (y * textureSize + x) * 4
+
+      // Generate fBm noise with seed offset
+      const nx = (x / textureSize) * noiseScale + seed * 100
+      const ny = (y / textureSize) * noiseScale + seed * 100
+      const noiseValue = fbmNoise(nx, ny, CLOUD_NOISE_OCTAVES, CLOUD_NOISE_PERSISTENCE)
+
+      // Calculate cloud opacity based on coverage level
+      let cloudAlpha: number
+      if (coverage >= 0.95) {
+        // OVC: completely solid cloud top
+        cloudAlpha = 1.0
+      } else if (coverage >= 0.6) {
+        // BKN: mostly solid with some gaps showing through
+        const gapThreshold = (1.0 - coverage) + 0.15
+        if (noiseValue < gapThreshold) {
+          cloudAlpha = 0.0
+        } else if (noiseValue < gapThreshold + 0.1) {
+          cloudAlpha = (noiseValue - gapThreshold) / 0.1
+        } else {
+          cloudAlpha = 1.0
+        }
+      } else {
+        // FEW/SCT: scattered patches
+        const threshold = 0.5 + 0.2 * (1.0 - 2.0 * coverage)
+        if (noiseValue > threshold) {
+          const edge = (noiseValue - threshold) / CLOUD_EDGE_SOFTNESS
+          cloudAlpha = Math.min(1.0, edge)
+        } else {
+          cloudAlpha = 0.0
+        }
+      }
+
+      // Apply radial fade at edges (but NOT for OVC - keep fully opaque)
+      const dx = x - centerX
+      const dy = y - centerY
+      const distance = Math.sqrt(dx * dx + dy * dy) / maxRadius
+
+      let finalAlpha: number
+      if (coverage >= 0.95) {
+        // OVC: NO radial fade - fully opaque cloud tops everywhere
+        finalAlpha = cloudAlpha
+      } else {
+        // BKN and below: apply radial fade
+        const fadeStart = coverage >= 0.6 ? 0.75 : CLOUD_RADIAL_FADE_START
+        let radialFade = 1.0
+        if (distance > fadeStart) {
+          radialFade = 1.0 - (distance - fadeStart) / (CLOUD_RADIAL_FADE_END - fadeStart)
+          radialFade = Math.max(0, Math.min(1, radialFade))
+        }
+        finalAlpha = cloudAlpha * radialFade
+      }
+
+      // Cloud tops from above: bright white with subtle variation
+      // Add some noise to the brightness for a fluffy appearance
+      const brightnessNoise = noiseValue * 0.1 // 0-0.1 variation
+      const brightness = Math.min(1.0, 0.95 + brightnessNoise * 0.05) // 0.95-1.0
+
+      // Write RGBA - bright white color
+      const colorValue = Math.round(brightness * 255)
+      data[idx] = colorValue     // R
+      data[idx + 1] = colorValue // G
+      data[idx + 2] = Math.min(255, Math.round(colorValue * 1.02)) // B slightly cooler
+      data[idx + 3] = Math.round(finalAlpha * 255) // A
     }
   }
 

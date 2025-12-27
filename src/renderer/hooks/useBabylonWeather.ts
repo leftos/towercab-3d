@@ -2,7 +2,8 @@ import { useEffect, useRef, useCallback } from 'react'
 import * as BABYLON from '@babylonjs/core'
 import { useWeatherStore } from '../stores/weatherStore'
 import { useSettingsStore } from '../stores/settingsStore'
-import type { UseBabylonWeatherResult, CloudMeshData, WeatherVisibilityParams } from '@/types'
+import { useAirportStore } from '../stores/airportStore'
+import type { UseBabylonWeatherResult, CloudMeshData, WeatherVisibilityParams, CloudLayer } from '@/types'
 import {
   CLOUD_POOL_SIZE,
   CLOUD_PLANE_DIAMETER,
@@ -45,13 +46,20 @@ import {
   CLOUD_LAYER_COVERAGE_REGEN_THRESHOLD,
   CLOUD_DOME_COVERAGE_THRESHOLD,
   CLOUD_DOME_FRESNEL_BIAS,
-  CLOUD_DOME_FRESNEL_POWER
+  CLOUD_DOME_FRESNEL_POWER,
+  CLOUD_ABOVE_TRANSITION_BUFFER,
+  CLOUD_DOME_FRESNEL_BIAS_ABOVE,
+  CLOUD_ABOVE_DIFFUSE_COLOR,
+  CLOUD_ABOVE_EMISSIVE_COLOR,
+  CLOUD_ABOVE_BASE_ALPHA,
+  VISIBILITY_TRANSITION_TIME
 } from '@/constants'
 
 // Import extracted weather utilities
 import {
   createPatchyCloudTexture,
   createOvercastDomeTexture,
+  createAboveCloudTexture,
   createCloudDomeMesh
 } from './weather'
 
@@ -93,6 +101,8 @@ interface CloudLayerState {
   useDome: boolean
   /** Whether dome texture has been generated for current state */
   domeTextureGenerated: boolean
+  /** Whether above-cloud texture has been generated for current state */
+  aboveTextureGenerated: boolean
 }
 
 /**
@@ -332,11 +342,50 @@ export function useBabylonWeather(
   const cloudLayerStatesRef = useRef<CloudLayerState[]>([])
   const cloudOpacityRef = useRef(1.0)
   const prevIsTopDownViewRef = useRef<boolean | undefined>(undefined)
+  // Track if we've ever had active cloud layers (for instant display on initial load)
+  const hadActiveCloudsRef = useRef(false)
+
+  // Fog smoothing state - smooth transitions when interpolated weather changes
+  const fogSmoothingRef = useRef({
+    // Current smoothed values (what's actually rendered)
+    currentVisibility: 10,
+    currentAlpha: 0,
+    currentFresnelBias: 0.1,
+    currentScale: 10000,
+    // Target values (from METAR data)
+    targetVisibility: 10,
+    targetAlpha: 0,
+    targetFresnelBias: 0.1,
+    targetScale: 10000,
+    // Whether smoothing is initialized
+    initialized: false
+  })
+
+  // Cloud layer smoothing - smooth the cloud layer data before matching
+  const cloudSmoothingRef = useRef<{
+    layers: Array<{
+      currentAltitude: number
+      currentCoverage: number
+      targetAltitude: number
+      targetCoverage: number
+      type: string
+    }>
+    initialized: boolean
+  }>({ layers: [], initialized: false })
+
+  // Track current airport to detect airport switches (reset smoothing on switch)
+  const currentAirportIcao = useAirportStore((state) => state.currentAirport?.icao ?? null)
+  const prevAirportIcaoRef = useRef<string | null>(null)
+
+  // Track camera position to detect position jumps (reset smoothing on teleport)
+  const cameraPosition = useWeatherStore((state) => state.cameraPosition)
+  const prevCameraPositionRef = useRef<{ lat: number; lon: number } | null>(null)
 
   // Weather store subscriptions
   const cloudLayers = useWeatherStore((state) => state.cloudLayers)
   const currentMetar = useWeatherStore((state) => state.currentMetar)
   const fogDensity = useWeatherStore((state) => state.fogDensity)
+  const consumeInstantUpdate = useWeatherStore((state) => state.consumeInstantUpdate)
   const showWeatherEffects = useSettingsStore((state) => state.weather.showWeatherEffects)
   const showCesiumFog = useSettingsStore((state) => state.weather.showCesiumFog)
   const showBabylonFog = useSettingsStore((state) => state.weather.showBabylonFog)
@@ -349,6 +398,77 @@ export function useBabylonWeather(
   useEffect(() => {
     cloudOpacityRef.current = cloudOpacity
   }, [cloudOpacity])
+
+  // Detect airport changes and reset smoothing (instant weather changes when switching airports)
+  useEffect(() => {
+    if (currentAirportIcao !== prevAirportIcaoRef.current) {
+      prevAirportIcaoRef.current = currentAirportIcao
+
+      // Reset fog smoothing - snap to target values
+      const fogState = fogSmoothingRef.current
+      fogState.currentVisibility = fogState.targetVisibility
+      fogState.currentAlpha = fogState.targetAlpha
+      fogState.currentFresnelBias = fogState.targetFresnelBias
+      fogState.currentScale = fogState.targetScale
+
+      // Reset cloud smoothing - snap to target values
+      const cloudState = cloudSmoothingRef.current
+      cloudState.initialized = false  // Force re-initialization for new airport
+      for (const layer of cloudState.layers) {
+        layer.currentAltitude = layer.targetAltitude
+        layer.currentCoverage = layer.targetCoverage
+      }
+
+      // Also reset the visual cloud layer states to force immediate update
+      for (const state of cloudLayerStatesRef.current) {
+        state.currentAlpha = state.targetAlpha
+        state.currentAltitude = state.targetAltitude
+        state.currentCoverage = state.targetCoverage
+      }
+
+      // Reset initial load flag so clouds appear instantly at new airport
+      hadActiveCloudsRef.current = false
+    }
+  }, [currentAirportIcao])
+
+  // Detect camera position jumps and reset smoothing (instant weather when teleporting)
+  // Threshold: ~5 nautical miles (0.083 degrees latitude ≈ 5nm)
+  const POSITION_JUMP_THRESHOLD_DEG = 0.083
+  useEffect(() => {
+    if (!cameraPosition) return
+
+    const prev = prevCameraPositionRef.current
+    if (prev) {
+      // Calculate approximate distance using simple lat/lon difference
+      // This is fast and accurate enough for detecting large jumps
+      const latDiff = Math.abs(cameraPosition.lat - prev.lat)
+      const lonDiff = Math.abs(cameraPosition.lon - prev.lon) * Math.cos((cameraPosition.lat * Math.PI) / 180)
+      const distance = Math.sqrt(latDiff * latDiff + lonDiff * lonDiff)
+
+      if (distance > POSITION_JUMP_THRESHOLD_DEG) {
+        // Position jumped significantly - reset all smoothing
+        const fogState = fogSmoothingRef.current
+        fogState.currentVisibility = fogState.targetVisibility
+        fogState.currentAlpha = fogState.targetAlpha
+        fogState.currentFresnelBias = fogState.targetFresnelBias
+        fogState.currentScale = fogState.targetScale
+
+        const cloudState = cloudSmoothingRef.current
+        for (const layer of cloudState.layers) {
+          layer.currentAltitude = layer.targetAltitude
+          layer.currentCoverage = layer.targetCoverage
+        }
+
+        for (const state of cloudLayerStatesRef.current) {
+          state.currentAlpha = state.targetAlpha
+          state.currentAltitude = state.targetAltitude
+          state.currentCoverage = state.targetCoverage
+        }
+      }
+    }
+
+    prevCameraPositionRef.current = { ...cameraPosition }
+  }, [cameraPosition])
 
   // Create cloud plane mesh pool and fog dome
   useEffect(() => {
@@ -398,7 +518,25 @@ export function useBabylonWeather(
 
       dome.material = domeMaterial
 
-      cloudMeshPoolRef.current.push({ plane, dome, material, domeMaterial, usingDome: false })
+      // Create above-cloud plane (for viewing clouds from above)
+      const abovePlane = BABYLON.MeshBuilder.CreatePlane(`cloud_above_${i}`, {
+        size: CLOUD_PLANE_DIAMETER
+      }, scene)
+      abovePlane.rotation.x = CLOUD_PLANE_ROTATION_X
+      abovePlane.isVisible = false
+
+      // Above-cloud material: lighter colors simulating cloud tops
+      const aboveMaterial = new BABYLON.StandardMaterial(`cloud_above_mat_${i}`, scene)
+      aboveMaterial.diffuseColor = new BABYLON.Color3(...CLOUD_ABOVE_DIFFUSE_COLOR)
+      aboveMaterial.emissiveColor = new BABYLON.Color3(...CLOUD_ABOVE_EMISSIVE_COLOR)
+      aboveMaterial.specularColor = new BABYLON.Color3(0, 0, 0)
+      aboveMaterial.alpha = CLOUD_ABOVE_BASE_ALPHA
+      aboveMaterial.backFaceCulling = false
+      aboveMaterial.disableLighting = true // Use emissive for uniform look
+      aboveMaterial.useAlphaFromDiffuseTexture = true
+      abovePlane.material = aboveMaterial
+
+      cloudMeshPoolRef.current.push({ plane, dome, abovePlane, material, domeMaterial, aboveMaterial, usingDome: false })
     }
 
     // Create fog dome
@@ -429,7 +567,7 @@ export function useBabylonWeather(
     fogDomeMaterialRef.current = fogDomeMaterial
 
     return () => {
-      // Dispose cloud planes, domes, and their individual diffuse textures
+      // Dispose cloud planes, domes, above-planes, and their individual diffuse textures
       for (const cloudData of cloudMeshPoolRef.current) {
         cloudData.material.diffuseTexture?.dispose()
         cloudData.material?.dispose()
@@ -437,6 +575,9 @@ export function useBabylonWeather(
         cloudData.domeMaterial.diffuseTexture?.dispose()
         cloudData.domeMaterial?.dispose()
         cloudData.dome.dispose()
+        cloudData.aboveMaterial.diffuseTexture?.dispose()
+        cloudData.aboveMaterial?.dispose()
+        cloudData.abovePlane.dispose()
       }
       cloudMeshPoolRef.current = []
 
@@ -471,22 +612,97 @@ export function useBabylonWeather(
             targetSpeed: initialSpeed
           },
           useDome: false,
-          domeTextureGenerated: false
+          domeTextureGenerated: false,
+          aboveTextureGenerated: false
         })
       }
     }
   }, [scene])
 
-  // Match new cloud layers to existing states and update targets
+  // Smooth cloud layer data before matching to prevent flickering from rapid METAR changes
+  // Updates target values in cloudSmoothingRef, actual smoothing happens in animation loop
+  useEffect(() => {
+    const smoothing = cloudSmoothingRef.current
+
+    // Check if instant update was requested (e.g., from Weather Debug panel)
+    const isInstantUpdate = consumeInstantUpdate()
+
+    // Resize smoothing array to match incoming cloud layers
+    while (smoothing.layers.length < cloudLayers.length) {
+      smoothing.layers.push({
+        currentAltitude: 0,
+        currentCoverage: 0,
+        targetAltitude: 0,
+        targetCoverage: 0,
+        type: ''
+      })
+    }
+
+    // Update targets from raw cloud layer data
+    for (let i = 0; i < cloudLayers.length; i++) {
+      const layer = cloudLayers[i]
+      const smooth = smoothing.layers[i]
+      smooth.targetAltitude = layer.altitude
+      smooth.targetCoverage = layer.coverage
+      smooth.type = layer.type
+
+      // Initialize on first update OR instant update - snap to target (no transition)
+      if (!smoothing.initialized || isInstantUpdate) {
+        smooth.currentAltitude = layer.altitude
+        smooth.currentCoverage = layer.coverage
+      }
+    }
+
+    // Mark layers beyond the current count as having zero coverage target
+    for (let i = cloudLayers.length; i < smoothing.layers.length; i++) {
+      smoothing.layers[i].targetCoverage = 0
+      // Also snap current to zero on instant update
+      if (isInstantUpdate) {
+        smoothing.layers[i].currentCoverage = 0
+      }
+    }
+
+    // If instant update, also reset the visual cloud layer states and force texture regeneration
+    if (isInstantUpdate) {
+      for (const state of cloudLayerStatesRef.current) {
+        state.currentAlpha = state.targetAlpha
+        state.currentAltitude = state.targetAltitude
+        state.currentCoverage = state.targetCoverage
+        // Force texture regeneration
+        state.aboveTextureGenerated = false
+        state.domeTextureGenerated = false
+        state.lastRenderedCoverage = -1
+      }
+    }
+
+    // Only mark as initialized once we have actual cloud data
+    // This ensures first METAR with clouds snaps to values instead of smoothing from 0
+    if (cloudLayers.length > 0) {
+      smoothing.initialized = true
+    }
+  }, [cloudLayers, consumeInstantUpdate])
+
+  // Match cloud layers to existing visual states and update targets
+  // Uses smoothed cloud layer values to prevent matching failures from rapid METAR changes
   // This enables smooth transitions instead of instant regeneration
   useEffect(() => {
     // Wait for both mesh pool and layer states to be initialized
     if (cloudMeshPoolRef.current.length === 0 || cloudLayerStatesRef.current.length === 0) return
 
     const states = cloudLayerStatesRef.current
+    const smoothing = cloudSmoothingRef.current
     const shouldShowClouds = showWeatherEffects && showClouds && !isTopDownView
 
-    if (!shouldShowClouds || cloudLayers.length === 0) {
+    // Get smoothed cloud layers (only those with non-zero coverage)
+    const smoothedLayers: CloudLayer[] = smoothing.layers
+      .filter(l => l.targetCoverage > 0)
+      .map(l => ({
+        altitude: l.currentAltitude,  // Use smoothed current value for matching
+        coverage: l.currentCoverage,
+        type: l.type
+      }))
+
+    if (!shouldShowClouds || smoothedLayers.length === 0) {
       // Fade out all layers
       for (const state of states) {
         if (state.active) {
@@ -500,9 +716,10 @@ export function useBabylonWeather(
     const matchedStates = new Set<number>()
     const matchedNewLayers = new Set<number>()
 
-    // First pass: match new layers to existing active states by altitude proximity
-    for (let newIdx = 0; newIdx < cloudLayers.length; newIdx++) {
-      const newLayer = cloudLayers[newIdx]
+    // First pass: match smoothed layers to existing active states by altitude proximity
+    // Use target values for matching (more stable than current values mid-transition)
+    for (let newIdx = 0; newIdx < smoothedLayers.length; newIdx++) {
+      const newLayer = smoothedLayers[newIdx]
       let bestMatchIdx = -1
       let bestMatchScore = Infinity
 
@@ -510,12 +727,16 @@ export function useBabylonWeather(
         const state = states[stateIdx]
         if (!state.active || matchedStates.has(stateIdx)) continue
 
-        const altitudeDiff = Math.abs(state.currentAltitude - newLayer.altitude)
-        const coverageDiff = Math.abs(state.currentCoverage - newLayer.coverage)
+        // Match using TARGET values (more stable during transitions)
+        const altitudeDiff = Math.abs(state.targetAltitude - newLayer.altitude)
+        const coverageDiff = Math.abs(state.targetCoverage - newLayer.coverage)
 
-        // Check if within matching thresholds
-        if (altitudeDiff <= CLOUD_LAYER_MATCH_ALTITUDE_THRESHOLD &&
-            coverageDiff <= CLOUD_LAYER_MATCH_COVERAGE_THRESHOLD) {
+        // Use more lenient thresholds for smoother transitions
+        // Double the thresholds to allow more matching during rapid changes
+        const altThreshold = CLOUD_LAYER_MATCH_ALTITUDE_THRESHOLD * 2
+        const covThreshold = CLOUD_LAYER_MATCH_COVERAGE_THRESHOLD * 1.5
+
+        if (altitudeDiff <= altThreshold && coverageDiff <= covThreshold) {
           // Score by altitude difference (prefer closer matches)
           if (altitudeDiff < bestMatchScore) {
             bestMatchScore = altitudeDiff
@@ -525,7 +746,7 @@ export function useBabylonWeather(
       }
 
       if (bestMatchIdx >= 0) {
-        // Match found - update targets, keep noise seed
+        // Match found - update targets from smoothed values, keep noise seed
         const state = states[bestMatchIdx]
         state.targetCoverage = newLayer.coverage
         state.targetAltitude = newLayer.altitude
@@ -543,11 +764,14 @@ export function useBabylonWeather(
       }
     }
 
-    // Third pass: assign unmatched new layers to inactive states (fade in)
-    for (let newIdx = 0; newIdx < cloudLayers.length; newIdx++) {
+    // Third pass: assign unmatched smoothed layers to inactive states (fade in)
+    // On initial load (never had active clouds), snap to visible immediately
+    const isInitialLoad = !hadActiveCloudsRef.current
+
+    for (let newIdx = 0; newIdx < smoothedLayers.length; newIdx++) {
       if (matchedNewLayers.has(newIdx)) continue
 
-      const newLayer = cloudLayers[newIdx]
+      const newLayer = smoothedLayers[newIdx]
 
       // Find an inactive state to use
       for (let stateIdx = 0; stateIdx < states.length; stateIdx++) {
@@ -559,10 +783,12 @@ export function useBabylonWeather(
           state.targetCoverage = newLayer.coverage
           state.currentAltitude = newLayer.altitude
           state.targetAltitude = newLayer.altitude
-          state.currentAlpha = 0
+          // On initial load, show clouds instantly; otherwise fade in
+          state.currentAlpha = isInitialLoad ? 1 : 0
           state.targetAlpha = 1
           state.lastRenderedCoverage = -1 // Force texture regeneration
           state.active = true
+          hadActiveCloudsRef.current = true  // Mark that we've had active clouds
           matchedNewLayers.add(newIdx)
           break
         }
@@ -611,18 +837,16 @@ export function useBabylonWeather(
     }
   }, [isTopDownView])
 
-  // Apply fog dome effect
+  // Calculate fog target values from METAR data
+  // Smoothing is applied in the animation loop below
   useEffect(() => {
-    const fogDome = fogDomeRef.current
-    const fogMaterial = fogDomeMaterialRef.current
-    if (!fogDome || !fogMaterial) return
+    const fogState = fogSmoothingRef.current
 
     const shouldShowFog = showWeatherEffects && showBabylonFog && currentMetar && fogDensity > 0 && !isTopDownView
 
     if (shouldShowFog && currentMetar) {
       const visibilityMeters = currentMetar.visib * STATUTE_MILES_TO_METERS
       const domeScale = visibilityMeters * visibilityScale
-      fogDome.scaling.setAll(domeScale)
 
       // Adjust fog opacity based on visibility severity
       const visib = currentMetar.visib
@@ -649,11 +873,29 @@ export function useBabylonWeather(
         fresnelBias = FOG_FRESNEL_BIAS_MODERATE
       }
 
-      fogMaterial.alpha = Math.min(1.0, baseAlpha * fogIntensity)
-      fogMaterial.opacityFresnelParameters!.bias = fresnelBias
-      fogDome.isVisible = true
+      // Set target values for smoothing
+      fogState.targetVisibility = currentMetar.visib
+      fogState.targetScale = domeScale
+      fogState.targetAlpha = Math.min(1.0, baseAlpha * fogIntensity)
+      fogState.targetFresnelBias = fresnelBias
+
+      // Initialize on first valid METAR - snap to target (no transition)
+      if (!fogState.initialized) {
+        fogState.currentVisibility = fogState.targetVisibility
+        fogState.currentScale = fogState.targetScale
+        fogState.currentAlpha = fogState.targetAlpha
+        fogState.currentFresnelBias = fogState.targetFresnelBias
+        fogState.initialized = true
+      }
     } else {
-      fogDome.isVisible = false
+      // Fog should be hidden - fade alpha to 0
+      fogState.targetAlpha = 0
+      fogState.targetScale = fogState.currentScale // Keep scale while fading
+      // Initialize if first update
+      if (!fogState.initialized) {
+        fogState.currentAlpha = 0
+        fogState.initialized = true
+      }
     }
   }, [showWeatherEffects, showBabylonFog, currentMetar, fogDensity, fogIntensity, visibilityScale, isTopDownView])
 
@@ -746,6 +988,70 @@ export function useBabylonWeather(
       const deltaSeconds = Math.min((now - lastTime) / 1000, 0.1)
       lastTime = now
 
+      // === FOG SMOOTHING ===
+      // Smooth fog dome parameters toward targets for gradual weather transitions
+      const fogDome = fogDomeRef.current
+      const fogMaterial = fogDomeMaterialRef.current
+      const fogState = fogSmoothingRef.current
+
+      if (fogDome && fogMaterial && fogState.initialized) {
+        // Exponential smoothing factor: 1 - e^(-dt / (tau/3))
+        const fogLerpFactor = 1 - Math.exp(-deltaSeconds / (VISIBILITY_TRANSITION_TIME / 3))
+
+        // Smooth scale
+        if (Math.abs(fogState.currentScale - fogState.targetScale) > 1) {
+          fogState.currentScale += (fogState.targetScale - fogState.currentScale) * fogLerpFactor
+        } else {
+          fogState.currentScale = fogState.targetScale
+        }
+
+        // Smooth alpha
+        if (Math.abs(fogState.currentAlpha - fogState.targetAlpha) > 0.001) {
+          fogState.currentAlpha += (fogState.targetAlpha - fogState.currentAlpha) * fogLerpFactor
+        } else {
+          fogState.currentAlpha = fogState.targetAlpha
+        }
+
+        // Smooth fresnel bias
+        if (Math.abs(fogState.currentFresnelBias - fogState.targetFresnelBias) > 0.001) {
+          fogState.currentFresnelBias += (fogState.targetFresnelBias - fogState.currentFresnelBias) * fogLerpFactor
+        } else {
+          fogState.currentFresnelBias = fogState.targetFresnelBias
+        }
+
+        // Apply smoothed values to fog dome
+        fogDome.scaling.setAll(fogState.currentScale)
+        fogMaterial.alpha = fogState.currentAlpha
+        fogMaterial.opacityFresnelParameters!.bias = fogState.currentFresnelBias
+
+        // Show/hide based on alpha threshold
+        fogDome.isVisible = fogState.currentAlpha > 0.001
+      }
+
+      // === CLOUD LAYER DATA SMOOTHING ===
+      // Smooth cloud layer altitude/coverage values before they're used in matching
+      const cloudSmoothing = cloudSmoothingRef.current
+      if (cloudSmoothing.initialized) {
+        // Use same lerp factor as fog for consistent weather transition speed
+        const cloudLerpFactor = 1 - Math.exp(-deltaSeconds / (VISIBILITY_TRANSITION_TIME / 3))
+
+        for (const layer of cloudSmoothing.layers) {
+          // Smooth altitude
+          if (Math.abs(layer.currentAltitude - layer.targetAltitude) > 1) {
+            layer.currentAltitude += (layer.targetAltitude - layer.currentAltitude) * cloudLerpFactor
+          } else {
+            layer.currentAltitude = layer.targetAltitude
+          }
+
+          // Smooth coverage
+          if (Math.abs(layer.currentCoverage - layer.targetCoverage) > 0.001) {
+            layer.currentCoverage += (layer.targetCoverage - layer.currentCoverage) * cloudLerpFactor
+          } else {
+            layer.currentCoverage = layer.targetCoverage
+          }
+        }
+      }
+
       // Periodically pick new rotation speeds
       const timeSinceSpeedChange = (now - lastSpeedChangeTime) / 1000
       if (timeSinceSpeedChange > CLOUD_ROTATION_CHANGE_INTERVAL) {
@@ -815,82 +1121,229 @@ export function useBabylonWeather(
           }
         }
 
-        // Determine if we should use dome or plane based on coverage
+        // Determine if we should use dome or plane based on coverage (for below view)
         const shouldUseDome = state.currentCoverage >= CLOUD_DOME_COVERAGE_THRESHOLD
 
-        // Handle geometry switching
+        // Handle geometry switching for below-cloud view
         if (shouldUseDome !== state.useDome) {
-          // Switching geometry type
           state.useDome = shouldUseDome
           if (shouldUseDome) {
-            // Switching to dome - need to generate dome texture
             state.domeTextureGenerated = false
           } else {
-            // Switching to plane - reset last rendered coverage to force texture regen
             state.lastRenderedCoverage = -1
           }
         }
 
-        if (shouldUseDome) {
-          // Use dome for OVC (overcast)
-          meshData.plane.isVisible = false
-          meshData.dome.isVisible = true
-          meshData.dome.position.y = state.currentAltitude
+        // === VIEW-DEPENDENT GEOMETRY SWITCHING ===
+        // Determine camera altitude and view mode (above/below/transition)
+        const cameraAltitude = scene.activeCamera?.position.y ?? 0
+        const cloudAltitude = state.currentAltitude
+        const buffer = CLOUD_ABOVE_TRANSITION_BUFFER
 
-          // Generate dome texture if needed
-          if (!state.domeTextureGenerated) {
-            if (meshData.domeMaterial.diffuseTexture) {
-              meshData.domeMaterial.diffuseTexture.dispose()
-            }
-            const domeTexture = createOvercastDomeTexture(
-              scene,
-              CLOUD_NOISE_TEXTURE_SIZE,
-              state.noiseSeed
-            )
-            meshData.domeMaterial.diffuseTexture = domeTexture
-            state.domeTextureGenerated = true
-          }
-
-          // Apply dome material properties
-          const opacity = cloudOpacityRef.current
-          meshData.domeMaterial.alpha = state.currentAlpha * opacity
-
-          // Animate dome rotation (slower than plane)
-          const rotLerpFactor = Math.min(1, deltaSeconds / CLOUD_ROTATION_TRANSITION_TIME)
-          state.rotation.currentSpeed += (state.rotation.targetSpeed - state.rotation.currentSpeed) * rotLerpFactor
-          meshData.dome.rotation.y += state.rotation.currentSpeed * deltaSeconds * 0.5 // Slower rotation for dome
-
+        type ViewMode = 'below' | 'above' | 'transition'
+        let viewMode: ViewMode
+        if (cameraAltitude > cloudAltitude + buffer) {
+          viewMode = 'above'
+        } else if (cameraAltitude < cloudAltitude - buffer) {
+          viewMode = 'below'
         } else {
-          // Use plane for FEW/SCT/BKN
-          meshData.dome.isVisible = false
-          meshData.plane.isVisible = true
-          meshData.plane.position.y = state.currentAltitude
+          viewMode = 'transition'
+        }
 
-          // Regenerate texture if coverage changed enough (keeps same noise seed for pattern continuity)
-          const coverageChange = Math.abs(state.currentCoverage - state.lastRenderedCoverage)
-          if (coverageChange >= CLOUD_LAYER_COVERAGE_REGEN_THRESHOLD || state.lastRenderedCoverage < 0) {
-            // Dispose old texture
-            if (meshData.material.diffuseTexture) {
-              meshData.material.diffuseTexture.dispose()
+        const opacity = cloudOpacityRef.current
+
+        // Set all mesh positions (Y coordinate)
+        meshData.plane.position.y = cloudAltitude
+        meshData.dome.position.y = cloudAltitude
+        meshData.abovePlane.position.y = cloudAltitude
+
+        if (viewMode === 'above') {
+          // Camera is above cloud layer - show above-plane (cloud tops)
+          meshData.plane.isVisible = false
+          meshData.dome.isVisible = false
+          meshData.abovePlane.isVisible = true
+
+          // Generate above texture if needed
+          if (!state.aboveTextureGenerated) {
+            if (meshData.aboveMaterial.diffuseTexture) {
+              meshData.aboveMaterial.diffuseTexture.dispose()
             }
-            // Create new texture with same seed (pattern stays, threshold changes)
-            const patchyTexture = createPatchyCloudTexture(
+            const aboveTexture = createAboveCloudTexture(
               scene,
               CLOUD_NOISE_TEXTURE_SIZE,
               state.currentCoverage,
               state.noiseSeed
             )
-            meshData.material.diffuseTexture = patchyTexture
-            state.lastRenderedCoverage = state.currentCoverage
+            meshData.aboveMaterial.diffuseTexture = aboveTexture
+            state.aboveTextureGenerated = true
           }
 
-          // Apply material properties
-          applyMaterialForCoverage(meshData.material, state.currentCoverage, state.currentAlpha)
+          // Apply above material properties
+          // Keep above-cloud plane semi-transparent so aircraft in Cesium show through
+          // (Babylon overlay is on top of Cesium canvas, so we can't use depth testing)
+          const isOVC = state.currentCoverage >= 0.95
+          if (isOVC) {
+            meshData.aboveMaterial.useAlphaFromDiffuseTexture = false
+            meshData.aboveMaterial.alpha = 0.75  // Semi-transparent so aircraft show through
+          } else {
+            meshData.aboveMaterial.useAlphaFromDiffuseTexture = true
+            meshData.aboveMaterial.alpha = state.currentAlpha * opacity * 0.8  // Slightly more transparent
+          }
 
           // Animate rotation
           const rotLerpFactor = Math.min(1, deltaSeconds / CLOUD_ROTATION_TRANSITION_TIME)
           state.rotation.currentSpeed += (state.rotation.targetSpeed - state.rotation.currentSpeed) * rotLerpFactor
-          meshData.plane.rotation.y += state.rotation.currentSpeed * deltaSeconds
+          meshData.abovePlane.rotation.y += state.rotation.currentSpeed * deltaSeconds
+
+        } else if (viewMode === 'below') {
+          // Camera is below cloud layer - show dome or plane based on coverage
+          meshData.abovePlane.isVisible = false
+
+          if (shouldUseDome) {
+            // Use dome for OVC (overcast)
+            meshData.plane.isVisible = false
+            meshData.dome.isVisible = true
+
+            // Generate dome texture if needed
+            if (!state.domeTextureGenerated) {
+              if (meshData.domeMaterial.diffuseTexture) {
+                meshData.domeMaterial.diffuseTexture.dispose()
+              }
+              const domeTexture = createOvercastDomeTexture(
+                scene,
+                CLOUD_NOISE_TEXTURE_SIZE,
+                state.noiseSeed
+              )
+              meshData.domeMaterial.diffuseTexture = domeTexture
+              state.domeTextureGenerated = true
+            }
+
+            // Reset fresnel to default for below view
+            meshData.domeMaterial.opacityFresnelParameters!.bias = CLOUD_DOME_FRESNEL_BIAS
+            meshData.domeMaterial.alpha = state.currentAlpha * opacity
+
+            // Animate dome rotation
+            const rotLerpFactor = Math.min(1, deltaSeconds / CLOUD_ROTATION_TRANSITION_TIME)
+            state.rotation.currentSpeed += (state.rotation.targetSpeed - state.rotation.currentSpeed) * rotLerpFactor
+            meshData.dome.rotation.y += state.rotation.currentSpeed * deltaSeconds * 0.5
+
+          } else {
+            // Use plane for FEW/SCT/BKN
+            meshData.dome.isVisible = false
+            meshData.plane.isVisible = true
+
+            // Regenerate texture if coverage changed enough
+            const coverageChange = Math.abs(state.currentCoverage - state.lastRenderedCoverage)
+            if (coverageChange >= CLOUD_LAYER_COVERAGE_REGEN_THRESHOLD || state.lastRenderedCoverage < 0) {
+              if (meshData.material.diffuseTexture) {
+                meshData.material.diffuseTexture.dispose()
+              }
+              const patchyTexture = createPatchyCloudTexture(
+                scene,
+                CLOUD_NOISE_TEXTURE_SIZE,
+                state.currentCoverage,
+                state.noiseSeed
+              )
+              meshData.material.diffuseTexture = patchyTexture
+              state.lastRenderedCoverage = state.currentCoverage
+            }
+
+            applyMaterialForCoverage(meshData.material, state.currentCoverage, state.currentAlpha)
+
+            // Animate rotation
+            const rotLerpFactor = Math.min(1, deltaSeconds / CLOUD_ROTATION_TRANSITION_TIME)
+            state.rotation.currentSpeed += (state.rotation.targetSpeed - state.rotation.currentSpeed) * rotLerpFactor
+            meshData.plane.rotation.y += state.rotation.currentSpeed * deltaSeconds
+          }
+
+        } else {
+          // Transition zone - interpolate between above and below views
+          // Show both geometries with blended opacity
+          const transitionT = (cameraAltitude - (cloudAltitude - buffer)) / (2 * buffer)
+          const aboveAlpha = transitionT
+          const belowAlpha = 1 - transitionT
+
+          // Generate above texture if needed
+          if (!state.aboveTextureGenerated) {
+            if (meshData.aboveMaterial.diffuseTexture) {
+              meshData.aboveMaterial.diffuseTexture.dispose()
+            }
+            const aboveTexture = createAboveCloudTexture(
+              scene,
+              CLOUD_NOISE_TEXTURE_SIZE,
+              state.currentCoverage,
+              state.noiseSeed
+            )
+            meshData.aboveMaterial.diffuseTexture = aboveTexture
+            state.aboveTextureGenerated = true
+          }
+
+          // Show above plane with transition alpha
+          // Keep semi-transparent so aircraft show through
+          meshData.abovePlane.isVisible = true
+          const isOVCTransition = state.currentCoverage >= 0.95
+          if (isOVCTransition) {
+            meshData.aboveMaterial.useAlphaFromDiffuseTexture = false
+            meshData.aboveMaterial.alpha = 0.75 * aboveAlpha  // Semi-transparent with transition
+          } else {
+            meshData.aboveMaterial.useAlphaFromDiffuseTexture = true
+            meshData.aboveMaterial.alpha = state.currentAlpha * opacity * aboveAlpha * 0.8
+          }
+
+          if (shouldUseDome) {
+            meshData.plane.isVisible = false
+            meshData.dome.isVisible = true
+
+            if (!state.domeTextureGenerated) {
+              if (meshData.domeMaterial.diffuseTexture) {
+                meshData.domeMaterial.diffuseTexture.dispose()
+              }
+              const domeTexture = createOvercastDomeTexture(
+                scene,
+                CLOUD_NOISE_TEXTURE_SIZE,
+                state.noiseSeed
+              )
+              meshData.domeMaterial.diffuseTexture = domeTexture
+              state.domeTextureGenerated = true
+            }
+
+            // Dynamic fresnel: interpolate bias for smoother transition
+            const adjustedBias = CLOUD_DOME_FRESNEL_BIAS * belowAlpha + CLOUD_DOME_FRESNEL_BIAS_ABOVE * aboveAlpha
+            meshData.domeMaterial.opacityFresnelParameters!.bias = adjustedBias
+            meshData.domeMaterial.alpha = state.currentAlpha * opacity * belowAlpha
+
+            const rotLerpFactor = Math.min(1, deltaSeconds / CLOUD_ROTATION_TRANSITION_TIME)
+            state.rotation.currentSpeed += (state.rotation.targetSpeed - state.rotation.currentSpeed) * rotLerpFactor
+            meshData.dome.rotation.y += state.rotation.currentSpeed * deltaSeconds * 0.5
+
+          } else {
+            meshData.dome.isVisible = false
+            meshData.plane.isVisible = true
+
+            const coverageChange = Math.abs(state.currentCoverage - state.lastRenderedCoverage)
+            if (coverageChange >= CLOUD_LAYER_COVERAGE_REGEN_THRESHOLD || state.lastRenderedCoverage < 0) {
+              if (meshData.material.diffuseTexture) {
+                meshData.material.diffuseTexture.dispose()
+              }
+              const patchyTexture = createPatchyCloudTexture(
+                scene,
+                CLOUD_NOISE_TEXTURE_SIZE,
+                state.currentCoverage,
+                state.noiseSeed
+              )
+              meshData.material.diffuseTexture = patchyTexture
+              state.lastRenderedCoverage = state.currentCoverage
+            }
+
+            applyMaterialForCoverage(meshData.material, state.currentCoverage, state.currentAlpha * belowAlpha)
+
+            const rotLerpFactor = Math.min(1, deltaSeconds / CLOUD_ROTATION_TRANSITION_TIME)
+            state.rotation.currentSpeed += (state.rotation.targetSpeed - state.rotation.currentSpeed) * rotLerpFactor
+            meshData.plane.rotation.y += state.rotation.currentSpeed * deltaSeconds
+          }
+
+          // Rotate above plane too
+          meshData.abovePlane.rotation.y += state.rotation.currentSpeed * deltaSeconds
         }
       }
     })

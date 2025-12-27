@@ -7,7 +7,7 @@
 export { hash, smoothNoise, fbmNoise } from './cloudNoiseGenerator'
 
 // Texture generation
-export { createPatchyCloudTexture, createOvercastDomeTexture } from './cloudTextureGenerator'
+export { createPatchyCloudTexture, createOvercastDomeTexture, createAboveCloudTexture } from './cloudTextureGenerator'
 
 // Mesh generation
 export { createCloudDomeMesh } from './cloudDomeMesh'
