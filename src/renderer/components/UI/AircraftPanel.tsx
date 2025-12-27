@@ -150,8 +150,6 @@ function AircraftPanel() {
     stopFollowing,
     followMode,
     toggleFollowMode,
-    followZoom,
-    orbitDistance,
     setLookAtTarget,
     positionOffsetX,
     positionOffsetY,
@@ -472,11 +470,6 @@ function AircraftPanel() {
           >
             {followMode === 'tower' ? 'Tower' : 'Orbit'}
           </button>
-          <div className="zoom-control">
-            {followMode !== 'orbit' && (
-              <span className="zoom-label">Zoom: {followZoom.toFixed(1)}x</span>
-            )}
-          </div>
           <button className="stop-following-btn" onClick={() => stopFollowing()}>
             Stop (Esc)
           </button>
