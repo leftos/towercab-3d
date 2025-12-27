@@ -22,6 +22,7 @@ function SettingsGeneralTab({ onShowImportModal, importStatus }: SettingsGeneral
   const defaultFov = useSettingsStore((state) => state.camera.defaultFov)
   const cameraSpeed = useSettingsStore((state) => state.camera.cameraSpeed)
   const mouseSensitivity = useSettingsStore((state) => state.camera.mouseSensitivity)
+  const joystickSensitivity = useSettingsStore((state) => state.camera.joystickSensitivity)
   const enableAutoAirportSwitch = useSettingsStore((state) => state.camera.enableAutoAirportSwitch ?? false)
   const updateCameraSettings = useSettingsStore((state) => state.updateCameraSettings)
 
@@ -160,6 +161,21 @@ function SettingsGeneralTab({ onShowImportModal, importStatus }: SettingsGeneral
             <span>{mouseSensitivity.toFixed(1)}</span>
           </div>
           <p className="setting-hint">Right-click drag sensitivity for camera rotation.</p>
+        </div>
+
+        <div className="setting-item">
+          <label>Joystick Sensitivity</label>
+          <div className="slider-with-value">
+            <input
+              type="range"
+              min="1"
+              max="10"
+              value={joystickSensitivity}
+              onChange={(e) => updateCameraSettings({ joystickSensitivity: Number(e.target.value) })}
+            />
+            <span>{joystickSensitivity}</span>
+          </div>
+          <p className="setting-hint">Virtual joystick movement speed on touch devices.</p>
         </div>
 
         <div className="setting-item">

@@ -23,6 +23,18 @@ A 3D tower cab view application for VATSIM air traffic controllers. View real-ti
 
 ## Features
 
+### Remote Browser Access
+- Access TowerCab from any device on your local network (iPad, tablets, other PCs)
+- Desktop app runs an HTTP server on port 8765 when launched
+- All mods, models, and settings served from host PC
+- Touch controls optimized for iPad Safari and mobile browsers:
+  - Single-finger drag to rotate camera or pan map
+  - Two-finger pinch to zoom
+  - Two-finger rotate to adjust heading
+  - Virtual joystick for camera movement
+- Camera bookmarks and datablock positions shared across all connected devices
+- Device optimization presets automatically offered on first remote connection
+
 ### Live VATSIM Integration
 - Real-time aircraft positions from VATSIM network (polled every 3 seconds, VATSIM updates ~15 seconds)
 - Smooth 60 Hz interpolation for fluid aircraft movement
@@ -97,7 +109,8 @@ A 3D tower cab view application for VATSIM air traffic controllers. View real-ti
 
 ## Requirements
 
-- Windows 10/11 (64-bit), macOS 10.13+, or Linux
+- **Desktop App:** Windows 10/11 (64-bit), macOS 10.13+, or Linux
+- **Remote Access:** Any device with a modern web browser (Chrome, Safari, Edge, Firefox)
 - Cesium Ion account (free tier) for terrain and imagery
 - Node.js 18+ and Rust toolchain (only for development)
 
@@ -122,8 +135,10 @@ npm install
 #### 2. Run in Development Mode
 
 ```bash
-npm run dev
+npm run dev  # Starts desktop app with HTTP server on port 8765
 ```
+
+The desktop app will start an HTTP server accessible at `http://[your-pc-ip]:8765` from other devices on your network.
 
 ### 2. Get a Cesium Ion Token
 
@@ -143,6 +158,15 @@ npm run dev
 1. Click the airport button in the top-left (shows "Select Airport" initially)
 2. Search for an airport by ICAO code (e.g., "KJFK"), IATA code (e.g., "JFK"), name, or city
 3. Click an airport to fly there
+
+### 5. Access from Remote Devices (Optional)
+
+1. With the desktop app running, find your PC's local IP address:
+   - Windows: Run `ipconfig` and look for "IPv4 Address"
+   - macOS/Linux: Run `ifconfig` or `ip addr` and look for your network interface
+2. On your iPad or other device, open a web browser and navigate to `http://[your-pc-ip]:8765`
+3. The app will load with the same settings, bookmarks, and mods as the desktop app
+4. On first connection from a touch device, you'll be prompted to apply optimized graphics settings
 
 ## Controls
 
@@ -178,6 +202,16 @@ npm run dev
 | **Left-click + Drag** | Pan camera (top-down mode only) |
 | **Scroll Wheel** | Zoom in/out |
 | **Click Aircraft Label** | Follow that aircraft |
+
+### Touch Controls (iPad/Mobile)
+
+| Action | Effect |
+|--------|--------|
+| **Single-finger Drag** | Rotate camera (3D) or pan map (top-down) |
+| **Two-finger Pinch** | Zoom in/out |
+| **Two-finger Rotate** | Adjust heading |
+| **Virtual Joystick** | Move camera position (WASD equivalent) |
+| **Tap Aircraft Label** | Follow that aircraft |
 
 ### Bookmark System
 
@@ -264,11 +298,12 @@ Settings are organized into tabs: General, Display, Graphics, Performance, and H
 ### General Tab
 | Setting | Description | Range |
 |---------|-------------|-------|
-| Cesium Ion Token | API key for terrain/imagery | Required |
+| Cesium Ion Token | API key for terrain/imagery (shared across devices) | Required |
 | Theme | Light or dark interface | Light/Dark |
 | Default FOV | Starting field of view | 10-120° |
 | Camera Speed | WASD movement speed | 0.1x-3x |
 | Mouse Sensitivity | Right-click drag rotation speed | 0.1x-3x |
+| Joystick Sensitivity | Virtual joystick movement speed (touch devices) | 1-10 |
 
 ### Display Tab
 | Setting | Description | Options |
@@ -327,6 +362,14 @@ Settings are organized into tabs: General, Display, Graphics, Performance, and H
 - Reduce terrain quality in settings
 - Disable 3D buildings
 - Close other GPU-intensive applications
+- On touch devices: apply the suggested device optimization preset when prompted
+
+### Remote Access Not Working
+- Ensure the desktop app is running on your PC
+- Verify both devices are on the same local network
+- Check firewall settings aren't blocking port 8765
+- Try accessing using your PC's IP address instead of hostname
+- On Windows, run `ipconfig` to find your IPv4 address
 
 ## CI/CD
 

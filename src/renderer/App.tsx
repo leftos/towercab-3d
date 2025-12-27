@@ -41,9 +41,7 @@ function App() {
   const loadAirports = useAirportStore((state) => state.loadAirports)
   const currentAirport = useAirportStore((state) => state.currentAirport)
   // Cesium token and FSLTL settings come from global settings (shared across browsers)
-  const cesiumIonToken = useGlobalSettingsStore((state) => state.cesiumIonToken)
   const setCesiumIonToken = useGlobalSettingsStore((state) => state.setCesiumIonToken)
-  const globalSettingsInitialized = useGlobalSettingsStore((state) => state.initialized)
   const fsltlSourcePath = useGlobalSettingsStore((state) => state.fsltl.sourcePath)
   const fsltlOutputPath = useGlobalSettingsStore((state) => state.fsltl.outputPath)
   const showWeatherEffects = useSettingsStore((state) => state.weather.showWeatherEffects)
@@ -74,11 +72,12 @@ function App() {
   // Track Cesium viewer for VR integration
   const [cesiumViewer, setCesiumViewer] = useState<Viewer | null>(null)
 
-  // Performance monitor toggle
-  const [showPerformanceHUD, setShowPerformanceHUD] = useState(false)
-
-  // Model matching modal toggle
-  const [showModelMatchingModal, setShowModelMatchingModal] = useState(false)
+  // Debug overlays (from store, accessible by touch controls)
+  const showPerformanceHUD = useUIFeedbackStore((state) => state.showPerformanceHUD)
+  const togglePerformanceHUD = useUIFeedbackStore((state) => state.togglePerformanceHUD)
+  const showModelMatchingModal = useUIFeedbackStore((state) => state.showModelMatchingModal)
+  const toggleModelMatchingModal = useUIFeedbackStore((state) => state.toggleModelMatchingModal)
+  const setShowModelMatchingModal = useUIFeedbackStore((state) => state.setShowModelMatchingModal)
 
   // Cesium token prompt
   const [showTokenPrompt, setShowTokenPrompt] = useState(false)
@@ -252,10 +251,10 @@ function App() {
 
       if (e.key === 'F1') {
         e.preventDefault()
-        setShowPerformanceHUD(prev => !prev)
+        togglePerformanceHUD()
       } else if (e.key === 'F3') {
         e.preventDefault()
-        setShowModelMatchingModal(prev => !prev)
+        toggleModelMatchingModal()
       } else if (e.ctrlKey && e.key.toLowerCase() === 'm') {
         e.preventDefault()
         updateUISettings({ showMetarOverlay: !showMetarOverlay })
@@ -280,7 +279,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [showMetarOverlay, updateUISettings, currentAirportIcao, loadBookmark, showFeedback])
+  }, [showMetarOverlay, updateUISettings, currentAirportIcao, loadBookmark, showFeedback, togglePerformanceHUD, toggleModelMatchingModal])
 
 
   if (isLoading) {

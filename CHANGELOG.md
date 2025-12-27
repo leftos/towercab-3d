@@ -5,6 +5,28 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Remote browser access (optional)
+  - Access TowerCab from iPad or any browser on your local network
+  - HTTP server can be started on port 8765 via the desktop app settings
+  - All mods, models, and settings served from the host PC
+  - Camera bookmarks and datablock positions now shared across all connected devices
+- Touch controls for iPad Safari and mobile browsers
+  - Single-finger drag rotates camera (3D/Tower mode) or pans map (top-down mode)
+  - Two-finger pinch zooms in/out
+  - Two-finger rotate twists the heading
+  - Virtual joystick for WASD movement on touch devices
+- Joystick Sensitivity setting in Settings > General > Camera
+  - Controls virtual joystick movement speed on touch devices
+  - Range 1-10, default 5
+- Device optimization presets for touch devices
+  - On first load, touch devices are prompted to apply optimized graphics settings
+  - iPad/tablet preset reduces shadows, MSAA, and tile cache for smoother performance
+  - Desktop preset keeps full quality settings
+- Remote mode UI indicators
+  - "Connected to [host]" badge shows connection status when accessing remotely
+  - Reconnect button if connection is lost
+  - FSLTL conversion panel shows read-only notice (conversion requires desktop app)
+  - Update notifications hidden in remote mode (updates handled on host)
 - Built-in Model Tint setting in Graphics options
   - Choose from White (original), Light Blue, Tan, Yellow, Orange, or Light Gray
   - Colored tints help built-in (FR24) aircraft stand out against satellite imagery
@@ -38,6 +60,8 @@ All notable changes to TowerCab 3D will be documented in this file.
   - Buttons briefly turn green and show "Saved!" or "Loaded!" when triggered
 
 ### Changed
+- Model brightness and tint settings moved out of Shadows section in Advanced Graphics
+  - Now always accessible even with shadows disabled
 - Tower positions now stored as individual files per airport (`mods/tower-positions/KJFK.json`) instead of single `tower-positions.json`
   - Easier to share and accept contributions for specific airports
   - Legacy single-file format still supported for backward compatibility

@@ -5,6 +5,8 @@
   right: 0;
   bottom: 0;
   overflow: hidden;
+  /* Prevent browser default touch gestures (zoom, scroll, etc.) */
+  touch-action: none;
 }
 
 /* Inset viewports fill their container completely */

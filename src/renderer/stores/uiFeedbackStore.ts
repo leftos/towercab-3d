@@ -13,6 +13,13 @@ interface UIFeedbackStore {
   popModal: () => void
   // Helper to check if any input-blocking UI is active
   isInputBlocked: () => boolean
+  // Debug overlay visibility (accessible from touch controls)
+  showPerformanceHUD: boolean
+  setShowPerformanceHUD: (show: boolean) => void
+  togglePerformanceHUD: () => void
+  showModelMatchingModal: boolean
+  setShowModelMatchingModal: (show: boolean) => void
+  toggleModelMatchingModal: () => void
 }
 
 let feedbackTimeout: ReturnType<typeof setTimeout> | null = null
@@ -36,5 +43,12 @@ export const useUIFeedbackStore = create<UIFeedbackStore>((set, get) => ({
   isInputBlocked: () => {
     const state = get()
     return state.isCommandInputActive || state.openModalCount > 0
-  }
+  },
+  // Debug overlays
+  showPerformanceHUD: false,
+  setShowPerformanceHUD: (show) => set({ showPerformanceHUD: show }),
+  togglePerformanceHUD: () => set((state) => ({ showPerformanceHUD: !state.showPerformanceHUD })),
+  showModelMatchingModal: false,
+  setShowModelMatchingModal: (show) => set({ showModelMatchingModal: show }),
+  toggleModelMatchingModal: () => set((state) => ({ showModelMatchingModal: !state.showModelMatchingModal }))
 }))

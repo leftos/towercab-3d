@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 TowerCab 3D is a Tauri 2 desktop application that provides a 3D tower cab view for VATSIM air traffic controllers. It displays real-time aircraft positions on a 3D globe with satellite imagery and terrain, featuring smooth camera controls, aircraft following modes, and extensive customization options.
 
+**Remote Browser Access:** The desktop app runs an HTTP server (port 8765) allowing access from browsers on the local network (iPad, tablets, other PCs). All mods, models, and settings are served from the host. Global settings (Cesium token, bookmarks, datablock positions) are shared across devices.
+
 ## Documentation Lookup
 
 When looking up documentation for libraries (Cesium, Babylon.js, React, etc.), always use the Context7 MCP tool first:
@@ -18,8 +20,8 @@ Only resort to WebSearch/WebFetch if Context7 doesn't have the information neede
 
 ```bash
 npm install           # Install dependencies
-npm run dev           # Start development mode with hot reload (Tauri desktop app)
-npm run serve         # Run in browser mode (opens http://localhost:5173 in default browser)
+npm run dev           # Start desktop app with HTTP server on :8765 (access from iPad/browsers)
+npm run serve         # Development: frontend only in browser (no Tauri, no mods)
 npm run build         # Build for production (outputs Windows installer to src-tauri/target/release/bundle/)
 npm run build:converter  # Build FSLTL converter executable (requires Python + PyInstaller)
 npm run vite:dev      # Frontend only (internal, used by Tauri)
@@ -71,7 +73,7 @@ See `src/renderer/docs/architecture.md` for detailed documentation including:
 - Component hierarchy
 - Coordinate system transformations (see also `coordinate-systems.md`)
 
-**Quick reference:** Tauri 2 desktop app with React 19 frontend. Dual rendering: CesiumJS (globe/terrain/aircraft) + Babylon.js overlay (labels/weather). Use `viewportStore` for camera state (not deprecated `cameraStore`).
+**Quick reference:** Tauri 2 desktop app with React 19 frontend. Dual rendering: CesiumJS (globe/terrain/aircraft) + Babylon.js overlay (labels/weather). Use `viewportStore` for camera state (not deprecated `cameraStore`). HTTP server (axum, port 8765) serves frontend to remote browsers. Use `remoteMode.ts` utilities to detect Tauri vs browser mode.
 
 ## Path Alias
 
@@ -91,7 +93,7 @@ All TypeScript types centralized by domain. Import via `import type { ... } from
 | `fsltl.ts` | FSLTL conversion, airline mapping |
 | `mod.ts` | Modding manifest formats |
 | `replay.ts` | Replay snapshots, playback state |
-| `settings.ts` | App settings (cesium, graphics, camera, weather, memory, aircraft, ui) |
+| `settings.ts` | App settings (cesium, graphics, camera, weather, memory, aircraft, ui) + GlobalSettings (cesiumIonToken, FSLTL paths, viewport data shared across devices) |
 | `vatsim.ts` | VATSIM API structures |
 | `viewport.ts` | Viewport layout, multi-viewport config |
 | `weather.ts` | METAR, clouds, fog, precipitation |
@@ -147,9 +149,10 @@ See MODDING.md for manifest format and model requirements. Models are loaded on 
 
 ### Adding a New Setting
 
+**Local Settings (per-browser):**
 1. Add to `types/settings.ts` grouped interface (cesium, graphics, camera, weather, memory, aircraft, or ui)
 2. Update `DEFAULT_SETTINGS` in `types/settings.ts`
-3. Add corresponding update function validation in `settingsStore.ts` (if needed)
+3. Add corresponding update function in `settingsStore.ts` (if needed)
 4. **IMPORTANT: Increment the `version` number in `settingsStore.ts` and add a migration** that merges the new defaults with existing user settings. Without this, existing users won't get the new settings and values will be `undefined`. Example migration:
    ```typescript
    if (version < NEW_VERSION) {
@@ -160,11 +163,13 @@ See MODDING.md for manifest format and model requirements. Models are loaded on 
      }
    }
    ```
-5. Add UI control in appropriate settings tab component:
-   - General settings → `SettingsGeneralTab.tsx`
-   - Display settings → `SettingsDisplayTab.tsx`
-   - Graphics settings → `SettingsGraphicsTab.tsx` (container) or specialized component in `settings/` subdirectory
-   - Performance settings → `SettingsPerformanceTab.tsx`
+5. Add UI control in appropriate settings tab
+
+**Global Settings (shared across devices):**
+1. Add to `GlobalSettings` interface in `types/settings.ts`
+2. Update `DEFAULT_GLOBAL_SETTINGS` in `types/settings.ts`
+3. Add corresponding update function in `globalSettingsStore.ts`
+4. Settings auto-sync via HTTP endpoints in remote mode
 
 ### Adding a New Keyboard Shortcut
 

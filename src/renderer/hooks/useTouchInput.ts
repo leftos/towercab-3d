@@ -2,6 +2,7 @@
  * Touch Input Hook for Camera Controls
  *
  * Implements touch gestures for camera manipulation on touch devices (iPad, etc.).
+ * Uses Cesium's ScreenSpaceEventHandler for reliable touch event handling.
  *
  * ## Touch Gestures
  *
@@ -26,75 +27,39 @@ import { useEffect, useRef } from 'react'
 import * as Cesium from 'cesium'
 import { useViewportStore } from '../stores/viewportStore'
 import { useSettingsStore } from '../stores/settingsStore'
-import {
-  PITCH_MIN,
-  PITCH_MAX,
-  FOV_MIN,
-  FOV_MAX,
-  ORBIT_PITCH_MIN,
-  ORBIT_PITCH_MAX,
-  ORBIT_DISTANCE_MIN,
-  ORBIT_DISTANCE_MAX,
-  TOPDOWN_ALTITUDE_MIN,
-  TOPDOWN_ALTITUDE_MAX,
-  FOLLOW_ZOOM_MIN,
-  FOLLOW_ZOOM_MAX
-} from '../constants'
+import { isTouchDevice } from '../utils/deviceDetection'
 
 interface UseTouchInputOptions {
   /** Callback when user manually breaks out of tower follow mode */
   onBreakTowerFollow?: () => void
 }
 
-interface TouchState {
-  /** Is a single-finger drag in progress */
-  isDragging: boolean
+interface PinchState {
   /** Is a two-finger gesture in progress */
   isPinching: boolean
-  /** Last single-finger position */
-  lastPos: { x: number; y: number }
-  /** Starting distance between two fingers (for pinch) */
-  initialPinchDistance: number
-  /** Starting angle between two fingers (for rotation) */
-  initialPinchAngle: number
-  /** Last pinch distance (for continuous pinch tracking) */
-  lastPinchDistance: number
-  /** Last pinch angle (for continuous rotation tracking) */
-  lastPinchAngle: number
-  /** Center point of pinch gesture */
-  pinchCenter: { x: number; y: number }
 }
 
 /**
- * Calculate distance between two touch points
+ * Cesium's PINCH_MOVE callback receives this custom format,
+ * NOT the documented TwoPointMotionEvent type.
+ * See: packages/engine/Source/Core/ScreenSpaceEventHandler.js
  */
-function getTouchDistance(touch1: Touch, touch2: Touch): number {
-  const dx = touch2.clientX - touch1.clientX
-  const dy = touch2.clientY - touch1.clientY
-  return Math.sqrt(dx * dx + dy * dy)
-}
-
-/**
- * Calculate angle between two touch points (in degrees)
- */
-function getTouchAngle(touch1: Touch, touch2: Touch): number {
-  const dx = touch2.clientX - touch1.clientX
-  const dy = touch2.clientY - touch1.clientY
-  return Math.atan2(dy, dx) * (180 / Math.PI)
-}
-
-/**
- * Calculate center point between two touches
- */
-function getTouchCenter(touch1: Touch, touch2: Touch): { x: number; y: number } {
-  return {
-    x: (touch1.clientX + touch2.clientX) / 2,
-    y: (touch1.clientY + touch2.clientY) / 2
+interface CesiumPinchMoveEvent {
+  /** Distance info: startPosition.y = prev distance, endPosition.y = curr distance (scaled ×0.25) */
+  distance: {
+    startPosition: Cesium.Cartesian2
+    endPosition: Cesium.Cartesian2
+  }
+  /** Angle/height info: x = angle (radians), y = center Y (scaled ×0.125) */
+  angleAndHeight: {
+    startPosition: Cesium.Cartesian2
+    endPosition: Cesium.Cartesian2
   }
 }
 
 /**
  * Hook for handling touch input on camera controls
+ * Uses Cesium's ScreenSpaceEventHandler for reliable event handling.
  *
  * @param viewer - The Cesium viewer instance
  * @param viewportId - The unique ID of this viewport
@@ -124,21 +89,14 @@ export function useTouchInput(
   const moveRight = useViewportStore((state) => state.moveRight)
   const clearLookAtTarget = useViewportStore((state) => state.clearLookAtTarget)
 
-  // Touch state ref
-  const touchStateRef = useRef<TouchState>({
-    isDragging: false,
-    isPinching: false,
-    lastPos: { x: 0, y: 0 },
-    initialPinchDistance: 0,
-    initialPinchAngle: 0,
-    lastPinchDistance: 0,
-    lastPinchAngle: 0,
-    pinchCenter: { x: 0, y: 0 }
-  })
-
   // Refs for current state (avoid stale closures)
   const viewportIdRef = useRef(viewportId)
   const touchSensitivityRef = useRef(touchSensitivity)
+  const isDraggingRef = useRef(false)
+  const lastPosRef = useRef({ x: 0, y: 0 })
+  const pinchStateRef = useRef<PinchState>({
+    isPinching: false
+  })
 
   // Keep refs updated
   viewportIdRef.current = viewportId
@@ -147,7 +105,12 @@ export function useTouchInput(
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return
 
-    const canvas = viewer.canvas
+    // Only enable touch input on touch-capable devices
+    // This prevents conflicts with useCameraInput's mouse handling on desktop
+    if (!isTouchDevice()) return
+
+    // Use Cesium's ScreenSpaceEventHandler for reliable touch handling
+    const handler = new Cesium.ScreenSpaceEventHandler(viewer.canvas)
 
     // Get current viewport state (fresh each time)
     const getViewportState = () => {
@@ -163,165 +126,140 @@ export function useTouchInput(
       }
     }
 
-    const handleTouchStart = (event: TouchEvent) => {
-      event.preventDefault()
-
+    // Single-finger touch start (treated as LEFT_DOWN in Cesium)
+    // Note: useCameraInput already handles LEFT_DOWN for mouse, but on touch devices
+    // we need separate handling for single-finger drag (camera rotation)
+    handler.setInputAction((movement: { position: Cesium.Cartesian2 }) => {
       // Activate this viewport on touch
       setActiveViewport(viewportIdRef.current)
 
-      const touches = event.touches
-      const state = touchStateRef.current
+      isDraggingRef.current = true
+      lastPosRef.current = { x: movement.position.x, y: movement.position.y }
 
-      if (touches.length === 1) {
-        // Single finger - start drag
-        state.isDragging = true
-        state.isPinching = false
-        state.lastPos = { x: touches[0].clientX, y: touches[0].clientY }
+      // Cancel any look-at animation
+      clearLookAtTarget()
 
-        // Cancel any look-at animation
-        clearLookAtTarget()
-
-        // Break tower follow on touch drag start
-        const vpState = getViewportState()
-        if (vpState.followingCallsign && vpState.followMode === 'tower') {
-          onBreakTowerFollow?.()
-        }
-      } else if (touches.length === 2) {
-        // Two fingers - start pinch/rotate
-        state.isDragging = false
-        state.isPinching = true
-        state.initialPinchDistance = getTouchDistance(touches[0], touches[1])
-        state.lastPinchDistance = state.initialPinchDistance
-        state.initialPinchAngle = getTouchAngle(touches[0], touches[1])
-        state.lastPinchAngle = state.initialPinchAngle
-        state.pinchCenter = getTouchCenter(touches[0], touches[1])
-      }
-    }
-
-    const handleTouchMove = (event: TouchEvent) => {
-      event.preventDefault()
-
-      const touches = event.touches
-      const state = touchStateRef.current
+      // Break tower follow on touch drag start
       const vpState = getViewportState()
+      if (vpState.followingCallsign && vpState.followMode === 'tower') {
+        onBreakTowerFollow?.()
+      }
+    }, Cesium.ScreenSpaceEventType.LEFT_DOWN)
 
-      // Base sensitivity scaled by user setting
+    // Single-finger touch end
+    handler.setInputAction(() => {
+      isDraggingRef.current = false
+    }, Cesium.ScreenSpaceEventType.LEFT_UP)
+
+    // Single-finger drag (treated as MOUSE_MOVE in Cesium)
+    handler.setInputAction((movement: { startPosition: Cesium.Cartesian2; endPosition: Cesium.Cartesian2 }) => {
+      // Only handle if we initiated a touch drag (not a mouse drag)
+      // useCameraInput handles right-click/middle-click drags
+      if (!isDraggingRef.current || pinchStateRef.current.isPinching) return
+
+      const vpState = getViewportState()
       const sensitivity = 0.3 * touchSensitivityRef.current
 
-      if (state.isDragging && touches.length === 1) {
-        // Single finger drag
-        const touch = touches[0]
-        const deltaX = touch.clientX - state.lastPos.x
-        const deltaY = touch.clientY - state.lastPos.y
+      const deltaX = movement.endPosition.x - lastPosRef.current.x
+      const deltaY = movement.endPosition.y - lastPosRef.current.y
 
-        if (vpState.viewMode === 'topdown') {
-          // Pan in top-down view
-          const panScale = vpState.topdownAltitude / 1000
-          const headingRad = vpState.heading * Math.PI / 180
-          const cosH = Math.cos(headingRad)
-          const sinH = Math.sin(headingRad)
-          // Rotate delta by heading (inverted for grab-and-drag feel)
-          const worldDeltaX = -(deltaX * cosH - deltaY * sinH)
-          const worldDeltaY = -(deltaX * sinH + deltaY * cosH)
-          moveRight(worldDeltaX * panScale)
-          moveForward(worldDeltaY * panScale)
-        } else if (vpState.followingCallsign && vpState.followMode === 'orbit') {
-          // Orbit mode - rotate orbit
-          adjustOrbitHeading(deltaX * sensitivity)
-          adjustOrbitPitch(deltaY * sensitivity)
+      if (vpState.viewMode === 'topdown') {
+        // Pan in top-down view
+        const panScale = vpState.topdownAltitude / 1000
+        const headingRad = vpState.heading * Math.PI / 180
+        const cosH = Math.cos(headingRad)
+        const sinH = Math.sin(headingRad)
+        // Rotate delta by heading (inverted for grab-and-drag feel)
+        const worldDeltaX = -(deltaX * cosH - deltaY * sinH)
+        const worldDeltaY = -(deltaX * sinH + deltaY * cosH)
+        moveRight(worldDeltaX * panScale)
+        moveForward(worldDeltaY * panScale)
+      } else if (vpState.followingCallsign && vpState.followMode === 'orbit') {
+        // Orbit mode - rotate orbit (inverted for natural touch feel)
+        adjustOrbitHeading(-deltaX * sensitivity)
+        adjustOrbitPitch(-deltaY * sensitivity)
+      } else {
+        // 3D/Tower mode - rotate camera (inverted for natural touch feel)
+        adjustHeading(-deltaX * sensitivity)
+        adjustPitch(deltaY * sensitivity)
+      }
+
+      lastPosRef.current = { x: movement.endPosition.x, y: movement.endPosition.y }
+    }, Cesium.ScreenSpaceEventType.MOUSE_MOVE)
+
+    // Two-finger pinch start
+    // Type: TwoPointEvent = { position1: Cartesian2, position2: Cartesian2 }
+    handler.setInputAction(() => {
+      // Stop single-finger drag when pinch starts
+      isDraggingRef.current = false
+      pinchStateRef.current.isPinching = true
+    }, Cesium.ScreenSpaceEventType.PINCH_START)
+
+    // Two-finger pinch move
+    // IMPORTANT: Cesium passes a custom format, NOT TwoPointMotionEvent!
+    // Format: { distance: { startPosition, endPosition }, angleAndHeight: { startPosition, endPosition } }
+    // distance.y values are finger distance (scaled ×0.25)
+    // angleAndHeight.x values are angle in radians
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    handler.setInputAction((event: any) => {
+      const pinchEvent = event as CesiumPinchMoveEvent
+      if (!pinchStateRef.current.isPinching) return
+
+      const vpState = getViewportState()
+
+      // Extract distance delta from Cesium's pre-calculated values
+      // Cesium scales by 0.25, so we multiply back to get pixel-like values
+      const prevDistance = pinchEvent.distance.startPosition.y * 4
+      const currDistance = pinchEvent.distance.endPosition.y * 4
+      const pinchDelta = currDistance - prevDistance
+
+      // Extract angle delta from Cesium's pre-calculated values (in radians)
+      const prevAngle = pinchEvent.angleAndHeight.startPosition.x
+      const currAngle = pinchEvent.angleAndHeight.endPosition.x
+      let angleDelta = (currAngle - prevAngle) * (180 / Math.PI) // Convert to degrees
+
+      // Handle angle wrap-around (e.g., 179 to -179)
+      if (angleDelta > 180) angleDelta -= 360
+      if (angleDelta < -180) angleDelta += 360
+
+      // Apply rotation (two-finger twist)
+      if (Math.abs(angleDelta) > 0.5) {
+        if (vpState.followingCallsign && vpState.followMode === 'orbit') {
+          adjustOrbitHeading(-angleDelta * 0.5)
         } else {
-          // 3D/Tower mode - rotate camera
-          adjustHeading(deltaX * sensitivity)
-          adjustPitch(-deltaY * sensitivity)
+          adjustHeading(-angleDelta * 0.5)
         }
-
-        state.lastPos = { x: touch.clientX, y: touch.clientY }
-      } else if (state.isPinching && touches.length === 2) {
-        // Two finger pinch/rotate
-        const currentDistance = getTouchDistance(touches[0], touches[1])
-        const currentAngle = getTouchAngle(touches[0], touches[1])
-
-        // Calculate deltas from last position (not initial - for continuous tracking)
-        const pinchDelta = currentDistance - state.lastPinchDistance
-        const angleDelta = currentAngle - state.lastPinchAngle
-
-        // Handle angle wrap-around (e.g., 179 to -179)
-        let normalizedAngleDelta = angleDelta
-        if (normalizedAngleDelta > 180) normalizedAngleDelta -= 360
-        if (normalizedAngleDelta < -180) normalizedAngleDelta += 360
-
-        // Apply rotation (two-finger twist)
-        if (Math.abs(normalizedAngleDelta) > 0.5) {
-          if (vpState.followingCallsign && vpState.followMode === 'orbit') {
-            adjustOrbitHeading(-normalizedAngleDelta * 0.5)
-          } else {
-            adjustHeading(-normalizedAngleDelta * 0.5)
-          }
-        }
-
-        // Apply pinch zoom
-        const pinchSensitivity = 0.5
-        if (Math.abs(pinchDelta) > 1) {
-          if (vpState.viewMode === 'topdown') {
-            // Top-down: adjust altitude (pinch out = lower altitude = zoom in)
-            const altitudeDelta = -pinchDelta * vpState.topdownAltitude * 0.005
-            adjustTopdownAltitude(altitudeDelta)
-          } else if (vpState.followingCallsign) {
-            if (vpState.followMode === 'tower') {
-              // Tower follow: adjust follow zoom (pinch out = zoom in = higher value)
-              adjustFollowZoom(pinchDelta * pinchSensitivity * 0.02)
-            } else {
-              // Orbit follow: adjust distance (pinch out = closer = lower distance)
-              adjustOrbitDistance(-pinchDelta * pinchSensitivity * 2)
-            }
-          } else {
-            // 3D view: adjust FOV (pinch out = lower FOV = zoom in)
-            adjustFov(-pinchDelta * pinchSensitivity * 0.3)
-          }
-        }
-
-        state.lastPinchDistance = currentDistance
-        state.lastPinchAngle = currentAngle
-        state.pinchCenter = getTouchCenter(touches[0], touches[1])
       }
-    }
 
-    const handleTouchEnd = (event: TouchEvent) => {
-      event.preventDefault()
-
-      const touches = event.touches
-      const state = touchStateRef.current
-
-      if (touches.length === 0) {
-        // All fingers lifted
-        state.isDragging = false
-        state.isPinching = false
-      } else if (touches.length === 1) {
-        // Went from 2 fingers to 1 - transition to drag
-        state.isDragging = true
-        state.isPinching = false
-        state.lastPos = { x: touches[0].clientX, y: touches[0].clientY }
+      // Apply pinch zoom
+      const pinchSensitivity = 0.5
+      if (Math.abs(pinchDelta) > 1) {
+        if (vpState.viewMode === 'topdown') {
+          // Top-down: adjust altitude (pinch out = lower altitude = zoom in)
+          const altitudeDelta = -pinchDelta * vpState.topdownAltitude * 0.005
+          adjustTopdownAltitude(altitudeDelta)
+        } else if (vpState.followingCallsign) {
+          if (vpState.followMode === 'tower') {
+            // Tower follow: adjust follow zoom (pinch out = zoom in = higher value)
+            adjustFollowZoom(pinchDelta * pinchSensitivity * 0.02)
+          } else {
+            // Orbit follow: adjust distance (pinch out = closer = lower distance)
+            adjustOrbitDistance(-pinchDelta * pinchSensitivity * 2)
+          }
+        } else {
+          // 3D view: adjust FOV (pinch out = lower FOV = zoom in)
+          adjustFov(-pinchDelta * pinchSensitivity * 0.3)
+        }
       }
-    }
+    }, Cesium.ScreenSpaceEventType.PINCH_MOVE)
 
-    const handleTouchCancel = (event: TouchEvent) => {
-      event.preventDefault()
-      const state = touchStateRef.current
-      state.isDragging = false
-      state.isPinching = false
-    }
-
-    // Add touch event listeners with passive: false to allow preventDefault
-    canvas.addEventListener('touchstart', handleTouchStart, { passive: false })
-    canvas.addEventListener('touchmove', handleTouchMove, { passive: false })
-    canvas.addEventListener('touchend', handleTouchEnd, { passive: false })
-    canvas.addEventListener('touchcancel', handleTouchCancel, { passive: false })
+    // Two-finger pinch end
+    handler.setInputAction(() => {
+      pinchStateRef.current.isPinching = false
+    }, Cesium.ScreenSpaceEventType.PINCH_END)
 
     return () => {
-      canvas.removeEventListener('touchstart', handleTouchStart)
-      canvas.removeEventListener('touchmove', handleTouchMove)
-      canvas.removeEventListener('touchend', handleTouchEnd)
-      canvas.removeEventListener('touchcancel', handleTouchCancel)
+      handler.destroy()
     }
   }, [
     viewer,

@@ -5099,6 +5099,7 @@ dependencies = [
  "tauri-plugin-window-state",
  "tokio",
  "tower-http 0.5.2",
+ "url",
  "windows-sys 0.59.0",
 ]
 

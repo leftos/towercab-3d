@@ -225,6 +225,9 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
             }),
             ...(updates.mouseSensitivity !== undefined && {
               mouseSensitivity: Math.max(0.1, Math.min(2.0, updates.mouseSensitivity))
+            }),
+            ...(updates.joystickSensitivity !== undefined && {
+              joystickSensitivity: Math.max(1, Math.min(10, updates.joystickSensitivity))
             })
           }
         })),
@@ -402,7 +405,7 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
     }),
     {
       name: 'settings-store',
-      version: 17, // Incremented for deviceOptimizationPromptDismissed UI setting
+      version: 18, // Incremented for joystickSensitivity camera setting
       migrate: (persistedState: unknown, version: number) => {
         // Auto-migrate old flat structure to grouped structure
         if (version < 2) {
@@ -602,6 +605,18 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
             }
           }
         }
+        // Migrate v17 to v18: add joystickSensitivity setting
+        if (version < 18) {
+          console.log('[Settings] Migrating v17 to v18: adding joystickSensitivity setting')
+          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
+          return {
+            ...state,
+            camera: {
+              ...DEFAULT_SETTINGS.camera,
+              ...state.camera
+            }
+          }
+        }
         return persistedState as SettingsStoreWithPresets
       }
     }
@@ -670,6 +685,7 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
       defaultFov: oldSettings.defaultFov ?? DEFAULT_SETTINGS.camera.defaultFov,
       cameraSpeed: oldSettings.cameraSpeed ?? DEFAULT_SETTINGS.camera.cameraSpeed,
       mouseSensitivity: oldSettings.mouseSensitivity ?? DEFAULT_SETTINGS.camera.mouseSensitivity,
+      joystickSensitivity: oldSettings.joystickSensitivity ?? DEFAULT_SETTINGS.camera.joystickSensitivity,
       enableAutoAirportSwitch: oldSettings.enableAutoAirportSwitch ?? DEFAULT_SETTINGS.camera.enableAutoAirportSwitch
     },
     weather: {

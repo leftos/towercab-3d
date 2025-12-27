@@ -208,17 +208,17 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
   },
 
   setCesiumIonToken: async (token: string) => {
-    const state = get()
-    const newSettings: GlobalSettings = {
-      cesiumIonToken: token,
-      fsltl: state.fsltl,
-      airports: state.airports,
-      server: state.server,
-      viewports: state.viewports
-    }
-
+    // Update state first, then read full current state for save
+    // This ensures concurrent updates from other functions are included
     set({ cesiumIonToken: token })
-    await saveSettings(newSettings)
+    const currentState = get()
+    await saveSettings({
+      cesiumIonToken: currentState.cesiumIonToken,
+      fsltl: currentState.fsltl,
+      airports: currentState.airports,
+      server: currentState.server,
+      viewports: currentState.viewports
+    })
   },
 
   updateFsltl: async (updates: Partial<GlobalSettings['fsltl']>) => {
@@ -232,32 +232,32 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
         : state.fsltl.textureScale) as FSLTLTextureScale
     }
 
-    const newSettings: GlobalSettings = {
-      cesiumIonToken: state.cesiumIonToken,
-      fsltl: newFsltl,
-      airports: state.airports,
-      server: state.server,
-      viewports: state.viewports
-    }
-
+    // Update state first, then read full current state for save
     set({ fsltl: newFsltl })
-    await saveSettings(newSettings)
+    const currentState = get()
+    await saveSettings({
+      cesiumIonToken: currentState.cesiumIonToken,
+      fsltl: currentState.fsltl,
+      airports: currentState.airports,
+      server: currentState.server,
+      viewports: currentState.viewports
+    })
   },
 
   updateAirports: async (updates: Partial<GlobalSettings['airports']>) => {
     const state = get()
     const newAirports = { ...state.airports, ...updates }
 
-    const newSettings: GlobalSettings = {
-      cesiumIonToken: state.cesiumIonToken,
-      fsltl: state.fsltl,
-      airports: newAirports,
-      server: state.server,
-      viewports: state.viewports
-    }
-
+    // Update state first, then read full current state for save
     set({ airports: newAirports })
-    await saveSettings(newSettings)
+    const currentState = get()
+    await saveSettings({
+      cesiumIonToken: currentState.cesiumIonToken,
+      fsltl: currentState.fsltl,
+      airports: currentState.airports,
+      server: currentState.server,
+      viewports: currentState.viewports
+    })
   },
 
   updateServer: async (updates: Partial<GlobalSettings['server']>) => {
@@ -271,16 +271,16 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
         : state.server.port
     }
 
-    const newSettings: GlobalSettings = {
-      cesiumIonToken: state.cesiumIonToken,
-      fsltl: state.fsltl,
-      airports: state.airports,
-      server: newServer,
-      viewports: state.viewports
-    }
-
+    // Update state first, then read full current state for save
     set({ server: newServer })
-    await saveSettings(newSettings)
+    const currentState = get()
+    await saveSettings({
+      cesiumIonToken: currentState.cesiumIonToken,
+      fsltl: currentState.fsltl,
+      airports: currentState.airports,
+      server: currentState.server,
+      viewports: currentState.viewports
+    })
   },
 
   updateViewports: async (updates: Partial<GlobalViewportSettings>) => {
@@ -298,31 +298,29 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
         : state.viewports.orbitSettings
     }
 
-    const newSettings: GlobalSettings = {
-      cesiumIonToken: state.cesiumIonToken,
-      fsltl: state.fsltl,
-      airports: state.airports,
-      server: state.server,
-      viewports: newViewports
-    }
-
+    // Update state first, then read full current state for save
     set({ viewports: newViewports })
-    await saveSettings(newSettings)
+    const currentState = get()
+    await saveSettings({
+      cesiumIonToken: currentState.cesiumIonToken,
+      fsltl: currentState.fsltl,
+      airports: currentState.airports,
+      server: currentState.server,
+      viewports: currentState.viewports
+    })
   },
 
   setViewports: async (viewports: GlobalViewportSettings) => {
-    const state = get()
-
-    const newSettings: GlobalSettings = {
-      cesiumIonToken: state.cesiumIonToken,
-      fsltl: state.fsltl,
-      airports: state.airports,
-      server: state.server,
-      viewports
-    }
-
+    // Update state first, then read full current state for save
     set({ viewports })
-    await saveSettings(newSettings)
+    const currentState = get()
+    await saveSettings({
+      cesiumIonToken: currentState.cesiumIonToken,
+      fsltl: currentState.fsltl,
+      airports: currentState.airports,
+      server: currentState.server,
+      viewports: currentState.viewports
+    })
   },
 
   resetToDefaults: async () => {

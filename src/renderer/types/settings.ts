@@ -265,6 +265,12 @@ export interface CameraSettings {
   mouseSensitivity: number
 
   /**
+   * Virtual joystick sensitivity for touch devices (1-10 scale, default: 5)
+   * Controls movement speed when using the on-screen joystick on iPad/tablets
+   */
+  joystickSensitivity: number
+
+  /**
    * Enable automatic airport switching when camera moves (default: false)
    *
    * When enabled, the application automatically switches to the nearest
@@ -665,6 +671,17 @@ export interface GlobalSettings {
      * Enable remote access server on startup (default: false)
      */
     enabled: boolean
+
+    /**
+     * Optional authentication token for API access
+     * When set, remote clients must include this token as Bearer token in Authorization header
+     */
+    authToken?: string
+
+    /**
+     * If true, only allow connections from local network (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+     */
+    requireLocalNetwork: boolean
   }
 
   /**
@@ -691,7 +708,9 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   },
   server: {
     port: 8765,
-    enabled: false
+    enabled: false,
+    authToken: undefined,
+    requireLocalNetwork: false
   },
   viewports: DEFAULT_GLOBAL_VIEWPORT_SETTINGS
 }
@@ -875,6 +894,7 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     defaultFov: 60,
     cameraSpeed: 5,
     mouseSensitivity: 1.0,
+    joystickSensitivity: 5,
     enableAutoAirportSwitch: false
   },
   weather: {

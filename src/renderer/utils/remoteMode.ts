@@ -9,9 +9,11 @@
  * Check if we're running in remote browser mode (not in Tauri)
  * Remote mode is when the app is accessed via HTTP from a browser
  * rather than running as a native Tauri desktop app.
+ *
+ * Checks both __TAURI__ and __TAURI_INTERNALS__ for consistency with isTauri()
  */
 export function isRemoteMode(): boolean {
-  return !('__TAURI__' in window)
+  return !('__TAURI__' in window) && !('__TAURI_INTERNALS__' in window)
 }
 
 /**

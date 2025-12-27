@@ -4,12 +4,13 @@
  * Provides virtual controls for touch devices:
  * - Virtual joystick for WASD movement
  * - Command input button for bookmark recall
- * - View mode toggle button
+ * - Debug overlay buttons (Performance HUD, Model Matching)
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useViewportStore } from '../../stores/viewportStore'
 import { useUIFeedbackStore } from '../../stores/uiFeedbackStore'
+import { useSettingsStore } from '../../stores/settingsStore'
 import { isTouchDevice } from '../../utils/deviceDetection'
 import './TouchControls.css'
 
@@ -322,23 +323,23 @@ function TouchControls() {
   // Viewport store actions
   const moveForward = useViewportStore((state) => state.moveForward)
   const moveRight = useViewportStore((state) => state.moveRight)
-  const toggleViewMode = useViewportStore((state) => state.toggleViewMode)
-  const viewports = useViewportStore((state) => state.viewports)
-  const activeViewportId = useViewportStore((state) => state.activeViewportId)
 
-  // Get current view mode
-  const activeViewport = viewports.find(v => v.id === activeViewportId)
-  const viewMode = activeViewport?.cameraState.viewMode ?? '3d'
+  // Debug overlay toggles
+  const togglePerformanceHUD = useUIFeedbackStore((state) => state.togglePerformanceHUD)
+  const toggleModelMatchingModal = useUIFeedbackStore((state) => state.toggleModelMatchingModal)
+
+  // Settings
+  const joystickSensitivity = useSettingsStore((state) => state.camera.joystickSensitivity)
 
   // Handle joystick movement
   const handleJoystickMove = useCallback((deltaX: number, deltaY: number) => {
-    // Scale movement speed
-    const speed = 2.0
+    // Scale movement speed based on sensitivity setting (1-10 maps to 1-10 speed)
+    const speed = joystickSensitivity
 
     // Note: deltaY is inverted (up on joystick = forward = negative Y in screen coords)
     moveForward(-deltaY * speed)
     moveRight(deltaX * speed)
-  }, [moveForward, moveRight])
+  }, [moveForward, moveRight, joystickSensitivity])
 
   // Don't render on non-touch devices
   if (!isTouchDevice()) {
@@ -368,16 +369,32 @@ function TouchControls() {
 
           {/* Right side buttons */}
           <div className="touch-controls-right">
-            {/* View mode toggle */}
+            {/* Performance HUD toggle (F1) */}
             <button
               className="touch-control-button"
-              onClick={() => toggleViewMode()}
-              title="Toggle view mode (T)"
+              onClick={togglePerformanceHUD}
+              title="Performance monitor (F1)"
             >
               <span className="touch-button-icon">
-                {viewMode === '3d' ? '3D' : '2D'}
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 20V10M18 20V4M6 20v-4" />
+                </svg>
               </span>
-              <span className="touch-button-label">View</span>
+              <span className="touch-button-label">Perf</span>
+            </button>
+
+            {/* Model matching modal toggle (F3) */}
+            <button
+              className="touch-control-button"
+              onClick={toggleModelMatchingModal}
+              title="Model matching (F3)"
+            >
+              <span className="touch-button-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M4 6h16M4 12h16M4 18h10" />
+                </svg>
+              </span>
+              <span className="touch-button-label">Models</span>
             </button>
 
             {/* Command input button */}

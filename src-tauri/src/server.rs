@@ -4,21 +4,23 @@
 //! when the server is enabled in global settings.
 
 use std::fs;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::{
     body::Body,
-    extract::{Path, Query, State},
-    http::{header, HeaderValue, Response, StatusCode},
+    extract::{ConnectInfo, Path, Query, State},
+    http::{header, HeaderValue, Request, Response, StatusCode},
+    middleware::{self, Next},
     response::IntoResponse,
     routing::{get, put},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::{AllowOrigin, Any, CorsLayer};
+use url::Url;
 
 use tauri::Manager;
 
@@ -33,6 +35,84 @@ pub struct ServerState {
     pub app_handle: tauri::AppHandle,
     /// Path to the frontend dist folder
     pub dist_path: PathBuf,
+    /// Optional authentication token (if set, clients must provide Bearer token)
+    pub auth_token: Option<String>,
+    /// Whether to require connections from local network only
+    pub require_local_network: bool,
+}
+
+/// Check if an IP address is from a local/private network
+fn is_local_network_ip(ip: &IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ipv4) => {
+            let octets = ipv4.octets();
+            // 127.x.x.x (localhost)
+            octets[0] == 127
+            // 10.x.x.x (Class A private)
+            || octets[0] == 10
+            // 172.16.x.x - 172.31.x.x (Class B private)
+            || (octets[0] == 172 && (16..=31).contains(&octets[1]))
+            // 192.168.x.x (Class C private)
+            || (octets[0] == 192 && octets[1] == 168)
+            // 169.254.x.x (link-local)
+            || (octets[0] == 169 && octets[1] == 254)
+        }
+        IpAddr::V6(ipv6) => {
+            // ::1 (localhost)
+            ipv6.is_loopback()
+            // fe80::/10 (link-local)
+            || (ipv6.segments()[0] & 0xffc0) == 0xfe80
+            // fc00::/7 (unique local address)
+            || (ipv6.segments()[0] & 0xfe00) == 0xfc00
+        }
+    }
+}
+
+/// Middleware to check authentication and local network requirements
+async fn auth_middleware(
+    State(state): State<Arc<ServerState>>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    request: Request<Body>,
+    next: Next,
+) -> Result<Response<Body>, (StatusCode, String)> {
+    // Check local network requirement
+    if state.require_local_network && !is_local_network_ip(&addr.ip()) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            format!("Access denied: connections only allowed from local network. Your IP: {}", addr.ip()),
+        ));
+    }
+
+    // Check authentication token if configured
+    if let Some(ref expected_token) = state.auth_token {
+        let auth_header = request
+            .headers()
+            .get(header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok());
+
+        let is_authenticated = match auth_header {
+            Some(header) if header.starts_with("Bearer ") => {
+                let provided_token = &header[7..];
+                provided_token == expected_token
+            }
+            _ => false,
+        };
+
+        if !is_authenticated {
+            // Allow unauthenticated access to static files (the app itself)
+            let path = request.uri().path();
+            let is_api_route = path.starts_with("/api/");
+
+            if is_api_route {
+                return Err((
+                    StatusCode::UNAUTHORIZED,
+                    "Authentication required. Provide Bearer token in Authorization header.".to_string(),
+                ));
+            }
+        }
+    }
+
+    Ok(next.run(request).await)
 }
 
 /// Start the HTTP server on a background thread
@@ -44,14 +124,36 @@ pub async fn start_server(
     // Find the dist folder (frontend build output)
     let dist_path = find_dist_path(&app_handle)?;
 
+    // Read auth settings from global settings
+    let (auth_token, require_local_network) = {
+        let settings_file = get_global_settings_file(&app_handle)?;
+        if settings_file.exists() {
+            let content = fs::read_to_string(&settings_file)
+                .map_err(|e| format!("Failed to read settings: {}", e))?;
+            let settings: GlobalSettings = serde_json::from_str(&content)
+                .map_err(|e| format!("Failed to parse settings: {}", e))?;
+            (settings.server.auth_token, settings.server.require_local_network)
+        } else {
+            (None, false)
+        }
+    };
+
     println!(
         "[Server] Starting HTTP server on port {} (serving from {:?})",
         port, dist_path
     );
+    if auth_token.is_some() {
+        println!("[Server] Authentication enabled");
+    }
+    if require_local_network {
+        println!("[Server] Restricted to local network only");
+    }
 
     let state = Arc::new(ServerState {
         app_handle,
         dist_path,
+        auth_token,
+        require_local_network,
     });
 
     // Build the router
@@ -70,7 +172,7 @@ pub async fn start_server(
 
     // Spawn the server task
     tokio::spawn(async move {
-        axum::serve(listener, app)
+        axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
             .with_graceful_shutdown(async move {
                 let _ = shutdown_rx.recv().await;
                 println!("[Server] Shutting down...");
@@ -143,13 +245,46 @@ fn find_dist_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     ))
 }
 
+/// Validate CORS origin - only allow local network origins
+fn validate_cors_origin(origin: &HeaderValue, _request_parts: &axum::http::request::Parts) -> bool {
+    let origin_str = match origin.to_str() {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+
+    // Parse the origin URL to extract the host
+    if let Ok(url) = Url::parse(origin_str) {
+        if let Some(host) = url.host_str() {
+            // Allow localhost variations
+            if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+                return true;
+            }
+
+            // Check if host is an IP and is local network
+            if let Ok(ip) = host.parse::<IpAddr>() {
+                return is_local_network_ip(&ip);
+            }
+
+            // Allow .local domains (mDNS)
+            if host.ends_with(".local") {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
 /// Create the axum router with all routes
 fn create_router(state: Arc<ServerState>) -> Router {
-    // CORS layer - allow all origins for development
+    // CORS layer with origin validation
+    // Only allow origins from local network addresses
     let cors = CorsLayer::new()
-        .allow_origin(Any)
+        .allow_origin(AllowOrigin::predicate(validate_cors_origin))
         .allow_methods(Any)
         .allow_headers(Any);
+
+    let state_clone = state.clone();
 
     Router::new()
         // API routes
@@ -166,6 +301,8 @@ fn create_router(state: Arc<ServerState>) -> Router {
         .route("/api/proxy", get(proxy_request))
         // Static file serving (must be last - catches all other routes)
         .fallback(get(serve_static))
+        // Apply auth middleware (checks auth token and local network requirement)
+        .layer(middleware::from_fn_with_state(state_clone, auth_middleware))
         .layer(cors)
         .with_state(state)
 }
@@ -548,26 +685,34 @@ async fn proxy_request(
         "raw.githubusercontent.com",
     ];
 
-    let url = &query.url;
+    let url_str = &query.url;
 
-    // Parse and validate the URL
+    // Parse the URL properly to extract the host
+    let parsed_url = Url::parse(url_str).map_err(|e| {
+        (StatusCode::BAD_REQUEST, format!("Invalid URL: {}", e))
+    })?;
+
+    // Get the host from the parsed URL
+    let host = parsed_url.host_str().ok_or_else(|| {
+        (StatusCode::BAD_REQUEST, "URL has no host".to_string())
+    })?;
+
+    // Check if the host matches any allowed domain (exact match or subdomain)
     let is_allowed = allowed_domains.iter().any(|domain| {
-        url.contains(&format!("://{}/", domain))
-            || url.contains(&format!("://{}", domain))
-            || url.contains(&format!(".{}/", domain))
+        host == *domain || host.ends_with(&format!(".{}", domain))
     });
 
     if !is_allowed {
         return Err((
             StatusCode::FORBIDDEN,
-            format!("Domain not allowed. Allowed: {:?}", allowed_domains),
+            format!("Domain '{}' not allowed. Allowed: {:?}", host, allowed_domains),
         ));
     }
 
     // Make the request
     let client = reqwest::Client::new();
     let response = client
-        .get(url)
+        .get(url_str)
         .send()
         .await
         .map_err(|e| (StatusCode::BAD_GATEWAY, format!("Proxy request failed: {}", e)))?;

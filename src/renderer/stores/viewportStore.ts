@@ -296,8 +296,16 @@ const scheduleAutoSave = (saveFunc: () => void) => {
 let globalSyncTimer: ReturnType<typeof setTimeout> | null = null
 const GLOBAL_SYNC_DELAY = 2000 // 2 seconds
 
+// Flag to prevent bidirectional sync loops
+// When true, changes originated from global settings and should not be synced back
+let isLoadingFromGlobal = false
+
 // Schedule a debounced sync to globalSettingsStore
 const scheduleGlobalSync = (syncFunc: () => void) => {
+  // Don't schedule sync if we're currently loading from global (prevents sync loops)
+  if (isLoadingFromGlobal) {
+    return
+  }
   if (globalSyncTimer) {
     clearTimeout(globalSyncTimer)
   }
@@ -353,6 +361,17 @@ const toGlobalCameraBookmark = (local: CameraBookmark): GlobalCameraBookmark => 
 })
 
 /**
+ * Validate and convert viewMode string to ViewMode type
+ */
+const validateViewMode = (viewMode: string): ViewMode => {
+  if (viewMode === '3d' || viewMode === 'topdown') {
+    return viewMode
+  }
+  console.warn(`[ViewportStore] Invalid viewMode "${viewMode}", defaulting to "3d"`)
+  return '3d'
+}
+
+/**
  * Convert global CameraBookmark to local format
  */
 const fromGlobalCameraBookmark = (global: GlobalCameraBookmark): CameraBookmark => ({
@@ -363,7 +382,7 @@ const fromGlobalCameraBookmark = (global: GlobalCameraBookmark): CameraBookmark 
   positionOffsetX: global.positionOffsetX,
   positionOffsetY: global.positionOffsetY,
   positionOffsetZ: global.positionOffsetZ,
-  viewMode: global.viewMode as ViewMode,
+  viewMode: validateViewMode(global.viewMode),
   topdownAltitude: global.topdownAltitude ?? TOPDOWN_ALTITUDE_DEFAULT
 })
 
@@ -467,7 +486,6 @@ const syncToGlobalSettings = () => {
  */
 const loadFromGlobalSettings = () => {
   const globalState = useGlobalSettingsStore.getState()
-  const globalViewports = globalState.viewports || DEFAULT_GLOBAL_VIEWPORT_SETTINGS
 
   // Only proceed if global settings are initialized
   if (!globalState.initialized) {
@@ -475,35 +493,67 @@ const loadFromGlobalSettings = () => {
     return
   }
 
-  const state = useViewportStore.getState()
-  const updatedConfigs = { ...state.airportViewportConfigs }
+  try {
+    // Set flag to prevent sync loop (loading from global shouldn't trigger sync back to global)
+    isLoadingFromGlobal = true
 
-  // Merge global configs into local configs
-  for (const [icao, globalConfig] of Object.entries(globalViewports.airportConfigs)) {
-    const localConfig = updatedConfigs[icao]
-    const mergedUpdates = mergeGlobalAirportConfig(localConfig, globalConfig)
+    const globalViewports = globalState.viewports || DEFAULT_GLOBAL_VIEWPORT_SETTINGS
 
-    if (localConfig) {
-      // Merge into existing config
-      updatedConfigs[icao] = { ...localConfig, ...mergedUpdates }
-    } else {
-      // Create new config with just the global data
-      const mainViewport = createMainViewport(undefined, globalViewports.orbitSettings)
-      updatedConfigs[icao] = {
-        viewports: [mainViewport],
-        activeViewportId: mainViewport.id,
-        ...mergedUpdates
+    // Validate that airportConfigs is an object
+    if (!globalViewports.airportConfigs || typeof globalViewports.airportConfigs !== 'object') {
+      console.warn('[ViewportStore] Global settings has invalid airportConfigs, skipping load')
+      return
+    }
+
+    const state = useViewportStore.getState()
+    const updatedConfigs = { ...state.airportViewportConfigs }
+
+    // Merge global configs into local configs
+    for (const [icao, globalConfig] of Object.entries(globalViewports.airportConfigs)) {
+      // Validate that globalConfig is an object
+      if (!globalConfig || typeof globalConfig !== 'object') {
+        console.warn(`[ViewportStore] Invalid config for ${icao}, skipping`)
+        continue
+      }
+
+      const localConfig = updatedConfigs[icao]
+      const mergedUpdates = mergeGlobalAirportConfig(localConfig, globalConfig)
+
+      if (localConfig) {
+        // Merge into existing config
+        updatedConfigs[icao] = { ...localConfig, ...mergedUpdates }
+      } else {
+        // Create new config with just the global data
+        const orbitSettings = globalViewports.orbitSettings && typeof globalViewports.orbitSettings === 'object'
+          ? globalViewports.orbitSettings
+          : undefined
+        const mainViewport = createMainViewport(undefined, orbitSettings)
+        updatedConfigs[icao] = {
+          viewports: [mainViewport],
+          activeViewportId: mainViewport.id,
+          ...mergedUpdates
+        }
       }
     }
+
+    // Validate orbitSettings before using
+    const orbitSettings = globalViewports.orbitSettings && typeof globalViewports.orbitSettings === 'object'
+      ? globalViewports.orbitSettings
+      : state.globalOrbitSettings
+
+    // Update state
+    useViewportStore.setState({
+      airportViewportConfigs: updatedConfigs,
+      globalOrbitSettings: orbitSettings
+    })
+
+    console.log('[ViewportStore] Loaded from global settings')
+  } catch (error) {
+    console.error('[ViewportStore] Failed to load from global settings:', error)
+  } finally {
+    // Always clear the flag, even if an error occurred
+    isLoadingFromGlobal = false
   }
-
-  // Update state
-  useViewportStore.setState({
-    airportViewportConfigs: updatedConfigs,
-    globalOrbitSettings: globalViewports.orbitSettings
-  })
-
-  console.log('[ViewportStore] Loaded from global settings')
 }
 
 // Migrate bookmarks from cameraStore to viewportStore (one-time migration)
@@ -1584,24 +1634,21 @@ export const useViewportStore = create<ViewportStore>()(
 
           // After rehydration, try to migrate to global settings and/or load from global
           // This runs after globalSettingsStore is initialized
-          const checkAndSync = () => {
-            const globalState = useGlobalSettingsStore.getState()
-            if (globalState.initialized) {
-              migrateToGlobalSettings()
-              loadFromGlobalSettings()
-            } else {
-              // Wait for global settings to initialize
-              const unsubscribe = useGlobalSettingsStore.subscribe((state) => {
-                if (state.initialized) {
-                  unsubscribe()
-                  migrateToGlobalSettings()
-                  loadFromGlobalSettings()
-                }
-              })
-            }
+          const globalState = useGlobalSettingsStore.getState()
+          if (globalState.initialized) {
+            // Global settings already initialized, sync immediately
+            migrateToGlobalSettings()
+            loadFromGlobalSettings()
+          } else {
+            // Wait for global settings to initialize via subscription
+            const unsubscribe = useGlobalSettingsStore.subscribe((newState) => {
+              if (newState.initialized) {
+                unsubscribe()
+                migrateToGlobalSettings()
+                loadFromGlobalSettings()
+              }
+            })
           }
-          // Small delay to ensure stores are set up
-          setTimeout(checkAndSync, 100)
         }
       }
     )

@@ -372,8 +372,7 @@ export function convertToAssetUrlSync(filePath: string): string {
     return `/api/mods/${modsMatch[1]}/${modsMatch[2]}`
   }
 
-  // Fallback: assume FSLTL and use just filename
-  const filename = normalized.split('/').pop() || 'model.glb'
+  // Fallback: return path as-is
   console.warn('[convertToAssetUrlSync] Could not parse path, returning as-is:', filePath)
   return filePath
 }

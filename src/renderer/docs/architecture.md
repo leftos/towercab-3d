@@ -4,7 +4,50 @@
 
 TowerCab 3D is a React-based desktop application using Tauri 2, featuring dual 3D rendering engines (CesiumJS for globe/terrain/aircraft, Babylon.js for screen-space labels and weather effects) and real-time VATSIM data integration.
 
+**Remote Browser Access:** The Tauri app runs an HTTP server (Rust axum, port 8765) serving the React app to browsers on the local network. Remote mode enables iPad/tablet access with touch controls while sharing global settings and mods from the host PC.
+
 ## Data Flow
+
+### Remote Mode Architecture
+
+```
+Desktop App (Tauri + React)
+├─ Rust Backend (src-tauri/src/)
+│   ├─ main.rs - App initialization, Tauri commands
+│   └─ server.rs - axum HTTP server (port 8765)
+│        ├─ Static file serving (/assets/, /index.html)
+│        ├─ Mods API (/api/mods/*)
+│        │    ├─ GET /api/mods/aircraft - List aircraft mods
+│        │    ├─ GET /api/mods/towers - List tower mods
+│        │    └─ GET /api/mods/file/* - Serve mod files
+│        ├─ Settings API (/api/settings/*)
+│        │    ├─ GET /api/settings/global - Get global settings
+│        │    ├─ PUT /api/settings/global - Update global settings
+│        │    └─ PUT /api/settings/viewport-bookmarks - Update bookmarks
+│        └─ Tower Positions API (/api/tower-positions/*)
+│             └─ GET /api/tower-positions/{icao} - Get tower position
+│
+└─ React Frontend (src/renderer/)
+    ├─ Desktop Mode (isTauri() = true)
+    │   ├─ Direct Tauri command invocations
+    │   ├─ File system access via Tauri
+    │   └─ Local settings in localStorage
+    │
+    └─ Remote Mode (isRemoteMode() = true)
+        ├─ HTTP API calls to host PC
+        ├─ Touch controls (useTouchInput.ts)
+        │    ├─ Single-finger drag: rotate camera
+        │    ├─ Two-finger pinch: zoom
+        │    ├─ Two-finger rotate: heading
+        │    └─ Virtual joystick: WASD movement
+        ├─ DeviceOptimizationPrompt (suggest optimized settings)
+        └─ RemoteIndicator (show connection status)
+
+Detection: remoteMode.ts
+├─ isRemoteMode(): !('__TAURI__' in window)
+├─ getApiBaseUrl(): window.location.origin in remote mode
+└─ getHostname(): window.location.hostname in remote mode
+```
 
 ### VATSIM Aircraft Data Flow
 
@@ -60,6 +103,7 @@ weatherStore.setWeather()
 
 ### Settings Persistence Flow
 
+**Local Settings (graphics, UI preferences - per browser/device):**
 ```
 User changes setting in SettingsModal
     ↓
@@ -74,6 +118,29 @@ settingsStore (rehydrated)
 Hooks observe changes via useSettingsStore()
     ↓
 Apply settings to Cesium/Babylon
+```
+
+**Global Settings (cesiumIonToken, FSLTL paths, bookmarks - shared across devices):**
+```
+Tauri Mode (Desktop):
+  User changes Cesium token → globalSettingsStore.updateCesiumIonToken()
+      ↓
+  Tauri command: save_global_settings()
+      ↓
+  File write: global-settings.json (app data dir)
+      ↓ [on next app start or remote client connect]
+  File read: load_global_settings()
+      ↓
+  globalSettingsStore initialized
+
+Remote Mode (Browser):
+  User changes Cesium token → globalSettingsStore.updateCesiumIonToken()
+      ↓
+  HTTP PUT: /api/settings/global
+      ↓
+  Host PC Tauri backend updates global-settings.json
+      ↓ [HTTP response]
+  Browser globalSettingsStore updates
 ```
 
 ## Camera State Flow
@@ -130,13 +197,18 @@ User types ".42." in CommandInput
     ↓
 viewportStore.saveBookmark(airportIcao, slot=42, viewportId)
     ├─ Reads current cameraState for viewportId
-    └─ Saves to: bookmarks[airportIcao][42] = cameraState
-         ↓ [persisted to localStorage]
+    └─ Calls globalSettingsStore.saveViewportBookmark()
+         ↓ [Tauri mode]
+         Tauri command saves to global-settings.json
+         ↓ [Remote mode]
+         HTTP PUT /api/settings/viewport-bookmarks
+         ↓
+         Bookmarks shared across all devices
 
 User types ".42" (no trailing dot)
     ↓
 viewportStore.loadBookmark(airportIcao, slot=42, viewportId)
-    ├─ Reads: bookmarks[airportIcao][42]
+    ├─ Reads from globalSettingsStore.viewportSettings.bookmarks
     └─ Applies to: viewports[viewportId].cameraState
          ↓
 useCesiumCamera detects change
@@ -282,6 +354,19 @@ useBabylonOverlay
 ### Store Relationships
 
 ```
+globalSettingsStore (NEW - shared across devices)
+├─ cesiumIonToken: string
+├─ fsltl: { sourcePath, outputPath, textureScale, enableFsltlModels }
+├─ airports: { defaultIcao, recentAirports }
+├─ viewportSettings: { bookmarks, datablockPositions, viewportLayouts }
+├─ Persisted in: Tauri file system (global-settings.json)
+├─ Synced via: HTTP API in remote mode
+└─ Used by:
+     ├─ CesiumViewer (Ion token)
+     ├─ viewportStore (bookmarks, viewport layouts)
+     ├─ datablockPositionStore (datablock positions)
+     └─ FSLTLConversionPanel (FSLTL paths)
+
 airportStore
 ├─ currentAirport: Airport | null
 ├─ towerHeight: number
@@ -293,10 +378,11 @@ airportStore
 viewportStore (PRIMARY CAMERA STORE)
 ├─ viewports: Viewport[]
 ├─ activeViewportId: string
-├─ bookmarks: Map<string, Map<number, CameraState>>
+├─ Bookmarks now in globalSettingsStore (shared across devices)
+├─ Viewport layouts now in globalSettingsStore (shared across devices)
 └─ Used by:
      ├─ useCesiumCamera (read/write camera state)
-     ├─ useCameraInput (write camera deltas)
+     ├─ useCameraInput (write camera deltas, touch controls in remote mode)
      ├─ ViewportManager (render viewports)
      └─ ControlsBar (display camera state, bookmark buttons)
 
@@ -394,6 +480,7 @@ datablockPositionStore
 ├─ globalPosition: number (1-9 numpad-style, default 9 = top-right)
 ├─ perAircraftPositions: Map<callsign, number>
 ├─ autoRearrange: boolean
+├─ Per-aircraft positions now in globalSettingsStore (shared across devices)
 └─ Used by:
      ├─ useBabylonLabels (datablock positioning)
      ├─ useCesiumLabels (label positioning)
@@ -798,10 +885,11 @@ src/renderer/
 │   ├─ cameraStore.ts (DEPRECATED)
 │   ├─ datablockPositionStore.ts
 │   ├─ fsltlConversionStore.ts
+│   ├─ globalSettingsStore.ts (NEW - shared across devices)
 │   ├─ measureStore.ts
 │   ├─ replayStore.ts
 │   ├─ runwayStore.ts
-│   ├─ settingsStore.ts
+│   ├─ settingsStore.ts (local per-browser settings)
 │   ├─ uiFeedbackStore.ts
 │   ├─ updateStore.ts
 │   ├─ vatsimStore.ts
@@ -818,6 +906,8 @@ src/renderer/
 │   ├─ enuTransforms.ts (coordinate conversions)
 │   ├─ formatting.ts (time/angle formatting utilities)
 │   ├─ interpolation.ts (physics-based aircraft movement)
+│   ├─ remoteMode.ts (Tauri vs browser detection, API base URL)
+│   ├─ tauriApi.ts (unified API for Tauri commands and HTTP)
 │   ├─ towerHeight.ts (tower position calculation)
 │   └─ performanceMonitor.ts (FPS tracking)
 │

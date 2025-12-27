@@ -5,22 +5,23 @@ Welcome to TowerCab 3D, a real-time 3D tower visualization tool for VATSIM air t
 ## Table of Contents
 
 1. [Getting Started](#getting-started)
-2. [User Interface Overview](#user-interface-overview)
-3. [Camera Controls](#camera-controls)
-4. [Aircraft Following](#aircraft-following)
-5. [Airport Selection](#airport-selection)
-6. [Aircraft Panel](#aircraft-panel)
-7. [Global Aircraft Search](#global-aircraft-search)
-8. [Bookmark System](#bookmark-system)
-9. [Multi-Viewport System](#multi-viewport-system)
-10. [Replay System](#replay-system)
-11. [Measuring Tool](#measuring-tool)
-12. [Weather Effects](#weather-effects)
-13. [VR Support](#vr-support)
-14. [Settings](#settings)
-15. [Modding](#modding)
-16. [Keyboard Shortcuts Reference](#keyboard-shortcuts-reference)
-17. [Troubleshooting](#troubleshooting)
+2. [Remote Browser Access](#remote-browser-access)
+3. [User Interface Overview](#user-interface-overview)
+4. [Camera Controls](#camera-controls)
+5. [Aircraft Following](#aircraft-following)
+6. [Airport Selection](#airport-selection)
+7. [Aircraft Panel](#aircraft-panel)
+8. [Global Aircraft Search](#global-aircraft-search)
+9. [Bookmark System](#bookmark-system)
+10. [Multi-Viewport System](#multi-viewport-system)
+11. [Replay System](#replay-system)
+12. [Measuring Tool](#measuring-tool)
+13. [Weather Effects](#weather-effects)
+14. [VR Support](#vr-support)
+15. [Settings](#settings)
+16. [Modding](#modding)
+17. [Keyboard Shortcuts Reference](#keyboard-shortcuts-reference)
+18. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -48,6 +49,102 @@ Once configured, you'll see:
 - A 3D globe with satellite imagery and terrain
 - Aircraft displayed as 3D models with callsign labels (datablocks)
 - Aircraft physics emulation: pitch during climbs/descents, banking in turns, landing flare
+
+---
+
+## Remote Browser Access
+
+TowerCab 3D can be accessed from any device on your local network through a web browser, allowing you to use iPads, tablets, or other PCs as remote viewing stations.
+
+### How Remote Access Works
+
+When you launch the desktop app, it automatically starts an HTTP server on port 8765. This server:
+- Serves the complete TowerCab interface to web browsers
+- Streams all aircraft models and mods from your PC
+- Shares global settings (Cesium token, camera bookmarks, datablock positions)
+- Provides touch-optimized controls for mobile devices
+
+### Setting Up Remote Access
+
+1. **Start the Desktop App** on your main PC
+   - The HTTP server starts automatically on port 8765
+
+2. **Find Your PC's IP Address**
+   - **Windows:** Open Command Prompt and run `ipconfig`. Look for "IPv4 Address" under your network adapter (e.g., `192.168.1.100`)
+   - **macOS/Linux:** Open Terminal and run `ifconfig` or `ip addr`. Look for your network interface's IP address
+
+3. **Connect from Remote Device**
+   - On your iPad, tablet, or another PC, open any modern web browser (Safari, Chrome, Edge, Firefox)
+   - Navigate to `http://[your-pc-ip]:8765` (e.g., `http://192.168.1.100:8765`)
+   - The TowerCab interface will load with all your settings and mods
+
+### Touch Controls (iPad/Mobile)
+
+Remote devices with touchscreens have specialized controls:
+
+| Gesture | Action |
+|---------|--------|
+| **Single-finger drag** | Rotate camera (3D view) or pan map (top-down view) |
+| **Two-finger pinch** | Zoom in/out |
+| **Two-finger rotate** | Adjust heading/bearing |
+| **Virtual joystick** | Move camera position (appears in bottom-left, equivalent to WASD keys) |
+| **Tap aircraft label** | Follow that aircraft |
+
+**Virtual Joystick Sensitivity:** Adjust in Settings > General > Camera > Joystick Sensitivity (range: 1-10, default: 5)
+
+### Device Optimization
+
+On first connection from a touch device, you'll be prompted to apply optimized graphics settings:
+
+**iPad/Tablet Preset:**
+- Reduced shadow quality for smoother performance
+- Lower MSAA anti-aliasing (2x instead of 4x)
+- Smaller tile cache to conserve memory
+- Optimized for 60 FPS on mobile devices
+
+**Desktop Preset:**
+- Full quality graphics settings maintained
+- Recommended for PCs and laptops with dedicated GPUs
+
+You can always manually adjust these settings later in the Graphics tab.
+
+### Shared Settings
+
+The following settings are synchronized across all connected devices (stored on the host PC):
+- Cesium Ion token
+- Camera bookmarks (100 slots per airport)
+- Datablock positions (per-aircraft label placements)
+- Viewport layouts
+- Recent airports list
+- FSLTL model paths
+
+The following settings remain local to each device (stored in browser):
+- Graphics quality (terrain, shadows, MSAA)
+- Display preferences (theme, label distance)
+- Performance settings (tile cache, data radius)
+- UI preferences (panel visibility, etc.)
+
+### Connection Indicator
+
+When using remote mode, you'll see a "Connected to [hostname]" indicator in the top bar. This shows:
+- The hostname or IP of the host PC
+- Green badge indicates active connection
+- Reconnect button appears if connection is lost
+
+### Limitations in Remote Mode
+
+- **FSLTL Conversion:** Model conversion can only be performed on the desktop app (requires file system access)
+- **Updates:** Update checks and downloads happen on the host PC only
+- **Mods:** All mods must be installed on the host PC (remote clients access them via HTTP)
+
+### Firewall Configuration
+
+If you can't connect from remote devices:
+1. Ensure both devices are on the same local network (same Wi-Fi or wired network)
+2. Check if your PC's firewall is blocking port 8765
+3. **Windows Firewall:** Add an inbound rule allowing TCP port 8765
+4. **macOS Firewall:** Go to System Preferences > Security & Privacy > Firewall > Firewall Options and ensure TowerCab is allowed
+5. **Router Issues:** Some routers have client isolation enabled on guest networks - use the main network instead
 - Weather effects: fog at visibility limits, cloud layers at ceilings
 - A panel on the right showing nearby aircraft
 - Status information in the top bar

@@ -63,6 +63,9 @@ static FSLTL_CONVERTER_PROCESS: Mutex<Option<ProcessWithJob>> = Mutex::new(None)
 // Global storage for the HTTP server shutdown channel
 static HTTP_SERVER_SHUTDOWN: Mutex<Option<broadcast::Sender<()>>> = Mutex::new(None);
 
+// Global storage for the running server port
+static HTTP_SERVER_PORT: Mutex<Option<u16>> = Mutex::new(None);
+
 /// Find the mods root directory, checking multiple locations
 /// Returns the first path that exists, or the first candidate if none exist
 fn find_mods_root(app: &tauri::AppHandle) -> PathBuf {
@@ -320,6 +323,13 @@ pub struct GlobalAirportSettings {
 pub struct GlobalServerSettings {
     pub port: u16,
     pub enabled: bool,
+    /// Optional authentication token for API access
+    /// When set, clients must send this as Bearer token in Authorization header
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth_token: Option<String>,
+    /// If true, only allow connections from local network (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+    #[serde(default)]
+    pub require_local_network: bool,
 }
 
 // =============================================================================
@@ -442,6 +452,8 @@ impl Default for GlobalSettings {
             server: GlobalServerSettings {
                 port: 8765,
                 enabled: false,
+                auth_token: None,
+                require_local_network: false,
             },
             viewports: GlobalViewportSettings::default(),
         }
@@ -573,10 +585,14 @@ async fn start_http_server(app: tauri::AppHandle, port: u16) -> Result<ServerSta
     // Start the server
     let shutdown_tx = server::start_server(app, port).await?;
 
-    // Store the shutdown channel
+    // Store the shutdown channel and port
     {
         let mut guard = HTTP_SERVER_SHUTDOWN.lock().map_err(|e| e.to_string())?;
         *guard = Some(shutdown_tx);
+    }
+    {
+        let mut port_guard = HTTP_SERVER_PORT.lock().map_err(|e| e.to_string())?;
+        *port_guard = Some(port);
     }
 
     let lan_ip = get_lan_ip();
@@ -595,6 +611,10 @@ fn stop_http_server() -> Result<(), String> {
 
     if let Some(shutdown_tx) = guard.take() {
         let _ = shutdown_tx.send(());
+        // Clear the stored port
+        if let Ok(mut port_guard) = HTTP_SERVER_PORT.lock() {
+            *port_guard = None;
+        }
         println!("[Server] Shutdown signal sent");
         Ok(())
     } else {
@@ -610,18 +630,25 @@ fn get_http_server_status() -> ServerStatus {
         .map(|guard| guard.is_some())
         .unwrap_or(false);
 
+    // Get the actual running port (or default if not stored)
+    let port = HTTP_SERVER_PORT
+        .lock()
+        .ok()
+        .and_then(|guard| *guard)
+        .unwrap_or(8765);
+
     if is_running {
         let lan_ip = get_lan_ip();
         ServerStatus {
             running: true,
-            port: 8765, // Default port - TODO: read from settings
-            local_url: Some("http://localhost:8765".to_string()),
-            lan_url: lan_ip.map(|ip| format!("http://{}:8765", ip)),
+            port,
+            local_url: Some(format!("http://localhost:{}", port)),
+            lan_url: lan_ip.map(|ip| format!("http://{}:{}", ip, port)),
         }
     } else {
         ServerStatus {
             running: false,
-            port: 8765,
+            port,
             local_url: None,
             lan_url: None,
         }
