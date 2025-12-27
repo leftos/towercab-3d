@@ -4,6 +4,7 @@ import type { View3dPosition, ResolvedView2dPosition } from '../types/mod'
 import { getEstimatedTowerHeight } from '../types/airport'
 import { useViewportStore } from './viewportStore'
 import { useVatsimStore } from './vatsimStore'
+import { useVnasStore } from './vnasStore'
 import { useGlobalSettingsStore } from './globalSettingsStore'
 import { modService } from '../services/ModService'
 
@@ -130,6 +131,15 @@ export const useAirportStore = create<AirportStore>()(
           // Immediately update VATSIM reference position to trigger re-filter
           // This ensures aircraft near the new airport are visible right away
           useVatsimStore.getState().setReferencePosition(airport.lat, airport.lon)
+
+          // Auto-subscribe to vNAS if connected (for 1Hz real-time updates)
+          const vnasState = useVnasStore.getState()
+          if (vnasState.isConnected()) {
+            // Fire and forget - don't await, don't block airport selection
+            vnasState.subscribe(icao).catch((err) => {
+              console.warn('vNAS auto-subscribe failed:', err)
+            })
+          }
         }
       },
 

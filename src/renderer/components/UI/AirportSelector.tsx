@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAirportStore } from '../../stores/airportStore'
+import { useVnasStore } from '../../stores/vnasStore'
 import type { Airport } from '../../types/airport'
 import './AirportSelector.css'
 
@@ -10,6 +11,7 @@ function AirportSelector() {
   const searchAirports = useAirportStore((state) => state.searchAirports)
   const selectAirport = useAirportStore((state) => state.selectAirport)
   const recentAirports = useAirportStore((state) => state.recentAirports)
+  const vnasConnected = useVnasStore((state) => state.status.state === 'connected')
 
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<Airport[]>([])
@@ -93,6 +95,13 @@ function AirportSelector() {
                       onClick={() => handleSelect(airport.icao)}
                     >
                       <div className="result-main">
+                        {vnasConnected && (
+                          <span className="vnas-indicator" title="1Hz real-time updates available">
+                            <svg width="8" height="8" viewBox="0 0 8 8">
+                              <circle cx="4" cy="4" r="4" fill="#0c7" />
+                            </svg>
+                          </span>
+                        )}
                         <span className="result-icao">{airport.icao}</span>
                         {airport.iata && <span className="result-iata">{airport.iata}</span>}
                         <span className="result-name">{airport.name}</span>
@@ -120,6 +129,13 @@ function AirportSelector() {
                       onClick={() => handleSelect(airport.icao)}
                     >
                       <div className="result-main">
+                        {vnasConnected && (
+                          <span className="vnas-indicator" title="1Hz real-time updates available">
+                            <svg width="8" height="8" viewBox="0 0 8 8">
+                              <circle cx="4" cy="4" r="4" fill="#0c7" />
+                            </svg>
+                          </span>
+                        )}
                         <span className="result-icao">{airport.icao}</span>
                         {airport.iata && <span className="result-iata">{airport.iata}</span>}
                         <span className="result-name">{airport.name}</span>
@@ -141,9 +157,15 @@ function AirportSelector() {
                     return (
                       <button
                         key={icao}
-                        className="quick-airport"
+                        className={`quick-airport${vnasConnected ? ' vnas-available' : ''}`}
                         onClick={() => handleSelect(icao)}
+                        title={vnasConnected ? '1Hz real-time updates available' : undefined}
                       >
+                        {vnasConnected && (
+                          <svg className="quick-vnas-dot" width="6" height="6" viewBox="0 0 6 6">
+                            <circle cx="3" cy="3" r="3" fill="#0c7" />
+                          </svg>
+                        )}
                         {icao}
                       </button>
                     )

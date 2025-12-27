@@ -191,3 +191,21 @@
 .selector-content::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
 }
+
+/* vNAS indicator - shows when 1Hz real-time updates are available */
+.vnas-indicator {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 4px;
+}
+
+.quick-airport.vnas-available {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.quick-vnas-dot {
+  flex-shrink: 0;
+}
