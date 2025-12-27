@@ -17,6 +17,7 @@ import {
   GROUNDSPEED_THRESHOLD_KNOTS,
   TURN_RATE_DECAY_MS
 } from '../constants/rendering'
+import { headingDifference } from './aircraft/geoMath'
 
 // Constants for physics-based interpolation
 const NM_TO_DEGREES_LAT = 1 / 60 // 1 NM = 1/60 degree latitude
@@ -488,9 +489,29 @@ export function interpolateAircraftState(
     interpolatedLat = hermiteResult.lat
     interpolatedLon = hermiteResult.lon
 
-    // Always interpolate heading separately (for model orientation)
-    // This ensures the aircraft model faces the correct direction regardless of movement
-    interpolatedHeading = lerpAngle(previous.heading, current.heading, t)
+    // Interpolate heading for model orientation
+    // For ground movement, align heading with track (direction of travel) to prevent
+    // sideways drift artifacts where aircraft appears to move sideways
+    if (isGroundMovement) {
+      // Check if this is forward movement (heading roughly matches track) vs pushback
+      const trackHeadingDiff = Math.abs(headingDifference(actualTrack, current.heading))
+
+      if (trackHeadingDiff < 60) {
+        // Forward taxi: blend heading toward track to eliminate sideways drift
+        // Use 70% track, 30% VATSIM heading for smooth but aligned movement
+        const blendedHeading = lerpAngle(current.heading, actualTrack, 0.7)
+        interpolatedHeading = lerpAngle(previous.heading, blendedHeading, t)
+      } else if (trackHeadingDiff > 120) {
+        // Pushback: heading is opposite to track, keep original heading interpolation
+        interpolatedHeading = lerpAngle(previous.heading, current.heading, t)
+      } else {
+        // Turning or ambiguous: use original heading interpolation
+        interpolatedHeading = lerpAngle(previous.heading, current.heading, t)
+      }
+    } else {
+      // Airborne: use original heading interpolation (allows for crab angle)
+      interpolatedHeading = lerpAngle(previous.heading, current.heading, t)
+    }
 
     // Use LINEAR interpolation for altitude to maintain consistent climb/descent rate
     // (smoothstep causes slowdown at ends which looks wrong for steady climbs/descents)
@@ -584,8 +605,9 @@ export function interpolateAircraftState(
     // Clamp t to 1.0 for orientation (don't extrapolate pitch/roll beyond final values)
     const tOrientation = Math.min(1.0, t)
 
-    // Use smootherstep (even gentler than smoothstep) for very gradual transitions
-    const easedT = smootherstep(tOrientation)
+    // Use smoothstep for natural but responsive transitions
+    // (smootherstep was too gradual, causing delayed pitch/roll response)
+    const easedT = smoothstep(tOrientation)
     pitch = lerp(prevOrientation.pitch, currOrientation.pitch, easedT)
     roll = lerp(prevOrientation.roll, currOrientation.roll, easedT)
   }

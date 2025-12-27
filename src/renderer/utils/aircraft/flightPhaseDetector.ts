@@ -494,15 +494,18 @@ export function detectFlightPhase(
       return { phase: 'holding_short', runway: runwayIdent, runwayDistance: runwayDistanceNm }
     }
 
-    // Check for pushback: moving slowly with track opposite to heading
+    // Check for pushback: moving with track opposite to heading
     // Pushback: aircraft faces one direction but moves backwards
-    if (speedKts > 0.3 && speedKts < PUSHBACK_MAX_SPEED_KTS) {
-      const trackHeadingDiff = Math.abs(headingDifference(track, heading))
-      // If track is 90-180° from heading, aircraft is moving backwards or sideways
-      // Use 90° threshold to catch curved pushbacks (not just straight back)
-      if (trackHeadingDiff > 90) {
-        return { phase: 'pushback', runway: null, runwayDistance: null }
-      }
+    // Note: VATSIM often reports groundspeed as 0 during pushback even though
+    // position is changing, so we don't require minimum speed. The track-heading
+    // difference alone indicates position is changing (track defaults to heading
+    // when stationary).
+    const trackHeadingDiff = Math.abs(headingDifference(track, heading))
+    // If track is 90-180° from heading, aircraft is moving backwards or sideways
+    // Use 90° threshold to catch curved pushbacks (not just straight back)
+    // Max speed check prevents flagging crosswind taxi as pushback
+    if (trackHeadingDiff > 90 && speedKts < PUSHBACK_MAX_SPEED_KTS) {
+      return { phase: 'pushback', runway: null, runwayDistance: null }
     }
 
     // If moving at all, it's taxi - stopped is the last resort

@@ -5,7 +5,6 @@ import { interpolateAircraftState, calculateFlarePitch } from '../utils/interpol
 import { performanceMonitor } from '../utils/performanceMonitor'
 import type { InterpolatedAircraftState, AircraftState } from '../types/vatsim'
 import {
-  GROUNDSPEED_THRESHOLD_KNOTS,
   GROUND_AIRCRAFT_TERRAIN_OFFSET,
   FLYING_AIRCRAFT_TERRAIN_OFFSET,
   TERRAIN_SMOOTHING_LERP_FACTOR,
@@ -48,6 +47,11 @@ const sharedWasInFlareRef = { current: new Map<string, boolean>() }
 // Store the actual flare pitch from the previous frame for accurate nosewheel transition
 const sharedLastFlarePitchRef = { current: new Map<string, number>() }
 
+// Cache previous segment's physics for smooth orientation transitions
+// These values are captured when new VATSIM data arrives and reused until next update
+const sharedCachedPrevTurnRateRef = { current: new Map<string, number>() }
+const sharedCachedPrevVerticalRateRef = { current: new Map<string, number>() }
+
 // Store subscribers for triggering re-renders
 const subscribers = new Set<() => void>()
 
@@ -89,10 +93,17 @@ function updateInterpolation() {
     // Detect if this is a new VATSIM data update (currentState timestamp changed)
     const isNewVatsimData = !existing || existing.timestamp !== currentState.timestamp
 
-    // Only extract previous physics if we have existing data and it's a NEW update
-    // This preserves the OLD segment's physics for smooth transitions
-    const previousVerticalRate = (existing && isNewVatsimData) ? (existing.verticalRate / 60000) : 0
-    const previousTurnRate = (existing && isNewVatsimData) ? existing.turnRate : 0
+    // Cache previous segment's physics when new VATSIM data arrives
+    // These values are reused for ALL frames until the next VATSIM update
+    // This ensures smooth interpolation from previous orientation to current orientation
+    if (isNewVatsimData && existing) {
+      sharedCachedPrevTurnRateRef.current.set(callsign, existing.turnRate)
+      sharedCachedPrevVerticalRateRef.current.set(callsign, existing.verticalRate / 60000)
+    }
+
+    // Use cached values (or 0 for new aircraft)
+    const previousTurnRate = sharedCachedPrevTurnRateRef.current.get(callsign) ?? 0
+    const previousVerticalRate = sharedCachedPrevVerticalRateRef.current.get(callsign) ?? 0
 
     const interpolated = interpolateAircraftState(
       previousState,
@@ -136,7 +147,6 @@ function updateInterpolation() {
     // Apply terrain correction to aircraft altitude
     // This ensures consistent height across all rendering (models, labels, etc.)
     const entry = statesMap.get(callsign)!
-    const isOnGround = entry.interpolatedGroundspeed < GROUNDSPEED_THRESHOLD_KNOTS
     const heightAboveEllipsoid = entry.interpolatedAltitude // VATSIM altitude in meters MSL
     const terrainOffset = sharedTerrainOffsetRef.current
     const groundElevationMeters = sharedGroundElevationMetersRef.current
@@ -146,10 +156,22 @@ function updateInterpolation() {
     const reportedEllipsoidHeight = heightAboveEllipsoid + terrainOffset
     const sampledTerrainHeight = groundAircraftTerrain.get(callsign)
 
+    // Calculate altitude above ground level (AGL) for ground detection
+    // Use terrain sample if available, otherwise use airport elevation
+    const altitudeAGL = sampledTerrainHeight !== undefined
+      ? reportedEllipsoidHeight - sampledTerrainHeight
+      : heightAboveEllipsoid - groundElevationMeters
+
+    // Determine if aircraft is on ground using BOTH speed and altitude:
+    // - Low speed (< 5 kts): definitely on ground (handles altitude/terrain mismatch)
+    // - Low altitude AGL (< 10m): also on ground (handles fast takeoff/landing roll)
+    const isLowSpeed = entry.interpolatedGroundspeed < 5
+    const isLowAltitude = altitudeAGL < 10
+    const isOnGround = isLowSpeed || isLowAltitude
+
     // Determine if we should clamp to terrain:
-    // 1. Groundspeed is low (definitely on ground), OR
+    // 1. Altitude AGL is low (definitely on ground), OR
     // 2. Terrain sample exists AND is higher than reported altitude (prevents going underground)
-    //    This fixes the issue where landing aircraft (>40kts) would clip through runway
     let shouldClampToTerrain = false
     if (sampledTerrainHeight !== undefined) {
       const terrainEllipsoidHeight = sampledTerrainHeight + GROUND_AIRCRAFT_TERRAIN_OFFSET
@@ -270,8 +292,8 @@ function updateInterpolation() {
       // This allows us to capture the actual flare pitch when aircraft is in flare
       const isDescending = entry.verticalRate < -50  // m/min
       const inFlareZone = altitudeAGL > 0 && altitudeAGL < 15  // meters
-      const isAirborne = entry.interpolatedGroundspeed >= GROUNDSPEED_THRESHOLD_KNOTS
-      const isInFlare = isDescending && inFlareZone && isAirborne
+      // Note: inFlareZone already requires altitudeAGL > 0 (airborne), no speed check needed
+      const isInFlare = isDescending && inFlareZone
 
       // Get the base pitch (without flare) for reference
       const basePitch = entry.interpolatedPitch
@@ -341,6 +363,8 @@ function updateInterpolation() {
       sharedNosewheelTransitionRef.current.delete(callsign)
       sharedWasInFlareRef.current.delete(callsign)
       sharedLastFlarePitchRef.current.delete(callsign)
+      sharedCachedPrevTurnRateRef.current.delete(callsign)
+      sharedCachedPrevVerticalRateRef.current.delete(callsign)
     }
   }
 
