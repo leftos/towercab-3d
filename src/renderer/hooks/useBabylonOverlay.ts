@@ -7,6 +7,7 @@ import { useBabylonRootNode } from './useBabylonRootNode'
 import { useBabylonCameraSync } from './useBabylonCameraSync'
 import { useBabylonPrecipitation } from './useBabylonPrecipitation'
 import { useViewportStore } from '../stores/viewportStore'
+import { useSettingsStore } from '../stores/settingsStore'
 
 /**
  * Orchestrator hook for Babylon.js overlay rendering synchronized with Cesium.
@@ -179,6 +180,9 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
   const viewMode = useViewportStore((state) => state.viewports.find(v => v.id === 'main')?.cameraState.viewMode)
   const isTopDownView = viewMode === 'topdown'
 
+  // Get datablock font size setting
+  const datablockFontSize = useSettingsStore((state) => state.aircraft.datablockFontSize)
+
   // 1. Initialize scene (engine, scene, camera, GUI, lighting)
   const { engine, scene, camera, guiTexture, sceneReady } = useBabylonScene({
     canvas: canvas!,
@@ -208,7 +212,8 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     hideAllLabels
   } = useBabylonLabels({
     guiTexture,
-    isTopDownView
+    isTopDownView,
+    fontSize: datablockFontSize
   })
 
   // 5. Initialize ENU root node (coordinate system, transforms)
@@ -242,8 +247,8 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
   )
 
   const updateLeaderLineAdapter = useCallback(
-    (callsign: string, coneX: number, coneY: number, offsetX: number, offsetY: number) => {
-      updateLabelPosition(callsign, coneX, coneY, offsetX, offsetY)
+    (callsign: string, aircraftX: number, aircraftY: number, offsetX: number, offsetY: number) => {
+      updateLabelPosition(callsign, aircraftX, aircraftY, offsetX, offsetY)
     },
     [updateLabelPosition]
   )

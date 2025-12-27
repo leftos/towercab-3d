@@ -849,7 +849,7 @@ Import airline-specific liveries from the FS Live Traffic Liveries (FSLTL) packa
 
 ### Aircraft Mods
 
-Replace the default cone mesh with realistic aircraft models. Mods match by ICAO aircraft type code (e.g., B738, A320).
+Add custom aircraft models with airline-specific liveries. Mods match by ICAO aircraft type code (e.g., B738, A320).
 
 ### Tower Mods
 

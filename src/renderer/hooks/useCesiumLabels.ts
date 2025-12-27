@@ -15,7 +15,7 @@ export type DatablockMode = 'none' | 'full' | 'airline'
 interface BabylonOverlay {
   updateAircraftLabel: (callsign: string, text: string, r: number, g: number, b: number) => void
   hideAllLabels: () => void
-  updateLeaderLine: (callsign: string, coneX: number, coneY: number, offsetX: number, offsetY: number) => void
+  updateLeaderLine: (callsign: string, aircraftX: number, aircraftY: number, offsetX: number, offsetY: number) => void
   getAircraftCallsigns: () => string[]
   removeAircraftLabel: (callsign: string) => void
   isDatablockVisibleByWeather: (cameraAltitudeAGL: number, aircraftAltitudeAGL: number, distanceMeters: number) => boolean
@@ -69,10 +69,10 @@ interface UseCesiumLabelsParams {
  *
  * ## Label Positioning
  * Uses intelligent overlap detection:
- * - **Default position**: Top-left of aircraft cone
- * - **Cone overlap check**: Move label further if it overlaps cone
+ * - **Default position**: Top-left of aircraft model
+ * - **Model overlap check**: Move label further if it overlaps aircraft
  * - **Label overlap check**: Try 5 alternative positions (top-right, bottom-left, etc.)
- * - **Leader lines**: Drawn from cone center to label corner
+ * - **Leader lines**: Drawn from aircraft position to label corner
  *
  * ## Datablock Modes
  * - **none**: No labels shown
@@ -327,15 +327,15 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
     // Second pass: Calculate label offsets with overlap detection
     const labelWidth = 90
     const labelHeight = 36
-    const coneRadius = viewMode === 'topdown' ? 15 : 15
+    const modelRadius = viewMode === 'topdown' ? 15 : 15
     // Leader distance setting: 1=short, 2=normal (default), 3=medium, 4=long, 5=very long
     const leaderDistance = useSettingsStore.getState().aircraft.leaderDistance ?? 2
     const labelGap = viewMode === 'topdown' ? leaderDistance * 10 : leaderDistance * 10
 
     const labelPositions: Array<{
       callsign: string
-      coneX: number
-      coneY: number
+      aircraftX: number
+      aircraftY: number
       labelX: number
       labelY: number
       offsetX: number
@@ -422,25 +422,25 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
 
       // Only apply overlap detection if the setting is enabled
       if (autoAvoidOverlaps) {
-        // Check for overlap with cone itself (cone is at aircraft position, not label attachment point)
+        // Check for overlap with aircraft model (model is at aircraft position, not label attachment point)
         const labelLeft = screenPos.x
         const labelTop = screenPos.y
         const labelRight = labelLeft + labelWidth
         const labelBottom = labelTop + labelHeight
 
-        if (labelRight > aircraftScreenPos.x - coneRadius && labelLeft < aircraftScreenPos.x + coneRadius &&
-            labelBottom > aircraftScreenPos.y - coneRadius && labelTop < aircraftScreenPos.y + coneRadius) {
-          // Adjust offsets to avoid cone overlap while respecting user's chosen direction
+        if (labelRight > aircraftScreenPos.x - modelRadius && labelLeft < aircraftScreenPos.x + modelRadius &&
+            labelBottom > aircraftScreenPos.y - modelRadius && labelTop < aircraftScreenPos.y + modelRadius) {
+          // Adjust offsets to avoid model overlap while respecting user's chosen direction
           // Use position column/row to determine direction, not offset sign
           // col: 0=left, 1=center, 2=right; row: 0=bottom, 1=middle, 2=top
 
           // For horizontal adjustment based on column
           if (positionCol === 2) {
             // Right column - push right
-            offsetX = coneRadius + labelGap
+            offsetX = modelRadius + labelGap
           } else if (positionCol === 0) {
             // Left column - push left
-            offsetX = -labelWidth - coneRadius - labelGap - horizontalOffsetPixels
+            offsetX = -labelWidth - modelRadius - labelGap - horizontalOffsetPixels
           } else {
             // Center column - maintain horizontal centering, just push out minimally
             offsetX = -labelWidth / 2
@@ -449,10 +449,10 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
           // For vertical adjustment based on row
           if (positionRow === 0) {
             // Bottom row - push down
-            offsetY = coneRadius + labelGap
+            offsetY = modelRadius + labelGap
           } else if (positionRow === 2) {
             // Top row - push up
-            offsetY = -labelHeight - coneRadius - labelGap - verticalOffsetPixels
+            offsetY = -labelHeight - modelRadius - labelGap - verticalOffsetPixels
           } else {
             // Middle row - maintain vertical centering
             offsetY = -labelHeight / 2
@@ -549,8 +549,8 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
 
       labelPositions.push({
         callsign: data.callsign,
-        coneX: aircraftWindowPos.x, // Center X of aircraft
-        coneY: leaderEndpointY, // Y based on position row (top/middle/bottom)
+        aircraftX: aircraftWindowPos.x, // Center X of aircraft
+        aircraftY: leaderEndpointY, // Y based on position row (top/middle/bottom)
         labelX: screenPos.x,
         labelY: screenPos.y,
         offsetX,
@@ -560,7 +560,7 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
 
     // Third pass: Update leader lines with calculated offsets
     for (const pos of labelPositions) {
-      babylonOverlay.updateLeaderLine(pos.callsign, pos.coneX, pos.coneY, pos.offsetX, pos.offsetY)
+      babylonOverlay.updateLeaderLine(pos.callsign, pos.aircraftX, pos.aircraftY, pos.offsetX, pos.offsetY)
     }
 
     // Clean up any Babylon labels that are no longer in the visible set

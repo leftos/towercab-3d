@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import * as Cesium from 'cesium'
 import {
-  CONE_POOL_SIZE,
+  AIRCRAFT_POOL_SIZE,
   getModelColorRgb,
   getModelColorBlendAmount
 } from '../constants/rendering'
@@ -322,7 +322,7 @@ export function useCesiumViewer(
 
     // Load models asynchronously into the pool
     let modelsLoaded = 0
-    for (let i = 0; i < CONE_POOL_SIZE; i++) {
+    for (let i = 0; i < AIRCRAFT_POOL_SIZE; i++) {
       modelPoolAssignmentsRef.current.set(i, null)
       modelPoolUrlsRef.current.set(i, defaultModelUrl)
 
@@ -339,7 +339,7 @@ export function useCesiumViewer(
         newViewer.scene.primitives.add(model)
         modelPoolRef.current.set(i, model)
         modelsLoaded++
-        if (modelsLoaded === CONE_POOL_SIZE) {
+        if (modelsLoaded === AIRCRAFT_POOL_SIZE) {
           modelPoolReadyRef.current = true
         }
       }).catch(err => {

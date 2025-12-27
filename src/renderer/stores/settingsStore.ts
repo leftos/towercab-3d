@@ -297,6 +297,9 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
             }),
             ...(updates.orientationIntensity !== undefined && {
               orientationIntensity: Math.max(0.25, Math.min(1.5, updates.orientationIntensity))
+            }),
+            ...(updates.datablockFontSize !== undefined && {
+              datablockFontSize: Math.max(8, Math.min(20, Math.round(updates.datablockFontSize)))
             })
           }
         })),
@@ -405,7 +408,7 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
     }),
     {
       name: 'settings-store',
-      version: 19, // Incremented for aircraftPanelWidth/Height UI settings
+      version: 20, // Incremented for datablockFontSize aircraft setting
       migrate: (persistedState: unknown, version: number) => {
         // Auto-migrate old flat structure to grouped structure
         if (version < 2) {
@@ -629,6 +632,18 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
             }
           }
         }
+        // Migrate v19 to v20: add datablockFontSize setting
+        if (version < 20) {
+          console.log('[Settings] Migrating v19 to v20: adding datablockFontSize setting')
+          const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
+          return {
+            ...state,
+            aircraft: {
+              ...DEFAULT_SETTINGS.aircraft,
+              ...state.aircraft
+            }
+          }
+        }
         return persistedState as SettingsStoreWithPresets
       }
     }
@@ -746,7 +761,9 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
       leaderDistance:
         oldSettings.leaderDistance ?? DEFAULT_SETTINGS.aircraft.leaderDistance,
       defaultDatablockDirection:
-        oldSettings.defaultDatablockDirection ?? DEFAULT_SETTINGS.aircraft.defaultDatablockDirection
+        oldSettings.defaultDatablockDirection ?? DEFAULT_SETTINGS.aircraft.defaultDatablockDirection,
+      datablockFontSize:
+        oldSettings.datablockFontSize ?? DEFAULT_SETTINGS.aircraft.datablockFontSize
     },
     ui: {
       theme: oldSettings.theme ?? DEFAULT_SETTINGS.ui.theme,

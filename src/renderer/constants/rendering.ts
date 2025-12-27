@@ -12,14 +12,12 @@
 // ============================================================================
 
 /**
- * Maximum number of aircraft cone fallback meshes to pool
+ * Maximum number of aircraft model instances to pool
  *
- * Cones are used when:
- * - No 3D model is available for the aircraft type
- * - Model loading fails
- * - Fallback display mode is enabled
+ * Pool size determines how many aircraft can be rendered simultaneously
+ * before older models are recycled.
  */
-export const CONE_POOL_SIZE = 100
+export const AIRCRAFT_POOL_SIZE = 100
 
 /**
  * Maximum number of full 3D aircraft models to pool
@@ -123,12 +121,12 @@ export const FSLTL_MODEL_HEIGHT_OFFSET = 1.0
 // ============================================================================
 
 /**
- * Default cone color for aircraft without 3D models (blue)
+ * Default fallback color for aircraft models (blue)
  *
  * RGBA format: [Red, Green, Blue, Alpha]
  * Values: 0.0 to 1.0
  */
-export const CONE_BLUE_COLOR = [0.2, 0.4, 1.0, 1.0] as const
+export const FALLBACK_MODEL_COLOR = [0.2, 0.4, 1.0, 1.0] as const
 
 /**
  * Shadow color (semi-transparent black)
@@ -341,7 +339,7 @@ export const DATABLOCK_HORIZONTAL_OFFSET_M = -10
 /**
  * Gap in pixels between leader line end and aircraft position (3D view)
  *
- * Small gap to prevent the line from overlapping the aircraft model/cone.
+ * Small gap to prevent the line from overlapping the aircraft model.
  * Used in 3D tower view mode.
  */
 export const LEADER_LINE_END_GAP_3D_PX = 3

@@ -21,6 +21,14 @@ export type DatablockPosition = 1 | 2 | 3 | 4 | 6 | 7 | 8 | 9
 /** Pending direction input (includes 5 for "reset to default") */
 export type PendingDirection = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
 
+/** Label screen bounds for click detection */
+export interface LabelBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 interface DatablockPositionStore {
   /**
    * Per-aircraft position overrides (session-only)
@@ -36,17 +44,29 @@ interface DatablockPositionStore {
    */
   pendingDirection: PendingDirection | null
 
+  /**
+   * Label screen bounds for click detection (session-only)
+   * Key: callsign, Value: screen bounds { x, y, width, height }
+   * Updated each frame by useBabylonLabels
+   */
+  labelBounds: Map<string, LabelBounds>
+
   // Actions
   setPendingDirection: (direction: PendingDirection | null) => void
   setAircraftPosition: (callsign: string, position: DatablockPosition) => void
   clearAircraftOverride: (callsign: string) => void
   clearAllOverrides: () => void
   getAircraftPosition: (callsign: string) => DatablockPosition | null
+  setLabelBounds: (callsign: string, bounds: LabelBounds) => void
+  clearLabelBounds: (callsign: string) => void
+  clearAllLabelBounds: () => void
+  findLabelAtPosition: (x: number, y: number) => string | null
 }
 
 export const useDatablockPositionStore = create<DatablockPositionStore>((set, get) => ({
   aircraftOverrides: new Map(),
   pendingDirection: null,
+  labelBounds: new Map(),
 
   setPendingDirection: (direction) => set({ pendingDirection: direction }),
 
@@ -64,5 +84,36 @@ export const useDatablockPositionStore = create<DatablockPositionStore>((set, ge
 
   clearAllOverrides: () => set({ aircraftOverrides: new Map() }),
 
-  getAircraftPosition: (callsign) => get().aircraftOverrides.get(callsign) ?? null
+  getAircraftPosition: (callsign) => get().aircraftOverrides.get(callsign) ?? null,
+
+  setLabelBounds: (callsign, bounds) => {
+    const labelBounds = get().labelBounds
+    labelBounds.set(callsign, bounds)
+    // Note: We don't call set() here to avoid unnecessary re-renders
+    // The bounds map is mutated in place since we only need it for click detection
+  },
+
+  clearLabelBounds: (callsign) => {
+    const labelBounds = get().labelBounds
+    labelBounds.delete(callsign)
+  },
+
+  clearAllLabelBounds: () => {
+    get().labelBounds.clear()
+  },
+
+  findLabelAtPosition: (x, y) => {
+    const { labelBounds } = get()
+    for (const [callsign, bounds] of labelBounds) {
+      if (
+        x >= bounds.x &&
+        x <= bounds.x + bounds.width &&
+        y >= bounds.y &&
+        y <= bounds.y + bounds.height
+      ) {
+        return callsign
+      }
+    }
+    return null
+  }
 }))

@@ -5,7 +5,7 @@ This guide explains how to create custom aircraft and tower models for TowerCab 
 ## Overview
 
 TowerCab 3D supports loading custom 3D models in multiple formats. You can create:
-- **Aircraft models**: Replace the default cone with realistic aircraft
+- **Aircraft models**: Add custom aircraft models with airline-specific liveries
 - **Tower models**: Add custom control tower models for specific airports
 
 ### Supported Formats

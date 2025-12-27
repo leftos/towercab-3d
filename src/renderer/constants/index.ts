@@ -18,7 +18,7 @@
 
 export {
   // Aircraft model pool
-  CONE_POOL_SIZE,
+  AIRCRAFT_POOL_SIZE,
   MODEL_POOL_SIZE,
 
   // Shadow configuration
@@ -31,7 +31,7 @@ export {
   FSLTL_MODEL_HEIGHT_OFFSET,
 
   // Colors
-  CONE_BLUE_COLOR,
+  FALLBACK_MODEL_COLOR,
   SHADOW_COLOR,
 
   // Rendering performance

@@ -456,6 +456,14 @@ export interface AircraftSettings {
    * Press 5+click to reset a specific aircraft's datablock to this default.
    */
   defaultDatablockDirection: DatablockDirection
+
+  /**
+   * Datablock font size in pixels (8-20, default: 12)
+   *
+   * Controls the font size of aircraft datablock labels. Larger sizes are
+   * easier to read but take more screen space and may overlap more.
+   */
+  datablockFontSize: number
 }
 
 /**
@@ -944,7 +952,8 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     pinFollowedAircraftToTop: true,
     autoAvoidOverlaps: true,
     leaderDistance: 2,
-    defaultDatablockDirection: 7
+    defaultDatablockDirection: 7,
+    datablockFontSize: 12
   },
   ui: {
     theme: 'dark',

@@ -2,10 +2,12 @@ import { useRef, useCallback } from 'react'
 import * as GUI from '@babylonjs/gui'
 import type { AircraftLabel, UseBabylonLabelsResult } from '@/types'
 import { LEADER_LINE_END_GAP_3D_PX, LEADER_LINE_END_GAP_2D_PX } from '@/constants/rendering'
+import { useDatablockPositionStore } from '@/stores/datablockPositionStore'
 
 interface UseBabylonLabelsOptions {
   guiTexture: GUI.AdvancedDynamicTexture | null
   isTopDownView?: boolean
+  fontSize?: number
 }
 
 // Memory diagnostic counters for label management
@@ -316,7 +318,7 @@ function rgbToHex(r: number, g: number, b: number): string {
 export function useBabylonLabels(
   options: UseBabylonLabelsOptions
 ): UseBabylonLabelsResult {
-  const { guiTexture, isTopDownView = false } = options
+  const { guiTexture, isTopDownView = false, fontSize = 12 } = options
 
   const aircraftLabelsRef = useRef<Map<string, AircraftLabel>>(new Map())
 
@@ -354,7 +356,7 @@ export function useBabylonLabels(
       memoryCounters.guiControlsCreated++
       text.text = labelText || callsign
       text.color = rgbToHex(color.r, color.g, color.b)
-      text.fontSize = 12
+      text.fontSize = fontSize
       text.fontFamily = 'monospace'
       text.fontWeight = 'bold'
       text.textHorizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT
@@ -384,16 +386,17 @@ export function useBabylonLabels(
       aircraftLabelsRef.current.set(callsign, labelData)
     }
 
-    // Update colors and text
+    // Update colors, text, and font size
     labelData.leaderLine.color = rgbToHex(color.r, color.g, color.b)
     labelData.labelText.text = labelText || callsign
     labelData.labelText.color = rgbToHex(color.r, color.g, color.b)
+    labelData.labelText.fontSize = fontSize
     labelData.label.color = rgbToHex(color.r, color.g, color.b)
     labelData.label.background = isFollowed ? 'rgba(0, 50, 80, 0.85)' : 'rgba(0, 0, 0, 0.85)'
     const scale = isFollowed ? 1.2 : 1.0
     labelData.label.scaleX = scale
     labelData.label.scaleY = scale
-  }, [guiTexture])
+  }, [guiTexture, fontSize])
 
   // Update label position and leader line
   const updateLabelPosition = useCallback((
@@ -488,6 +491,14 @@ export function useBabylonLabels(
     // Now show label and leader line (coordinates already set)
     labelData.label.isVisible = true
     labelData.leaderLine.isVisible = true
+
+    // Report label bounds for click detection (allow clicking on datablock itself)
+    useDatablockPositionStore.getState().setLabelBounds(callsign, {
+      x: labelX,
+      y: labelY,
+      width: labelW,
+      height: labelH
+    })
   }, [guiTexture, isTopDownView])
 
   // Remove aircraft label
@@ -501,6 +512,7 @@ export function useBabylonLabels(
       labelData.label.dispose()
       memoryCounters.guiControlsDisposed++
       aircraftLabelsRef.current.delete(callsign)
+      useDatablockPositionStore.getState().clearLabelBounds(callsign)
     }
   }, [])
 
@@ -515,6 +527,7 @@ export function useBabylonLabels(
       memoryCounters.guiControlsDisposed++
     }
     aircraftLabelsRef.current.clear()
+    useDatablockPositionStore.getState().clearAllLabelBounds()
   }, [])
 
   // Get label data for specific aircraft

@@ -100,8 +100,8 @@ export function createRectangle(x: number, y: number, width: number, height: num
  */
 export interface LabelPosition {
   callsign: string
-  coneX: number
-  coneY: number
+  aircraftX: number
+  aircraftY: number
   labelX: number
   labelY: number
   offsetX: number
@@ -112,7 +112,7 @@ export interface LabelPosition {
  * Alternative label offset positions to try when avoiding overlaps
  */
 export const LABEL_OFFSET_ALTERNATIVES = [
-  { x: 0, y: 0 },      // Default: top-left of cone (will be adjusted below)
+  { x: 0, y: 0 },      // Default: top-left of aircraft (will be adjusted below)
   { x: 30, y: -40 },   // Top-right
   { x: -90, y: 0 },    // Left
   { x: 30, y: 0 },     // Right
@@ -123,42 +123,42 @@ export const LABEL_OFFSET_ALTERNATIVES = [
 ] as const
 
 /**
- * Calculate label offset avoiding overlap with cone and other labels
+ * Calculate label offset avoiding overlap with aircraft and other labels
  *
- * @param screenPos - Screen position of the cone
+ * @param screenPos - Screen position of the aircraft
  * @param labelWidth - Width of the label
  * @param labelHeight - Height of the label
- * @param coneRadius - Radius of the cone on screen
- * @param labelGap - Gap between label and cone
+ * @param modelRadius - Radius of the aircraft model on screen
+ * @param labelGap - Gap between label and aircraft
  * @param existingLabels - Array of existing label positions to avoid
  */
 export function calculateLabelOffset(
   screenPos: { x: number; y: number },
   labelWidth: number,
   labelHeight: number,
-  coneRadius: number,
+  modelRadius: number,
   labelGap: number,
   existingLabels: LabelPosition[]
 ): { offsetX: number; offsetY: number } {
-  // Default offset: top-left of cone
+  // Default offset: top-left of aircraft
   let offsetX = -labelWidth - labelGap
   let offsetY = -labelHeight - labelGap
 
-  // Check for overlap with cone itself
+  // Check for overlap with aircraft model itself
   const labelLeft = screenPos.x + offsetX
   const labelTop = screenPos.y + offsetY
   const labelRight = labelLeft + labelWidth
   const labelBottom = labelTop + labelHeight
 
-  // If label overlaps cone area, push it further out
+  // If label overlaps aircraft area, push it further out
   if (
-    labelRight > screenPos.x - coneRadius &&
-    labelLeft < screenPos.x + coneRadius &&
-    labelBottom > screenPos.y - coneRadius &&
-    labelTop < screenPos.y + coneRadius
+    labelRight > screenPos.x - modelRadius &&
+    labelLeft < screenPos.x + modelRadius &&
+    labelBottom > screenPos.y - modelRadius &&
+    labelTop < screenPos.y + modelRadius
   ) {
-    offsetX = -labelWidth - coneRadius - labelGap
-    offsetY = -labelHeight - coneRadius - labelGap
+    offsetX = -labelWidth - modelRadius - labelGap
+    offsetY = -labelHeight - modelRadius - labelGap
   }
 
   // Check for overlap with other labels
@@ -206,51 +206,51 @@ export function calculateLabelOffset(
 }
 
 /**
- * Calculate leader line endpoints from label to cone
- * The line connects the edge of the label closest to the cone to the cone position
+ * Calculate leader line endpoints from label to aircraft
+ * The line connects the edge of the label closest to the aircraft position
  *
  * @param labelX - Label X position
  * @param labelY - Label Y position
  * @param labelWidth - Label width
  * @param labelHeight - Label height
- * @param coneX - Cone X position
- * @param coneY - Cone Y position
- * @param coneRadius - Radius of the cone on screen
+ * @param aircraftX - Aircraft screen X position
+ * @param aircraftY - Aircraft screen Y position
+ * @param modelRadius - Radius of the aircraft model on screen
  */
 export function calculateLeaderLineEndpoints(
   labelX: number,
   labelY: number,
   labelWidth: number,
   labelHeight: number,
-  coneX: number,
-  coneY: number,
-  coneRadius: number
+  aircraftX: number,
+  aircraftY: number,
+  modelRadius: number
 ): { startX: number; startY: number; endX: number; endY: number } {
   const labelCenterX = labelX + labelWidth / 2
   const labelCenterY = labelY + labelHeight / 2
 
-  // Find the edge of the label closest to the cone
+  // Find the edge of the label closest to the aircraft
   let startX = labelCenterX
   let startY = labelCenterY
 
   // Horizontal edge
-  if (coneX < labelX) {
+  if (aircraftX < labelX) {
     startX = labelX
-  } else if (coneX > labelX + labelWidth) {
+  } else if (aircraftX > labelX + labelWidth) {
     startX = labelX + labelWidth
   }
 
   // Vertical edge
-  if (coneY < labelY) {
+  if (aircraftY < labelY) {
     startY = labelY
-  } else if (coneY > labelY + labelHeight) {
+  } else if (aircraftY > labelY + labelHeight) {
     startY = labelY + labelHeight
   }
 
-  // End point is at the edge of the cone towards the label
-  const angle = Math.atan2(startY - coneY, startX - coneX)
-  const endX = coneX + Math.cos(angle) * coneRadius
-  const endY = coneY + Math.sin(angle) * coneRadius
+  // End point is at the edge of the aircraft model towards the label
+  const angle = Math.atan2(startY - aircraftY, startX - aircraftX)
+  const endX = aircraftX + Math.cos(angle) * modelRadius
+  const endY = aircraftY + Math.sin(angle) * modelRadius
 
   return { startX, startY, endX, endY }
 }

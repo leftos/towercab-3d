@@ -38,7 +38,7 @@ import {
  *
  * ## Model Pool System
  * Uses a pool of pre-loaded Cesium.Model primitives to avoid per-aircraft load overhead:
- * - **Pool size**: 100 models (CONE_POOL_SIZE)
+ * - **Pool size**: 100 models (AIRCRAFT_POOL_SIZE)
  * - **Assignment**: Maps callsign → pool index
  * - **Dynamic loading**: Swaps models when aircraft type changes
  * - **Cleanup**: Hides and releases models when aircraft leave viewport

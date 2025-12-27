@@ -5,6 +5,12 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Datablock font size setting in Settings > Display > Aircraft Display
+  - Adjust font size from 8px to 20px (default: 12px)
+  - Larger sizes are easier to read but may overlap more
+- Datablock repositioning now works by clicking on the datablock label itself
+  - Previously only clicking near the aircraft worked
+  - Now you can press a direction key (1-9) and click directly on the datablock text
 - Remote browser access (optional)
   - Access TowerCab from iPad or any browser on your local network
   - HTTP server can be started on port 8765 via the desktop app settings
@@ -438,7 +444,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Datablock display mode setting with three options:
   - Full: shows callsign, aircraft type, altitude, and speed
   - Airline Codes Only: shows only the airline ICAO code (e.g., "UAL" instead of "UAL123") for airline flights
-  - None: hides labels entirely, showing only aircraft cones
+  - None: hides labels entirely, showing only aircraft models
 - New settings now accessible in the UI:
   - Theme (light/dark)
   - Default FOV and camera speed
@@ -472,7 +478,7 @@ All notable changes to TowerCab 3D will be documented in this file.
   - Enables realistic weather when flying around globally
 
 ### Changed
-- Aircraft rendering now uses type-specific 3D models instead of generic cones/sample model
+- Aircraft rendering now uses type-specific 3D models instead of a generic fallback model
 - Settings modal reorganized into tabs to reduce vertical scrolling
 - Keyboard shortcuts moved to dedicated Help tab
 

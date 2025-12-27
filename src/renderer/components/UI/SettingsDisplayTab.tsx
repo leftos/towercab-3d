@@ -13,6 +13,7 @@ function SettingsDisplayTab() {
   const autoAvoidOverlaps = useSettingsStore((state) => state.aircraft.autoAvoidOverlaps)
   const leaderDistance = useSettingsStore((state) => state.aircraft.leaderDistance)
   const defaultDatablockDirection = useSettingsStore((state) => state.aircraft.defaultDatablockDirection)
+  const datablockFontSize = useSettingsStore((state) => state.aircraft.datablockFontSize)
   const updateAircraftSettings = useSettingsStore((state) => state.updateAircraftSettings)
   const showAircraftPanel = useSettingsStore((state) => state.ui.showAircraftPanel)
   const updateUISettings = useSettingsStore((state) => state.updateUISettings)
@@ -66,7 +67,7 @@ function SettingsDisplayTab() {
                 checked={datablockMode === 'none'}
                 onChange={() => updateAircraftSettings({ datablockMode: 'none' })}
               />
-              None (hide labels, show cones only)
+              None (hide labels, show aircraft only)
             </label>
           </div>
         </div>
@@ -99,6 +100,23 @@ function SettingsDisplayTab() {
           </div>
           <p className="setting-hint">
             Length of leader lines connecting datablocks to aircraft. 1=short, 5=long.
+          </p>
+        </div>
+
+        <div className="setting-item">
+          <label>Datablock Font Size</label>
+          <div className="slider-with-value">
+            <input
+              type="range"
+              min="8"
+              max="20"
+              value={datablockFontSize}
+              onChange={(e) => updateAircraftSettings({ datablockFontSize: Number(e.target.value) })}
+            />
+            <span>{datablockFontSize}px</span>
+          </div>
+          <p className="setting-hint">
+            Font size for aircraft datablock labels.
           </p>
         </div>
 

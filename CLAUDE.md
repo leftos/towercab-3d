@@ -179,7 +179,7 @@ See MODDING.md for manifest format and model requirements. Models are loaded on 
 ### Modifying Aircraft Rendering
 
 1. Interpolation logic (60 Hz smooth motion): `useAircraftInterpolation.ts`
-2. 3D model rendering (aircraft cones/models): `CesiumViewer.tsx` (Cesium entities)
+2. 3D model rendering: `CesiumViewer.tsx` (Cesium entities)
 3. Datablock labels and leader lines: `useBabylonOverlay.ts` (Babylon.js GUI)
 
 ### Modifying Camera Behavior

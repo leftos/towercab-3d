@@ -827,8 +827,16 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
 
     const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas)
 
-    // Helper to find aircraft near click position
+    // Helper to find aircraft near click position (checks both datablocks and aircraft models)
     const findAircraftAtPosition = (screenPos: Cesium.Cartesian2): string | null => {
+      // First, check if clicking on a datablock label
+      const datablockStore = useDatablockPositionStore.getState()
+      const labelCallsign = datablockStore.findLabelAtPosition(screenPos.x, screenPos.y)
+      if (labelCallsign) {
+        return labelCallsign
+      }
+
+      // Otherwise, check if clicking near an aircraft position
       const threshold = 30 // pixels
 
       for (const [callsign, aircraft] of interpolatedAircraft) {
