@@ -50,6 +50,8 @@ pub enum SessionState {
 }
 
 /// Aircraft position from vNAS (simplified for frontend)
+/// Note: Only used when `vnas` feature is enabled, but kept public for API consistency
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VnasAircraft {
