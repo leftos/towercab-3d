@@ -4,6 +4,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+## [0.0.16-alpha] - 2025-12-27
+
 ### Added
 - Collapsible settings sections
   - Each section in the Settings panel can now be expanded/collapsed
