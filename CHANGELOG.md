@@ -61,6 +61,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Fixed ground detection relying only on groundspeed
   - Now also considers altitude above ground (below 10m = on ground)
   - Fixes edge cases during takeoff roll and landing
+- Fixed certain data not loading when the remote server functionality wasn't active
 
 ## [0.0.16-alpha] - 2025-12-27
 
