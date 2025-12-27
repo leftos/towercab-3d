@@ -44,6 +44,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 - FSLTL models now always preferred over built-in FR24 models
   - Previously, airlines without FSLTL liveries would fall back to built-in B738 instead of FSLTL generic B738
   - All FSLTL matching (exact, scaled, base livery) now happens before built-in model matching
+- FSLTL VMR rules file now copied to output folder during conversion
+  - Enables type aliasing (B38M→B738) and better matching without keeping source folder configured
+  - App loads VMR from output folder first, falls back to source folder if not found
 - Aircraft panel now hidden when no airport is selected and no flight is being followed
 - 2D top-down view improvements
   - Aircraft models now display at full size (previously scaled to 50%)

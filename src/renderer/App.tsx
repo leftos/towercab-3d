@@ -132,9 +132,9 @@ function App() {
 
         // Scan output directory for existing models and rebuild registry
         // This ensures models are loaded even if they were converted with a different path
+        let outputPath = fsltlOutputPath
         try {
           // Use saved output path or get default
-          let outputPath = fsltlOutputPath
           console.log(`[App] FSLTL outputPath from settings: ${outputPath}`)
           if (!outputPath) {
             const [defaultPath] = await fsltlApi.getFsltlDefaultOutputPath()
@@ -149,11 +149,25 @@ function App() {
           console.warn('[App] Failed to scan FSLTL models:', err)
         }
 
-        if (fsltlSourcePath) {
+        // Load VMR rules - try output folder first (copied during conversion), then source folder
+        let vmrLoaded = false
+        if (outputPath) {
+          try {
+            const vmrContent = await fsltlApi.readVmrFromOutput(outputPath)
+            if (vmrContent) {
+              fsltlService.parseVMRContent(vmrContent)
+              console.log('[App] Loaded FSLTL VMR rules from output folder')
+              vmrLoaded = true
+            }
+          } catch (err) {
+            console.warn('[App] Failed to load VMR from output folder:', err)
+          }
+        }
+        if (!vmrLoaded && fsltlSourcePath) {
           try {
             const vmrContent = await fsltlApi.readVmrFile(fsltlSourcePath)
             fsltlService.parseVMRContent(vmrContent)
-            console.log('[App] Loaded FSLTL VMR rules')
+            console.log('[App] Loaded FSLTL VMR rules from source folder')
           } catch (err) {
             console.warn('[App] Failed to load FSLTL VMR (source may not exist):', err)
           }

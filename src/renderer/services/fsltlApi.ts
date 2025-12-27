@@ -216,6 +216,25 @@ export async function readVmrFile(sourcePath: string): Promise<string> {
 }
 
 /**
+ * Read the FSLTL_Rules.vmr file from the converted models output directory
+ * The converter copies the VMR file to the output folder for use without source folder
+ * @param outputPath - Path to converted FSLTL models
+ * @returns VMR file contents as string, or null if not found
+ * Note: Not available in browser mode
+ */
+export async function readVmrFromOutput(outputPath: string): Promise<string | null> {
+  if (!isTauri()) {
+    return null
+  }
+  try {
+    const vmrPath = `${outputPath}\\FSLTL_Rules.vmr`
+    return await invoke<string>('read_text_file', { path: vmrPath })
+  } catch {
+    return null
+  }
+}
+
+/**
  * Scanned model info returned from scan_fsltl_models
  */
 export interface ScannedFSLTLModel {

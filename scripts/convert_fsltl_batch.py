@@ -939,6 +939,17 @@ def main():
                 traceback.print_exc()
                 update_progress()
 
+    # Copy FSLTL_Rules.vmr to output folder for future use without source folder
+    vmr_source = source_path / "FSLTL_Rules.vmr"
+    vmr_dest = output_path / "FSLTL_Rules.vmr"
+    if vmr_source.exists():
+        try:
+            import shutil
+            shutil.copy2(vmr_source, vmr_dest)
+            print(f"Copied FSLTL_Rules.vmr to output folder")
+        except Exception as e:
+            print(f"Warning: Failed to copy FSLTL_Rules.vmr: {e}")
+
     # Final status
     with progress_lock:
         progress['status'] = 'complete' if not progress['errors'] else 'error'
