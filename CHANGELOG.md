@@ -49,6 +49,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Graphics settings reorganized into collapsible sections (Rendering, Model Appearance, Shadows)
 
 ### Fixed
+- Fixed mouse wheel zoom being sluggish at low frame rates
+  - Wheel impulse decay is now time-based instead of frame-based
+  - Scrolling now feels equally responsive at 30 FPS as at 60 FPS
 - Fixed follow mode not working for aircraft outside the current 200nm filter range
   - Now uses all pilots list instead of filtered aircraft states
 - Fixed pushback detection being too restrictive

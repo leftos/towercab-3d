@@ -218,13 +218,16 @@ export function calculateTargetVelocities(
  *
  * If the impulse direction is opposite to existing velocity, the velocity
  * is reset to zero first, providing immediate response when changing scroll direction.
+ *
+ * @param dt - Delta time in seconds, used for frame-rate-independent decay
  */
 export function applyWheelImpulse(
   velocity: VelocityState,
   wheelImpulse: number,
   viewMode: '3d' | 'topdown',
   followingCallsign: string | null,
-  followMode: 'tower' | 'orbit'
+  followMode: 'tower' | 'orbit',
+  dt: number
 ): number {
   if (Math.abs(wheelImpulse) <= 0.001) {
     return 0
@@ -261,8 +264,11 @@ export function applyWheelImpulse(
     velocity.zoom += impulseAmount * 0.08
   }
 
-  // Decay the impulse
-  let decayedImpulse = wheelImpulse * 0.6
+  // Decay the impulse using time-based exponential decay
+  // At 60 FPS (dt=0.016), this gives ~0.6 decay per frame (matching old behavior)
+  // At 30 FPS (dt=0.033), decay is stronger per frame but same per second
+  const decayRate = 30  // Higher = faster decay
+  let decayedImpulse = wheelImpulse * Math.exp(-decayRate * dt)
   if (Math.abs(decayedImpulse) < 0.01) {
     decayedImpulse = 0
   }

@@ -604,7 +604,7 @@ export function useCameraInput(
       const sprintMultiplier = shiftHeld ? 3.0 : 1.0
 
       // Process mouse wheel impulse (adds to velocity directly)
-      wheelImpulseRef.current = applyWheelImpulse(vel, wheelImpulseRef.current, viewModeRef.current, followingCallsignRef.current, followModeRef.current)
+      wheelImpulseRef.current = applyWheelImpulse(vel, wheelImpulseRef.current, viewModeRef.current, followingCallsignRef.current, followModeRef.current, dt)
 
       // Scale movement speed with altitude in topdown view, and apply sprint multiplier
       const effectiveMoveSpeed = calculateEffectiveMoveSpeed(
