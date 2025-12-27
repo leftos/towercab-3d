@@ -17,7 +17,7 @@
  */
 
 import { create } from 'zustand'
-import type { GlobalSettings, FSLTLTextureScale } from '@/types'
+import type { GlobalSettings, GlobalViewportSettings, FSLTLTextureScale } from '@/types'
 import { DEFAULT_GLOBAL_SETTINGS } from '@/types'
 import { globalSettingsApi, isTauri } from '@/utils/tauriApi'
 
@@ -111,6 +111,12 @@ interface GlobalSettingsState extends GlobalSettings {
 
   /** Update server configuration */
   updateServer: (updates: Partial<GlobalSettings['server']>) => Promise<void>
+
+  /** Update viewport settings (camera positions, bookmarks) */
+  updateViewports: (updates: Partial<GlobalViewportSettings>) => Promise<void>
+
+  /** Set entire viewport settings (for bulk updates from viewportStore) */
+  setViewports: (viewports: GlobalViewportSettings) => Promise<void>
 
   /** Reset to default settings */
   resetToDefaults: () => Promise<void>
@@ -207,7 +213,8 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
       cesiumIonToken: token,
       fsltl: state.fsltl,
       airports: state.airports,
-      server: state.server
+      server: state.server,
+      viewports: state.viewports
     }
 
     set({ cesiumIonToken: token })
@@ -229,7 +236,8 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
       cesiumIonToken: state.cesiumIonToken,
       fsltl: newFsltl,
       airports: state.airports,
-      server: state.server
+      server: state.server,
+      viewports: state.viewports
     }
 
     set({ fsltl: newFsltl })
@@ -244,7 +252,8 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
       cesiumIonToken: state.cesiumIonToken,
       fsltl: state.fsltl,
       airports: newAirports,
-      server: state.server
+      server: state.server,
+      viewports: state.viewports
     }
 
     set({ airports: newAirports })
@@ -266,10 +275,53 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
       cesiumIonToken: state.cesiumIonToken,
       fsltl: state.fsltl,
       airports: state.airports,
-      server: newServer
+      server: newServer,
+      viewports: state.viewports
     }
 
     set({ server: newServer })
+    await saveSettings(newSettings)
+  },
+
+  updateViewports: async (updates: Partial<GlobalViewportSettings>) => {
+    const state = get()
+    const newViewports: GlobalViewportSettings = {
+      ...state.viewports,
+      ...updates,
+      // Deep merge airportConfigs if provided
+      airportConfigs: updates.airportConfigs
+        ? { ...state.viewports.airportConfigs, ...updates.airportConfigs }
+        : state.viewports.airportConfigs,
+      // Deep merge orbitSettings if provided
+      orbitSettings: updates.orbitSettings
+        ? { ...state.viewports.orbitSettings, ...updates.orbitSettings }
+        : state.viewports.orbitSettings
+    }
+
+    const newSettings: GlobalSettings = {
+      cesiumIonToken: state.cesiumIonToken,
+      fsltl: state.fsltl,
+      airports: state.airports,
+      server: state.server,
+      viewports: newViewports
+    }
+
+    set({ viewports: newViewports })
+    await saveSettings(newSettings)
+  },
+
+  setViewports: async (viewports: GlobalViewportSettings) => {
+    const state = get()
+
+    const newSettings: GlobalSettings = {
+      cesiumIonToken: state.cesiumIonToken,
+      fsltl: state.fsltl,
+      airports: state.airports,
+      server: state.server,
+      viewports
+    }
+
+    set({ viewports })
     await saveSettings(newSettings)
   },
 
@@ -284,7 +336,8 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
       cesiumIonToken: state.cesiumIonToken,
       fsltl: state.fsltl,
       airports: state.airports,
-      server: state.server
+      server: state.server,
+      viewports: state.viewports
     }
   }
 }))
@@ -317,4 +370,11 @@ export function useFsltlSettings(): GlobalSettings['fsltl'] {
  */
 export function useGlobalSettingsInitialized(): boolean {
   return useGlobalSettingsStore((state) => state.initialized)
+}
+
+/**
+ * Hook to get viewport settings
+ */
+export function useViewportSettings(): GlobalViewportSettings {
+  return useGlobalSettingsStore((state) => state.viewports)
 }

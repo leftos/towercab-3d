@@ -495,6 +495,95 @@ export type FSLTLTextureScale = 'full' | '2k' | '1k' | '512'
 // Global Settings (stored on host file system, shared across all browsers)
 // ============================================================================
 
+// ============================================================================
+// Global Viewport Settings (shared across all browsers)
+// ============================================================================
+
+/**
+ * View-mode-specific camera defaults (what the user saved)
+ */
+export interface GlobalViewModeDefaults {
+  heading: number
+  pitch: number
+  fov: number
+  positionOffsetX: number
+  positionOffsetY: number
+  positionOffsetZ: number
+  topdownAltitude?: number  // Only for 2D
+}
+
+/**
+ * Camera bookmark (saved camera position)
+ */
+export interface GlobalCameraBookmark {
+  name?: string
+  heading: number
+  pitch: number
+  fov: number
+  positionOffsetX: number
+  positionOffsetY: number
+  positionOffsetZ: number
+  viewMode: '3d' | 'topdown'
+  topdownAltitude?: number
+}
+
+/**
+ * Datablock position (1-9 numpad style)
+ * 7=top-left, 8=top, 9=top-right
+ * 4=left, 6=right
+ * 1=bottom-left, 2=bottom, 3=bottom-right
+ */
+export type GlobalDatablockPosition = 1 | 2 | 3 | 4 | 6 | 7 | 8 | 9
+
+/**
+ * Per-airport viewport configuration stored globally
+ * Contains camera defaults and bookmarks shared across all devices
+ */
+export interface GlobalAirportViewportConfig {
+  /** Camera defaults for 3D view mode */
+  default3d?: GlobalViewModeDefaults
+  /** Camera defaults for 2D/top-down view mode */
+  default2d?: GlobalViewModeDefaults
+  /** Camera bookmarks (0-99) */
+  bookmarks?: Record<number, GlobalCameraBookmark>
+  /** Global datablock position for this airport */
+  datablockPosition?: GlobalDatablockPosition
+}
+
+/**
+ * Global orbit camera settings (persist across all airports)
+ */
+export interface GlobalOrbitSettings {
+  distance: number
+  heading: number
+  pitch: number
+}
+
+/**
+ * All global viewport settings
+ */
+export interface GlobalViewportSettings {
+  /** Per-airport viewport configurations */
+  airportConfigs: Record<string, GlobalAirportViewportConfig>
+  /** Last used orbit settings (shared across airports) */
+  orbitSettings: GlobalOrbitSettings
+  /** Last visited airport ICAO */
+  lastAirportIcao: string | null
+}
+
+/**
+ * Default global viewport settings
+ */
+export const DEFAULT_GLOBAL_VIEWPORT_SETTINGS: GlobalViewportSettings = {
+  airportConfigs: {},
+  orbitSettings: {
+    distance: 500,
+    heading: 0,
+    pitch: -30
+  },
+  lastAirportIcao: null
+}
+
 /**
  * Global settings stored on the host file system
  *
@@ -577,6 +666,12 @@ export interface GlobalSettings {
      */
     enabled: boolean
   }
+
+  /**
+   * Viewport settings (camera positions, bookmarks, orbit settings)
+   * Shared across all browsers/devices
+   */
+  viewports: GlobalViewportSettings
 }
 
 /**
@@ -597,7 +692,8 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   server: {
     port: 8765,
     enabled: false
-  }
+  },
+  viewports: DEFAULT_GLOBAL_VIEWPORT_SETTINGS
 }
 
 /**

@@ -322,6 +322,96 @@ pub struct GlobalServerSettings {
     pub enabled: bool,
 }
 
+// =============================================================================
+// VIEWPORT SETTINGS (per-airport camera positions, bookmarks)
+// =============================================================================
+
+/// View mode defaults (camera position for 3D or 2D mode)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlobalViewModeDefaults {
+    pub heading: f64,
+    pub pitch: f64,
+    pub fov: f64,
+    pub position_offset_x: f64,
+    pub position_offset_y: f64,
+    pub position_offset_z: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub topdown_altitude: Option<f64>,
+}
+
+/// Camera bookmark (saved camera position with optional name)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlobalCameraBookmark {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    pub heading: f64,
+    pub pitch: f64,
+    pub fov: f64,
+    pub position_offset_x: f64,
+    pub position_offset_y: f64,
+    pub position_offset_z: f64,
+    pub view_mode: String,  // "3d" or "topdown"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub topdown_altitude: Option<f64>,
+}
+
+/// Per-airport viewport configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct GlobalAirportViewportConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_3d: Option<GlobalViewModeDefaults>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_2d: Option<GlobalViewModeDefaults>,
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub bookmarks: std::collections::HashMap<String, GlobalCameraBookmark>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub datablock_position: Option<u8>,  // 1-9 numpad position
+}
+
+/// Global orbit camera settings (persisted across airports)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlobalOrbitSettings {
+    pub distance: f64,
+    pub heading: f64,
+    pub pitch: f64,
+}
+
+impl Default for GlobalOrbitSettings {
+    fn default() -> Self {
+        GlobalOrbitSettings {
+            distance: 500.0,  // ORBIT_DISTANCE_DEFAULT
+            heading: 0.0,     // ORBIT_HEADING_DEFAULT
+            pitch: 20.0,      // ORBIT_PITCH_DEFAULT
+        }
+    }
+}
+
+/// Viewport settings (camera positions, bookmarks per airport)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlobalViewportSettings {
+    #[serde(default)]
+    pub airport_configs: std::collections::HashMap<String, GlobalAirportViewportConfig>,
+    #[serde(default)]
+    pub orbit_settings: GlobalOrbitSettings,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_airport_icao: Option<String>,
+}
+
+impl Default for GlobalViewportSettings {
+    fn default() -> Self {
+        GlobalViewportSettings {
+            airport_configs: std::collections::HashMap::new(),
+            orbit_settings: GlobalOrbitSettings::default(),
+            last_airport_icao: None,
+        }
+    }
+}
+
 /// Global settings stored on host file system (shared across all browsers)
 /// These settings are persisted to global-settings.json in the app data directory
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -331,6 +421,8 @@ pub struct GlobalSettings {
     pub fsltl: GlobalFsltlSettings,
     pub airports: GlobalAirportSettings,
     pub server: GlobalServerSettings,
+    #[serde(default)]
+    pub viewports: GlobalViewportSettings,
 }
 
 impl Default for GlobalSettings {
@@ -351,6 +443,7 @@ impl Default for GlobalSettings {
                 port: 8765,
                 enabled: false,
             },
+            viewports: GlobalViewportSettings::default(),
         }
     }
 }

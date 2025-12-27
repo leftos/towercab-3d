@@ -139,7 +139,15 @@ export type {
   SettingsStore,
 
   // Global settings (stored on host file system, shared across browsers)
-  GlobalSettings
+  GlobalSettings,
+
+  // Global viewport settings (stored on host, shared across browsers)
+  GlobalViewModeDefaults,
+  GlobalCameraBookmark,
+  GlobalDatablockPosition,
+  GlobalAirportViewportConfig,
+  GlobalOrbitSettings,
+  GlobalViewportSettings
 } from './settings'
 
 export {
@@ -147,7 +155,10 @@ export {
   DEFAULT_SETTINGS,
 
   // Default global settings values
-  DEFAULT_GLOBAL_SETTINGS
+  DEFAULT_GLOBAL_SETTINGS,
+
+  // Default global viewport settings values
+  DEFAULT_GLOBAL_VIEWPORT_SETTINGS
 } from './settings'
 
 // ============================================================================
