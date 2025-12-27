@@ -131,12 +131,20 @@ async fn auth_middleware(
     Ok(next.run(request).await)
 }
 
+/// Server handles returned from start_server
+pub struct ServerHandles {
+    /// Send to this channel to shut down the server
+    pub shutdown_tx: broadcast::Sender<()>,
+    /// Send vNAS aircraft updates to this channel for WebSocket relay
+    pub vnas_tx: broadcast::Sender<Vec<VnasAircraftBroadcast>>,
+}
+
 /// Start the HTTP server on a background thread
-/// Returns a shutdown channel sender that can be used to stop the server
+/// Returns handles for shutdown and vNAS broadcast
 pub async fn start_server(
     app_handle: tauri::AppHandle,
     port: u16,
-) -> Result<broadcast::Sender<()>, String> {
+) -> Result<ServerHandles, String> {
     // Find the dist folder (frontend build output)
     let dist_path = find_dist_path(&app_handle)?;
 
@@ -167,6 +175,7 @@ pub async fn start_server(
 
     // Create vNAS broadcast channel for relaying aircraft updates to WebSocket clients
     let (vnas_tx, _) = broadcast::channel::<Vec<VnasAircraftBroadcast>>(256);
+    let vnas_tx_return = vnas_tx.clone();
 
     let state = Arc::new(ServerState {
         app_handle,
@@ -201,7 +210,10 @@ pub async fn start_server(
             .unwrap_or_else(|e| eprintln!("[Server] Error: {}", e));
     });
 
-    Ok(shutdown_tx)
+    Ok(ServerHandles {
+        shutdown_tx,
+        vnas_tx: vnas_tx_return,
+    })
 }
 
 /// Find the frontend dist folder
@@ -781,11 +793,15 @@ async fn proxy_request(
 /// [{"callsign":"DAL123","lat":42.0,"lon":-71.0,"altitude":10000,"heading":90,"typeCode":"B738","timestamp":1234567890}]
 /// ```
 ///
-/// ## TODO
-/// This is a placeholder implementation. The actual vNAS data flow requires:
-/// 1. vNAS OAuth credentials from VATSIM tech team
-/// 2. Wiring up towercab-3d-vnas crate
-/// 3. Broadcasting updates from vnas.rs to server.rs
+/// ## Data Flow
+/// 1. vnas.rs connects to vNAS SignalR hub (requires OAuth credentials)
+/// 2. vNAS sends TowerCabAircraft updates via SignalR
+/// 3. vnas.rs converts updates to VnasAircraftBroadcast and calls broadcast_vnas_to_websocket()
+/// 4. This WebSocket handler receives updates and forwards to connected browsers
+///
+/// ## Note
+/// Actual vNAS connection requires OAuth credentials from the VATSIM tech team.
+/// Until those are available, this WebSocket will not receive any updates.
 async fn vnas_websocket_handler(
     ws: WebSocketUpgrade,
     State(state): State<Arc<ServerState>>,

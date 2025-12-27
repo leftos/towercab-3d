@@ -67,6 +67,10 @@ static HTTP_SERVER_SHUTDOWN: Mutex<Option<broadcast::Sender<()>>> = Mutex::new(N
 // Global storage for the running server port
 static HTTP_SERVER_PORT: Mutex<Option<u16>> = Mutex::new(None);
 
+// Global storage for vNAS WebSocket broadcast channel (to relay updates to remote browsers)
+static VNAS_WEBSOCKET_TX: Mutex<Option<broadcast::Sender<Vec<server::VnasAircraftBroadcast>>>> =
+    Mutex::new(None);
+
 /// Find the mods root directory, checking multiple locations
 /// Returns the first path that exists, or the first candidate if none exist
 fn find_mods_root(app: &tauri::AppHandle) -> PathBuf {
@@ -584,12 +588,16 @@ async fn start_http_server(app: tauri::AppHandle, port: u16) -> Result<ServerSta
     }
 
     // Start the server
-    let shutdown_tx = server::start_server(app, port).await?;
+    let handles = server::start_server(app, port).await?;
 
-    // Store the shutdown channel and port
+    // Store the shutdown channel, vNAS sender, and port
     {
         let mut guard = HTTP_SERVER_SHUTDOWN.lock().map_err(|e| e.to_string())?;
-        *guard = Some(shutdown_tx);
+        *guard = Some(handles.shutdown_tx);
+    }
+    {
+        let mut vnas_guard = VNAS_WEBSOCKET_TX.lock().map_err(|e| e.to_string())?;
+        *vnas_guard = Some(handles.vnas_tx);
     }
     {
         let mut port_guard = HTTP_SERVER_PORT.lock().map_err(|e| e.to_string())?;
@@ -603,6 +611,16 @@ async fn start_http_server(app: tauri::AppHandle, port: u16) -> Result<ServerSta
         local_url: Some(format!("http://localhost:{}", port)),
         lan_url: lan_ip.map(|ip| format!("http://{}:{}", ip, port)),
     })
+}
+
+/// Broadcast vNAS aircraft updates to WebSocket clients (for remote browser access)
+/// This is called from the vNAS event loop when aircraft updates are received
+pub fn broadcast_vnas_to_websocket(updates: Vec<server::VnasAircraftBroadcast>) {
+    if let Ok(guard) = VNAS_WEBSOCKET_TX.lock() {
+        if let Some(ref tx) = *guard {
+            let _ = tx.send(updates);
+        }
+    }
 }
 
 /// Stop the HTTP server
@@ -1296,9 +1314,12 @@ pub fn run() {
                     println!("[Server] Auto-starting HTTP server on port {}{}", port,
                         if force_start { " (via TOWERCAB_AUTO_SERVER)" } else { "" });
                     match server::start_server(app_handle.clone(), port).await {
-                        Ok(shutdown_tx) => {
+                        Ok(handles) => {
                             if let Ok(mut guard) = HTTP_SERVER_SHUTDOWN.lock() {
-                                *guard = Some(shutdown_tx);
+                                *guard = Some(handles.shutdown_tx);
+                            }
+                            if let Ok(mut vnas_guard) = VNAS_WEBSOCKET_TX.lock() {
+                                *vnas_guard = Some(handles.vnas_tx);
                             }
                             println!("[Server] Auto-started successfully");
                         }

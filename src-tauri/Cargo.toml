@@ -42,8 +42,7 @@ futures-util = { version = "0.3", features = ["sink"] }  # For WebSocket stream 
 parking_lot = "0.12"
 
 # vNAS integration for real-time aircraft updates
-# TODO: Uncomment when ready to wire up the full vnas crate
-# towercab-3d-vnas = { git = "https://github.com/Leftos/towercab-3d-vnas", branch = "main" }
+towercab-3d-vnas = { git = "https://github.com/Leftos/towercab-3d-vnas", branch = "master" }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_System_JobObjects", "Win32_System_Threading", "Win32_Foundation", "Win32_Security"] }

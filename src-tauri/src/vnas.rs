@@ -4,28 +4,29 @@
 //! system and receiving 1Hz aircraft updates to supplement the
 //! 15-second VATSIM HTTP polling.
 //!
-//! ## TODO: OAuth Testing
+//! ## Note: OAuth Testing
 //! The OAuth flow uses auth.vfsp.net and requires credentials from
 //! the VATSIM tech team. Until those are available, authentication
-//! will fail. See towercab-3d-vnas/todo.md for details.
+//! will fail at the token exchange step.
 
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager, State};
-use tokio::sync::broadcast;
+use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
+use tauri::{AppHandle, Emitter, Manager, State};
+use tokio::sync::{broadcast, RwLock as TokioRwLock};
 
-// Re-export types for use in Tauri commands
-// TODO: Uncomment when towercab-3d-vnas dependency is added
-// use towercab_3d_vnas::{
-//     Environment, SessionState, TowerCabAircraftDto, VnasConfig, VnasError, VnasEvent,
-//     VnasService,
-// };
+// Import types from the vNAS crate
+use towercab_3d_vnas::{
+    Environment as VnasEnvironment, SessionState as VnasSessionState, TowerCabAircraftDto,
+    VnasConfig, VnasEvent, VnasService,
+};
 
 // =============================================================================
-// PLACEHOLDER TYPES (until towercab-3d-vnas is wired up)
+// FRONTEND TYPES (JSON-serializable for Tauri commands)
 // =============================================================================
 
-/// vNAS environment (matches towercab_3d_vnas::Environment)
+/// vNAS environment for frontend
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Environment {
@@ -35,7 +36,27 @@ pub enum Environment {
     Sweatbox2,
 }
 
-/// Session state (matches towercab_3d_vnas::SessionState)
+impl From<Environment> for VnasEnvironment {
+    fn from(env: Environment) -> Self {
+        match env {
+            Environment::Live => VnasEnvironment::Live,
+            Environment::Sweatbox1 => VnasEnvironment::Sweatbox1,
+            Environment::Sweatbox2 => VnasEnvironment::Sweatbox2,
+        }
+    }
+}
+
+impl From<VnasEnvironment> for Environment {
+    fn from(env: VnasEnvironment) -> Self {
+        match env {
+            VnasEnvironment::Live => Environment::Live,
+            VnasEnvironment::Sweatbox1 => Environment::Sweatbox1,
+            VnasEnvironment::Sweatbox2 => Environment::Sweatbox2,
+        }
+    }
+}
+
+/// Session state for frontend
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SessionState {
@@ -46,6 +67,19 @@ pub enum SessionState {
     JoiningSession,
     Subscribing,
     Connected,
+}
+
+impl From<VnasSessionState> for SessionState {
+    fn from(state: VnasSessionState) -> Self {
+        match state {
+            VnasSessionState::Disconnected => SessionState::Disconnected,
+            VnasSessionState::Authenticating => SessionState::Authenticating,
+            VnasSessionState::Connecting => SessionState::Connecting,
+            VnasSessionState::JoiningSession => SessionState::JoiningSession,
+            VnasSessionState::Subscribing => SessionState::Subscribing,
+            VnasSessionState::Connected => SessionState::Connected,
+        }
+    }
 }
 
 /// Aircraft position from vNAS (simplified for frontend)
@@ -63,6 +97,29 @@ pub struct VnasAircraft {
     pub altitude_agl: f64,
     pub voice_type: u8, // 0=Unknown, 1=Full, 2=ReceiveOnly, 3=TextOnly
     pub timestamp: u64, // Unix timestamp ms
+}
+
+impl From<&TowerCabAircraftDto> for VnasAircraft {
+    fn from(dto: &TowerCabAircraftDto) -> Self {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+
+        Self {
+            callsign: dto.aircraft_id.clone(),
+            type_code: dto.type_code.clone(),
+            is_heavy: dto.is_heavy,
+            lat: dto.location.lat,
+            lon: dto.location.lon,
+            true_heading: dto.true_heading,
+            true_ground_track: dto.true_ground_track,
+            altitude_true: dto.altitude_true,
+            altitude_agl: dto.altitude_agl,
+            voice_type: dto.voice_type as u8,
+            timestamp,
+        }
+    }
 }
 
 /// vNAS connection status for frontend
@@ -93,10 +150,12 @@ impl Default for VnasStatus {
 /// vNAS state managed by Tauri
 pub struct VnasState {
     status: RwLock<VnasStatus>,
-    /// Channel for broadcasting aircraft updates to frontend
+    /// The vNAS service instance (uses tokio RwLock for async access)
+    service: TokioRwLock<Option<VnasService>>,
+    /// Channel for broadcasting aircraft updates to frontend/WebSocket
     event_tx: broadcast::Sender<VnasAircraft>,
-    // TODO: Add VnasService when wiring up real implementation
-    // service: RwLock<Option<VnasService>>,
+    /// App handle for emitting events
+    app_handle: RwLock<Option<AppHandle>>,
 }
 
 impl VnasState {
@@ -104,7 +163,9 @@ impl VnasState {
         let (event_tx, _) = broadcast::channel(1024);
         Self {
             status: RwLock::new(VnasStatus::default()),
+            service: TokioRwLock::new(None),
             event_tx,
+            app_handle: RwLock::new(None),
         }
     }
 
@@ -116,9 +177,18 @@ impl VnasState {
         *self.status.write() = status;
     }
 
-    pub fn subscribe(&self) -> broadcast::Receiver<VnasAircraft> {
-        self.event_tx.subscribe()
+    pub fn update_state(&self, state: SessionState) {
+        self.status.write().state = state;
     }
+
+    pub fn set_error(&self, error: Option<String>) {
+        self.status.write().error = error;
+    }
+
+    pub fn set_facility(&self, facility_id: Option<String>) {
+        self.status.write().facility_id = facility_id;
+    }
+
 }
 
 impl Default for VnasState {
@@ -139,96 +209,162 @@ pub fn vnas_get_status(state: State<'_, VnasState>) -> VnasStatus {
 
 /// Start the vNAS OAuth authentication flow.
 /// Returns the URL to open in the user's browser.
-///
-/// ## TODO
-/// This currently returns a placeholder URL. Real implementation requires:
-/// 1. OAuth credentials from VATSIM tech team
-/// 2. Testing the auth.vfsp.net SSE callback flow
 #[tauri::command]
 pub async fn vnas_start_auth(
-    _app: AppHandle,
+    app: AppHandle,
     state: State<'_, VnasState>,
     environment: Environment,
 ) -> Result<String, String> {
-    // Update status to authenticating
+    // Update status
     let mut status = state.status();
     status.state = SessionState::Authenticating;
     status.environment = environment;
+    status.error = None;
     state.set_status(status);
 
-    // TODO: Replace with real VnasService.start_oauth() call
-    // For now, return a placeholder that explains the situation
-    //
-    // Real implementation:
-    // let config = VnasConfig::new(environment.into());
-    // let service = VnasService::new(config);
-    // let auth_url = service.start_oauth().await.map_err(|e| e.to_string())?;
+    // Store app handle for later event emission
+    *state.app_handle.write() = Some(app.clone());
 
-    let env_name = match environment {
-        Environment::Live => "live",
-        Environment::Sweatbox1 => "sweatbox1",
-        Environment::Sweatbox2 => "sweatbox2",
-    };
+    // Create VnasService with the selected environment
+    let config = VnasConfig::new(environment.into());
+    let service = VnasService::new(config);
 
-    // TODO: This is a placeholder URL - the real flow uses auth.vfsp.net
-    let auth_url = format!(
-        "https://auth.vfsp.net/login?state=placeholder&env={}",
-        env_name
-    );
+    // Start OAuth flow
+    let auth_url = service
+        .start_oauth()
+        .await
+        .map_err(|e| {
+            state.set_error(Some(e.to_string()));
+            state.update_state(SessionState::Disconnected);
+            e.to_string()
+        })?;
 
-    println!("[vNAS] OAuth flow started for {} environment", env_name);
-    println!("[vNAS] TODO: Awaiting OAuth credentials from VATSIM tech team");
+    // Store service for later use
+    *state.service.write().await = Some(service);
+
+    println!("[vNAS] OAuth flow started for {:?} environment", environment);
+    println!("[vNAS] Auth URL: {}", auth_url);
 
     Ok(auth_url)
 }
 
 /// Complete the OAuth flow after browser callback.
-/// This is called after the user authenticates in their browser.
-///
-/// ## TODO
-/// Currently fails with a placeholder error until OAuth is tested.
+/// This waits for the SSE callback from auth.vfsp.net.
 #[tauri::command]
 pub async fn vnas_complete_auth(state: State<'_, VnasState>) -> Result<(), String> {
-    // TODO: Replace with real VnasService.complete_oauth() call
-    //
-    // Real implementation:
-    // let service = ... (get from state)
-    // service.complete_oauth().await.map_err(|e| e.to_string())?;
+    // Get service reference
+    let service_guard = state.service.read().await;
+    let service = service_guard
+        .as_ref()
+        .ok_or("OAuth not started - call vnas_start_auth first")?;
 
-    // For now, return an error explaining the situation
-    let mut status = state.status();
-    status.state = SessionState::Disconnected;
-    status.error = Some("OAuth not yet implemented - awaiting VATSIM tech team credentials".into());
-    state.set_status(status);
+    // Wait for OAuth callback (this blocks until user completes browser auth)
+    println!("[vNAS] Waiting for OAuth callback from browser...");
 
-    Err("vNAS OAuth not yet available. See todo.md for details.".into())
+    service
+        .complete_oauth()
+        .await
+        .map_err(|e| {
+            state.set_error(Some(e.to_string()));
+            state.update_state(SessionState::Disconnected);
+            format!("OAuth failed: {}", e)
+        })?;
+
+    println!("[vNAS] OAuth completed successfully");
+    state.update_state(SessionState::Connecting);
+
+    Ok(())
 }
 
 /// Connect to vNAS after successful authentication.
 /// This establishes the SignalR WebSocket connection.
 #[tauri::command]
 pub async fn vnas_connect(state: State<'_, VnasState>) -> Result<(), String> {
-    let mut status = state.status();
+    // Check if authenticated
+    let service_guard = state.service.read().await;
+    let service = service_guard
+        .as_ref()
+        .ok_or("Not authenticated - complete OAuth first")?;
 
-    // Check if we're authenticated (placeholder check)
-    if status.state != SessionState::Authenticating {
-        return Err("Must authenticate before connecting".into());
+    if !service.is_authenticated().await {
+        return Err("Not authenticated - complete OAuth first".into());
     }
 
-    status.state = SessionState::Connecting;
-    state.set_status(status.clone());
+    state.update_state(SessionState::Connecting);
 
-    // TODO: Replace with real VnasService.connect() call
-    //
-    // Real implementation:
-    // let service = ... (get from state)
-    // service.connect().await.map_err(|e| e.to_string())?;
+    // Connect to SignalR hub
+    service.connect().await.map_err(|e| {
+        state.set_error(Some(e.to_string()));
+        state.update_state(SessionState::Disconnected);
+        format!("Connection failed: {}", e)
+    })?;
 
-    status.state = SessionState::Disconnected;
-    status.error = Some("Connection not yet implemented".into());
-    state.set_status(status);
+    println!("[vNAS] Connected to SignalR hub");
+    state.update_state(SessionState::JoiningSession);
 
-    Err("vNAS connection not yet implemented".into())
+    // Start listening for events
+    let event_tx = state.event_tx.clone();
+    let status_lock = Arc::new(RwLock::new(state.status()));
+    let app_handle = state.app_handle.read().clone();
+
+    let mut events = service.events();
+    tokio::spawn(async move {
+        while let Ok(event) = events.recv().await {
+            match event {
+                VnasEvent::AircraftUpdate(aircraft_list) => {
+                    // Batch aircraft for WebSocket broadcast to remote browsers
+                    let mut ws_batch = Vec::with_capacity(aircraft_list.len());
+
+                    for dto in aircraft_list {
+                        let aircraft = VnasAircraft::from(&dto);
+                        let _ = event_tx.send(aircraft.clone());
+
+                        // Emit to frontend via Tauri event
+                        if let Some(ref app) = app_handle {
+                            let _ = app.emit("vnas-aircraft-update", &aircraft);
+                        }
+
+                        // Add to WebSocket batch
+                        ws_batch.push(crate::server::VnasAircraftBroadcast {
+                            callsign: aircraft.callsign,
+                            lat: aircraft.lat,
+                            lon: aircraft.lon,
+                            altitude: aircraft.altitude_true,
+                            heading: aircraft.true_heading,
+                            type_code: Some(aircraft.type_code),
+                            timestamp: aircraft.timestamp,
+                        });
+                    }
+
+                    // Broadcast to WebSocket clients (remote browsers)
+                    crate::broadcast_vnas_to_websocket(ws_batch);
+                }
+                VnasEvent::AircraftDisconnected(callsign) => {
+                    println!("[vNAS] Aircraft disconnected: {}", callsign);
+                    if let Some(ref app) = app_handle {
+                        let _ = app.emit("vnas-aircraft-disconnected", &callsign);
+                    }
+                }
+                VnasEvent::SessionStateChanged(new_state) => {
+                    let frontend_state: SessionState = new_state.into();
+                    status_lock.write().state = frontend_state;
+                    println!("[vNAS] Session state changed: {:?}", frontend_state);
+                    if let Some(ref app) = app_handle {
+                        let _ = app.emit("vnas-state-changed", &frontend_state);
+                    }
+                }
+                VnasEvent::Error(error) => {
+                    println!("[vNAS] Error: {}", error);
+                    status_lock.write().error = Some(error.to_string());
+                    if let Some(ref app) = app_handle {
+                        let _ = app.emit("vnas-error", error.to_string());
+                    }
+                }
+            }
+        }
+    });
+
+    Ok(())
 }
 
 /// Subscribe to TowerCabAircraft updates for a facility.
@@ -240,43 +376,40 @@ pub async fn vnas_subscribe(
     state: State<'_, VnasState>,
     facility_id: String,
 ) -> Result<(), String> {
-    let mut status = state.status();
+    let service_guard = state.service.read().await;
+    let service = service_guard
+        .as_ref()
+        .ok_or("Not connected - call vnas_connect first")?;
 
-    // Check if we're connected
-    if status.state != SessionState::Connected && status.state != SessionState::JoiningSession {
-        return Err("Must be connected before subscribing".into());
-    }
+    state.update_state(SessionState::Subscribing);
 
-    status.state = SessionState::Subscribing;
-    state.set_status(status.clone());
+    // Subscribe to TowerCabAircraft topic
+    service
+        .subscribe_towercab(&facility_id)
+        .await
+        .map_err(|e| {
+            state.set_error(Some(e.to_string()));
+            format!("Subscription failed: {}", e)
+        })?;
 
-    // TODO: Replace with real VnasService.subscribe_towercab() call
-    //
-    // Real implementation:
-    // let service = ... (get from state)
-    // service.subscribe_towercab(&facility_id).await.map_err(|e| e.to_string())?;
+    state.set_facility(Some(facility_id.clone()));
+    state.update_state(SessionState::Connected);
 
-    status.state = SessionState::Disconnected;
-    status.error = Some("Subscription not yet implemented".into());
-    state.set_status(status);
+    println!("[vNAS] Subscribed to TowerCabAircraft for {}", facility_id);
 
-    Err(format!(
-        "vNAS subscription to {} not yet implemented",
-        facility_id
-    ))
+    Ok(())
 }
 
 /// Disconnect from vNAS.
 #[tauri::command]
 pub async fn vnas_disconnect(state: State<'_, VnasState>) -> Result<(), String> {
+    // Disconnect service if connected
+    if let Some(service) = state.service.write().await.take() {
+        service.disconnect().await.map_err(|e| e.to_string())?;
+    }
+
+    // Reset status
     let mut status = state.status();
-
-    // TODO: Replace with real VnasService.disconnect() call
-    //
-    // Real implementation:
-    // let service = ... (get from state)
-    // service.disconnect().await.map_err(|e| e.to_string())?;
-
     status.state = SessionState::Disconnected;
     status.facility_id = None;
     status.error = None;
@@ -295,8 +428,6 @@ pub fn vnas_is_connected(state: State<'_, VnasState>) -> bool {
 /// Check if vNAS is authenticated.
 #[tauri::command]
 pub fn vnas_is_authenticated(state: State<'_, VnasState>) -> bool {
-    // TODO: Check actual token state
-    // For now, check if we're past authentication state
     matches!(
         state.status().state,
         SessionState::Connecting
