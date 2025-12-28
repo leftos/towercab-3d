@@ -46,7 +46,8 @@
       "resources/texconv.exe",
       "resources/airports.json",
       "resources/runways.csv",
-      "mods/**/*"
+      "mods/**/*",
+      "../dist/**/*"
     ],
     "icon": [
       "icons/32x32.png",
