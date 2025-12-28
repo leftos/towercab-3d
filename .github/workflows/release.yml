@@ -113,6 +113,8 @@ jobs:
 
       - name: Update towercab-3d-vnas dependency
         if: steps.vnas-check.outputs.vnas_available == 'true'
+        env:
+          CARGO_NET_GIT_FETCH_WITH_CLI: true
         run: cd src-tauri && cargo update -p towercab-3d-vnas
 
       - name: Build Tauri app
