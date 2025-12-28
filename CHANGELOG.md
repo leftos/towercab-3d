@@ -4,6 +4,11 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- Default shadow mode is now "Aircraft Shadows Only" for better performance
+- Shadow Darkness slider now works intuitively: 0% = invisible, 100% = black
+- Night darkening disabled by default (can be enabled in Settings > Graphics > Lighting)
+
 ### Fixed
 - Orbit follow mode now remembers zoom distance and camera angle across app restarts
   - Previously reset to 500m default on every app launch

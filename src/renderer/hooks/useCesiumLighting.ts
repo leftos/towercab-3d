@@ -17,7 +17,7 @@ export interface CesiumLightingSettings {
   shadowMapSize: number
   /** Maximum distance for shadow rendering (meters) */
   shadowMaxDistance: number
-  /** Shadow darkness (0-1, where 1 is completely black) */
+  /** Shadow darkness (0-1, where 0 is invisible and 1 is black) */
   shadowDarkness: number
   /** Enable soft shadow edges (PCF filtering) */
   shadowSoftness: boolean
@@ -120,7 +120,8 @@ export function useCesiumLighting(
         viewer.shadowMap.softShadows = shadowSoftness
         viewer.shadowMap.size = shadowMapSize
         viewer.shadowMap.maximumDistance = shadowMaxDistance
-        viewer.shadowMap.darkness = shadowDarkness
+        // Invert: Cesium uses 0=dark, 1=light but we want 0=invisible, 1=dark in UI
+        viewer.shadowMap.darkness = 1 - shadowDarkness
         viewer.shadowMap.fadingEnabled = shadowFadingEnabled
         viewer.shadowMap.normalOffset = shadowNormalOffset
         // RECEIVE_ONLY: terrain receives shadows from aircraft but doesn't self-shadow
@@ -136,7 +137,8 @@ export function useCesiumLighting(
         viewer.shadowMap.size = shadowMapSize
         // Note: numberOfCascades is not configurable in Cesium API (only 1 or 4 cascades supported internally)
         viewer.shadowMap.maximumDistance = shadowMaxDistance
-        viewer.shadowMap.darkness = shadowDarkness
+        // Invert: Cesium uses 0=dark, 1=light but we want 0=invisible, 1=dark in UI
+        viewer.shadowMap.darkness = 1 - shadowDarkness
         viewer.shadowMap.fadingEnabled = shadowFadingEnabled
         viewer.shadowMap.normalOffset = shadowNormalOffset
         // RECEIVE_ONLY: terrain receives shadows from aircraft but doesn't cast shadows on itself

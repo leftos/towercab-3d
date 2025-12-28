@@ -178,7 +178,7 @@ export interface GraphicsSettings {
   /** Maximum shadow rendering distance in meters (default: 10000) */
   shadowMaxDistance: number
 
-  /** Shadow darkness: 0.0 (no darkening) to 1.0 (black) (default: 0.3) */
+  /** Shadow darkness: 0.0 (invisible) to 1.0 (black) (default: 0.3) */
   shadowDarkness: number
 
   /** Enable soft shadows vs hard shadows (PCF filtering, default: true) */
@@ -946,7 +946,7 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     shadowSoftness: true,
     shadowFadingEnabled: false,
     shadowNormalOffset: true,
-    aircraftShadowsOnly: false,
+    aircraftShadowsOnly: true,
     shadowDepthBias: 0.0004,
     shadowPolygonOffsetFactor: 1.1,
     shadowPolygonOffsetUnits: 4.0,
@@ -954,7 +954,7 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     builtinModelBrightness: 1.7,
     builtinModelTintColor: 'lightBlue',
     fsltlModelBrightness: 1.0,
-    enableNightDarkening: true,
+    enableNightDarkening: false,
     nightDarkeningIntensity: 0.7,
     aircraftNightVisibility: 1.5,
     maxFramerate: 60

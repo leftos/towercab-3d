@@ -97,7 +97,7 @@ function ShadowSettings() {
             <span>{(shadowDarkness * 100).toFixed(0)}%</span>
           </div>
           <p className="setting-hint">
-            Shadow brightness. 0% = black shadows, 100% = invisible shadows.
+            Shadow intensity. 0% = invisible, 100% = black.
           </p>
         </div>
 

@@ -408,7 +408,7 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
     }),
     {
       name: 'settings-store',
-      version: 24, // Added aircraft night visibility setting
+      version: 25, // Changed defaults: aircraft shadows only, night darkening off
       migrate: (persistedState: unknown, version: number) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let state: any = persistedState
@@ -613,6 +613,19 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
           state = {
             ...state,
             graphics: { ...DEFAULT_SETTINGS.graphics, ...state.graphics }
+          }
+        }
+
+        // Migrate v24 to v25: change shadow and night darkening defaults
+        if (version < 25) {
+          console.log('[Settings] Migrating v24 to v25: changing shadow and night darkening defaults')
+          state = {
+            ...state,
+            graphics: {
+              ...state.graphics,
+              aircraftShadowsOnly: true,
+              enableNightDarkening: false
+            }
           }
         }
 
