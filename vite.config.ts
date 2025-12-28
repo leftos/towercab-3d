@@ -76,7 +76,14 @@ export default defineConfig({
 
   server: {
     port: 5173,
-    strictPort: true
+    strictPort: true,
+    proxy: {
+      // Proxy RealTraffic API requests through Tauri backend (bypasses CORS)
+      '/api/realtraffic': {
+        target: 'http://localhost:8765',
+        changeOrigin: true
+      }
+    }
   },
 
   plugins: [

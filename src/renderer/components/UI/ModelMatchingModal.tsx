@@ -1,5 +1,7 @@
 import { useMemo, useEffect } from 'react'
 import { useVatsimStore } from '../../stores/vatsimStore'
+import { useRealTrafficStore } from '../../stores/realTrafficStore'
+import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { aircraftModelService, type ModelInfo } from '../../services/AircraftModelService'
 import './ModelMatchingModal.css'
@@ -15,11 +17,29 @@ interface AircraftModelData {
 }
 
 function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
+  const dataSource = useGlobalSettingsStore((state) => state.realtraffic.dataSource)
   const pilots = useVatsimStore((state) => state.pilots)
+  const rtAircraftStates = useRealTrafficStore((state) => state.aircraftStates)
   const aircraftDataRadiusNM = useSettingsStore((state) => state.memory.aircraftDataRadiusNM)
 
-  // Build model matching data for all pilots in range
+  // Build model matching data for all aircraft in range
   const aircraftData = useMemo<AircraftModelData[]>(() => {
+    if (dataSource === 'realtraffic') {
+      // RealTraffic mode: use aircraftStates from realTrafficStore
+      return Array.from(rtAircraftStates.values())
+        .map((state) => {
+          const aircraftType = state.aircraftType
+          const modelInfo = aircraftModelService.getModelInfo(aircraftType, state.callsign)
+          return {
+            callsign: state.callsign,
+            aircraftType: aircraftType || 'N/A',
+            modelInfo
+          }
+        })
+        .sort((a, b) => a.callsign.localeCompare(b.callsign))
+    }
+
+    // VATSIM mode: use pilots from vatsimStore
     return pilots
       .map((pilot) => {
         const aircraftType = pilot.flight_plan?.aircraft_faa || null
@@ -32,7 +52,7 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
         }
       })
       .sort((a, b) => a.callsign.localeCompare(b.callsign))
-  }, [pilots])
+  }, [dataSource, pilots, rtAircraftStates])
 
   // Format scale for display
   const formatScale = (scale: { x: number; y: number; z: number }): { text: string; isScaled: boolean } => {

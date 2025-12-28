@@ -28,6 +28,7 @@ import {
   getModelGroundData,
   parseGroundDataFromUrl
 } from '../utils/gltfAnimationParser'
+import { filterAircraftForRendering } from './useRenderCulling'
 
 /**
  * Manages aircraft 3D model rendering using Cesium.Model pool
@@ -134,6 +135,14 @@ export function useAircraftModels(
 
     performanceMonitor.startTimer('aircraftUpdate')
 
+    // Apply render culling: filter by distance from camera and max aircraft limit
+    // This runs every frame to keep the closest aircraft visible as camera moves
+    const { filteredAircraft } = filterAircraftForRendering({
+      viewer,
+      interpolatedAircraft,
+      alwaysInclude: followingCallsign
+    })
+
     // Track which callsigns we've seen this frame (for cleanup)
     const seenCallsigns = new Set<string>()
 
@@ -151,8 +160,8 @@ export function useAircraftModels(
       nightLightBoost = 1.0 + (aircraftNightVisibility - 1.0) * nightProgress
     }
 
-    // Update each aircraft model
-    for (const aircraft of interpolatedAircraft.values()) {
+    // Update each aircraft model (using filtered list)
+    for (const aircraft of filteredAircraft.values()) {
       seenCallsigns.add(aircraft.callsign)
 
       // Get the correct model info for this aircraft type (and callsign for FSLTL livery matching)
@@ -221,10 +230,7 @@ export function useAircraftModels(
 
             // Track if this is an FSLTL or custom VMR model (for color blend logic)
             // These models have custom liveries and should use FSLTL brightness/no tint
-            const isFsltlOrVmrModel = modelInfo.matchType === 'fsltl' ||
-              modelInfo.matchType === 'fsltl-base' ||
-              modelInfo.matchType === 'fsltl-vmr' ||
-              modelInfo.matchType === 'custom-vmr'
+            const isFsltlOrVmrModel = modelInfo.isFsltl === true
             modelPoolIsFsltlRef.current.set(poolIndex, isFsltlOrVmrModel)
 
             // Calculate model color and blend amount based on brightness setting
@@ -332,11 +338,7 @@ export function useAircraftModels(
 
           // Apply color blend - full white in topdown, preserve textures in 3D
           // FSLTL/VMR models get no blend by default in 3D mode to show their liveries
-          // Compute directly from modelInfo rather than relying on ref (more reliable)
-          const isFsltlOrVmr = modelInfo.matchType === 'fsltl' ||
-            modelInfo.matchType === 'fsltl-base' ||
-            modelInfo.matchType === 'fsltl-vmr' ||
-            modelInfo.matchType === 'custom-vmr'
+          const isFsltlOrVmr = modelInfo.isFsltl === true
           if (viewMode === 'topdown') {
             // Always white in top-down view for visibility (both FSLTL and built-in)
             model.color = Cesium.Color.WHITE

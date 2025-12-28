@@ -17,7 +17,7 @@
  */
 
 import { create } from 'zustand'
-import type { GlobalSettings, GlobalViewportSettings, FSLTLTextureScale } from '@/types'
+import type { GlobalSettings, GlobalViewportSettings, FSLTLTextureScale, DataSourceType } from '@/types'
 import { DEFAULT_GLOBAL_SETTINGS } from '@/types'
 import { globalSettingsApi, isTauri } from '@/utils/tauriApi'
 
@@ -118,6 +118,9 @@ interface GlobalSettingsState extends GlobalSettings {
   /** Set entire viewport settings (for bulk updates from viewportStore) */
   setViewports: (viewports: GlobalViewportSettings) => Promise<void>
 
+  /** Update RealTraffic settings (data source, license key, radius) */
+  updateRealTraffic: (updates: Partial<GlobalSettings['realtraffic']>) => Promise<void>
+
   /** Reset to default settings */
   resetToDefaults: () => Promise<void>
 
@@ -217,6 +220,7 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
       fsltl: currentState.fsltl,
       airports: currentState.airports,
       server: currentState.server,
+      realtraffic: currentState.realtraffic,
       viewports: currentState.viewports
     })
   },
@@ -240,6 +244,7 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
       fsltl: currentState.fsltl,
       airports: currentState.airports,
       server: currentState.server,
+      realtraffic: currentState.realtraffic,
       viewports: currentState.viewports
     })
   },
@@ -256,6 +261,7 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
       fsltl: currentState.fsltl,
       airports: currentState.airports,
       server: currentState.server,
+      realtraffic: currentState.realtraffic,
       viewports: currentState.viewports
     })
   },
@@ -279,6 +285,7 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
       fsltl: currentState.fsltl,
       airports: currentState.airports,
       server: currentState.server,
+      realtraffic: currentState.realtraffic,
       viewports: currentState.viewports
     })
   },
@@ -306,6 +313,7 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
       fsltl: currentState.fsltl,
       airports: currentState.airports,
       server: currentState.server,
+      realtraffic: currentState.realtraffic,
       viewports: currentState.viewports
     })
   },
@@ -319,6 +327,35 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
       fsltl: currentState.fsltl,
       airports: currentState.airports,
       server: currentState.server,
+      realtraffic: currentState.realtraffic,
+      viewports: currentState.viewports
+    })
+  },
+
+  updateRealTraffic: async (updates: Partial<GlobalSettings['realtraffic']>) => {
+    const state = get()
+    const newRealTraffic = {
+      ...state.realtraffic,
+      ...updates,
+      // Validate dataSource
+      dataSource: (updates.dataSource && ['vatsim', 'realtraffic'].includes(updates.dataSource)
+        ? updates.dataSource
+        : state.realtraffic.dataSource) as DataSourceType,
+      // Validate radiusNm (10-200)
+      radiusNm: updates.radiusNm !== undefined
+        ? Math.max(10, Math.min(200, updates.radiusNm))
+        : state.realtraffic.radiusNm
+    }
+
+    // Update state first, then read full current state for save
+    set({ realtraffic: newRealTraffic })
+    const currentState = get()
+    await saveSettings({
+      cesiumIonToken: currentState.cesiumIonToken,
+      fsltl: currentState.fsltl,
+      airports: currentState.airports,
+      server: currentState.server,
+      realtraffic: currentState.realtraffic,
       viewports: currentState.viewports
     })
   },
@@ -335,10 +372,18 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
       fsltl: state.fsltl,
       airports: state.airports,
       server: state.server,
+      realtraffic: state.realtraffic,
       viewports: state.viewports
     }
   }
 }))
+
+/**
+ * Hook to get RealTraffic settings
+ */
+export function useRealTrafficSettings(): GlobalSettings['realtraffic'] {
+  return useGlobalSettingsStore((state) => state.realtraffic)
+}
 
 /**
  * Initialize global settings store

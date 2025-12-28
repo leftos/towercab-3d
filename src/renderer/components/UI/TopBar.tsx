@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useAirportStore } from '../../stores/airportStore'
 import { useVatsimStore } from '../../stores/vatsimStore'
+import { useRealTrafficStore } from '../../stores/realTrafficStore'
+import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
 import { useViewportStore } from '../../stores/viewportStore'
 import './TopBar.css'
 
@@ -22,9 +24,32 @@ function getCardinalDirection(heading: number): string {
 function TopBar() {
   const currentAirport = useAirportStore((state) => state.currentAirport)
   const setAirportSelectorOpen = useAirportStore((state) => state.setAirportSelectorOpen)
-  const isConnected = useVatsimStore((state) => state.isConnected)
-  const totalPilotsFromApi = useVatsimStore((state) => state.totalPilotsFromApi)
   const heading = useViewportStore((state) => state.getActiveCameraState().heading)
+
+  // Data source selection
+  const dataSource = useGlobalSettingsStore((state) => state.realtraffic.dataSource)
+
+  // VATSIM state
+  const vatsimIsConnected = useVatsimStore((state) => state.isConnected)
+  const vatsimTotalPilots = useVatsimStore((state) => state.totalPilotsFromApi)
+
+  // RealTraffic state
+  const rtStatus = useRealTrafficStore((state) => state.status)
+  const rtTotalAircraft = useRealTrafficStore((state) => state.totalAircraftFromApi)
+
+  // Determine connection status and count based on data source
+  const isConnected = dataSource === 'realtraffic'
+    ? rtStatus === 'connected'
+    : vatsimIsConnected
+  const trafficCount = dataSource === 'realtraffic'
+    ? rtTotalAircraft
+    : vatsimTotalPilots
+  const countLabel = dataSource === 'realtraffic'
+    ? 'aircraft'
+    : 'pilots online'
+  const sourceLabel = dataSource === 'realtraffic'
+    ? 'RealTraffic'
+    : 'VATSIM'
 
   const [zuluTime, setZuluTime] = useState('')
 
@@ -70,9 +95,9 @@ function TopBar() {
 
       <div className="top-bar-right">
         <div className="status-info">
-          <span className="aircraft-count">{totalPilotsFromApi} pilots online</span>
+          <span className="aircraft-count">{trafficCount} {countLabel}</span>
           <span className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>
-            {isConnected ? 'Connected' : 'Disconnected'}
+            {sourceLabel}: {isConnected ? 'Connected' : 'Disconnected'}
           </span>
         </div>
       </div>

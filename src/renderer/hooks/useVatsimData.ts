@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useVatsimStore } from '../stores/vatsimStore'
+import { useGlobalSettingsStore } from '../stores/globalSettingsStore'
 import type { PilotData } from '../types/vatsim'
 
 /**
@@ -148,14 +149,22 @@ export function useVatsimData() {
   const startPolling = useVatsimStore((state) => state.startPolling)
   const stopPolling = useVatsimStore((state) => state.stopPolling)
 
-  // Start polling on mount
+  // Get data source setting - only start VATSIM polling if VATSIM is the active source
+  const dataSource = useGlobalSettingsStore((state) => state.realtraffic.dataSource)
+
+  // Start polling on mount, but only if VATSIM is the active data source
   useEffect(() => {
+    // Don't start VATSIM polling if RealTraffic is active
+    if (dataSource !== 'vatsim') {
+      return
+    }
+
     startPolling()
 
     return () => {
       stopPolling()
     }
-  }, [startPolling, stopPolling])
+  }, [startPolling, stopPolling, dataSource])
 
   return {
     pilots,

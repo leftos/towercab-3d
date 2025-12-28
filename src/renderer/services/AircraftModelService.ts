@@ -389,6 +389,8 @@ export interface ModelInfo {
   hasAnimations?: boolean
   /** VMR variation name (e.g., "FSLTL_FAIB_B738_American") for FSLTL matches */
   vmrVariationName?: string
+  /** Whether this is an FSLTL/VMR model with custom liveries (affects tinting behavior) */
+  isFsltl?: boolean
 }
 
 /**
@@ -476,7 +478,8 @@ class AircraftModelServiceClass {
               matchedModel: airlineModel.modelName,
               dimensions: dims ?? b738Dims,
               rotationOffset: 180,
-              hasAnimations: airlineModel.hasAnimations
+              hasAnimations: airlineModel.hasAnimations,
+              isFsltl: true
             }
           }
         }
@@ -493,7 +496,8 @@ class AircraftModelServiceClass {
           matchedModel: fsltlB738Fallback.modelName,
           dimensions: b738Dims,
           rotationOffset: 180,
-          hasAnimations: fsltlB738Fallback.hasAnimations
+          hasAnimations: fsltlB738Fallback.hasAnimations,
+          isFsltl: true
         }
       }
       const fallbackDims = this.getModelDimensions(FALLBACK_MODEL)
@@ -524,7 +528,8 @@ class AircraftModelServiceClass {
         matchType: 'custom-vmr',
         matchedModel: customVMRMatch.modelName,
         dimensions: targetDims ?? { wingspan: 35.78, length: 39.47 },
-        rotationOffset: customVMRMatch.rotationOffset?.y
+        rotationOffset: customVMRMatch.rotationOffset?.y,
+        isFsltl: true
       }
     }
 
@@ -558,7 +563,8 @@ class AircraftModelServiceClass {
         dimensions: targetDims ?? { wingspan: 35.78, length: 39.47 },
         rotationOffset: 180, // FSLTL models face same direction as built-in models
         hasAnimations: fsltlModel.hasAnimations,
-        vmrVariationName
+        vmrVariationName,
+        isFsltl: true
       }
     }
 
@@ -576,7 +582,8 @@ class AircraftModelServiceClass {
           matchedModel: closestAirlineModel.model.modelName,
           dimensions: targetDims ?? { wingspan: 35.78, length: 39.47 },
           rotationOffset: 180,
-          hasAnimations: closestAirlineModel.model.hasAnimations
+          hasAnimations: closestAirlineModel.model.hasAnimations,
+          isFsltl: true
         }
       }
     }
@@ -594,7 +601,8 @@ class AircraftModelServiceClass {
         matchedModel: fsltlBaseModel.modelName,
         dimensions: targetDims ?? { wingspan: 35.78, length: 39.47 },
         rotationOffset: 180,
-        hasAnimations: fsltlBaseModel.hasAnimations
+        hasAnimations: fsltlBaseModel.hasAnimations,
+        isFsltl: true
       }
     }
 
@@ -611,7 +619,8 @@ class AircraftModelServiceClass {
         matchedModel: closestFsltlModel.model.modelName,
         dimensions: targetDims ?? { wingspan: 35.78, length: 39.47 },
         rotationOffset: 180,
-        hasAnimations: closestFsltlModel.model.hasAnimations
+        hasAnimations: closestFsltlModel.model.hasAnimations,
+        isFsltl: true
       }
     }
 
@@ -667,7 +676,8 @@ class AircraftModelServiceClass {
           matchedModel: airlineFallback.modelName,
           dimensions: fallbackDims ?? b738Dims,
           rotationOffset: 180,
-          hasAnimations: airlineFallback.hasAnimations
+          hasAnimations: airlineFallback.hasAnimations,
+          isFsltl: true
         }
       }
     }
@@ -683,7 +693,8 @@ class AircraftModelServiceClass {
         matchedModel: fsltlB738Fallback.modelName,
         dimensions: b738Dims,
         rotationOffset: 180,
-        hasAnimations: fsltlB738Fallback.hasAnimations
+        hasAnimations: fsltlB738Fallback.hasAnimations,
+        isFsltl: true
       }
     }
 

@@ -139,6 +139,7 @@ export type {
   TimeMode,
   Theme,
   FSLTLTextureScale,
+  DataSourceType,
 
   // Settings groups
   CesiumSettings,
@@ -149,6 +150,7 @@ export type {
   AircraftSettings,
   UISettings,
   FSLTLSettings,
+  RealTrafficSettings,
 
   // Main settings store (NEW grouped structure for Phase 5)
   SettingsStore,
@@ -175,6 +177,49 @@ export {
   // Default global viewport settings values
   DEFAULT_GLOBAL_VIEWPORT_SETTINGS
 } from './settings'
+
+// ============================================================================
+// AIRCRAFT TIMELINE TYPES (Unified Interpolation)
+// ============================================================================
+
+export type {
+  // Data source identifier
+  AircraftDataSource,
+
+  // Observation types
+  AircraftObservation,
+  AircraftMetadata,
+  AircraftTimeline,
+
+  // Interpolation result
+  TimelineInterpolationResult
+} from './aircraft-timeline'
+
+// ============================================================================
+// REALTRAFFIC API TYPES
+// ============================================================================
+
+export type {
+  // API request/response types
+  RTAuthRequest,
+  RTAuthResponse,
+  RTTrafficRequest,
+  RTTrafficResponse,
+  RTTrafficRecord,
+  RTErrorResponse,
+
+  // Store types
+  RTConnectionStatus,
+  RealTrafficStoreState
+} from './realtraffic'
+
+export {
+  // Error codes
+  RT_ERROR_CODES,
+
+  // Default settings
+  DEFAULT_REALTRAFFIC_SETTINGS
+} from './realtraffic'
 
 // ============================================================================
 // FSLTL (FS Live Traffic Liveries) TYPES

@@ -19,7 +19,9 @@
 import { useReplayStore } from '../stores/replayStore'
 import { useVatsimStore } from '../stores/vatsimStore'
 import { useVnasStore } from '../stores/vnasStore'
+import { useRealTrafficStore } from '../stores/realTrafficStore'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useGlobalSettingsStore } from '../stores/globalSettingsStore'
 import { SNAPSHOT_INTERVAL_MS } from '../constants/replay'
 import { calculateDistanceNM } from '../utils/interpolation'
 import type { AircraftState } from '../types/vatsim'
@@ -161,7 +163,36 @@ export function getAircraftDataSource(): AircraftDataSource {
   const { playbackMode, currentIndex, segmentProgress, getActiveSnapshots } = replayState
 
   if (playbackMode === 'live') {
-    // LIVE MODE: Merge vNAS (1Hz) and VATSIM (15s) data
+    // Check which data source is configured
+    const dataSource = useGlobalSettingsStore.getState().realtraffic.dataSource
+
+    if (dataSource === 'realtraffic') {
+      // REALTRAFFIC MODE: Use RealTraffic API data
+      const rtState = useRealTrafficStore.getState()
+
+      // Only use RealTraffic if connected and has data
+      if (rtState.status === 'connected' && rtState.aircraftStates.size > 0) {
+        return {
+          aircraftStates: rtState.aircraftStates,
+          previousStates: rtState.previousStates,
+          timestamp: Date.now(),
+          updateInterval: rtState.updateInterval,
+          playbackMode: 'live'
+        }
+      }
+
+      // RealTraffic not connected/no data - return empty (don't fall back to VATSIM)
+      // This makes it clear to the user they need to connect RealTraffic
+      return {
+        aircraftStates: new Map(),
+        previousStates: new Map(),
+        timestamp: Date.now(),
+        updateInterval: SNAPSHOT_INTERVAL_MS,
+        playbackMode: 'live'
+      }
+    }
+
+    // VATSIM MODE: Merge vNAS (1Hz) and VATSIM (15s) data
     // vNAS data takes priority for aircraft within its subscription range
     const vatsimState = useVatsimStore.getState()
     const vnasState = useVnasStore.getState()

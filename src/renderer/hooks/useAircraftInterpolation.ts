@@ -1,16 +1,24 @@
 import { useState, useEffect } from 'react'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useAircraftTimelineStore } from '../stores/aircraftTimelineStore'
 import { getAircraftDataSource } from './useAircraftDataSource'
-import { interpolateAircraftState, calculateFlarePitch } from '../utils/interpolation'
+import { interpolateAircraftState, calculateFlarePitch, angleDifference } from '../utils/interpolation'
 import { performanceMonitor } from '../utils/performanceMonitor'
 import type { InterpolatedAircraftState, AircraftState } from '../types/vatsim'
+import type { TimelineInterpolationResult } from '../types/aircraft-timeline'
 import {
   GROUND_AIRCRAFT_TERRAIN_OFFSET,
   FLYING_AIRCRAFT_TERRAIN_OFFSET,
   TERRAIN_SMOOTHING_LERP_FACTOR,
   HEIGHT_TRANSITION_LERP_FACTOR,
   NOSEWHEEL_LOWERING_LERP_FACTOR,
-  FALLBACK_FLARE_PITCH_DEGREES
+  FALLBACK_FLARE_PITCH_DEGREES,
+  PITCH_RATE_MULTIPLIER,
+  ROLL_RATE_MULTIPLIER,
+  MAX_PITCH_DEGREES,
+  MAX_ROLL_DEGREES,
+  MAX_PITCH_RATE_DEG_PER_SEC,
+  MAX_ROLL_RATE_DEG_PER_SEC
 } from '../constants/rendering'
 
 // SINGLETON: Shared interpolated states map and animation loop
@@ -52,8 +60,196 @@ const sharedLastFlarePitchRef = { current: new Map<string, number>() }
 const sharedCachedPrevTurnRateRef = { current: new Map<string, number>() }
 const sharedCachedPrevVerticalRateRef = { current: new Map<string, number>() }
 
+// ============================================================================
+// TIMELINE-BASED INTERPOLATION STATE (for RealTraffic unified timeline)
+// ============================================================================
+// Track previous frame values to calculate rates for orientation emulation
+
+/** Last frame's interpolated altitude (meters) for vertical rate calculation */
+const sharedTimelinePrevAltitudeRef = { current: new Map<string, number>() }
+/** Last frame's interpolated heading (degrees) for turn rate calculation */
+const sharedTimelinePrevHeadingRef = { current: new Map<string, number>() }
+/** Last frame's interpolated groundspeed (knots) for acceleration calculation */
+const sharedTimelinePrevGroundspeedRef = { current: new Map<string, number>() }
+/** Last frame's timestamp (ms) for rate calculations */
+const sharedTimelineLastFrameTimeRef = { current: 0 }
+/** Smoothed vertical rate (reduces noise from small altitude jitter) */
+const sharedTimelineSmoothedVerticalRateRef = { current: new Map<string, number>() }
+/** Smoothed turn rate (reduces noise from heading jitter) */
+const sharedTimelineSmoothedTurnRateRef = { current: new Map<string, number>() }
+/** Previous frame's pitch for rate limiting */
+const sharedTimelinePrevPitchRef = { current: new Map<string, number>() }
+/** Previous frame's roll for rate limiting */
+const sharedTimelinePrevRollRef = { current: new Map<string, number>() }
+
 // Store subscribers for triggering re-renders
 const subscribers = new Set<() => void>()
+
+// Rate smoothing factor (higher = more smoothing, less responsive)
+const RATE_SMOOTHING = 0.15
+
+/**
+ * Convert a TimelineInterpolationResult to InterpolatedAircraftState
+ * Calculates rates and orientation from frame-to-frame changes
+ */
+function timelineToInterpolatedState(
+  timeline: TimelineInterpolationResult,
+  now: number,
+  orientationEnabled: boolean,
+  orientationIntensity: number
+): InterpolatedAircraftState {
+  const callsign = timeline.callsign
+
+  // Get previous frame values
+  const prevAltitude = sharedTimelinePrevAltitudeRef.current.get(callsign)
+  const prevHeading = sharedTimelinePrevHeadingRef.current.get(callsign)
+  const prevGroundspeed = sharedTimelinePrevGroundspeedRef.current.get(callsign)
+  const lastFrameTime = sharedTimelineLastFrameTimeRef.current
+
+  // Calculate frame delta (ms)
+  const frameDelta = lastFrameTime > 0 ? now - lastFrameTime : 16.67 // ~60fps default
+
+  // Calculate rates from frame-to-frame changes
+  let verticalRate = 0 // m/min
+  let turnRate = 0 // deg/sec
+  let acceleration = 0 // knots/sec
+
+  if (frameDelta > 0 && frameDelta < 100) { // Only calculate if reasonable frame time
+    // Vertical rate: prefer actual ADS-B baro_rate when available
+    if (timeline.verticalRate !== null) {
+      // Use actual ADS-B vertical rate (in fpm), convert to m/min
+      const FEET_TO_METERS = 0.3048
+      const adsVerticalRate = timeline.verticalRate * FEET_TO_METERS // fpm to m/min
+      // Still apply smoothing to reduce sudden jumps when new observations arrive
+      const prevSmoothed = sharedTimelineSmoothedVerticalRateRef.current.get(callsign) ?? adsVerticalRate
+      verticalRate = prevSmoothed + (adsVerticalRate - prevSmoothed) * 0.3 // Faster convergence for ADS-B data
+      sharedTimelineSmoothedVerticalRateRef.current.set(callsign, verticalRate)
+    } else if (prevAltitude !== undefined) {
+      // Fall back to calculating from altitude deltas (VATSIM, vNAS)
+      const altitudeChange = timeline.altitude - prevAltitude // meters
+      const rawVerticalRate = (altitudeChange / frameDelta) * 60000 // m/min
+      // Smooth the rate to reduce jitter
+      const prevSmoothed = sharedTimelineSmoothedVerticalRateRef.current.get(callsign) ?? 0
+      verticalRate = prevSmoothed + (rawVerticalRate - prevSmoothed) * RATE_SMOOTHING
+      sharedTimelineSmoothedVerticalRateRef.current.set(callsign, verticalRate)
+    }
+
+    // Turn rate: heading change per second
+    if (prevHeading !== undefined) {
+      const headingChange = angleDifference(prevHeading, timeline.heading)
+      const rawTurnRate = (headingChange / frameDelta) * 1000 // deg/sec
+      // Clamp to realistic limits and smooth
+      const clampedTurnRate = Math.max(-6, Math.min(6, rawTurnRate))
+      const prevSmoothed = sharedTimelineSmoothedTurnRateRef.current.get(callsign) ?? 0
+      turnRate = prevSmoothed + (clampedTurnRate - prevSmoothed) * RATE_SMOOTHING
+      sharedTimelineSmoothedTurnRateRef.current.set(callsign, turnRate)
+    }
+
+    // Acceleration: groundspeed change per second
+    if (prevGroundspeed !== undefined) {
+      const speedChange = timeline.groundspeed - prevGroundspeed
+      acceleration = (speedChange / frameDelta) * 1000 // knots/sec
+    }
+  }
+
+  // Store current values for next frame
+  sharedTimelinePrevAltitudeRef.current.set(callsign, timeline.altitude)
+  sharedTimelinePrevHeadingRef.current.set(callsign, timeline.heading)
+  sharedTimelinePrevGroundspeedRef.current.set(callsign, timeline.groundspeed)
+
+  // Calculate pitch and roll from rates (orientation emulation)
+  let pitch = 0
+  let roll = 0
+
+  if (orientationEnabled) {
+    // Pitch from vertical rate
+    // ~1000 fpm climb = ~5 degrees pitch (standard approximation)
+    // verticalRate is in m/min, convert to fpm for calculation
+    const fpm = verticalRate * 3.28084
+    let targetPitch = (fpm / 1000) * PITCH_RATE_MULTIPLIER * orientationIntensity
+    targetPitch = Math.max(-MAX_PITCH_DEGREES, Math.min(MAX_PITCH_DEGREES, targetPitch))
+
+    // Roll: Use actual ADS-B roll if available, otherwise calculate from turn rate
+    let targetRoll: number
+    if (timeline.roll !== null) {
+      // Use actual ADS-B bank angle (apply intensity for consistency with calculated roll)
+      targetRoll = timeline.roll * orientationIntensity
+      targetRoll = Math.max(-MAX_ROLL_DEGREES, Math.min(MAX_ROLL_DEGREES, targetRoll))
+    } else {
+      // Calculate from turn rate
+      // Standard rate turn (3 deg/sec) = ~15-20 degrees bank
+      targetRoll = turnRate * ROLL_RATE_MULTIPLIER * orientationIntensity
+      targetRoll = Math.max(-MAX_ROLL_DEGREES, Math.min(MAX_ROLL_DEGREES, targetRoll))
+    }
+
+    // Apply rate limiting to prevent jerky motion from noisy data
+    const prevPitch = sharedTimelinePrevPitchRef.current.get(callsign) ?? targetPitch
+    const prevRoll = sharedTimelinePrevRollRef.current.get(callsign) ?? targetRoll
+    const dtSeconds = frameDelta / 1000
+
+    // Limit pitch rate of change
+    const maxPitchChange = MAX_PITCH_RATE_DEG_PER_SEC * dtSeconds
+    const pitchDelta = targetPitch - prevPitch
+    if (Math.abs(pitchDelta) > maxPitchChange) {
+      pitch = prevPitch + Math.sign(pitchDelta) * maxPitchChange
+    } else {
+      pitch = targetPitch
+    }
+
+    // Limit roll rate of change
+    const maxRollChange = MAX_ROLL_RATE_DEG_PER_SEC * dtSeconds
+    const rollDelta = targetRoll - prevRoll
+    if (Math.abs(rollDelta) > maxRollChange) {
+      roll = prevRoll + Math.sign(rollDelta) * maxRollChange
+    } else {
+      roll = targetRoll
+    }
+
+    // Store for next frame
+    sharedTimelinePrevPitchRef.current.set(callsign, pitch)
+    sharedTimelinePrevRollRef.current.set(callsign, roll)
+  }
+
+  // Calculate track from groundTrack or default to heading
+  const track = timeline.groundTrack ?? timeline.heading
+
+  // Build the InterpolatedAircraftState
+  return {
+    // Base AircraftState fields
+    callsign: timeline.callsign,
+    cid: timeline.cid,
+    latitude: timeline.latitude,
+    longitude: timeline.longitude,
+    altitude: timeline.altitude,
+    groundspeed: timeline.groundspeed,
+    heading: timeline.heading,
+    groundTrack: timeline.groundTrack,
+    transponder: timeline.transponder,
+    aircraftType: timeline.aircraftType,
+    departure: timeline.departure,
+    arrival: timeline.arrival,
+    timestamp: now,
+
+    // Interpolated values (same as raw for timeline-based)
+    interpolatedLatitude: timeline.latitude,
+    interpolatedLongitude: timeline.longitude,
+    interpolatedAltitude: timeline.altitude,
+    interpolatedHeading: timeline.heading,
+    interpolatedGroundspeed: timeline.groundspeed,
+
+    // Orientation
+    interpolatedPitch: pitch,
+    interpolatedRoll: roll,
+
+    // Rates
+    verticalRate,
+    turnRate,
+    acceleration,
+    track,
+
+    isInterpolated: true
+  }
+}
 
 // Singleton animation loop function
 function updateInterpolation() {
@@ -83,7 +279,71 @@ function updateInterpolation() {
   const orientationEnabled = sharedOrientationEnabledRef.current
   const orientationIntensity = sharedOrientationIntensityRef.current
 
-  for (const [callsign, currentState] of aircraftStates) {
+  // ============================================================================
+  // TIMELINE-BASED INTERPOLATION (ALL LIVE SOURCES)
+  // ============================================================================
+  // Use the timeline store for smooth position interpolation with source-specific
+  // display delays. This handles VATSIM (15s delay), vNAS (2s delay), and
+  // RealTraffic (5s delay) uniformly.
+  //
+  // The timeline store receives observations from all sources and provides
+  // unified interpolation based on each aircraft's most recent data source.
+
+  const isLiveMode = source.playbackMode === 'live'
+
+  if (isLiveMode) {
+    // Get interpolated states from timeline store
+    const timelineStore = useAircraftTimelineStore.getState()
+    const timelineStates = timelineStore.getInterpolatedStates(now)
+
+    for (const [callsign, timeline] of timelineStates) {
+      activeCallsigns.add(callsign)
+
+      // Convert timeline result to InterpolatedAircraftState
+      const interpolated = timelineToInterpolatedState(
+        timeline,
+        now,
+        orientationEnabled,
+        orientationIntensity
+      )
+
+      // Reuse existing entry or create new one
+      const existing = statesMap.get(callsign)
+      if (existing) {
+        // Update in place to avoid object allocation
+        existing.callsign = interpolated.callsign
+        existing.interpolatedLatitude = interpolated.interpolatedLatitude
+        existing.interpolatedLongitude = interpolated.interpolatedLongitude
+        existing.interpolatedAltitude = interpolated.interpolatedAltitude
+        existing.interpolatedGroundspeed = interpolated.interpolatedGroundspeed
+        existing.interpolatedHeading = interpolated.interpolatedHeading
+        existing.interpolatedPitch = interpolated.interpolatedPitch
+        existing.interpolatedRoll = interpolated.interpolatedRoll
+        existing.aircraftType = interpolated.aircraftType
+        existing.departure = interpolated.departure
+        existing.arrival = interpolated.arrival
+        existing.isInterpolated = interpolated.isInterpolated
+        existing.verticalRate = interpolated.verticalRate
+        existing.turnRate = interpolated.turnRate
+        existing.acceleration = interpolated.acceleration
+        existing.track = interpolated.track
+        existing.timestamp = interpolated.timestamp
+      } else {
+        statesMap.set(callsign, interpolated)
+      }
+    }
+
+    // Update frame timestamp for rate calculations
+    sharedTimelineLastFrameTimeRef.current = now
+
+    // Skip to terrain correction and cleanup (shared with legacy path)
+  } else {
+    // ============================================================================
+    // LEGACY INTERPOLATION (VATSIM/vNAS/Replay)
+    // ============================================================================
+    // Uses previousState/currentState model for interpolation
+
+    for (const [callsign, currentState] of aircraftStates) {
     activeCallsigns.add(callsign)
     const previousState = previousStates.get(callsign)
 
@@ -115,8 +375,6 @@ function updateInterpolation() {
       previousTurnRate
     )
 
-    // Diagnostic logging removed - use performance monitor for frame timing
-
     // Reuse existing entry or create new one
     if (existing) {
       // Update in place to avoid object allocation
@@ -143,10 +401,19 @@ function updateInterpolation() {
     } else {
       statesMap.set(callsign, interpolated)
     }
+    } // End legacy for loop
+  } // End else block (legacy path)
 
+  // ============================================================================
+  // TERRAIN CORRECTION AND FLARE PITCH (applies to ALL aircraft)
+  // ============================================================================
+  // This section applies to both timeline-based and legacy interpolated states
+
+  for (const callsign of activeCallsigns) {
     // Apply terrain correction to aircraft altitude
     // This ensures consistent height across all rendering (models, labels, etc.)
-    const entry = statesMap.get(callsign)!
+    const entry = statesMap.get(callsign)
+    if (!entry) continue // Safety check
     const heightAboveEllipsoid = entry.interpolatedAltitude // VATSIM altitude in meters MSL
     const terrainOffset = sharedTerrainOffsetRef.current
     const groundElevationMeters = sharedGroundElevationMetersRef.current
@@ -365,6 +632,12 @@ function updateInterpolation() {
       sharedLastFlarePitchRef.current.delete(callsign)
       sharedCachedPrevTurnRateRef.current.delete(callsign)
       sharedCachedPrevVerticalRateRef.current.delete(callsign)
+      // Timeline-specific cleanup
+      sharedTimelinePrevAltitudeRef.current.delete(callsign)
+      sharedTimelinePrevHeadingRef.current.delete(callsign)
+      sharedTimelinePrevGroundspeedRef.current.delete(callsign)
+      sharedTimelineSmoothedVerticalRateRef.current.delete(callsign)
+      sharedTimelineSmoothedTurnRateRef.current.delete(callsign)
     }
   }
 

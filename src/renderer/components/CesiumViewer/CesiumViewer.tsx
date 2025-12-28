@@ -159,7 +159,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   const totalPilotsFromApi = useVatsimStore((state) => state.totalPilotsFromApi)
   const pilotsFilteredByDistance = useVatsimStore((state) => state.pilotsFilteredByDistance)
 
-  // Get interpolated aircraft states
+  // Get interpolated aircraft states (all aircraft, unfiltered)
   const interpolatedAircraft = useAircraftInterpolation()
 
   // Get filter settings from stores (for inline filtering at 60Hz)
@@ -344,6 +344,9 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   // =========================================================================
   // 6. Aircraft Model Pool Rendering
   // =========================================================================
+  // Note: Render culling (distance + max count filtering) happens inside
+  // useAircraftModels on every frame, not here. This is because the animation
+  // loop runs outside React's render cycle.
   useAircraftModels(
     viewer,
     modelPoolRefs,
@@ -376,7 +379,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   useCesiumLabels({
     viewer,
     babylonOverlay, // Now passes actual babylonOverlay (may be null initially, but will update)
-    interpolatedAircraft,
+    interpolatedAircraft, // Culling happens inside the hook on every frame
     datablockMode,
     viewMode,
     followingCallsign,

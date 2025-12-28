@@ -9,6 +9,7 @@ import { useDatablockPositionStore } from '../stores/datablockPositionStore'
 import { useViewportStore } from '../stores/viewportStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { GROUNDSPEED_THRESHOLD_KNOTS } from '../constants/rendering'
+import { filterAircraftForRendering } from './useRenderCulling'
 
 export type DatablockMode = 'none' | 'full' | 'airline'
 
@@ -145,6 +146,14 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
   const updateLabels = useCallback(() => {
     if (!viewer || !babylonOverlay || !refLat || !refLon || !refAltitudeFeet) return
 
+    // Apply render culling: filter by distance from camera and max aircraft limit
+    // This runs every frame to keep the closest aircraft visible as camera moves
+    const { filteredAircraft } = filterAircraftForRendering({
+      viewer,
+      interpolatedAircraft,
+      alwaysInclude: followingCallsign
+    })
+
     const query = searchQuery.toLowerCase()
     const airportIcao = currentAirportIcao
 
@@ -166,7 +175,8 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
 
     const seenCallsigns = new Set<string>()
 
-    for (const aircraft of interpolatedAircraft.values()) {
+    // Iterate over culled/filtered aircraft (closest to camera, up to max limit)
+    for (const aircraft of filteredAircraft.values()) {
       seenCallsigns.add(aircraft.callsign)
 
       // Calculate distance from reference position

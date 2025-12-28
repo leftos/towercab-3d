@@ -51,10 +51,10 @@ function lerp(a: number, b: number, t: number): number {
  */
 function calculateTargetBrightness(sunElevation: number, intensity: number): number {
   // Minimum brightness at night depends on intensity setting
-  // intensity 0.0 = minBrightness 0.5 (no darkening)
-  // intensity 0.7 = minBrightness ~0.22
+  // intensity 0.0 = minBrightness 1.0 (no darkening - same as disabled)
+  // intensity 0.5 = minBrightness ~0.58
   // intensity 1.0 = minBrightness 0.15 (maximum darkening)
-  const minBrightness = NIGHT_BRIGHTNESS_MIN + (1 - intensity) * (0.5 - NIGHT_BRIGHTNESS_MIN)
+  const minBrightness = NIGHT_BRIGHTNESS_MIN + (1 - intensity) * (1.0 - NIGHT_BRIGHTNESS_MIN)
 
   // Day: full brightness
   if (sunElevation >= SUN_ELEVATION_DAY) {

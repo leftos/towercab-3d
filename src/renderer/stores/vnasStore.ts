@@ -1,7 +1,9 @@
 import { create } from 'zustand'
 import type { VnasAircraft, VnasStatus, VnasEnvironment } from '../types/vnas'
 import type { AircraftState } from '../types/vatsim'
+import type { AircraftObservation, AircraftMetadata } from '../types/aircraft-timeline'
 import { isRemoteMode } from '../utils/remoteMode'
+import { useAircraftTimelineStore } from './aircraftTimelineStore'
 
 /**
  * vNAS Store
@@ -288,20 +290,49 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       previousStates: newPreviousStates,
       lastUpdateTime: now
     })
+
+    // Feed observation into the unified timeline store
+    const timelineStore = useAircraftTimelineStore.getState()
+    const observation: AircraftObservation = {
+      latitude: aircraft.lat,
+      longitude: aircraft.lon,
+      altitude: aircraft.altitudeTrue,
+      heading: aircraft.trueHeading,
+      groundspeed: 0,  // vNAS doesn't provide groundspeed directly
+      groundTrack: aircraft.trueGroundTrack ?? null,
+      headingIsTrue: true,  // vNAS heading is always reliable (from simulator)
+      // Extended ADS-B data (not available from vNAS)
+      onGround: null,
+      roll: null,
+      verticalRate: null,
+      observedAt: now,  // vNAS data is real-time
+      receivedAt: now,
+      source: 'vnas'
+    }
+
+    const metadata: AircraftMetadata = {
+      cid: 0,  // vNAS doesn't provide CID
+      aircraftType: aircraft.typeCode || null,
+      transponder: '',
+      departure: null,
+      arrival: null
+    }
+
+    timelineStore.addObservation(aircraft.callsign, observation, metadata)
   },
 
   /**
    * Handle a batch of aircraft updates from vNAS.
    * More efficient than individual updates for large batches.
    */
-  handleBatchUpdate: (aircraft: VnasAircraft[]) => {
+  handleBatchUpdate: (batchAircraft: VnasAircraft[]) => {
     const now = Date.now()
     const { aircraftStates, previousStates } = get()
 
     const newAircraftStates = new Map(aircraftStates)
     const newPreviousStates = new Map(previousStates)
 
-    for (const ac of aircraft) {
+    for (const ac of batchAircraft) {
       const newState: AircraftState = {
         callsign: ac.callsign,
         cid: 0,
@@ -340,6 +371,47 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       previousStates: newPreviousStates,
       lastUpdateTime: now
     })
+
+    // Feed observations into the unified timeline store
+    const timelineStore = useAircraftTimelineStore.getState()
+    const observationBatch: Array<{
+      callsign: string
+      observation: AircraftObservation
+      metadata: AircraftMetadata
+    }> = []
+
+    for (const ac of batchAircraft) {
+      const observation: AircraftObservation = {
+        latitude: ac.lat,
+        longitude: ac.lon,
+        altitude: ac.altitudeTrue,
+        heading: ac.trueHeading,
+        groundspeed: 0,  // vNAS doesn't provide groundspeed directly
+        groundTrack: ac.trueGroundTrack ?? null,
+        headingIsTrue: true,  // vNAS heading is always reliable (from simulator)
+        // Extended ADS-B data (not available from vNAS)
+        onGround: null,
+        roll: null,
+        verticalRate: null,
+        observedAt: now,  // vNAS data is real-time
+        receivedAt: now,
+        source: 'vnas'
+      }
+
+      const metadata: AircraftMetadata = {
+        cid: 0,  // vNAS doesn't provide CID
+        aircraftType: ac.typeCode || null,
+        transponder: '',
+        departure: null,
+        arrival: null
+      }
+
+      observationBatch.push({ callsign: ac.callsign, observation, metadata })
+    }
+
+    if (observationBatch.length > 0) {
+      timelineStore.addObservationBatch(observationBatch)
+    }
   },
 
   /**

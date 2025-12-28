@@ -21,6 +21,7 @@ import { WeatherDebugPanel } from './components/UI/WeatherDebugPanel'
 import { VnasPanel } from './components/UI/VnasPanel'
 import { performanceMonitor } from './utils/performanceMonitor'
 import { useVatsimStore } from './stores/vatsimStore'
+import { useRealTrafficStore } from './stores/realTrafficStore'
 import { useAirportStore } from './stores/airportStore'
 import { useSettingsStore } from './stores/settingsStore'
 import { useGlobalSettingsStore, initializeGlobalSettings } from './stores/globalSettingsStore'
@@ -30,12 +31,14 @@ import { useVRStore } from './stores/vrStore'
 import { useUIFeedbackStore } from './stores/uiFeedbackStore'
 import { useRunwayStore } from './stores/runwayStore'
 import { useVnasStore } from './stores/vnasStore'
+import { useAircraftTimelineStore } from './stores/aircraftTimelineStore'
 import { airportService } from './services/AirportService'
 import { aircraftDimensionsService } from './services/AircraftDimensionsService'
 import { fsltlService } from './services/FSLTLService'
 import * as fsltlApi from './services/fsltlApi'
 import { migrateFromElectron, isMigrationComplete } from './services/MigrationService'
 import { modService } from './services/ModService'
+import { realTrafficService } from './services/RealTrafficService'
 import { isOrbitWithoutAirport } from './utils/viewingContext'
 import { isRemoteMode } from './utils/remoteMode'
 
@@ -175,9 +178,31 @@ function App() {
           }
         }
 
-        // Start VATSIM data polling
-        setLoadingStatus('Connecting to VATSIM...')
-        startPolling()
+        // Start data source polling based on settings
+        const dataSource = useGlobalSettingsStore.getState().realtraffic.dataSource
+        if (dataSource === 'realtraffic') {
+          const licenseKey = useGlobalSettingsStore.getState().realtraffic.licenseKey
+          if (licenseKey) {
+            setLoadingStatus('Connecting to RealTraffic...')
+            const rtStore = useRealTrafficStore.getState()
+            await rtStore.authenticate(licenseKey)
+            // If authentication succeeded and we're connected, start polling
+            if (useRealTrafficStore.getState().status === 'connected') {
+              rtStore.startPolling()
+              // Start the timeline store prune timer for RealTraffic
+              useAircraftTimelineStore.getState().startPruneTimer()
+            }
+          } else {
+            setLoadingStatus('RealTraffic license required...')
+            // No license key - user will need to enter one in settings
+          }
+        } else {
+          // VATSIM data source
+          setLoadingStatus('Connecting to VATSIM...')
+          startPolling()
+          // Start the timeline store prune timer for VATSIM
+          useAircraftTimelineStore.getState().startPruneTimer()
+        }
 
         // Check VR support
         checkVRSupport()
@@ -248,6 +273,25 @@ function App() {
       if (cleanup) cleanup()
     }
   }, [showFeedback])
+
+  // Cleanup RealTraffic session when app is closing
+  // This releases the server-side session to allow immediate reconnection
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      // Fire-and-forget deauth - we don't await since the window is closing
+      realTrafficService.deauthenticate().catch(() => {
+        // Ignore errors during shutdown
+      })
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+      // Also deauth when the component unmounts (e.g., hot reload in dev)
+      realTrafficService.deauthenticate().catch(() => {})
+    }
+  }, [])
 
   // Fetch weather data when airport changes or weather effects are enabled
   // When no airport is selected but orbit-following an aircraft, use nearest METAR mode

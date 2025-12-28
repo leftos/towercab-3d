@@ -750,6 +750,27 @@ export interface GlobalSettings {
   }
 
   /**
+   * RealTraffic data source settings
+   * Shared across all browsers/devices so all sessions use same data source
+   */
+  realtraffic: {
+    /**
+     * Selected data source for aircraft traffic (default: 'vatsim')
+     */
+    dataSource: DataSourceType
+
+    /**
+     * License key for RealTraffic API
+     */
+    licenseKey: string
+
+    /**
+     * Query radius in nautical miles (10-200, default: 100)
+     */
+    radiusNm: number
+  }
+
+  /**
    * Viewport settings (camera positions, bookmarks, orbit settings)
    * Shared across all browsers/devices
    */
@@ -777,7 +798,64 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
     authToken: undefined,
     requireLocalNetwork: false
   },
+  realtraffic: {
+    dataSource: 'vatsim',
+    licenseKey: '',
+    radiusNm: 100
+  },
   viewports: DEFAULT_GLOBAL_VIEWPORT_SETTINGS
+}
+
+/**
+ * Data source selection for aircraft traffic
+ *
+ * Controls which source provides aircraft position data:
+ * - 'vatsim': VATSIM network (virtual ATC, 15s updates)
+ * - 'realtraffic': RealTraffic API (real-world ADS-B, ~3s updates)
+ */
+export type DataSourceType = 'vatsim' | 'realtraffic'
+
+/**
+ * RealTraffic settings
+ *
+ * Settings for the RealTraffic (RTAPI) integration, providing real-world ADS-B
+ * aircraft data as an alternative to VATSIM network data.
+ *
+ * @see RealTrafficService - Service that handles API communication
+ * @see realTrafficStore - Store that manages RealTraffic data
+ */
+export interface RealTrafficSettings {
+  /**
+   * Selected data source for aircraft traffic (default: 'vatsim')
+   *
+   * Controls whether aircraft data comes from VATSIM (virtual traffic)
+   * or RealTraffic (real-world ADS-B data).
+   */
+  dataSource: DataSourceType
+
+  /**
+   * License key for RealTraffic API
+   *
+   * User can enter manually, or auto-detected from RealTraffic.lic file.
+   * Empty string means no license configured.
+   */
+  licenseKey: string
+
+  /**
+   * Attempt to auto-detect license from RealTraffic.lic file (default: true)
+   *
+   * File location: %APPDATA%/InsideSystems/RealTraffic.lic (Windows)
+   * Only works in Tauri desktop mode (not remote browser).
+   */
+  autoDetectLicense: boolean
+
+  /**
+   * Query radius in nautical miles (10-200, default: 100)
+   *
+   * Aircraft within this radius of the reference position will be fetched.
+   * Larger radius = more aircraft but higher data usage.
+   */
+  radiusNm: number
 }
 
 /**
@@ -869,6 +947,9 @@ export interface SettingsStore {
   /** FSLTL aircraft model settings */
   fsltl: FSLTLSettings
 
+  /** RealTraffic data source settings */
+  realtraffic: RealTrafficSettings
+
   // Actions (will be added in Phase 5)
   /** Update Cesium settings (partial update) */
   updateCesiumSettings: (updates: Partial<CesiumSettings>) => void
@@ -893,6 +974,9 @@ export interface SettingsStore {
 
   /** Update FSLTL settings (partial update) */
   updateFSLTLSettings: (updates: Partial<FSLTLSettings>) => void
+
+  /** Update RealTraffic settings (partial update) */
+  updateRealTrafficSettings: (updates: Partial<RealTrafficSettings>) => void
 
   /** Reset all settings to defaults */
   resetToDefaults: () => void
@@ -919,6 +1003,7 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
   updateAircraftSettings: unknown
   updateUISettings: unknown
   updateFSLTLSettings: unknown
+  updateRealTrafficSettings: unknown
   resetToDefaults: unknown
   exportSettings: unknown
   importSettings: unknown
@@ -1013,5 +1098,11 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     outputPath: null,
     textureScale: '1k',
     enableFsltlModels: true
+  },
+  realtraffic: {
+    dataSource: 'vatsim',
+    licenseKey: '',
+    autoDetectLicense: true,
+    radiusNm: 100
   }
 }

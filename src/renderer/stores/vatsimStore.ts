@@ -1,10 +1,12 @@
 import { create } from 'zustand'
 import type { PilotData, VatsimData, AircraftState } from '../types/vatsim'
+import type { AircraftObservation, AircraftMetadata } from '../types/aircraft-timeline'
 import { interpolateAircraftState, calculateDistanceNM } from '../utils/interpolation'
 import { useSettingsStore } from './settingsStore'
 // Note: Intentional coupling - vatsimStore triggers replay snapshots on each VATSIM update.
 // This is simpler than an event system and acceptable since replay depends on vatsim data.
 import { useReplayStore } from './replayStore'
+import { useAircraftTimelineStore } from './aircraftTimelineStore'
 import { VATSIM_DATA_URL, VATSIM_POLL_INTERVAL, VATSIM_ACTUAL_UPDATE_INTERVAL } from '../constants'
 
 interface ReferencePosition {
@@ -194,6 +196,50 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
         error: null
       })
 
+      // =========================================================================
+      // Feed observations into the unified timeline store
+      // =========================================================================
+      const timelineStore = useAircraftTimelineStore.getState()
+      const observationBatch: Array<{
+        callsign: string
+        observation: AircraftObservation
+        metadata: AircraftMetadata
+      }> = []
+
+      for (const pilot of filteredPilots) {
+        const observation: AircraftObservation = {
+          latitude: pilot.latitude,
+          longitude: pilot.longitude,
+          altitude: pilot.altitude * 0.3048,  // Convert feet to meters
+          heading: pilot.heading,
+          groundspeed: pilot.groundspeed,
+          groundTrack: null,  // VATSIM doesn't provide ground track
+          headingIsTrue: true,  // VATSIM heading is always reliable (from simulator)
+          // Extended ADS-B data (not available from VATSIM)
+          onGround: null,
+          roll: null,
+          verticalRate: null,
+          observedAt: vatsimTimestamp,  // When VATSIM says this was true
+          receivedAt: now,
+          source: 'vatsim'
+        }
+
+        const metadata: AircraftMetadata = {
+          cid: pilot.cid,
+          aircraftType: pilot.flight_plan?.aircraft_short || null,
+          transponder: pilot.transponder,
+          departure: pilot.flight_plan?.departure || null,
+          arrival: pilot.flight_plan?.arrival || null
+        }
+
+        observationBatch.push({ callsign: pilot.callsign, observation, metadata })
+      }
+
+      // Add all observations in batch for efficiency
+      if (observationBatch.length > 0) {
+        timelineStore.addObservationBatch(observationBatch)
+      }
+
       // Build UNFILTERED states for replay snapshot
       // This ensures replay contains ALL aircraft, not just those within current filter radius
       const allAircraftStates = new Map<string, AircraftState>()
@@ -238,7 +284,9 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
     const { pollingInterval, fetchData } = get()
 
     // Don't start if already polling
-    if (pollingInterval) return
+    if (pollingInterval) {
+      return
+    }
 
     // Fetch immediately
     fetchData()

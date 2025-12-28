@@ -5,6 +5,7 @@ import { getEstimatedTowerHeight } from '../types/airport'
 import { useViewportStore } from './viewportStore'
 import { useVatsimStore } from './vatsimStore'
 import { useVnasStore } from './vnasStore'
+import { useRealTrafficStore } from './realTrafficStore'
 import { useGlobalSettingsStore } from './globalSettingsStore'
 import { modService } from '../services/ModService'
 
@@ -128,9 +129,14 @@ export const useAirportStore = create<AirportStore>()(
           // Update viewport store (saves/loads viewport configurations per airport)
           useViewportStore.getState().setCurrentAirport(icao)
 
-          // Immediately update VATSIM reference position to trigger re-filter
+          // Immediately update data source reference position to trigger re-filter
           // This ensures aircraft near the new airport are visible right away
-          useVatsimStore.getState().setReferencePosition(airport.lat, airport.lon)
+          const dataSource = useGlobalSettingsStore.getState().realtraffic.dataSource
+          if (dataSource === 'realtraffic') {
+            useRealTrafficStore.getState().setReferencePosition(airport.lat, airport.lon)
+          } else {
+            useVatsimStore.getState().setReferencePosition(airport.lat, airport.lon)
+          }
 
           // Auto-subscribe to vNAS if connected (for 1Hz real-time updates)
           const vnasState = useVnasStore.getState()

@@ -8,7 +8,8 @@ import type {
   MemorySettings,
   AircraftSettings,
   UISettings,
-  FSLTLSettings
+  FSLTLSettings,
+  RealTrafficSettings
 } from '../types/settings'
 import { DEFAULT_SETTINGS } from '../types/settings'
 
@@ -109,6 +110,7 @@ interface SettingsStoreWithPresets {
   aircraft: AircraftSettings
   ui: UISettings
   fsltl: FSLTLSettings
+  realtraffic: RealTrafficSettings
 
   updateCesiumSettings: (updates: Partial<CesiumSettings>) => void
   updateGraphicsSettings: (updates: Partial<GraphicsSettings>) => void
@@ -118,6 +120,7 @@ interface SettingsStoreWithPresets {
   updateAircraftSettings: (updates: Partial<AircraftSettings>) => void
   updateUISettings: (updates: Partial<UISettings>) => void
   updateFSLTLSettings: (updates: Partial<FSLTLSettings>) => void
+  updateRealTrafficSettings: (updates: Partial<RealTrafficSettings>) => void
   resetToDefaults: () => void
   exportSettings: () => string
   importSettings: (json: string) => boolean
@@ -314,6 +317,18 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
           fsltl: { ...state.fsltl, ...updates }
         })),
 
+      updateRealTrafficSettings: (updates: Partial<RealTrafficSettings>) =>
+        set((state) => ({
+          realtraffic: {
+            ...state.realtraffic,
+            ...updates,
+            // Clamp radiusNm to valid range
+            ...(updates.radiusNm !== undefined && {
+              radiusNm: Math.max(10, Math.min(200, updates.radiusNm))
+            })
+          }
+        })),
+
       // ========================================================================
       // RESET TO DEFAULTS
       // ========================================================================
@@ -334,7 +349,8 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
           memory: state.memory,
           aircraft: state.aircraft,
           ui: state.ui,
-          fsltl: state.fsltl
+          fsltl: state.fsltl,
+          realtraffic: state.realtraffic
         }
         return JSON.stringify(settings, null, 2)
       },
@@ -382,6 +398,9 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
           if (imported.fsltl && typeof imported.fsltl === 'object') {
             updates.fsltl = { ...DEFAULT_SETTINGS.fsltl, ...imported.fsltl }
           }
+          if (imported.realtraffic && typeof imported.realtraffic === 'object') {
+            updates.realtraffic = { ...DEFAULT_SETTINGS.realtraffic, ...imported.realtraffic }
+          }
 
           set(updates)
           return true
@@ -408,7 +427,7 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
     }),
     {
       name: 'settings-store',
-      version: 25, // Changed defaults: aircraft shadows only, night darkening off
+      version: 26, // Added RealTraffic settings
       migrate: (persistedState: unknown, version: number) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let state: any = persistedState
@@ -629,6 +648,15 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
           }
         }
 
+        // Migrate v25 to v26: add RealTraffic settings
+        if (version < 26) {
+          console.log('[Settings] Migrating v25 to v26: adding RealTraffic settings')
+          state = {
+            ...state,
+            realtraffic: { ...DEFAULT_SETTINGS.realtraffic, ...state.realtraffic }
+          }
+        }
+
         // Repair step: ensure all settings groups have defaults filled in
         // This catches any settings that were missed by migrations
         const repaired = {
@@ -640,7 +668,8 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
           memory: { ...DEFAULT_SETTINGS.memory, ...state.memory },
           fsltl: { ...DEFAULT_SETTINGS.fsltl, ...state.fsltl },
           aircraft: { ...DEFAULT_SETTINGS.aircraft, ...state.aircraft },
-          ui: { ...DEFAULT_SETTINGS.ui, ...state.ui }
+          ui: { ...DEFAULT_SETTINGS.ui, ...state.ui },
+          realtraffic: { ...DEFAULT_SETTINGS.realtraffic, ...state.realtraffic }
         }
 
         return repaired as SettingsStoreWithPresets
@@ -786,6 +815,12 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
       outputPath: oldSettings.fsltl?.outputPath ?? DEFAULT_SETTINGS.fsltl.outputPath,
       textureScale: oldSettings.fsltl?.textureScale ?? DEFAULT_SETTINGS.fsltl.textureScale,
       enableFsltlModels: oldSettings.fsltl?.enableFsltlModels ?? DEFAULT_SETTINGS.fsltl.enableFsltlModels
+    },
+    realtraffic: {
+      dataSource: oldSettings.realtraffic?.dataSource ?? DEFAULT_SETTINGS.realtraffic.dataSource,
+      licenseKey: oldSettings.realtraffic?.licenseKey ?? DEFAULT_SETTINGS.realtraffic.licenseKey,
+      autoDetectLicense: oldSettings.realtraffic?.autoDetectLicense ?? DEFAULT_SETTINGS.realtraffic.autoDetectLicense,
+      radiusNm: oldSettings.realtraffic?.radiusNm ?? DEFAULT_SETTINGS.realtraffic.radiusNm
     }
   }
 }
