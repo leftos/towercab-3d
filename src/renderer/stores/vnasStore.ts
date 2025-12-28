@@ -33,6 +33,7 @@ interface VnasStore {
   // Actions
   startAuth: (environment: VnasEnvironment) => Promise<string>
   completeAuth: () => Promise<void>
+  handleOAuthCallback: (callbackUrl: string) => Promise<void>
   connect: () => Promise<void>
   subscribe: (facilityId: string) => Promise<void>
   disconnect: () => Promise<void>
@@ -110,6 +111,38 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
           ...state.status,
           state: 'disconnected',
           error: `Auth completion failed: ${message}`
+        }
+      }))
+      throw error
+    }
+  },
+
+  /**
+   * Handle OAuth callback from deep link (tc3d://oauth/callback?code=...).
+   * This is called when the app receives the OAuth redirect from the browser.
+   */
+  handleOAuthCallback: async (callbackUrl: string) => {
+    if (isRemoteMode()) {
+      throw new Error('vNAS not yet available in remote browser mode')
+    }
+
+    console.log('[vNAS] Handling OAuth callback:', callbackUrl)
+
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+      await invoke('vnas_handle_oauth_callback', { callbackUrl })
+
+      // After successful OAuth, automatically connect
+      console.log('[vNAS] OAuth callback handled, connecting...')
+      await get().connect()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      console.error('[vNAS] OAuth callback failed:', message)
+      set(state => ({
+        status: {
+          ...state.status,
+          state: 'disconnected',
+          error: `OAuth callback failed: ${message}`
         }
       }))
       throw error

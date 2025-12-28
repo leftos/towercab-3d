@@ -73,6 +73,11 @@
     }
   },
   "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["tc3d"]
+      }
+    },
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDkyNUNCNDY2QzIyN0Y4NDAKUldSQStDZkNaclJja3E0cEczOEdheDhZcXdrZUkvbnZycGlwYjhkUTN1WUNGVTB1SkVMSlRjRzYK",
       "endpoints": [

@@ -29,6 +29,7 @@ tauri-plugin-http = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-process = "2"
 tauri-plugin-updater = "2"
+tauri-plugin-deep-link = "2"
 
 # HTTP server for remote browser access
 axum = { version = "0.7", features = ["ws"] }  # ws feature for WebSocket support

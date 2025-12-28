@@ -29,6 +29,7 @@ import { useViewportStore } from './stores/viewportStore'
 import { useVRStore } from './stores/vrStore'
 import { useUIFeedbackStore } from './stores/uiFeedbackStore'
 import { useRunwayStore } from './stores/runwayStore'
+import { useVnasStore } from './stores/vnasStore'
 import { airportService } from './services/AirportService'
 import { aircraftDimensionsService } from './services/AircraftDimensionsService'
 import { fsltlService } from './services/FSLTLService'
@@ -36,6 +37,7 @@ import * as fsltlApi from './services/fsltlApi'
 import { migrateFromElectron, isMigrationComplete } from './services/MigrationService'
 import { modService } from './services/ModService'
 import { isOrbitWithoutAirport } from './utils/viewingContext'
+import { isRemoteMode } from './utils/remoteMode'
 
 function App() {
   const startPolling = useVatsimStore((state) => state.startPolling)
@@ -203,6 +205,49 @@ function App() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startPolling, loadAirports, checkVRSupport])
+
+  // Deep link handler for OAuth callbacks (tc3d://oauth/callback)
+  useEffect(() => {
+    // Only handle deep links in desktop mode (not remote browser)
+    if (isRemoteMode()) return
+
+    let cleanup: (() => void) | undefined
+
+    async function setupDeepLinkHandler() {
+      try {
+        const { onOpenUrl } = await import('@tauri-apps/plugin-deep-link')
+
+        cleanup = await onOpenUrl((urls) => {
+          console.log('[App] Deep link received:', urls)
+
+          for (const url of urls) {
+            // Handle OAuth callback
+            if (url.startsWith('tc3d://oauth/callback')) {
+              console.log('[App] OAuth callback received, processing...')
+              useVnasStore.getState().handleOAuthCallback(url)
+                .then(() => {
+                  console.log('[App] OAuth callback processed successfully')
+                  showFeedback('vNAS authentication successful', 'success')
+                })
+                .catch((error) => {
+                  console.error('[App] OAuth callback failed:', error)
+                  showFeedback(`vNAS auth failed: ${error}`, 'error')
+                })
+            }
+          }
+        })
+      } catch (error) {
+        // Deep link plugin may not be available (e.g., in dev mode without Tauri)
+        console.warn('[App] Deep link handler not available:', error)
+      }
+    }
+
+    setupDeepLinkHandler()
+
+    return () => {
+      if (cleanup) cleanup()
+    }
+  }, [showFeedback])
 
   // Fetch weather data when airport changes or weather effects are enabled
   // When no airport is selected but orbit-following an aircraft, use nearest METAR mode

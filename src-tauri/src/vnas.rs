@@ -299,6 +299,52 @@ mod real_impl {
         Ok(())
     }
 
+    /// Handle OAuth callback from deep link (tc3d://oauth/callback?code=...).
+    /// This is called when the app receives the OAuth redirect.
+    ///
+    /// Note: This requires the towercab-3d-vnas crate to be updated with:
+    /// 1. Use tc3d://oauth/callback as redirect_uri in OAuth URL
+    /// 2. Add complete_oauth_with_code(&str) method
+    #[tauri::command]
+    pub async fn vnas_handle_oauth_callback(
+        state: State<'_, VnasState>,
+        callback_url: String,
+    ) -> Result<(), String> {
+        println!("[vNAS] Received OAuth callback: {}", callback_url);
+
+        // Parse the callback URL to extract the authorization code
+        let url = url::Url::parse(&callback_url)
+            .map_err(|e| format!("Invalid callback URL: {}", e))?;
+
+        let code = url
+            .query_pairs()
+            .find(|(key, _)| key == "code")
+            .map(|(_, value)| value.to_string())
+            .ok_or("No authorization code in callback URL")?;
+
+        let code_preview = if code.len() > 10 { &code[..10] } else { &code };
+        println!("[vNAS] Extracted authorization code: {}...", code_preview);
+
+        // Get service reference
+        let service_guard = state.service.read().await;
+        let service = service_guard
+            .as_ref()
+            .ok_or("OAuth not started - call vnas_start_auth first")?;
+
+        // Complete OAuth with the authorization code from the deep link
+        // The vNAS crate needs complete_oauth_with_code method for this to work
+        service.complete_oauth_with_code(&code).await.map_err(|e| {
+            state.set_error(Some(e.to_string()));
+            state.update_state(SessionState::Disconnected);
+            format!("OAuth failed: {}", e)
+        })?;
+
+        println!("[vNAS] OAuth completed successfully via deep link");
+        state.update_state(SessionState::Connecting);
+
+        Ok(())
+    }
+
     /// Connect to vNAS after successful authentication.
     /// This establishes the SignalR WebSocket connection.
     #[tauri::command]
@@ -527,6 +573,15 @@ mod stub_impl {
     /// Complete the OAuth flow (stub)
     #[tauri::command]
     pub async fn vnas_complete_auth(_state: State<'_, VnasState>) -> Result<(), String> {
+        Err(UNAVAILABLE_MSG.to_string())
+    }
+
+    /// Handle OAuth callback from deep link (stub)
+    #[tauri::command]
+    pub async fn vnas_handle_oauth_callback(
+        _state: State<'_, VnasState>,
+        _callback_url: String,
+    ) -> Result<(), String> {
         Err(UNAVAILABLE_MSG.to_string())
     }
 

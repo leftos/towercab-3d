@@ -1262,6 +1262,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_deep_link::init())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -1381,6 +1382,7 @@ pub fn run() {
             vnas::vnas_is_available,
             vnas::vnas_start_auth,
             vnas::vnas_complete_auth,
+            vnas::vnas_handle_oauth_callback,
             vnas::vnas_connect,
             vnas::vnas_subscribe,
             vnas::vnas_disconnect,
