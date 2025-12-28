@@ -87,6 +87,10 @@ jobs:
           fi
         shell: bash
 
+      - name: Update towercab-3d-vnas dependency
+        if: steps.vnas-check.outputs.vnas_available == 'true'
+        run: cd src-tauri && cargo update -p towercab-3d-vnas
+
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
