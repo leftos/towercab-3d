@@ -72,6 +72,23 @@ export const SHADOW_DISC_RADIUS = 3.5
 export const GROUNDSPEED_THRESHOLD_KNOTS = 40
 
 /**
+ * Ground speed threshold for transitioning from ground to air (knots)
+ *
+ * Higher threshold for ground→air transition to prevent flickering
+ * during fast taxi. Aircraft must exceed this speed to be considered airborne.
+ */
+export const GROUNDSPEED_THRESHOLD_TO_AIR = 40
+
+/**
+ * Ground speed threshold for transitioning from air to ground (knots)
+ *
+ * Lower threshold for air→ground transition to provide hysteresis.
+ * Aircraft must drop below this speed to be considered on ground.
+ * This prevents oscillation during takeoff roll and fast taxi.
+ */
+export const GROUNDSPEED_THRESHOLD_TO_GROUND = 35
+
+/**
  * Low altitude threshold for terrain sampling in meters AGL
  *
  * Aircraft below this altitude (above ground level) will have terrain
@@ -396,9 +413,11 @@ export const FLARE_TARGET_PITCH_DEGREES = 6
  * Must be negative (descending). Aircraft must be descending faster
  * than this rate to trigger the flare.
  *
- * Default: -50 m/min (~165 fpm descent)
+ * Default: -150 m/min (~490 fpm descent)
+ * Note: Normal approach descent rates are 600-800 fpm (183-244 m/min).
+ * Using -150 m/min ensures flare only triggers during actual approaches.
  */
-export const FLARE_MIN_DESCENT_RATE = -50
+export const FLARE_MIN_DESCENT_RATE = -150
 
 // ============================================================================
 // INTERPOLATION TIMING
@@ -453,3 +472,57 @@ export const NOSEWHEEL_LOWERING_LERP_FACTOR = 0.017
  * Default: 4 degrees
  */
 export const FALLBACK_FLARE_PITCH_DEGREES = 4
+
+// ============================================================================
+// ORIENTATION EMULATION CONSTANTS
+// ============================================================================
+
+/**
+ * Pitch rate multiplier for orientation emulation
+ *
+ * Converts vertical rate (fpm / 1000) to pitch angle.
+ * At 1000 fpm climb, aircraft will show approximately this many degrees pitch up.
+ *
+ * Default: 5 degrees per 1000 fpm
+ */
+export const PITCH_RATE_MULTIPLIER = 5
+
+/**
+ * Roll rate multiplier for orientation emulation
+ *
+ * Converts turn rate (deg/sec) to roll angle.
+ * Standard rate turn (3 deg/sec) should produce realistic bank.
+ *
+ * Default: 5 degrees roll per 1 deg/sec turn rate (15-20° at standard rate)
+ */
+export const ROLL_RATE_MULTIPLIER = 5
+
+/**
+ * Maximum pitch angle for orientation emulation (degrees)
+ *
+ * Clamps calculated pitch to realistic limits.
+ */
+export const MAX_PITCH_DEGREES = 20
+
+/**
+ * Maximum roll angle for orientation emulation (degrees)
+ *
+ * Clamps calculated roll to realistic limits.
+ */
+export const MAX_ROLL_DEGREES = 35
+
+/**
+ * Maximum pitch rate for orientation emulation (degrees per second)
+ *
+ * Limits how quickly pitch can change to prevent jerky motion from noisy data.
+ * Transport aircraft typically pitch at 3-5 degrees/sec.
+ */
+export const MAX_PITCH_RATE_DEG_PER_SEC = 5
+
+/**
+ * Maximum roll rate for orientation emulation (degrees per second)
+ *
+ * Limits how quickly roll can change to prevent jerky motion from noisy data.
+ * Transport aircraft typically roll at 10-15 degrees/sec.
+ */
+export const MAX_ROLL_RATE_DEG_PER_SEC = 10
