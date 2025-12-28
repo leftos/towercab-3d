@@ -17,6 +17,7 @@ import ViewportManager from './components/Viewport/ViewportManager'
 import VRScene from './components/VR/VRScene'
 import { PerformanceHUD } from './components/UI/PerformanceHUD'
 import ModelMatchingModal from './components/UI/ModelMatchingModal'
+import AircraftTimelineModal from './components/UI/AircraftTimelineModal'
 import { WeatherDebugPanel } from './components/UI/WeatherDebugPanel'
 import { VnasPanel } from './components/UI/VnasPanel'
 import { performanceMonitor } from './utils/performanceMonitor'
@@ -84,6 +85,9 @@ function App() {
   const showModelMatchingModal = useUIFeedbackStore((state) => state.showModelMatchingModal)
   const toggleModelMatchingModal = useUIFeedbackStore((state) => state.toggleModelMatchingModal)
   const setShowModelMatchingModal = useUIFeedbackStore((state) => state.setShowModelMatchingModal)
+  const showTimelineDebugModal = useUIFeedbackStore((state) => state.showTimelineDebugModal)
+  const toggleTimelineDebugModal = useUIFeedbackStore((state) => state.toggleTimelineDebugModal)
+  const setShowTimelineDebugModal = useUIFeedbackStore((state) => state.setShowTimelineDebugModal)
 
   // Cesium token prompt
   const [showTokenPrompt, setShowTokenPrompt] = useState(false)
@@ -332,6 +336,13 @@ function App() {
   }, [showModelMatchingModal, pushModal, popModal])
 
   useEffect(() => {
+    if (showTimelineDebugModal) {
+      pushModal()
+      return () => popModal()
+    }
+  }, [showTimelineDebugModal, pushModal, popModal])
+
+  useEffect(() => {
     if (showTokenPrompt) {
       pushModal()
       return () => popModal()
@@ -359,6 +370,9 @@ function App() {
       } else if (e.key === 'F3') {
         e.preventDefault()
         toggleModelMatchingModal()
+      } else if (e.key === 'F4') {
+        e.preventDefault()
+        toggleTimelineDebugModal()
       } else if (e.ctrlKey && e.key.toLowerCase() === 'm') {
         e.preventDefault()
         updateUISettings({ showMetarOverlay: !showMetarOverlay })
@@ -458,6 +472,9 @@ function App() {
       <PerformanceHUD visible={showPerformanceHUD} />
       {!isVRActive && showModelMatchingModal && (
         <ModelMatchingModal onClose={() => setShowModelMatchingModal(false)} />
+      )}
+      {!isVRActive && showTimelineDebugModal && (
+        <AircraftTimelineModal onClose={() => setShowTimelineDebugModal(false)} />
       )}
 
       {/* Cesium Ion Token Prompt */}

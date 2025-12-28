@@ -20,6 +20,9 @@ interface UIFeedbackStore {
   showModelMatchingModal: boolean
   setShowModelMatchingModal: (show: boolean) => void
   toggleModelMatchingModal: () => void
+  showTimelineDebugModal: boolean
+  setShowTimelineDebugModal: (show: boolean) => void
+  toggleTimelineDebugModal: () => void
 }
 
 let feedbackTimeout: ReturnType<typeof setTimeout> | null = null
@@ -50,5 +53,8 @@ export const useUIFeedbackStore = create<UIFeedbackStore>((set, get) => ({
   togglePerformanceHUD: () => set((state) => ({ showPerformanceHUD: !state.showPerformanceHUD })),
   showModelMatchingModal: false,
   setShowModelMatchingModal: (show) => set({ showModelMatchingModal: show }),
-  toggleModelMatchingModal: () => set((state) => ({ showModelMatchingModal: !state.showModelMatchingModal }))
+  toggleModelMatchingModal: () => set((state) => ({ showModelMatchingModal: !state.showModelMatchingModal })),
+  showTimelineDebugModal: false,
+  setShowTimelineDebugModal: (show) => set({ showTimelineDebugModal: show }),
+  toggleTimelineDebugModal: () => set((state) => ({ showTimelineDebugModal: !state.showTimelineDebugModal }))
 }))

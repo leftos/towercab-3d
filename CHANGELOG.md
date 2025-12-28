@@ -5,6 +5,13 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Aircraft Timeline Debug Modal (F4) for visualizing observation data
+  - DAW-style timeline showing when each aircraft position update was received
+  - Color-coded markers by source: VATSIM (blue), vNAS (green), RealTraffic (orange)
+  - Latency lines showing delay between observation time and receipt time
+  - Hover tooltips with detailed observation info including RealTraffic-specific fields
+  - Filter dropdown to show all aircraft or only those within range
+  - Zoom slider and auto-scroll toggle
 - Export/Import Settings Wizard with selective export
   - Tree view lets you choose exactly which settings and airports to export
   - Select individual categories (Graphics, Camera, Weather, etc.) or specific airports
