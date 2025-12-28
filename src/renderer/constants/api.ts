@@ -66,13 +66,13 @@ export const RUNWAYS_DB_URL = 'https://davidmegginson.github.io/ourairports-data
  * VATSIM data poll interval in milliseconds
  *
  * How often to fetch new data from VATSIM API.
- * Set to 3 seconds to catch updates quickly, even though VATSIM only
- * updates every ~15 seconds. This ensures we get new data as soon as
- * it's available.
+ * Set to 1 second to catch updates as quickly as possible, even though
+ * VATSIM only updates every ~15 seconds. This ensures we get new data
+ * with minimal latency once it becomes available.
  *
- * Default: 3000ms (3 seconds)
+ * Default: 1000ms (1 second)
  */
-export const VATSIM_POLL_INTERVAL = 3000
+export const VATSIM_POLL_INTERVAL = 1000
 
 /**
  * Expected VATSIM data update interval in milliseconds
