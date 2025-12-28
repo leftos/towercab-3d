@@ -4,6 +4,13 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+## v0.0.18-alpha - 2025-12-28
+
+### Fixed
+- Remote browser access server now starts correctly on installed versions
+  - The HTTP server was failing to find frontend assets in production builds
+  - Settings > Server > Start Server now works as expected
+
 ## v0.0.17-alpha - 2025-12-27
 
 ### Added
