@@ -9,7 +9,7 @@
 /**
  * Data source identifier
  */
-export type AircraftDataSource = 'vatsim' | 'vnas' | 'realtraffic'
+export type AircraftDataSource = 'vatsim' | 'vnas' | 'realtraffic' | 'replay'
 
 /**
  * Single position observation for an aircraft.

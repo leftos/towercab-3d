@@ -29,6 +29,7 @@ import type {
   AircraftTimeline,
   TimelineInterpolationResult
 } from '../types/aircraft-timeline'
+import type { VatsimSnapshot } from '../types/replay'
 import {
   SOURCE_DISPLAY_DELAYS,
   MAX_OBSERVATIONS_PER_AIRCRAFT,
@@ -74,6 +75,26 @@ interface AircraftTimelineStore {
   getInterpolatedState: (callsign: string, now: number) => TimelineInterpolationResult | null
   getInterpolatedStates: (now: number) => Map<string, TimelineInterpolationResult>
   getTimeline: (callsign: string) => AircraftTimeline | undefined
+
+  /**
+   * Check if any aircraft has enough observations (2+) to start interpolating.
+   * Used by the data loading overlay to know when to hide.
+   */
+  hasReadyAircraft: () => boolean
+
+  // Replay support
+  /**
+   * Load all replay snapshots into the timeline store.
+   * Clears existing data and populates timelines with all observations from snapshots.
+   * After loading, use getInterpolatedStates(virtualNow) to scrub through the replay.
+   */
+  loadReplaySnapshots: (snapshots: VatsimSnapshot[]) => void
+
+  /**
+   * Get the time range of loaded replay data.
+   * Returns null if no replay data is loaded.
+   */
+  getReplayTimeRange: () => { start: number; end: number } | null
 }
 
 /**
@@ -670,5 +691,115 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
    */
   getTimeline: (callsign) => {
     return get().timelines.get(callsign)
+  },
+
+  /**
+   * Check if any aircraft has enough observations (2+) to start interpolating.
+   * Returns true if at least one aircraft has 2+ observations, false otherwise.
+   */
+  hasReadyAircraft: () => {
+    const { timelines } = get()
+    for (const timeline of timelines.values()) {
+      if (timeline.observations.length >= 2) {
+        return true
+      }
+    }
+    return false
+  },
+
+  /**
+   * Load all replay snapshots into the timeline store.
+   * Converts each snapshot into observations for all aircraft.
+   */
+  loadReplaySnapshots: (snapshots) => {
+    // Clear existing data
+    get().clear()
+
+    if (snapshots.length === 0) return
+
+    // Build timelines from all snapshots
+    const timelines = new Map<string, AircraftTimeline>()
+
+    for (const snapshot of snapshots) {
+      const snapshotTime = snapshot.timestamp
+
+      for (const state of snapshot.aircraftStates) {
+        const callsign = state.callsign
+
+        // Create observation from serialized state
+        const observation: AircraftObservation = {
+          latitude: state.latitude,
+          longitude: state.longitude,
+          altitude: state.altitude,
+          heading: state.heading,
+          groundspeed: state.groundspeed,
+          groundTrack: null, // Not available in replay snapshots
+          headingIsTrue: false, // Assume not true heading for VATSIM data
+          onGround: null, // Not available in replay snapshots
+          roll: null,
+          verticalRate: null,
+          source: 'replay',
+          observedAt: snapshotTime,
+          receivedAt: snapshotTime
+        }
+
+        const metadata: AircraftMetadata = {
+          cid: state.cid,
+          aircraftType: state.aircraftType,
+          transponder: state.transponder,
+          departure: state.departure,
+          arrival: state.arrival
+        }
+
+        const existing = timelines.get(callsign)
+        if (existing) {
+          // Add to existing timeline
+          existing.observations.push(observation)
+          existing.metadata = metadata
+          existing.lastSource = 'replay'
+          existing.lastReceivedAt = snapshotTime
+        } else {
+          // Create new timeline
+          timelines.set(callsign, {
+            callsign,
+            observations: [observation],
+            metadata,
+            lastSource: 'replay',
+            lastReceivedAt: snapshotTime
+          })
+        }
+      }
+    }
+
+    // Trim observations to max size (keep most recent)
+    for (const timeline of timelines.values()) {
+      if (timeline.observations.length > MAX_OBSERVATIONS_PER_AIRCRAFT) {
+        timeline.observations = timeline.observations.slice(-MAX_OBSERVATIONS_PER_AIRCRAFT)
+      }
+    }
+
+    set({ timelines, lastKnownHeadings: new Map() })
+  },
+
+  /**
+   * Get the time range of loaded replay data.
+   */
+  getReplayTimeRange: () => {
+    const { timelines } = get()
+    if (timelines.size === 0) return null
+
+    let minTime = Infinity
+    let maxTime = -Infinity
+
+    for (const timeline of timelines.values()) {
+      for (const obs of timeline.observations) {
+        if (obs.observedAt < minTime) minTime = obs.observedAt
+        if (obs.observedAt > maxTime) maxTime = obs.observedAt
+      }
+    }
+
+    if (minTime === Infinity || maxTime === -Infinity) return null
+
+    return { start: minTime, end: maxTime }
   }
 }))

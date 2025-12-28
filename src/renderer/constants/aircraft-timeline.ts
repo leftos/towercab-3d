@@ -19,7 +19,8 @@ import type { AircraftDataSource } from '../types/aircraft-timeline'
 export const SOURCE_DISPLAY_DELAYS: Record<AircraftDataSource, number> = {
   vatsim: 15000,      // 15 seconds
   vnas: 2000,         // 2 seconds
-  realtraffic: 5000   // 5 seconds
+  realtraffic: 5000,  // 5 seconds
+  replay: 0           // No delay for replay - we're scrubbing through historical data
 }
 
 /**

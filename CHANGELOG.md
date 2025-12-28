@@ -24,6 +24,11 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Night darkening disabled by default (can be enabled in Settings > Graphics > Lighting)
 - Cesium Ion token is no longer included in exports (security improvement)
 
+### Changed
+- Replay mode now uses the unified timeline interpolation system
+  - Smoother scrubbing through recorded data
+  - Consistent interpolation behavior between live and replay modes
+
 ### Fixed
 - Orbit follow mode now remembers zoom distance and camera angle across app restarts
   - Previously reset to 500m default on every app launch

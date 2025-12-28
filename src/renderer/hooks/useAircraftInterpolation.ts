@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useReplayStore } from '../stores/replayStore'
 import { useAircraftTimelineStore } from '../stores/aircraftTimelineStore'
 import { getAircraftDataSource } from './useAircraftDataSource'
-import { interpolateAircraftState, calculateFlarePitch, angleDifference } from '../utils/interpolation'
+import { calculateFlarePitch, angleDifference } from '../utils/interpolation'
 import { performanceMonitor } from '../utils/performanceMonitor'
 import type { InterpolatedAircraftState, AircraftState } from '../types/vatsim'
 import type { TimelineInterpolationResult } from '../types/aircraft-timeline'
@@ -55,13 +56,8 @@ const sharedWasInFlareRef = { current: new Map<string, boolean>() }
 // Store the actual flare pitch from the previous frame for accurate nosewheel transition
 const sharedLastFlarePitchRef = { current: new Map<string, number>() }
 
-// Cache previous segment's physics for smooth orientation transitions
-// These values are captured when new VATSIM data arrives and reused until next update
-const sharedCachedPrevTurnRateRef = { current: new Map<string, number>() }
-const sharedCachedPrevVerticalRateRef = { current: new Map<string, number>() }
-
 // ============================================================================
-// TIMELINE-BASED INTERPOLATION STATE (for RealTraffic unified timeline)
+// TIMELINE-BASED INTERPOLATION STATE
 // ============================================================================
 // Track previous frame values to calculate rates for orientation emulation
 
@@ -81,6 +77,9 @@ const sharedTimelineSmoothedTurnRateRef = { current: new Map<string, number>() }
 const sharedTimelinePrevPitchRef = { current: new Map<string, number>() }
 /** Previous frame's roll for rate limiting */
 const sharedTimelinePrevRollRef = { current: new Map<string, number>() }
+
+/** Track playback mode to detect mode changes */
+const sharedLastPlaybackModeRef = { current: 'live' as string }
 
 // Store subscribers for triggering re-renders
 const subscribers = new Set<() => void>()
@@ -275,8 +274,6 @@ function updateInterpolation() {
   sharedLastInterpolationTimeRef.current = now
 
   const statesMap = sharedInterpolatedStates
-  const aircraftStates = source.aircraftStates
-  const previousStates = source.previousStates
 
   // Track which callsigns are still active
   const activeCallsigns = new Set<string>()
@@ -285,23 +282,56 @@ function updateInterpolation() {
   const orientationIntensity = sharedOrientationIntensityRef.current
 
   // ============================================================================
-  // TIMELINE-BASED INTERPOLATION (ALL LIVE SOURCES)
+  // MODE CHANGE DETECTION - Load replay data into timeline when entering replay
   // ============================================================================
-  // Use the timeline store for smooth position interpolation with source-specific
-  // display delays. This handles VATSIM (15s delay), vNAS (2s delay), and
-  // RealTraffic (5s delay) uniformly.
+  const currentMode = source.playbackMode
+  const previousMode = sharedLastPlaybackModeRef.current
+
+  if (currentMode !== previousMode) {
+    sharedLastPlaybackModeRef.current = currentMode
+    const timelineStore = useAircraftTimelineStore.getState()
+
+    if (currentMode === 'replay' || currentMode === 'imported') {
+      // Entering replay mode - load snapshots into timeline store
+      const replayState = useReplayStore.getState()
+      const snapshots = replayState.getActiveSnapshots()
+      timelineStore.loadReplaySnapshots(snapshots)
+
+      // Clear rate tracking refs for fresh start
+      sharedTimelinePrevAltitudeRef.current.clear()
+      sharedTimelinePrevHeadingRef.current.clear()
+      sharedTimelinePrevGroundspeedRef.current.clear()
+      sharedTimelineSmoothedVerticalRateRef.current.clear()
+      sharedTimelineSmoothedTurnRateRef.current.clear()
+      sharedTimelinePrevPitchRef.current.clear()
+      sharedTimelinePrevRollRef.current.clear()
+    } else if (currentMode === 'live') {
+      // Returning to live mode - clear replay data from timeline
+      timelineStore.clear()
+    }
+  }
+
+  // ============================================================================
+  // UNIFIED TIMELINE-BASED INTERPOLATION (ALL MODES)
+  // ============================================================================
+  // Use the timeline store for smooth position interpolation.
+  // - Live mode: Uses VATSIM/vNAS/RealTraffic with source-specific display delays
+  // - Replay mode: Uses loaded snapshots with zero display delay
   //
-  // The timeline store receives observations from all sources and provides
-  // unified interpolation based on each aircraft's most recent data source.
+  // The timeline store handles interpolation uniformly for all sources.
 
-  const isLiveMode = source.playbackMode === 'live'
-
-  if (isLiveMode) {
+  {
     // Get interpolated states from timeline store
     const timelineStore = useAircraftTimelineStore.getState()
     const timelineStates = timelineStore.getInterpolatedStates(now)
 
     for (const [callsign, timeline] of timelineStates) {
+      // Skip aircraft with fewer than 2 observations - we need at least 2 data points
+      // to interpolate smoothly. Aircraft will "spawn in" once they have enough data.
+      if (timeline.observationCount < 2) {
+        continue
+      }
+
       activeCallsigns.add(callsign)
 
       // Convert timeline result to InterpolatedAircraftState
@@ -340,79 +370,11 @@ function updateInterpolation() {
 
     // Update frame timestamp for rate calculations
     sharedTimelineLastFrameTimeRef.current = now
-
-    // Skip to terrain correction and cleanup (shared with legacy path)
-  } else {
-    // ============================================================================
-    // LEGACY INTERPOLATION (VATSIM/vNAS/Replay)
-    // ============================================================================
-    // Uses previousState/currentState model for interpolation
-
-    for (const [callsign, currentState] of aircraftStates) {
-    activeCallsigns.add(callsign)
-    const previousState = previousStates.get(callsign)
-
-    // Get previous segment's physics from last interpolated state for smooth transitions
-    const existing = statesMap.get(callsign)
-
-    // Detect if this is a new VATSIM data update (currentState timestamp changed)
-    const isNewVatsimData = !existing || existing.timestamp !== currentState.timestamp
-
-    // Cache previous segment's physics when new VATSIM data arrives
-    // These values are reused for ALL frames until the next VATSIM update
-    // This ensures smooth interpolation from previous orientation to current orientation
-    if (isNewVatsimData && existing) {
-      sharedCachedPrevTurnRateRef.current.set(callsign, existing.turnRate)
-      sharedCachedPrevVerticalRateRef.current.set(callsign, existing.verticalRate / 60000)
-    }
-
-    // Use cached values (or 0 for new aircraft)
-    const previousTurnRate = sharedCachedPrevTurnRateRef.current.get(callsign) ?? 0
-    const previousVerticalRate = sharedCachedPrevVerticalRateRef.current.get(callsign) ?? 0
-
-    const interpolated = interpolateAircraftState(
-      previousState,
-      currentState,
-      now,
-      orientationEnabled,
-      orientationIntensity,
-      previousVerticalRate,
-      previousTurnRate
-    )
-
-    // Reuse existing entry or create new one
-    if (existing) {
-      // Update in place to avoid object allocation
-      existing.callsign = interpolated.callsign
-      existing.interpolatedLatitude = interpolated.interpolatedLatitude
-      existing.interpolatedLongitude = interpolated.interpolatedLongitude
-      existing.interpolatedAltitude = interpolated.interpolatedAltitude
-      existing.interpolatedGroundspeed = interpolated.interpolatedGroundspeed
-      existing.interpolatedHeading = interpolated.interpolatedHeading
-      existing.interpolatedPitch = interpolated.interpolatedPitch
-      existing.interpolatedRoll = interpolated.interpolatedRoll
-      existing.aircraftType = interpolated.aircraftType
-      existing.departure = interpolated.departure
-      existing.arrival = interpolated.arrival
-      existing.isInterpolated = interpolated.isInterpolated
-
-      // CRITICAL: Only update physics when VATSIM data changes
-      // This preserves the segment's physics for smooth orientation transitions
-      if (isNewVatsimData) {
-        existing.verticalRate = interpolated.verticalRate
-        existing.turnRate = interpolated.turnRate
-        existing.timestamp = interpolated.timestamp
-      }
-    } else {
-      statesMap.set(callsign, interpolated)
-    }
-    } // End legacy for loop
-  } // End else block (legacy path)
+  }
 
   // ============================================================================
   // TERRAIN CORRECTION AND FLARE PITCH (applies to ALL aircraft)
   // ============================================================================
-  // This section applies to both timeline-based and legacy interpolated states
 
   for (const callsign of activeCallsigns) {
     // Apply terrain correction to aircraft altitude
@@ -635,8 +597,6 @@ function updateInterpolation() {
       sharedNosewheelTransitionRef.current.delete(callsign)
       sharedWasInFlareRef.current.delete(callsign)
       sharedLastFlarePitchRef.current.delete(callsign)
-      sharedCachedPrevTurnRateRef.current.delete(callsign)
-      sharedCachedPrevVerticalRateRef.current.delete(callsign)
       // Timeline-specific cleanup
       sharedTimelinePrevAltitudeRef.current.delete(callsign)
       sharedTimelinePrevHeadingRef.current.delete(callsign)

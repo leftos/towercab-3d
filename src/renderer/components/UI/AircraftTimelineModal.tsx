@@ -32,7 +32,8 @@ interface HoveredObservation {
 const SOURCE_COLORS: Record<AircraftDataSource, string> = {
   vatsim: '#4fc3f7',      // Light blue
   vnas: '#81c784',        // Green
-  realtraffic: '#ffb74d'  // Orange
+  realtraffic: '#ffb74d', // Orange
+  replay: '#ce93d8'       // Purple
 }
 
 const LABEL_WIDTH = 80
