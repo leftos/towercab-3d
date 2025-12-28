@@ -10,6 +10,7 @@
  *   --lint, -l       Run ESLint on src/ directory
  *   --types, -t      Run TypeScript type checking
  *   --rust, -r       Run Cargo check on Rust backend
+ *   --vnas, -v       Run Cargo checks on private vNAS crate (requires access)
  *   --all, -a        Run all checks (default if no options)
  *   --fix, -f        Auto-fix ESLint issues (use with --lint)
  *   --quiet, -q      Only show errors, not warnings
@@ -20,6 +21,7 @@
  *   node scripts/check.js --lint       # ESLint only
  *   node scripts/check.js --lint --fix # ESLint with auto-fix
  *   node scripts/check.js -t -r        # TypeScript and Rust only
+ *   node scripts/check.js --vnas       # Private vNAS crate only
  */
 
 import { spawn } from 'child_process';
@@ -28,6 +30,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = join(__dirname, '..');
+const VNAS_CRATE_DIR = join(ROOT_DIR, '..', 'towercab-3d-vnas');
 
 // ANSI color codes
 const colors = {
@@ -215,6 +218,73 @@ async function runCargoCheck(quiet = false) {
 }
 
 /**
+ * Check if the vNAS crate directory exists
+ */
+async function vnascrateExists() {
+  const { existsSync } = await import('fs');
+  return existsSync(VNAS_CRATE_DIR);
+}
+
+/**
+ * Run Cargo checks on the private vNAS crate
+ */
+async function runVnascrateCheck(quiet = false) {
+  logHeader('vNAS Crate (Private)');
+
+  // Check if crate directory exists
+  if (!(await vnascrateExists())) {
+    logWarning('vNAS crate not found at ../towercab-3d-vnas');
+    log('  Clone the private repo to enable this check', colors.yellow);
+    return { success: true, code: 0, skipped: true }; // Don't fail if not present
+  }
+
+  // Use RUSTFLAGS to deny warnings
+  const env = { ...process.env, RUSTFLAGS: '-D warnings' };
+  const cargoOpts = { cwd: VNAS_CRATE_DIR, env };
+
+  // Run cargo check
+  log('Running cargo check...', colors.blue);
+  const checkArgs = ['check'];
+  if (quiet) checkArgs.push('--quiet');
+  const checkResult = await runCommand('cargo', checkArgs, cargoOpts);
+  if (!checkResult.success) {
+    logError('cargo check failed');
+    return checkResult;
+  }
+
+  // Run cargo clippy (with pedantic lints as configured in the crate)
+  console.log();
+  log('Running cargo clippy...', colors.blue);
+  const clippyArgs = ['clippy', '--', '-D', 'warnings'];
+  if (quiet) clippyArgs.splice(1, 0, '--quiet');
+  const clippyResult = await runCommand('cargo', clippyArgs, cargoOpts);
+  if (!clippyResult.success) {
+    logError('cargo clippy found issues');
+    return clippyResult;
+  }
+
+  // Run cargo fmt check (if rustfmt is installed)
+  console.log();
+  log('Running cargo fmt --check...', colors.blue);
+  const fmtResult = await runCommandWithOutput('cargo', ['fmt', '--check'], cargoOpts);
+  if (!fmtResult.success) {
+    // Check if rustfmt is not installed
+    const output = fmtResult.stdout + fmtResult.stderr;
+    if (output.includes("is not installed") || output.includes("not found")) {
+      logWarning('cargo fmt skipped - rustfmt not installed');
+      log('  Run "rustup component add rustfmt" to enable formatting checks', colors.yellow);
+    } else {
+      logError('cargo fmt found formatting issues');
+      log('  Run "cargo fmt" in the vNAS crate to fix', colors.yellow);
+      return fmtResult;
+    }
+  }
+
+  logSuccess('vNAS crate checks passed');
+  return { success: true, code: 0 };
+}
+
+/**
  * Parse command line arguments
  */
 function parseArgs() {
@@ -223,6 +293,7 @@ function parseArgs() {
     lint: false,
     types: false,
     rust: false,
+    vnas: false,
     fix: false,
     quiet: false,
     help: false,
@@ -242,11 +313,16 @@ function parseArgs() {
       case '-r':
         options.rust = true;
         break;
+      case '--vnas':
+      case '-v':
+        options.vnas = true;
+        break;
       case '--all':
       case '-a':
         options.lint = true;
         options.types = true;
         options.rust = true;
+        options.vnas = true;
         break;
       case '--fix':
       case '-f':
@@ -266,10 +342,11 @@ function parseArgs() {
   }
 
   // Default to all checks if no specific ones selected
-  if (!options.lint && !options.types && !options.rust && !options.help) {
+  if (!options.lint && !options.types && !options.rust && !options.vnas && !options.help) {
     options.lint = true;
     options.types = true;
     options.rust = true;
+    options.vnas = true;
   }
 
   return options;
@@ -290,6 +367,7 @@ ${colors.cyan}Options:${colors.reset}
   --lint, -l       Run ESLint on src/ directory
   --types, -t      Run TypeScript type checking
   --rust, -r       Run Cargo check on Rust backend
+  --vnas, -v       Run Cargo checks on private vNAS crate (requires access)
   --all, -a        Run all checks (default if no options)
   --fix, -f        Auto-fix ESLint issues (use with --lint)
   --quiet, -q      Only show errors, not warnings
@@ -300,6 +378,7 @@ ${colors.cyan}Examples:${colors.reset}
   node scripts/check.js --lint       ${colors.yellow}# ESLint only${colors.reset}
   node scripts/check.js --lint --fix ${colors.yellow}# ESLint with auto-fix${colors.reset}
   node scripts/check.js -t -r        ${colors.yellow}# TypeScript and Rust only${colors.reset}
+  node scripts/check.js --vnas       ${colors.yellow}# Private vNAS crate only${colors.reset}
   npm run check                      ${colors.yellow}# Run all checks via npm${colors.reset}
   npm run check -- --lint --fix      ${colors.yellow}# ESLint with auto-fix via npm${colors.reset}
 `);
@@ -328,6 +407,13 @@ async function main() {
 
   if (options.rust) {
     results.push({ name: 'Cargo', ...(await runCargoCheck(options.quiet)) });
+  }
+
+  if (options.vnas) {
+    const vnasResult = await runVnascrateCheck(options.quiet);
+    if (!vnasResult.skipped) {
+      results.push({ name: 'vNAS Crate', ...vnasResult });
+    }
   }
 
   // Summary
