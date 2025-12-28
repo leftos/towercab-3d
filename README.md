@@ -2,6 +2,8 @@
 
 A 3D tower cab view application for VATSIM air traffic controllers. View real-time aircraft positions on a 3D globe with satellite imagery and terrain.
 
+[Discord](https://discord.gg/TR3FSpzvvp)
+
 ![TowerCab 3D](resources/screenshot.png)
 
 ## Table of Contents
