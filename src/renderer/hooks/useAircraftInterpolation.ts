@@ -169,9 +169,14 @@ function timelineToInterpolatedState(
     let targetPitch = (fpm / 1000) * PITCH_RATE_MULTIPLIER * orientationIntensity
     targetPitch = Math.max(-MAX_PITCH_DEGREES, Math.min(MAX_PITCH_DEGREES, targetPitch))
 
-    // Roll: Use actual ADS-B roll if available, otherwise calculate from turn rate
+    // Roll: Only calculate for airborne aircraft
+    // Ground aircraft steer with rudder (yaw only), they don't bank/roll
+    const isOnGround = timeline.onGround === true || timeline.groundspeed < 40
     let targetRoll: number
-    if (timeline.roll !== null) {
+    if (isOnGround) {
+      // Ground aircraft: no roll, only yaw steering
+      targetRoll = 0
+    } else if (timeline.roll !== null) {
       // Use actual ADS-B bank angle (apply intensity for consistency with calculated roll)
       targetRoll = timeline.roll * orientationIntensity
       targetRoll = Math.max(-MAX_ROLL_DEGREES, Math.min(MAX_ROLL_DEGREES, targetRoll))

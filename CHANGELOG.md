@@ -27,6 +27,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 ### Fixed
 - Orbit follow mode now remembers zoom distance and camera angle across app restarts
   - Previously reset to 500m default on every app launch
+- Ground aircraft no longer bank/roll during turns
+  - Aircraft on the ground now only yaw (rudder steering) as in real life
 
 ## v0.0.18-alpha - 2025-12-28
 
