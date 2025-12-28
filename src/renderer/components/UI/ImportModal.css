@@ -160,6 +160,18 @@
   cursor: not-allowed;
 }
 
+/* Import Tree Section */
+.import-tree-section {
+  margin-bottom: 16px;
+}
+
+.import-tree-section .step-description {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
 /* Export Modal Styles */
 .export-modal {
   width: 550px;

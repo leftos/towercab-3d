@@ -14,10 +14,11 @@ interface SettingsModalProps {
   isOpen: boolean
   onClose: () => void
   onShowImportModal: () => void
+  onShowExportModal: () => void
   importStatus: 'idle' | 'success' | 'error'
 }
 
-function SettingsModal({ isOpen, onClose, onShowImportModal, importStatus }: SettingsModalProps) {
+function SettingsModal({ isOpen, onClose, onShowImportModal, onShowExportModal, importStatus }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('general')
   const pushModal = useUIFeedbackStore((state) => state.pushModal)
   const popModal = useUIFeedbackStore((state) => state.popModal)
@@ -95,6 +96,7 @@ function SettingsModal({ isOpen, onClose, onShowImportModal, importStatus }: Set
           {activeTab === 'general' && (
             <SettingsGeneralTab
               onShowImportModal={onShowImportModal}
+              onShowExportModal={onShowExportModal}
               importStatus={importStatus}
             />
           )}

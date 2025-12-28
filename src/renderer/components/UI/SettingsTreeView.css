@@ -1,0 +1,249 @@
+/**
+ * Settings Tree View Styles
+ *
+ * A hierarchical tree view with tri-state checkboxes for the Export/Import Wizard.
+ * Uses the app's dark theme with cyan (#4fc3f7) accent color.
+ */
+
+/* Tree container */
+.settings-tree-view {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+/* Toolbar */
+.tree-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.tree-selection-summary {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.tree-toolbar-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tree-toolbar-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tree-toolbar-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.tree-toolbar-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.tree-toolbar-btn.icon {
+  padding: 4px 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tree-toolbar-separator {
+  width: 1px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 0 4px;
+}
+
+/* Tree content */
+.tree-content {
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+/* Tree node */
+.tree-node {
+  user-select: none;
+}
+
+.tree-node-header {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  gap: 6px;
+}
+
+.tree-node-header:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* Chevron for expand/collapse */
+.tree-chevron {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.4);
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.tree-chevron.expanded {
+  transform: rotate(90deg);
+}
+
+.tree-chevron.hidden {
+  visibility: hidden;
+}
+
+.tree-chevron:hover {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Tri-state checkbox */
+.tri-checkbox {
+  width: 16px;
+  height: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 3px;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.tri-checkbox:hover {
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+.tri-checkbox.checked {
+  background: #4fc3f7;
+  border-color: #4fc3f7;
+}
+
+.tri-checkbox.checked svg {
+  stroke: #1e1e28;
+}
+
+.tri-checkbox.indeterminate {
+  background: rgba(79, 195, 247, 0.4);
+  border-color: #4fc3f7;
+}
+
+.tri-checkbox.indeterminate svg {
+  stroke: #4fc3f7;
+}
+
+/* Node label */
+.tree-node-label {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.9);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-node-label.category {
+  font-weight: 600;
+  color: #4fc3f7;
+}
+
+/* Setting count */
+.tree-node-count {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  margin-left: 4px;
+}
+
+/* Badge (for bookmarks, insets, etc.) */
+.tree-node-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  background: rgba(79, 195, 247, 0.15);
+  border: 1px solid rgba(79, 195, 247, 0.3);
+  border-radius: 3px;
+  color: rgba(255, 255, 255, 0.7);
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+/* Children container */
+.tree-children {
+  animation: slideDown 0.15s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Scrollbar styling */
+.tree-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.tree-content::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.tree-content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+
+.tree-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* Import mode specific styling */
+.settings-tree-view.import .tree-node-badge {
+  background: rgba(76, 175, 80, 0.15);
+  border-color: rgba(76, 175, 80, 0.3);
+}
+
+/* Empty state */
+.tree-empty {
+  padding: 32px 16px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 13px;
+}
+
+/* Category separator lines */
+.tree-node[data-depth="0"] + .tree-node[data-depth="0"] {
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Highlight effect for hover on deeper levels */
+.tree-node[data-depth="1"] .tree-node-header:hover,
+.tree-node[data-depth="2"] .tree-node-header:hover,
+.tree-node[data-depth="3"] .tree-node-header:hover {
+  background: rgba(79, 195, 247, 0.05);
+}

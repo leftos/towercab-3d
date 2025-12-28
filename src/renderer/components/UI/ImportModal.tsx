@@ -2,10 +2,12 @@ import { useState, useRef, useMemo, useEffect } from 'react'
 import {
   ExportData,
   readImportFile,
-  getAirportsInExport,
-  getAirportExportSummary,
-  importData
+  importData,
+  isSelectiveExportData
 } from '../../services/ExportImportService'
+import type { SelectiveExportData } from '@/types/exportImport'
+import { buildImportTree, getAllLeafIds } from '../../services/SettingsTreeBuilder'
+import SettingsTreeView from './SettingsTreeView'
 import './ImportModal.css'
 
 interface ImportModalProps {
@@ -19,17 +21,51 @@ type ImportStep = 'source' | 'select' | 'complete'
 function ImportModal({ onClose, onSuccess, onElectronImport }: ImportModalProps) {
   const [step, setStep] = useState<ImportStep>('source')
   const [error, setError] = useState<string | null>(null)
-  const [exportData, setExportData] = useState<ExportData | null>(null)
-  const [selectedAirports, setSelectedAirports] = useState<Set<string>>(new Set())
-  const [importGlobalSettings, setImportGlobalSettings] = useState(true)
+  const [exportData, setExportData] = useState<ExportData | SelectiveExportData | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [mergeMode, setMergeMode] = useState<'replace' | 'merge'>('merge')
   const [importResult, setImportResult] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const airports = useMemo(() => {
+  // Build tree from import data
+  const treeNodes = useMemo(() => {
     if (!exportData) return []
-    return getAirportsInExport(exportData)
+
+    // Handle v3 (SelectiveExportData) format
+    if (isSelectiveExportData(exportData)) {
+      return buildImportTree({
+        localSettings: exportData.localSettings as Record<string, unknown>,
+        globalSettings: exportData.globalSettings as Record<string, unknown>,
+        airports: exportData.airports as Record<string, unknown>
+      })
+    }
+
+    // Handle v2 (ExportData) format - globalSettings contains all local settings
+    // Convert v2 airports format to the expected structure
+    const airportsForTree: Record<string, unknown> = {}
+    for (const [icao, data] of Object.entries(exportData.airports)) {
+      // v2 wraps airport config in viewports property
+      if (data.viewports) {
+        airportsForTree[icao] = data.viewports
+      } else if (data.camera) {
+        // v1 legacy format - convert camera to viewport format
+        airportsForTree[icao] = {
+          bookmarks: data.camera.bookmarks,
+          default3d: data.camera.default3d,
+          default2d: data.camera.defaultTopdown
+        }
+      }
+    }
+
+    return buildImportTree({
+      localSettings: exportData.globalSettings as Record<string, unknown>,
+      globalSettings: undefined, // v2 doesn't have separate global settings
+      airports: airportsForTree
+    })
   }, [exportData])
+
+  // Get all leaf IDs for default selection
+  const allLeafIds = useMemo(() => getAllLeafIds(treeNodes), [treeNodes])
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -39,8 +75,7 @@ function ImportModal({ onClose, onSuccess, onElectronImport }: ImportModalProps)
       setError(null)
       const data = await readImportFile(file)
       setExportData(data)
-      // Select all airports by default
-      setSelectedAirports(new Set(getAirportsInExport(data)))
+      // Selection will be set after tree is built (via useEffect)
       setStep('select')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to read file')
@@ -52,32 +87,37 @@ function ImportModal({ onClose, onSuccess, onElectronImport }: ImportModalProps)
     }
   }
 
-  const handleToggleAirport = (icao: string) => {
-    setSelectedAirports(prev => {
-      const next = new Set(prev)
-      if (next.has(icao)) {
-        next.delete(icao)
-      } else {
-        next.add(icao)
-      }
-      return next
-    })
-  }
-
-  const handleSelectAll = () => {
-    setSelectedAirports(new Set(airports))
-  }
-
-  const handleSelectNone = () => {
-    setSelectedAirports(new Set())
-  }
+  // Select all items by default when tree changes
+  useEffect(() => {
+    if (allLeafIds.length > 0 && step === 'select') {
+      setSelectedIds(new Set(allLeafIds))
+    }
+  }, [allLeafIds, step])
 
   const handleImport = () => {
     if (!exportData) return
 
+    // Extract selected airports and global settings flag from selectedIds
+    const selectedAirports: string[] = []
+    let importGlobalSettings = false
+
+    for (const id of selectedIds) {
+      if (id.startsWith('global.') || id.startsWith('local.')) {
+        importGlobalSettings = true
+      } else if (id.startsWith('airports.')) {
+        const parts = id.split('.')
+        if (parts.length >= 2) {
+          const icao = parts[1]
+          if (!selectedAirports.includes(icao)) {
+            selectedAirports.push(icao)
+          }
+        }
+      }
+    }
+
     const result = importData(exportData, {
       importGlobalSettings,
-      selectedAirports: [...selectedAirports],
+      selectedAirports,
       mergeMode
     })
 
@@ -113,7 +153,7 @@ function ImportModal({ onClose, onSuccess, onElectronImport }: ImportModalProps)
   }, [onClose])
 
   return (
-    <div className="settings-modal-overlay">
+    <div className="settings-modal-overlay" onClick={onClose}>
       <div className="settings-modal import-modal" onClick={(e) => e.stopPropagation()}>
         <div className="settings-header">
           <h2>
@@ -187,56 +227,17 @@ function ImportModal({ onClose, onSuccess, onElectronImport }: ImportModalProps)
 
           {step === 'select' && exportData && (
             <>
-              <div className="settings-section">
-                <h3>Global Settings</h3>
-                <div className="setting-item">
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={importGlobalSettings}
-                      onChange={(e) => setImportGlobalSettings(e.target.checked)}
-                    />
-                    Import global settings (Cesium token, camera speed, graphics, etc.)
-                  </label>
-                </div>
-              </div>
-
-              <div className="settings-section">
-                <h3>Per-Airport Data</h3>
-                <div className="airport-selection-header">
-                  <span>{selectedAirports.size} of {airports.length} airports selected</span>
-                  <div className="selection-buttons">
-                    <button onClick={handleSelectAll}>Select All</button>
-                    <button onClick={handleSelectNone}>Select None</button>
-                  </div>
-                </div>
-
-                <div className="airport-list">
-                  {airports.map(icao => {
-                    const summary = getAirportExportSummary(exportData, icao)
-                    return (
-                      <label key={icao} className="airport-item">
-                        <input
-                          type="checkbox"
-                          checked={selectedAirports.has(icao)}
-                          onChange={() => handleToggleAirport(icao)}
-                        />
-                        <span className="airport-icao">{icao}</span>
-                        <span className="airport-details">
-                          {summary.bookmarkCount > 0 && (
-                            <span className="detail-badge">{summary.bookmarkCount} bookmarks</span>
-                          )}
-                          {summary.hasDefaultView && (
-                            <span className="detail-badge">default view</span>
-                          )}
-                          {summary.viewportCount > 1 && (
-                            <span className="detail-badge">{summary.viewportCount} viewports</span>
-                          )}
-                        </span>
-                      </label>
-                    )
-                  })}
-                </div>
+              <div className="import-tree-section">
+                <p className="step-description">
+                  Select which settings and airport data to import from the file.
+                </p>
+                <SettingsTreeView
+                  nodes={treeNodes}
+                  selectedIds={selectedIds}
+                  onSelectionChange={setSelectedIds}
+                  mode="import"
+                  maxHeight="280px"
+                />
               </div>
 
               <div className="settings-section">
@@ -274,9 +275,9 @@ function ImportModal({ onClose, onSuccess, onElectronImport }: ImportModalProps)
                 <button
                   className="control-button primary"
                   onClick={handleImport}
-                  disabled={!importGlobalSettings && selectedAirports.size === 0}
+                  disabled={selectedIds.size === 0}
                 >
-                  Import {selectedAirports.size > 0 ? `${selectedAirports.size} Airport(s)` : 'Settings'}
+                  Import Selected
                 </button>
               </div>
 

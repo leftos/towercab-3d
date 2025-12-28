@@ -13,6 +13,7 @@ import { modApi } from '../../utils/tauriApi'
 import GlobalSearchPanel from './GlobalSearchPanel'
 import VRButton from '../VR/VRButton'
 import ImportModal from './ImportModal'
+import ExportWizardModal from './ExportWizardModal'
 import BookmarkManagerModal from './BookmarkManagerModal'
 import SettingsModal from './SettingsModal'
 import ReplayControls from './ReplayControls'
@@ -24,6 +25,7 @@ type BarMode = 'controls' | 'replay'
 function ControlsBar() {
   const [showSettings, setShowSettings] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
+  const [showExportModal, setShowExportModal] = useState(false)
   const [showBookmarkModal, setShowBookmarkModal] = useState(false)
   const [showExitConfirm, setShowExitConfirm] = useState(false)
   const [barMode, setBarMode] = useState<BarMode>('controls')
@@ -116,6 +118,13 @@ function ControlsBar() {
       return () => popModal()
     }
   }, [showImportModal, pushModal, popModal])
+
+  useEffect(() => {
+    if (showExportModal) {
+      pushModal()
+      return () => popModal()
+    }
+  }, [showExportModal, pushModal, popModal])
 
   useEffect(() => {
     if (showExitConfirm) {
@@ -527,6 +536,7 @@ function ControlsBar() {
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
         onShowImportModal={() => setShowImportModal(true)}
+        onShowExportModal={() => setShowExportModal(true)}
         importStatus={importStatus}
       />
 
@@ -536,6 +546,13 @@ function ControlsBar() {
           onClose={() => setShowImportModal(false)}
           onSuccess={handleImportSuccess}
           onElectronImport={handleImportFromElectron}
+        />
+      )}
+
+      {/* Export Settings Wizard Modal */}
+      {showExportModal && (
+        <ExportWizardModal
+          onClose={() => setShowExportModal(false)}
         />
       )}
 

@@ -4,10 +4,18 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Export/Import Settings Wizard with selective export
+  - Tree view lets you choose exactly which settings and airports to export
+  - Select individual categories (Graphics, Camera, Weather, etc.) or specific airports
+  - Import wizard shows what's available in the file before importing
+  - Merge mode preserves existing bookmarks while adding new ones
+
 ### Changed
 - Default shadow mode is now "Aircraft Shadows Only" for better performance
 - Shadow Darkness slider now works intuitively: 0% = invisible, 100% = black
 - Night darkening disabled by default (can be enabled in Settings > Graphics > Lighting)
+- Cesium Ion token is no longer included in exports (security improvement)
 
 ### Fixed
 - Orbit follow mode now remembers zoom distance and camera angle across app restarts

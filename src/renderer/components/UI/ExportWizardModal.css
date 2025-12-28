@@ -1,0 +1,212 @@
+/**
+ * Export Wizard Modal Styles
+ *
+ * Styles for the VS-style export settings wizard.
+ */
+
+/* Modal sizing */
+.export-wizard-modal {
+  width: 550px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Step indicator */
+.wizard-steps {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.wizard-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 13px;
+  transition: color 0.2s ease;
+}
+
+.wizard-step.active {
+  color: #4fc3f7;
+}
+
+.wizard-step.completed {
+  color: #4caf50;
+}
+
+.wizard-step-number {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.wizard-step.active .wizard-step-number {
+  background: rgba(79, 195, 247, 0.2);
+}
+
+.wizard-step.completed .wizard-step-number {
+  background: #4caf50;
+  border-color: #4caf50;
+  color: white;
+}
+
+.wizard-step-label {
+  font-weight: 500;
+}
+
+.wizard-step-connector {
+  width: 40px;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 1px;
+}
+
+/* Step content */
+.export-select-step,
+.export-summary-step {
+  padding: 4px 0;
+}
+
+.step-description {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+
+/* Summary */
+.export-summary {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.export-summary h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  margin: 0 0 16px 0;
+}
+
+.summary-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.summary-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+}
+
+.summary-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(79, 195, 247, 0.1);
+  border-radius: 6px;
+  color: #4fc3f7;
+}
+
+.summary-label {
+  flex: 1;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.summary-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: #4fc3f7;
+}
+
+.export-info {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  text-align: center;
+}
+
+.export-info code {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Actions */
+.wizard-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.wizard-actions .control-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wizard-actions .control-button.primary {
+  background: rgba(79, 195, 247, 0.2);
+  border-color: #4fc3f7;
+  color: #4fc3f7;
+}
+
+.wizard-actions .control-button.primary:hover:not(:disabled) {
+  background: rgba(79, 195, 247, 0.3);
+}
+
+.wizard-actions .control-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Spinner animation */
+.wizard-actions .spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Error display */
+.export-error {
+  margin-top: 16px;
+  padding: 12px;
+  background: rgba(244, 67, 54, 0.1);
+  border: 1px solid rgba(244, 67, 54, 0.3);
+  border-radius: 6px;
+  color: #f44336;
+  font-size: 13px;
+  text-align: center;
+}
