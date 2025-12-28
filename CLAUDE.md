@@ -38,6 +38,8 @@ The optional `vnas` feature enables 1Hz real-time aircraft updates via the priva
 - **With vNAS access:** Use `npm run dev:vnas` and `npm run build:vnas`
 - **Signed builds:** `.\build-signed.ps1` (with vNAS) or `.\build-signed.ps1 -NoVnas`
 
+**Dependency updates:** The `npm run dev:vnas` and `npm run build:vnas` commands automatically run `cargo update -p towercab-3d-vnas` before building to fetch the latest commits from the private repo's master branch. This is also configured in the private repo's CI workflow, so builds always use the latest implementation.
+
 **Private vNAS Crate Repository:**
 - **GitHub:** https://github.com/leftos/towercab-3d-vnas
 - **Location (local):** `../towercab-3d-vnas/` (sibling directory)
