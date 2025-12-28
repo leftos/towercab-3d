@@ -144,6 +144,48 @@ export interface AircraftState {
    * If null/undefined, interpolation will calculate track from position changes.
    */
   groundTrack?: number | null
+  /**
+   * True heading (nose direction) in degrees (0-360).
+   * From RealTraffic ADS-B data. Use this for visual display instead of
+   * groundTrack, especially for ground aircraft where heading differs
+   * from direction of movement (pushback, crosswind taxi).
+   */
+  trueHeading?: number | null
+  /**
+   * Rate of turn in degrees per second. Negative = turning left.
+   * From RealTraffic ADS-B data. Critical for predicting aircraft turns
+   * during interpolation.
+   */
+  trackRate?: number | null
+  /**
+   * Roll/bank angle in degrees. Negative = left bank.
+   * From RealTraffic ADS-B data. Used for visual display.
+   */
+  roll?: number | null
+  /**
+   * Barometric vertical rate in feet per minute.
+   * Positive = climbing, negative = descending.
+   * From RealTraffic ADS-B data.
+   */
+  baroRate?: number | null
+  /**
+   * Age of position data in seconds since last ADS-B update.
+   * From RealTraffic. Higher values indicate stale data - reduce
+   * extrapolation confidence accordingly.
+   */
+  positionAge?: number | null
+  /**
+   * On-ground flag from ADS-B transponder.
+   * 1 = on ground, 0 = airborne.
+   */
+  onGround?: number | null
+  /**
+   * Original API/ADS-B timestamp (Unix seconds) when this position was observed.
+   * From RealTraffic record[10]. Used for stale data detection - if this value
+   * hasn't changed between polls, the position data is stale and should not
+   * create a new interpolation target.
+   */
+  apiTimestamp?: number | null
   transponder: string
   aircraftType: string | null
   departure: string | null
