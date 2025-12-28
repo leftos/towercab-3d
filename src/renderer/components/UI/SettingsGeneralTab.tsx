@@ -5,6 +5,7 @@ import { useRealTrafficStore } from '../../stores/realTrafficStore'
 import { useVatsimStore } from '../../stores/vatsimStore'
 import { useViewportStore } from '../../stores/viewportStore'
 import { useAirportStore } from '../../stores/airportStore'
+import { useAircraftTimelineStore } from '../../stores/aircraftTimelineStore'
 import { shellApi } from '../../utils/tauriApi'
 import FSLTLImportPanel from './FSLTLImportPanel'
 import CollapsibleSection from './settings/CollapsibleSection'
@@ -121,6 +122,9 @@ function SettingsGeneralTab({ onShowImportModal, onShowExportModal, importStatus
 
     // Update the data source setting
     updateRealTrafficSettings({ dataSource: newSource })
+
+    // Clear the unified aircraft timeline store to remove stale data from previous source
+    useAircraftTimelineStore.getState().clear()
 
     // Stop the old data source and start the new one
     if (newSource === 'realtraffic') {
