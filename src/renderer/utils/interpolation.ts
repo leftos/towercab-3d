@@ -521,19 +521,29 @@ export function interpolateAircraftState(
 
   } else {
     // EXTRAPOLATION PHASE (t > 1.0) - Dead reckoning
-    // Use heading/track and groundspeed to predict position
+    // Use ground track (preferred) or heading and groundspeed to predict position
 
     // Time elapsed since we reached the "current" position (at t=1.0)
     // NOT total time since current.timestamp - that would cause a jump!
     const extrapolationMs = (t - 1.0) * interval
 
-    // Calculate actual track from last known movement
-    const lastTrack = calculateBearing(
-      previous.latitude,
-      previous.longitude,
-      current.latitude,
-      current.longitude
-    )
+    // Get ground track for extrapolation direction
+    // Priority: vNAS groundTrack > calculated from position > heading
+    // Ground track represents actual direction of travel, while heading may
+    // differ due to crosswind (crab angle).
+    let lastTrack: number
+    if (current.groundTrack != null) {
+      // Use vNAS-provided ground track if available
+      lastTrack = current.groundTrack
+    } else {
+      // Calculate from position change
+      lastTrack = calculateBearing(
+        previous.latitude,
+        previous.longitude,
+        current.latitude,
+        current.longitude
+      )
+    }
 
     // Determine if this is ground movement
     const isGroundMovement = current.groundspeed < GROUNDSPEED_THRESHOLD_KNOTS
@@ -545,10 +555,15 @@ export function interpolateAircraftState(
     interpolatedHeading = normalizeAngle(current.heading + extrapolatedTurnDeg)
 
     // For dead reckoning direction:
+    // - If vNAS groundTrack is available, use it (most accurate)
     // - Ground aircraft: use last known track (direction of actual movement)
-    // - Airborne: use extrapolated heading (allows for continued turns)
+    // - Airborne without groundTrack: use extrapolated heading
     let deadReckonDirection: number
-    if (isGroundMovement) {
+    if (current.groundTrack != null) {
+      // vNAS provides ground track - use it directly with turn decay
+      const extrapolatedTrack = normalizeAngle(current.groundTrack + extrapolatedTurnDeg)
+      deadReckonDirection = lerpAngle(current.groundTrack, extrapolatedTrack, 0.5)
+    } else if (isGroundMovement) {
       // Ground aircraft continue in the direction they were moving
       // Apply same turn rate decay to track for turning taxi
       const extrapolatedTrack = normalizeAngle(lastTrack + extrapolatedTurnDeg)

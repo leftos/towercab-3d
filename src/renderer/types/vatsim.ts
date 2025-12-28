@@ -134,6 +134,16 @@ export interface AircraftState {
   altitude: number        // Altitude in METERS (converted from VATSIM feet)
   groundspeed: number
   heading: number
+  /**
+   * Ground track (direction of actual movement) in degrees (0-360).
+   *
+   * When available from vNAS (trueGroundTrack), use this for extrapolation
+   * instead of heading. Ground track represents the actual direction of
+   * travel, while heading may differ due to crosswind (crab angle).
+   *
+   * If null/undefined, interpolation will calculate track from position changes.
+   */
+  groundTrack?: number | null
   transponder: string
   aircraftType: string | null
   departure: string | null

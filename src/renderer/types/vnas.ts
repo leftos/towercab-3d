@@ -14,6 +14,7 @@ export type VnasSessionState =
   | 'authenticating'
   | 'connecting'
   | 'joiningSession'
+  | 'waitingForSession'  // TC3D connected before CRC - waiting for CRC to create session
   | 'subscribing'
   | 'connected'
   | 'unavailable'  // vNAS feature not compiled in

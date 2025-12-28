@@ -208,6 +208,9 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
     const { aircraftStates, previousStates } = get()
 
     // Convert vNAS aircraft to AircraftState format
+    // Use trueGroundTrack for interpolation/extrapolation when available.
+    // Ground track represents actual direction of travel, while heading
+    // may differ due to crosswind (crab angle).
     const newState: AircraftState = {
       callsign: aircraft.callsign,
       cid: 0, // vNAS doesn't provide CID
@@ -216,6 +219,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       altitude: aircraft.altitudeTrue,
       groundspeed: 0, // Calculated from position changes or not available
       heading: aircraft.trueHeading,
+      groundTrack: aircraft.trueGroundTrack, // Use for extrapolation if set
       transponder: '', // Not provided by vNAS
       aircraftType: aircraft.typeCode || null,
       departure: null, // Not provided by vNAS
@@ -273,6 +277,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
         altitude: ac.altitudeTrue,
         groundspeed: 0,
         heading: ac.trueHeading,
+        groundTrack: ac.trueGroundTrack, // Use for extrapolation if set
         transponder: '',
         aircraftType: ac.typeCode || null,
         departure: null,

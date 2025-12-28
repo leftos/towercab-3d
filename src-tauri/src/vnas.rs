@@ -43,6 +43,8 @@ pub enum SessionState {
     Authenticating,
     Connecting,
     JoiningSession,
+    /// TC3D connected before CRC - waiting for CRC to create session
+    WaitingForSession,
     Subscribing,
     Connected,
     /// vNAS feature not compiled in
@@ -136,6 +138,7 @@ mod real_impl {
                 VnasSessionState::Authenticating => SessionState::Authenticating,
                 VnasSessionState::Connecting => SessionState::Connecting,
                 VnasSessionState::JoiningSession => SessionState::JoiningSession,
+                VnasSessionState::WaitingForSession => SessionState::WaitingForSession,
                 VnasSessionState::Subscribing => SessionState::Subscribing,
                 VnasSessionState::Connected => SessionState::Connected,
             }
