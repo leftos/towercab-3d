@@ -38,6 +38,20 @@ The optional `vnas` feature enables 1Hz real-time aircraft updates via the priva
 - **With vNAS access:** Use `npm run dev:vnas` and `npm run build:vnas`
 - **Signed builds:** `.\build-signed.ps1` (with vNAS) or `.\build-signed.ps1 -NoVnas`
 
+**Private vNAS Crate Repository:**
+- **GitHub:** https://github.com/leftos/towercab-3d-vnas
+- **Location (local):** `../towercab-3d-vnas/` (sibling directory)
+- **Documentation:** `docs/vnas-udp-integration-plan.md` in the private repo
+- **Build:** `cargo build` or `cargo check`
+- **CI:** GitHub Actions runs on push (check, test, fmt, clippy, doc)
+
+**vNAS Implementation Details:**
+- SignalR WebSocket client for real-time aircraft updates
+- UDP connection for 1Hz data streaming
+- Server-initiated callbacks (HandleSessionStarted) for session management
+- Ground track field for accurate aircraft extrapolation
+- WaitingForSession state when TC3D connects before CRC
+
 **Note:** The `npm run build` command automatically runs `build:converter` to create the FSLTL model converter executable. This requires Python 3 with Pillow installed. PyInstaller is auto-installed if missing.
 
 **Note for Claude:** Only the user can run `npm run dev` as it launches the Tauri app with a GUI. Ask the user to run this command and report back any errors.
