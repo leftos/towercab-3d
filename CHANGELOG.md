@@ -4,6 +4,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+## [0.0.21-alpha] - 2025-12-28
+
 ### Fixed
 - Datablocks now display at correct positions on 4K and other high-DPI displays
   - Labels were appearing far from aircraft due to coordinate system mismatch
