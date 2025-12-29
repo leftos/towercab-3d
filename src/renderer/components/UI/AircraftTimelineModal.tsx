@@ -184,7 +184,14 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
     if (nowX >= LABEL_WIDTH && nowX <= width) {
       ctx.fillStyle = '#f44336'
       ctx.font = 'bold 10px sans-serif'
-      ctx.fillText('NOW', nowX, 12)
+      // Right-align text when near the right edge to prevent clipping
+      if (nowX > width - 30) {
+        ctx.textAlign = 'right'
+        ctx.fillText('NOW', nowX - 4, 12)
+        ctx.textAlign = 'center'
+      } else {
+        ctx.fillText('NOW', nowX, 12)
+      }
     }
 
     // Draw "REPLAY" indicator when in replay mode
