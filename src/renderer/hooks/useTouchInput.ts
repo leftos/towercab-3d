@@ -37,6 +37,8 @@ interface UseTouchInputOptions {
 interface PinchState {
   /** Is a two-finger gesture in progress */
   isPinching: boolean
+  /** Has this gesture sequence ever had multiple fingers? If so, don't break follow. */
+  wasMultiTouch: boolean
 }
 
 /**
@@ -95,8 +97,11 @@ export function useTouchInput(
   const isDraggingRef = useRef(false)
   const lastPosRef = useRef({ x: 0, y: 0 })
   const pinchStateRef = useRef<PinchState>({
-    isPinching: false
+    isPinching: false,
+    wasMultiTouch: false
   })
+  // Track accumulated movement to require a threshold before breaking follow
+  const accumulatedMovementRef = useRef(0)
 
   // Keep refs updated
   viewportIdRef.current = viewportId
@@ -136,19 +141,24 @@ export function useTouchInput(
       isDraggingRef.current = true
       lastPosRef.current = { x: movement.position.x, y: movement.position.y }
 
+      // Reset gesture tracking - new gesture starting
+      pinchStateRef.current.wasMultiTouch = false
+      accumulatedMovementRef.current = 0
+
       // Cancel any look-at animation
       clearLookAtTarget()
 
-      // Break tower follow on touch drag start
-      const vpState = getViewportState()
-      if (vpState.followingCallsign && vpState.followMode === 'tower') {
-        onBreakTowerFollow?.()
-      }
+      // NOTE: Don't break tower follow here - wait for intentional single-finger movement.
+      // This prevents pinch-to-zoom from breaking follow mode. The break is deferred to
+      // MOUSE_MOVE after we've confirmed it's not a multi-touch gesture.
     }, Cesium.ScreenSpaceEventType.LEFT_DOWN)
 
     // Single-finger touch end
     handler.setInputAction(() => {
       isDraggingRef.current = false
+      // Reset gesture tracking
+      pinchStateRef.current.wasMultiTouch = false
+      accumulatedMovementRef.current = 0
     }, Cesium.ScreenSpaceEventType.LEFT_UP)
 
     // Single-finger drag (treated as MOUSE_MOVE in Cesium)
@@ -162,6 +172,25 @@ export function useTouchInput(
 
       const deltaX = movement.endPosition.x - lastPosRef.current.x
       const deltaY = movement.endPosition.y - lastPosRef.current.y
+
+      // Only break tower follow for gestures that were NEVER multi-touch
+      // This prevents pinch-to-zoom from breaking follow mode even if the first
+      // finger moves slightly before the second one lands
+      if (!pinchStateRef.current.wasMultiTouch) {
+        // Accumulate movement to require intentional drag before breaking follow
+        const movementMagnitude = Math.sqrt(deltaX * deltaX + deltaY * deltaY)
+        accumulatedMovementRef.current += movementMagnitude
+
+        // Threshold in pixels - must move at least this much to break tower follow
+        // This prevents tiny movements during pinch setup from breaking follow
+        const BREAK_FOLLOW_THRESHOLD = 15
+
+        // Break tower follow once we've confirmed intentional single-finger movement
+        if (vpState.followingCallsign && vpState.followMode === 'tower' &&
+            accumulatedMovementRef.current >= BREAK_FOLLOW_THRESHOLD) {
+          onBreakTowerFollow?.()
+        }
+      }
 
       if (vpState.viewMode === 'topdown') {
         // Pan in top-down view
@@ -193,6 +222,8 @@ export function useTouchInput(
       // Stop single-finger drag when pinch starts
       isDraggingRef.current = false
       pinchStateRef.current.isPinching = true
+      // Mark this gesture as multi-touch so we never break follow for it
+      pinchStateRef.current.wasMultiTouch = true
     }, Cesium.ScreenSpaceEventType.PINCH_START)
 
     // Two-finger pinch move
