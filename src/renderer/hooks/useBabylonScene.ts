@@ -208,13 +208,51 @@ export function useBabylonScene(
   const cameraRef = useRef<BABYLON.FreeCamera | null>(null)
   const guiTextureRef = useRef<GUI.AdvancedDynamicTexture | null>(null)
   const [sceneReady, setSceneReady] = useState(false)
+  // Track when canvas has valid dimensions (needed for freshly created canvases)
+  const [canvasReady, setCanvasReady] = useState(false)
 
+  // Wait for canvas to have valid dimensions before initializing Babylon.
+  // This is necessary because a freshly appended canvas might have 0x0 dimensions
+  // for one render cycle before the browser computes layout.
   useEffect(() => {
-    if (!canvas) return
+    if (!canvas) {
+      setCanvasReady(false)
+      return
+    }
+
+    // Reset canvasReady when canvas changes (new canvas object)
+    setCanvasReady(false)
+
+    let cancelled = false
+    const checkDimensions = () => {
+      if (cancelled) return
+      const rect = canvas.getBoundingClientRect()
+      if (rect.width > 0 && rect.height > 0) {
+        setCanvasReady(true)
+      } else {
+        // Canvas not ready yet - wait for valid dimensions via animation frame
+        requestAnimationFrame(checkDimensions)
+      }
+    }
+
+    checkDimensions()
+
+    return () => {
+      cancelled = true
+      setCanvasReady(false)
+    }
+  }, [canvas])
+
+  // Initialize Babylon engine and scene once canvas has valid dimensions
+  useEffect(() => {
+    if (!canvas || !canvasReady) return
 
     // Set canvas size to match display size
     const rect = canvas.getBoundingClientRect()
-    if (rect.width === 0 || rect.height === 0) return
+    if (rect.width === 0 || rect.height === 0) {
+      // Shouldn't happen if canvasReady is true, but guard anyway
+      return
+    }
 
     canvas.width = rect.width * devicePixelRatio
     canvas.height = rect.height * devicePixelRatio
@@ -306,7 +344,7 @@ export function useBabylonScene(
       guiTextureRef.current = null
       setSceneReady(false)
     }
-  }, [canvas, antialias, transparent, devicePixelRatio])
+  }, [canvas, canvasReady, antialias, transparent, devicePixelRatio])
 
   return {
     engine: engineRef.current,
