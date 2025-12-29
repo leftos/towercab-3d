@@ -52,6 +52,8 @@ All notable changes to TowerCab 3D will be documented in this file.
   - Imported replays use this data for more accurate playback
 
 ### Fixed
+- RealTraffic now displays ICAO airport codes (e.g., KJFK) instead of IATA codes (JFK) for departure/arrival
+- Aircraft with "null" departure or arrival data no longer show "null" in the route display
 - Orbit follow mode now remembers zoom distance and camera angle across app restarts
   - Previously reset to 500m default on every app launch
 - Ground aircraft no longer bank/roll during turns
