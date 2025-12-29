@@ -2,9 +2,11 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useAircraftTimelineStore } from '@/stores/aircraftTimelineStore'
 import { useAirportStore } from '@/stores/airportStore'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useGlobalSettingsStore } from '@/stores/globalSettingsStore'
 import { useReplayStore } from '@/stores/replayStore'
 import { calculateDistanceNM } from '@/utils/interpolation'
 import { getTowerPosition } from '@/utils/towerHeight'
+import { SOURCE_DISPLAY_DELAYS } from '@/constants/aircraft-timeline'
 import type { AircraftObservation, AircraftDataSource } from '@/types/aircraft-timeline'
 import './AircraftTimelineModal.css'
 
@@ -68,6 +70,7 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
   const customTowerPosition = useAirportStore((state) => state.customTowerPosition)
   const labelVisibilityDistance = useSettingsStore((state) => state.aircraft.labelVisibilityDistance)
   const playbackMode = useReplayStore((state) => state.playbackMode)
+  const dataSource = useGlobalSettingsStore((state) => state.realtraffic.dataSource)
 
   // Calculate visible time window based on container width
   const visibleDurationMs = useMemo(() => {
@@ -179,19 +182,26 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
       ctx.fillText(label, x, height - 14)
     }
 
-    // Draw "NOW" indicator
-    const nowX = LABEL_WIDTH + ((now - startTime) / 1000) * config.timeScale
-    if (nowX >= LABEL_WIDTH && nowX <= width) {
-      ctx.fillStyle = '#f44336'
-      ctx.font = 'bold 10px sans-serif'
-      // Right-align text when near the right edge to prevent clipping
-      if (nowX > width - 30) {
-        ctx.textAlign = 'right'
-        ctx.fillText('NOW', nowX - 4, 12)
+    // Draw "NOW" indicator only in replay mode (in live mode it's at the right edge, hidden by scrollbar)
+    if (replayTime !== null) {
+      const nowX = LABEL_WIDTH + ((now - startTime) / 1000) * config.timeScale
+      if (nowX >= LABEL_WIDTH && nowX <= width) {
+        ctx.fillStyle = '#f44336'
+        ctx.font = 'bold 10px sans-serif'
         ctx.textAlign = 'center'
-      } else {
         ctx.fillText('NOW', nowX, 12)
       }
+    }
+
+    // Draw "In TC3D" indicator (where interpolated positions are rendered from)
+    const sourceDelay = SOURCE_DISPLAY_DELAYS[dataSource] ?? SOURCE_DISPLAY_DELAYS.vatsim
+    const displayTime = replayTime !== null ? replayTime : now - sourceDelay
+    const displayX = LABEL_WIDTH + ((displayTime - startTime) / 1000) * config.timeScale
+    if (displayX >= LABEL_WIDTH && displayX <= width) {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'
+      ctx.font = 'bold 10px sans-serif'
+      ctx.textAlign = 'center'
+      ctx.fillText('In TC3D', displayX, 12)
     }
 
     // Draw "REPLAY" indicator when in replay mode
@@ -205,7 +215,7 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
     }
 
     ctx.setTransform(1, 0, 0, 1, 0, 0)
-  }, [containerWidth, config.timeScale])
+  }, [containerWidth, config.timeScale, dataSource])
 
   // Draw tracks
   const drawTracks = useCallback((now: number, startTime: number, endTime: number, replayTime: number | null) => {
@@ -277,34 +287,34 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
       }
     })
 
-    // Draw display time line (where interpolated positions are rendered from)
-    // In live mode, this is now minus the source delay (typically 15s for VATSIM)
-    // In replay mode, this is the replay time
-    const displayTime = replayTime !== null ? replayTime : now - 15000  // Default to 15s delay
+    // Draw "In TC3D" line (where interpolated positions are rendered from)
+    // Uses the source-specific delay from SOURCE_DISPLAY_DELAYS
+    const sourceDelay = SOURCE_DISPLAY_DELAYS[dataSource] ?? SOURCE_DISPLAY_DELAYS.vatsim
+    const displayTime = replayTime !== null ? replayTime : now - sourceDelay
     const displayX = LABEL_WIDTH + ((displayTime - startTime) / 1000) * config.timeScale
     if (displayX >= LABEL_WIDTH && displayX <= width) {
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)'
       ctx.lineWidth = 1.5
-      ctx.setLineDash([4, 4])
       ctx.beginPath()
       ctx.moveTo(displayX, 0)
       ctx.lineTo(displayX, height)
       ctx.stroke()
-      ctx.setLineDash([])
       ctx.lineWidth = 1
     }
 
-    // Draw playhead (NOW line)
-    const nowX = LABEL_WIDTH + ((now - startTime) / 1000) * config.timeScale
-    if (nowX >= LABEL_WIDTH && nowX <= width) {
-      ctx.strokeStyle = '#f44336'
-      ctx.lineWidth = 2
-      ctx.setLineDash([])
-      ctx.beginPath()
-      ctx.moveTo(nowX, 0)
-      ctx.lineTo(nowX, height)
-      ctx.stroke()
-      ctx.lineWidth = 1
+    // Draw playhead (NOW line) only in replay mode
+    // In live mode it's always at the right edge, hidden by scrollbar
+    if (replayTime !== null) {
+      const nowX = LABEL_WIDTH + ((now - startTime) / 1000) * config.timeScale
+      if (nowX >= LABEL_WIDTH && nowX <= width) {
+        ctx.strokeStyle = '#f44336'
+        ctx.lineWidth = 2
+        ctx.beginPath()
+        ctx.moveTo(nowX, 0)
+        ctx.lineTo(nowX, height)
+        ctx.stroke()
+        ctx.lineWidth = 1
+      }
     }
 
     // Draw replay playhead when in replay mode
@@ -323,7 +333,7 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
     }
 
     ctx.setTransform(1, 0, 0, 1, 0, 0)
-  }, [containerWidth, config.trackHeight, filteredTimelines, config.timeScale])
+  }, [containerWidth, config.trackHeight, filteredTimelines, config.timeScale, dataSource])
 
   // Animation loop
   useEffect(() => {
