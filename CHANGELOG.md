@@ -23,11 +23,13 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Shadow Darkness slider now works intuitively: 0% = invisible, 100% = black
 - Night darkening disabled by default (can be enabled in Settings > Graphics > Lighting)
 - Cesium Ion token is no longer included in exports (security improvement)
-
-### Changed
 - Replay mode now uses the unified timeline interpolation system
   - Smoother scrubbing through recorded data
   - Consistent interpolation behavior between live and replay modes
+  - Buffer replay (Enter key) scrubs through existing timeline without reloading
+- Replay exports now include extended ADS-B data when available
+  - Ground track, on-ground status, roll angle, and vertical rate are preserved
+  - Imported replays use this data for more accurate playback
 
 ### Fixed
 - Orbit follow mode now remembers zoom distance and camera angle across app restarts

@@ -27,6 +27,11 @@ export interface SerializedAircraftState {
   departure: string | null
   arrival: string | null
   timestamp: number
+  // Extended fields from timeline/ADS-B data (optional for backward compat)
+  groundTrack?: number | null
+  onGround?: number | null  // 1 = on ground, 0 = airborne
+  roll?: number | null
+  baroRate?: number | null  // Vertical rate in fpm
 }
 
 /**
@@ -90,7 +95,12 @@ export function serializeAircraftStates(states: Map<string, AircraftState>): Ser
     aircraftType: state.aircraftType,
     departure: state.departure,
     arrival: state.arrival,
-    timestamp: state.timestamp
+    timestamp: state.timestamp,
+    // Extended fields (will be null/undefined for basic VATSIM data)
+    groundTrack: state.groundTrack ?? null,
+    onGround: state.onGround ?? null,
+    roll: state.roll ?? null,
+    baroRate: state.baroRate ?? null
   }))
 }
 
@@ -109,7 +119,12 @@ export function deserializeAircraftStates(states: SerializedAircraftState[]): Ma
       aircraftType: state.aircraftType,
       departure: state.departure,
       arrival: state.arrival,
-      timestamp: state.timestamp
+      timestamp: state.timestamp,
+      // Extended fields (backward compatible - may be undefined in old exports)
+      groundTrack: state.groundTrack ?? null,
+      onGround: state.onGround ?? null,
+      roll: state.roll ?? null,
+      baroRate: state.baroRate ?? null
     })
   }
   return map

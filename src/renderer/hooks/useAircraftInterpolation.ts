@@ -291,8 +291,9 @@ function updateInterpolation() {
     sharedLastPlaybackModeRef.current = currentMode
     const timelineStore = useAircraftTimelineStore.getState()
 
-    if (currentMode === 'replay' || currentMode === 'imported') {
-      // Entering replay mode - load snapshots into timeline store
+    if (currentMode === 'imported') {
+      // Entering imported replay mode - load external snapshots into timeline store
+      // This replaces the timeline with data from an imported file
       const replayState = useReplayStore.getState()
       const snapshots = replayState.getActiveSnapshots()
       timelineStore.loadReplaySnapshots(snapshots)
@@ -305,10 +306,24 @@ function updateInterpolation() {
       sharedTimelineSmoothedTurnRateRef.current.clear()
       sharedTimelinePrevPitchRef.current.clear()
       sharedTimelinePrevRollRef.current.clear()
-    } else if (currentMode === 'live') {
-      // Returning to live mode - clear replay data from timeline
+    } else if (currentMode === 'replay') {
+      // Entering buffer replay mode - scrub through existing timeline
+      // The timeline already has live observations, no need to load anything
+      // Just clear rate tracking for fresh orientation calculations
+      sharedTimelinePrevAltitudeRef.current.clear()
+      sharedTimelinePrevHeadingRef.current.clear()
+      sharedTimelinePrevGroundspeedRef.current.clear()
+      sharedTimelineSmoothedVerticalRateRef.current.clear()
+      sharedTimelineSmoothedTurnRateRef.current.clear()
+      sharedTimelinePrevPitchRef.current.clear()
+      sharedTimelinePrevRollRef.current.clear()
+    } else if (currentMode === 'live' && previousMode === 'imported') {
+      // Returning to live mode from imported replay - clear the imported data
+      // Live observations will start populating the timeline again
       timelineStore.clear()
     }
+    // Note: Returning to live from buffer replay doesn't need to clear -
+    // the timeline still has valid live observations
   }
 
   // ============================================================================
@@ -316,7 +331,8 @@ function updateInterpolation() {
   // ============================================================================
   // Use the timeline store for smooth position interpolation.
   // - Live mode: Uses VATSIM/vNAS/RealTraffic with source-specific display delays
-  // - Replay mode: Uses loaded snapshots with zero display delay
+  // - Buffer replay: Scrubs through existing timeline with virtual "now" time
+  // - Imported replay: Uses loaded snapshots with zero display delay
   //
   // The timeline store handles interpolation uniformly for all sources.
 

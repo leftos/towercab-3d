@@ -727,17 +727,18 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
         const callsign = state.callsign
 
         // Create observation from serialized state
+        // Use extended fields if available (newer exports include these)
         const observation: AircraftObservation = {
           latitude: state.latitude,
           longitude: state.longitude,
           altitude: state.altitude,
           heading: state.heading,
           groundspeed: state.groundspeed,
-          groundTrack: null, // Not available in replay snapshots
+          groundTrack: state.groundTrack ?? null,
           headingIsTrue: false, // Assume not true heading for VATSIM data
-          onGround: null, // Not available in replay snapshots
-          roll: null,
-          verticalRate: null,
+          onGround: state.onGround === 1 ? true : state.onGround === 0 ? false : null,
+          roll: state.roll ?? null,
+          verticalRate: state.baroRate ?? null,
           source: 'replay',
           observedAt: snapshotTime,
           receivedAt: snapshotTime
