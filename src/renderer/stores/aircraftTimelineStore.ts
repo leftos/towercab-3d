@@ -423,11 +423,15 @@ function interpolateTimeline(
   // Derive heading using our smart logic
   const { heading, isReliable } = deriveHeading(observations, before, after, lastKnownHeading)
 
-  // If we interpolating between two observations, also interpolate heading if both are reliable
+  // Interpolate heading between observations for smooth animation
+  // We always interpolate when we have two observations, even if headings are "unreliable"
+  // (e.g., RealTraffic derived from track). This prevents jarring yaw snaps on ground.
+  // The "unreliable" flag is for choosing which heading to trust, not for skipping interpolation.
   let finalHeading = heading
-  if (before && after && isHeadingReliable(before) && isHeadingReliable(after)) {
+  if (before && after) {
     const interval = after.observedAt - before.observedAt
     const t = interval > 0 ? (displayTime - before.observedAt) / interval : 1
+    // Use the headings from observations (whether true or derived) for smooth interpolation
     finalHeading = lerpHeading(before.heading, after.heading, t)
   }
 
