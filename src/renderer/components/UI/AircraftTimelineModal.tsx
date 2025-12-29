@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useAircraftTimelineStore } from '@/stores/aircraftTimelineStore'
 import { useAirportStore } from '@/stores/airportStore'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useReplayStore } from '@/stores/replayStore'
 import { calculateDistanceNM } from '@/utils/interpolation'
 import { getTowerPosition } from '@/utils/towerHeight'
 import { SOURCE_DISPLAY_DELAYS } from '@/constants/aircraft-timeline'
@@ -66,6 +67,8 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
   const towerHeight = useAirportStore((state) => state.towerHeight)
   const customTowerPosition = useAirportStore((state) => state.customTowerPosition)
   const labelVisibilityDistance = useSettingsStore((state) => state.aircraft.labelVisibilityDistance)
+  const playbackMode = useReplayStore((state) => state.playbackMode)
+  const getCurrentSnapshot = useReplayStore((state) => state.getCurrentSnapshot)
 
   // Calculate visible time window based on container width
   const visibleDurationMs = useMemo(() => {
@@ -129,7 +132,7 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
   }, [onClose])
 
   // Draw time ruler
-  const drawRuler = useCallback((now: number, startTime: number, endTime: number) => {
+  const drawRuler = useCallback((now: number, startTime: number, endTime: number, replayTime: number | null) => {
     const canvas = rulerCanvasRef.current
     if (!canvas) return
 
@@ -185,11 +188,21 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
       ctx.fillText('NOW', nowX, 12)
     }
 
+    // Draw "REPLAY" indicator when in replay mode
+    if (replayTime !== null) {
+      const replayX = LABEL_WIDTH + ((replayTime - startTime) / 1000) * config.timeScale
+      if (replayX >= LABEL_WIDTH && replayX <= width) {
+        ctx.fillStyle = '#ce93d8'  // Purple to match replay source color
+        ctx.font = 'bold 10px sans-serif'
+        ctx.fillText('REPLAY', replayX, 12)
+      }
+    }
+
     ctx.setTransform(1, 0, 0, 1, 0, 0)
   }, [containerWidth, config.timeScale])
 
   // Draw tracks
-  const drawTracks = useCallback((now: number, startTime: number, endTime: number) => {
+  const drawTracks = useCallback((now: number, startTime: number, endTime: number, replayTime: number | null) => {
     const canvas = tracksCanvasRef.current
     if (!canvas) return
 
@@ -286,6 +299,21 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
       ctx.lineWidth = 1
     }
 
+    // Draw replay playhead when in replay mode
+    if (replayTime !== null) {
+      const replayX = LABEL_WIDTH + ((replayTime - startTime) / 1000) * config.timeScale
+      if (replayX >= LABEL_WIDTH && replayX <= width) {
+        ctx.strokeStyle = '#ce93d8'  // Purple to match replay source color
+        ctx.lineWidth = 3
+        ctx.setLineDash([])
+        ctx.beginPath()
+        ctx.moveTo(replayX, 0)
+        ctx.lineTo(replayX, height)
+        ctx.stroke()
+        ctx.lineWidth = 1
+      }
+    }
+
     ctx.setTransform(1, 0, 0, 1, 0, 0)
   }, [containerWidth, config.trackHeight, filteredTimelines, config.timeScale])
 
@@ -305,15 +333,24 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
         lastDataSnapshot = now
       }
 
-      drawRuler(now, startTime, endTime)
-      drawTracks(now, startTime, endTime)
+      // Get replay time if in replay mode
+      let replayTime: number | null = null
+      if (playbackMode !== 'live') {
+        const currentSnapshot = getCurrentSnapshot()
+        if (currentSnapshot) {
+          replayTime = currentSnapshot.timestamp
+        }
+      }
+
+      drawRuler(now, startTime, endTime, replayTime)
+      drawTracks(now, startTime, endTime, replayTime)
 
       animationId = requestAnimationFrame(render)
     }
 
     animationId = requestAnimationFrame(render)
     return () => cancelAnimationFrame(animationId)
-  }, [config.autoscroll, visibleDurationMs, drawRuler, drawTracks])
+  }, [config.autoscroll, visibleDurationMs, drawRuler, drawTracks, playbackMode, getCurrentSnapshot])
 
   // Handle mouse move for hover detection
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -385,6 +422,12 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
           </select>
 
           <span className="timeline-stats">{filteredTimelines.length} aircraft</span>
+
+          {playbackMode !== 'live' && (
+            <span className="timeline-replay-indicator" style={{ color: '#ce93d8' }}>
+              ▶ {playbackMode === 'imported' ? 'IMPORTED' : 'REPLAY'}
+            </span>
+          )}
 
           <div className="timeline-zoom">
             <span>Zoom:</span>

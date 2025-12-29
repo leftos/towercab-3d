@@ -41,6 +41,21 @@
   color: rgba(255, 255, 255, 0.7);
 }
 
+.timeline-replay-indicator {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  background: rgba(206, 147, 216, 0.15);
+  border: 1px solid rgba(206, 147, 216, 0.4);
+  border-radius: 4px;
+  animation: pulse-replay 2s ease-in-out infinite;
+}
+
+@keyframes pulse-replay {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
 .timeline-zoom {
   display: flex;
   align-items: center;

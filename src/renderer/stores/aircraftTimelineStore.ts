@@ -77,10 +77,15 @@ interface AircraftTimelineStore {
   getTimeline: (callsign: string) => AircraftTimeline | undefined
 
   /**
-   * Check if any aircraft has enough observations (2+) to start interpolating.
-   * Used by the data loading overlay to know when to hide.
+   * Get the data loading status for the overlay.
+   * Returns whether we have aircraft in range and whether any are ready to render.
    */
-  hasReadyAircraft: () => boolean
+  getDataLoadingStatus: () => {
+    /** True if at least one aircraft is in range (has any observations) */
+    hasAircraftInRange: boolean
+    /** True if at least one aircraft has 2+ observations (ready to interpolate) */
+    hasReadyAircraft: boolean
+  }
 
   // Replay support
   /**
@@ -694,17 +699,25 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
   },
 
   /**
-   * Check if any aircraft has enough observations (2+) to start interpolating.
-   * Returns true if at least one aircraft has 2+ observations, false otherwise.
+   * Get the data loading status for the overlay.
+   * Returns whether we have aircraft in range and whether any are ready to render.
    */
-  hasReadyAircraft: () => {
+  getDataLoadingStatus: () => {
     const { timelines } = get()
+    let hasAircraftInRange = false
+    let hasReadyAircraft = false
+
     for (const timeline of timelines.values()) {
+      if (timeline.observations.length >= 1) {
+        hasAircraftInRange = true
+      }
       if (timeline.observations.length >= 2) {
-        return true
+        hasReadyAircraft = true
+        break // Found a ready aircraft, no need to continue
       }
     }
-    return false
+
+    return { hasAircraftInRange, hasReadyAircraft }
   },
 
   /**
