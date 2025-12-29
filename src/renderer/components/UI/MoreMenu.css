@@ -1,0 +1,115 @@
+/**
+ * More Menu Styles
+ *
+ * Flyout menu for grouping secondary controls on small screens
+ */
+
+.more-menu {
+  position: relative;
+}
+
+.more-menu-toggle {
+  /* Inherits .control-button styles */
+}
+
+.more-menu-dropdown {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  min-width: 180px;
+  background: rgba(20, 20, 30, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  padding: 6px;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(10px);
+  animation: slideUp 0.15s ease-out;
+  z-index: 150;
+}
+
+/* Right-positioned menu - dropdown aligns to right edge */
+.more-menu-right .more-menu-dropdown {
+  right: 0;
+}
+
+/* Left-positioned menu - dropdown aligns to left edge */
+.more-menu-left .more-menu-dropdown {
+  left: 0;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.more-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+}
+
+.more-menu-item:hover:not(.disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.more-menu-item:active:not(.disabled) {
+  background: rgba(79, 195, 247, 0.2);
+}
+
+.more-menu-item.active {
+  background: rgba(79, 195, 247, 0.15);
+  color: #4fc3f7;
+}
+
+.more-menu-item.active:hover {
+  background: rgba(79, 195, 247, 0.25);
+}
+
+.more-menu-item.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.more-menu-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.more-menu-item-label {
+  flex: 1;
+}
+
+.more-menu-item-badge {
+  padding: 2px 6px;
+  background: rgba(79, 195, 247, 0.3);
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #4fc3f7;
+}
+
+/* Show More menu only on compact layouts (< 1200px) */
+@media (min-width: 1200px) {
+  .more-menu {
+    display: none;
+  }
+}
