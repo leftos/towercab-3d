@@ -6,6 +6,7 @@
 use std::fs;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use axum::{
@@ -23,7 +24,7 @@ use tokio::sync::broadcast;
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use url::Url;
 
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 use crate::{
     find_mods_root, get_global_settings_file, normalize_path_string, read_tower_positions,
@@ -55,6 +56,8 @@ pub struct ServerState {
     pub require_local_network: bool,
     /// Broadcast channel for vNAS aircraft updates (to relay to WebSocket clients)
     pub vnas_tx: broadcast::Sender<Vec<VnasAircraftBroadcast>>,
+    /// Count of currently connected remote clients (WebSocket connections)
+    pub connected_clients: AtomicUsize,
 }
 
 /// Check if an IP address is from a local/private network
@@ -183,6 +186,7 @@ pub async fn start_server(
         auth_token,
         require_local_network,
         vnas_tx,
+        connected_clients: AtomicUsize::new(0),
     });
 
     // Build the router
@@ -338,6 +342,8 @@ fn create_router(state: Arc<ServerState>) -> Router {
         .route("/api/realtraffic/deauth", post(realtraffic_deauth))
         // vNAS WebSocket endpoint for real-time aircraft updates
         .route("/api/vnas/ws", get(vnas_websocket_handler))
+        // Presence WebSocket for tracking connected remote clients
+        .route("/api/presence", get(presence_websocket_handler))
         // Static file serving (must be last - catches all other routes)
         .fallback(get(serve_static))
         // Apply auth middleware (checks auth token and local network requirement)
@@ -1071,6 +1077,47 @@ async fn handle_vnas_websocket(socket: WebSocket, state: Arc<ServerState>) {
     // Clean up
     send_task.abort();
     println!("[vNAS WS] Client disconnected");
+}
+
+// =============================================================================
+// Presence WebSocket (Remote Client Tracking)
+// =============================================================================
+
+/// WebSocket handler for remote client presence tracking.
+///
+/// Remote browsers connect to this endpoint when they load the app.
+/// The server tracks connected clients and emits events to notify the
+/// desktop app UI of changes.
+async fn presence_websocket_handler(
+    ws: WebSocketUpgrade,
+    State(state): State<Arc<ServerState>>,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| handle_presence_websocket(socket, state))
+}
+
+/// Handle a presence WebSocket connection
+async fn handle_presence_websocket(socket: WebSocket, state: Arc<ServerState>) {
+    let (_sender, mut receiver) = socket.split();
+
+    // Increment connected client count and emit event
+    let count = state.connected_clients.fetch_add(1, Ordering::SeqCst) + 1;
+    println!("[Presence] Remote client connected (total: {})", count);
+    let _ = state.app_handle.emit("remote-clients-changed", count);
+
+    // Keep connection alive until client disconnects
+    // We just listen for close/disconnect, no messages expected
+    while let Some(msg) = receiver.next().await {
+        match msg {
+            Ok(Message::Close(_)) => break,
+            Err(_) => break,
+            _ => {} // Ignore other messages
+        }
+    }
+
+    // Decrement connected client count and emit event
+    let count = state.connected_clients.fetch_sub(1, Ordering::SeqCst) - 1;
+    println!("[Presence] Remote client disconnected (total: {})", count);
+    let _ = state.app_handle.emit("remote-clients-changed", count);
 }
 
 // =============================================================================

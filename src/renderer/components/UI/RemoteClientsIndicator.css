@@ -1,0 +1,25 @@
+/**
+ * Remote Clients Indicator Styles
+ */
+
+.remote-clients-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: rgba(76, 175, 80, 0.15);
+  border: 1px solid rgba(76, 175, 80, 0.3);
+  border-radius: 6px;
+  color: #81c784;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.remote-clients-icon {
+  opacity: 0.9;
+}
+
+.remote-clients-count {
+  min-width: 12px;
+  text-align: center;
+}
