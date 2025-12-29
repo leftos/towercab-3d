@@ -7,9 +7,8 @@ import AircraftPanel from './components/UI/AircraftPanel'
 import ControlsBar from './components/UI/ControlsBar'
 import AirportSelector from './components/UI/AirportSelector'
 import CommandInput from './components/UI/CommandInput'
-import TouchControls from './components/UI/TouchControls'
+import TouchControls, { TouchCommandInput } from './components/UI/TouchControls'
 import DeviceOptimizationPrompt from './components/UI/DeviceOptimizationPrompt'
-import RemoteIndicator from './components/UI/RemoteIndicator'
 import MeasuringTool from './components/UI/MeasuringTool'
 import MetarOverlay from './components/UI/MetarOverlay'
 import DataLoadingOverlay from './components/UI/DataLoadingOverlay'
@@ -43,6 +42,7 @@ import { modService } from './services/ModService'
 import { realTrafficService } from './services/RealTrafficService'
 import { isOrbitWithoutAirport } from './utils/viewingContext'
 import { isRemoteMode } from './utils/remoteMode'
+import { usePresenceWebSocket } from './hooks/usePresenceWebSocket'
 
 function App() {
   const startPolling = useVatsimStore((state) => state.startPolling)
@@ -93,6 +93,12 @@ function App() {
   // Cesium token prompt
   const [showTokenPrompt, setShowTokenPrompt] = useState(false)
   const [tokenInput, setTokenInput] = useState('')
+
+  // Touch command modal state (opened from TopBar's MobileToolsFlyout)
+  const [showTouchCommand, setShowTouchCommand] = useState(false)
+
+  // Connect to presence WebSocket in remote mode (registers this client with the server)
+  usePresenceWebSocket()
 
   const handleViewerReady = useCallback((viewer: Viewer | null) => {
     setCesiumViewer(viewer)
@@ -454,8 +460,7 @@ function App() {
       <VRScene cesiumViewer={cesiumViewer} />
 
       {/* Hide normal UI when VR is active */}
-      {!isVRActive && <TopBar />}
-      {!isVRActive && <RemoteIndicator />}
+      {!isVRActive && <TopBar onCommandClick={() => setShowTouchCommand(true)} />}
       {!isVRActive && <UpdateNotification />}
       {!isVRActive && <MetarOverlay />}
       {!isVRActive && <DataLoadingOverlay />}
@@ -467,6 +472,13 @@ function App() {
       </div>
       {!isVRActive && <ControlsBar />}
       {!isVRActive && <TouchControls />}
+      {/* Touch command input modal - shown on mobile when Cmd button clicked */}
+      {!isVRActive && (
+        <TouchCommandInput
+          isOpen={showTouchCommand}
+          onClose={() => setShowTouchCommand(false)}
+        />
+      )}
       {!isVRActive && import.meta.env.DEV && <WeatherDebugPanel />}
       {!isVRActive && import.meta.env.DEV && <VnasPanel />}
       {!isVRActive && <AirportSelector />}
