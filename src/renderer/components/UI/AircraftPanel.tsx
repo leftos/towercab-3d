@@ -556,13 +556,13 @@ function AircraftPanel() {
                   <span className="bearing">{Math.round(aircraft.bearing).toString().padStart(3, '0')}°</span>
                 </div>
 
-                {(aircraft.departure || aircraft.arrival) && (
+                {(aircraft.departure && aircraft.departure !== 'null') || (aircraft.arrival && aircraft.arrival !== 'null') ? (
                   <div className="aircraft-route">
-                    <span className="route-from">{aircraft.departure || '????'}</span>
+                    <span className="route-from">{aircraft.departure && aircraft.departure !== 'null' ? aircraft.departure : '????'}</span>
                     <span className="route-arrow">→</span>
-                    <span className="route-to">{aircraft.arrival || '????'}</span>
+                    <span className="route-to">{aircraft.arrival && aircraft.arrival !== 'null' ? aircraft.arrival : '????'}</span>
                   </div>
-                )}
+                ) : null}
               </div>
             )
           })

@@ -177,9 +177,9 @@ function GlobalSearchPanel() {
                       <span className="result-type">{result.aircraftType || '???'}</span>
                     </div>
                     <div className="result-details">
-                      {result.departure || result.arrival ? (
+                      {(result.departure && result.departure !== 'null') || (result.arrival && result.arrival !== 'null') ? (
                         <span className="result-route">
-                          {result.departure || '????'} → {result.arrival || '????'}
+                          {result.departure && result.departure !== 'null' ? result.departure : '????'} → {result.arrival && result.arrival !== 'null' ? result.arrival : '????'}
                         </span>
                       ) : null}
                       <span className="result-info">
