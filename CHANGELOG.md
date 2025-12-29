@@ -11,6 +11,9 @@ All notable changes to TowerCab 3D will be documented in this file.
   - Requires a RealTraffic license key (subscription service)
   - ~2-3 second update intervals with ADS-B ground track for accurate taxi/pushback direction
   - Configurable query radius (10-200 NM)
+  - Max Parked Aircraft setting (0-200) to include stationary aircraft at gates
+    - Active aircraft get display priority; parked fill remaining slots
+    - Set to 0 to disable parked aircraft
   - Auto-connects when switching to RealTraffic if license key is saved
 - "Waiting for data updates..." overlay with spinner while loading initial aircraft data
   - Aircraft now spawn in individually once they have enough data to interpolate smoothly

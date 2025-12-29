@@ -13,7 +13,9 @@ import { isTauri } from '@/utils/tauriApi'
 import type {
   RTAuthResponse,
   RTTrafficResponse,
-  RTRawRecord
+  RTRawRecord,
+  RTParkedTrafficResponse,
+  RTParkedRecord
 } from '../types/realtraffic'
 import type { AircraftState } from '../types/vatsim'
 import {
@@ -381,6 +383,186 @@ class RealTrafficService {
       departure: from_iata || null, // Note: IATA format
       arrival: to_iata || null,     // Note: IATA format
       timestamp: Date.now()
+    }
+  }
+
+  /**
+   * Fetch parked aircraft data from RealTraffic API
+   *
+   * Parked aircraft are those with zero groundspeed and position timestamp
+   * between 10 minutes and 24 hours old.
+   *
+   * @param centerLat - Center latitude for bounding box
+   * @param centerLon - Center longitude for bounding box
+   * @param radiusNm - Radius in nautical miles
+   * @returns Traffic data result with parked aircraft states
+   */
+  async fetchParkedTraffic(
+    centerLat: number,
+    centerLon: number,
+    radiusNm: number
+  ): Promise<TrafficResult> {
+    if (!this.sessionGuid) {
+      return { success: false, error: 'Not authenticated' }
+    }
+
+    // Calculate bounding box from center and radius
+    const latOffset = radiusNm * NM_TO_DEGREES
+    const lonOffset = radiusNm * NM_TO_DEGREES / Math.cos(centerLat * Math.PI / 180)
+
+    const latMin = centerLat - latOffset
+    const latMax = centerLat + latOffset
+    const lonMin = centerLon - lonOffset
+    const lonMax = centerLon + lonOffset
+
+    // In Tauri mode, use Tauri command (bypasses CORS)
+    if (isTauri()) {
+      try {
+        const params = {
+          guid: this.sessionGuid,
+          latMin,
+          latMax,
+          lonMin,
+          lonMax
+        }
+
+        const responseText = await invoke<string>('realtraffic_parked_traffic', { params })
+        const data: RTParkedTrafficResponse = JSON.parse(responseText)
+
+        // Check for API error status
+        if (data.status && data.status !== 200) {
+          const errorMessage = data.message || `API error: ${data.status}`
+          console.warn('[RealTraffic] Parked traffic API error:', data.status, errorMessage)
+          return {
+            success: false,
+            error: errorMessage,
+            trafficRateLimit: this.trafficRateLimit
+          }
+        }
+
+        // Update rate limits from response (only if valid numbers)
+        if (typeof data.rrl === 'number' && !isNaN(data.rrl)) {
+          this.trafficRateLimit = Math.max(data.rrl, REALTRAFFIC_MIN_POLL_INTERVAL)
+        }
+
+        // Transform parked records to AircraftState
+        const aircraft = Object.entries(data.data || {}).map(([hexid, record]) =>
+          this.transformParkedRecord(hexid, record)
+        )
+
+        return {
+          success: true,
+          aircraft,
+          trafficRateLimit: this.trafficRateLimit
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        if (message.includes('401')) {
+          this.sessionGuid = null
+          return { success: false, error: 'Session expired, please re-authenticate' }
+        }
+        return { success: false, error: `Parked traffic fetch failed: ${message}` }
+      }
+    }
+
+    // In browser mode, use proxy endpoint
+    const url = '/api/realtraffic/parked-traffic'
+    const payload = {
+      guid: this.sessionGuid,
+      lat1: latMin,
+      lon1: lonMin,
+      lat2: latMax,
+      lon2: lonMax
+    }
+
+    try {
+      const response = await this.fetchWithRetry(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          this.sessionGuid = null
+          return { success: false, error: 'Session expired, please re-authenticate' }
+        }
+        if (response.status === 429) {
+          return { success: false, error: 'Rate limit exceeded' }
+        }
+        const errorText = await response.text()
+        return { success: false, error: `Parked traffic fetch failed: ${response.status} ${errorText}` }
+      }
+
+      const data: RTParkedTrafficResponse = await response.json()
+
+      // Update rate limits from response
+      if (typeof data.rrl === 'number') {
+        this.trafficRateLimit = Math.max(data.rrl, REALTRAFFIC_MIN_POLL_INTERVAL)
+      }
+
+      // Transform parked records to AircraftState
+      const aircraft = Object.entries(data.data || {}).map(([hexid, record]) =>
+        this.transformParkedRecord(hexid, record)
+      )
+
+      return {
+        success: true,
+        aircraft,
+        trafficRateLimit: this.trafficRateLimit
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      return { success: false, error: `Parked traffic fetch failed: ${message}` }
+    }
+  }
+
+  /**
+   * Transform a RealTraffic parked record to AircraftState
+   *
+   * Parked traffic uses a simpler format:
+   * [0] latitude, [1] longitude, [2] gate_id, [3] type,
+   * [4] tail, [5] timestamp, [6] callsign, [7] heading/track
+   */
+  private transformParkedRecord(hexid: string, record: RTParkedRecord): AircraftState {
+    const lat = Number(record[0]) || 0
+    const lon = Number(record[1]) || 0
+    const gateId = String(record[2] ?? '') // e.g., "YSSY_101"
+    const type = String(record[3] ?? '')
+    const tail = String(record[4] ?? '')
+    const api_timestamp = record[5] != null ? Number(record[5]) : null
+    const callsign = String(record[6] ?? '') || tail || hexid
+    const heading = Number(record[7]) || 0
+
+    // Convert hex ID to numeric CID
+    const cidFromHex = parseInt(hexid, 16)
+    const cid = Number.isFinite(cidFromHex) ? cidFromHex : 0
+
+    // Extract departure airport from gate_id (e.g., "YSSY_101" -> "YSSY")
+    const departure = gateId.includes('_') ? gateId.split('_')[0] : null
+
+    return {
+      callsign: callsign.startsWith('.') ? callsign.slice(1) : callsign,
+      cid,
+      latitude: lat,
+      longitude: lon,
+      altitude: 0, // Parked aircraft are on ground
+      groundspeed: 0, // Parked = stationary
+      heading,
+      groundTrack: heading,
+      trueHeading: heading,
+      trackRate: null,
+      roll: null,
+      baroRate: null,
+      positionAge: null,
+      onGround: 1, // Always on ground (parked)
+      apiTimestamp: (api_timestamp != null && !isNaN(api_timestamp)) ? api_timestamp : null,
+      transponder: '',
+      aircraftType: type || null,
+      departure: departure, // ICAO format from gate_id
+      arrival: null,
+      timestamp: Date.now(),
+      isParked: true // Flag to identify parked aircraft for culling
     }
   }
 

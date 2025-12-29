@@ -168,8 +168,10 @@ export const useRealTrafficStore = create<RealTrafficStore>((set, get) => ({
 
     set({ isLoading: true })
 
-    // Get radius from settings
-    const radiusNm = useGlobalSettingsStore.getState().realtraffic.radiusNm
+    // Get settings
+    const rtSettings = useGlobalSettingsStore.getState().realtraffic
+    const radiusNm = rtSettings.radiusNm
+    const maxParkedAircraft = rtSettings.maxParkedAircraft ?? 0
 
     const result = await realTrafficService.fetchTraffic(
       referencePosition.latitude,
@@ -205,12 +207,39 @@ export const useRealTrafficStore = create<RealTrafficStore>((set, get) => ({
     // Filter out:
     // - Invalid callsigns (null, empty, or literal "null" string)
     // - Ground operations vehicles (callsigns containing "OPS")
-    const aircraft = (result.aircraft ?? []).filter(state =>
+    let aircraft = (result.aircraft ?? []).filter(state =>
       state.callsign &&
       state.callsign !== 'null' &&
       state.callsign.trim() !== '' &&
       !state.callsign.toUpperCase().startsWith('OPS')
     )
+
+    // Fetch parked aircraft if enabled (maxParkedAircraft > 0)
+    if (maxParkedAircraft > 0) {
+      const parkedResult = await realTrafficService.fetchParkedTraffic(
+        referencePosition.latitude,
+        referencePosition.longitude,
+        radiusNm
+      )
+
+      if (parkedResult.success && parkedResult.aircraft) {
+        // Filter parked aircraft same as regular traffic, then limit to max
+        const parkedAircraft = parkedResult.aircraft
+          .filter(state =>
+            state.callsign &&
+            state.callsign !== 'null' &&
+            state.callsign.trim() !== '' &&
+            !state.callsign.toUpperCase().startsWith('OPS')
+          )
+          .slice(0, maxParkedAircraft)
+
+        // Merge parked with active aircraft
+        // Use a Set to avoid duplicates (active aircraft already on ground might overlap)
+        const activeCallsigns = new Set(aircraft.map(a => a.callsign))
+        const uniqueParked = parkedAircraft.filter(p => !activeCallsigns.has(p.callsign))
+        aircraft = [...aircraft, ...uniqueParked]
+      }
+    }
 
     // =========================================================================
     // Feed observations into the unified timeline store
@@ -250,7 +279,8 @@ export const useRealTrafficStore = create<RealTrafficStore>((set, get) => ({
           aircraftType: state.aircraftType,
           transponder: state.transponder,
           departure: state.departure,
-          arrival: state.arrival
+          arrival: state.arrival,
+          isParked: state.isParked
         }
 
         observationBatch.push({ callsign: state.callsign, observation, metadata })

@@ -26,6 +26,7 @@ interface HoveredObservation {
   y: number
   observation: AircraftObservation
   callsign: string
+  isParked?: boolean
 }
 
 // Source colors
@@ -242,7 +243,8 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
       ctx.font = '12px monospace'
       ctx.textAlign = 'left'
       ctx.textBaseline = 'middle'
-      ctx.fillText(timeline.callsign, 8, centerY)
+      const callsignLabel = timeline.metadata.isParked ? `${timeline.callsign} (P)` : timeline.callsign
+      ctx.fillText(callsignLabel, 8, centerY)
 
       // Draw observations
       for (const obs of timeline.observations) {
@@ -408,7 +410,8 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
           x: e.clientX,
           y: e.clientY,
           observation: obs,
-          callsign: timeline.callsign
+          callsign: timeline.callsign,
+          isParked: timeline.metadata.isParked
         })
         return
       }
@@ -503,7 +506,10 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
               top: Math.min(hoveredObs.y + 10, window.innerHeight - 300)
             }}
           >
-            <div className="tooltip-header">{hoveredObs.callsign}</div>
+            <div className="tooltip-header">
+              {hoveredObs.callsign}
+              {hoveredObs.isParked && <span className="tooltip-parked-badge">PARKED</span>}
+            </div>
             <div className="tooltip-section">
               <div className="tooltip-row">
                 <span className="tooltip-label">Source:</span>

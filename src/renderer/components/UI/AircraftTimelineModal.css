@@ -205,6 +205,20 @@
   color: #4fc3f7;
   padding-bottom: 6px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tooltip-parked-badge {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 2px 6px;
+  background: rgba(255, 183, 77, 0.2);
+  border: 1px solid rgba(255, 183, 77, 0.5);
+  border-radius: 3px;
+  color: #ffb74d;
+  text-transform: uppercase;
 }
 
 .tooltip-section {

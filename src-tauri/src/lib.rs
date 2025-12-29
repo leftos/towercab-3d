@@ -866,6 +866,52 @@ async fn realtraffic_traffic(params: RealTrafficTrafficParams) -> Result<String,
         .map_err(|e| format!("Failed to read RealTraffic response: {}", e))
 }
 
+/// RealTraffic parked traffic request parameters
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RealTrafficParkedParams {
+    pub guid: String,
+    pub lat_min: f64,
+    pub lat_max: f64,
+    pub lon_min: f64,
+    pub lon_max: f64,
+}
+
+/// Fetch parked aircraft data from RealTraffic API
+/// Returns aircraft with zero groundspeed that haven't moved for 10min-24h
+#[tauri::command]
+async fn realtraffic_parked_traffic(params: RealTrafficParkedParams) -> Result<String, String> {
+    let client = reqwest::Client::new();
+
+    // RealTraffic API expects form data, not JSON
+    // Field names: GUID (uppercase), querytype, top/bottom/left/right for bbox
+    let form_data: Vec<(&str, String)> = vec![
+        ("GUID", params.guid.clone()),
+        ("querytype", "parkedtraffic".to_string()),
+        ("top", params.lat_max.to_string()),
+        ("bottom", params.lat_min.to_string()),
+        ("left", params.lon_min.to_string()),
+        ("right", params.lon_max.to_string()),
+    ];
+
+    let response = client
+        .post(format!("{}/traffic", REALTRAFFIC_API_URL))
+        .header("Accept-Encoding", "gzip")
+        .form(&form_data)
+        .send()
+        .await
+        .map_err(|e| format!("RealTraffic parked traffic request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("HTTP error: {}", response.status()));
+    }
+
+    response
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read RealTraffic response: {}", e))
+}
+
 /// Deauthenticate from RealTraffic API
 /// Releases the session on the server, allowing immediate reconnection
 #[tauri::command]
@@ -1569,6 +1615,7 @@ pub fn run() {
             // RealTraffic commands
             realtraffic_auth,
             realtraffic_traffic,
+            realtraffic_parked_traffic,
             realtraffic_deauth,
             // FSLTL commands
             pick_folder,

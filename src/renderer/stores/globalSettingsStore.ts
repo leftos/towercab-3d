@@ -167,6 +167,25 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
       // Load settings from disk (or HTTP API in browser mode)
       let settings = await globalSettingsApi.read()
 
+      // Merge with defaults to handle new fields added in updates
+      // This ensures existing users get default values for new settings
+      settings = {
+        ...DEFAULT_GLOBAL_SETTINGS,
+        ...settings,
+        // Deep merge nested objects to preserve existing values while adding new fields
+        fsltl: { ...DEFAULT_GLOBAL_SETTINGS.fsltl, ...settings.fsltl },
+        airports: { ...DEFAULT_GLOBAL_SETTINGS.airports, ...settings.airports },
+        server: { ...DEFAULT_GLOBAL_SETTINGS.server, ...settings.server },
+        realtraffic: { ...DEFAULT_GLOBAL_SETTINGS.realtraffic, ...settings.realtraffic },
+        viewports: {
+          ...DEFAULT_GLOBAL_SETTINGS.viewports,
+          ...settings.viewports,
+          // Preserve nested viewport objects
+          airportConfigs: settings.viewports?.airportConfigs ?? DEFAULT_GLOBAL_SETTINGS.viewports.airportConfigs,
+          orbitSettings: settings.viewports?.orbitSettings ?? DEFAULT_GLOBAL_SETTINGS.viewports.orbitSettings
+        }
+      }
+
       // Check if we need to migrate from localStorage (one-time migration)
       // This only happens in Tauri mode when global settings file is new/empty
       if (isTauri()) {
@@ -344,7 +363,11 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
       // Validate radiusNm (10-200)
       radiusNm: updates.radiusNm !== undefined
         ? Math.max(10, Math.min(200, updates.radiusNm))
-        : state.realtraffic.radiusNm
+        : state.realtraffic.radiusNm,
+      // Validate maxParkedAircraft (0-200)
+      maxParkedAircraft: updates.maxParkedAircraft !== undefined
+        ? Math.max(0, Math.min(200, updates.maxParkedAircraft))
+        : state.realtraffic.maxParkedAircraft
     }
 
     // Update state first, then read full current state for save

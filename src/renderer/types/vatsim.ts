@@ -191,6 +191,11 @@ export interface AircraftState {
   departure: string | null
   arrival: string | null
   timestamp: number
+  /**
+   * Flag indicating this is a parked aircraft from RealTraffic parkedtraffic query.
+   * Parked aircraft are culled first when total exceeds maxAircraftDisplay.
+   */
+  isParked?: boolean
 }
 
 export interface InterpolatedAircraftState extends AircraftState {

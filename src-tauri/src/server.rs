@@ -334,6 +334,7 @@ fn create_router(state: Arc<ServerState>) -> Router {
         // RealTraffic proxy endpoints (to bypass CORS)
         .route("/api/realtraffic/auth", post(realtraffic_auth))
         .route("/api/realtraffic/traffic", post(realtraffic_traffic))
+        .route("/api/realtraffic/parked-traffic", post(realtraffic_parked_traffic))
         .route("/api/realtraffic/deauth", post(realtraffic_deauth))
         // vNAS WebSocket endpoint for real-time aircraft updates
         .route("/api/vnas/ws", get(vnas_websocket_handler))
@@ -803,6 +804,60 @@ async fn realtraffic_traffic(
         .send()
         .await
         .map_err(|e| (StatusCode::BAD_GATEWAY, format!("RealTraffic traffic request failed: {}", e)))?;
+
+    let body = response
+        .bytes()
+        .await
+        .map_err(|e| (StatusCode::BAD_GATEWAY, format!("Failed to read RealTraffic response: {}", e)))?;
+
+    let mut resp = Response::builder()
+        .status(StatusCode::OK)
+        .body(Body::from(body))
+        .unwrap();
+
+    resp.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/json"),
+    );
+
+    Ok(resp)
+}
+
+/// RealTraffic parked traffic request body
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RealTrafficParkedRequest {
+    guid: String,
+    lat1: f64,
+    lon1: f64,
+    lat2: f64,
+    lon2: f64,
+}
+
+/// POST /api/realtraffic/parked-traffic - Proxy RealTraffic parked aircraft data
+async fn realtraffic_parked_traffic(
+    Json(request): Json<RealTrafficParkedRequest>,
+) -> Result<Response<Body>, (StatusCode, String)> {
+    let client = reqwest::Client::new();
+
+    // RealTraffic API expects form data, not JSON
+    // Field names: GUID (uppercase), querytype=parkedtraffic, top/bottom/left/right for bbox
+    let form_data: Vec<(&str, String)> = vec![
+        ("GUID", request.guid.clone()),
+        ("querytype", "parkedtraffic".to_string()),
+        ("top", request.lat2.to_string()),
+        ("bottom", request.lat1.to_string()),
+        ("left", request.lon1.to_string()),
+        ("right", request.lon2.to_string()),
+    ];
+
+    let response = client
+        .post(format!("{}/traffic", REALTRAFFIC_API_URL))
+        .header("Accept-Encoding", "gzip")
+        .form(&form_data)
+        .send()
+        .await
+        .map_err(|e| (StatusCode::BAD_GATEWAY, format!("RealTraffic parked traffic request failed: {}", e)))?;
 
     let body = response
         .bytes()

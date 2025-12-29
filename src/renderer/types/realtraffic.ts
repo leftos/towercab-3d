@@ -171,6 +171,49 @@ export interface RTTrafficResponse {
 }
 
 // ============================================================================
+// PARKED TRAFFIC TYPES
+// ============================================================================
+
+/**
+ * Raw parked aircraft record from RealTraffic API
+ *
+ * Parked traffic uses a simpler format with these indices:
+ * [0] latitude
+ * [1] longitude
+ * [2] gate_id (format: "ICAO_GATE", e.g., "YSSY_101")
+ * [3] aircraft type (e.g., "A388", "B738")
+ * [4] tail number (e.g., "VH-OQA")
+ * [5] timestamp (Unix seconds when aircraft was last moving)
+ * [6] callsign (ATC callsign)
+ * [7] heading/track (for orientation on ground)
+ */
+export type RTParkedRecord = (string | number | null)[]
+
+/**
+ * RealTraffic parked traffic response
+ *
+ * Returned from POST /v5/traffic with querytype=parkedtraffic.
+ * Aircraft whose last groundspeed was zero and position timestamp
+ * is 10 minutes to 24 hours old.
+ */
+export interface RTParkedTrafficResponse {
+  /** API status code (200 = success) */
+  status: number
+  /** Parked aircraft records keyed by hex ID */
+  data: Record<string, RTParkedRecord>
+  /** Updated rate limit for traffic requests (milliseconds) */
+  rrl: number
+  /** Total aircraft count in system */
+  full_count?: number
+  /** Data source */
+  source?: string
+  /** Data epoch timestamp */
+  dataepoch?: number
+  /** Error message (present when status !== 200) */
+  message?: string
+}
+
+// ============================================================================
 // ERROR TYPES
 // ============================================================================
 

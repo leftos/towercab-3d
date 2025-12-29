@@ -76,6 +76,11 @@ export interface AircraftMetadata {
   transponder: string
   departure: string | null
   arrival: string | null
+  /**
+   * True if this is a parked aircraft from RealTraffic parkedtraffic query.
+   * Parked aircraft have been stationary for 10min-24h.
+   */
+  isParked?: boolean
 }
 
 /**

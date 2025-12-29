@@ -445,8 +445,20 @@ export function useAircraftFiltering(
     }
     stats.afterAirport = filtered.length
 
-    // Sort by distance and limit count
-    const sorted = filtered.sort((a, b) => a.distance - b.distance).slice(0, maxAircraftDisplay)
+    // Sort by: active aircraft first (by distance), then parked aircraft (by distance)
+    // This ensures active aircraft get priority when hitting maxAircraftDisplay limit
+    const sorted = filtered
+      .sort((a, b) => {
+        // Active aircraft come before parked
+        const aParked = a.isParked ?? false
+        const bParked = b.isParked ?? false
+        if (aParked !== bParked) {
+          return aParked ? 1 : -1  // Non-parked first
+        }
+        // Within same category, sort by distance
+        return a.distance - b.distance
+      })
+      .slice(0, maxAircraftDisplay)
 
     return {
       filtered: sorted,

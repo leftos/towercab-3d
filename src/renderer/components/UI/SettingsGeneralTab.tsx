@@ -37,6 +37,7 @@ function SettingsGeneralTab({ onShowImportModal, onShowExportModal, importStatus
   const dataSource = useGlobalSettingsStore((state) => state.realtraffic.dataSource)
   const licenseKey = useGlobalSettingsStore((state) => state.realtraffic.licenseKey)
   const radiusNm = useGlobalSettingsStore((state) => state.realtraffic.radiusNm)
+  const maxParkedAircraft = useGlobalSettingsStore((state) => state.realtraffic.maxParkedAircraft)
   const updateRealTrafficSettings = useGlobalSettingsStore((state) => state.updateRealTraffic)
 
   // RealTraffic store for connection state (used for UI display)
@@ -296,6 +297,23 @@ function SettingsGeneralTab({ onShowImportModal, onShowExportModal, importStatus
               </div>
               <p className="setting-hint">
                 Aircraft within this radius of the tower will be fetched.
+              </p>
+            </div>
+
+            <div className="setting-item">
+              <label>Max Parked Aircraft</label>
+              <div className="slider-with-value">
+                <input
+                  type="range"
+                  min="0"
+                  max="200"
+                  value={maxParkedAircraft}
+                  onChange={(e) => updateRealTrafficSettings({ maxParkedAircraft: Number(e.target.value) })}
+                />
+                <span>{maxParkedAircraft}</span>
+              </div>
+              <p className="setting-hint">
+                Parked aircraft to include (0 = disabled). Active aircraft have priority; parked fill remaining display slots.
               </p>
             </div>
           </>

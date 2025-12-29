@@ -768,6 +768,14 @@ export interface GlobalSettings {
      * Query radius in nautical miles (10-200, default: 100)
      */
     radiusNm: number
+
+    /**
+     * Maximum parked aircraft to fetch (0-200, default: 50)
+     *
+     * Set to 0 to disable parked aircraft entirely.
+     * Parked aircraft are culled first if total exceeds maxAircraftDisplay.
+     */
+    maxParkedAircraft: number
   }
 
   /**
@@ -801,7 +809,8 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   realtraffic: {
     dataSource: 'vatsim',
     licenseKey: '',
-    radiusNm: 100
+    radiusNm: 100,
+    maxParkedAircraft: 50
   },
   viewports: DEFAULT_GLOBAL_VIEWPORT_SETTINGS
 }
