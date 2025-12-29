@@ -8,7 +8,7 @@ import { calculateDatablockOffset } from '../utils/screenProjection'
 import { useDatablockPositionStore } from '../stores/datablockPositionStore'
 import { useViewportStore } from '../stores/viewportStore'
 import { useSettingsStore } from '../stores/settingsStore'
-import { GROUNDSPEED_THRESHOLD_KNOTS } from '../constants/rendering'
+import { GROUNDSPEED_THRESHOLD_KNOTS, DATABLOCK_LEADER_LINE_HEIGHT_MULTIPLIER } from '../constants/rendering'
 import { filterAircraftForRendering } from './useRenderCulling'
 
 export type DatablockMode = 'none' | 'full' | 'airline'
@@ -370,12 +370,12 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
       if (!aircraftWindowPos) continue
 
       // Project a point slightly above the aircraft for leader line attachment
-      // Use 12m offset to account for: ground offset (~5m) + fuselage height (~6m)
-      const LEADER_ATTACH_HEIGHT_METERS = 12
+      // Scale height based on wingspan so small aircraft get shorter leader lines
+      const leaderAttachHeightMeters = data.wingspanMeters * DATABLOCK_LEADER_LINE_HEIGHT_MULTIPLIER
       const aircraftTopPosition = Cesium.Cartesian3.fromDegrees(
         data.longitude,
         data.latitude,
-        data.heightAboveEllipsoid + LEADER_ATTACH_HEIGHT_METERS
+        data.heightAboveEllipsoid + leaderAttachHeightMeters
       )
       const aircraftTopWindowPos = Cesium.SceneTransforms.worldToWindowCoordinates(viewer.scene, aircraftTopPosition)
       if (!aircraftTopWindowPos) continue

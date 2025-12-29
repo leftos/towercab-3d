@@ -40,6 +40,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Night darkening disabled by default (can be enabled in Settings > Graphics > Lighting)
 - Follow mode zoom level no longer displayed in aircraft panel header
 - Cesium Ion token is no longer included in exports (security improvement)
+- Datablock leader lines now scale with aircraft wingspan for more proportional positioning
+  - Small aircraft (GA planes) have shorter leader lines for better visual balance
+  - Large aircraft (widebodies) have longer leader lines matching their size
 - Replay mode now uses the unified timeline interpolation system
   - Smoother scrubbing through recorded data
   - Consistent interpolation behavior between live and replay modes
