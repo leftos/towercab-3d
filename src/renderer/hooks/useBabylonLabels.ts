@@ -409,6 +409,15 @@ export function useBabylonLabels(
     const labelData = aircraftLabelsRef.current.get(callsign)
     if (!labelData) return
 
+    // Scale CSS pixel coordinates to device pixels for high-DPI displays (4K monitors)
+    // Cesium's worldToWindowCoordinates returns CSS pixels, but Babylon GUI operates
+    // in device pixels when the canvas is scaled by devicePixelRatio
+    const dpr = window.devicePixelRatio || 1
+    const scaledScreenX = screenX * dpr
+    const scaledScreenY = screenY * dpr
+    const scaledOffsetX = labelOffsetX * dpr
+    const scaledOffsetY = labelOffsetY * dpr
+
     // Get label dimensions for calculations, accounting for scale (followed aircraft are 1.2x)
     const scaleX = labelData.label.scaleX ?? 1
     const scaleY = labelData.label.scaleY ?? 1
@@ -420,9 +429,9 @@ export function useBabylonLabels(
     if (guiTexture) {
       const size = guiTexture.getSize()
       if (size.width > 0 && size.height > 0) {
-        const aircraftMargin = 50 // Aircraft must be within 50px of viewport edge
-        if (screenX < -aircraftMargin || screenX > size.width + aircraftMargin ||
-            screenY < -aircraftMargin || screenY > size.height + aircraftMargin) {
+        const aircraftMargin = 50 * dpr // Aircraft must be within 50px of viewport edge (scaled)
+        if (scaledScreenX < -aircraftMargin || scaledScreenX > size.width + aircraftMargin ||
+            scaledScreenY < -aircraftMargin || scaledScreenY > size.height + aircraftMargin) {
           // Aircraft is off-screen, hide label
           labelData.label.isVisible = false
           labelData.leaderLine.isVisible = false
@@ -432,8 +441,8 @@ export function useBabylonLabels(
     }
 
     // Position label with offset from model screen position
-    let labelX = screenX + labelOffsetX
-    let labelY = screenY + labelOffsetY
+    let labelX = scaledScreenX + scaledOffsetX
+    let labelY = scaledScreenY + scaledOffsetY
 
     // Clamp label position to viewport boundaries (keep fully visible)
     // Only apply clamping if guiTexture has valid dimensions
@@ -449,13 +458,13 @@ export function useBabylonLabels(
     labelData.label.left = labelX
     labelData.label.top = labelY
 
-    // Line from label center to model screen position
+    // Line from label center to model screen position (using scaled coordinates)
     const labelCenterX = labelX + labelW / 2
     const labelCenterY = labelY + labelH / 2
 
-    // Calculate direction from label to model
-    const dirX = screenX - labelCenterX
-    const dirY = screenY - labelCenterY
+    // Calculate direction from label to model (all in device pixels)
+    const dirX = scaledScreenX - labelCenterX
+    const dirY = scaledScreenY - labelCenterY
     const dist = Math.sqrt(dirX * dirX + dirY * dirY)
 
     if (dist < 1) {
@@ -472,15 +481,15 @@ export function useBabylonLabels(
     // Line starts at label edge - calculate intersection with rectangle
     const tX = Math.abs(nx) > 0.001 ? (labelW / 2) / Math.abs(nx) : 10000
     const tY = Math.abs(ny) > 0.001 ? (labelH / 2) / Math.abs(ny) : 10000
-    const tEdge = Math.min(tX, tY) + 3  // +3 pixel gap from edge
+    const tEdge = Math.min(tX, tY) + 3 * dpr  // +3 pixel gap from edge (scaled)
 
     const startX = labelCenterX + nx * tEdge
     const startY = labelCenterY + ny * tEdge
 
-    // Line ends near model (leave small gap - larger in 2D top-down view)
-    const endGap = isTopDownView ? LEADER_LINE_END_GAP_2D_PX : LEADER_LINE_END_GAP_3D_PX
-    const endX = screenX - nx * endGap
-    const endY = screenY - ny * endGap
+    // Line ends near model (leave small gap - larger in 2D top-down view, scaled for DPI)
+    const endGap = (isTopDownView ? LEADER_LINE_END_GAP_2D_PX : LEADER_LINE_END_GAP_3D_PX) * dpr
+    const endX = scaledScreenX - nx * endGap
+    const endY = scaledScreenY - ny * endGap
 
     // Set line coordinates BEFORE making visible to prevent flash at (0,0)
     labelData.leaderLine.x1 = startX

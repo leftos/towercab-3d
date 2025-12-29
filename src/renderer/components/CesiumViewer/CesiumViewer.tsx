@@ -884,8 +884,10 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     // Helper to find aircraft near click position (checks both datablocks and aircraft models)
     const findAircraftAtPosition = (screenPos: Cesium.Cartesian2): string | null => {
       // First, check if clicking on a datablock label
+      // Label bounds are stored in device pixels, so scale click coordinates for high-DPI displays
       const datablockStore = useDatablockPositionStore.getState()
-      const labelCallsign = datablockStore.findLabelAtPosition(screenPos.x, screenPos.y)
+      const dpr = window.devicePixelRatio || 1
+      const labelCallsign = datablockStore.findLabelAtPosition(screenPos.x * dpr, screenPos.y * dpr)
       if (labelCallsign) {
         return labelCallsign
       }

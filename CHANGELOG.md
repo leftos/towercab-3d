@@ -4,6 +4,12 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Datablocks now display at correct positions on 4K and other high-DPI displays
+  - Labels were appearing far from aircraft due to coordinate system mismatch
+  - Cesium returns CSS pixels but Babylon GUI operates in device pixels
+  - All screen coordinates now properly scaled by devicePixelRatio
+
 ## [0.0.20-alpha] - 2025-12-28
 
 ### Fixed
