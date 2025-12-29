@@ -4,6 +4,12 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- Global aircraft search (Ctrl+K) now sorts results by distance from camera when an airport is selected
+  - Closest aircraft appear first, with distance shown in results (e.g., "12.3nm")
+  - Selecting an aircraft within render range automatically uses tower follow mode
+  - Aircraft beyond render range still use orbit follow mode
+
 ## [0.0.21-alpha] - 2025-12-28
 
 ### Fixed

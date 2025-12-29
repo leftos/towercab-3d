@@ -2,7 +2,11 @@ import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useVatsimStore } from '../../stores/vatsimStore'
 import { useVnasStore } from '../../stores/vnasStore'
+import { useAirportStore } from '../../stores/airportStore'
+import { useSettingsStore } from '../../stores/settingsStore'
 import { useActiveViewportCamera } from '../../hooks/useActiveViewportCamera'
+import { calculateDistanceNM } from '../../utils/interpolation'
+import { getTowerPosition } from '../../utils/towerHeight'
 import './GlobalSearchPanel.css'
 
 interface SearchResult {
@@ -12,6 +16,9 @@ interface SearchResult {
   arrival: string | null
   altitude: number
   groundspeed: number
+  latitude: number
+  longitude: number
+  distance: number  // Distance from camera in NM
   isLive: boolean
 }
 
@@ -21,11 +28,24 @@ function GlobalSearchPanel() {
   const inputRef = useRef<HTMLInputElement>(null)
 
   const allPilots = useVatsimStore((state) => state.allPilots)
-  const { followAircraftInOrbit, followingCallsign } = useActiveViewportCamera()
+  const { followAircraftInOrbit, followAircraft, followingCallsign } = useActiveViewportCamera()
+
+  // Airport and camera position for distance calculation
+  const currentAirport = useAirportStore((state) => state.currentAirport)
+  const towerHeight = useAirportStore((state) => state.towerHeight)
+  const customTowerPosition = useAirportStore((state) => state.customTowerPosition)
+  const labelVisibilityDistance = useSettingsStore((state) => state.aircraft.labelVisibilityDistance)
 
   // vNAS state for live update indicator
   const vnasConnected = useVnasStore((state) => state.status.state === 'connected')
   const vnasAircraftStates = useVnasStore((state) => state.aircraftStates)
+
+  // Get camera reference position
+  const cameraPosition = useMemo(() => {
+    if (!currentAirport) return null
+    const pos = getTowerPosition(currentAirport, towerHeight, customTowerPosition ?? undefined)
+    return { latitude: pos.latitude, longitude: pos.longitude }
+  }, [currentAirport, towerHeight, customTowerPosition])
 
   // Focus input when opened
   useEffect(() => {
@@ -67,6 +87,16 @@ function GlobalSearchPanel() {
       const matchesArrival = arrival?.toLowerCase().includes(searchTerm)
 
       if (matchesCallsign || matchesType || matchesDeparture || matchesArrival) {
+        // Calculate distance from camera position
+        const distance = cameraPosition
+          ? calculateDistanceNM(
+              cameraPosition.latitude,
+              cameraPosition.longitude,
+              pilot.latitude,
+              pilot.longitude
+            )
+          : Infinity
+
         results.push({
           callsign: pilot.callsign,
           aircraftType,
@@ -74,29 +104,47 @@ function GlobalSearchPanel() {
           arrival,
           altitude: pilot.altitude,  // Keep in METERS
           groundspeed: pilot.groundspeed,
+          latitude: pilot.latitude,
+          longitude: pilot.longitude,
+          distance,
           isLive: vnasAircraftStates.has(pilot.callsign)
         })
       }
-
-      // Limit results for performance
-      if (results.length >= 20) break
     }
 
-    // Sort by callsign match first, then alphabetically
-    return results.sort((a, b) => {
-      const aStartsWithQuery = a.callsign.toLowerCase().startsWith(searchTerm)
-      const bStartsWithQuery = b.callsign.toLowerCase().startsWith(searchTerm)
-      if (aStartsWithQuery && !bStartsWithQuery) return -1
-      if (!aStartsWithQuery && bStartsWithQuery) return 1
-      return a.callsign.localeCompare(b.callsign)
-    })
-  }, [query, allPilots, vnasAircraftStates])
+    // Sort by distance from camera (closest first)
+    // If no airport selected, fall back to callsign match then alphabetical
+    if (cameraPosition) {
+      results.sort((a, b) => a.distance - b.distance)
+    } else {
+      results.sort((a, b) => {
+        const aStartsWithQuery = a.callsign.toLowerCase().startsWith(searchTerm)
+        const bStartsWithQuery = b.callsign.toLowerCase().startsWith(searchTerm)
+        if (aStartsWithQuery && !bStartsWithQuery) return -1
+        if (!aStartsWithQuery && bStartsWithQuery) return 1
+        return a.callsign.localeCompare(b.callsign)
+      })
+    }
+
+    // Limit results for performance (after sorting so we get the closest ones)
+    return results.slice(0, 20)
+  }, [query, allPilots, vnasAircraftStates, cameraPosition])
 
   const handleSelect = useCallback((callsign: string) => {
-    followAircraftInOrbit(callsign)
+    // Find the aircraft to check if it's within render range
+    const aircraft = searchResults.find(r => r.callsign === callsign)
+
+    // If airport is selected and aircraft is within render range, use tower follow
+    // Otherwise use orbit follow
+    if (currentAirport && aircraft && aircraft.distance <= labelVisibilityDistance) {
+      followAircraft(callsign)
+    } else {
+      followAircraftInOrbit(callsign)
+    }
+
     setIsOpen(false)
     setQuery('')
-  }, [followAircraftInOrbit])
+  }, [searchResults, currentAirport, labelVisibilityDistance, followAircraft, followAircraftInOrbit])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && searchResults.length > 0) {
@@ -183,6 +231,9 @@ function GlobalSearchPanel() {
                         </span>
                       ) : null}
                       <span className="result-info">
+                        {cameraPosition && result.distance !== Infinity && (
+                          <>{result.distance.toFixed(1)}nm • </>
+                        )}
                         FL{Math.round((result.altitude / 0.3048) / 100).toString().padStart(3, '0')} • {result.groundspeed}kts
                       </span>
                     </div>
