@@ -51,6 +51,9 @@ export const useAirportStore = create<AirportStore>()(
     isAirportSelectorOpen: false,
 
     // recentAirports is now stored in globalSettingsStore
+    // NOTE: This getter is for non-reactive reads only (e.g., in actions).
+    // Components should subscribe directly to globalSettingsStore for reactive updates:
+    //   useGlobalSettingsStore((state) => state.airports.recentAirports)
     get recentAirports() {
       return useGlobalSettingsStore.getState().airports.recentAirports
     },

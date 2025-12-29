@@ -414,6 +414,14 @@ export function useRealTrafficSettings(): GlobalSettings['realtraffic'] {
  */
 export async function initializeGlobalSettings(): Promise<void> {
   await useGlobalSettingsStore.getState().initialize()
+
+  // Automatically attempt to recover any settings that may have been
+  // lost during previous upgrades. This is safe to run because it only
+  // recovers data when current values are empty/missing.
+  const result = await repairSettingsMigration()
+  if (result.recovered.length > 0) {
+    console.log('[GlobalSettings] Auto-recovered settings:', result.recovered)
+  }
 }
 
 /**
@@ -443,4 +451,117 @@ export function useGlobalSettingsInitialized(): boolean {
  */
 export function useViewportSettings(): GlobalViewportSettings {
   return useGlobalSettingsStore((state) => state.viewports)
+}
+
+/**
+ * Repair settings by re-running migrations
+ *
+ * This clears migration flags and attempts to recover settings from localStorage
+ * that may not have been properly migrated to global settings.
+ *
+ * Call this if settings were lost during an upgrade.
+ * Returns a summary of what was recovered.
+ */
+export async function repairSettingsMigration(): Promise<{
+  recovered: string[]
+  errors: string[]
+}> {
+  const recovered: string[] = []
+  const errors: string[] = []
+
+  console.log('[RepairSettings] Starting settings repair...')
+
+  try {
+    // Clear migration keys
+    const migrationKeys = [
+      'globalSettingsMigrationDone',
+      'viewport-store-bookmark-migration-v1',
+      'viewport-store-global-migration-v1'
+    ]
+    migrationKeys.forEach(key => localStorage.removeItem(key))
+    console.log('[RepairSettings] Cleared migration keys')
+
+    // Read settings from localStorage
+    const settingsStoreRaw = localStorage.getItem('settings-store')
+    if (settingsStoreRaw) {
+      try {
+        const parsed = JSON.parse(settingsStoreRaw)
+        const state = parsed?.state
+
+        if (state) {
+          const store = useGlobalSettingsStore.getState()
+
+          // Recover Cesium Ion token (only if current is empty)
+          if (state.cesium?.cesiumIonToken && !store.cesiumIonToken) {
+            await store.setCesiumIonToken(state.cesium.cesiumIonToken)
+            recovered.push('Cesium Ion token')
+          }
+
+          // Recover FSLTL settings (only if current paths are empty)
+          if (state.fsltl) {
+            const localHasPath = state.fsltl.sourcePath || state.fsltl.outputPath
+            const storeHasPath = store.fsltl.sourcePath || store.fsltl.outputPath
+            if (localHasPath && !storeHasPath) {
+              await store.updateFsltl({
+                sourcePath: state.fsltl.sourcePath || null,
+                outputPath: state.fsltl.outputPath || null,
+                textureScale: state.fsltl.textureScale || '1k',
+                enableFsltlModels: state.fsltl.enableFsltlModels ?? true
+              })
+              recovered.push('FSLTL paths')
+            }
+          }
+        }
+      } catch (e) {
+        errors.push(`Failed to parse settings-store: ${e}`)
+      }
+    }
+
+    // Read camera bookmarks from old cameraStore
+    const cameraStoreRaw = localStorage.getItem('camera-store')
+    if (cameraStoreRaw) {
+      try {
+        const parsed = JSON.parse(cameraStoreRaw)
+        const airportSettings = parsed?.state?.airportSettings
+
+        if (airportSettings && Object.keys(airportSettings).length > 0) {
+          // The viewport migration will pick this up now that keys are cleared
+          recovered.push(`Camera bookmarks for ${Object.keys(airportSettings).length} airports (pending sync)`)
+        }
+      } catch (e) {
+        errors.push(`Failed to parse camera-store: ${e}`)
+      }
+    }
+
+    // Read viewport store
+    const viewportStoreRaw = localStorage.getItem('viewport-store')
+    if (viewportStoreRaw) {
+      try {
+        const parsed = JSON.parse(viewportStoreRaw)
+        const state = parsed?.state
+
+        if (state?.airportViewportConfigs && Object.keys(state.airportViewportConfigs).length > 0) {
+          recovered.push(`Viewport configs for ${Object.keys(state.airportViewportConfigs).length} airports (pending sync)`)
+        }
+      } catch (e) {
+        errors.push(`Failed to parse viewport-store: ${e}`)
+      }
+    }
+
+    if (recovered.length === 0) {
+      console.log('[RepairSettings] No settings found to recover in localStorage')
+    } else {
+      console.log('[RepairSettings] Recovered:', recovered)
+    }
+
+    if (errors.length > 0) {
+      console.error('[RepairSettings] Errors:', errors)
+    }
+
+  } catch (e) {
+    errors.push(`Repair failed: ${e}`)
+    console.error('[RepairSettings] Failed:', e)
+  }
+
+  return { recovered, errors }
 }

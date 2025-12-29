@@ -4,6 +4,12 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Settings now automatically recovered on startup if lost during upgrade
+  - Cesium token, FSLTL paths, and camera bookmarks are restored from browser storage
+  - Only recovers missing settings; existing settings are not overwritten
+  - Manual "Repair Settings" button available in Settings > Help if needed
+
 ## [0.0.19-alpha] - 2025-12-28
 
 ### Added

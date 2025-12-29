@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAirportStore } from '../../stores/airportStore'
+import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
 import { useVnasStore } from '../../stores/vnasStore'
 import type { Airport } from '../../types/airport'
 import './AirportSelector.css'
@@ -10,7 +11,8 @@ function AirportSelector() {
   const airports = useAirportStore((state) => state.airports)
   const searchAirports = useAirportStore((state) => state.searchAirports)
   const selectAirport = useAirportStore((state) => state.selectAirport)
-  const recentAirports = useAirportStore((state) => state.recentAirports)
+  // Subscribe directly to globalSettingsStore for reactive updates
+  const recentAirports = useGlobalSettingsStore((state) => state.airports.recentAirports)
   const vnasConnected = useVnasStore((state) => state.status.state === 'connected')
 
   const [query, setQuery] = useState('')
