@@ -4,6 +4,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+## [0.0.19-alpha] - 2025-12-28
+
 ### Added
 - RealTraffic API integration for real-world ADS-B traffic
   - See real aircraft at any airport worldwide
