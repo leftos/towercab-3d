@@ -120,7 +120,7 @@ All TypeScript types centralized by domain. Import via `import type { ... } from
 | `mod.ts` | Modding manifest formats |
 | `replay.ts` | Replay snapshots, playback state |
 | `settings.ts` | App settings (cesium, graphics, camera, weather, memory, aircraft, ui) + GlobalSettings (cesiumIonToken, FSLTL paths, viewport data shared across devices) |
-| `vatsim.ts` | VATSIM API structures |
+| `vatsim.ts` | VATSIM and RealTraffic API structures, ADS-B fields |
 | `viewport.ts` | Viewport layout, multi-viewport config |
 | `weather.ts` | METAR, clouds, fog, precipitation |
 
@@ -130,10 +130,13 @@ Configuration values and limits. Import via `import { ... } from '@/constants'`:
 
 | File | Purpose |
 |------|---------|
+| `aircraft-timeline.ts` | Timeline debug modal settings |
 | `api.ts` | Endpoints, poll intervals, cache TTL |
 | `babylon.ts` | Scene settings, visibility thresholds |
 | `camera.ts` | FOV/pitch limits, orbit defaults |
+| `lighting.ts` | Sun position, shadow configuration |
 | `precipitation.ts` | Rain/snow particles, wind effects |
+| `realtraffic.ts` | RealTraffic API configuration |
 | `rendering.ts` | Model pool, shadows, colors |
 | `replay.ts` | Buffer size, playback speeds |
 | `weather.ts` | Cloud/fog parameters |
@@ -143,7 +146,8 @@ Use `SCREAMING_SNAKE_CASE` (e.g., `FOV_DEFAULT`, `ORBIT_DISTANCE_MAX`).
 ## External Dependencies
 
 - **Cesium Ion**: Requires user-provided access token for terrain/imagery (free tier available)
-- **VATSIM API**: `https://data.vatsim.net/v3/vatsim-data.json` (polled every 3 seconds)
+- **VATSIM API**: `https://data.vatsim.net/v3/vatsim-data.json` (polled every 1 second)
+- **RealTraffic API**: Optional real-world ADS-B traffic with ~2-3s updates (requires license key subscription)
 - **Airport Database**: Fetched from `mwgg/Airports` GitHub raw JSON on startup
 - **Aviation Weather API**: `https://aviationweather.gov/api/data/metar` for METAR weather data (5-minute refresh)
 
@@ -201,6 +205,7 @@ See MODDING.md for manifest format and model requirements. Models are loaded on 
 
 1. Add key handler in `useCameraInput.ts` (for camera-related) or `App.tsx` (for global shortcuts)
 2. Update keyboard reference in `SettingsHelpTab.tsx`
+3. Update USER_GUIDE.md keyboard shortcuts section if user-facing
 
 ### Modifying Aircraft Rendering
 

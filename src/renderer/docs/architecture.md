@@ -49,12 +49,12 @@ Detection: remoteMode.ts
 └─ getHostname(): window.location.hostname in remote mode
 ```
 
-### VATSIM Aircraft Data Flow
+### Aircraft Data Flow (VATSIM & RealTraffic)
 
 ```
-VATSIM API (15s updates)
-    ↓ [fetch every 3s via polling]
-VatsimService.fetchVatsimData()
+Data Source (VATSIM: 15s updates | RealTraffic: ~2-3s updates)
+    ↓ [VATSIM: fetch every 1s | RealTraffic: WebSocket push]
+VatsimService.fetchVatsimData() OR RealTrafficService
     ↓
 vatsimStore.setVatsimData()
     ├─ pilots: Map<callsign, Pilot>
@@ -402,9 +402,11 @@ vatsimStore
 ├─ pilots: Map<callsign, Pilot>
 ├─ aircraftStates: Map<callsign, AircraftState>
 ├─ referencePosition: {lat, lon} (for distance filtering)
+├─ dataSource: 'vatsim' | 'realtraffic'
 └─ Used by:
      ├─ useAircraftInterpolation (read aircraftStates)
-     └─ AircraftPanel (pilot information)
+     ├─ AircraftPanel (pilot information, data source indicators)
+     └─ RealTrafficService (populate aircraftStates)
 
 weatherStore
 ├─ visibility: number (statute miles)
@@ -809,7 +811,8 @@ Distance-Based Filtering
 ### Update Frequencies
 
 ```
-VATSIM API: 15s actual updates, 3s poll interval
+VATSIM API: 15s actual updates, 1s poll interval
+RealTraffic API: ~2-3s updates via WebSocket
 Weather API: 5 minute refresh interval
 Aircraft Interpolation: 60 Hz (every frame)
 Aircraft Models: 60 Hz position updates

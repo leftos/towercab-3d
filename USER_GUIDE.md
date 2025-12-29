@@ -935,6 +935,7 @@ See [MODDING.md](MODDING.md) for complete modding instructions including:
 | Ctrl+M | Toggle METAR overlay display |
 | F1 | Toggle performance HUD |
 | F3 | Open model matching debug modal |
+| F4 | Open aircraft timeline debug modal |
 
 ### Replay (when in Replay mode)
 

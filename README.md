@@ -34,14 +34,17 @@ A 3D tower cab view application for VATSIM air traffic controllers. View real-ti
   - Two-finger pinch to zoom
   - Two-finger rotate to adjust heading
   - Virtual joystick for camera movement
+- Responsive mobile-friendly UI adapts to screen size with flyout menus
+- Remote client presence indicator shows device count on desktop
 - Camera bookmarks and datablock positions shared across all connected devices
 - Device optimization presets automatically offered on first remote connection
 
-### Live VATSIM Integration
-- Real-time aircraft positions from VATSIM network (polled every 3 seconds, VATSIM updates ~15 seconds)
-- Smooth 60 Hz interpolation for fluid aircraft movement
-- Global aircraft search (Ctrl+K) to find and follow any aircraft on the network
-- Connection status indicator with pilot count
+### Live Traffic Integration
+- **VATSIM Network**: Real-time virtual ATC traffic (polled every 1 second, VATSIM updates ~15 seconds)
+- **RealTraffic**: Optional real-world ADS-B traffic with ~2-3s updates (requires license key)
+- Smooth 60 Hz interpolation for fluid aircraft movement between updates
+- Global aircraft search (Ctrl+K) to find and follow any aircraft (sorted by distance when airport selected)
+- Connection status indicator with pilot/aircraft count
 - Compass direction indicator showing camera heading
 
 ### 3D Visualization
@@ -193,6 +196,7 @@ The desktop app will start an HTTP server accessible at `http://[your-pc-ip]:876
 | **M** | Toggle measuring tool |
 | **F1** | Toggle performance HUD |
 | **F3** | Open model matching debug modal |
+| **F4** | Open aircraft timeline debug modal |
 | **Space** | Play/Pause replay (in Replay mode) |
 | **Left/Right Arrow** | Step backward/forward 15s (in Replay mode) |
 
@@ -275,7 +279,8 @@ towercab-3d/
 
 ## Data Sources
 
-- **VATSIM**: Real-time flight data from [data.vatsim.net](https://data.vatsim.net/v3/vatsim-data.json)
+- **VATSIM**: Virtual ATC traffic from [data.vatsim.net](https://data.vatsim.net/v3/vatsim-data.json)
+- **RealTraffic**: Optional real-world ADS-B traffic (requires license key subscription)
 - **Airports**: Database from [github.com/mwgg/Airports](https://github.com/mwgg/Airports)
 - **Terrain/Imagery**: Cesium Ion World Terrain and Bing Maps Aerial
 - **Aircraft Dimensions**: Wingspan and length data from [FAA Aircraft Characteristics Database](https://www.faa.gov/airports/engineering/aircraft_char_database)
@@ -301,6 +306,8 @@ Settings are organized into tabs: General, Display, Graphics, Performance, and H
 | Setting | Description | Range |
 |---------|-------------|-------|
 | Cesium Ion Token | API key for terrain/imagery (shared across devices) | Required |
+| Data Source | Choose VATSIM or RealTraffic | VATSIM/RealTraffic |
+| RealTraffic License Key | Required for RealTraffic data | Optional |
 | Theme | Light or dark interface | Light/Dark |
 | Default FOV | Starting field of view | 10-120° |
 | Camera Speed | WASD movement speed | 0.1x-3x |
@@ -338,9 +345,10 @@ Settings are organized into tabs: General, Display, Graphics, Performance, and H
 ### Performance Tab
 | Setting | Description | Range |
 |---------|-------------|-------|
-| In-Memory Tile Cache | Cached terrain tiles in memory | 50-500 tiles |
+| In-Memory Tile Cache | Cached terrain tiles in memory | 50-5000 tiles |
 | Disk Cache Size | Persistent tile cache on disk | 0.1-10 GB |
-| Aircraft Data Radius | VATSIM data fetch radius | 50-500 nm |
+| Aircraft Data Radius | Data fetch radius (VATSIM/RealTraffic) | 50-500 nm |
+| Max Parked Aircraft | Max stationary aircraft (RealTraffic only) | 0-200 |
 
 ## Performance Tips
 

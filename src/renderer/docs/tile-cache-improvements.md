@@ -1,10 +1,11 @@
 # Tile Cache Improvements
 
-## Current Implementation (v0.0.14)
+## Current Implementation (v0.0.22)
 
 - `tileCacheSize` default raised from 500 to 2000 (max 5000)
 - Monkey-patch on `TileReplacementQueue.trimTiles()` multiplies effective limit by 10x
 - Effective cache: ~20,000 tiles before aggressive eviction kicks in
+- Increased terrain/imagery tile cache for smoother panning around airport areas
 
 ## Cesium Internals Reference
 
