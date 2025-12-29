@@ -24,9 +24,12 @@ const SHORT_FINAL_NM = 2
 const LONG_FINAL_NM = 6
 const PATTERN_ALTITUDE_FT = 2000  // Typical patterns are 1000-1500ft AGL, use 2000 for margin
 const PATTERN_DISTANCE_NM = 5
-const GROUND_ALTITUDE_AGL_FT = 300
+// Ground altitude threshold: 100ft AGL accounts for GPS inaccuracy while avoiding
+// false positives from low pattern work. Note: AGL is calculated from airport
+// elevation, not actual terrain - may be inaccurate for sloped terrain.
+const GROUND_ALTITUDE_AGL_FT = 100
 const PUSHBACK_MAX_SPEED_KTS = 8  // Pushback is typically 2-5 kts
-const STOPPED_SPEED_KTS = 1       // Below 1 kt is truly stopped
+const STOPPED_SPEED_KTS = 2       // Below 2 kts is truly stopped (accounts for GPS jitter)
 const RUNWAY_ALIGNMENT_DEG = 25  // Generous for wind correction/crab angle
 const HOLDING_SHORT_DISTANCE_FT = 500
 const RUNWAY_WIDTH_BUFFER_FT = 150
@@ -38,6 +41,8 @@ const CLIMBING_THRESHOLD_FPM = 200
 const GO_AROUND_CLIMB_FPM = 500
 const GO_AROUND_DISTANCE_NM = 3
 const GO_AROUND_HISTORY_MS = 30000  // Look back 30 seconds for approach phase
+// Minimum runway length before warning (feet) - below this, data quality is suspect
+const MIN_RUNWAY_LENGTH_FT = 500
 
 // ============================================================================
 // PHASE HISTORY TRACKING (for go-around detection)
@@ -110,15 +115,29 @@ export function clearPhaseHistory(): void {
 // ============================================================================
 
 /**
- * Check if aircraft heading is aligned with runway (within tolerance)
+ * Check if aircraft heading is aligned with a specific runway heading (within tolerance)
  */
-function isAlignedWithRunway(
+function isAlignedWithHeading(
   aircraftHeading: number,
   runwayHeading: number,
   tolerance: number = RUNWAY_ALIGNMENT_DEG
 ): boolean {
   const diff = Math.abs(headingDifference(aircraftHeading, runwayHeading))
   return diff <= tolerance
+}
+
+/**
+ * Check if aircraft is aligned with a runway (either direction).
+ * A runway has two valid headings (reciprocals, 180° apart).
+ * Aircraft taking off on 27 (heading 270) are aligned even if closer to 09 threshold.
+ */
+function isAlignedWithRunway(
+  aircraftHeading: number,
+  runway: Runway,
+  tolerance: number = RUNWAY_ALIGNMENT_DEG
+): boolean {
+  return isAlignedWithHeading(aircraftHeading, runway.lowEnd.headingTrue, tolerance) ||
+         isAlignedWithHeading(aircraftHeading, runway.highEnd.headingTrue, tolerance)
 }
 
 /**
@@ -156,6 +175,12 @@ function isOnRunway(
   aircraftLat: number, aircraftLon: number,
   runway: Runway
 ): boolean {
+  // Skip runways with missing coordinate data (both ends must have valid coords)
+  if ((runway.lowEnd.lat === 0 && runway.lowEnd.lon === 0) ||
+      (runway.highEnd.lat === 0 && runway.highEnd.lon === 0)) {
+    return false
+  }
+
   const distToLow = haversineDistanceFt(
     aircraftLat, aircraftLon,
     runway.lowEnd.lat, runway.lowEnd.lon
@@ -167,7 +192,15 @@ function isOnRunway(
 
   // Check if aircraft is roughly between thresholds
   // Must be within runway length distance from both ends
-  const runwayLengthFt = runway.lengthFt || 10000
+  let runwayLengthFt = runway.lengthFt
+  if (!runwayLengthFt || runwayLengthFt < MIN_RUNWAY_LENGTH_FT) {
+    // Fallback: estimate length from threshold distance if data is missing/suspect
+    const estimatedLength = haversineDistanceFt(
+      runway.lowEnd.lat, runway.lowEnd.lon,
+      runway.highEnd.lat, runway.highEnd.lon
+    )
+    runwayLengthFt = estimatedLength > MIN_RUNWAY_LENGTH_FT ? estimatedLength : 10000
+  }
   if (distToLow > runwayLengthFt || distToHigh > runwayLengthFt) {
     return false
   }
@@ -183,7 +216,8 @@ function isOnRunway(
   const lateralDistFt = distToLow * Math.sin(angleOff * Math.PI / 180)
 
   // Allow runway half-width plus buffer for GPS inaccuracy
-  const runwayHalfWidth = (runway.widthFt || 150) / 2 + RUNWAY_WIDTH_BUFFER_FT
+  // Use 75ft default (typical GA runway) instead of 150ft to avoid false positives
+  const runwayHalfWidth = (runway.widthFt || 75) / 2 + RUNWAY_WIDTH_BUFFER_FT
   return lateralDistFt <= runwayHalfWidth
 }
 
@@ -222,90 +256,99 @@ function calculateLateralOffset(
 }
 
 /**
- * Find a runway the aircraft is aligned with (by heading).
+ * Find a runway the aircraft is aligned with (by heading or track for approaches).
  * For parallel runways, uses lateral offset to pick the correct one.
  * Returns the best-matching runway threshold based on alignment and lateral offset.
+ *
+ * @param useTrack - If true, uses aircraft track (direction of movement) instead of heading.
+ *                   This is better for approach detection in crosswind conditions.
  */
 function findAlignedRunway(
   aircraftLat: number,
   aircraftLon: number,
-  aircraftHeading: number,
-  runways: Runway[]
+  aircraftHeadingOrTrack: number,
+  runways: Runway[],
+  _useTrack: boolean = false  // For documentation: true = using track, false = using heading
 ): RunwayProximity | null {
   if (runways.length === 0) return null
 
   let bestMatch: RunwayProximity | null = null
 
   for (const runway of runways) {
-    // Check low end
-    if (runway.lowEnd.lat !== 0 || runway.lowEnd.lon !== 0) {
-      const isAligned = isAlignedWithRunway(aircraftHeading, runway.lowEnd.headingTrue)
-      if (isAligned) {
-        const distNm = haversineDistanceNm(
-          aircraftLat, aircraftLon,
-          runway.lowEnd.lat, runway.lowEnd.lon
-        )
-        const isInbound = isInboundToThreshold(
-          aircraftLat, aircraftLon, aircraftHeading,
-          runway.lowEnd.lat, runway.lowEnd.lon
-        )
-        const lateralOffsetFt = calculateLateralOffset(
-          aircraftLat, aircraftLon,
-          runway.lowEnd.lat, runway.lowEnd.lon,
-          runway.lowEnd.headingTrue
-        )
-        // For parallel runways: prefer smaller lateral offset
-        // For non-parallel: prefer closer distance
-        const isBetterMatch = !bestMatch ||
-          lateralOffsetFt < bestMatch.lateralOffsetFt ||
-          (lateralOffsetFt === bestMatch.lateralOffsetFt && distNm < bestMatch.distanceNm)
+    // Skip runways with missing coordinate data (require both ends)
+    if ((runway.lowEnd.lat === 0 && runway.lowEnd.lon === 0) ||
+        (runway.highEnd.lat === 0 && runway.highEnd.lon === 0)) {
+      continue
+    }
 
-        if (isBetterMatch) {
-          bestMatch = {
-            runway,
-            endIdent: runway.lowEnd.ident,
-            distanceNm: distNm,
-            distanceFt: distNm * 6076.12,
-            isAligned: true,
-            isInbound,
-            lateralOffsetFt
-          }
+    // Check low end - aircraft aligned with this threshold's heading
+    const isAlignedLow = isAlignedWithHeading(aircraftHeadingOrTrack, runway.lowEnd.headingTrue)
+    if (isAlignedLow) {
+      const distNm = haversineDistanceNm(
+        aircraftLat, aircraftLon,
+        runway.lowEnd.lat, runway.lowEnd.lon
+      )
+      const isInbound = isInboundToThreshold(
+        aircraftLat, aircraftLon, aircraftHeadingOrTrack,
+        runway.lowEnd.lat, runway.lowEnd.lon
+      )
+      const lateralOffsetFt = calculateLateralOffset(
+        aircraftLat, aircraftLon,
+        runway.lowEnd.lat, runway.lowEnd.lon,
+        runway.lowEnd.headingTrue
+      )
+      // For parallel runways: prefer smaller lateral offset
+      // At extreme distances (>10nm), add distance penalty to offset comparison
+      // to account for extended centerline divergence
+      const adjustedOffset = distNm > 10 ? lateralOffsetFt + (distNm - 10) * 100 : lateralOffsetFt
+      const isBetterMatch = !bestMatch ||
+        adjustedOffset < (bestMatch.distanceNm > 10 ? bestMatch.lateralOffsetFt + (bestMatch.distanceNm - 10) * 100 : bestMatch.lateralOffsetFt) ||
+        (adjustedOffset === bestMatch.lateralOffsetFt && distNm < bestMatch.distanceNm)
+
+      if (isBetterMatch) {
+        bestMatch = {
+          runway,
+          endIdent: runway.lowEnd.ident,
+          distanceNm: distNm,
+          distanceFt: distNm * 6076.12,
+          isAligned: true,
+          isInbound,
+          lateralOffsetFt
         }
       }
     }
 
-    // Check high end
-    if (runway.highEnd.lat !== 0 || runway.highEnd.lon !== 0) {
-      const isAligned = isAlignedWithRunway(aircraftHeading, runway.highEnd.headingTrue)
-      if (isAligned) {
-        const distNm = haversineDistanceNm(
-          aircraftLat, aircraftLon,
-          runway.highEnd.lat, runway.highEnd.lon
-        )
-        const isInbound = isInboundToThreshold(
-          aircraftLat, aircraftLon, aircraftHeading,
-          runway.highEnd.lat, runway.highEnd.lon
-        )
-        const lateralOffsetFt = calculateLateralOffset(
-          aircraftLat, aircraftLon,
-          runway.highEnd.lat, runway.highEnd.lon,
-          runway.highEnd.headingTrue
-        )
-        // For parallel runways: prefer smaller lateral offset
-        const isBetterMatch = !bestMatch ||
-          lateralOffsetFt < bestMatch.lateralOffsetFt ||
-          (lateralOffsetFt === bestMatch.lateralOffsetFt && distNm < bestMatch.distanceNm)
+    // Check high end - aircraft aligned with this threshold's heading
+    const isAlignedHigh = isAlignedWithHeading(aircraftHeadingOrTrack, runway.highEnd.headingTrue)
+    if (isAlignedHigh) {
+      const distNm = haversineDistanceNm(
+        aircraftLat, aircraftLon,
+        runway.highEnd.lat, runway.highEnd.lon
+      )
+      const isInbound = isInboundToThreshold(
+        aircraftLat, aircraftLon, aircraftHeadingOrTrack,
+        runway.highEnd.lat, runway.highEnd.lon
+      )
+      const lateralOffsetFt = calculateLateralOffset(
+        aircraftLat, aircraftLon,
+        runway.highEnd.lat, runway.highEnd.lon,
+        runway.highEnd.headingTrue
+      )
+      // For parallel runways: prefer smaller lateral offset with distance adjustment
+      const adjustedOffset = distNm > 10 ? lateralOffsetFt + (distNm - 10) * 100 : lateralOffsetFt
+      const isBetterMatch = !bestMatch ||
+        adjustedOffset < (bestMatch.distanceNm > 10 ? bestMatch.lateralOffsetFt + (bestMatch.distanceNm - 10) * 100 : bestMatch.lateralOffsetFt) ||
+        (adjustedOffset === bestMatch.lateralOffsetFt && distNm < bestMatch.distanceNm)
 
-        if (isBetterMatch) {
-          bestMatch = {
-            runway,
-            endIdent: runway.highEnd.ident,
-            distanceNm: distNm,
-            distanceFt: distNm * 6076.12,
-            isAligned: true,
-            isInbound,
-            lateralOffsetFt
-          }
+      if (isBetterMatch) {
+        bestMatch = {
+          runway,
+          endIdent: runway.highEnd.ident,
+          distanceNm: distNm,
+          distanceFt: distNm * 6076.12,
+          isAligned: true,
+          isInbound,
+          lateralOffsetFt
         }
       }
     }
@@ -315,7 +358,12 @@ function findAlignedRunway(
 }
 
 /**
- * Find the nearest runway threshold and compute proximity data
+ * Find the nearest runway threshold and compute proximity data.
+ *
+ * IMPORTANT: The `isAligned` field indicates whether the aircraft is aligned
+ * with the RUNWAY (either direction), not just the nearest threshold. This is
+ * crucial for detecting aircraft on takeoff/landing roll - an aircraft taking
+ * off on runway 27 should be marked as aligned even if closer to the 09 threshold.
  */
 function findNearestRunwayThreshold(
   aircraftLat: number,
@@ -328,62 +376,70 @@ function findNearestRunwayThreshold(
   let nearest: RunwayProximity | null = null
 
   for (const runway of runways) {
-    // Check low end
-    if (runway.lowEnd.lat !== 0 || runway.lowEnd.lon !== 0) {
-      const distNm = haversineDistanceNm(
-        aircraftLat, aircraftLon,
-        runway.lowEnd.lat, runway.lowEnd.lon
-      )
-      const isAligned = isAlignedWithRunway(aircraftHeading, runway.lowEnd.headingTrue)
-      const isInbound = isInboundToThreshold(
-        aircraftLat, aircraftLon, aircraftHeading,
-        runway.lowEnd.lat, runway.lowEnd.lon
-      )
-      const lateralOffsetFt = calculateLateralOffset(
-        aircraftLat, aircraftLon,
-        runway.lowEnd.lat, runway.lowEnd.lon,
-        runway.lowEnd.headingTrue
-      )
+    // Skip runways with missing coordinate data (require both ends for accurate detection)
+    if ((runway.lowEnd.lat === 0 && runway.lowEnd.lon === 0) ||
+        (runway.highEnd.lat === 0 && runway.highEnd.lon === 0)) {
+      continue
+    }
 
-      if (!nearest || distNm < nearest.distanceNm) {
+    // Check alignment with the RUNWAY (either direction), not just one threshold
+    // This fixes the bug where aircraft taking off on 27 were marked as "taxi"
+    // because they were closer to the 09 threshold
+    const isAlignedWithRwy = isAlignedWithRunway(aircraftHeading, runway)
+
+    // Check low end
+    const distToLowNm = haversineDistanceNm(
+      aircraftLat, aircraftLon,
+      runway.lowEnd.lat, runway.lowEnd.lon
+    )
+    const isInboundLow = isInboundToThreshold(
+      aircraftLat, aircraftLon, aircraftHeading,
+      runway.lowEnd.lat, runway.lowEnd.lon
+    )
+    const lateralOffsetLowFt = calculateLateralOffset(
+      aircraftLat, aircraftLon,
+      runway.lowEnd.lat, runway.lowEnd.lon,
+      runway.lowEnd.headingTrue
+    )
+
+    // Check high end
+    const distToHighNm = haversineDistanceNm(
+      aircraftLat, aircraftLon,
+      runway.highEnd.lat, runway.highEnd.lon
+    )
+    const isInboundHigh = isInboundToThreshold(
+      aircraftLat, aircraftLon, aircraftHeading,
+      runway.highEnd.lat, runway.highEnd.lon
+    )
+    const lateralOffsetHighFt = calculateLateralOffset(
+      aircraftLat, aircraftLon,
+      runway.highEnd.lat, runway.highEnd.lon,
+      runway.highEnd.headingTrue
+    )
+
+    // Pick the closer threshold
+    if (distToLowNm <= distToHighNm) {
+      if (!nearest || distToLowNm < nearest.distanceNm) {
         nearest = {
           runway,
           endIdent: runway.lowEnd.ident,
-          distanceNm: distNm,
-          distanceFt: distNm * 6076.12,
-          isAligned,
-          isInbound,
-          lateralOffsetFt
+          distanceNm: distToLowNm,
+          distanceFt: distToLowNm * 6076.12,
+          isAligned: isAlignedWithRwy,
+          isInbound: isInboundLow,
+          lateralOffsetFt: lateralOffsetLowFt
         }
       }
-    }
-
-    // Check high end
-    if (runway.highEnd.lat !== 0 || runway.highEnd.lon !== 0) {
-      const distNm = haversineDistanceNm(
-        aircraftLat, aircraftLon,
-        runway.highEnd.lat, runway.highEnd.lon
-      )
-      const isAligned = isAlignedWithRunway(aircraftHeading, runway.highEnd.headingTrue)
-      const isInbound = isInboundToThreshold(
-        aircraftLat, aircraftLon, aircraftHeading,
-        runway.highEnd.lat, runway.highEnd.lon
-      )
-      const lateralOffsetFt = calculateLateralOffset(
-        aircraftLat, aircraftLon,
-        runway.highEnd.lat, runway.highEnd.lon,
-        runway.highEnd.headingTrue
-      )
-
-      if (!nearest || distNm < nearest.distanceNm) {
+    } else {
+      if (!nearest || distToHighNm < nearest.distanceNm) {
         nearest = {
           runway,
           endIdent: runway.highEnd.ident,
-          distanceNm: distNm,
-          distanceFt: distNm * 6076.12,
-          isAligned,
-          isInbound,
-          lateralOffsetFt
+          distanceNm: distToHighNm,
+          distanceFt: distToHighNm * 6076.12,
+          isAligned: isAlignedWithRwy,
+          isInbound: isInboundHigh,
+          lateralOffsetFt: lateralOffsetHighFt
         }
       }
     }
@@ -428,7 +484,11 @@ export function detectFlightPhase(
   const isDepartingHere = departureIcao === currentIcao
 
   // Check if on a runway surface (checked BEFORE speed-based ground check)
-  const onRunwaySurface = nearestRwy && context.runways.some(r => isOnRunway(lat, lon, r))
+  // Optimization: check nearest runway first before iterating all runways
+  const onRunwaySurface = nearestRwy && (
+    isOnRunway(lat, lon, nearestRwy.runway) ||
+    context.runways.some(r => r !== nearestRwy.runway && isOnRunway(lat, lon, r))
+  )
 
   // === RUNWAY SURFACE PHASES ===
   // Check this FIRST regardless of speed - aircraft on takeoff roll can exceed 80+ kts
@@ -450,12 +510,16 @@ export function detectFlightPhase(
     // Moving on runway - use acceleration to determine departure vs landing roll
     // Positive acceleration = accelerating = takeoff roll
     // Negative acceleration = decelerating = landing roll
-    // This handles go-arounds (accelerating on destination runway) correctly
     const accel = aircraft.acceleration  // knots per second
     const ACCEL_THRESHOLD = 0.5  // Minimum acceleration to be considered significant
 
     if (accel > ACCEL_THRESHOLD) {
-      // Accelerating = takeoff roll (even if this is the arrival airport - could be go-around)
+      // Accelerating on runway - check if this is a go-around (balked landing)
+      // If aircraft was recently on approach, this is a rejected landing, not a departure
+      if (wasRecentlyOnApproach(aircraft.callsign)) {
+        return { phase: 'go_around', runway: runwayIdent, runwayDistance: runwayDistanceNm }
+      }
+      // Normal departure roll
       return { phase: 'departure_roll', runway: runwayIdent, runwayDistance: runwayDistanceNm }
     } else if (accel < -ACCEL_THRESHOLD) {
       // Decelerating = landing roll
@@ -496,16 +560,16 @@ export function detectFlightPhase(
 
     // Check for pushback: moving with track opposite to heading
     // Pushback: aircraft faces one direction but moves backwards
-    // Note: VATSIM often reports groundspeed as 0 during pushback even though
-    // position is changing, so we don't require minimum speed. The track-heading
-    // difference alone indicates position is changing (track defaults to heading
-    // when stationary).
-    const trackHeadingDiff = Math.abs(headingDifference(track, heading))
-    // If track is 90-180° from heading, aircraft is moving backwards or sideways
-    // Use 90° threshold to catch curved pushbacks (not just straight back)
-    // Max speed check prevents flagging crosswind taxi as pushback
-    if (trackHeadingDiff > 90 && speedKts < PUSHBACK_MAX_SPEED_KTS) {
-      return { phase: 'pushback', runway: null, runwayDistance: null }
+    // IMPORTANT: Only check pushback if there's actual movement (speed > 0.5 kts)
+    // When stationary (speed ≈ 0), track defaults to heading, making the diff ≈ 0
+    // So stationary aircraft won't falsely trigger this check
+    if (speedKts > 0.5 && speedKts < PUSHBACK_MAX_SPEED_KTS) {
+      const trackHeadingDiff = Math.abs(headingDifference(track, heading))
+      // If track is 90-180° from heading, aircraft is moving backwards or sideways
+      // Use 90° threshold to catch curved pushbacks (not just straight back)
+      if (trackHeadingDiff > 90) {
+        return { phase: 'pushback', runway: null, runwayDistance: null }
+      }
     }
 
     // If moving at all, it's taxi - stopped is the last resort
@@ -525,19 +589,22 @@ export function detectFlightPhase(
   const isDescending = verticalRateFpm < DESCENDING_THRESHOLD_FPM
   const isClimbing = verticalRateFpm > CLIMBING_THRESHOLD_FPM
 
-  // For arriving aircraft, use the nearest runway they're aligned with
-  // For departing aircraft, find the runway that matches their heading (not nearest by distance)
-  const alignedRunway = findAlignedRunway(lat, lon, heading, context.runways)
+  // For approach detection, use TRACK (direction of movement) instead of heading
+  // This handles crosswind approaches where aircraft crab into the wind
+  // The track shows actual ground path toward the runway
+  const alignedRunwayByTrack = findAlignedRunway(lat, lon, track, context.runways, true)
+  // For departure detection, use heading (aircraft points in departure direction)
+  const alignedRunwayByHeading = findAlignedRunway(lat, lon, heading, context.runways, false)
 
-  // Check if aircraft is on approach to any runway (aligned + inbound)
-  if (alignedRunway && alignedRunway.isInbound) {
-    if (alignedRunway.distanceNm < SHORT_FINAL_NM) {
+  // Check if aircraft is on approach to any runway (aligned by track + inbound)
+  if (alignedRunwayByTrack && alignedRunwayByTrack.isInbound) {
+    if (alignedRunwayByTrack.distanceNm < SHORT_FINAL_NM) {
       // Within 2nm and aligned = definitely short final
-      return { phase: 'short_final', runway: alignedRunway.endIdent, runwayDistance: alignedRunway.distanceNm }
-    } else if (alignedRunway.distanceNm < LONG_FINAL_NM) {
+      return { phase: 'short_final', runway: alignedRunwayByTrack.endIdent, runwayDistance: alignedRunwayByTrack.distanceNm }
+    } else if (alignedRunwayByTrack.distanceNm < LONG_FINAL_NM) {
       // Within 6nm, aligned, inbound = on approach (accept any non-climbing)
       if (!isClimbing) {
-        return { phase: 'long_final', runway: alignedRunway.endIdent, runwayDistance: alignedRunway.distanceNm }
+        return { phase: 'long_final', runway: alignedRunwayByTrack.endIdent, runwayDistance: alignedRunwayByTrack.distanceNm }
       }
     }
   }
@@ -546,7 +613,7 @@ export function detectFlightPhase(
   // KEY: Must have been recently observed on approach (short_final or long_final)
   // This prevents false positives from normal departures
   if (verticalRateFpm > GO_AROUND_CLIMB_FPM && aglFt < PATTERN_ALTITUDE_FT) {
-    const goAroundRunway = alignedRunway || nearestRwy
+    const goAroundRunway = alignedRunwayByTrack || nearestRwy
     if (goAroundRunway && goAroundRunway.distanceNm < GO_AROUND_DISTANCE_NM) {
       // Only flag as go-around if we recently saw this aircraft on approach
       if (wasRecentlyOnApproach(aircraft.callsign)) {
@@ -557,9 +624,9 @@ export function detectFlightPhase(
 
   // Check if aircraft is departing (climbing + aligned with a runway heading away)
   if (isClimbing && distFromAirportNm < 10) {
-    if (alignedRunway && !alignedRunway.isInbound) {
+    if (alignedRunwayByHeading && !alignedRunwayByHeading.isInbound) {
       // Climbing and aligned with runway heading = departing that runway
-      return { phase: 'departing_climb', runway: alignedRunway.endIdent, runwayDistance: alignedRunway.distanceNm }
+      return { phase: 'departing_climb', runway: alignedRunwayByHeading.endIdent, runwayDistance: alignedRunwayByHeading.distanceNm }
     } else {
       // Climbing but not aligned (turned out) - don't show runway
       return { phase: 'departing_climb', runway: null, runwayDistance: null }

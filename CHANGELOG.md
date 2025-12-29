@@ -52,14 +52,17 @@ All notable changes to TowerCab 3D will be documented in this file.
   - Imported replays use this data for more accurate playback
 
 ### Fixed
-- RealTraffic now displays ICAO airport codes (e.g., KJFK) instead of IATA codes (JFK) for departure/arrival
-- Aircraft with "null" departure or arrival data no longer show "null" in the route display
 - Orbit follow mode now remembers zoom distance and camera angle across app restarts
   - Previously reset to 500m default on every app launch
 - Ground aircraft no longer bank/roll during turns
   - Aircraft on the ground now only yaw (rudder steering) as in real life
-- Aircraft from previous data source no longer persist when switching between VATSIM and RealTraffic
-- Aircraft Timeline Debug Modal now populates immediately when switching airports
+- Aircraft on takeoff or landing roll now correctly show "Rolling" or "Roll Out" phase
+  - Previously showed "Taxi" because alignment was checked against the wrong runway threshold
+  - Now properly detects alignment with either runway direction
+- Crosswind approaches now correctly detected as "Final" even when aircraft is crabbing
+  - Uses ground track instead of heading for approach detection
+- Go-around detection now catches rejected landings during runway acceleration
+  - Previously only detected once aircraft was airborne and climbing
 
 ## v0.0.18-alpha - 2025-12-28
 
