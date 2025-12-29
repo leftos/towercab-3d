@@ -1,0 +1,238 @@
+/**
+ * Mobile Tools Flyout Styles
+ *
+ * Collapsible flyout for debug tools, positioned next to RemoteIndicator
+ */
+
+.mobile-tools-flyout {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Status indicator dots shown next to toggle button */
+.mobile-tools-indicators {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mobile-indicator-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.mobile-indicator-dot.connected {
+  background: #4caf50;
+  box-shadow: 0 0 8px rgba(76, 175, 80, 0.7);
+}
+
+.mobile-indicator-dot.checking {
+  background: #ffc107;
+  box-shadow: 0 0 8px rgba(255, 193, 7, 0.6);
+}
+
+.mobile-indicator-dot.disconnected {
+  background: #f44336;
+  box-shadow: 0 0 8px rgba(244, 67, 54, 0.6);
+}
+
+/* Toggle button */
+.mobile-tools-toggle {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-tools-toggle:hover,
+.mobile-tools-toggle.active {
+  background: rgba(0, 0, 0, 0.8);
+  border-color: rgba(79, 195, 247, 0.5);
+  color: #fff;
+}
+
+/* Flyout panel */
+.mobile-tools-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: rgba(20, 20, 30, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  padding: 12px;
+  min-width: 140px;
+  backdrop-filter: blur(10px);
+  animation: slideIn 0.15s ease-out;
+  z-index: 200;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Connectivity status section */
+.mobile-tools-status {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.mobile-status-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+}
+
+.mobile-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.mobile-status-dot.connected {
+  background: #4caf50;
+  box-shadow: 0 0 6px rgba(76, 175, 80, 0.5);
+}
+
+.mobile-status-dot.checking {
+  background: #ffc107;
+  animation: pulse 1s infinite;
+}
+
+.mobile-status-dot.disconnected {
+  background: #f44336;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.mobile-status-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.mobile-status-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.mobile-status-detail {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mobile-reconnect-btn {
+  padding: 4px 8px;
+  font-size: 10px;
+  background: rgba(244, 67, 54, 0.2);
+  border: 1px solid rgba(244, 67, 54, 0.4);
+  border-radius: 4px;
+  color: #f44336;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.mobile-reconnect-btn:hover {
+  background: rgba(244, 67, 54, 0.3);
+}
+
+/* Divider between status and tools */
+.mobile-tools-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 8px 0;
+}
+
+/* Tool buttons */
+.mobile-tools-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mobile-tool-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-tool-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.mobile-tool-btn:active {
+  background: rgba(79, 195, 247, 0.2);
+  border-color: rgba(79, 195, 247, 0.4);
+}
+
+.mobile-tool-btn .cmd-dot {
+  font-size: 18px;
+  font-weight: bold;
+  width: 16px;
+  text-align: center;
+  color: #4fc3f7;
+}
+
+/* Compact layout for landscape phones */
+@media (max-height: 500px) and (orientation: landscape) {
+  .mobile-tools-toggle {
+    width: 36px;
+    height: 36px;
+  }
+
+  .mobile-tools-panel {
+    padding: 8px;
+    min-width: 120px;
+  }
+
+  .mobile-tool-btn {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+}
