@@ -23,6 +23,7 @@
 
 .top-bar-right {
   justify-content: flex-end;
+  gap: 12px;
 }
 
 .top-bar-center {
@@ -114,4 +115,93 @@
   background: rgba(244, 67, 54, 0.2);
   color: #ef5350;
   border: 1px solid rgba(244, 67, 54, 0.4);
+}
+
+/* ============================================================================
+   RESPONSIVE STYLES FOR SMALL SCREENS
+   ============================================================================ */
+
+@media (max-width: 899px) {
+  .top-bar {
+    padding: 0 10px;
+    height: 44px;
+  }
+
+  .compass-direction {
+    font-size: 12px;
+    margin-right: 8px;
+    min-width: 20px;
+  }
+
+  .airport-button {
+    padding: 6px 10px;
+    gap: 8px;
+  }
+
+  .airport-icao {
+    font-size: 14px;
+  }
+
+  .airport-name {
+    font-size: 12px;
+    max-width: 120px;
+  }
+
+  .zulu-time {
+    font-size: 16px;
+  }
+
+  .status-info {
+    gap: 10px;
+  }
+
+  .aircraft-count {
+    font-size: 11px;
+  }
+
+  .connection-status {
+    font-size: 10px;
+    padding: 3px 8px;
+  }
+}
+
+@media (max-width: 600px) {
+  .top-bar {
+    padding: 0 8px;
+    height: 40px;
+  }
+
+  /* Hide compass direction on very small screens */
+  .compass-direction {
+    display: none;
+  }
+
+  .airport-button {
+    padding: 4px 8px;
+    gap: 6px;
+  }
+
+  .airport-icao {
+    font-size: 13px;
+  }
+
+  /* Hide airport name on very small screens */
+  .airport-name {
+    display: none;
+  }
+
+  .zulu-time {
+    font-size: 14px;
+    letter-spacing: 0.5px;
+  }
+
+  /* Hide aircraft count on very small screens */
+  .aircraft-count {
+    display: none;
+  }
+
+  .connection-status {
+    font-size: 9px;
+    padding: 2px 6px;
+  }
 }

@@ -4,6 +4,10 @@ import { useVatsimStore } from '../../stores/vatsimStore'
 import { useRealTrafficStore } from '../../stores/realTrafficStore'
 import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
 import { useViewportStore } from '../../stores/viewportStore'
+import { useIsMobileLayout } from '../../hooks/useIsMobileLayout'
+import RemoteIndicator from './RemoteIndicator'
+import RemoteClientsIndicator from './RemoteClientsIndicator'
+import MobileToolsFlyout from './MobileToolsFlyout'
 import './TopBar.css'
 
 /**
@@ -21,10 +25,15 @@ function getCardinalDirection(heading: number): string {
   return 'NW'
 }
 
-function TopBar() {
+interface TopBarProps {
+  onCommandClick?: () => void
+}
+
+function TopBar({ onCommandClick }: TopBarProps) {
   const currentAirport = useAirportStore((state) => state.currentAirport)
   const setAirportSelectorOpen = useAirportStore((state) => state.setAirportSelectorOpen)
   const heading = useViewportStore((state) => state.getActiveCameraState().heading)
+  const isMobileLayout = useIsMobileLayout()
 
   // Data source selection
   const dataSource = useGlobalSettingsStore((state) => state.realtraffic.dataSource)
@@ -94,12 +103,30 @@ function TopBar() {
       </div>
 
       <div className="top-bar-right">
-        <div className="status-info">
-          <span className="aircraft-count">{trafficCount} {countLabel}</span>
-          <span className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>
-            {sourceLabel}: {isConnected ? 'Connected' : 'Disconnected'}
-          </span>
-        </div>
+        {/* Remote clients indicator - always shown on desktop when clients connected */}
+        <RemoteClientsIndicator />
+        {/* Status info and remote indicator - hidden on mobile (shown in flyout) */}
+        {!isMobileLayout && (
+          <>
+            <div className="status-info">
+              <span className="aircraft-count">{trafficCount} {countLabel}</span>
+              <span className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>
+                {sourceLabel}: {isConnected ? 'Connected' : 'Disconnected'}
+              </span>
+            </div>
+            <RemoteIndicator />
+          </>
+        )}
+        {/* Mobile tools flyout - includes connectivity status on mobile */}
+        {isMobileLayout && onCommandClick && (
+          <MobileToolsFlyout
+            onCommandClick={onCommandClick}
+            dataSourceLabel={sourceLabel}
+            isDataConnected={isConnected}
+            trafficCount={trafficCount}
+            trafficLabel={countLabel}
+          />
+        )}
       </div>
     </div>
   )
