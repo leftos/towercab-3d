@@ -324,7 +324,7 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
   // Refilter pilots based on current reference position
   // Called when reference position changes or settings change
   refilterPilots: () => {
-    const { allPilots, referencePosition, aircraftStates, previousStates } = get()
+    const { allPilots, referencePosition, aircraftStates, previousStates, lastVatsimTimestamp } = get()
     const aircraftDataRadiusNM = useSettingsStore.getState().memory.aircraftDataRadiusNM
 
     if (!referencePosition || allPilots.length === 0) {
@@ -347,6 +347,14 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
     // Build new state maps containing only filtered aircraft
     const newAircraftStates = new Map<string, AircraftState>()
     const newPreviousStates = new Map<string, AircraftState>()
+
+    // Also add observations to timeline store for newly visible aircraft
+    const timelineStore = useAircraftTimelineStore.getState()
+    const observationBatch: Array<{
+      callsign: string
+      observation: AircraftObservation
+      metadata: AircraftMetadata
+    }> = []
 
     for (const pilot of filteredPilots) {
       const callsign = pilot.callsign
@@ -377,6 +385,42 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
         newAircraftStates.set(callsign, state)
         newPreviousStates.set(callsign, { ...state })  // Same position for immediate display
       }
+
+      // Add observation to timeline if this aircraft isn't already in timeline
+      // This ensures the timeline gets populated immediately when switching airports
+      const existingTimeline = timelineStore.getTimeline(callsign)
+      if (!existingTimeline) {
+        const observation: AircraftObservation = {
+          latitude: pilot.latitude,
+          longitude: pilot.longitude,
+          altitude: pilot.altitude * 0.3048,
+          heading: pilot.heading,
+          groundspeed: pilot.groundspeed,
+          groundTrack: null,
+          headingIsTrue: true,
+          onGround: null,
+          roll: null,
+          verticalRate: null,
+          observedAt: lastVatsimTimestamp || now,
+          receivedAt: now,
+          source: 'vatsim'
+        }
+
+        const metadata: AircraftMetadata = {
+          cid: pilot.cid,
+          aircraftType: pilot.flight_plan?.aircraft_short || null,
+          transponder: pilot.transponder,
+          departure: pilot.flight_plan?.departure || null,
+          arrival: pilot.flight_plan?.arrival || null
+        }
+
+        observationBatch.push({ callsign, observation, metadata })
+      }
+    }
+
+    // Add observations to timeline store
+    if (observationBatch.length > 0) {
+      timelineStore.addObservationBatch(observationBatch)
     }
 
     set({
