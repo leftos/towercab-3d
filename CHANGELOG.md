@@ -5,6 +5,13 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- RealTraffic API integration for real-world ADS-B traffic
+  - See real aircraft at any airport worldwide
+  - Switch between VATSIM and RealTraffic in Settings > General > Data Source
+  - Requires a RealTraffic license key (subscription service)
+  - ~2-3 second update intervals with ADS-B ground track for accurate taxi/pushback direction
+  - Configurable query radius (10-200 NM)
+  - Auto-connects when switching to RealTraffic if license key is saved
 - "Waiting for data updates..." overlay with spinner while loading initial aircraft data
   - Aircraft now spawn in individually once they have enough data to interpolate smoothly
   - Prevents jerky initial appearance when aircraft only have one data point
@@ -24,9 +31,11 @@ All notable changes to TowerCab 3D will be documented in this file.
   - Merge mode preserves existing bookmarks while adding new ones
 
 ### Changed
+- VATSIM data now polled every 1 second (down from 15 seconds) for lower latency
 - Default shadow mode is now "Aircraft Shadows Only" for better performance
 - Shadow Darkness slider now works intuitively: 0% = invisible, 100% = black
 - Night darkening disabled by default (can be enabled in Settings > Graphics > Lighting)
+- Follow mode zoom level no longer displayed in aircraft panel header
 - Cesium Ion token is no longer included in exports (security improvement)
 - Replay mode now uses the unified timeline interpolation system
   - Smoother scrubbing through recorded data
@@ -41,6 +50,8 @@ All notable changes to TowerCab 3D will be documented in this file.
   - Previously reset to 500m default on every app launch
 - Ground aircraft no longer bank/roll during turns
   - Aircraft on the ground now only yaw (rudder steering) as in real life
+- Aircraft from previous data source no longer persist when switching between VATSIM and RealTraffic
+- Aircraft Timeline Debug Modal now populates immediately when switching airports
 
 ## v0.0.18-alpha - 2025-12-28
 

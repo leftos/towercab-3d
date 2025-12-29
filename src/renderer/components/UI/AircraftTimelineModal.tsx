@@ -5,7 +5,6 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useReplayStore } from '@/stores/replayStore'
 import { calculateDistanceNM } from '@/utils/interpolation'
 import { getTowerPosition } from '@/utils/towerHeight'
-import { SOURCE_DISPLAY_DELAYS } from '@/constants/aircraft-timeline'
 import type { AircraftObservation, AircraftDataSource } from '@/types/aircraft-timeline'
 import './AircraftTimelineModal.css'
 

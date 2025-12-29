@@ -398,7 +398,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [showMetarOverlay, updateUISettings, currentAirportIcao, loadBookmark, showFeedback, togglePerformanceHUD, toggleModelMatchingModal])
+  }, [showMetarOverlay, updateUISettings, currentAirportIcao, loadBookmark, showFeedback, togglePerformanceHUD, toggleModelMatchingModal, toggleTimelineDebugModal])
 
 
   if (isLoading) {

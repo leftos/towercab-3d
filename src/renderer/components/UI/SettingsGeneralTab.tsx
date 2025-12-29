@@ -138,6 +138,16 @@ function SettingsGeneralTab({ onShowImportModal, onShowExportModal, importStatus
       }
       if (rtStore.status === 'connected') {
         rtStore.startPolling()
+      } else {
+        // Auto-connect if license key is present but not connected
+        const storedLicenseKey = useGlobalSettingsStore.getState().realtraffic.licenseKey
+        if (storedLicenseKey) {
+          rtStore.authenticate(storedLicenseKey).then((success) => {
+            if (success && airport) {
+              rtStore.startPolling()
+            }
+          })
+        }
       }
     } else {
       // Switch to VATSIM: stop RT polling first
