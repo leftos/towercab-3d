@@ -12,6 +12,7 @@ import DeviceOptimizationPrompt from './components/UI/DeviceOptimizationPrompt'
 import RemoteIndicator from './components/UI/RemoteIndicator'
 import MeasuringTool from './components/UI/MeasuringTool'
 import MetarOverlay from './components/UI/MetarOverlay'
+import DataLoadingOverlay from './components/UI/DataLoadingOverlay'
 import UpdateNotification from './components/UI/UpdateNotification'
 import ViewportManager from './components/Viewport/ViewportManager'
 import VRScene from './components/VR/VRScene'
@@ -457,6 +458,7 @@ function App() {
       {!isVRActive && <RemoteIndicator />}
       {!isVRActive && <UpdateNotification />}
       {!isVRActive && <MetarOverlay />}
+      {!isVRActive && <DataLoadingOverlay />}
       <div className="main-content">
         <ViewportManager mainViewportContent={<CesiumViewer onViewerReady={handleViewerReady} />}>
           {!isVRActive && <CommandInput />}

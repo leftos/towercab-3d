@@ -5,6 +5,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- "Waiting for data updates..." overlay with spinner while loading initial aircraft data
+  - Aircraft now spawn in individually once they have enough data to interpolate smoothly
+  - Prevents jerky initial appearance when aircraft only have one data point
 - Aircraft Timeline Debug Modal (F4) for visualizing observation data
   - DAW-style timeline showing when each aircraft position update was received
   - Color-coded markers by source: VATSIM (blue), vNAS (green), RealTraffic (orange)

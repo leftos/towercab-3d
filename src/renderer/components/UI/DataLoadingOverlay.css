@@ -1,0 +1,37 @@
+.data-loading-overlay {
+  position: fixed;
+  bottom: 16px;
+  left: 16px;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: rgba(0, 0, 0, 0.75);
+  border-radius: 6px;
+  pointer-events: none;
+  user-select: none;
+}
+
+.data-loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #60a5fa;
+  border-radius: 50%;
+  animation: data-loading-spin 1s linear infinite;
+}
+
+@keyframes data-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.data-loading-text {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.85);
+  letter-spacing: 0.3px;
+}
