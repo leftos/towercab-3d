@@ -12,6 +12,7 @@ import { modService } from '../../services/ModService'
 import { modApi } from '../../utils/tauriApi'
 import GlobalSearchPanel from './GlobalSearchPanel'
 import VRButton from '../VR/VRButton'
+import MoreMenu from './MoreMenu'
 import ImportModal from './ImportModal'
 import ExportWizardModal from './ExportWizardModal'
 import BookmarkManagerModal from './BookmarkManagerModal'
@@ -363,7 +364,7 @@ function ControlsBar() {
                   <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
                   <path d="M3 3v5h5" />
                 </svg>
-                Reset
+                <span className="button-label">Reset</span>
               </button>
 
               <button
@@ -385,11 +386,12 @@ function ControlsBar() {
                     <line x1="3" y1="12" x2="21" y2="12" />
                   </svg>
                 )}
-                {viewMode === '3d' ? '3D' : '2D'}
+                <span className="button-label">{viewMode === '3d' ? '3D' : '2D'}</span>
               </button>
 
+              {/* Set Default - hidden on mobile, in MoreMenu */}
               <button
-                className={`control-button ${defaultSaved ? 'success' : ''}`}
+                className={`control-button hide-on-mobile ${defaultSaved ? 'success' : ''}`}
                 onClick={handleSaveAsDefault}
                 title={shiftPressed ? "Save to tower-positions file (for sharing)" : "Set Default View"}
                 disabled={!currentAirport}
@@ -402,8 +404,9 @@ function ControlsBar() {
                 {defaultSaved ? 'Saved!' : (shiftPressed ? 'Save Tower Pos' : 'Set Default')}
               </button>
 
+              {/* To Default - hidden on mobile, in MoreMenu */}
               <button
-                className={`control-button ${defaultLoaded ? 'success' : ''} ${(!currentAirport || (!hasCustomDefault() && !shiftPressed)) ? 'disabled' : ''}`}
+                className={`control-button hide-on-mobile ${defaultLoaded ? 'success' : ''} ${(!currentAirport || (!hasCustomDefault() && !shiftPressed)) ? 'disabled' : ''}`}
                 onClick={handleResetToDefault}
                 disabled={!currentAirport || (!hasCustomDefault() && !shiftPressed)}
                 title={shiftPressed ? "Load app default (from tower-positions file)" : "Load your saved default view"}
@@ -415,7 +418,58 @@ function ControlsBar() {
                 {defaultLoaded ? 'Loaded!' : (shiftPressed ? 'Load Tower Pos' : 'To Default')}
               </button>
 
-              <GlobalSearchPanel />
+              {/* Search - hidden on compact, has Ctrl+K shortcut */}
+              <span className="hide-on-mobile">
+                <GlobalSearchPanel />
+              </span>
+
+              {/* Left MoreMenu for compact screens - groups left-side buttons */}
+              <MoreMenu
+                items={[
+                  {
+                    id: 'setDefault',
+                    label: shiftPressed ? 'Save Tower Pos' : 'Set Default',
+                    icon: (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                        <polyline points="17 21 17 13 7 13 7 21" />
+                        <polyline points="7 3 7 8 15 8" />
+                      </svg>
+                    ),
+                    onClick: () => handleSaveAsDefault({ shiftKey: shiftPressed } as React.MouseEvent),
+                    disabled: !currentAirport
+                  },
+                  {
+                    id: 'toDefault',
+                    label: shiftPressed ? 'Load Tower Pos' : 'To Default',
+                    icon: (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                        <polyline points="9 22 9 12 15 12 15 22" />
+                      </svg>
+                    ),
+                    onClick: () => handleResetToDefault({ shiftKey: shiftPressed } as React.MouseEvent),
+                    disabled: !currentAirport || (!hasCustomDefault() && !shiftPressed)
+                  },
+                  {
+                    id: 'search',
+                    label: 'Search Flights',
+                    icon: (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="11" cy="11" r="8" />
+                        <path d="m21 21-4.35-4.35" />
+                      </svg>
+                    ),
+                    onClick: () => {
+                      // Trigger Ctrl+K programmatically
+                      const event = new KeyboardEvent('keydown', { key: 'k', ctrlKey: true })
+                      window.dispatchEvent(event)
+                    },
+                    disabled: false
+                  }
+                ]}
+                position="left"
+              />
 
               <div className="camera-info">
                 {viewMode === 'topdown' ? (
@@ -465,8 +519,9 @@ function ControlsBar() {
             </div>
 
             <div className="controls-right">
+              {/* Buttons hidden on mobile - appear in MoreMenu instead */}
               <button
-                className={`control-button ${isMeasuring ? 'active' : ''}`}
+                className={`control-button hide-on-mobile ${isMeasuring ? 'active' : ''}`}
                 onClick={toggleMeasuring}
                 title="Measuring Tool (M)"
               >
@@ -476,7 +531,7 @@ function ControlsBar() {
               </button>
 
               <button
-                className="control-button"
+                className="control-button hide-on-mobile"
                 onClick={() => setShowBookmarkModal(!showBookmarkModal)}
                 title="Bookmark Manager (Ctrl+B)"
                 disabled={!currentAirport}
@@ -488,7 +543,7 @@ function ControlsBar() {
               </button>
 
               <button
-                className="control-button"
+                className="control-button hide-on-mobile"
                 onClick={() => addViewport()}
                 title={`Add Inset Viewport (${insetCount} active)`}
                 disabled={!currentAirport}
@@ -500,7 +555,52 @@ function ControlsBar() {
                 {insetCount > 0 && <span className="inset-count">{insetCount}</span>}
               </button>
 
-              <VRButton />
+              <span className="hide-on-mobile">
+                <VRButton />
+              </span>
+
+              {/* Right MoreMenu for small screens - groups hidden right-side buttons */}
+              <MoreMenu
+                items={[
+                  {
+                    id: 'measure',
+                    label: 'Measuring Tool',
+                    icon: (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M2 12h20M12 2v20M6 6l12 12M18 6L6 18" />
+                      </svg>
+                    ),
+                    onClick: toggleMeasuring,
+                    active: isMeasuring
+                  },
+                  {
+                    id: 'bookmarks',
+                    label: 'Bookmarks',
+                    icon: (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M4 6h16M4 12h16M4 18h16" />
+                        <path d="M19 4l-5 5M19 10l-5 5M19 16l-5 5" />
+                      </svg>
+                    ),
+                    onClick: () => setShowBookmarkModal(true),
+                    disabled: !currentAirport
+                  },
+                  {
+                    id: 'inset',
+                    label: 'Add Inset',
+                    icon: (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                        <rect x="12" y="3" width="9" height="9" rx="1" ry="1" />
+                      </svg>
+                    ),
+                    onClick: () => addViewport(),
+                    disabled: !currentAirport,
+                    badge: insetCount > 0 ? insetCount : undefined
+                  }
+                ]}
+                position="right"
+              />
 
               {currentAirport && (
                 <button
