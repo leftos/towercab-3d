@@ -45,6 +45,7 @@ interface VatsimStore {
   fetchData: () => Promise<void>
   startPolling: () => void
   stopPolling: () => void
+  resetTimestamp: () => void
   updateAircraftState: (callsign: string, state: AircraftState) => void
   setReferencePosition: (lat: number, lon: number) => void
   refilterPilots: () => void
@@ -303,6 +304,12 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
       clearInterval(pollingInterval)
       set({ pollingInterval: null })
     }
+  },
+
+  // Reset the timestamp to force next fetch to process data
+  // Used when switching data sources to ensure we don't skip the first fetch
+  resetTimestamp: () => {
+    set({ lastVatsimTimestamp: 0 })
   },
 
   // Update individual aircraft state (for interpolation)

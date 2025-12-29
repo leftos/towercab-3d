@@ -144,7 +144,8 @@ function SettingsGeneralTab({ onShowImportModal, onShowExportModal, importStatus
         const storedLicenseKey = useGlobalSettingsStore.getState().realtraffic.licenseKey
         if (storedLicenseKey) {
           rtStore.authenticate(storedLicenseKey).then((success) => {
-            if (success && airport) {
+            if (success) {
+              // Start polling even without airport - fetchData will wait for reference position
               rtStore.startPolling()
             }
           })
@@ -156,6 +157,8 @@ function SettingsGeneralTab({ onShowImportModal, onShowExportModal, importStatus
 
       // Start VATSIM polling
       const vatsimStore = useVatsimStore.getState()
+      // Reset timestamp to ensure first fetch isn't skipped due to stale timestamp
+      vatsimStore.resetTimestamp()
       if (airport) {
         vatsimStore.setReferencePosition(airport.lat, airport.lon)
       }

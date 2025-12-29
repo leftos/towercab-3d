@@ -133,7 +133,12 @@ export const useAirportStore = create<AirportStore>()(
           // This ensures aircraft near the new airport are visible right away
           const dataSource = useGlobalSettingsStore.getState().realtraffic.dataSource
           if (dataSource === 'realtraffic') {
-            useRealTrafficStore.getState().setReferencePosition(airport.lat, airport.lon)
+            const rtStore = useRealTrafficStore.getState()
+            rtStore.setReferencePosition(airport.lat, airport.lon)
+            // Ensure polling is running if connected (may not have started on main menu)
+            if (rtStore.status === 'connected' && !rtStore.isPolling) {
+              rtStore.startPolling()
+            }
           } else {
             useVatsimStore.getState().setReferencePosition(airport.lat, airport.lon)
           }
