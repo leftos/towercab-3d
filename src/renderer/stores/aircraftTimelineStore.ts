@@ -110,6 +110,26 @@ function lerp(a: number, b: number, t: number): number {
 }
 
 /**
+ * Smoothstep easing function - creates an S-curve for natural motion
+ * Returns 0 at t=0, 1 at t=1, with zero velocity at both ends
+ */
+function smoothstep(t: number): number {
+  t = Math.max(0, Math.min(1, t))
+  return t * t * (3 - 2 * t)
+}
+
+/**
+ * Blend between linear and smoothstep interpolation
+ * @param blend 0 = pure linear, 1 = pure smoothstep
+ */
+function lerpBlended(a: number, b: number, t: number, blend: number): number {
+  const linearT = t
+  const smoothT = smoothstep(t)
+  const blendedT = linearT + (smoothT - linearT) * blend
+  return a + (b - a) * blendedT
+}
+
+/**
  * Interpolate heading with wraparound (0-360)
  */
 function lerpHeading(a: number, b: number, t: number): number {
@@ -337,7 +357,54 @@ function interpolateTimeline(
 
     latitude = lerp(before.latitude, after.latitude, t)
     longitude = lerp(before.longitude, after.longitude, t)
-    altitude = lerp(before.altitude, after.altitude, t)
+
+    // Phase-aware altitude interpolation: use easing only at phase transitions
+    // to match pitch rate-limiting behavior. During steady climbs/descents, use linear.
+    //
+    // Calculate vertical rates for adjacent segments to detect phase changes:
+    // - If rate changes significantly (level→climb, climb→level), use smoothstep
+    // - If rate is consistent (steady climb), use linear
+    let altitudeBlend = 0  // 0 = linear, 1 = full smoothstep
+    if (observations.length >= 2 && interval > 0) {
+      // Current segment vertical rate (m/min)
+      const currentRate = (after.altitude - before.altitude) / (interval / 60000)
+
+      // Check segment BEFORE current (if exists)
+      const beforeIdx = observations.indexOf(before)
+      let prevRate = currentRate  // Default to same rate if no previous segment
+      if (beforeIdx > 0) {
+        const prevObs = observations[beforeIdx - 1]
+        const prevInterval = before.observedAt - prevObs.observedAt
+        if (prevInterval > 0) {
+          prevRate = (before.altitude - prevObs.altitude) / (prevInterval / 60000)
+        }
+      }
+
+      // Check segment AFTER current (if exists)
+      const afterIdx = observations.indexOf(after)
+      let nextRate = currentRate  // Default to same rate if no next segment
+      if (afterIdx < observations.length - 1) {
+        const nextObs = observations[afterIdx + 1]
+        const nextInterval = nextObs.observedAt - after.observedAt
+        if (nextInterval > 0) {
+          nextRate = (nextObs.altitude - after.altitude) / (nextInterval / 60000)
+        }
+      }
+
+      // Calculate how much the rate is changing at segment boundaries
+      // Large changes = phase transition, apply more easing
+      // Small changes = steady state, stay linear
+      const RATE_CHANGE_THRESHOLD = 100  // m/min - significant change threshold
+      const prevRateChange = Math.abs(currentRate - prevRate)
+      const nextRateChange = Math.abs(currentRate - nextRate)
+
+      // Apply easing proportional to rate change, capped at 0.7 (not full smoothstep)
+      // Use the larger of the two boundary changes
+      const maxRateChange = Math.max(prevRateChange, nextRateChange)
+      altitudeBlend = Math.min(0.7, maxRateChange / (RATE_CHANGE_THRESHOLD * 3))
+    }
+
+    altitude = lerpBlended(before.altitude, after.altitude, t, altitudeBlend)
     groundspeed = lerp(before.groundspeed, after.groundspeed, t)
     groundTrack = before.groundTrack !== null && after.groundTrack !== null
       ? lerpHeading(before.groundTrack, after.groundTrack, t)
