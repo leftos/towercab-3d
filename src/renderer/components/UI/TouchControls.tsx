@@ -3,8 +3,8 @@
  *
  * Provides virtual controls for touch devices:
  * - Virtual joystick for WASD movement
- * - Command input button for bookmark recall
- * - Debug overlay buttons (Performance HUD, Model Matching)
+ * - Command input button for bookmark recall (via MobileToolsFlyout)
+ * - Debug overlay buttons (Performance HUD, Model Matching) (via MobileToolsFlyout)
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react'
@@ -315,18 +315,17 @@ function VirtualJoystick({
 
 /**
  * Main touch controls component
+ *
+ * Only renders the virtual joystick on touch devices.
+ * The MobileToolsFlyout is now rendered separately in App.tsx
+ * based on window size (works on both touch and small desktop windows).
  */
 function TouchControls() {
-  const [showCommandInput, setShowCommandInput] = useState(false)
-  const [isVisible, setIsVisible] = useState(true)
+  const [isJoystickVisible, setIsJoystickVisible] = useState(true)
 
   // Viewport store actions
   const moveForward = useViewportStore((state) => state.moveForward)
   const moveRight = useViewportStore((state) => state.moveRight)
-
-  // Debug overlay toggles
-  const togglePerformanceHUD = useUIFeedbackStore((state) => state.togglePerformanceHUD)
-  const toggleModelMatchingModal = useUIFeedbackStore((state) => state.toggleModelMatchingModal)
 
   // Settings
   const joystickSensitivity = useSettingsStore((state) => state.camera.joystickSensitivity)
@@ -341,18 +340,18 @@ function TouchControls() {
     moveRight(deltaX * speed)
   }, [moveForward, moveRight, joystickSensitivity])
 
-  // Don't render on non-touch devices
+  // Don't render on non-touch devices (joystick only makes sense with touch)
   if (!isTouchDevice()) {
     return null
   }
 
   return (
     <>
-      {/* Toggle button to show/hide controls */}
+      {/* Toggle button to show/hide joystick */}
       <button
-        className={`touch-controls-toggle ${isVisible ? 'active' : ''}`}
-        onClick={() => setIsVisible(!isVisible)}
-        title={isVisible ? 'Hide touch controls' : 'Show touch controls'}
+        className={`touch-controls-toggle ${isJoystickVisible ? 'active' : ''}`}
+        onClick={() => setIsJoystickVisible(!isJoystickVisible)}
+        title={isJoystickVisible ? 'Hide joystick' : 'Show joystick'}
       >
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <circle cx="12" cy="12" r="3" />
@@ -360,63 +359,17 @@ function TouchControls() {
         </svg>
       </button>
 
-      {isVisible && (
+      {/* Virtual joystick (left side) */}
+      {isJoystickVisible && (
         <div className="touch-controls-container">
-          {/* Virtual joystick for WASD */}
           <div className="touch-controls-left">
             <VirtualJoystick onMove={handleJoystickMove} />
           </div>
-
-          {/* Right side buttons */}
-          <div className="touch-controls-right">
-            {/* Performance HUD toggle (F1) */}
-            <button
-              className="touch-control-button"
-              onClick={togglePerformanceHUD}
-              title="Performance monitor (F1)"
-            >
-              <span className="touch-button-icon">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 20V10M18 20V4M6 20v-4" />
-                </svg>
-              </span>
-              <span className="touch-button-label">Perf</span>
-            </button>
-
-            {/* Model matching modal toggle (F3) */}
-            <button
-              className="touch-control-button"
-              onClick={toggleModelMatchingModal}
-              title="Model matching (F3)"
-            >
-              <span className="touch-button-icon">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M4 6h16M4 12h16M4 18h10" />
-                </svg>
-              </span>
-              <span className="touch-button-label">Models</span>
-            </button>
-
-            {/* Command input button */}
-            <button
-              className="touch-control-button"
-              onClick={() => setShowCommandInput(true)}
-              title="Open command input"
-            >
-              <span className="touch-button-icon">.</span>
-              <span className="touch-button-label">Cmd</span>
-            </button>
-          </div>
         </div>
       )}
-
-      {/* Command input modal */}
-      <TouchCommandInput
-        isOpen={showCommandInput}
-        onClose={() => setShowCommandInput(false)}
-      />
     </>
   )
 }
 
 export default TouchControls
+export { TouchCommandInput }

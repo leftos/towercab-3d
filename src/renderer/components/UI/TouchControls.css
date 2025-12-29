@@ -31,21 +31,16 @@
   border-color: rgba(0, 200, 255, 0.6);
 }
 
-/* Main container for touch controls */
+/* Main container for touch controls (joystick only now) */
 .touch-controls-container {
   position: fixed;
   bottom: 80px;
-  left: 0;
-  right: 0;
-  display: flex;
-  justify-content: space-between;
-  padding: 0 20px;
+  left: 20px;
   pointer-events: none;
   z-index: 999;
 }
 
-.touch-controls-left,
-.touch-controls-right {
+.touch-controls-left {
   pointer-events: auto;
 }
 
@@ -123,47 +118,7 @@
   transform: translateY(-50%);
 }
 
-/* Right side control buttons */
-.touch-controls-right {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  align-items: flex-end;
-}
-
-.touch-control-button {
-  width: 64px;
-  height: 64px;
-  border-radius: 12px;
-  background: rgba(0, 0, 0, 0.6);
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  color: white;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.touch-control-button:active {
-  background: rgba(0, 200, 255, 0.3);
-  border-color: rgba(0, 200, 255, 0.6);
-  transform: scale(0.95);
-}
-
-.touch-button-icon {
-  font-size: 20px;
-  font-weight: bold;
-  line-height: 1;
-}
-
-.touch-button-label {
-  font-size: 10px;
-  margin-top: 4px;
-  opacity: 0.7;
-}
+/* Note: Right side control buttons removed - now in MobileToolsFlyout */
 
 /* Command Input Modal */
 .touch-command-overlay {
@@ -321,7 +276,7 @@
   font-family: monospace;
 }
 
-/* Hide on landscape orientation on phones (too cramped) */
+/* Compact layout on landscape orientation on phones (too cramped) */
 @media (max-height: 500px) and (orientation: landscape) {
   .touch-controls-container {
     bottom: 10px;
@@ -342,12 +297,13 @@
     height: 35px;
   }
 
-  .touch-control-button {
-    width: 50px;
-    height: 50px;
+  .joystick-labels {
+    display: none;
   }
 
-  .touch-button-label {
-    display: none;
+  .touch-controls-toggle {
+    width: 36px;
+    height: 36px;
+    bottom: 12px;
   }
 }
