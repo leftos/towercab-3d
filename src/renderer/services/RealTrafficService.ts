@@ -26,6 +26,31 @@ import {
   FEET_TO_METERS,
   NM_TO_DEGREES
 } from '../constants/realtraffic'
+import { useAirportStore } from '../stores/airportStore'
+
+// Cache IATA→ICAO lookup map (built lazily from airport database)
+let iataToIcaoMap: Map<string, string> | null = null
+
+/**
+ * Convert IATA airport code to ICAO code
+ * Uses the airport database for lookup, returns null if not found
+ */
+function iataToIcao(iata: string): string | null {
+  if (!iata) return null
+
+  // Build lookup map on first use
+  if (!iataToIcaoMap) {
+    iataToIcaoMap = new Map()
+    const airports = useAirportStore.getState().airports
+    for (const [icao, airport] of airports) {
+      if (airport.iata && airport.iata.length > 0) {
+        iataToIcaoMap.set(airport.iata.toUpperCase(), icao)
+      }
+    }
+  }
+
+  return iataToIcaoMap.get(iata.toUpperCase()) ?? null
+}
 
 /**
  * RealTraffic auth result from Tauri command
@@ -380,8 +405,8 @@ class RealTrafficService {
       apiTimestamp: (api_timestamp != null && !isNaN(api_timestamp)) ? api_timestamp : null,
       transponder: squawk,
       aircraftType: type || null,
-      departure: from_iata || null, // Note: IATA format
-      arrival: to_iata || null,     // Note: IATA format
+      departure: iataToIcao(from_iata),
+      arrival: iataToIcao(to_iata),
       timestamp: Date.now()
     }
   }
