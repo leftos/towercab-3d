@@ -68,7 +68,6 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
   const customTowerPosition = useAirportStore((state) => state.customTowerPosition)
   const labelVisibilityDistance = useSettingsStore((state) => state.aircraft.labelVisibilityDistance)
   const playbackMode = useReplayStore((state) => state.playbackMode)
-  const getCurrentSnapshot = useReplayStore((state) => state.getCurrentSnapshot)
 
   // Calculate visible time window based on container width
   const visibleDurationMs = useMemo(() => {
@@ -268,23 +267,24 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
         ctx.fillStyle = SOURCE_COLORS[obs.source]
         ctx.fill()
       }
-
-      // Draw display time indicator for this aircraft
-      const displayDelay = SOURCE_DISPLAY_DELAYS[timeline.lastSource]
-      const displayTime = now - displayDelay
-      if (displayTime >= startTime && displayTime <= endTime) {
-        const displayX = LABEL_WIDTH + ((displayTime - startTime) / 1000) * config.timeScale
-
-        // Small triangle
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)'
-        ctx.beginPath()
-        ctx.moveTo(displayX - 4, y + 3)
-        ctx.lineTo(displayX + 4, y + 3)
-        ctx.lineTo(displayX, y + 10)
-        ctx.closePath()
-        ctx.fill()
-      }
     })
+
+    // Draw display time line (where interpolated positions are rendered from)
+    // In live mode, this is now minus the source delay (typically 15s for VATSIM)
+    // In replay mode, this is the replay time
+    const displayTime = replayTime !== null ? replayTime : now - 15000  // Default to 15s delay
+    const displayX = LABEL_WIDTH + ((displayTime - startTime) / 1000) * config.timeScale
+    if (displayX >= LABEL_WIDTH && displayX <= width) {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'
+      ctx.lineWidth = 1.5
+      ctx.setLineDash([4, 4])
+      ctx.beginPath()
+      ctx.moveTo(displayX, 0)
+      ctx.lineTo(displayX, height)
+      ctx.stroke()
+      ctx.setLineDash([])
+      ctx.lineWidth = 1
+    }
 
     // Draw playhead (NOW line)
     const nowX = LABEL_WIDTH + ((now - startTime) / 1000) * config.timeScale
@@ -325,21 +325,28 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
 
     const render = () => {
       const now = Date.now()
-      const endTime = config.autoscroll ? now : now
-      const startTime = endTime - visibleDurationMs
+
+      // Get fresh replay state from the store (not from stale React state)
+      const replayState = useReplayStore.getState()
+      let replayTime: number | null = null
+      if (replayState.playbackMode !== 'live') {
+        const currentSnapshot = replayState.getCurrentSnapshot()
+        if (currentSnapshot) {
+          replayTime = currentSnapshot.timestamp
+        }
+      }
+
+      // Determine the center point for the view:
+      // - In replay mode: always center on replay time (so it stays visible)
+      // - In live mode with autoscroll: center on now
+      // - In live mode without autoscroll: center on now (TODO: could add fixed view position)
+      const centerTime = replayTime !== null ? replayTime : now
+      const endTime = centerTime + visibleDurationMs / 2
+      const startTime = centerTime - visibleDurationMs / 2
 
       // Only update data-dependent drawing every 200ms
       if (now - lastDataSnapshot > DATA_SNAPSHOT_INTERVAL) {
         lastDataSnapshot = now
-      }
-
-      // Get replay time if in replay mode
-      let replayTime: number | null = null
-      if (playbackMode !== 'live') {
-        const currentSnapshot = getCurrentSnapshot()
-        if (currentSnapshot) {
-          replayTime = currentSnapshot.timestamp
-        }
       }
 
       drawRuler(now, startTime, endTime, replayTime)
@@ -350,7 +357,7 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
 
     animationId = requestAnimationFrame(render)
     return () => cancelAnimationFrame(animationId)
-  }, [config.autoscroll, visibleDurationMs, drawRuler, drawTracks, playbackMode, getCurrentSnapshot])
+  }, [visibleDurationMs, drawRuler, drawTracks])
 
   // Handle mouse move for hover detection
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
