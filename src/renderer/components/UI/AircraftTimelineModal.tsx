@@ -336,13 +336,20 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
         }
       }
 
-      // Determine the center point for the view:
-      // - In replay mode: always center on replay time (so it stays visible)
-      // - In live mode with autoscroll: center on now
-      // - In live mode without autoscroll: center on now (TODO: could add fixed view position)
-      const centerTime = replayTime !== null ? replayTime : now
-      const endTime = centerTime + visibleDurationMs / 2
-      const startTime = centerTime - visibleDurationMs / 2
+      // Determine the view window:
+      // - Live mode: NOW at right edge (traditional timeline view)
+      // - Replay mode: replay time centered (so playhead stays visible)
+      let startTime: number
+      let endTime: number
+      if (replayTime !== null) {
+        // Replay mode: center on replay time
+        endTime = replayTime + visibleDurationMs / 2
+        startTime = replayTime - visibleDurationMs / 2
+      } else {
+        // Live mode: NOW at right edge
+        endTime = now
+        startTime = now - visibleDurationMs
+      }
 
       // Only update data-dependent drawing every 200ms
       if (now - lastDataSnapshot > DATA_SNAPSHOT_INTERVAL) {
