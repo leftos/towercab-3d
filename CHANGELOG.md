@@ -4,11 +4,28 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+## [0.0.22-alpha] - 2025-12-29
+
+### Added
+- Responsive mobile-friendly UI for smaller screens and tablets
+  - Controls bar adapts to screen size, hiding less-used buttons into flyout menus at narrower widths
+  - Mobile tools flyout shows connectivity status and quick access to debug tools
+  - Flyout menus for Search, Measure, Bookmarks, and other controls on compact layouts
+- Remote client presence indicator
+  - Desktop app shows monitor icon with count when browsers/tablets are connected via remote access
+  - Helps track how many devices are viewing the tower
+
 ### Changed
 - Global aircraft search (Ctrl+K) now sorts results by distance from camera when an airport is selected
   - Closest aircraft appear first, with distance shown in results (e.g., "12.3nm")
   - Selecting an aircraft within render range automatically uses tower follow mode
   - Aircraft beyond render range still use orbit follow mode
+- Touch controls simplified to virtual joystick only; other tools now accessible via mobile flyout menu
+
+### Fixed
+- Fixed pinch-to-zoom breaking tower follow mode on mobile devices
+  - Two-finger gestures no longer accidentally trigger camera rotation that breaks follow
+- Fixed Babylon overlay not initializing on freshly connected remote browsers
 
 ## [0.0.21-alpha] - 2025-12-28
 
