@@ -42,41 +42,48 @@ const sharedGroundAircraftTerrainRef = { current: new Map<string, number>() }
 const sharedTerrainOffsetRef = { current: 0 }
 const sharedGroundElevationMetersRef = { current: 0 }
 
-// Terrain correction transition state (for smooth ground/air transitions)
-const sharedSmoothedTerrainHeightsRef = { current: new Map<string, number>() }
-const sharedPrevClampStateRef = { current: new Map<string, boolean>() }
-const sharedTransitionHeightsRef = { current: new Map<string, { source: number; target: number; progress: number }>() }
-// Store previous frame's corrected height for accurate transition source
-const sharedPrevCorrectedHeightRef = { current: new Map<string, number>() }
+// ============================================================================
+// CONSOLIDATED STATE OBJECTS
+// ============================================================================
+// Consolidate related Maps into single Maps with combined state objects
+// This reduces memory overhead and simplifies cleanup
 
-// Nosewheel lowering transition state (for smooth pitch after landing)
-// Tracks the last flare pitch to smoothly transition to ground pitch after touchdown
-const sharedNosewheelTransitionRef = { current: new Map<string, { sourcePitch: number; progress: number }>() }
-const sharedWasInFlareRef = { current: new Map<string, boolean>() }
-// Store the actual flare pitch from the previous frame for accurate nosewheel transition
-const sharedLastFlarePitchRef = { current: new Map<string, number>() }
+/** Consolidated terrain correction state per aircraft */
+interface TerrainCorrectionState {
+  smoothedTerrainHeight: number
+  prevClampState: boolean
+  transition: { source: number; target: number; progress: number } | null
+  prevCorrectedHeight: number
+}
+
+/** Consolidated nosewheel transition state per aircraft */
+interface NosewheelState {
+  transition: { sourcePitch: number; progress: number } | null
+  wasInFlare: boolean
+  lastFlarePitch: number | null
+}
+
+/** Consolidated timeline rate tracking state per aircraft */
+interface TimelineRateState {
+  prevAltitude: number | null
+  prevHeading: number | null
+  prevGroundspeed: number | null
+  smoothedVerticalRate: number
+  smoothedTurnRate: number
+  prevPitch: number | null
+  prevRoll: number | null
+}
+
+// Consolidated state Maps (3 Maps instead of 16)
+const sharedTerrainStateRef = { current: new Map<string, TerrainCorrectionState>() }
+const sharedNosewheelStateRef = { current: new Map<string, NosewheelState>() }
+const sharedTimelineRateStateRef = { current: new Map<string, TimelineRateState>() }
 
 // ============================================================================
-// TIMELINE-BASED INTERPOLATION STATE
+// TIMELINE FRAME TIMING
 // ============================================================================
-// Track previous frame values to calculate rates for orientation emulation
-
-/** Last frame's interpolated altitude (meters) for vertical rate calculation */
-const sharedTimelinePrevAltitudeRef = { current: new Map<string, number>() }
-/** Last frame's interpolated heading (degrees) for turn rate calculation */
-const sharedTimelinePrevHeadingRef = { current: new Map<string, number>() }
-/** Last frame's interpolated groundspeed (knots) for acceleration calculation */
-const sharedTimelinePrevGroundspeedRef = { current: new Map<string, number>() }
 /** Last frame's timestamp (ms) for rate calculations */
 const sharedTimelineLastFrameTimeRef = { current: 0 }
-/** Smoothed vertical rate (reduces noise from small altitude jitter) */
-const sharedTimelineSmoothedVerticalRateRef = { current: new Map<string, number>() }
-/** Smoothed turn rate (reduces noise from heading jitter) */
-const sharedTimelineSmoothedTurnRateRef = { current: new Map<string, number>() }
-/** Previous frame's pitch for rate limiting */
-const sharedTimelinePrevPitchRef = { current: new Map<string, number>() }
-/** Previous frame's roll for rate limiting */
-const sharedTimelinePrevRollRef = { current: new Map<string, number>() }
 
 /** Track playback mode to detect mode changes */
 const sharedLastPlaybackModeRef = { current: 'live' as string }
@@ -99,10 +106,21 @@ function timelineToInterpolatedState(
 ): InterpolatedAircraftState {
   const callsign = timeline.callsign
 
-  // Get previous frame values
-  const prevAltitude = sharedTimelinePrevAltitudeRef.current.get(callsign)
-  const prevHeading = sharedTimelinePrevHeadingRef.current.get(callsign)
-  const prevGroundspeed = sharedTimelinePrevGroundspeedRef.current.get(callsign)
+  // Get or create consolidated rate state for this aircraft
+  let rateState = sharedTimelineRateStateRef.current.get(callsign)
+  if (!rateState) {
+    rateState = {
+      prevAltitude: null,
+      prevHeading: null,
+      prevGroundspeed: null,
+      smoothedVerticalRate: 0,
+      smoothedTurnRate: 0,
+      prevPitch: null,
+      prevRoll: null
+    }
+    sharedTimelineRateStateRef.current.set(callsign, rateState)
+  }
+
   const lastFrameTime = sharedTimelineLastFrameTimeRef.current
 
   // Calculate frame delta (ms)
@@ -120,41 +138,38 @@ function timelineToInterpolatedState(
       const FEET_TO_METERS = 0.3048
       const adsVerticalRate = timeline.verticalRate * FEET_TO_METERS // fpm to m/min
       // Still apply smoothing to reduce sudden jumps when new observations arrive
-      const prevSmoothed = sharedTimelineSmoothedVerticalRateRef.current.get(callsign) ?? adsVerticalRate
-      verticalRate = prevSmoothed + (adsVerticalRate - prevSmoothed) * 0.3 // Faster convergence for ADS-B data
-      sharedTimelineSmoothedVerticalRateRef.current.set(callsign, verticalRate)
-    } else if (prevAltitude !== undefined) {
+      verticalRate = rateState.smoothedVerticalRate + (adsVerticalRate - rateState.smoothedVerticalRate) * 0.3
+      rateState.smoothedVerticalRate = verticalRate
+    } else if (rateState.prevAltitude !== null) {
       // Fall back to calculating from altitude deltas (VATSIM, vNAS)
-      const altitudeChange = timeline.altitude - prevAltitude // meters
+      const altitudeChange = timeline.altitude - rateState.prevAltitude // meters
       const rawVerticalRate = (altitudeChange / frameDelta) * 60000 // m/min
       // Smooth the rate to reduce jitter
-      const prevSmoothed = sharedTimelineSmoothedVerticalRateRef.current.get(callsign) ?? 0
-      verticalRate = prevSmoothed + (rawVerticalRate - prevSmoothed) * RATE_SMOOTHING
-      sharedTimelineSmoothedVerticalRateRef.current.set(callsign, verticalRate)
+      verticalRate = rateState.smoothedVerticalRate + (rawVerticalRate - rateState.smoothedVerticalRate) * RATE_SMOOTHING
+      rateState.smoothedVerticalRate = verticalRate
     }
 
     // Turn rate: heading change per second
-    if (prevHeading !== undefined) {
-      const headingChange = angleDifference(prevHeading, timeline.heading)
+    if (rateState.prevHeading !== null) {
+      const headingChange = angleDifference(rateState.prevHeading, timeline.heading)
       const rawTurnRate = (headingChange / frameDelta) * 1000 // deg/sec
       // Clamp to realistic limits and smooth
       const clampedTurnRate = Math.max(-6, Math.min(6, rawTurnRate))
-      const prevSmoothed = sharedTimelineSmoothedTurnRateRef.current.get(callsign) ?? 0
-      turnRate = prevSmoothed + (clampedTurnRate - prevSmoothed) * RATE_SMOOTHING
-      sharedTimelineSmoothedTurnRateRef.current.set(callsign, turnRate)
+      turnRate = rateState.smoothedTurnRate + (clampedTurnRate - rateState.smoothedTurnRate) * RATE_SMOOTHING
+      rateState.smoothedTurnRate = turnRate
     }
 
     // Acceleration: groundspeed change per second
-    if (prevGroundspeed !== undefined) {
-      const speedChange = timeline.groundspeed - prevGroundspeed
+    if (rateState.prevGroundspeed !== null) {
+      const speedChange = timeline.groundspeed - rateState.prevGroundspeed
       acceleration = (speedChange / frameDelta) * 1000 // knots/sec
     }
   }
 
   // Store current values for next frame
-  sharedTimelinePrevAltitudeRef.current.set(callsign, timeline.altitude)
-  sharedTimelinePrevHeadingRef.current.set(callsign, timeline.heading)
-  sharedTimelinePrevGroundspeedRef.current.set(callsign, timeline.groundspeed)
+  rateState.prevAltitude = timeline.altitude
+  rateState.prevHeading = timeline.heading
+  rateState.prevGroundspeed = timeline.groundspeed
 
   // Calculate pitch and roll from rates (orientation emulation)
   let pitch = 0
@@ -187,8 +202,8 @@ function timelineToInterpolatedState(
     }
 
     // Apply rate limiting to prevent jerky motion from noisy data
-    const prevPitch = sharedTimelinePrevPitchRef.current.get(callsign) ?? targetPitch
-    const prevRoll = sharedTimelinePrevRollRef.current.get(callsign) ?? targetRoll
+    const prevPitch = rateState.prevPitch ?? targetPitch
+    const prevRoll = rateState.prevRoll ?? targetRoll
     const dtSeconds = frameDelta / 1000
 
     // Limit pitch rate of change
@@ -210,8 +225,8 @@ function timelineToInterpolatedState(
     }
 
     // Store for next frame
-    sharedTimelinePrevPitchRef.current.set(callsign, pitch)
-    sharedTimelinePrevRollRef.current.set(callsign, roll)
+    rateState.prevPitch = pitch
+    rateState.prevRoll = roll
   }
 
   // Calculate track from groundTrack or default to heading
@@ -298,25 +313,13 @@ function updateInterpolation() {
       const snapshots = replayState.getActiveSnapshots()
       timelineStore.loadReplaySnapshots(snapshots)
 
-      // Clear rate tracking refs for fresh start
-      sharedTimelinePrevAltitudeRef.current.clear()
-      sharedTimelinePrevHeadingRef.current.clear()
-      sharedTimelinePrevGroundspeedRef.current.clear()
-      sharedTimelineSmoothedVerticalRateRef.current.clear()
-      sharedTimelineSmoothedTurnRateRef.current.clear()
-      sharedTimelinePrevPitchRef.current.clear()
-      sharedTimelinePrevRollRef.current.clear()
+      // Clear consolidated rate tracking state for fresh start
+      sharedTimelineRateStateRef.current.clear()
     } else if (currentMode === 'replay') {
       // Entering buffer replay mode - scrub through existing timeline
       // The timeline already has live observations, no need to load anything
       // Just clear rate tracking for fresh orientation calculations
-      sharedTimelinePrevAltitudeRef.current.clear()
-      sharedTimelinePrevHeadingRef.current.clear()
-      sharedTimelinePrevGroundspeedRef.current.clear()
-      sharedTimelineSmoothedVerticalRateRef.current.clear()
-      sharedTimelineSmoothedTurnRateRef.current.clear()
-      sharedTimelinePrevPitchRef.current.clear()
-      sharedTimelinePrevRollRef.current.clear()
+      sharedTimelineRateStateRef.current.clear()
     } else if (currentMode === 'live' && previousMode === 'imported') {
       // Returning to live mode from imported replay - clear the imported data
       // Live observations will start populating the timeline again
@@ -402,6 +405,18 @@ function updateInterpolation() {
     const groundElevationMeters = sharedGroundElevationMetersRef.current
     const groundAircraftTerrain = sharedGroundAircraftTerrainRef.current
 
+    // Get or create consolidated terrain state for this aircraft
+    let terrainState = sharedTerrainStateRef.current.get(callsign)
+    if (!terrainState) {
+      terrainState = {
+        smoothedTerrainHeight: 0,
+        prevClampState: false,
+        transition: null,
+        prevCorrectedHeight: entry.interpolatedAltitude
+      }
+      sharedTerrainStateRef.current.set(callsign, terrainState)
+    }
+
     // Calculate heights in ellipsoid coordinates for comparison
     const reportedEllipsoidHeight = heightAboveEllipsoid + terrainOffset
     const sampledTerrainHeight = groundAircraftTerrain.get(callsign)
@@ -434,12 +449,14 @@ function updateInterpolation() {
 
     if (shouldClampToTerrain && sampledTerrainHeight !== undefined) {
       // Clamp to terrain: use terrain-sampled height (smoothed for consistency)
-      const currentSmoothed = sharedSmoothedTerrainHeightsRef.current.get(callsign) ?? sampledTerrainHeight
-      const newSmoothed = currentSmoothed + (sampledTerrainHeight - currentSmoothed) * TERRAIN_SMOOTHING_LERP_FACTOR
-      sharedSmoothedTerrainHeightsRef.current.set(callsign, newSmoothed)
+      // Initialize smoothed height if this is the first terrain sample
+      if (terrainState.smoothedTerrainHeight === 0) {
+        terrainState.smoothedTerrainHeight = sampledTerrainHeight
+      }
+      terrainState.smoothedTerrainHeight += (sampledTerrainHeight - terrainState.smoothedTerrainHeight) * TERRAIN_SMOOTHING_LERP_FACTOR
 
       // Target height: smoothed terrain + offset
-      targetHeight = newSmoothed + GROUND_AIRCRAFT_TERRAIN_OFFSET
+      targetHeight = terrainState.smoothedTerrainHeight + GROUND_AIRCRAFT_TERRAIN_OFFSET
     } else if (isOnGround) {
       // Low groundspeed but no terrain sample - use fallback
       const groundEllipsoidHeight = groundElevationMeters + terrainOffset
@@ -450,98 +467,104 @@ function updateInterpolation() {
       // This prevents the 5m jump when aircraft is still on the runway during takeoff roll
       let flyingOffset = FLYING_AIRCRAFT_TERRAIN_OFFSET
       if (sampledTerrainHeight !== undefined) {
-        const altitudeAGL = reportedEllipsoidHeight - sampledTerrainHeight
+        const altitudeAGLCalc = reportedEllipsoidHeight - sampledTerrainHeight
         // Gradually increase offset from 0.1m (ground) to 5m (fully airborne at 30m AGL)
         // This creates a smooth visual transition during takeoff/landing
-        const transitionProgress = Math.min(1.0, Math.max(0, altitudeAGL / 30))
+        const transitionProgress = Math.min(1.0, Math.max(0, altitudeAGLCalc / 30))
         flyingOffset = GROUND_AIRCRAFT_TERRAIN_OFFSET +
           (FLYING_AIRCRAFT_TERRAIN_OFFSET - GROUND_AIRCRAFT_TERRAIN_OFFSET) * transitionProgress
       }
       targetHeight = reportedEllipsoidHeight + flyingOffset
 
-      // Clean up smoothed terrain height for aircraft that are truly airborne
+      // Reset smoothed terrain height for aircraft that are truly airborne
       if (sampledTerrainHeight !== undefined) {
-        const altitudeAGL = reportedEllipsoidHeight - sampledTerrainHeight
-        if (altitudeAGL > 50) {
-          // Only clean up once truly airborne (50m+ AGL)
-          sharedSmoothedTerrainHeightsRef.current.delete(callsign)
+        const altitudeAGLCalc = reportedEllipsoidHeight - sampledTerrainHeight
+        if (altitudeAGLCalc > 50) {
+          // Only reset once truly airborne (50m+ AGL)
+          terrainState.smoothedTerrainHeight = 0
         }
       } else {
-        sharedSmoothedTerrainHeightsRef.current.delete(callsign)
+        terrainState.smoothedTerrainHeight = 0
       }
     }
 
     // Smooth transition when switching between clamped/unclamped states
     // Track shouldClampToTerrain changes (not just isOnGround) to handle landing transition
     let correctedHeight = targetHeight
-    const prevClampState = sharedPrevClampStateRef.current.get(callsign)
 
-    if (prevClampState !== undefined && prevClampState !== shouldClampToTerrain) {
+    if (terrainState.prevClampState !== shouldClampToTerrain) {
       // State changed! Start a transition
-      const currentTransition = sharedTransitionHeightsRef.current.get(callsign)
-
-      if (!currentTransition || currentTransition.target !== targetHeight) {
+      if (!terrainState.transition || terrainState.transition.target !== targetHeight) {
         // Initialize new transition from current position to target
         // Use the PREVIOUS FRAME's corrected height as source (not raw interpolated altitude)
         // This prevents visual jumps when transitioning between ground/airborne states
         let sourceHeight: number
-        if (currentTransition) {
+        if (terrainState.transition) {
           // Mid-transition: calculate current interpolated height
-          sourceHeight = currentTransition.source +
-            (currentTransition.target - currentTransition.source) * currentTransition.progress
+          sourceHeight = terrainState.transition.source +
+            (terrainState.transition.target - terrainState.transition.source) * terrainState.transition.progress
         } else {
-          // New transition: use previous frame's corrected height if available
-          const prevCorrectedHeight = sharedPrevCorrectedHeightRef.current.get(callsign)
-          sourceHeight = prevCorrectedHeight ?? entry.interpolatedAltitude
+          // New transition: use previous frame's corrected height
+          sourceHeight = terrainState.prevCorrectedHeight
         }
-        sharedTransitionHeightsRef.current.set(callsign, {
+        terrainState.transition = {
           source: sourceHeight,
           target: targetHeight,
           progress: 0
-        })
+        }
       }
     }
 
     // Apply ongoing transition if exists
-    const transition = sharedTransitionHeightsRef.current.get(callsign)
-    if (transition && transition.progress < 1.0) {
+    if (terrainState.transition && terrainState.transition.progress < 1.0) {
       // Lerp from source to target over ~15 frames (~0.25 seconds at 60fps)
       // Slower transition for smoother landing appearance
-      transition.progress = Math.min(1.0, transition.progress + HEIGHT_TRANSITION_LERP_FACTOR)
-      correctedHeight = transition.source + (transition.target - transition.source) * transition.progress
+      terrainState.transition.progress = Math.min(1.0, terrainState.transition.progress + HEIGHT_TRANSITION_LERP_FACTOR)
+      correctedHeight = terrainState.transition.source + (terrainState.transition.target - terrainState.transition.source) * terrainState.transition.progress
 
       // Update target if it changed during transition
-      if (transition.target !== targetHeight) {
-        transition.target = targetHeight
+      if (terrainState.transition.target !== targetHeight) {
+        terrainState.transition.target = targetHeight
       }
 
       // Clean up completed transitions
-      if (transition.progress >= 1.0) {
-        sharedTransitionHeightsRef.current.delete(callsign)
+      if (terrainState.transition.progress >= 1.0) {
+        terrainState.transition = null
       }
     }
 
     // Update previous state
-    sharedPrevClampStateRef.current.set(callsign, shouldClampToTerrain)
+    terrainState.prevClampState = shouldClampToTerrain
 
     // Apply corrected height to interpolated altitude
     entry.interpolatedAltitude = correctedHeight
 
     // Store corrected height for next frame (used as transition source when state changes)
-    sharedPrevCorrectedHeightRef.current.set(callsign, correctedHeight)
+    terrainState.prevCorrectedHeight = correctedHeight
 
     // Apply landing flare pitch adjustment
     // When aircraft is descending close to the ground, pitch nose up to emulate flare
     // NOTE: Calculate AGL BEFORE terrain correction is applied to entry.interpolatedAltitude
     if (orientationEnabled && sampledTerrainHeight !== undefined) {
+      // Get or create consolidated nosewheel state for this aircraft
+      let nosewheelState = sharedNosewheelStateRef.current.get(callsign)
+      if (!nosewheelState) {
+        nosewheelState = {
+          transition: null,
+          wasInFlare: false,
+          lastFlarePitch: null
+        }
+        sharedNosewheelStateRef.current.set(callsign, nosewheelState)
+      }
+
       // Calculate altitude above ground level (AGL)
       // Use reported altitude (not corrected) since terrain height is in ellipsoid coords
-      const altitudeAGL = reportedEllipsoidHeight - sampledTerrainHeight
+      const altitudeAGLFlare = reportedEllipsoidHeight - sampledTerrainHeight
 
       // Determine if aircraft is currently in flare conditions BEFORE applying flare
       // This allows us to capture the actual flare pitch when aircraft is in flare
       const isDescending = entry.verticalRate < -50  // m/min
-      const inFlareZone = altitudeAGL > 0 && altitudeAGL < 15  // meters
+      const inFlareZone = altitudeAGLFlare > 0 && altitudeAGLFlare < 15  // meters
       // Note: inFlareZone already requires altitudeAGL > 0 (airborne), no speed check needed
       const isInFlare = isDescending && inFlareZone
 
@@ -551,7 +574,7 @@ function updateInterpolation() {
       // Apply flare pitch calculation
       entry.interpolatedPitch = calculateFlarePitch(
         entry.interpolatedPitch,
-        altitudeAGL,
+        altitudeAGLFlare,
         entry.verticalRate,  // Already in m/min
         entry.interpolatedGroundspeed,
         orientationIntensity
@@ -559,66 +582,54 @@ function updateInterpolation() {
 
       // If currently in flare, store the actual flare pitch for nosewheel transition
       if (isInFlare) {
-        sharedLastFlarePitchRef.current.set(callsign, entry.interpolatedPitch)
+        nosewheelState.lastFlarePitch = entry.interpolatedPitch
       }
 
       // Track flare state for nosewheel lowering transition
-      const wasInFlare = sharedWasInFlareRef.current.get(callsign) ?? false
-      const nosewheelTransition = sharedNosewheelTransitionRef.current.get(callsign)
-
-      if (wasInFlare && !isInFlare && !nosewheelTransition) {
+      if (nosewheelState.wasInFlare && !isInFlare && !nosewheelState.transition) {
         // Just exited flare! Start nosewheel lowering transition
         // Use the stored flare pitch from when we were actually in flare
-        const lastFlarePitch = sharedLastFlarePitchRef.current.get(callsign) ?? (basePitch + FALLBACK_FLARE_PITCH_DEGREES)
-        sharedNosewheelTransitionRef.current.set(callsign, {
+        const lastFlarePitch = nosewheelState.lastFlarePitch ?? (basePitch + FALLBACK_FLARE_PITCH_DEGREES)
+        nosewheelState.transition = {
           sourcePitch: lastFlarePitch,
           progress: 0
-        })
+        }
         // Clean up stored flare pitch
-        sharedLastFlarePitchRef.current.delete(callsign)
+        nosewheelState.lastFlarePitch = null
       }
 
       // Apply ongoing nosewheel lowering transition
-      if (nosewheelTransition && nosewheelTransition.progress < 1.0) {
+      if (nosewheelState.transition && nosewheelState.transition.progress < 1.0) {
         // Gradually lower nose over ~1 second at 60fps (~60 frames)
         // smoothstep easing for natural deceleration
-        nosewheelTransition.progress = Math.min(1.0, nosewheelTransition.progress + NOSEWHEEL_LOWERING_LERP_FACTOR)
+        nosewheelState.transition.progress = Math.min(1.0, nosewheelState.transition.progress + NOSEWHEEL_LOWERING_LERP_FACTOR)
 
         // smoothstep: x^2 * (3 - 2x) for smooth acceleration/deceleration
-        const easedProgress = nosewheelTransition.progress * nosewheelTransition.progress * (3 - 2 * nosewheelTransition.progress)
+        const easedProgress = nosewheelState.transition.progress * nosewheelState.transition.progress * (3 - 2 * nosewheelState.transition.progress)
 
         // Blend from flare pitch to base pitch (physics-based pitch for current motion)
-        entry.interpolatedPitch = nosewheelTransition.sourcePitch * (1 - easedProgress) + basePitch * easedProgress
+        entry.interpolatedPitch = nosewheelState.transition.sourcePitch * (1 - easedProgress) + basePitch * easedProgress
 
         // Clean up completed transitions
-        if (nosewheelTransition.progress >= 1.0) {
-          sharedNosewheelTransitionRef.current.delete(callsign)
+        if (nosewheelState.transition.progress >= 1.0) {
+          nosewheelState.transition = null
         }
       }
 
       // Update flare state for next frame
-      sharedWasInFlareRef.current.set(callsign, isInFlare)
+      nosewheelState.wasInFlare = isInFlare
     }
   }
 
   // Remove stale entries (aircraft that are no longer in the data)
+  // Consolidated cleanup: only 3 Maps to clean instead of 16
   for (const callsign of statesMap.keys()) {
     if (!activeCallsigns.has(callsign)) {
       statesMap.delete(callsign)
-      // Clean up transition state for removed aircraft
-      sharedSmoothedTerrainHeightsRef.current.delete(callsign)
-      sharedPrevClampStateRef.current.delete(callsign)
-      sharedTransitionHeightsRef.current.delete(callsign)
-      sharedPrevCorrectedHeightRef.current.delete(callsign)
-      sharedNosewheelTransitionRef.current.delete(callsign)
-      sharedWasInFlareRef.current.delete(callsign)
-      sharedLastFlarePitchRef.current.delete(callsign)
-      // Timeline-specific cleanup
-      sharedTimelinePrevAltitudeRef.current.delete(callsign)
-      sharedTimelinePrevHeadingRef.current.delete(callsign)
-      sharedTimelinePrevGroundspeedRef.current.delete(callsign)
-      sharedTimelineSmoothedVerticalRateRef.current.delete(callsign)
-      sharedTimelineSmoothedTurnRateRef.current.delete(callsign)
+      // Clean up all consolidated state Maps for removed aircraft
+      sharedTerrainStateRef.current.delete(callsign)
+      sharedNosewheelStateRef.current.delete(callsign)
+      sharedTimelineRateStateRef.current.delete(callsign)
     }
   }
 

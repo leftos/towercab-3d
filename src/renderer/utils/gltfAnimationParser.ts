@@ -56,6 +56,34 @@ const pendingParses = new Map<string, Promise<AnimationSet | null>>()
 /** URLs that failed to fetch/parse (avoid repeated fetch attempts and log spam) */
 const failedAnimationUrls = new Set<string>()
 
+// =============================================================================
+// GEAR ANIMATION TRANSFORM CACHE
+// =============================================================================
+// Cache computed node transforms at discrete progress intervals to avoid
+// expensive quaternion slerp and matrix operations every frame.
+// Since gear moves slowly, snapping to nearest 2% interval is imperceptible.
+
+/** Number of cached progress steps (50 = 2% intervals from 0.0 to 1.0) */
+const GEAR_CACHE_STEPS = 50
+
+/** Gear progress step size (0.02 = 2%) */
+const GEAR_CACHE_STEP_SIZE = 1.0 / GEAR_CACHE_STEPS
+
+/** Cached gear transforms: Map<modelUrl, Map<progressIndex, Map<nodeName, Matrix4>>> */
+interface CachedNodeTransform {
+  translation: { x: number; y: number; z: number }
+  rotation: { x: number; y: number; z: number; w: number }
+  scale: { x: number; y: number; z: number }
+}
+const gearTransformCache = new Map<string, Map<number, Map<string, CachedNodeTransform>>>()
+
+/**
+ * Get the nearest cached progress index for a gear progress value
+ */
+function getProgressCacheIndex(progress: number): number {
+  return Math.round(progress / GEAR_CACHE_STEP_SIZE)
+}
+
 /** Cache of ground data by model URL */
 const groundDataCache = new Map<string, ModelGroundData>()
 
@@ -421,27 +449,245 @@ export function applyAnimationPercent(
  * Apply gear animations to a model at a specific percent
  * Finds all animations with "GEAR" in the name and applies them
  *
+ * Uses cached transforms at discrete 2% intervals to avoid expensive
+ * quaternion slerp and matrix operations every frame.
+ *
  * @param model - Cesium Model primitive
  * @param animationSet - Parsed animation set
  * @param percent - Gear progress (0 = retracted, 1 = extended)
+ * @param modelUrl - Model URL for cache lookup (optional, enables caching)
  * @returns Number of gear animations applied
  */
 export function applyGearAnimationsPercent(
   model: Cesium.Model,
   animationSet: AnimationSet,
-  percent: number
+  percent: number,
+  modelUrl?: string
 ): number {
   let appliedCount = 0
 
+  // Snap to nearest cached progress index (2% intervals)
+  const cacheIndex = getProgressCacheIndex(percent)
+  const snappedPercent = cacheIndex * GEAR_CACHE_STEP_SIZE
+
+  // Try to use cached transforms if modelUrl is provided
+  if (modelUrl) {
+    let urlCache = gearTransformCache.get(modelUrl)
+    if (!urlCache) {
+      urlCache = new Map()
+      gearTransformCache.set(modelUrl, urlCache)
+    }
+
+    let progressCache = urlCache.get(cacheIndex)
+    if (progressCache) {
+      // Apply cached transforms directly - much faster than recomputing
+      return applyCachedGearTransforms(model, animationSet, progressCache)
+    }
+
+    // No cache for this progress - compute and cache
+    progressCache = new Map()
+
+    for (const animation of animationSet.animations) {
+      if (animation.name.toUpperCase().includes('GEAR')) {
+        const success = applyAnimationPercentWithCache(
+          model,
+          animationSet,
+          animation.name,
+          snappedPercent,
+          progressCache
+        )
+        if (success) appliedCount++
+      }
+    }
+
+    // Store computed transforms in cache
+    urlCache.set(cacheIndex, progressCache)
+    return appliedCount
+  }
+
+  // No URL provided - fall back to non-cached path
   for (const animation of animationSet.animations) {
-    // Match gear-related animations
     if (animation.name.toUpperCase().includes('GEAR')) {
-      const success = applyAnimationPercent(model, animationSet, animation.name, percent)
+      const success = applyAnimationPercent(model, animationSet, animation.name, snappedPercent)
       if (success) appliedCount++
     }
   }
 
   return appliedCount
+}
+
+/**
+ * Apply cached transforms directly to model nodes - O(nodes) with minimal computation
+ */
+function applyCachedGearTransforms(
+  model: Cesium.Model,
+  animationSet: AnimationSet,
+  cache: Map<string, CachedNodeTransform>
+): number {
+  let appliedCount = 0
+
+  for (const [nodeName, transform] of cache) {
+    const nodeData = animationSet.nodes.get(nodeName)
+    if (!nodeData) continue
+
+    const node = model.getNode(nodeName)
+    if (!node) continue
+
+    // Store original matrix if not already stored
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const nodeWithOriginal = node as any
+    if (!nodeWithOriginal._originalMatrix) {
+      nodeWithOriginal._originalMatrix = node.matrix.clone()
+    }
+    const originalMatrix = nodeWithOriginal._originalMatrix as Cesium.Matrix4
+
+    // Build transform from cached values
+    const translation = new Cesium.Cartesian3(transform.translation.x, transform.translation.y, transform.translation.z)
+    const rotation = new Cesium.Quaternion(transform.rotation.x, transform.rotation.y, transform.rotation.z, transform.rotation.w)
+    const scale = new Cesium.Cartesian3(transform.scale.x, transform.scale.y, transform.scale.z)
+
+    const transformMatrix = Cesium.Matrix4.fromTranslationQuaternionRotationScale(
+      translation,
+      rotation,
+      scale,
+      new Cesium.Matrix4()
+    )
+
+    node.matrix = Cesium.Matrix4.multiply(originalMatrix, transformMatrix, new Cesium.Matrix4())
+    appliedCount++
+  }
+
+  return appliedCount
+}
+
+/**
+ * Apply animation and cache the computed transforms for reuse
+ */
+function applyAnimationPercentWithCache(
+  model: Cesium.Model,
+  animationSet: AnimationSet,
+  animationName: string,
+  percent: number,
+  cache: Map<string, CachedNodeTransform>
+): boolean {
+  const animation = animationSet.animations.find(a =>
+    a.name.toUpperCase().includes(animationName.toUpperCase())
+  )
+
+  if (!animation) {
+    return false
+  }
+
+  const clampedPercent = Math.max(0, Math.min(1, percent))
+  const targetTime = animation.duration * clampedPercent
+
+  for (const [nodeName, track] of animation.tracks) {
+    const nodeData = animationSet.nodes.get(nodeName)
+    if (!nodeData) continue
+
+    const node = model.getNode(nodeName)
+    if (!node) continue
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const nodeWithOriginal = node as any
+    if (!nodeWithOriginal._originalMatrix) {
+      nodeWithOriginal._originalMatrix = node.matrix.clone()
+    }
+    const originalMatrix = nodeWithOriginal._originalMatrix as Cesium.Matrix4
+
+    // Interpolate translation
+    let translation = new Cesium.Cartesian3(0, 0, 0)
+    const transKeys = getKeysAtTime(track.translationKeys, targetTime)
+    if (transKeys) {
+      const [k0, k1] = transKeys
+      if (k0.time === k1.time) {
+        translation = new Cesium.Cartesian3(
+          k0.value[0] - nodeData.translation[0],
+          k0.value[1] - nodeData.translation[1],
+          k0.value[2] - nodeData.translation[2]
+        )
+      } else {
+        const t = (targetTime - k0.time) / (k1.time - k0.time)
+        const start = new Cesium.Cartesian3(k0.value[0], k0.value[1], k0.value[2])
+        const end = new Cesium.Cartesian3(k1.value[0], k1.value[1], k1.value[2])
+        const lerped = Cesium.Cartesian3.lerp(start, end, t, new Cesium.Cartesian3())
+        translation = new Cesium.Cartesian3(
+          lerped.x - nodeData.translation[0],
+          lerped.y - nodeData.translation[1],
+          lerped.z - nodeData.translation[2]
+        )
+      }
+      Cesium.Matrix3.multiplyByVector(nodeData.invRotationMatrix, translation, translation)
+    }
+
+    // Interpolate rotation
+    const rotation = new Cesium.Quaternion(0, 0, 0, 1)
+    const rotKeys = getKeysAtTime(track.rotationKeys, targetTime)
+    if (rotKeys) {
+      const [k0, k1] = rotKeys
+      let result: Cesium.Quaternion
+      if (k0.time === k1.time) {
+        result = new Cesium.Quaternion(k0.value[0], k0.value[1], k0.value[2], k0.value[3])
+      } else {
+        const t = (targetTime - k0.time) / (k1.time - k0.time)
+        const start = new Cesium.Quaternion(k0.value[0], k0.value[1], k0.value[2], k0.value[3])
+        const end = new Cesium.Quaternion(k1.value[0], k1.value[1], k1.value[2], k1.value[3])
+        result = Cesium.Quaternion.slerp(start, end, t, new Cesium.Quaternion())
+      }
+
+      const resultAxis = new Cesium.Cartesian3(1, 0, 0)
+      const resultAngle = Cesium.Quaternion.computeAngle(result)
+      if (Math.abs(resultAngle) > Cesium.Math.EPSILON5) {
+        Cesium.Quaternion.computeAxis(result, resultAxis)
+      }
+      Cesium.Matrix3.multiplyByVector(nodeData.invRotationMatrix, resultAxis, resultAxis)
+      Cesium.Quaternion.fromAxisAngle(resultAxis, resultAngle, result)
+      Cesium.Quaternion.multiply(result, nodeData.invRotation, rotation)
+    }
+
+    // Interpolate scale
+    let scale = new Cesium.Cartesian3(1, 1, 1)
+    const scaleKeys = getKeysAtTime(track.scaleKeys, targetTime)
+    if (scaleKeys) {
+      const [k0, k1] = scaleKeys
+      if (k0.time === k1.time) {
+        scale = new Cesium.Cartesian3(
+          k0.value[0] / nodeData.scale[0],
+          k0.value[1] / nodeData.scale[1],
+          k0.value[2] / nodeData.scale[2]
+        )
+      } else {
+        const t = (targetTime - k0.time) / (k1.time - k0.time)
+        const start = new Cesium.Cartesian3(k0.value[0], k0.value[1], k0.value[2])
+        const end = new Cesium.Cartesian3(k1.value[0], k1.value[1], k1.value[2])
+        const lerped = Cesium.Cartesian3.lerp(start, end, t, new Cesium.Cartesian3())
+        scale = new Cesium.Cartesian3(
+          lerped.x / nodeData.scale[0],
+          lerped.y / nodeData.scale[1],
+          lerped.z / nodeData.scale[2]
+        )
+      }
+    }
+
+    // Cache the computed transform values (as plain objects, not Cesium types)
+    cache.set(nodeName, {
+      translation: { x: translation.x, y: translation.y, z: translation.z },
+      rotation: { x: rotation.x, y: rotation.y, z: rotation.z, w: rotation.w },
+      scale: { x: scale.x, y: scale.y, z: scale.z }
+    })
+
+    // Build transform matrix and apply to node
+    const transformMatrix = Cesium.Matrix4.fromTranslationQuaternionRotationScale(
+      translation,
+      rotation,
+      scale,
+      new Cesium.Matrix4()
+    )
+
+    node.matrix = Cesium.Matrix4.multiply(originalMatrix, transformMatrix, new Cesium.Matrix4())
+  }
+
+  return true
 }
 
 // =============================================================================
@@ -456,6 +702,7 @@ export function clearAnimationCache(url?: string): void {
     animationSetCache.delete(url)
     groundDataCache.delete(url)
     wingDataCache.delete(url)
+    gearTransformCache.delete(url)
     failedGroundDataUrls.delete(url)
     failedWingDataUrls.delete(url)
     failedAnimationUrls.delete(url)
@@ -463,6 +710,7 @@ export function clearAnimationCache(url?: string): void {
     animationSetCache.clear()
     groundDataCache.clear()
     wingDataCache.clear()
+    gearTransformCache.clear()
     failedGroundDataUrls.clear()
     failedWingDataUrls.clear()
     failedAnimationUrls.clear()

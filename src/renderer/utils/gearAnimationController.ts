@@ -312,8 +312,8 @@ export function applyGearAnimation(
     return // Still loading or no animations
   }
 
-  // Apply gear animations using direct node transforms
-  applyGearAnimationsPercent(model, animSet, progress)
+  // Apply gear animations using direct node transforms (with caching by modelUrl)
+  applyGearAnimationsPercent(model, animSet, progress, modelUrl)
 }
 
 /**

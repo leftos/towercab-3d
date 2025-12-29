@@ -123,6 +123,12 @@ export function useAircraftModels(
   // Track which pool slots have FSLTL models (for color blend logic)
   const modelPoolIsFsltlRef = useRef<Map<number, boolean>>(new Map())
 
+  // Reverse lookup: callsign → pool index (O(1) lookup instead of O(poolSize) scan)
+  const callsignToPoolIndexRef = useRef<Map<string, number>>(new Map())
+
+  // Track available (unused) pool slots for O(1) allocation
+  const availablePoolSlotsRef = useRef<Set<number>>(new Set())
+
   // Track animation counts per model URL (populated via gltfCallback during model loading)
   const modelAnimationCountsRef = useRef<Map<string, number>>(new Map())
 
@@ -134,6 +140,15 @@ export function useAircraftModels(
     if (!viewer || !modelPoolReady.current) return
 
     performanceMonitor.startTimer('aircraftUpdate')
+
+    // Initialize available pool slots on first run (O(poolSize) once, not every frame)
+    if (availablePoolSlotsRef.current.size === 0 && callsignToPoolIndexRef.current.size === 0) {
+      for (const idx of modelPool.current.keys()) {
+        if (modelPoolAssignments.current.get(idx) === null) {
+          availablePoolSlotsRef.current.add(idx)
+        }
+      }
+    }
 
     // Apply render culling: filter by distance from camera and max aircraft limit
     // This runs every frame to keep the closest aircraft visible as camera moves
@@ -191,30 +206,25 @@ export function useAircraftModels(
       }
       const modelHeight = aircraft.interpolatedAltitude + heightOffset
 
-      // Find existing pool slot for this callsign, or get an unused one
-      let poolIndex = -1
-      for (const [idx, assignedCallsign] of modelPoolAssignments.current.entries()) {
-        if (assignedCallsign === aircraft.callsign) {
-          poolIndex = idx
-          break
-        }
-      }
-      if (poolIndex === -1) {
-        // Find an unused slot
-        for (const [idx, assignedCallsign] of modelPoolAssignments.current.entries()) {
-          if (assignedCallsign === null) {
-            poolIndex = idx
-            modelPoolAssignments.current.set(idx, aircraft.callsign)
+      // Find existing pool slot for this callsign, or get an unused one - O(1) lookup
+      let poolIndex = callsignToPoolIndexRef.current.get(aircraft.callsign) ?? -1
 
-            // Initialize gear state based on aircraft's current conditions
-            // This ensures aircraft spawning in flight have gear up, while ground aircraft have gear down
-            const isOnGround = aircraft.interpolatedGroundspeed < GROUNDSPEED_THRESHOLD_KNOTS
-            const altitudeAglMeters = aircraft.interpolatedAltitude - groundElevationMeters
-            const altitudeAglFeet = altitudeAglMeters * 3.28084
-            const verticalRateFpm = aircraft.verticalRate * 3.28084
-            initializeGearState(aircraft.callsign, altitudeAglFeet, verticalRateFpm, isOnGround)
-            break
-          }
+      if (poolIndex === -1) {
+        // Get an unused slot from the available set - O(1)
+        const firstAvailable = availablePoolSlotsRef.current.values().next()
+        if (!firstAvailable.done) {
+          poolIndex = firstAvailable.value
+          availablePoolSlotsRef.current.delete(poolIndex)
+          callsignToPoolIndexRef.current.set(aircraft.callsign, poolIndex)
+          modelPoolAssignments.current.set(poolIndex, aircraft.callsign)
+
+          // Initialize gear state based on aircraft's current conditions
+          // This ensures aircraft spawning in flight have gear up, while ground aircraft have gear down
+          const isOnGround = aircraft.interpolatedGroundspeed < GROUNDSPEED_THRESHOLD_KNOTS
+          const altitudeAglMeters = aircraft.interpolatedAltitude - groundElevationMeters
+          const altitudeAglFeet = altitudeAglMeters * 3.28084
+          const verticalRateFpm = aircraft.verticalRate * 3.28084
+          initializeGearState(aircraft.callsign, altitudeAglFeet, verticalRateFpm, isOnGround)
         }
       }
 
@@ -407,14 +417,18 @@ export function useAircraftModels(
     }
 
     // Hide unused pool models and clean up references to prevent memory leaks
-    for (const [idx, assignedCallsign] of modelPoolAssignments.current.entries()) {
-      if (assignedCallsign !== null && !seenCallsigns.has(assignedCallsign)) {
+    // Use reverse lookup to find stale assignments - O(seenCallsigns) instead of O(poolSize)
+    for (const [callsign, idx] of callsignToPoolIndexRef.current.entries()) {
+      if (!seenCallsigns.has(callsign)) {
         // Clean up gear animation state for this aircraft
-        clearGearState(assignedCallsign)
+        clearGearState(callsign)
 
         // Release this slot and hide the model
         modelPoolAssignments.current.set(idx, null)
         modelPoolIsFsltlRef.current.delete(idx)
+        callsignToPoolIndexRef.current.delete(callsign)
+        availablePoolSlotsRef.current.add(idx)
+
         const model = modelPool.current.get(idx)
         if (model) {
           model.show = false
@@ -427,16 +441,15 @@ export function useAircraftModels(
 
     // Update silhouette selected array with only built-in (non-FSLTL) visible models
     // This enables edge detection outlines only for the white FR24 models
+    // Use reverse lookup for O(active_aircraft) instead of O(poolSize)
     const edgeDetection = silhouetteRefs?.edgeDetection.current
     if (edgeDetection) {
       const builtinModels: Cesium.Model[] = []
-      for (const [idx, assignedCallsign] of modelPoolAssignments.current.entries()) {
-        if (assignedCallsign !== null) {
-          const model = modelPool.current.get(idx)
-          const isFsltl = modelPoolIsFsltlRef.current.get(idx) ?? false
-          if (model && model.show && !isFsltl) {
-            builtinModels.push(model)
-          }
+      for (const [, idx] of callsignToPoolIndexRef.current.entries()) {
+        const model = modelPool.current.get(idx)
+        const isFsltl = modelPoolIsFsltlRef.current.get(idx) ?? false
+        if (model && model.show && !isFsltl) {
+          builtinModels.push(model)
         }
       }
       edgeDetection.selected = builtinModels

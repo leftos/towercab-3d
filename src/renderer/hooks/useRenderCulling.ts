@@ -59,6 +59,72 @@ function calculateDistanceNM(
   return R * c
 }
 
+// ============================================================================
+// QUICKSELECT ALGORITHM
+// ============================================================================
+// O(n) average-case algorithm to find the k smallest elements
+// Much faster than O(n log n) full sort when we only need top-N
+
+interface AircraftWithDistance {
+  callsign: string
+  aircraft: InterpolatedAircraftState
+  distance: number
+}
+
+/**
+ * Partition array around a pivot (Lomuto partition scheme)
+ * Returns the final index of the pivot
+ */
+function partition(arr: AircraftWithDistance[], left: number, right: number): number {
+  const pivot = arr[right].distance
+  let i = left
+
+  for (let j = left; j < right; j++) {
+    if (arr[j].distance <= pivot) {
+      // Swap arr[i] and arr[j]
+      const temp = arr[i]
+      arr[i] = arr[j]
+      arr[j] = temp
+      i++
+    }
+  }
+
+  // Swap arr[i] and arr[right] (put pivot in correct position)
+  const temp = arr[i]
+  arr[i] = arr[right]
+  arr[right] = temp
+
+  return i
+}
+
+/**
+ * Quickselect: rearrange array so that the k smallest elements are at indices 0..k-1
+ * Average O(n) time complexity vs O(n log n) for full sort
+ *
+ * After this function, arr[0..k-1] contains the k smallest elements (not necessarily sorted)
+ */
+function quickselect(arr: AircraftWithDistance[], k: number): void {
+  if (arr.length <= k) return // Already small enough
+
+  let left = 0
+  let right = arr.length - 1
+
+  while (left < right) {
+    const pivotIndex = partition(arr, left, right)
+
+    if (pivotIndex === k - 1) {
+      // Pivot is at the boundary - we're done
+      return
+    } else if (pivotIndex < k - 1) {
+      // Need more elements on the left, search right partition
+      left = pivotIndex + 1
+    } else {
+      // Too many elements on the left, search left partition
+      right = pivotIndex - 1
+    }
+  }
+}
+
 /**
  * Get camera position in lat/lon from Cesium viewer
  */
@@ -171,11 +237,10 @@ export function filterAircraftForRendering({
   }
 
   // Calculate distance for each aircraft and filter by radius
-  const aircraftWithDistance: Array<{
-    callsign: string
-    aircraft: InterpolatedAircraftState
-    distance: number
-  }> = []
+  const aircraftWithDistance: AircraftWithDistance[] = []
+
+  // Track always-include aircraft separately for guaranteed inclusion
+  let alwaysIncludeEntry: AircraftWithDistance | null = null
 
   for (const [callsign, aircraft] of interpolatedAircraft) {
     const distance = calculateDistanceNM(
@@ -187,26 +252,32 @@ export function filterAircraftForRendering({
 
     // Include if within radius OR if it's the always-include callsign
     if (distance <= effectiveRadiusNM || callsign === alwaysInclude) {
-      aircraftWithDistance.push({ callsign, aircraft, distance })
+      const entry = { callsign, aircraft, distance }
+      aircraftWithDistance.push(entry)
+
+      // Track always-include for later
+      if (callsign === alwaysInclude) {
+        alwaysIncludeEntry = entry
+      }
     }
   }
 
-  // Sort by distance (closest first)
-  aircraftWithDistance.sort((a, b) => a.distance - b.distance)
+  // Use quickselect O(n) instead of sort O(n log n) to find closest N aircraft
+  // After quickselect, arr[0..k-1] contains the k smallest elements (unordered)
+  quickselect(aircraftWithDistance, effectiveMaxAircraft)
+
+  // Take the first effectiveMaxAircraft elements (these are the closest, but unordered)
+  const finalList = aircraftWithDistance.slice(0, Math.min(effectiveMaxAircraft, aircraftWithDistance.length))
 
   // Ensure always-include aircraft is in the final list
-  // If it was culled by max count, we need to add it back
-  let finalList = aircraftWithDistance.slice(0, effectiveMaxAircraft)
-
-  if (alwaysInclude) {
+  if (alwaysInclude && alwaysIncludeEntry) {
     const alwaysIncludeInList = finalList.some(a => a.callsign === alwaysInclude)
     if (!alwaysIncludeInList) {
-      // Find it in the full list and add it
-      const alwaysIncludeAircraft = aircraftWithDistance.find(a => a.callsign === alwaysInclude)
-      if (alwaysIncludeAircraft) {
-        // Replace the farthest aircraft with the always-include one
-        finalList = finalList.slice(0, effectiveMaxAircraft - 1)
-        finalList.push(alwaysIncludeAircraft)
+      // Replace the last element (one of the k-th closest) with always-include
+      if (finalList.length >= effectiveMaxAircraft) {
+        finalList[finalList.length - 1] = alwaysIncludeEntry
+      } else {
+        finalList.push(alwaysIncludeEntry)
       }
     }
   }
