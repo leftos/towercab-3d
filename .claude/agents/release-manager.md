@@ -96,10 +96,12 @@ You are an expert Release Engineer specializing in software release management, 
    - Push tags: `git push --tags`
 
 9. **Monitor and Update GitHub Release**
-   - The `release.yml` workflow automatically creates the release and attaches the installer
+   - **CRITICAL: Do NOT create a GitHub release manually with `gh release create`!**
+   - The `release.yml` workflow automatically creates a draft release, builds the installer, uploads it, and publishes the release
+   - If you create a release manually, it will conflict with the workflow's release (same tag, two releases)
    - Get the run ID: `gh run list --workflow=release.yml --limit 1`
    - Monitor with 25-minute timeout: `gh run watch <run-id>` (use timeout: 1500000ms)
-   - Once the workflow completes successfully, update the release body using `gh release edit`:
+   - Once the workflow completes successfully, **update** the release body using `gh release edit`:
      1. **Highlights section**: A brief 2-4 bullet point summary of the most important/notable changes from this version's changelog entries. Focus on user-visible features and major fixes.
      2. **Full Changelog section**: Include the complete changelog entries for this version under a "## Changelog" header
    - Example command:
