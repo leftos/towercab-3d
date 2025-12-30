@@ -314,6 +314,59 @@ function VirtualJoystick({
 }
 
 /**
+ * Zoom buttons component for touch devices
+ * Adjusts zoom based on current camera mode (tower follow, orbit, or free)
+ */
+function ZoomButtons() {
+  const followingCallsign = useViewportStore((state) => state.getActiveCameraState().followingCallsign)
+  const followMode = useViewportStore((state) => state.getActiveCameraState().followMode)
+  const adjustFollowZoom = useViewportStore((state) => state.adjustFollowZoom)
+  const adjustOrbitDistance = useViewportStore((state) => state.adjustOrbitDistance)
+  const adjustFov = useViewportStore((state) => state.adjustFov)
+
+  // Determine which zoom function to use based on camera mode
+  const handleZoom = useCallback((direction: 'in' | 'out') => {
+    const delta = direction === 'in' ? 0.2 : -0.2
+
+    if (followingCallsign && followMode !== 'orbit') {
+      // Tower follow mode: adjust zoom level (higher = more zoomed in)
+      adjustFollowZoom(delta)
+    } else if (followMode === 'orbit') {
+      // Orbit mode: adjust distance (negative = closer, positive = farther)
+      // Flip the sign since distance is inverse of zoom
+      adjustOrbitDistance(-delta * 50) // Scale for orbit distance units
+    } else {
+      // Free camera: adjust FOV (negative = zoom in, positive = zoom out)
+      adjustFov(-delta * 10) // Scale for FOV degrees
+    }
+  }, [followingCallsign, followMode, adjustFollowZoom, adjustOrbitDistance, adjustFov])
+
+  return (
+    <div className="touch-zoom-buttons">
+      <button
+        className="touch-zoom-btn zoom-in"
+        onTouchStart={(e) => { e.preventDefault(); handleZoom('in') }}
+        onClick={() => handleZoom('in')}
+      >
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+      </button>
+      <button
+        className="touch-zoom-btn zoom-out"
+        onTouchStart={(e) => { e.preventDefault(); handleZoom('out') }}
+        onClick={() => handleZoom('out')}
+      >
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+      </button>
+    </div>
+  )
+}
+
+/**
  * Main touch controls component
  *
  * Only renders the virtual joystick on touch devices.
@@ -359,11 +412,12 @@ function TouchControls() {
         </svg>
       </button>
 
-      {/* Virtual joystick (left side) */}
+      {/* Virtual joystick (left side) with zoom buttons */}
       {isJoystickVisible && (
         <div className="touch-controls-container">
           <div className="touch-controls-left">
             <VirtualJoystick onMove={handleJoystickMove} />
+            <ZoomButtons />
           </div>
         </div>
       )}
