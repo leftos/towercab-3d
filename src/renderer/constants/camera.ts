@@ -173,7 +173,7 @@ export const FOLLOW_ZOOM_MIN = 0.5
 /**
  * Maximum follow zoom factor
  */
-export const FOLLOW_ZOOM_MAX = 5.0
+export const FOLLOW_ZOOM_MAX = 10.0
 
 // ============================================================================
 // TOP-DOWN VIEW

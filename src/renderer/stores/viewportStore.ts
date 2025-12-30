@@ -15,6 +15,8 @@ import {
   FOV_MIN,
   FOV_MAX,
   FOLLOW_ZOOM_DEFAULT,
+  FOLLOW_ZOOM_MIN,
+  FOLLOW_ZOOM_MAX,
   TOPDOWN_ALTITUDE_DEFAULT,
   TOPDOWN_ALTITUDE_MIN,
   TOPDOWN_ALTITUDE_MAX,
@@ -658,7 +660,7 @@ export const useViewportStore = create<ViewportStore>()(
           },
 
           setFollowZoom: (zoom) => {
-            const clamped = Math.max(0.5, Math.min(5.0, zoom))
+            const clamped = Math.max(FOLLOW_ZOOM_MIN, Math.min(FOLLOW_ZOOM_MAX, zoom))
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
@@ -671,7 +673,7 @@ export const useViewportStore = create<ViewportStore>()(
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, (state) => ({
-                followZoom: Math.max(0.5, Math.min(5.0, state.followZoom + delta))
+                followZoom: Math.max(FOLLOW_ZOOM_MIN, Math.min(FOLLOW_ZOOM_MAX, state.followZoom + delta))
               }))
             })
           },

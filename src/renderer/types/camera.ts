@@ -137,7 +137,7 @@ export interface ViewportCameraState {
   /** Following mode: tower tracking or orbit */
   followMode: FollowMode
   /**
-   * Zoom factor for tower follow mode (0.5-5.0, 1.0 = default)
+   * Zoom factor for tower follow mode (0.5-10.0, 1.0 = default)
    * Lower values = more zoomed in, higher = more zoomed out
    */
   followZoom: number
