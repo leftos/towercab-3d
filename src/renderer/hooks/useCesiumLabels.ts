@@ -411,12 +411,6 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
       const aircraftTopWindowPos = Cesium.SceneTransforms.worldToWindowCoordinates(viewer.scene, aircraftTopPosition)
       if (!aircraftTopWindowPos) continue
 
-      // Fixed screen-space offsets for label positioning
-      // These provide consistent label distance regardless of zoom level
-      const viewModeScale = viewMode === 'topdown' ? 0.5 : 1.0
-      const verticalOffsetPixels = 25 * viewModeScale
-      const horizontalOffsetPixels = 25
-
       const aircraftScreenPos = { x: aircraftWindowPos.x, y: aircraftWindowPos.y }
 
       // Get custom position (per-aircraft override → global default)
@@ -477,23 +471,23 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
 
           // For horizontal adjustment based on column
           if (positionCol === 2) {
-            // Right column - push right
+            // Right column - push right past model
             offsetX = modelRadius + labelGap
           } else if (positionCol === 0) {
-            // Left column - push left
-            offsetX = -labelWidth - modelRadius - labelGap - horizontalOffsetPixels
+            // Left column - push left past model
+            offsetX = -labelWidth - modelRadius - labelGap
           } else {
-            // Center column - maintain horizontal centering, just push out minimally
+            // Center column - maintain horizontal centering
             offsetX = -labelWidth / 2
           }
 
           // For vertical adjustment based on row
           if (positionRow === 0) {
-            // Bottom row - push down
+            // Bottom row - push down past model
             offsetY = modelRadius + labelGap
           } else if (positionRow === 2) {
-            // Top row - push up
-            offsetY = -labelHeight - modelRadius - labelGap - verticalOffsetPixels
+            // Top row - push up past model
+            offsetY = -labelHeight - modelRadius - labelGap
           } else {
             // Middle row - maintain vertical centering
             offsetY = -labelHeight / 2
@@ -519,19 +513,22 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
             const pushUp = positionRow === 2
 
             // Build alternatives list based on user's preferred direction
+            // Use labelGap as the base spacing unit to respect leader line length
             const rightX = labelGap
-            const leftX = -labelWidth - labelGap - horizontalOffsetPixels
-            const upY = -labelHeight - labelGap - verticalOffsetPixels
+            const leftX = -labelWidth - labelGap
+            const upY = -labelHeight - labelGap
             const downY = labelGap
             const centerX = -labelWidth / 2
             const centerY = -labelHeight / 2
+            // Small nudge for alternatives (half of labelGap, minimum 5px)
+            const nudge = Math.max(5, Math.round(labelGap / 2))
 
             // For centered positions, try to maintain centering in that axis
             let alternatives: Array<{ x: number; y: number }>
             if (positionCol === 1) {
               // Horizontally centered - prioritize maintaining centerX
               alternatives = [
-                { x: centerX, y: pushUp ? upY - 30 : downY + 30 },
+                { x: centerX, y: pushUp ? upY - nudge : downY + nudge },
                 { x: centerX, y: pushUp ? downY : upY },
                 { x: rightX, y: pushUp ? upY : downY },
                 { x: leftX, y: pushUp ? upY : downY },
@@ -539,7 +536,7 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
             } else if (positionRow === 1) {
               // Vertically centered - prioritize maintaining centerY
               alternatives = [
-                { x: pushRight ? rightX + 30 : leftX - 30, y: centerY },
+                { x: pushRight ? rightX + nudge : leftX - nudge, y: centerY },
                 { x: pushRight ? leftX : rightX, y: centerY },
                 { x: pushRight ? rightX : leftX, y: upY },
                 { x: pushRight ? rightX : leftX, y: downY },
@@ -549,14 +546,14 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
               alternatives = pushRight
                 ? [
                     { x: rightX, y: pushUp ? upY : downY },
-                    { x: rightX + 30, y: pushUp ? upY : downY },
+                    { x: rightX + nudge, y: pushUp ? upY : downY },
                     { x: rightX, y: pushUp ? downY : upY },
                     { x: leftX, y: pushUp ? upY : downY },
                     { x: leftX, y: pushUp ? downY : upY },
                   ]
                 : [
                     { x: leftX, y: pushUp ? upY : downY },
-                    { x: leftX - 30, y: pushUp ? upY : downY },
+                    { x: leftX - nudge, y: pushUp ? upY : downY },
                     { x: leftX, y: pushUp ? downY : upY },
                     { x: rightX, y: pushUp ? upY : downY },
                     { x: rightX, y: pushUp ? downY : upY },

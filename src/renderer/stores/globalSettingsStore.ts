@@ -655,7 +655,7 @@ export function useDisplaySettings(): GlobalDisplaySettings {
  * Hook to get specific display setting values
  * More efficient than useDisplaySettings when only one value is needed
  */
-export function useLeaderDistance(): 1 | 2 | 3 | 4 | 5 {
+export function useLeaderDistance(): number {
   return useGlobalSettingsStore((state) => state.display.leaderDistance)
 }
 

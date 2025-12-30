@@ -101,8 +101,9 @@ function SettingsDisplayTab() {
               type="range"
               min="1"
               max="5"
+              step="0.5"
               value={leaderDistance}
-              onChange={(e) => updateDisplay({ leaderDistance: Number(e.target.value) as 1 | 2 | 3 | 4 | 5 })}
+              onChange={(e) => updateDisplay({ leaderDistance: Number(e.target.value) })}
             />
             <span>{leaderDistance}</span>
           </div>
