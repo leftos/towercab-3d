@@ -98,6 +98,35 @@ export type Theme = 'light' | 'dark'
 export type AircraftTintColor = 'white' | 'lightBlue' | 'tan' | 'yellow' | 'orange' | 'lightGray'
 
 /**
+ * 3D Building quality preset
+ *
+ * Controls the Level of Detail (LOD) for OSM 3D Buildings:
+ * - 'low': Buildings disappear quickly when zooming out (saves memory)
+ * - 'medium': Balanced quality/performance (default Cesium behavior)
+ * - 'high': Buildings stay visible longer when zoomed out (uses more memory)
+ *
+ * Technical: Controls Cesium3DTileset.maximumScreenSpaceError
+ * - low: 24 (aggressive LOD reduction)
+ * - medium: 16 (default)
+ * - high: 8 (keeps high detail longer)
+ */
+export type BuildingQuality = 'low' | 'medium' | 'high'
+
+/**
+ * Ground traffic label display mode
+ *
+ * Controls which ground aircraft display labels to reduce gate clutter:
+ * - 'all': Show labels for all ground aircraft (default, most cluttered)
+ * - 'moving': Show labels only for aircraft with groundspeed > minSpeed
+ * - 'activeOnly': Show labels only for aircraft that are actively taxiing (> 5 kts)
+ * - 'none': Hide all ground aircraft labels (least cluttered)
+ *
+ * Note: This only affects labels, not the aircraft model visibility.
+ * Use 'Show Ground Traffic' toggle to hide ground aircraft entirely.
+ */
+export type GroundLabelMode = 'all' | 'moving' | 'activeOnly' | 'none'
+
+/**
  * Cesium-specific configuration
  *
  * Settings related to the Cesium globe, terrain, and lighting system.
@@ -114,6 +143,16 @@ export interface CesiumSettings {
 
   /** Show 3D building models (OSM Buildings tileset, default: false) */
   show3DBuildings: boolean
+
+  /**
+   * 3D building quality/LOD setting (default: 'low')
+   *
+   * Controls how long buildings stay visible when zooming out:
+   * - 'low': Buildings disappear quickly (saves memory, current default)
+   * - 'medium': Balanced quality/performance
+   * - 'high': Buildings stay visible longer (uses more memory)
+   */
+  buildingQuality: BuildingQuality
 
   /** Time mode for sun position: real-time or fixed (default: 'real') */
   timeMode: TimeMode
@@ -656,6 +695,93 @@ export const DEFAULT_GLOBAL_VIEWPORT_SETTINGS: GlobalViewportSettings = {
 }
 
 /**
+ * Display settings that are shared across all devices
+ *
+ * These settings control how aircraft datablocks and labels appear,
+ * and are synced across all connected browsers/devices for a consistent
+ * controller experience.
+ */
+export interface GlobalDisplaySettings {
+  /**
+   * Leader line distance (1-5, default: 2)
+   * Same across all devices for consistent datablock appearance.
+   */
+  leaderDistance: 1 | 2 | 3 | 4 | 5
+
+  /**
+   * Default datablock direction (numpad-style position, default: 7)
+   * Same across all devices for consistent layout.
+   */
+  defaultDatablockDirection: DatablockDirection
+
+  /**
+   * Datablock display mode ('full', 'airline', 'none')
+   * Same across all devices so all controllers see the same info.
+   */
+  datablockMode: DatablockMode
+
+  /**
+   * Label visibility distance in nautical miles (1-100, default: 30)
+   * Same across all devices so all controllers see the same aircraft.
+   */
+  labelVisibilityDistance: number
+
+  /**
+   * Show ground traffic (default: true)
+   * Same across all devices for consistent filtering.
+   */
+  showGroundTraffic: boolean
+
+  /**
+   * Show airborne traffic (default: true)
+   * Same across all devices for consistent filtering.
+   */
+  showAirborneTraffic: boolean
+
+  /**
+   * Auto-avoid datablock overlaps (default: true)
+   * Same across all devices for consistent layout behavior.
+   */
+  autoAvoidOverlaps: boolean
+
+  /**
+   * Ground traffic label display mode (default: 'all')
+   *
+   * Controls which ground aircraft show labels to reduce gate clutter:
+   * - 'all': Show labels for all ground aircraft (most cluttered)
+   * - 'moving': Show labels only for aircraft above minimum speed
+   * - 'activeOnly': Show labels only for actively taxiing aircraft (> 5 kts)
+   * - 'none': Hide all ground traffic labels (least cluttered)
+   *
+   * Note: This only affects labels, not aircraft model visibility.
+   */
+  groundLabelMode: GroundLabelMode
+
+  /**
+   * Minimum groundspeed (kts) for ground labels when mode is 'moving' (default: 2)
+   *
+   * Aircraft below this speed are considered "parked" and won't show labels
+   * when groundLabelMode is 'moving'. Range: 1-10 kts.
+   */
+  groundLabelMinSpeed: number
+}
+
+/**
+ * Default global display settings
+ */
+export const DEFAULT_GLOBAL_DISPLAY_SETTINGS: GlobalDisplaySettings = {
+  leaderDistance: 2,
+  defaultDatablockDirection: 7,
+  datablockMode: 'full',
+  labelVisibilityDistance: 30,
+  showGroundTraffic: true,
+  showAirborneTraffic: true,
+  autoAvoidOverlaps: true,
+  groundLabelMode: 'all',
+  groundLabelMinSpeed: 2
+}
+
+/**
  * Global settings stored on the host file system
  *
  * These settings are persisted to a JSON file on the host PC and are
@@ -783,6 +909,12 @@ export interface GlobalSettings {
    * Shared across all browsers/devices
    */
   viewports: GlobalViewportSettings
+
+  /**
+   * Display settings (datablocks, labels, filtering)
+   * Shared across all browsers/devices for consistent appearance
+   */
+  display: GlobalDisplaySettings
 }
 
 /**
@@ -812,7 +944,8 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
     radiusNm: 100,
     maxParkedAircraft: 50
   },
-  viewports: DEFAULT_GLOBAL_VIEWPORT_SETTINGS
+  viewports: DEFAULT_GLOBAL_VIEWPORT_SETTINGS,
+  display: DEFAULT_GLOBAL_DISPLAY_SETTINGS
 }
 
 /**
@@ -1022,6 +1155,7 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     terrainQuality: 3,
     enableLighting: true,
     show3DBuildings: false,
+    buildingQuality: 'low',
     timeMode: 'real',
     fixedTimeHour: 12
   },

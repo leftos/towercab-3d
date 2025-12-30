@@ -427,7 +427,7 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
     }),
     {
       name: 'settings-store',
-      version: 26, // Added RealTraffic settings
+      version: 27, // Added buildingQuality setting
       migrate: (persistedState: unknown, version: number) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let state: any = persistedState
@@ -695,6 +695,7 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
       terrainQuality: oldSettings.terrainQuality ?? DEFAULT_SETTINGS.cesium.terrainQuality,
       enableLighting: oldSettings.enableLighting ?? DEFAULT_SETTINGS.cesium.enableLighting,
       show3DBuildings: oldSettings.show3DBuildings ?? DEFAULT_SETTINGS.cesium.show3DBuildings,
+      buildingQuality: oldSettings.buildingQuality ?? DEFAULT_SETTINGS.cesium.buildingQuality,
       timeMode: oldSettings.timeMode ?? DEFAULT_SETTINGS.cesium.timeMode,
       fixedTimeHour: oldSettings.fixedTimeHour ?? DEFAULT_SETTINGS.cesium.fixedTimeHour
     },

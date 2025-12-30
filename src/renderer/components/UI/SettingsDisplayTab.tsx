@@ -1,19 +1,27 @@
 import { useSettingsStore } from '../../stores/settingsStore'
+import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
 import CollapsibleSection from './settings/CollapsibleSection'
 import './ControlsBar.css'
 
+import type { GroundLabelMode } from '../../types'
+
 function SettingsDisplayTab() {
-  // Settings store - Display (Aircraft group)
-  const labelVisibilityDistance = useSettingsStore((state) => state.aircraft.labelVisibilityDistance)
+  // Global display settings (synced across all devices)
+  const labelVisibilityDistance = useGlobalSettingsStore((state) => state.display.labelVisibilityDistance)
+  const datablockMode = useGlobalSettingsStore((state) => state.display.datablockMode)
+  const showGroundTraffic = useGlobalSettingsStore((state) => state.display.showGroundTraffic)
+  const showAirborneTraffic = useGlobalSettingsStore((state) => state.display.showAirborneTraffic)
+  const autoAvoidOverlaps = useGlobalSettingsStore((state) => state.display.autoAvoidOverlaps)
+  const leaderDistance = useGlobalSettingsStore((state) => state.display.leaderDistance)
+  const defaultDatablockDirection = useGlobalSettingsStore((state) => state.display.defaultDatablockDirection)
+  const groundLabelMode = useGlobalSettingsStore((state) => state.display.groundLabelMode)
+  const groundLabelMinSpeed = useGlobalSettingsStore((state) => state.display.groundLabelMinSpeed)
+  const updateDisplay = useGlobalSettingsStore((state) => state.updateDisplay)
+
+  // Local settings (per-device)
   const maxAircraftDisplay = useSettingsStore((state) => state.aircraft.maxAircraftDisplay)
-  const datablockMode = useSettingsStore((state) => state.aircraft.datablockMode)
-  const showGroundTraffic = useSettingsStore((state) => state.aircraft.showGroundTraffic)
-  const showAirborneTraffic = useSettingsStore((state) => state.aircraft.showAirborneTraffic)
   const orientationEmulation = useSettingsStore((state) => state.aircraft.orientationEmulation)
   const orientationIntensity = useSettingsStore((state) => state.aircraft.orientationIntensity)
-  const autoAvoidOverlaps = useSettingsStore((state) => state.aircraft.autoAvoidOverlaps)
-  const leaderDistance = useSettingsStore((state) => state.aircraft.leaderDistance)
-  const defaultDatablockDirection = useSettingsStore((state) => state.aircraft.defaultDatablockDirection)
   const datablockFontSize = useSettingsStore((state) => state.aircraft.datablockFontSize)
   const updateAircraftSettings = useSettingsStore((state) => state.updateAircraftSettings)
   const showAircraftPanel = useSettingsStore((state) => state.ui.showAircraftPanel)
@@ -30,7 +38,7 @@ function SettingsDisplayTab() {
               min="5"
               max="100"
               value={labelVisibilityDistance}
-              onChange={(e) => updateAircraftSettings({ labelVisibilityDistance: Number(e.target.value) })}
+              onChange={(e) => updateDisplay({ labelVisibilityDistance: Number(e.target.value) })}
             />
             <span>{labelVisibilityDistance} nm</span>
           </div>
@@ -45,7 +53,7 @@ function SettingsDisplayTab() {
                 name="datablockMode"
                 value="full"
                 checked={datablockMode === 'full'}
-                onChange={() => updateAircraftSettings({ datablockMode: 'full' })}
+                onChange={() => updateDisplay({ datablockMode: 'full' })}
               />
               Full (callsign + type + altitude + speed)
             </label>
@@ -55,7 +63,7 @@ function SettingsDisplayTab() {
                 name="datablockMode"
                 value="airline"
                 checked={datablockMode === 'airline'}
-                onChange={() => updateAircraftSettings({ datablockMode: 'airline' })}
+                onChange={() => updateDisplay({ datablockMode: 'airline' })}
               />
               Airline Codes Only (ICAO code for airline flights)
             </label>
@@ -65,7 +73,7 @@ function SettingsDisplayTab() {
                 name="datablockMode"
                 value="none"
                 checked={datablockMode === 'none'}
-                onChange={() => updateAircraftSettings({ datablockMode: 'none' })}
+                onChange={() => updateDisplay({ datablockMode: 'none' })}
               />
               None (hide labels, show aircraft only)
             </label>
@@ -77,7 +85,7 @@ function SettingsDisplayTab() {
             <input
               type="checkbox"
               checked={autoAvoidOverlaps}
-              onChange={(e) => updateAircraftSettings({ autoAvoidOverlaps: e.target.checked })}
+              onChange={(e) => updateDisplay({ autoAvoidOverlaps: e.target.checked })}
             />
             Auto-rearrange to Avoid Overlaps
           </label>
@@ -94,7 +102,7 @@ function SettingsDisplayTab() {
               min="1"
               max="5"
               value={leaderDistance}
-              onChange={(e) => updateAircraftSettings({ leaderDistance: Number(e.target.value) as 1 | 2 | 3 | 4 | 5 })}
+              onChange={(e) => updateDisplay({ leaderDistance: Number(e.target.value) as 1 | 2 | 3 | 4 | 5 })}
             />
             <span>{leaderDistance}</span>
           </div>
@@ -116,7 +124,7 @@ function SettingsDisplayTab() {
             <span>{datablockFontSize}px</span>
           </div>
           <p className="setting-hint">
-            Font size for aircraft datablock labels.
+            Font size for aircraft datablock labels. (Per-device setting)
           </p>
         </div>
 
@@ -124,7 +132,7 @@ function SettingsDisplayTab() {
           <label>Default Datablock Direction</label>
           <select
             value={defaultDatablockDirection}
-            onChange={(e) => updateAircraftSettings({ defaultDatablockDirection: Number(e.target.value) as 1 | 2 | 3 | 4 | 6 | 7 | 8 | 9 })}
+            onChange={(e) => updateDisplay({ defaultDatablockDirection: Number(e.target.value) as 1 | 2 | 3 | 4 | 6 | 7 | 8 | 9 })}
           >
             <option value={7}>7 - Top-Left</option>
             <option value={8}>8 - Top</option>
@@ -155,7 +163,7 @@ function SettingsDisplayTab() {
             />
             <span>{maxAircraftDisplay}</span>
           </div>
-          <p className="setting-hint">Maximum number of aircraft to render.</p>
+          <p className="setting-hint">Maximum number of aircraft to render. (Per-device setting)</p>
         </div>
 
         <div className="setting-item">
@@ -163,18 +171,57 @@ function SettingsDisplayTab() {
             <input
               type="checkbox"
               checked={showGroundTraffic}
-              onChange={(e) => updateAircraftSettings({ showGroundTraffic: e.target.checked })}
+              onChange={(e) => updateDisplay({ showGroundTraffic: e.target.checked })}
             />
             Show Ground Traffic
           </label>
         </div>
+
+        {showGroundTraffic && (
+          <>
+            <div className="setting-item">
+              <label>Ground Traffic Labels</label>
+              <select
+                value={groundLabelMode ?? 'all'}
+                onChange={(e) => updateDisplay({ groundLabelMode: e.target.value as GroundLabelMode })}
+              >
+                <option value="all">All Ground Aircraft</option>
+                <option value="moving">Moving Only (custom speed)</option>
+                <option value="activeOnly">Active Only (&gt; 5 kts)</option>
+                <option value="none">Hide All Ground Labels</option>
+              </select>
+              <p className="setting-hint">
+                Reduce gate clutter by hiding labels for parked/stationary aircraft.
+              </p>
+            </div>
+
+            {groundLabelMode === 'moving' && (
+              <div className="setting-item">
+                <label>Minimum Speed for Labels</label>
+                <div className="slider-with-value">
+                  <input
+                    type="range"
+                    min="1"
+                    max="10"
+                    value={groundLabelMinSpeed ?? 2}
+                    onChange={(e) => updateDisplay({ groundLabelMinSpeed: Number(e.target.value) })}
+                  />
+                  <span>{groundLabelMinSpeed ?? 2} kts</span>
+                </div>
+                <p className="setting-hint">
+                  Aircraft below this speed won&apos;t show labels (considered parked).
+                </p>
+              </div>
+            )}
+          </>
+        )}
 
         <div className="setting-item">
           <label>
             <input
               type="checkbox"
               checked={showAirborneTraffic}
-              onChange={(e) => updateAircraftSettings({ showAirborneTraffic: e.target.checked })}
+              onChange={(e) => updateDisplay({ showAirborneTraffic: e.target.checked })}
             />
             Show Airborne Traffic
           </label>
@@ -190,7 +237,7 @@ function SettingsDisplayTab() {
             Emulate Aircraft Pitch/Roll
           </label>
           <p className="setting-hint">
-            Tilts aircraft based on climb/descent and turn rates.
+            Tilts aircraft based on climb/descent and turn rates. (Per-device setting)
           </p>
         </div>
 

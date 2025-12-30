@@ -460,6 +460,78 @@ impl Default for GlobalViewportSettings {
     }
 }
 
+/// Display settings shared across all browsers for consistent appearance
+/// These control datablock labels, leader lines, and filtering
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlobalDisplaySettings {
+    /// Leader line distance (1-5, default: 2)
+    #[serde(default = "default_leader_distance")]
+    pub leader_distance: u8,
+    /// Default datablock direction (numpad-style position 1-9, default: 7)
+    #[serde(default = "default_datablock_direction")]
+    pub default_datablock_direction: u8,
+    /// Datablock mode: "full", "airline", or "none"
+    #[serde(default = "default_datablock_mode")]
+    pub datablock_mode: String,
+    /// Label visibility distance in nautical miles (1-100, default: 30)
+    #[serde(default = "default_label_visibility_distance")]
+    pub label_visibility_distance: f64,
+    /// Show ground traffic (default: true)
+    #[serde(default = "default_true")]
+    pub show_ground_traffic: bool,
+    /// Show airborne traffic (default: true)
+    #[serde(default = "default_true")]
+    pub show_airborne_traffic: bool,
+    /// Auto-avoid datablock overlaps (default: true)
+    #[serde(default = "default_true")]
+    pub auto_avoid_overlaps: bool,
+    /// Ground traffic label mode: "all", "moving", "activeOnly", "none" (default: "all")
+    #[serde(default = "default_ground_label_mode")]
+    pub ground_label_mode: String,
+    /// Minimum groundspeed (kts) for ground labels when mode is "moving" (default: 2)
+    #[serde(default = "default_ground_label_min_speed")]
+    pub ground_label_min_speed: f64,
+}
+
+fn default_leader_distance() -> u8 {
+    2
+}
+fn default_datablock_direction() -> u8 {
+    7
+}
+fn default_datablock_mode() -> String {
+    "full".to_string()
+}
+fn default_label_visibility_distance() -> f64 {
+    30.0
+}
+fn default_true() -> bool {
+    true
+}
+fn default_ground_label_mode() -> String {
+    "all".to_string()
+}
+fn default_ground_label_min_speed() -> f64 {
+    2.0
+}
+
+impl Default for GlobalDisplaySettings {
+    fn default() -> Self {
+        GlobalDisplaySettings {
+            leader_distance: 2,
+            default_datablock_direction: 7,
+            datablock_mode: "full".to_string(),
+            label_visibility_distance: 30.0,
+            show_ground_traffic: true,
+            show_airborne_traffic: true,
+            auto_avoid_overlaps: true,
+            ground_label_mode: "all".to_string(),
+            ground_label_min_speed: 2.0,
+        }
+    }
+}
+
 /// Global settings stored on host file system (shared across all browsers)
 /// These settings are persisted to global-settings.json in the app data directory
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -473,6 +545,8 @@ pub struct GlobalSettings {
     pub realtraffic: GlobalRealTrafficSettings,
     #[serde(default)]
     pub viewports: GlobalViewportSettings,
+    #[serde(default)]
+    pub display: GlobalDisplaySettings,
 }
 
 impl Default for GlobalSettings {
@@ -497,6 +571,7 @@ impl Default for GlobalSettings {
             },
             realtraffic: GlobalRealTrafficSettings::default(),
             viewports: GlobalViewportSettings::default(),
+            display: GlobalDisplaySettings::default(),
         }
     }
 }

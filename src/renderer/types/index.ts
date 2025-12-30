@@ -140,6 +140,8 @@ export type {
   Theme,
   FSLTLTextureScale,
   DataSourceType,
+  BuildingQuality,
+  GroundLabelMode,
 
   // Settings groups
   CesiumSettings,
@@ -158,6 +160,9 @@ export type {
   // Global settings (stored on host file system, shared across browsers)
   GlobalSettings,
 
+  // Global display settings (shared across browsers for consistent appearance)
+  GlobalDisplaySettings,
+
   // Global viewport settings (stored on host, shared across browsers)
   GlobalViewModeDefaults,
   GlobalCameraBookmark,
@@ -173,6 +178,9 @@ export {
 
   // Default global settings values
   DEFAULT_GLOBAL_SETTINGS,
+
+  // Default global display settings values
+  DEFAULT_GLOBAL_DISPLAY_SETTINGS,
 
   // Default global viewport settings values
   DEFAULT_GLOBAL_VIEWPORT_SETTINGS

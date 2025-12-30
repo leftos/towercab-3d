@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useAircraftTimelineStore } from '@/stores/aircraftTimelineStore'
 import { useAirportStore } from '@/stores/airportStore'
-import { useSettingsStore } from '@/stores/settingsStore'
 import { useGlobalSettingsStore } from '@/stores/globalSettingsStore'
 import { useReplayStore } from '@/stores/replayStore'
 import { calculateDistanceNM } from '@/utils/interpolation'
@@ -68,7 +67,7 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
   const currentAirport = useAirportStore((state) => state.currentAirport)
   const towerHeight = useAirportStore((state) => state.towerHeight)
   const customTowerPosition = useAirportStore((state) => state.customTowerPosition)
-  const labelVisibilityDistance = useSettingsStore((state) => state.aircraft.labelVisibilityDistance)
+  const labelVisibilityDistance = useGlobalSettingsStore((state) => state.display.labelVisibilityDistance)
   const playbackMode = useReplayStore((state) => state.playbackMode)
   const dataSource = useGlobalSettingsStore((state) => state.realtraffic.dataSource)
 

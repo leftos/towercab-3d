@@ -17,12 +17,14 @@
  */
 
 import { create } from 'zustand'
-import type { GlobalSettings, GlobalViewportSettings, FSLTLTextureScale, DataSourceType } from '@/types'
-import { DEFAULT_GLOBAL_SETTINGS } from '@/types'
+import type { GlobalSettings, GlobalViewportSettings, GlobalDisplaySettings, FSLTLTextureScale, DataSourceType, DatablockMode, DatablockDirection } from '@/types'
+import { DEFAULT_GLOBAL_SETTINGS, DEFAULT_GLOBAL_DISPLAY_SETTINGS } from '@/types'
 import { globalSettingsApi, isTauri } from '@/utils/tauriApi'
 
 // Key used to track if migration from localStorage has been done
 const MIGRATION_KEY = 'globalSettingsMigrationDone'
+// Migration key for display settings specifically (v2 migration)
+const DISPLAY_MIGRATION_KEY = 'globalSettingsDisplayMigrationDone'
 
 /**
  * Check if there are settings in localStorage that should be migrated
@@ -83,6 +85,78 @@ function migrateFromLocalStorage(): Partial<GlobalSettings> | null {
   }
 }
 
+/**
+ * Migrate display settings from local settingsStore to global settings
+ * This handles the v2 migration where display settings become global
+ */
+function migrateDisplaySettings(): Partial<GlobalDisplaySettings> | null {
+  // Check if migration already done
+  if (localStorage.getItem(DISPLAY_MIGRATION_KEY)) {
+    return null
+  }
+
+  try {
+    const stored = localStorage.getItem('settings-store')
+    if (!stored) {
+      localStorage.setItem(DISPLAY_MIGRATION_KEY, 'true')
+      return null
+    }
+
+    const parsed = JSON.parse(stored)
+    const state = parsed?.state
+
+    if (!state?.aircraft) {
+      localStorage.setItem(DISPLAY_MIGRATION_KEY, 'true')
+      return null
+    }
+
+    const aircraft = state.aircraft
+    const migrated: Partial<GlobalDisplaySettings> = {}
+    let hasMigration = false
+
+    // Migrate display-related aircraft settings
+    if (aircraft.leaderDistance !== undefined) {
+      migrated.leaderDistance = aircraft.leaderDistance
+      hasMigration = true
+    }
+    if (aircraft.defaultDatablockDirection !== undefined) {
+      migrated.defaultDatablockDirection = aircraft.defaultDatablockDirection
+      hasMigration = true
+    }
+    if (aircraft.datablockMode !== undefined) {
+      migrated.datablockMode = aircraft.datablockMode
+      hasMigration = true
+    }
+    if (aircraft.labelVisibilityDistance !== undefined) {
+      migrated.labelVisibilityDistance = aircraft.labelVisibilityDistance
+      hasMigration = true
+    }
+    if (aircraft.showGroundTraffic !== undefined) {
+      migrated.showGroundTraffic = aircraft.showGroundTraffic
+      hasMigration = true
+    }
+    if (aircraft.showAirborneTraffic !== undefined) {
+      migrated.showAirborneTraffic = aircraft.showAirborneTraffic
+      hasMigration = true
+    }
+    if (aircraft.autoAvoidOverlaps !== undefined) {
+      migrated.autoAvoidOverlaps = aircraft.autoAvoidOverlaps
+      hasMigration = true
+    }
+
+    if (hasMigration) {
+      console.log('[GlobalSettings] Migrating display settings from localStorage:', Object.keys(migrated))
+    }
+
+    localStorage.setItem(DISPLAY_MIGRATION_KEY, 'true')
+    return hasMigration ? migrated : null
+  } catch (error) {
+    console.warn('[GlobalSettings] Display migration from localStorage failed:', error)
+    localStorage.setItem(DISPLAY_MIGRATION_KEY, 'true')
+    return null
+  }
+}
+
 interface GlobalSettingsState extends GlobalSettings {
   /** Whether the store has been initialized (loaded from disk) */
   initialized: boolean
@@ -121,22 +195,24 @@ interface GlobalSettingsState extends GlobalSettings {
   /** Update RealTraffic settings (data source, license key, radius) */
   updateRealTraffic: (updates: Partial<GlobalSettings['realtraffic']>) => Promise<void>
 
+  /** Update display settings (datablocks, labels, filtering - synced across devices) */
+  updateDisplay: (updates: Partial<GlobalDisplaySettings>) => Promise<void>
+
   /** Reset to default settings */
   resetToDefaults: () => Promise<void>
 
   /** Get current settings (without actions) */
   getSettings: () => GlobalSettings
+
+  /** Refresh settings from disk/server (used for sync) */
+  refresh: () => Promise<void>
 }
 
 /**
- * Save settings to disk via Tauri
+ * Save settings to disk via Tauri or HTTP API
+ * In remote browser mode, saves via HTTP which updates the host settings
  */
 async function saveSettings(settings: GlobalSettings): Promise<void> {
-  if (!isTauri()) {
-    console.warn('[GlobalSettings] Cannot save - not in Tauri environment')
-    return
-  }
-
   try {
     await globalSettingsApi.write(settings)
   } catch (error) {
@@ -183,7 +259,8 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
           // Preserve nested viewport objects
           airportConfigs: settings.viewports?.airportConfigs ?? DEFAULT_GLOBAL_SETTINGS.viewports.airportConfigs,
           orbitSettings: settings.viewports?.orbitSettings ?? DEFAULT_GLOBAL_SETTINGS.viewports.orbitSettings
-        }
+        },
+        display: { ...DEFAULT_GLOBAL_DISPLAY_SETTINGS, ...settings.display }
       }
 
       // Check if we need to migrate from localStorage (one-time migration)
@@ -204,6 +281,19 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
             console.log('[GlobalSettings] Migration complete, saved to disk')
           }
         }
+      }
+
+      // Migrate display settings from localStorage (v2 migration)
+      // This runs for both Tauri and remote browser modes to pick up local preferences
+      const displayMigrated = migrateDisplaySettings()
+      if (displayMigrated) {
+        settings = {
+          ...settings,
+          display: { ...settings.display, ...displayMigrated }
+        }
+        // Save the migrated display settings
+        await globalSettingsApi.write(settings)
+        console.log('[GlobalSettings] Display settings migration complete')
       }
 
       set({
@@ -230,18 +320,9 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
   },
 
   setCesiumIonToken: async (token: string) => {
-    // Update state first, then read full current state for save
-    // This ensures concurrent updates from other functions are included
+    // Update state first, then save all current state
     set({ cesiumIonToken: token })
-    const currentState = get()
-    await saveSettings({
-      cesiumIonToken: currentState.cesiumIonToken,
-      fsltl: currentState.fsltl,
-      airports: currentState.airports,
-      server: currentState.server,
-      realtraffic: currentState.realtraffic,
-      viewports: currentState.viewports
-    })
+    await saveSettings(get().getSettings())
   },
 
   updateFsltl: async (updates: Partial<GlobalSettings['fsltl']>) => {
@@ -254,35 +335,15 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
         ? updates.textureScale
         : state.fsltl.textureScale) as FSLTLTextureScale
     }
-
-    // Update state first, then read full current state for save
     set({ fsltl: newFsltl })
-    const currentState = get()
-    await saveSettings({
-      cesiumIonToken: currentState.cesiumIonToken,
-      fsltl: currentState.fsltl,
-      airports: currentState.airports,
-      server: currentState.server,
-      realtraffic: currentState.realtraffic,
-      viewports: currentState.viewports
-    })
+    await saveSettings(get().getSettings())
   },
 
   updateAirports: async (updates: Partial<GlobalSettings['airports']>) => {
     const state = get()
     const newAirports = { ...state.airports, ...updates }
-
-    // Update state first, then read full current state for save
     set({ airports: newAirports })
-    const currentState = get()
-    await saveSettings({
-      cesiumIonToken: currentState.cesiumIonToken,
-      fsltl: currentState.fsltl,
-      airports: currentState.airports,
-      server: currentState.server,
-      realtraffic: currentState.realtraffic,
-      viewports: currentState.viewports
-    })
+    await saveSettings(get().getSettings())
   },
 
   updateServer: async (updates: Partial<GlobalSettings['server']>) => {
@@ -295,18 +356,8 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
         ? Math.max(1024, Math.min(65535, updates.port))
         : state.server.port
     }
-
-    // Update state first, then read full current state for save
     set({ server: newServer })
-    const currentState = get()
-    await saveSettings({
-      cesiumIonToken: currentState.cesiumIonToken,
-      fsltl: currentState.fsltl,
-      airports: currentState.airports,
-      server: currentState.server,
-      realtraffic: currentState.realtraffic,
-      viewports: currentState.viewports
-    })
+    await saveSettings(get().getSettings())
   },
 
   updateViewports: async (updates: Partial<GlobalViewportSettings>) => {
@@ -323,32 +374,13 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
         ? { ...state.viewports.orbitSettings, ...updates.orbitSettings }
         : state.viewports.orbitSettings
     }
-
-    // Update state first, then read full current state for save
     set({ viewports: newViewports })
-    const currentState = get()
-    await saveSettings({
-      cesiumIonToken: currentState.cesiumIonToken,
-      fsltl: currentState.fsltl,
-      airports: currentState.airports,
-      server: currentState.server,
-      realtraffic: currentState.realtraffic,
-      viewports: currentState.viewports
-    })
+    await saveSettings(get().getSettings())
   },
 
   setViewports: async (viewports: GlobalViewportSettings) => {
-    // Update state first, then read full current state for save
     set({ viewports })
-    const currentState = get()
-    await saveSettings({
-      cesiumIonToken: currentState.cesiumIonToken,
-      fsltl: currentState.fsltl,
-      airports: currentState.airports,
-      server: currentState.server,
-      realtraffic: currentState.realtraffic,
-      viewports: currentState.viewports
-    })
+    await saveSettings(get().getSettings())
   },
 
   updateRealTraffic: async (updates: Partial<GlobalSettings['realtraffic']>) => {
@@ -369,18 +401,36 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
         ? Math.max(0, Math.min(200, updates.maxParkedAircraft))
         : state.realtraffic.maxParkedAircraft
     }
-
-    // Update state first, then read full current state for save
     set({ realtraffic: newRealTraffic })
-    const currentState = get()
-    await saveSettings({
-      cesiumIonToken: currentState.cesiumIonToken,
-      fsltl: currentState.fsltl,
-      airports: currentState.airports,
-      server: currentState.server,
-      realtraffic: currentState.realtraffic,
-      viewports: currentState.viewports
-    })
+    await saveSettings(get().getSettings())
+  },
+
+  updateDisplay: async (updates: Partial<GlobalDisplaySettings>) => {
+    const state = get()
+    const newDisplay: GlobalDisplaySettings = {
+      ...state.display,
+      ...updates,
+      // Validate leaderDistance (1-5)
+      leaderDistance: (updates.leaderDistance !== undefined
+        ? Math.max(1, Math.min(5, updates.leaderDistance)) as 1 | 2 | 3 | 4 | 5
+        : state.display.leaderDistance),
+      // Validate defaultDatablockDirection (1-9, excluding 5)
+      defaultDatablockDirection: (updates.defaultDatablockDirection !== undefined
+        ? (updates.defaultDatablockDirection >= 1 && updates.defaultDatablockDirection <= 9
+            ? updates.defaultDatablockDirection as DatablockDirection
+            : state.display.defaultDatablockDirection)
+        : state.display.defaultDatablockDirection),
+      // Validate datablockMode
+      datablockMode: (updates.datablockMode && ['full', 'airline', 'none'].includes(updates.datablockMode)
+        ? updates.datablockMode as DatablockMode
+        : state.display.datablockMode),
+      // Validate labelVisibilityDistance (1-100)
+      labelVisibilityDistance: updates.labelVisibilityDistance !== undefined
+        ? Math.max(1, Math.min(100, updates.labelVisibilityDistance))
+        : state.display.labelVisibilityDistance
+    }
+    set({ display: newDisplay })
+    await saveSettings(get().getSettings())
   },
 
   resetToDefaults: async () => {
@@ -396,7 +446,35 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
       airports: state.airports,
       server: state.server,
       realtraffic: state.realtraffic,
-      viewports: state.viewports
+      viewports: state.viewports,
+      display: state.display
+    }
+  },
+
+  refresh: async () => {
+    try {
+      // Reload settings from disk/server
+      const settings = await globalSettingsApi.read()
+      // Merge with defaults for any missing fields
+      const mergedSettings = {
+        ...DEFAULT_GLOBAL_SETTINGS,
+        ...settings,
+        fsltl: { ...DEFAULT_GLOBAL_SETTINGS.fsltl, ...settings.fsltl },
+        airports: { ...DEFAULT_GLOBAL_SETTINGS.airports, ...settings.airports },
+        server: { ...DEFAULT_GLOBAL_SETTINGS.server, ...settings.server },
+        realtraffic: { ...DEFAULT_GLOBAL_SETTINGS.realtraffic, ...settings.realtraffic },
+        viewports: {
+          ...DEFAULT_GLOBAL_SETTINGS.viewports,
+          ...settings.viewports,
+          airportConfigs: settings.viewports?.airportConfigs ?? DEFAULT_GLOBAL_SETTINGS.viewports.airportConfigs,
+          orbitSettings: settings.viewports?.orbitSettings ?? DEFAULT_GLOBAL_SETTINGS.viewports.orbitSettings
+        },
+        display: { ...DEFAULT_GLOBAL_DISPLAY_SETTINGS, ...settings.display }
+      }
+      set(mergedSettings)
+      console.log('[GlobalSettings] Refreshed from server')
+    } catch (error) {
+      console.error('[GlobalSettings] Failed to refresh:', error)
     }
   }
 }))
@@ -564,4 +642,43 @@ export async function repairSettingsMigration(): Promise<{
   }
 
   return { recovered, errors }
+}
+
+/**
+ * Hook to get display settings (synced across devices)
+ */
+export function useDisplaySettings(): GlobalDisplaySettings {
+  return useGlobalSettingsStore((state) => state.display)
+}
+
+/**
+ * Hook to get specific display setting values
+ * More efficient than useDisplaySettings when only one value is needed
+ */
+export function useLeaderDistance(): 1 | 2 | 3 | 4 | 5 {
+  return useGlobalSettingsStore((state) => state.display.leaderDistance)
+}
+
+export function useDatablockMode(): DatablockMode {
+  return useGlobalSettingsStore((state) => state.display.datablockMode)
+}
+
+export function useLabelVisibilityDistance(): number {
+  return useGlobalSettingsStore((state) => state.display.labelVisibilityDistance)
+}
+
+export function useShowGroundTraffic(): boolean {
+  return useGlobalSettingsStore((state) => state.display.showGroundTraffic)
+}
+
+export function useShowAirborneTraffic(): boolean {
+  return useGlobalSettingsStore((state) => state.display.showAirborneTraffic)
+}
+
+export function useAutoAvoidOverlaps(): boolean {
+  return useGlobalSettingsStore((state) => state.display.autoAvoidOverlaps)
+}
+
+export function useDefaultDatablockDirection(): DatablockDirection {
+  return useGlobalSettingsStore((state) => state.display.defaultDatablockDirection)
 }

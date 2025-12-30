@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useVatsimStore } from '../../stores/vatsimStore'
 import { useVnasStore } from '../../stores/vnasStore'
 import { useAirportStore } from '../../stores/airportStore'
-import { useSettingsStore } from '../../stores/settingsStore'
+import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
 import { useActiveViewportCamera } from '../../hooks/useActiveViewportCamera'
 import { calculateDistanceNM } from '../../utils/interpolation'
 import { getTowerPosition } from '../../utils/towerHeight'
@@ -34,7 +34,7 @@ function GlobalSearchPanel() {
   const currentAirport = useAirportStore((state) => state.currentAirport)
   const towerHeight = useAirportStore((state) => state.towerHeight)
   const customTowerPosition = useAirportStore((state) => state.customTowerPosition)
-  const labelVisibilityDistance = useSettingsStore((state) => state.aircraft.labelVisibilityDistance)
+  const labelVisibilityDistance = useGlobalSettingsStore((state) => state.display.labelVisibilityDistance)
 
   // vNAS state for live update indicator
   const vnasConnected = useVnasStore((state) => state.status.state === 'connected')

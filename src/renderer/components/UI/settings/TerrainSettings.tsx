@@ -1,10 +1,12 @@
 import { useSettingsStore } from '../../../stores/settingsStore'
 import CollapsibleSection from './CollapsibleSection'
 import '../ControlsBar.css'
+import type { BuildingQuality } from '../../../types'
 
 function TerrainSettings() {
   const terrainQuality = useSettingsStore((state) => state.cesium.terrainQuality)
   const show3DBuildings = useSettingsStore((state) => state.cesium.show3DBuildings)
+  const buildingQuality = useSettingsStore((state) => state.cesium.buildingQuality)
   const updateCesiumSettings = useSettingsStore((state) => state.updateCesiumSettings)
 
   return (
@@ -40,6 +42,23 @@ function TerrainSettings() {
           Display OpenStreetMap 3D buildings. May impact performance.
         </p>
       </div>
+
+      {show3DBuildings && (
+        <div className="setting-item">
+          <label>Building Quality</label>
+          <select
+            value={buildingQuality ?? 'low'}
+            onChange={(e) => updateCesiumSettings({ buildingQuality: e.target.value as BuildingQuality })}
+          >
+            <option value="low">Low (save memory)</option>
+            <option value="medium">Medium (balanced)</option>
+            <option value="high">High (stay visible when zoomed out)</option>
+          </select>
+          <p className="setting-hint">
+            Higher quality keeps buildings visible at greater zoom distances but uses more memory.
+          </p>
+        </div>
+      )}
     </CollapsibleSection>
   )
 }

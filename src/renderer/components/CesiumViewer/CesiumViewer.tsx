@@ -81,9 +81,10 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   const currentAirport = useAirportStore((state) => state.currentAirport)
   const towerHeight = useAirportStore((state) => state.towerHeight)
   const customTowerPosition = useAirportStore((state) => state.customTowerPosition)
-  const datablockMode = useSettingsStore((state) => state.aircraft.datablockMode)
+  const datablockMode = useGlobalSettingsStore((state) => state.display.datablockMode)
   const terrainQuality = useSettingsStore((state) => state.cesium.terrainQuality)
   const show3DBuildings = useSettingsStore((state) => state.cesium.show3DBuildings)
+  const buildingQuality = useSettingsStore((state) => state.cesium.buildingQuality)
   const timeMode = useSettingsStore((state) => state.cesium.timeMode)
   const fixedTimeHour = useSettingsStore((state) => state.cesium.fixedTimeHour)
   const inMemoryTileCacheSize = useSettingsStore((state) => state.memory.inMemoryTileCacheSize)
@@ -165,9 +166,9 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   // Get filter settings from stores (for inline filtering at 60Hz)
   const searchQuery = useAircraftFilterStore((state) => state.searchQuery)
   const filterAirportTraffic = useAircraftFilterStore((state) => state.filterAirportTraffic)
-  const labelVisibilityDistance = useSettingsStore((state) => state.aircraft.labelVisibilityDistance)
-  const showGroundTraffic = useSettingsStore((state) => state.aircraft.showGroundTraffic)
-  const showAirborneTraffic = useSettingsStore((state) => state.aircraft.showAirborneTraffic)
+  const labelVisibilityDistance = useGlobalSettingsStore((state) => state.display.labelVisibilityDistance)
+  const showGroundTraffic = useGlobalSettingsStore((state) => state.display.showGroundTraffic)
+  const showAirborneTraffic = useGlobalSettingsStore((state) => state.display.showAirborneTraffic)
 
   // =========================================================================
   // Calculate reference position and ground elevation (used by hooks below)
@@ -527,9 +528,17 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
           const tileset = await Cesium.createOsmBuildingsAsync()
           if (isCancelled) return
 
-          // Memory optimization: minimize tile caching to reduce RAM usage
-          tileset.cacheBytes = 0  // Don't cache tiles in memory (new API, replaces maximumMemoryUsage)
-          tileset.maximumScreenSpaceError = 24  // Use lower quality tiles (default is 16)
+          // Configure LOD based on buildingQuality setting
+          // maximumScreenSpaceError: lower = more detail at distance, higher = less detail
+          // cacheBytes: higher = more tiles cached in memory
+          const qualitySettings = {
+            low: { maxError: 24, cacheBytes: 0 },           // Aggressive LOD reduction, no caching
+            medium: { maxError: 16, cacheBytes: 256 * 1024 * 1024 },  // Default Cesium behavior
+            high: { maxError: 8, cacheBytes: 512 * 1024 * 1024 }      // Keep detail longer
+          }
+          const settings = qualitySettings[buildingQuality] || qualitySettings.low
+          tileset.cacheBytes = settings.cacheBytes
+          tileset.maximumScreenSpaceError = settings.maxError
 
           // Disable building shadows when aircraftShadowsOnly is enabled
           tileset.shadows = aircraftShadowsOnly
@@ -554,7 +563,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
         setBuildingsTileset(null)
       }
     }
-  }, [viewer, show3DBuildings, isInset, aircraftShadowsOnly])
+  }, [viewer, show3DBuildings, buildingQuality, isInset, aircraftShadowsOnly])
 
   // Update building shadows when aircraftShadowsOnly changes
   useEffect(() => {
@@ -922,7 +931,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
         // Key 5 means "reset to default" - clear per-aircraft override
         if (datablockStore.pendingDirection === 5) {
           datablockStore.clearAircraftOverride(callsign)
-          const appDefault = useSettingsStore.getState().aircraft.defaultDatablockDirection
+          const appDefault = useGlobalSettingsStore.getState().display.defaultDatablockDirection
           useUIFeedbackStore.getState().showFeedback(
             `${callsign} datablock reset to default (${appDefault})`,
             'success'

@@ -7,7 +7,7 @@ import { calculateDistanceNM } from '../utils/interpolation'
 import { calculateDatablockOffset } from '../utils/screenProjection'
 import { useDatablockPositionStore } from '../stores/datablockPositionStore'
 import { useViewportStore } from '../stores/viewportStore'
-import { useSettingsStore } from '../stores/settingsStore'
+import { useGlobalSettingsStore } from '../stores/globalSettingsStore'
 import { GROUNDSPEED_THRESHOLD_KNOTS, DATABLOCK_LEADER_LINE_HEIGHT_MULTIPLIER } from '../constants/rendering'
 import { filterAircraftForRendering } from './useRenderCulling'
 
@@ -220,6 +220,34 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
           }
         }
 
+        // Ground label mode filter (gate clutter reduction)
+        // Only applies to ground aircraft, not airborne
+        if (showDatablock && !isAirborne) {
+          const displaySettings = useGlobalSettingsStore.getState().display
+          const groundLabelMode = displaySettings.groundLabelMode ?? 'all'
+          const groundLabelMinSpeed = displaySettings.groundLabelMinSpeed ?? 2
+
+          switch (groundLabelMode) {
+            case 'none':
+              // Hide all ground labels
+              showDatablock = false
+              break
+            case 'activeOnly':
+              // Only show actively taxiing aircraft (> 5 kts)
+              if (aircraft.interpolatedGroundspeed < 5) {
+                showDatablock = false
+              }
+              break
+            case 'moving':
+              // Only show aircraft above minimum speed
+              if (aircraft.interpolatedGroundspeed < groundLabelMinSpeed) {
+                showDatablock = false
+              }
+              break
+            // 'all' - show all ground labels (default behavior)
+          }
+        }
+
         // Search filter (from panel)
         if (showDatablock && query) {
           if (!aircraft.callsign.toLowerCase().includes(query) &&
@@ -338,9 +366,12 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
     const labelWidth = 90
     const labelHeight = 36
     const modelRadius = viewMode === 'topdown' ? 15 : 15
-    // Leader distance setting: 1=short, 2=normal (default), 3=medium, 4=long, 5=very long
-    const leaderDistance = useSettingsStore.getState().aircraft.leaderDistance ?? 2
-    const labelGap = viewMode === 'topdown' ? leaderDistance * 10 : leaderDistance * 10
+    // Leader distance setting: 1=5px (short), 2=10px (normal), 3=15px (medium), 4=20px (long), 5=25px (very long)
+    // On mobile (< 1200px width), scale down leader lines to appear proportional
+    const leaderDistance = useGlobalSettingsStore.getState().display.leaderDistance ?? 2
+    const screenWidth = typeof window !== 'undefined' ? window.innerWidth : 1920
+    const mobileScale = screenWidth < 1200 ? 0.6 : 1.0  // 60% on mobile for proportional appearance
+    const labelGap = Math.round(leaderDistance * 5 * mobileScale)
 
     const labelPositions: Array<{
       callsign: string
@@ -391,7 +422,7 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
       // Get custom position (per-aircraft override → global default)
       const datablockPositionStore = useDatablockPositionStore.getState()
       const viewportStore = useViewportStore.getState()
-      const autoAvoidOverlaps = useSettingsStore.getState().aircraft.autoAvoidOverlaps ?? true
+      const autoAvoidOverlaps = useGlobalSettingsStore.getState().display.autoAvoidOverlaps ?? true
 
       const perAircraftPos = datablockPositionStore.getAircraftPosition(data.callsign)
       const globalPos = viewportStore.getDatablockPosition()

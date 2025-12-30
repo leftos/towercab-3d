@@ -1152,8 +1152,8 @@ export const useViewportStore = create<ViewportStore>()(
           getDatablockPosition: (): DatablockPosition => {
             const state = get()
             const icao = state.currentAirportIcao
-            // Get app default from settings
-            const appDefault = useSettingsStore.getState().aircraft.defaultDatablockDirection
+            // Get app default from global display settings (synced across devices)
+            const appDefault = useGlobalSettingsStore.getState().display.defaultDatablockDirection
             if (!icao) return appDefault
             const pos = state.airportViewportConfigs[icao]?.datablockPosition ?? appDefault
             return pos

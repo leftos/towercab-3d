@@ -2,6 +2,7 @@ import { useEffect, useRef, useMemo } from 'react'
 import * as Cesium from 'cesium'
 import { useViewportStore } from '../stores/viewportStore'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useGlobalSettingsStore } from '../stores/globalSettingsStore'
 import { useUIFeedbackStore } from '../stores/uiFeedbackStore'
 import { useAirportStore } from '../stores/airportStore'
 import { useDatablockPositionStore, type PendingDirection } from '../stores/datablockPositionStore'
@@ -519,7 +520,7 @@ export function useCameraInput(
           const datablockStore = useDatablockPositionStore.getState()
           datablockStore.setPendingDirection(numKey as PendingDirection)
           if (numKey === 5) {
-            const appDefault = useSettingsStore.getState().aircraft.defaultDatablockDirection
+            const appDefault = useGlobalSettingsStore.getState().display.defaultDatablockDirection
             useUIFeedbackStore.getState().showFeedback(
               `Reset to default (${appDefault}): Enter=all, Click=aircraft, Esc=cancel`,
               'success'
@@ -540,7 +541,7 @@ export function useCameraInput(
         if (datablockStore.pendingDirection) {
           // Key 5 means "reset to app default"
           if (datablockStore.pendingDirection === 5) {
-            const appDefault = useSettingsStore.getState().aircraft.defaultDatablockDirection
+            const appDefault = useGlobalSettingsStore.getState().display.defaultDatablockDirection
             useViewportStore.getState().setDatablockPosition(appDefault)
             useUIFeedbackStore.getState().showFeedback(
               `All datablocks reset to default (position ${appDefault})`,

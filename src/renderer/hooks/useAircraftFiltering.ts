@@ -1,5 +1,6 @@
 import { useAircraftFilterStore } from '@/stores/aircraftFilterStore'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useGlobalSettingsStore } from '@/stores/globalSettingsStore'
 import { useViewportStore } from '@/stores/viewportStore'
 import { useAirportStore } from '@/stores/airportStore'
 import { useWeatherStore } from '@/stores/weatherStore'
@@ -252,10 +253,10 @@ export function useAircraftFiltering(
 ): FilteredAircraftResult {
   const includeFollowedRegardlessOfDistance = options?.includeFollowedRegardlessOfDistance ?? false
 
-  // Get global settings
-  const labelVisibilityDistance = useSettingsStore((state) => state.aircraft.labelVisibilityDistance)
-  const showGroundTraffic = useSettingsStore((state) => state.aircraft.showGroundTraffic)
-  const showAirborneTraffic = useSettingsStore((state) => state.aircraft.showAirborneTraffic)
+  // Get global display settings (synced across devices)
+  const labelVisibilityDistance = useGlobalSettingsStore((state) => state.display.labelVisibilityDistance)
+  const showGroundTraffic = useGlobalSettingsStore((state) => state.display.showGroundTraffic)
+  const showAirborneTraffic = useGlobalSettingsStore((state) => state.display.showAirborneTraffic)
   const showWeatherEffects = useSettingsStore((state) => state.weather.showWeatherEffects)
   const showCesiumFog = useSettingsStore((state) => state.weather.showCesiumFog)
   const showClouds = useSettingsStore((state) => state.weather.showClouds)
