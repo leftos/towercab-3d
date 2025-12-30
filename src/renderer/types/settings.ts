@@ -507,16 +507,11 @@ export interface AircraftSettings {
   autoAvoidOverlaps: boolean
 
   /**
-   * Leader line distance (1-5 in 0.5 increments, default: 2)
+   * Leader line distance (0.5-5 in 0.5 increments, default: 2)
    *
    * Controls the length of the leader lines connecting datablocks to aircraft.
    * Higher values = longer lines, more separation between label and aircraft.
-   *
-   * - 1 = Short (5px gap)
-   * - 2 = Normal (10px gap, default)
-   * - 3 = Medium (15px gap)
-   * - 4 = Long (20px gap)
-   * - 5 = Very Long (25px gap)
+   * Multiplied by 3 to get pixel gap (e.g., 2 = 6px gap).
    */
   leaderDistance: number
 
@@ -703,8 +698,9 @@ export const DEFAULT_GLOBAL_VIEWPORT_SETTINGS: GlobalViewportSettings = {
  */
 export interface GlobalDisplaySettings {
   /**
-   * Leader line distance (1-5 in 0.5 increments, default: 2)
+   * Leader line distance (0.5-5 in 0.5 increments, default: 2)
    * Same across all devices for consistent datablock appearance.
+   * Multiplied by 3 to get pixel gap.
    */
   leaderDistance: number
 

@@ -99,7 +99,7 @@ function SettingsDisplayTab() {
           <div className="slider-with-value">
             <input
               type="range"
-              min="1"
+              min="0.5"
               max="5"
               step="0.5"
               value={leaderDistance}

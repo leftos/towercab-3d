@@ -410,9 +410,9 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
     const newDisplay: GlobalDisplaySettings = {
       ...state.display,
       ...updates,
-      // Validate leaderDistance (1-5)
+      // Validate leaderDistance (0.5-5)
       leaderDistance: (updates.leaderDistance !== undefined
-        ? Math.max(1, Math.min(5, updates.leaderDistance)) as 1 | 2 | 3 | 4 | 5
+        ? Math.max(0.5, Math.min(5, updates.leaderDistance))
         : state.display.leaderDistance),
       // Validate defaultDatablockDirection (1-9, excluding 5)
       defaultDatablockDirection: (updates.defaultDatablockDirection !== undefined
