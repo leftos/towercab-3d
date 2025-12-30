@@ -2,7 +2,28 @@
 
 All notable changes to TowerCab 3D will be documented in this file.
 
-## [Unreleased]
+## [0.0.23-alpha] - 2025-12-30
+
+### Added
+- Mobile zoom buttons for touch devices
+  - Plus/minus buttons appear next to the virtual joystick on mobile browsers
+  - Works with all camera modes: zoom level (tower), distance (orbit), and FOV (free camera)
+- Ground label filtering to reduce gate clutter
+  - All: Show labels for all ground aircraft (default)
+  - Moving Only: Show labels for aircraft above custom speed threshold
+  - Active Only: Show labels for aircraft above 5 knots
+  - None: Hide all ground traffic labels
+  - Access via Settings > Display > Ground Labels
+- Building quality setting for 3D OSM buildings
+  - Low: Aggressive LOD reduction, minimal caching (saves memory on older devices)
+  - Medium: Default Cesium behavior with 256MB cache
+  - High: Keep detail longer with 512MB cache
+  - Access via Settings > Graphics > Terrain
+
+### Changed
+- Display settings now sync across all connected devices
+  - Datablock mode, label visibility distance, ground/airborne traffic toggles, leader distance, and default datablock direction are now shared
+  - Provides consistent controller view when accessing from iPad or other browsers
 
 ### Fixed
 - Aircraft no longer jump backward when switching data sources (e.g., vNAS → VATSIM after landing)
