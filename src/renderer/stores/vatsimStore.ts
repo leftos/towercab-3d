@@ -8,6 +8,7 @@ import { useSettingsStore } from './settingsStore'
 import { useReplayStore } from './replayStore'
 import { useAircraftTimelineStore } from './aircraftTimelineStore'
 import { VATSIM_DATA_URL, VATSIM_POLL_INTERVAL, VATSIM_ACTUAL_UPDATE_INTERVAL } from '../constants'
+import { SOURCE_DISPLAY_DELAYS } from '../constants/aircraft-timeline'
 
 interface ReferencePosition {
   latitude: number
@@ -222,7 +223,8 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
           verticalRate: null,
           observedAt: vatsimTimestamp,  // When VATSIM says this was true
           receivedAt: now,
-          source: 'vatsim'
+          source: 'vatsim',
+          displayDelay: SOURCE_DISPLAY_DELAYS.vatsim
         }
 
         const metadata: AircraftMetadata = {
@@ -410,7 +412,8 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
           verticalRate: null,
           observedAt: lastVatsimTimestamp || now,
           receivedAt: now,
-          source: 'vatsim'
+          source: 'vatsim',
+          displayDelay: SOURCE_DISPLAY_DELAYS.vatsim
         }
 
         const metadata: AircraftMetadata = {

@@ -65,6 +65,13 @@ export interface AircraftObservation {
 
   // Source
   source: AircraftDataSource
+
+  /**
+   * Display delay that was appropriate when this observation was created.
+   * Used for interpolation to prevent position jumps when source changes.
+   * Value in milliseconds.
+   */
+  displayDelay: number
 }
 
 /**

@@ -19,6 +19,7 @@ import { useAircraftTimelineStore } from './aircraftTimelineStore'
 import {
   REALTRAFFIC_DEFAULT_POLL_INTERVAL
 } from '../constants/realtraffic'
+import { SOURCE_DISPLAY_DELAYS } from '../constants/aircraft-timeline'
 
 interface ReferencePosition {
   latitude: number
@@ -271,7 +272,8 @@ export const useRealTrafficStore = create<RealTrafficStore>((set, get) => ({
           verticalRate: state.baroRate ?? null, // Actual ADS-B vertical rate in fpm
           observedAt: state.apiTimestamp * 1000,  // Convert seconds to ms
           receivedAt: now,
-          source: 'realtraffic'
+          source: 'realtraffic',
+          displayDelay: SOURCE_DISPLAY_DELAYS.realtraffic
         }
 
         const metadata: AircraftMetadata = {

@@ -4,6 +4,11 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Aircraft no longer jump backward when switching data sources (e.g., vNAS → VATSIM after landing)
+  - Previously, aircraft would teleport ~30 seconds back along their path when the data source changed
+  - Each observation now stores its own display delay, preventing sudden position jumps during transitions
+
 ## [0.0.22-alpha] - 2025-12-29
 
 ### Added

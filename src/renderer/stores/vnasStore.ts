@@ -4,6 +4,7 @@ import type { AircraftState } from '../types/vatsim'
 import type { AircraftObservation, AircraftMetadata } from '../types/aircraft-timeline'
 import { isRemoteMode } from '../utils/remoteMode'
 import { useAircraftTimelineStore } from './aircraftTimelineStore'
+import { SOURCE_DISPLAY_DELAYS } from '../constants/aircraft-timeline'
 
 /**
  * vNAS Store
@@ -307,7 +308,8 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       verticalRate: null,
       observedAt: now,  // vNAS data is real-time
       receivedAt: now,
-      source: 'vnas'
+      source: 'vnas',
+      displayDelay: SOURCE_DISPLAY_DELAYS.vnas
     }
 
     const metadata: AircraftMetadata = {
@@ -395,7 +397,8 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
         verticalRate: null,
         observedAt: now,  // vNAS data is real-time
         receivedAt: now,
-        source: 'vnas'
+        source: 'vnas',
+        displayDelay: SOURCE_DISPLAY_DELAYS.vnas
       }
 
       const metadata: AircraftMetadata = {

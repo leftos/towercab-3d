@@ -333,8 +333,12 @@ function interpolateTimeline(
     return null
   }
 
-  // Get display delay for this source
-  const displayDelay = SOURCE_DISPLAY_DELAYS[lastSource]
+  // Get display delay from the most recent observation
+  // This prevents position jumps when source changes (e.g., vNAS → VATSIM after landing)
+  // because each observation remembers its own display delay from when it was created.
+  // Fallback to SOURCE_DISPLAY_DELAYS[lastSource] for migration (old observations without displayDelay)
+  const newestObs = observations[observations.length - 1]
+  const displayDelay = newestObs.displayDelay ?? SOURCE_DISPLAY_DELAYS[lastSource]
   const displayTime = now - displayDelay
 
   // Find bracketing observations
@@ -825,7 +829,8 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
           verticalRate: state.baroRate ?? null,
           source: 'replay',
           observedAt: snapshotTime,
-          receivedAt: snapshotTime
+          receivedAt: snapshotTime,
+          displayDelay: SOURCE_DISPLAY_DELAYS.replay  // No delay for replay - we're scrubbing through historical data
         }
 
         const metadata: AircraftMetadata = {
