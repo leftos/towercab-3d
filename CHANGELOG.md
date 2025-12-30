@@ -2,6 +2,22 @@
 
 All notable changes to TowerCab 3D will be documented in this file.
 
+## [0.0.24-alpha] - 2025-12-30
+
+### Added
+- Smarter datablock layout algorithm that places labels at any angle and distance
+  - Labels automatically find non-overlapping positions using a spiral search
+  - Distance extends automatically when needed to avoid overlaps
+  - Priority-based placement: followed aircraft > custom positions > closer aircraft > airborne
+
+### Changed
+- Tower follow mode max zoom increased from 5x to 10x
+- Leader Line Length setting now supports 0.5 increments (0.5, 1.0, 1.5, 2.0, etc.)
+
+### Fixed
+- Auto-rearrange datablocks now respects your chosen leader line length setting
+  - Previously added extra spacing on top of your setting, causing datablocks to spread too far apart
+
 ## [0.0.23-alpha] - 2025-12-30
 
 ### Added
