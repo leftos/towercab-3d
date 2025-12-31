@@ -412,9 +412,37 @@ export function useCameraInput(
     }
     canvas.addEventListener('contextmenu', handleContextMenu)
 
+    // Global mouseup listeners to catch releases that happen outside canvas or are missed due to low framerate
+    const handleGlobalMouseUp = (event: MouseEvent) => {
+      // Right button (button 2) or middle button (button 1)
+      if (event.button === 2 || event.button === 1) {
+        isDraggingRef.current = false
+      }
+      // Left button (button 0)
+      if (event.button === 0) {
+        isLeftDraggingRef.current = false
+      }
+    }
+
+    // Also check button state on any mouse move - if button is no longer pressed, end drag
+    const handleGlobalMouseMove = (event: MouseEvent) => {
+      // event.buttons is a bitmask: 1=left, 2=right, 4=middle
+      if (isDraggingRef.current && !(event.buttons & 2) && !(event.buttons & 4)) {
+        isDraggingRef.current = false
+      }
+      if (isLeftDraggingRef.current && !(event.buttons & 1)) {
+        isLeftDraggingRef.current = false
+      }
+    }
+
+    window.addEventListener('mouseup', handleGlobalMouseUp)
+    window.addEventListener('mousemove', handleGlobalMouseMove)
+
     return () => {
       handler.destroy()
       canvas.removeEventListener('contextmenu', handleContextMenu)
+      window.removeEventListener('mouseup', handleGlobalMouseUp)
+      window.removeEventListener('mousemove', handleGlobalMouseMove)
     }
   }, [viewer, adjustHeading, adjustPitch, adjustOrbitHeading, adjustOrbitPitch, moveForward, moveRight, onBreakTowerFollow, setActiveViewport, clearLookAtTarget])
 

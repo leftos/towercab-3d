@@ -5500,7 +5500,7 @@ checksum = "8df9b6e13f2d32c91b9bd719c00d1958837bc7dec474d94952798cc8e69eeec3"
 
 [[package]]
 name = "towercab-3d"
-version = "0.0.24-alpha"
+version = "0.0.25-alpha"
 dependencies = [
  "axum",
  "futures-util",
