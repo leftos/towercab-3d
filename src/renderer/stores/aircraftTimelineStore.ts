@@ -338,11 +338,52 @@ function interpolateTimeline(
   // because each observation remembers its own display delay from when it was created.
   // Fallback to SOURCE_DISPLAY_DELAYS[lastSource] for migration (old observations without displayDelay)
   const newestObs = observations[observations.length - 1]
+  const oldestObs = observations[0]
   const displayDelay = newestObs.displayDelay ?? SOURCE_DISPLAY_DELAYS[lastSource]
-  const displayTime = now - displayDelay
+
+  // Calculate displayTime in the observation's time domain (server time) to handle clock skew.
+  //
+  // CRITICAL: We anchor to the OLDEST observation, not the newest. This ensures displayTime
+  // progresses continuously with local time, regardless of when new observations arrive.
+  //
+  // If we anchored to newestObs, displayTime would jump whenever a new observation arrives:
+  // - Before obs3: displayTime = obs2.observedAt - delay + 15000ms (waited 15s for update)
+  // - After obs3: displayTime = obs3.observedAt - delay + 0ms (just received)
+  // This causes a ~15s forward jump in displayTime, making aircraft visually snap.
+  //
+  // By anchoring to oldestObs, displayTime advances smoothly with local time:
+  //   displayTime = oldestObs.observedAt + (now - oldestObs.receivedAt) - displayDelay
+  //
+  // As observations are pruned (MAX_OBSERVATIONS_PER_AIRCRAFT), the anchor stays fresh.
+  const timeSinceOldestReceived = now - oldestObs.receivedAt
+  const displayTime = oldestObs.observedAt + timeSinceOldestReceived - displayDelay
 
   // Find bracketing observations
   const [before, after] = findBracketingObservations(observations, displayTime)
+
+  // DEBUG: Log interpolation state for ONE moving aircraft every ~2 seconds (dev only)
+  if (import.meta.env.DEV) {
+    const debugState = globalThis as Record<string, unknown>
+    if (!debugState.__interpDebugCallsign && newestObs.groundspeed > 5) {
+      debugState.__interpDebugCallsign = callsign
+      debugState.__interpDebugCounter = 0
+    }
+    if (callsign === debugState.__interpDebugCallsign) {
+      debugState.__interpDebugCounter = ((debugState.__interpDebugCounter as number) || 0) + 1
+      if ((debugState.__interpDebugCounter as number) % 120 === 1) {
+        const mode = before && after ? 'INTERP' : before ? 'FWD' : after ? 'BWD' : 'NONE'
+        let tVal = 'N/A'
+        if (before && after) {
+          const interval = after.observedAt - before.observedAt
+          const t = interval > 0 ? (displayTime - before.observedAt) / interval : 1
+          tVal = t.toFixed(3)
+        }
+        const dtFromOldest = displayTime - oldestObs.observedAt
+        const dtFromNewest = displayTime - newestObs.observedAt
+        console.log(`[Interp] ${callsign} ${mode} t=${tVal} obs=${observations.length} dtOld=${Math.round(dtFromOldest)} dtNew=${Math.round(dtFromNewest)} tSinceOld=${Math.round(timeSinceOldestReceived)}`)
+      }
+    }
+  }
 
   let latitude: number
   let longitude: number
