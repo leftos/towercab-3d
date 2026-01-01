@@ -226,8 +226,10 @@ function App() {
           setShowTokenPrompt(true)
         }
 
-        // Start performance logging to console
-        performanceMonitor.startLogging()
+        // Start performance logging to console (DEV only)
+        if (import.meta.env.DEV) {
+          performanceMonitor.startLogging()
+        }
       } catch (error) {
         console.error('Initialization error:', error)
         setLoadingStatus(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`)

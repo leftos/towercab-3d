@@ -403,6 +403,22 @@ function interpolateTimeline(
   if (import.meta.env.DEV) {
     const debugState = globalThis as Record<string, unknown>
 
+    // Setup visibility change listener (once)
+    if (!debugState.__visibilityListenerAdded && typeof document !== 'undefined') {
+      debugState.__visibilityListenerAdded = true
+      debugState.__lastVisibilityState = document.visibilityState
+      document.addEventListener('visibilitychange', () => {
+        const prevState = debugState.__lastVisibilityState
+        const newState = document.visibilityState
+        const ts = new Date().toISOString().slice(11, 23) // HH:MM:SS.mmm
+        console.log(`[Interp] ${ts} 👁️ VISIBILITY: ${prevState} → ${newState}`)
+        debugState.__lastVisibilityState = newState
+        if (newState === 'visible') {
+          debugState.__justBecameVisible = Date.now()
+        }
+      })
+    }
+
     // Wait for aircraft with positive airspeed before picking a target
     if (!debugState.__interpDebugCallsign && newestObs.groundspeed > 50) {
       debugState.__interpDebugCallsign = callsign
@@ -410,12 +426,16 @@ function interpolateTimeline(
       debugState.__interpLastLat = null
       debugState.__interpLastLon = null
       debugState.__interpLastObsCount = 0
-      console.log(`[Interp DEBUG] Now tracking: ${callsign} (gs=${newestObs.groundspeed.toFixed(0)}kts)`)
+      debugState.__interpLastOldestObsAt = null
+      debugState.__interpLastNow = null
+      const ts = new Date().toISOString().slice(11, 23)
+      console.log(`[Interp] ${ts} DEBUG Now tracking: ${callsign} (gs=${newestObs.groundspeed.toFixed(0)}kts)`)
     }
 
     if (callsign === debugState.__interpDebugCallsign) {
       debugState.__interpDebugCounter = ((debugState.__interpDebugCounter as number) || 0) + 1
       const counter = debugState.__interpDebugCounter as number
+      const ts = new Date().toISOString().slice(11, 23) // HH:MM:SS.mmm
 
       // Calculate interpolation details
       const mode = before && after ? 'INTERP' : before ? 'EXTRAP_FWD' : after ? 'EXTRAP_BWD' : 'NONE'
@@ -426,39 +446,52 @@ function interpolateTimeline(
         t = interval > 0 ? (displayTime - before.observedAt) / interval : 1
       }
 
-      // Log every 60 frames (~1 second) OR when observation count changes (new data arrived)
+      // Detect oldestObs change (anchor point shift)
+      const prevOldestObsAt = debugState.__interpLastOldestObsAt as number | null
+      const oldestObsChanged = prevOldestObsAt !== null && prevOldestObsAt !== oldestObs.observedAt
+
+      // Detect now jump (time skip from background)
+      const prevNow = debugState.__interpLastNow as number | null
+      const nowDelta = prevNow !== null ? now - prevNow : 0
+      const nowJumped = nowDelta > 100 // More than 100ms between frames = suspicious
+
+      // Log every 60 frames (~1 second) OR when observation count changes OR anchor changes OR now jumps
       const obsCountChanged = observations.length !== debugState.__interpLastObsCount
-      const shouldLog = counter % 60 === 1 || obsCountChanged
+      const shouldLog = counter % 60 === 1 || obsCountChanged || oldestObsChanged || nowJumped
 
       if (shouldLog) {
         const dtFromNewest = displayTime - newestObs.observedAt
+        const visibility = typeof document !== 'undefined' ? document.visibilityState : 'unknown'
+        const justVisible = debugState.__justBecameVisible && (now - (debugState.__justBecameVisible as number)) < 1000
 
-        // Calculate position delta from last frame (to detect snaps)
-        // Note: This debug uses lastRenderedPos to compare against last frame
-        let deltaInfo = ''
-        if (lastRenderedPos && before && after) {
-          // We'll compute the actual position below, so for now just note we have lastPos
-          // The actual delta will be logged after position calculation
-          deltaInfo = ' (delta computed below)'
-        }
+        // Build info tags
+        const tags: string[] = []
+        if (obsCountChanged) tags.push('NEW_OBS')
+        if (oldestObsChanged) tags.push(`ANCHOR_SHIFT(${prevOldestObsAt}→${oldestObs.observedAt})`)
+        if (nowJumped) tags.push(`NOW_JUMP(+${nowDelta}ms)`)
+        if (justVisible) tags.push('JUST_VISIBLE')
+        if (visibility === 'hidden') tags.push('HIDDEN')
 
-        const obsInfo = obsCountChanged ? ' [NEW OBS]' : ''
-        console.log(`[Interp] ${callsign} ${mode} t=${t.toFixed(3)} obs=${observations.length} ` +
-          `interval=${(interval/1000).toFixed(1)}s dtNewest=${Math.round(dtFromNewest)}ms` +
-          `${deltaInfo}${obsInfo}`)
+        const tagStr = tags.length > 0 ? ` [${tags.join(', ')}]` : ''
 
-        // Log observation timestamps when new data arrives
-        if (obsCountChanged && observations.length >= 2) {
-          const times = observations.slice(-3).map(o => o.observedAt)
-          console.log(`[Interp]   Recent obs times: ${times.map(t => t.toString()).join(' -> ')}`)
-          console.log(`[Interp]   displayTime=${displayTime} (should be between obs for INTERP)`)
+        console.log(`[Interp] ${ts} ${callsign} ${mode} t=${t.toFixed(3)} obs=${observations.length} ` +
+          `interval=${(interval/1000).toFixed(1)}s dtNewest=${Math.round(dtFromNewest)}ms ` +
+          `now=${now}${tagStr}`)
+
+        // Log observation timestamps when new data arrives or anchor changes
+        if ((obsCountChanged || oldestObsChanged) && observations.length >= 2) {
+          const obsInfo = observations.slice(0, 2).concat(observations.slice(-2))
+            .map((o, i) => `${i < 2 ? 'oldest' : 'newest'}[${i % 2}]: ${o.observedAt}`)
+          console.log(`[Interp] ${ts}   Observations: ${obsInfo.join(', ')}`)
+          console.log(`[Interp] ${ts}   displayTime=${displayTime} anchor=(obsAt=${oldestObs.observedAt}, rcvAt=${oldestObs.receivedAt})`)
         }
 
         debugState.__interpLastObsCount = observations.length
       }
 
-      // Position tracking for delta calculation now happens after actual computation
-      // The actual latitude/longitude values will be set below and tracked by caller
+      // Update tracking state
+      debugState.__interpLastOldestObsAt = oldestObs.observedAt
+      debugState.__interpLastNow = now
     }
   }
 
@@ -494,7 +527,8 @@ function interpolateTimeline(
         // Debug: log when starting new reconciliation
         const debugState = globalThis as Record<string, unknown>
         if (callsign === debugState.__interpDebugCallsign) {
-          console.log(`[Interp] ${callsign} NEW TARGET - using lastRenderedPos (${lastRenderedPos.latitude.toFixed(4)}, ${lastRenderedPos.longitude.toFixed(4)})`)
+          const ts = new Date().toISOString().slice(11, 23)
+          console.log(`[Interp] ${ts} ${callsign} NEW TARGET - using lastRenderedPos (${lastRenderedPos.latitude.toFixed(4)}, ${lastRenderedPos.longitude.toFixed(4)}) targetObs=${after.observedAt}`)
         }
       } else {
         // First time seeing this aircraft - use 'before' as start
@@ -508,7 +542,8 @@ function interpolateTimeline(
         // Debug
         const debugState = globalThis as Record<string, unknown>
         if (callsign === debugState.__interpDebugCallsign) {
-          console.log(`[Interp] ${callsign} NEW TARGET - NO lastRenderedPos, using before (${before.latitude.toFixed(4)}, ${before.longitude.toFixed(4)})`)
+          const ts = new Date().toISOString().slice(11, 23)
+          console.log(`[Interp] ${ts} ${callsign} NEW TARGET - NO lastRenderedPos, using before (${before.latitude.toFixed(4)}, ${before.longitude.toFixed(4)}) targetObs=${after.observedAt}`)
         }
       }
     } else {
@@ -686,7 +721,13 @@ function interpolateTimeline(
     const lonDelta = (longitude - lastRenderedPos.longitude) * 111320 * Math.cos(latitude * Math.PI / 180)
     const distance = Math.sqrt(latDelta * latDelta + lonDelta * lonDelta)
     if (distance > 50) {
-      console.log(`[Interp] ${callsign} ⚠️ SNAP! delta=${distance.toFixed(1)}m`)
+      const ts = new Date().toISOString().slice(11, 23)
+      const justVisible = debugState.__justBecameVisible && (now - (debugState.__justBecameVisible as number)) < 2000
+      const visibility = typeof document !== 'undefined' ? document.visibilityState : 'unknown'
+      console.log(`[Interp] ${ts} ${callsign} ⚠️ SNAP! delta=${distance.toFixed(1)}m ` +
+        `from=(${lastRenderedPos.latitude.toFixed(5)}, ${lastRenderedPos.longitude.toFixed(5)}) ` +
+        `to=(${latitude.toFixed(5)}, ${longitude.toFixed(5)}) ` +
+        `visibility=${visibility}${justVisible ? ' JUST_VISIBLE' : ''}`)
     }
   }
 
@@ -736,8 +777,13 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
     const existing = timelines.get(callsign)
 
     let observations: AircraftObservation[]
+    let pruned = false
+    let oldestBefore: number | null = null
+    let oldestAfter: number | null = null
 
     if (existing) {
+      oldestBefore = existing.observations[0]?.observedAt ?? null
+
       // Check if this observation is too close to the last one
       const lastObs = existing.observations[existing.observations.length - 1]
       if (lastObs && (observation.receivedAt - lastObs.receivedAt) < MIN_OBSERVATION_INTERVAL) {
@@ -758,11 +804,28 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
 
       // Trim to max size
       if (observations.length > MAX_OBSERVATIONS_PER_AIRCRAFT) {
+        pruned = true
         observations = observations.slice(-MAX_OBSERVATIONS_PER_AIRCRAFT)
       }
+
+      oldestAfter = observations[0]?.observedAt ?? null
     } else {
       // New aircraft
       observations = [observation]
+      oldestAfter = observation.observedAt
+    }
+
+    // Debug: Log observation additions for tracked aircraft
+    if (import.meta.env.DEV) {
+      const debugState = globalThis as Record<string, unknown>
+      if (callsign === debugState.__interpDebugCallsign) {
+        const ts = new Date().toISOString().slice(11, 23)
+        const anchorShift = oldestBefore !== null && oldestBefore !== oldestAfter
+          ? ` ANCHOR_SHIFT(${oldestBefore}→${oldestAfter})`
+          : ''
+        console.log(`[Interp] ${ts} ${callsign} +OBS obsAt=${observation.observedAt} rcvAt=${observation.receivedAt} ` +
+          `total=${observations.length}${pruned ? ' PRUNED' : ''}${anchorShift}`)
+      }
     }
 
     const updated = new Map(timelines)
@@ -787,8 +850,13 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       const existing = updated.get(callsign)
 
       let observations: AircraftObservation[]
+      let pruned = false
+      let oldestBefore: number | null = null
+      let oldestAfter: number | null = null
 
       if (existing) {
+        oldestBefore = existing.observations[0]?.observedAt ?? null
+
         // Check if this observation is too close to the last one
         const lastObs = existing.observations[existing.observations.length - 1]
         if (lastObs && (observation.receivedAt - lastObs.receivedAt) < MIN_OBSERVATION_INTERVAL) {
@@ -804,10 +872,27 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
 
         observations = [...existing.observations, observation]
         if (observations.length > MAX_OBSERVATIONS_PER_AIRCRAFT) {
+          pruned = true
           observations = observations.slice(-MAX_OBSERVATIONS_PER_AIRCRAFT)
         }
+
+        oldestAfter = observations[0]?.observedAt ?? null
       } else {
         observations = [observation]
+        oldestAfter = observation.observedAt
+      }
+
+      // Debug: Log observation additions for tracked aircraft
+      if (import.meta.env.DEV) {
+        const debugState = globalThis as Record<string, unknown>
+        if (callsign === debugState.__interpDebugCallsign) {
+          const ts = new Date().toISOString().slice(11, 23)
+          const anchorShift = oldestBefore !== null && oldestBefore !== oldestAfter
+            ? ` ANCHOR_SHIFT(${oldestBefore}→${oldestAfter})`
+            : ''
+          console.log(`[Interp] ${ts} ${callsign} +OBS obsAt=${observation.observedAt} rcvAt=${observation.receivedAt} ` +
+            `total=${observations.length}${pruned ? ' PRUNED' : ''}${anchorShift}`)
+        }
       }
 
       updated.set(callsign, {

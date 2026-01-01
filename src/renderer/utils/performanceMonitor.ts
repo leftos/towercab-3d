@@ -150,9 +150,12 @@ class PerformanceMonitor {
   }
 
   /**
-   * Log current performance metrics to console
+   * Log current performance metrics to console (DEV only)
    */
   logMetrics(): void {
+    // Only log in development mode
+    if (!import.meta.env.DEV) return
+
     const m = this.metrics
     const opsTotal = m.totalFrame || 1
     const frameTotal = m.frameInterval || 1
