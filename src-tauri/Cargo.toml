@@ -1,6 +1,6 @@
 [package]
 name = "towercab-3d"
-version = "0.0.26-alpha"
+version = "0.0.27-alpha"
 description = "3D Tower Cab View for VATSIM Controllers"
 authors = [""]
 license = "GPL-2.0"

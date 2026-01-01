@@ -2,7 +2,7 @@
 
 All notable changes to TowerCab 3D will be documented in this file.
 
-## [0.0.26-alpha] - 2026-01-01
+## [0.0.27-alpha] - 2026-01-01
 
 ### Changed
 - Aircraft now removed from display after 30 seconds without updates (was 60 seconds)
@@ -11,15 +11,19 @@ All notable changes to TowerCab 3D will be documented in this file.
   - Falls back to C172, C152, DA40, or TBM930 from FSLTL if available, otherwise built-in PA28
 
 ### Fixed
+- Rain no longer stops after a few seconds when loading an airport with precipitation
+- Rain intensity now properly reflects METAR light/moderate/heavy codes
+  - Light rain (-RA) is now a gentle drizzle instead of a downpour
+
+## [0.0.26-alpha] - 2026-01-01
+
+### Fixed
 - More work to smooth out aircraft interpolation and reduce snapping
   - Reworked algorithm to use present position as starting point towards new target when new observation arrives
   - Increased display delay buffer for VATSIM to 17s to reduce extrapolation frequency
 - Camera no longer gets stuck panning if right-click release is missed during low framerate
 - Aircraft no longer bounce pitch up and down after landing
   - Nosewheel lowering transition now blends to level instead of noisy vertical rate data
-- Rain no longer stops after a few seconds when loading an airport with precipitation
-- Rain intensity now properly reflects METAR light/moderate/heavy codes
-  - Light rain (-RA) is now a gentle drizzle instead of a downpour
 
 ## [0.0.25-alpha] - 2025-12-30
 
