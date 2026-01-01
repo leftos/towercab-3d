@@ -6,6 +6,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ### Changed
 - Aircraft now removed from display after 30 seconds without updates (was 60 seconds)
+- GA aircraft (N-numbers, registrations like C-XXXX, G-XXXX) now use Cessna 172 as fallback model instead of Boeing 737
+  - Much more realistic representation for small private aircraft
+  - Falls back to C172, C152, DA40, or TBM930 from FSLTL if available, otherwise built-in PA28
 
 ### Fixed
 - More work to smooth out aircraft interpolation and reduce snapping

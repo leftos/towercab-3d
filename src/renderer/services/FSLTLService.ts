@@ -501,6 +501,35 @@ class FSLTLServiceClass {
   }
 
   /**
+   * GA fallback types in preference order (smaller to larger)
+   * C172 is the most common trainer and best generic GA representation
+   */
+  private static readonly GA_FALLBACK_TYPES = ['C172', 'C152', 'DA40', 'TBM9']
+
+  /**
+   * Get the FSLTL GA base model for General Aviation fallback.
+   * Uses C172 (or similar small aircraft) instead of B738 for GA traffic.
+   *
+   * @returns FSLTL GA model (C172, C152, DA40, or TBM9), or null if not available
+   */
+  getGAFallback(): FSLTLModel | null {
+    if (!this.isEnabled()) return null
+
+    // Try each GA type in preference order
+    for (const gaType of FSLTLServiceClass.GA_FALLBACK_TYPES) {
+      const gaModels = this.registry.byAircraftType.get(gaType)
+      if (gaModels) {
+        // Prefer base livery (no airline code)
+        const baseModel = gaModels.find(m => !m.airlineCode)
+        if (baseModel) return baseModel
+        // Fall back to any model of this type
+        if (gaModels.length > 0) return gaModels[0]
+      }
+    }
+    return null
+  }
+
+  /**
    * Get an airline-specific fallback model from common narrowbody types.
    * When the requested aircraft type isn't available, this finds any model
    * for the airline from common fallback types (B738, A320, etc.).

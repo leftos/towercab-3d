@@ -15,8 +15,13 @@
  * 7. Built-in models with direct lowercase match
  * 8. Built-in models with closest size match (scaled)
  * 9. FSLTL airline-specific fallback from common types
- * 10. FSLTL B738 base model (generic fallback)
- * 11. Fallback to built-in B738
+ * 10. FSLTL GA fallback (C172) for GA callsigns, or B738 for airlines
+ * 11. Fallback to built-in PA28 for GA, or B738 for airlines
+ *
+ * GA Detection:
+ * GA callsigns are detected by pattern (N-numbers, country registrations like C-XXXX,
+ * G-XXXX, etc.) or by not matching the airline pattern (3 letters + digits).
+ * GA aircraft use C172 (FSLTL) or PA28 (built-in) as fallback instead of B738.
  *
  * The goal is to prioritize visual similarity (shape + size) over generic fallbacks.
  * For airlines, we prefer a scaled version of their actual livery over a generic B738.
@@ -274,6 +279,8 @@ const TYPE_TO_MODEL: Record<string, string> = {
 
 // Default fallback model when no dimensions available
 const FALLBACK_MODEL = 'b738'
+// GA fallback for non-airline aircraft (small single-engine)
+const GA_FALLBACK_MODEL = 'pa28'
 
 /**
  * Extract base aircraft type code from FAA format strings
@@ -454,7 +461,7 @@ class AircraftModelServiceClass {
     const uniformScale = { x: 1, y: 1, z: 1 }
     const b738Dims = { wingspan: 35.78, length: 39.47 }
 
-    // If no aircraft type, try airline-specific narrowbody fallback, then generic B738
+    // If no aircraft type, try airline-specific narrowbody fallback, then generic fallback
     // Common narrowbody types to search for airline liveries (in preference order)
     const FALLBACK_TYPES = [
       'B738', 'A320', 'B739', 'A321', 'A319', 'B737',
@@ -463,6 +470,7 @@ class AircraftModelServiceClass {
 
     if (!aircraftType) {
       const airlineCode = this.extractAirlineCode(callsign)
+      const isGA = this.isGACallsign(callsign)
 
       // Try airline-specific narrowbody models (e.g., JBU A320 for JetBlue)
       if (airlineCode) {
@@ -485,7 +493,34 @@ class AircraftModelServiceClass {
         }
       }
 
-      // Fall back to generic B738
+      // Fall back to appropriate model: GA aircraft (C172) or B738
+      if (isGA) {
+        const fsltlGAFallback = fsltlService.getGAFallback()
+        if (fsltlGAFallback) {
+          const modelUrl = convertToAssetUrlSync(fsltlGAFallback.modelPath)
+          const gaDims = aircraftDimensionsService.getDimensions(fsltlGAFallback.aircraftType)
+          return {
+            modelUrl,
+            scale: uniformScale,
+            matchType: 'fallback',
+            matchedModel: fsltlGAFallback.modelName,
+            dimensions: gaDims ?? { wingspan: 11.0, length: 8.28 },
+            rotationOffset: 180,
+            hasAnimations: fsltlGAFallback.hasAnimations,
+            isFsltl: true
+          }
+        }
+        // Built-in PA28 fallback for GA
+        const gaFallbackDims = this.getModelDimensions(GA_FALLBACK_MODEL)
+        return {
+          modelUrl: `./${GA_FALLBACK_MODEL}.glb`,
+          scale: uniformScale,
+          matchType: 'fallback',
+          dimensions: gaFallbackDims
+        }
+      }
+
+      // Fall back to generic B738 for non-GA
       const fsltlB738Fallback = fsltlService.getB738Fallback()
       if (fsltlB738Fallback) {
         const modelUrl = convertToAssetUrlSync(fsltlB738Fallback.modelPath)
@@ -682,26 +717,50 @@ class AircraftModelServiceClass {
       }
     }
 
-    // 10. Try FSLTL B738 base model as generic fallback
-    const fsltlB738Fallback = fsltlService.getB738Fallback()
-    if (fsltlB738Fallback) {
-      const modelUrl = convertToAssetUrlSync(fsltlB738Fallback.modelPath)
-      return {
-        modelUrl,
-        scale: uniformScale,
-        matchType: 'fallback',
-        matchedModel: fsltlB738Fallback.modelName,
-        dimensions: b738Dims,
-        rotationOffset: 180,
-        hasAnimations: fsltlB738Fallback.hasAnimations,
-        isFsltl: true
+    // Check if this is a GA callsign - use appropriate fallback
+    const isGA = this.isGACallsign(callsign)
+
+    // 10. Try FSLTL GA or B738 base model as generic fallback
+    if (isGA) {
+      // For GA callsigns, prefer small GA aircraft (C172) over B738
+      const fsltlGAFallback = fsltlService.getGAFallback()
+      if (fsltlGAFallback) {
+        const modelUrl = convertToAssetUrlSync(fsltlGAFallback.modelPath)
+        const gaDims = aircraftDimensionsService.getDimensions(fsltlGAFallback.aircraftType)
+        return {
+          modelUrl,
+          scale: uniformScale,
+          matchType: 'fallback',
+          matchedModel: fsltlGAFallback.modelName,
+          dimensions: gaDims ?? { wingspan: 11.0, length: 8.28 }, // C172 default
+          rotationOffset: 180,
+          hasAnimations: fsltlGAFallback.hasAnimations,
+          isFsltl: true
+        }
+      }
+    } else {
+      // For airline callsigns, use B738 as fallback
+      const fsltlB738Fallback = fsltlService.getB738Fallback()
+      if (fsltlB738Fallback) {
+        const modelUrl = convertToAssetUrlSync(fsltlB738Fallback.modelPath)
+        return {
+          modelUrl,
+          scale: uniformScale,
+          matchType: 'fallback',
+          matchedModel: fsltlB738Fallback.modelName,
+          dimensions: b738Dims,
+          rotationOffset: 180,
+          hasAnimations: fsltlB738Fallback.hasAnimations,
+          isFsltl: true
+        }
       }
     }
 
-    // 11. Final fallback - use B738 built-in at 1:1 scale
-    const finalFallbackDims = this.getModelDimensions(FALLBACK_MODEL)
+    // 11. Final fallback - use built-in model (PA28 for GA, B738 otherwise)
+    const fallbackModel = isGA ? GA_FALLBACK_MODEL : FALLBACK_MODEL
+    const finalFallbackDims = this.getModelDimensions(fallbackModel)
     return {
-      modelUrl: `./${FALLBACK_MODEL}.glb`,
+      modelUrl: `./${fallbackModel}.glb`,
       scale: uniformScale,
       matchType: 'fallback',
       dimensions: finalFallbackDims
@@ -735,6 +794,39 @@ class AircraftModelServiceClass {
     // Match pattern: 3 letters followed by digits (typical airline callsign)
     const match = callsign.match(/^([A-Z]{3})\d/)
     return match ? match[1] : null
+  }
+
+  /**
+   * Check if a callsign appears to be a GA/private aircraft registration
+   * rather than an airline callsign.
+   *
+   * GA callsigns are typically:
+   * - N-numbers: N123AB, N1234A, N12345 (US)
+   * - C-XXXX: C-FABC (Canada)
+   * - G-XXXX: G-ABCD (UK)
+   * - VH-XXX: VH-ABC (Australia)
+   * - D-XXXX: D-ABCD (Germany)
+   * - F-XXXX: F-ABCD (France)
+   * - Or any callsign that doesn't match the airline pattern (3 letters + digits)
+   *
+   * @param callsign The aircraft callsign
+   * @returns true if this appears to be a GA registration
+   */
+  isGACallsign(callsign: string | null | undefined): boolean {
+    if (!callsign) return false
+
+    const upper = callsign.toUpperCase()
+
+    // Common registration patterns that are definitely GA
+    // N-numbers (US): N followed by 1-5 alphanumeric
+    if (/^N[0-9][0-9A-Z]{0,4}$/.test(upper)) return true
+
+    // Country prefixes with hyphen: C-XXXX, G-XXXX, D-XXXX, F-XXXX, VH-XXX, etc.
+    if (/^[A-Z]{1,2}-[A-Z0-9]{2,5}$/.test(upper)) return true
+
+    // If it's not an airline callsign (3 letters + digits), treat as GA
+    // This catches other registration formats
+    return this.extractAirlineCode(callsign) === null
   }
 
   /**
