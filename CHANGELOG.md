@@ -5,8 +5,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [0.0.25-alpha] - 2025-12-30
 
 ### Fixed
-- Aircraft no longer snap to new positions when VATSIM data updates
+- Reduced aircraft position snapping when VATSIM data updates
   - Fixed interpolation timing calculation that caused aircraft to visually jump backward when new position data arrived
+  - Increased display delay buffer to reduce extrapolation frequency
   - Interpolation now progresses smoothly regardless of irregular update intervals
 - Camera no longer gets stuck panning if right-click release is missed during low framerate
 
