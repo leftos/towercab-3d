@@ -124,13 +124,13 @@ export const SNOW_EMITTER_BOX_HEIGHT = 20
 // ============================================================================
 
 /** Multiplier for light precipitation (-) */
-export const INTENSITY_LIGHT = 0.1
+export const INTENSITY_LIGHT = 0.02
 
 /** Multiplier for moderate precipitation (no modifier) */
-export const INTENSITY_MODERATE = 1.0
+export const INTENSITY_MODERATE = 0.3
 
 /** Multiplier for heavy precipitation (+) */
-export const INTENSITY_HEAVY = 3.0
+export const INTENSITY_HEAVY = 1.0
 
 // ============================================================================
 // VISIBILITY-BASED SCALING

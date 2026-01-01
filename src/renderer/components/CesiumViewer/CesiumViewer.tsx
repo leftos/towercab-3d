@@ -414,13 +414,21 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     enabled: viewportId === 'main' && enableAutoAirportSwitch
   })
 
-  // Enable weather interpolation when setting is on
+  // Enable weather interpolation when setting is on AND not at a specific airport
+  // When at an airport, App.tsx handles weather via fetchWeather(icao) which uses
+  // the airport's own METAR. Interpolation should only be used when flying between
+  // airports or in "orbit without airport" mode.
   useEffect(() => {
-    if (enableWeatherInterpolation && showWeatherEffects) {
+    if (enableWeatherInterpolation && showWeatherEffects && !currentAirport) {
+      // Not at an airport - use interpolated weather from nearby stations
       setUseInterpolation(true)
       startInterpolatedAutoRefresh()
+    } else {
+      // At an airport or interpolation disabled - use airport METAR directly
+      // This prevents interpolated weather from overwriting airport-specific data
+      setUseInterpolation(false)
     }
-  }, [enableWeatherInterpolation, showWeatherEffects, setUseInterpolation, startInterpolatedAutoRefresh])
+  }, [enableWeatherInterpolation, showWeatherEffects, currentAirport, setUseInterpolation, startInterpolatedAutoRefresh])
 
   // Notify parent when viewer is ready (for VR integration)
   useEffect(() => {

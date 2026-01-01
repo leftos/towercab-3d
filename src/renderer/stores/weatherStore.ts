@@ -272,6 +272,7 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
             fogDensity: visibilityToFogDensity(metar.visib)
           })
         } else {
+          const newPrecip = parsePrecipitationState(metar)
           set({
             currentMetar: metar,
             lastFetchTime: Date.now(),
@@ -279,7 +280,7 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
             error: null,
             fogDensity: visibilityToFogDensity(metar.visib),
             cloudLayers: parseCloudLayers(metar),
-            precipitation: parsePrecipitationState(metar),
+            precipitation: newPrecip,
             wind: metar.wind
           })
         }

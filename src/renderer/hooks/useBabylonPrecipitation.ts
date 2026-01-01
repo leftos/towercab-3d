@@ -792,6 +792,25 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
     const shouldShowPrecip = showWeatherEffects && showPrecipitation && precipitation.active && !isTopDownView
     const shouldShowLightning = showWeatherEffects && showLightning && precipitation.hasThunderstorm && !isTopDownView
 
+    // Sync smoothing state with store state when effect runs
+    // This fixes race conditions where the airport change effect snaps smoothing to false
+    // before the weather fetch completes, causing emit rate to be 0 initially
+    const smoothing = precipSmoothingRef.current
+    if (shouldShowPrecip && !smoothing.precipActive) {
+      smoothing.precipActive = true
+      smoothing.currentIntensity = 1
+      smoothing.targetIntensity = 1
+      smoothing.precipOnsetTime = null
+      smoothing.precipCessationTime = null
+    } else if (!shouldShowPrecip && smoothing.precipActive && !precipitation.active) {
+      // Also sync when precipitation becomes inactive
+      smoothing.precipActive = false
+      smoothing.currentIntensity = 0
+      smoothing.targetIntensity = 0
+      smoothing.precipOnsetTime = null
+      smoothing.precipCessationTime = null
+    }
+
     /**
      * Helper to dispose a particle system and its texture
      */
@@ -885,17 +904,25 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
           }
 
           if (system) {
-            const baseEmitRate = getBaseEmitRate(precip.type)
-            data = { system, type: precip.type, baseEmitRate }
+            // Calculate effective base emit rate including all intensity factors
+            // This is what the render loop will use with smoothing
+            const rawBaseEmitRate = getBaseEmitRate(precip.type)
+            const intensityMult = getIntensityMultiplier(precip.intensity)
+            const effectiveBaseEmitRate = rawBaseEmitRate * intensityMult * precipitation.visibilityFactor * precipitationIntensity
+
+            data = { system, type: precip.type, baseEmitRate: effectiveBaseEmitRate }
             particleSystemsRef.current.set(systemKey, data)
+            system.emitRate = effectiveBaseEmitRate
             system.start()
           }
         }
 
         if (data) {
-          // Update emit rate based on intensity, visibility, and user setting
+          // Update emit rate if intensity/visibility changed (already stored in baseEmitRate for new systems)
           const intensityMult = getIntensityMultiplier(precip.intensity)
-          const newEmitRate = data.baseEmitRate * intensityMult * precipitation.visibilityFactor * precipitationIntensity
+          const newEmitRate = getBaseEmitRate(precip.type) * intensityMult * precipitation.visibilityFactor * precipitationIntensity
+          // Update stored base rate so render loop uses correct value
+          data.baseEmitRate = newEmitRate
           data.system.emitRate = newEmitRate
         }
       }

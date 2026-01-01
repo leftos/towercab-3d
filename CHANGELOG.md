@@ -17,6 +17,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Camera no longer gets stuck panning if right-click release is missed during low framerate
 - Aircraft no longer bounce pitch up and down after landing
   - Nosewheel lowering transition now blends to level instead of noisy vertical rate data
+- Rain no longer stops after a few seconds when loading an airport with precipitation
+- Rain intensity now properly reflects METAR light/moderate/heavy codes
+  - Light rain (-RA) is now a gentle drizzle instead of a downpour
 
 ## [0.0.25-alpha] - 2025-12-30
 
