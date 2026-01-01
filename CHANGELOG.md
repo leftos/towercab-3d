@@ -10,6 +10,8 @@ All notable changes to TowerCab 3D will be documented in this file.
   - Increased display delay buffer to reduce extrapolation frequency
   - Interpolation now progresses smoothly regardless of irregular update intervals
 - Camera no longer gets stuck panning if right-click release is missed during low framerate
+- Aircraft no longer bounce pitch up and down after landing
+  - Nosewheel lowering transition now blends to level instead of noisy vertical rate data
 
 ## [0.0.24-alpha] - 2025-12-30
 

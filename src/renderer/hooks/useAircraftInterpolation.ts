@@ -607,8 +607,10 @@ function updateInterpolation() {
         // smoothstep: x^2 * (3 - 2x) for smooth acceleration/deceleration
         const easedProgress = nosewheelState.transition.progress * nosewheelState.transition.progress * (3 - 2 * nosewheelState.transition.progress)
 
-        // Blend from flare pitch to base pitch (physics-based pitch for current motion)
-        entry.interpolatedPitch = nosewheelState.transition.sourcePitch * (1 - easedProgress) + basePitch * easedProgress
+        // Blend from flare pitch to level (0 degrees)
+        // Using 0 as target instead of basePitch prevents oscillation from noisy
+        // vertical rate data during rollout (terrain samples at 3Hz cause spikes)
+        entry.interpolatedPitch = nosewheelState.transition.sourcePitch * (1 - easedProgress)
 
         // Clean up completed transitions
         if (nosewheelState.transition.progress >= 1.0) {
