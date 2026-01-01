@@ -4,6 +4,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [0.0.26-alpha] - 2026-01-01
 
+### Changed
+- Aircraft now removed from display after 30 seconds without updates (was 60 seconds)
+
 ### Fixed
 - More work to smooth out aircraft interpolation and reduce snapping
   - Reworked algorithm to use present position as starting point towards new target when new observation arrives

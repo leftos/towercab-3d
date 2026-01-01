@@ -51,7 +51,7 @@ export const MAX_EXTRAPOLATION_TIME = 30000  // 30 seconds
  * If we haven't received ANY data for this long, the aircraft is
  * considered gone (disconnected, out of range, etc.).
  */
-export const AIRCRAFT_TIMEOUT = 60000  // 60 seconds
+export const AIRCRAFT_TIMEOUT = 30000  // 30 seconds
 
 /**
  * Minimum time between observations to consider them distinct (ms).
