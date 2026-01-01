@@ -17,7 +17,7 @@ import type { AircraftDataSource } from '../types/aircraft-timeline'
  * - RealTraffic: ~2s polls with 1.5-4.5s apiDelta, need ~5s for P90 coverage
  */
 export const SOURCE_DISPLAY_DELAYS: Record<AircraftDataSource, number> = {
-  vatsim: 16000,      // 16 seconds
+  vatsim: 17000,      // 17 seconds (15s updates + 1s poll + 1s jitter buffer)
   vnas: 2000,         // 2 seconds
   realtraffic: 5000,  // 5 seconds
   replay: 0           // No delay for replay - we're scrubbing through historical data

@@ -47,6 +47,26 @@ interface AircraftTimelineStore {
   // Per-aircraft last known good heading (for when current heading is unreliable)
   lastKnownHeadings: Map<string, number>
 
+  // Per-aircraft last rendered position (for starting new reconciliations)
+  lastRenderedPositions: Map<string, {
+    latitude: number
+    longitude: number
+    altitude: number
+  }>
+
+  // Per-aircraft reconciliation state for smooth transitions.
+  // Tracks what 'after' observation we're interpolating toward and where we started from.
+  reconciliationStates: Map<string, {
+    // The observation time of 'after' we're currently interpolating toward
+    targetObservedAt: number
+    // Position we were at when this target was set (our starting point)
+    startLat: number
+    startLon: number
+    startAlt: number
+    // displayTime when we started interpolating toward this target
+    startDisplayTime: number
+  }>
+
   // Prune timer
   pruneTimer: NodeJS.Timeout | null
 
@@ -314,19 +334,36 @@ function deriveHeading(
   return { heading: primaryObs.heading, isReliable: false }
 }
 
+// Reconciliation state for smooth transitions after extrapolation
+type ReconciliationState = {
+  targetObservedAt: number  // The 'after' observation we're heading toward
+  startLat: number          // Where we were when we started
+  startLon: number
+  startAlt: number
+  startDisplayTime: number  // displayTime when we started
+}
+
 /**
  * Compute interpolated/extrapolated state for an aircraft
  *
  * @param timeline - The aircraft's observation timeline
  * @param now - Current time in milliseconds
  * @param lastKnownHeading - Previously known reliable heading (for stationary aircraft)
- * @returns Interpolation result and updated lastKnownHeading
+ * @param reconciliation - Current reconciliation state (for smooth transitions)
+ * @param lastRenderedPos - The position we rendered last frame (for starting new reconciliations)
+ * @returns Interpolation result, updated heading, and updated reconciliation state
  */
 function interpolateTimeline(
   timeline: AircraftTimeline,
   now: number,
-  lastKnownHeading: number | null
-): { result: TimelineInterpolationResult; newLastKnownHeading: number } | null {
+  lastKnownHeading: number | null,
+  reconciliation: ReconciliationState | undefined,
+  lastRenderedPos: { latitude: number; longitude: number; altitude: number } | undefined
+): {
+  result: TimelineInterpolationResult
+  newLastKnownHeading: number
+  newReconciliation: ReconciliationState | null
+} | null {
   const { observations, metadata, lastSource, callsign } = timeline
 
   if (observations.length === 0) {
@@ -361,27 +398,67 @@ function interpolateTimeline(
   // Find bracketing observations
   const [before, after] = findBracketingObservations(observations, displayTime)
 
-  // DEBUG: Log interpolation state for ONE moving aircraft every ~2 seconds (dev only)
+  // DEBUG: Log interpolation state for ONE moving aircraft (dev only)
+  // Tracks position frame-to-frame to detect snaps
   if (import.meta.env.DEV) {
     const debugState = globalThis as Record<string, unknown>
-    if (!debugState.__interpDebugCallsign && newestObs.groundspeed > 5) {
+
+    // Wait for aircraft with positive airspeed before picking a target
+    if (!debugState.__interpDebugCallsign && newestObs.groundspeed > 50) {
       debugState.__interpDebugCallsign = callsign
       debugState.__interpDebugCounter = 0
+      debugState.__interpLastLat = null
+      debugState.__interpLastLon = null
+      debugState.__interpLastObsCount = 0
+      console.log(`[Interp DEBUG] Now tracking: ${callsign} (gs=${newestObs.groundspeed.toFixed(0)}kts)`)
     }
+
     if (callsign === debugState.__interpDebugCallsign) {
       debugState.__interpDebugCounter = ((debugState.__interpDebugCounter as number) || 0) + 1
-      if ((debugState.__interpDebugCounter as number) % 120 === 1) {
-        const mode = before && after ? 'INTERP' : before ? 'FWD' : after ? 'BWD' : 'NONE'
-        let tVal = 'N/A'
-        if (before && after) {
-          const interval = after.observedAt - before.observedAt
-          const t = interval > 0 ? (displayTime - before.observedAt) / interval : 1
-          tVal = t.toFixed(3)
-        }
-        const dtFromOldest = displayTime - oldestObs.observedAt
-        const dtFromNewest = displayTime - newestObs.observedAt
-        console.log(`[Interp] ${callsign} ${mode} t=${tVal} obs=${observations.length} dtOld=${Math.round(dtFromOldest)} dtNew=${Math.round(dtFromNewest)} tSinceOld=${Math.round(timeSinceOldestReceived)}`)
+      const counter = debugState.__interpDebugCounter as number
+
+      // Calculate interpolation details
+      const mode = before && after ? 'INTERP' : before ? 'EXTRAP_FWD' : after ? 'EXTRAP_BWD' : 'NONE'
+      let t = 0
+      let interval = 0
+      if (before && after) {
+        interval = after.observedAt - before.observedAt
+        t = interval > 0 ? (displayTime - before.observedAt) / interval : 1
       }
+
+      // Log every 60 frames (~1 second) OR when observation count changes (new data arrived)
+      const obsCountChanged = observations.length !== debugState.__interpLastObsCount
+      const shouldLog = counter % 60 === 1 || obsCountChanged
+
+      if (shouldLog) {
+        const dtFromNewest = displayTime - newestObs.observedAt
+
+        // Calculate position delta from last frame (to detect snaps)
+        // Note: This debug uses lastRenderedPos to compare against last frame
+        let deltaInfo = ''
+        if (lastRenderedPos && before && after) {
+          // We'll compute the actual position below, so for now just note we have lastPos
+          // The actual delta will be logged after position calculation
+          deltaInfo = ' (delta computed below)'
+        }
+
+        const obsInfo = obsCountChanged ? ' [NEW OBS]' : ''
+        console.log(`[Interp] ${callsign} ${mode} t=${t.toFixed(3)} obs=${observations.length} ` +
+          `interval=${(interval/1000).toFixed(1)}s dtNewest=${Math.round(dtFromNewest)}ms` +
+          `${deltaInfo}${obsInfo}`)
+
+        // Log observation timestamps when new data arrives
+        if (obsCountChanged && observations.length >= 2) {
+          const times = observations.slice(-3).map(o => o.observedAt)
+          console.log(`[Interp]   Recent obs times: ${times.map(t => t.toString()).join(' -> ')}`)
+          console.log(`[Interp]   displayTime=${displayTime} (should be between obs for INTERP)`)
+        }
+
+        debugState.__interpLastObsCount = observations.length
+      }
+
+      // Position tracking for delta calculation now happens after actual computation
+      // The actual latitude/longitude values will be set below and tracked by caller
     }
   }
 
@@ -394,14 +471,58 @@ function interpolateTimeline(
   let roll: number | null
   let verticalRate: number | null
   let isExtrapolating = false
+  let newReconciliation: ReconciliationState | null = null
 
   if (before && after) {
     // INTERPOLATION: displayTime is between two observations
     const interval = after.observedAt - before.observedAt
     const t = interval > 0 ? (displayTime - before.observedAt) / interval : 1
 
-    latitude = lerp(before.latitude, after.latitude, t)
-    longitude = lerp(before.longitude, after.longitude, t)
+    // Check if we're targeting a new 'after' observation
+    const isNewTarget = !reconciliation || reconciliation.targetObservedAt !== after.observedAt
+
+    if (isNewTarget) {
+      if (lastRenderedPos) {
+        // We know exactly where the aircraft was - use that as start point
+        newReconciliation = {
+          targetObservedAt: after.observedAt,
+          startLat: lastRenderedPos.latitude,
+          startLon: lastRenderedPos.longitude,
+          startAlt: lastRenderedPos.altitude,
+          startDisplayTime: displayTime
+        }
+        // Debug: log when starting new reconciliation
+        const debugState = globalThis as Record<string, unknown>
+        if (callsign === debugState.__interpDebugCallsign) {
+          console.log(`[Interp] ${callsign} NEW TARGET - using lastRenderedPos (${lastRenderedPos.latitude.toFixed(4)}, ${lastRenderedPos.longitude.toFixed(4)})`)
+        }
+      } else {
+        // First time seeing this aircraft - use 'before' as start
+        newReconciliation = {
+          targetObservedAt: after.observedAt,
+          startLat: before.latitude,
+          startLon: before.longitude,
+          startAlt: before.altitude,
+          startDisplayTime: before.observedAt
+        }
+        // Debug
+        const debugState = globalThis as Record<string, unknown>
+        if (callsign === debugState.__interpDebugCallsign) {
+          console.log(`[Interp] ${callsign} NEW TARGET - NO lastRenderedPos, using before (${before.latitude.toFixed(4)}, ${before.longitude.toFixed(4)})`)
+        }
+      }
+    } else {
+      // Continue with existing reconciliation
+      newReconciliation = reconciliation!
+    }
+
+    // Interpolate from start position to 'after' over the remaining time
+    const duration = after.observedAt - newReconciliation.startDisplayTime
+    const elapsed = displayTime - newReconciliation.startDisplayTime
+    const reconT = duration > 0 ? Math.min(1, elapsed / duration) : 1
+
+    latitude = lerp(newReconciliation.startLat, after.latitude, reconT)
+    longitude = lerp(newReconciliation.startLon, after.longitude, reconT)
 
     // Phase-aware altitude interpolation: use easing only at phase transitions
     // to match pitch rate-limiting behavior. During steady climbs/descents, use linear.
@@ -449,8 +570,8 @@ function interpolateTimeline(
       altitudeBlend = Math.min(0.7, maxRateChange / (RATE_CHANGE_THRESHOLD * 3))
     }
 
-    altitude = lerpBlended(before.altitude, after.altitude, t, altitudeBlend)
-    groundspeed = lerp(before.groundspeed, after.groundspeed, t)
+    altitude = lerpBlended(newReconciliation.startAlt, after.altitude, reconT, altitudeBlend)
+    groundspeed = lerp(before.groundspeed, after.groundspeed, t)  // Speed uses observation-based t
     groundTrack = before.groundTrack !== null && after.groundTrack !== null
       ? lerpHeading(before.groundTrack, after.groundTrack, t)
       : (after.groundTrack ?? before.groundTrack)
@@ -494,6 +615,10 @@ function interpolateTimeline(
     // Pass through ADS-B data from last observation
     onGround = before.onGround
     roll = before.roll
+
+    // Clear reconciliation during extrapolation - we'll start fresh when new data arrives
+    // The lastRenderedPos (tracked by caller) will tell us where we were
+    newReconciliation = null
 
     // Vertical rate: prefer ADS-B data, otherwise estimate from recent observations
     if (before.verticalRate !== null) {
@@ -554,6 +679,17 @@ function interpolateTimeline(
   const mostRecent = observations[observations.length - 1]
   const observationAge = now - mostRecent.receivedAt
 
+  // Debug: Log position delta from last frame (only for tracked aircraft)
+  const debugState = globalThis as Record<string, unknown>
+  if (callsign === debugState.__interpDebugCallsign && lastRenderedPos) {
+    const latDelta = (latitude - lastRenderedPos.latitude) * 111320
+    const lonDelta = (longitude - lastRenderedPos.longitude) * 111320 * Math.cos(latitude * Math.PI / 180)
+    const distance = Math.sqrt(latDelta * latDelta + lonDelta * lonDelta)
+    if (distance > 50) {
+      console.log(`[Interp] ${callsign} ⚠️ SNAP! delta=${distance.toFixed(1)}m`)
+    }
+  }
+
   return {
     result: {
       callsign,
@@ -580,13 +716,16 @@ function interpolateTimeline(
       observationCount: observations.length,
       displayTime
     },
-    newLastKnownHeading
+    newLastKnownHeading,
+    newReconciliation
   }
 }
 
 export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get) => ({
   timelines: new Map(),
   lastKnownHeadings: new Map(),
+  lastRenderedPositions: new Map(),
+  reconciliationStates: new Map(),
   pruneTimer: null,
 
   /**
@@ -687,7 +826,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
    * Remove an aircraft from the timeline
    */
   removeAircraft: (callsign) => {
-    const { timelines, lastKnownHeadings } = get()
+    const { timelines, lastKnownHeadings, lastRenderedPositions, reconciliationStates } = get()
     if (timelines.has(callsign)) {
       const updatedTimelines = new Map(timelines)
       updatedTimelines.delete(callsign)
@@ -695,7 +834,18 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       const updatedHeadings = new Map(lastKnownHeadings)
       updatedHeadings.delete(callsign)
 
-      set({ timelines: updatedTimelines, lastKnownHeadings: updatedHeadings })
+      const updatedPositions = new Map(lastRenderedPositions)
+      updatedPositions.delete(callsign)
+
+      const updatedReconciliations = new Map(reconciliationStates)
+      updatedReconciliations.delete(callsign)
+
+      set({
+        timelines: updatedTimelines,
+        lastKnownHeadings: updatedHeadings,
+        lastRenderedPositions: updatedPositions,
+        reconciliationStates: updatedReconciliations
+      })
     }
   },
 
@@ -703,23 +853,32 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
    * Remove aircraft that haven't received updates recently
    */
   pruneStaleAircraft: () => {
-    const { timelines, lastKnownHeadings } = get()
+    const { timelines, lastKnownHeadings, lastRenderedPositions, reconciliationStates } = get()
     const now = Date.now()
     let hasChanges = false
 
     const updatedTimelines = new Map(timelines)
     const updatedHeadings = new Map(lastKnownHeadings)
+    const updatedPositions = new Map(lastRenderedPositions)
+    const updatedReconciliations = new Map(reconciliationStates)
 
     for (const [callsign, timeline] of timelines) {
       if (now - timeline.lastReceivedAt > AIRCRAFT_TIMEOUT) {
         updatedTimelines.delete(callsign)
         updatedHeadings.delete(callsign)
+        updatedPositions.delete(callsign)
+        updatedReconciliations.delete(callsign)
         hasChanges = true
       }
     }
 
     if (hasChanges) {
-      set({ timelines: updatedTimelines, lastKnownHeadings: updatedHeadings })
+      set({
+        timelines: updatedTimelines,
+        lastKnownHeadings: updatedHeadings,
+        lastRenderedPositions: updatedPositions,
+        reconciliationStates: updatedReconciliations
+      })
     }
   },
 
@@ -752,7 +911,12 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
    * Clear all timelines
    */
   clear: () => {
-    set({ timelines: new Map(), lastKnownHeadings: new Map() })
+    set({
+      timelines: new Map(),
+      lastKnownHeadings: new Map(),
+      lastRenderedPositions: new Map(),
+      reconciliationStates: new Map()
+    })
   },
 
   /**
@@ -768,10 +932,12 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
     if (!timeline) return null
 
     const lastKnownHeading = lastKnownHeadings.get(callsign) ?? null
-    const result = interpolateTimeline(timeline, now, lastKnownHeading)
+    const reconciliation = get().reconciliationStates.get(callsign)
+    const lastPosition = get().lastRenderedPositions.get(callsign)
+    const result = interpolateTimeline(timeline, now, lastKnownHeading, reconciliation, lastPosition)
 
     // Return result without mutating store state
-    // Heading updates are only applied by getInterpolatedStates() batch operation
+    // Heading/reconciliation updates are only applied by getInterpolatedStates() batch operation
     return result?.result ?? null
   },
 
@@ -779,14 +945,20 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
    * Get interpolated states for all aircraft
    */
   getInterpolatedStates: (now) => {
-    const { timelines, lastKnownHeadings } = get()
+    const { timelines, lastKnownHeadings, lastRenderedPositions, reconciliationStates } = get()
     const results = new Map<string, TimelineInterpolationResult>()
     const updatedHeadings = new Map(lastKnownHeadings)
+    const updatedPositions = new Map(lastRenderedPositions)
+    const updatedReconciliations = new Map(reconciliationStates)
     let headingsChanged = false
+    let positionsChanged = false
+    let reconciliationsChanged = false
 
     for (const [callsign, timeline] of timelines) {
       const lastKnownHeading = lastKnownHeadings.get(callsign) ?? null
-      const interpolation = interpolateTimeline(timeline, now, lastKnownHeading)
+      const lastPosition = lastRenderedPositions.get(callsign)
+      const reconciliation = reconciliationStates.get(callsign)
+      const interpolation = interpolateTimeline(timeline, now, lastKnownHeading, reconciliation, lastPosition)
 
       if (interpolation) {
         results.set(callsign, interpolation.result)
@@ -796,12 +968,34 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
           updatedHeadings.set(callsign, interpolation.newLastKnownHeading)
           headingsChanged = true
         }
+
+        // Update last rendered position for next frame
+        const { latitude, longitude, altitude } = interpolation.result
+        const prevPos = lastRenderedPositions.get(callsign)
+        if (!prevPos || prevPos.latitude !== latitude || prevPos.longitude !== longitude || prevPos.altitude !== altitude) {
+          updatedPositions.set(callsign, { latitude, longitude, altitude })
+          positionsChanged = true
+        }
+
+        // Update reconciliation state
+        if (interpolation.newReconciliation !== reconciliation) {
+          if (interpolation.newReconciliation) {
+            updatedReconciliations.set(callsign, interpolation.newReconciliation)
+          } else {
+            updatedReconciliations.delete(callsign)
+          }
+          reconciliationsChanged = true
+        }
       }
     }
 
-    // Batch update lastKnownHeadings if any changed
-    if (headingsChanged) {
-      set({ lastKnownHeadings: updatedHeadings })
+    // Batch update state if anything changed
+    if (headingsChanged || positionsChanged || reconciliationsChanged) {
+      set({
+        lastKnownHeadings: headingsChanged ? updatedHeadings : lastKnownHeadings,
+        lastRenderedPositions: positionsChanged ? updatedPositions : lastRenderedPositions,
+        reconciliationStates: reconciliationsChanged ? updatedReconciliations : reconciliationStates
+      })
     }
 
     return results
