@@ -98,15 +98,10 @@ jobs:
           else
             echo "signing_available=false" >> $GITHUB_OUTPUT
             echo "Building without updater signing (no TAURI_SIGNING_PRIVATE_KEY secret)"
-            # Remove entire updater plugin config so Tauri doesn't require signing
+            # Disable updater plugin in Cargo.toml so Tauri doesn't require signing config
             cd src-tauri
-            node -e "
-              const fs = require('fs');
-              const config = JSON.parse(fs.readFileSync('tauri.conf.json', 'utf8'));
-              delete config.plugins.updater;
-              fs.writeFileSync('tauri.conf.json', JSON.stringify(config, null, 2));
-            "
-            echo "Removed updater plugin from tauri.conf.json"
+            sed -i '/tauri-plugin-updater/d' Cargo.toml
+            echo "Disabled tauri-plugin-updater in Cargo.toml"
           fi
         shell: bash
 
