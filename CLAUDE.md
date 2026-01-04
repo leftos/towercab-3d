@@ -54,7 +54,7 @@ The optional `vnas` feature enables 1Hz real-time aircraft updates via the priva
 - Ground track field for accurate aircraft extrapolation
 - WaitingForSession state when TC3D connects before CRC
 
-**Maintaining Cargo.lock.public:** CI uses `src-tauri/Cargo.lock.public` for builds without vNAS access (e.g., dependabot PRs). When updating Rust dependencies, regenerate it:
+**Cargo.lock.public:** A fallback lockfile for release.yml if VNAS_REPO_TOKEN is missing (shouldn't happen). The build.yml workflow regenerates Cargo.lock dynamically to preserve dependabot updates. To regenerate:
 
 ```bash
 cd src-tauri
