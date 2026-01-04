@@ -87,18 +87,41 @@ jobs:
           fi
         shell: bash
 
+      - name: Check signing key availability
+        id: signing-check
+        env:
+          SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -n "$SIGNING_KEY" ]; then
+            echo "signing_available=true" >> $GITHUB_OUTPUT
+          else
+            echo "signing_available=false" >> $GITHUB_OUTPUT
+            echo "Building without updater signing (no TAURI_SIGNING_PRIVATE_KEY secret)"
+          fi
+        shell: bash
+
       - name: Update towercab-3d-vnas dependency
         if: steps.vnas-check.outputs.vnas_available == 'true'
         env:
           CARGO_NET_GIT_FETCH_WITH_CLI: true
         run: cd src-tauri && cargo update -p towercab-3d-vnas
 
-      - name: Build Tauri app
+      - name: Build Tauri app (with signing)
+        if: steps.signing-check.outputs.signing_available == 'true'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          CARGO_NET_GIT_FETCH_WITH_CLI: ${{ steps.vnas-check.outputs.vnas_available == 'true' }}
+        with:
+          args: --target ${{ matrix.target }} ${{ steps.vnas-check.outputs.vnas_available == 'true' && '--features vnas' || '' }}
+
+      - name: Build Tauri app (without signing)
+        if: steps.signing-check.outputs.signing_available != 'true'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_NET_GIT_FETCH_WITH_CLI: ${{ steps.vnas-check.outputs.vnas_available == 'true' }}
         with:
           args: --target ${{ matrix.target }} ${{ steps.vnas-check.outputs.vnas_available == 'true' && '--features vnas' || '' }}
