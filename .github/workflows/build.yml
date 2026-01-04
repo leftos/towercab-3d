@@ -97,6 +97,10 @@ jobs:
           else
             echo "signing_available=false" >> $GITHUB_OUTPUT
             echo "Building without updater signing (no TAURI_SIGNING_PRIVATE_KEY secret)"
+            # Remove updater pubkey so Tauri doesn't require signing
+            cd src-tauri
+            sed -i '/"pubkey":/d' tauri.conf.json
+            echo "Removed updater pubkey from tauri.conf.json"
           fi
         shell: bash
 
