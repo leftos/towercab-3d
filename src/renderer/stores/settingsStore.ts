@@ -9,7 +9,8 @@ import type {
   AircraftSettings,
   UISettings,
   FSLTLSettings,
-  RealTrafficSettings
+  RealTrafficSettings,
+  AdvancedSettings
 } from '../types/settings'
 import { DEFAULT_SETTINGS } from '../types/settings'
 
@@ -111,6 +112,7 @@ interface SettingsStoreWithPresets {
   ui: UISettings
   fsltl: FSLTLSettings
   realtraffic: RealTrafficSettings
+  advanced: AdvancedSettings
 
   updateCesiumSettings: (updates: Partial<CesiumSettings>) => void
   updateGraphicsSettings: (updates: Partial<GraphicsSettings>) => void
@@ -121,6 +123,7 @@ interface SettingsStoreWithPresets {
   updateUISettings: (updates: Partial<UISettings>) => void
   updateFSLTLSettings: (updates: Partial<FSLTLSettings>) => void
   updateRealTrafficSettings: (updates: Partial<RealTrafficSettings>) => void
+  updateAdvancedSettings: (updates: Partial<AdvancedSettings>) => void
   resetToDefaults: () => void
   exportSettings: () => string
   importSettings: (json: string) => boolean
@@ -329,6 +332,11 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
           }
         })),
 
+      updateAdvancedSettings: (updates: Partial<AdvancedSettings>) =>
+        set((state) => ({
+          advanced: { ...state.advanced, ...updates }
+        })),
+
       // ========================================================================
       // RESET TO DEFAULTS
       // ========================================================================
@@ -350,7 +358,8 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
           aircraft: state.aircraft,
           ui: state.ui,
           fsltl: state.fsltl,
-          realtraffic: state.realtraffic
+          realtraffic: state.realtraffic,
+          advanced: state.advanced
         }
         return JSON.stringify(settings, null, 2)
       },
@@ -401,6 +410,9 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
           if (imported.realtraffic && typeof imported.realtraffic === 'object') {
             updates.realtraffic = { ...DEFAULT_SETTINGS.realtraffic, ...imported.realtraffic }
           }
+          if (imported.advanced && typeof imported.advanced === 'object') {
+            updates.advanced = { ...DEFAULT_SETTINGS.advanced, ...imported.advanced }
+          }
 
           set(updates)
           return true
@@ -427,7 +439,7 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
     }),
     {
       name: 'settings-store',
-      version: 27, // Added buildingQuality setting
+      version: 28, // Added advanced settings (interpolation debug logs)
       migrate: (persistedState: unknown, version: number) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let state: any = persistedState
@@ -657,6 +669,15 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
           }
         }
 
+        // Migrate v27 to v28: add advanced settings (interpolation debug logs)
+        if (version < 28) {
+          console.log('[Settings] Migrating v27 to v28: adding advanced settings')
+          state = {
+            ...state,
+            advanced: { ...DEFAULT_SETTINGS.advanced, ...state.advanced }
+          }
+        }
+
         // Repair step: ensure all settings groups have defaults filled in
         // This catches any settings that were missed by migrations
         const repaired = {
@@ -669,7 +690,8 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
           fsltl: { ...DEFAULT_SETTINGS.fsltl, ...state.fsltl },
           aircraft: { ...DEFAULT_SETTINGS.aircraft, ...state.aircraft },
           ui: { ...DEFAULT_SETTINGS.ui, ...state.ui },
-          realtraffic: { ...DEFAULT_SETTINGS.realtraffic, ...state.realtraffic }
+          realtraffic: { ...DEFAULT_SETTINGS.realtraffic, ...state.realtraffic },
+          advanced: { ...DEFAULT_SETTINGS.advanced, ...state.advanced }
         }
 
         return repaired as SettingsStoreWithPresets
@@ -822,6 +844,9 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
       licenseKey: oldSettings.realtraffic?.licenseKey ?? DEFAULT_SETTINGS.realtraffic.licenseKey,
       autoDetectLicense: oldSettings.realtraffic?.autoDetectLicense ?? DEFAULT_SETTINGS.realtraffic.autoDetectLicense,
       radiusNm: oldSettings.realtraffic?.radiusNm ?? DEFAULT_SETTINGS.realtraffic.radiusNm
+    },
+    advanced: {
+      enableInterpolationDebugLogs: oldSettings.advanced?.enableInterpolationDebugLogs ?? DEFAULT_SETTINGS.advanced.enableInterpolationDebugLogs
     }
   }
 }

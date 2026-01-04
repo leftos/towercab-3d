@@ -38,6 +38,8 @@ import {
   MIN_OBSERVATION_INTERVAL,
   PRUNE_INTERVAL
 } from '../constants/aircraft-timeline'
+import { useViewportStore } from './viewportStore'
+import { useSettingsStore } from './settingsStore'
 
 
 interface AircraftTimelineStore {
@@ -65,6 +67,8 @@ interface AircraftTimelineStore {
     startAlt: number
     // displayTime when we started interpolating toward this target
     startDisplayTime: number
+    // Anchor (oldest obs) when this reconciliation was created
+    anchorObservedAt: number
   }>
 
   // Prune timer
@@ -341,6 +345,7 @@ type ReconciliationState = {
   startLon: number
   startAlt: number
   startDisplayTime: number  // displayTime when we started
+  anchorObservedAt: number  // Anchor (oldest obs) when this reconciliation was created
 }
 
 /**
@@ -398,9 +403,11 @@ function interpolateTimeline(
   // Find bracketing observations
   const [before, after] = findBracketingObservations(observations, displayTime)
 
-  // DEBUG: Log interpolation state for ONE moving aircraft (dev only)
+  // DEBUG: Log interpolation state for ONE moving aircraft
   // Tracks position frame-to-frame to detect snaps
-  if (import.meta.env.DEV) {
+  // Enabled in DEV mode always, or in production when advanced.enableInterpolationDebugLogs is true
+  const debugLogsEnabled = import.meta.env.DEV || useSettingsStore.getState().advanced?.enableInterpolationDebugLogs
+  if (debugLogsEnabled) {
     const debugState = globalThis as Record<string, unknown>
 
     // Setup visibility change listener (once)
@@ -419,17 +426,62 @@ function interpolateTimeline(
       })
     }
 
-    // Wait for aircraft with positive airspeed before picking a target
-    if (!debugState.__interpDebugCallsign && newestObs.groundspeed > 50) {
-      debugState.__interpDebugCallsign = callsign
+    // Track the followed aircraft from viewport store
+    // When user follows a new aircraft, switch debug logging to that aircraft
+    const followedCallsign = useViewportStore.getState().getMainViewport()?.cameraState?.followingCallsign
+    const currentTime = Date.now()
+
+    // Check if current aircraft is the one we're tracking - update last seen time
+    if (callsign === debugState.__interpDebugCallsign) {
+      debugState.__interpDebugLastSeen = currentTime
+    }
+
+    // Auto-clear stale debug target when not following anyone
+    // If we haven't seen the tracked aircraft in 5 seconds, clear it so we can pick a new one
+    const STALE_THRESHOLD_MS = 5000
+    const PICK_COOLDOWN_MS = 3000
+    const lastSeen = debugState.__interpDebugLastSeen as number | undefined
+    const lastPickAttempt = debugState.__interpDebugLastPickAttempt as number | undefined
+    const isStale = debugState.__interpDebugCallsign && lastSeen && (currentTime - lastSeen > STALE_THRESHOLD_MS)
+
+    if (isStale && !followedCallsign) {
+      // Tracked aircraft disconnected and we're not following anyone - clear it
+      const ts = new Date().toISOString().slice(11, 23)
+      console.log(`[Interp] ${ts} DEBUG Aircraft ${debugState.__interpDebugCallsign} disconnected, will auto-pick new target`)
+      debugState.__interpDebugCallsign = null
+      debugState.__interpDebugLastSeen = null
+    }
+
+    if (followedCallsign && followedCallsign !== debugState.__interpDebugCallsign) {
+      // User started following a new aircraft - switch to tracking it
+      debugState.__interpDebugCallsign = followedCallsign
       debugState.__interpDebugCounter = 0
       debugState.__interpLastLat = null
       debugState.__interpLastLon = null
       debugState.__interpLastObsCount = 0
       debugState.__interpLastOldestObsAt = null
       debugState.__interpLastNow = null
+      debugState.__interpDebugLastSeen = currentTime
+      debugState.__interpDebugLastPickAttempt = currentTime
       const ts = new Date().toISOString().slice(11, 23)
-      console.log(`[Interp] ${ts} DEBUG Now tracking: ${callsign} (gs=${newestObs.groundspeed.toFixed(0)}kts)`)
+      console.log(`[Interp] ${ts} DEBUG Now tracking (followed): ${followedCallsign}`)
+    } else if (!debugState.__interpDebugCallsign && newestObs.groundspeed > 50) {
+      // Fallback: auto-pick first aircraft with positive airspeed if not following anyone
+      // But only if we haven't tried recently (cooldown to avoid spam)
+      const canPick = !lastPickAttempt || (currentTime - lastPickAttempt > PICK_COOLDOWN_MS)
+      if (canPick) {
+        debugState.__interpDebugCallsign = callsign
+        debugState.__interpDebugCounter = 0
+        debugState.__interpLastLat = null
+        debugState.__interpLastLon = null
+        debugState.__interpLastObsCount = 0
+        debugState.__interpLastOldestObsAt = null
+        debugState.__interpLastNow = null
+        debugState.__interpDebugLastSeen = currentTime
+        debugState.__interpDebugLastPickAttempt = currentTime
+        const ts = new Date().toISOString().slice(11, 23)
+        console.log(`[Interp] ${ts} DEBUG Now tracking: ${callsign} (gs=${newestObs.groundspeed.toFixed(0)}kts)`)
+      }
     }
 
     if (callsign === debugState.__interpDebugCallsign) {
@@ -511,8 +563,11 @@ function interpolateTimeline(
     const interval = after.observedAt - before.observedAt
     const t = interval > 0 ? (displayTime - before.observedAt) / interval : 1
 
-    // Check if we're targeting a new 'after' observation
-    const isNewTarget = !reconciliation || reconciliation.targetObservedAt !== after.observedAt
+    // Check if we're targeting a new 'after' observation OR if anchor shifted.
+    // Anchor shift invalidates reconciliation because startDisplayTime was calculated
+    // with the old anchor, and displayTime has now jumped to a different value.
+    const anchorChanged = reconciliation && reconciliation.anchorObservedAt !== oldestObs.observedAt
+    const isNewTarget = !reconciliation || reconciliation.targetObservedAt !== after.observedAt || anchorChanged
 
     if (isNewTarget) {
       if (lastRenderedPos) {
@@ -522,13 +577,15 @@ function interpolateTimeline(
           startLat: lastRenderedPos.latitude,
           startLon: lastRenderedPos.longitude,
           startAlt: lastRenderedPos.altitude,
-          startDisplayTime: displayTime
+          startDisplayTime: displayTime,
+          anchorObservedAt: oldestObs.observedAt
         }
         // Debug: log when starting new reconciliation
         const debugState = globalThis as Record<string, unknown>
         if (callsign === debugState.__interpDebugCallsign) {
           const ts = new Date().toISOString().slice(11, 23)
-          console.log(`[Interp] ${ts} ${callsign} NEW TARGET - using lastRenderedPos (${lastRenderedPos.latitude.toFixed(4)}, ${lastRenderedPos.longitude.toFixed(4)}) targetObs=${after.observedAt}`)
+          const reason = anchorChanged ? 'ANCHOR_SHIFT' : 'NEW_TARGET'
+          console.log(`[Interp] ${ts} ${callsign} ${reason} - using lastRenderedPos (${lastRenderedPos.latitude.toFixed(4)}, ${lastRenderedPos.longitude.toFixed(4)}) targetObs=${after.observedAt}`)
         }
       } else {
         // First time seeing this aircraft - use 'before' as start
@@ -537,7 +594,8 @@ function interpolateTimeline(
           startLat: before.latitude,
           startLon: before.longitude,
           startAlt: before.altitude,
-          startDisplayTime: before.observedAt
+          startDisplayTime: before.observedAt,
+          anchorObservedAt: oldestObs.observedAt
         }
         // Debug
         const debugState = globalThis as Record<string, unknown>

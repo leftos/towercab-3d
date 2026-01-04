@@ -2,6 +2,18 @@
 
 All notable changes to TowerCab 3D will be documented in this file.
 
+## [Unreleased]
+
+## [0.0.28-alpha] - 2026-01-03
+
+### Added
+- Advanced settings section with option to enable interpolation debug logging
+  - Useful for diagnosing aircraft position issues (Settings → General → Advanced)
+
+### Fixed
+- More work to prevent aircraft snapping/jumping position every 15 seconds during flight
+  - Fixed a timing discontinuity when old position data was pruned from memory
+
 ## [0.0.27-alpha] - 2026-01-01
 
 ### Changed

@@ -33,6 +33,10 @@ function SettingsGeneralTab({ onShowImportModal, onShowExportModal, importStatus
   const enableAutoAirportSwitch = useSettingsStore((state) => state.camera.enableAutoAirportSwitch ?? false)
   const updateCameraSettings = useSettingsStore((state) => state.updateCameraSettings)
 
+  // Advanced settings
+  const enableInterpolationDebugLogs = useSettingsStore((state) => state.advanced?.enableInterpolationDebugLogs ?? false)
+  const updateAdvancedSettings = useSettingsStore((state) => state.updateAdvancedSettings)
+
   // RealTraffic settings (from global settings - shared across devices)
   const dataSource = useGlobalSettingsStore((state) => state.realtraffic.dataSource)
   const licenseKey = useGlobalSettingsStore((state) => state.realtraffic.licenseKey)
@@ -429,6 +433,23 @@ function SettingsGeneralTab({ onShowImportModal, onShowExportModal, importStatus
       </CollapsibleSection>
 
       <FSLTLImportPanel />
+
+      <CollapsibleSection title="Advanced / Debugging">
+        <div className="setting-item">
+          <label className="setting-label">
+            <input
+              type="checkbox"
+              checked={enableInterpolationDebugLogs}
+              onChange={(e) => updateAdvancedSettings({ enableInterpolationDebugLogs: e.target.checked })}
+            />
+            Enable Interpolation Debug Logs
+          </label>
+          <p className="setting-hint">
+            Logs detailed interpolation data to the browser console for the followed aircraft.
+            Useful for diagnosing position snapping or timing issues. Open Developer Tools (F12) to view.
+          </p>
+        </div>
+      </CollapsibleSection>
 
       <CollapsibleSection title="Import / Export Settings">
         <p className="setting-hint" style={{ marginBottom: '12px' }}>

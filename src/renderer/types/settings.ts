@@ -586,6 +586,25 @@ export interface UISettings {
 }
 
 /**
+ * Advanced/debug settings for troubleshooting and diagnostics
+ *
+ * These settings are intended for power users and developers to diagnose
+ * issues with aircraft interpolation and rendering.
+ */
+export interface AdvancedSettings {
+  /**
+   * Enable interpolation debug logging (default: false)
+   *
+   * When enabled, logs detailed interpolation information to the browser console
+   * for the currently followed aircraft. Useful for diagnosing position snapping,
+   * extrapolation issues, and data source timing problems.
+   *
+   * Log format: [Interp] HH:MM:SS.mmm CALLSIGN MODE t=X obs=N interval=Xs ...
+   */
+  enableInterpolationDebugLogs: boolean
+}
+
+/**
  * Texture downscaling options for FSLTL conversion
  *
  * Controls the maximum texture resolution when converting FSLTL models:
@@ -1088,6 +1107,9 @@ export interface SettingsStore {
   /** RealTraffic data source settings */
   realtraffic: RealTrafficSettings
 
+  /** Advanced/debug settings */
+  advanced: AdvancedSettings
+
   // Actions (will be added in Phase 5)
   /** Update Cesium settings (partial update) */
   updateCesiumSettings: (updates: Partial<CesiumSettings>) => void
@@ -1116,6 +1138,9 @@ export interface SettingsStore {
   /** Update RealTraffic settings (partial update) */
   updateRealTrafficSettings: (updates: Partial<RealTrafficSettings>) => void
 
+  /** Update advanced/debug settings (partial update) */
+  updateAdvancedSettings: (updates: Partial<AdvancedSettings>) => void
+
   /** Reset all settings to defaults */
   resetToDefaults: () => void
 
@@ -1142,6 +1167,7 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
   updateUISettings: unknown
   updateFSLTLSettings: unknown
   updateRealTrafficSettings: unknown
+  updateAdvancedSettings: unknown
   resetToDefaults: unknown
   exportSettings: unknown
   importSettings: unknown
@@ -1243,5 +1269,8 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     licenseKey: '',
     autoDetectLicense: true,
     radiusNm: 100
+  },
+  advanced: {
+    enableInterpolationDebugLogs: false
   }
 }
