@@ -52,7 +52,7 @@
     "vite-plugin-static-copy": "^3.1.4"
   },
   "dependencies": {
-    "@babylonjs/core": "^8.43.0",
+    "@babylonjs/core": "^8.44.0",
     "@babylonjs/gui": "^8.43.0",
     "@babylonjs/loaders": "^8.43.0",
     "@tauri-apps/api": "^2",
