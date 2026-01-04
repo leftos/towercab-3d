@@ -103,9 +103,12 @@ jobs:
           else
             echo "vnas_available=false" >> $GITHUB_OUTPUT
             echo "Building without vNAS (no VNAS_REPO_TOKEN secret)"
-            # Use pre-generated lockfile that doesn't reference the private vnas repo
-            cp src-tauri/Cargo.lock.public src-tauri/Cargo.lock
-            echo "Using Cargo.lock.public (no vNAS dependency)"
+            # Remove vnas from Cargo.toml and use pre-generated lockfile
+            cd src-tauri
+            sed -i '/towercab-3d-vnas.*git.*Leftos/d' Cargo.toml
+            sed -i 's/vnas = \["dep:towercab-3d-vnas"\]/vnas = []/' Cargo.toml
+            cp Cargo.lock.public Cargo.lock
+            echo "Removed vNAS from Cargo.toml and using Cargo.lock.public"
           fi
         shell: bash
 
