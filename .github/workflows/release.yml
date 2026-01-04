@@ -103,11 +103,9 @@ jobs:
           else
             echo "vnas_available=false" >> $GITHUB_OUTPUT
             echo "Building without vNAS (no VNAS_REPO_TOKEN secret)"
-            # Regenerate Cargo.lock without the optional vnas dependency
-            # The sed approach corrupted TOML by removing lines from multi-line blocks
-            cd src-tauri
-            cargo generate-lockfile
-            echo "Regenerated Cargo.lock without vNAS"
+            # Use pre-generated lockfile that doesn't reference the private vnas repo
+            cp src-tauri/Cargo.lock.public src-tauri/Cargo.lock
+            echo "Using Cargo.lock.public (no vNAS dependency)"
           fi
         shell: bash
 
