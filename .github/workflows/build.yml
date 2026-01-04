@@ -96,7 +96,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          CARGO_NET_GIT_FETCH_WITH_CLI: ${{ steps.vnas-check.outputs.vnas_available == 'true' && 'true' || '' }}
+          CARGO_NET_GIT_FETCH_WITH_CLI: ${{ steps.vnas-check.outputs.vnas_available == 'true' }}
         with:
           args: --target ${{ matrix.target }} ${{ steps.vnas-check.outputs.vnas_available == 'true' && '--features vnas' || '' }}
 
