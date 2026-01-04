@@ -54,6 +54,18 @@ The optional `vnas` feature enables 1Hz real-time aircraft updates via the priva
 - Ground track field for accurate aircraft extrapolation
 - WaitingForSession state when TC3D connects before CRC
 
+**Maintaining Cargo.lock.public:** CI uses `src-tauri/Cargo.lock.public` for builds without vNAS access (e.g., dependabot PRs). When updating Rust dependencies, regenerate it:
+
+```bash
+cd src-tauri
+cp Cargo.toml Cargo.toml.bak
+sed -i '/towercab-3d-vnas.*git.*Leftos/d' Cargo.toml
+sed -i 's/vnas = \["dep:towercab-3d-vnas"\]/vnas = []/' Cargo.toml
+cargo generate-lockfile
+cp Cargo.lock Cargo.lock.public
+cp Cargo.toml.bak Cargo.toml && rm Cargo.toml.bak
+```
+
 **Note:** The `npm run build` command automatically runs `build:converter` to create the FSLTL model converter executable. This requires Python 3 with Pillow installed. PyInstaller is auto-installed if missing.
 
 **Note for Claude:** Only the user can run `npm run dev` as it launches the Tauri app with a GUI. Ask the user to run this command and report back any errors.
