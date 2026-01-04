@@ -122,10 +122,13 @@ jobs:
           else
             echo "signing_available=false" >> $GITHUB_OUTPUT
             echo "WARNING: Building release without signing (no TAURI_SIGNING_PRIVATE_KEY secret)"
-            # Disable updater plugin in Cargo.toml so Tauri doesn't require signing config
+            # Disable updater plugin completely
             cd src-tauri
             sed -i '/tauri-plugin-updater/d' Cargo.toml
-            echo "Disabled tauri-plugin-updater in Cargo.toml"
+            sed -i '/"updater:default"/d' capabilities/desktop.json
+            # Remove updater code block from lib.rs (comment + cfg + plugin line)
+            sed -i '/Register updater plugin/,/tauri_plugin_updater/d' src/lib.rs
+            echo "Disabled tauri-plugin-updater"
           fi
         shell: bash
 
