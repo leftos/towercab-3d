@@ -60,6 +60,18 @@ The optional `vnas` feature enables 1Hz real-time aircraft updates via the priva
 
 **Windows Warning:** Never use `2>nul` to suppress stderr in terminal commands. On Windows, this creates a file literally named `nul` which is extremely difficult to delete (requires special tools or booting from Linux). Use `2>$null` in PowerShell or simply omit stderr redirection.
 
+## File Editing on Windows
+
+**CRITICAL:** When using Edit or Write tools on Windows, you MUST use absolute paths with backslashes:
+
+```
+✅ CORRECT:  X:\dev\towercab-3d\package.json
+❌ WRONG:    package.json
+❌ WRONG:    X:/dev/towercab-3d/package.json
+```
+
+Using relative paths or forward slashes causes "File has been unexpectedly modified" errors and other failures. Always construct the full absolute path with backslashes before calling Edit or Write.
+
 **Important:** Always run ESLint and TypeScript checks before committing changes:
 
 ```bash
