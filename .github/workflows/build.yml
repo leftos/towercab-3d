@@ -104,6 +104,14 @@ jobs:
             sed -i '/"updater:default"/d' capabilities/desktop.json
             # Remove updater code block from lib.rs (comment + cfg + plugin line)
             sed -i '/Register updater plugin/,/tauri_plugin_updater/d' src/lib.rs
+            # Remove updater config and disable updater artifacts in tauri.conf.json
+            node -e "
+              const fs = require('fs');
+              const config = JSON.parse(fs.readFileSync('tauri.conf.json', 'utf8'));
+              delete config.plugins.updater;
+              config.bundle.createUpdaterArtifacts = false;
+              fs.writeFileSync('tauri.conf.json', JSON.stringify(config, null, 2));
+            "
             echo "Disabled tauri-plugin-updater"
           fi
         shell: bash
