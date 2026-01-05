@@ -54,7 +54,7 @@
   "dependencies": {
     "@babylonjs/core": "^8.43.0",
     "@babylonjs/gui": "^8.43.0",
-    "@babylonjs/loaders": "^8.43.0",
+    "@babylonjs/loaders": "^8.44.0",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-fs": "^2.4.4",
     "@tauri-apps/plugin-process": "^2.3.1",
