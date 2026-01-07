@@ -377,11 +377,11 @@ class MSFSModelConversionServiceClass {
    * Index a source on-demand (when user enables it in settings)
    * Call this after user enables FSLTL or AIG in settings
    * @param source - 'fsltl' or 'aig'
-   * @param onProgress Optional callback to report progress
+   * @param onProgress Optional callback to report progress (progress: 0-100, status: string)
    */
   async indexSourceOnDemand(
     source: MSFSModelSource,
-    onProgress?: (status: string) => void
+    onProgress?: (progress: number, status: string) => void
   ): Promise<boolean> {
     if (!this.lastDetection) {
       console.warn('[MSFSConversion] Cannot index on-demand: detection not yet complete')
@@ -390,17 +390,23 @@ class MSFSModelConversionServiceClass {
 
     try {
       if (source === 'fsltl' && this.lastDetection.fsltlFound && this.lastDetection.fsltlPath) {
-        onProgress?.('Indexing FSLTL models...')
-        await this.buildFsltlIndex(this.lastDetection.fsltlPath, (status) => {
-          onProgress?.(status)
+        onProgress?.(10, 'Scanning FSLTL models...')
+        await this.buildFsltlIndex(this.lastDetection.fsltlPath, (status, progress) => {
+          // Map buildFsltlIndex progress (0-100) to our overall progress (10-95)
+          const overallProgress = 10 + (progress ?? 50) * 0.85
+          onProgress?.(overallProgress, status)
         })
+        onProgress?.(100, 'FSLTL models indexed')
         console.log('[MSFSConversion] FSLTL indexed on-demand')
         return true
       } else if (source === 'aig' && this.lastDetection.aigFound && this.lastDetection.aigPath) {
-        onProgress?.('Indexing AIG models...')
-        await this.buildAigIndex(this.lastDetection.aigPath, (status) => {
-          onProgress?.(status)
+        onProgress?.(10, 'Scanning AIG models...')
+        await this.buildAigIndex(this.lastDetection.aigPath, (status, progress) => {
+          // Map buildAigIndex progress (0-100) to our overall progress (10-95)
+          const overallProgress = 10 + (progress ?? 50) * 0.85
+          onProgress?.(overallProgress, status)
         })
+        onProgress?.(100, 'AIG models indexed')
         console.log('[MSFSConversion] AIG indexed on-demand')
         return true
       } else {
@@ -795,13 +801,9 @@ class MSFSModelConversionServiceClass {
       const { invoke } = await import('@tauri-apps/api/core')
       const settings = this.getSettings()
 
-      // Determine output path
-      const outputPath = settings.cacheDirectory
-        ? `${settings.cacheDirectory}/${modelKey}.glb`
-        : null // Will return blob data
-
-      // Always need an output path - use cache directory or temp location
-      const finalOutputPath = outputPath || await this.getTempOutputPath(modelKey)
+      // Determine output directory (converter creates TYPE/AIRLINE/model.glb subdirectories)
+      const finalOutputPath = settings.cacheDirectory
+        || await this.getTempOutputDir()
 
       // Determine source path based on model source type
       const sourcePath = sourceInfo.source === 'fsltl'
@@ -891,24 +893,34 @@ class MSFSModelConversionServiceClass {
   }
 
   /**
-   * Get a temporary output path for models when no cache directory is set
+   * Get a temporary output directory for models when no cache directory is set
+   * (Returns the directory path, not a file path - converter creates subdirectories)
    */
-  private async getTempOutputPath(modelKey: string): Promise<string> {
+  private async getTempOutputDir(): Promise<string> {
     if (!isTauri()) {
-      return `temp_${modelKey}.glb`
+      return 'msfs_cache'
     }
 
     try {
       const { appDataDir, join } = await import('@tauri-apps/api/path')
       const appData = await appDataDir()
       // Use join for proper path handling on all platforms
-      const cachePath = await join(appData, 'msfs_cache', `${modelKey}.glb`)
-      console.log(`[MSFSConversion] Output path: ${cachePath}`)
-      return cachePath
+      const cacheDir = await join(appData, 'msfs_cache')
+      console.log(`[MSFSConversion] Cache directory: ${cacheDir}`)
+      return cacheDir
     } catch (e) {
       console.warn('[MSFSConversion] Failed to get app data dir, using relative path:', e)
-      return `msfs_cache/${modelKey}.glb`
+      return 'msfs_cache'
     }
+  }
+
+  /**
+   * Get a temporary output path for models when no cache directory is set
+   * (Returns a file path - for backwards compatibility)
+   */
+  private async getTempOutputPath(modelKey: string): Promise<string> {
+    const dir = await this.getTempOutputDir()
+    return `${dir}/${modelKey}.glb`
   }
 
   /**

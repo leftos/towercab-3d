@@ -54,7 +54,9 @@ export function ModelPreviewModal({ modelInfo, onClose }: ModelPreviewModalProps
       imageryLayers.addImageryProvider(
         new Cesium.SingleTileImageryProvider({
           url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mM8duzYfwAHwQL9h9FqHwAAAABJRU5ErkJggg==',
-          rectangle: Cesium.Rectangle.MAX_VALUE
+          rectangle: Cesium.Rectangle.MAX_VALUE,
+          tileWidth: 256,
+          tileHeight: 256
         })
       )
 
