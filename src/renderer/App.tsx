@@ -19,9 +19,11 @@ import LoadingScreen, { type LoadingStep, type LoadingProgress } from './compone
 import { PerformanceHUD } from './components/UI/PerformanceHUD'
 import ModelMatchingModal from './components/UI/ModelMatchingModal'
 import AircraftTimelineModal from './components/UI/AircraftTimelineModal'
+import { MSFSIndexingModal } from './components/UI/MSFSIndexingModal'
 import { WeatherDebugPanel } from './components/UI/WeatherDebugPanel'
 import { VnasPanel } from './components/UI/VnasPanel'
 import { performanceMonitor } from './utils/performanceMonitor'
+import { stopFileLogging } from './utils/fileLogger'
 import { useVatsimStore } from './stores/vatsimStore'
 import { useRealTrafficStore } from './stores/realTrafficStore'
 import { useAirportStore } from './stores/airportStore'
@@ -249,6 +251,11 @@ function App() {
 
     return () => {
       performanceMonitor.stopLogging()
+      if (import.meta.env.DEV) {
+        stopFileLogging().catch(() => {
+          // Ignore errors during cleanup
+        })
+      }
     }
   }, [startPolling, loadAirports, checkVRSupport, updateProgress])
 
@@ -457,6 +464,7 @@ function App() {
       {!isVRActive && showTimelineDebugModal && (
         <AircraftTimelineModal onClose={() => setShowTimelineDebugModal(false)} />
       )}
+      <MSFSIndexingModal />
 
       {/* Cesium Ion Token Prompt */}
       {showTokenPrompt && (

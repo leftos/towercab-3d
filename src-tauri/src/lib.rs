@@ -13,6 +13,7 @@
 //! - `vnas`: vNAS WebSocket/UDP integration
 
 use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Child};
 use std::sync::Mutex;
@@ -268,6 +269,49 @@ fn get_http_server_status() -> ServerStatus {
             lan_url: None,
         }
     }
+}
+
+/// Get the log file path from environment variable (if set via --log flag)
+#[tauri::command]
+fn get_log_file_path() -> Option<String> {
+    std::env::var("TOWERCAB_LOG_FILE").ok()
+}
+
+/// Create a fresh text file (overwrites if exists)
+#[tauri::command]
+fn create_text_file(path: String, content: String) -> Result<(), String> {
+    // Create parent directories if needed
+    if let Some(parent) = std::path::Path::new(&path).parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create directories: {}", e))?;
+    }
+
+    fs::write(&path, content)
+        .map_err(|e| format!("Failed to write file: {}", e))
+}
+
+/// Append to a text file (creates if doesn't exist)
+/// Uses append mode for efficiency - seeks to end and writes without reading entire file
+#[tauri::command]
+fn append_to_text_file(path: String, content: String) -> Result<(), String> {
+    // Create parent directories if needed
+    if let Some(parent) = std::path::Path::new(&path).parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create directories: {}", e))?;
+    }
+
+    // Open file in append mode (creates if doesn't exist, seeks to end)
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .map_err(|e| format!("Failed to open file: {}", e))?;
+
+    // Write content to end of file
+    file.write_all(content.as_bytes())
+        .map_err(|e| format!("Failed to write to file: {}", e))?;
+
+    Ok(())
 }
 
 // =============================================================================
@@ -631,6 +675,10 @@ pub fn run() {
             start_http_server,
             stop_http_server,
             get_http_server_status,
+            get_log_file_path,
+            // File commands
+            create_text_file,
+            append_to_text_file,
             fetch_url,
             // RealTraffic commands
             realtraffic::realtraffic_auth,
