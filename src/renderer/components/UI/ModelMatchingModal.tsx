@@ -5,6 +5,7 @@ import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { aircraftModelService, type ModelInfo } from '../../services/AircraftModelService'
 import { userVMRService } from '../../services/UserVMRService'
+import { ModelPreviewModal } from './ModelPreviewModal'
 import './ModelMatchingModal.css'
 
 interface ModelMatchingModalProps {
@@ -38,6 +39,9 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
   const [testAirline, setTestAirline] = useState('')
   const [testType, setTestType] = useState('')
   const [testResult, setTestResult] = useState<TestResult | null>(null)
+
+  // Preview modal state
+  const [previewModel, setPreviewModel] = useState<ModelInfo | null>(null)
 
   // Listen for model conversion completions to refresh the table
   useEffect(() => {
@@ -73,6 +77,8 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
       modelInfo,
       vmrAlternatives
     })
+    // Open preview modal
+    setPreviewModel(modelInfo)
   }, [testAirline, testType])
 
   // Build model matching data for all aircraft in range
@@ -298,7 +304,11 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
                   const showScale = shouldShowScale(aircraft.modelInfo)
                   const scale = showScale ? formatScale(aircraft.modelInfo.scale) : null
                   return (
-                    <tr key={aircraft.callsign}>
+                    <tr
+                      key={aircraft.callsign}
+                      onClick={() => setPreviewModel(aircraft.modelInfo)}
+                      style={{ cursor: 'pointer' }}
+                    >
                       <td className="callsign">{aircraft.callsign}</td>
                       <td className="type-code">{aircraft.aircraftType}</td>
                       <td
@@ -325,6 +335,14 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
             </table>
           )}
         </div>
+
+        {/* Model Preview Modal */}
+        {previewModel && (
+          <ModelPreviewModal
+            modelInfo={previewModel}
+            onClose={() => setPreviewModel(null)}
+          />
+        )}
       </div>
     </div>
   )
