@@ -1,0 +1,1029 @@
+//! MSFS (Microsoft Flight Simulator) model handling.
+//!
+//! This module handles:
+//! - Detecting MSFS model sources (FSLTL, AIG)
+//! - Listing available models from each source
+//! - Converting models on-demand (GLTF -> GLB)
+//! - Scanning converted models in output directories
+//! - Model index caching for performance
+
+use std::fs;
+use std::path::PathBuf;
+use std::process::Command;
+use serde::{Deserialize, Serialize};
+use tauri::Manager;
+
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
+use crate::normalize_path_string;
+
+// =============================================================================
+// TYPES
+// =============================================================================
+
+/// Result of detecting MSFS model installations
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MSFSDetectionResult {
+    pub fsltl_found: bool,
+    pub fsltl_path: Option<String>,
+    pub fsltl_model_count: Option<u32>,
+    pub aig_found: bool,
+    pub aig_path: Option<String>,
+    pub aig_model_count: Option<u32>,
+}
+
+/// Source model info for conversion
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceModelInfo {
+    pub source: String,         // "fsltl" or "aig"
+    pub model_name: String,     // Display name (from aircraft.cfg title)
+    pub folder_name: String,    // Actual folder name (e.g., "FSLTL_A320_BAW_IAE")
+    pub gltf_path: String,
+    pub texture_dirs: Vec<String>,
+    pub aircraft_type: String,
+    pub airline_code: Option<String>,
+}
+
+/// Result of a single model conversion
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MSFSConversionResult {
+    pub success: bool,
+    pub output_path: Option<String>,
+    pub error: Option<String>,
+    pub duration_ms: u64,
+}
+
+/// Scanned model info from converted output directory
+/// (renamed from ScannedFSLTLModel since it scans any converted models)
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScannedConvertedModel {
+    pub model_name: String,
+    pub model_path: String,
+    /// Relative path usable with /api/fsltl/* endpoint (e.g., "B738/AAL/model.glb")
+    pub relative_path: String,
+    pub aircraft_type: String,
+    pub airline_code: Option<String>,
+    pub has_animations: bool,
+    pub file_size: u64,
+}
+
+/// Info about a cached GLB model file
+#[derive(Debug, Serialize)]
+pub struct CachedGlbInfo {
+    /// Full path to the GLB file
+    pub path: String,
+    /// Model key extracted from filename (e.g., "fsltl_FSLTL_FAIB_B738_American")
+    pub model_key: String,
+    /// File size in bytes
+    pub file_size: u64,
+}
+
+/// Livery info from aircraft.cfg FLTSIM section
+struct AircraftCfgLivery {
+    title: String,
+    texture_folder: String,
+}
+
+// =============================================================================
+// MODEL INDEX CACHING
+// =============================================================================
+
+/// Cached model index with folder modification time for invalidation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ModelIndexCache {
+    /// Unix timestamp when the source folder was last modified
+    folder_mtime: u64,
+    /// Version number for cache format - bump to invalidate old caches
+    version: u32,
+    /// The cached model list
+    models: Vec<SourceModelInfo>,
+}
+
+const MODEL_CACHE_VERSION: u32 = 2; // Bump when cache format changes
+
+/// Get the modification time of a folder (recursive max mtime would be too slow)
+fn get_folder_mtime(path: &std::path::Path) -> Option<u64> {
+    fs::metadata(path).ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
+}
+
+/// Get the cache file path for a model source
+fn get_cache_path(base_path: &std::path::Path, source: &str) -> PathBuf {
+    // Store cache next to the source folder for easy invalidation
+    // Use parent directory so cache persists if user re-extracts FSLTL
+    let cache_dir = base_path.parent().unwrap_or(base_path);
+    cache_dir.join(format!(".tc3d_{}_cache.json", source))
+}
+
+/// Load model index from cache if valid
+fn load_model_cache(base_path: &std::path::Path, source: &str) -> Option<Vec<SourceModelInfo>> {
+    let cache_path = get_cache_path(base_path, source);
+    if !cache_path.exists() {
+        return None;
+    }
+
+    let cache_content = fs::read_to_string(&cache_path).ok()?;
+    let cache: ModelIndexCache = serde_json::from_str(&cache_content).ok()?;
+
+    // Check version
+    if cache.version != MODEL_CACHE_VERSION {
+        println!("[MSFSDetection] {} cache version mismatch (have {}, need {}), will rebuild",
+            source, cache.version, MODEL_CACHE_VERSION);
+        return None;
+    }
+
+    // Check if folder mtime has changed
+    let airplanes = base_path.join("SimObjects").join("Airplanes");
+    let current_mtime = get_folder_mtime(&airplanes)?;
+
+    if cache.folder_mtime != current_mtime {
+        println!("[MSFSDetection] {} folder modified, cache invalid", source);
+        return None;
+    }
+
+    println!("[MSFSDetection] Loaded {} models from {} cache", cache.models.len(), source);
+    Some(cache.models)
+}
+
+/// Save model index to cache
+fn save_model_cache(base_path: &std::path::Path, source: &str, models: &[SourceModelInfo]) {
+    let airplanes = base_path.join("SimObjects").join("Airplanes");
+    let Some(folder_mtime) = get_folder_mtime(&airplanes) else { return };
+
+    let cache = ModelIndexCache {
+        folder_mtime,
+        version: MODEL_CACHE_VERSION,
+        models: models.to_vec(),
+    };
+
+    let cache_path = get_cache_path(base_path, source);
+    if let Ok(content) = serde_json::to_string(&cache) {
+        if let Err(e) = fs::write(&cache_path, content) {
+            println!("[MSFSDetection] Failed to write {} cache: {}", source, e);
+        } else {
+            println!("[MSFSDetection] Saved {} models to {} cache", models.len(), source);
+        }
+    }
+}
+
+// =============================================================================
+// AIRCRAFT.CFG PARSING
+// =============================================================================
+
+/// Parse aircraft.cfg to extract the title field from first FLTSIM section
+/// Returns the title from [FLTSIM.0] section, or None if not found
+fn parse_aircraft_cfg_title(aircraft_dir: &std::path::Path) -> Option<String> {
+    let cfg_path = aircraft_dir.join("aircraft.cfg");
+    if !cfg_path.exists() {
+        return None;
+    }
+
+    let content = fs::read_to_string(&cfg_path).ok()?;
+
+    // Look for title = "..." in the [FLTSIM.0] section
+    let mut in_fltsim_section = false;
+    for line in content.lines() {
+        let trimmed = line.trim();
+
+        // Check for section headers
+        if trimmed.starts_with('[') {
+            in_fltsim_section = trimmed.to_uppercase().starts_with("[FLTSIM");
+            continue;
+        }
+
+        // Look for title in FLTSIM section
+        if in_fltsim_section && trimmed.to_lowercase().starts_with("title") {
+            // Parse: title = "FSLTL_FAIB_B738_American" ; comment
+            if let Some(eq_pos) = trimmed.find('=') {
+                let value_part = trimmed[eq_pos + 1..].trim();
+                // Remove quotes and everything after semicolon (comment)
+                let value = value_part
+                    .split(';')
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .trim_matches('"')
+                    .trim();
+                if !value.is_empty() {
+                    return Some(value.to_string());
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// Parse all FLTSIM sections from aircraft.cfg
+/// Returns list of (title, texture_folder) for each livery
+fn parse_aircraft_cfg_all_liveries(aircraft_dir: &std::path::Path) -> Vec<AircraftCfgLivery> {
+    let cfg_path = aircraft_dir.join("aircraft.cfg");
+    if !cfg_path.exists() {
+        return Vec::new();
+    }
+
+    let content = match fs::read_to_string(&cfg_path) {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut liveries = Vec::new();
+    let mut in_fltsim_section = false;
+    let mut current_title: Option<String> = None;
+    let mut current_texture: Option<String> = None;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+
+        // Check for section headers
+        if trimmed.starts_with('[') {
+            // Save previous livery if complete
+            if in_fltsim_section {
+                if let (Some(title), Some(texture)) = (current_title.take(), current_texture.take()) {
+                    liveries.push(AircraftCfgLivery { title, texture_folder: texture });
+                }
+            }
+            in_fltsim_section = trimmed.to_uppercase().starts_with("[FLTSIM");
+            current_title = None;
+            current_texture = None;
+            continue;
+        }
+
+        if !in_fltsim_section {
+            continue;
+        }
+
+        let lower = trimmed.to_lowercase();
+        if lower.starts_with("title") {
+            if let Some(eq_pos) = trimmed.find('=') {
+                let value = trimmed[eq_pos + 1..]
+                    .split(';')
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .trim_matches('"')
+                    .trim();
+                if !value.is_empty() {
+                    current_title = Some(value.to_string());
+                }
+            }
+        } else if lower.starts_with("texture") && !lower.starts_with("texture.") {
+            if let Some(eq_pos) = trimmed.find('=') {
+                let value = trimmed[eq_pos + 1..]
+                    .split(';')
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .trim_matches('"')
+                    .trim();
+                if !value.is_empty() {
+                    current_texture = Some(value.to_string());
+                }
+            }
+        }
+    }
+
+    // Don't forget the last section
+    if in_fltsim_section {
+        if let (Some(title), Some(texture)) = (current_title, current_texture) {
+            liveries.push(AircraftCfgLivery { title, texture_folder: texture });
+        }
+    }
+
+    liveries
+}
+
+// =============================================================================
+// UNIFIED MODEL LISTING
+// =============================================================================
+
+/// Configuration for listing models from an MSFS traffic source
+struct SourceConfig {
+    /// Source identifier ("fsltl" or "aig")
+    source: &'static str,
+    /// Folder prefix to filter (e.g., "FSLTL_" or "AIGAIM_")
+    folder_prefix: &'static str,
+}
+
+/// Find GLTF file in an aircraft directory
+/// Returns the path to the best exterior GLTF file, or None if not found
+fn find_gltf_in_dir(aircraft_dir: &std::path::Path) -> Option<String> {
+    let model_dirs: Vec<_> = fs::read_dir(aircraft_dir)
+        .ok()
+        .into_iter()
+        .flatten()
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            e.path().is_dir() &&
+            e.file_name().to_string_lossy().to_lowercase().starts_with("model")
+        })
+        .collect();
+
+    for model_dir_entry in model_dirs {
+        let model_dir = model_dir_entry.path();
+
+        // Find all GLTF files in this directory
+        let gltf_files: Vec<_> = fs::read_dir(&model_dir)
+            .ok()
+            .into_iter()
+            .flatten()
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                e.path().extension()
+                    .map(|ext| ext.to_string_lossy().to_lowercase() == "gltf")
+                    .unwrap_or(false)
+            })
+            .collect();
+
+        // Prefer exterior model: exclude cockpit/interior files, prefer lower LOD numbers
+        let exterior_gltf = gltf_files.iter()
+            .filter(|e| {
+                let name = e.file_name().to_string_lossy().to_lowercase();
+                !name.contains("cockpit") && !name.contains("interior")
+            })
+            .min_by_key(|e| {
+                let name = e.file_name().to_string_lossy().to_lowercase();
+                if name.contains("lod00") { 0 }
+                else if name.contains("lod01") { 1 }
+                else if name.contains("lod02") { 2 }
+                else if name.contains("lod03") { 3 }
+                else if name.contains("lod04") { 4 }
+                else { 5 }
+            });
+
+        if let Some(gltf_file) = exterior_gltf {
+            return Some(normalize_path_string(&gltf_file.path()));
+        }
+    }
+
+    None
+}
+
+/// Collect texture directories from a folder
+/// Returns directories starting with "texture" or "oci" (case-insensitive)
+fn collect_texture_dirs(dir: &std::path::Path) -> Vec<String> {
+    fs::read_dir(dir)
+        .ok()
+        .into_iter()
+        .flatten()
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            let name = e.file_name().to_string_lossy().to_lowercase();
+            e.path().is_dir() && (name.starts_with("texture") || name.starts_with("oci"))
+        })
+        .map(|e| normalize_path_string(&e.path()))
+        .collect()
+}
+
+/// Parse aircraft type from folder name
+/// Handles both FSLTL (FSLTL_B738_AAL) and AIG (AIGAIM_TFS_B777-200ER_GE) patterns
+fn parse_aircraft_type(folder_name: &str, prefix: &str) -> String {
+    let without_prefix = folder_name.strip_prefix(prefix).unwrap_or(folder_name);
+    let parts: Vec<&str> = without_prefix.split('_').collect();
+
+    if prefix == "FSLTL_" {
+        // FSLTL: FSLTL_{TYPE}_{AIRLINE} -> TYPE is first part
+        parts.first().map(|s| s.to_string()).unwrap_or_default()
+    } else {
+        // AIG: AIGAIM_{SOURCE}_{TYPE} -> TYPE is second part, before any hyphen
+        if parts.len() >= 2 {
+            parts[1].split('-').next().unwrap_or(parts[1]).to_string()
+        } else {
+            without_prefix.split('-').next().unwrap_or(without_prefix).to_string()
+        }
+    }
+}
+
+/// Unified model listing for MSFS traffic sources (FSLTL and AIG)
+///
+/// This function handles both source types with a unified approach:
+/// 1. Build base model index (for FSLTL's base model fallback pattern)
+/// 2. For each aircraft folder, parse ALL FLTSIM sections from aircraft.cfg
+/// 3. Create a SourceModelInfo for each livery with correct texture directories
+fn list_models_unified(base_path: &std::path::Path, config: &SourceConfig) -> Vec<SourceModelInfo> {
+    let airplanes = base_path.join("SimObjects").join("Airplanes");
+    if !airplanes.exists() {
+        return Vec::new();
+    }
+
+    // PASS 1: Build base model index
+    // Maps aircraft_type -> (gltf_path, texture_dirs)
+    // This is needed for FSLTL where livery folders reference a base model
+    // For AIG, this is mostly unused but harmless
+    let mut base_models: std::collections::HashMap<String, (String, Vec<String>)> = std::collections::HashMap::new();
+
+    if let Ok(entries) = fs::read_dir(&airplanes) {
+        for entry in entries.filter_map(|e| e.ok()) {
+            let aircraft_dir = entry.path();
+            if !aircraft_dir.is_dir() {
+                continue;
+            }
+
+            let folder_name = entry.file_name().to_string_lossy().to_string();
+            if !folder_name.starts_with(config.folder_prefix) {
+                continue;
+            }
+
+            // Check if this looks like a base model (FSLTL_B738 or FSLTL_B738_ZZZZ)
+            let parts: Vec<&str> = folder_name.split('_').collect();
+            let is_base_model = if config.folder_prefix == "FSLTL_" {
+                parts.len() == 2 || (parts.len() >= 3 && parts[2] == "ZZZZ")
+            } else {
+                // AIG folders are always "base models" (they contain their own GLTF)
+                true
+            };
+
+            if is_base_model {
+                if let Some(gltf_path) = find_gltf_in_dir(&aircraft_dir) {
+                    let aircraft_type = parse_aircraft_type(&folder_name, config.folder_prefix);
+                    let texture_dirs = collect_texture_dirs(&aircraft_dir);
+                    base_models.entry(aircraft_type).or_insert((gltf_path, texture_dirs));
+                }
+            }
+        }
+    }
+
+    // PASS 2: Create entries for all liveries
+    let mut models = Vec::new();
+
+    if let Ok(entries) = fs::read_dir(&airplanes) {
+        for entry in entries.filter_map(|e| e.ok()) {
+            let aircraft_dir = entry.path();
+            if !aircraft_dir.is_dir() {
+                continue;
+            }
+
+            let folder_name = entry.file_name().to_string_lossy().to_string();
+            if !folder_name.starts_with(config.folder_prefix) {
+                continue;
+            }
+
+            let aircraft_type = parse_aircraft_type(&folder_name, config.folder_prefix);
+
+            // Find GLTF - either in this folder or from base model
+            let gltf_path = find_gltf_in_dir(&aircraft_dir)
+                .or_else(|| base_models.get(&aircraft_type).map(|(p, _)| p.clone()));
+
+            let gltf_path = match gltf_path {
+                Some(p) => p,
+                None => continue, // Skip if no GLTF found
+            };
+
+            // Collect shared texture directories (oci.* folders, base model textures)
+            let shared_texture_dirs: Vec<String> = {
+                let mut dirs: Vec<String> = fs::read_dir(&aircraft_dir)
+                    .ok()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|e| e.ok())
+                    .filter(|e| {
+                        let name = e.file_name().to_string_lossy().to_lowercase();
+                        e.path().is_dir() && name.starts_with("oci")
+                    })
+                    .map(|e| normalize_path_string(&e.path()))
+                    .collect();
+
+                // Add base model texture directories as fallback (for shared textures like portholes)
+                if let Some((_, base_tex_dirs)) = base_models.get(&aircraft_type) {
+                    for base_dir in base_tex_dirs {
+                        if !dirs.contains(base_dir) {
+                            dirs.push(base_dir.clone());
+                        }
+                    }
+                }
+
+                dirs
+            };
+
+            // Parse ALL FLTSIM sections from aircraft.cfg
+            let liveries = parse_aircraft_cfg_all_liveries(&aircraft_dir);
+
+            if !liveries.is_empty() {
+                // Create entry for each livery defined in aircraft.cfg
+                for livery in liveries {
+                    // Find the texture folder for this livery
+                    let texture_folder_path = aircraft_dir.join(format!("texture.{}", livery.texture_folder));
+                    let texture_folder_path_alt = aircraft_dir.join(format!("Texture.{}", livery.texture_folder));
+
+                    let mut texture_dirs: Vec<String> = Vec::new();
+
+                    // Add livery-specific texture folder first (highest priority)
+                    if texture_folder_path.exists() {
+                        texture_dirs.push(normalize_path_string(&texture_folder_path));
+                    } else if texture_folder_path_alt.exists() {
+                        texture_dirs.push(normalize_path_string(&texture_folder_path_alt));
+                    }
+
+                    // Add shared texture directories as fallback
+                    texture_dirs.extend(shared_texture_dirs.clone());
+
+                    // Extract airline code from texture folder name
+                    let airline_code = livery.texture_folder
+                        .split('-')
+                        .next()
+                        .map(|s| s.to_uppercase())
+                        .filter(|s| s.len() == 3 || s.len() == 4); // 3-4 letter ICAO codes
+
+                    models.push(SourceModelInfo {
+                        source: config.source.to_string(),
+                        model_name: livery.title,
+                        folder_name: folder_name.clone(),
+                        gltf_path: gltf_path.clone(),
+                        texture_dirs,
+                        aircraft_type: aircraft_type.clone(),
+                        airline_code,
+                    });
+                }
+            } else {
+                // Fallback: No aircraft.cfg liveries found
+                // Scan texture.* folders and create entries for each
+                let livery_folders: Vec<_> = fs::read_dir(&aircraft_dir)
+                    .ok()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|e| e.ok())
+                    .filter(|e| {
+                        let name = e.file_name().to_string_lossy().to_lowercase();
+                        e.path().is_dir() && name.starts_with("texture.")
+                    })
+                    .collect();
+
+                if !livery_folders.is_empty() {
+                    for livery_entry in &livery_folders {
+                        let livery_name = livery_entry.file_name().to_string_lossy().to_string();
+                        let texture_suffix = livery_name
+                            .strip_prefix("texture.")
+                            .or_else(|| livery_name.strip_prefix("Texture."))
+                            .unwrap_or(&livery_name);
+
+                        let airline_code = texture_suffix
+                            .split('-')
+                            .next()
+                            .map(|s| s.to_uppercase())
+                            .filter(|s| s.len() == 3 || s.len() == 4);
+
+                        // Use folder name + texture suffix as model name
+                        let model_name = format!("{}_{}", folder_name, texture_suffix);
+
+                        let mut texture_dirs = vec![normalize_path_string(&livery_entry.path())];
+                        texture_dirs.extend(shared_texture_dirs.clone());
+
+                        models.push(SourceModelInfo {
+                            source: config.source.to_string(),
+                            model_name,
+                            folder_name: folder_name.clone(),
+                            gltf_path: gltf_path.clone(),
+                            texture_dirs,
+                            aircraft_type: aircraft_type.clone(),
+                            airline_code,
+                        });
+                    }
+                } else {
+                    // No texture.* folders - create single entry with all textures
+                    let all_texture_dirs = collect_texture_dirs(&aircraft_dir);
+
+                    // Try to get title from aircraft.cfg, fall back to folder name
+                    let model_name = parse_aircraft_cfg_title(&aircraft_dir)
+                        .unwrap_or_else(|| folder_name.clone());
+
+                    // Try to extract airline from folder name (FSLTL_B738_AAL -> AAL)
+                    let airline_code = if config.folder_prefix == "FSLTL_" {
+                        let parts: Vec<&str> = folder_name.split('_').collect();
+                        if parts.len() > 2 && parts[2] != "ZZZZ" {
+                            Some(parts[2].to_uppercase())
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+
+                    models.push(SourceModelInfo {
+                        source: config.source.to_string(),
+                        model_name,
+                        folder_name: folder_name.clone(),
+                        gltf_path: gltf_path.clone(),
+                        texture_dirs: all_texture_dirs,
+                        aircraft_type: aircraft_type.clone(),
+                        airline_code,
+                    });
+                }
+            }
+        }
+    }
+
+    models
+}
+
+// =============================================================================
+// TAURI COMMANDS - DETECTION
+// =============================================================================
+
+/// Detect FSLTL and AIG installations in Community folder
+#[tauri::command]
+pub fn detect_msfs_installations(community_path: String) -> Result<MSFSDetectionResult, String> {
+    let base = PathBuf::from(&community_path);
+
+    if !base.exists() {
+        return Err(format!("Community folder does not exist: {}", community_path));
+    }
+
+    let mut result = MSFSDetectionResult {
+        fsltl_found: false,
+        fsltl_path: None,
+        fsltl_model_count: None,
+        aig_found: false,
+        aig_path: None,
+        aig_model_count: None,
+    };
+
+    // Check for FSLTL (fsltl-traffic-base folder with FSLTL_Rules.vmr)
+    let fsltl_path = base.join("fsltl-traffic-base");
+    if fsltl_path.exists() && fsltl_path.join("FSLTL_Rules.vmr").exists() {
+        result.fsltl_found = true;
+        result.fsltl_path = Some(normalize_path_string(&fsltl_path));
+        // Don't count here - actual count comes from list_fsltl_models
+    }
+
+    // Check for AIG (aig-aitraffic-oci folder)
+    let aig_path = base.join("aig-aitraffic-oci");
+    if aig_path.exists() {
+        let airplanes = aig_path.join("SimObjects").join("Airplanes");
+        if airplanes.exists() {
+            result.aig_found = true;
+            result.aig_path = Some(normalize_path_string(&aig_path));
+            // Don't count here - actual count comes from list_aig_models
+        }
+    }
+
+    println!("[MSFSDetection] FSLTL: {} ({:?}), AIG: {} ({:?})",
+        result.fsltl_found, result.fsltl_model_count,
+        result.aig_found, result.aig_model_count);
+
+    Ok(result)
+}
+
+// =============================================================================
+// TAURI COMMANDS - SOURCE LISTING
+// =============================================================================
+
+/// List available FSLTL models from source
+/// Uses unified listing logic that parses ALL FLTSIM sections from aircraft.cfg
+#[tauri::command]
+pub fn list_fsltl_models(base_path: String) -> Result<Vec<SourceModelInfo>, String> {
+    let base = PathBuf::from(&base_path);
+
+    // Try to load from cache first (much faster on subsequent launches)
+    if let Some(cached) = load_model_cache(&base, "fsltl") {
+        return Ok(cached);
+    }
+
+    let start_time = std::time::Instant::now();
+
+    let config = SourceConfig {
+        source: "fsltl",
+        folder_prefix: "FSLTL_",
+    };
+
+    let models = list_models_unified(&base, &config);
+
+    let elapsed = start_time.elapsed();
+    println!("[MSFSDetection] Indexed {} FSLTL liveries in {:?}", models.len(), elapsed);
+
+    // Save to cache for faster subsequent launches
+    save_model_cache(&base, "fsltl", &models);
+
+    Ok(models)
+}
+
+/// List available AIG models from source
+/// Uses unified listing logic that parses ALL FLTSIM sections from aircraft.cfg
+#[tauri::command]
+pub fn list_aig_models(base_path: String) -> Result<Vec<SourceModelInfo>, String> {
+    let base = PathBuf::from(&base_path);
+
+    // Try to load from cache first
+    if let Some(cached) = load_model_cache(&base, "aig") {
+        return Ok(cached);
+    }
+
+    let start_time = std::time::Instant::now();
+
+    let config = SourceConfig {
+        source: "aig",
+        folder_prefix: "AIGAIM_",
+    };
+
+    let models = list_models_unified(&base, &config);
+
+    let elapsed = start_time.elapsed();
+    println!("[MSFSDetection] Indexed {} AIG liveries in {:?}", models.len(), elapsed);
+
+    // Save to cache for faster subsequent launches
+    save_model_cache(&base, "aig", &models);
+
+    Ok(models)
+}
+
+// =============================================================================
+// TAURI COMMANDS - CONVERSION
+// =============================================================================
+
+/// Convert a single MSFS model (FSLTL or AIG) to GLB format
+/// This is used for on-the-fly conversion when an aircraft first appears
+///
+/// Arguments:
+/// - source_path: Path to the traffic base folder (fsltl-traffic-base or AIG equivalent)
+/// - folder_name: Model folder name (e.g., "FSLTL_A320_BAW_IAE")
+/// - output_path: Where to write the converted GLB
+/// - texture_scale: Texture scaling ("full", "2k", "1k", "512")
+/// - texture_dirs: Optional list of texture directories (bypasses auto-discovery)
+#[tauri::command]
+pub async fn convert_msfs_model(
+    app: tauri::AppHandle,
+    source_path: String,
+    folder_name: String,
+    output_path: String,
+    texture_scale: String,
+    texture_dirs: Option<Vec<String>>,
+) -> Result<MSFSConversionResult, String> {
+    let start_time = std::time::Instant::now();
+
+    // Find the converter executable
+    let resource_path = app
+        .path()
+        .resource_dir()
+        .map_err(|e| format!("Failed to get resource directory: {}", e))?;
+
+    let dev_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/fsltl_converter.exe");
+
+    let possible_paths = [
+        resource_path.join("resources").join("fsltl_converter.exe"),
+        dev_path,
+        PathBuf::from("src-tauri/resources/fsltl_converter.exe"),
+        PathBuf::from("fsltl_converter.exe"),
+    ];
+
+    let converter_path = possible_paths
+        .iter()
+        .find(|p| p.exists())
+        .ok_or_else(|| {
+            "Converter executable not found. Ensure fsltl_converter.exe is in resources/".to_string()
+        })?
+        .clone();
+
+    // Create output directory if needed
+    if let Some(parent) = PathBuf::from(&output_path).parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create output directory: {}", e))?;
+    }
+
+    // Build command arguments for single model conversion
+    // --single mode uses the same texture resolution logic as batch mode
+    let cmd = Command::new(&converter_path);
+    let mut cmd = cmd;
+    cmd.args([
+        "--single",
+        "--source", &source_path,
+        "--model", &folder_name,
+        "--output", &output_path,
+        "--texture-scale", &texture_scale,
+    ]);
+
+    // Pass explicit texture directories if provided (bypasses auto-discovery)
+    // This is critical for AIG models where multiple liveries share the same base model
+    if let Some(ref dirs) = texture_dirs {
+        if !dirs.is_empty() {
+            let dirs_str = dirs.join(";");
+            cmd.args(["--texture-dirs", &dirs_str]);
+        }
+    }
+
+    // Hide console window on Windows
+    #[cfg(windows)]
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+
+    // Execute and wait for completion
+    let output = cmd
+        .output()
+        .map_err(|e| format!("Failed to execute converter: {}", e))?;
+
+    let duration_ms = start_time.elapsed().as_millis() as u64;
+
+    // Log command output for debugging
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    if !stderr.is_empty() {
+        println!("[MSFSConvert] stderr: {}", stderr);
+    }
+    if !stdout.is_empty() {
+        println!("[MSFSConvert] stdout: {}", stdout);
+    }
+
+    if output.status.success() {
+        // Verify output file exists
+        if PathBuf::from(&output_path).exists() {
+            println!("[MSFSConvert] Converted {} in {}ms -> {}",
+                folder_name,
+                duration_ms,
+                output_path);
+            Ok(MSFSConversionResult {
+                success: true,
+                output_path: Some(output_path),
+                error: None,
+                duration_ms,
+            })
+        } else {
+            println!("[MSFSConvert] Output file not found: {}", output_path);
+            Ok(MSFSConversionResult {
+                success: false,
+                output_path: None,
+                error: Some(format!("Output file not found at: {}. Stderr: {}", output_path, stderr)),
+                duration_ms,
+            })
+        }
+    } else {
+        let error_msg = if !stderr.is_empty() {
+            stderr.to_string()
+        } else if !stdout.is_empty() {
+            stdout.to_string()
+        } else {
+            format!("Conversion failed with exit code: {:?}", output.status.code())
+        };
+
+        println!("[MSFSConvert] Failed to convert {}: {}",
+            folder_name,
+            error_msg);
+
+        Ok(MSFSConversionResult {
+            success: false,
+            output_path: None,
+            error: Some(error_msg),
+            duration_ms,
+        })
+    }
+}
+
+// =============================================================================
+// TAURI COMMANDS - SCANNING
+// =============================================================================
+
+/// Scan a converted models output directory for existing models
+/// Returns info about all model.glb files found
+/// Directory structure: outputPath/TYPE/AIRLINE/model.glb or outputPath/TYPE/base/model.glb
+///
+/// Note: This function was renamed from scan_fsltl_models since it scans any
+/// converted models, regardless of source (FSLTL, AIG, or future sources).
+#[tauri::command]
+pub fn scan_converted_models(output_path: String) -> Result<Vec<ScannedConvertedModel>, String> {
+    let base_path = PathBuf::from(&output_path);
+
+    if !base_path.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut models = Vec::new();
+
+    // Iterate through aircraft type directories (e.g., B738, A320)
+    let type_dirs = fs::read_dir(&base_path)
+        .map_err(|e| format!("Failed to read output directory: {}", e))?;
+
+    for type_entry in type_dirs.filter_map(|e| e.ok()) {
+        let type_path = type_entry.path();
+        if !type_path.is_dir() {
+            continue;
+        }
+
+        let aircraft_type = match type_entry.file_name().into_string() {
+            Ok(name) => name,
+            Err(_) => continue,
+        };
+
+        // Skip hidden/system directories
+        if aircraft_type.starts_with('.') || aircraft_type.starts_with('_') {
+            continue;
+        }
+
+        // Iterate through airline directories (e.g., UAL, SWA, base)
+        let airline_dirs = match fs::read_dir(&type_path) {
+            Ok(dirs) => dirs,
+            Err(_) => continue,
+        };
+
+        for airline_entry in airline_dirs.filter_map(|e| e.ok()) {
+            let airline_path = airline_entry.path();
+            if !airline_path.is_dir() {
+                continue;
+            }
+
+            let airline_folder = match airline_entry.file_name().into_string() {
+                Ok(name) => name,
+                Err(_) => continue,
+            };
+
+            // Check for model.glb
+            let model_file = airline_path.join("model.glb");
+            if !model_file.exists() {
+                continue;
+            }
+
+            // Get file size
+            let file_size = fs::metadata(&model_file)
+                .map(|m| m.len())
+                .unwrap_or(0);
+
+            // Determine airline code (None if "base" folder)
+            let airline_code = if airline_folder.to_lowercase() == "base" {
+                None
+            } else {
+                Some(airline_folder.clone())
+            };
+
+            // Build model name like FSLTL_B738_AAL or FSLTL_B738_ZZZZ
+            let model_name = if let Some(ref code) = airline_code {
+                format!("FSLTL_{}_{}", aircraft_type, code)
+            } else {
+                format!("FSLTL_{}_ZZZZ", aircraft_type)
+            };
+
+            // Check for animations by reading manifest.json if it exists
+            let has_animations = {
+                let manifest_path = airline_path.join("manifest.json");
+                if manifest_path.exists() {
+                    if let Ok(content) = fs::read_to_string(&manifest_path) {
+                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                            json.get("hasAnimations")
+                                .and_then(|v| v.as_bool())
+                                .unwrap_or(false)
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            };
+
+            // Relative path for HTTP API access (e.g., "B738/AAL/model.glb")
+            let relative_path = format!("{}/{}/model.glb", aircraft_type, airline_folder);
+
+            models.push(ScannedConvertedModel {
+                model_name,
+                model_path: normalize_path_string(&model_file),
+                relative_path,
+                aircraft_type: aircraft_type.clone(),
+                airline_code,
+                has_animations,
+                file_size,
+            });
+        }
+    }
+
+    println!("[MSFS] Scanned {} existing models from {}", models.len(), output_path);
+    Ok(models)
+}
+
+/// Scan cache directory for existing GLB files
+/// Returns info about each cached model for loading into memory cache
+#[tauri::command]
+pub fn scan_cache_directory(cache_dir: String) -> Result<Vec<CachedGlbInfo>, String> {
+    let dir_path = PathBuf::from(&cache_dir);
+    if !dir_path.exists() {
+        return Ok(vec![]);
+    }
+
+    let entries = fs::read_dir(&dir_path)
+        .map_err(|e| format!("Failed to read cache directory {}: {}", cache_dir, e))?;
+
+    let mut cached_models = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_file() {
+            if let Some(ext) = path.extension() {
+                if ext.eq_ignore_ascii_case("glb") {
+                    // Extract model key from filename (remove .glb extension)
+                    if let Some(stem) = path.file_stem() {
+                        let model_key = stem.to_string_lossy().to_string();
+                        let file_size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+                        cached_models.push(CachedGlbInfo {
+                            path: normalize_path_string(&path),
+                            model_key,
+                            file_size,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(cached_models)
+}

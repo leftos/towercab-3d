@@ -27,8 +27,10 @@ use url::Url;
 use tauri::{Emitter, Manager};
 
 use crate::{
-    find_mods_root, get_global_settings_file, normalize_path_string, read_tower_positions,
-    GlobalSettings, ScannedFSLTLModel, TowerPositionEntry,
+    normalize_path_string,
+    mods::{find_mods_root, read_tower_positions, TowerPositionEntry},
+    settings::{get_global_settings_file, GlobalSettings},
+    msfs::ScannedConvertedModel,
 };
 
 /// vNAS aircraft update for WebSocket broadcast
@@ -512,7 +514,7 @@ async fn serve_mod_file(
 /// GET /api/fsltl/models - List converted FSLTL models
 async fn list_fsltl_models(
     State(state): State<Arc<ServerState>>,
-) -> Result<Json<Vec<ScannedFSLTLModel>>, (StatusCode, String)> {
+) -> Result<Json<Vec<ScannedConvertedModel>>, (StatusCode, String)> {
     // Get FSLTL output path from global settings
     let settings_file = get_global_settings_file(&state.app_handle)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
