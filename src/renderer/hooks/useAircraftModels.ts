@@ -504,4 +504,21 @@ export function useAircraftModels(
       window.removeEventListener('fsltl-models-updated', handleFsltlUpdate)
     }
   }, [modelPoolUrls])
+
+  // Listen for MSFS settings changes (enable/disable FSLTL/AIG, priority changes, etc.)
+  // This clears the model pool URLs so aircraft re-fetch models with new settings
+  useEffect(() => {
+    const handleMsfsSettingsChange = () => {
+      // Clear all URL mappings to force model refresh on next frame
+      for (const [idx] of modelPoolUrls.current.entries()) {
+        modelPoolUrls.current.set(idx, '')
+      }
+      console.log('[AircraftModels] MSFS settings changed, cleared model pool URLs')
+    }
+
+    window.addEventListener('msfs-settings-changed', handleMsfsSettingsChange)
+    return () => {
+      window.removeEventListener('msfs-settings-changed', handleMsfsSettingsChange)
+    }
+  }, [modelPoolUrls])
 }

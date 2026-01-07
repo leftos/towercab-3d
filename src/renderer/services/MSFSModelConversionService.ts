@@ -171,12 +171,18 @@ class MSFSModelConversionServiceClass {
 
     // Then detect MSFS installations for on-demand conversion
     // This phase is ~70% of MSFS init
+    // Only index enabled sources to avoid unnecessary scanning
     if (settings.communityPath) {
-      await this.detectInstallations(settings.communityPath, (status, subProgress) => {
-        // Map sub-progress (0-100) to 30-100 range
-        const progress = 30 + Math.round((subProgress ?? 50) * 0.7)
-        onProgress?.(status, progress)
-      })
+      await this.detectInstallationsSelective(
+        settings.communityPath,
+        settings.enableFsltl,
+        settings.enableAig,
+        (status, subProgress) => {
+          // Map sub-progress (0-100) to 30-100 range
+          const progress = 30 + Math.round((subProgress ?? 50) * 0.7)
+          onProgress?.(status, progress)
+        }
+      )
     }
 
     this.initialized = true
@@ -296,6 +302,114 @@ class MSFSModelConversionServiceClass {
     } catch (error) {
       console.error('[MSFSConversion] Detection failed:', error)
       return { fsltlFound: false, aigFound: false }
+    }
+  }
+
+  /**
+   * Detect FSLTL and AIG installations, but only index enabled sources
+   * Used at startup to avoid scanning disabled sources
+   * @param onProgress Optional callback to report progress (status, percentage 0-100)
+   */
+  async detectInstallationsSelective(
+    communityPath: string,
+    enableFsltl: boolean,
+    enableAig: boolean,
+    onProgress?: (status: string, progress?: number) => void
+  ): Promise<MSFSDetectionResult> {
+    if (!isTauri()) {
+      return { fsltlFound: false, aigFound: false }
+    }
+
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+
+      onProgress?.('Scanning Community folder...', 0)
+      const result = await invoke<MSFSDetectionResult>('detect_msfs_installations', {
+        communityPath
+      })
+
+      this.lastDetection = result
+      console.log('[MSFSConversion] Detection result:', result)
+      onProgress?.('Community folder scanned', 20)
+
+      // Only index enabled sources
+      const willIndexFsltl = enableFsltl && result.fsltlFound && result.fsltlPath
+      const willIndexAig = enableAig && result.aigFound && result.aigPath
+
+      // Allocate 20-100% range: split evenly if both will be indexed
+      let fsltlEnd = 100
+      let aigStart = 20
+
+      if (willIndexFsltl && willIndexAig) {
+        fsltlEnd = 60 // 20-60 for FSLTL
+        aigStart = 60 // 60-100 for AIG
+      }
+
+      // Build model indexes only if enabled
+      if (willIndexFsltl) {
+        await this.buildFsltlIndex(result.fsltlPath!, (status, subPct) => {
+          const pct = 20 + Math.round((subPct / 100) * (fsltlEnd - 20))
+          onProgress?.(status, pct)
+        })
+        onProgress?.('FSLTL models indexed', fsltlEnd)
+      } else if (!enableFsltl && result.fsltlFound) {
+        onProgress?.('FSLTL disabled, skipping index', fsltlEnd)
+      }
+
+      if (willIndexAig) {
+        await this.buildAigIndex(result.aigPath!, (status, subPct) => {
+          const pct = aigStart + Math.round((subPct / 100) * (100 - aigStart))
+          onProgress?.(status, pct)
+        })
+        onProgress?.('AIG models indexed', 100)
+      } else if (!enableAig && result.aigFound) {
+        onProgress?.('AIG disabled, skipping index', 100)
+      }
+
+      return result
+    } catch (error) {
+      console.error('[MSFSConversion] Detection failed:', error)
+      return { fsltlFound: false, aigFound: false }
+    }
+  }
+
+  /**
+   * Index a source on-demand (when user enables it in settings)
+   * Call this after user enables FSLTL or AIG in settings
+   * @param source - 'fsltl' or 'aig'
+   * @param onProgress Optional callback to report progress
+   */
+  async indexSourceOnDemand(
+    source: MSFSModelSource,
+    onProgress?: (status: string) => void
+  ): Promise<boolean> {
+    if (!this.lastDetection) {
+      console.warn('[MSFSConversion] Cannot index on-demand: detection not yet complete')
+      return false
+    }
+
+    try {
+      if (source === 'fsltl' && this.lastDetection.fsltlFound && this.lastDetection.fsltlPath) {
+        onProgress?.('Indexing FSLTL models...')
+        await this.buildFsltlIndex(this.lastDetection.fsltlPath, (status) => {
+          onProgress?.(status)
+        })
+        console.log('[MSFSConversion] FSLTL indexed on-demand')
+        return true
+      } else if (source === 'aig' && this.lastDetection.aigFound && this.lastDetection.aigPath) {
+        onProgress?.('Indexing AIG models...')
+        await this.buildAigIndex(this.lastDetection.aigPath, (status) => {
+          onProgress?.(status)
+        })
+        console.log('[MSFSConversion] AIG indexed on-demand')
+        return true
+      } else {
+        console.warn(`[MSFSConversion] Source ${source} not available for on-demand indexing`)
+        return false
+      }
+    } catch (error) {
+      console.error(`[MSFSConversion] Failed to index ${source} on-demand:`, error)
+      return false
     }
   }
 

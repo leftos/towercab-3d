@@ -444,6 +444,37 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
     }
     set({ msfsModels: newMsfsModels })
     await saveSettings(get().getSettings())
+
+    // Invalidate aircraft model cache when MSFS settings change
+    // This ensures aircraft are re-matched with the new settings
+    const { aircraftModelService } = await import('@/services/AircraftModelService')
+    aircraftModelService.clearCache()
+
+    // Trigger on-demand indexing if a source is being enabled
+    const { MSFSModelConversionService } = await import('@/services/MSFSModelConversionService')
+    if (updates.enableFsltl === true && state.msfsModels.enableFsltl === false) {
+      // FSLTL being enabled - index it if not already indexed
+      console.log('[GlobalSettings] FSLTL enabled, indexing on-demand')
+      MSFSModelConversionService.indexSourceOnDemand('fsltl', (status) => {
+        console.log('[GlobalSettings]', status)
+      }).catch(err => {
+        console.error('[GlobalSettings] Failed to index FSLTL on-demand:', err)
+      })
+    }
+    if (updates.enableAig === true && state.msfsModels.enableAig === false) {
+      // AIG being enabled - index it if not already indexed
+      console.log('[GlobalSettings] AIG enabled, indexing on-demand')
+      MSFSModelConversionService.indexSourceOnDemand('aig', (status) => {
+        console.log('[GlobalSettings]', status)
+      }).catch(err => {
+        console.error('[GlobalSettings] Failed to index AIG on-demand:', err)
+      })
+    }
+
+    // Dispatch event so useAircraftModels hook can clear model pool URLs
+    window.dispatchEvent(new CustomEvent('msfs-settings-changed', {
+      detail: { newMsfsModels, previousMsfsModels: state.msfsModels }
+    }))
   },
 
   updateAirports: async (updates: Partial<GlobalSettings['airports']>) => {

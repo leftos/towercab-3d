@@ -112,6 +112,11 @@ const failedWingDataUrls = new Set<string>()
  * Results are cached by URL to avoid re-parsing
  */
 export async function parseAnimationSetFromUrl(glbUrl: string): Promise<AnimationSet | null> {
+  // Skip empty URLs (pending conversions have no URL yet)
+  if (!glbUrl || glbUrl === '') {
+    return null
+  }
+
   // Check cache first
   if (animationSetCache.has(glbUrl)) {
     return animationSetCache.get(glbUrl)!
@@ -854,6 +859,11 @@ export function getModelWingData(modelUrl: string): ModelWingData | null {
  * Results are cached by URL to avoid re-parsing
  */
 export async function parseWingDataFromUrl(glbUrl: string): Promise<ModelWingData | null> {
+  // Skip empty URLs (pending conversions have no URL yet)
+  if (!glbUrl || glbUrl === '') {
+    return null
+  }
+
   // Check cache first
   if (wingDataCache.has(glbUrl)) {
     return wingDataCache.get(glbUrl)!

@@ -289,6 +289,11 @@ export function applyGearAnimation(
     return
   }
 
+  // Skip animation loading for empty URLs (pending conversions have no URL yet)
+  if (!modelUrl || modelUrl === '') {
+    return
+  }
+
   // Clamp progress to valid range
   const progress = Math.max(0, Math.min(1, gearProgress))
 

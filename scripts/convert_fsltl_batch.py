@@ -150,8 +150,9 @@ def convert_dds_with_texconv(dds_path: Path, target_size: int | None = None) -> 
 
             # Read and optionally resize
             img = Image.open(output_file)
-            if img.mode != 'RGBA':
-                img = img.convert('RGBA')
+            # Convert to RGB to avoid premultiplied alpha issues during resize
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
 
             if target_size is not None and max(img.size) > target_size:
                 ratio = target_size / max(img.size)
@@ -178,13 +179,22 @@ def convert_dds_to_png(dds_path: Path, target_size: int | None = None) -> bytes:
     """Convert DDS file to PNG bytes, optionally resizing.
 
     Uses PIL for common formats, falls back to texconv.exe for BC7 and other advanced formats.
+
+    IMPORTANT: We convert to RGB (dropping alpha) before resizing because:
+    1. MSFS livery textures often have alpha channels used for day/night switching
+       (not transparency) where transparent areas still have valid RGB data
+    2. LANCZOS/BILINEAR resize uses premultiplied alpha blending, which destroys
+       RGB values in transparent areas (RGB → black)
+    3. Our output uses alphaMode=OPAQUE, so alpha is ignored anyway
     """
     # First try PIL (faster for supported formats)
     try:
         img = Image.open(dds_path)
         # PIL succeeded - process the image
-        if img.mode != 'RGBA':
-            img = img.convert('RGBA')
+        # Convert to RGB to avoid premultiplied alpha issues during resize
+        # (LANCZOS blending destroys RGB values in transparent areas)
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
 
         if target_size is not None and max(img.size) > target_size:
             ratio = target_size / max(img.size)
@@ -441,6 +451,13 @@ def convert_single_gltf(gltf_path: Path, output_path: Path, texture_dirs: list[P
             pbr['metallicFactor'] = 0.0
             pbr['roughnessFactor'] = 1.0
             mat['pbrMetallicRoughness'] = pbr
+
+            # Remove emissive textures and factors from MSFS models
+            # MSFS uses _L textures for day/night lighting which doesn't translate to glTF
+            # Keeping them causes paint artifacts where the underpaint looks too bright
+            if 'emissiveTexture' in mat:
+                del mat['emissiveTexture']
+            mat['emissiveFactor'] = [0, 0, 0]
 
     # Fix texture references
     if 'textures' in gltf:

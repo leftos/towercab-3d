@@ -5507,6 +5507,7 @@ dependencies = [
  "log",
  "mime_guess",
  "parking_lot",
+ "quick-xml 0.37.5",
  "reqwest",
  "serde",
  "serde_json",
