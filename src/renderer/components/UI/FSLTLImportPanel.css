@@ -363,7 +363,6 @@
   background: var(--surface-bg);
   border: 1px solid var(--border-color);
   border-radius: 4px;
-  cursor: grab;
   transition: background 0.15s, border-color 0.15s;
 }
 
@@ -371,16 +370,34 @@
   background: var(--hover-bg);
 }
 
-.msfs-source-item.dragging {
-  opacity: 0.5;
-  border-color: var(--accent-color, #4caf50);
+/* Arrow buttons for reordering */
+.msfs-source-arrows,
+.msfs-vmr-arrows {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 
-.msfs-source-drag-handle {
+.msfs-arrow-btn {
+  background: none;
+  border: none;
+  padding: 0 4px;
+  cursor: pointer;
   color: var(--text-tertiary);
-  font-size: 12px;
-  cursor: grab;
-  user-select: none;
+  font-size: 8px;
+  line-height: 1;
+  border-radius: 2px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.msfs-arrow-btn:hover:not(:disabled) {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+.msfs-arrow-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 .msfs-source-checkbox {
@@ -435,24 +452,11 @@
   background: var(--surface-bg);
   border: 1px solid var(--border-color);
   border-radius: 4px;
-  cursor: grab;
   transition: background 0.15s, border-color 0.15s;
 }
 
 .msfs-vmr-item:hover {
   background: var(--hover-bg);
-}
-
-.msfs-vmr-item.dragging {
-  opacity: 0.5;
-  border-color: var(--accent-color, #4caf50);
-}
-
-.msfs-vmr-drag-handle {
-  color: var(--text-tertiary);
-  font-size: 12px;
-  cursor: grab;
-  user-select: none;
 }
 
 .msfs-vmr-name {

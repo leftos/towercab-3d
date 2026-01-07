@@ -1214,6 +1214,190 @@ fn list_vmr_files_in_dir(directory: String) -> Result<Vec<String>, String> {
     Ok(vmr_files)
 }
 
+// =============================================================================
+// VMR PARSING AND CACHING
+// =============================================================================
+
+/// Parsed VMR rule (from XML file)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ParsedVmrRule {
+    /// Aircraft ICAO type code (e.g., "B738")
+    type_code: String,
+    /// Model name or path (may contain // for alternatives)
+    model_name: String,
+    /// Optional airline ICAO code for airline-specific rules
+    callsign_prefix: Option<String>,
+    /// Source file path
+    source_vmr: String,
+}
+
+/// Cached VMR file parse result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct VmrFileCache {
+    /// File modification time (Unix timestamp)
+    file_mtime: u64,
+    /// Cache format version
+    version: u32,
+    /// Parsed rules from this file
+    rules: Vec<ParsedVmrRule>,
+}
+
+const VMR_CACHE_VERSION: u32 = 1;
+
+/// Get file modification time as Unix timestamp
+fn get_file_mtime(path: &std::path::Path) -> Option<u64> {
+    let metadata = fs::metadata(path).ok()?;
+    let mtime = metadata.modified().ok()?;
+    Some(mtime.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs())
+}
+
+/// Get cache file path for a VMR file
+fn get_vmr_cache_path(vmr_path: &std::path::Path) -> PathBuf {
+    let file_name = vmr_path.file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+    let parent = vmr_path.parent().unwrap_or(vmr_path);
+    parent.join(format!(".tc3d_{}.cache.json", file_name))
+}
+
+/// Load cached VMR parse result if valid
+fn load_vmr_cache(vmr_path: &std::path::Path) -> Option<Vec<ParsedVmrRule>> {
+    let cache_path = get_vmr_cache_path(vmr_path);
+    if !cache_path.exists() {
+        return None;
+    }
+
+    let cache_content = fs::read_to_string(&cache_path).ok()?;
+    let cache: VmrFileCache = serde_json::from_str(&cache_content).ok()?;
+
+    // Check version
+    if cache.version != VMR_CACHE_VERSION {
+        return None;
+    }
+
+    // Check if source file mtime matches
+    let current_mtime = get_file_mtime(vmr_path)?;
+    if cache.file_mtime != current_mtime {
+        return None;
+    }
+
+    Some(cache.rules)
+}
+
+/// Save parsed VMR rules to cache
+fn save_vmr_cache(vmr_path: &std::path::Path, rules: &[ParsedVmrRule]) {
+    let Some(file_mtime) = get_file_mtime(vmr_path) else { return };
+
+    let cache = VmrFileCache {
+        file_mtime,
+        version: VMR_CACHE_VERSION,
+        rules: rules.to_vec(),
+    };
+
+    let cache_path = get_vmr_cache_path(vmr_path);
+    if let Ok(json) = serde_json::to_string(&cache) {
+        let _ = fs::write(&cache_path, json);
+    }
+}
+
+/// Parse a single VMR file and return rules
+/// Uses simple line-by-line parsing (same as server.rs)
+fn parse_vmr_file(path: &std::path::Path) -> Vec<ParsedVmrRule> {
+    let source_path = normalize_path_string(&path.to_path_buf());
+    let content = match fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut rules = Vec::new();
+
+    for line in content.lines() {
+        let line = line.trim();
+        if !line.contains("ModelMatchRule") {
+            continue;
+        }
+
+        // Extract TypeCode attribute
+        let type_code = match extract_vmr_attr(line, "TypeCode") {
+            Some(tc) => tc.to_uppercase(),
+            None => continue,
+        };
+
+        // Extract ModelName attribute
+        let model_name = match extract_vmr_attr(line, "ModelName") {
+            Some(mn) => mn,
+            None => continue,
+        };
+
+        // Extract optional CallsignPrefix
+        let callsign_prefix = extract_vmr_attr(line, "CallsignPrefix")
+            .map(|cp| cp.to_uppercase());
+
+        rules.push(ParsedVmrRule {
+            type_code,
+            model_name,
+            callsign_prefix,
+            source_vmr: source_path.clone(),
+        });
+    }
+
+    rules
+}
+
+/// Extract an attribute value from an XML element string
+fn extract_vmr_attr(line: &str, attr: &str) -> Option<String> {
+    let pattern = format!("{}=\"", attr);
+    let start = line.find(&pattern)? + pattern.len();
+    let end = line[start..].find('"')? + start;
+    Some(line[start..end].to_string())
+}
+
+/// Parse multiple VMR files and return all rules with caching
+/// This is the main Tauri command for VMR parsing
+#[tauri::command]
+fn parse_vmr_files(file_paths: Vec<String>) -> Result<Vec<ParsedVmrRule>, String> {
+    let start_time = std::time::Instant::now();
+    let mut all_rules = Vec::new();
+    let mut cached_count = 0;
+    let mut parsed_count = 0;
+
+    for file_path in &file_paths {
+        let path = PathBuf::from(file_path);
+        if !path.exists() {
+            continue;
+        }
+
+        // Try to load from cache first
+        if let Some(cached_rules) = load_vmr_cache(&path) {
+            all_rules.extend(cached_rules);
+            cached_count += 1;
+        } else {
+            // Parse the file and cache the result
+            let rules = parse_vmr_file(&path);
+            if !rules.is_empty() {
+                save_vmr_cache(&path, &rules);
+                all_rules.extend(rules);
+            }
+            parsed_count += 1;
+        }
+    }
+
+    let elapsed = start_time.elapsed();
+    if !file_paths.is_empty() {
+        println!(
+            "[VMR] Loaded {} rules from {} file(s) ({} cached, {} parsed) in {:?}",
+            all_rules.len(),
+            file_paths.len(),
+            cached_count,
+            parsed_count,
+            elapsed
+        );
+    }
+
+    Ok(all_rules)
+}
+
 /// Info about a cached GLB model file
 #[derive(Debug, Serialize)]
 struct CachedGlbInfo {
@@ -1802,6 +1986,90 @@ fn parse_aircraft_cfg_all_liveries(aircraft_dir: &std::path::Path) -> Vec<Aircra
     liveries
 }
 
+// =============================================================================
+// MODEL INDEX CACHING
+// =============================================================================
+
+/// Cached model index with folder modification time for invalidation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ModelIndexCache {
+    /// Unix timestamp when the source folder was last modified
+    folder_mtime: u64,
+    /// Version number for cache format - bump to invalidate old caches
+    version: u32,
+    /// The cached model list
+    models: Vec<SourceModelInfo>,
+}
+
+const MODEL_CACHE_VERSION: u32 = 2; // Bump when cache format changes
+
+/// Get the modification time of a folder (recursive max mtime would be too slow)
+fn get_folder_mtime(path: &std::path::Path) -> Option<u64> {
+    fs::metadata(path).ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
+}
+
+/// Get the cache file path for a model source
+fn get_cache_path(base_path: &std::path::Path, source: &str) -> PathBuf {
+    // Store cache next to the source folder for easy invalidation
+    // Use parent directory so cache persists if user re-extracts FSLTL
+    let cache_dir = base_path.parent().unwrap_or(base_path);
+    cache_dir.join(format!(".tc3d_{}_cache.json", source))
+}
+
+/// Load model index from cache if valid
+fn load_model_cache(base_path: &std::path::Path, source: &str) -> Option<Vec<SourceModelInfo>> {
+    let cache_path = get_cache_path(base_path, source);
+    if !cache_path.exists() {
+        return None;
+    }
+
+    let cache_content = fs::read_to_string(&cache_path).ok()?;
+    let cache: ModelIndexCache = serde_json::from_str(&cache_content).ok()?;
+
+    // Check version
+    if cache.version != MODEL_CACHE_VERSION {
+        println!("[MSFSDetection] {} cache version mismatch (have {}, need {}), will rebuild",
+            source, cache.version, MODEL_CACHE_VERSION);
+        return None;
+    }
+
+    // Check if folder mtime has changed
+    let airplanes = base_path.join("SimObjects").join("Airplanes");
+    let current_mtime = get_folder_mtime(&airplanes)?;
+
+    if cache.folder_mtime != current_mtime {
+        println!("[MSFSDetection] {} folder modified, cache invalid", source);
+        return None;
+    }
+
+    println!("[MSFSDetection] Loaded {} models from {} cache", cache.models.len(), source);
+    Some(cache.models)
+}
+
+/// Save model index to cache
+fn save_model_cache(base_path: &std::path::Path, source: &str, models: &[SourceModelInfo]) {
+    let airplanes = base_path.join("SimObjects").join("Airplanes");
+    let Some(folder_mtime) = get_folder_mtime(&airplanes) else { return };
+
+    let cache = ModelIndexCache {
+        folder_mtime,
+        version: MODEL_CACHE_VERSION,
+        models: models.to_vec(),
+    };
+
+    let cache_path = get_cache_path(base_path, source);
+    if let Ok(content) = serde_json::to_string(&cache) {
+        if let Err(e) = fs::write(&cache_path, content) {
+            println!("[MSFSDetection] Failed to write {} cache: {}", source, e);
+        } else {
+            println!("[MSFSDetection] Saved {} models to {} cache", models.len(), source);
+        }
+    }
+}
+
 /// List available FSLTL models from source
 #[tauri::command]
 fn list_fsltl_models(base_path: String) -> Result<Vec<SourceModelInfo>, String> {
@@ -1811,6 +2079,13 @@ fn list_fsltl_models(base_path: String) -> Result<Vec<SourceModelInfo>, String> 
     if !airplanes.exists() {
         return Ok(Vec::new());
     }
+
+    // Try to load from cache first (much faster on subsequent launches)
+    if let Some(cached) = load_model_cache(&base, "fsltl") {
+        return Ok(cached);
+    }
+
+    let start_time = std::time::Instant::now();
 
     // FSLTL uses shared models: most livery folders (FSLTL_B738_AAL) reference a base model
     // (FSLTL_B738_ZZZZ). We need two passes:
@@ -2049,7 +2324,12 @@ fn list_fsltl_models(base_path: String) -> Result<Vec<SourceModelInfo>, String> 
         }
     }
 
-    println!("[MSFSDetection] Found {} FSLTL liveries", models.len());
+    let elapsed = start_time.elapsed();
+    println!("[MSFSDetection] Indexed {} FSLTL liveries in {:?}", models.len(), elapsed);
+
+    // Save to cache for faster subsequent launches
+    save_model_cache(&base, "fsltl", &models);
+
     Ok(models)
 }
 
@@ -2064,6 +2344,12 @@ fn list_aig_models(base_path: String) -> Result<Vec<SourceModelInfo>, String> {
         return Ok(Vec::new());
     }
 
+    // Try to load from cache first
+    if let Some(cached) = load_model_cache(&base, "aig") {
+        return Ok(cached);
+    }
+
+    let start_time = std::time::Instant::now();
     let mut models = Vec::new();
 
     if let Ok(entries) = fs::read_dir(&airplanes) {
@@ -2246,7 +2532,12 @@ fn list_aig_models(base_path: String) -> Result<Vec<SourceModelInfo>, String> {
         }
     }
 
-    println!("[MSFSDetection] Found {} AIG liveries", models.len());
+    let elapsed = start_time.elapsed();
+    println!("[MSFSDetection] Indexed {} AIG liveries in {:?}", models.len(), elapsed);
+
+    // Save to cache for faster subsequent launches
+    save_model_cache(&base, "aig", &models);
+
     Ok(models)
 }
 
@@ -2310,6 +2601,7 @@ pub struct MSFSConversionResult {
 /// - folder_name: Model folder name (e.g., "FSLTL_A320_BAW_IAE")
 /// - output_path: Where to write the converted GLB
 /// - texture_scale: Texture scaling ("full", "2k", "1k", "512")
+/// - texture_dirs: Optional list of texture directories (bypasses auto-discovery)
 #[tauri::command]
 async fn convert_msfs_model(
     app: tauri::AppHandle,
@@ -2317,6 +2609,7 @@ async fn convert_msfs_model(
     folder_name: String,
     output_path: String,
     texture_scale: String,
+    texture_dirs: Option<Vec<String>>,
 ) -> Result<MSFSConversionResult, String> {
     let start_time = std::time::Instant::now();
 
@@ -2360,6 +2653,15 @@ async fn convert_msfs_model(
         "--output", &output_path,
         "--texture-scale", &texture_scale,
     ]);
+
+    // Pass explicit texture directories if provided (bypasses auto-discovery)
+    // This is critical for AIG models where multiple liveries share the same base model
+    if let Some(ref dirs) = texture_dirs {
+        if !dirs.is_empty() {
+            let dirs_str = dirs.join(";");
+            cmd.args(["--texture-dirs", &dirs_str]);
+        }
+    }
 
     // Hide console window on Windows
     #[cfg(windows)]
@@ -2659,6 +2961,7 @@ pub fn run() {
             read_mod_manifest,
             list_vmr_files,
             list_vmr_files_in_dir,
+            parse_vmr_files,
             read_tower_positions,
             update_tower_position,
             // Global settings commands

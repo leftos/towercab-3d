@@ -395,23 +395,28 @@ def convert_single_gltf(gltf_path: Path, output_path: Path, texture_dirs: list[P
     # Update buffer size
     gltf['buffers'] = [{'byteLength': len(bin_data)}]
 
-    # Remove MSFS-specific extensions
-    extensions_to_remove = ['MSFT_texture_dds', 'ASOBO_normal_map_convention',
-                            'ASOBO_macro_light', 'ASOBO_asset_optimized']
+    # Remove MSFS-specific extensions (exact matches)
+    extensions_to_remove = ['MSFT_texture_dds']
+    # Also remove any extension starting with ASOBO_ (MSFS-specific)
+    asobo_prefix = 'ASOBO_'
 
     if 'extensionsUsed' in gltf:
-        gltf['extensionsUsed'] = [e for e in gltf['extensionsUsed'] if e not in extensions_to_remove]
+        gltf['extensionsUsed'] = [e for e in gltf['extensionsUsed']
+                                  if e not in extensions_to_remove and not e.startswith(asobo_prefix)]
         if not gltf['extensionsUsed']:
             del gltf['extensionsUsed']
 
     if 'extensionsRequired' in gltf:
-        gltf['extensionsRequired'] = [e for e in gltf['extensionsRequired'] if e not in extensions_to_remove]
+        gltf['extensionsRequired'] = [e for e in gltf['extensionsRequired']
+                                      if e not in extensions_to_remove and not e.startswith(asobo_prefix)]
         if not gltf['extensionsRequired']:
             del gltf['extensionsRequired']
 
     # Clean up asset extensions (ASOBO extensions often stored here)
     if 'asset' in gltf and 'extensions' in gltf['asset']:
-        for ext in extensions_to_remove:
+        keys_to_remove = [k for k in gltf['asset']['extensions']
+                          if k in extensions_to_remove or k.startswith(asobo_prefix)]
+        for ext in keys_to_remove:
             gltf['asset']['extensions'].pop(ext, None)
         if not gltf['asset']['extensions']:
             del gltf['asset']['extensions']
@@ -420,7 +425,9 @@ def convert_single_gltf(gltf_path: Path, output_path: Path, texture_dirs: list[P
     if 'materials' in gltf:
         for mat in gltf['materials']:
             if 'extensions' in mat:
-                for ext in extensions_to_remove:
+                keys_to_remove = [k for k in mat['extensions']
+                                  if k in extensions_to_remove or k.startswith(asobo_prefix)]
+                for ext in keys_to_remove:
                     mat['extensions'].pop(ext, None)
                 if not mat['extensions']:
                     del mat['extensions']
@@ -444,10 +451,64 @@ def convert_single_gltf(gltf_path: Path, output_path: Path, texture_dirs: list[P
                     tex['source'] = dds_ext['source']
 
             if 'extensions' in tex:
-                for ext in extensions_to_remove:
+                keys_to_remove = [k for k in tex['extensions']
+                                  if k in extensions_to_remove or k.startswith(asobo_prefix)]
+                for ext in keys_to_remove:
                     tex['extensions'].pop(ext, None)
                 if not tex['extensions']:
                     del tex['extensions']
+
+    # Clean up top-level extensions object
+    if 'extensions' in gltf:
+        keys_to_remove = [k for k in gltf['extensions']
+                          if k in extensions_to_remove or k.startswith(asobo_prefix)]
+        for ext in keys_to_remove:
+            gltf['extensions'].pop(ext, None)
+        if not gltf['extensions']:
+            del gltf['extensions']
+
+    # Clean up node extensions (ASOBO_unique_id, etc.)
+    if 'nodes' in gltf:
+        for node in gltf['nodes']:
+            if 'extensions' in node:
+                keys_to_remove = [k for k in node['extensions']
+                                  if k in extensions_to_remove or k.startswith(asobo_prefix)]
+                for ext in keys_to_remove:
+                    node['extensions'].pop(ext, None)
+                if not node['extensions']:
+                    del node['extensions']
+
+    # Clean up mesh extensions
+    if 'meshes' in gltf:
+        for mesh in gltf['meshes']:
+            if 'extensions' in mesh:
+                keys_to_remove = [k for k in mesh['extensions']
+                                  if k in extensions_to_remove or k.startswith(asobo_prefix)]
+                for ext in keys_to_remove:
+                    mesh['extensions'].pop(ext, None)
+                if not mesh['extensions']:
+                    del mesh['extensions']
+            # Also clean primitives
+            if 'primitives' in mesh:
+                for prim in mesh['primitives']:
+                    if 'extensions' in prim:
+                        keys_to_remove = [k for k in prim['extensions']
+                                          if k in extensions_to_remove or k.startswith(asobo_prefix)]
+                        for ext in keys_to_remove:
+                            prim['extensions'].pop(ext, None)
+                        if not prim['extensions']:
+                            del prim['extensions']
+
+    # Clean up animation extensions (ASOBO_animation_retargeting, etc.)
+    if 'animations' in gltf:
+        for anim in gltf['animations']:
+            if 'extensions' in anim:
+                keys_to_remove = [k for k in anim['extensions']
+                                  if k in extensions_to_remove or k.startswith(asobo_prefix)]
+                for ext in keys_to_remove:
+                    anim['extensions'].pop(ext, None)
+                if not anim['extensions']:
+                    del anim['extensions']
 
     # Serialize JSON
     json_str = json.dumps(gltf, separators=(',', ':'))
@@ -756,7 +817,8 @@ def convert_model_task(args_tuple):
 
 
 def convert_single_model(source_path: Path, model_name: str, output_path: Path,
-                         texture_scale: int | None = None) -> dict:
+                         texture_scale: int | None = None,
+                         explicit_texture_dirs: list[Path] | None = None) -> dict:
     """
     Convert a single FSLTL/AIG model to GLB.
 
@@ -769,6 +831,7 @@ def convert_single_model(source_path: Path, model_name: str, output_path: Path,
         model_name: Folder name (e.g., "FSLTL_A320_BAW_IAE")
         output_path: Where to write the GLB file
         texture_scale: Max texture dimension (None for full, 1024 for 1k, etc.)
+        explicit_texture_dirs: If provided, use these texture directories instead of auto-discovery
 
     Returns:
         dict with success, output_size, has_animations, error, etc.
@@ -784,6 +847,11 @@ def convert_single_model(source_path: Path, model_name: str, output_path: Path,
         gltf_path, texture_dirs, base_dir = find_model_gltf(aircraft_dir)
         if gltf_path is None:
             raise FileNotFoundError(f"No GLTF file found for {model_name} (checked base_container if livery)")
+
+        # Use explicit texture directories if provided (from Rust indexing)
+        # This ensures we use the correct livery textures for AIG models
+        if explicit_texture_dirs:
+            texture_dirs = explicit_texture_dirs
 
         # Parse model name for metadata
         aircraft_type, airline_code = parse_model_name(model_name)
@@ -832,14 +900,20 @@ def main():
         parser.add_argument('--output', required=True, help='Path for output GLB file')
         parser.add_argument('--texture-scale', default='1k', choices=['full', '2k', '1k', '512'],
                             help='Texture scaling (default: 1k)')
+        parser.add_argument('--texture-dirs', help='Semicolon-separated list of texture directories (bypasses auto-discovery)')
         args = parser.parse_args()
 
         source_path = Path(args.source)
         output_path = Path(args.output)
         texture_scale = TEXTURE_SCALE_MAP.get(args.texture_scale, 1024)
 
+        # Parse explicit texture directories if provided
+        explicit_texture_dirs = None
+        if args.texture_dirs:
+            explicit_texture_dirs = [Path(p.strip()) for p in args.texture_dirs.split(';') if p.strip()]
+
         # Use the same conversion function as batch mode
-        result = convert_single_model(source_path, args.model, output_path, texture_scale)
+        result = convert_single_model(source_path, args.model, output_path, texture_scale, explicit_texture_dirs)
 
         if result.get('success'):
             size_mb = result.get('output_size', 0) / 1024 / 1024

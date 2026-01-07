@@ -69,10 +69,6 @@ function MSFSModelSettingsPanel() {
 
   // VMR file management
   const [vmrFiles, setVmrFiles] = useState<string[]>(settings.vmrFiles || [])
-  const [draggedVmrIndex, setDraggedVmrIndex] = useState<number | null>(null)
-
-  // Source priority drag state
-  const [draggedSourceIndex, setDraggedSourceIndex] = useState<number | null>(null)
 
   // Cache stats
   const [cacheStats, setCacheStats] = useState({ entryCount: 0, totalSizeMB: 0, limitMB: settings.cacheLimitMB })
@@ -171,51 +167,28 @@ function MSFSModelSettingsPanel() {
     await updateMsfsModels({ vmrFiles: updated })
   }, [vmrFiles, updateMsfsModels])
 
-  // Handle VMR reordering via drag and drop
-  const handleVmrDragStart = (index: number) => {
-    setDraggedVmrIndex(index)
-  }
-
-  const handleVmrDragOver = (e: React.DragEvent, index: number) => {
-    e.preventDefault()
-    if (draggedVmrIndex === null || draggedVmrIndex === index) return
-  }
-
-  const handleVmrDrop = async (index: number) => {
-    if (draggedVmrIndex === null || draggedVmrIndex === index) {
-      setDraggedVmrIndex(null)
-      return
-    }
+  // Handle VMR reordering with up/down buttons
+  const handleMoveVmr = async (index: number, direction: 'up' | 'down') => {
+    const newIndex = direction === 'up' ? index - 1 : index + 1
+    if (newIndex < 0 || newIndex >= vmrFiles.length) return
 
     const updated = [...vmrFiles]
-    const [dragged] = updated.splice(draggedVmrIndex, 1)
-    updated.splice(index, 0, dragged)
+    const [item] = updated.splice(index, 1)
+    updated.splice(newIndex, 0, item)
 
     setVmrFiles(updated)
-    setDraggedVmrIndex(null)
     await updateMsfsModels({ vmrFiles: updated })
   }
 
-  // Handle source priority reordering
-  const handleSourceDragStart = (index: number) => {
-    setDraggedSourceIndex(index)
-  }
-
-  const handleSourceDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-  }
-
-  const handleSourceDrop = async (index: number) => {
-    if (draggedSourceIndex === null || draggedSourceIndex === index) {
-      setDraggedSourceIndex(null)
-      return
-    }
+  // Handle source priority reordering with up/down buttons
+  const handleMoveSource = async (index: number, direction: 'up' | 'down') => {
+    const newIndex = direction === 'up' ? index - 1 : index + 1
+    if (newIndex < 0 || newIndex >= settings.priority.length) return
 
     const updated = [...settings.priority]
-    const [dragged] = updated.splice(draggedSourceIndex, 1)
-    updated.splice(index, 0, dragged)
+    const [item] = updated.splice(index, 1)
+    updated.splice(newIndex, 0, item)
 
-    setDraggedSourceIndex(null)
     await updateMsfsModels({ priority: updated })
   }
 
@@ -299,7 +272,7 @@ function MSFSModelSettingsPanel() {
         {/* Source Priority & Enable/Disable */}
         {settings.communityPath && (
           <div className="fsltl-section">
-            <label>Model Sources (drag to reorder priority)</label>
+            <label>Model Sources (use arrows to reorder priority)</label>
             <div className="msfs-source-list">
               {settings.priority.map((source, index) => {
                 const isEnabled = source === 'fsltl' ? settings.enableFsltl : settings.enableAig
@@ -309,15 +282,21 @@ function MSFSModelSettingsPanel() {
                   : (detection?.aigFound ?? false)
 
                 return (
-                  <div
-                    key={source}
-                    className={`msfs-source-item ${draggedSourceIndex === index ? 'dragging' : ''}`}
-                    draggable
-                    onDragStart={() => handleSourceDragStart(index)}
-                    onDragOver={handleSourceDragOver}
-                    onDrop={() => handleSourceDrop(index)}
-                  >
-                    <span className="msfs-source-drag-handle">⋮⋮</span>
+                  <div key={source} className="msfs-source-item">
+                    <div className="msfs-source-arrows">
+                      <button
+                        className="msfs-arrow-btn"
+                        onClick={() => handleMoveSource(index, 'up')}
+                        disabled={index === 0}
+                        title="Move up"
+                      >▲</button>
+                      <button
+                        className="msfs-arrow-btn"
+                        onClick={() => handleMoveSource(index, 'down')}
+                        disabled={index === settings.priority.length - 1}
+                        title="Move down"
+                      >▼</button>
+                    </div>
                     <label className="msfs-source-checkbox">
                       <input
                         type="checkbox"
@@ -343,19 +322,25 @@ function MSFSModelSettingsPanel() {
 
         {/* VMR File Management */}
         <div className="fsltl-section">
-          <label>VMR Files (drag to reorder priority)</label>
+          <label>VMR Files (use arrows to reorder priority)</label>
           {vmrFiles.length > 0 ? (
             <div className="msfs-vmr-list">
               {vmrFiles.map((file, index) => (
-                <div
-                  key={file}
-                  className={`msfs-vmr-item ${draggedVmrIndex === index ? 'dragging' : ''}`}
-                  draggable
-                  onDragStart={() => handleVmrDragStart(index)}
-                  onDragOver={(e) => handleVmrDragOver(e, index)}
-                  onDrop={() => handleVmrDrop(index)}
-                >
-                  <span className="msfs-vmr-drag-handle">⋮⋮</span>
+                <div key={file} className="msfs-vmr-item">
+                  <div className="msfs-vmr-arrows">
+                    <button
+                      className="msfs-arrow-btn"
+                      onClick={() => handleMoveVmr(index, 'up')}
+                      disabled={index === 0}
+                      title="Move up"
+                    >▲</button>
+                    <button
+                      className="msfs-arrow-btn"
+                      onClick={() => handleMoveVmr(index, 'down')}
+                      disabled={index === vmrFiles.length - 1}
+                      title="Move down"
+                    >▼</button>
+                  </div>
                   <span className="msfs-vmr-name" title={file}>
                     #{index + 1} {getFilename(file)}
                   </span>

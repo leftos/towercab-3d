@@ -60,25 +60,57 @@ class CustomVMRServiceClass {
 
   /**
    * Initialize by loading all VMR files from mods folder
+   * Uses Rust backend for cached parsing (much faster on subsequent loads)
    */
   async loadVMRFiles(): Promise<void> {
     if (this.loaded) return
 
     try {
       if (isTauri()) {
-        // Tauri mode: load VMR files directly from disk
+        // Tauri mode: use Rust backend for cached VMR parsing
         const vmrPaths = await modApi.listVMRFiles()
 
-        for (const vmrPath of vmrPaths) {
-          try {
-            const content = await modApi.readTextFile(vmrPath)
+        if (vmrPaths.length > 0) {
+          // Parse all VMR files using Rust backend (with caching)
+          const rules = await modApi.parseVMRFiles(vmrPaths)
+
+          // Process parsed rules
+          for (const apiRule of rules) {
+            const typeCode = apiRule.typeCode.toUpperCase()
+            const modelNames = apiRule.modelName.split('//').filter(name => name.trim())
+            const callsignPrefix = apiRule.callsignPrefix?.toUpperCase()
+
+            if (modelNames.length === 0) continue
+
+            const basePath = this.getBasePath(apiRule.sourceVmr)
+            const rule: CustomVMRRule = {
+              typeCode,
+              modelNames,
+              callsignPrefix: callsignPrefix || undefined
+            }
+
+            if (callsignPrefix) {
+              const key = `${callsignPrefix}_${typeCode}`
+              // First rule wins for conflicts
+              if (!this.airlineRules.has(key)) {
+                this.airlineRules.set(key, { rule, basePath })
+              }
+            } else {
+              // First rule wins for conflicts
+              if (!this.defaultRules.has(typeCode)) {
+                this.defaultRules.set(typeCode, { rule, basePath })
+              }
+            }
+          }
+
+          // Track which files were processed
+          const uniqueFiles = new Set(rules.map(r => r.sourceVmr))
+          this.loadedFiles = Array.from(uniqueFiles)
+
+          // Pre-load manifests for all models
+          for (const vmrPath of this.loadedFiles) {
             const basePath = this.getBasePath(vmrPath)
-            this.parseVMRContent(content, vmrPath, basePath)
-            // Pre-load manifests for all models in this VMR file
             await this.preloadManifestsForVMR(basePath)
-            this.loadedFiles.push(vmrPath)
-          } catch (error) {
-            console.warn(`[CustomVMRService] Failed to load VMR: ${vmrPath}`, error)
           }
         }
       } else {

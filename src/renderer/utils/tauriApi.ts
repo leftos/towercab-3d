@@ -83,6 +83,30 @@ export const modApi = {
   },
 
   /**
+   * Parse VMR files and return rules with caching
+   * Uses Rust backend for fast cached parsing
+   * @param filePaths Array of absolute paths to VMR files
+   * @returns Parsed VMR rules
+   */
+  parseVMRFiles: async (filePaths: string[]): Promise<Array<{
+    typeCode: string
+    modelName: string
+    callsignPrefix: string | null
+    sourceVmr: string
+  }>> => {
+    if (isTauri()) {
+      return invoke<Array<{
+        typeCode: string
+        modelName: string
+        callsignPrefix: string | null
+        sourceVmr: string
+      }>>('parse_vmr_files', { filePaths })
+    }
+    // In browser mode, VMR rules come from HTTP API
+    return []
+  },
+
+  /**
    * Read a text file (used for reading VMR files)
    */
   readTextFile: async (path: string): Promise<string> => {

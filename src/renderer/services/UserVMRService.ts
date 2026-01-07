@@ -19,8 +19,7 @@
  */
 
 import { useGlobalSettingsStore } from '@/stores/globalSettingsStore'
-import * as fsltlApi from './fsltlApi'
-import { isTauri } from '@/utils/tauriApi'
+import { isTauri, modApi } from '@/utils/tauriApi'
 
 // =============================================================================
 // Types
@@ -72,6 +71,7 @@ class UserVMRServiceClass {
   /**
    * Load VMR files from user settings
    * Reloads all rules - call when vmrFiles setting changes
+   * Uses Rust backend for cached parsing (much faster on subsequent loads)
    * @param onProgress Optional callback for progress (status, percentage 0-100)
    */
   async loadVMRFiles(onProgress?: (status: string, progress: number) => void): Promise<void> {
@@ -98,22 +98,40 @@ class UserVMRServiceClass {
       return
     }
 
-    // Load each VMR file in order (first has highest priority)
-    const total = vmrPaths.length
-    for (let i = 0; i < vmrPaths.length; i++) {
-      const vmrPath = vmrPaths[i]
-      const fileName = vmrPath.split(/[\\/]/).pop() || vmrPath
-      const pct = Math.round((i / total) * 100)
-      onProgress?.(`Parsing ${fileName}...`, pct)
+    onProgress?.('Parsing VMR files...', 10)
 
-      try {
-        const content = await fsltlApi.readTextFile(vmrPath)
-        this.parseVMRContent(content, vmrPath)
-        this.loadedFiles.push(vmrPath)
-        console.log(`[UserVMRService] Loaded: ${vmrPath}`)
-      } catch (error) {
-        console.warn(`[UserVMRService] Failed to load: ${vmrPath}`, error)
+    try {
+      // Use Rust backend for cached VMR parsing
+      const rules = await modApi.parseVMRFiles(vmrPaths)
+
+      // Process parsed rules
+      for (const apiRule of rules) {
+        const typeCode = apiRule.typeCode.toUpperCase()
+        const modelNames = apiRule.modelName.split('//').filter(n => n.trim())
+        const callsignPrefix = apiRule.callsignPrefix?.toUpperCase()
+
+        if (modelNames.length === 0) continue
+
+        const rule: VMRRule = { typeCode, modelNames, callsignPrefix }
+
+        if (callsignPrefix) {
+          const key = `${callsignPrefix}_${typeCode}`
+          // First rule wins (higher priority VMR files loaded first)
+          if (!this.airlineRules.has(key)) {
+            this.airlineRules.set(key, { rule, sourceVmr: apiRule.sourceVmr })
+          }
+        } else {
+          if (!this.defaultRules.has(typeCode)) {
+            this.defaultRules.set(typeCode, { rule, sourceVmr: apiRule.sourceVmr })
+          }
+        }
       }
+
+      // Track which files were processed
+      const uniqueFiles = new Set(rules.map(r => r.sourceVmr))
+      this.loadedFiles = Array.from(uniqueFiles)
+    } catch (error) {
+      console.warn('[UserVMRService] Failed to parse VMR files:', error)
     }
 
     onProgress?.(`Loaded ${this.loadedFiles.length} VMR file(s)`, 100)

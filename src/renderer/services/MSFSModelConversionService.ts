@@ -707,7 +707,10 @@ class MSFSModelConversionServiceClass {
         sourcePath,
         folderName: sourceInfo.folderName,
         outputPath: finalOutputPath,
-        textureScale: settings.textureScale
+        textureScale: settings.textureScale,
+        // Pass explicit texture directories from indexing (critical for AIG models
+        // where multiple liveries share the same base model folder)
+        textureDirs: sourceInfo.textureDirs
       })
 
       console.log(`[MSFSConversion] Converted ${modelKey} in ${result.durationMs}ms`)
