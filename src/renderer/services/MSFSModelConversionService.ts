@@ -803,10 +803,9 @@ class MSFSModelConversionServiceClass {
       const { invoke } = await import('@tauri-apps/api/core')
       const settings = this.getSettings()
 
-      // Determine full output file path (not a directory)
-      // Format: {cacheDir}/aig_ModelName.glb (modelKey already includes source prefix)
+      // Pass output DIRECTORY to Python converter (not a file path)
+      // Python will create: {outputDir}/{source}_{liveryTitle}.glb
       const outputDir = settings.cacheDirectory || await this.getTempOutputDir()
-      const finalOutputPath = `${outputDir}/${modelKey}.glb`
 
       // Determine source path - use specific aircraft folder, not the entire FSLTL/AIG folder
       let sourcePath: string
@@ -817,7 +816,7 @@ class MSFSModelConversionServiceClass {
         // Reconstruct from gltfPath by getting the aircraft folder
         // gltfPath is like: .../SimObjects/Airplanes/FSLTL_A320/model/model.gltf
         // We want: .../SimObjects/Airplanes/FSLTL_A320
-        const parts = sourceInfo.gltfPath.split(/[\/\\]/)
+        const parts = sourceInfo.gltfPath.split(/[/\\]/)
         parts.pop() // Remove 'model.gltf'
         parts.pop() // Remove 'model' folder
         sourcePath = parts.join('\\') // Use backslashes for Windows
@@ -835,7 +834,7 @@ class MSFSModelConversionServiceClass {
       }>('convert_msfs_model', {
         sourcePath,
         folderName: sourceInfo.folderName,
-        outputPath: finalOutputPath,
+        outputDir,  // Changed: pass directory, not full file path
         textureScale: settings.textureScale,
         // Pass the specific livery title to convert only this livery
         liveryTitle: sourceInfo.modelName,
@@ -862,7 +861,7 @@ class MSFSModelConversionServiceClass {
         // Track as failed so we skip it on subsequent requests
         this.failedConversions.add(modelKey)
         console.warn(`[MSFSConversion] Marking ${modelKey} as failed: ${result.error || 'No output file'}`)
-        console.warn(`[MSFSConversion] Output path was: ${finalOutputPath}`)
+        console.warn(`[MSFSConversion] Output directory: ${outputDir}`)
         resolve({
           success: false,
           error: result.error || 'Unknown conversion error'

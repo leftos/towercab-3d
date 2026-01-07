@@ -813,7 +813,7 @@ pub fn list_aig_models(base_path: String) -> Result<Vec<SourceModelInfo>, String
 /// - source_path: Path to aircraft folder (source/SimObjects/Airplanes/FSLTL_B738_AAL).
 ///                Converter auto-detects this and skips global scan for fast conversion.
 /// - folder_name: Aircraft folder name (used for logging, e.g., "FSLTL_B738_AAL")
-/// - output_path: Base directory for converted models (structure: TYPE/AIRLINE/model.glb)
+/// - output_dir: Output directory for converted models (converter creates {source}_{liveryTitle}.glb)
 /// - texture_scale: Texture scaling ("full", "2k", "1k", "512")
 /// - livery_title: Livery title from aircraft.cfg to convert (only this livery)
 /// - texture_dirs: Pre-computed texture directories from model indexing (for reference/debugging)
@@ -822,7 +822,7 @@ pub async fn convert_msfs_model(
     app: tauri::AppHandle,
     source_path: String,
     folder_name: String,
-    output_path: String,
+    output_dir: String,
     texture_scale: String,
     livery_title: String,
     texture_dirs: Option<Vec<String>>,
@@ -853,16 +853,14 @@ pub async fn convert_msfs_model(
         .clone();
 
     // Create output directory if needed
-    if let Some(parent) = PathBuf::from(&output_path).parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create output directory: {}", e))?;
-    }
+    fs::create_dir_all(&output_dir)
+        .map_err(|e| format!("Failed to create output directory: {}", e))?;
 
     // Build command arguments
     let mut cmd = Command::new(&converter_path);
     cmd.args([
         "--source", &source_path,
-        "--output", &output_path,
+        "--output", &output_dir,
         "--texture-scale", &texture_scale,
     ]);
 
@@ -897,13 +895,24 @@ pub async fn convert_msfs_model(
     }
 
     if output.status.success() {
+        // Construct expected output path (matches Python converter naming)
+        // Python creates: {outputDir}/{source}_{liveryTitle}.glb
+        let source_type = if folder_name.to_lowercase().starts_with("fsltl") {
+            "fsltl"
+        } else {
+            "aig"
+        };
+        let output_file = format!("{}_{}.glb", source_type, livery_title);
+        let output_path = PathBuf::from(&output_dir).join(&output_file);
+        let output_path_str = normalize_path_string(&output_path);
+
         println!("[MSFSConvert] Converted {} in {}ms -> {}",
             folder_name,
             duration_ms,
-            output_path);
+            output_path_str);
         Ok(MSFSConversionResult {
             success: true,
-            output_path: Some(output_path),
+            output_path: Some(output_path_str),
             error: None,
             duration_ms,
         })

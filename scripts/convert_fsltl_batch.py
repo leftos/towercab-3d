@@ -300,12 +300,13 @@ def convert_single_gltf(gltf_path: Path, output_path: Path, texture_dirs: list[P
                     img.save(buffer, format='PNG')
                     image_buffers.append(buffer.getvalue())
 
-    # Convert float16 UVs to float32
+    # Convert float16 UVs to float32 and fix SCALAR WEIGHTS_0 to VEC4
     accessors = gltf.get('accessors', [])
     buffer_views = gltf.get('bufferViews', [])
 
-    # Find all TEXCOORD_0 accessors and remove problematic attributes
+    # Find all TEXCOORD_0 accessors, SCALAR WEIGHTS_0 accessors, and remove problematic attributes
     uv_accessors = {}
+    scalar_weights_accessors = {}  # MSFS non-standard: SCALAR instead of VEC4
     for mesh in gltf.get('meshes', []):
         for prim in mesh.get('primitives', []):
             attrs = prim.get('attributes', {})
@@ -314,7 +315,15 @@ def convert_single_gltf(gltf_path: Path, output_path: Path, texture_dirs: list[P
                 if acc_idx not in uv_accessors:
                     uv_accessors[acc_idx] = accessors[acc_idx]
 
-            # Remove problematic attributes
+            # Check for non-standard SCALAR WEIGHTS_0 (should be VEC4 per glTF spec)
+            if 'WEIGHTS_0' in attrs:
+                acc_idx = attrs['WEIGHTS_0']
+                acc = accessors[acc_idx]
+                if acc['type'] == 'SCALAR':
+                    if acc_idx not in scalar_weights_accessors:
+                        scalar_weights_accessors[acc_idx] = acc
+
+            # Remove problematic attributes (keep JOINTS_0/WEIGHTS_0 for skinning)
             for attr in ['COLOR_0', 'TEXCOORD_1', 'NORMAL', 'TANGENT']:
                 if attr in attrs:
                     del attrs[attr]
@@ -385,13 +394,14 @@ def convert_single_gltf(gltf_path: Path, output_path: Path, texture_dirs: list[P
     current_offset = len(bin_data)
 
     # Create buffer view for UV data
-    # byteStride is required when multiple accessors share a buffer view
+    # Note: Do NOT set byteStride here - the accessors are stored sequentially
+    # (each with its own byteOffset), not interleaved. byteStride is only for
+    # interleaved data where multiple attributes share the same vertex stride.
     uv_buffer_view_idx = len(gltf['bufferViews'])
     gltf['bufferViews'].append({
         'buffer': 0,
         'byteOffset': uv_bv_start,
-        'byteLength': len(new_uv_data),
-        'byteStride': 8  # VEC2 float32 = 8 bytes
+        'byteLength': len(new_uv_data)
     })
 
     # Update UV accessors
@@ -403,6 +413,137 @@ def convert_single_gltf(gltf_path: Path, output_path: Path, texture_dirs: list[P
         acc['normalized'] = False
         acc.pop('min', None)
         acc.pop('max', None)
+
+    # Convert SCALAR WEIGHTS_0 to VEC4 (MSFS non-standard format)
+    # glTF spec requires WEIGHTS_0 to be VEC4, but some AIG models use SCALAR
+    new_weights_data = bytearray()
+    weights_accessor_mapping = {}
+
+    for acc_idx, acc in scalar_weights_accessors.items():
+        bv = buffer_views[acc['bufferView']]
+        offset = bv.get('byteOffset', 0) + acc.get('byteOffset', 0)
+        stride = bv.get('byteStride', 4)  # SCALAR float = 4 bytes
+        count = acc['count']
+
+        # Read SCALAR weight and expand to VEC4 (w, 0, 0, 0)
+        weights_start = len(new_weights_data)
+        for i in range(count):
+            pos = offset + i * stride
+            if pos + 4 > len(bin_data):
+                raise ValueError(f"WEIGHTS_0 accessor reads past buffer end at position {pos}")
+            w = struct.unpack('<f', bytes(bin_data[pos:pos+4]))[0]
+            # Expand to VEC4: (w, 0, 0, 0) as normalized UNSIGNED_SHORT
+            w_ushort = min(65535, max(0, int(w * 65535)))
+            new_weights_data.extend(struct.pack('<4H', w_ushort, 0, 0, 0))
+
+        weights_accessor_mapping[acc_idx] = {
+            'offset': weights_start,
+            'count': count
+        }
+
+    # Add VEC4 weights data to buffer if we have any SCALAR weights to convert
+    if new_weights_data:
+        padding_needed = (4 - (current_offset % 4)) % 4
+        bin_data += b'\x00' * padding_needed
+        current_offset = len(bin_data)
+
+        weights_bv_start = current_offset
+        bin_data += new_weights_data
+        current_offset += len(new_weights_data)
+
+        # Create buffer view for converted weights
+        # Note: No byteStride needed - accessors are sequential, not interleaved
+        weights_buffer_view_idx = len(gltf['bufferViews'])
+        gltf['bufferViews'].append({
+            'buffer': 0,
+            'byteOffset': weights_bv_start,
+            'byteLength': len(new_weights_data)
+        })
+
+        # Update WEIGHTS_0 accessors from SCALAR FLOAT to VEC4 UNSIGNED_SHORT normalized
+        for acc_idx, mapping in weights_accessor_mapping.items():
+            acc = accessors[acc_idx]
+            acc['bufferView'] = weights_buffer_view_idx
+            acc['byteOffset'] = mapping['offset']
+            acc['componentType'] = 5123  # UNSIGNED_SHORT
+            acc['type'] = 'VEC4'
+            acc['normalized'] = True
+            acc.pop('min', None)
+            acc.pop('max', None)
+
+    # ========================================================================
+    # MSFS SKINNING FIX
+    # ========================================================================
+    # MSFS uses skinning differently than standard glTF:
+    # 1. MSFS ignores inverseBindMatrices (vertices already in model space)
+    # 2. Node transforms are applied differently
+    # 3. Standard loaders apply both, causing incorrect positioning
+    #
+    # Solution: Strip skinning entirely and fix node transforms
+    # - Wings: Vertices already in model space, zero translation/rotation
+    # - Slats: Skinned slats are in skeleton-local space, hide them
+    #          (non-skinned bone-parented slats render correctly)
+    # - Left meshes: May need mirroring if vertices are on wrong side
+    # ========================================================================
+    meshes_list = gltf.get('meshes', [])
+    skins = gltf.get('skins', [])
+
+    if skins:
+        for node in gltf.get('nodes', []):
+            if 'skin' not in node:
+                continue
+
+            node_name = node.get('name', 'unnamed')
+            is_slat = 'slat' in node_name.lower()
+
+            # Remove skin reference (standard loaders can't handle MSFS skinning)
+            del node['skin']
+
+            if is_slat:
+                # Skinned slat meshes are in skeleton-local space and can't be
+                # properly positioned without MSFS-specific skinning logic.
+                # Hide them by removing mesh reference - the non-skinned slat
+                # meshes (r_slats1/l_slats1 parented to bone) render correctly.
+                if 'mesh' in node:
+                    del node['mesh']
+                if 'rotation' in node:
+                    del node['rotation']
+                node['translation'] = [0.0, 0.0, 0.0]
+            else:
+                # Wings and other skinned meshes: vertices are already in model
+                # space, so zero node transforms (MSFS applies differently)
+                node['translation'] = [0.0, 0.0, 0.0]
+                if 'rotation' in node:
+                    del node['rotation']
+
+            # Auto-detect left meshes that need mirroring
+            # Some left meshes have vertices on the right side (positive X)
+            # and need scale=[-1,1,1] to render correctly
+            is_left = node_name.lower().startswith('l_')
+            if 'mesh' in node and is_left:
+                mesh = meshes_list[node['mesh']]
+                prims = mesh.get('primitives', [])
+                if prims:
+                    pos_acc_idx = prims[0].get('attributes', {}).get('POSITION')
+                    if pos_acc_idx is not None:
+                        acc = accessors[pos_acc_idx]
+                        x_min = acc.get('min', [0])[0] if acc.get('min') else 0
+                        x_max = acc.get('max', [0])[0] if acc.get('max') else 0
+                        x_center = (x_min + x_max) / 2
+                        if x_center > 1.0:
+                            # Left mesh but vertices on right side - mirror it
+                            node['scale'] = [-1.0, 1.0, 1.0]
+
+        # Remove skins array entirely (no longer used)
+        del gltf['skins']
+
+        # Remove JOINTS_0 and WEIGHTS_0 from mesh primitives (skinning stripped)
+        for mesh in meshes_list:
+            for prim in mesh.get('primitives', []):
+                attrs = prim.get('attributes', {})
+                for attr in list(attrs.keys()):
+                    if attr.startswith('JOINTS_') or attr.startswith('WEIGHTS_'):
+                        del attrs[attr]
 
     # Update buffer size
     gltf['buffers'] = [{'byteLength': len(bin_data)}]
@@ -460,6 +601,16 @@ def convert_single_gltf(gltf_path: Path, output_path: Path, texture_dirs: list[P
             if 'emissiveTexture' in mat:
                 del mat['emissiveTexture']
             mat['emissiveFactor'] = [0, 0, 0]
+
+            # Remove normal textures - MSFS uses DirectX format (inverted green channel)
+            # but Babylon.js/Cesium expect OpenGL format. We already removed NORMAL/TANGENT
+            # vertex attributes, so normal maps wouldn't work correctly anyway.
+            if 'normalTexture' in mat:
+                del mat['normalTexture']
+
+            # Remove occlusion textures (ambient occlusion) - not needed for traffic display
+            if 'occlusionTexture' in mat:
+                del mat['occlusionTexture']
 
     # Fix texture references
     if 'textures' in gltf:
@@ -651,6 +802,127 @@ def find_gltf_in_model_dir(model_dir: Path) -> Path | None:
     return exterior_gltf[0] if exterior_gltf else None
 
 
+def parse_model_cfg(model_cfg_path: Path) -> Path | None:
+    """
+    Parse a model.cfg file to find the referenced base GLTF.
+
+    MSFS livery folders have a model.XXX/model.cfg that points to the base model:
+        [models]
+        normal=..\\..\\FSLTL_A320\\model.iae\\FAIB_A320_IAE.xml
+
+    Returns the GLTF path derived from the XML reference, or None.
+    """
+    if not model_cfg_path.exists():
+        return None
+
+    try:
+        content = model_cfg_path.read_text(encoding='utf-8', errors='ignore')
+        for line in content.splitlines():
+            line = line.strip()
+            if line.lower().startswith('normal='):
+                rel_path = line.partition('=')[2].strip()
+                if rel_path:
+                    # Convert backslashes to forward slashes
+                    rel_path = rel_path.replace('\\', '/')
+                    # The path points to an .xml file - find the corresponding GLTF
+                    # e.g., model.iae/FAIB_A320_IAE.xml -> model.iae/FAIB_A320_IAE_LOD0.gltf
+                    if rel_path.endswith('.xml'):
+                        gltf_base = rel_path[:-4]  # Remove .xml
+                        # Resolve relative to model.cfg's parent directory
+                        abs_path = (model_cfg_path.parent / gltf_base).resolve()
+                        gltf_dir = abs_path.parent
+                        gltf_stem = abs_path.name
+                        if gltf_dir.exists():
+                            # Look for LOD0 first (highest quality), then any LOD
+                            for suffix in ['_LOD0.gltf', '_LOD0.GLTF', '_LOD1.gltf', '_LOD1.GLTF']:
+                                candidate = gltf_dir / f"{gltf_stem}{suffix}"
+                                if candidate.exists():
+                                    return candidate
+                            # Fall back to any GLTF with matching prefix
+                            for gltf_file in gltf_dir.glob(f"{gltf_stem}*.gltf"):
+                                return gltf_file
+                            for gltf_file in gltf_dir.glob(f"{gltf_stem}*.GLTF"):
+                                return gltf_file
+    except Exception:
+        pass
+    return None
+
+
+def parse_base_container(aircraft_dir: Path) -> Path | None:
+    """
+    Parse aircraft.cfg to find the base_container reference.
+
+    Returns the resolved base container path, or None.
+    """
+    cfg_path = aircraft_dir / "aircraft.cfg"
+    if not cfg_path.exists():
+        return None
+
+    try:
+        content = cfg_path.read_text(encoding='utf-8', errors='ignore')
+        for line in content.splitlines():
+            line = line.strip()
+            if '=' in line:
+                key, _, value = line.partition('=')
+                key = key.strip().lower()
+                if key == 'base_container':
+                    value = value.strip().strip('"').strip("'")
+                    if value:
+                        # Resolve relative path (e.g., "..\FSLTL_A320")
+                        base_path = (aircraft_dir / value.replace('\\', '/')).resolve()
+                        if base_path.exists():
+                            return base_path
+    except Exception:
+        pass
+    return None
+
+
+def find_gltf_for_aircraft(aircraft_dir: Path) -> tuple[Path | None, Path | None]:
+    """
+    Find the GLTF file for an aircraft folder.
+
+    Handles both:
+    1. Base models (GLTF directly in model.* subfolder)
+    2. Livery-only folders (model.cfg references a base model)
+
+    Returns (gltf_path, base_model_dir) where base_model_dir is set if
+    this is a livery referencing another folder's model.
+    """
+    model_dirs = list(aircraft_dir.glob("model*")) + list(aircraft_dir.glob("MODEL*"))
+
+    # First try to find GLTF directly in this folder
+    for model_dir in model_dirs:
+        if model_dir.is_dir():
+            gltf = find_gltf_in_model_dir(model_dir)
+            if gltf:
+                return gltf, None
+
+    # No direct GLTF - check for model.cfg references to base model
+    for model_dir in model_dirs:
+        if model_dir.is_dir():
+            model_cfg = model_dir / "model.cfg"
+            if not model_cfg.exists():
+                model_cfg = model_dir / "model.CFG"
+            if model_cfg.exists():
+                gltf = parse_model_cfg(model_cfg)
+                if gltf:
+                    # Return the base model's directory for texture fallback
+                    base_dir = gltf.parent.parent  # model.xxx -> aircraft folder
+                    return gltf, base_dir
+
+    # Also check base_container in aircraft.cfg
+    base_container = parse_base_container(aircraft_dir)
+    if base_container:
+        base_model_dirs = list(base_container.glob("model*")) + list(base_container.glob("MODEL*"))
+        for model_dir in base_model_dirs:
+            if model_dir.is_dir():
+                gltf = find_gltf_in_model_dir(model_dir)
+                if gltf:
+                    return gltf, base_container
+
+    return None, None
+
+
 def discover_liveries_in_source(source_path: Path, requested_titles: set[str] | None = None) -> list[dict]:
     """
     Discover liveries in source path (smart detection).
@@ -658,6 +930,10 @@ def discover_liveries_in_source(source_path: Path, requested_titles: set[str] | 
     If source_path is an aircraft folder (ends with FSLTL_*, AIGAIM_*, etc.),
     scans only that folder (fast). Otherwise, scans all aircraft folders in
     source/SimObjects/Airplanes (slow, batch mode).
+
+    Handles both:
+    - Base model folders (contain GLTF directly)
+    - Livery-only folders (reference base model via model.cfg or base_container)
 
     Args:
         source_path: Path to source (traffic base or specific aircraft folder)
@@ -673,15 +949,8 @@ def discover_liveries_in_source(source_path: Path, requested_titles: set[str] | 
         if not source_path.is_dir():
             return []
 
-        # Find GLTF in this aircraft folder
-        model_dirs = list(source_path.glob("model*")) + list(source_path.glob("MODEL*"))
-        gltf_path = None
-        for model_dir in model_dirs:
-            if model_dir.is_dir():
-                gltf = find_gltf_in_model_dir(model_dir)
-                if gltf:
-                    gltf_path = gltf
-                    break
+        # Find GLTF (handles both direct and referenced models)
+        gltf_path, base_model_dir = find_gltf_for_aircraft(source_path)
 
         if not gltf_path:
             return []
@@ -693,8 +962,14 @@ def discover_liveries_in_source(source_path: Path, requested_titles: set[str] | 
         # Parse liveries from this aircraft's aircraft.cfg (with early stopping if requested_titles provided)
         liveries = parse_aircraft_cfg_all_liveries(source_path, requested_titles)
 
-        # Get texture directories for shared textures
-        texture_dirs = list(source_path.glob("TEXTURE*")) + list(source_path.glob("texture*"))
+        # Get texture directories for shared textures (from this folder)
+        # Match any subfolder containing "texture" (covers TEXTURE*, texture.*, oci.texture*, etc.)
+        texture_dirs = [d for d in source_path.iterdir() if d.is_dir() and 'texture' in d.name.lower()]
+
+        # If using a base model, also include base model's textures as fallback
+        base_texture_dirs = []
+        if base_model_dir:
+            base_texture_dirs = [d for d in base_model_dir.iterdir() if d.is_dir() and 'texture' in d.name.lower()]
 
         if not liveries:
             # Fallback: create a single entry if no liveries found
@@ -705,10 +980,10 @@ def discover_liveries_in_source(source_path: Path, requested_titles: set[str] | 
 
         all_liveries = []
         for livery in liveries:
-            # Build texture directory list
+            # Build texture directory list (priority order)
             texture_dirs_for_livery = []
 
-            # Add livery-specific texture folder first (if it exists)
+            # 1. Add livery-specific texture folder first (if it exists)
             if livery.get('texture_folder'):
                 livery_tex_path = source_path / f"texture.{livery['texture_folder']}"
                 if not livery_tex_path.exists():
@@ -716,8 +991,11 @@ def discover_liveries_in_source(source_path: Path, requested_titles: set[str] | 
                 if livery_tex_path.exists():
                     texture_dirs_for_livery.append(str(livery_tex_path))
 
-            # Add shared textures as fallback
+            # 2. Add shared textures from this folder
             texture_dirs_for_livery.extend([str(d) for d in texture_dirs])
+
+            # 3. Add base model textures as final fallback (for livery-only folders)
+            texture_dirs_for_livery.extend([str(d) for d in base_texture_dirs])
 
             all_liveries.append({
                 'source': source_type,
@@ -753,15 +1031,8 @@ def discover_liveries_in_source(source_path: Path, requested_titles: set[str] | 
         if not (aircraft_folder_name.startswith("FSLTL_") or aircraft_folder_name.startswith("AIGAIM_")):
             continue
 
-        # Find GLTF in this aircraft folder
-        model_dirs = list(aircraft_dir.glob("model*")) + list(aircraft_dir.glob("MODEL*"))
-        gltf_path = None
-        for model_dir in model_dirs:
-            if model_dir.is_dir():
-                gltf = find_gltf_in_model_dir(model_dir)
-                if gltf:
-                    gltf_path = gltf
-                    break
+        # Find GLTF (handles both direct and referenced models)
+        gltf_path, base_model_dir = find_gltf_for_aircraft(aircraft_dir)
 
         if not gltf_path:
             continue
@@ -773,18 +1044,24 @@ def discover_liveries_in_source(source_path: Path, requested_titles: set[str] | 
         # Parse liveries from this aircraft's aircraft.cfg (with early stopping if requested_titles provided)
         liveries = parse_aircraft_cfg_all_liveries(aircraft_dir, requested_titles)
 
-        # Get texture directories for shared textures
-        texture_dirs = list(aircraft_dir.glob("TEXTURE*")) + list(aircraft_dir.glob("texture*"))
+        # Get texture directories for shared textures (from this folder)
+        # Match any subfolder containing "texture" (covers TEXTURE*, texture.*, oci.texture*, etc.)
+        texture_dirs = [d for d in aircraft_dir.iterdir() if d.is_dir() and 'texture' in d.name.lower()]
+
+        # If using a base model, also include base model's textures as fallback
+        base_texture_dirs = []
+        if base_model_dir:
+            base_texture_dirs = [d for d in base_model_dir.iterdir() if d.is_dir() and 'texture' in d.name.lower()]
 
         if not liveries:
             # Fallback: create a single entry if no liveries found
             liveries = [{'title': aircraft_folder_name, 'texture_folder': '', 'icao_airline': None}]
 
         for livery in liveries:
-            # Build texture directory list
+            # Build texture directory list (priority order)
             texture_dirs_for_livery = []
 
-            # Add livery-specific texture folder first (if it exists)
+            # 1. Add livery-specific texture folder first (if it exists)
             if livery.get('texture_folder'):
                 livery_tex_path = aircraft_dir / f"texture.{livery['texture_folder']}"
                 if not livery_tex_path.exists():
@@ -792,8 +1069,11 @@ def discover_liveries_in_source(source_path: Path, requested_titles: set[str] | 
                 if livery_tex_path.exists():
                     texture_dirs_for_livery.append(str(livery_tex_path))
 
-            # Add shared textures as fallback
+            # 2. Add shared textures from this folder
             texture_dirs_for_livery.extend([str(d) for d in texture_dirs])
+
+            # 3. Add base model textures as final fallback (for livery-only folders)
+            texture_dirs_for_livery.extend([str(d) for d in base_texture_dirs])
 
             all_liveries.append({
                 'source': source_type,
