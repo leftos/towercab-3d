@@ -700,6 +700,9 @@ def discover_liveries_in_source(source_path: Path, requested_titles: set[str] | 
             # Fallback: create a single entry if no liveries found
             liveries = [{'title': folder_name, 'texture_folder': '', 'icao_airline': None}]
 
+        # Determine source type from folder name
+        source_type = 'fsltl' if folder_name.lower().startswith('fsltl') else 'aig'
+
         all_liveries = []
         for livery in liveries:
             # Build texture directory list
@@ -717,6 +720,7 @@ def discover_liveries_in_source(source_path: Path, requested_titles: set[str] | 
             texture_dirs_for_livery.extend([str(d) for d in texture_dirs])
 
             all_liveries.append({
+                'source': source_type,
                 'folder_name': folder_name,
                 'livery_title': livery['title'],
                 'texture_folder': livery.get('texture_folder', ''),
@@ -733,6 +737,9 @@ def discover_liveries_in_source(source_path: Path, requested_titles: set[str] | 
     airplanes = source_path / "SimObjects" / "Airplanes"
     if not airplanes.exists():
         return []
+
+    # Determine source type from the traffic base folder name
+    source_type = 'fsltl' if 'fsltl' in source_path.name.lower() else 'aig'
 
     all_liveries = []
 
@@ -789,6 +796,7 @@ def discover_liveries_in_source(source_path: Path, requested_titles: set[str] | 
             texture_dirs_for_livery.extend([str(d) for d in texture_dirs])
 
             all_liveries.append({
+                'source': source_type,
                 'folder_name': aircraft_folder_name,
                 'livery_title': livery['title'],
                 'texture_folder': livery.get('texture_folder', ''),
@@ -818,10 +826,12 @@ def convert_livery_task(args_tuple):
             if 3 <= len(code) <= 4:
                 airline_code = code
 
-    if airline_code:
-        model_output = output_base_path / aircraft_type / airline_code / "model.glb"
-    else:
-        model_output = output_base_path / aircraft_type / "base" / "model.glb"
+    # Output flat structure: all .glb files in root with source prefix and livery title
+    # Example: output_base_path/aig_AIGAIM_Singapore Airlines Airbus A350-900.glb
+    #          output_base_path/fsltl_FSLTL_A350_AIR_FRANCE.glb
+    livery_title = livery_info['livery_title']
+    source_type = livery_info.get('source', 'aig')  # Default to 'aig' if not specified
+    model_output = output_base_path / f"{source_type}_{livery_title}.glb"
 
     try:
         gltf_path = Path(livery_info['gltf_path'])

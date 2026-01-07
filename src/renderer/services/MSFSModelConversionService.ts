@@ -803,9 +803,10 @@ class MSFSModelConversionServiceClass {
       const { invoke } = await import('@tauri-apps/api/core')
       const settings = this.getSettings()
 
-      // Determine output directory (converter creates TYPE/AIRLINE/model.glb subdirectories)
-      const finalOutputPath = settings.cacheDirectory
-        || await this.getTempOutputDir()
+      // Determine full output file path (not a directory)
+      // Format: {cacheDir}/aig_ModelName.glb (modelKey already includes source prefix)
+      const outputDir = settings.cacheDirectory || await this.getTempOutputDir()
+      const finalOutputPath = `${outputDir}/${modelKey}.glb`
 
       // Determine source path - use specific aircraft folder, not the entire FSLTL/AIG folder
       let sourcePath: string
