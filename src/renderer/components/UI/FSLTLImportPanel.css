@@ -317,3 +317,201 @@
   background: rgba(158, 158, 158, 0.2);
   color: #9e9e9e;
 }
+
+/* ============================================================================
+   MSFS Model Settings Panel Styles
+   ============================================================================ */
+
+/* Detection status badges */
+.msfs-detection-status {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.msfs-source-badge {
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.msfs-source-badge.found {
+  background: rgba(76, 175, 80, 0.15);
+  color: #4caf50;
+  border: 1px solid rgba(76, 175, 80, 0.3);
+}
+
+.msfs-source-badge.not-found {
+  background: rgba(158, 158, 158, 0.1);
+  color: #9e9e9e;
+  border: 1px solid rgba(158, 158, 158, 0.2);
+}
+
+/* Source priority list */
+.msfs-source-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.msfs-source-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--surface-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  cursor: grab;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.msfs-source-item:hover {
+  background: var(--hover-bg);
+}
+
+.msfs-source-item.dragging {
+  opacity: 0.5;
+  border-color: var(--accent-color, #4caf50);
+}
+
+.msfs-source-drag-handle {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  cursor: grab;
+  user-select: none;
+}
+
+.msfs-source-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  cursor: pointer;
+}
+
+.msfs-source-checkbox input[type="checkbox"] {
+  margin: 0;
+  width: 14px;
+  height: 14px;
+}
+
+.msfs-source-checkbox span {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.msfs-source-count {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  min-width: 70px;
+  text-align: right;
+}
+
+.msfs-source-priority {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--border-color);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+/* VMR file list */
+.msfs-vmr-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.msfs-vmr-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--surface-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  cursor: grab;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.msfs-vmr-item:hover {
+  background: var(--hover-bg);
+}
+
+.msfs-vmr-item.dragging {
+  opacity: 0.5;
+  border-color: var(--accent-color, #4caf50);
+}
+
+.msfs-vmr-drag-handle {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  cursor: grab;
+  user-select: none;
+}
+
+.msfs-vmr-name {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.msfs-vmr-remove {
+  background: none;
+  border: none;
+  padding: 2px 6px;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  font-size: 14px;
+  line-height: 1;
+  border-radius: 3px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.msfs-vmr-remove:hover {
+  background: rgba(244, 67, 54, 0.2);
+  color: #f44336;
+}
+
+.msfs-vmr-empty {
+  padding: 12px;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-style: italic;
+  background: var(--surface-bg);
+  border: 1px dashed var(--border-color);
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+/* Cache settings */
+.msfs-cache-limit-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.msfs-cache-limit-row select {
+  flex: 1;
+}
+
+.msfs-cache-stats {
+  display: flex;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--surface-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}

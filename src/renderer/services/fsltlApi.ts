@@ -30,6 +30,21 @@ export async function pickFolder(): Promise<string | null> {
 }
 
 /**
+ * Open a native file picker dialog for multiple files
+ * @param filterName - Display name for the file filter (e.g., "VMR Files")
+ * @param extensions - File extensions to filter (e.g., ["vmr"])
+ * @returns Array of selected file paths, or empty array if cancelled
+ * Note: Not available in browser mode
+ */
+export async function pickFiles(filterName?: string, extensions?: string[]): Promise<string[]> {
+  if (!isTauri()) {
+    console.warn('[fsltlApi] pickFiles not available in browser mode')
+    return []
+  }
+  return invoke<string[]>('pick_files', { filterName, extensions })
+}
+
+/**
  * Read a text file from disk
  * @param path - Absolute path to the file
  * @returns File contents as string
@@ -231,6 +246,23 @@ export async function readVmrFromOutput(outputPath: string): Promise<string | nu
     return await invoke<string>('read_text_file', { path: vmrPath })
   } catch {
     return null
+  }
+}
+
+/**
+ * List all VMR files in a directory
+ * @param directory - Path to scan for .vmr files
+ * @returns Array of absolute paths to VMR files
+ * Note: Not available in browser mode
+ */
+export async function listVmrFiles(directory: string): Promise<string[]> {
+  if (!isTauri()) {
+    return []
+  }
+  try {
+    return await invoke<string[]>('list_vmr_files_in_dir', { directory })
+  } catch {
+    return []
   }
 }
 

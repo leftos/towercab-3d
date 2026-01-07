@@ -185,8 +185,7 @@ export function useAircraftModels(
       // Model height: interpolatedAltitude is already terrain-corrected by interpolation system
       // (includes terrain sampling, ground/air transitions, and all offsets)
       // Compute dynamic ground offset based on model geometry and gear state
-      const isFsltlModel = modelInfo.matchType === 'fsltl' || modelInfo.matchType === 'fsltl-base' ||
-                           modelInfo.matchType === 'fsltl-vmr' || modelInfo.matchType === 'custom-vmr'
+      const isFsltlModel = modelInfo.isFsltl === true
       const groundData = getModelGroundData(modelInfo.modelUrl)
       let heightOffset: number
       if (groundData) {
@@ -234,7 +233,8 @@ export function useAircraftModels(
           const currentModelUrl = modelPoolUrls.current.get(poolIndex)
 
           // If model URL changed, load the new model asynchronously
-          if (currentModelUrl !== modelInfo.modelUrl && !modelPoolLoading.current.has(poolIndex)) {
+          // Skip empty URLs (pending conversions) - keep using current model until conversion completes
+          if (currentModelUrl !== modelInfo.modelUrl && modelInfo.modelUrl && !modelPoolLoading.current.has(poolIndex)) {
             modelPoolLoading.current.add(poolIndex)
             modelPoolUrls.current.set(poolIndex, modelInfo.modelUrl)
 
@@ -378,10 +378,10 @@ export function useAircraftModels(
           }
 
           // Apply landing gear animation for FSLTL models
-          // We check for FSLTL match type instead of hasAnimations flag because:
+          // We check for isFsltl flag instead of hasAnimations flag because:
           // 1. Old converted models may not have hasAnimations set correctly
           // 2. The applyGearAnimation function handles models without animations gracefully
-          const isFsltlForGear = modelInfo.matchType === 'fsltl' || modelInfo.matchType === 'fsltl-base'
+          const isFsltlForGear = modelInfo.isFsltl === true
 
           // Skip gear animation if model is still loading (the current model in pool is a placeholder)
           const isModelLoading = modelPoolLoading.current.has(poolIndex)

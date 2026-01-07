@@ -17,9 +17,10 @@
  */
 
 import { create } from 'zustand'
-import type { GlobalSettings, GlobalViewportSettings, GlobalDisplaySettings, FSLTLTextureScale, DataSourceType, DatablockMode, DatablockDirection } from '@/types'
-import { DEFAULT_GLOBAL_SETTINGS, DEFAULT_GLOBAL_DISPLAY_SETTINGS } from '@/types'
+import type { GlobalSettings, GlobalViewportSettings, GlobalDisplaySettings, MSFSModelSettings, FSLTLTextureScale, DataSourceType, DatablockMode, DatablockDirection, MSFSModelSource } from '@/types'
+import { DEFAULT_GLOBAL_SETTINGS, DEFAULT_GLOBAL_DISPLAY_SETTINGS, DEFAULT_MSFS_MODEL_SETTINGS, MSFS_CACHE_LIMIT } from '@/types'
 import { globalSettingsApi, isTauri } from '@/utils/tauriApi'
+import { listVmrFiles } from '@/services/fsltlApi'
 
 // Key used to track if migration from localStorage has been done
 const MIGRATION_KEY = 'globalSettingsMigrationDone'
@@ -157,6 +158,68 @@ function migrateDisplaySettings(): Partial<GlobalDisplaySettings> | null {
   }
 }
 
+// Migration key for FSLTL to MSFS settings (v3 migration)
+const MSFS_MIGRATION_KEY = 'globalSettingsMsfsMigrationDone'
+
+/**
+ * Migrate old FSLTL settings to new MSFS model settings
+ * - Copies outputPath from fsltl to msfsModels.cacheDirectory
+ * - Auto-detects VMR files in the cache directory and adds to vmrFiles
+ *
+ * This enables smooth transition from batch-converted FSLTL models
+ * to the new on-demand conversion system.
+ */
+async function migrateFsltlToMsfs(settings: GlobalSettings): Promise<Partial<MSFSModelSettings> | null> {
+  // Skip in browser mode (MSFS features are host-only)
+  if (!isTauri()) {
+    return null
+  }
+
+  // Check if migration already done
+  if (localStorage.getItem(MSFS_MIGRATION_KEY)) {
+    return null
+  }
+
+  try {
+    const updates: Partial<MSFSModelSettings> = {}
+    let hasMigration = false
+
+    // Migrate outputPath from deprecated fsltl to new msfsModels.cacheDirectory
+    // Only if cacheDirectory isn't already set
+    if (!settings.msfsModels.cacheDirectory && settings.fsltl.outputPath) {
+      updates.cacheDirectory = settings.fsltl.outputPath
+      hasMigration = true
+      console.log('[GlobalSettings] Migrating FSLTL outputPath to MSFS cacheDirectory:', settings.fsltl.outputPath)
+    }
+
+    // Determine which directory to scan for VMR files
+    const scanDir = updates.cacheDirectory || settings.msfsModels.cacheDirectory || settings.fsltl.outputPath
+
+    // Auto-detect VMR files in the cache directory
+    if (scanDir) {
+      const vmrFiles = await listVmrFiles(scanDir)
+      if (vmrFiles.length > 0) {
+        // Merge with existing vmrFiles (avoid duplicates)
+        const existingVmrFiles = new Set(settings.msfsModels.vmrFiles || [])
+        const newVmrFiles = vmrFiles.filter(f => !existingVmrFiles.has(f))
+
+        if (newVmrFiles.length > 0) {
+          updates.vmrFiles = [...(settings.msfsModels.vmrFiles || []), ...newVmrFiles]
+          hasMigration = true
+          console.log('[GlobalSettings] Auto-detected VMR files:', newVmrFiles)
+        }
+      }
+    }
+
+    localStorage.setItem(MSFS_MIGRATION_KEY, 'true')
+    return hasMigration ? updates : null
+  } catch (error) {
+    console.warn('[GlobalSettings] FSLTL to MSFS migration failed:', error)
+    localStorage.setItem(MSFS_MIGRATION_KEY, 'true')
+    return null
+  }
+}
+
 interface GlobalSettingsState extends GlobalSettings {
   /** Whether the store has been initialized (loaded from disk) */
   initialized: boolean
@@ -177,8 +240,11 @@ interface GlobalSettingsState extends GlobalSettings {
   /** Update Cesium Ion token */
   setCesiumIonToken: (token: string) => Promise<void>
 
-  /** Update FSLTL configuration */
+  /** Update FSLTL configuration (deprecated, use updateMsfsModels) */
   updateFsltl: (updates: Partial<GlobalSettings['fsltl']>) => Promise<void>
+
+  /** Update MSFS model configuration (on-the-fly conversion) */
+  updateMsfsModels: (updates: Partial<MSFSModelSettings>) => Promise<void>
 
   /** Update airport configuration */
   updateAirports: (updates: Partial<GlobalSettings['airports']>) => Promise<void>
@@ -249,6 +315,7 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
         ...DEFAULT_GLOBAL_SETTINGS,
         ...settings,
         // Deep merge nested objects to preserve existing values while adding new fields
+        msfsModels: { ...DEFAULT_MSFS_MODEL_SETTINGS, ...settings.msfsModels },
         fsltl: { ...DEFAULT_GLOBAL_SETTINGS.fsltl, ...settings.fsltl },
         airports: { ...DEFAULT_GLOBAL_SETTINGS.airports, ...settings.airports },
         server: { ...DEFAULT_GLOBAL_SETTINGS.server, ...settings.server },
@@ -296,6 +363,20 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
         console.log('[GlobalSettings] Display settings migration complete')
       }
 
+      // Migrate FSLTL settings to new MSFS system (v3 migration)
+      // - Copies outputPath to cacheDirectory for pre-converted model reuse
+      // - Auto-detects VMR files in the cache directory
+      const msfsMigrated = await migrateFsltlToMsfs(settings)
+      if (msfsMigrated) {
+        settings = {
+          ...settings,
+          msfsModels: { ...settings.msfsModels, ...msfsMigrated }
+        }
+        // Save the migrated MSFS settings
+        await globalSettingsApi.write(settings)
+        console.log('[GlobalSettings] FSLTL to MSFS migration complete')
+      }
+
       set({
         ...settings,
         initialized: true,
@@ -336,6 +417,32 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
         : state.fsltl.textureScale) as FSLTLTextureScale
     }
     set({ fsltl: newFsltl })
+    await saveSettings(get().getSettings())
+  },
+
+  updateMsfsModels: async (updates: Partial<MSFSModelSettings>) => {
+    const state = get()
+    const newMsfsModels: MSFSModelSettings = {
+      ...state.msfsModels,
+      ...updates,
+      // Validate texture scale
+      textureScale: (updates.textureScale && ['full', '2k', '1k', '512'].includes(updates.textureScale)
+        ? updates.textureScale
+        : state.msfsModels.textureScale) as FSLTLTextureScale,
+      // Validate priority array
+      priority: updates.priority
+        ? updates.priority.filter((s): s is MSFSModelSource => s === 'fsltl' || s === 'aig')
+        : state.msfsModels.priority,
+      // Validate cache limit (null for unlimited, or 500-20480 MB)
+      cacheLimitMB: updates.cacheLimitMB === null
+        ? null
+        : updates.cacheLimitMB !== undefined
+          ? Math.max(MSFS_CACHE_LIMIT.MIN_MB, Math.min(MSFS_CACHE_LIMIT.MAX_MB, updates.cacheLimitMB))
+          : state.msfsModels.cacheLimitMB,
+      // Ensure vmrFiles is always an array
+      vmrFiles: updates.vmrFiles ?? state.msfsModels.vmrFiles
+    }
+    set({ msfsModels: newMsfsModels })
     await saveSettings(get().getSettings())
   },
 
@@ -442,6 +549,7 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
     const state = get()
     return {
       cesiumIonToken: state.cesiumIonToken,
+      msfsModels: state.msfsModels,
       fsltl: state.fsltl,
       airports: state.airports,
       server: state.server,
@@ -459,6 +567,7 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
       const mergedSettings = {
         ...DEFAULT_GLOBAL_SETTINGS,
         ...settings,
+        msfsModels: { ...DEFAULT_MSFS_MODEL_SETTINGS, ...settings.msfsModels },
         fsltl: { ...DEFAULT_GLOBAL_SETTINGS.fsltl, ...settings.fsltl },
         airports: { ...DEFAULT_GLOBAL_SETTINGS.airports, ...settings.airports },
         server: { ...DEFAULT_GLOBAL_SETTINGS.server, ...settings.server },
@@ -511,10 +620,17 @@ export function useCesiumIonToken(): string {
 }
 
 /**
- * Hook to get just the FSLTL settings
+ * Hook to get just the FSLTL settings (deprecated, use useMsfsModelSettings)
  */
 export function useFsltlSettings(): GlobalSettings['fsltl'] {
   return useGlobalSettingsStore((state) => state.fsltl)
+}
+
+/**
+ * Hook to get MSFS model settings (on-the-fly conversion)
+ */
+export function useMsfsModelSettings(): MSFSModelSettings {
+  return useGlobalSettingsStore((state) => state.msfsModels)
 }
 
 /**
@@ -553,6 +669,8 @@ export async function repairSettingsMigration(): Promise<{
     // Clear migration keys
     const migrationKeys = [
       'globalSettingsMigrationDone',
+      'globalSettingsDisplayMigrationDone',
+      'globalSettingsMsfsMigrationDone',
       'viewport-store-bookmark-migration-v1',
       'viewport-store-global-migration-v1'
     ]

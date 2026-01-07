@@ -605,15 +605,105 @@ export interface AdvancedSettings {
 }
 
 /**
- * Texture downscaling options for FSLTL conversion
+ * Texture downscaling options for MSFS model conversion
  *
- * Controls the maximum texture resolution when converting FSLTL models:
+ * Controls the maximum texture resolution when converting FSLTL/AIG models:
  * - 'full': Original 4K textures (largest file size, ~40+ GB total)
  * - '2k': 2048px max dimension (high quality, ~10-15 GB)
  * - '1k': 1024px max dimension (balanced, ~3-5 GB, recommended)
  * - '512': 512px max dimension (smallest, ~1-2 GB)
  */
 export type FSLTLTextureScale = 'full' | '2k' | '1k' | '512'
+
+/**
+ * MSFS model source type for priority ordering
+ */
+export type MSFSModelSource = 'fsltl' | 'aig'
+
+/**
+ * Cache limit constants for MSFS model conversion
+ */
+export const MSFS_CACHE_LIMIT = {
+  /** Minimum cache size in MB (500 MB) */
+  MIN_MB: 500,
+  /** Maximum cache size in MB (20 GB) */
+  MAX_MB: 20480,
+  /** Default cache size in MB (5 GB) */
+  DEFAULT_MB: 5120
+} as const
+
+/**
+ * MSFS Model conversion settings
+ *
+ * Settings for on-the-fly conversion of FSLTL and AIG aircraft models.
+ * These settings replace the old FSLTL-specific batch conversion settings.
+ */
+export interface MSFSModelSettings {
+  /**
+   * Path to MSFS Community folder on host
+   * Used to auto-detect FSLTL and AIG installations
+   */
+  communityPath: string | null
+
+  /**
+   * Enable FSLTL model conversion and usage (default: true)
+   */
+  enableFsltl: boolean
+
+  /**
+   * Enable AIG model conversion and usage (default: true)
+   */
+  enableAig: boolean
+
+  /**
+   * Priority order for model sources (first = highest priority)
+   * Models from higher-priority sources are preferred when matching
+   * Default: ['fsltl', 'aig']
+   */
+  priority: MSFSModelSource[]
+
+  /**
+   * Paths to user-selected VMR files for custom model matching rules
+   * These VMRs are parsed and used for model matching (not copied)
+   */
+  vmrFiles: string[]
+
+  /**
+   * Optional directory for caching converted GLB models
+   * null = cache in app's temp directory (cleared on app close)
+   * When set, converted models persist across app restarts
+   */
+  cacheDirectory: string | null
+
+  /**
+   * Cache size limit in MB (null = unlimited)
+   * Range: 500-20480 (500MB to 20GB)
+   * Default: 5120 (5GB)
+   * When limit is reached, least-recently-used models are evicted
+   */
+  cacheLimitMB: number | null
+
+  /**
+   * Texture downscaling preference for conversion
+   * Lower values = smaller files but less detail
+   * Default: '1k' (balanced quality/size)
+   */
+  textureScale: FSLTLTextureScale
+}
+
+/**
+ * Default MSFS model settings
+ */
+export const DEFAULT_MSFS_MODEL_SETTINGS: MSFSModelSettings = {
+  communityPath: null,
+  enableFsltl: true,
+  enableAig: true,
+  priority: ['fsltl', 'aig'],
+  vmrFiles: [],
+  cacheDirectory: null,
+  cacheLimitMB: MSFS_CACHE_LIMIT.DEFAULT_MB,
+  textureScale: '1k'
+}
 
 // ============================================================================
 // Global Settings (stored on host file system, shared across all browsers)
@@ -820,7 +910,14 @@ export interface GlobalSettings {
   cesiumIonToken: string
 
   /**
-   * FSLTL model configuration
+   * MSFS model configuration (on-the-fly conversion)
+   * Replaces the old fsltl settings with support for FSLTL + AIG
+   */
+  msfsModels: MSFSModelSettings
+
+  /**
+   * @deprecated Use msfsModels instead. Kept for migration compatibility.
+   * FSLTL model configuration (old pre-conversion system)
    * Paths reference the host file system
    */
   fsltl: {
@@ -937,6 +1034,8 @@ export interface GlobalSettings {
  */
 export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   cesiumIonToken: '',
+  msfsModels: DEFAULT_MSFS_MODEL_SETTINGS,
+  // @deprecated - kept for migration only
   fsltl: {
     sourcePath: null,
     outputPath: null,

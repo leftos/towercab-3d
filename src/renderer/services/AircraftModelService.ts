@@ -32,8 +32,9 @@
 
 import { convertToAssetUrlSync } from '../utils/tauriApi'
 import { aircraftDimensionsService, type AircraftDimensions } from './AircraftDimensionsService'
-import { fsltlService } from './FSLTLService'
 import { customVMRService } from './CustomVMRService'
+import { userVMRService } from './UserVMRService'
+import { MSFSModelConversionService, type SourceModelInfo } from './MSFSModelConversionService'
 
 // Available model files (lowercase, without extension)
 // These correspond to .glb files in src/renderer/public/
@@ -387,7 +388,7 @@ function findClosestModel(
 export interface ModelInfo {
   modelUrl: string
   scale: { x: number; y: number; z: number }  // Non-uniform scale factors
-  matchType: 'exact' | 'mapped' | 'closest' | 'fallback' | 'fsltl' | 'fsltl-vmr' | 'fsltl-base' | 'custom-vmr'
+  matchType: 'exact' | 'closest' | 'fallback' | 'pending'
   matchedModel?: string  // For debugging: which model was matched
   dimensions: AircraftDimensions  // Dimensions of the actual model being used
   /** Additional heading rotation in degrees (180 for FSLTL models, custom for mods) */
@@ -398,6 +399,10 @@ export interface ModelInfo {
   vmrVariationName?: string
   /** Whether this is an FSLTL/VMR model with custom liveries (affects tinting behavior) */
   isFsltl?: boolean
+  /** MSFS model source info - set when conversion is pending */
+  pendingMsfsModel?: SourceModelInfo
+  /** Whether an MSFS model is currently being converted */
+  msfsConversionPending?: boolean
 }
 
 /**
@@ -436,6 +441,70 @@ const AIRLINE_COLORS: Record<string, AirlineLivery> = {
 }
 
 class AircraftModelServiceClass {
+  /** Cache of ModelInfo results by cache key (type_airline) */
+  private modelInfoCache = new Map<string, ModelInfo>()
+
+  /** Keys with pending MSFS conversions - will be invalidated when conversion completes */
+  private pendingConversions = new Set<string>()
+
+  /** Callsigns already logged (to avoid spam - only log once per callsign per app run) */
+  private loggedCallsigns = new Set<string>()
+
+  /**
+   * Log model matching details for a callsign (only once per callsign per app run)
+   */
+  private logModelMatch(
+    callsign: string | null | undefined,
+    aircraftType: string,
+    airlineCode: string | null,
+    step: string,
+    result: string
+  ): void {
+    if (!callsign || this.loggedCallsigns.has(callsign)) return
+    console.log(`[ModelMatch] ${callsign} (${aircraftType}/${airlineCode ?? 'no-airline'}): ${step} -> ${result}`)
+  }
+
+  /**
+   * Mark a callsign as logged (prevents further logging for this callsign)
+   */
+  private markLogged(callsign: string | null | undefined): void {
+    if (callsign) this.loggedCallsigns.add(callsign)
+  }
+
+  /**
+   * Get cache key for a type+airline combination
+   */
+  private getCacheKey(aircraftType: string, airlineCode: string | null): string {
+    return airlineCode ? `${aircraftType}_${airlineCode}` : aircraftType
+  }
+
+  /**
+   * Invalidate cache entries when MSFS conversion completes
+   * Called by MSFSModelConversionService after successful conversion
+   */
+  invalidateCacheForModel(modelName: string): void {
+    // Remove all cache entries that might be affected by this model
+    // We don't know exactly which type+airline combos map to this model,
+    // so we clear entries that have pending conversions
+    for (const key of this.pendingConversions) {
+      this.modelInfoCache.delete(key)
+    }
+    this.pendingConversions.clear()
+    console.log(`[AircraftModelService] Cache invalidated for model: ${modelName}`)
+
+    // Notify UI components that model info has changed
+    // This allows components like ModelMatchingModal to re-render with updated match types
+    window.dispatchEvent(new CustomEvent('model-conversion-complete', { detail: { modelName } }))
+  }
+
+  /**
+   * Clear all cached model info (call when settings change)
+   */
+  clearCache(): void {
+    this.modelInfoCache.clear()
+    this.pendingConversions.clear()
+  }
+
   /**
    * Get dimensions for a model file
    * @param modelName Model file name (without extension, e.g., "b738")
@@ -452,92 +521,288 @@ class AircraftModelServiceClass {
   }
 
   /**
+   * Check for MSFS model match
+   * Tries VMR rules first, then falls back to type+airline and type-only matches
+   *
+   * @param cacheKey Cache key for tracking pending conversions
+   * @param callsign Optional callsign for logging
+   * @returns Model info with converted GLB, or null if no MSFS model available
+   */
+  private checkMsfsModel(
+    aircraftType: string,
+    airlineCode: string | null,
+    cacheKey: string,
+    callsign?: string | null
+  ): ModelInfo | null {
+    const log = (step: string, result: string) => {
+      this.logModelMatch(callsign, aircraftType, airlineCode, step, result)
+    }
+    const targetDims = aircraftDimensionsService.getDimensions(aircraftType)
+    const defaultDims = { wingspan: 35.78, length: 39.47 }
+    const uniformScale = { x: 1, y: 1, z: 1 }
+
+    // Helper to create result for exact match (scale 1:1)
+    const createExactResult = (
+      cachedPath: string,
+      modelName: string
+    ): ModelInfo => ({
+      modelUrl: convertToAssetUrlSync(cachedPath),
+      scale: uniformScale,
+      matchType: 'exact',
+      matchedModel: modelName,
+      dimensions: targetDims ?? defaultDims,
+      rotationOffset: 180,
+      isFsltl: true
+    })
+
+    // Helper to create result for closest match (with scaling)
+    const createClosestResult = (
+      cachedPath: string,
+      modelName: string,
+      scale: { x: number; y: number; z: number }
+    ): ModelInfo => ({
+      modelUrl: convertToAssetUrlSync(cachedPath),
+      scale,
+      matchType: 'closest',
+      matchedModel: modelName,
+      dimensions: targetDims ?? defaultDims,
+      rotationOffset: 180,
+      isFsltl: true
+    })
+
+    // Helper to create pending result (used when conversion is in progress)
+    const createPendingResult = (
+      modelName: string,
+      sourceInfo: SourceModelInfo,
+      scale: { x: number; y: number; z: number } = uniformScale
+    ): ModelInfo => ({
+      modelUrl: '', // No URL yet - conversion pending
+      scale,
+      matchType: 'pending',
+      matchedModel: modelName,
+      dimensions: targetDims ?? defaultDims,
+      rotationOffset: 180,
+      isFsltl: true,
+      pendingMsfsModel: sourceInfo,
+      msfsConversionPending: true
+    })
+
+    // Helper to start conversion and return pending result
+    const startConversionAndReturnPending = (
+      sourceInfo: SourceModelInfo,
+      scale: { x: number; y: number; z: number } = uniformScale
+    ): ModelInfo => {
+      this.pendingConversions.add(cacheKey)
+      console.log(`[ModelMatch] Starting conversion for ${sourceInfo.modelName}, cacheKey=${cacheKey}`)
+      MSFSModelConversionService.convertModel(sourceInfo)
+        .then((result) => {
+          console.log(`[ModelMatch] Conversion completed for ${sourceInfo.modelName}:`, result.success ? 'success' : 'failed', result.glbPath || result.error)
+          this.invalidateCacheForModel(sourceInfo.modelName)
+        })
+        .catch((err) => {
+          console.error(`[ModelMatch] Conversion error for ${sourceInfo.modelName}:`, err)
+          this.invalidateCacheForModel(sourceInfo.modelName)
+        })
+      return createPendingResult(sourceInfo.modelName, sourceInfo, scale)
+    }
+
+    // Helper to try a source model (cached, converting, or start conversion)
+    const trySourceModel = (
+      sourceInfo: SourceModelInfo,
+      scale: { x: number; y: number; z: number } = uniformScale
+    ): ModelInfo | null => {
+      // Skip if previously failed
+      if (MSFSModelConversionService.hasConversionFailed(sourceInfo.modelName, sourceInfo.source)) {
+        return null
+      }
+
+      // Check if cached
+      const cachedPath = MSFSModelConversionService.getCachedModel(sourceInfo.modelName, sourceInfo.source)
+      if (cachedPath) {
+        log('trySourceModel', `cache HIT for ${sourceInfo.modelName} -> ${cachedPath}`)
+        return scale === uniformScale
+          ? createExactResult(cachedPath, sourceInfo.modelName)
+          : createClosestResult(cachedPath, sourceInfo.modelName, scale)
+      }
+
+      // Already converting - return pending and track the cache key
+      if (MSFSModelConversionService.isConverting(sourceInfo.modelName, sourceInfo.source)) {
+        this.pendingConversions.add(cacheKey)
+        return createPendingResult(sourceInfo.modelName, sourceInfo, scale)
+      }
+
+      // Start conversion
+      return startConversionAndReturnPending(sourceInfo, scale)
+    }
+
+    // 1. Try VMR rules first (highest priority)
+    const alternatives = userVMRService.getAlternatives(aircraftType, airlineCode)
+    if (alternatives.length > 0) {
+      log('1. VMR rules', `found ${alternatives.length} alternatives: ${alternatives.join(', ')}`)
+    } else if (!userVMRService.hasRules()) {
+      log('1. VMR rules', 'no VMR files configured')
+    } else {
+      log('1. VMR rules', `no rule for ${aircraftType}/${airlineCode}`)
+    }
+    for (const modelName of alternatives) {
+      // Check if model is already cached (pre-converted)
+      for (const source of ['fsltl', 'aig'] as const) {
+        const cachedPath = MSFSModelConversionService.getCachedModel(modelName, source)
+        if (cachedPath) {
+          log('1. VMR rules', `MATCH cached ${source}:${modelName}`)
+          return createExactResult(cachedPath, modelName)
+        }
+      }
+
+      // Try to find source model for on-demand conversion
+      const sourceInfo = MSFSModelConversionService.resolveSourceModel(modelName)
+      if (sourceInfo) {
+        const result = trySourceModel(sourceInfo)
+        if (result) {
+          log('1. VMR rules', `MATCH ${result.matchType} ${modelName}`)
+          return result
+        }
+      }
+      // No source for this alternative - continue to next
+    }
+
+    // 2. Try type+airline exact match from indexed models
+    if (airlineCode) {
+      const typeAirlineSource = MSFSModelConversionService.findModelByTypeAndAirline(aircraftType, airlineCode)
+      if (typeAirlineSource) {
+        const result = trySourceModel(typeAirlineSource)
+        if (result) {
+          log('2. type+airline', `MATCH ${result.matchType} ${typeAirlineSource.modelName}`)
+          return result
+        }
+      } else {
+        log('2. type+airline', `no match for ${aircraftType}+${airlineCode}`)
+      }
+    }
+
+    // 3. Try closest airline model (scaled) - same airline, different but similar type
+    if (airlineCode) {
+      const closestAirline = MSFSModelConversionService.findClosestModelForAirline(aircraftType, airlineCode)
+      if (closestAirline) {
+        const result = trySourceModel(closestAirline.model, closestAirline.scale)
+        if (result) {
+          log('3. closest airline', `MATCH ${result.matchType} ${closestAirline.model.modelName} (dist=${closestAirline.distance.toFixed(3)})`)
+          return result
+        }
+      } else {
+        log('3. closest airline', `no similar model for airline ${airlineCode}`)
+      }
+    }
+
+    // 4. Try type-only match (base livery)
+    const typeOnlySource = MSFSModelConversionService.findModelByTypeAndAirline(aircraftType, null)
+    if (typeOnlySource) {
+      const result = trySourceModel(typeOnlySource)
+      if (result) {
+        log('4. type-only base', `MATCH ${result.matchType} ${typeOnlySource.modelName}`)
+        return result
+      }
+    } else {
+      log('4. type-only base', `no base livery for ${aircraftType}`)
+    }
+
+    // 5. Try closest any model (scaled) - any MSFS model close in size
+    const closestAny = MSFSModelConversionService.findClosestModel(aircraftType)
+    if (closestAny) {
+      const result = trySourceModel(closestAny.model, closestAny.scale)
+      if (result) {
+        log('5. closest any', `MATCH ${result.matchType} ${closestAny.model.modelName} (dist=${closestAny.distance.toFixed(3)})`)
+        return result
+      }
+    } else {
+      log('5. closest any', `no similar model found`)
+    }
+
+    // No MSFS model available (will fall back to built-in)
+    log('MSFS', 'no match, falling back to built-in')
+    return null
+  }
+
+  /**
    * Get the model URL and scale for an aircraft type
    * @param aircraftType ICAO aircraft type code (e.g., "B738", "A320")
-   * @param callsign Optional callsign for airline-specific FSLTL model matching
+   * @param callsign Optional callsign for airline-specific model matching
    * @returns Model URL, scale factor, and match type
    */
   getModelInfo(aircraftType: string | null | undefined, callsign?: string | null): ModelInfo {
     const uniformScale = { x: 1, y: 1, z: 1 }
     const b738Dims = { wingspan: 35.78, length: 39.47 }
+    const isGA = this.isGACallsign(callsign)
+    const airlineCode = this.extractAirlineCode(callsign)
 
-    // If no aircraft type, try airline-specific narrowbody fallback, then generic fallback
-    // Common narrowbody types to search for airline liveries (in preference order)
-    const FALLBACK_TYPES = [
-      'B738', 'A320', 'B739', 'A321', 'A319', 'B737',
-      'A20N', 'A21N', 'A19N', 'B38M', 'B39M', 'B73X'
-    ]
-
+    // No aircraft type - try airline-specific narrowbody fallback, then generic
     if (!aircraftType) {
-      const airlineCode = this.extractAirlineCode(callsign)
-      const isGA = this.isGACallsign(callsign)
+      // For airline callsigns, try to find an airline-specific narrowbody model
+      if (airlineCode && !isGA) {
+        const airlineFallback = MSFSModelConversionService.findAirlineFallbackModel(airlineCode)
+        if (airlineFallback) {
+          // Check cache first (use a special cache key for unknown type)
+          const cacheKey = `_UNKNOWN_${airlineCode}`
+          const cached = this.modelInfoCache.get(cacheKey)
+          if (cached) {
+            return cached
+          }
 
-      // Try airline-specific narrowbody models (e.g., JBU A320 for JetBlue)
-      if (airlineCode) {
-        for (const fallbackType of FALLBACK_TYPES) {
-          const airlineModel = fsltlService.findBestModel(fallbackType, airlineCode)
-          if (airlineModel) {
-            const modelUrl = convertToAssetUrlSync(airlineModel.modelPath)
-            const dims = aircraftDimensionsService.getDimensions(fallbackType)
-            return {
-              modelUrl,
+          // Try to get or convert the model
+          const cachedPath = MSFSModelConversionService.getCachedModel(airlineFallback.modelName, airlineFallback.source)
+          if (cachedPath) {
+            const result: ModelInfo = {
+              modelUrl: convertToAssetUrlSync(cachedPath),
               scale: uniformScale,
               matchType: 'fallback',
-              matchedModel: airlineModel.modelName,
-              dimensions: dims ?? b738Dims,
+              matchedModel: airlineFallback.modelName,
+              dimensions: b738Dims,
               rotationOffset: 180,
-              hasAnimations: airlineModel.hasAnimations,
               isFsltl: true
             }
+            this.modelInfoCache.set(cacheKey, result)
+            this.logModelMatch(callsign, 'N/A', airlineCode, 'airline-fallback', `MATCH ${airlineFallback.modelName}`)
+            this.markLogged(callsign)
+            return result
           }
-        }
-      }
 
-      // Fall back to appropriate model: GA aircraft (C172) or B738
-      if (isGA) {
-        const fsltlGAFallback = fsltlService.getGAFallback()
-        if (fsltlGAFallback) {
-          const modelUrl = convertToAssetUrlSync(fsltlGAFallback.modelPath)
-          const gaDims = aircraftDimensionsService.getDimensions(fsltlGAFallback.aircraftType)
-          return {
-            modelUrl,
+          // Not cached - start conversion if not already converting
+          if (!MSFSModelConversionService.isConverting(airlineFallback.modelName, airlineFallback.source) &&
+              !MSFSModelConversionService.hasConversionFailed(airlineFallback.modelName, airlineFallback.source)) {
+            MSFSModelConversionService.convertModel(airlineFallback)
+              .then(() => {
+                this.modelInfoCache.delete(cacheKey)
+                window.dispatchEvent(new CustomEvent('model-conversion-complete', { detail: { modelName: airlineFallback.modelName } }))
+              })
+              .catch(() => {
+                this.modelInfoCache.delete(cacheKey)
+              })
+          }
+
+          // Return pending result
+          const pendingResult: ModelInfo = {
+            modelUrl: '',
             scale: uniformScale,
-            matchType: 'fallback',
-            matchedModel: fsltlGAFallback.modelName,
-            dimensions: gaDims ?? { wingspan: 11.0, length: 8.28 },
+            matchType: 'pending',
+            matchedModel: airlineFallback.modelName,
+            dimensions: b738Dims,
             rotationOffset: 180,
-            hasAnimations: fsltlGAFallback.hasAnimations,
-            isFsltl: true
+            isFsltl: true,
+            pendingMsfsModel: airlineFallback,
+            msfsConversionPending: true
           }
-        }
-        // Built-in PA28 fallback for GA
-        const gaFallbackDims = this.getModelDimensions(GA_FALLBACK_MODEL)
-        return {
-          modelUrl: `./${GA_FALLBACK_MODEL}.glb`,
-          scale: uniformScale,
-          matchType: 'fallback',
-          dimensions: gaFallbackDims
+          this.modelInfoCache.set(cacheKey, pendingResult)
+          this.logModelMatch(callsign, 'N/A', airlineCode, 'airline-fallback', `PENDING ${airlineFallback.modelName}`)
+          this.markLogged(callsign)
+          return pendingResult
         }
       }
 
-      // Fall back to generic B738 for non-GA
-      const fsltlB738Fallback = fsltlService.getB738Fallback()
-      if (fsltlB738Fallback) {
-        const modelUrl = convertToAssetUrlSync(fsltlB738Fallback.modelPath)
-        return {
-          modelUrl,
-          scale: uniformScale,
-          matchType: 'fallback',
-          matchedModel: fsltlB738Fallback.modelName,
-          dimensions: b738Dims,
-          rotationOffset: 180,
-          hasAnimations: fsltlB738Fallback.hasAnimations,
-          isFsltl: true
-        }
-      }
-      const fallbackDims = this.getModelDimensions(FALLBACK_MODEL)
+      // Fall back to generic model (PA28 for GA, B738 otherwise)
+      const fallbackModel = isGA ? GA_FALLBACK_MODEL : FALLBACK_MODEL
+      const fallbackDims = this.getModelDimensions(fallbackModel)
       return {
-        modelUrl: `./${FALLBACK_MODEL}.glb`,
+        modelUrl: `./${fallbackModel}.glb`,
         scale: uniformScale,
         matchType: 'fallback',
         dimensions: fallbackDims
@@ -546,225 +811,112 @@ class AircraftModelServiceClass {
 
     // Extract base aircraft type (strips equipment suffixes like "/L" from "B738/L")
     const normalized = extractBaseAircraftType(aircraftType)
-    const airlineCode = this.extractAirlineCode(callsign)
+    const cacheKey = this.getCacheKey(normalized, airlineCode)
 
-    // 1. Check custom VMR rules (highest priority - user mods)
+    // Check cache first - avoids expensive lookups every frame
+    const cached = this.modelInfoCache.get(cacheKey)
+    if (cached) {
+      return cached
+    }
+
+    // Helper for final logging
+    const logFinal = (step: string, result: ModelInfo) => {
+      this.logModelMatch(callsign, normalized, airlineCode, step, `${result.matchType} -> ${result.matchedModel ?? result.modelUrl}`)
+      this.markLogged(callsign)
+    }
+
+    // 1. Check MSFS models (highest priority - handles VMR rules + on-demand conversion)
+    const msfsModel = this.checkMsfsModel(normalized, airlineCode, cacheKey, callsign)
+    if (msfsModel) {
+      this.modelInfoCache.set(cacheKey, msfsModel)
+      logFinal('FINAL', msfsModel)
+      return msfsModel
+    }
+
+    // 2. Check custom VMR rules from mods folder
     const customVMRMatch = customVMRService.findBestModel(normalized, airlineCode)
     if (customVMRMatch) {
-      // Get dimensions from FAA database for the aircraft type
       const targetDims = aircraftDimensionsService.getDimensions(normalized)
-      return {
+      const result: ModelInfo = {
         modelUrl: customVMRMatch.modelPath,
         scale: {
           x: customVMRMatch.scale,
           y: customVMRMatch.scale,
           z: customVMRMatch.scale
         },
-        matchType: 'custom-vmr',
+        matchType: 'exact',
         matchedModel: customVMRMatch.modelName,
-        dimensions: targetDims ?? { wingspan: 35.78, length: 39.47 },
+        dimensions: targetDims ?? b738Dims,
         rotationOffset: customVMRMatch.rotationOffset?.y,
         isFsltl: true
       }
+      this.modelInfoCache.set(cacheKey, result)
+      logFinal('custom VMR', result)
+      return result
     }
 
-    // 2. Check FSLTL for airline+type or base type match
-    const fsltlModel = fsltlService.findBestModel(normalized, airlineCode)
-    if (fsltlModel) {
-      // Get dimensions from FAA database for scaling reference
-      const targetDims = aircraftDimensionsService.getDimensions(normalized)
-      // Get the VMR variation name that was matched (stored by findBestModel)
-      const vmrVariationName = fsltlService.lastMatchVariationName ?? undefined
-      // Convert file path to Tauri asset URL for webview access
-      const modelUrl = convertToAssetUrlSync(fsltlModel.modelPath)
-
-      // Determine match type: exact if model type matches requested type, vmr if mapped
-      // VMR mapping occurs when the model's aircraft type differs from what was requested
-      // (e.g., requested B753 but VMR maps to B739)
-      let matchType: 'fsltl' | 'fsltl-vmr' | 'fsltl-base'
-      if (fsltlModel.airlineCode) {
-        // Airline-specific match: check if type was mapped
-        matchType = fsltlModel.aircraftType.toUpperCase() === normalized ? 'fsltl' : 'fsltl-vmr'
-      } else {
-        // Base livery match
-        matchType = 'fsltl-base'
-      }
-
-      return {
-        modelUrl,
-        scale: uniformScale, // FSLTL models are properly scaled
-        matchType,
-        matchedModel: fsltlModel.modelName,
-        dimensions: targetDims ?? { wingspan: 35.78, length: 39.47 },
-        rotationOffset: 180, // FSLTL models face same direction as built-in models
-        hasAnimations: fsltlModel.hasAnimations,
-        vmrVariationName,
-        isFsltl: true
-      }
-    }
-
-    // 3. Try FSLTL closest airline model (scaled) - same airline, different but similar type
-    // E.g., AAL flying B753 but we only have AAL B738 - scale that instead of generic B738
-    if (airlineCode) {
-      const closestAirlineModel = fsltlService.findClosestModelForAirline(normalized, airlineCode)
-      if (closestAirlineModel) {
-        const targetDims = aircraftDimensionsService.getDimensions(normalized)
-        const modelUrl = convertToAssetUrlSync(closestAirlineModel.model.modelPath)
-        return {
-          modelUrl,
-          scale: closestAirlineModel.scale,
-          matchType: 'closest',
-          matchedModel: closestAirlineModel.model.modelName,
-          dimensions: targetDims ?? { wingspan: 35.78, length: 39.47 },
-          rotationOffset: 180,
-          hasAnimations: closestAirlineModel.model.hasAnimations,
-          isFsltl: true
-        }
-      }
-    }
-
-    // 4. Try FSLTL base livery for exact type match (before built-in models)
-    // Even when an airline was requested but doesn't have this type, prefer FSLTL base over built-in
-    const fsltlBaseModel = fsltlService.findBestModel(normalized, null)
-    if (fsltlBaseModel) {
-      const targetDims = aircraftDimensionsService.getDimensions(normalized)
-      const modelUrl = convertToAssetUrlSync(fsltlBaseModel.modelPath)
-      return {
-        modelUrl,
-        scale: uniformScale,
-        matchType: 'fsltl-base',
-        matchedModel: fsltlBaseModel.modelName,
-        dimensions: targetDims ?? { wingspan: 35.78, length: 39.47 },
-        rotationOffset: 180,
-        hasAnimations: fsltlBaseModel.hasAnimations,
-        isFsltl: true
-      }
-    }
-
-    // 5. Try FSLTL closest base model (scaled) - any FSLTL model close in size
-    // This helps GA aircraft when we have FSLTL models but no built-in small planes
-    const closestFsltlModel = fsltlService.findClosestModel(normalized)
-    if (closestFsltlModel) {
-      const targetDims = aircraftDimensionsService.getDimensions(normalized)
-      const modelUrl = convertToAssetUrlSync(closestFsltlModel.model.modelPath)
-      return {
-        modelUrl,
-        scale: closestFsltlModel.scale,
-        matchType: 'closest',
-        matchedModel: closestFsltlModel.model.modelName,
-        dimensions: targetDims ?? { wingspan: 35.78, length: 39.47 },
-        rotationOffset: 180,
-        hasAnimations: closestFsltlModel.model.hasAnimations,
-        isFsltl: true
-      }
-    }
-
-    // 6. Check explicit mapping for built-in models (after FSLTL exhausted)
+    // 3. Check explicit mapping for built-in models
     const mappedModel = TYPE_TO_MODEL[normalized]
     if (mappedModel && AVAILABLE_MODELS.has(mappedModel)) {
       const modelDims = this.getModelDimensions(mappedModel)
-      return {
+      const result: ModelInfo = {
         modelUrl: `./${mappedModel}.glb`,
         scale: uniformScale,
-        matchType: normalized.toLowerCase() === mappedModel ? 'exact' : 'mapped',
+        matchType: 'exact',
+        matchedModel: mappedModel,
         dimensions: modelDims
       }
+      this.modelInfoCache.set(cacheKey, result)
+      logFinal('built-in map', result)
+      return result
     }
 
-    // 7. Try direct match (lowercase)
+    // 4. Try direct match (lowercase)
     const directMatch = normalized.toLowerCase()
     if (AVAILABLE_MODELS.has(directMatch)) {
       const directDims = this.getModelDimensions(directMatch)
-      return {
+      const result: ModelInfo = {
         modelUrl: `./${directMatch}.glb`,
         scale: uniformScale,
         matchType: 'exact',
+        matchedModel: directMatch,
         dimensions: directDims
       }
+      this.modelInfoCache.set(cacheKey, result)
+      logFinal('built-in direct', result)
+      return result
     }
 
-    // 8. No direct built-in model - try to find closest built-in match by dimensions
+    // 5. No direct built-in model - try to find closest built-in match by dimensions
     const targetDims = aircraftDimensionsService.getDimensions(normalized)
     if (targetDims && targetDims.wingspan && targetDims.length) {
       const { model, scale } = findClosestModel(targetDims.wingspan, targetDims.length)
       const closestDims = this.getModelDimensions(model)
-      return {
+      const result: ModelInfo = {
         modelUrl: `./${model}.glb`,
         scale,
         matchType: 'closest',
         matchedModel: model,
         dimensions: closestDims
       }
+      this.modelInfoCache.set(cacheKey, result)
+      logFinal('built-in closest', result)
+      return result
     }
 
-    // 9. Try FSLTL airline-specific fallback from common narrowbody types
-    // E.g., AAL flying an unknown type should use AAL's B738 livery, not generic B738
-    if (airlineCode) {
-      const airlineFallback = fsltlService.getAirlineFallback(airlineCode)
-      if (airlineFallback) {
-        const modelUrl = convertToAssetUrlSync(airlineFallback.modelPath)
-        const fallbackDims = aircraftDimensionsService.getDimensions(airlineFallback.aircraftType)
-        return {
-          modelUrl,
-          scale: uniformScale,
-          matchType: 'fallback',
-          matchedModel: airlineFallback.modelName,
-          dimensions: fallbackDims ?? b738Dims,
-          rotationOffset: 180,
-          hasAnimations: airlineFallback.hasAnimations,
-          isFsltl: true
-        }
-      }
-    }
-
-    // Check if this is a GA callsign - use appropriate fallback
-    const isGA = this.isGACallsign(callsign)
-
-    // 10. Try FSLTL GA or B738 base model as generic fallback
-    if (isGA) {
-      // For GA callsigns, prefer small GA aircraft (C172) over B738
-      const fsltlGAFallback = fsltlService.getGAFallback()
-      if (fsltlGAFallback) {
-        const modelUrl = convertToAssetUrlSync(fsltlGAFallback.modelPath)
-        const gaDims = aircraftDimensionsService.getDimensions(fsltlGAFallback.aircraftType)
-        return {
-          modelUrl,
-          scale: uniformScale,
-          matchType: 'fallback',
-          matchedModel: fsltlGAFallback.modelName,
-          dimensions: gaDims ?? { wingspan: 11.0, length: 8.28 }, // C172 default
-          rotationOffset: 180,
-          hasAnimations: fsltlGAFallback.hasAnimations,
-          isFsltl: true
-        }
-      }
-    } else {
-      // For airline callsigns, use B738 as fallback
-      const fsltlB738Fallback = fsltlService.getB738Fallback()
-      if (fsltlB738Fallback) {
-        const modelUrl = convertToAssetUrlSync(fsltlB738Fallback.modelPath)
-        return {
-          modelUrl,
-          scale: uniformScale,
-          matchType: 'fallback',
-          matchedModel: fsltlB738Fallback.modelName,
-          dimensions: b738Dims,
-          rotationOffset: 180,
-          hasAnimations: fsltlB738Fallback.hasAnimations,
-          isFsltl: true
-        }
-      }
-    }
-
-    // 11. Final fallback - use built-in model (PA28 for GA, B738 otherwise)
+    // 6. Final fallback - use built-in model (PA28 for GA, B738 otherwise)
     const fallbackModel = isGA ? GA_FALLBACK_MODEL : FALLBACK_MODEL
     const finalFallbackDims = this.getModelDimensions(fallbackModel)
-    return {
+    const result: ModelInfo = {
       modelUrl: `./${fallbackModel}.glb`,
       scale: uniformScale,
       matchType: 'fallback',
+      matchedModel: fallbackModel,
       dimensions: finalFallbackDims
     }
+    this.modelInfoCache.set(cacheKey, result)
+    logFinal('built-in fallback', result)
+    return result
   }
 
   /**
@@ -772,7 +924,7 @@ class AircraftModelServiceClass {
    */
   hasSpecificModel(aircraftType: string | null | undefined): boolean {
     const info = this.getModelInfo(aircraftType)
-    return info.matchType === 'exact' || info.matchType === 'mapped'
+    return info.matchType === 'exact'
   }
 
   /**

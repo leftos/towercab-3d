@@ -405,8 +405,8 @@ function interpolateTimeline(
 
   // DEBUG: Log interpolation state for ONE moving aircraft
   // Tracks position frame-to-frame to detect snaps
-  // Enabled in DEV mode always, or in production when advanced.enableInterpolationDebugLogs is true
-  const debugLogsEnabled = import.meta.env.DEV || useSettingsStore.getState().advanced?.enableInterpolationDebugLogs
+  // Only enabled when advanced.enableInterpolationDebugLogs is true in settings
+  const debugLogsEnabled = useSettingsStore.getState().advanced?.enableInterpolationDebugLogs
   if (debugLogsEnabled) {
     const debugState = globalThis as Record<string, unknown>
 

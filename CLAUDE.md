@@ -16,6 +16,10 @@ When looking up documentation for libraries (Cesium, Babylon.js, React, etc.), a
 
 Only resort to WebSearch/WebFetch if Context7 doesn't have the information needed.
 
+## Logs
+
+When told to "check the logs", read temp/console.log. It's likely it's quite big, so try not to read it all into context.
+
 ## Development Commands
 
 ```bash

@@ -1,9 +1,10 @@
-import { useMemo, useEffect } from 'react'
+import { useMemo, useEffect, useState, useCallback } from 'react'
 import { useVatsimStore } from '../../stores/vatsimStore'
 import { useRealTrafficStore } from '../../stores/realTrafficStore'
 import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { aircraftModelService, type ModelInfo } from '../../services/AircraftModelService'
+import { userVMRService } from '../../services/UserVMRService'
 import './ModelMatchingModal.css'
 
 interface ModelMatchingModalProps {
@@ -16,11 +17,63 @@ interface AircraftModelData {
   modelInfo: ModelInfo
 }
 
+/** Test result for manual model matching lookup */
+interface TestResult {
+  callsign: string
+  aircraftType: string
+  modelInfo: ModelInfo
+  vmrAlternatives: string[]
+}
+
 function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
   const dataSource = useGlobalSettingsStore((state) => state.realtraffic.dataSource)
   const pilots = useVatsimStore((state) => state.pilots)
   const rtAircraftStates = useRealTrafficStore((state) => state.aircraftStates)
   const aircraftDataRadiusNM = useSettingsStore((state) => state.memory.aircraftDataRadiusNM)
+
+  // Counter to force re-render when model conversions complete
+  const [conversionVersion, setConversionVersion] = useState(0)
+
+  // Test panel state
+  const [testAirline, setTestAirline] = useState('')
+  const [testType, setTestType] = useState('')
+  const [testResult, setTestResult] = useState<TestResult | null>(null)
+
+  // Listen for model conversion completions to refresh the table
+  useEffect(() => {
+    const handleConversionComplete = () => {
+      // Increment version to trigger useMemo recalculation
+      setConversionVersion(v => v + 1)
+    }
+
+    window.addEventListener('model-conversion-complete', handleConversionComplete)
+    return () => {
+      window.removeEventListener('model-conversion-complete', handleConversionComplete)
+    }
+  }, [])
+
+  // Run test lookup
+  const runTest = useCallback(() => {
+    if (!testType.trim()) return
+
+    const airlineCode = testAirline.trim().toUpperCase() || null
+    const aircraftType = testType.trim().toUpperCase()
+    // Create a fake callsign for model matching (airline + flight number)
+    const fakeCallsign = airlineCode ? `${airlineCode}999` : 'N12345'
+
+    // Clear the cache for this lookup to get fresh results
+    aircraftModelService.clearCache()
+
+    const modelInfo = aircraftModelService.getModelInfo(aircraftType, fakeCallsign)
+    const vmrAlternatives = userVMRService.getAlternatives(aircraftType, airlineCode)
+
+    setTestResult({
+      callsign: fakeCallsign,
+      aircraftType,
+      modelInfo,
+      vmrAlternatives
+    })
+  }, [testAirline, testType])
 
   // Build model matching data for all aircraft in range
   const aircraftData = useMemo<AircraftModelData[]>(() => {
@@ -52,7 +105,8 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
         }
       })
       .sort((a, b) => a.callsign.localeCompare(b.callsign))
-  }, [dataSource, pilots, rtAircraftStates])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- conversionVersion triggers refresh when models finish converting
+  }, [dataSource, pilots, rtAircraftStates, conversionVersion])
 
   // Format scale for display
   const formatScale = (scale: { x: number; y: number; z: number }): { text: string; isScaled: boolean } => {
@@ -71,11 +125,17 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
     }
   }
 
-  // Extract display-friendly model name from URL
+  // Extract display-friendly model name from ModelInfo
+  // MSFS models: Use matchedModel directly (e.g., "FSLTL_FAIB_B738_American")
+  // FSLTL: "...fsltl/B738/AAL/model.glb" -> "B738/AAL"
   // Built-in: "./b738.glb" -> "b738"
-  // FSLTL: "...fsltl/B738/AAL/model.glb" or "...fsltl%5CB738%5CAAL%5Cmodel.glb" -> "B738/AAL"
-  // FSLTL base: "...fsltl/B738/base/model.glb" -> "B738"
   const getModelName = (modelInfo: ModelInfo): { name: string; variationName?: string } => {
+    // For FSLTL/MSFS converted models, use matchedModel directly
+    // This contains the clean model name like "FSLTL_FAIB_B738_American"
+    if (modelInfo.isFsltl && modelInfo.matchedModel) {
+      return { name: modelInfo.matchedModel }
+    }
+
     const modelUrl = modelInfo.modelUrl
 
     // Decode URL-encoded characters (e.g., %5C -> \, %3A -> :)
@@ -100,15 +160,11 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
   const getMatchTypeDisplay = (matchType: string): { label: string; className: string } => {
     switch (matchType) {
       case 'exact':
-      case 'fsltl':
         return { label: 'exact', className: 'exact' }
-      case 'mapped':
-      case 'fsltl-base':
-        return { label: 'mapped', className: 'mapped' }
-      case 'fsltl-vmr':
-        return { label: 'vmr', className: 'mapped' }
       case 'closest':
         return { label: 'closest', className: 'closest' }
+      case 'pending':
+        return { label: 'converting...', className: 'pending' }
       case 'fallback':
       default:
         return { label: 'fallback', className: 'fallback' }
@@ -141,6 +197,82 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
 
         <div className="model-matching-summary">
           {aircraftData.length} aircraft within data radius ({aircraftDataRadiusNM} NM)
+        </div>
+
+        {/* Model Matching Tester */}
+        <div className="model-test-panel">
+          <div className="model-test-inputs">
+            <input
+              type="text"
+              placeholder="Airline (e.g., UAL)"
+              value={testAirline}
+              onChange={(e) => setTestAirline(e.target.value)}
+              className="model-test-input"
+              maxLength={4}
+            />
+            <input
+              type="text"
+              placeholder="Type (e.g., B738)"
+              value={testType}
+              onChange={(e) => setTestType(e.target.value)}
+              className="model-test-input"
+              maxLength={4}
+              onKeyDown={(e) => e.key === 'Enter' && runTest()}
+            />
+            <button
+              onClick={runTest}
+              disabled={!testType.trim()}
+              className="model-test-button"
+            >
+              Test
+            </button>
+          </div>
+          {testResult && (
+            <div className="model-test-result">
+              <div className="model-test-result-row">
+                <span className="model-test-label">Callsign:</span>
+                <span className="model-test-value">{testResult.callsign}</span>
+              </div>
+              <div className="model-test-result-row">
+                <span className="model-test-label">Type:</span>
+                <span className="model-test-value">{testResult.aircraftType}</span>
+              </div>
+              <div className="model-test-result-row">
+                <span className="model-test-label">Model:</span>
+                <span className="model-test-value model-name">
+                  {getModelName(testResult.modelInfo).name}
+                </span>
+              </div>
+              <div className="model-test-result-row">
+                <span className="model-test-label">Match:</span>
+                <span className={`match-badge ${getMatchTypeDisplay(testResult.modelInfo.matchType).className}`}>
+                  {getMatchTypeDisplay(testResult.modelInfo.matchType).label}
+                </span>
+              </div>
+              {testResult.modelInfo.matchType === 'closest' && (
+                <div className="model-test-result-row">
+                  <span className="model-test-label">Scale:</span>
+                  <span className="model-test-value scale-value scaled">
+                    {formatScale(testResult.modelInfo.scale).text}
+                  </span>
+                </div>
+              )}
+              {testResult.vmrAlternatives.length > 0 && (
+                <div className="model-test-result-row">
+                  <span className="model-test-label">VMR Options:</span>
+                  <span className="model-test-value vmr-alternatives">
+                    {testResult.vmrAlternatives.join(', ')}
+                  </span>
+                </div>
+              )}
+              <div className="model-test-result-row">
+                <span className="model-test-label">URL:</span>
+                <span className="model-test-value model-url" title={testResult.modelInfo.modelUrl}>
+                  {testResult.modelInfo.modelUrl}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="model-matching-table-container">

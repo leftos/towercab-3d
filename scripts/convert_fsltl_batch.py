@@ -25,6 +25,7 @@ Usage:
 # This allows us to write errors to the progress file if imports fail
 import sys
 import json
+import traceback  # Safe stdlib import - needed for error handling
 from pathlib import Path
 
 def _get_progress_file_from_args():
@@ -68,7 +69,6 @@ try:
     from PIL import Image
     import numpy as np
     import io
-    import traceback
     import time
     import os
     import subprocess
@@ -373,11 +373,13 @@ def convert_single_gltf(gltf_path: Path, output_path: Path, texture_dirs: list[P
     current_offset = len(bin_data)
 
     # Create buffer view for UV data
+    # byteStride is required when multiple accessors share a buffer view
     uv_buffer_view_idx = len(gltf['bufferViews'])
     gltf['bufferViews'].append({
         'buffer': 0,
         'byteOffset': uv_bv_start,
-        'byteLength': len(new_uv_data)
+        'byteLength': len(new_uv_data),
+        'byteStride': 8  # VEC2 float32 = 8 bytes
     })
 
     # Update UV accessors
@@ -406,6 +408,13 @@ def convert_single_gltf(gltf_path: Path, output_path: Path, texture_dirs: list[P
         gltf['extensionsRequired'] = [e for e in gltf['extensionsRequired'] if e not in extensions_to_remove]
         if not gltf['extensionsRequired']:
             del gltf['extensionsRequired']
+
+    # Clean up asset extensions (ASOBO extensions often stored here)
+    if 'asset' in gltf and 'extensions' in gltf['asset']:
+        for ext in extensions_to_remove:
+            gltf['asset']['extensions'].pop(ext, None)
+        if not gltf['asset']['extensions']:
+            del gltf['asset']['extensions']
 
     # Clean up materials
     if 'materials' in gltf:
@@ -770,6 +779,55 @@ def convert_model_task(args_tuple):
         }
 
 
+def convert_single_model_cli(args):
+    """
+    Handle --single mode: convert a single GLTF file with specified texture directories.
+    Used for on-the-fly conversion when an aircraft first appears.
+    """
+    gltf_path = Path(args.gltf)
+    output_path = Path(args.output)
+    texture_scale = TEXTURE_SCALE_MAP.get(args.texture_scale, 1024)
+
+    if not gltf_path.exists():
+        print(f"ERROR: GLTF file not found: {gltf_path}", file=sys.stderr)
+        return 1
+
+    # Collect texture directories
+    texture_dirs = []
+    if args.texture_dir:
+        for tex_dir in args.texture_dir:
+            tex_path = Path(tex_dir)
+            if tex_path.exists():
+                texture_dirs.append(tex_path)
+            else:
+                print(f"Warning: Texture directory not found: {tex_dir}", file=sys.stderr)
+
+    # If no texture dirs specified, look in parent directories
+    if not texture_dirs:
+        model_dir = gltf_path.parent
+        aircraft_dir = model_dir.parent
+        texture_dirs = list(aircraft_dir.glob("TEXTURE*")) + list(aircraft_dir.glob("texture*"))
+        # Also check for AIG-style oci.* folders
+        texture_dirs.extend(list(aircraft_dir.glob("oci.texture*")))
+        texture_dirs.extend(list(aircraft_dir.glob("oci.*")))
+
+    try:
+        result = convert_single_gltf(gltf_path, output_path, texture_dirs, texture_scale)
+
+        if result['success']:
+            size_mb = result.get('output_size', 0) / 1024 / 1024
+            print(f"Converted: {output_path} ({size_mb:.2f} MB)")
+            return 0
+        else:
+            print(f"ERROR: {result.get('error', 'Unknown error')}", file=sys.stderr)
+            return 1
+
+    except Exception as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        traceback.print_exc()
+        return 1
+
+
 def main():
     # Quick self-test before full argument parsing (allows --self-test without other required args)
     if '--self-test' in sys.argv:
@@ -785,6 +843,18 @@ def main():
         print(f"  NumPy operations: OK")
         print("Self-test PASSED: All dependencies working correctly.")
         return 0
+
+    # Check for --single mode first (allows different required args)
+    if '--single' in sys.argv:
+        parser = argparse.ArgumentParser(description='Convert a single MSFS GLTF to GLB')
+        parser.add_argument('--single', action='store_true', help='Single file conversion mode')
+        parser.add_argument('--gltf', required=True, help='Path to input GLTF file')
+        parser.add_argument('--output', required=True, help='Path for output GLB file')
+        parser.add_argument('--texture-dir', action='append', help='Texture directory (can specify multiple)')
+        parser.add_argument('--texture-scale', default='1k', choices=['full', '2k', '1k', '512'],
+                            help='Texture scaling (default: 1k)')
+        args = parser.parse_args()
+        return convert_single_model_cli(args)
 
     parser = argparse.ArgumentParser(description='Convert FSLTL models to GLB')
     parser.add_argument('--source', required=True, help='Path to fsltl-traffic-base')

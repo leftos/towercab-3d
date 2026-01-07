@@ -111,10 +111,126 @@
   color: #e57373;
 }
 
+.match-badge.pending {
+  background: rgba(156, 39, 176, 0.2);
+  border: 1px solid rgba(156, 39, 176, 0.4);
+  color: #ba68c8;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
 /* Empty state */
 .model-matching-empty {
   padding: 40px 20px;
   text-align: center;
   color: rgba(255, 255, 255, 0.5);
   font-size: 14px;
+}
+
+/* Model Matching Tester */
+.model-test-panel {
+  padding: 12px 20px;
+  background: rgba(0, 0, 0, 0.15);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.model-test-inputs {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.model-test-input {
+  width: 100px;
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: white;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  text-transform: uppercase;
+}
+
+.model-test-input::placeholder {
+  text-transform: none;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.model-test-input:focus {
+  outline: none;
+  border-color: rgba(79, 195, 247, 0.5);
+}
+
+.model-test-button {
+  padding: 6px 16px;
+  background: rgba(79, 195, 247, 0.2);
+  border: 1px solid rgba(79, 195, 247, 0.4);
+  border-radius: 4px;
+  color: #4fc3f7;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.model-test-button:hover:not(:disabled) {
+  background: rgba(79, 195, 247, 0.3);
+}
+
+.model-test-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.model-test-result {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+.model-test-result-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.model-test-result-row:last-child {
+  margin-bottom: 0;
+}
+
+.model-test-label {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  min-width: 80px;
+}
+
+.model-test-value {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.model-test-value.model-name {
+  color: #81c784;
+}
+
+.model-test-value.vmr-alternatives {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+}
+
+.model-test-value.model-url {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

@@ -143,6 +143,10 @@ export type {
   BuildingQuality,
   GroundLabelMode,
 
+  // MSFS model types (on-the-fly conversion)
+  MSFSModelSource,
+  MSFSModelSettings,
+
   // Settings groups
   CesiumSettings,
   GraphicsSettings,
@@ -183,7 +187,13 @@ export {
   DEFAULT_GLOBAL_DISPLAY_SETTINGS,
 
   // Default global viewport settings values
-  DEFAULT_GLOBAL_VIEWPORT_SETTINGS
+  DEFAULT_GLOBAL_VIEWPORT_SETTINGS,
+
+  // MSFS model cache limits
+  MSFS_CACHE_LIMIT,
+
+  // Default MSFS model settings
+  DEFAULT_MSFS_MODEL_SETTINGS
 } from './settings'
 
 // ============================================================================

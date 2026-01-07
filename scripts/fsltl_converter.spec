@@ -11,23 +11,18 @@ Output:
     dist/fsltl_converter.exe (single file executable)
 """
 
-from PyInstaller.utils.hooks import collect_all, collect_submodules
+from PyInstaller.utils.hooks import collect_submodules
 
-# Collect ALL numpy components - submodules, binaries, and data files
-# This is required because numpy has a complex structure with C extensions
-numpy_datas, numpy_binaries, numpy_hiddenimports = collect_all('numpy')
-
-# Also collect PIL properly
-pil_datas, pil_binaries, pil_hiddenimports = collect_all('PIL')
-
+# Let PyInstaller's built-in numpy hook handle most of the work
+# Just add PIL DDS plugin as hidden import
 a = Analysis(
     ['convert_fsltl_batch.py'],
     pathex=[],
-    binaries=numpy_binaries + pil_binaries,
-    datas=numpy_datas + pil_datas,
-    hiddenimports=numpy_hiddenimports + pil_hiddenimports + [
+    binaries=[],
+    datas=[],
+    hiddenimports=[
         'PIL.DdsImagePlugin',  # Ensure DDS support is included
-    ],
+    ] + collect_submodules('PIL'),
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -39,14 +34,14 @@ a = Analysis(
         'cv2',
         'IPython',
         'jupyter',
-        # Exclude numpy test modules to reduce size
+        # Exclude numpy test/build modules to reduce size
         'numpy.testing',
         'numpy.tests',
         'numpy.f2py',
         'numpy.distutils',
     ],
     noarchive=False,
-    optimize=2,
+    optimize=0,  # Required: numpy internals need docstrings preserved
 )
 
 pyz = PYZ(a.pure)

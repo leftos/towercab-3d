@@ -733,6 +733,11 @@ export function getModelGroundData(modelUrl: string): ModelGroundData | null {
  * Results are cached by URL to avoid re-parsing
  */
 export async function parseGroundDataFromUrl(glbUrl: string): Promise<ModelGroundData | null> {
+  // Skip empty URLs (pending conversions have no URL yet)
+  if (!glbUrl || glbUrl === '') {
+    return null
+  }
+
   // Check cache first
   if (groundDataCache.has(glbUrl)) {
     return groundDataCache.get(glbUrl)!

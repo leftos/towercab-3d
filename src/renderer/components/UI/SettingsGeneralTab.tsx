@@ -7,7 +7,7 @@ import { useViewportStore } from '../../stores/viewportStore'
 import { useAirportStore } from '../../stores/airportStore'
 import { useAircraftTimelineStore } from '../../stores/aircraftTimelineStore'
 import { shellApi } from '../../utils/tauriApi'
-import FSLTLImportPanel from './FSLTLImportPanel'
+import MSFSModelSettingsPanel from './MSFSModelSettingsPanel'
 import CollapsibleSection from './settings/CollapsibleSection'
 import type { DataSourceType } from '../../types/realtraffic'
 import './ControlsBar.css'
@@ -432,7 +432,7 @@ function SettingsGeneralTab({ onShowImportModal, onShowExportModal, importStatus
         </div>
       </CollapsibleSection>
 
-      <FSLTLImportPanel />
+      <MSFSModelSettingsPanel />
 
       <CollapsibleSection title="Advanced / Debugging">
         <div className="setting-item">

@@ -40,7 +40,7 @@ import {
   parseModelName,
   DEFAULT_CONVERSION_PROGRESS
 } from '../types/fsltl'
-import { useSettingsStore } from '../stores/settingsStore'
+// Note: useSettingsStore was used for enableFsltlModels setting, now disabled
 import { isTauri } from '../utils/tauriApi'
 
 /** Model info returned from /api/fsltl/models endpoint */
@@ -111,10 +111,14 @@ class FSLTLServiceClass {
   }
 
   /**
-   * Check if FSLTL models are enabled in settings
+   * Check if FSLTL models are enabled
+   * @deprecated Pre-converted FSLTL models are no longer supported.
+   * Use MSFSModelConversionService for on-demand conversion instead.
    */
   private isEnabled(): boolean {
-    return useSettingsStore.getState().fsltl.enableFsltlModels
+    // Pre-conversion has been removed - always return false
+    // The new MSFSModelConversionService handles on-demand conversion
+    return false
   }
 
   // ==========================================================================

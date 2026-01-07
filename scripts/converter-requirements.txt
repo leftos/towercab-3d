@@ -1,0 +1,13 @@
+# Requirements for building the FSLTL converter executable
+# Install with: pip install -r scripts/converter-requirements.txt
+
+# PyInstaller for bundling
+pyinstaller>=6.0
+
+# Image processing (DDS texture support)
+pillow>=10.0
+
+# NumPy for array operations
+# IMPORTANT: Must use 1.x - numpy 2.x has PyInstaller bundling issues
+# (docstring stripping in optimize=2 breaks numpy internals)
+numpy>=1.24,<2.0

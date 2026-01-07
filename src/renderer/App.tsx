@@ -15,6 +15,7 @@ import DataLoadingOverlay from './components/UI/DataLoadingOverlay'
 import UpdateNotification from './components/UI/UpdateNotification'
 import ViewportManager from './components/Viewport/ViewportManager'
 import VRScene from './components/VR/VRScene'
+import LoadingScreen, { type LoadingStep, type LoadingProgress } from './components/UI/LoadingScreen'
 import { PerformanceHUD } from './components/UI/PerformanceHUD'
 import ModelMatchingModal from './components/UI/ModelMatchingModal'
 import AircraftTimelineModal from './components/UI/AircraftTimelineModal'
@@ -35,10 +36,10 @@ import { useVnasStore } from './stores/vnasStore'
 import { useAircraftTimelineStore } from './stores/aircraftTimelineStore'
 import { airportService } from './services/AirportService'
 import { aircraftDimensionsService } from './services/AircraftDimensionsService'
-import { fsltlService } from './services/FSLTLService'
-import * as fsltlApi from './services/fsltlApi'
 import { migrateFromElectron, isMigrationComplete } from './services/MigrationService'
 import { modService } from './services/ModService'
+import { userVMRService } from './services/UserVMRService'
+import { MSFSModelConversionService } from './services/MSFSModelConversionService'
 import { realTrafficService } from './services/RealTrafficService'
 import { isOrbitWithoutAirport } from './utils/viewingContext'
 import { isRemoteMode } from './utils/remoteMode'
@@ -48,10 +49,8 @@ function App() {
   const startPolling = useVatsimStore((state) => state.startPolling)
   const loadAirports = useAirportStore((state) => state.loadAirports)
   const currentAirport = useAirportStore((state) => state.currentAirport)
-  // Cesium token and FSLTL settings come from global settings (shared across browsers)
+  // Cesium token comes from global settings (shared across browsers)
   const setCesiumIonToken = useGlobalSettingsStore((state) => state.setCesiumIonToken)
-  const fsltlSourcePath = useGlobalSettingsStore((state) => state.fsltl.sourcePath)
-  const fsltlOutputPath = useGlobalSettingsStore((state) => state.fsltl.outputPath)
   const showWeatherEffects = useSettingsStore((state) => state.weather.showWeatherEffects)
   const showMetarOverlay = useSettingsStore((state) => state.ui.showMetarOverlay)
   const updateUISettings = useSettingsStore((state) => state.updateUISettings)
@@ -74,8 +73,36 @@ function App() {
   const pushModal = useUIFeedbackStore((state) => state.pushModal)
   const popModal = useUIFeedbackStore((state) => state.popModal)
 
+  // Loading progress state
   const [isLoading, setIsLoading] = useState(true)
-  const [loadingStatus, setLoadingStatus] = useState('Initializing...')
+  const [loadingProgress, setLoadingProgress] = useState<LoadingProgress>({
+    currentStep: 0,
+    totalSteps: 8,
+    stepProgress: 0,
+    status: 'Initializing...'
+  })
+
+  // Define loading steps with relative weights (heavier = takes longer)
+  const loadingSteps: LoadingStep[] = [
+    { id: 'settings', label: 'Loading settings', weight: 5 },
+    { id: 'migration', label: 'Checking migration', weight: 5 },
+    { id: 'mods', label: 'Loading mods', weight: 10 },
+    { id: 'airports', label: 'Loading airports', weight: 25 },
+    { id: 'msfs', label: 'Detecting MSFS', weight: 30 },
+    { id: 'vmr', label: 'Loading VMR rules', weight: 5 },
+    { id: 'datasource', label: 'Connecting', weight: 15 },
+    { id: 'finalize', label: 'Finalizing', weight: 5 }
+  ]
+
+  // Helper to update progress
+  const updateProgress = useCallback((step: number, stepProgress: number, status: string) => {
+    setLoadingProgress({
+      currentStep: step,
+      totalSteps: loadingSteps.length,
+      stepProgress,
+      status
+    })
+  }, [loadingSteps.length])
 
   // Track Cesium viewer for VR integration
   const [cesiumViewer, setCesiumViewer] = useState<Viewer | null>(null)
@@ -107,19 +134,21 @@ function App() {
   useEffect(() => {
     async function initialize() {
       try {
-        // Initialize global settings first (loads from host file system)
+        // Step 0: Initialize global settings first (loads from host file system)
         // This also migrates cesiumIonToken and FSLTL settings from localStorage
-        setLoadingStatus('Loading settings...')
+        updateProgress(0, 0, 'Loading settings...')
         await initializeGlobalSettings()
+        updateProgress(0, 100, 'Settings loaded')
 
-        // Migrate settings from Electron version (one-time, on first launch)
+        // Step 1: Migrate settings from Electron version (one-time, on first launch)
+        updateProgress(1, 0, 'Checking for previous installation...')
         if (!isMigrationComplete()) {
-          setLoadingStatus('Checking for previous installation...')
           const migrationResult = await migrateFromElectron()
           if (migrationResult.settingsFound) {
             console.log('Migrated settings from Electron version')
           }
         }
+        updateProgress(1, 100, 'Migration check complete')
 
         // Set Cesium Ion access token (from global settings)
         const token = useGlobalSettingsStore.getState().cesiumIonToken
@@ -127,14 +156,17 @@ function App() {
           Ion.defaultAccessToken = token
         }
 
-        // Load mods (tower positions, custom aircraft, etc.)
-        setLoadingStatus('Loading mods...')
+        // Step 2: Load mods (tower positions, custom aircraft, etc.)
+        updateProgress(2, 0, 'Loading mods...')
         await modService.loadMods()
+        updateProgress(2, 100, 'Mods loaded')
 
-        // Load airport database
-        setLoadingStatus('Loading airport database...')
+        // Step 3: Load airport database
+        updateProgress(3, 0, 'Loading airport database...')
         const airports = await airportService.loadAirports()
+        updateProgress(3, 80, 'Processing airports...')
         loadAirports(Object.fromEntries(airports))
+        updateProgress(3, 100, 'Airports loaded')
 
         // Load runway database (non-blocking, used for smart sort)
         useRunwayStore.getState().loadRunways()
@@ -142,59 +174,27 @@ function App() {
         // Load aircraft dimensions data (non-blocking)
         aircraftDimensionsService.load()
 
-        // Initialize FSLTL service (loads registry and VMR rules if source path is set)
-        setLoadingStatus('Loading aircraft models...')
-        await fsltlService.initialize()
+        // Step 4: Initialize MSFS model conversion service (detects FSLTL/AIG from Community folder)
+        updateProgress(4, 0, 'Detecting MSFS installations...')
+        // Pass a progress callback that updates step progress
+        await MSFSModelConversionService.initialize((status, progress) => {
+          updateProgress(4, progress ?? 50, status)
+        })
+        updateProgress(4, 100, 'MSFS detection complete')
 
-        // Scan output directory for existing models and rebuild registry
-        // This ensures models are loaded even if they were converted with a different path
-        let outputPath = fsltlOutputPath
-        try {
-          // Use saved output path or get default
-          console.log(`[App] FSLTL outputPath from settings: ${outputPath}`)
-          if (!outputPath) {
-            const [defaultPath] = await fsltlApi.getFsltlDefaultOutputPath()
-            outputPath = defaultPath
-            console.log(`[App] Using default FSLTL path: ${outputPath}`)
-          }
-          if (outputPath) {
-            const scannedCount = await fsltlService.scanAndRebuildRegistry(outputPath)
-            console.log(`[App] Scanned ${scannedCount} FSLTL models from ${outputPath}`)
-          }
-        } catch (err) {
-          console.warn('[App] Failed to scan FSLTL models:', err)
-        }
+        // Step 5: Load user VMR files (from Settings > MSFS Aircraft Models)
+        updateProgress(5, 0, 'Loading VMR rules...')
+        await userVMRService.loadVMRFiles((status, progress) => {
+          updateProgress(5, progress, status)
+        })
+        updateProgress(5, 100, 'VMR rules loaded')
 
-        // Load VMR rules - try output folder first (copied during conversion), then source folder
-        let vmrLoaded = false
-        if (outputPath) {
-          try {
-            const vmrContent = await fsltlApi.readVmrFromOutput(outputPath)
-            if (vmrContent) {
-              fsltlService.parseVMRContent(vmrContent)
-              console.log('[App] Loaded FSLTL VMR rules from output folder')
-              vmrLoaded = true
-            }
-          } catch (err) {
-            console.warn('[App] Failed to load VMR from output folder:', err)
-          }
-        }
-        if (!vmrLoaded && fsltlSourcePath) {
-          try {
-            const vmrContent = await fsltlApi.readVmrFile(fsltlSourcePath)
-            fsltlService.parseVMRContent(vmrContent)
-            console.log('[App] Loaded FSLTL VMR rules from source folder')
-          } catch (err) {
-            console.warn('[App] Failed to load FSLTL VMR (source may not exist):', err)
-          }
-        }
-
-        // Start data source polling based on settings
+        // Step 6: Start data source polling based on settings
         const dataSource = useGlobalSettingsStore.getState().realtraffic.dataSource
         if (dataSource === 'realtraffic') {
           const licenseKey = useGlobalSettingsStore.getState().realtraffic.licenseKey
           if (licenseKey) {
-            setLoadingStatus('Connecting to RealTraffic...')
+            updateProgress(6, 0, 'Connecting to RealTraffic...')
             const rtStore = useRealTrafficStore.getState()
             await rtStore.authenticate(licenseKey)
             // If authentication succeeded and we're connected, start polling
@@ -203,20 +203,24 @@ function App() {
               // Start the timeline store prune timer for RealTraffic
               useAircraftTimelineStore.getState().startPruneTimer()
             }
+            updateProgress(6, 100, 'Connected to RealTraffic')
           } else {
-            setLoadingStatus('RealTraffic license required...')
+            updateProgress(6, 100, 'RealTraffic license required')
             // No license key - user will need to enter one in settings
           }
         } else {
           // VATSIM data source
-          setLoadingStatus('Connecting to VATSIM...')
+          updateProgress(6, 0, 'Connecting to VATSIM...')
           startPolling()
           // Start the timeline store prune timer for VATSIM
           useAircraftTimelineStore.getState().startPruneTimer()
+          updateProgress(6, 100, 'Connected to VATSIM')
         }
 
-        // Check VR support
+        // Step 7: Finalize
+        updateProgress(7, 0, 'Finalizing...')
         checkVRSupport()
+        updateProgress(7, 100, 'Ready')
 
         setIsLoading(false)
 
@@ -232,7 +236,12 @@ function App() {
         }
       } catch (error) {
         console.error('Initialization error:', error)
-        setLoadingStatus(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        // Keep current step, just update status to show error
+        setLoadingProgress(prev => ({
+          ...prev,
+          stepProgress: 0,
+          status: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+        }))
       }
     }
 
@@ -241,8 +250,7 @@ function App() {
     return () => {
       performanceMonitor.stopLogging()
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startPolling, loadAirports, checkVRSupport])
+  }, [startPolling, loadAirports, checkVRSupport, updateProgress])
 
   // Deep link handler for OAuth callbacks (tc3d://oauth/callback)
   useEffect(() => {
@@ -410,50 +418,7 @@ function App() {
 
 
   if (isLoading) {
-    return (
-      <div className="loading-screen">
-        <div className="loading-content">
-          <img src="/logo.png" alt="TowerCab 3D" className="loading-logo" />
-          <div className="loading-spinner"></div>
-          <p>{loadingStatus}</p>
-        </div>
-        <style>{`
-          .loading-screen {
-            width: 100vw;
-            height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2f 100%);
-          }
-          .loading-content {
-            text-align: center;
-            color: white;
-          }
-          .loading-logo {
-            width: 128px;
-            height: 128px;
-            margin-bottom: 24px;
-          }
-          .loading-spinner {
-            width: 40px;
-            height: 40px;
-            border: 3px solid rgba(79, 195, 247, 0.2);
-            border-top-color: #4fc3f7;
-            border-radius: 50%;
-            margin: 0 auto 16px;
-            animation: spin 1s linear infinite;
-          }
-          @keyframes spin {
-            to { transform: rotate(360deg); }
-          }
-          .loading-content p {
-            font-size: 14px;
-            color: rgba(255, 255, 255, 0.6);
-          }
-        `}</style>
-      </div>
-    )
+    return <LoadingScreen progress={loadingProgress} steps={loadingSteps} />
   }
 
   return (
