@@ -590,8 +590,8 @@ def find_gltf_in_model_dir(model_dir: Path) -> Path | None:
     if not all_gltf:
         return None
 
-    # Filter out interior models (we want exterior only)
-    exterior_gltf = [f for f in all_gltf if 'INTERIOR' not in f.stem.upper()]
+    # Filter out interior/cockpit models (we want exterior only)
+    exterior_gltf = [f for f in all_gltf if 'INTERIOR' not in f.stem.upper() and 'COCKPIT' not in f.stem.upper()]
     if not exterior_gltf:
         exterior_gltf = all_gltf  # Fall back to all if no exterior found
 
@@ -738,9 +738,41 @@ def write_progress(progress_file: Path, progress: dict):
 
 
 def convert_model_task(args_tuple):
-    """Worker function to convert a single model. Returns result dict."""
-    model_name, source_path, output_path, texture_scale, texture_scale_name = args_tuple
+    """Worker function for batch conversion. Wraps convert_single_model with output path logic."""
+    model_name, source_path, output_base_path, texture_scale, texture_scale_name = args_tuple
 
+    # Determine output path based on model name
+    aircraft_type, airline_code = parse_model_name(model_name)
+    if airline_code:
+        model_output = output_base_path / aircraft_type / airline_code / "model.glb"
+    else:
+        model_output = output_base_path / aircraft_type / "base" / "model.glb"
+
+    # Use the shared conversion function
+    result = convert_single_model(source_path, model_name, model_output, texture_scale)
+    result['texture_scale_name'] = texture_scale_name
+
+    return result
+
+
+def convert_single_model(source_path: Path, model_name: str, output_path: Path,
+                         texture_scale: int | None = None) -> dict:
+    """
+    Convert a single FSLTL/AIG model to GLB.
+
+    This is the core conversion function used by both batch and single modes.
+    It uses find_model_gltf() to properly resolve texture directories, ensuring
+    livery textures take priority over base model textures.
+
+    Args:
+        source_path: Path to fsltl-traffic-base (or AIG equivalent)
+        model_name: Folder name (e.g., "FSLTL_A320_BAW_IAE")
+        output_path: Where to write the GLB file
+        texture_scale: Max texture dimension (None for full, 1024 for 1k, etc.)
+
+    Returns:
+        dict with success, output_size, has_animations, error, etc.
+    """
     try:
         # Find aircraft directory
         aircraft_dir = source_path / "SimObjects" / "Airplanes" / model_name
@@ -748,24 +780,20 @@ def convert_model_task(args_tuple):
             raise FileNotFoundError(f"Aircraft directory not found: {aircraft_dir}")
 
         # Find GLTF and textures (handles both base models and liveries)
+        # This is the key function that properly resolves texture directories
         gltf_path, texture_dirs, base_dir = find_model_gltf(aircraft_dir)
         if gltf_path is None:
             raise FileNotFoundError(f"No GLTF file found for {model_name} (checked base_container if livery)")
 
-        # Determine output path
+        # Parse model name for metadata
         aircraft_type, airline_code = parse_model_name(model_name)
-        if airline_code:
-            model_output = output_path / aircraft_type / airline_code / "model.glb"
-        else:
-            model_output = output_path / aircraft_type / "base" / "model.glb"
 
         # Convert
-        result = convert_single_gltf(gltf_path, model_output, texture_dirs, texture_scale)
+        result = convert_single_gltf(gltf_path, output_path, texture_dirs, texture_scale)
         result['model_name'] = model_name
-        result['output_path'] = str(model_output)
+        result['output_path'] = str(output_path)
         result['aircraft_type'] = aircraft_type
         result['airline_code'] = airline_code
-        result['texture_scale_name'] = texture_scale_name
         result['is_livery'] = base_dir is not None
 
         return result
@@ -777,55 +805,6 @@ def convert_model_task(args_tuple):
             'error': str(e),
             'traceback': traceback.format_exc()
         }
-
-
-def convert_single_model_cli(args):
-    """
-    Handle --single mode: convert a single GLTF file with specified texture directories.
-    Used for on-the-fly conversion when an aircraft first appears.
-    """
-    gltf_path = Path(args.gltf)
-    output_path = Path(args.output)
-    texture_scale = TEXTURE_SCALE_MAP.get(args.texture_scale, 1024)
-
-    if not gltf_path.exists():
-        print(f"ERROR: GLTF file not found: {gltf_path}", file=sys.stderr)
-        return 1
-
-    # Collect texture directories
-    texture_dirs = []
-    if args.texture_dir:
-        for tex_dir in args.texture_dir:
-            tex_path = Path(tex_dir)
-            if tex_path.exists():
-                texture_dirs.append(tex_path)
-            else:
-                print(f"Warning: Texture directory not found: {tex_dir}", file=sys.stderr)
-
-    # If no texture dirs specified, look in parent directories
-    if not texture_dirs:
-        model_dir = gltf_path.parent
-        aircraft_dir = model_dir.parent
-        texture_dirs = list(aircraft_dir.glob("TEXTURE*")) + list(aircraft_dir.glob("texture*"))
-        # Also check for AIG-style oci.* folders
-        texture_dirs.extend(list(aircraft_dir.glob("oci.texture*")))
-        texture_dirs.extend(list(aircraft_dir.glob("oci.*")))
-
-    try:
-        result = convert_single_gltf(gltf_path, output_path, texture_dirs, texture_scale)
-
-        if result['success']:
-            size_mb = result.get('output_size', 0) / 1024 / 1024
-            print(f"Converted: {output_path} ({size_mb:.2f} MB)")
-            return 0
-        else:
-            print(f"ERROR: {result.get('error', 'Unknown error')}", file=sys.stderr)
-            return 1
-
-    except Exception as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        traceback.print_exc()
-        return 1
 
 
 def main():
@@ -846,15 +825,31 @@ def main():
 
     # Check for --single mode first (allows different required args)
     if '--single' in sys.argv:
-        parser = argparse.ArgumentParser(description='Convert a single MSFS GLTF to GLB')
-        parser.add_argument('--single', action='store_true', help='Single file conversion mode')
-        parser.add_argument('--gltf', required=True, help='Path to input GLTF file')
+        parser = argparse.ArgumentParser(description='Convert a single MSFS model to GLB')
+        parser.add_argument('--single', action='store_true', help='Single model conversion mode')
+        parser.add_argument('--source', required=True, help='Path to fsltl-traffic-base (or AIG equivalent)')
+        parser.add_argument('--model', required=True, help='Model folder name (e.g., FSLTL_A320_BAW_IAE)')
         parser.add_argument('--output', required=True, help='Path for output GLB file')
-        parser.add_argument('--texture-dir', action='append', help='Texture directory (can specify multiple)')
         parser.add_argument('--texture-scale', default='1k', choices=['full', '2k', '1k', '512'],
                             help='Texture scaling (default: 1k)')
         args = parser.parse_args()
-        return convert_single_model_cli(args)
+
+        source_path = Path(args.source)
+        output_path = Path(args.output)
+        texture_scale = TEXTURE_SCALE_MAP.get(args.texture_scale, 1024)
+
+        # Use the same conversion function as batch mode
+        result = convert_single_model(source_path, args.model, output_path, texture_scale)
+
+        if result.get('success'):
+            size_mb = result.get('output_size', 0) / 1024 / 1024
+            print(f"Converted: {output_path} ({size_mb:.2f} MB)")
+            return 0
+        else:
+            print(f"ERROR: {result.get('error', 'Unknown error')}", file=sys.stderr)
+            if result.get('traceback'):
+                print(result['traceback'], file=sys.stderr)
+            return 1
 
     parser = argparse.ArgumentParser(description='Convert FSLTL models to GLB')
     parser.add_argument('--source', required=True, help='Path to fsltl-traffic-base')

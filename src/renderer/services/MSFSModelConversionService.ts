@@ -33,8 +33,10 @@ import { aircraftDimensionsService } from './AircraftDimensionsService'
 export interface SourceModelInfo {
   /** Source type (fsltl or aig) */
   source: MSFSModelSource
-  /** Model name (e.g., "FSLTL_B738_AAL" or "AIGAIM_B738-MAX8") */
+  /** Model name - display name from aircraft.cfg title */
   modelName: string
+  /** Folder name - actual folder name (e.g., "FSLTL_A320_BAW_IAE") */
+  folderName: string
   /** Path to the GLTF file */
   gltfPath: string
   /** Paths to texture directories */
@@ -687,15 +689,24 @@ class MSFSModelConversionServiceClass {
       // Always need an output path - use cache directory or temp location
       const finalOutputPath = outputPath || await this.getTempOutputPath(modelKey)
 
+      // Determine source path based on model source type
+      const sourcePath = sourceInfo.source === 'fsltl'
+        ? this.lastDetection?.fsltlPath
+        : this.lastDetection?.aigPath
+
+      if (!sourcePath) {
+        throw new Error(`No source path available for ${sourceInfo.source} models`)
+      }
+
       const result = await invoke<{
         success: boolean
         outputPath?: string
         error?: string
         durationMs: number
       }>('convert_msfs_model', {
-        gltfPath: sourceInfo.gltfPath,
+        sourcePath,
+        folderName: sourceInfo.folderName,
         outputPath: finalOutputPath,
-        textureDirs: sourceInfo.textureDirs,
         textureScale: settings.textureScale
       })
 

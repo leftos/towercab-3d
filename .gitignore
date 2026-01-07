@@ -67,3 +67,6 @@ build-signed.ps1
 
 # Local planning docs (not for public repo)
 docs/private/
+
+# Python cache
+__pycache__/
