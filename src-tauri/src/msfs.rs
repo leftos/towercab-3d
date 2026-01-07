@@ -806,15 +806,16 @@ pub fn list_aig_models(base_path: String) -> Result<Vec<SourceModelInfo>, String
 // TAURI COMMANDS - CONVERSION
 // =============================================================================
 
-/// Convert a single MSFS model (FSLTL or AIG) to GLB format
+/// Convert one or more MSFS model liveries to GLB format
 /// This is used for on-the-fly conversion when an aircraft first appears
 ///
 /// Arguments:
-/// - source_path: Path to the traffic base folder (fsltl-traffic-base or AIG equivalent)
-/// - folder_name: Model folder name (e.g., "FSLTL_A320_BAW_IAE")
-/// - output_path: Where to write the converted GLB
+/// - source_path: Path to aircraft folder (source/SimObjects/Airplanes/FSLTL_B738_AAL).
+///                Converter auto-detects this and skips global scan for fast conversion.
+/// - folder_name: Aircraft folder name (used for logging, e.g., "FSLTL_B738_AAL")
+/// - output_path: Base directory for converted models (structure: TYPE/AIRLINE/model.glb)
 /// - texture_scale: Texture scaling ("full", "2k", "1k", "512")
-/// - texture_dirs: Optional list of texture directories (bypasses auto-discovery)
+/// - texture_dirs: Pre-computed texture directories from model indexing (for reference/debugging)
 #[tauri::command]
 pub async fn convert_msfs_model(
     app: tauri::AppHandle,
@@ -855,26 +856,17 @@ pub async fn convert_msfs_model(
             .map_err(|e| format!("Failed to create output directory: {}", e))?;
     }
 
-    // Build command arguments for single model conversion
-    // --single mode uses the same texture resolution logic as batch mode
-    let cmd = Command::new(&converter_path);
-    let mut cmd = cmd;
+    // Build command arguments
+    let mut cmd = Command::new(&converter_path);
     cmd.args([
-        "--single",
         "--source", &source_path,
-        "--model", &folder_name,
         "--output", &output_path,
         "--texture-scale", &texture_scale,
     ]);
 
-    // Pass explicit texture directories if provided (bypasses auto-discovery)
-    // This is critical for AIG models where multiple liveries share the same base model
-    if let Some(ref dirs) = texture_dirs {
-        if !dirs.is_empty() {
-            let dirs_str = dirs.join(";");
-            cmd.args(["--texture-dirs", &dirs_str]);
-        }
-    }
+    // Note: texture_dirs are pre-computed during indexing but not passed to converter
+    // (converter auto-detects textures in source directory tree)
+    let _ = texture_dirs;
 
     // Hide console window on Windows
     #[cfg(windows)]
@@ -898,27 +890,16 @@ pub async fn convert_msfs_model(
     }
 
     if output.status.success() {
-        // Verify output file exists
-        if PathBuf::from(&output_path).exists() {
-            println!("[MSFSConvert] Converted {} in {}ms -> {}",
-                folder_name,
-                duration_ms,
-                output_path);
-            Ok(MSFSConversionResult {
-                success: true,
-                output_path: Some(output_path),
-                error: None,
-                duration_ms,
-            })
-        } else {
-            println!("[MSFSConvert] Output file not found: {}", output_path);
-            Ok(MSFSConversionResult {
-                success: false,
-                output_path: None,
-                error: Some(format!("Output file not found at: {}. Stderr: {}", output_path, stderr)),
-                duration_ms,
-            })
-        }
+        println!("[MSFSConvert] Converted {} in {}ms -> {}",
+            folder_name,
+            duration_ms,
+            output_path);
+        Ok(MSFSConversionResult {
+            success: true,
+            output_path: Some(output_path),
+            error: None,
+            duration_ms,
+        })
     } else {
         let error_msg = if !stderr.is_empty() {
             stderr.to_string()
@@ -928,9 +909,7 @@ pub async fn convert_msfs_model(
             format!("Conversion failed with exit code: {:?}", output.status.code())
         };
 
-        println!("[MSFSConvert] Failed to convert {}: {}",
-            folder_name,
-            error_msg);
+        println!("[MSFSConvert] Failed to convert {}: {}", folder_name, error_msg);
 
         Ok(MSFSConversionResult {
             success: false,
