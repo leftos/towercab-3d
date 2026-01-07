@@ -37,6 +37,8 @@ export interface SourceModelInfo {
   modelName: string
   /** Folder name - actual folder name (e.g., "FSLTL_A320_BAW_IAE") */
   folderName: string
+  /** Full path to the aircraft folder (e.g., C:\...\SimObjects\Airplanes\FSLTL_A320_BAW_IAE) */
+  aircraftFolderPath: string
   /** Path to the GLTF file */
   gltfPath: string
   /** Paths to texture directories */
@@ -805,13 +807,23 @@ class MSFSModelConversionServiceClass {
       const finalOutputPath = settings.cacheDirectory
         || await this.getTempOutputDir()
 
-      // Determine source path based on model source type
-      const sourcePath = sourceInfo.source === 'fsltl'
-        ? this.lastDetection?.fsltlPath
-        : this.lastDetection?.aigPath
+      // Determine source path - use specific aircraft folder, not the entire FSLTL/AIG folder
+      let sourcePath: string
+      if (sourceInfo.aircraftFolderPath) {
+        // Use the full path if available
+        sourcePath = sourceInfo.aircraftFolderPath
+      } else {
+        // Reconstruct from gltfPath by getting the aircraft folder
+        // gltfPath is like: .../SimObjects/Airplanes/FSLTL_A320/model/model.gltf
+        // We want: .../SimObjects/Airplanes/FSLTL_A320
+        const parts = sourceInfo.gltfPath.split(/[\/\\]/)
+        parts.pop() // Remove 'model.gltf'
+        parts.pop() // Remove 'model' folder
+        sourcePath = parts.join('\\') // Use backslashes for Windows
+      }
 
       if (!sourcePath) {
-        throw new Error(`No source path available for ${sourceInfo.source} models`)
+        throw new Error(`Cannot determine source path for model conversion`)
       }
 
       const result = await invoke<{
@@ -824,6 +836,8 @@ class MSFSModelConversionServiceClass {
         folderName: sourceInfo.folderName,
         outputPath: finalOutputPath,
         textureScale: settings.textureScale,
+        // Pass the specific livery title to convert only this livery
+        liveryTitle: sourceInfo.modelName,
         // Pass explicit texture directories from indexing (critical for AIG models
         // where multiple liveries share the same base model folder)
         textureDirs: sourceInfo.textureDirs

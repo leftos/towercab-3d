@@ -815,6 +815,7 @@ pub fn list_aig_models(base_path: String) -> Result<Vec<SourceModelInfo>, String
 /// - folder_name: Aircraft folder name (used for logging, e.g., "FSLTL_B738_AAL")
 /// - output_path: Base directory for converted models (structure: TYPE/AIRLINE/model.glb)
 /// - texture_scale: Texture scaling ("full", "2k", "1k", "512")
+/// - livery_title: Livery title from aircraft.cfg to convert (only this livery)
 /// - texture_dirs: Pre-computed texture directories from model indexing (for reference/debugging)
 #[tauri::command]
 pub async fn convert_msfs_model(
@@ -823,6 +824,7 @@ pub async fn convert_msfs_model(
     folder_name: String,
     output_path: String,
     texture_scale: String,
+    livery_title: String,
     texture_dirs: Option<Vec<String>>,
 ) -> Result<MSFSConversionResult, String> {
     let start_time = std::time::Instant::now();
@@ -863,6 +865,11 @@ pub async fn convert_msfs_model(
         "--output", &output_path,
         "--texture-scale", &texture_scale,
     ]);
+
+    // Pass the specific livery title to convert only that livery
+    if !livery_title.is_empty() {
+        cmd.args(["--liveries", &livery_title]);
+    }
 
     // Note: texture_dirs are pre-computed during indexing but not passed to converter
     // (converter auto-detects textures in source directory tree)

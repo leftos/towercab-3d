@@ -452,22 +452,47 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
 
     // Trigger on-demand indexing if a source is being enabled
     const { MSFSModelConversionService } = await import('@/services/MSFSModelConversionService')
+    const { useIndexingStore } = await import('@/stores/indexingStore')
+
     if (updates.enableFsltl === true && state.msfsModels.enableFsltl === false) {
       // FSLTL being enabled - index it if not already indexed
       console.log('[GlobalSettings] FSLTL enabled, indexing on-demand')
-      MSFSModelConversionService.indexSourceOnDemand('fsltl', (status) => {
-        console.log('[GlobalSettings]', status)
+      const indexingStore = useIndexingStore.getState()
+      indexingStore.startIndexing('fsltl')
+
+      MSFSModelConversionService.indexSourceOnDemand('fsltl', (progress, status) => {
+        useIndexingStore.getState().updateProgress(progress, status)
+        console.log('[GlobalSettings] FSLTL indexing:', `${Math.round(progress)}%`, status)
+      }).then(success => {
+        if (success) {
+          useIndexingStore.getState().finishIndexing()
+        } else {
+          useIndexingStore.getState().cancel()
+        }
       }).catch(err => {
         console.error('[GlobalSettings] Failed to index FSLTL on-demand:', err)
+        useIndexingStore.getState().cancel()
       })
     }
+
     if (updates.enableAig === true && state.msfsModels.enableAig === false) {
       // AIG being enabled - index it if not already indexed
       console.log('[GlobalSettings] AIG enabled, indexing on-demand')
-      MSFSModelConversionService.indexSourceOnDemand('aig', (status) => {
-        console.log('[GlobalSettings]', status)
+      const indexingStore = useIndexingStore.getState()
+      indexingStore.startIndexing('aig')
+
+      MSFSModelConversionService.indexSourceOnDemand('aig', (progress, status) => {
+        useIndexingStore.getState().updateProgress(progress, status)
+        console.log('[GlobalSettings] AIG indexing:', `${Math.round(progress)}%`, status)
+      }).then(success => {
+        if (success) {
+          useIndexingStore.getState().finishIndexing()
+        } else {
+          useIndexingStore.getState().cancel()
+        }
       }).catch(err => {
         console.error('[GlobalSettings] Failed to index AIG on-demand:', err)
+        useIndexingStore.getState().cancel()
       })
     }
 

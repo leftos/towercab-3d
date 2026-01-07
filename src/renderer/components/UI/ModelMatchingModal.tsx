@@ -57,7 +57,7 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
   }, [])
 
   // Run test lookup
-  const runTest = useCallback(() => {
+  const runTest = useCallback(async () => {
     if (!testType.trim()) return
 
     const airlineCode = testAirline.trim().toUpperCase() || null
@@ -68,8 +68,25 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
     // Clear the cache for this lookup to get fresh results
     aircraftModelService.clearCache()
 
-    const modelInfo = aircraftModelService.getModelInfo(aircraftType, fakeCallsign)
+    let modelInfo = aircraftModelService.getModelInfo(aircraftType, fakeCallsign)
     const vmrAlternatives = userVMRService.getAlternatives(aircraftType, airlineCode)
+
+    // If model is pending conversion, wait for it to complete
+    if (modelInfo.matchType === 'pending') {
+      try {
+        const result = await aircraftModelService.waitForConversion(
+          aircraftType,
+          fakeCallsign
+        )
+        if (result.success && result.glbPath) {
+          // Get the updated model info after conversion
+          modelInfo = aircraftModelService.getModelInfo(aircraftType, fakeCallsign)
+        }
+      } catch (error) {
+        console.warn('[ModelMatch] Conversion wait failed:', error)
+        // Continue with the pending model info
+      }
+    }
 
     setTestResult({
       callsign: fakeCallsign,
@@ -77,8 +94,10 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
       modelInfo,
       vmrAlternatives
     })
-    // Open preview modal
-    setPreviewModel(modelInfo)
+    // Open preview modal only if model is ready or converted
+    if (modelInfo.matchType !== 'pending') {
+      setPreviewModel(modelInfo)
+    }
   }, [testAirline, testType])
 
   // Build model matching data for all aircraft in range

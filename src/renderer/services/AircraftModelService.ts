@@ -1008,6 +1008,44 @@ class AircraftModelServiceClass {
   getRegisteredAirlines(): string[] {
     return Object.keys(AIRLINE_COLORS)
   }
+
+  /**
+   * Wait for a model conversion to complete
+   * Useful for ensuring a model is ready before trying to load it
+   *
+   * @param aircraftType - Aircraft type code (e.g., "B738")
+   * @param callsign - Optional callsign to help with model matching
+   * @returns Conversion result when complete
+   */
+  async waitForConversion(
+    aircraftType: string | null | undefined,
+    callsign?: string | null
+  ): Promise<{ success: boolean; glbPath?: string; error?: string }> {
+    // Poll for conversion completion every 100ms
+    const maxWaitTime = 30000 // 30 second timeout
+    const pollInterval = 100
+    const startTime = Date.now()
+
+    while (Date.now() - startTime < maxWaitTime) {
+      const modelInfo = this.getModelInfo(aircraftType, callsign)
+
+      // If model is ready (not pending), return success
+      if (modelInfo.matchType !== 'pending') {
+        return {
+          success: true,
+          glbPath: modelInfo.modelUrl
+        }
+      }
+
+      // Wait before polling again
+      await new Promise(resolve => setTimeout(resolve, pollInterval))
+    }
+
+    return {
+      success: false,
+      error: 'Model conversion timed out after 30 seconds'
+    }
+  }
 }
 
 // Singleton instance
