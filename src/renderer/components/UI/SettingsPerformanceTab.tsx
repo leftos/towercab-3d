@@ -16,6 +16,10 @@ function SettingsPerformanceTab() {
   const maxReplayDurationMinutes = useSettingsStore((state) => state.memory.maxReplayDurationMinutes)
   const updateMemorySettings = useSettingsStore((state) => state.updateMemorySettings)
 
+  // Aircraft display limit (per-device setting)
+  const maxAircraftDisplay = useSettingsStore((state) => state.aircraft.maxAircraftDisplay)
+  const updateAircraftSettings = useSettingsStore((state) => state.updateAircraftSettings)
+
   // Replay store
   const replaySnapshots = useReplayStore((state) => state.snapshots)
   const importedSnapshots = useReplayStore((state) => state.importedSnapshots)
@@ -56,6 +60,44 @@ function SettingsPerformanceTab() {
 
   return (
     <>
+      <CollapsibleSection title="Display Limits">
+        <div className="setting-item">
+          <label>Max Aircraft Count</label>
+          <div className="slider-with-value">
+            <input
+              type="range"
+              min="10"
+              max="1000"
+              step="10"
+              value={maxAircraftDisplay}
+              onChange={(e) => updateAircraftSettings({ maxAircraftDisplay: Number(e.target.value) })}
+            />
+            <span>{maxAircraftDisplay}</span>
+          </div>
+          <p className="setting-hint">
+            Maximum number of aircraft to render simultaneously. Lower values improve performance on slower devices. (Per-device setting)
+          </p>
+        </div>
+
+        <div className="setting-item">
+          <label>Aircraft Data Radius</label>
+          <div className="slider-with-value">
+            <input
+              type="range"
+              min="10"
+              max="500"
+              step="10"
+              value={aircraftDataRadiusNM}
+              onChange={(e) => updateMemorySettings({ aircraftDataRadiusNM: Number(e.target.value) })}
+            />
+            <span>{aircraftDataRadiusNM} nm</span>
+          </div>
+          <p className="setting-hint">
+            Discard aircraft data beyond this radius to save memory. Should be larger than Visibility Range in Aircraft & Labels tab.
+          </p>
+        </div>
+      </CollapsibleSection>
+
       <CollapsibleSection title="Tile Cache">
         <div className="setting-item">
           <label>In-Memory Tile Cache</label>
@@ -90,26 +132,6 @@ function SettingsPerformanceTab() {
           </div>
           <p className="setting-hint">
             IndexedDB cache for satellite/terrain tiles.
-          </p>
-        </div>
-      </CollapsibleSection>
-
-      <CollapsibleSection title="Data">
-        <div className="setting-item">
-          <label>Aircraft Data Radius</label>
-          <div className="slider-with-value">
-            <input
-              type="range"
-              min="10"
-              max="500"
-              step="10"
-              value={aircraftDataRadiusNM}
-              onChange={(e) => updateMemorySettings({ aircraftDataRadiusNM: Number(e.target.value) })}
-            />
-            <span>{aircraftDataRadiusNM} nm</span>
-          </div>
-          <p className="setting-hint">
-            Only keep aircraft data within this radius of tower.
           </p>
         </div>
       </CollapsibleSection>

@@ -4,6 +4,40 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **AIG Models support** for Microsoft Flight Simulator aircraft
+  - Use aircraft models from AIG (AI traffic add-on) alongside FSLTL
+  - Configure priority order (FSLTL first vs AIG first) in Settings
+  - Both model packs now use unified loading system
+- **On-demand model conversion** - models load instantly without pre-conversion
+  - Models are converted automatically when first needed by an aircraft
+  - No more waiting for entire library to convert before using the app
+  - Loading screen shows initialization progress while detecting available models
+  - Aircraft with unknown type (N/A) now get airline-specific liveries when possible
+- **Support for multiple VMR rules with priority order**
+- **3D model preview in Model Matching dialog (F3)**
+  - Click any aircraft row to see a rotating preview of its 3D model
+  - Verify which model and livery is being used for each aircraft
+  - Useful for debugging model conversions, scaling, and rotations
+- **Converter version system** for MSFS models
+  - Models are automatically re-converted when the converter is updated
+  - Version number embedded in GLB metadata and checked on startup
+  - Ensures you always have the latest conversion fixes without manual re-conversion or cache deletion
+
+### Changed
+- **Settings panel completely reorganized for better clarity**
+  - New tab structure: Configuration, Aircraft & Labels, Graphics & Weather, Controls & Camera, Performance, Advanced
+  - Aircraft-related settings now grouped together in one tab instead of scattered across 3 tabs
+  - Keyboard shortcuts moved from Help to Controls & Camera for easier reference
+  - Server settings integrated into Configuration tab
+  - Clearer setting names: "Max Aircraft Count" (was "Max Aircraft Display"), "Visibility Range" (was "Max Nearby Aircraft Range")
+  - Better section organization: "Datablocks & Labels", "Aircraft Rendering", "Display Limits"
+  - All settings remain in the same locations in localStorage - no data loss
+
+### Fixed
+- **FSLTL generic models (fallback liveries) now load correctly**
+  - Fixed parsing of models with empty texture fields
+
 ## [0.0.28-alpha] - 2026-01-03
 
 ### Added

@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useUIFeedbackStore } from '../../stores/uiFeedbackStore'
-import SettingsGeneralTab from './SettingsGeneralTab'
-import SettingsDisplayTab from './SettingsDisplayTab'
-import SettingsGraphicsTab from './SettingsGraphicsTab'
+import SettingsConfigurationTab from './SettingsConfigurationTab'
+import SettingsAircraftLabelsTab from './SettingsAircraftLabelsTab'
+import SettingsGraphicsWeatherTab from './SettingsGraphicsWeatherTab'
+import SettingsControlsCameraTab from './SettingsControlsCameraTab'
 import SettingsPerformanceTab from './SettingsPerformanceTab'
-import SettingsServerTab from './SettingsServerTab'
-import SettingsHelpTab from './SettingsHelpTab'
+import SettingsAdvancedTab from './SettingsAdvancedTab'
 import './ControlsBar.css'
 
-type SettingsTab = 'general' | 'display' | 'graphics' | 'performance' | 'server' | 'help'
+type SettingsTab = 'configuration' | 'aircraft' | 'graphics' | 'controls' | 'performance' | 'advanced'
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -19,7 +19,7 @@ interface SettingsModalProps {
 }
 
 function SettingsModal({ isOpen, onClose, onShowImportModal, onShowExportModal, importStatus }: SettingsModalProps) {
-  const [activeTab, setActiveTab] = useState<SettingsTab>('general')
+  const [activeTab, setActiveTab] = useState<SettingsTab>('configuration')
   const pushModal = useUIFeedbackStore((state) => state.pushModal)
   const popModal = useUIFeedbackStore((state) => state.popModal)
 
@@ -55,22 +55,28 @@ function SettingsModal({ isOpen, onClose, onShowImportModal, onShowExportModal, 
 
         <div className="settings-tabs">
           <button
-            className={`tab-button ${activeTab === 'general' ? 'active' : ''}`}
-            onClick={() => setActiveTab('general')}
+            className={`tab-button ${activeTab === 'configuration' ? 'active' : ''}`}
+            onClick={() => setActiveTab('configuration')}
           >
-            General
+            Configuration
           </button>
           <button
-            className={`tab-button ${activeTab === 'display' ? 'active' : ''}`}
-            onClick={() => setActiveTab('display')}
+            className={`tab-button ${activeTab === 'aircraft' ? 'active' : ''}`}
+            onClick={() => setActiveTab('aircraft')}
           >
-            Display
+            Aircraft & Labels
           </button>
           <button
             className={`tab-button ${activeTab === 'graphics' ? 'active' : ''}`}
             onClick={() => setActiveTab('graphics')}
           >
-            Graphics
+            Graphics & Weather
+          </button>
+          <button
+            className={`tab-button ${activeTab === 'controls' ? 'active' : ''}`}
+            onClick={() => setActiveTab('controls')}
+          >
+            Controls & Camera
           </button>
           <button
             className={`tab-button ${activeTab === 'performance' ? 'active' : ''}`}
@@ -79,32 +85,26 @@ function SettingsModal({ isOpen, onClose, onShowImportModal, onShowExportModal, 
             Performance
           </button>
           <button
-            className={`tab-button ${activeTab === 'server' ? 'active' : ''}`}
-            onClick={() => setActiveTab('server')}
+            className={`tab-button ${activeTab === 'advanced' ? 'active' : ''}`}
+            onClick={() => setActiveTab('advanced')}
           >
-            Server
-          </button>
-          <button
-            className={`tab-button ${activeTab === 'help' ? 'active' : ''}`}
-            onClick={() => setActiveTab('help')}
-          >
-            Help
+            Advanced
           </button>
         </div>
 
         <div className="settings-content">
-          {activeTab === 'general' && (
-            <SettingsGeneralTab
+          {activeTab === 'configuration' && (
+            <SettingsConfigurationTab
               onShowImportModal={onShowImportModal}
               onShowExportModal={onShowExportModal}
               importStatus={importStatus}
             />
           )}
-          {activeTab === 'display' && <SettingsDisplayTab />}
-          {activeTab === 'graphics' && <SettingsGraphicsTab />}
+          {activeTab === 'aircraft' && <SettingsAircraftLabelsTab />}
+          {activeTab === 'graphics' && <SettingsGraphicsWeatherTab />}
+          {activeTab === 'controls' && <SettingsControlsCameraTab />}
           {activeTab === 'performance' && <SettingsPerformanceTab />}
-          {activeTab === 'server' && <SettingsServerTab />}
-          {activeTab === 'help' && <SettingsHelpTab />}
+          {activeTab === 'advanced' && <SettingsAdvancedTab />}
         </div>
       </div>
     </div>
