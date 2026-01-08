@@ -102,6 +102,21 @@ export interface MSFSDetectionResult {
 }
 
 // =============================================================================
+// Constants
+// =============================================================================
+
+/**
+ * Converter version - must match CONVERTER_VERSION in convert_fsltl_batch.py
+ * and CONVERTER_VERSION in msfs.rs
+ * Increment this when converter logic changes to invalidate old cached GLB files
+ * Version history:
+ *   1: Initial version with source metadata embedding
+ *   2: Added animation baking for MSFS models (fixes misaligned flaps, slats, gear, etc.)
+ *   3: Fixed steering animations by using identity quaternion frame instead of frame 0
+ */
+const CONVERTER_VERSION = 3
+
+// =============================================================================
 // Service Class
 // =============================================================================
 
@@ -208,6 +223,7 @@ class MSFSModelConversionServiceClass {
         path: string
         model_key: string
         file_size: number
+        converter_version: number | null
       }>>('scan_cache_directory', { cacheDir })
 
       if (cachedModels.length === 0) {
@@ -217,8 +233,17 @@ class MSFSModelConversionServiceClass {
 
       onProgress?.(`Loading ${cachedModels.length} cached models...`)
 
-      // Add each cached model to memory cache
+      // Add each cached model to memory cache (skip outdated versions)
+      let loadedCount = 0
+      let skippedCount = 0
       for (const cached of cachedModels) {
+        // Skip models with old/missing converter versions
+        if (cached.converter_version !== CONVERTER_VERSION) {
+          console.log(`[MSFSConversion] Skipping outdated model ${cached.model_key} (version ${cached.converter_version ?? 'unknown'}, need ${CONVERTER_VERSION})`)
+          skippedCount++
+          continue
+        }
+
         this.memoryCache.set(cached.model_key, {
           path: cached.path,
           fileSize: cached.file_size,
@@ -226,9 +251,10 @@ class MSFSModelConversionServiceClass {
           isDiskCache: true
         })
         this.totalCacheSize += cached.file_size
+        loadedCount++
       }
 
-      console.log(`[MSFSConversion] Loaded ${cachedModels.length} cached models (${Math.round(this.totalCacheSize / 1024 / 1024)}MB)`)
+      console.log(`[MSFSConversion] Loaded ${loadedCount} cached models (${Math.round(this.totalCacheSize / 1024 / 1024)}MB)${skippedCount > 0 ? `, skipped ${skippedCount} outdated` : ''}`)
     } catch (error) {
       console.warn('[MSFSConversion] Failed to load cached models:', error)
     }

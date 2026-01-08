@@ -94,6 +94,13 @@ except Exception as e:
     )
     sys.exit(1)
 
+# Converter version - increment when conversion logic changes to invalidate cached models
+# Version history:
+#   1: Initial version with source metadata embedding
+#   2: Added animation baking for MSFS models (fixes misaligned flaps, slats, gear, etc.)
+#   3: Fixed steering animations by using identity quaternion frame instead of frame 0
+CONVERTER_VERSION = 3
+
 # Global texconv.exe path (downloaded on first use)
 _texconv_path: Path | None = None
 _texconv_lock = threading.Lock()
@@ -249,9 +256,19 @@ def detect_animations(gltf: dict) -> bool:
 
 
 def convert_single_gltf(gltf_path: Path, output_path: Path, texture_dirs: list[Path],
-                        texture_scale: int | None = None) -> dict:
+                        texture_scale: int | None = None,
+                        source_metadata: dict | None = None) -> dict:
     """
     Convert a single GLTF file to GLB.
+
+    Args:
+        gltf_path: Path to source GLTF file
+        output_path: Path for output GLB file
+        texture_dirs: List of directories to search for textures
+        texture_scale: Max texture dimension (None for full size)
+        source_metadata: Optional dict of source info to embed in GLB extras.
+                        Keys: source, livery_title, folder_name, aircraft_type,
+                              icao_airline, gltf_path, texture_dirs, aircraft_folder
 
     Returns dict with:
         - success: bool
@@ -639,7 +656,7 @@ def convert_single_gltf(gltf_path: Path, output_path: Path, texture_dirs: list[P
 
     # Clean up node extensions (ASOBO_unique_id, etc.)
     if 'nodes' in gltf:
-        for node in gltf['nodes']:
+        for i, node in enumerate(gltf['nodes']):
             if 'extensions' in node:
                 keys_to_remove = [k for k in node['extensions']
                                   if k in extensions_to_remove or k.startswith(asobo_prefix)]
@@ -669,6 +686,74 @@ def convert_single_gltf(gltf_path: Path, output_path: Path, texture_dirs: list[P
                         if not prim['extensions']:
                             del prim['extensions']
 
+    # Bake first frame of ALL animations into node transforms (MSFS models fix)
+    # MSFS models are designed to look correct with animations at their default state.
+    # For static display (without animation playback), we bake the t=0 keyframe of all
+    # animations into the node transforms so parts render in their correct positions.
+    # This fixes issues with flaps, slats, spoilers, gear, and other animated parts.
+    #
+    # Special handling for steering animations (e.g., front wheel):
+    # - Rotation channels are scanned to find the keyframe closest to identity quaternion
+    # - If a near-identity keyframe exists (angle < 5°), use that instead of frame 0
+    # - This ensures steering wheels point straight forward rather than turned
+    if 'animations' in gltf and 'accessors' in gltf and 'bufferViews' in gltf:
+        import math
+        animation_count = len(gltf['animations'])
+        if animation_count > 0:
+            print(f"  Baking first frame of {animation_count} animations into static transforms")
+
+        for anim in gltf['animations']:
+            for channel in anim.get('channels', []):
+                target_node = channel['target']['node']
+                target_path = channel['target']['path']  # 'translation', 'rotation', or 'scale'
+                sampler = anim['samplers'][channel['sampler']]
+
+                # Read the output accessor (animation data)
+                output_acc_idx = sampler['output']
+                output_acc = gltf['accessors'][output_acc_idx]
+                output_bv = gltf['bufferViews'][output_acc['bufferView']]
+                offset = output_bv.get('byteOffset', 0) + output_acc.get('byteOffset', 0)
+                keyframe_count = output_acc['count']
+
+                # For rotations, find the keyframe closest to identity quaternion
+                # This handles steering animations where neutral position is in the middle
+                keyframe_to_use = 0
+                if target_path == 'rotation' and keyframe_count > 1:
+                    min_angle = float('inf')
+                    best_frame = 0
+
+                    for i in range(keyframe_count):
+                        frame_offset = offset + i * 16  # 4 floats = 16 bytes
+                        quat = struct.unpack_from('<4f', bin_data, frame_offset)
+                        # Angle from identity = 2 * acos(w), where w is the 4th component
+                        w_clamped = max(-1.0, min(1.0, quat[3]))
+                        angle = 2 * math.acos(w_clamped)
+
+                        if angle < min_angle:
+                            min_angle = angle
+                            best_frame = i
+
+                    # Use identity frame if it's close enough (< 5° = ~0.087 radians)
+                    if min_angle < 0.087:  # 5 degrees in radians
+                        keyframe_to_use = best_frame
+
+                # Read keyframe value
+                if target_path == 'translation':
+                    # VEC3 FLOAT
+                    value_offset = offset + keyframe_to_use * 12  # 3 floats = 12 bytes
+                    value = struct.unpack_from('<3f', bin_data, value_offset)
+                    gltf['nodes'][target_node]['translation'] = list(value)
+                elif target_path == 'rotation':
+                    # VEC4 FLOAT (quaternion)
+                    value_offset = offset + keyframe_to_use * 16  # 4 floats = 16 bytes
+                    value = struct.unpack_from('<4f', bin_data, value_offset)
+                    gltf['nodes'][target_node]['rotation'] = list(value)
+                elif target_path == 'scale':
+                    # VEC3 FLOAT
+                    value_offset = offset + keyframe_to_use * 12  # 3 floats = 12 bytes
+                    value = struct.unpack_from('<3f', bin_data, value_offset)
+                    gltf['nodes'][target_node]['scale'] = list(value)
+
     # Clean up animation extensions (ASOBO_animation_retargeting, etc.)
     if 'animations' in gltf:
         for anim in gltf['animations']:
@@ -679,6 +764,24 @@ def convert_single_gltf(gltf_path: Path, output_path: Path, texture_dirs: list[P
                     anim['extensions'].pop(ext, None)
                 if not anim['extensions']:
                     del anim['extensions']
+
+    # Embed source metadata in asset.extras for debugging and lookup
+    if source_metadata:
+        if 'asset' not in gltf:
+            gltf['asset'] = {'version': '2.0'}
+        gltf['asset']['extras'] = {
+            'towercab3d': {
+                'converterVersion': CONVERTER_VERSION,
+                'source': source_metadata.get('source'),
+                'liveryTitle': source_metadata.get('livery_title'),
+                'folderName': source_metadata.get('folder_name'),
+                'aircraftType': source_metadata.get('aircraft_type'),
+                'icaoAirline': source_metadata.get('icao_airline'),
+                'gltfPath': source_metadata.get('gltf_path'),
+                'textureDirs': source_metadata.get('texture_dirs'),
+                'aircraftFolder': source_metadata.get('aircraft_folder'),
+            }
+        }
 
     # Serialize JSON
     json_str = json.dumps(gltf, separators=(',', ':'))
@@ -1078,6 +1181,7 @@ def discover_liveries_in_source(source_path: Path, requested_titles: set[str] | 
             all_liveries.append({
                 'source': source_type,
                 'folder_name': aircraft_folder_name,
+                'aircraft_folder': str(aircraft_dir),
                 'livery_title': livery['title'],
                 'texture_folder': livery.get('texture_folder', ''),
                 'icao_airline': livery.get('icao_airline'),
@@ -1117,7 +1221,19 @@ def convert_livery_task(args_tuple):
         gltf_path = Path(livery_info['gltf_path'])
         texture_dirs = [Path(d) for d in livery_info['texture_dirs']]
 
-        result = convert_single_gltf(gltf_path, model_output, texture_dirs, texture_scale)
+        # Build source metadata to embed in the GLB for debugging/lookup
+        source_metadata = {
+            'source': source_type,
+            'livery_title': livery_info['livery_title'],
+            'folder_name': livery_info.get('folder_name'),
+            'aircraft_type': aircraft_type,
+            'icao_airline': airline_code,
+            'gltf_path': str(gltf_path),
+            'texture_dirs': [str(d) for d in texture_dirs],
+            'aircraft_folder': livery_info.get('aircraft_folder'),
+        }
+
+        result = convert_single_gltf(gltf_path, model_output, texture_dirs, texture_scale, source_metadata)
         result['livery_title'] = livery_info['livery_title']
         result['aircraft_type'] = aircraft_type
         result['airline_code'] = airline_code

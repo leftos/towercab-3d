@@ -392,11 +392,174 @@ The SCALAR weight value was always 1.0, meaning "100% bound to first joint".
 
 **Note**: This conversion happens before the skinning fix strips the WEIGHTS_0 attributes, so it's technically redundant for AIG models. However, keeping it ensures the buffer data is valid if we ever need to re-enable skinning for specific models.
 
+### Animation Baking for Static Display (Fixed)
+
+**Problem**: AIG models have animated parts (flaps, spoilers, slats, gear) rendering misaligned - standing up vertically instead of lying flat, clipping through the wing.
+
+**Root Cause**: MSFS models are designed to look correct WITH animations at their first keyframe (t=0). The animations compensate for the coordinate system differences between the main body and animated parts:
+- Main body meshes: Direct children of scene root, in glTF Y-up coordinates
+- Animated parts: Under `node_36` with rotation `[0, 0.707, 0.707, 0]` (Z-up to Y-up conversion)
+- Animations: Contain transforms at t=0 that position parts correctly relative to the rotated coordinate system
+
+Standard glTF loaders render animated parts incorrectly in static state (without animation playback).
+
+**Investigation Process**:
+```
+User testing revealed:
+1. Removing node_36 rotation made it WORSE (wrong approach!)
+2. Playing specific animations fixed positioning:
+   - custom_anim_FLAPS_AIRLINER
+   - custom_anim_SLATS_AIRLINER
+   - l_spoiler_key / r_spoiler_key
+3. After running all animations, nothing was misaligned anymore
+4. Conclusion: Need to bake first keyframe of ALL animations
+```
+
+**MSFS Landing Gear Animation Structure**: According to MSFS docs, landing gear animations are split 50/50:
+- **Frame 0 (neutral position)**: The "rest state" for static display
+- **Frames 0-50%**: Extension/retraction (or static neutral for non-retractable)
+- **Frames 50-100%**: Compression animation
+
+This confirms that baking frame 0 gives us the correct static display state.
+
+**Fix**: Bake the first keyframe (t=0) of ALL animations into static node transforms:
+
+```python
+# Bake first frame of ALL animations into node transforms
+if 'animations' in gltf and 'accessors' in gltf and 'bufferViews' in gltf:
+    for anim in gltf['animations']:
+        for channel in anim.get('channels', []):
+            target_node = channel['target']['node']
+            target_path = channel['target']['path']  # 'translation', 'rotation', or 'scale'
+            sampler = anim['samplers'][channel['sampler']]
+
+            # Read the output accessor (animation data)
+            output_acc = gltf['accessors'][sampler['output']]
+            output_bv = gltf['bufferViews'][output_acc['bufferView']]
+            offset = output_bv.get('byteOffset', 0) + output_acc.get('byteOffset', 0)
+
+            # Read first keyframe value and apply to node
+            if target_path == 'translation':
+                first_value = struct.unpack_from('<3f', bin_data, offset)
+                gltf['nodes'][target_node]['translation'] = list(first_value)
+            elif target_path == 'rotation':
+                first_value = struct.unpack_from('<4f', bin_data, offset)
+                gltf['nodes'][target_node]['rotation'] = list(first_value)
+            elif target_path == 'scale':
+                first_value = struct.unpack_from('<3f', bin_data, offset)
+                gltf['nodes'][target_node]['scale'] = list(first_value)
+```
+
+**Result**: All animated parts (flaps, slats, spoilers, gear, doors, etc.) now render in correct positions for static display. The node_36 rotation is preserved and the animations compensate for it.
+
+**Compatibility**: Safe for all MSFS models:
+- **FSLTL models**: May have animations that benefit from baking
+- **AIG models**: Critical fix for correct rendering
+- **Models without animations**: No-op, no animations to bake
+
+### Steering Animation Neutral Position (Fixed)
+
+**Problem**: Front landing gear steering wheels render rotated 90 degrees sideways, clipping through the fuselage, instead of pointing straight forward.
+
+**Root Cause**: Steering animations (e.g., `custom_anim_C_WHEEL_LR`) have their neutral/straight-ahead position at a middle keyframe, not at frame 0:
+- **Frame 0**: Quaternion `[0, 0.707, 0, 0.707]` = 90° left turn
+- **Frame 1**: Quaternion `[0, 0, 0, 1]` = IDENTITY = straight forward (neutral)
+- **Frame 2**: Quaternion `[0, -0.707, 0, 0.707]` = 90° right turn
+
+This is different from extension/retraction animations where frame 0 is the correct neutral position.
+
+**Investigation**:
+```
+Analysis of custom_anim_C_WHEEL_LR (3 keyframes):
+  Frame 0 (t=100s): 90° from identity (wheel turned left)
+  Frame 1 (t=150s):  0° from identity (wheel straight) ← NEUTRAL
+  Frame 2 (t=200s): 90° from identity (wheel turned right)
+
+Landing gear extension (c_gear) has no identity keyframe:
+  Frame 0: 189° from identity (rotated for extension mechanism)
+  All frames are far from identity - this is correct behavior
+```
+
+**Fix**: For rotation channels, scan all keyframes to find the one closest to identity quaternion `[0,0,0,1]`. If a near-identity keyframe exists (angle < 5°), use that instead of frame 0:
+
+```python
+# For rotations, find the keyframe closest to identity quaternion
+if target_path == 'rotation' and keyframe_count > 1:
+    min_angle = float('inf')
+    best_frame = 0
+
+    for i in range(keyframe_count):
+        quat = struct.unpack_from('<4f', bin_data, frame_offset)
+        # Angle from identity = 2 * acos(w)
+        angle = 2 * math.acos(max(-1.0, min(1.0, quat[3])))
+
+        if angle < min_angle:
+            min_angle = angle
+            best_frame = i
+
+    # Use identity frame if close enough (< 5°)
+    if min_angle < 0.087:  # 5 degrees in radians
+        keyframe_to_use = best_frame
+```
+
+**Result**:
+- **Steering wheels**: Point straight forward (identity quaternion used)
+- **Landing gear**: Still use frame 0 (no identity keyframe exists)
+- **Other animations**: Automatically select correct neutral position
+
+**Compatibility**: Safe for all animations:
+- Animations with identity keyframes use the neutral position
+- Animations without identity keyframes use frame 0 (existing behavior)
+
+## Embedded Source Metadata
+
+Converted GLB files contain embedded source metadata in `asset.extras.towercab3d`:
+
+```json
+{
+  "asset": {
+    "version": "2.0",
+    "extras": {
+      "towercab3d": {
+        "converterVersion": 2,
+        "source": "aig",
+        "liveryTitle": "AIGAIM_United Airlines Boeing 737 MAX 8",
+        "folderName": "AIGAIM_AIA_B737-MAX8",
+        "aircraftType": "B38M",
+        "icaoAirline": "UAL",
+        "gltfPath": "X:/Games/.../AIA_737-8_MAX_MSFS_LOD0.gltf",
+        "textureDirs": ["X:/Games/.../texture.UAL-United Airlines", ...],
+        "aircraftFolder": "X:/Games/.../AIGAIM_AIA_B737-MAX8"
+      }
+    }
+  }
+}
+```
+
+This metadata allows tracing a converted GLB back to its source files without needing filesystem access.
+
+### Converter Version System
+
+The `converterVersion` field tracks which version of the conversion logic was used. When conversion bugs are fixed (e.g., animation baking for misaligned parts), this version is incremented to invalidate old cached models:
+
+**Version History:**
+- **Version 1**: Initial version with source metadata embedding
+- **Version 2**: Added animation baking for MSFS models (fixes misaligned flaps, slats, gear, spoilers, etc.)
+- **Version 3**: Fixed steering animations by using identity quaternion frame instead of frame 0
+
+**Implementation:**
+- Python converter: `CONVERTER_VERSION` constant in `convert_fsltl_batch.py`
+- Rust backend: `CONVERTER_VERSION` constant in `msfs.rs`
+- TypeScript frontend: `CONVERTER_VERSION` constant in `MSFSModelConversionService.ts`
+
+All three must match. When loading cached models on startup, the frontend skips GLBs with old/missing converter versions, forcing automatic re-conversion when the model is next requested.
+
 ## File Locations
 
 | File | Purpose |
 |------|---------|
 | `scripts/convert_fsltl_batch.py` | Python converter source |
+| `scripts/lookup_glb_source.py` | GLB source file lookup utility |
 | `scripts/build_converter.py` | PyInstaller build script |
 | `scripts/converter-requirements.txt` | Python dependencies |
 | `scripts/fsltl_converter.spec` | PyInstaller spec file |
@@ -406,6 +569,21 @@ The SCALAR weight value was always 1.0, meaning "100% bound to first joint".
 | `src/renderer/services/MSFSModelConversionService.ts` | Frontend service |
 
 ## Debugging
+
+### Lookup GLB Source Files
+```bash
+# If GLB has embedded metadata (newer conversions):
+python scripts/lookup_glb_source.py model.glb
+
+# With custom Community folder:
+python scripts/lookup_glb_source.py --community "D:/MSFS/Community" model.glb
+
+# Dump node hierarchy:
+python scripts/lookup_glb_source.py --dump-nodes model.glb
+
+# Inspect specific node:
+python scripts/lookup_glb_source.py --node 28 model.glb
+```
 
 ### Inspect Source GLTF
 ```python

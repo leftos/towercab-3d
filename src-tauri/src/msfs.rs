@@ -82,6 +82,8 @@ pub struct CachedGlbInfo {
     pub model_key: String,
     /// File size in bytes
     pub file_size: u64,
+    /// Converter version used to create this GLB (from asset.extras.towercab3d.converterVersion)
+    pub converter_version: Option<u32>,
 }
 
 /// Livery info from aircraft.cfg FLTSIM section
@@ -1079,6 +1081,51 @@ pub fn scan_converted_models(output_path: String) -> Result<Vec<ScannedConverted
     Ok(models)
 }
 
+/// Extract converter version from a GLB file's metadata
+fn get_glb_converter_version(glb_path: &std::path::Path) -> Option<u32> {
+    use std::io::Read;
+
+    let mut file = fs::File::open(glb_path).ok()?;
+
+    // Read GLB header (12 bytes)
+    let mut header = [0u8; 12];
+    file.read_exact(&mut header).ok()?;
+
+    // Verify magic number "glTF" (0x46546C67)
+    if &header[0..4] != b"glTF" {
+        return None;
+    }
+
+    // Read JSON chunk header (8 bytes)
+    let mut chunk_header = [0u8; 8];
+    file.read_exact(&mut chunk_header).ok()?;
+
+    let json_length = u32::from_le_bytes([chunk_header[0], chunk_header[1], chunk_header[2], chunk_header[3]]);
+    let chunk_type = u32::from_le_bytes([chunk_header[4], chunk_header[5], chunk_header[6], chunk_header[7]]);
+
+    // Verify JSON chunk type (0x4E4F534A "JSON")
+    if chunk_type != 0x4E4F534A {
+        return None;
+    }
+
+    // Read JSON data (limit to 1MB to avoid huge allocations)
+    let json_length = json_length.min(1024 * 1024) as usize;
+    let mut json_bytes = vec![0u8; json_length];
+    file.read_exact(&mut json_bytes).ok()?;
+
+    // Parse JSON
+    let json_str = String::from_utf8(json_bytes).ok()?;
+    let gltf: serde_json::Value = serde_json::from_str(&json_str).ok()?;
+
+    // Extract asset.extras.towercab3d.converterVersion
+    gltf.get("asset")?
+        .get("extras")?
+        .get("towercab3d")?
+        .get("converterVersion")?
+        .as_u64()
+        .map(|v| v as u32)
+}
+
 /// Scan cache directory for existing GLB files
 /// Returns info about each cached model for loading into memory cache
 #[tauri::command]
@@ -1101,10 +1148,12 @@ pub fn scan_cache_directory(cache_dir: String) -> Result<Vec<CachedGlbInfo>, Str
                     if let Some(stem) = path.file_stem() {
                         let model_key = stem.to_string_lossy().to_string();
                         let file_size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+                        let converter_version = get_glb_converter_version(&path);
                         cached_models.push(CachedGlbInfo {
                             path: normalize_path_string(&path),
                             model_key,
                             file_size,
+                            converter_version,
                         });
                     }
                 }
