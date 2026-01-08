@@ -12,7 +12,7 @@ All notable changes to TowerCab 3D will be documented in this file.
   - Configurable edge blend distance for natural terrain transitions
 
 ### Fixed
-- **Pushback detection now works for VATSIM users** - aircraft pushing back from gates now correctly show "PUSH" phase instead of "TAXI"
+- **Pushback detection fixes for VATSIM users** 
 
 ## [0.0.29-alpha] - 2026-01-07
 
