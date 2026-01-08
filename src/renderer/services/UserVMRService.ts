@@ -64,6 +64,65 @@ class UserVMRServiceClass {
   /** Whether the service has been initialized */
   private initialized = false
 
+  /** Current source priority for sorting model alternatives */
+  private currentPriority: ('fsltl' | 'aig')[] = ['fsltl', 'aig']
+
+  /** Unsubscribe function for settings listener */
+  private unsubscribe?: () => void
+
+  constructor() {
+    // Subscribe to priority changes to re-sort alternatives
+    this.unsubscribe = useGlobalSettingsStore.subscribe((state) => {
+      const priority = state.msfsModels.priority
+      if (JSON.stringify(priority) !== JSON.stringify(this.currentPriority)) {
+        console.log('[UserVMRService] Priority changed, re-sorting alternatives:', priority)
+        this.currentPriority = [...priority]
+        this.sortAllAlternativesByPriority()
+      }
+    })
+  }
+
+  // ===========================================================================
+  // PRIORITY SORTING
+  // ===========================================================================
+
+  /**
+   * Determine which source a model name belongs to based on prefix
+   */
+  private getModelSource(name: string): 'fsltl' | 'aig' | 'unknown' {
+    const upper = name.toUpperCase()
+    if (upper.startsWith('FSLTL_') || upper.startsWith('FSLTL ')) return 'fsltl'
+    if (upper.startsWith('AIGAIM_') || upper.startsWith('AIGAIM ')) return 'aig'
+    return 'unknown'
+  }
+
+  /**
+   * Sort model names array by current source priority
+   */
+  private sortModelNamesByPriority(modelNames: string[]): void {
+    modelNames.sort((a, b) => {
+      const sourceA = this.getModelSource(a)
+      const sourceB = this.getModelSource(b)
+      // Unknown sources go last
+      const priorityA = sourceA === 'unknown' ? 999 : this.currentPriority.indexOf(sourceA)
+      const priorityB = sourceB === 'unknown' ? 999 : this.currentPriority.indexOf(sourceB)
+      return priorityA - priorityB
+    })
+  }
+
+  /**
+   * Re-sort all loaded alternatives by current priority
+   * Called when priority setting changes
+   */
+  private sortAllAlternativesByPriority(): void {
+    for (const entry of this.defaultRules.values()) {
+      this.sortModelNamesByPriority(entry.rule.modelNames)
+    }
+    for (const entry of this.airlineRules.values()) {
+      this.sortModelNamesByPriority(entry.rule.modelNames)
+    }
+  }
+
   // ===========================================================================
   // INITIALIZATION
   // ===========================================================================
@@ -130,6 +189,10 @@ class UserVMRServiceClass {
       // Track which files were processed
       const uniqueFiles = new Set(rules.map(r => r.sourceVmr))
       this.loadedFiles = Array.from(uniqueFiles)
+
+      // Update current priority and sort alternatives
+      this.currentPriority = [...settings.priority]
+      this.sortAllAlternativesByPriority()
     } catch (error) {
       console.warn('[UserVMRService] Failed to parse VMR files:', error)
     }
@@ -192,6 +255,11 @@ class UserVMRServiceClass {
       }
 
       this.loadedFiles.push('(HTTP API)')
+
+      // Update current priority and sort alternatives
+      const settings = useGlobalSettingsStore.getState().msfsModels
+      this.currentPriority = [...settings.priority]
+      this.sortAllAlternativesByPriority()
     } catch (error) {
       console.warn('[UserVMRService] Error loading from API:', error)
     }
