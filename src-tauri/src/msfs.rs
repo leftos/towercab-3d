@@ -593,30 +593,19 @@ fn list_models_unified(base_path: &std::path::Path, config: &SourceConfig) -> Ve
             if !liveries.is_empty() {
                 // Create entry for each livery defined in aircraft.cfg
                 for livery in liveries {
-                    let mut texture_dirs: Vec<String> = Vec::new();
-
-                    // Find the texture folder for this livery
-                    if livery.texture_folder.is_empty() {
-                        // For generic models with empty texture field, use bare "texture" folder
-                        let texture_folder_path = aircraft_dir.join("texture");
-                        let texture_folder_path_alt = aircraft_dir.join("Texture");
-
-                        if texture_folder_path.exists() {
-                            texture_dirs.push(normalize_path_string(&texture_folder_path));
-                        } else if texture_folder_path_alt.exists() {
-                            texture_dirs.push(normalize_path_string(&texture_folder_path_alt));
-                        }
-                    } else {
-                        // For liveries with specific texture folders
-                        let texture_folder_path = aircraft_dir.join(format!("texture.{}", livery.texture_folder));
-                        let texture_folder_path_alt = aircraft_dir.join(format!("Texture.{}", livery.texture_folder));
-
-                        if texture_folder_path.exists() {
-                            texture_dirs.push(normalize_path_string(&texture_folder_path));
-                        } else if texture_folder_path_alt.exists() {
-                            texture_dirs.push(normalize_path_string(&texture_folder_path_alt));
-                        }
-                    }
+                    // Collect all texture folders for this livery
+                    // Scan for all folders starting with "texture" (case-insensitive)
+                    let mut texture_dirs: Vec<String> = fs::read_dir(&aircraft_dir)
+                        .ok()
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|e| e.ok())
+                        .filter(|e| {
+                            let name = e.file_name().to_string_lossy().to_lowercase();
+                            e.path().is_dir() && name.starts_with("texture")
+                        })
+                        .map(|e| normalize_path_string(&e.path()))
+                        .collect();
 
                     // Add shared texture directories as fallback
                     texture_dirs.extend(shared_texture_dirs.clone());
@@ -1202,5 +1191,81 @@ mod tests {
         assert_eq!(u.title, "AIGAIM_United Airlines Airbus A320-200");
         assert_eq!(u.icao_airline.as_deref(), Some("UAL"));
         println!("Found United: title='{}', icao_airline={:?}", u.title, u.icao_airline);
+    }
+
+    #[test]
+    fn test_parse_fsltl_generic_model() {
+        // Test parsing FSLTL generic models with empty texture fields
+        let path = PathBuf::from(r"X:\Games\MSFlightSimPackages2024\Community\fsltl-traffic-base\SimObjects\Airplanes\FSLTL_BCS3");
+        if !path.exists() {
+            println!("Skipping test - FSLTL BCS3 path not found");
+            return;
+        }
+
+        let liveries = parse_aircraft_cfg_all_liveries(&path);
+        println!("Found {} liveries", liveries.len());
+        assert!(!liveries.is_empty(), "Should have parsed some liveries");
+
+        // Verify ZZZZ generic model is found
+        let generic = liveries.iter().find(|l| l.title.contains("ZZZZ"));
+        assert!(generic.is_some(), "Should find ZZZZ generic livery");
+
+        let g = generic.unwrap();
+        assert_eq!(g.title, "FSLTL_BCS3_ZZZZ");
+        assert_eq!(g.texture_folder, ""); // Empty texture field
+        println!("Found generic: title='{}', texture_folder='{}', icao_airline={:?}",
+                 g.title, g.texture_folder, g.icao_airline);
+
+        // Verify texture folders are found
+        let texture_dirs: Vec<String> = fs::read_dir(&path)
+            .ok()
+            .into_iter()
+            .flatten()
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                let name = e.file_name().to_string_lossy().to_lowercase();
+                e.path().is_dir() && name.starts_with("texture")
+            })
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .collect();
+
+        println!("Texture folders: {:?}", texture_dirs);
+        assert!(!texture_dirs.is_empty(), "Should find at least one texture folder");
+    }
+
+    #[test]
+    fn test_fsltl_indexing_end_to_end() {
+        // Test that FSLTL_BCS3_ZZZZ is properly indexed with correct model_name
+        let base_path = PathBuf::from(r"X:\Games\MSFlightSimPackages2024\Community\fsltl-traffic-base");
+        if !base_path.exists() {
+            println!("Skipping test - FSLTL base path not found");
+            return;
+        }
+
+        let config = SourceConfig {
+            source: "fsltl",
+            folder_prefix: "FSLTL_",
+        };
+
+        let models = list_models_unified(&base_path, &config);
+
+        // Find FSLTL_BCS3_ZZZZ
+        let bcs3_zzzz = models.iter().find(|m| m.model_name == "FSLTL_BCS3_ZZZZ");
+        assert!(bcs3_zzzz.is_some(), "Should find FSLTL_BCS3_ZZZZ in indexed models");
+
+        let model = bcs3_zzzz.unwrap();
+        println!("Found model:");
+        println!("  model_name: {}", model.model_name);
+        println!("  folder_name: {}", model.folder_name);
+        println!("  aircraft_folder_path: {}", model.aircraft_folder_path);
+        println!("  texture_dirs: {} directories", model.texture_dirs.len());
+        for td in &model.texture_dirs {
+            let path = PathBuf::from(td);
+            println!("    - {}", path.file_name().unwrap().to_string_lossy());
+        }
+
+        assert_eq!(model.model_name, "FSLTL_BCS3_ZZZZ");
+        assert!(model.aircraft_folder_path.contains("FSLTL_BCS3"));
+        assert!(!model.texture_dirs.is_empty(), "Should have texture directories");
     }
 }

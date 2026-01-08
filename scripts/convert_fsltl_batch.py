@@ -845,8 +845,8 @@ def parse_aircraft_cfg_all_liveries(aircraft_dir: Path, requested_titles: set[st
 
             # Check for section headers
             if trimmed.startswith('['):
-                # Save previous livery if complete
-                if in_fltsim and current_livery.get('title') and current_livery.get('texture_folder'):
+                # Save previous livery if complete (title + texture_folder key exists, even if empty)
+                if in_fltsim and current_livery.get('title') and 'texture_folder' in current_livery:
                     liveries.append(current_livery)
 
                     # Early stopping: if we found all requested liveries, we're done
@@ -871,8 +871,8 @@ def parse_aircraft_cfg_all_liveries(aircraft_dir: Path, requested_titles: set[st
             elif key == 'icao_airline':
                 current_livery['icao_airline'] = value.upper()
 
-        # Don't forget the last section
-        if in_fltsim and current_livery.get('title') and current_livery.get('texture_folder'):
+        # Don't forget the last section (title + texture_folder key exists, even if empty)
+        if in_fltsim and current_livery.get('title') and 'texture_folder' in current_livery:
             liveries.append(current_livery)
 
     except Exception:
