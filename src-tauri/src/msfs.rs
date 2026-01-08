@@ -593,17 +593,29 @@ fn list_models_unified(base_path: &std::path::Path, config: &SourceConfig) -> Ve
             if !liveries.is_empty() {
                 // Create entry for each livery defined in aircraft.cfg
                 for livery in liveries {
-                    // Find the texture folder for this livery
-                    let texture_folder_path = aircraft_dir.join(format!("texture.{}", livery.texture_folder));
-                    let texture_folder_path_alt = aircraft_dir.join(format!("Texture.{}", livery.texture_folder));
-
                     let mut texture_dirs: Vec<String> = Vec::new();
 
-                    // Add livery-specific texture folder first (highest priority)
-                    if texture_folder_path.exists() {
-                        texture_dirs.push(normalize_path_string(&texture_folder_path));
-                    } else if texture_folder_path_alt.exists() {
-                        texture_dirs.push(normalize_path_string(&texture_folder_path_alt));
+                    // Find the texture folder for this livery
+                    if livery.texture_folder.is_empty() {
+                        // For generic models with empty texture field, use bare "texture" folder
+                        let texture_folder_path = aircraft_dir.join("texture");
+                        let texture_folder_path_alt = aircraft_dir.join("Texture");
+
+                        if texture_folder_path.exists() {
+                            texture_dirs.push(normalize_path_string(&texture_folder_path));
+                        } else if texture_folder_path_alt.exists() {
+                            texture_dirs.push(normalize_path_string(&texture_folder_path_alt));
+                        }
+                    } else {
+                        // For liveries with specific texture folders
+                        let texture_folder_path = aircraft_dir.join(format!("texture.{}", livery.texture_folder));
+                        let texture_folder_path_alt = aircraft_dir.join(format!("Texture.{}", livery.texture_folder));
+
+                        if texture_folder_path.exists() {
+                            texture_dirs.push(normalize_path_string(&texture_folder_path));
+                        } else if texture_folder_path_alt.exists() {
+                            texture_dirs.push(normalize_path_string(&texture_folder_path_alt));
+                        }
                     }
 
                     // Add shared texture directories as fallback
