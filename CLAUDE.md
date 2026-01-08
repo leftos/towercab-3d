@@ -107,7 +107,7 @@ The build script now automatically runs typecheck first, so production builds wi
 
 ## Architecture
 
-See `src/renderer/docs/architecture.md` for detailed documentation including:
+See `docs/architecture.md` for detailed documentation including:
 - Data flow diagrams (VATSIM, weather, settings)
 - Store relationships (18 Zustand stores)
 - Hook dependencies and call order
