@@ -319,21 +319,6 @@ function MSFSModelSettingsPanel() {
           </p>
         </div>
 
-        {/* Detection Status */}
-        {detection && (
-          <div className="fsltl-section">
-            <label>Detected Sources</label>
-            <div className="msfs-detection-status">
-              <div className={`msfs-source-badge ${detection.fsltlFound ? 'found' : 'not-found'}`}>
-                FSLTL: {detection.fsltlFound ? `${detection.fsltlModelCount || 0} models` : 'Not found'}
-              </div>
-              <div className={`msfs-source-badge ${detection.aigFound ? 'found' : 'not-found'}`}>
-                AIG: {detection.aigFound ? `${detection.aigModelCount || 0} models` : 'Not found'}
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Source Priority & Enable/Disable */}
         {settings.communityPath && (
           <div className="fsltl-section">
