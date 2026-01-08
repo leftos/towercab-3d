@@ -194,6 +194,7 @@ export function useCesiumLighting(
     aircraftShadowsOnly,
     shadowDepthBias,
     shadowPolygonOffsetFactor,
-    shadowPolygonOffsetUnits
+    shadowPolygonOffsetUnits,
+    highQualityInsets
   ])
 }
