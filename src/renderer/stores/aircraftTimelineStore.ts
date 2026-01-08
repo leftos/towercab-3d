@@ -40,6 +40,7 @@ import {
 } from '../constants/aircraft-timeline'
 import { useViewportStore } from './viewportStore'
 import { useSettingsStore } from './settingsStore'
+import { calculateBearing } from '../utils/aircraft/geoMath'
 
 
 interface AircraftTimelineStore {
@@ -669,6 +670,35 @@ function interpolateTimeline(
       ? lerpHeading(before.groundTrack, after.groundTrack, t)
       : (after.groundTrack ?? before.groundTrack)
 
+    // FALLBACK: Calculate groundTrack from position change when not provided by data source
+    // This is essential for VATSIM data which doesn't include ground track.
+    // Without this, pushback detection fails because track defaults to heading.
+    if (groundTrack === null && interval > 0) {
+      // Calculate distance moved in meters (approximate, using equirectangular projection)
+      const latDiff = after.latitude - before.latitude
+      const lonDiff = after.longitude - before.longitude
+      const avgLat = (before.latitude + after.latitude) / 2
+      const latMeters = latDiff * 111320 // 1 degree lat ≈ 111.32 km
+      const lonMeters = lonDiff * 111320 * Math.cos(avgLat * Math.PI / 180)
+      const distanceMeters = Math.sqrt(latMeters * latMeters + lonMeters * lonMeters)
+
+      // Require minimum movement to calculate reliable bearing:
+      // - At least 3 meters total (exceeds typical GPS noise of 2-5m)
+      // - OR at least 0.5 m/s average speed (ensures meaningful movement for short intervals)
+      // This handles both:
+      // - VATSIM (15s intervals): 3m threshold easily met at pushback speeds
+      // - vNAS (1s intervals): 0.5 m/s = ~1 kt, needs at least slow taxi to calculate
+      const intervalSeconds = interval / 1000
+      const minDistanceForInterval = Math.max(3.0, 0.5 * intervalSeconds)
+
+      if (distanceMeters > minDistanceForInterval) {
+        groundTrack = calculateBearing(
+          before.latitude, before.longitude,
+          after.latitude, after.longitude
+        )
+      }
+    }
+
     // Interpolate ADS-B data if available on both observations
     onGround = after.onGround  // Use the later observation's ground state
     roll = before.roll !== null && after.roll !== null
@@ -705,6 +735,35 @@ function interpolateTimeline(
     altitude = extrapolated.altitude
     groundspeed = before.groundspeed
     groundTrack = before.groundTrack
+
+    // FALLBACK: Calculate groundTrack from position change if not provided (e.g., VATSIM)
+    // Use the last two observations to determine direction of travel
+    if (groundTrack === null && observations.length >= 2) {
+      const prev = observations[observations.length - 2]
+      const obsInterval = before.observedAt - prev.observedAt
+
+      if (obsInterval > 0) {
+        // Calculate distance moved in meters (approximate, using equirectangular projection)
+        const latDiff = before.latitude - prev.latitude
+        const lonDiff = before.longitude - prev.longitude
+        const avgLat = (prev.latitude + before.latitude) / 2
+        const latMeters = latDiff * 111320
+        const lonMeters = lonDiff * 111320 * Math.cos(avgLat * Math.PI / 180)
+        const distanceMeters = Math.sqrt(latMeters * latMeters + lonMeters * lonMeters)
+
+        // Same threshold logic as interpolation case
+        const intervalSeconds = obsInterval / 1000
+        const minDistanceForInterval = Math.max(3.0, 0.5 * intervalSeconds)
+
+        if (distanceMeters > minDistanceForInterval) {
+          groundTrack = calculateBearing(
+            prev.latitude, prev.longitude,
+            before.latitude, before.longitude
+          )
+        }
+      }
+    }
+
     // Pass through ADS-B data from last observation
     onGround = before.onGround
     roll = before.roll

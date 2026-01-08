@@ -4,6 +4,16 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Terrain flattening for airport runways**
+  - Smooths out bumps and undulations that caused aircraft to appear jumpy while taxiing
+  - Aircraft now pitch realistically on sloped runways instead of staying level
+  - Toggle on/off in Settings → Graphics & Weather → Terrain
+  - Configurable edge blend distance for natural terrain transitions
+
+### Fixed
+- **Pushback detection now works for VATSIM users** - aircraft pushing back from gates now correctly show "PUSH" phase instead of "TAXI"
+
 ## [0.0.29-alpha] - 2026-01-07
 
 ### Added
