@@ -169,6 +169,13 @@ export interface ViewportCameraState {
    * Cleared when animation completes or user manually moves camera.
    */
   lookAtTarget: { heading: number; pitch: number } | null
+
+  /**
+   * Version counter to force camera recalculation
+   * Incremented when terrain changes (e.g., flattening toggle) to trigger
+   * the camera position effect to re-run with updated terrain heights.
+   */
+  cameraVersion: number
 }
 
 /**

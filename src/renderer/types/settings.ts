@@ -163,6 +163,24 @@ export interface CesiumSettings {
    * Default: 12 (noon)
    */
   fixedTimeHour: number
+
+  /**
+   * Enable terrain flattening for airport runways (default: true)
+   *
+   * When enabled, runway surfaces are flattened to their proper elevations,
+   * eliminating terrain bumps and valleys that cause aircraft to bounce
+   * unrealistically when taxiing or rolling.
+   */
+  enableTerrainFlattening: boolean
+
+  /**
+   * Terrain blend distance in meters (25-100, default: 50)
+   *
+   * Controls the transition zone between flattened runway surfaces and
+   * natural terrain. Higher values create smoother transitions but may
+   * flatten more of the surrounding area.
+   */
+  terrainBlendDistance: number
 }
 
 /**
@@ -625,6 +643,15 @@ export interface AdvancedSettings {
    * Log format: [Interp] HH:MM:SS.mmm CALLSIGN MODE t=X obs=N interval=Xs ...
    */
   enableInterpolationDebugLogs: boolean
+
+  /**
+   * Enable debug coordinate overlay (default: false)
+   *
+   * When enabled, shows a small panel with the current camera coordinates.
+   * Clicking anywhere on the terrain copies the clicked coordinates to clipboard.
+   * Useful for debugging terrain flattening issues and reporting exact locations.
+   */
+  enableDebugCoordinateOverlay: boolean
 }
 
 /**
@@ -1301,7 +1328,9 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     show3DBuildings: false,
     buildingQuality: 'low',
     timeMode: 'real',
-    fixedTimeHour: 12
+    fixedTimeHour: 12,
+    enableTerrainFlattening: true,
+    terrainBlendDistance: 50
   },
   graphics: {
     msaaSamples: 4,
@@ -1394,6 +1423,7 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     radiusNm: 100
   },
   advanced: {
-    enableInterpolationDebugLogs: false
+    enableInterpolationDebugLogs: false,
+    enableDebugCoordinateOverlay: false
   }
 }

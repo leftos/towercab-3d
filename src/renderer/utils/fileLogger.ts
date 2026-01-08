@@ -134,16 +134,19 @@ function timestamp(): string {
 async function flushLogs() {
   if (!logFilePath || logBuffer.length === 0) return
 
+  // Atomically grab and clear buffer to prevent race conditions
+  // (multiple concurrent flushLogs calls from timer + buffer overflow)
+  const toFlush = logBuffer
+  logBuffer = []
+
   try {
-    const content = logBuffer.join('\n') + '\n'
+    const content = toFlush.join('\n') + '\n'
 
     // Append to the log file via Tauri command
     await invoke('append_to_text_file', {
       path: logFilePath,
       content
     })
-
-    logBuffer = []
   } catch {
     // Silently fail to avoid recursion
     // The original console is still available, so errors won't disappear

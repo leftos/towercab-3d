@@ -2,6 +2,7 @@ import { useEffect, useCallback } from 'react'
 import * as Cesium from 'cesium'
 import type { InterpolatedAircraftState } from '../types/vatsim'
 import type { ViewMode } from '../types'
+import type { TerrainData } from './useGroundAircraftTerrain'
 import { aircraftModelService } from '../services/AircraftModelService'
 import { calculateDistanceNM } from '../utils/interpolation'
 import { useDatablockPositionStore } from '../stores/datablockPositionStore'
@@ -45,8 +46,8 @@ interface UseCesiumLabelsParams {
   searchQuery: string
   filterAirportTraffic: boolean
   isOrbitModeWithoutAirport: boolean
-  // Ground aircraft terrain heights (sampled 3x per second)
-  groundAircraftTerrain: Map<string, number>
+  // Ground aircraft terrain data (height and slope, sampled 10x per second)
+  groundAircraftTerrain: Map<string, TerrainData>
 }
 
 /**

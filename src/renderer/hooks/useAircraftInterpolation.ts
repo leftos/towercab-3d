@@ -7,6 +7,7 @@ import { calculateFlarePitch, angleDifference } from '../utils/interpolation'
 import { performanceMonitor } from '../utils/performanceMonitor'
 import type { InterpolatedAircraftState, AircraftState } from '../types/vatsim'
 import type { TimelineInterpolationResult } from '../types/aircraft-timeline'
+import type { TerrainData } from './useGroundAircraftTerrain'
 import {
   GROUND_AIRCRAFT_TERRAIN_OFFSET,
   FLYING_AIRCRAFT_TERRAIN_OFFSET,
@@ -38,7 +39,7 @@ const sharedLastInterpolationTimeRef = { current: 0 }
 const sharedLastAircraftCountRef = { current: 0 }
 
 // Shared state for terrain correction (injected from rendering layer)
-const sharedGroundAircraftTerrainRef = { current: new Map<string, number>() }
+const sharedGroundAircraftTerrainRef = { current: new Map<string, TerrainData>() }
 const sharedTerrainOffsetRef = { current: 0 }
 const sharedGroundElevationMetersRef = { current: 0 }
 
@@ -419,7 +420,9 @@ function updateInterpolation() {
 
     // Calculate heights in ellipsoid coordinates for comparison
     const reportedEllipsoidHeight = heightAboveEllipsoid + terrainOffset
-    const sampledTerrainHeight = groundAircraftTerrain.get(callsign)
+    const terrainDataForAircraft = groundAircraftTerrain.get(callsign)
+    const sampledTerrainHeight = terrainDataForAircraft?.height
+    const terrainSlopeDegrees = terrainDataForAircraft?.slopeDegrees ?? 0
 
     // Calculate altitude above ground level (AGL) for ground detection
     // Use terrain sample if available, otherwise use airport elevation
@@ -621,6 +624,22 @@ function updateInterpolation() {
       // Update flare state for next frame
       nosewheelState.wasInFlare = isInFlare
     }
+
+    // ========================================================================
+    // TERRAIN SLOPE APPLICATION
+    // ========================================================================
+    // Apply terrain slope to pitch for ground aircraft so they "glide" on sloped
+    // runways instead of appearing to climb tiny steps
+    // Only apply when:
+    // 1. Aircraft is on ground (shouldClampToTerrain)
+    // 2. We have terrain slope data
+    // 3. Groundspeed is above a minimum (to avoid jitter when stationary)
+    if (shouldClampToTerrain && terrainSlopeDegrees !== 0 && entry.interpolatedGroundspeed > 2) {
+      // Smoothly blend terrain slope into pitch
+      // The terrain slope should ADD to the current pitch (which may include flare/nosewheel effects)
+      // Negative slope (downhill) should pitch nose down, positive (uphill) pitches nose up
+      entry.interpolatedPitch += terrainSlopeDegrees
+    }
   }
 
   // Remove stale entries (aircraft that are no longer in the data)
@@ -652,14 +671,14 @@ function updateInterpolation() {
  * Inject terrain correction data into the interpolation system
  *
  * This function allows the rendering layer to provide terrain data that will be
- * used for ground aircraft altitude correction during interpolation.
+ * used for ground aircraft altitude and pitch correction during interpolation.
  *
- * @param groundAircraftTerrain - Map of terrain heights (ellipsoid) sampled at 3Hz
+ * @param groundAircraftTerrain - Map of terrain data (height and slope) sampled at 10Hz
  * @param terrainOffset - Geoid offset for MSL → ellipsoid conversion
  * @param groundElevationMeters - Ground elevation at tower/reference position
  */
 export function setInterpolationTerrainData(
-  groundAircraftTerrain: Map<string, number>,
+  groundAircraftTerrain: Map<string, TerrainData>,
   terrainOffset: number,
   groundElevationMeters: number
 ) {

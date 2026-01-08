@@ -144,6 +144,7 @@ export function useCesiumCamera(
   const orbitDistance = cameraState?.orbitDistance ?? 500
   const orbitHeading = cameraState?.orbitHeading ?? 0
   const orbitPitch = cameraState?.orbitPitch ?? -20
+  const cameraVersion = cameraState?.cameraVersion ?? 0
 
   // Viewport store - actions (these operate on this specific viewport when called from preRender,
   // but we'll use setState directly for the preRender callback to avoid activeViewport routing)
@@ -884,7 +885,8 @@ export function useCesiumCamera(
     setPitchInternal,
     stopFollowingStore,
     clampToTerrain,
-    custom2dPosition
+    custom2dPosition,
+    cameraVersion  // Triggers recalculation when terrain changes
   ])
 
   return {

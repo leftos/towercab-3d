@@ -144,6 +144,10 @@ interface ViewportStore {
   // Reset
   resetView: () => void
 
+  // Terrain change
+  /** Increment cameraVersion to force camera recalculation after terrain changes */
+  refreshCamera: () => void
+
   // Selectors
   getActiveViewport: () => Viewport | undefined
   getActiveCameraState: () => ViewportCameraState
@@ -1183,6 +1187,22 @@ export const useViewportStore = create<ViewportStore>()(
                   preFollowState: null
                 }
               })
+            })
+          },
+
+          refreshCamera: () => {
+            // Increment cameraVersion for ALL viewports to trigger camera recalculation
+            // This is used after terrain changes (e.g., flattening toggle) so the camera
+            // position gets recalculated with updated terrain heights
+            const { viewports } = get()
+            set({
+              viewports: viewports.map(v => ({
+                ...v,
+                cameraState: {
+                  ...v.cameraState,
+                  cameraVersion: (v.cameraState.cameraVersion ?? 0) + 1
+                }
+              }))
             })
           },
 

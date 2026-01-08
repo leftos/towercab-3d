@@ -167,6 +167,7 @@ class MSFSModelConversionServiceClass {
    */
   async initialize(onProgress?: (status: string, progress?: number) => void): Promise<void> {
     if (this.initialized) return
+    this.initialized = true // Set immediately to prevent concurrent initialization (StrictMode)
 
     const settings = useGlobalSettingsStore.getState().msfsModels
     console.log('[MSFSConversion] Initialize settings:', {
@@ -202,7 +203,6 @@ class MSFSModelConversionServiceClass {
       )
     }
 
-    this.initialized = true
     console.log('[MSFSConversion] Service initialized')
   }
 

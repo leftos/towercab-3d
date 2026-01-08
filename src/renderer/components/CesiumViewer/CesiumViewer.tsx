@@ -10,6 +10,7 @@ import { useMeasureStore } from '../../stores/measureStore'
 import { useAircraftFilterStore } from '../../stores/aircraftFilterStore'
 import { useDatablockPositionStore } from '../../stores/datablockPositionStore'
 import { useUIFeedbackStore } from '../../stores/uiFeedbackStore'
+import { useRunwayStore } from '../../stores/runwayStore'
 import { useAircraftInterpolation, setInterpolationTerrainData } from '../../hooks/useAircraftInterpolation'
 import { useCesiumCamera } from '../../hooks/useCesiumCamera'
 import { useBabylonOverlay } from '../../hooks/useBabylonOverlay'
@@ -24,11 +25,13 @@ import { useAircraftModels } from '../../hooks/useAircraftModels'
 import { useCesiumLabels } from '../../hooks/useCesiumLabels'
 import { useGroundAircraftTerrain } from '../../hooks/useGroundAircraftTerrain'
 import { useAutoAirportSwitch } from '../../hooks/useAutoAirportSwitch'
+import { useTerrainFlattening } from '../../hooks/useTerrainFlattening'
 import { getTowerPosition } from '../../utils/towerHeight'
 import { performanceMonitor } from '../../utils/performanceMonitor'
 import { hasViewingContext, isOrbitFollowing, isOrbitWithoutAirport } from '../../utils/viewingContext'
 import { getServiceWorkerCacheStats } from '../../utils/serviceWorkerRegistration'
 import { getMemoryCounters } from '../../hooks/useBabylonOverlay'
+import DebugCoordinateOverlay from '../UI/DebugCoordinateOverlay'
 import './CesiumViewer.css'
 
 // Import Cesium CSS
@@ -92,6 +95,8 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   const showCesiumFog = useSettingsStore((state) => state.weather.showCesiumFog)
   const enableWeatherInterpolation = useSettingsStore((state) => state.weather.enableWeatherInterpolation)
   const enableAutoAirportSwitch = useSettingsStore((state) => state.camera.enableAutoAirportSwitch)
+  const enableTerrainFlattening = useSettingsStore((state) => state.cesium.enableTerrainFlattening)
+  const terrainBlendDistance = useSettingsStore((state) => state.cesium.terrainBlendDistance)
 
   // Experimental graphics settings
   const msaaSamples = useSettingsStore((state) => state.graphics.msaaSamples)
@@ -124,6 +129,8 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   const nightDarkeningIntensity = useSettingsStore((state) => state.graphics.nightDarkeningIntensity) ?? 0.7
   // Performance settings
   const maxFramerate = useSettingsStore((state) => state.graphics.maxFramerate) ?? 60
+  // Debug settings
+  const enableDebugCoordinateOverlay = useSettingsStore((state) => state.advanced?.enableDebugCoordinateOverlay) ?? false
 
   // Weather store for fog effects, camera position updates, and cloud layers
   const fogDensity = useWeatherStore((state) => state.fogDensity)
@@ -134,6 +141,10 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
 
   // Camera geo position state (for auto-airport switching and weather interpolation)
   const [cameraGeoPosition, setCameraGeoPosition] = useState<{ lat: number; lon: number } | null>(null)
+
+  // Runway store for terrain flattening
+  const getRunwaysWithCoordinates = useRunwayStore((state) => state.getRunwaysWithCoordinates)
+  const runwaysLoaded = useRunwayStore((state) => state.isLoaded)
 
   // Measure store for measuring mode
   const isMeasuring = useMeasureStore((state) => state.isActive)
@@ -230,6 +241,23 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   // 2. Terrain Quality Management
   // =========================================================================
   useTerrainQuality(viewer, terrainQuality, inMemoryTileCacheSize)
+
+  // =========================================================================
+  // 2a. Terrain Flattening (Runway Surface Correction)
+  // =========================================================================
+  // Get runways for the current airport (memoized to prevent re-renders)
+  const currentRunways = useMemo(() => {
+    if (!currentAirport?.icao || !runwaysLoaded) return []
+    return getRunwaysWithCoordinates(currentAirport.icao)
+  }, [currentAirport?.icao, runwaysLoaded, getRunwaysWithCoordinates])
+
+  useTerrainFlattening({
+    viewer,
+    currentAirportIcao: currentAirport?.icao ?? null,
+    runways: currentRunways,
+    enabled: enableTerrainFlattening,
+    blendDistance: terrainBlendDistance
+  })
 
   // =========================================================================
   // 3. Lighting and Shadow Configuration
@@ -332,7 +360,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   useCesiumWeather(viewer, showWeatherEffects, showCesiumFog, fogDensity)
 
   // =========================================================================
-  // 5. Ground Aircraft Terrain Sampling (3x per second)
+  // 5. Ground Aircraft Terrain Sampling (10x per second)
   // =========================================================================
   const groundAircraftTerrain = useGroundAircraftTerrain(viewer, interpolatedAircraft, groundElevationMeters)
 
@@ -486,6 +514,31 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     if (!viewer) return
     viewer.scene.globe.tileCacheSize = inMemoryTileCacheSize
   }, [viewer, inMemoryTileCacheSize])
+
+  // Handle terrain cache clear requests from settings
+  const clearTerrainCacheRequested = useUIFeedbackStore((state) => state.clearTerrainCacheRequested)
+  const acknowledgeClearTerrainCache = useUIFeedbackStore((state) => state.acknowledgeClearTerrainCache)
+  const showFeedback = useUIFeedbackStore((state) => state.showFeedback)
+
+  useEffect(() => {
+    if (!clearTerrainCacheRequested || !viewer || viewer.isDestroyed()) return
+
+    const clearCache = async () => {
+      try {
+        // Import dynamically to avoid circular dependencies
+        const { clearAllTerrainCaches } = await import('../../utils/terrainCache')
+        await clearAllTerrainCaches(viewer)
+        showFeedback('Terrain cache cleared', 'success')
+      } catch (error) {
+        console.error('[CesiumViewer] Failed to clear terrain cache:', error)
+        showFeedback('Failed to clear cache', 'error')
+      } finally {
+        acknowledgeClearTerrainCache()
+      }
+    }
+
+    void clearCache()
+  }, [clearTerrainCacheRequested, viewer, acknowledgeClearTerrainCache, showFeedback])
 
   // Apply target frame rate limit (0 = unlimited)
   useEffect(() => {
@@ -964,7 +1017,14 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   }, [viewer, pendingDirection, interpolatedAircraft])
 
   return (
-    <div className={`cesium-viewer-container ${isInset ? 'inset' : ''}`} ref={containerRef} />
+    <div className={`cesium-viewer-container ${isInset ? 'inset' : ''}`} ref={containerRef}>
+      {!isInset && (
+        <DebugCoordinateOverlay
+          viewer={viewer}
+          enabled={enableDebugCoordinateOverlay}
+        />
+      )}
+    </div>
   )
 }
 

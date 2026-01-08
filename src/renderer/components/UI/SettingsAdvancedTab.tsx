@@ -13,6 +13,7 @@ function SettingsAdvancedTab() {
 
   // Debugging settings
   const enableInterpolationDebugLogs = useSettingsStore((state) => state.advanced?.enableInterpolationDebugLogs ?? false)
+  const enableDebugCoordinateOverlay = useSettingsStore((state) => state.advanced?.enableDebugCoordinateOverlay ?? false)
   const updateAdvancedSettings = useSettingsStore((state) => state.updateAdvancedSettings)
 
   // Updates
@@ -84,6 +85,21 @@ function SettingsAdvancedTab() {
           <p className="setting-hint">
             Logs detailed interpolation data to the browser console for the followed aircraft.
             Useful for diagnosing position snapping or timing issues. Open Developer Tools (F12) to view.
+          </p>
+        </div>
+
+        <div className="setting-item">
+          <label className="setting-label">
+            <input
+              type="checkbox"
+              checked={enableDebugCoordinateOverlay}
+              onChange={(e) => updateAdvancedSettings({ enableDebugCoordinateOverlay: e.target.checked })}
+            />
+            Enable Debug Coordinate Overlay
+          </label>
+          <p className="setting-hint">
+            Shows a panel with camera coordinates. Click anywhere to copy terrain coordinates to clipboard.
+            Useful for reporting exact locations of terrain flattening issues.
           </p>
         </div>
       </CollapsibleSection>

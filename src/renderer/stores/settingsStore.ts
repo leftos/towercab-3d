@@ -439,7 +439,7 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
     }),
     {
       name: 'settings-store',
-      version: 29, // Added highQualityInsets graphics setting
+      version: 30, // Added terrain flattening settings
       migrate: (persistedState: unknown, version: number) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let state: any = persistedState
@@ -687,6 +687,15 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
           }
         }
 
+        // Migrate v29 to v30: add terrain flattening settings
+        if (version < 30) {
+          console.log('[Settings] Migrating v29 to v30: adding terrain flattening settings')
+          state = {
+            ...state,
+            cesium: { ...DEFAULT_SETTINGS.cesium, ...state.cesium }
+          }
+        }
+
         // Repair step: ensure all settings groups have defaults filled in
         // This catches any settings that were missed by migrations
         const repaired = {
@@ -728,7 +737,9 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
       show3DBuildings: oldSettings.show3DBuildings ?? DEFAULT_SETTINGS.cesium.show3DBuildings,
       buildingQuality: oldSettings.buildingQuality ?? DEFAULT_SETTINGS.cesium.buildingQuality,
       timeMode: oldSettings.timeMode ?? DEFAULT_SETTINGS.cesium.timeMode,
-      fixedTimeHour: oldSettings.fixedTimeHour ?? DEFAULT_SETTINGS.cesium.fixedTimeHour
+      fixedTimeHour: oldSettings.fixedTimeHour ?? DEFAULT_SETTINGS.cesium.fixedTimeHour,
+      enableTerrainFlattening: oldSettings.enableTerrainFlattening ?? DEFAULT_SETTINGS.cesium.enableTerrainFlattening,
+      terrainBlendDistance: oldSettings.terrainBlendDistance ?? DEFAULT_SETTINGS.cesium.terrainBlendDistance
     },
     graphics: {
       msaaSamples: oldSettings.msaaSamples ?? DEFAULT_SETTINGS.graphics.msaaSamples,
@@ -857,7 +868,8 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
       radiusNm: oldSettings.realtraffic?.radiusNm ?? DEFAULT_SETTINGS.realtraffic.radiusNm
     },
     advanced: {
-      enableInterpolationDebugLogs: oldSettings.advanced?.enableInterpolationDebugLogs ?? DEFAULT_SETTINGS.advanced.enableInterpolationDebugLogs
+      enableInterpolationDebugLogs: oldSettings.advanced?.enableInterpolationDebugLogs ?? DEFAULT_SETTINGS.advanced.enableInterpolationDebugLogs,
+      enableDebugCoordinateOverlay: oldSettings.advanced?.enableDebugCoordinateOverlay ?? DEFAULT_SETTINGS.advanced.enableDebugCoordinateOverlay
     }
   }
 }

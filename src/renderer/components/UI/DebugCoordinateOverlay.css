@@ -1,0 +1,72 @@
+.debug-coordinate-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 1000;
+}
+
+.debug-coord-panel {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(0, 0, 0, 0.8);
+  border: 1px solid rgba(0, 255, 0, 0.5);
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 12px;
+  color: #00ff00;
+  pointer-events: auto;
+  cursor: crosshair;
+  min-width: 280px;
+}
+
+.debug-coord-title {
+  font-weight: bold;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(0, 255, 0, 0.3);
+}
+
+.debug-coord-row {
+  display: flex;
+  justify-content: space-between;
+  margin: 2px 0;
+}
+
+.debug-coord-row.clicked {
+  color: #ffff00;
+}
+
+.debug-coord-label {
+  opacity: 0.7;
+  margin-right: 12px;
+}
+
+.debug-coord-value {
+  text-align: right;
+}
+
+.debug-coord-copied {
+  margin-top: 8px;
+  padding: 4px 8px;
+  background: rgba(0, 255, 0, 0.2);
+  border-radius: 2px;
+  text-align: center;
+  animation: fadeIn 0.2s ease-in;
+}
+
+.debug-coord-hint {
+  margin-top: 8px;
+  font-size: 10px;
+  opacity: 0.5;
+  text-align: center;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

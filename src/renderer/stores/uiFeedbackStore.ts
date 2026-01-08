@@ -23,6 +23,10 @@ interface UIFeedbackStore {
   showTimelineDebugModal: boolean
   setShowTimelineDebugModal: (show: boolean) => void
   toggleTimelineDebugModal: () => void
+  // Terrain cache clear request (handled by CesiumViewer)
+  clearTerrainCacheRequested: boolean
+  requestClearTerrainCache: () => void
+  acknowledgeClearTerrainCache: () => void
 }
 
 let feedbackTimeout: ReturnType<typeof setTimeout> | null = null
@@ -56,5 +60,9 @@ export const useUIFeedbackStore = create<UIFeedbackStore>((set, get) => ({
   toggleModelMatchingModal: () => set((state) => ({ showModelMatchingModal: !state.showModelMatchingModal })),
   showTimelineDebugModal: false,
   setShowTimelineDebugModal: (show) => set({ showTimelineDebugModal: show }),
-  toggleTimelineDebugModal: () => set((state) => ({ showTimelineDebugModal: !state.showTimelineDebugModal }))
+  toggleTimelineDebugModal: () => set((state) => ({ showTimelineDebugModal: !state.showTimelineDebugModal })),
+  // Terrain cache clear
+  clearTerrainCacheRequested: false,
+  requestClearTerrainCache: () => set({ clearTerrainCacheRequested: true }),
+  acknowledgeClearTerrainCache: () => set({ clearTerrainCacheRequested: false })
 }))

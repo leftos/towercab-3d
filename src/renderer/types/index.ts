@@ -387,6 +387,17 @@ export type {
 } from './exportImport'
 
 // ============================================================================
+// TERRAIN FLATTENING TYPES
+// ============================================================================
+
+export type {
+  // Flattening polygon types
+  FlatteningPolygon,
+  AirportFlatteningConfig,
+  PolygonBBox
+} from './terrain'
+
+// ============================================================================
 // TYPE ORGANIZATION NOTES
 // ============================================================================
 

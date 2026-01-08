@@ -1,6 +1,7 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useReplayStore } from '../../stores/replayStore'
+import { useUIFeedbackStore } from '../../stores/uiFeedbackStore'
 import { estimateReplayMemoryMB } from '../../constants/replay'
 import type { ReplayExportData } from '../../types/replay'
 import CollapsibleSection from './settings/CollapsibleSection'
@@ -8,6 +9,10 @@ import './ControlsBar.css'
 
 function SettingsPerformanceTab() {
   const replayFileInputRef = useRef<HTMLInputElement>(null)
+  const [isClearingCache, setIsClearingCache] = useState(false)
+
+  // UI feedback store for cache clear
+  const requestClearTerrainCache = useUIFeedbackStore((state) => state.requestClearTerrainCache)
 
   // Settings store - Performance (Memory group)
   const inMemoryTileCacheSize = useSettingsStore((state) => state.memory.inMemoryTileCacheSize)
@@ -132,6 +137,36 @@ function SettingsPerformanceTab() {
           </div>
           <p className="setting-hint">
             IndexedDB cache for satellite/terrain tiles.
+          </p>
+        </div>
+
+        <div className="setting-item">
+          <label>Clear Terrain Cache</label>
+          <button
+            className="control-button"
+            onClick={() => {
+              setIsClearingCache(true)
+              requestClearTerrainCache()
+              // Reset button state after a delay (actual clear happens in CesiumViewer)
+              setTimeout(() => setIsClearingCache(false), 2000)
+            }}
+            disabled={isClearingCache}
+            style={{ marginTop: '4px' }}
+          >
+            {isClearingCache ? (
+              <>Clearing...</>
+            ) : (
+              <>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                </svg>
+                Clear Cache
+              </>
+            )}
+          </button>
+          <p className="setting-hint">
+            Clears in-memory and disk terrain tile caches. Use this after toggling terrain flattening or if terrain appears corrupted.
           </p>
         </div>
       </CollapsibleSection>

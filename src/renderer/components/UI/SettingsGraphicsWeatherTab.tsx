@@ -19,6 +19,8 @@ function SettingsGraphicsWeatherTab() {
   const terrainQuality = useSettingsStore((state) => state.cesium.terrainQuality)
   const show3DBuildings = useSettingsStore((state) => state.cesium.show3DBuildings)
   const buildingQuality = useSettingsStore((state) => state.cesium.buildingQuality)
+  const enableTerrainFlattening = useSettingsStore((state) => state.cesium.enableTerrainFlattening)
+  const terrainBlendDistance = useSettingsStore((state) => state.cesium.terrainBlendDistance)
   const updateCesiumSettings = useSettingsStore((state) => state.updateCesiumSettings)
 
   // Lighting & atmosphere settings
@@ -207,6 +209,40 @@ function SettingsGraphicsWeatherTab() {
             </select>
             <p className="setting-hint">
               Higher quality keeps buildings visible at greater zoom distances but uses more memory.
+            </p>
+          </div>
+        )}
+
+        <div className="setting-item">
+          <label>
+            <input
+              type="checkbox"
+              checked={enableTerrainFlattening}
+              onChange={(e) => updateCesiumSettings({ enableTerrainFlattening: e.target.checked })}
+            />
+            Flatten Airport Runways
+          </label>
+          <p className="setting-hint">
+            Flattens runway surfaces to their proper elevations. Prevents aircraft from bouncing on uneven terrain.
+          </p>
+        </div>
+
+        {enableTerrainFlattening && (
+          <div className="setting-item">
+            <label>Runway Edge Blend Distance</label>
+            <div className="slider-with-value">
+              <input
+                type="range"
+                min="25"
+                max="100"
+                step="5"
+                value={terrainBlendDistance}
+                onChange={(e) => updateCesiumSettings({ terrainBlendDistance: Number(e.target.value) })}
+              />
+              <span>{terrainBlendDistance}m</span>
+            </div>
+            <p className="setting-hint">
+              Smooth transition zone between flat runway and natural terrain. Higher = smoother edges.
             </p>
           </div>
         )}
