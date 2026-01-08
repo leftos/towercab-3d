@@ -315,7 +315,8 @@ fn parse_aircraft_cfg_all_liveries(aircraft_dir: &std::path::Path) -> Vec<Aircra
             }
             in_fltsim_section = trimmed.to_uppercase().starts_with("[FLTSIM");
             current_title = None;
-            current_texture = None;
+            // Default to empty texture (for FSLTL generic models)
+            current_texture = if in_fltsim_section { Some(String::new()) } else { None };
             current_icao_airline = None;
             continue;
         }
@@ -347,9 +348,8 @@ fn parse_aircraft_cfg_all_liveries(aircraft_dir: &std::path::Path) -> Vec<Aircra
                     .trim()
                     .trim_matches('"')
                     .trim();
-                if !value.is_empty() {
-                    current_texture = Some(value.to_string());
-                }
+                // Allow empty texture folders (for FSLTL generic models like FSLTL_BCS3_ZZZZ)
+                current_texture = Some(value.to_string());
             }
         } else if lower.starts_with("icao_airline") {
             if let Some(eq_pos) = trimmed.find('=') {
