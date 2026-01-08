@@ -351,12 +351,14 @@ useBabylonOverlay
 
 ## State Management (Zustand Stores)
 
+18 Zustand stores manage application state.
+
 ### Store Relationships
 
 ```
-globalSettingsStore (NEW - shared across devices)
+globalSettingsStore (shared across devices)
 ├─ cesiumIonToken: string
-├─ fsltl: { sourcePath, outputPath, textureScale, enableFsltlModels }
+├─ msfsModels: { communityPath, enableFsltl, enableAig, priority, textureScale, cacheDirectory, cacheLimitMB }
 ├─ airports: { defaultIcao, recentAirports }
 ├─ viewportSettings: { bookmarks, datablockPositions, viewportLayouts }
 ├─ Persisted in: Tauri file system (global-settings.json)
@@ -365,7 +367,8 @@ globalSettingsStore (NEW - shared across devices)
      ├─ CesiumViewer (Ion token)
      ├─ viewportStore (bookmarks, viewport layouts)
      ├─ datablockPositionStore (datablock positions)
-     └─ FSLTLConversionPanel (FSLTL paths)
+     ├─ MSFSModelConversionService (MSFS paths, cache settings)
+     └─ ModelMatchingPanel (model settings UI)
 
 airportStore
 ├─ currentAirport: Airport | null
@@ -433,13 +436,35 @@ aircraftFilterStore
      ├─ useAircraftFiltering (list filtering for UI)
      └─ AircraftPanel (filter controls)
 
-fsltlConversionStore
-├─ conversionProgress: ConversionProgress
-├─ selectedAirlines: Set<string>
-├─ selectedAircraftTypes: Set<string>
+indexingStore
+├─ fsltlProgress: number (0-100)
+├─ aigProgress: number (0-100)
+├─ status: string
 └─ Used by:
-     ├─ FSLTLConversionPanel (conversion UI)
-     └─ AircraftModelService (model loading)
+     └─ InitializationOverlay (show MSFS indexing progress)
+
+realTrafficStore
+├─ isConnected: boolean
+├─ connectionError: string | null
+├─ lastUpdate: timestamp
+└─ Used by:
+     ├─ RealTrafficService (connection management)
+     └─ ControlsBar (connection status)
+
+vnasStore
+├─ sessionState: 'disconnected' | 'connecting' | 'connected' | 'waiting'
+├─ sessionId: string | null
+├─ lastUpdate: timestamp
+└─ Used by:
+     ├─ VnasService (session management)
+     └─ TopBar (connection status)
+
+aircraftTimelineStore
+├─ isOpen: boolean
+├─ selectedCallsign: string | null
+├─ snapshots: AircraftSnapshot[]
+└─ Used by:
+     └─ AircraftTimelineModal (debug visualization)
 
 updateStore
 ├─ updateAvailable: boolean
@@ -880,11 +905,13 @@ src/renderer/
 │
 ├─ stores/
 │   ├─ aircraftFilterStore.ts
+│   ├─ aircraftTimelineStore.ts (debug timeline modal)
 │   ├─ airportStore.ts
 │   ├─ datablockPositionStore.ts
-│   ├─ fsltlConversionStore.ts
-│   ├─ globalSettingsStore.ts (NEW - shared across devices)
+│   ├─ globalSettingsStore.ts (shared across devices)
+│   ├─ indexingStore.ts (MSFS model indexing progress)
 │   ├─ measureStore.ts
+│   ├─ realTrafficStore.ts (RealTraffic connection state)
 │   ├─ replayStore.ts
 │   ├─ runwayStore.ts
 │   ├─ settingsStore.ts (local per-browser settings)
@@ -892,13 +919,20 @@ src/renderer/
 │   ├─ updateStore.ts
 │   ├─ vatsimStore.ts
 │   ├─ viewportStore.ts (PRIMARY CAMERA STORE)
+│   ├─ vnasStore.ts (vNAS connection state)
 │   ├─ vrStore.ts
 │   └─ weatherStore.ts
 │
 ├─ services/
-│   ├─ VatsimService.ts (API client)
-│   ├─ WeatherService.ts (METAR parsing)
-│   └─ AircraftModelService.ts (model metadata)
+│   ├─ VatsimService.ts (VATSIM API client)
+│   ├─ MetarService.ts (METAR weather parsing)
+│   ├─ RealTrafficService.ts (RealTraffic WebSocket client)
+│   ├─ AircraftModelService.ts (model lookup and matching)
+│   ├─ MSFSModelConversionService.ts (FSLTL/AIG model conversion)
+│   ├─ AircraftDimensionsService.ts (aircraft size data for scaling)
+│   ├─ ModService.ts (custom model loading)
+│   ├─ RunwayService.ts (runway data for flight phase)
+│   └─ UpdateService.ts (app update checking)
 │
 ├─ utils/
 │   ├─ enuTransforms.ts (coordinate conversions)
@@ -910,15 +944,19 @@ src/renderer/
 │   └─ performanceMonitor.ts (FPS tracking)
 │
 ├─ types/
+│   ├─ aircraft-timeline.ts (debug timeline snapshots)
 │   ├─ airport.ts (Airport data structures, tower height)
-│   ├─ babylon.ts (labels, weather meshes, scene options, hook return types, ENU transforms)
+│   ├─ babylon.ts (labels, weather meshes, scene options, ENU transforms)
 │   ├─ camera.ts (ViewMode, FollowMode, CameraState, etc.)
-│   ├─ fsltl.ts (FSLTL conversion types, airline mapping)
+│   ├─ exportImport.ts (settings backup/restore)
+│   ├─ fsltl.ts (MSFS model types, MSFSModelSettings)
 │   ├─ mod.ts (modding system types, manifest formats)
+│   ├─ realtraffic.ts (RealTraffic API types)
 │   ├─ replay.ts (replay snapshots, playback state)
 │   ├─ settings.ts (grouped settings interfaces)
 │   ├─ vatsim.ts (Pilot, AircraftState, InterpolatedAircraftState)
 │   ├─ viewport.ts (Viewport, ViewportLayout, etc.)
+│   ├─ vnas.ts (vNAS session types)
 │   └─ weather.ts (CloudLayer, FlightCategory, precipitation, etc.)
 │
 ├─ constants/

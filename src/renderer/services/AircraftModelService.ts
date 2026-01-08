@@ -636,6 +636,8 @@ class AircraftModelServiceClass {
     }
 
     // 1. Try VMR rules first (highest priority)
+    // Get settings to respect source priority and enabled state
+    const msfsSettings = MSFSModelConversionService.getSettings()
     const alternatives = userVMRService.getAlternatives(aircraftType, airlineCode)
     if (alternatives.length > 0) {
       log('1. VMR rules', `found ${alternatives.length} alternatives: ${alternatives.join(', ')}`)
@@ -646,7 +648,11 @@ class AircraftModelServiceClass {
     }
     for (const modelName of alternatives) {
       // Check if model is already cached (pre-converted)
-      for (const source of ['fsltl', 'aig'] as const) {
+      // IMPORTANT: Use priority order and only check enabled sources
+      for (const source of msfsSettings.priority) {
+        const isEnabled = source === 'fsltl' ? msfsSettings.enableFsltl : msfsSettings.enableAig
+        if (!isEnabled) continue
+
         const cachedPath = MSFSModelConversionService.getCachedModel(modelName, source)
         if (cachedPath) {
           log('1. VMR rules', `MATCH cached ${source}:${modelName}`)
@@ -655,6 +661,7 @@ class AircraftModelServiceClass {
       }
 
       // Try to find source model for on-demand conversion
+      // resolveSourceModel already respects priority and enabled state
       const sourceInfo = MSFSModelConversionService.resolveSourceModel(modelName)
       if (sourceInfo) {
         const result = trySourceModel(sourceInfo)

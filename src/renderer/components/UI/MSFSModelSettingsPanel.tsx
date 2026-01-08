@@ -73,6 +73,12 @@ function MSFSModelSettingsPanel() {
   // Cache stats
   const [cacheStats, setCacheStats] = useState({ entryCount: 0, totalSizeMB: 0, limitMB: settings.cacheLimitMB })
 
+  // Model counts (updated when indexing completes)
+  const [modelCounts, setModelCounts] = useState({ fsltl: 0, aig: 0 })
+
+  // Indexing state for showing progress
+  const [indexingSource, setIndexingSource] = useState<MSFSModelSource | null>(null)
+
   // Initialize on mount
   useEffect(() => {
     if (inRemoteMode || !isTauri()) return
@@ -85,6 +91,9 @@ function MSFSModelSettingsPanel() {
 
     // Update cache stats
     setCacheStats(MSFSModelConversionService.getCacheStats())
+
+    // Update model counts
+    setModelCounts(MSFSModelConversionService.getModelCounts())
   }, [inRemoteMode])
 
   // Sync VMR files with settings
@@ -199,6 +208,25 @@ function MSFSModelSettingsPanel() {
     } else {
       await updateMsfsModels({ enableAig: enabled })
     }
+
+    // If enabling a source, trigger indexing if not already indexed
+    if (enabled) {
+      const currentCounts = MSFSModelConversionService.getModelCounts()
+      const needsIndexing = source === 'fsltl' ? currentCounts.fsltl === 0 : currentCounts.aig === 0
+
+      if (needsIndexing) {
+        setIndexingSource(source)
+        try {
+          await MSFSModelConversionService.indexSourceOnDemand(source)
+          // Update model counts after indexing completes
+          setModelCounts(MSFSModelConversionService.getModelCounts())
+        } catch (err) {
+          console.error(`[MSFSSettings] Failed to index ${source}:`, err)
+        } finally {
+          setIndexingSource(null)
+        }
+      }
+    }
   }
 
   // Handle cache limit change
@@ -228,8 +256,6 @@ function MSFSModelSettingsPanel() {
   if (inRemoteMode) {
     return <MSFSModelSettingsPanelRemote />
   }
-
-  const modelCounts = MSFSModelConversionService.getModelCounts()
 
   return (
     <CollapsibleSection title="MSFS Aircraft Models">
@@ -280,6 +306,7 @@ function MSFSModelSettingsPanel() {
                 const isFound = source === 'fsltl'
                   ? (detection?.fsltlFound ?? false)
                   : (detection?.aigFound ?? false)
+                const isIndexing = indexingSource === source
 
                 return (
                   <div key={source} className="msfs-source-item">
@@ -287,13 +314,13 @@ function MSFSModelSettingsPanel() {
                       <button
                         className="msfs-arrow-btn"
                         onClick={() => handleMoveSource(index, 'up')}
-                        disabled={index === 0}
+                        disabled={index === 0 || isIndexing}
                         title="Move up"
                       >▲</button>
                       <button
                         className="msfs-arrow-btn"
                         onClick={() => handleMoveSource(index, 'down')}
-                        disabled={index === settings.priority.length - 1}
+                        disabled={index === settings.priority.length - 1 || isIndexing}
                         title="Move down"
                       >▼</button>
                     </div>
@@ -302,12 +329,12 @@ function MSFSModelSettingsPanel() {
                         type="checkbox"
                         checked={isEnabled}
                         onChange={(e) => handleEnableToggle(source, e.target.checked)}
-                        disabled={!isFound}
+                        disabled={!isFound || isIndexing}
                       />
                       <span>{source.toUpperCase()}</span>
                     </label>
-                    <span className="msfs-source-count">
-                      {isFound ? `${count} indexed` : 'Not installed'}
+                    <span className={`msfs-source-count ${isIndexing ? 'indexing' : ''}`}>
+                      {!isFound ? 'Not installed' : isIndexing ? 'Indexing...' : `${count} indexed`}
                     </span>
                     <span className="msfs-source-priority">#{index + 1}</span>
                   </div>

@@ -427,6 +427,16 @@
   text-align: right;
 }
 
+.msfs-source-count.indexing {
+  color: #ba68c8;
+  animation: msfs-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes msfs-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
 .msfs-source-priority {
   font-size: 10px;
   font-weight: 600;

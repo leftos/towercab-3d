@@ -41,6 +41,7 @@ pub struct SourceModelInfo {
     pub source: String,         // "fsltl" or "aig"
     pub model_name: String,     // Display name (from aircraft.cfg title)
     pub folder_name: String,    // Actual folder name (e.g., "FSLTL_A320_BAW_IAE")
+    pub aircraft_folder_path: String, // Full path to the aircraft folder
     pub gltf_path: String,
     pub texture_dirs: Vec<String>,
     pub aircraft_type: String,
@@ -105,7 +106,7 @@ struct ModelIndexCache {
     models: Vec<SourceModelInfo>,
 }
 
-const MODEL_CACHE_VERSION: u32 = 3; // Bump when cache format changes
+const MODEL_CACHE_VERSION: u32 = 5; // Bump when cache format changes (v5: fixed UTF-8 parsing for AIG)
 
 /// Get the modification time of a folder (recursive max mtime would be too slow)
 fn get_folder_mtime(path: &std::path::Path) -> Option<u64> {
@@ -116,16 +117,16 @@ fn get_folder_mtime(path: &std::path::Path) -> Option<u64> {
 }
 
 /// Get the cache file path for a model source
-fn get_cache_path(base_path: &std::path::Path, source: &str) -> PathBuf {
-    // Store cache next to the source folder for easy invalidation
-    // Use parent directory so cache persists if user re-extracts FSLTL
-    let cache_dir = base_path.parent().unwrap_or(base_path);
-    cache_dir.join(format!(".tc3d_{}_cache.json", source))
+/// cache_dir should be the app data directory (e.g., %APPDATA%/com.towercab.viewer)
+fn get_cache_path(cache_dir: &std::path::Path, source: &str) -> PathBuf {
+    cache_dir.join(format!("{}_model_cache.json", source))
 }
 
 /// Load model index from cache if valid
-fn load_model_cache(base_path: &std::path::Path, source: &str) -> Option<Vec<SourceModelInfo>> {
-    let cache_path = get_cache_path(base_path, source);
+/// cache_dir: app data directory for storing cache files
+/// base_path: source folder path (for mtime validation)
+fn load_model_cache(cache_dir: &std::path::Path, base_path: &std::path::Path, source: &str) -> Option<Vec<SourceModelInfo>> {
+    let cache_path = get_cache_path(cache_dir, source);
     if !cache_path.exists() {
         return None;
     }
@@ -154,7 +155,9 @@ fn load_model_cache(base_path: &std::path::Path, source: &str) -> Option<Vec<Sou
 }
 
 /// Save model index to cache
-fn save_model_cache(base_path: &std::path::Path, source: &str, models: &[SourceModelInfo]) {
+/// cache_dir: app data directory for storing cache files
+/// base_path: source folder path (for mtime)
+fn save_model_cache(cache_dir: &std::path::Path, base_path: &std::path::Path, source: &str, models: &[SourceModelInfo]) {
     let airplanes = base_path.join("SimObjects").join("Airplanes");
     let Some(folder_mtime) = get_folder_mtime(&airplanes) else { return };
 
@@ -164,7 +167,13 @@ fn save_model_cache(base_path: &std::path::Path, source: &str, models: &[SourceM
         models: models.to_vec(),
     };
 
-    let cache_path = get_cache_path(base_path, source);
+    // Ensure cache directory exists
+    if let Err(e) = fs::create_dir_all(cache_dir) {
+        println!("[MSFSDetection] Failed to create cache directory: {}", e);
+        return;
+    }
+
+    let cache_path = get_cache_path(cache_dir, source);
     if let Ok(content) = serde_json::to_string(&cache) {
         if let Err(e) = fs::write(&cache_path, content) {
             println!("[MSFSDetection] Failed to write {} cache: {}", source, e);
@@ -186,7 +195,9 @@ fn parse_aircraft_cfg_icao_type(aircraft_dir: &std::path::Path) -> Option<String
         return None;
     }
 
-    let content = fs::read_to_string(&cfg_path).ok()?;
+    // Use lossy UTF-8 conversion for AIG files with Windows-1252 encoding
+    let bytes = fs::read(&cfg_path).ok()?;
+    let content = String::from_utf8_lossy(&bytes);
 
     let mut in_general_section = false;
     for line in content.lines() {
@@ -226,7 +237,9 @@ fn parse_aircraft_cfg_title(aircraft_dir: &std::path::Path) -> Option<String> {
         return None;
     }
 
-    let content = fs::read_to_string(&cfg_path).ok()?;
+    // Use lossy UTF-8 conversion for AIG files with Windows-1252 encoding
+    let bytes = fs::read(&cfg_path).ok()?;
+    let content = String::from_utf8_lossy(&bytes);
 
     // Look for title = "..." in the [FLTSIM.0] section
     let mut in_fltsim_section = false;
@@ -270,8 +283,10 @@ fn parse_aircraft_cfg_all_liveries(aircraft_dir: &std::path::Path) -> Vec<Aircra
         return Vec::new();
     }
 
-    let content = match fs::read_to_string(&cfg_path) {
-        Ok(c) => c,
+    // Read as bytes and convert to string with lossy UTF-8 conversion
+    // AIG aircraft.cfg files often contain Windows-1252 encoded characters
+    let content = match fs::read(&cfg_path) {
+        Ok(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
         Err(_) => return Vec::new(),
     };
 
@@ -605,6 +620,7 @@ fn list_models_unified(base_path: &std::path::Path, config: &SourceConfig) -> Ve
                         source: config.source.to_string(),
                         model_name: livery.title,
                         folder_name: folder_name.clone(),
+                        aircraft_folder_path: normalize_path_string(&aircraft_dir),
                         gltf_path: gltf_path.clone(),
                         texture_dirs,
                         aircraft_type: aircraft_type.clone(),
@@ -649,6 +665,7 @@ fn list_models_unified(base_path: &std::path::Path, config: &SourceConfig) -> Ve
                             source: config.source.to_string(),
                             model_name,
                             folder_name: folder_name.clone(),
+                            aircraft_folder_path: normalize_path_string(&aircraft_dir),
                             gltf_path: gltf_path.clone(),
                             texture_dirs,
                             aircraft_type: aircraft_type.clone(),
@@ -679,6 +696,7 @@ fn list_models_unified(base_path: &std::path::Path, config: &SourceConfig) -> Ve
                         source: config.source.to_string(),
                         model_name,
                         folder_name: folder_name.clone(),
+                        aircraft_folder_path: normalize_path_string(&aircraft_dir),
                         gltf_path: gltf_path.clone(),
                         texture_dirs: all_texture_dirs,
                         aircraft_type: aircraft_type.clone(),
@@ -747,11 +765,13 @@ pub fn detect_msfs_installations(community_path: String) -> Result<MSFSDetection
 /// List available FSLTL models from source
 /// Uses unified listing logic that parses ALL FLTSIM sections from aircraft.cfg
 #[tauri::command]
-pub fn list_fsltl_models(base_path: String) -> Result<Vec<SourceModelInfo>, String> {
+pub fn list_fsltl_models(app: tauri::AppHandle, base_path: String) -> Result<Vec<SourceModelInfo>, String> {
     let base = PathBuf::from(&base_path);
+    let cache_dir = app.path().app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
 
     // Try to load from cache first (much faster on subsequent launches)
-    if let Some(cached) = load_model_cache(&base, "fsltl") {
+    if let Some(cached) = load_model_cache(&cache_dir, &base, "fsltl") {
         return Ok(cached);
     }
 
@@ -768,7 +788,7 @@ pub fn list_fsltl_models(base_path: String) -> Result<Vec<SourceModelInfo>, Stri
     println!("[MSFSDetection] Indexed {} FSLTL liveries in {:?}", models.len(), elapsed);
 
     // Save to cache for faster subsequent launches
-    save_model_cache(&base, "fsltl", &models);
+    save_model_cache(&cache_dir, &base, "fsltl", &models);
 
     Ok(models)
 }
@@ -776,11 +796,13 @@ pub fn list_fsltl_models(base_path: String) -> Result<Vec<SourceModelInfo>, Stri
 /// List available AIG models from source
 /// Uses unified listing logic that parses ALL FLTSIM sections from aircraft.cfg
 #[tauri::command]
-pub fn list_aig_models(base_path: String) -> Result<Vec<SourceModelInfo>, String> {
+pub fn list_aig_models(app: tauri::AppHandle, base_path: String) -> Result<Vec<SourceModelInfo>, String> {
     let base = PathBuf::from(&base_path);
+    let cache_dir = app.path().app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
 
     // Try to load from cache first
-    if let Some(cached) = load_model_cache(&base, "aig") {
+    if let Some(cached) = load_model_cache(&cache_dir, &base, "aig") {
         return Ok(cached);
     }
 
@@ -797,7 +819,7 @@ pub fn list_aig_models(base_path: String) -> Result<Vec<SourceModelInfo>, String
     println!("[MSFSDetection] Indexed {} AIG liveries in {:?}", models.len(), elapsed);
 
     // Save to cache for faster subsequent launches
-    save_model_cache(&base, "aig", &models);
+    save_model_cache(&cache_dir, &base, "aig", &models);
 
     Ok(models)
 }
@@ -1091,4 +1113,33 @@ pub fn scan_cache_directory(cache_dir: String) -> Result<Vec<CachedGlbInfo>, Str
     }
 
     Ok(cached_models)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_parse_aig_aircraft_cfg() {
+        // Test parsing AIG aircraft.cfg files which use Windows-1252 encoding
+        let path = PathBuf::from(r"X:\Games\MSFlightSimPackages2024\Community\aig-aitraffic-oci\SimObjects\Airplanes\AIGAIM_FAIB_A320-200_IAE");
+        if !path.exists() {
+            println!("Skipping test - AIG path not found");
+            return;
+        }
+
+        let liveries = parse_aircraft_cfg_all_liveries(&path);
+        println!("Found {} liveries", liveries.len());
+        assert!(!liveries.is_empty(), "Should have parsed some liveries");
+
+        // Verify United Airlines is found with correct title format
+        let united = liveries.iter().find(|l| l.title.contains("United Airlines"));
+        assert!(united.is_some(), "Should find United Airlines livery");
+
+        let u = united.unwrap();
+        assert_eq!(u.title, "AIGAIM_United Airlines Airbus A320-200");
+        assert_eq!(u.icao_airline.as_deref(), Some("UAL"));
+        println!("Found United: title='{}', icao_airline={:?}", u.title, u.icao_airline);
+    }
 }

@@ -192,6 +192,18 @@
   cursor: not-allowed;
 }
 
+.model-test-button.loading {
+  background: rgba(156, 39, 176, 0.2);
+  border-color: rgba(156, 39, 176, 0.4);
+  color: #ba68c8;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.model-test-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .model-test-result {
   margin-top: 12px;
   padding: 10px 12px;

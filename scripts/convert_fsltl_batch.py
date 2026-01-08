@@ -1237,6 +1237,18 @@ Examples:
     if requested_titles:
         liveries_to_convert = [l for l in all_liveries if l['livery_title'] in requested_titles]
         print(f"Filtering to {len(liveries_to_convert)} requested liveries")
+
+        # If specific liveries were requested but none found, that's an error
+        if not liveries_to_convert:
+            not_found = requested_titles - {l['livery_title'] for l in all_liveries}
+            print(f"ERROR: None of the requested liveries were found in source", file=sys.stderr)
+            print(f"Requested: {requested_titles}", file=sys.stderr)
+            if not_found:
+                print(f"Not found: {not_found}", file=sys.stderr)
+            # Show some available liveries for debugging
+            available = [l['livery_title'] for l in all_liveries[:10]]
+            print(f"Available (first 10): {available}", file=sys.stderr)
+            return 1
     else:
         liveries_to_convert = all_liveries
         print(f"Converting all {len(liveries_to_convert)} liveries")
@@ -1352,6 +1364,11 @@ Examples:
             print(f"  - {error}")
         if len(progress['errors']) > 10:
             print(f"  ... and {len(progress['errors']) - 10} more")
+
+    # Return error if nothing was successfully converted
+    if successful == 0:
+        print("ERROR: No models were successfully converted", file=sys.stderr)
+        return 1
 
     return 0 if not failed else 1
 

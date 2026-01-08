@@ -109,7 +109,7 @@ The build script now automatically runs typecheck first, so production builds wi
 
 See `src/renderer/docs/architecture.md` for detailed documentation including:
 - Data flow diagrams (VATSIM, weather, settings)
-- Store relationships (15 Zustand stores)
+- Store relationships (18 Zustand stores)
 - Hook dependencies and call order
 - Rendering pipeline (Cesium + Babylon.js)
 - Component hierarchy
@@ -129,14 +129,18 @@ All TypeScript types centralized by domain. Import via `import type { ... } from
 
 | File | Purpose |
 |------|---------|
+| `aircraft-timeline.ts` | Timeline debug modal state and snapshot types |
 | `airport.ts` | Airport data, tower height |
 | `babylon.ts` | Labels, weather meshes, ENU transforms |
 | `camera.ts` | Camera state, view/follow modes, bookmarks |
-| `fsltl.ts` | FSLTL conversion, airline mapping |
+| `exportImport.ts` | Settings export/import data structures |
+| `fsltl.ts` | FSLTL/AIG conversion, airline mapping, MSFSModelSettings |
 | `mod.ts` | Modding manifest formats |
+| `realtraffic.ts` | RealTraffic API structures, ADS-B position data |
 | `replay.ts` | Replay snapshots, playback state |
-| `settings.ts` | App settings (cesium, graphics, camera, weather, memory, aircraft, ui) + GlobalSettings (cesiumIonToken, FSLTL paths, viewport data shared across devices) |
-| `vatsim.ts` | VATSIM and RealTraffic API structures, ADS-B fields |
+| `settings.ts` | App settings (cesium, graphics, camera, weather, memory, aircraft, ui) + GlobalSettings (cesiumIonToken, MSFS paths, viewport data shared across devices) |
+| `vatsim.ts` | VATSIM API structures, pilot/aircraft state |
+| `vnas.ts` | vNAS integration types (session, aircraft updates) |
 | `viewport.ts` | Viewport layout, multi-viewport config |
 | `weather.ts` | METAR, clouds, fog, precipitation |
 
@@ -159,6 +163,54 @@ Configuration values and limits. Import via `import { ... } from '@/constants'`:
 
 Use `SCREAMING_SNAKE_CASE` (e.g., `FOV_DEFAULT`, `ORBIT_DISTANCE_MAX`).
 
+### Services (`services/`)
+
+Business logic and external API integrations:
+
+| Service | Purpose |
+|---------|---------|
+| `AircraftDimensionsService.ts` | Aircraft wingspan/length data for model scaling |
+| `AircraftModelService.ts` | Model lookup, matching, and loading coordination |
+| `AirportService.ts` | Airport data fetching and caching |
+| `CustomVMRService.ts` | User-defined VMR (model matching) rules |
+| `ExportImportService.ts` | Settings backup and restore |
+| `FSLTLService.ts` | Legacy FSLTL service (being replaced by MSFS conversion) |
+| `MetarService.ts` | METAR weather data parsing and fetching |
+| `MigrationService.ts` | Settings migration between versions |
+| `ModService.ts` | Custom aircraft/tower model loading |
+| `MSFSModelConversionService.ts` | FSLTL/AIG model conversion orchestration |
+| `RealTrafficService.ts` | RealTraffic API WebSocket client |
+| `RunwayService.ts` | Runway data fetching for flight phase detection |
+| `SettingsTreeBuilder.ts` | Hierarchical settings organization |
+| `UpdateService.ts` | App update checking and installation |
+| `UserVMRService.ts` | User VMR rule management |
+| `VatsimService.ts` | VATSIM API data fetching |
+
+### Stores (`stores/`)
+
+Zustand state management (18 stores):
+
+| Store | Purpose |
+|-------|---------|
+| `aircraftFilterStore.ts` | Search query, airport traffic filter |
+| `aircraftTimelineStore.ts` | Debug timeline modal state |
+| `airportStore.ts` | Current airport, tower height |
+| `datablockPositionStore.ts` | Label positioning (global + per-aircraft) |
+| `globalSettingsStore.ts` | Shared settings (Cesium token, MSFS paths, bookmarks) |
+| `indexingStore.ts` | MSFS model indexing progress |
+| `measureStore.ts` | Measuring tool state |
+| `realTrafficStore.ts` | RealTraffic connection state |
+| `replayStore.ts` | Replay buffer and playback state |
+| `runwayStore.ts` | Runway data for current airport |
+| `settingsStore.ts` | Local per-browser settings |
+| `uiFeedbackStore.ts` | Toasts and notifications |
+| `updateStore.ts` | App update availability |
+| `vatsimStore.ts` | VATSIM pilots, aircraft states |
+| `viewportStore.ts` | Viewport layout, camera state (primary camera store) |
+| `vnasStore.ts` | vNAS connection state |
+| `vrStore.ts` | WebXR VR session state |
+| `weatherStore.ts` | METAR data, fog density |
+
 ## External Dependencies
 
 - **Cesium Ion**: Requires user-provided access token for terrain/imagery (free tier available)
@@ -166,6 +218,7 @@ Use `SCREAMING_SNAKE_CASE` (e.g., `FOV_DEFAULT`, `ORBIT_DISTANCE_MAX`).
 - **RealTraffic API**: Optional real-world ADS-B traffic with ~2-3s updates (requires license key subscription)
 - **Airport Database**: Fetched from `mwgg/Airports` GitHub raw JSON on startup
 - **Aviation Weather API**: `https://aviationweather.gov/api/data/metar` for METAR weather data (5-minute refresh)
+- **FSLTL/AIG Models**: Optional MSFS aircraft models from Community folder (on-the-fly conversion)
 
 ## Modding System
 
@@ -182,6 +235,61 @@ mods/
 ```
 
 See MODDING.md for manifest format and model requirements. Models are loaded on app startup; restart required for new mods.
+
+## MSFS Model Conversion
+
+TowerCab 3D can use aircraft models from FSLTL and AIG (AI traffic add-ons for Microsoft Flight Simulator) by converting them on-the-fly from MSFS GLTF format to GLB.
+
+### Architecture
+
+```
+MSFSModelConversionService (TypeScript)
+├─ initialize() - Detect FSLTL/AIG in Community folder, build model indexes
+├─ resolveSourceModel() - Find model by name, respects source priority
+├─ findModelByTypeAndAirline() - Match by aircraft type + airline code
+├─ findClosestModel() - Dimension-based fallback matching with scale factors
+├─ convertModel() - Queue conversion via Rust backend
+└─ Cache management - Memory + disk cache with LRU eviction
+
+msfs.rs (Rust backend)
+├─ detect_msfs_installations() - Find FSLTL/AIG folders
+├─ list_fsltl_models() / list_aig_models() - Parse aircraft.cfg, index liveries
+├─ convert_msfs_model() - Execute Python converter sidecar
+├─ Model index caching - JSON cache files for fast re-indexing
+└─ scan_cache_directory() - Load pre-converted models on startup
+
+fsltl_converter.exe (Python sidecar)
+├─ Converts GLTF + DDS textures to GLB
+├─ Texture scaling options (full/2k/1k/512)
+├─ Handles multiple liveries per aircraft folder
+└─ Built via PyInstaller (npm run build:converter)
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/renderer/services/MSFSModelConversionService.ts` | Frontend conversion service |
+| `src-tauri/src/msfs.rs` | Rust backend for detection, indexing, conversion |
+| `scripts/convert_fsltl_batch.py` | Python converter (source) |
+| `src-tauri/resources/fsltl_converter.exe` | Bundled converter executable |
+| `scripts/build_converter.py` | Builds the Python converter |
+
+### Model Matching Flow
+
+1. **Exact match**: Aircraft type + airline code → specific livery
+2. **Airline fallback**: Find any model for the airline (common narrowbody types)
+3. **Dimension matching**: Find closest model by wingspan/length, apply scale factors
+4. **Generic fallback**: Use built-in b738.glb model
+
+### Settings (GlobalSettings.msfsModels)
+
+- `communityPath`: MSFS Community folder location
+- `enableFsltl` / `enableAig`: Toggle each source
+- `priority`: Source priority order (`['fsltl', 'aig']`)
+- `textureScale`: Texture downscaling (`'full'` | `'2k'` | `'1k'` | `'512'`)
+- `cacheDirectory`: Where to store converted GLB files
+- `cacheLimitMB`: Max cache size (LRU eviction when exceeded)
 
 ## Build Configuration
 

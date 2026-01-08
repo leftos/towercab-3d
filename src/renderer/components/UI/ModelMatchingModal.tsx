@@ -39,6 +39,7 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
   const [testAirline, setTestAirline] = useState('')
   const [testType, setTestType] = useState('')
   const [testResult, setTestResult] = useState<TestResult | null>(null)
+  const [isTestLoading, setIsTestLoading] = useState(false)
 
   // Preview modal state
   const [previewModel, setPreviewModel] = useState<ModelInfo | null>(null)
@@ -58,7 +59,7 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
 
   // Run test lookup
   const runTest = useCallback(async () => {
-    if (!testType.trim()) return
+    if (!testType.trim() || isTestLoading) return
 
     const airlineCode = testAirline.trim().toUpperCase() || null
     const aircraftType = testType.trim().toUpperCase()
@@ -71,8 +72,17 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
     let modelInfo = aircraftModelService.getModelInfo(aircraftType, fakeCallsign)
     const vmrAlternatives = userVMRService.getAlternatives(aircraftType, airlineCode)
 
-    // If model is pending conversion, wait for it to complete
+    // If model is pending conversion, show loading state and wait
     if (modelInfo.matchType === 'pending') {
+      setIsTestLoading(true)
+      // Show initial result with pending status
+      setTestResult({
+        callsign: fakeCallsign,
+        aircraftType,
+        modelInfo,
+        vmrAlternatives
+      })
+
       try {
         const result = await aircraftModelService.waitForConversion(
           aircraftType,
@@ -85,6 +95,8 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
       } catch (error) {
         console.warn('[ModelMatch] Conversion wait failed:', error)
         // Continue with the pending model info
+      } finally {
+        setIsTestLoading(false)
       }
     }
 
@@ -98,7 +110,7 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
     if (modelInfo.matchType !== 'pending') {
       setPreviewModel(modelInfo)
     }
-  }, [testAirline, testType])
+  }, [testAirline, testType, isTestLoading])
 
   // Build model matching data for all aircraft in range
   const aircraftData = useMemo<AircraftModelData[]>(() => {
@@ -234,6 +246,7 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
               onChange={(e) => setTestAirline(e.target.value)}
               className="model-test-input"
               maxLength={4}
+              disabled={isTestLoading}
             />
             <input
               type="text"
@@ -243,13 +256,14 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
               className="model-test-input"
               maxLength={4}
               onKeyDown={(e) => e.key === 'Enter' && runTest()}
+              disabled={isTestLoading}
             />
             <button
               onClick={runTest}
-              disabled={!testType.trim()}
-              className="model-test-button"
+              disabled={!testType.trim() || isTestLoading}
+              className={`model-test-button ${isTestLoading ? 'loading' : ''}`}
             >
-              Test
+              {isTestLoading ? 'Converting...' : 'Test'}
             </button>
           </div>
           {testResult && (

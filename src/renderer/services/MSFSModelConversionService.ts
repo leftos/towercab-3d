@@ -237,7 +237,7 @@ class MSFSModelConversionServiceClass {
   /**
    * Get current MSFS model settings
    */
-  private getSettings(): MSFSModelSettings {
+  getSettings(): MSFSModelSettings {
     return useGlobalSettingsStore.getState().msfsModels
   }
 

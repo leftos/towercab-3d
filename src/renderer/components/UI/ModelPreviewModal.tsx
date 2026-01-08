@@ -48,27 +48,23 @@ export function ModelPreviewModal({ modelInfo, onClose }: ModelPreviewModalProps
         creditContainer: document.createElement('div')
       })
 
-      // Set single color background (no imagery)
-      const imageryLayers = viewer.imageryLayers
-      imageryLayers.removeAll()
-      imageryLayers.addImageryProvider(
-        new Cesium.SingleTileImageryProvider({
-          url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mM8duzYfwAHwQL9h9FqHwAAAABJRU5ErkJggg==',
-          rectangle: Cesium.Rectangle.MAX_VALUE,
-          tileWidth: 256,
-          tileHeight: 256
-        })
-      )
+      // Disable the globe and imagery for simple 3D model display
+      viewer.scene.globe.show = false
+      if (viewer.scene.skyBox) viewer.scene.skyBox.show = false
+      if (viewer.scene.sun) viewer.scene.sun.show = false
+      if (viewer.scene.moon) viewer.scene.moon.show = false
+      if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = false
 
-      // Configure scene
-      viewer.scene.globe.enableLighting = false
-      viewer.scene.globe.depthTestAgainstTerrain = false
-      viewer.scene.backgroundColor = new Cesium.Color(0.1, 0.1, 0.15, 1.0)
-      viewer.scene.logarithmicDepthBuffer = true
-      viewer.scene.highDynamicRange = true
+      // Remove all imagery
+      viewer.imageryLayers.removeAll()
+
+      // Configure scene for model preview
+      viewer.scene.backgroundColor = new Cesium.Color(0.1, 0.1, 0.12, 1.0)
+      viewer.scene.logarithmicDepthBuffer = false // Not needed for close-up model
+      viewer.scene.highDynamicRange = false
       viewer.scene.postProcessStages.fxaa.enabled = true
 
-      // Simple lighting
+      // Simple directional lighting for model visibility
       viewer.scene.light = new Cesium.DirectionalLight({
         direction: new Cesium.Cartesian3(0.3, -0.5, -0.8)
       })
@@ -98,25 +94,29 @@ export function ModelPreviewModal({ modelInfo, onClose }: ModelPreviewModalProps
     // Clear previous models
     viewer.scene.primitives.removeAll()
 
-    // Load model at world origin
+    // Load model in simple 3D space (not geographic)
     Cesium.Model.fromGltfAsync({
       url: modelInfo.modelUrl,
       show: true,
-      shadows: Cesium.ShadowMode.DISABLED,
-      modelMatrix: Cesium.Matrix4.IDENTITY
+      shadows: Cesium.ShadowMode.DISABLED
     })
       .then((model: Cesium.Model) => {
         if (!viewer || viewer.isDestroyed()) return
 
-        // Apply scale and rotation from ModelInfo
-        const position = Cesium.Cartesian3.ZERO
-        const hpr = new Cesium.HeadingPitchRoll(
-          Cesium.Math.toRadians(modelInfo.rotationOffset ?? 0),
-          0,
-          0
-        )
-        const modelMatrix = Cesium.Transforms.headingPitchRollToFixedFrame(position, hpr)
+        // Create transformation matrix at origin (0,0,0)
+        // Start with identity matrix
+        let modelMatrix = Cesium.Matrix4.IDENTITY.clone()
 
+        // Apply rotation around Z axis for heading (if specified)
+        if (modelInfo.rotationOffset && modelInfo.rotationOffset !== 0) {
+          const rotation = Cesium.Matrix3.fromRotationZ(
+            Cesium.Math.toRadians(modelInfo.rotationOffset)
+          )
+          const rotationMatrix = Cesium.Matrix4.fromRotationTranslation(rotation)
+          modelMatrix = Cesium.Matrix4.multiply(modelMatrix, rotationMatrix, new Cesium.Matrix4())
+        }
+
+        // Apply scale
         const scaleMatrix = Cesium.Matrix4.fromScale(
           new Cesium.Cartesian3(
             modelInfo.scale.x,
@@ -124,27 +124,45 @@ export function ModelPreviewModal({ modelInfo, onClose }: ModelPreviewModalProps
             modelInfo.scale.z
           )
         )
-        Cesium.Matrix4.multiply(modelMatrix, scaleMatrix, modelMatrix)
+        modelMatrix = Cesium.Matrix4.multiply(modelMatrix, scaleMatrix, new Cesium.Matrix4())
+
         model.modelMatrix = modelMatrix
 
         // Add to scene
         viewer.scene.primitives.add(model)
 
-        // Position camera based on model bounds
-        const boundingSphere = model.boundingSphere as Cesium.BoundingSphere
-        const radius = boundingSphere?.radius ?? 15
-        const distance = radius * 2.5
+        // Wait for model to be fully ready before positioning camera
+        // This ensures boundingSphere is available
+        model.readyEvent.addEventListener(() => {
+          if (!viewer || viewer.isDestroyed()) return
 
-        viewer.camera.setView({
-          destination: new Cesium.Cartesian3(distance, 0, radius * 0.8),
-          orientation: {
-            heading: Cesium.Math.toRadians(-90),
-            pitch: Cesium.Math.toRadians(-20),
-            roll: 0
-          }
+          // Position camera based on model bounds
+          const boundingSphere = model.boundingSphere as Cesium.BoundingSphere
+          const center = boundingSphere?.center ?? Cesium.Cartesian3.ZERO
+          const radius = boundingSphere?.radius ?? 15
+          const distance = radius * 2.5
+
+          // Camera positioned to the side and slightly above
+          const cameraPosition = new Cesium.Cartesian3(
+            center.x + distance,
+            center.y,
+            center.z + radius * 0.5
+          )
+
+          viewer.camera.position = cameraPosition
+          viewer.camera.direction = Cesium.Cartesian3.normalize(
+            Cesium.Cartesian3.subtract(center, cameraPosition, new Cesium.Cartesian3()),
+            new Cesium.Cartesian3()
+          )
+          viewer.camera.up = Cesium.Cartesian3.UNIT_Z.clone()
+          viewer.camera.right = Cesium.Cartesian3.cross(
+            viewer.camera.direction,
+            viewer.camera.up,
+            new Cesium.Cartesian3()
+          )
+
+          setIsLoading(false)
         })
-
-        setIsLoading(false)
       })
       .catch((err: Error) => {
         console.error('Model loading failed:', err)
@@ -169,24 +187,31 @@ export function ModelPreviewModal({ modelInfo, onClose }: ModelPreviewModalProps
       // Calculate rotation angle (360° in 10 seconds)
       const angle = (elapsed / 10000) * Math.PI * 2
 
-      // Get model bounding sphere for distance calculation
+      // Get model bounding sphere for distance and center
       const model = viewer.scene.primitives.get(0) as Cesium.Model | undefined
+      const center = model?.boundingSphere?.center ?? Cesium.Cartesian3.ZERO
       const radius = model?.boundingSphere?.radius ?? 15
       const distance = radius * 2.5
 
-      const cameraX = Math.cos(angle) * distance
-      const cameraY = Math.sin(angle) * distance
-      const cameraZ = radius * 0.8
+      // Rotate camera around model in local space
+      const cameraX = center.x + Math.cos(angle) * distance
+      const cameraY = center.y + Math.sin(angle) * distance
+      const cameraZ = center.z + radius * 0.5
 
-      // Update camera position
-      viewer.camera.setView({
-        destination: new Cesium.Cartesian3(cameraX, cameraY, cameraZ),
-        orientation: {
-          heading: angle + Math.PI / 2,
-          pitch: Cesium.Math.toRadians(-20),
-          roll: 0
-        }
-      })
+      const cameraPosition = new Cesium.Cartesian3(cameraX, cameraY, cameraZ)
+
+      // Update camera to look at model center
+      viewer.camera.position = cameraPosition
+      viewer.camera.direction = Cesium.Cartesian3.normalize(
+        Cesium.Cartesian3.subtract(center, cameraPosition, new Cesium.Cartesian3()),
+        new Cesium.Cartesian3()
+      )
+      viewer.camera.up = Cesium.Cartesian3.UNIT_Z.clone()
+      viewer.camera.right = Cesium.Cartesian3.cross(
+        viewer.camera.direction,
+        viewer.camera.up,
+        new Cesium.Cartesian3()
+      )
 
       animationFrameRef.current = requestAnimationFrame(animate)
     }
