@@ -144,7 +144,7 @@ async function flushLogs() {
     })
 
     logBuffer = []
-  } catch (error) {
+  } catch {
     // Silently fail to avoid recursion
     // The original console is still available, so errors won't disappear
   }

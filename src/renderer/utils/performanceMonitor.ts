@@ -37,10 +37,8 @@ class PerformanceMonitor {
   private cesiumPreRenderTime = 0
 
   private frameStartTime = 0
-  private lastFrameTime = 0
   private frameTimes: number[] = []
   private readonly MAX_FRAME_SAMPLES = 60
-  private logInterval: ReturnType<typeof setInterval> | null = null
   private previousFrameEndTime = 0
 
   /**
@@ -139,7 +137,6 @@ class PerformanceMonitor {
     this.metrics.totalFrame = operationsTime
 
     this.previousFrameEndTime = now
-    this.lastFrameTime = now
   }
 
   /**
@@ -147,56 +144,6 @@ class PerformanceMonitor {
    */
   getMetrics(): PerformanceMetrics {
     return { ...this.metrics }
-  }
-
-  /**
-   * Log current performance metrics to console (DEV only)
-   */
-  logMetrics(): void {
-    // Only log in development mode
-    if (!import.meta.env.DEV) return
-
-    const m = this.metrics
-    const opsTotal = m.totalFrame || 1
-    const frameTotal = m.frameInterval || 1
-
-    // Suppress verbose performance logging - only log when FPS drops below 30
-    if (m.fps < 30) {
-      // Format as multi-line string for auto-expanded readability
-      const output = [
-        `[Performance Monitor] ${Math.round(m.fps)} FPS | ${m.frameInterval.toFixed(2)}ms interval`,
-        `  Cesium Render:  ${m.cesiumRender.toFixed(2)}ms (${((m.cesiumRender / frameTotal) * 100).toFixed(1)}% of frame)`,
-        `    • Primitives: ${m.cesiumPrimitives} | Tiles: ${m.cesiumTilesLoaded} loaded, ${m.cesiumTilesLoading} loading`,
-        `  Our Operations: ${m.totalFrame.toFixed(2)}ms (${((m.totalFrame / frameTotal) * 100).toFixed(1)}% of frame)`,
-        `    • Interpolation:   ${m.interpolation.toFixed(2)}ms (${((m.interpolation / opsTotal) * 100).toFixed(1)}% of ops)`,
-        `    • Aircraft Update: ${m.aircraftUpdate.toFixed(2)}ms (${((m.aircraftUpdate / opsTotal) * 100).toFixed(1)}% of ops)`,
-        `    • Babylon Sync:    ${m.babylonSync.toFixed(2)}ms (${((m.babylonSync / opsTotal) * 100).toFixed(1)}% of ops)`,
-        `    • Babylon Render:  ${m.babylonRender.toFixed(2)}ms (${((m.babylonRender / opsTotal) * 100).toFixed(1)}% of ops)`
-      ].join('\n')
-
-      console.warn(output)
-    }
-  }
-
-  /**
-   * Start logging metrics to console every 5 seconds
-   */
-  startLogging(): void {
-    if (this.logInterval) return // Already logging
-
-    this.logInterval = setInterval(() => {
-      this.logMetrics()
-    }, 5000)
-  }
-
-  /**
-   * Stop logging metrics to console
-   */
-  stopLogging(): void {
-    if (this.logInterval) {
-      clearInterval(this.logInterval)
-      this.logInterval = null
-    }
   }
 
   /**

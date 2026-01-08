@@ -22,7 +22,6 @@ import AircraftTimelineModal from './components/UI/AircraftTimelineModal'
 import { MSFSIndexingModal } from './components/UI/MSFSIndexingModal'
 import { WeatherDebugPanel } from './components/UI/WeatherDebugPanel'
 import { VnasPanel } from './components/UI/VnasPanel'
-import { performanceMonitor } from './utils/performanceMonitor'
 import { stopFileLogging } from './utils/fileLogger'
 import { useVatsimStore } from './stores/vatsimStore'
 import { useRealTrafficStore } from './stores/realTrafficStore'
@@ -231,11 +230,6 @@ function App() {
         if (!globalToken) {
           setShowTokenPrompt(true)
         }
-
-        // Start performance logging to console (DEV only)
-        if (import.meta.env.DEV) {
-          performanceMonitor.startLogging()
-        }
       } catch (error) {
         console.error('Initialization error:', error)
         // Keep current step, just update status to show error
@@ -250,7 +244,6 @@ function App() {
     initialize()
 
     return () => {
-      performanceMonitor.stopLogging()
       if (import.meta.env.DEV) {
         stopFileLogging().catch(() => {
           // Ignore errors during cleanup
