@@ -469,23 +469,37 @@ class MSFSModelConversionServiceClass {
 
     try {
       const { invoke } = await import('@tauri-apps/api/core')
+      const { listen } = await import('@tauri-apps/api/event')
 
-      onProgress?.('Indexing FSLTL models...', 10)
+      onProgress?.('Indexing FSLTL models...', 0)
 
-      const models = await invoke<SourceModelInfo[]>('list_fsltl_models', {
-        basePath: fsltlPath
-      })
+      // Listen for progress events from Rust backend
+      const unlisten = await listen<{ progress: number; processed: number; total: number }>(
+        'msfs-indexing-progress',
+        (event) => {
+          const { progress, processed, total } = event.payload
+          onProgress?.(`Indexing FSLTL models (${processed}/${total})...`, progress)
+        }
+      )
 
-      this.fsltlModels.clear()
-      for (const model of models) {
-        this.fsltlModels.set(model.modelName, model)
+      try {
+        const models = await invoke<SourceModelInfo[]>('list_fsltl_models', {
+          basePath: fsltlPath
+        })
+
+        this.fsltlModels.clear()
+        for (const model of models) {
+          this.fsltlModels.set(model.modelName, model)
+        }
+
+        onProgress?.(`Indexed ${models.length.toLocaleString()} FSLTL models`, 100)
+
+        // Log sample model names to help debug matching
+        const sampleNames = Array.from(this.fsltlModels.keys()).slice(0, 10)
+        console.log(`[MSFSConversion] Indexed ${this.fsltlModels.size} FSLTL models, samples: ${sampleNames.join(', ')}`)
+      } finally {
+        unlisten()
       }
-
-      onProgress?.(`Indexed ${models.length.toLocaleString()} FSLTL models`, 100)
-
-      // Log sample model names to help debug matching
-      const sampleNames = Array.from(this.fsltlModels.keys()).slice(0, 10)
-      console.log(`[MSFSConversion] Indexed ${this.fsltlModels.size} FSLTL models, samples: ${sampleNames.join(', ')}`)
     } catch (error) {
       console.error('[MSFSConversion] Failed to index FSLTL models:', error)
     }
@@ -502,21 +516,35 @@ class MSFSModelConversionServiceClass {
 
     try {
       const { invoke } = await import('@tauri-apps/api/core')
+      const { listen } = await import('@tauri-apps/api/event')
 
-      onProgress?.('Indexing AIG models...', 10)
+      onProgress?.('Indexing AIG models...', 0)
 
-      const models = await invoke<SourceModelInfo[]>('list_aig_models', {
-        basePath: aigPath
-      })
+      // Listen for progress events from Rust backend
+      const unlisten = await listen<{ progress: number; processed: number; total: number }>(
+        'msfs-indexing-progress',
+        (event) => {
+          const { progress, processed, total } = event.payload
+          onProgress?.(`Indexing AIG models (${processed}/${total})...`, progress)
+        }
+      )
 
-      this.aigModels.clear()
-      for (const model of models) {
-        this.aigModels.set(model.modelName, model)
+      try {
+        const models = await invoke<SourceModelInfo[]>('list_aig_models', {
+          basePath: aigPath
+        })
+
+        this.aigModels.clear()
+        for (const model of models) {
+          this.aigModels.set(model.modelName, model)
+        }
+
+        onProgress?.(`Indexed ${models.length.toLocaleString()} AIG models`, 100)
+
+        console.log(`[MSFSConversion] Indexed ${this.aigModels.size} AIG models`)
+      } finally {
+        unlisten()
       }
-
-      onProgress?.(`Indexed ${models.length.toLocaleString()} AIG models`, 100)
-
-      console.log(`[MSFSConversion] Indexed ${this.aigModels.size} AIG models`)
     } catch (error) {
       console.error('[MSFSConversion] Failed to index AIG models:', error)
     }

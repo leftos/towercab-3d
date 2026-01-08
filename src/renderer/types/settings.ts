@@ -326,6 +326,29 @@ export interface GraphicsSettings {
    */
   maxFramerate: number
 
+  /**
+   * Enable high-quality rendering for inset viewports (default: false)
+   *
+   * When enabled, inset viewports use the same graphics settings as the main viewport:
+   * - OSM 3D buildings (if enabled)
+   * - Full shadow rendering (if enabled)
+   * - Aircraft silhouette outlines (if enabled)
+   * - User-configured MSAA level
+   * - Full tile cache size
+   * - High terrain detail
+   * - Tile preloading
+   *
+   * When disabled (performance mode), insets use reduced quality settings:
+   * - No buildings, shadows, or silhouettes
+   * - 2x MSAA (fixed)
+   * - 50 tile cache
+   * - Lower terrain detail
+   *
+   * WARNING: High-quality mode significantly increases GPU/CPU load per inset.
+   * Only enable if you have a powerful GPU and few insets (1-2 max recommended).
+   */
+  highQualityInsets: boolean
+
 }
 
 /**
@@ -1306,7 +1329,8 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     enableNightDarkening: false,
     nightDarkeningIntensity: 0.7,
     aircraftNightVisibility: 1.5,
-    maxFramerate: 60
+    maxFramerate: 60,
+    highQualityInsets: false
   },
   camera: {
     defaultFov: 60,

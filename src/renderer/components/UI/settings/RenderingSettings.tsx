@@ -11,6 +11,7 @@ function RenderingSettings() {
   const enableGroundAtmosphere = useSettingsStore((state) => state.graphics.enableGroundAtmosphere)
   const enableAmbientOcclusion = useSettingsStore((state) => state.graphics.enableAmbientOcclusion)
   const enableAircraftSilhouettes = useSettingsStore((state) => state.graphics.enableAircraftSilhouettes)
+  const highQualityInsets = useSettingsStore((state) => state.graphics.highQualityInsets)
   const enableLighting = useSettingsStore((state) => state.cesium.enableLighting)
   const updateGraphicsSettings = useSettingsStore((state) => state.updateGraphicsSettings)
   const updateCesiumSettings = useSettingsStore((state) => state.updateCesiumSettings)
@@ -133,6 +134,20 @@ function RenderingSettings() {
         </label>
         <p className="setting-hint">
           Adds black edge outlines to built-in (FR24) aircraft models. High GPU cost (~20%) - use Aircraft Tint instead for better performance.
+        </p>
+      </div>
+
+      <div className="setting-item">
+        <label>
+          <input
+            type="checkbox"
+            checked={highQualityInsets}
+            onChange={(e) => updateGraphicsSettings({ highQualityInsets: e.target.checked })}
+          />
+          High-Quality Inset Rendering
+        </label>
+        <p className="setting-hint">
+          Use same graphics settings on inset viewports as main viewport (buildings, shadows, full MSAA, etc.). WARNING: Significantly increases GPU/CPU load. Only enable with powerful GPU and 1-2 insets max.
         </p>
       </div>
 

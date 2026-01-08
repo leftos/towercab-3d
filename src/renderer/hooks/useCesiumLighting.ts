@@ -5,6 +5,8 @@ import type { ViewMode } from '@/types'
 export interface CesiumLightingSettings {
   /** Whether this is an inset viewport (disables shadows for performance) */
   isInset: boolean
+  /** Enable high-quality rendering for inset viewports (default: false) */
+  highQualityInsets: boolean
   /** Current view mode ('3d' or 'topdown') - shadows disabled in topdown */
   viewMode?: ViewMode
   /** Enable realistic sun-based lighting on terrain */
@@ -82,6 +84,7 @@ export function useCesiumLighting(
 ) {
   const {
     isInset,
+    highQualityInsets,
     viewMode,
     enableLighting,
     enableGroundAtmosphere,
@@ -108,9 +111,9 @@ export function useCesiumLighting(
     // Update lighting
     viewer.scene.globe.enableLighting = enableLighting
 
-    // Update shadows - disabled for insets, aircraft-only for topdown, configurable for main 3D viewport
+    // Update shadows - disabled for insets (unless highQualityInsets), aircraft-only for topdown, configurable for main 3D viewport
     const isTopDown = viewMode === 'topdown'
-    if (isInset) {
+    if (isInset && !highQualityInsets) {
       viewer.shadows = false
       viewer.terrainShadows = Cesium.ShadowMode.DISABLED
     } else if (isTopDown) {

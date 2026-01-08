@@ -15,6 +15,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useGlobalSettingsStore, useMsfsModelSettings } from '../../stores/globalSettingsStore'
 import { MSFSModelConversionService, type MSFSDetectionResult } from '../../services/MSFSModelConversionService'
+import { aircraftModelService } from '../../services/AircraftModelService'
 import { isTauri } from '../../utils/tauriApi'
 import { isRemoteMode } from '../../utils/remoteMode'
 import * as fsltlApi from '../../services/fsltlApi'
@@ -78,6 +79,7 @@ function MSFSModelSettingsPanel() {
 
   // Indexing state for showing progress
   const [indexingSource, setIndexingSource] = useState<MSFSModelSource | null>(null)
+  const [indexingProgress, setIndexingProgress] = useState({ status: '', progress: 0 })
 
   // Initialize on mount
   useEffect(() => {
@@ -114,10 +116,21 @@ function MSFSModelSettingsPanel() {
       // Save the path
       await updateMsfsModels({ communityPath: folder })
 
-      // Detect installations
+      // Detect installations with progress tracking
       setIsDetecting(true)
-      const result = await MSFSModelConversionService.detectInstallations(folder)
+      const result = await MSFSModelConversionService.detectInstallations(folder, (status, progress) => {
+        setIndexingProgress({ status, progress: progress ?? 0 })
+      })
       setDetection(result)
+
+      // Update model counts after detection completes
+      setModelCounts(MSFSModelConversionService.getModelCounts())
+
+      // Invalidate aircraft model cache so existing aircraft can switch to MSFS models
+      if (result.fsltlFound || result.aigFound) {
+        aircraftModelService.clearCache()
+        console.log('[MSFSSettings] Model cache invalidated - aircraft will re-match with MSFS models')
+      }
 
       if (!result.fsltlFound && !result.aigFound) {
         setError('No FSLTL or AIG installation found in this folder')
@@ -126,6 +139,7 @@ function MSFSModelSettingsPanel() {
       setError(err instanceof Error ? err.message : 'Failed to select folder')
     } finally {
       setIsDetecting(false)
+      setIndexingProgress({ status: '', progress: 0 })
     }
   }, [updateMsfsModels])
 
@@ -199,6 +213,10 @@ function MSFSModelSettingsPanel() {
     updated.splice(newIndex, 0, item)
 
     await updateMsfsModels({ priority: updated })
+
+    // Invalidate model cache since priority affects which models are selected
+    aircraftModelService.clearCache()
+    console.log('[MSFSSettings] Model cache invalidated after priority change')
   }
 
   // Handle toggle changes
@@ -220,6 +238,9 @@ function MSFSModelSettingsPanel() {
           await MSFSModelConversionService.indexSourceOnDemand(source)
           // Update model counts after indexing completes
           setModelCounts(MSFSModelConversionService.getModelCounts())
+          // Invalidate model cache so aircraft can use the newly indexed models
+          aircraftModelService.clearCache()
+          console.log(`[MSFSSettings] Model cache invalidated after ${source} indexing`)
         } catch (err) {
           console.error(`[MSFSSettings] Failed to index ${source}:`, err)
         } finally {
@@ -227,6 +248,11 @@ function MSFSModelSettingsPanel() {
         }
       }
     }
+
+    // Invalidate cache when toggling sources (enabling or disabling)
+    // This allows aircraft to re-match (either to newly available MSFS models or back to built-ins)
+    aircraftModelService.clearCache()
+    console.log(`[MSFSSettings] Model cache invalidated after ${enabled ? 'enabling' : 'disabling'} ${source}`)
   }
 
   // Handle cache limit change
@@ -275,6 +301,19 @@ function MSFSModelSettingsPanel() {
               {isDetecting ? 'Detecting...' : 'Browse...'}
             </button>
           </div>
+          {isDetecting && indexingProgress.status && (
+            <div className="msfs-indexing-progress">
+              <div className="msfs-progress-bar">
+                <div
+                  className="msfs-progress-fill"
+                  style={{ width: `${indexingProgress.progress}%` }}
+                />
+              </div>
+              <span className="msfs-progress-text">
+                {indexingProgress.status} ({indexingProgress.progress}%)
+              </span>
+            </div>
+          )}
           <p className="setting-hint">
             Select your MSFS Community folder to auto-detect FSLTL and AIG installations.
           </p>

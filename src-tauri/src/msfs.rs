@@ -11,7 +11,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 use serde::{Deserialize, Serialize};
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
@@ -488,7 +488,12 @@ fn parse_aircraft_type(folder_name: &str, prefix: &str) -> String {
 /// 1. Build base model index (for FSLTL's base model fallback pattern)
 /// 2. For each aircraft folder, parse ALL FLTSIM sections from aircraft.cfg
 /// 3. Create a SourceModelInfo for each livery with correct texture directories
-fn list_models_unified(base_path: &std::path::Path, config: &SourceConfig) -> Vec<SourceModelInfo> {
+fn list_models_unified(
+    base_path: &std::path::Path,
+    config: &SourceConfig,
+    app: Option<&tauri::AppHandle>,
+    event_name: &str
+) -> Vec<SourceModelInfo> {
     let airplanes = base_path.join("SimObjects").join("Airplanes");
     if !airplanes.exists() {
         return Vec::new();
@@ -536,7 +541,19 @@ fn list_models_unified(base_path: &std::path::Path, config: &SourceConfig) -> Ve
     // PASS 2: Create entries for all liveries
     let mut models = Vec::new();
 
+    // Count total folders for progress tracking
+    let total_folders = fs::read_dir(&airplanes)
+        .ok()
+        .map(|entries| entries.filter_map(|e| e.ok()).filter(|e| {
+            let folder_name = e.file_name().to_string_lossy().to_string();
+            e.path().is_dir() && folder_name.starts_with(config.folder_prefix)
+        }).count())
+        .unwrap_or(0);
+
     if let Ok(entries) = fs::read_dir(&airplanes) {
+        let mut processed = 0;
+        let mut last_reported_pct = 0;
+
         for entry in entries.filter_map(|e| e.ok()) {
             let aircraft_dir = entry.path();
             if !aircraft_dir.is_dir() {
@@ -707,6 +724,23 @@ fn list_models_unified(base_path: &std::path::Path, config: &SourceConfig) -> Ve
                     });
                 }
             }
+
+            // Update progress tracking
+            processed += 1;
+            if total_folders > 0 {
+                let pct = (processed * 100 / total_folders) as u32;
+                // Only emit every 5% to avoid flooding events
+                if pct >= last_reported_pct + 5 || processed == total_folders {
+                    last_reported_pct = pct;
+                    if let Some(app_handle) = app {
+                        let _ = app_handle.emit(event_name, serde_json::json!({
+                            "progress": pct,
+                            "processed": processed,
+                            "total": total_folders
+                        }));
+                    }
+                }
+            }
         }
     }
 
@@ -768,63 +802,73 @@ pub fn detect_msfs_installations(community_path: String) -> Result<MSFSDetection
 /// List available FSLTL models from source
 /// Uses unified listing logic that parses ALL FLTSIM sections from aircraft.cfg
 #[tauri::command]
-pub fn list_fsltl_models(app: tauri::AppHandle, base_path: String) -> Result<Vec<SourceModelInfo>, String> {
-    let base = PathBuf::from(&base_path);
-    let cache_dir = app.path().app_data_dir()
-        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
+pub async fn list_fsltl_models(app: tauri::AppHandle, base_path: String) -> Result<Vec<SourceModelInfo>, String> {
+    // Run on background thread to avoid blocking UI
+    tokio::task::spawn_blocking(move || {
+        let base = PathBuf::from(&base_path);
+        let cache_dir = app.path().app_data_dir()
+            .map_err(|e| format!("Failed to get app data dir: {}", e))?;
 
-    // Try to load from cache first (much faster on subsequent launches)
-    if let Some(cached) = load_model_cache(&cache_dir, &base, "fsltl") {
-        return Ok(cached);
-    }
+        // Try to load from cache first (much faster on subsequent launches)
+        if let Some(cached) = load_model_cache(&cache_dir, &base, "fsltl") {
+            return Ok(cached);
+        }
 
-    let start_time = std::time::Instant::now();
+        let start_time = std::time::Instant::now();
 
-    let config = SourceConfig {
-        source: "fsltl",
-        folder_prefix: "FSLTL_",
-    };
+        let config = SourceConfig {
+            source: "fsltl",
+            folder_prefix: "FSLTL_",
+        };
 
-    let models = list_models_unified(&base, &config);
+        let models = list_models_unified(&base, &config, Some(&app), "msfs-indexing-progress");
 
-    let elapsed = start_time.elapsed();
-    println!("[MSFSDetection] Indexed {} FSLTL liveries in {:?}", models.len(), elapsed);
+        let elapsed = start_time.elapsed();
+        println!("[MSFSDetection] Indexed {} FSLTL liveries in {:?}", models.len(), elapsed);
 
-    // Save to cache for faster subsequent launches
-    save_model_cache(&cache_dir, &base, "fsltl", &models);
+        // Save to cache for faster subsequent launches
+        save_model_cache(&cache_dir, &base, "fsltl", &models);
 
-    Ok(models)
+        Ok(models)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
 }
 
 /// List available AIG models from source
 /// Uses unified listing logic that parses ALL FLTSIM sections from aircraft.cfg
 #[tauri::command]
-pub fn list_aig_models(app: tauri::AppHandle, base_path: String) -> Result<Vec<SourceModelInfo>, String> {
-    let base = PathBuf::from(&base_path);
-    let cache_dir = app.path().app_data_dir()
-        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
+pub async fn list_aig_models(app: tauri::AppHandle, base_path: String) -> Result<Vec<SourceModelInfo>, String> {
+    // Run on background thread to avoid blocking UI
+    tokio::task::spawn_blocking(move || {
+        let base = PathBuf::from(&base_path);
+        let cache_dir = app.path().app_data_dir()
+            .map_err(|e| format!("Failed to get app data dir: {}", e))?;
 
-    // Try to load from cache first
-    if let Some(cached) = load_model_cache(&cache_dir, &base, "aig") {
-        return Ok(cached);
-    }
+        // Try to load from cache first
+        if let Some(cached) = load_model_cache(&cache_dir, &base, "aig") {
+            return Ok(cached);
+        }
 
-    let start_time = std::time::Instant::now();
+        let start_time = std::time::Instant::now();
 
-    let config = SourceConfig {
-        source: "aig",
-        folder_prefix: "AIGAIM_",
-    };
+        let config = SourceConfig {
+            source: "aig",
+            folder_prefix: "AIGAIM_",
+        };
 
-    let models = list_models_unified(&base, &config);
+        let models = list_models_unified(&base, &config, Some(&app), "msfs-indexing-progress");
 
-    let elapsed = start_time.elapsed();
-    println!("[MSFSDetection] Indexed {} AIG liveries in {:?}", models.len(), elapsed);
+        let elapsed = start_time.elapsed();
+        println!("[MSFSDetection] Indexed {} AIG liveries in {:?}", models.len(), elapsed);
 
-    // Save to cache for faster subsequent launches
-    save_model_cache(&cache_dir, &base, "aig", &models);
+        // Save to cache for faster subsequent launches
+        save_model_cache(&cache_dir, &base, "aig", &models);
 
-    Ok(models)
+        Ok(models)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
 }
 
 // =============================================================================
@@ -1130,39 +1174,44 @@ fn get_glb_converter_version(glb_path: &std::path::Path) -> Option<u32> {
 /// Scan cache directory for existing GLB files
 /// Returns info about each cached model for loading into memory cache
 #[tauri::command]
-pub fn scan_cache_directory(cache_dir: String) -> Result<Vec<CachedGlbInfo>, String> {
-    let dir_path = PathBuf::from(&cache_dir);
-    if !dir_path.exists() {
-        return Ok(vec![]);
-    }
+pub async fn scan_cache_directory(cache_dir: String) -> Result<Vec<CachedGlbInfo>, String> {
+    // Run on background thread to avoid blocking UI
+    tokio::task::spawn_blocking(move || {
+        let dir_path = PathBuf::from(&cache_dir);
+        if !dir_path.exists() {
+            return Ok(vec![]);
+        }
 
-    let entries = fs::read_dir(&dir_path)
-        .map_err(|e| format!("Failed to read cache directory {}: {}", cache_dir, e))?;
+        let entries = fs::read_dir(&dir_path)
+            .map_err(|e| format!("Failed to read cache directory {}: {}", cache_dir, e))?;
 
-    let mut cached_models = Vec::new();
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_file() {
-            if let Some(ext) = path.extension() {
-                if ext.eq_ignore_ascii_case("glb") {
-                    // Extract model key from filename (remove .glb extension)
-                    if let Some(stem) = path.file_stem() {
-                        let model_key = stem.to_string_lossy().to_string();
-                        let file_size = entry.metadata().map(|m| m.len()).unwrap_or(0);
-                        let converter_version = get_glb_converter_version(&path);
-                        cached_models.push(CachedGlbInfo {
-                            path: normalize_path_string(&path),
-                            model_key,
-                            file_size,
-                            converter_version,
-                        });
+        let mut cached_models = Vec::new();
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                if let Some(ext) = path.extension() {
+                    if ext.eq_ignore_ascii_case("glb") {
+                        // Extract model key from filename (remove .glb extension)
+                        if let Some(stem) = path.file_stem() {
+                            let model_key = stem.to_string_lossy().to_string();
+                            let file_size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+                            let converter_version = get_glb_converter_version(&path);
+                            cached_models.push(CachedGlbInfo {
+                                path: normalize_path_string(&path),
+                                model_key,
+                                file_size,
+                                converter_version,
+                            });
+                        }
                     }
                 }
             }
         }
-    }
 
-    Ok(cached_models)
+        Ok(cached_models)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
 }
 
 #[cfg(test)]
@@ -1247,7 +1296,7 @@ mod tests {
             folder_prefix: "FSLTL_",
         };
 
-        let models = list_models_unified(&base_path, &config);
+        let models = list_models_unified(&base_path, &config, None, "");
 
         // Find FSLTL_BCS3_ZZZZ
         let bcs3_zzzz = models.iter().find(|m| m.model_name == "FSLTL_BCS3_ZZZZ");

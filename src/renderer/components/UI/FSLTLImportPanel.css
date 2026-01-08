@@ -529,3 +529,30 @@
   color: var(--text-secondary);
   margin-bottom: 8px;
 }
+
+/* Indexing progress indicator */
+.msfs-indexing-progress {
+  margin-top: 8px;
+  padding: 8px 0;
+}
+
+.msfs-progress-bar {
+  height: 6px;
+  background: var(--border-color);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.msfs-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ba68c8, #9c27b0);
+  transition: width 0.3s ease;
+}
+
+.msfs-progress-text {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-align: center;
+  display: block;
+}

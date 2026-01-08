@@ -439,7 +439,7 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
     }),
     {
       name: 'settings-store',
-      version: 28, // Added advanced settings (interpolation debug logs)
+      version: 29, // Added highQualityInsets graphics setting
       migrate: (persistedState: unknown, version: number) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let state: any = persistedState
@@ -678,6 +678,15 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
           }
         }
 
+        // Migrate v28 to v29: add highQualityInsets graphics setting
+        if (version < 29) {
+          console.log('[Settings] Migrating v28 to v29: adding highQualityInsets graphics setting')
+          state = {
+            ...state,
+            graphics: { ...DEFAULT_SETTINGS.graphics, ...state.graphics }
+          }
+        }
+
         // Repair step: ensure all settings groups have defaults filled in
         // This catches any settings that were missed by migrations
         const repaired = {
@@ -765,7 +774,9 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
       aircraftNightVisibility:
         oldSettings.aircraftNightVisibility ?? DEFAULT_SETTINGS.graphics.aircraftNightVisibility,
       maxFramerate:
-        oldSettings.maxFramerate ?? DEFAULT_SETTINGS.graphics.maxFramerate
+        oldSettings.maxFramerate ?? DEFAULT_SETTINGS.graphics.maxFramerate,
+      highQualityInsets:
+        oldSettings.highQualityInsets ?? DEFAULT_SETTINGS.graphics.highQualityInsets
     },
     camera: {
       defaultFov: oldSettings.defaultFov ?? DEFAULT_SETTINGS.camera.defaultFov,
