@@ -372,7 +372,7 @@ All three files must have matching version numbers. The Tauri build uses these t
 
 1. Update version in all three files above
 2. Move `[Unreleased]` entries in CHANGELOG.md to new version header
-3. Run `npm run typecheck` to verify no type errors
+3. Run `npm run check` to run all validation checks (ESLint, TypeScript, Rust)
 4. Commit: `git commit -m "Release vX.X.X-alpha"`
 5. Tag: `git tag vX.X.X-alpha`
 6. Push: `git push && git push --tags`

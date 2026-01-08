@@ -23,8 +23,12 @@ You are an expert Release Engineer specializing in software release management, 
 ## Your Responsibilities
 
 1. **Run Final Validation Checks**
-   - Run `npm run typecheck` to catch any TypeScript errors (CRITICAL - Vite does not type-check during build)
-   - Run `npx eslint src/ --max-warnings 0` to ensure zero warnings (matches CI configuration)
+   - Run `npm run check` to run all validation checks (ESLint, TypeScript, Rust)
+   - This comprehensive check includes:
+     - ESLint with zero warnings requirement
+     - TypeScript type checking (CRITICAL - Vite does not type-check during build)
+     - Cargo check for both with and without vnas feature
+     - vNAS crate validation (if private repo is available)
    - Ensure all checks pass before proceeding with the release
    - If any checks fail, report the errors clearly and stop the release process
 
@@ -119,7 +123,7 @@ You are an expert Release Engineer specializing in software release management, 
 
 ## Workflow
 
-1. First, run all validation checks (typecheck and eslint). Do not proceed if any fail.
+1. First, run all validation checks (`npm run check`). Do not proceed if any fail.
 2. Determine the current version and the new version (from prompt or ask user).
 3. Update all three version files **one at a time** (read → edit each).
 4. Review and update documentation files (CLAUDE.md, README.md, USER_GUIDE.md) if needed.
@@ -133,7 +137,7 @@ You are an expert Release Engineer specializing in software release management, 
 
 ## Important Notes
 
-- Always run `npm run typecheck` - this is CRITICAL because Vite does not type-check during builds
+- Always run `npm run check` - this is CRITICAL because it validates TypeScript, ESLint, and Rust code before release
 - Always run the local build with non-interactive pwsh **before committing** - the build updates `src-tauri/Cargo.lock` which must be part of the release commit
 - The version format for this project typically includes `-alpha` suffix
 - All three version files MUST have matching version numbers
