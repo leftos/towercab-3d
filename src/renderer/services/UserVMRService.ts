@@ -20,20 +20,20 @@
 
 import { useGlobalSettingsStore } from '@/stores/globalSettingsStore'
 import { isTauri, modApi } from '@/utils/tauriApi'
+import {
+  type VMRRule,
+  type RuleEntry,
+  type ParsedApiRule,
+  processApiRules,
+  getUniqueSourceFiles,
+  findRuleMatch,
+  createAirlineRuleKey,
+  normalizeTypeCode
+} from './vmrUtils'
 
 // =============================================================================
 // Types
 // =============================================================================
-
-/** Parsed VMR rule */
-export interface VMRRule {
-  /** Aircraft ICAO type code (e.g., "B738") */
-  typeCode: string
-  /** Model names to try in order (alternatives separated by //) */
-  modelNames: string[]
-  /** Optional airline ICAO code for airline-specific rules */
-  callsignPrefix?: string
-}
 
 /** Match result from VMR lookup */
 export interface VMRMatch {
@@ -47,16 +47,22 @@ export interface VMRMatch {
   sourceVmr: string
 }
 
+/** Rule entry with source tracking */
+interface UserVMRRuleEntry extends RuleEntry<VMRRule> {
+  rule: VMRRule
+  sourceVmr: string
+}
+
 // =============================================================================
 // Service Class
 // =============================================================================
 
 class UserVMRServiceClass {
   /** Default rules: typeCode -> rule with source */
-  private defaultRules = new Map<string, { rule: VMRRule; sourceVmr: string }>()
+  private defaultRules = new Map<string, UserVMRRuleEntry>()
 
   /** Airline rules: `${airline}_${type}` -> rule with source */
-  private airlineRules = new Map<string, { rule: VMRRule; sourceVmr: string }>()
+  private airlineRules = new Map<string, UserVMRRuleEntry>()
 
   /** Currently loaded VMR file paths */
   private loadedFiles: string[] = []
@@ -163,32 +169,16 @@ class UserVMRServiceClass {
       // Use Rust backend for cached VMR parsing
       const rules = await modApi.parseVMRFiles(vmrPaths)
 
-      // Process parsed rules
-      for (const apiRule of rules) {
-        const typeCode = apiRule.typeCode.toUpperCase()
-        const modelNames = apiRule.modelName.split('//').filter(n => n.trim())
-        const callsignPrefix = apiRule.callsignPrefix?.toUpperCase()
-
-        if (modelNames.length === 0) continue
-
-        const rule: VMRRule = { typeCode, modelNames, callsignPrefix }
-
-        if (callsignPrefix) {
-          const key = `${callsignPrefix}_${typeCode}`
-          // First rule wins (higher priority VMR files loaded first)
-          if (!this.airlineRules.has(key)) {
-            this.airlineRules.set(key, { rule, sourceVmr: apiRule.sourceVmr })
-          }
-        } else {
-          if (!this.defaultRules.has(typeCode)) {
-            this.defaultRules.set(typeCode, { rule, sourceVmr: apiRule.sourceVmr })
-          }
-        }
-      }
+      // Process parsed rules using shared utility
+      processApiRules(
+        rules as ParsedApiRule[],
+        this.defaultRules,
+        this.airlineRules,
+        (rule, sourceVmr) => ({ rule, sourceVmr })
+      )
 
       // Track which files were processed
-      const uniqueFiles = new Set(rules.map(r => r.sourceVmr))
-      this.loadedFiles = Array.from(uniqueFiles)
+      this.loadedFiles = getUniqueSourceFiles(rules as ParsedApiRule[])
 
       // Update current priority and sort alternatives
       this.currentPriority = [...settings.priority]
@@ -226,33 +216,15 @@ class UserVMRServiceClass {
         return
       }
 
-      const rules: Array<{
-        typeCode: string
-        modelName: string
-        callsignPrefix?: string
-        sourceVmr: string
-      }> = await response.json()
+      const rules: ParsedApiRule[] = await response.json()
 
-      for (const apiRule of rules) {
-        const typeCode = apiRule.typeCode.toUpperCase()
-        const modelNames = apiRule.modelName.split('//').filter(n => n.trim())
-        const callsignPrefix = apiRule.callsignPrefix?.toUpperCase()
-
-        if (modelNames.length === 0) continue
-
-        const rule: VMRRule = { typeCode, modelNames, callsignPrefix }
-
-        if (callsignPrefix) {
-          const key = `${callsignPrefix}_${typeCode}`
-          if (!this.airlineRules.has(key)) {
-            this.airlineRules.set(key, { rule, sourceVmr: apiRule.sourceVmr })
-          }
-        } else {
-          if (!this.defaultRules.has(typeCode)) {
-            this.defaultRules.set(typeCode, { rule, sourceVmr: apiRule.sourceVmr })
-          }
-        }
-      }
+      // Process parsed rules using shared utility
+      processApiRules(
+        rules,
+        this.defaultRules,
+        this.airlineRules,
+        (rule, sourceVmr) => ({ rule, sourceVmr })
+      )
 
       this.loadedFiles.push('(HTTP API)')
 
@@ -262,98 +234,6 @@ class UserVMRServiceClass {
       this.sortAllAlternativesByPriority()
     } catch (error) {
       console.warn('[UserVMRService] Error loading from API:', error)
-    }
-  }
-
-  // ===========================================================================
-  // VMR PARSING
-  // ===========================================================================
-
-  /**
-   * Parse VMR XML content
-   */
-  private parseVMRContent(content: string, sourcePath: string): void {
-    const parser = new DOMParser()
-    const doc = parser.parseFromString(content, 'text/xml')
-
-    const parseError = doc.querySelector('parsererror')
-    if (parseError) {
-      console.warn(`[UserVMRService] XML parse error in ${sourcePath}, using regex fallback`)
-      this.parseVMRContentFallback(content, sourcePath)
-      return
-    }
-
-    const rules = doc.querySelectorAll('ModelMatchRule')
-
-    for (const ruleEl of rules) {
-      const typeCode = ruleEl.getAttribute('TypeCode')?.toUpperCase()
-      const modelName = ruleEl.getAttribute('ModelName')
-      const callsignPrefix = ruleEl.getAttribute('CallsignPrefix')?.toUpperCase()
-
-      if (!typeCode || !modelName) continue
-
-      const modelNames = modelName.split('//').filter(name => name.trim())
-      if (modelNames.length === 0) continue
-
-      const rule: VMRRule = { typeCode, modelNames, callsignPrefix }
-
-      if (callsignPrefix) {
-        const key = `${callsignPrefix}_${typeCode}`
-        // First rule wins (higher priority VMR files loaded first)
-        if (!this.airlineRules.has(key)) {
-          this.airlineRules.set(key, { rule, sourceVmr: sourcePath })
-        }
-      } else {
-        if (!this.defaultRules.has(typeCode)) {
-          this.defaultRules.set(typeCode, { rule, sourceVmr: sourcePath })
-        }
-      }
-    }
-  }
-
-  /**
-   * Fallback regex parsing for malformed XML
-   */
-  private parseVMRContentFallback(content: string, sourcePath: string): void {
-    // Match both self-closing and open/close tags
-    const selfClosingRegex = /<ModelMatchRule\s+([^>]+)\s*\/>/g
-    const openCloseRegex = /<ModelMatchRule\s+([^>]+)>[\s\S]*?<\/ModelMatchRule>/g
-
-    const allMatches: string[] = []
-
-    let match: RegExpExecArray | null
-    while ((match = selfClosingRegex.exec(content)) !== null) {
-      allMatches.push(match[1])
-    }
-    while ((match = openCloseRegex.exec(content)) !== null) {
-      allMatches.push(match[1])
-    }
-
-    for (const attrs of allMatches) {
-      const typeCodeMatch = attrs.match(/TypeCode\s*=\s*"([^"]+)"/)
-      const modelNameMatch = attrs.match(/ModelName\s*=\s*"([^"]+)"/)
-      const callsignMatch = attrs.match(/CallsignPrefix\s*=\s*"([^"]+)"/)
-
-      if (!typeCodeMatch || !modelNameMatch) continue
-
-      const typeCode = typeCodeMatch[1].toUpperCase()
-      const modelNames = modelNameMatch[1].split('//').filter(name => name.trim())
-      const callsignPrefix = callsignMatch?.[1]?.toUpperCase()
-
-      if (modelNames.length === 0) continue
-
-      const rule: VMRRule = { typeCode, modelNames, callsignPrefix }
-
-      if (callsignPrefix) {
-        const key = `${callsignPrefix}_${typeCode}`
-        if (!this.airlineRules.has(key)) {
-          this.airlineRules.set(key, { rule, sourceVmr: sourcePath })
-        }
-      } else {
-        if (!this.defaultRules.has(typeCode)) {
-          this.defaultRules.set(typeCode, { rule, sourceVmr: sourcePath })
-        }
-      }
     }
   }
 
@@ -371,36 +251,24 @@ class UserVMRServiceClass {
   findMatch(aircraftType: string | null, airlineCode: string | null): VMRMatch | null {
     if (!aircraftType || !this.initialized) return null
 
-    const normalizedType = aircraftType.toUpperCase()
-    const normalizedAirline = airlineCode?.toUpperCase()
+    const result = findRuleMatch(
+      aircraftType,
+      airlineCode,
+      this.defaultRules,
+      this.airlineRules
+    )
 
-    // 1. Try airline-specific rule
-    if (normalizedAirline) {
-      const airlineKey = `${normalizedAirline}_${normalizedType}`
-      const entry = this.airlineRules.get(airlineKey)
-      if (entry) {
-        const modelName = entry.rule.modelNames[0] // First alternative
-        return {
-          modelName,
-          typeCode: entry.rule.typeCode,
-          airlineCode: normalizedAirline,
-          sourceVmr: entry.sourceVmr
-        }
-      }
+    if (!result) return null
+
+    const { entry, isAirlineSpecific } = result
+    const modelName = entry.rule.modelNames[0] // First alternative (already sorted by priority)
+
+    return {
+      modelName,
+      typeCode: entry.rule.typeCode,
+      airlineCode: isAirlineSpecific ? airlineCode?.toUpperCase() : undefined,
+      sourceVmr: entry.sourceVmr
     }
-
-    // 2. Try default rule for type
-    const defaultEntry = this.defaultRules.get(normalizedType)
-    if (defaultEntry) {
-      const modelName = defaultEntry.rule.modelNames[0]
-      return {
-        modelName,
-        typeCode: defaultEntry.rule.typeCode,
-        sourceVmr: defaultEntry.sourceVmr
-      }
-    }
-
-    return null
   }
 
   /**
@@ -408,12 +276,12 @@ class UserVMRServiceClass {
    * Useful for fallback when first model doesn't exist
    */
   getAlternatives(aircraftType: string, airlineCode: string | null): string[] {
-    const normalizedType = aircraftType.toUpperCase()
+    const normalizedType = normalizeTypeCode(aircraftType)
     const normalizedAirline = airlineCode?.toUpperCase()
 
     // Check airline-specific first
     if (normalizedAirline) {
-      const airlineKey = `${normalizedAirline}_${normalizedType}`
+      const airlineKey = createAirlineRuleKey(normalizedAirline, normalizedType)
       const entry = this.airlineRules.get(airlineKey)
       if (entry) {
         return [...entry.rule.modelNames]

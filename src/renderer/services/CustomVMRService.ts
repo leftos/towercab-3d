@@ -21,17 +21,18 @@
 
 import { convertToAssetUrlSync, modApi, isTauri } from '../utils/tauriApi'
 import type { CustomVMRRule, CustomVMRMatch } from '../types/mod'
-
-/** VMR rule from HTTP API */
-interface ApiVmrRule {
-  typeCode: string
-  modelName: string
-  callsignPrefix: string | null
-}
+import {
+  type ParsedApiRule,
+  type VMRRule,
+  processApiRules,
+  getUniqueSourceFiles,
+  findRuleMatch
+} from './vmrUtils'
 
 /** Rule entry with base path for model resolution */
-interface RuleEntry {
-  rule: CustomVMRRule
+interface CustomRuleEntry {
+  rule: VMRRule
+  sourceVmr: string
   basePath: string
 }
 
@@ -44,10 +45,10 @@ interface ManifestCache {
 
 class CustomVMRServiceClass {
   /** Combined default rules from all VMR files (keyed by typeCode) */
-  private defaultRules = new Map<string, RuleEntry>()
+  private defaultRules = new Map<string, CustomRuleEntry>()
 
   /** Combined airline rules from all VMR files (keyed by `${callsignPrefix}_${typeCode}`) */
-  private airlineRules = new Map<string, RuleEntry>()
+  private airlineRules = new Map<string, CustomRuleEntry>()
 
   /** VMR files that were loaded (for debugging) */
   private loadedFiles: string[] = []
@@ -74,38 +75,20 @@ class CustomVMRServiceClass {
           // Parse all VMR files using Rust backend (with caching)
           const rules = await modApi.parseVMRFiles(vmrPaths)
 
-          // Process parsed rules
-          for (const apiRule of rules) {
-            const typeCode = apiRule.typeCode.toUpperCase()
-            const modelNames = apiRule.modelName.split('//').filter(name => name.trim())
-            const callsignPrefix = apiRule.callsignPrefix?.toUpperCase()
-
-            if (modelNames.length === 0) continue
-
-            const basePath = this.getBasePath(apiRule.sourceVmr)
-            const rule: CustomVMRRule = {
-              typeCode,
-              modelNames,
-              callsignPrefix: callsignPrefix || undefined
-            }
-
-            if (callsignPrefix) {
-              const key = `${callsignPrefix}_${typeCode}`
-              // First rule wins for conflicts
-              if (!this.airlineRules.has(key)) {
-                this.airlineRules.set(key, { rule, basePath })
-              }
-            } else {
-              // First rule wins for conflicts
-              if (!this.defaultRules.has(typeCode)) {
-                this.defaultRules.set(typeCode, { rule, basePath })
-              }
-            }
-          }
+          // Process parsed rules using shared utility with custom entry creation
+          processApiRules(
+            rules as ParsedApiRule[],
+            this.defaultRules,
+            this.airlineRules,
+            (rule, sourceVmr) => ({
+              rule,
+              sourceVmr,
+              basePath: this.getBasePath(sourceVmr)
+            })
+          )
 
           // Track which files were processed
-          const uniqueFiles = new Set(rules.map(r => r.sourceVmr))
-          this.loadedFiles = Array.from(uniqueFiles)
+          this.loadedFiles = getUniqueSourceFiles(rules as ParsedApiRule[])
 
           // Pre-load manifests for all models
           for (const vmrPath of this.loadedFiles) {
@@ -143,34 +126,17 @@ class CustomVMRServiceClass {
         return
       }
 
-      const rules: ApiVmrRule[] = await response.json()
+      const rules: ParsedApiRule[] = await response.json()
       // Base path for models served via HTTP API
       const basePath = '/api/mods/aircraft'
 
-      for (const apiRule of rules) {
-        const typeCode = apiRule.typeCode.toUpperCase()
-        const modelNames = apiRule.modelName.split('//').filter(name => name.trim())
-        const callsignPrefix = apiRule.callsignPrefix?.toUpperCase()
-
-        if (modelNames.length === 0) continue
-
-        const rule: CustomVMRRule = {
-          typeCode,
-          modelNames,
-          callsignPrefix
-        }
-
-        if (callsignPrefix) {
-          const key = `${callsignPrefix}_${typeCode}`
-          if (!this.airlineRules.has(key)) {
-            this.airlineRules.set(key, { rule, basePath })
-          }
-        } else {
-          if (!this.defaultRules.has(typeCode)) {
-            this.defaultRules.set(typeCode, { rule, basePath })
-          }
-        }
-      }
+      // Process parsed rules using shared utility
+      processApiRules(
+        rules,
+        this.defaultRules,
+        this.airlineRules,
+        (rule, sourceVmr) => ({ rule, sourceVmr, basePath })
+      )
 
       // Pre-load manifests for all models
       if (rules.length > 0) {
@@ -196,116 +162,6 @@ class CustomVMRServiceClass {
     // Fallback: use parent directory of VMR file
     const lastSlash = normalized.lastIndexOf('/')
     return lastSlash >= 0 ? normalized.substring(0, lastSlash) : normalized
-  }
-
-  /**
-   * Parse VMR XML content
-   */
-  private parseVMRContent(content: string, sourcePath: string, basePath: string): void {
-    const parser = new DOMParser()
-    const doc = parser.parseFromString(content, 'text/xml')
-
-    const parseError = doc.querySelector('parsererror')
-    if (parseError) {
-      console.warn(`[CustomVMRService] XML parse error in ${sourcePath}, using regex fallback`)
-      this.parseVMRContentFallback(content, basePath)
-      return
-    }
-
-    const rules = doc.querySelectorAll('ModelMatchRule')
-
-    for (const ruleEl of rules) {
-      const typeCode = ruleEl.getAttribute('TypeCode')?.toUpperCase()
-      const modelName = ruleEl.getAttribute('ModelName')
-      const callsignPrefix = ruleEl.getAttribute('CallsignPrefix')?.toUpperCase()
-
-      if (!typeCode || !modelName) continue
-
-      // Split alternatives (e.g., "Model1//Model2") and filter empty strings
-      const modelNames = modelName.split('//').filter(name => name.trim())
-
-      // Warn if all model names are empty
-      if (modelNames.length === 0) {
-        console.warn(`[CustomVMRService] VMR rule for ${typeCode} has no valid model names`)
-        continue
-      }
-
-      const rule: CustomVMRRule = {
-        typeCode,
-        modelNames,
-        callsignPrefix: callsignPrefix || undefined
-      }
-
-      if (callsignPrefix) {
-        const key = `${callsignPrefix}_${typeCode}`
-        // First rule wins for conflicts
-        if (!this.airlineRules.has(key)) {
-          this.airlineRules.set(key, { rule, basePath })
-        }
-      } else {
-        // First rule wins for conflicts
-        if (!this.defaultRules.has(typeCode)) {
-          this.defaultRules.set(typeCode, { rule, basePath })
-        }
-      }
-    }
-  }
-
-  /**
-   * Fallback regex parsing for malformed XML
-   * Matches both self-closing (<ModelMatchRule ... />) and open/close (<ModelMatchRule ...></ModelMatchRule>) tags
-   */
-  private parseVMRContentFallback(content: string, basePath: string): void {
-    // Match self-closing tags: <ModelMatchRule ... />
-    const selfClosingRegex = /<ModelMatchRule\s+([^>]+)\s*\/>/g
-    // Match open/close tags: <ModelMatchRule ...>...</ModelMatchRule>
-    const openCloseRegex = /<ModelMatchRule\s+([^>]+)>[\s\S]*?<\/ModelMatchRule>/g
-
-    const allMatches: Array<{ attrs: string }> = []
-
-    let match: RegExpExecArray | null
-    while ((match = selfClosingRegex.exec(content)) !== null) {
-      allMatches.push({ attrs: match[1] })
-    }
-
-    while ((match = openCloseRegex.exec(content)) !== null) {
-      allMatches.push({ attrs: match[1] })
-    }
-
-    for (const { attrs } of allMatches) {
-      const typeCodeMatch = attrs.match(/TypeCode\s*=\s*"([^"]+)"/)
-      const modelNameMatch = attrs.match(/ModelName\s*=\s*"([^"]+)"/)
-      const callsignMatch = attrs.match(/CallsignPrefix\s*=\s*"([^"]+)"/)
-
-      if (!typeCodeMatch || !modelNameMatch) continue
-
-      const typeCode = typeCodeMatch[1].toUpperCase()
-      const modelNames = modelNameMatch[1].split('//').filter(name => name.trim())
-      const callsignPrefix = callsignMatch?.[1]?.toUpperCase()
-
-      // Warn if all model names are empty
-      if (modelNames.length === 0) {
-        console.warn(`[CustomVMRService] VMR rule for ${typeCode} has no valid model names`)
-        continue
-      }
-
-      const rule: CustomVMRRule = {
-        typeCode,
-        modelNames,
-        callsignPrefix
-      }
-
-      if (callsignPrefix) {
-        const key = `${callsignPrefix}_${typeCode}`
-        if (!this.airlineRules.has(key)) {
-          this.airlineRules.set(key, { rule, basePath })
-        }
-      } else {
-        if (!this.defaultRules.has(typeCode)) {
-          this.defaultRules.set(typeCode, { rule, basePath })
-        }
-      }
-    }
   }
 
   /**
@@ -419,32 +275,21 @@ class CustomVMRServiceClass {
   findBestModel(aircraftType: string | null, airlineCode: string | null): CustomVMRMatch | null {
     if (!aircraftType || !this.loaded) return null
 
-    const normalizedType = aircraftType.toUpperCase()
-    const normalizedAirline = airlineCode?.toUpperCase()
+    const result = findRuleMatch(
+      aircraftType,
+      airlineCode,
+      this.defaultRules,
+      this.airlineRules
+    )
 
-    // 1. Try airline-specific rule
-    if (normalizedAirline) {
-      const airlineKey = `${normalizedAirline}_${normalizedType}`
-      const airlineEntry = this.airlineRules.get(airlineKey)
-      if (airlineEntry) {
-        const match = this.resolveModelPath(airlineEntry.rule, airlineEntry.basePath)
-        if (match) {
-          match.airlineCode = normalizedAirline
-          return match
-        }
-      }
+    if (!result) return null
+
+    const { entry, isAirlineSpecific } = result
+    const match = this.resolveModelPath(entry.rule, entry.basePath)
+    if (match && isAirlineSpecific) {
+      match.airlineCode = airlineCode?.toUpperCase() ?? null
     }
-
-    // 2. Try default rule for this type
-    const defaultEntry = this.defaultRules.get(normalizedType)
-    if (defaultEntry) {
-      const match = this.resolveModelPath(defaultEntry.rule, defaultEntry.basePath)
-      if (match) {
-        return match
-      }
-    }
-
-    return null
+    return match
   }
 
   /**
@@ -458,7 +303,7 @@ class CustomVMRServiceClass {
    * @param basePath Base path for model resolution (mods/aircraft/)
    * @returns Matched model info or null if no valid model found
    */
-  private resolveModelPath(rule: CustomVMRRule, basePath: string): CustomVMRMatch | null {
+  private resolveModelPath(rule: CustomVMRRule | VMRRule, basePath: string): CustomVMRMatch | null {
     // Try each model name alternative until we find a non-empty one with existing file
     for (const modelName of rule.modelNames) {
       const trimmedName = modelName.trim()

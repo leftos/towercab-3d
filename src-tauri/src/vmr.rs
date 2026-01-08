@@ -2,11 +2,13 @@
 //!
 //! VMR files are XML files that define aircraft model matching rules.
 //! Uses quick-xml for robust parsing that handles various XML formats.
+//! Files are parsed in parallel using rayon for better performance with multiple files.
 
 use std::fs;
 use std::path::PathBuf;
 use quick_xml::events::Event;
 use quick_xml::Reader;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::normalize_path_string;
@@ -44,7 +46,9 @@ fn parse_vmr_file(path: &std::path::Path) -> Vec<ParsedVmrRule> {
         }
     };
 
-    let mut rules = Vec::new();
+    // Pre-allocate based on rough estimate (average ~50 bytes per rule in XML)
+    let estimated_rules = content.len() / 50;
+    let mut rules = Vec::with_capacity(estimated_rules.max(100));
     let mut reader = Reader::from_str(&content);
 
     loop {
@@ -93,23 +97,38 @@ fn parse_vmr_file(path: &std::path::Path) -> Vec<ParsedVmrRule> {
 // TAURI COMMANDS
 // =============================================================================
 
-/// Parse multiple VMR files and return all rules
+/// Parse multiple VMR files in parallel and return all rules
 #[tauri::command]
 pub fn parse_vmr_files(file_paths: Vec<String>) -> Result<Vec<ParsedVmrRule>, String> {
     let start_time = std::time::Instant::now();
-    let mut all_rules = Vec::new();
 
-    for file_path in &file_paths {
-        let path = PathBuf::from(file_path);
-        if !path.exists() {
-            eprintln!("[VMR] File not found: {}", file_path);
-            continue;
-        }
+    // Convert paths and filter out non-existent files
+    let valid_paths: Vec<PathBuf> = file_paths
+        .iter()
+        .filter_map(|file_path| {
+            let path = PathBuf::from(file_path);
+            if path.exists() {
+                Some(path)
+            } else {
+                eprintln!("[VMR] File not found: {}", file_path);
+                None
+            }
+        })
+        .collect();
 
-        let rules = parse_vmr_file(&path);
-        println!("[VMR] Parsed {} rules from {}", rules.len(), path.file_name().unwrap_or_default().to_string_lossy());
-        all_rules.extend(rules);
-    }
+    // Parse files in parallel using rayon
+    let all_rules: Vec<ParsedVmrRule> = valid_paths
+        .par_iter()
+        .flat_map(|path| {
+            let rules = parse_vmr_file(path);
+            println!(
+                "[VMR] Parsed {} rules from {}",
+                rules.len(),
+                path.file_name().unwrap_or_default().to_string_lossy()
+            );
+            rules
+        })
+        .collect();
 
     let elapsed = start_time.elapsed();
     println!(
