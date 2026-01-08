@@ -4,6 +4,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+## [0.0.29-alpha] - 2026-01-07
+
 ### Added
 - **AIG Models support** for Microsoft Flight Simulator aircraft
   - Use aircraft models from AIG (AI traffic add-on) alongside FSLTL
