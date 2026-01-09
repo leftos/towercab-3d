@@ -11,8 +11,10 @@
 export interface FlatteningPolygon {
   /** Unique identifier for this polygon */
   id: string
-  /** Closed ring of vertices as [longitude, latitude][] pairs */
+  /** Closed ring of vertices as [longitude, latitude][] pairs (exterior boundary) */
   vertices: [number, number][]
+  /** Optional holes (interior rings) as arrays of [longitude, latitude][] pairs */
+  holes?: [number, number][][]
   /** Target elevation in meters MSL (used if no gradient) */
   elevation: number
   /** Distance in meters for edge blending/gradient */

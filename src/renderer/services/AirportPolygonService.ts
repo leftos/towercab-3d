@@ -232,10 +232,6 @@ class AirportPolygonService {
       const polygon = createRunwayPolygon(runway, blendDistance)
       if (polygon) {
         polygons.push(polygon)
-        // Debug: log polygon details
-        const lats = polygon.vertices.map(v => v[1])
-        const lons = polygon.vertices.map(v => v[0])
-        console.log(`[AirportPolygonService] Runway ${runway.ident}: elevation=${polygon.elevation.toFixed(1)}m, lat range ${Math.min(...lats).toFixed(6)} to ${Math.max(...lats).toFixed(6)}, lon range ${Math.min(...lons).toFixed(6)} to ${Math.max(...lons).toFixed(6)}`)
       }
     }
 
@@ -244,7 +240,6 @@ class AirportPolygonService {
       const pavementPolygons = airportSurfacesService.getPavementPolygons(icao)
       if (pavementPolygons.length > 0) {
         polygons.push(...pavementPolygons)
-        console.log(`[AirportPolygonService] Added ${pavementPolygons.length} pavement polygons for ${icao}`)
       }
     }
 
@@ -252,8 +247,6 @@ class AirportPolygonService {
     const bounds = polygons.length > 0
       ? calculateBounds(polygons)
       : [0, 0, 0, 0] as [number, number, number, number]
-
-    console.log(`[AirportPolygonService] Generated ${polygons.length} total polygons for ${icao} (${runways.length} runways, ${polygons.length - runways.length} pavements)`)
 
     return {
       icao: icao.toUpperCase(),

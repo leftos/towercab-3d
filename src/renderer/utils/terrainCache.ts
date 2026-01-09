@@ -7,6 +7,11 @@
 
 import * as Cesium from 'cesium'
 
+/** Maximum time to wait for terrain to load (ms) */
+const MAX_TERRAIN_WAIT_MS = 2000
+/** Check interval when waiting for terrain (ms) */
+const TERRAIN_CHECK_INTERVAL_MS = 100
+
 /**
  * Clear the in-memory terrain tile cache
  *
@@ -55,19 +60,41 @@ export async function clearTerrainCache(viewer: Cesium.Viewer): Promise<void> {
 
       console.log('[TerrainCache] Terrain provider swapped to force tile reload')
 
-      // Step 4: Wait for terrain to load, then trigger render to let camera clamping
-      // logic (in useCesiumCamera) correct the camera height automatically.
-      // The camera's preRender listener uses globe.getHeight() which needs loaded terrain.
-      setTimeout(() => {
+      // Step 4: Wait for terrain to load before resolving
+      // Use a retry pattern instead of fixed timeout for reliability
+      const startTime = Date.now()
+      const initialTilesLoading = globe.tilesLoaded
+
+      const checkTerrainLoaded = (): void => {
         if (viewer.isDestroyed()) {
           resolve()
           return
         }
-        // Force a render cycle - the camera's preRender listener will
-        // use the updated terrain height from globe.getHeight() to clamp the camera
-        viewer.scene.render()
-        resolve()
-      }, 300) // Wait for terrain tiles to load
+
+        // Check if terrain has loaded (tilesLoaded becomes true or changed state)
+        // Also check if we've exceeded the max wait time
+        const elapsed = Date.now() - startTime
+        const tilesNowLoaded = globe.tilesLoaded
+
+        if (tilesNowLoaded || elapsed >= MAX_TERRAIN_WAIT_MS) {
+          // Terrain is loaded or we've waited long enough
+          viewer.scene.render()
+          resolve()
+          return
+        }
+
+        // If tiles started loading and are still loading, or just waiting for first load
+        if (!initialTilesLoading || !tilesNowLoaded) {
+          setTimeout(checkTerrainLoaded, TERRAIN_CHECK_INTERVAL_MS)
+        } else {
+          // Tiles appear loaded, resolve
+          viewer.scene.render()
+          resolve()
+        }
+      }
+
+      // Start checking after a short initial delay
+      setTimeout(checkTerrainLoaded, TERRAIN_CHECK_INTERVAL_MS)
     })
   })
 }

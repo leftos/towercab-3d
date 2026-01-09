@@ -59,9 +59,10 @@ export function useTerrainFlattening({
   const isWrappedRef = useRef(false)
   const flatteningProviderRef = useRef<FlatteningProvider | null>(null)
   const lastAirportRef = useRef<string | null>(null)
-  const originalProviderRef = useRef<Cesium.TerrainProvider | null>(null)
   // Track if pavements were included in the last polygon generation
   const hadPavementsRef = useRef(false)
+  // Track last enabled state to detect enable/disable transitions
+  const lastEnabledRef = useRef<boolean>(enabled)
 
   // Track if airport surfaces data is loaded
   const [surfacesLoaded, setSurfacesLoaded] = useState(airportSurfacesService.isLoaded())
@@ -92,9 +93,6 @@ export function useTerrainFlattening({
       return
     }
 
-    // Store original for potential restoration
-    originalProviderRef.current = currentProvider
-
     // Wrap the provider
     const wrapped = createFlatteningTerrainProvider(currentProvider)
     flatteningProviderRef.current = wrapped
@@ -103,7 +101,8 @@ export function useTerrainFlattening({
     console.log('[TerrainFlattening] Wrapped terrain provider')
   }, [viewer])
 
-  // Update flattening polygons when airport/runways change
+  // Single unified effect for managing terrain flattening state
+  // Handles: enable/disable, airport changes, pavement data loading
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return
 
@@ -115,11 +114,21 @@ export function useTerrainFlattening({
     const provider = flatteningProviderRef.current
     if (!provider) return
 
+    // Detect enable/disable transition
+    const wasEnabled = lastEnabledRef.current
+    const justDisabled = wasEnabled && !enabled
+    const justEnabled = !wasEnabled && enabled
+    lastEnabledRef.current = enabled
+
     // Handle disabled state
     if (!enabled) {
       if (lastAirportRef.current !== null) {
+        if (justDisabled) {
+          console.log('[TerrainFlattening] Disabled - clearing polygons')
+        }
         provider.clearFlatteningPolygons()
         lastAirportRef.current = null
+        hadPavementsRef.current = false
         // Clear cache to reload original tiles, then refresh camera position
         void clearAllTerrainCaches(viewer).then(() => refreshCamera())
       }
@@ -131,20 +140,27 @@ export function useTerrainFlattening({
       if (lastAirportRef.current !== null) {
         provider.clearFlatteningPolygons()
         lastAirportRef.current = null
+        hadPavementsRef.current = false
         void clearAllTerrainCaches(viewer).then(() => refreshCamera())
       }
       return
     }
 
-    // Check if we need to regenerate polygons
+    // Check if we need to regenerate polygons:
     // - Different airport: always regenerate
     // - Same airport but pavements just became available: regenerate to include them
+    // - Just re-enabled: regenerate
     const pavementsNowAvailable = surfacesLoaded && airportSurfacesService.isLoaded()
-    const needsRegeneration = currentAirportIcao !== lastAirportRef.current ||
-      (pavementsNowAvailable && !hadPavementsRef.current)
+    const airportChanged = currentAirportIcao !== lastAirportRef.current
+    const pavementsJustLoaded = pavementsNowAvailable && !hadPavementsRef.current
+    const needsRegeneration = airportChanged || pavementsJustLoaded || justEnabled
 
     if (!needsRegeneration) {
       return
+    }
+
+    if (justEnabled) {
+      console.log(`[TerrainFlattening] Re-enabled for ${currentAirportIcao}`)
     }
 
     // Generate polygons (includes pavements if loaded)
@@ -177,41 +193,6 @@ export function useTerrainFlattening({
     // Clear tile cache to force re-fetch with modifications, then refresh camera position
     void clearAllTerrainCaches(viewer).then(() => refreshCamera())
   }, [viewer, currentAirportIcao, runways, enabled, blendDistance, wrapTerrainProvider, refreshCamera, surfacesLoaded])
-
-  // Handle enabled toggle - this is separate from airport change to ensure proper state
-  // The main effect handles re-enabling since lastAirportRef.current will be null
-  useEffect(() => {
-    const provider = flatteningProviderRef.current
-    if (!provider || !viewer || viewer.isDestroyed()) return
-
-    if (!enabled && lastAirportRef.current !== null) {
-      console.log('[TerrainFlattening] Disabling - clearing polygons and cache')
-      provider.clearFlatteningPolygons()
-      lastAirportRef.current = null
-      // Wait for cache clear to complete, then refresh camera position
-      void clearAllTerrainCaches(viewer).then(() => {
-        console.log('[TerrainFlattening] Cache cleared after disable')
-        refreshCamera()
-      })
-    } else if (enabled && lastAirportRef.current === null && currentAirportIcao) {
-      // Re-enabling with an airport set - regenerate polygons
-      console.log(`[TerrainFlattening] Re-enabling for ${currentAirportIcao}`)
-      const config = airportPolygonService.generateRunwayPolygons(
-        currentAirportIcao,
-        runways,
-        blendDistance
-      )
-      if (config.polygons.length > 0) {
-        provider.setFlatteningPolygons(config.polygons)
-        lastAirportRef.current = currentAirportIcao
-        console.log(`[TerrainFlattening] Set ${config.polygons.length} polygons, clearing cache`)
-        void clearAllTerrainCaches(viewer).then(() => {
-          console.log('[TerrainFlattening] Cache cleared after enable')
-          refreshCamera()
-        })
-      }
-    }
-  }, [viewer, enabled, currentAirportIcao, runways, blendDistance, refreshCamera])
 
   // Cleanup on unmount
   useEffect(() => {

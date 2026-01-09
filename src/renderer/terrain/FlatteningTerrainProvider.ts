@@ -11,10 +11,11 @@ import * as Cesium from 'cesium'
 import * as turf from '@turf/turf'
 import type { Feature, Polygon } from 'geojson'
 import RBush from 'rbush'
-import type { FlatteningPolygon, PolygonBBox } from '../types/terrain'
+import type { FlatteningPolygon } from '../types/terrain'
 
 /** Terrain modification data for a single flattening zone */
 interface FloorData {
+  id: string // Unique identifier to link with spatial index
   floorHeight: number
   floorBoundingRect: Cesium.Rectangle
   floorPolygon: Feature<Polygon>
@@ -26,42 +27,100 @@ interface FloorData {
   endElevation?: number
 }
 
+/** R-tree entry that references FloorData by ID */
+interface FloorBBox {
+  minX: number
+  minY: number
+  maxX: number
+  maxY: number
+  floorId: string
+  blendDistance: number // Store blend distance for expanded search
+}
+
 /**
  * Create a custom terrain provider that flattens designated areas
  *
  * @param baseProvider - The base CesiumTerrainProvider to wrap
  * @returns Modified terrain provider with flattening capability
  */
+/** Maximum tile cache size before LRU eviction */
+const MAX_TILE_CACHE_SIZE = 500
+
 export function createFlatteningTerrainProvider(
   baseProvider: Cesium.CesiumTerrainProvider
 ): Cesium.CesiumTerrainProvider & {
   setFlatteningPolygons: (polygons: FlatteningPolygon[]) => void
   clearFlatteningPolygons: () => void
 } {
-  // Store modification data
-  const modifyData: FloorData[] = []
+  // Store modification data by ID for fast lookup
+  const floorDataMap = new Map<string, FloorData>()
 
-  // Spatial index for fast polygon lookup
-  const spatialIndex = new RBush<PolygonBBox>()
+  // Spatial index for fast polygon lookup (references FloorData by ID)
+  const spatialIndex = new RBush<FloorBBox>()
 
   // Track logged tiles to avoid spam (tile key -> true)
   const loggedTiles = new Set<string>()
 
-  // Cache for processed terrain data (tile key -> modified TerrainData)
-  // This prevents reprocessing tiles on every request
+  // LRU cache for processed terrain data (tile key -> modified TerrainData)
+  // Uses a Map which maintains insertion order for LRU eviction
   const processedTileCache = new Map<string, Cesium.TerrainData>()
+  // Track access order for LRU (most recent at end)
+  const tileCacheOrder: string[] = []
+
+  /**
+   * Add a tile to the cache with LRU eviction
+   */
+  function cacheTile(key: string, data: Cesium.TerrainData): void {
+    // If already in cache, remove from order tracking (will re-add at end)
+    const existingIndex = tileCacheOrder.indexOf(key)
+    if (existingIndex !== -1) {
+      tileCacheOrder.splice(existingIndex, 1)
+    }
+
+    // Add to cache and order
+    processedTileCache.set(key, data)
+    tileCacheOrder.push(key)
+
+    // Evict oldest entries if over limit
+    while (tileCacheOrder.length > MAX_TILE_CACHE_SIZE) {
+      const oldest = tileCacheOrder.shift()
+      if (oldest) {
+        processedTileCache.delete(oldest)
+      }
+    }
+  }
+
+  /**
+   * Get a tile from cache and update LRU order
+   */
+  function getCachedTile(key: string): Cesium.TerrainData | undefined {
+    const data = processedTileCache.get(key)
+    if (data) {
+      // Move to end of order (most recently used)
+      const index = tileCacheOrder.indexOf(key)
+      if (index !== -1) {
+        tileCacheOrder.splice(index, 1)
+        tileCacheOrder.push(key)
+      }
+    }
+    return data
+  }
 
   /**
    * Set the flattening polygons
    */
   function setFlatteningPolygons(polygons: FlatteningPolygon[]): void {
     // Clear existing data
-    modifyData.length = 0
+    floorDataMap.clear()
     spatialIndex.clear()
     loggedTiles.clear()
     processedTileCache.clear()
+    tileCacheOrder.length = 0
 
     if (polygons.length === 0) return
+
+    // Batch items for spatial index bulk load (more efficient than individual inserts)
+    const spatialItems: FloorBBox[] = []
 
     // Convert polygons to floor data
     for (const polygon of polygons) {
@@ -78,9 +137,18 @@ export function createFlatteningTerrainProvider(
       const floorBoundingRect = Cesium.Rectangle.fromDegrees(west, south, east, north)
 
       // Create turf polygon for point-in-polygon testing
-      const floorPolygon = turf.polygon([polygon.vertices])
+      // Include holes if present (exterior ring + hole rings)
+      const rings: [number, number][][] = [polygon.vertices]
+      if (polygon.holes && polygon.holes.length > 0) {
+        rings.push(...polygon.holes)
+      }
+      // Ensure correct winding order (counterclockwise for exterior, clockwise for holes)
+      const turfPoly = turf.polygon(rings)
+      const floorPolygon = turf.rewind(turfPoly, { reverse: false }) as Feature<Polygon>
 
-      modifyData.push({
+      // Store floor data by ID
+      floorDataMap.set(polygon.id, {
+        id: polygon.id,
         floorHeight: polygon.elevation,
         floorBoundingRect,
         floorPolygon,
@@ -92,15 +160,19 @@ export function createFlatteningTerrainProvider(
         endElevation: polygon.endElevation
       })
 
-      // Add to spatial index (in degrees for easier lookup)
-      spatialIndex.insert({
+      // Add to spatial index batch (in degrees for easier lookup)
+      spatialItems.push({
         minX: west,
         minY: south,
         maxX: east,
         maxY: north,
-        polygon
+        floorId: polygon.id,
+        blendDistance: polygon.blendDistance
       })
     }
+
+    // Bulk load spatial index (more efficient than individual inserts)
+    spatialIndex.load(spatialItems)
 
     console.log(`[FlatteningTerrainProvider] Set ${polygons.length} flattening polygons`)
   }
@@ -109,18 +181,20 @@ export function createFlatteningTerrainProvider(
    * Clear all flattening polygons
    */
   function clearFlatteningPolygons(): void {
-    modifyData.length = 0
+    floorDataMap.clear()
     spatialIndex.clear()
     loggedTiles.clear()
     processedTileCache.clear()
+    tileCacheOrder.length = 0
     console.log('[FlatteningTerrainProvider] Cleared flattening polygons')
   }
 
   /**
    * Check if a tile rectangle intersects any flattening zones (including blend areas)
+   * Returns matching floor data directly from R-tree results
    */
   function tileIntersectsFloors(tileRect: Cesium.Rectangle): FloorData[] {
-    if (modifyData.length === 0) return []
+    if (floorDataMap.size === 0) return []
 
     // Convert tile rectangle to degrees for spatial index query
     const west = Cesium.Math.toDegrees(tileRect.west)
@@ -128,29 +202,50 @@ export function createFlatteningTerrainProvider(
     const east = Cesium.Math.toDegrees(tileRect.east)
     const north = Cesium.Math.toDegrees(tileRect.north)
 
-    // Expand search area by max blend distance (rough approximation in degrees)
-    // ~0.001 degrees ≈ 111 meters at equator, less at higher latitudes
-    const maxBlendDegrees = 0.001 // ~100m buffer for blend distance search
+    // Calculate latitude-dependent blend buffer in degrees
+    // At equator: 1° ≈ 111km, at 60°N: 1° longitude ≈ 55km
+    // Use the tile center latitude to estimate meters-per-degree
+    const centerLat = (south + north) / 2
+    const metersPerDegreeLat = 111320 // meters per degree latitude (constant)
+    const metersPerDegreeLon = 111320 * Math.cos(centerLat * Math.PI / 180)
+
+    // Find max blend distance from all floors (typically 30-100m)
+    // Use 100m as safe default since we don't know which floors might match
+    const maxBlendMeters = 100
+    const blendDegreesLat = maxBlendMeters / metersPerDegreeLat
+    const blendDegreesLon = maxBlendMeters / metersPerDegreeLon
+
+    // Query spatial index with expanded bounds for blend zones
     const candidates = spatialIndex.search({
-      minX: west - maxBlendDegrees,
-      minY: south - maxBlendDegrees,
-      maxX: east + maxBlendDegrees,
-      maxY: north + maxBlendDegrees
+      minX: west - blendDegreesLon,
+      minY: south - blendDegreesLat,
+      maxX: east + blendDegreesLon,
+      maxY: north + blendDegreesLat
     })
+
     if (candidates.length === 0) return []
 
-    // Return matching floor data (expand floor bounds by blend distance)
-    return modifyData.filter(floor => {
-      // Expand the floor's bounding rect by blend distance for intersection check
-      const blendRadians = floor.blendDistance / 6371000 // Earth radius in meters
-      const expandedRect = new Cesium.Rectangle(
-        floor.floorBoundingRect.west - blendRadians,
-        floor.floorBoundingRect.south - blendRadians,
-        floor.floorBoundingRect.east + blendRadians,
-        floor.floorBoundingRect.north + blendRadians
-      )
-      return Cesium.Rectangle.intersection(tileRect, expandedRect) !== undefined
-    })
+    // Convert R-tree results directly to FloorData using the stored IDs
+    const results: FloorData[] = []
+    for (const candidate of candidates) {
+      const floor = floorDataMap.get(candidate.floorId)
+      if (floor) {
+        // Verify intersection with expanded bounds (accounting for blend distance)
+        const blendRadiansLat = floor.blendDistance / 6371000
+        const blendRadiansLon = blendRadiansLat / Math.cos(centerLat * Math.PI / 180)
+        const expandedRect = new Cesium.Rectangle(
+          floor.floorBoundingRect.west - blendRadiansLon,
+          floor.floorBoundingRect.south - blendRadiansLat,
+          floor.floorBoundingRect.east + blendRadiansLon,
+          floor.floorBoundingRect.north + blendRadiansLat
+        )
+        if (Cesium.Rectangle.intersection(tileRect, expandedRect) !== undefined) {
+          results.push(floor)
+        }
+      }
+    }
+
+    return results
   }
 
   /**
@@ -335,10 +430,9 @@ export function createFlatteningTerrainProvider(
       return originalRequestTileGeometry(x, y, level, request)
     }
 
-    // Check if we already processed this tile
-    const cached = processedTileCache.get(tileKey)
+    // Check if we already processed this tile (updates LRU order)
+    const cached = getCachedTile(tileKey)
     if (cached) {
-      // Don't log cache hits - too noisy
       return Promise.resolve(cached)
     }
 
@@ -350,7 +444,7 @@ export function createFlatteningTerrainProvider(
       // Check if this is QuantizedMeshTerrainData
       if (!(terrainData instanceof Cesium.QuantizedMeshTerrainData)) {
         console.log(`[FlatteningTerrainProvider] Tile ${tileKey} is not QuantizedMeshTerrainData, skipping`)
-        processedTileCache.set(tileKey, terrainData)
+        cacheTile(tileKey, terrainData)
         return terrainData
       }
 
@@ -399,7 +493,7 @@ export function createFlatteningTerrainProvider(
 
       if (!modified) {
         // Cache even unmodified tiles to avoid re-checking
-        processedTileCache.set(tileKey, terrainData)
+        cacheTile(tileKey, terrainData)
         return terrainData
       }
 
@@ -440,8 +534,8 @@ export function createFlatteningTerrainProvider(
         credits: mesh._credits
       })
 
-      // Cache the processed tile
-      processedTileCache.set(tileKey, modifiedTerrainData)
+      // Cache the processed tile (with LRU eviction)
+      cacheTile(tileKey, modifiedTerrainData)
 
       return modifiedTerrainData
     })
@@ -461,15 +555,28 @@ export function createFlatteningTerrainProvider(
 
 // Singleton for the flattening provider instance
 let flatteningProviderInstance: ReturnType<typeof createFlatteningTerrainProvider> | null = null
+// Track which base provider was wrapped (to detect provider changes)
+let wrappedBaseProvider: Cesium.CesiumTerrainProvider | null = null
 
 /**
  * Get or create the flattening terrain provider
+ *
+ * If the base provider has changed since the last call, creates a new wrapper.
  */
 export function getFlatteningTerrainProvider(
   baseProvider: Cesium.CesiumTerrainProvider
 ): ReturnType<typeof createFlatteningTerrainProvider> {
+  // If base provider changed, recreate the wrapper
+  if (flatteningProviderInstance && wrappedBaseProvider !== baseProvider) {
+    console.log('[FlatteningTerrainProvider] Base provider changed, recreating wrapper')
+    flatteningProviderInstance.clearFlatteningPolygons()
+    flatteningProviderInstance = null
+    wrappedBaseProvider = null
+  }
+
   if (!flatteningProviderInstance) {
     flatteningProviderInstance = createFlatteningTerrainProvider(baseProvider)
+    wrappedBaseProvider = baseProvider
   }
   return flatteningProviderInstance
 }
@@ -481,5 +588,6 @@ export function clearFlatteningTerrainProvider(): void {
   if (flatteningProviderInstance) {
     flatteningProviderInstance.clearFlatteningPolygons()
     flatteningProviderInstance = null
+    wrappedBaseProvider = null
   }
 }

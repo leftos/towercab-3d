@@ -226,6 +226,21 @@ class AirportSurfacesService {
   }
 
   /**
+   * Ensure a polygon ring is closed (first point == last point)
+   */
+  private ensureRingClosed(ring: [number, number][]): [number, number][] {
+    if (ring.length < 2) return ring
+
+    const first = ring[0]
+    const last = ring[ring.length - 1]
+
+    if (first[0] !== last[0] || first[1] !== last[1]) {
+      return [...ring, [first[0], first[1]]]
+    }
+    return ring
+  }
+
+  /**
    * Convert a single pavement to a flattening polygon
    */
   private convertPavementToPolygon(
@@ -234,13 +249,13 @@ class AirportSurfacesService {
     index: number,
     elevationMeters: number
   ): FlatteningPolygon | null {
-    // Ensure the polygon is closed
-    const vertices = [...pavement.v] as [number, number][]
-    const first = vertices[0]
-    const last = vertices[vertices.length - 1]
+    // Ensure the exterior ring is closed
+    const vertices = this.ensureRingClosed([...pavement.v] as [number, number][])
 
-    if (first[0] !== last[0] || first[1] !== last[1]) {
-      vertices.push([first[0], first[1]])
+    // Process holes if present
+    let holes: [number, number][][] | undefined
+    if (pavement.h && pavement.h.length > 0) {
+      holes = pavement.h.map(hole => this.ensureRingClosed([...hole] as [number, number][]))
     }
 
     // Determine source type based on surface
@@ -251,6 +266,7 @@ class AirportSurfacesService {
     return {
       id: `${icao}-pavement-${index}`,
       vertices,
+      holes,
       elevation: elevationMeters,
       blendDistance: PAVEMENT_BLEND_DISTANCE,
       source
