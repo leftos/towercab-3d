@@ -5,6 +5,7 @@ import {
   getModelColorRgb,
   getModelColorBlendAmount
 } from '../constants/rendering'
+import { applyCesiumDebugPatch } from '../utils/cesiumDebugPatch'
 
 export interface CesiumViewerSettings {
   /** Cesium Ion access token for terrain/imagery */
@@ -341,6 +342,9 @@ export function useCesiumViewer(
 
     viewerRef.current = newViewer
     setViewer(newViewer)
+
+    // Apply debug patch to capture crash diagnostics (e.g., updateFrustums errors)
+    applyCesiumDebugPatch(newViewer)
 
     // Create aircraft model pool using Cesium.Model primitives for non-uniform scaling
     // Models from Flightradar24/fr24-3d-models (GPL-2.0, originally from FlightGear)
