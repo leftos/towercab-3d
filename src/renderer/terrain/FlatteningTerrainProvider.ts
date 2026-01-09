@@ -558,6 +558,19 @@ export function createFlatteningTerrainProvider(
         newQuantizedVertices[vertexCount * 2 + i] = heightBuffer[i]
       }
 
+      // Recompute bounding sphere to account for modified heights
+      // This is critical for frustum culling - if we use the original bounding sphere
+      // (computed from the original lower heights), tiles may be incorrectly culled
+      // when their modified geometry is raised above the original bounding volume.
+      const newBoundingSphere = Cesium.BoundingSphere.fromRectangle3D(
+        tileRect,
+        Cesium.Ellipsoid.WGS84,
+        newMaxHeight // Use max height to ensure the sphere encompasses all modified geometry
+      )
+      // Expand the radius slightly to account for the height range
+      const heightRange = newMaxHeight - newMinHeight
+      newBoundingSphere.radius += heightRange / 2
+
       // Create new QuantizedMeshTerrainData with modified heights
       // Convert Uint16Array to number[] for Cesium's constructor
       const modifiedTerrainData = new Cesium.QuantizedMeshTerrainData({
@@ -565,8 +578,8 @@ export function createFlatteningTerrainProvider(
         maximumHeight: newMaxHeight,
         quantizedVertices: newQuantizedVertices,
         indices: mesh._indices,
-        boundingSphere: mesh._boundingSphere,
-        orientedBoundingBox: mesh._orientedBoundingBox,
+        boundingSphere: newBoundingSphere,
+        orientedBoundingBox: mesh._orientedBoundingBox, // TODO: may also need recomputation
         horizonOcclusionPoint: mesh._horizonOcclusionPoint,
         westIndices: Array.from(mesh._westIndices),
         southIndices: Array.from(mesh._southIndices),
