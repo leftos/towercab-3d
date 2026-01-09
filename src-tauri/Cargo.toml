@@ -35,6 +35,7 @@ tauri-plugin-deep-link = "2"
 
 # HTTP server for remote browser access
 axum = { version = "0.7", features = ["ws"] }  # ws feature for WebSocket support
+flate2 = "1.0"  # For gzip decompression (airport surfaces data)
 tower-http = { version = "0.5", features = ["cors", "fs", "trace"] }
 tokio = { version = "1", features = ["rt-multi-thread", "net", "sync"] }
 mime_guess = "2"

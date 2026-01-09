@@ -3,9 +3,10 @@
  *
  * This script uses the actual shipping code to:
  * 1. Load runway data for YMML
- * 2. Generate flattening polygons using AirportPolygonService
- * 3. Test point-in-polygon and elevation interpolation
- * 4. Sample real Cesium terrain at various points
+ * 2. Load airport surfaces (taxiways, aprons) from X-Plane apt.dat
+ * 3. Generate flattening polygons using AirportPolygonService
+ * 4. Test point-in-polygon and elevation interpolation
+ * 5. Sample real Cesium terrain at various points
  *
  * Run with: npx tsx scripts/test-terrain-flattening.ts
  *
@@ -16,11 +17,14 @@ import * as Cesium from 'cesium'
 import * as turf from '@turf/turf'
 import * as fs from 'fs'
 import * as path from 'path'
+import * as zlib from 'zlib'
 
 // Import actual shipping code
 import { airportPolygonService } from '../src/renderer/services/AirportPolygonService'
+import { airportSurfacesService } from '../src/renderer/services/AirportSurfacesService'
 import type { Runway } from '../src/renderer/types/airport'
 import type { FlatteningPolygon } from '../src/renderer/types/terrain'
+import type { AirportSurfacesData } from '../src/renderer/types/airportSurfaces'
 
 // Load .env file from project root
 function loadEnv() {
@@ -41,6 +45,22 @@ function loadEnv() {
 }
 
 loadEnv()
+
+// ============================================================================
+// Airport Surfaces Data Loading (Node.js - loads gzip file directly)
+// ============================================================================
+
+function loadAirportSurfacesForNode(): AirportSurfacesData | null {
+  const gzPath = path.join(process.cwd(), 'src-tauri', 'resources', 'airport-surfaces.json.gz')
+  if (!fs.existsSync(gzPath)) {
+    console.warn(`Airport surfaces file not found: ${gzPath}`)
+    return null
+  }
+
+  const compressed = fs.readFileSync(gzPath)
+  const decompressed = zlib.gunzipSync(compressed)
+  return JSON.parse(decompressed.toString('utf-8')) as AirportSurfacesData
+}
 
 // YMML runway data (from OurAirports - matching actual RunwayService format)
 const YMML_RUNWAYS: Runway[] = [
@@ -203,6 +223,7 @@ async function main() {
   console.log('='.repeat(70))
   console.log('TERRAIN FLATTENING TEST - YMML (Melbourne Airport)')
   console.log('Using actual AirportPolygonService shipping code')
+  console.log('Now includes taxiways and aprons from X-Plane apt.dat')
   console.log('='.repeat(70))
   console.log()
 
@@ -216,13 +237,54 @@ async function main() {
 
   Cesium.Ion.defaultAccessToken = token
 
-  // Generate runway polygons using actual shipping code
+  // Load airport surfaces data using Node.js file reading, then inject into service
+  console.log('Loading airport surfaces data...')
+  const surfacesData = loadAirportSurfacesForNode()
+  if (surfacesData) {
+    // Inject into the actual service so AirportPolygonService can use it
+    airportSurfacesService.loadFromData(surfacesData)
+
+    // Show YMML-specific stats
+    const ymmlSurfaces = surfacesData.airports['YMML']
+    if (ymmlSurfaces) {
+      console.log(`YMML airport data:`)
+      console.log(`  Name: ${ymmlSurfaces.n}`)
+      console.log(`  Elevation: ${ymmlSurfaces.e} ft`)
+      console.log(`  Pavement polygons: ${ymmlSurfaces.p.length}`)
+
+      // Surface breakdown
+      const surfaceCounts: Record<string, number> = {}
+      for (const p of ymmlSurfaces.p) {
+        surfaceCounts[p.s] = (surfaceCounts[p.s] || 0) + 1
+      }
+      console.log(`  Surface breakdown:`)
+      for (const [s, count] of Object.entries(surfaceCounts)) {
+        const name = { a: 'asphalt', c: 'concrete', g: 'grass', d: 'dirt', o: 'other' }[s] || s
+        console.log(`    ${name}: ${count} polygons`)
+      }
+    }
+  } else {
+    console.log('No airport surfaces data found - will only use runway polygons')
+  }
+  console.log()
+
+  // Generate all flattening polygons using actual shipping code
+  // This now includes both runways AND pavement polygons automatically
   const blendDistance = 50
   const config = airportPolygonService.generateRunwayPolygons('YMML', YMML_RUNWAYS, blendDistance)
-  const polygons = config.polygons
+  const allPolygons = config.polygons
 
-  console.log('Generated Runway Polygons (from AirportPolygonService):')
-  for (const p of polygons) {
+  // Separate for reporting
+  const runwayPolygons = allPolygons.filter(p => p.source === 'runway')
+  const pavementPolygons = allPolygons.filter(p => p.source === 'taxiway' || p.source === 'apron')
+
+  console.log(`Generated ${allPolygons.length} Total Flattening Polygons:`)
+  console.log(`  Runways: ${runwayPolygons.length}`)
+  console.log(`  Pavements (taxiways/aprons): ${pavementPolygons.length}`)
+  console.log()
+
+  console.log('Runway Polygons:')
+  for (const p of runwayPolygons) {
     const lats = p.vertices.map(v => v[1])
     const lons = p.vertices.map(v => v[0])
     console.log(`  ${p.id}:`)
@@ -248,13 +310,26 @@ async function main() {
     { name: 'Sample 3', lon: 144.836653, lat: -37.662378, reportedHeight: 122.7 },
     { name: 'Sample 4', lon: 144.836845, lat: -37.663293, reportedHeight: 116.1 },
     { name: 'Sample 5', lon: 144.835265, lat: -37.655067, reportedHeight: 115.5 },
+    // Bumpy taxiway samples
+    { name: 'Taxiway bump 1', lon: 144.840490, lat: -37.660318, reportedHeight: 132.2 },
+    { name: 'Taxiway bump 2', lon: 144.840566, lat: -37.660785, reportedHeight: 127.4 },
+    { name: 'Taxiway bump 3', lon: 144.840618, lat: -37.661124, reportedHeight: 123.1 },
+    { name: 'Taxiway bump 4', lon: 144.840300, lat: -37.659707, reportedHeight: 132.6 },
+    { name: 'Taxiway bump 5', lon: 144.840289, lat: -37.659358, reportedHeight: 132.4 },
+    { name: 'Taxiway bump 6', lon: 144.840094, lat: -37.658420, reportedHeight: 133.5 },
+    // New taxiway bumps (west side)
+    { name: 'Taxiway west 1', lon: 144.830527, lat: -37.664592, reportedHeight: 123.8 },
+    { name: 'Taxiway west 2', lon: 144.829656, lat: -37.664560, reportedHeight: 131.9 },
+    { name: 'Taxiway west 3', lon: 144.830202, lat: -37.664576, reportedHeight: 125.5 },
+    { name: 'Taxiway west 4', lon: 144.830017, lat: -37.664555, reportedHeight: 129.0 },
+    { name: 'Taxiway west 5', lon: 144.831404, lat: -37.664691, reportedHeight: 128.8 },
   ]
 
   console.log('Point Name           | Reported | Calculated | Reason')
   console.log('-'.repeat(70))
 
   for (const pt of problemPoints) {
-    const result = classifyPoint(pt.lon, pt.lat, pt.reportedHeight, polygons)
+    const result = classifyPoint(pt.lon, pt.lat, pt.reportedHeight, allPolygons)
     const delta = result.height - pt.reportedHeight
     console.log(
       `${pt.name.padEnd(20)} | ${pt.reportedHeight.toFixed(1).padStart(8)}m | ${result.height.toFixed(1).padStart(10)}m | ${result.reason}`
@@ -292,7 +367,7 @@ async function main() {
   for (let i = 0; i < gridPoints.length; i++) {
     const pt = gridPoints[i]
     const original = gridSampled[i].height
-    const result = classifyPoint(pt.lon, pt.lat, original, polygons)
+    const result = classifyPoint(pt.lon, pt.lat, original, allPolygons)
     const delta = result.height - original
 
     const label = i === 0 ? 'THR 16' : i === 20 ? 'THR 34' : `${pt.pct.toFixed(0)}%`.padStart(6)
@@ -327,7 +402,7 @@ async function main() {
   for (let i = 0; i < intersectionPoints.length; i++) {
     const pt = intersectionPoints[i]
     const original = intSampled[i].height
-    const result = classifyPoint(pt.lon, pt.lat, original, polygons)
+    const result = classifyPoint(pt.lon, pt.lat, original, allPolygons)
 
     console.log(
       `${pt.lat.toFixed(6)} | ${original.toFixed(1).padStart(12)}m | ${result.height.toFixed(1).padStart(11)}m | ${result.reason}`

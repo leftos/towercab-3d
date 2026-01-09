@@ -1,14 +1,19 @@
 /**
  * Airport Polygon Service
  *
- * Generates flattening polygons for runways based on runway data.
+ * Generates flattening polygons for airport surfaces (runways, taxiways, aprons).
  * These polygons are used by the FlatteningTerrainProvider to create
- * smooth, flat runway surfaces.
+ * smooth, flat surfaces.
+ *
+ * Data sources:
+ * - Runways: OurAirports CSV (via RunwayService)
+ * - Taxiways/Aprons: X-Plane apt.dat (via AirportSurfacesService)
  */
 
 import * as turf from '@turf/turf'
 import type { Runway } from '../types/airport'
 import type { FlatteningPolygon, AirportFlatteningConfig } from '../types/terrain'
+import { airportSurfacesService } from './AirportSurfacesService'
 
 /** Default blend distance in meters for edge transitions */
 const DEFAULT_BLEND_DISTANCE = 50
@@ -198,24 +203,31 @@ function calculateBounds(polygons: FlatteningPolygon[]): [number, number, number
 /**
  * Airport Polygon Service
  *
- * Generates flattening polygons for airport surfaces (currently runways only).
+ * Generates flattening polygons for airport surfaces (runways, taxiways, aprons).
  */
 class AirportPolygonService {
   /**
-   * Generate flattening polygons for all runways at an airport
+   * Generate flattening polygons for all surfaces at an airport
+   *
+   * This includes:
+   * - Runways (from OurAirports via RunwayService)
+   * - Taxiways and aprons (from X-Plane apt.dat via AirportSurfacesService)
    *
    * @param icao - Airport ICAO code
    * @param runways - Array of runway data from RunwayService
    * @param blendDistance - Edge blend distance in meters (default: 50)
-   * @returns Airport flattening configuration with all runway polygons
+   * @param includePavements - Whether to include taxiway/apron polygons (default: true)
+   * @returns Airport flattening configuration with all polygons
    */
   generateRunwayPolygons(
     icao: string,
     runways: Runway[],
-    blendDistance: number = DEFAULT_BLEND_DISTANCE
+    blendDistance: number = DEFAULT_BLEND_DISTANCE,
+    includePavements: boolean = true
   ): AirportFlatteningConfig {
     const polygons: FlatteningPolygon[] = []
 
+    // Add runway polygons
     for (const runway of runways) {
       const polygon = createRunwayPolygon(runway, blendDistance)
       if (polygon) {
@@ -224,7 +236,15 @@ class AirportPolygonService {
         const lats = polygon.vertices.map(v => v[1])
         const lons = polygon.vertices.map(v => v[0])
         console.log(`[AirportPolygonService] Runway ${runway.ident}: elevation=${polygon.elevation.toFixed(1)}m, lat range ${Math.min(...lats).toFixed(6)} to ${Math.max(...lats).toFixed(6)}, lon range ${Math.min(...lons).toFixed(6)} to ${Math.max(...lons).toFixed(6)}`)
-        console.log(`[AirportPolygonService] Runway ${runway.ident} source data: lowEnd=(${runway.lowEnd.lat.toFixed(6)}, ${runway.lowEnd.lon.toFixed(6)}) elev=${runway.lowEnd.elevationFt}ft heading=${runway.lowEnd.headingTrue}° displaced=${runway.lowEnd.displacedThresholdFt}ft, highEnd=(${runway.highEnd.lat.toFixed(6)}, ${runway.highEnd.lon.toFixed(6)}) elev=${runway.highEnd.elevationFt}ft heading=${runway.highEnd.headingTrue}° displaced=${runway.highEnd.displacedThresholdFt}ft`)
+      }
+    }
+
+    // Add pavement polygons (taxiways, aprons) if available and enabled
+    if (includePavements && airportSurfacesService.isLoaded()) {
+      const pavementPolygons = airportSurfacesService.getPavementPolygons(icao)
+      if (pavementPolygons.length > 0) {
+        polygons.push(...pavementPolygons)
+        console.log(`[AirportPolygonService] Added ${pavementPolygons.length} pavement polygons for ${icao}`)
       }
     }
 
@@ -232,6 +252,8 @@ class AirportPolygonService {
     const bounds = polygons.length > 0
       ? calculateBounds(polygons)
       : [0, 0, 0, 0] as [number, number, number, number]
+
+    console.log(`[AirportPolygonService] Generated ${polygons.length} total polygons for ${icao} (${runways.length} runways, ${polygons.length - runways.length} pavements)`)
 
     return {
       icao: icao.toUpperCase(),

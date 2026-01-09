@@ -5,8 +5,10 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Added
-- **Terrain flattening for airport runways**
+- **Terrain flattening for airport surfaces**
+  - Flattens runways, taxiways, and aprons for smooth aircraft movement
   - Smooths out bumps and undulations that caused aircraft to appear jumpy while taxiing
+  - Runway data from OurAirports, taxiway/apron polygons from X-Plane apt.dat (15,000+ airports)
   - Aircraft now pitch realistically on sloped runways instead of staying level
   - Toggle on/off in Settings → Graphics & Weather → Terrain
   - Configurable edge blend distance for natural terrain transitions

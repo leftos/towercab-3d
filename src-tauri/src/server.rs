@@ -4,10 +4,13 @@
 //! when the server is enabled in global settings.
 
 use std::fs;
+use std::io::Read;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+
+use flate2::read::GzDecoder;
 
 use axum::{
     body::Body,
@@ -326,6 +329,7 @@ fn create_router(state: Arc<ServerState>) -> Router {
 
     Router::new()
         // API routes
+        .route("/api/airport-surfaces", get(get_airport_surfaces))
         .route("/api/global-settings", get(get_global_settings).post(update_global_settings))
         .route("/api/mods/aircraft", get(list_aircraft_mods))
         .route("/api/mods/towers", get(list_tower_mods))
@@ -357,6 +361,58 @@ fn create_router(state: Arc<ServerState>) -> Router {
 // =============================================================================
 // API Handlers
 // =============================================================================
+
+/// GET /api/airport-surfaces - Return airport pavement data (decompressed JSON)
+///
+/// This endpoint reads the compressed airport-surfaces.json.gz file from
+/// bundled resources and serves the decompressed JSON. The data contains
+/// taxiway and apron polygons from X-Plane apt.dat for terrain flattening.
+async fn get_airport_surfaces(
+    State(state): State<Arc<ServerState>>,
+) -> Result<Response<Body>, (StatusCode, String)> {
+    // Find the airport-surfaces.json.gz file in bundled resources
+    let resource_path = state
+        .app_handle
+        .path()
+        .resource_dir()
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to get resource dir: {}", e)))?
+        .join("airport-surfaces.json.gz");
+
+    if !resource_path.exists() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            "Airport surfaces data not found. The airport-surfaces.json.gz file is missing from resources.".to_string(),
+        ));
+    }
+
+    // Read and decompress the gzip file
+    let compressed_data = fs::read(&resource_path)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to read airport surfaces file: {}", e)))?;
+
+    let mut decoder = GzDecoder::new(&compressed_data[..]);
+    let mut decompressed = String::new();
+    decoder.read_to_string(&mut decompressed)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to decompress airport surfaces: {}", e)))?;
+
+    // Build response with JSON content type
+    let mut resp = Response::builder()
+        .status(StatusCode::OK)
+        .body(Body::from(decompressed))
+        .unwrap();
+
+    resp.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/json"),
+    );
+
+    // Cache for 24 hours since this data rarely changes
+    resp.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("public, max-age=86400"),
+    );
+
+    Ok(resp)
+}
 
 /// GET /api/global-settings - Return global settings JSON
 async fn get_global_settings(

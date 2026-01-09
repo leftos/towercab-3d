@@ -398,6 +398,24 @@ export type {
 } from './terrain'
 
 // ============================================================================
+// AIRPORT SURFACES TYPES (X-Plane apt.dat pavement data)
+// ============================================================================
+
+export type {
+  // Pavement data types
+  SurfaceTypeCode,
+  AptDatPavement,
+  AptDatAirport,
+  AirportSurfacesMeta,
+  AirportSurfacesData
+} from './airportSurfaces'
+
+export {
+  // Surface type name mapping
+  SURFACE_TYPE_NAMES
+} from './airportSurfaces'
+
+// ============================================================================
 // TYPE ORGANIZATION NOTES
 // ============================================================================
 

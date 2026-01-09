@@ -10,6 +10,7 @@
     "vite:preview": "vite preview",
     "typecheck": "tsc -p tsconfig.web.json --noEmit",
     "build:converter": "python scripts/build_converter.py",
+    "extract:surfaces": "python scripts/extract-airport-surfaces.py",
     "dev": "node scripts/dev-wrapper.js",
     "dev:vnas": "node scripts/dev-wrapper.js --vnas",
     "dev:server": "npm run vite:build && set TOWERCAB_AUTO_SERVER=1 && tauri dev --config src-tauri/tauri.dev.conf.json",

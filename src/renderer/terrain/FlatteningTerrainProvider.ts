@@ -47,6 +47,10 @@ export function createFlatteningTerrainProvider(
   // Track logged tiles to avoid spam (tile key -> true)
   const loggedTiles = new Set<string>()
 
+  // Cache for processed terrain data (tile key -> modified TerrainData)
+  // This prevents reprocessing tiles on every request
+  const processedTileCache = new Map<string, Cesium.TerrainData>()
+
   /**
    * Set the flattening polygons
    */
@@ -55,6 +59,7 @@ export function createFlatteningTerrainProvider(
     modifyData.length = 0
     spatialIndex.clear()
     loggedTiles.clear()
+    processedTileCache.clear()
 
     if (polygons.length === 0) return
 
@@ -107,6 +112,7 @@ export function createFlatteningTerrainProvider(
     modifyData.length = 0
     spatialIndex.clear()
     loggedTiles.clear()
+    processedTileCache.clear()
     console.log('[FlatteningTerrainProvider] Cleared flattening polygons')
   }
 
@@ -263,9 +269,13 @@ export function createFlatteningTerrainProvider(
 
       if (insideFloors.length > 0) {
         // Inside one or more polygons (intersection case)
-        // Average the heights from all matching floors for smooth intersection
-        const sumHeight = insideFloors.reduce((sum, f) => sum + f.height, 0)
-        finalHeight = sumHeight / insideFloors.length
+        // Prioritize runways (floors with gradient data) over flat pavements
+        const runwayFloors = insideFloors.filter(f => f.floor.gradientStart !== undefined)
+        const floorsToUse = runwayFloors.length > 0 ? runwayFloors : insideFloors
+
+        // Average the heights from matching floors
+        const sumHeight = floorsToUse.reduce((sum, f) => sum + f.height, 0)
+        finalHeight = sumHeight / floorsToUse.length
       } else if (blendFloors.length > 0) {
         // In blend zone of one or more polygons
         // Weight by blend factor for smooth edge transitions
@@ -316,12 +326,20 @@ export function createFlatteningTerrainProvider(
     level: number,
     request?: Cesium.Request
   ): Promise<Cesium.TerrainData> | undefined {
+    const tileKey = `${x}/${y}/${level}`
     const tileRect = baseProvider.tilingScheme.tileXYToRectangle(x, y, level)
     const floors = tileIntersectsFloors(tileRect)
 
     // If no floors intersect this tile, use original behavior
     if (floors.length === 0) {
       return originalRequestTileGeometry(x, y, level, request)
+    }
+
+    // Check if we already processed this tile
+    const cached = processedTileCache.get(tileKey)
+    if (cached) {
+      // Don't log cache hits - too noisy
+      return Promise.resolve(cached)
     }
 
     // Request the original tile data
@@ -331,7 +349,8 @@ export function createFlatteningTerrainProvider(
     return promise.then((terrainData: Cesium.TerrainData) => {
       // Check if this is QuantizedMeshTerrainData
       if (!(terrainData instanceof Cesium.QuantizedMeshTerrainData)) {
-        console.log(`[FlatteningTerrainProvider] Tile ${x}/${y}/${level} is not QuantizedMeshTerrainData, skipping`)
+        console.log(`[FlatteningTerrainProvider] Tile ${tileKey} is not QuantizedMeshTerrainData, skipping`)
+        processedTileCache.set(tileKey, terrainData)
         return terrainData
       }
 
@@ -379,14 +398,16 @@ export function createFlatteningTerrainProvider(
       )
 
       if (!modified) {
+        // Cache even unmodified tiles to avoid re-checking
+        processedTileCache.set(tileKey, terrainData)
         return terrainData
       }
 
       // Only log each tile once to avoid spam
-      const tileKey = `${x}/${y}/${level}`
       if (!loggedTiles.has(tileKey)) {
         loggedTiles.add(tileKey)
-        console.log(`[FlatteningTerrainProvider] Modified tile ${tileKey}: ${vertexCount} vertices, ${modifiedCount} flattened, height range ${mesh._minimumHeight.toFixed(1)}-${mesh._maximumHeight.toFixed(1)} -> ${newMinHeight.toFixed(1)}-${newMaxHeight.toFixed(1)}`)
+        const pct = ((modifiedCount / vertexCount) * 100).toFixed(0)
+        console.log(`[FlatteningTerrainProvider] Modified tile ${tileKey}: ${modifiedCount}/${vertexCount} (${pct}%) flattened, height ${mesh._minimumHeight.toFixed(1)}-${mesh._maximumHeight.toFixed(1)} -> ${newMinHeight.toFixed(1)}-${newMaxHeight.toFixed(1)}`)
       }
 
       // Reconstruct quantized vertices
@@ -399,7 +420,7 @@ export function createFlatteningTerrainProvider(
 
       // Create new QuantizedMeshTerrainData with modified heights
       // Convert Uint16Array to number[] for Cesium's constructor
-      return new Cesium.QuantizedMeshTerrainData({
+      const modifiedTerrainData = new Cesium.QuantizedMeshTerrainData({
         minimumHeight: newMinHeight,
         maximumHeight: newMaxHeight,
         quantizedVertices: newQuantizedVertices,
@@ -418,6 +439,11 @@ export function createFlatteningTerrainProvider(
         childTileMask: terrainData.wasCreatedByUpsampling() ? 0 : 15,
         credits: mesh._credits
       })
+
+      // Cache the processed tile
+      processedTileCache.set(tileKey, modifiedTerrainData)
+
+      return modifiedTerrainData
     })
   }
 

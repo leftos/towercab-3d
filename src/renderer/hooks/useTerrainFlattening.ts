@@ -12,10 +12,11 @@
  * 4. Clears tile cache when polygons change to force re-fetch
  */
 
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useState } from 'react'
 import * as Cesium from 'cesium'
 import type { Runway } from '../types/airport'
 import { airportPolygonService } from '../services/AirportPolygonService'
+import { airportSurfacesService } from '../services/AirportSurfacesService'
 import { createFlatteningTerrainProvider } from '../terrain/FlatteningTerrainProvider'
 import { clearAllTerrainCaches } from '../utils/terrainCache'
 import { useViewportStore } from '../stores/viewportStore'
@@ -59,6 +60,27 @@ export function useTerrainFlattening({
   const flatteningProviderRef = useRef<FlatteningProvider | null>(null)
   const lastAirportRef = useRef<string | null>(null)
   const originalProviderRef = useRef<Cesium.TerrainProvider | null>(null)
+  // Track if pavements were included in the last polygon generation
+  const hadPavementsRef = useRef(false)
+
+  // Track if airport surfaces data is loaded
+  const [surfacesLoaded, setSurfacesLoaded] = useState(airportSurfacesService.isLoaded())
+
+  // Load airport surfaces data on mount
+  useEffect(() => {
+    if (!surfacesLoaded) {
+      airportSurfacesService.load()
+        .then(() => {
+          setSurfacesLoaded(true)
+          console.log('[TerrainFlattening] Airport surfaces data loaded')
+        })
+        .catch((error) => {
+          console.warn('[TerrainFlattening] Failed to load airport surfaces data:', error)
+          // Still mark as loaded (empty) so flattening can proceed with just runways
+          setSurfacesLoaded(true)
+        })
+    }
+  }, [surfacesLoaded])
 
   // Wrap the terrain provider on first use
   const wrapTerrainProvider = useCallback(() => {
@@ -114,20 +136,30 @@ export function useTerrainFlattening({
       return
     }
 
-    // Skip if same airport (polygons already set)
-    if (currentAirportIcao === lastAirportRef.current) {
+    // Check if we need to regenerate polygons
+    // - Different airport: always regenerate
+    // - Same airport but pavements just became available: regenerate to include them
+    const pavementsNowAvailable = surfacesLoaded && airportSurfacesService.isLoaded()
+    const needsRegeneration = currentAirportIcao !== lastAirportRef.current ||
+      (pavementsNowAvailable && !hadPavementsRef.current)
+
+    if (!needsRegeneration) {
       return
     }
 
-    // Generate runway polygons
+    // Generate polygons (includes pavements if loaded)
     const config = airportPolygonService.generateRunwayPolygons(
       currentAirportIcao,
       runways,
       blendDistance
     )
 
+    // Track whether pavements were included
+    const pavementsIncluded = pavementsNowAvailable && airportSurfacesService.hasAirportData(currentAirportIcao)
+    hadPavementsRef.current = pavementsIncluded
+
     if (config.polygons.length === 0) {
-      console.log(`[TerrainFlattening] No runway polygons for ${currentAirportIcao}`)
+      console.log(`[TerrainFlattening] No polygons for ${currentAirportIcao}`)
       provider.clearFlatteningPolygons()
       lastAirportRef.current = currentAirportIcao
       return
@@ -138,11 +170,13 @@ export function useTerrainFlattening({
     provider.setFlatteningPolygons(config.polygons)
     lastAirportRef.current = currentAirportIcao
 
-    console.log(`[TerrainFlattening] Set ${config.polygons.length} runway polygons for ${currentAirportIcao}`)
+    const runwayCount = config.polygons.filter(p => p.source === 'runway').length
+    const pavementCount = config.polygons.length - runwayCount
+    console.log(`[TerrainFlattening] Set ${config.polygons.length} polygons for ${currentAirportIcao} (${runwayCount} runways, ${pavementCount} pavements)`)
 
     // Clear tile cache to force re-fetch with modifications, then refresh camera position
     void clearAllTerrainCaches(viewer).then(() => refreshCamera())
-  }, [viewer, currentAirportIcao, runways, enabled, blendDistance, wrapTerrainProvider, refreshCamera])
+  }, [viewer, currentAirportIcao, runways, enabled, blendDistance, wrapTerrainProvider, refreshCamera, surfacesLoaded])
 
   // Handle enabled toggle - this is separate from airport change to ensure proper state
   // The main effect handles re-enabling since lastAirportRef.current will be null

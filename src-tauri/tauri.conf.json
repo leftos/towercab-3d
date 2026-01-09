@@ -46,6 +46,7 @@
       "resources/texconv.exe",
       "resources/airports.json",
       "resources/runways.csv",
+      "resources/airport-surfaces.json.gz",
       "mods/**/*",
       "../dist/**/*"
     ],

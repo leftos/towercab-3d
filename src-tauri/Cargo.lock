@@ -5548,6 +5548,7 @@ name = "towercab-3d"
 version = "0.0.29-alpha"
 dependencies = [
  "axum",
+ "flate2",
  "futures-util",
  "log",
  "mime_guess",
