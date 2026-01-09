@@ -9,7 +9,7 @@ process and will skip extraction if the apt.dat file hasn't changed.
 Output: src-tauri/resources/airport-surfaces.json.gz (gzip compressed)
 
 Usage:
-    python scripts/extract-airport-surfaces.py [--force] [--apt-dat PATH]
+    python scripts/shipping/data-generation/extract-airport-surfaces.py [--force] [--apt-dat PATH]
 
 Options:
     --force       Force re-extraction even if apt.dat hasn't changed
@@ -34,7 +34,7 @@ COORD_PRECISION = 6
 # =============================================================================
 
 SCRIPT_DIR = Path(__file__).parent
-PROJECT_ROOT = SCRIPT_DIR.parent
+PROJECT_ROOT = SCRIPT_DIR.parent.parent.parent  # scripts/shipping/data-generation -> project root
 OUTPUT_FILE = PROJECT_ROOT / "src-tauri" / "resources" / "airport-surfaces.json.gz"
 MEMO_FILE = PROJECT_ROOT / "src-tauri" / "resources" / ".airport-surfaces-memo.json"
 

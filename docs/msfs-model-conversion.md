@@ -558,12 +558,12 @@ All three must match. When loading cached models on startup, the frontend skips 
 
 | File | Purpose |
 |------|---------|
-| `scripts/convert_fsltl_batch.py` | Python converter source |
-| `scripts/lookup_glb_source.py` | GLB source file lookup utility |
-| `scripts/build_converter.py` | PyInstaller build script |
-| `scripts/converter-requirements.txt` | Python dependencies |
-| `scripts/fsltl_converter.spec` | PyInstaller spec file |
-| `scripts/texconv.exe` | Microsoft texture converter |
+| `scripts/shipping/conversion/convert_fsltl_batch.py` | Python converter source |
+| `scripts/debugging/lookup_glb_source.py` | GLB source file lookup utility |
+| `scripts/shipping/build/build_converter.py` | PyInstaller build script |
+| `scripts/shipping/build/converter-requirements.txt` | Python dependencies |
+| `scripts/shipping/build/fsltl_converter.spec` | PyInstaller spec file |
+| `scripts/shipping/conversion/texconv.exe` | Microsoft texture converter |
 | `src-tauri/resources/fsltl_converter.exe` | Bundled converter |
 | `src-tauri/src/msfs.rs` | Rust backend |
 | `src/renderer/services/MSFSModelConversionService.ts` | Frontend service |
@@ -573,16 +573,16 @@ All three must match. When loading cached models on startup, the frontend skips 
 ### Lookup GLB Source Files
 ```bash
 # If GLB has embedded metadata (newer conversions):
-python scripts/lookup_glb_source.py model.glb
+python scripts/debugging/lookup_glb_source.py model.glb
 
 # With custom Community folder:
-python scripts/lookup_glb_source.py --community "D:/MSFS/Community" model.glb
+python scripts/debugging/lookup_glb_source.py --community "D:/MSFS/Community" model.glb
 
 # Dump node hierarchy:
-python scripts/lookup_glb_source.py --dump-nodes model.glb
+python scripts/debugging/lookup_glb_source.py --dump-nodes model.glb
 
 # Inspect specific node:
-python scripts/lookup_glb_source.py --node 28 model.glb
+python scripts/debugging/lookup_glb_source.py --node 28 model.glb
 ```
 
 ### Inspect Source GLTF

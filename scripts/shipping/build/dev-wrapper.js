@@ -4,7 +4,7 @@
  * Development wrapper script that parses command-line arguments
  * and passes them to the Tauri dev process.
  *
- * Usage: node scripts/dev-wrapper.js [LOG_PATH] [--vnas]
+ * Usage: node scripts/shipping/build/dev-wrapper.js [LOG_PATH] [--vnas]
  * Examples:
  *   npm run dev
  *   npm run dev -- temp/console.log

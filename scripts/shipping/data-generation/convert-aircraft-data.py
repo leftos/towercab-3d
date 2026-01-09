@@ -5,7 +5,7 @@ Aircraft Dimensions Data Converter
 Downloads aircraft data from FAA Aircraft Characteristics Database and converts
 it to JSON for use in the application.
 
-Usage: python scripts/convert-aircraft-data.py
+Usage: python scripts/shipping/data-generation/convert-aircraft-data.py
 
 Data source: https://www.faa.gov/airports/engineering/aircraft_char_database
 """
@@ -27,7 +27,8 @@ FAA_URL = "https://www.faa.gov/airports/engineering/aircraft_char_database/aircr
 
 # Output path for the JSON file
 SCRIPT_DIR = Path(__file__).parent
-OUTPUT_PATH = SCRIPT_DIR.parent / "src" / "renderer" / "public" / "aircraft-dimensions.json"
+PROJECT_ROOT = SCRIPT_DIR.parent.parent.parent  # scripts/shipping/data-generation -> project root
+OUTPUT_PATH = PROJECT_ROOT / "src" / "renderer" / "public" / "aircraft-dimensions.json"
 
 # Conversion factor: feet to meters
 FEET_TO_METERS = 0.3048

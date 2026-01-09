@@ -293,7 +293,7 @@ The aircraft dimensions data (used for realistic model sizing) is bundled with t
 ```bash
 # Requires Python 3 with pandas and openpyxl
 pip install pandas openpyxl
-python scripts/convert-aircraft-data.py
+python scripts/shipping/data-generation/convert-aircraft-data.py
 ```
 
 This downloads the latest FAA Excel file and converts it to `src/renderer/public/aircraft-dimensions.json`.

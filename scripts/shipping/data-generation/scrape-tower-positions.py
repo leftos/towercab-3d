@@ -7,7 +7,7 @@ Generate tower positions by combining:
 - mwgg/Airports (ICAO code mapping)
 
 Usage:
-    python scripts/scrape-tower-positions.py [--dof-path PATH]
+    python scripts/shipping/data-generation/scrape-tower-positions.py [--dof-path PATH]
 
 Requires:
     pip install requests

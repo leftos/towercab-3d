@@ -8,7 +8,7 @@
  * 4. Test point-in-polygon and elevation interpolation
  * 5. Sample real Cesium terrain at various points
  *
- * Run with: npx tsx scripts/test-terrain-flattening.ts
+ * Run with: npx tsx scripts/debugging/test-terrain-flattening.ts
  *
  * Requires CESIUM_ION_TOKEN in .env file at project root
  */
@@ -20,11 +20,11 @@ import * as path from 'path'
 import * as zlib from 'zlib'
 
 // Import actual shipping code
-import { airportPolygonService } from '../src/renderer/services/AirportPolygonService'
-import { airportSurfacesService } from '../src/renderer/services/AirportSurfacesService'
-import type { Runway } from '../src/renderer/types/airport'
-import type { FlatteningPolygon } from '../src/renderer/types/terrain'
-import type { AirportSurfacesData } from '../src/renderer/types/airportSurfaces'
+import { airportPolygonService } from '../../src/renderer/services/AirportPolygonService'
+import { airportSurfacesService } from '../../src/renderer/services/AirportSurfacesService'
+import type { Runway } from '../../src/renderer/types/airport'
+import type { FlatteningPolygon } from '../../src/renderer/types/terrain'
+import type { AirportSurfacesData } from '../../src/renderer/types/airportSurfaces'
 
 // Load .env file from project root
 function loadEnv() {

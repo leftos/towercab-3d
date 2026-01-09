@@ -8,7 +8,7 @@ that can be bundled with the Tauri application.
 Uses a virtual environment to avoid affecting the global Python installation.
 
 Usage:
-    python scripts/build_converter.py
+    python scripts/shipping/build/build_converter.py
 
 Output:
     src-tauri/resources/fsltl_converter.exe
@@ -49,9 +49,10 @@ def setup_venv(venv_dir: Path, requirements_file: Path) -> Path:
 
 def main():
     # Paths
-    script_dir = Path(__file__).parent
-    project_root = script_dir.parent
-    converter_script = script_dir / "convert_fsltl_batch.py"
+    script_dir = Path(__file__).parent  # scripts/shipping/build
+    shipping_dir = script_dir.parent     # scripts/shipping
+    project_root = shipping_dir.parent.parent  # project root
+    converter_script = shipping_dir / "conversion" / "convert_fsltl_batch.py"
     requirements_file = script_dir / "converter-requirements.txt"
     output_dir = project_root / "src-tauri" / "resources"
     venv_dir = project_root / "build" / "converter-venv"
@@ -107,7 +108,7 @@ def main():
     print(f"[build_converter] SUCCESS: {output_exe} ({size_mb:.1f} MB)")
 
     # Copy texconv.exe alongside the converter
-    texconv_src = script_dir / "texconv.exe"
+    texconv_src = shipping_dir / "conversion" / "texconv.exe"
     texconv_dest = output_dir / "texconv.exe"
     if texconv_src.exists():
         shutil.copy2(texconv_src, texconv_dest)

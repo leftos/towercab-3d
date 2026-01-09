@@ -4,7 +4,7 @@
  * All checks treat warnings as failures (strict mode).
  *
  * Usage:
- *   node scripts/check.js [options]
+ *   node scripts/shipping/build/check.js [options]
  *
  * Options:
  *   --lint, -l       Run ESLint on src/ directory
@@ -17,11 +17,11 @@
  *   --help, -h       Show this help message
  *
  * Examples:
- *   node scripts/check.js              # Run all checks
- *   node scripts/check.js --lint       # ESLint only
- *   node scripts/check.js --lint --fix # ESLint with auto-fix
- *   node scripts/check.js -t -r        # TypeScript and Rust only
- *   node scripts/check.js --vnas       # Private vNAS crate only
+ *   node scripts/shipping/build/check.js              # Run all checks
+ *   node scripts/shipping/build/check.js --lint       # ESLint only
+ *   node scripts/shipping/build/check.js --lint --fix # ESLint with auto-fix
+ *   node scripts/shipping/build/check.js -t -r        # TypeScript and Rust only
+ *   node scripts/shipping/build/check.js --vnas       # Private vNAS crate only
  */
 
 import { spawn } from 'child_process';
@@ -29,7 +29,7 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT_DIR = join(__dirname, '..');
+const ROOT_DIR = join(__dirname, '..', '..', '..'); // scripts/shipping/build -> project root
 const VNAS_CRATE_DIR = join(ROOT_DIR, '..', 'towercab-3d-vnas');
 
 // ANSI color codes
@@ -360,7 +360,7 @@ Run various linting and type checking tools across the project.
 ${colors.yellow}All checks treat warnings as failures (strict mode).${colors.reset}
 
 ${colors.cyan}Usage:${colors.reset}
-  node scripts/check.js [options]
+  node scripts/shipping/build/check.js [options]
   npm run check [-- options]
 
 ${colors.cyan}Options:${colors.reset}
@@ -374,11 +374,11 @@ ${colors.cyan}Options:${colors.reset}
   --help, -h       Show this help message
 
 ${colors.cyan}Examples:${colors.reset}
-  node scripts/check.js              ${colors.yellow}# Run all checks${colors.reset}
-  node scripts/check.js --lint       ${colors.yellow}# ESLint only${colors.reset}
-  node scripts/check.js --lint --fix ${colors.yellow}# ESLint with auto-fix${colors.reset}
-  node scripts/check.js -t -r        ${colors.yellow}# TypeScript and Rust only${colors.reset}
-  node scripts/check.js --vnas       ${colors.yellow}# Private vNAS crate only${colors.reset}
+  node scripts/shipping/build/check.js              ${colors.yellow}# Run all checks${colors.reset}
+  node scripts/shipping/build/check.js --lint       ${colors.yellow}# ESLint only${colors.reset}
+  node scripts/shipping/build/check.js --lint --fix ${colors.yellow}# ESLint with auto-fix${colors.reset}
+  node scripts/shipping/build/check.js -t -r        ${colors.yellow}# TypeScript and Rust only${colors.reset}
+  node scripts/shipping/build/check.js --vnas       ${colors.yellow}# Private vNAS crate only${colors.reset}
   npm run check                      ${colors.yellow}# Run all checks via npm${colors.reset}
   npm run check -- --lint --fix      ${colors.yellow}# ESLint with auto-fix via npm${colors.reset}
 `);

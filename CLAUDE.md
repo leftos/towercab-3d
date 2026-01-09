@@ -271,9 +271,9 @@ fsltl_converter.exe (Python sidecar)
 |------|---------|
 | `src/renderer/services/MSFSModelConversionService.ts` | Frontend conversion service |
 | `src-tauri/src/msfs.rs` | Rust backend for detection, indexing, conversion |
-| `scripts/convert_fsltl_batch.py` | Python converter (source) |
+| `scripts/shipping/conversion/convert_fsltl_batch.py` | Python converter (source) |
 | `src-tauri/resources/fsltl_converter.exe` | Bundled converter executable |
-| `scripts/build_converter.py` | Builds the Python converter |
+| `scripts/shipping/build/build_converter.py` | Builds the Python converter |
 
 ### Model Matching Flow
 
@@ -298,6 +298,31 @@ fsltl_converter.exe (Python sidecar)
 - **TypeScript**: Strict mode with path aliases
 - **React 19**: Latest React with concurrent features
 - **vite-plugin-static-copy**: Cesium assets copied to output
+
+## Scripts Organization
+
+Scripts are organized under `scripts/` in two main categories:
+
+```
+scripts/
+├── shipping/           # Production and build scripts
+│   ├── build/          # Build tooling (converter, check, dev-wrapper)
+│   ├── conversion/     # Model conversion (convert_fsltl_batch.py, texconv.exe)
+│   └── data-generation/# One-off data scripts (aircraft data, airport surfaces, tower positions)
+└── debugging/          # Development and debugging utilities
+```
+
+**Shipping scripts** are used for building, development, and data generation:
+- `shipping/build/` - Build tools: check.js, build_converter.py, dev-wrapper.js
+- `shipping/conversion/` - Runtime conversion: convert_fsltl_batch.py, texconv.exe
+- `shipping/data-generation/` - One-off scripts: convert-aircraft-data.py, extract-airport-surfaces.py, scrape-tower-positions.py
+
+**Debugging scripts** are utilities for development and troubleshooting:
+- `analyze_animations.py` - GLB animation analysis
+- `debug-rt-interpolation.cjs` - RealTraffic debugging
+- `denoise-logs.cjs` - Log file cleanup
+- `lookup_glb_source.py` - Find MSFS source for converted GLB
+- `test-terrain-flattening.ts` - Terrain flattening tests
 
 ## Common Development Tasks
 

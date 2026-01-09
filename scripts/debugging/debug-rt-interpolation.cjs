@@ -5,7 +5,7 @@
  * Polls RealTraffic API around KSFO, tracks selected aircraft with non-zero speed,
  * and logs snapshots to help debug interpolation issues (pausing, shuffling, jumping).
  *
- * Usage: node scripts/debug-rt-interpolation.js
+ * Usage: node scripts/debugging/debug-rt-interpolation.cjs
  */
 
 const https = require('https');
