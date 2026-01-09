@@ -20,7 +20,7 @@ export interface FlatteningPolygon {
   /** Distance in meters for edge blending/gradient */
   blendDistance: number
   /** Source type for this polygon */
-  source: 'runway' | 'taxiway' | 'apron' | 'custom'
+  source: 'runway' | 'taxiway' | 'apron' | 'fill' | 'custom'
 
   // Optional: elevation gradient along runway length
   /** Start point of the runway centerline [lon, lat] */

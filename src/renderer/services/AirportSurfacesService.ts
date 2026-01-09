@@ -181,23 +181,33 @@ class AirportSurfacesService {
    *
    * @param icao - Airport ICAO code
    * @param surfaceTypes - Optional array of surface types to include (default: all paved surfaces)
+   * @param fieldElevationMeters - Optional override elevation in meters (derived from runway data)
    * @returns Array of flattening polygons for terrain modification
    */
   getPavementPolygons(
     icao: string,
-    surfaceTypes: string[] = ['a', 'c'] // Default to asphalt and concrete only
+    surfaceTypes: string[] = ['a', 'c'], // Default to asphalt and concrete only
+    fieldElevationMeters?: number
   ): FlatteningPolygon[] {
     const airport = this.getAirportData(icao)
     if (!airport || !airport.p || airport.p.length === 0) {
       return []
     }
 
-    // Validate elevation - log if malformed (helps debug NaN issues)
-    if (typeof airport.e !== 'number' || !Number.isFinite(airport.e)) {
-      console.error(`[AirportSurfacesService] INVALID ELEVATION for ${icao}: airport.e = ${airport.e} (type: ${typeof airport.e})`)
-      return [] // Skip this airport to prevent NaN propagation
+    // Use provided field elevation (from runway data) if available, otherwise fall back to apt.dat
+    let elevationMeters: number
+    if (fieldElevationMeters !== undefined && Number.isFinite(fieldElevationMeters)) {
+      elevationMeters = fieldElevationMeters
+      console.log(`[AirportSurfacesService] Using runway-derived field elevation for ${icao}: ${elevationMeters.toFixed(1)}m`)
+    } else {
+      // Validate elevation - log if malformed (helps debug NaN issues)
+      if (typeof airport.e !== 'number' || !Number.isFinite(airport.e)) {
+        console.error(`[AirportSurfacesService] INVALID ELEVATION for ${icao}: airport.e = ${airport.e} (type: ${typeof airport.e})`)
+        return [] // Skip this airport to prevent NaN propagation
+      }
+      elevationMeters = feetToMeters(airport.e)
+      console.log(`[AirportSurfacesService] Using apt.dat reference elevation for ${icao}: ${elevationMeters.toFixed(1)}m (${airport.e} ft)`)
     }
-    const elevationMeters = feetToMeters(airport.e)
     const polygons: FlatteningPolygon[] = []
 
     for (let i = 0; i < airport.p.length; i++) {
