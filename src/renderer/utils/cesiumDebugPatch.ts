@@ -44,7 +44,8 @@ interface DebugSnapshot {
 
 let frameCount = 0
 let lastSnapshot: DebugSnapshot | null = null
-let isPatched = false
+// Track which viewer instances have been patched (WeakSet allows GC of destroyed viewers)
+const patchedViewers = new WeakSet<Cesium.Viewer>()
 
 /**
  * Check if a number is invalid (NaN, Infinity, or extremely large)
@@ -223,18 +224,58 @@ function captureSnapshot(scene: Cesium.Scene): DebugSnapshot {
 }
 
 /**
+ * Log crash diagnostics with the captured snapshot
+ */
+function logCrashDiagnostics(error: unknown, snapshot: DebugSnapshot | null): void {
+  console.error('[CesiumDebugPatch] RENDER CRASH DETECTED!')
+  console.error('[CesiumDebugPatch] Error:', error)
+
+  if (snapshot) {
+    console.error('[CesiumDebugPatch] Last known state before crash:')
+    console.error('[CesiumDebugPatch] Frame:', snapshot.frameNumber)
+    console.error('[CesiumDebugPatch] Timestamp:', snapshot.timestamp)
+    console.error('[CesiumDebugPatch] Camera:', JSON.stringify(snapshot.camera, null, 2))
+    console.error('[CesiumDebugPatch] Frustum:', JSON.stringify(snapshot.frustum, null, 2))
+    console.error('[CesiumDebugPatch] Canvas:', JSON.stringify(snapshot.canvas))
+    console.error('[CesiumDebugPatch] DrawingBuffer:', JSON.stringify(snapshot.drawingBufferSize))
+    console.error('[CesiumDebugPatch] Issues:', snapshot.issues)
+
+    // Also store in window for debugging
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(window as any).__cesiumCrashSnapshot = snapshot
+    console.error('[CesiumDebugPatch] Snapshot saved to window.__cesiumCrashSnapshot')
+  } else {
+    console.error('[CesiumDebugPatch] No snapshot available (crash on first frame?)')
+  }
+}
+
+/**
  * Apply the debug monkey patch to a Cesium Scene
  *
  * Call this after creating the Cesium.Viewer to enable crash diagnostics.
+ *
+ * NOTE: Cesium's Scene.render() has internal error handling via tryAndCatchError()
+ * which catches errors and raises scene.renderError event instead of re-throwing.
+ * So we must listen to renderError event to capture crash diagnostics.
  */
 export function applyCesiumDebugPatch(viewer: Cesium.Viewer): void {
-  if (isPatched) {
-    console.warn('[CesiumDebugPatch] Already patched, skipping')
+  // Check if THIS viewer instance has already been patched
+  if (patchedViewers.has(viewer)) {
+    console.warn('[CesiumDebugPatch] This viewer already patched, skipping')
     return
   }
 
   const scene = viewer.scene
   const originalRender = scene.render.bind(scene)
+
+  // Listen to Cesium's renderError event - this is how Cesium reports render crashes
+  // The error is caught internally by tryAndCatchError() and raised via this event
+  const errorHandler = (_scene: Cesium.Scene, error: unknown) => {
+    console.error('[CesiumDebugPatch] renderError event received!')
+    logCrashDiagnostics(error, lastSnapshot)
+  }
+  scene.renderError.addEventListener(errorHandler)
+  console.log('[CesiumDebugPatch] Added renderError listener, numberOfListeners:', scene.renderError.numberOfListeners)
 
   scene.render = function(time?: Cesium.JulianDate) {
     frameCount++
@@ -256,36 +297,21 @@ export function applyCesiumDebugPatch(viewer: Cesium.Viewer): void {
     }
 
     // Call original render
+    // Note: Cesium catches errors internally and raises renderError event,
+    // so we also wrap in try/catch as a fallback for any uncaught errors
     try {
       return originalRender(time)
     } catch (error) {
-      // Crash occurred! Log the state we captured
-      console.error('[CesiumDebugPatch] RENDER CRASH DETECTED!')
-      console.error('[CesiumDebugPatch] Error:', error)
-
-      if (lastSnapshot) {
-        console.error('[CesiumDebugPatch] Last known state before crash:')
-        console.error('[CesiumDebugPatch] Frame:', lastSnapshot.frameNumber)
-        console.error('[CesiumDebugPatch] Timestamp:', lastSnapshot.timestamp)
-        console.error('[CesiumDebugPatch] Camera:', JSON.stringify(lastSnapshot.camera, null, 2))
-        console.error('[CesiumDebugPatch] Frustum:', JSON.stringify(lastSnapshot.frustum, null, 2))
-        console.error('[CesiumDebugPatch] Canvas:', JSON.stringify(lastSnapshot.canvas))
-        console.error('[CesiumDebugPatch] DrawingBuffer:', JSON.stringify(lastSnapshot.drawingBufferSize))
-        console.error('[CesiumDebugPatch] Issues:', lastSnapshot.issues)
-
-        // Also store in window for debugging
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ;(window as any).__cesiumCrashSnapshot = lastSnapshot
-        console.error('[CesiumDebugPatch] Snapshot saved to window.__cesiumCrashSnapshot')
-      }
-
-      // Re-throw the original error
+      // This shouldn't normally fire since Cesium catches internally,
+      // but keep as fallback
+      console.error('[CesiumDebugPatch] Caught error in try/catch fallback!')
+      logCrashDiagnostics(error, lastSnapshot)
       throw error
     }
   }
 
-  isPatched = true
-  console.log('[CesiumDebugPatch] Debug patch applied - will capture state on render crashes')
+  patchedViewers.add(viewer)
+  console.log('[CesiumDebugPatch] Debug patch applied - listening to renderError event')
 }
 
 /**

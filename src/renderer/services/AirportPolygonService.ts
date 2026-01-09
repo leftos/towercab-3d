@@ -165,6 +165,18 @@ function createRunwayPolygon(runway: Runway, blendDistance: number): FlatteningP
   const lowElevationMeters = feetToMeters(lowEnd.elevationFt)
   const highElevationMeters = feetToMeters(highEnd.elevationFt)
 
+  // Validate elevations to prevent NaN propagation in terrain flattening
+  if (!Number.isFinite(elevationMeters) || !Number.isFinite(lowElevationMeters) || !Number.isFinite(highElevationMeters)) {
+    console.error(`[AirportPolygonService] INVALID ELEVATION in runway ${runway.ident}:`, {
+      elevationMeters,
+      lowElevationMeters,
+      highElevationMeters,
+      lowEnd: lowEnd.elevationFt,
+      highEnd: highEnd.elevationFt
+    })
+    return null
+  }
+
   return {
     id: `runway-${runway.ident}`,
     vertices,

@@ -5,6 +5,8 @@ import {
   GROUNDSPEED_THRESHOLD_KNOTS,
   LOW_ALTITUDE_AGL_THRESHOLD_M
 } from '../constants/rendering'
+import { isTerrainCacheClearing } from './useTerrainFlattening'
+import { getHeightAndSlopeFromPolygons } from '../terrain/FlatteningTerrainProvider'
 
 /** Terrain data for a single aircraft including height and slope */
 export interface TerrainData {
@@ -16,6 +18,44 @@ export interface TerrainData {
 
 /** Distance in meters to sample ahead/behind for slope calculation */
 const SLOPE_SAMPLE_DISTANCE_M = 15
+
+/** Minimum distance in meters an aircraft must move before re-sampling terrain */
+const MIN_MOVEMENT_FOR_RESAMPLE_M = 2
+
+/** Last sampled positions for each aircraft (to avoid redundant sampling) */
+const lastSampledPositions = new Map<string, { lat: number; lon: number; heading: number }>()
+
+/**
+ * Calculate approximate distance in meters between two lat/lon points
+ * Uses equirectangular approximation (fast, accurate enough for small distances)
+ */
+function approxDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371000 // Earth radius in meters
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLon = (lon2 - lon1) * Math.PI / 180
+  const avgLat = (lat1 + lat2) / 2 * Math.PI / 180
+  const x = dLon * Math.cos(avgLat)
+  return R * Math.sqrt(dLat * dLat + x * x)
+}
+
+/**
+ * Check if aircraft has moved enough to warrant re-sampling terrain
+ */
+function needsResample(callsign: string, lat: number, lon: number, heading: number): boolean {
+  const last = lastSampledPositions.get(callsign)
+  if (!last) return true // Never sampled, needs sample
+
+  // Check if position changed significantly
+  const distance = approxDistanceMeters(last.lat, last.lon, lat, lon)
+  if (distance >= MIN_MOVEMENT_FOR_RESAMPLE_M) return true
+
+  // Check if heading changed significantly (affects slope sample points)
+  const headingDiff = Math.abs(heading - last.heading)
+  const normalizedHeadingDiff = headingDiff > 180 ? 360 - headingDiff : headingDiff
+  if (normalizedHeadingDiff >= 5) return true // 5 degree threshold
+
+  return false
+}
 
 /**
  * Continuously samples terrain height and slope for ground and low-altitude aircraft (3x per second)
@@ -51,17 +91,32 @@ export function useGroundAircraftTerrain(
 
     // Sample terrain for all ground aircraft every 333ms (3x per second)
     const intervalId = setInterval(() => {
-      const groundAircraft: Array<{
+      // Skip terrain sampling while terrain cache is being cleared
+      // (provider swap in progress - sampling would return invalid data)
+      if (isTerrainCacheClearing()) return
+
+      // Aircraft that need terrain sampling (outside flattening polygons)
+      const needsTerrainSampling: Array<{
         callsign: string
         lat: number
         lon: number
         heading: number
       }> = []
 
-      // Collect aircraft that need terrain sampling:
+      // Updates to apply from polygon cache hits
+      const polygonCacheHits: Array<{
+        callsign: string
+        lat: number
+        lon: number
+        heading: number
+        height: number
+        slopeDegrees: number
+      }> = []
+
+      // Collect aircraft that need terrain data:
       // 1. Ground aircraft (groundspeed < 40kts) - definitely on the ground
-      // 2. Low altitude aircraft (< 300m AGL) - likely landing/departing, need terrain
-      //    data before they slow down to prevent clipping during landing roll
+      // 2. Low altitude aircraft (< 300m AGL) - likely landing/departing
+      // 3. Only re-sample if aircraft has moved significantly
       for (const aircraft of interpolatedAircraft.values()) {
         if (samplingInProgressRef.current.has(aircraft.callsign)) continue
 
@@ -70,26 +125,78 @@ export function useGroundAircraftTerrain(
         const isLowAltitude = altitudeAgl < LOW_ALTITUDE_AGL_THRESHOLD_M
 
         if (isOnGround || isLowAltitude) {
-          groundAircraft.push({
-            callsign: aircraft.callsign,
-            lat: aircraft.interpolatedLatitude,
-            lon: aircraft.interpolatedLongitude,
-            heading: aircraft.interpolatedHeading
-          })
+          // Skip if aircraft hasn't moved enough since last sample
+          if (!needsResample(
+            aircraft.callsign,
+            aircraft.interpolatedLatitude,
+            aircraft.interpolatedLongitude,
+            aircraft.interpolatedHeading
+          )) {
+            continue
+          }
+
+          // OPTIMIZATION: First try to get height/slope from flattening polygon cache
+          // This avoids expensive terrain sampling for aircraft on runways/taxiways/aprons
+          const cachedData = getHeightAndSlopeFromPolygons(
+            aircraft.interpolatedLongitude,
+            aircraft.interpolatedLatitude,
+            aircraft.interpolatedHeading
+          )
+
+          if (cachedData) {
+            // Cache hit! Use polygon data directly
+            polygonCacheHits.push({
+              callsign: aircraft.callsign,
+              lat: aircraft.interpolatedLatitude,
+              lon: aircraft.interpolatedLongitude,
+              heading: aircraft.interpolatedHeading,
+              height: cachedData.height,
+              slopeDegrees: cachedData.slopeDegrees
+            })
+          } else {
+            // Cache miss - needs actual terrain sampling (aircraft in non-flattened area)
+            needsTerrainSampling.push({
+              callsign: aircraft.callsign,
+              lat: aircraft.interpolatedLatitude,
+              lon: aircraft.interpolatedLongitude,
+              heading: aircraft.interpolatedHeading
+            })
+          }
         }
       }
 
-      if (groundAircraft.length === 0) return
+      // Apply polygon cache hits immediately (no async terrain sampling needed)
+      if (polygonCacheHits.length > 0) {
+        setTerrainData(prev => {
+          const updated = new Map(prev)
+          for (const hit of polygonCacheHits) {
+            updated.set(hit.callsign, {
+              height: hit.height,
+              slopeDegrees: hit.slopeDegrees
+            })
+            // Update last sampled position
+            lastSampledPositions.set(hit.callsign, {
+              lat: hit.lat,
+              lon: hit.lon,
+              heading: hit.heading
+            })
+          }
+          return updated
+        })
+      }
 
-      // Mark all as sampling in progress
-      groundAircraft.forEach(a => samplingInProgressRef.current.add(a.callsign))
+      // Only proceed with terrain sampling if there are aircraft outside flattening polygons
+      if (needsTerrainSampling.length === 0) return
 
-      // Sample terrain for all ground aircraft in one batch (more efficient)
+      // Mark as sampling in progress (only for terrain-sampled aircraft)
+      needsTerrainSampling.forEach(a => samplingInProgressRef.current.add(a.callsign))
+
+      // Sample terrain for aircraft outside flattening polygons in one batch
       // For each aircraft, sample 3 points: position, ahead, and behind (for slope)
       const positions: Cesium.Cartographic[] = []
       const positionIndexMap: Array<{ callsign: string; centerIdx: number; aheadIdx: number; behindIdx: number }> = []
 
-      for (const aircraft of groundAircraft) {
+      for (const aircraft of needsTerrainSampling) {
         const centerIdx = positions.length
 
         // Center position (aircraft location)
@@ -144,6 +251,18 @@ export function useGroundAircraftTerrain(
               const aheadHeight = sampledPositions[mapping.aheadIdx].height
               const behindHeight = sampledPositions[mapping.behindIdx].height
 
+              // Skip aircraft with undefined heights (terrain provider throttled)
+              // Keep using their previous terrain data instead of corrupting with NaN
+              if (centerHeight === undefined || aheadHeight === undefined || behindHeight === undefined) {
+                const centerPos = positions[mapping.centerIdx]
+                console.warn(`[Terrain Sampling] Throttled for ${mapping.callsign} - keeping previous data`, {
+                  centerLon: Cesium.Math.toDegrees(centerPos.longitude),
+                  centerLat: Cesium.Math.toDegrees(centerPos.latitude)
+                })
+                samplingInProgressRef.current.delete(mapping.callsign)
+                continue // Don't update terrain data or last position
+              }
+
               // Calculate slope from behind to ahead (total distance = 2 * SLOPE_SAMPLE_DISTANCE_M)
               // Positive slope means uphill in direction of travel
               const heightDiff = aheadHeight - behindHeight
@@ -156,6 +275,16 @@ export function useGroundAircraftTerrain(
                 slopeDegrees
               })
 
+              // Update last sampled position on successful sample
+              const aircraft = needsTerrainSampling.find(a => a.callsign === mapping.callsign)
+              if (aircraft) {
+                lastSampledPositions.set(mapping.callsign, {
+                  lat: aircraft.lat,
+                  lon: aircraft.lon,
+                  heading: aircraft.heading
+                })
+              }
+
               samplingInProgressRef.current.delete(mapping.callsign)
             }
 
@@ -163,11 +292,11 @@ export function useGroundAircraftTerrain(
           })
         })
         .catch((error) => {
-          console.warn('[Terrain Sampling] Failed to sample terrain for ground aircraft:', error)
+          console.warn('[Terrain Sampling] Failed to sample terrain:', error)
           // Clear sampling flags on error
-          groundAircraft.forEach(a => samplingInProgressRef.current.delete(a.callsign))
+          needsTerrainSampling.forEach(a => samplingInProgressRef.current.delete(a.callsign))
         })
-    }, 100) // 10x per second for responsive slope updates
+    }, 333) // 3x per second - balanced for responsiveness vs terrain provider load
 
     return () => clearInterval(intervalId)
   }, [viewer, terrainProvider, interpolatedAircraft, groundElevationMeters])
@@ -181,8 +310,9 @@ export function useGroundAircraftTerrain(
       for (const callsign of updated.keys()) {
         const aircraft = interpolatedAircraft.get(callsign)
         if (!aircraft) {
-          // Aircraft no longer in data
+          // Aircraft no longer in data - clean up both terrain data and position cache
           updated.delete(callsign)
+          lastSampledPositions.delete(callsign)
           changed = true
           continue
         }
@@ -194,6 +324,7 @@ export function useGroundAircraftTerrain(
         // Only remove terrain data if aircraft is both fast AND high altitude
         if (!isOnGround && !isLowAltitude) {
           updated.delete(callsign)
+          lastSampledPositions.delete(callsign)
           changed = true
         }
       }

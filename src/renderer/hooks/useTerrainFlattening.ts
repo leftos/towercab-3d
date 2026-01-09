@@ -17,9 +17,17 @@ import * as Cesium from 'cesium'
 import type { Runway } from '../types/airport'
 import { airportPolygonService } from '../services/AirportPolygonService'
 import { airportSurfacesService } from '../services/AirportSurfacesService'
-import { createFlatteningTerrainProvider } from '../terrain/FlatteningTerrainProvider'
+import { getFlatteningTerrainProvider, setFlatteningTileCacheSize } from '../terrain/FlatteningTerrainProvider'
 import { clearAllTerrainCaches } from '../utils/terrainCache'
 import { useViewportStore } from '../stores/viewportStore'
+import { useSettingsStore } from '../stores/settingsStore'
+
+// Global flag to signal terrain cache is being cleared
+// Other systems (terrain sampling, aircraft rendering) should pause during this
+let terrainCacheClearing = false
+export function isTerrainCacheClearing(): boolean {
+  return terrainCacheClearing
+}
 
 interface UseTerrainFlatteningOptions {
   /** Cesium viewer instance */
@@ -54,6 +62,8 @@ export function useTerrainFlattening({
 }: UseTerrainFlatteningOptions): void {
   // Get refreshCamera action to trigger camera recalculation after terrain changes
   const refreshCamera = useViewportStore((state) => state.refreshCamera)
+  // Get tile cache size setting to sync with flattening provider
+  const inMemoryTileCacheSize = useSettingsStore((state) => state.memory.inMemoryTileCacheSize)
 
   // Track if we've wrapped the terrain provider
   const isWrappedRef = useRef(false)
@@ -83,6 +93,11 @@ export function useTerrainFlattening({
     }
   }, [surfacesLoaded])
 
+  // Sync flattening provider's tile cache size with user settings
+  useEffect(() => {
+    setFlatteningTileCacheSize(inMemoryTileCacheSize)
+  }, [inMemoryTileCacheSize])
+
   // Wrap the terrain provider on first use
   const wrapTerrainProvider = useCallback(() => {
     if (!viewer || viewer.isDestroyed() || isWrappedRef.current) return
@@ -93,8 +108,8 @@ export function useTerrainFlattening({
       return
     }
 
-    // Wrap the provider
-    const wrapped = createFlatteningTerrainProvider(currentProvider)
+    // Wrap the provider (uses singleton so polygon data is accessible globally)
+    const wrapped = getFlatteningTerrainProvider(currentProvider)
     flatteningProviderRef.current = wrapped
     isWrappedRef.current = true
 
@@ -130,7 +145,12 @@ export function useTerrainFlattening({
         lastAirportRef.current = null
         hadPavementsRef.current = false
         // Clear cache to reload original tiles, then refresh camera position
-        void clearAllTerrainCaches(viewer).then(() => refreshCamera())
+        // Set flag to pause terrain sampling during cache clear
+        terrainCacheClearing = true
+        void clearAllTerrainCaches(viewer).then(() => {
+          terrainCacheClearing = false
+          refreshCamera()
+        })
       }
       return
     }
@@ -141,7 +161,12 @@ export function useTerrainFlattening({
         provider.clearFlatteningPolygons()
         lastAirportRef.current = null
         hadPavementsRef.current = false
-        void clearAllTerrainCaches(viewer).then(() => refreshCamera())
+        // Set flag to pause terrain sampling during cache clear
+        terrainCacheClearing = true
+        void clearAllTerrainCaches(viewer).then(() => {
+          terrainCacheClearing = false
+          refreshCamera()
+        })
       }
       return
     }
@@ -190,8 +215,11 @@ export function useTerrainFlattening({
     const pavementCount = config.polygons.length - runwayCount
     console.log(`[TerrainFlattening] Set ${config.polygons.length} polygons for ${currentAirportIcao} (${runwayCount} runways, ${pavementCount} pavements)`)
 
-    // Clear tile cache to force re-fetch with modifications, then refresh camera position
-    void clearAllTerrainCaches(viewer).then(() => refreshCamera())
+    // Note: We don't clear the terrain cache here. The FlatteningTerrainProvider
+    // already clears its internal processedTileCache when setFlatteningPolygons is called.
+    // New tile requests will be processed with the updated polygons.
+    // Existing cached tiles will refresh naturally as the camera moves.
+    // Only clear cache when DISABLING flattening (to restore original terrain).
   }, [viewer, currentAirportIcao, runways, enabled, blendDistance, wrapTerrainProvider, refreshCamera, surfacesLoaded])
 
   // Cleanup on unmount

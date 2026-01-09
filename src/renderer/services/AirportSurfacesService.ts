@@ -192,6 +192,11 @@ class AirportSurfacesService {
       return []
     }
 
+    // Validate elevation - log if malformed (helps debug NaN issues)
+    if (typeof airport.e !== 'number' || !Number.isFinite(airport.e)) {
+      console.error(`[AirportSurfacesService] INVALID ELEVATION for ${icao}: airport.e = ${airport.e} (type: ${typeof airport.e})`)
+      return [] // Skip this airport to prevent NaN propagation
+    }
     const elevationMeters = feetToMeters(airport.e)
     const polygons: FlatteningPolygon[] = []
 

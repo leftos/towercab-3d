@@ -43,14 +43,16 @@ interface FloorBBox {
  * @param baseProvider - The base CesiumTerrainProvider to wrap
  * @returns Modified terrain provider with flattening capability
  */
-/** Maximum tile cache size before LRU eviction */
-const MAX_TILE_CACHE_SIZE = 500
+/** Default tile cache size (will be overridden by user settings) */
+const DEFAULT_TILE_CACHE_SIZE = 500
 
 export function createFlatteningTerrainProvider(
   baseProvider: Cesium.CesiumTerrainProvider
 ): Cesium.CesiumTerrainProvider & {
   setFlatteningPolygons: (polygons: FlatteningPolygon[]) => void
   clearFlatteningPolygons: () => void
+  getHeightAndSlopeAtPosition: (lon: number, lat: number, headingDegrees: number) => { height: number; slopeDegrees: number } | null
+  setTileCacheSize: (size: number) => void
 } {
   // Store modification data by ID for fast lookup
   const floorDataMap = new Map<string, FloorData>()
@@ -66,6 +68,22 @@ export function createFlatteningTerrainProvider(
   const processedTileCache = new Map<string, Cesium.TerrainData>()
   // Track access order for LRU (most recent at end)
   const tileCacheOrder: string[] = []
+  // Maximum cache size (matches user's inMemoryTileCacheSize setting)
+  let maxTileCacheSize = DEFAULT_TILE_CACHE_SIZE
+
+  /**
+   * Update the tile cache size limit
+   */
+  function setTileCacheSize(size: number): void {
+    maxTileCacheSize = Math.max(100, size) // Minimum 100 tiles
+    // Evict excess tiles if new limit is smaller
+    while (tileCacheOrder.length > maxTileCacheSize) {
+      const oldest = tileCacheOrder.shift()
+      if (oldest) {
+        processedTileCache.delete(oldest)
+      }
+    }
+  }
 
   /**
    * Add a tile to the cache with LRU eviction
@@ -82,7 +100,7 @@ export function createFlatteningTerrainProvider(
     tileCacheOrder.push(key)
 
     // Evict oldest entries if over limit
-    while (tileCacheOrder.length > MAX_TILE_CACHE_SIZE) {
+    while (tileCacheOrder.length > maxTileCacheSize) {
       const oldest = tileCacheOrder.shift()
       if (oldest) {
         processedTileCache.delete(oldest)
@@ -124,6 +142,19 @@ export function createFlatteningTerrainProvider(
 
     // Convert polygons to floor data
     for (const polygon of polygons) {
+      // Validate elevation before processing
+      if (!Number.isFinite(polygon.elevation)) {
+        console.error(`[FlatteningTerrainProvider] INVALID ELEVATION in polygon ${polygon.id}: elevation = ${polygon.elevation}`)
+        continue // Skip invalid polygons
+      }
+      if (polygon.startElevation !== undefined && !Number.isFinite(polygon.startElevation)) {
+        console.error(`[FlatteningTerrainProvider] INVALID startElevation in polygon ${polygon.id}: ${polygon.startElevation}`)
+        continue
+      }
+      if (polygon.endElevation !== undefined && !Number.isFinite(polygon.endElevation)) {
+        console.error(`[FlatteningTerrainProvider] INVALID endElevation in polygon ${polygon.id}: ${polygon.endElevation}`)
+        continue
+      }
       // Calculate bounding rectangle
       let west = 180, south = 90, east = -180, north = -90
       for (const [lon, lat] of polygon.vertices) {
@@ -386,6 +417,18 @@ export function createFlatteningTerrainProvider(
       }
 
       if (finalHeight !== null) {
+        // Catch NaN heights before they corrupt the terrain mesh
+        if (!Number.isFinite(finalHeight)) {
+          console.error(`[FlatteningTerrainProvider] NaN/Infinite height computed at vertex ${i}:`, {
+            finalHeight,
+            lon,
+            lat,
+            insideFloors: insideFloors.map(f => ({ id: f.floor.id, height: f.height })),
+            blendFloors: blendFloors.map(f => ({ id: f.floor.id, height: f.height, factor: f.factor })),
+            originalHeight
+          })
+          continue // Skip this vertex to prevent NaN propagation
+        }
         modifications.set(i, finalHeight)
         if (finalHeight < newMinHeight) newMinHeight = finalHeight
         if (finalHeight > newMaxHeight) newMaxHeight = finalHeight
@@ -438,7 +481,10 @@ export function createFlatteningTerrainProvider(
 
     // Request the original tile data
     const promise = originalRequestTileGeometry(x, y, level, request)
-    if (!promise) return undefined
+    if (!promise) {
+      // Base provider returned undefined (throttled) - normal during heavy tile loading
+      return undefined
+    }
 
     return promise.then((terrainData: Cesium.TerrainData) => {
       // Check if this is QuantizedMeshTerrainData
@@ -538,17 +584,128 @@ export function createFlatteningTerrainProvider(
       cacheTile(tileKey, modifiedTerrainData)
 
       return modifiedTerrainData
+    }).catch((error) => {
+      // Log the error - this causes sampleTerrainMostDetailed to return undefined heights!
+      console.error(`[FlatteningTerrainProvider] EXCEPTION in tile ${tileKey}:`, error)
+      // Re-throw so Cesium handles it normally
+      throw error
     })
+  }
+
+  /**
+   * Query cached height and slope at a position without terrain sampling
+   *
+   * Returns height and slope if the position is inside a flattening polygon,
+   * or null if the position is outside all polygons (requires terrain sampling).
+   *
+   * This is much faster than terrain sampling since it uses cached polygon data.
+   */
+  function getHeightAndSlopeAtPosition(
+    lon: number,
+    lat: number,
+    headingDegrees: number
+  ): { height: number; slopeDegrees: number } | null {
+    if (floorDataMap.size === 0) return null
+
+    const point = turf.point([lon, lat])
+
+    // Check all floors to find which polygon contains this point
+    // Use spatial index for fast lookup
+    const metersPerDegreeLat = 111320
+    const metersPerDegreeLon = 111320 * Math.cos(lat * Math.PI / 180)
+    const searchRadiusDegLat = 100 / metersPerDegreeLat // 100m buffer
+    const searchRadiusDegLon = 100 / metersPerDegreeLon
+
+    const candidates = spatialIndex.search({
+      minX: lon - searchRadiusDegLon,
+      minY: lat - searchRadiusDegLat,
+      maxX: lon + searchRadiusDegLon,
+      maxY: lat + searchRadiusDegLat
+    })
+
+    if (candidates.length === 0) return null
+
+    // Find the floor that contains this point
+    // Prioritize runways (with gradient) over flat surfaces
+    let matchingFloor: FloorData | null = null
+    let isInsidePolygon = false
+
+    for (const candidate of candidates) {
+      const floor = floorDataMap.get(candidate.floorId)
+      if (!floor) continue
+
+      if (turf.booleanPointInPolygon(point, floor.floorPolygon)) {
+        isInsidePolygon = true
+        // Prefer runways (have gradient data) over flat surfaces
+        if (floor.gradientStart !== undefined) {
+          matchingFloor = floor
+          break // Found a runway, use it
+        } else if (!matchingFloor) {
+          matchingFloor = floor // First match, could be taxiway/apron
+        }
+      }
+    }
+
+    if (!isInsidePolygon || !matchingFloor) return null
+
+    // Calculate height at this position
+    const height = getGradientElevation(lon, lat, matchingFloor)
+
+    // Calculate slope in the aircraft's heading direction
+    let slopeDegrees = 0
+
+    if (matchingFloor.gradientStart && matchingFloor.gradientEnd &&
+        matchingFloor.startElevation !== undefined && matchingFloor.endElevation !== undefined) {
+      // Runway with gradient - calculate slope
+      const [startLon, startLat] = matchingFloor.gradientStart
+      const [endLon, endLat] = matchingFloor.gradientEnd
+
+      // Calculate runway heading (direction from start to end threshold)
+      const runwayHeadingRad = Math.atan2(
+        (endLon - startLon) * Math.cos(lat * Math.PI / 180),
+        endLat - startLat
+      )
+      const runwayHeadingDeg = (Cesium.Math.toDegrees(runwayHeadingRad) + 360) % 360
+
+      // Calculate runway length in meters
+      const dLat = (endLat - startLat) * Math.PI / 180
+      const dLon = (endLon - startLon) * Math.PI / 180
+      const avgLat = (startLat + endLat) / 2 * Math.PI / 180
+      const x = dLon * Math.cos(avgLat) * 6371000
+      const y = dLat * 6371000
+      const runwayLengthM = Math.sqrt(x * x + y * y)
+
+      if (runwayLengthM > 0) {
+        // Runway slope magnitude (positive = uphill from start to end)
+        const elevationDiff = matchingFloor.endElevation - matchingFloor.startElevation
+        const runwaySlopeRad = Math.atan2(elevationDiff, runwayLengthM)
+
+        // Calculate angle between aircraft heading and runway direction
+        // If heading same direction as runway gradient: use runway slope
+        // If heading opposite: negate slope
+        const headingDiff = ((headingDegrees - runwayHeadingDeg + 180 + 360) % 360) - 180
+        const headingAlignment = Math.cos(headingDiff * Math.PI / 180)
+
+        slopeDegrees = Cesium.Math.toDegrees(runwaySlopeRad) * headingAlignment
+      }
+    }
+    // For flat surfaces (taxiways, aprons), slope remains 0
+
+    return { height, slopeDegrees }
   }
 
   // Add our custom methods
   const enhanced = baseProvider as Cesium.CesiumTerrainProvider & {
     setFlatteningPolygons: (polygons: FlatteningPolygon[]) => void
     clearFlatteningPolygons: () => void
+    getHeightAndSlopeAtPosition: (lon: number, lat: number, headingDegrees: number) => { height: number; slopeDegrees: number } | null
+    setTileCacheSize: (size: number) => void
   }
 
   enhanced.setFlatteningPolygons = setFlatteningPolygons
   enhanced.clearFlatteningPolygons = clearFlatteningPolygons
+  enhanced.getHeightAndSlopeAtPosition = getHeightAndSlopeAtPosition
+  enhanced.setTileCacheSize = setTileCacheSize
 
   return enhanced
 }
@@ -589,5 +746,39 @@ export function clearFlatteningTerrainProvider(): void {
     flatteningProviderInstance.clearFlatteningPolygons()
     flatteningProviderInstance = null
     wrappedBaseProvider = null
+  }
+}
+
+/**
+ * Query cached height and slope at a position from flattening polygon data
+ *
+ * This is much faster than terrain sampling since it uses cached polygon data.
+ * Returns null if the position is outside all flattening polygons.
+ *
+ * @param lon - Longitude in degrees
+ * @param lat - Latitude in degrees
+ * @param headingDegrees - Aircraft heading in degrees (for slope calculation)
+ * @returns Height and slope if inside a flattening polygon, null otherwise
+ */
+export function getHeightAndSlopeFromPolygons(
+  lon: number,
+  lat: number,
+  headingDegrees: number
+): { height: number; slopeDegrees: number } | null {
+  if (!flatteningProviderInstance) return null
+  return flatteningProviderInstance.getHeightAndSlopeAtPosition(lon, lat, headingDegrees)
+}
+
+/**
+ * Set the tile cache size for the flattening provider
+ *
+ * Should match the user's inMemoryTileCacheSize setting for consistency
+ * with Cesium's globe tile cache.
+ *
+ * @param size - Maximum number of tiles to cache
+ */
+export function setFlatteningTileCacheSize(size: number): void {
+  if (flatteningProviderInstance) {
+    flatteningProviderInstance.setTileCacheSize(size)
   }
 }

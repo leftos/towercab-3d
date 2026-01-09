@@ -27,6 +27,7 @@ import { useGroundAircraftTerrain } from '../../hooks/useGroundAircraftTerrain'
 import { useAutoAirportSwitch } from '../../hooks/useAutoAirportSwitch'
 import { useTerrainFlattening } from '../../hooks/useTerrainFlattening'
 import { getTowerPosition } from '../../utils/towerHeight'
+import { getHeightAndSlopeFromPolygons } from '../../terrain/FlatteningTerrainProvider'
 import { performanceMonitor } from '../../utils/performanceMonitor'
 import { hasViewingContext, isOrbitFollowing, isOrbitWithoutAirport } from '../../utils/viewingContext'
 import { getServiceWorkerCacheStats } from '../../utils/serviceWorkerRegistration'
@@ -651,12 +652,26 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
       const towerPos = getTowerPosition(currentAirport, towerHeight, customTowerPosition ?? undefined)
       const groundElevationMsl = currentAirport.elevation ? currentAirport.elevation * 0.3048 : 0
 
-      // Sample terrain to calculate offset between MSL and actual terrain height
+      // First try to get terrain height from flattening polygon cache (fast, no async)
+      const cachedData = getHeightAndSlopeFromPolygons(towerPos.longitude, towerPos.latitude, 0)
+      if (cachedData) {
+        terrainOffsetRef.current = cachedData.height - groundElevationMsl
+        setTerrainOffsetReady(true)
+        return
+      }
+
+      // Fall back to terrain sampling if tower is outside flattening polygons
       if (viewer.terrainProvider) {
         const positions = [Cesium.Cartographic.fromDegrees(towerPos.longitude, towerPos.latitude)]
         Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, positions).then((updatedPositions) => {
           const terrainHeight = updatedPositions[0].height
-          terrainOffsetRef.current = terrainHeight - groundElevationMsl
+          // Handle undefined terrain height gracefully (use 0 offset instead of NaN)
+          if (terrainHeight === undefined) {
+            console.warn('[Terrain Offset] Terrain sampling returned undefined, using 0m offset')
+            terrainOffsetRef.current = 0
+          } else {
+            terrainOffsetRef.current = terrainHeight - groundElevationMsl
+          }
           setTerrainOffsetReady(true)
         }).catch(() => {
           terrainOffsetRef.current = 0
@@ -665,6 +680,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
         })
       } else {
         console.warn('[Terrain Offset] No terrain provider, using 0m offset')
+        terrainOffsetRef.current = 0
         setTerrainOffsetReady(true)
       }
       return
