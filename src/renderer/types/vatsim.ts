@@ -131,7 +131,7 @@ export interface AircraftState {
   cid: number
   latitude: number
   longitude: number
-  altitude: number        // Altitude in METERS (converted from VATSIM feet)
+  altitude: number        // Altitude in METERS ellipsoidal (WGS84) - converted from MSL via GeoidService
   groundspeed: number
   heading: number
   /**
@@ -202,7 +202,7 @@ export interface InterpolatedAircraftState extends AircraftState {
   // Interpolated values for smooth rendering
   interpolatedLatitude: number
   interpolatedLongitude: number
-  interpolatedAltitude: number  // Interpolated altitude in METERS
+  interpolatedAltitude: number  // Interpolated altitude in METERS ellipsoidal (WGS84)
   interpolatedHeading: number
   interpolatedGroundspeed: number
   // Emulated orientation (derived from physics)

@@ -27,7 +27,6 @@ import { useGroundAircraftTerrain } from '../../hooks/useGroundAircraftTerrain'
 import { useAutoAirportSwitch } from '../../hooks/useAutoAirportSwitch'
 import { useTerrainFlattening } from '../../hooks/useTerrainFlattening'
 import { getTowerPosition } from '../../utils/towerHeight'
-import { getHeightAndSlopeFromPolygons } from '../../terrain/FlatteningTerrainProvider'
 import { performanceMonitor } from '../../utils/performanceMonitor'
 import { hasViewingContext, isOrbitFollowing, isOrbitWithoutAirport } from '../../utils/viewingContext'
 import { getServiceWorkerCacheStats } from '../../utils/serviceWorkerRegistration'
@@ -64,11 +63,6 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   const containerRef = useRef<HTMLDivElement>(null!)
   const babylonCanvasRef = useRef<HTMLCanvasElement>(null)
   const rootNodeSetupRef = useRef(false)
-
-  // Terrain offset: difference between ellipsoidal height and MSL elevation
-  // This corrects for geoid undulation (varies by location, e.g., -30m at Boston)
-  const terrainOffsetRef = useRef<number>(0)
-  const [_terrainOffsetReady, setTerrainOffsetReady] = useState(false)
 
   // Track last reference position to prevent redundant setReferencePosition calls
   // which would otherwise cause infinite render loops
@@ -366,10 +360,10 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   const groundAircraftTerrain = useGroundAircraftTerrain(viewer, interpolatedAircraft, groundElevationMeters)
 
   // Inject terrain data into interpolation system for terrain correction
+  // groundElevationMeters is in MSL and will be converted to ellipsoidal in the interpolation system
   useEffect(() => {
     setInterpolationTerrainData(
       groundAircraftTerrain,
-      terrainOffsetRef.current,
       groundElevationMeters
     )
   }, [groundAircraftTerrain, groundElevationMeters])
@@ -419,7 +413,6 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     currentAirportIcao: currentAirport?.icao?.toUpperCase() ?? null,
     airportElevationFeet,
     groundElevationMeters,
-    terrainOffset: terrainOffsetRef.current,
     towerHeight,
     refLat,
     refLon,
@@ -638,64 +631,6 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
       ? Cesium.ShadowMode.DISABLED
       : Cesium.ShadowMode.ENABLED
   }, [buildingsTileset, aircraftShadowsOnly])
-
-  // Calculate terrain offset when airport changes or when in orbit mode without airport
-  // This corrects for the difference between MSL and ellipsoidal height
-  useEffect(() => {
-    if (!viewer) {
-      setTerrainOffsetReady(false)
-      return
-    }
-
-    // For airport mode, calculate terrain offset at tower position
-    if (currentAirport) {
-      const towerPos = getTowerPosition(currentAirport, towerHeight, customTowerPosition ?? undefined)
-      const groundElevationMsl = currentAirport.elevation ? currentAirport.elevation * 0.3048 : 0
-
-      // First try to get terrain height from flattening polygon cache (fast, no async)
-      const cachedData = getHeightAndSlopeFromPolygons(towerPos.longitude, towerPos.latitude, 0)
-      if (cachedData) {
-        terrainOffsetRef.current = cachedData.height - groundElevationMsl
-        setTerrainOffsetReady(true)
-        return
-      }
-
-      // Fall back to terrain sampling if tower is outside flattening polygons
-      if (viewer.terrainProvider) {
-        const positions = [Cesium.Cartographic.fromDegrees(towerPos.longitude, towerPos.latitude)]
-        Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, positions).then((updatedPositions) => {
-          const terrainHeight = updatedPositions[0].height
-          // Handle undefined terrain height gracefully (use 0 offset instead of NaN)
-          if (terrainHeight === undefined) {
-            console.warn('[Terrain Offset] Terrain sampling returned undefined, using 0m offset')
-            terrainOffsetRef.current = 0
-          } else {
-            terrainOffsetRef.current = terrainHeight - groundElevationMsl
-          }
-          setTerrainOffsetReady(true)
-        }).catch(() => {
-          terrainOffsetRef.current = 0
-          console.warn('[Terrain Offset] Failed to sample terrain, using 0m offset')
-          setTerrainOffsetReady(true)
-        })
-      } else {
-        console.warn('[Terrain Offset] No terrain provider, using 0m offset')
-        terrainOffsetRef.current = 0
-        setTerrainOffsetReady(true)
-      }
-      return
-    }
-
-    // For orbit mode without airport, use default offset (will be recalculated per-aircraft as needed)
-    if (isOrbitFollowing(followMode, followingCallsign)) {
-      terrainOffsetRef.current = 0
-      setTerrainOffsetReady(true)
-      return
-    }
-
-    // No airport and not in orbit mode - reset
-    setTerrainOffsetReady(false)
-  }, [viewer, currentAirport, towerHeight, customTowerPosition, followMode, followingCallsign])
 
   // Setup Babylon root node when airport changes OR when in orbit mode without airport
   // Also set reference position for VATSIM distance filtering

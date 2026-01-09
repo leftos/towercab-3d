@@ -264,14 +264,12 @@ export interface UseBabylonLabelsResult {
 export interface UseBabylonRootNodeResult {
   /** Root transform node at ENU origin (tower location) */
   rootNode: BABYLON.TransformNode | null
-  /** Setup root node at a geographic position */
+  /** Setup root node at a geographic position (height should be in ellipsoidal coordinates) */
   setupRootNode: (lat: number, lon: number, height: number) => void
   /** Get the ENU to ECEF transformation matrix */
   getEnuToFixed: () => Cesium.Matrix4 | null
   /** Get the ECEF to ENU transformation matrix */
   getFixedToEnu: () => Cesium.Matrix4 | null
-  /** Get terrain offset (actual terrain height - MSL elevation) */
-  getTerrainOffset: () => number
 }
 
 /**

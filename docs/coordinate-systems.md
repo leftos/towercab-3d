@@ -102,40 +102,54 @@ const enuPosition = transformPositionToENU(
 
 ## Altitude Systems
 
+### Internal System: Ellipsoidal (WGS84)
+
+TowerCab 3D uses **ellipsoidal coordinates internally** for all altitude handling.
+This matches Cesium World Terrain's native coordinate system and simplifies rendering.
+
+- Aircraft altitudes are converted from MSL to ellipsoidal at ingestion (in `vatsimStore.ts`)
+- Terrain flattening polygons use ellipsoidal elevations
+- All internal height comparisons use ellipsoidal heights
+- MSL conversion only happens at display time (datablocks, UI panels)
+
 ### MSL (Mean Sea Level)
-- VATSIM reports altitude as MSL
+
+- **Input boundary**: VATSIM reports altitude as MSL
+- **Output boundary**: User-facing displays show MSL (what pilots expect)
 - Standard aviation altitude reference
-- **Does NOT account for local terrain**
+- Converted to/from ellipsoidal using GeoidService
 
 ### AGL (Above Ground Level)
-- Used for ground aircraft positioning
-- Calculated by: AGL = MSL - terrain_elevation
-- See `useBabylonOverlay.ts` for terrain sampling
 
-### Ellipsoidal Height
-- Cesium's default altitude reference
+- Used for ground aircraft detection and positioning
+- Calculated by: AGL = ellipsoidalAltitude - terrainHeight
+- Both values are in ellipsoidal coordinates (no conversion needed)
+
+### Ellipsoidal Height (WGS84)
+
+- **Internal altitude reference** for all systems
 - Measured from WGS84 ellipsoid
-- **Different from MSL by ~30m** (geoid offset)
-- Use `Cartographic.fromCartesian()` to get ellipsoidal height
+- Different from MSL by geoid undulation (-106m to +85m worldwide)
+- Use `Cartographic.fromCartesian()` to get ellipsoidal height from Cesium
 
-### Geoid Offset Handling
+### GeoidService - MSL/Ellipsoidal Conversion
 
-To position aircraft accurately on terrain:
+The GeoidService uses the EGM96 geoid model for accurate conversion at any location:
+
 ```typescript
-// Sample terrain at tower location
-const towerTerrainHeight = await sampleTerrainMostDetailed(
-  viewer.terrainProvider,
-  [Cartographic.fromDegrees(towerLon, towerLat)]
-)
+import { geoidService } from '@/services/GeoidService'
 
-// Calculate geoid offset (ellipsoidal - MSL)
-const geoidOffset = towerTerrainHeight[0].height - towerElevationMSL
+// Convert MSL to ellipsoidal (at data ingestion)
+const ellipsoidalMeters = geoidService.mslToEllipsoidal(lat, lon, mslMeters)
 
-// Position aircraft using offset
-const aircraftY = (aircraftAltitudeMSL + geoidOffset) - terrainElevation
+// Convert ellipsoidal to MSL (at display time)
+const mslMeters = geoidService.ellipsoidalToMsl(lat, lon, ellipsoidalMeters)
+
+// Get geoid height at a location
+const geoidHeight = geoidService.getGeoidHeight(lat, lon)
 ```
 
-See `CesiumViewer.tsx` terrain offset calculation for implementation.
+See `services/GeoidService.ts` for implementation.
 
 ## Common Pitfalls
 
@@ -147,33 +161,36 @@ mesh.position.set(aircraft.lon, aircraft.alt, aircraft.lat)
 
 ### ✅ Correct approach
 ```typescript
-// Convert to ENU first
+// Convert to ENU first (aircraft.alt is already ellipsoidal)
 const enu = transformPositionToENU(
   aircraft.lon,
   aircraft.lat,
-  aircraft.alt,
+  aircraft.alt,  // Ellipsoidal altitude
   enuTransform
 )
 mesh.position.set(enu.x, enu.y, enu.z)
 ```
 
-### ❌ Ignoring geoid offset
+### ❌ Displaying internal altitude directly
 ```typescript
-// WRONG - aircraft will be ~30m off
-const height = aircraftAltitude - airportElevation
+// WRONG - shows ellipsoidal height, not what pilots expect
+const displayAlt = Math.round(aircraft.interpolatedAltitude / 0.3048)
 ```
 
 ### ✅ Correct approach
 ```typescript
-// Account for ellipsoid vs MSL difference
-const height = (aircraftAltitude + geoidOffset) - terrainElevation
+// Convert to MSL before displaying
+const mslMeters = geoidService.ellipsoidalToMsl(
+  aircraft.latitude, aircraft.longitude, aircraft.interpolatedAltitude
+)
+const displayAlt = Math.round(mslMeters / 0.3048)
 ```
 
 ## Reference Files
 
 - **Geographic ↔ Cartesian3**: Cesium built-in functions
 - **Cartesian3 ↔ ENU**: `utils/enuTransforms.ts`
-- **Terrain sampling**: `CesiumViewer.tsx` (geoid offset calculation)
+- **MSL ↔ Ellipsoidal**: `services/GeoidService.ts` (EGM96 geoid model)
 - **Camera transforms**: `useBabylonCameraSync.ts`
 
 ## Conversion Cheat Sheet
@@ -184,16 +201,21 @@ const height = (aircraftAltitude + geoidOffset) - terrainElevation
 | Cartesian3 | Geographic | `Cartographic.fromCartesian(cartesian3)` |
 | Geographic | ENU | `transformPositionToENU(lon, lat, alt, transform)` |
 | ENU | Geographic | `transformENUToPosition(x, y, z, transform)` |
-| MSL | Ellipsoidal | `msl + geoidOffset` |
-| Ellipsoidal | MSL | `ellipsoidal - geoidOffset` |
+| MSL | Ellipsoidal | `geoidService.mslToEllipsoidal(lat, lon, mslMeters)` |
+| Ellipsoidal | MSL | `geoidService.ellipsoidalToMsl(lat, lon, ellipsoidalMeters)` |
 
 ## Axis Orientation Summary
 
 ```
-Geographic:
+Geographic (External):
   Latitude: -90 (South) to +90 (North)
   Longitude: -180 (West) to +180 (East)
-  Altitude: meters MSL
+  Altitude: meters MSL (from data sources)
+
+Internal State:
+  Latitude: -90 (South) to +90 (North)
+  Longitude: -180 (West) to +180 (East)
+  Altitude: meters ellipsoidal (WGS84)
 
 Cesium Cartesian3 (ECEF):
   X: through (0°N, 0°E)
@@ -209,11 +231,12 @@ Babylon ENU:
 ## Implementation Notes
 
 ### Aircraft Positioning
-1. VATSIM provides: `lat`, `lon`, `altitude` (MSL)
-2. Calculate geoid offset at airport location (once)
-3. Convert to Cartesian3 for Cesium rendering
-4. Convert to ENU for Babylon.js 3D models
-5. Apply terrain offset for ground aircraft
+1. VATSIM provides: `lat`, `lon`, `altitude` (MSL feet)
+2. Convert altitude to ellipsoidal meters using GeoidService (at ingestion)
+3. Store aircraft state with ellipsoidal altitude
+4. Convert to Cartesian3 for Cesium rendering (no conversion needed, already ellipsoidal)
+5. Convert to ENU for Babylon.js 3D models
+6. Convert altitude to MSL at display time (datablocks, UI panels)
 
 ### Camera Synchronization
 1. Cesium camera updates based on user input

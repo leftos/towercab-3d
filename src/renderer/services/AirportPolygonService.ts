@@ -14,6 +14,7 @@ import * as turf from '@turf/turf'
 import type { Runway } from '../types/airport'
 import type { FlatteningPolygon, AirportFlatteningConfig } from '../types/terrain'
 import { airportSurfacesService } from './AirportSurfacesService'
+import { geoidService } from './GeoidService'
 
 /** Default blend distance in meters for edge transitions */
 const DEFAULT_BLEND_DISTANCE = 50
@@ -135,8 +136,13 @@ function createRunwayPolygon(runway: Runway, blendDistance: number): FlatteningP
   const halfWidthMeters = feetToMeters(widthFt) / 2 + WIDTH_BUFFER_METERS
 
   // Use average elevation of both ends
+  // Convert from MSL to ellipsoidal for terrain flattening
+  // Use runway midpoint for geoid lookup
+  const midLat = (lowEnd.lat + highEnd.lat) / 2
+  const midLon = (lowEnd.lon + highEnd.lon) / 2
   const averageElevationFt = (lowEnd.elevationFt + highEnd.elevationFt) / 2
-  const elevationMeters = feetToMeters(averageElevationFt)
+  const elevationMetersMsl = feetToMeters(averageElevationFt)
+  const elevationMeters = geoidService.mslToEllipsoidal(midLat, midLon, elevationMetersMsl)
 
   const lowHeading = lowEnd.headingTrue
 
@@ -205,8 +211,12 @@ function createRunwayPolygon(runway: Runway, blendDistance: number): FlatteningP
   ]
 
   // Calculate individual end elevations for gradient
-  const lowElevationMeters = feetToMeters(lowEnd.elevationFt)
-  const highElevationMeters = feetToMeters(highEnd.elevationFt)
+  // Convert from MSL to ellipsoidal for terrain flattening
+  // Use each end's position for accurate geoid lookup
+  const lowElevationMetersMsl = feetToMeters(lowEnd.elevationFt)
+  const highElevationMetersMsl = feetToMeters(highEnd.elevationFt)
+  const lowElevationMeters = geoidService.mslToEllipsoidal(lowEnd.lat, lowEnd.lon, lowElevationMetersMsl)
+  const highElevationMeters = geoidService.mslToEllipsoidal(highEnd.lat, highEnd.lon, highElevationMetersMsl)
 
   // Validate elevations to prevent NaN propagation in terrain flattening
   if (!Number.isFinite(elevationMeters) || !Number.isFinite(lowElevationMeters) || !Number.isFinite(highElevationMeters)) {
@@ -246,7 +256,7 @@ function createRunwayPolygon(runway: Runway, blendDistance: number): FlatteningP
  *
  * @param runways - Array of runway data
  * @param pavementPolygons - Array of pavement polygons from apt.dat
- * @param elevation - Field elevation in meters
+ * @param elevation - Field elevation in meters ellipsoidal (WGS84)
  * @param blendDistance - Edge blend distance in meters
  * @returns Fill polygon or null if not enough points
  */
@@ -359,12 +369,38 @@ class AirportPolygonService {
     // Calculate field elevation from runway data
     // If all runways are at similar elevations, we can use this for taxiways/aprons
     const fieldElevationResult = calculateFieldElevation(runways)
+
+    // Calculate airport center from runway endpoints for geoid lookup
+    let centerLat = 0, centerLon = 0, pointCount = 0
+    for (const runway of runways) {
+      if (runway.lowEnd.lat !== 0 || runway.lowEnd.lon !== 0) {
+        centerLat += runway.lowEnd.lat
+        centerLon += runway.lowEnd.lon
+        pointCount++
+      }
+      if (runway.highEnd.lat !== 0 || runway.highEnd.lon !== 0) {
+        centerLat += runway.highEnd.lat
+        centerLon += runway.highEnd.lon
+        pointCount++
+      }
+    }
+    if (pointCount > 0) {
+      centerLat /= pointCount
+      centerLon /= pointCount
+    }
+
+    // Convert field elevation from MSL to ellipsoidal for terrain flattening
+    const fieldElevationEllipsoidal = fieldElevationResult && pointCount > 0
+      ? geoidService.mslToEllipsoidal(centerLat, centerLon, fieldElevationResult.elevation)
+      : null
+
     if (fieldElevationResult) {
       const { elevation, isFlat } = fieldElevationResult
+      const ellipsoidal = fieldElevationEllipsoidal ?? 0
       if (isFlat) {
-        console.log(`[AirportPolygonService] ${icao}: Flat airport detected, field elevation ${elevation.toFixed(1)}m`)
+        console.log(`[AirportPolygonService] ${icao}: Flat airport detected, field elevation ${elevation.toFixed(1)}m MSL (${ellipsoidal.toFixed(1)}m ellipsoidal)`)
       } else {
-        console.log(`[AirportPolygonService] ${icao}: Variable runway elevations, using average ${elevation.toFixed(1)}m for taxiways`)
+        console.log(`[AirportPolygonService] ${icao}: Variable runway elevations, using average ${elevation.toFixed(1)}m MSL (${ellipsoidal.toFixed(1)}m ellipsoidal) for taxiways`)
       }
     }
 
@@ -377,13 +413,13 @@ class AirportPolygonService {
     }
 
     // Add pavement polygons (taxiways, aprons) if available and enabled
-    // Use runway-derived field elevation instead of apt.dat reference elevation
+    // Use ellipsoidal field elevation for terrain flattening
     let pavementPolygons: FlatteningPolygon[] = []
     if (includePavements && airportSurfacesService.isLoaded()) {
       pavementPolygons = airportSurfacesService.getPavementPolygons(
         icao,
         ['a', 'c'], // asphalt and concrete
-        fieldElevationResult?.elevation // Pass runway-derived elevation
+        fieldElevationEllipsoidal ?? undefined // Pass ellipsoidal elevation
       )
       if (pavementPolygons.length > 0) {
         polygons.push(...pavementPolygons)
@@ -393,11 +429,11 @@ class AirportPolygonService {
     // Create airport fill polygon to cover gaps between pavement polygons
     // This uses the convex hull of all runways and pavements to ensure complete coverage
     // Add it at the BEGINNING so specific polygons (runways, taxiways) take precedence
-    if (fieldElevationResult && (runways.length > 0 || pavementPolygons.length > 0)) {
+    if (fieldElevationEllipsoidal !== null && (runways.length > 0 || pavementPolygons.length > 0)) {
       const fillPolygon = createAirportFillPolygon(
         runways,
         pavementPolygons,
-        fieldElevationResult.elevation,
+        fieldElevationEllipsoidal,
         blendDistance
       )
       if (fillPolygon) {

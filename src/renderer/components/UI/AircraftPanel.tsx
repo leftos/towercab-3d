@@ -9,6 +9,7 @@ import { useAircraftInterpolation } from '../../hooks/useAircraftInterpolation'
 import { useAircraftFiltering } from '../../hooks/useAircraftFiltering'
 import { calculateBearing, calculateDistanceNM } from '../../utils/interpolation'
 import { formatAltitude, formatGroundspeed, formatHeading, getTowerPosition } from '../../utils/towerHeight'
+import { geoidService } from '../../services/GeoidService'
 import { applyPositionOffsets, calculatePitchToTarget } from '../../utils/cameraGeometry'
 import {
   calculateSmartSort,
@@ -214,10 +215,16 @@ function AircraftPanel() {
 
     const withBearing = filtered.map((aircraft) => {
       const smartData = smartSortMap.get(aircraft.callsign)
+      // Convert ellipsoidal altitude to MSL for display (formatAltitude expects MSL meters)
+      const altitudeMsl = geoidService.ellipsoidalToMsl(
+        aircraft.interpolatedLatitude,
+        aircraft.interpolatedLongitude,
+        aircraft.interpolatedAltitude
+      )
       return {
         callsign: aircraft.callsign,
         aircraftType: aircraft.aircraftType,
-        altitude: aircraft.interpolatedAltitude,  // Keep in METERS (formatAltitude handles conversion)
+        altitude: altitudeMsl,  // MSL in METERS (formatAltitude handles conversion to feet)
         groundspeed: aircraft.interpolatedGroundspeed,
         heading: aircraft.interpolatedHeading,
         distance: aircraft.distance,

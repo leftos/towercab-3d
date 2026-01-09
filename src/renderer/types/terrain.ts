@@ -7,6 +7,13 @@
 
 /**
  * Polygon representing a flattened surface (runway, taxiway, apron)
+ *
+ * IMPORTANT: All elevations are in meters above the WGS84 ellipsoid (ellipsoidal height),
+ * NOT meters above Mean Sea Level (MSL). This matches Cesium World Terrain's native
+ * coordinate system and avoids geoid conversion issues during rendering.
+ *
+ * Source data (runway elevations, apt.dat, etc.) is in MSL and must be converted
+ * to ellipsoidal using GeoidService.mslToEllipsoidal() when creating polygons.
  */
 export interface FlatteningPolygon {
   /** Unique identifier for this polygon */
@@ -15,7 +22,7 @@ export interface FlatteningPolygon {
   vertices: [number, number][]
   /** Optional holes (interior rings) as arrays of [longitude, latitude][] pairs */
   holes?: [number, number][][]
-  /** Target elevation in meters MSL (used if no gradient) */
+  /** Target elevation in meters ellipsoidal (WGS84) - used if no gradient */
   elevation: number
   /** Distance in meters for edge blending/gradient */
   blendDistance: number
@@ -27,9 +34,9 @@ export interface FlatteningPolygon {
   gradientStart?: [number, number]
   /** End point of the runway centerline [lon, lat] */
   gradientEnd?: [number, number]
-  /** Elevation at the start point in meters MSL */
+  /** Elevation at the start point in meters ellipsoidal (WGS84) */
   startElevation?: number
-  /** Elevation at the end point in meters MSL */
+  /** Elevation at the end point in meters ellipsoidal (WGS84) */
   endElevation?: number
 }
 

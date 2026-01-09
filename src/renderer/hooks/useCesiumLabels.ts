@@ -4,6 +4,7 @@ import type { InterpolatedAircraftState } from '../types/vatsim'
 import type { ViewMode } from '../types'
 import type { TerrainData } from './useGroundAircraftTerrain'
 import { aircraftModelService } from '../services/AircraftModelService'
+import { geoidService } from '../services/GeoidService'
 import { calculateDistanceNM } from '../utils/interpolation'
 import { useDatablockPositionStore } from '../stores/datablockPositionStore'
 import { useViewportStore } from '../stores/viewportStore'
@@ -33,7 +34,6 @@ interface UseCesiumLabelsParams {
   currentAirportIcao: string | null
   airportElevationFeet: number
   groundElevationMeters: number
-  terrainOffset: number  // Geoid offset for MSL → ellipsoid conversion
   towerHeight: number
   // Reference position for distance calculation
   refLat: number | null
@@ -129,7 +129,6 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
     followingCallsign,
     currentAirportIcao,
     groundElevationMeters,
-    terrainOffset: _terrainOffset,
     towerHeight,
     refLat,
     refLon,
@@ -274,8 +273,13 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
       if (datablockMode !== 'none' && showDatablock) {
         const type = aircraft.aircraftType || '????'
         const speedTens = Math.round(aircraft.interpolatedGroundspeed / 10).toString().padStart(2, '0')
-        // Convert altitude to feet for FL display (METERS → FEET), clamp to 0 minimum
-        const altitudeFeet = Math.max(0, aircraft.interpolatedAltitude / 0.3048)
+        // Convert ellipsoidal altitude to MSL (pilots report MSL), then to feet for FL display
+        const altitudeMsl = geoidService.ellipsoidalToMsl(
+          aircraft.interpolatedLatitude,
+          aircraft.interpolatedLongitude,
+          aircraft.interpolatedAltitude
+        )
+        const altitudeFeet = Math.max(0, altitudeMsl / 0.3048)
         const dataLine = isAirborne
           ? `${Math.round(altitudeFeet / 100).toString().padStart(3, '0')} ${speedTens}`
           : speedTens

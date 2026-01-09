@@ -65,6 +65,7 @@
     "@tauri-apps/plugin-updater": "^2.9.0",
     "@turf/turf": "^7.3.1",
     "cesium": "^1.136.0",
+    "egm96-universal": "^1.1.1",
     "rbush": "^4.0.1",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",

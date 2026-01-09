@@ -14,6 +14,7 @@
 import type { AirportSurfacesData, AptDatAirport, AptDatPavement } from '../types/airportSurfaces'
 import type { FlatteningPolygon } from '../types/terrain'
 import { isTauri } from '../utils/tauriApi'
+import { geoidService } from './GeoidService'
 
 /** Blend distance in meters for pavement edges */
 const PAVEMENT_BLEND_DISTANCE = 30
@@ -181,32 +182,51 @@ class AirportSurfacesService {
    *
    * @param icao - Airport ICAO code
    * @param surfaceTypes - Optional array of surface types to include (default: all paved surfaces)
-   * @param fieldElevationMeters - Optional override elevation in meters (derived from runway data)
+   * @param fieldElevationEllipsoidal - Optional override elevation in meters ellipsoidal (WGS84)
    * @returns Array of flattening polygons for terrain modification
    */
   getPavementPolygons(
     icao: string,
     surfaceTypes: string[] = ['a', 'c'], // Default to asphalt and concrete only
-    fieldElevationMeters?: number
+    fieldElevationEllipsoidal?: number
   ): FlatteningPolygon[] {
     const airport = this.getAirportData(icao)
     if (!airport || !airport.p || airport.p.length === 0) {
       return []
     }
 
-    // Use provided field elevation (from runway data) if available, otherwise fall back to apt.dat
+    // Use provided ellipsoidal elevation (from runway data) if available, otherwise fall back to apt.dat
     let elevationMeters: number
-    if (fieldElevationMeters !== undefined && Number.isFinite(fieldElevationMeters)) {
-      elevationMeters = fieldElevationMeters
-      console.log(`[AirportSurfacesService] Using runway-derived field elevation for ${icao}: ${elevationMeters.toFixed(1)}m`)
+    if (fieldElevationEllipsoidal !== undefined && Number.isFinite(fieldElevationEllipsoidal)) {
+      elevationMeters = fieldElevationEllipsoidal
+      console.log(`[AirportSurfacesService] Using runway-derived elevation for ${icao}: ${elevationMeters.toFixed(1)}m ellipsoidal`)
     } else {
       // Validate elevation - log if malformed (helps debug NaN issues)
       if (typeof airport.e !== 'number' || !Number.isFinite(airport.e)) {
         console.error(`[AirportSurfacesService] INVALID ELEVATION for ${icao}: airport.e = ${airport.e} (type: ${typeof airport.e})`)
         return [] // Skip this airport to prevent NaN propagation
       }
-      elevationMeters = feetToMeters(airport.e)
-      console.log(`[AirportSurfacesService] Using apt.dat reference elevation for ${icao}: ${elevationMeters.toFixed(1)}m (${airport.e} ft)`)
+
+      // Calculate centroid from pavement vertices for geoid lookup
+      let centerLat = 0, centerLon = 0, vertexCount = 0
+      for (const pavement of airport.p) {
+        for (const [lon, lat] of pavement.v) {
+          centerLon += lon
+          centerLat += lat
+          vertexCount++
+        }
+      }
+      if (vertexCount > 0) {
+        centerLat /= vertexCount
+        centerLon /= vertexCount
+      }
+
+      // Convert apt.dat MSL elevation to ellipsoidal
+      const mslMeters = feetToMeters(airport.e)
+      elevationMeters = vertexCount > 0
+        ? geoidService.mslToEllipsoidal(centerLat, centerLon, mslMeters)
+        : mslMeters // Fallback if no vertices (shouldn't happen)
+      console.log(`[AirportSurfacesService] Using apt.dat elevation for ${icao}: ${mslMeters.toFixed(1)}m MSL (${elevationMeters.toFixed(1)}m ellipsoidal)`)
     }
     const polygons: FlatteningPolygon[] = []
 

@@ -7,8 +7,6 @@ import type { UseBabylonRootNodeResult } from '@/types'
 interface UseBabylonRootNodeOptions {
   /** Babylon scene to create root node in */
   scene: BABYLON.Scene | null
-  /** Cesium viewer for terrain sampling */
-  cesiumViewer: Cesium.Viewer | null
 }
 
 /**
@@ -17,13 +15,11 @@ interface UseBabylonRootNodeOptions {
  * ## Responsibilities
  * - Create and manage the root TransformNode positioned at the ENU origin (tower location)
  * - Setup ENU coordinate transformation matrices for converting between geographic and local coordinates
- * - Sample Cesium terrain to calculate geoid offset for accurate altitude positioning
- * - Provide access to transformation matrices and terrain offset for aircraft positioning
+ * - Provide access to transformation matrices for aircraft positioning
  * - Properly dispose of root node on unmount
  *
  * ## Dependencies
  * - Requires: Initialized Babylon.Scene (from useBabylonScene)
- * - Requires: Cesium.Viewer instance (for terrain sampling)
  * - Reads: None (self-contained)
  * - Writes: Creates BABYLON.TransformNode, stores ENU transform matrices
  * - Uses: `setupEnuTransforms()` utility from utils/enuTransforms.ts
@@ -37,7 +33,7 @@ interface UseBabylonRootNodeOptions {
  *   const { scene } = useBabylonScene({ canvas })
  *
  *   // 2. Setup root node (needs scene)
- *   const rootNode = useBabylonRootNode({ scene, cesiumViewer })
+ *   const rootNode = useBabylonRootNode({ scene })
  *
  *   // 3. Create weather effects, labels, etc. (can use rootNode transforms)
  *   const weather = useBabylonWeather({ scene })
@@ -107,40 +103,22 @@ interface UseBabylonRootNodeOptions {
  *
  * The matrices are created by `setupEnuTransforms()` using Cesium's `Transforms.eastNorthUpToFixedFrame()`.
  *
- * ## Terrain Offset (Geoid Correction)
+ * ## Coordinate System
  *
- * Aircraft altitudes from VATSIM are reported in **MSL (Mean Sea Level)**, but Cesium's
- * terrain heights are in **ellipsoidal height** (WGS84 ellipsoid). The difference between
- * these two references is called the **geoid undulation** or **geoid offset**.
- *
- * ### Why Correction is Needed
- * - Boston (KBOS): ~30 meters difference (geoid below ellipsoid)
- * - Denver (KDEN): ~-20 meters difference (geoid above ellipsoid)
- * - Without correction, aircraft appear buried or floating above terrain
- *
- * ### How It Works
- * 1. Sample Cesium terrain height at tower location (ellipsoidal height)
- * 2. Compare with airport elevation from database (MSL height)
- * 3. Calculate offset: `terrainOffset = terrainHeight - airportElevationMSL`
- * 4. Apply to aircraft positioning: `aircraftY = (altitudeMSL + terrainOffset) - terrainElevation`
- *
- * ### Terrain Sampling
- * - Asynchronous operation using `Cesium.sampleTerrainMostDetailed()`
- * - Called once when `setupRootNode()` is invoked (typically on airport change)
- * - Falls back to 0 offset if terrain provider unavailable or sampling fails
- * - Stored in `terrainOffsetRef` for read access via `getTerrainOffset()`
+ * All altitudes in this system are in **ellipsoidal (WGS84) coordinates**. Aircraft altitudes
+ * are converted from MSL to ellipsoidal using the GeoidService at ingestion time.
  *
  * ## Usage Pattern
  *
  * ### Initial Setup
  * ```typescript
- * // Setup root node at airport location
+ * // Setup root node at airport location (height should be ellipsoidal)
  * useEffect(() => {
  *   if (airport && rootNodeReady) {
  *     setupRootNode(
  *       airport.latitude,  // degrees
  *       airport.longitude, // degrees
- *       airport.elevation  // meters MSL
+ *       airport.elevation  // meters ellipsoidal
  *     )
  *   }
  * }, [airport, rootNodeReady])
@@ -150,13 +128,13 @@ interface UseBabylonRootNodeOptions {
  * ```typescript
  * // Get transform matrices for coordinate conversion
  * const fixedToEnu = getFixedToEnu()
- * const terrainOffset = getTerrainOffset()
  *
  * // Convert aircraft position from geographic to ENU
+ * // Aircraft altitude is already in ellipsoidal coordinates
  * const enuPos = transformPositionToENU(
  *   aircraft.lon,
  *   aircraft.lat,
- *   aircraft.alt + terrainOffset, // Apply geoid correction
+ *   aircraft.alt,  // Already ellipsoidal
  *   fixedToEnu
  * )
  *
@@ -167,7 +145,6 @@ interface UseBabylonRootNodeOptions {
  * ## Performance Considerations
  *
  * - **Transform matrix creation**: One-time cost when airport changes (~0.5ms)
- * - **Terrain sampling**: Asynchronous, doesn't block rendering (~50-200ms)
  * - **Root node disposal**: Properly cleaned up on unmount
  * - **Memory usage**: Minimal (one TransformNode + two Matrix4 objects)
  *
@@ -177,45 +154,41 @@ interface UseBabylonRootNodeOptions {
  * 1. Previous root node is disposed (if exists)
  * 2. New root node is created
  * 3. Transform matrices are updated
- * 4. Terrain sampling is re-triggered
  *
  * This ensures no memory leaks when switching between airports.
  *
  * @param options - Configuration options
  * @param options.scene - Babylon.Scene instance to create root node in (must not be disposed)
- * @param options.cesiumViewer - Cesium.Viewer instance for terrain sampling (can be null)
  * @returns Root node management interface
  *
  * @example
  * // Basic setup
  * const { setupRootNode, rootNode } = useBabylonRootNode({
- *   scene: babylonScene,
- *   cesiumViewer: viewer
+ *   scene: babylonScene
  * })
  *
- * // Setup at Boston airport
- * setupRootNode(42.3656, -71.0096, 5.8)
+ * // Setup at Boston airport (height in ellipsoidal coordinates)
+ * setupRootNode(42.3656, -71.0096, -24.2)  // elevation converted to ellipsoidal
  *
  * // Later: access root node
  * console.log('Root node:', rootNode) // BABYLON.TransformNode
  *
  * @example
  * // Using transform matrices for aircraft positioning
- * const { getFixedToEnu, getTerrainOffset } = useBabylonRootNode({
- *   scene: babylonScene,
- *   cesiumViewer: viewer
+ * const { getFixedToEnu } = useBabylonRootNode({
+ *   scene: babylonScene
  * })
  *
  * // Setup ENU origin
- * setupRootNode(airportLat, airportLon, airportElevation)
+ * setupRootNode(airportLat, airportLon, airportElevationEllipsoidal)
  *
- * // Convert aircraft position
+ * // Convert aircraft position (altitude already in ellipsoidal coordinates)
  * const fixedToEnu = getFixedToEnu()
  * if (fixedToEnu) {
  *   const enuPos = transformPositionToENU(
  *     aircraft.lon,
  *     aircraft.lat,
- *     aircraft.alt + getTerrainOffset(),
+ *     aircraft.alt,  // Already ellipsoidal
  *     fixedToEnu
  *   )
  *   aircraftMesh.position.set(enuPos.x, enuPos.y, enuPos.z)
@@ -224,8 +197,7 @@ interface UseBabylonRootNodeOptions {
  * @example
  * // Checking if root node is ready before positioning objects
  * const { rootNode, getFixedToEnu } = useBabylonRootNode({
- *   scene: babylonScene,
- *   cesiumViewer: viewer
+ *   scene: babylonScene
  * })
  *
  * useEffect(() => {
@@ -242,18 +214,13 @@ interface UseBabylonRootNodeOptions {
  * @see useBabylonOverlay - Primary consumer of this hook for aircraft positioning
  */
 export function useBabylonRootNode({
-  scene,
-  cesiumViewer
+  scene
 }: UseBabylonRootNodeOptions): UseBabylonRootNodeResult {
   // Root transform node positioned at ENU origin (tower location)
   const rootNodeRef = useRef<BABYLON.TransformNode | null>(null)
 
   // ENU transformation data (matrices and reference points)
   const enuDataRef = useRef<EnuTransformData | null>(null)
-
-  // Terrain offset: difference between MSL elevation and actual Cesium terrain height
-  // This corrects for geoid undulation (varies by location, e.g., ~30m at Boston)
-  const terrainOffsetRef = useRef<number>(0)
 
   /**
    * Setup the ENU root node at a specific geographic location.
@@ -275,24 +242,9 @@ export function useBabylonRootNode({
       if (!scene) return
 
       // Use utility function to calculate ENU transform matrices
+      // Note: height parameter is now expected to be in ellipsoidal coordinates
       const enuData = setupEnuTransforms(lat, lon, height)
       enuDataRef.current = enuData
-
-      // Sample terrain to calculate offset between MSL elevation and actual terrain height
-      // This corrects for geoid undulation automatically at any location
-      if (cesiumViewer?.terrainProvider) {
-        const positions = [Cesium.Cartographic.fromDegrees(lon, lat)]
-        Cesium.sampleTerrainMostDetailed(cesiumViewer.terrainProvider, positions)
-          .then((updatedPositions) => {
-            const terrainHeight = updatedPositions[0].height
-            // Offset = terrain height (ellipsoidal) - MSL height
-            terrainOffsetRef.current = terrainHeight - height
-          })
-          .catch((err) => {
-            console.warn('Failed to sample terrain, using default offset:', err)
-            terrainOffsetRef.current = 0
-          })
-      }
 
       // Create or update root node
       // Dispose previous root node if it exists (prevents memory leak on airport change)
@@ -304,7 +256,7 @@ export function useBabylonRootNode({
       const rootNode = new BABYLON.TransformNode('RootNode', scene)
       rootNodeRef.current = rootNode
     },
-    [scene, cesiumViewer]
+    [scene]
   )
 
   /**
@@ -328,24 +280,11 @@ export function useBabylonRootNode({
     return enuDataRef.current?.fixedToEnu ?? null
   }, [])
 
-  /**
-   * Get the terrain offset for geoid correction.
-   *
-   * This value should be added to aircraft MSL altitudes before
-   * converting to ENU coordinates to account for geoid undulation.
-   *
-   * @returns Offset in meters (ellipsoidal height - MSL height)
-   */
-  const getTerrainOffset = useCallback((): number => {
-    return terrainOffsetRef.current
-  }, [])
-
   return {
     rootNode: rootNodeRef.current,
     setupRootNode,
     getEnuToFixed,
-    getFixedToEnu,
-    getTerrainOffset
+    getFixedToEnu
   }
 }
 

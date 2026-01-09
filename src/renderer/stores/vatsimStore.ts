@@ -3,6 +3,7 @@ import type { PilotData, VatsimData, AircraftState } from '../types/vatsim'
 import type { AircraftObservation, AircraftMetadata } from '../types/aircraft-timeline'
 import { interpolateAircraftState, calculateDistanceNM } from '../utils/interpolation'
 import { useSettingsStore } from './settingsStore'
+import { geoidService } from '../services/GeoidService'
 // Note: Intentional coupling - vatsimStore triggers replay snapshots on each VATSIM update.
 // This is simpler than an event system and acceptable since replay depends on vatsim data.
 import { useReplayStore } from './replayStore'
@@ -138,7 +139,7 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
           cid: pilot.cid,
           latitude: pilot.latitude,
           longitude: pilot.longitude,
-          altitude: pilot.altitude * 0.3048,  // Convert VATSIM feet → meters
+          altitude: geoidService.mslToEllipsoidal(pilot.latitude, pilot.longitude, pilot.altitude * 0.3048),  // Convert VATSIM feet MSL → meters ellipsoidal
           groundspeed: pilot.groundspeed,
           heading: pilot.heading,
           transponder: pilot.transponder,
@@ -212,7 +213,7 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
         const observation: AircraftObservation = {
           latitude: pilot.latitude,
           longitude: pilot.longitude,
-          altitude: pilot.altitude * 0.3048,  // Convert feet to meters
+          altitude: geoidService.mslToEllipsoidal(pilot.latitude, pilot.longitude, pilot.altitude * 0.3048),  // Convert feet MSL → meters ellipsoidal
           heading: pilot.heading,
           groundspeed: pilot.groundspeed,
           groundTrack: null,  // VATSIM doesn't provide ground track
@@ -253,7 +254,7 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
           cid: pilot.cid,
           latitude: pilot.latitude,
           longitude: pilot.longitude,
-          altitude: pilot.altitude * 0.3048,  // Convert VATSIM feet → meters
+          altitude: geoidService.mslToEllipsoidal(pilot.latitude, pilot.longitude, pilot.altitude * 0.3048),  // Convert VATSIM feet MSL → meters ellipsoidal
           groundspeed: pilot.groundspeed,
           heading: pilot.heading,
           transponder: pilot.transponder,
@@ -382,7 +383,7 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
           cid: pilot.cid,
           latitude: pilot.latitude,
           longitude: pilot.longitude,
-          altitude: pilot.altitude * 0.3048,  // Convert VATSIM feet → meters
+          altitude: geoidService.mslToEllipsoidal(pilot.latitude, pilot.longitude, pilot.altitude * 0.3048),  // Convert VATSIM feet MSL → meters ellipsoidal
           groundspeed: pilot.groundspeed,
           heading: pilot.heading,
           transponder: pilot.transponder,
@@ -402,7 +403,7 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
         const observation: AircraftObservation = {
           latitude: pilot.latitude,
           longitude: pilot.longitude,
-          altitude: pilot.altitude * 0.3048,
+          altitude: geoidService.mslToEllipsoidal(pilot.latitude, pilot.longitude, pilot.altitude * 0.3048),  // Convert feet MSL → meters ellipsoidal
           heading: pilot.heading,
           groundspeed: pilot.groundspeed,
           groundTrack: null,

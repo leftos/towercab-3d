@@ -27,6 +27,7 @@ import {
   NM_TO_DEGREES
 } from '../constants/realtraffic'
 import { useAirportStore } from '../stores/airportStore'
+import { geoidService } from './GeoidService'
 
 // Cache IATA→ICAO lookup map (built lazily from airport database)
 let iataToIcaoMap: Map<string, string> | null = null
@@ -392,7 +393,7 @@ class RealTrafficService {
       cid,
       latitude: lat,
       longitude: lon,
-      altitude: baro_alt * FEET_TO_METERS, // Convert feet to meters
+      altitude: geoidService.mslToEllipsoidal(lat, lon, baro_alt * FEET_TO_METERS), // Convert feet MSL → meters ellipsoidal
       groundspeed: gs,
       heading: displayHeading, // Use true heading for display when available
       groundTrack: track, // Use ADS-B track for interpolation/extrapolation direction

@@ -218,8 +218,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
 
   // 5. Initialize ENU root node (coordinate system, transforms)
   const { setupRootNode, getFixedToEnu } = useBabylonRootNode({
-    scene,
-    cesiumViewer
+    scene
   })
 
   // 6. Initialize camera synchronization

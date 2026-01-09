@@ -5,6 +5,7 @@ import { useAircraftTimelineStore } from '../stores/aircraftTimelineStore'
 import { getAircraftDataSource } from './useAircraftDataSource'
 import { calculateFlarePitch, angleDifference } from '../utils/interpolation'
 import { performanceMonitor } from '../utils/performanceMonitor'
+import { geoidService } from '../services/GeoidService'
 import type { InterpolatedAircraftState, AircraftState } from '../types/vatsim'
 import type { TimelineInterpolationResult } from '../types/aircraft-timeline'
 import type { TerrainData } from './useGroundAircraftTerrain'
@@ -40,7 +41,8 @@ const sharedLastAircraftCountRef = { current: 0 }
 
 // Shared state for terrain correction (injected from rendering layer)
 const sharedGroundAircraftTerrainRef = { current: new Map<string, TerrainData>() }
-const sharedTerrainOffsetRef = { current: 0 }
+// Note: groundElevationMeters is in MSL for fallback when no terrain sample available
+// It will be converted to ellipsoidal using the aircraft's position
 const sharedGroundElevationMetersRef = { current: 0 }
 
 // ============================================================================
@@ -401,9 +403,9 @@ function updateInterpolation() {
     // This ensures consistent height across all rendering (models, labels, etc.)
     const entry = statesMap.get(callsign)
     if (!entry) continue // Safety check
-    const heightAboveEllipsoid = entry.interpolatedAltitude // VATSIM altitude in meters MSL
-    const terrainOffset = sharedTerrainOffsetRef.current
-    const groundElevationMeters = sharedGroundElevationMetersRef.current
+    // Aircraft altitude is already in ellipsoidal coordinates (converted in vatsimStore/RealTrafficService)
+    const reportedEllipsoidHeight = entry.interpolatedAltitude
+    const groundElevationMetersMsl = sharedGroundElevationMetersRef.current
     const groundAircraftTerrain = sharedGroundAircraftTerrainRef.current
 
     // Get or create consolidated terrain state for this aircraft
@@ -418,17 +420,16 @@ function updateInterpolation() {
       sharedTerrainStateRef.current.set(callsign, terrainState)
     }
 
-    // Calculate heights in ellipsoid coordinates for comparison
-    const reportedEllipsoidHeight = heightAboveEllipsoid + terrainOffset
+    // Get terrain data - sampledTerrainHeight is in ellipsoidal coordinates (from Cesium)
     const terrainDataForAircraft = groundAircraftTerrain.get(callsign)
     const sampledTerrainHeight = terrainDataForAircraft?.height
     const terrainSlopeDegrees = terrainDataForAircraft?.slopeDegrees ?? 0
 
     // Calculate altitude above ground level (AGL) for ground detection
-    // Use terrain sample if available, otherwise use airport elevation
+    // Use terrain sample if available, otherwise convert MSL ground elevation to ellipsoidal
     const altitudeAGL = sampledTerrainHeight !== undefined
       ? reportedEllipsoidHeight - sampledTerrainHeight
-      : heightAboveEllipsoid - groundElevationMeters
+      : reportedEllipsoidHeight - geoidService.mslToEllipsoidal(entry.interpolatedLatitude, entry.interpolatedLongitude, groundElevationMetersMsl)
 
     // Determine if aircraft is on ground using BOTH speed and altitude:
     // - Low speed (< 5 kts): definitely on ground (handles altitude/terrain mismatch)
@@ -462,7 +463,8 @@ function updateInterpolation() {
       targetHeight = terrainState.smoothedTerrainHeight + GROUND_AIRCRAFT_TERRAIN_OFFSET
     } else if (isOnGround) {
       // Low groundspeed but no terrain sample - use fallback
-      const groundEllipsoidHeight = groundElevationMeters + terrainOffset
+      // Convert MSL ground elevation to ellipsoidal using aircraft's position
+      const groundEllipsoidHeight = geoidService.mslToEllipsoidal(entry.interpolatedLatitude, entry.interpolatedLongitude, groundElevationMetersMsl)
       targetHeight = Math.max(reportedEllipsoidHeight, groundEllipsoidHeight) + GROUND_AIRCRAFT_TERRAIN_OFFSET
     } else {
       // Moving fast (>= 40 kts) but not necessarily airborne yet
@@ -674,17 +676,14 @@ function updateInterpolation() {
  * used for ground aircraft altitude and pitch correction during interpolation.
  *
  * @param groundAircraftTerrain - Map of terrain data (height and slope) sampled at 10Hz
- * @param terrainOffset - Geoid offset for MSL → ellipsoid conversion
- * @param groundElevationMeters - Ground elevation at tower/reference position
+ * @param groundElevationMetersMsl - Ground elevation at tower/reference position in MSL meters (fallback only)
  */
 export function setInterpolationTerrainData(
   groundAircraftTerrain: Map<string, TerrainData>,
-  terrainOffset: number,
-  groundElevationMeters: number
+  groundElevationMetersMsl: number
 ) {
   sharedGroundAircraftTerrainRef.current = groundAircraftTerrain
-  sharedTerrainOffsetRef.current = terrainOffset
-  sharedGroundElevationMetersRef.current = groundElevationMeters
+  sharedGroundElevationMetersRef.current = groundElevationMetersMsl
 }
 
 /**
