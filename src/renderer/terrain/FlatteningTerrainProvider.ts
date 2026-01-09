@@ -13,6 +13,190 @@ import type { Feature, Polygon } from 'geojson'
 import RBush from 'rbush'
 import type { FlatteningPolygon } from '../types/terrain'
 
+// ============================================================================
+// Inline Geometry Functions (performance-optimized replacements for turf)
+// ============================================================================
+
+/**
+ * Ray casting algorithm for point-in-polygon test
+ * Works with flat coordinate arrays for maximum performance
+ *
+ * @param x - Point X coordinate (longitude)
+ * @param y - Point Y coordinate (latitude)
+ * @param coordsX - Polygon X coordinates (Float64Array)
+ * @param coordsY - Polygon Y coordinates (Float64Array)
+ * @returns true if point is inside polygon
+ */
+function pointInPolygonRayCast(
+  x: number,
+  y: number,
+  coordsX: Float64Array,
+  coordsY: Float64Array
+): boolean {
+  const n = coordsX.length
+  let inside = false
+
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const xi = coordsX[i], yi = coordsY[i]
+    const xj = coordsX[j], yj = coordsY[j]
+
+    // Check if ray from point intersects edge
+    if (((yi > y) !== (yj > y)) &&
+        (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
+      inside = !inside
+    }
+  }
+
+  return inside
+}
+
+/**
+ * Check if point is inside a polygon with holes
+ * Must be inside exterior ring and outside all hole rings
+ *
+ * @param x - Point X coordinate (longitude)
+ * @param y - Point Y coordinate (latitude)
+ * @param exteriorX - Exterior ring X coordinates
+ * @param exteriorY - Exterior ring Y coordinates
+ * @param holesX - Array of hole ring X coordinates (or null if no holes)
+ * @param holesY - Array of hole ring Y coordinates (or null if no holes)
+ * @returns true if point is inside polygon (and outside all holes)
+ */
+function pointInPolygonWithHoles(
+  x: number,
+  y: number,
+  exteriorX: Float64Array,
+  exteriorY: Float64Array,
+  holesX: Float64Array[] | null,
+  holesY: Float64Array[] | null
+): boolean {
+  // Must be inside exterior ring
+  if (!pointInPolygonRayCast(x, y, exteriorX, exteriorY)) {
+    return false
+  }
+
+  // Must be outside all holes
+  if (holesX && holesY) {
+    for (let i = 0; i < holesX.length; i++) {
+      if (pointInPolygonRayCast(x, y, holesX[i], holesY[i])) {
+        return false // Inside a hole, so outside the polygon
+      }
+    }
+  }
+
+  return true
+}
+
+/**
+ * Squared distance from point to line segment
+ * Uses squared distance to avoid expensive sqrt() call
+ *
+ * @param px - Point X
+ * @param py - Point Y
+ * @param x1 - Segment start X
+ * @param y1 - Segment start Y
+ * @param x2 - Segment end X
+ * @param y2 - Segment end Y
+ * @returns Squared distance to segment
+ */
+function distanceToSegmentSquared(
+  px: number,
+  py: number,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number
+): number {
+  const dx = x2 - x1
+  const dy = y2 - y1
+  const lengthSq = dx * dx + dy * dy
+
+  if (lengthSq === 0) {
+    // Segment is a point
+    const ddx = px - x1
+    const ddy = py - y1
+    return ddx * ddx + ddy * ddy
+  }
+
+  // Project point onto line, clamped to segment
+  let t = ((px - x1) * dx + (py - y1) * dy) / lengthSq
+  t = Math.max(0, Math.min(1, t))
+
+  // Closest point on segment
+  const closestX = x1 + t * dx
+  const closestY = y1 + t * dy
+
+  const ddx = px - closestX
+  const ddy = py - closestY
+  return ddx * ddx + ddy * ddy
+}
+
+/**
+ * Distance from point to polygon edge (exterior ring only for simplicity)
+ * Returns distance in the same units as input coordinates (degrees)
+ *
+ * @param x - Point X coordinate (longitude)
+ * @param y - Point Y coordinate (latitude)
+ * @param coordsX - Polygon X coordinates
+ * @param coordsY - Polygon Y coordinates
+ * @param maxDistSq - Maximum distance squared to check (early exit optimization)
+ * @returns Distance to nearest edge, or Infinity if > sqrt(maxDistSq)
+ */
+function distanceToPolygonEdge(
+  x: number,
+  y: number,
+  coordsX: Float64Array,
+  coordsY: Float64Array,
+  maxDistSq: number
+): number {
+  const n = coordsX.length
+  let minDistSq = Infinity
+
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const distSq = distanceToSegmentSquared(
+      x, y,
+      coordsX[j], coordsY[j],
+      coordsX[i], coordsY[i]
+    )
+
+    if (distSq < minDistSq) {
+      minDistSq = distSq
+      // Early exit if we've found a close enough edge
+      // (we know we're in blend zone, no need to check other edges)
+      if (minDistSq < maxDistSq * 0.01) break
+    }
+  }
+
+  return Math.sqrt(minDistSq)
+}
+
+/**
+ * Convert distance in degrees to meters at a given latitude
+ * Uses spherical approximation for speed
+ */
+function degreesToMeters(distDegrees: number, lat: number): number {
+  // Average meters per degree at this latitude
+  const metersPerDegreeLat = 111320
+  const metersPerDegreeLon = 111320 * Math.cos(lat * Math.PI / 180)
+  // Use geometric mean for reasonable approximation
+  const avgMetersPerDegree = Math.sqrt(metersPerDegreeLat * metersPerDegreeLon)
+  return distDegrees * avgMetersPerDegree
+}
+
+/**
+ * Convert meters to degrees at a given latitude
+ */
+function metersToDegrees(distMeters: number, lat: number): number {
+  const metersPerDegreeLat = 111320
+  const metersPerDegreeLon = 111320 * Math.cos(lat * Math.PI / 180)
+  const avgMetersPerDegree = Math.sqrt(metersPerDegreeLat * metersPerDegreeLon)
+  return distMeters / avgMetersPerDegree
+}
+
+// ============================================================================
+// Data Structures
+// ============================================================================
+
 /** Terrain modification data for a single flattening zone */
 interface FloorData {
   id: string // Unique identifier to link with spatial index
@@ -25,6 +209,25 @@ interface FloorData {
   gradientEnd?: [number, number]   // [lon, lat]
   startElevation?: number
   endElevation?: number
+
+  // Pre-computed data for fast geometry operations
+  exteriorX: Float64Array    // Exterior ring X coordinates (longitude)
+  exteriorY: Float64Array    // Exterior ring Y coordinates (latitude)
+  holesX: Float64Array[] | null  // Hole rings X coordinates (null if no holes)
+  holesY: Float64Array[] | null  // Hole rings Y coordinates (null if no holes)
+
+  // Bounding box in degrees (for fast rejection)
+  minLon: number
+  maxLon: number
+  minLat: number
+  maxLat: number
+  // Expanded bbox including blend distance (in degrees)
+  expandedMinLon: number
+  expandedMaxLon: number
+  expandedMinLat: number
+  expandedMaxLat: number
+  // Blend distance in degrees (pre-computed at polygon center latitude)
+  blendDistanceDeg: number
 }
 
 /** R-tree entry that references FloorData by ID */
@@ -64,10 +267,11 @@ export function createFlatteningTerrainProvider(
   const loggedTiles = new Set<string>()
 
   // LRU cache for processed terrain data (tile key -> modified TerrainData)
-  // Uses a Map which maintains insertion order for LRU eviction
   const processedTileCache = new Map<string, Cesium.TerrainData>()
-  // Track access order for LRU (most recent at end)
-  const tileCacheOrder: string[] = []
+  // Track access timestamps for O(1) LRU eviction (tile key -> timestamp)
+  const tileCacheTimestamps = new Map<string, number>()
+  // Monotonic timestamp counter (faster than Date.now())
+  let cacheTimestamp = 0
   // Maximum cache size (matches user's inMemoryTileCacheSize setting)
   let maxTileCacheSize = DEFAULT_TILE_CACHE_SIZE
 
@@ -77,49 +281,61 @@ export function createFlatteningTerrainProvider(
   function setTileCacheSize(size: number): void {
     maxTileCacheSize = Math.max(100, size) // Minimum 100 tiles
     // Evict excess tiles if new limit is smaller
-    while (tileCacheOrder.length > maxTileCacheSize) {
-      const oldest = tileCacheOrder.shift()
-      if (oldest) {
-        processedTileCache.delete(oldest)
+    evictOldestTiles()
+  }
+
+  /**
+   * Evict oldest tiles to stay within cache size limit
+   * Uses timestamp-based LRU eviction
+   */
+  function evictOldestTiles(): void {
+    while (processedTileCache.size > maxTileCacheSize) {
+      // Find oldest tile by timestamp
+      let oldestKey: string | null = null
+      let oldestTime = Infinity
+
+      for (const [key, time] of tileCacheTimestamps) {
+        if (time < oldestTime) {
+          oldestTime = time
+          oldestKey = key
+        }
+      }
+
+      if (oldestKey) {
+        processedTileCache.delete(oldestKey)
+        tileCacheTimestamps.delete(oldestKey)
+      } else {
+        break // Safety: no tiles to evict
       }
     }
   }
 
   /**
    * Add a tile to the cache with LRU eviction
+   * O(1) for cache hit, O(n) only during eviction (amortized)
    */
   function cacheTile(key: string, data: Cesium.TerrainData): void {
-    // If already in cache, remove from order tracking (will re-add at end)
-    const existingIndex = tileCacheOrder.indexOf(key)
-    if (existingIndex !== -1) {
-      tileCacheOrder.splice(existingIndex, 1)
-    }
-
-    // Add to cache and order
+    // Update timestamp (newer = higher)
+    cacheTimestamp++
+    tileCacheTimestamps.set(key, cacheTimestamp)
     processedTileCache.set(key, data)
-    tileCacheOrder.push(key)
 
-    // Evict oldest entries if over limit
-    while (tileCacheOrder.length > maxTileCacheSize) {
-      const oldest = tileCacheOrder.shift()
-      if (oldest) {
-        processedTileCache.delete(oldest)
-      }
+    // Evict if over limit
+    if (processedTileCache.size > maxTileCacheSize) {
+      evictOldestTiles()
     }
   }
 
   /**
-   * Get a tile from cache and update LRU order
+   * Get a tile from cache and update LRU timestamp
+   * O(1) operation
    */
   function getCachedTile(key: string): Cesium.TerrainData | undefined {
     const data = processedTileCache.get(key)
     if (data) {
-      // Move to end of order (most recently used)
-      const index = tileCacheOrder.indexOf(key)
-      if (index !== -1) {
-        tileCacheOrder.splice(index, 1)
-        tileCacheOrder.push(key)
-      }
+      // Update timestamp to mark as recently used (O(1))
+      cacheTimestamp++
+      tileCacheTimestamps.set(key, cacheTimestamp)
     }
     return data
   }
@@ -133,7 +349,8 @@ export function createFlatteningTerrainProvider(
     spatialIndex.clear()
     loggedTiles.clear()
     processedTileCache.clear()
-    tileCacheOrder.length = 0
+    tileCacheTimestamps.clear()
+    cacheTimestamp = 0
 
     if (polygons.length === 0) return
 
@@ -177,6 +394,45 @@ export function createFlatteningTerrainProvider(
       const turfPoly = turf.polygon(rings)
       const floorPolygon = turf.rewind(turfPoly, { reverse: false }) as Feature<Polygon>
 
+      // Pre-compute flat coordinate arrays for fast inline geometry operations
+      // Extract coordinates from the rewound polygon (correct winding order)
+      const exteriorRing = floorPolygon.geometry.coordinates[0]
+      const exteriorX = new Float64Array(exteriorRing.length)
+      const exteriorY = new Float64Array(exteriorRing.length)
+      for (let i = 0; i < exteriorRing.length; i++) {
+        exteriorX[i] = exteriorRing[i][0]
+        exteriorY[i] = exteriorRing[i][1]
+      }
+
+      // Pre-compute hole coordinate arrays if present
+      let holesX: Float64Array[] | null = null
+      let holesY: Float64Array[] | null = null
+      if (floorPolygon.geometry.coordinates.length > 1) {
+        holesX = []
+        holesY = []
+        for (let h = 1; h < floorPolygon.geometry.coordinates.length; h++) {
+          const holeRing = floorPolygon.geometry.coordinates[h]
+          const holeX = new Float64Array(holeRing.length)
+          const holeY = new Float64Array(holeRing.length)
+          for (let i = 0; i < holeRing.length; i++) {
+            holeX[i] = holeRing[i][0]
+            holeY[i] = holeRing[i][1]
+          }
+          holesX.push(holeX)
+          holesY.push(holeY)
+        }
+      }
+
+      // Pre-compute blend distance in degrees at polygon center latitude
+      const centerLat = (south + north) / 2
+      const blendDistanceDeg = metersToDegrees(polygon.blendDistance, centerLat)
+
+      // Pre-compute expanded bounding box (bbox + blend distance)
+      const expandedMinLon = west - blendDistanceDeg
+      const expandedMaxLon = east + blendDistanceDeg
+      const expandedMinLat = south - blendDistanceDeg
+      const expandedMaxLat = north + blendDistanceDeg
+
       // Store floor data by ID
       floorDataMap.set(polygon.id, {
         id: polygon.id,
@@ -188,7 +444,22 @@ export function createFlatteningTerrainProvider(
         gradientStart: polygon.gradientStart,
         gradientEnd: polygon.gradientEnd,
         startElevation: polygon.startElevation,
-        endElevation: polygon.endElevation
+        endElevation: polygon.endElevation,
+        // Pre-computed coordinate arrays
+        exteriorX,
+        exteriorY,
+        holesX,
+        holesY,
+        // Bounding boxes in degrees
+        minLon: west,
+        maxLon: east,
+        minLat: south,
+        maxLat: north,
+        expandedMinLon,
+        expandedMaxLon,
+        expandedMinLat,
+        expandedMaxLat,
+        blendDistanceDeg
       })
 
       // Add to spatial index batch (in degrees for easier lookup)
@@ -216,7 +487,8 @@ export function createFlatteningTerrainProvider(
     spatialIndex.clear()
     loggedTiles.clear()
     processedTileCache.clear()
-    tileCacheOrder.length = 0
+    tileCacheTimestamps.clear()
+    cacheTimestamp = 0
     console.log('[FlatteningTerrainProvider] Cleared flattening polygons')
   }
 
@@ -336,9 +608,15 @@ export function createFlatteningTerrainProvider(
   /**
    * Modify terrain vertex heights for flattening with edge blending
    *
-   * Uses single-pass algorithm:
+   * Uses single-pass algorithm with optimized inline geometry functions:
    * 1. Iterate vertices once, collecting modification data and computing new min/max
    * 2. Apply modifications in second pass only if needed
+   *
+   * Performance optimizations:
+   * - Bounding box pre-filtering to skip polygons far from vertex
+   * - Inline ray-casting instead of turf.booleanPointInPolygon
+   * - Inline distance calculation instead of turf.pointToPolygonDistance
+   * - No GeoJSON object allocation per vertex
    */
   function modifyTerrain(
     uBuffer: Uint16Array,
@@ -352,40 +630,69 @@ export function createFlatteningTerrainProvider(
     const tileWidth = tileRect.east - tileRect.west
     const tileHeight = tileRect.north - tileRect.south
 
+    // Pre-compute tile bounds in degrees for coordinate conversion
+    const tileWestDeg = Cesium.Math.toDegrees(tileRect.west)
+    const tileSouthDeg = Cesium.Math.toDegrees(tileRect.south)
+    const tileWidthDeg = Cesium.Math.toDegrees(tileWidth)
+    const tileHeightDeg = Cesium.Math.toDegrees(tileHeight)
+
     // Collect modification data in single pass
     // Map: vertex index -> target height
     const modifications = new Map<number, number>()
     let newMinHeight = minHeight
     let newMaxHeight = maxHeight
 
+    // Reusable arrays to reduce per-vertex allocations
+    const insideFloors: { floor: FloorData; height: number }[] = []
+    const blendFloors: { floor: FloorData; height: number; factor: number }[] = []
+
     for (let i = 0; i < uBuffer.length; i++) {
       const u = uBuffer[i] / 32767
       const v = vBuffer[i] / 32767
 
-      const lon = Cesium.Math.toDegrees(tileRect.west + u * tileWidth)
-      const lat = Cesium.Math.toDegrees(tileRect.south + v * tileHeight)
-      const point = turf.point([lon, lat])
+      // Compute vertex position in degrees (no GeoJSON allocation)
+      const lon = tileWestDeg + u * tileWidthDeg
+      const lat = tileSouthDeg + v * tileHeightDeg
 
       // Get original height for potential blending
       const originalHeight = getActualHeight(heightBuffer[i], minHeight, maxHeight)
 
-      // Check all floors for this vertex - collect all matches for intersection handling
-      const insideFloors: { floor: FloorData; height: number }[] = []
-      const blendFloors: { floor: FloorData; height: number; factor: number }[] = []
+      // Clear reusable arrays
+      insideFloors.length = 0
+      blendFloors.length = 0
 
+      // Check all floors for this vertex
       for (const floor of floors) {
-        if (turf.booleanPointInPolygon(point, floor.floorPolygon)) {
+        // OPTIMIZATION: Quick bbox rejection before expensive polygon tests
+        // Check against expanded bbox (includes blend distance)
+        if (lon < floor.expandedMinLon || lon > floor.expandedMaxLon ||
+            lat < floor.expandedMinLat || lat > floor.expandedMaxLat) {
+          continue // Vertex is outside this floor's area of influence
+        }
+
+        // Use inline ray-casting instead of turf.booleanPointInPolygon
+        if (pointInPolygonWithHoles(lon, lat, floor.exteriorX, floor.exteriorY, floor.holesX, floor.holesY)) {
           // Inside this polygon
           const targetHeight = getGradientElevation(lon, lat, floor)
           insideFloors.push({ floor, height: targetHeight })
         } else if (floor.blendDistance > 0) {
-          // Check if within blend distance
-          const distanceToPolygon = turf.pointToPolygonDistance(point, floor.floorPolygon, { units: 'meters' })
-          if (distanceToPolygon <= floor.blendDistance) {
-            const targetHeight = getGradientElevation(lon, lat, floor)
-            const blendFactor = 1.0 - (distanceToPolygon / floor.blendDistance)
-            const easedFactor = blendFactor * blendFactor * (3 - 2 * blendFactor)
-            blendFloors.push({ floor, height: targetHeight, factor: easedFactor })
+          // Check if within blend distance using inline distance calculation
+          // Only check if within core bbox (not in polygon but might be in blend zone)
+          if (lon >= floor.minLon - floor.blendDistanceDeg && lon <= floor.maxLon + floor.blendDistanceDeg &&
+              lat >= floor.minLat - floor.blendDistanceDeg && lat <= floor.maxLat + floor.blendDistanceDeg) {
+            // Compute distance to polygon edge in degrees
+            const maxDistDegSq = floor.blendDistanceDeg * floor.blendDistanceDeg
+            const distDeg = distanceToPolygonEdge(lon, lat, floor.exteriorX, floor.exteriorY, maxDistDegSq)
+
+            // Convert to meters for blend calculation
+            const distMeters = degreesToMeters(distDeg, lat)
+
+            if (distMeters <= floor.blendDistance) {
+              const targetHeight = getGradientElevation(lon, lat, floor)
+              const blendFactor = 1.0 - (distMeters / floor.blendDistance)
+              const easedFactor = blendFactor * blendFactor * (3 - 2 * blendFactor)
+              blendFloors.push({ floor, height: targetHeight, factor: easedFactor })
+            }
           }
         }
       }
@@ -396,12 +703,28 @@ export function createFlatteningTerrainProvider(
       if (insideFloors.length > 0) {
         // Inside one or more polygons (intersection case)
         // Prioritize runways (floors with gradient data) over flat pavements
-        const runwayFloors = insideFloors.filter(f => f.floor.gradientStart !== undefined)
-        const floorsToUse = runwayFloors.length > 0 ? runwayFloors : insideFloors
+        let sumHeight = 0
+        let count = 0
+        let hasRunway = false
 
-        // Average the heights from matching floors
-        const sumHeight = floorsToUse.reduce((sum, f) => sum + f.height, 0)
-        finalHeight = sumHeight / floorsToUse.length
+        for (const f of insideFloors) {
+          if (f.floor.gradientStart !== undefined) {
+            if (!hasRunway) {
+              // First runway found, reset sum to only include runways
+              sumHeight = 0
+              count = 0
+              hasRunway = true
+            }
+            sumHeight += f.height
+            count++
+          } else if (!hasRunway) {
+            // No runway yet, include non-runway floors
+            sumHeight += f.height
+            count++
+          }
+        }
+
+        finalHeight = count > 0 ? sumHeight / count : insideFloors[0].height
       } else if (blendFloors.length > 0) {
         // In blend zone of one or more polygons
         // Weight by blend factor for smooth edge transitions
@@ -611,7 +934,8 @@ export function createFlatteningTerrainProvider(
    * Returns height and slope if the position is inside a flattening polygon,
    * or null if the position is outside all polygons (requires terrain sampling).
    *
-   * This is much faster than terrain sampling since it uses cached polygon data.
+   * This is much faster than terrain sampling since it uses cached polygon data
+   * and inline geometry functions (no turf overhead).
    */
   function getHeightAndSlopeAtPosition(
     lon: number,
@@ -620,20 +944,15 @@ export function createFlatteningTerrainProvider(
   ): { height: number; slopeDegrees: number } | null {
     if (floorDataMap.size === 0) return null
 
-    const point = turf.point([lon, lat])
-
     // Check all floors to find which polygon contains this point
     // Use spatial index for fast lookup
-    const metersPerDegreeLat = 111320
-    const metersPerDegreeLon = 111320 * Math.cos(lat * Math.PI / 180)
-    const searchRadiusDegLat = 100 / metersPerDegreeLat // 100m buffer
-    const searchRadiusDegLon = 100 / metersPerDegreeLon
+    const searchRadiusDeg = metersToDegrees(100, lat) // 100m buffer
 
     const candidates = spatialIndex.search({
-      minX: lon - searchRadiusDegLon,
-      minY: lat - searchRadiusDegLat,
-      maxX: lon + searchRadiusDegLon,
-      maxY: lat + searchRadiusDegLat
+      minX: lon - searchRadiusDeg,
+      minY: lat - searchRadiusDeg,
+      maxX: lon + searchRadiusDeg,
+      maxY: lat + searchRadiusDeg
     })
 
     if (candidates.length === 0) return null
@@ -647,7 +966,8 @@ export function createFlatteningTerrainProvider(
       const floor = floorDataMap.get(candidate.floorId)
       if (!floor) continue
 
-      if (turf.booleanPointInPolygon(point, floor.floorPolygon)) {
+      // Use inline ray-casting instead of turf.booleanPointInPolygon
+      if (pointInPolygonWithHoles(lon, lat, floor.exteriorX, floor.exteriorY, floor.holesX, floor.holesY)) {
         isInsidePolygon = true
         // Prefer runways (have gradient data) over flat surfaces
         if (floor.gradientStart !== undefined) {
