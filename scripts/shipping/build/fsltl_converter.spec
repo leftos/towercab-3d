@@ -16,7 +16,7 @@ from PyInstaller.utils.hooks import collect_submodules
 # Let PyInstaller's built-in numpy hook handle most of the work
 # Just add PIL DDS plugin as hidden import
 a = Analysis(
-    ['convert_fsltl_batch.py'],
+    ['../conversion/convert_fsltl_batch.py'],
     pathex=[],
     binaries=[],
     datas=[],
