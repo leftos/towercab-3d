@@ -23,7 +23,6 @@ export function VnasPanel() {
   const status = useVnasStore((state) => state.status)
   const startAuth = useVnasStore((state) => state.startAuth)
   const handleOAuthCallback = useVnasStore((state) => state.handleOAuthCallback)
-  const connect = useVnasStore((state) => state.connect)
   const subscribe = useVnasStore((state) => state.subscribe)
   const disconnect = useVnasStore((state) => state.disconnect)
   const getStatus = useVnasStore((state) => state.getStatus)
