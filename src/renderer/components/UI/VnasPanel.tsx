@@ -18,10 +18,11 @@ export function VnasPanel() {
   const [isOpen, setIsOpen] = useState(false)
   const [selectedEnv, setSelectedEnv] = useState<VnasEnvironment>('live')
   const [isAuthenticating, setIsAuthenticating] = useState(false)
+  const [callbackUrl, setCallbackUrl] = useState('')
 
   const status = useVnasStore((state) => state.status)
   const startAuth = useVnasStore((state) => state.startAuth)
-  const completeAuth = useVnasStore((state) => state.completeAuth)
+  const handleOAuthCallback = useVnasStore((state) => state.handleOAuthCallback)
   const connect = useVnasStore((state) => state.connect)
   const subscribe = useVnasStore((state) => state.subscribe)
   const disconnect = useVnasStore((state) => state.disconnect)
@@ -40,23 +41,39 @@ export function VnasPanel() {
   const handleStartAuth = useCallback(async () => {
     try {
       setIsAuthenticating(true)
+      setCallbackUrl('')
       const authUrl = await startAuth(selectedEnv)
-      // Open auth URL in browser
-      window.open(authUrl, '_blank')
-      // Wait for OAuth callback
-      await completeAuth()
-      // Connect after auth
-      await connect()
-      // Subscribe to current airport if set
-      if (currentAirport?.icao) {
-        await subscribe(currentAirport.icao)
-      }
+      console.log('[vNAS] Opening auth URL in browser:', authUrl)
+
+      // Open auth URL in system browser using Tauri shell plugin
+      const { open } = await import('@tauri-apps/plugin-shell')
+      await open(authUrl)
+
+      // Note: In production, the OAuth callback is handled by the deep-link handler in App.tsx
+      // In dev mode, deep links don't work, so user needs to paste the callback URL manually
     } catch (error) {
       console.error('vNAS auth failed:', error)
-    } finally {
       setIsAuthenticating(false)
     }
-  }, [selectedEnv, startAuth, completeAuth, connect, subscribe, currentAirport?.icao])
+  }, [selectedEnv, startAuth])
+
+  const handleManualCallback = useCallback(async () => {
+    if (!callbackUrl.trim()) return
+    try {
+      console.log('[vNAS] Processing manual callback URL:', callbackUrl)
+      await handleOAuthCallback(callbackUrl.trim())
+      setCallbackUrl('')
+      setIsAuthenticating(false)
+    } catch (error) {
+      console.error('vNAS manual callback failed:', error)
+    }
+  }, [callbackUrl, handleOAuthCallback])
+
+  const handleCancelAuth = useCallback(() => {
+    setIsAuthenticating(false)
+    setCallbackUrl('')
+    disconnect()
+  }, [disconnect])
 
   const handleDisconnect = useCallback(async () => {
     try {
@@ -161,14 +178,13 @@ export function VnasPanel() {
         {/* Controls - only show if feature is available */}
         {status.available && (
           <>
-            {status.state === 'disconnected' && (
+            {status.state === 'disconnected' && !isAuthenticating && (
               <>
                 <div className="vnas-panel-row">
                   <label>Environment</label>
                   <select
                     value={selectedEnv}
                     onChange={(e) => setSelectedEnv(e.target.value as VnasEnvironment)}
-                    disabled={isAuthenticating}
                   >
                     <option value="live">Live</option>
                     <option value="sweatbox1">Sweatbox 1</option>
@@ -179,10 +195,41 @@ export function VnasPanel() {
                 <button
                   className="vnas-panel-button primary"
                   onClick={handleStartAuth}
-                  disabled={isAuthenticating}
                 >
-                  {isAuthenticating ? 'Connecting...' : 'Connect to vNAS'}
+                  Connect to vNAS
                 </button>
+              </>
+            )}
+
+            {/* Manual callback input for dev mode (deep links don't work in dev) */}
+            {isAuthenticating && (
+              <>
+                <div className="vnas-panel-note">
+                  After authorizing in browser, copy the callback URL (tc3d://...) and paste below:
+                </div>
+                <input
+                  type="text"
+                  className="vnas-panel-input"
+                  placeholder="tc3d://oauth/callback?code=..."
+                  value={callbackUrl}
+                  onChange={(e) => setCallbackUrl(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleManualCallback()}
+                />
+                <div className="vnas-panel-buttons">
+                  <button
+                    className="vnas-panel-button primary"
+                    onClick={handleManualCallback}
+                    disabled={!callbackUrl.trim()}
+                  >
+                    Submit
+                  </button>
+                  <button
+                    className="vnas-panel-button"
+                    onClick={handleCancelAuth}
+                  >
+                    Cancel
+                  </button>
+                </div>
               </>
             )}
 

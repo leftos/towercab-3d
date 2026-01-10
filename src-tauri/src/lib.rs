@@ -97,6 +97,100 @@ static FSLTL_CONVERTER_PROCESS: Mutex<Option<ProcessWithJob>> = Mutex::new(None)
 // Global storage for the HTTP server shutdown channel
 static HTTP_SERVER_SHUTDOWN: Mutex<Option<broadcast::Sender<()>>> = Mutex::new(None);
 
+// Global log file path (set from TOWERCAB_LOG_FILE env var)
+static LOG_FILE_PATH: Mutex<Option<String>> = Mutex::new(None);
+
+// =============================================================================
+// UNIFIED LOGGING (tracing-based)
+// =============================================================================
+
+use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use tracing_appender::non_blocking::WorkerGuard;
+
+// Keep the non-blocking writer guard alive for the lifetime of the app
+static LOG_GUARD: Mutex<Option<WorkerGuard>> = Mutex::new(None);
+
+/// Initialize tracing subscriber with optional file logging.
+/// If TOWERCAB_LOG_FILE env var is set, logs go to both stdout and the file.
+fn init_logging() {
+    let env_filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info,towercab_3d=debug,towercab_3d_vnas=debug"));
+
+    if let Ok(path) = std::env::var("TOWERCAB_LOG_FILE") {
+        // Create parent directories if needed
+        if let Some(parent) = std::path::Path::new(&path).parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+
+        // Store path for frontend logging
+        *LOG_FILE_PATH.lock().unwrap() = Some(path.clone());
+
+        // Create file appender
+        let file = fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&path);
+
+        match file {
+            Ok(file) => {
+                // Non-blocking writer for the file
+                let (non_blocking, guard) = tracing_appender::non_blocking(file);
+                *LOG_GUARD.lock().unwrap() = Some(guard);
+
+                // Create layers for both stdout and file
+                let stdout_layer = fmt::layer()
+                    .with_target(true)
+                    .with_thread_ids(false)
+                    .with_file(false);
+
+                let file_layer = fmt::layer()
+                    .with_target(true)
+                    .with_thread_ids(false)
+                    .with_file(false)
+                    .with_ansi(false)
+                    .with_writer(non_blocking);
+
+                tracing_subscriber::registry()
+                    .with(env_filter)
+                    .with(stdout_layer)
+                    .with(file_layer)
+                    .init();
+
+                tracing::info!("Logging initialized to file: {}", path);
+            }
+            Err(e) => {
+                // Fall back to stdout only
+                tracing_subscriber::registry()
+                    .with(env_filter)
+                    .with(fmt::layer())
+                    .init();
+                tracing::warn!("Failed to open log file {}: {}", path, e);
+            }
+        }
+    } else {
+        // No log file configured, stdout only
+        tracing_subscriber::registry()
+            .with(env_filter)
+            .with(fmt::layer())
+            .init();
+    }
+}
+
+/// Tauri command for frontend to log messages to the unified log file.
+/// Called by the frontend fileLogger instead of writing directly.
+#[tauri::command]
+fn log_from_frontend(level: String, message: String) {
+    // Use tracing macros so it goes through the same subscriber
+    match level.as_str() {
+        "ERROR" => tracing::error!(target: "frontend", "{}", message),
+        "WARN" => tracing::warn!(target: "frontend", "{}", message),
+        "INFO" => tracing::info!(target: "frontend", "{}", message),
+        "DEBUG" => tracing::debug!(target: "frontend", "{}", message),
+        _ => tracing::info!(target: "frontend", "[{}] {}", level, message),
+    }
+}
+
 // Global storage for the running server port
 static HTTP_SERVER_PORT: Mutex<Option<u16>> = Mutex::new(None);
 
@@ -231,7 +325,7 @@ fn stop_http_server() -> Result<(), String> {
         if let Ok(mut port_guard) = HTTP_SERVER_PORT.lock() {
             *port_guard = None;
         }
-        println!("[Server] Shutdown signal sent");
+        tracing::info!("Server shutdown signal sent");
         Ok(())
     } else {
         Err("Server is not running".to_string())
@@ -496,7 +590,7 @@ fn cancel_fsltl_conversion() -> Result<(), String> {
             // Now wait for the child process to fully exit (should be quick since we killed it)
             let _ = proc.child.wait();
 
-            println!("[FSLTL] Converter process tree terminated (PID {})", pid);
+            tracing::info!("FSLTL converter process tree terminated (PID {})", pid);
             return Ok(());
         }
     }
@@ -564,6 +658,9 @@ fn set_webview2_args() {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Initialize tracing subscriber (logs to file if --log flag was passed)
+    init_logging();
+
     // Set WebView2 GPU flags before creating the window
     set_webview2_args();
 
@@ -574,14 +671,6 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_deep_link::init())
         .setup(|app| {
-            if cfg!(debug_assertions) {
-                app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .build(),
-                )?;
-            }
-
             // Register updater plugin (desktop only)
             #[cfg(desktop)]
             app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
@@ -622,9 +711,11 @@ pub fn run() {
                 };
 
                 if should_start {
-                    println!("[Server] Auto-starting HTTP server on port {}{}",
+                    tracing::info!(
+                        "Auto-starting HTTP server on port {}{}",
                         port,
-                        if force_start { " (via TOWERCAB_AUTO_SERVER)" } else { "" });
+                        if force_start { " (via TOWERCAB_AUTO_SERVER)" } else { "" }
+                    );
                     match server::start_server(app_handle.clone(), port).await {
                         Ok(handles) => {
                             if let Ok(mut guard) = HTTP_SERVER_SHUTDOWN.lock() {
@@ -633,10 +724,10 @@ pub fn run() {
                             if let Ok(mut vnas_guard) = VNAS_WEBSOCKET_TX.lock() {
                                 *vnas_guard = Some(handles.vnas_tx);
                             }
-                            println!("[Server] Auto-started successfully");
+                            tracing::info!("HTTP server auto-started successfully");
                         }
                         Err(e) => {
-                            eprintln!("[Server] Auto-start failed: {}", e);
+                            tracing::error!("HTTP server auto-start failed: {}", e);
                         }
                     }
                 }
@@ -718,6 +809,7 @@ pub fn run() {
             // vNAS commands
             vnas::vnas_get_status,
             vnas::vnas_is_available,
+            vnas::vnas_try_restore_session,
             vnas::vnas_start_auth,
             vnas::vnas_complete_auth,
             vnas::vnas_handle_oauth_callback,
@@ -726,6 +818,11 @@ pub fn run() {
             vnas::vnas_disconnect,
             vnas::vnas_is_connected,
             vnas::vnas_is_authenticated,
+            vnas::vnas_get_session_facilities,
+            vnas::vnas_get_session_artcc,
+            vnas::vnas_get_session_airports,
+            // Logging
+            log_from_frontend,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

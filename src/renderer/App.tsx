@@ -45,6 +45,7 @@ import { realTrafficService } from './services/RealTrafficService'
 import { isOrbitWithoutAirport } from './utils/viewingContext'
 import { isRemoteMode } from './utils/remoteMode'
 import { usePresenceWebSocket } from './hooks/usePresenceWebSocket'
+import { useVnasEvents } from './hooks/useVnasEvents'
 
 function App() {
   const startPolling = useVatsimStore((state) => state.startPolling)
@@ -127,6 +128,9 @@ function App() {
 
   // Connect to presence WebSocket in remote mode (registers this client with the server)
   usePresenceWebSocket()
+
+  // Set up vNAS event listeners (receives real-time aircraft updates from Rust backend)
+  useVnasEvents()
 
   const handleViewerReady = useCallback((viewer: Viewer | null) => {
     setCesiumViewer(viewer)

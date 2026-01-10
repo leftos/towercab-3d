@@ -143,7 +143,7 @@ pub fn clear_cache_directory(path: String) -> Result<(), String> {
         }
     }
 
-    println!("[Cache] Cleared cache directory: {}", path);
+    tracing::info!("[Cache] Cleared cache directory: {}", path);
     Ok(())
 }
 

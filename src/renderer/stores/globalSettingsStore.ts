@@ -611,7 +611,8 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
       server: state.server,
       realtraffic: state.realtraffic,
       viewports: state.viewports,
-      display: state.display
+      display: state.display,
+      vnasTokens: state.vnasTokens
     }
   },
 

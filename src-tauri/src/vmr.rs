@@ -41,7 +41,7 @@ fn parse_vmr_file(path: &std::path::Path) -> Vec<ParsedVmrRule> {
     let content = match fs::read_to_string(path) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("[VMR] Failed to read {}: {}", path.display(), e);
+            tracing::error!("[VMR] Failed to read {}: {}", path.display(), e);
             return Vec::new();
         }
     };
@@ -83,7 +83,7 @@ fn parse_vmr_file(path: &std::path::Path) -> Vec<ParsedVmrRule> {
             }
             Ok(Event::Eof) => break,
             Err(e) => {
-                eprintln!("[VMR] XML parse error in {}: {}", path.display(), e);
+                tracing::error!("[VMR] XML parse error in {}: {}", path.display(), e);
                 break;
             }
             _ => {}
@@ -110,7 +110,7 @@ pub fn parse_vmr_files(file_paths: Vec<String>) -> Result<Vec<ParsedVmrRule>, St
             if path.exists() {
                 Some(path)
             } else {
-                eprintln!("[VMR] File not found: {}", file_path);
+                tracing::error!("[VMR] File not found: {}", file_path);
                 None
             }
         })
@@ -121,7 +121,7 @@ pub fn parse_vmr_files(file_paths: Vec<String>) -> Result<Vec<ParsedVmrRule>, St
         .par_iter()
         .flat_map(|path| {
             let rules = parse_vmr_file(path);
-            println!(
+            tracing::info!(
                 "[VMR] Parsed {} rules from {}",
                 rules.len(),
                 path.file_name().unwrap_or_default().to_string_lossy()
@@ -131,7 +131,7 @@ pub fn parse_vmr_files(file_paths: Vec<String>) -> Result<Vec<ParsedVmrRule>, St
         .collect();
 
     let elapsed = start_time.elapsed();
-    println!(
+    tracing::info!(
         "[VMR] Total: {} rules from {} file(s) in {:?}",
         all_rules.len(),
         file_paths.len(),

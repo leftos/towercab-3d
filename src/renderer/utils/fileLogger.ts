@@ -1,17 +1,20 @@
 import { invoke } from '@tauri-apps/api/core'
 import { isRemoteMode } from './remoteMode'
 
-let logBuffer: string[] = []
-let logFilePath: string | null = null
+let logBuffer: Array<{ level: string; message: string }> = []
+let isLoggingEnabled = false
 let flushInterval: NodeJS.Timeout | null = null
 let isInitialized = false
 
-const MAX_BUFFER = 100 // Flush after 100 lines
-const FLUSH_INTERVAL = 5000 // Or every 5 seconds
+const MAX_BUFFER = 50 // Flush after 50 lines
+const FLUSH_INTERVAL = 2000 // Or every 2 seconds
 
 /**
  * Initialize file logging if --log flag was passed to npm run dev
  * Called from main.tsx before anything else
+ *
+ * This sends console.log calls to the Rust backend, which writes them
+ * to the same unified log file that Rust uses for its own logging.
  */
 export async function initFileLogging() {
   // Don't initialize in remote browser mode or if already initialized
@@ -19,26 +22,15 @@ export async function initFileLogging() {
   isInitialized = true
 
   try {
-    // Get the log file path from the Tauri backend (set via --log flag)
+    // Check if log file is configured (set via --log flag)
     const logPath = await invoke<string | null>('get_log_file_path')
     if (!logPath) {
       // No log file specified, only log to console
       return
     }
 
-    logFilePath = logPath
-    console.log(`[fileLogger] Logging to: ${logFilePath}`)
-
-    // Create fresh log file on first initialization
-    try {
-      await invoke('create_text_file', {
-        path: logFilePath,
-        content: `[${timestamp()}] === Console Log Started ===\n`
-      })
-    } catch (error) {
-      console.error('[fileLogger] Failed to create log file:', error)
-      return
-    }
+    isLoggingEnabled = true
+    console.log(`[fileLogger] Logging enabled, Rust will write to: ${logPath}`)
 
     // Override console methods
     setupConsoleInterception()
@@ -60,7 +52,7 @@ export async function initFileLogging() {
 }
 
 /**
- * Intercept console methods and write to log file
+ * Intercept console methods and send to Rust for unified logging
  */
 function setupConsoleInterception() {
   const originalLog = console.log
@@ -74,28 +66,28 @@ function setupConsoleInterception() {
   console.log = (...args) => {
     originalLog(...args)
     const message = formatMessage(args)
-    logBuffer.push(`[${timestamp()}] LOG: ${message}`)
+    logBuffer.push({ level: 'LOG', message })
     if (logBuffer.length >= MAX_BUFFER) flushLogs()
   }
 
   console.error = (...args) => {
     originalError(...args)
     const message = formatMessage(args)
-    logBuffer.push(`[${timestamp()}] ERROR: ${message}`)
+    logBuffer.push({ level: 'ERROR', message })
     if (logBuffer.length >= MAX_BUFFER) flushLogs()
   }
 
   console.warn = (...args) => {
     originalWarn(...args)
     const message = formatMessage(args)
-    logBuffer.push(`[${timestamp()}] WARN: ${message}`)
+    logBuffer.push({ level: 'WARN', message })
     if (logBuffer.length >= MAX_BUFFER) flushLogs()
   }
 
   console.info = (...args) => {
     originalInfo(...args)
     const message = formatMessage(args)
-    logBuffer.push(`[${timestamp()}] INFO: ${message}`)
+    logBuffer.push({ level: 'INFO', message })
     if (logBuffer.length >= MAX_BUFFER) flushLogs()
   }
 
@@ -122,34 +114,27 @@ function formatMessage(args: unknown[]): string {
 }
 
 /**
- * Get current timestamp in ISO format
- */
-function timestamp(): string {
-  return new Date().toISOString()
-}
-
-/**
- * Flush buffered logs to file
+ * Flush buffered logs to Rust backend
  */
 async function flushLogs() {
-  if (!logFilePath || logBuffer.length === 0) return
+  if (!isLoggingEnabled || logBuffer.length === 0) return
 
   // Atomically grab and clear buffer to prevent race conditions
   // (multiple concurrent flushLogs calls from timer + buffer overflow)
   const toFlush = logBuffer
   logBuffer = []
 
-  try {
-    const content = toFlush.join('\n') + '\n'
-
-    // Append to the log file via Tauri command
-    await invoke('append_to_text_file', {
-      path: logFilePath,
-      content
-    })
-  } catch {
-    // Silently fail to avoid recursion
-    // The original console is still available, so errors won't disappear
+  // Send each log entry to Rust (which will write to the unified log file)
+  for (const entry of toFlush) {
+    try {
+      await invoke('log_from_frontend', {
+        level: entry.level,
+        message: entry.message
+      })
+    } catch {
+      // Silently fail to avoid recursion
+      // The original console is still available, so errors won't disappear
+    }
   }
 }
 

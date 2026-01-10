@@ -146,9 +146,9 @@ export const useAirportStore = create<AirportStore>()(
             useVatsimStore.getState().setReferencePosition(airport.lat, airport.lon)
           }
 
-          // Auto-subscribe to vNAS if connected (for 1Hz real-time updates)
+          // Auto-subscribe to vNAS if ready (for 1Hz real-time updates)
           const vnasState = useVnasStore.getState()
-          if (vnasState.isConnected()) {
+          if (vnasState.canSubscribe()) {
             // Fire and forget - don't await, don't block airport selection
             vnasState.subscribe(icao).catch((err) => {
               console.warn('vNAS auto-subscribe failed:', err)

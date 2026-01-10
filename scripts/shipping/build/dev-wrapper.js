@@ -8,7 +8,8 @@
  * Examples:
  *   npm run dev
  *   npm run dev -- temp/console.log
- *   npm run dev -- temp/console.log --vnas
+ *   npm run dev:vnas
+ *   npm run dev:vnas -- temp/console.log
  *
  * Or use environment variable:
  *   set TOWERCAB_LOG_FILE=temp/console.log && npm run dev
@@ -23,15 +24,14 @@ const args = process.argv.slice(2)
 let logFile = process.env.TOWERCAB_LOG_FILE || null
 let useVnas = false
 
-// First positional argument is the log file path (if provided)
-if (args.length > 0 && !args[0].startsWith('--')) {
-  logFile = args[0]
-  args.shift()
-}
-
-// Check for --vnas flag
-if (args.includes('--vnas')) {
-  useVnas = true
+// Parse all arguments (order-independent)
+for (const arg of args) {
+  if (arg === '--vnas') {
+    useVnas = true
+  } else if (!arg.startsWith('--')) {
+    // Positional argument is the log file path
+    logFile = arg
+  }
 }
 
 // Set environment variable for the Tauri backend to read

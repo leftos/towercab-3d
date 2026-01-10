@@ -13,7 +13,17 @@ function AirportSelector() {
   const selectAirport = useAirportStore((state) => state.selectAirport)
   // Subscribe directly to globalSettingsStore for reactive updates
   const recentAirports = useGlobalSettingsStore((state) => state.airports.recentAirports)
-  const vnasConnected = useVnasStore((state) => state.status.state === 'connected')
+  const vnasState = useVnasStore((state) => state.status.state)
+  const sessionFacilities = useVnasStore((state) => state.sessionFacilities)
+
+  // Check if vNAS is connected enough to know about session facilities
+  // (subscribing or connected means we've joined a session)
+  const hasVnasSession = vnasState === 'subscribing' || vnasState === 'connected'
+
+  // Check if a specific airport has 1Hz updates available in current session
+  const hasVnas1Hz = useCallback((icao: string) => {
+    return hasVnasSession && sessionFacilities.includes(icao)
+  }, [hasVnasSession, sessionFacilities])
 
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<Airport[]>([])
@@ -97,8 +107,8 @@ function AirportSelector() {
                       onClick={() => handleSelect(airport.icao)}
                     >
                       <div className="result-main">
-                        {vnasConnected && (
-                          <span className="vnas-indicator" title="1Hz real-time updates available">
+                        {hasVnas1Hz(airport.icao) && (
+                          <span className="vnas-indicator" title="1Hz real-time updates available (vNAS session)">
                             <svg width="8" height="8" viewBox="0 0 8 8">
                               <circle cx="4" cy="4" r="4" fill="#0c7" />
                             </svg>
@@ -131,8 +141,8 @@ function AirportSelector() {
                       onClick={() => handleSelect(airport.icao)}
                     >
                       <div className="result-main">
-                        {vnasConnected && (
-                          <span className="vnas-indicator" title="1Hz real-time updates available">
+                        {hasVnas1Hz(airport.icao) && (
+                          <span className="vnas-indicator" title="1Hz real-time updates available (vNAS session)">
                             <svg width="8" height="8" viewBox="0 0 8 8">
                               <circle cx="4" cy="4" r="4" fill="#0c7" />
                             </svg>
@@ -156,14 +166,15 @@ function AirportSelector() {
                   {['KJFK', 'KLAX', 'EGLL', 'EDDF', 'LFPG', 'RJTT', 'VHHH', 'YSSY'].map((icao) => {
                     const airport = airports.get(icao)
                     if (!airport) return null
+                    const has1Hz = hasVnas1Hz(icao)
                     return (
                       <button
                         key={icao}
-                        className={`quick-airport${vnasConnected ? ' vnas-available' : ''}`}
+                        className={`quick-airport${has1Hz ? ' vnas-available' : ''}`}
                         onClick={() => handleSelect(icao)}
-                        title={vnasConnected ? '1Hz real-time updates available' : undefined}
+                        title={has1Hz ? '1Hz real-time updates available (vNAS session)' : undefined}
                       >
-                        {vnasConnected && (
+                        {has1Hz && (
                           <svg className="quick-vnas-dot" width="6" height="6" viewBox="0 0 6 6">
                             <circle cx="3" cy="3" r="3" fill="#0c7" />
                           </svg>

@@ -1077,6 +1077,12 @@ export interface GlobalSettings {
    * Shared across all browsers/devices for consistent appearance
    */
   display: GlobalDisplaySettings
+
+  /**
+   * vNAS authentication tokens (opaque to frontend, managed by Rust)
+   * Stored as JSON string for feature-flag compatibility with the vnas crate
+   */
+  vnasTokens?: string
 }
 
 /**

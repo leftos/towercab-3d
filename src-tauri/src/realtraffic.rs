@@ -217,9 +217,9 @@ pub async fn realtraffic_deauth(guid: String) -> Result<(), String> {
     if let Ok(data) = serde_json::from_str::<serde_json::Value>(&response_text) {
         let status = data.get("status").and_then(|v| v.as_i64()).unwrap_or(0);
         if status == 200 {
-            println!("[RealTraffic] Deauth successful");
+            tracing::info!("[RealTraffic] Deauth successful");
         } else {
-            println!("[RealTraffic] Deauth returned status {}: {}", status, response_text);
+            tracing::info!("[RealTraffic] Deauth returned status {}: {}", status, response_text);
         }
     }
 

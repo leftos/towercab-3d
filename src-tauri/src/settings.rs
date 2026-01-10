@@ -343,6 +343,10 @@ pub struct GlobalSettings {
     pub viewports: GlobalViewportSettings,
     #[serde(default)]
     pub display: GlobalDisplaySettings,
+    /// vNAS authentication tokens (stored as JSON string for feature-flag compatibility)
+    /// Contains serialized StoredTokens from towercab-3d-vnas crate
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vnas_tokens: Option<String>,
 }
 
 impl Default for GlobalSettings {
@@ -369,6 +373,7 @@ impl Default for GlobalSettings {
             realtraffic: GlobalRealTrafficSettings::default(),
             viewports: GlobalViewportSettings::default(),
             display: GlobalDisplaySettings::default(),
+            vnas_tokens: None,
         }
     }
 }
@@ -420,9 +425,24 @@ pub fn read_global_settings(app: tauri::AppHandle) -> Result<GlobalSettings, Str
 }
 
 /// Write global settings to disk
+///
+/// This preserves fields that the frontend doesn't know about (like vnas_tokens)
+/// by reading the existing file and merging.
 #[tauri::command]
-pub fn write_global_settings(app: tauri::AppHandle, settings: GlobalSettings) -> Result<(), String> {
+pub fn write_global_settings(app: tauri::AppHandle, mut settings: GlobalSettings) -> Result<(), String> {
     let settings_file = get_global_settings_file(&app)?;
+
+    // Preserve vnas_tokens if incoming settings don't have it but existing file does
+    if settings.vnas_tokens.is_none() && settings_file.exists() {
+        if let Ok(content) = fs::read_to_string(&settings_file) {
+            if let Ok(existing) = serde_json::from_str::<GlobalSettings>(&content) {
+                if existing.vnas_tokens.is_some() {
+                    tracing::debug!("[Settings] Preserving existing vnas_tokens");
+                    settings.vnas_tokens = existing.vnas_tokens;
+                }
+            }
+        }
+    }
 
     let content = serde_json::to_string_pretty(&settings)
         .map_err(|e| format!("Failed to serialize global settings: {}", e))?;
@@ -430,6 +450,6 @@ pub fn write_global_settings(app: tauri::AppHandle, settings: GlobalSettings) ->
     fs::write(&settings_file, content)
         .map_err(|e| format!("Failed to write global settings: {}", e))?;
 
-    println!("[Settings] Global settings saved to {:?}", settings_file);
+    tracing::info!("[Settings] Global settings saved to {:?}", settings_file);
     Ok(())
 }

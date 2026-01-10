@@ -30,10 +30,15 @@ interface VnasStore {
   aircraftStates: Map<string, AircraftState>
   previousStates: Map<string, AircraftState>
 
+  // Session info (available facilities from CRC session)
+  sessionFacilities: string[]  // Facility IDs the user can subscribe to
+  sessionArtccId: string | null  // ARTCC ID for the current session
+
   // Timing
   lastUpdateTime: number  // Local time of last aircraft update
 
   // Actions
+  tryRestoreSession: (environment: VnasEnvironment) => Promise<boolean>
   startAuth: (environment: VnasEnvironment) => Promise<string>
   completeAuth: () => Promise<void>
   handleOAuthCallback: (callbackUrl: string) => Promise<void>
@@ -46,7 +51,12 @@ interface VnasStore {
   checkAvailability: () => Promise<boolean>
   isAvailable: () => boolean
   isConnected: () => boolean
+  canSubscribe: () => boolean
   isAuthenticated: () => boolean
+  getSessionFacilities: () => Promise<string[]>
+  getSessionArtcc: () => Promise<string | null>
+  getSessionAirports: () => Promise<string[]>
+  canSubscribeTo: (facilityId: string) => boolean
 
   // Internal actions
   setStatus: (status: VnasStatus) => void
@@ -66,7 +76,34 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
   status: DEFAULT_STATUS,
   aircraftStates: new Map(),
   previousStates: new Map(),
+  sessionFacilities: [],
+  sessionArtccId: null,
   lastUpdateTime: 0,
+
+  /**
+   * Try to restore a session from stored tokens.
+   * Call this on app startup before showing OAuth UI.
+   * Returns true if session was restored, false if user needs to authenticate.
+   */
+  tryRestoreSession: async (environment: VnasEnvironment): Promise<boolean> => {
+    if (isRemoteMode()) {
+      return false
+    }
+
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+      const restored = await invoke<boolean>('vnas_try_restore_session', { environment })
+
+      if (restored) {
+        console.log('[vNAS] Session restored from stored tokens')
+      }
+
+      return restored
+    } catch (error) {
+      console.warn('[vNAS] Failed to restore session:', error)
+      return false
+    }
+  },
 
   /**
    * Start the OAuth authentication flow.
@@ -138,6 +175,15 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       // After successful OAuth, automatically connect
       console.log('[vNAS] OAuth callback handled, connecting...')
       await get().connect()
+
+      // Auto-subscribe to current airport if one is selected
+      // Import dynamically to avoid circular dependencies
+      const { useAirportStore } = await import('./airportStore')
+      const currentAirport = useAirportStore.getState().currentAirport
+      if (currentAirport?.icao) {
+        console.log('[vNAS] Auto-subscribing to current airport:', currentAirport.icao)
+        await get().subscribe(currentAirport.icao)
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       console.error('[vNAS] OAuth callback failed:', message)
@@ -178,11 +224,21 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
 
   /**
    * Subscribe to TowerCabAircraft updates for a facility.
-   * @param facilityId - ICAO code of the airport (e.g., "KBOS")
+   * @param icaoCode - ICAO code of the airport (e.g., "KSFO" or "SFO")
+   *
+   * Note: vNAS facility IDs don't include the K prefix for US airports.
+   * This function automatically strips it (KSFO -> SFO).
    */
-  subscribe: async (facilityId: string) => {
+  subscribe: async (icaoCode: string) => {
     if (isRemoteMode()) {
       throw new Error('vNAS not yet available in remote browser mode')
+    }
+
+    // vNAS facility IDs don't have K prefix for US airports (KSFO -> SFO)
+    let facilityId = icaoCode
+    if (icaoCode.startsWith('K') && icaoCode.length === 4) {
+      facilityId = icaoCode.slice(1)
+      console.log(`[vNAS] Stripped K prefix: ${icaoCode} -> ${facilityId}`)
     }
 
     try {
@@ -191,7 +247,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       set(state => ({
         status: {
           ...state.status,
-          facilityId
+          facilityId: icaoCode  // Store original ICAO for UI display
         }
       }))
     } catch (error) {
@@ -468,10 +524,19 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
   },
 
   /**
-   * Check if vNAS is currently connected.
+   * Check if vNAS is currently connected (receiving updates).
    */
   isConnected: (): boolean => {
     return get().status.state === 'connected'
+  },
+
+  /**
+   * Check if vNAS can subscribe to an airport.
+   * True when connected to hub and ready to subscribe (or already subscribed).
+   */
+  canSubscribe: (): boolean => {
+    const state = get().status.state
+    return state === 'subscribing' || state === 'connected'
   },
 
   /**
@@ -483,6 +548,84 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
            state === 'joiningSession' ||
            state === 'subscribing' ||
            state === 'connected'
+  },
+
+  /**
+   * Get list of facility IDs available in the current CRC session.
+   * These are the airports the user can subscribe to for 1Hz data.
+   */
+  getSessionFacilities: async (): Promise<string[]> => {
+    if (isRemoteMode()) {
+      // TODO: Implement remote mode API
+      return []
+    }
+
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+      const facilities = await invoke<string[]>('vnas_get_session_facilities')
+      set({ sessionFacilities: facilities })
+      console.log(`[vNAS] Session facilities: ${facilities.join(', ') || '(none)'}`)
+      return facilities
+    } catch (error) {
+      console.error('[vNAS] Failed to get session facilities:', error)
+      return []
+    }
+  },
+
+  /**
+   * Get the ARTCC ID for the current CRC session.
+   */
+  getSessionArtcc: async (): Promise<string | null> => {
+    if (isRemoteMode()) {
+      return null
+    }
+
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+      const artccId = await invoke<string | null>('vnas_get_session_artcc')
+      set({ sessionArtccId: artccId })
+      if (artccId) {
+        console.log(`[vNAS] Session ARTCC: ${artccId}`)
+      }
+      return artccId
+    } catch (error) {
+      console.error('[vNAS] Failed to get session ARTCC:', error)
+      return null
+    }
+  },
+
+  /**
+   * Get the list of airport ICAOs that support 1Hz updates in the current session.
+   * This resolves facilities (e.g., NCT TRACON) to their constituent airports.
+   */
+  getSessionAirports: async (): Promise<string[]> => {
+    if (isRemoteMode()) {
+      return []
+    }
+
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+      const airports = await invoke<string[]>('vnas_get_session_airports')
+      set({ sessionFacilities: airports })
+      console.log(`[vNAS] Session airports (1Hz): ${airports.join(', ') || '(none)'}`)
+      return airports
+    } catch (error) {
+      console.error('[vNAS] Failed to get session airports:', error)
+      return []
+    }
+  },
+
+  /**
+   * Check if a facility can be subscribed to in the current session.
+   * Handles both ICAO (KSFO) and vNAS facility ID (SFO) formats.
+   */
+  canSubscribeTo: (icaoCode: string): boolean => {
+    const { sessionFacilities } = get()
+    // Session facilities use vNAS format (no K prefix), so check both
+    const facilityId = icaoCode.startsWith('K') && icaoCode.length === 4
+      ? icaoCode.slice(1)
+      : icaoCode
+    return sessionFacilities.includes(facilityId) || sessionFacilities.includes(icaoCode)
   },
 
   /**

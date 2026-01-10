@@ -48,3 +48,4 @@ export interface VnasStatus {
   /** Whether vNAS feature is compiled into the backend */
   available: boolean
 }
+

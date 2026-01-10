@@ -170,15 +170,15 @@ pub async fn start_server(
         }
     };
 
-    println!(
+    tracing::info!(
         "[Server] Starting HTTP server on port {} (serving from {:?})",
         port, dist_path
     );
     if auth_token.is_some() {
-        println!("[Server] Authentication enabled");
+        tracing::info!("[Server] Authentication enabled");
     }
     if require_local_network {
-        println!("[Server] Restricted to local network only");
+        tracing::info!("[Server] Restricted to local network only");
     }
 
     // Create vNAS broadcast channel for relaying aircraft updates to WebSocket clients
@@ -206,17 +206,17 @@ pub async fn start_server(
         .await
         .map_err(|e| format!("Failed to bind to port {}: {}", port, e))?;
 
-    println!("[Server] Listening on http://0.0.0.0:{}", port);
+    tracing::info!("[Server] Listening on http://0.0.0.0:{}", port);
 
     // Spawn the server task
     tokio::spawn(async move {
         axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
             .with_graceful_shutdown(async move {
                 let _ = shutdown_rx.recv().await;
-                println!("[Server] Shutting down...");
+                tracing::info!("[Server] Shutting down...");
             })
             .await
-            .unwrap_or_else(|e| eprintln!("[Server] Error: {}", e));
+            .unwrap_or_else(|e| tracing::error!("[Server] Error: {}", e));
     });
 
     Ok(ServerHandles {
@@ -273,7 +273,7 @@ fn find_dist_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 
     for candidate in &candidates {
         if candidate.exists() && candidate.join("index.html").exists() {
-            println!("[Server] Found dist folder at: {:?}", candidate);
+            tracing::info!("[Server] Found dist folder at: {:?}", candidate);
             return Ok(candidate.clone());
         }
     }
@@ -437,7 +437,7 @@ async fn get_global_settings(
 /// POST /api/global-settings - Update global settings
 async fn update_global_settings(
     State(state): State<Arc<ServerState>>,
-    Json(settings): Json<GlobalSettings>,
+    Json(mut settings): Json<GlobalSettings>,
 ) -> Result<Json<GlobalSettings>, (StatusCode, String)> {
     let settings_file = get_global_settings_file(&state.app_handle)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
@@ -448,6 +448,18 @@ async fn update_global_settings(
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to create directory: {}", e)))?;
     }
 
+    // Preserve vnas_tokens if incoming settings don't have it but existing file does
+    if settings.vnas_tokens.is_none() && settings_file.exists() {
+        if let Ok(content) = fs::read_to_string(&settings_file) {
+            if let Ok(existing) = serde_json::from_str::<GlobalSettings>(&content) {
+                if existing.vnas_tokens.is_some() {
+                    tracing::debug!("[Server] Preserving existing vnas_tokens");
+                    settings.vnas_tokens = existing.vnas_tokens;
+                }
+            }
+        }
+    }
+
     // Write settings to file
     let content = serde_json::to_string_pretty(&settings)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to serialize settings: {}", e)))?;
@@ -455,7 +467,7 @@ async fn update_global_settings(
     fs::write(&settings_file, content)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to write settings: {}", e)))?;
 
-    println!("[Server] Updated global settings via API");
+    tracing::info!("[Server] Updated global settings via API");
     Ok(Json(settings))
 }
 
@@ -696,7 +708,7 @@ async fn update_tower_position(
     fs::write(&file_path, content)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to write position file: {}", e)))?;
 
-    println!("[Server] Updated tower position for {} via API", icao.to_uppercase());
+    tracing::info!("[Server] Updated tower position for {} via API", icao.to_uppercase());
     Ok(Json(entry))
 }
 
@@ -1092,7 +1104,7 @@ async fn handle_vnas_websocket(socket: WebSocket, state: Arc<ServerState>) {
     // Subscribe to vNAS broadcast channel
     let mut vnas_rx = state.vnas_tx.subscribe();
 
-    println!("[vNAS WS] Client connected");
+    tracing::info!("[vNAS WS] Client connected");
 
     // Spawn a task to forward vNAS updates to the WebSocket
     let send_task = tokio::spawn(async move {
@@ -1105,7 +1117,7 @@ async fn handle_vnas_websocket(socket: WebSocket, state: Arc<ServerState>) {
                     }
                 }
                 Err(e) => {
-                    eprintln!("[vNAS WS] Serialization error: {}", e);
+                    tracing::error!("[vNAS WS] Serialization error: {}", e);
                 }
             }
         }
@@ -1116,17 +1128,17 @@ async fn handle_vnas_websocket(socket: WebSocket, state: Arc<ServerState>) {
         match msg {
             Ok(Message::Ping(data)) => {
                 // Ping/pong handled automatically by axum
-                println!("[vNAS WS] Received ping: {:?}", data);
+                tracing::info!("[vNAS WS] Received ping: {:?}", data);
             }
             Ok(Message::Close(_)) => {
-                println!("[vNAS WS] Client requested close");
+                tracing::info!("[vNAS WS] Client requested close");
                 break;
             }
             Ok(_) => {
                 // Ignore other message types (we don't expect client messages)
             }
             Err(e) => {
-                eprintln!("[vNAS WS] Error: {}", e);
+                tracing::error!("[vNAS WS] Error: {}", e);
                 break;
             }
         }
@@ -1134,7 +1146,7 @@ async fn handle_vnas_websocket(socket: WebSocket, state: Arc<ServerState>) {
 
     // Clean up
     send_task.abort();
-    println!("[vNAS WS] Client disconnected");
+    tracing::info!("[vNAS WS] Client disconnected");
 }
 
 // =============================================================================
@@ -1159,7 +1171,7 @@ async fn handle_presence_websocket(socket: WebSocket, state: Arc<ServerState>) {
 
     // Increment connected client count and emit event
     let count = state.connected_clients.fetch_add(1, Ordering::SeqCst) + 1;
-    println!("[Presence] Remote client connected (total: {})", count);
+    tracing::info!("[Presence] Remote client connected (total: {})", count);
     let _ = state.app_handle.emit("remote-clients-changed", count);
 
     // Keep connection alive until client disconnects
@@ -1174,7 +1186,7 @@ async fn handle_presence_websocket(socket: WebSocket, state: Arc<ServerState>) {
 
     // Decrement connected client count and emit event
     let count = state.connected_clients.fetch_sub(1, Ordering::SeqCst) - 1;
-    println!("[Presence] Remote client disconnected (total: {})", count);
+    tracing::info!("[Presence] Remote client disconnected (total: {})", count);
     let _ = state.app_handle.emit("remote-clients-changed", count);
 }
 
@@ -1196,7 +1208,7 @@ async fn serve_static(
     let file_path = state.dist_path.join(path);
 
     // Debug: log what we're looking for
-    println!("[Server] Request: {} -> {:?} (exists: {})", path, file_path, file_path.exists());
+    tracing::info!("[Server] Request: {} -> {:?} (exists: {})", path, file_path, file_path.exists());
 
     // Try the exact path first
     if file_path.exists() && file_path.is_file() {
@@ -1220,7 +1232,7 @@ async fn serve_static(
 
     if has_extension {
         // Static asset not found - return 404, don't serve index.html
-        println!("[Server] Static file not found: {}", path);
+        tracing::info!("[Server] Static file not found: {}", path);
         return Err((StatusCode::NOT_FOUND, format!("File not found: {}", path)));
     }
 

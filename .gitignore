@@ -11,6 +11,9 @@ build/
 # Tauri build outputs
 src-tauri/target/
 
+# Cargo local config (path overrides for local vNAS development)
+src-tauri/.cargo/
+
 # Logs
 logs
 *.log
