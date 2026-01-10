@@ -37,6 +37,10 @@ pub struct GlobalAirportSettings {
     pub default_icao: String,
     #[serde(default)]
     pub recent_airports: Vec<String>,
+    #[serde(default)]
+    pub vatsim_favorites: Vec<String>,
+    #[serde(default)]
+    pub realtraffic_favorites: Vec<String>,
 }
 
 // =============================================================================
@@ -355,6 +359,8 @@ impl Default for GlobalSettings {
             airports: GlobalAirportSettings {
                 default_icao: String::new(),
                 recent_airports: Vec::new(),
+                vatsim_favorites: Vec::new(),
+                realtraffic_favorites: Vec::new(),
             },
             server: GlobalServerSettings {
                 port: 8765,

@@ -249,6 +249,12 @@ interface GlobalSettingsState extends GlobalSettings {
   /** Update airport configuration */
   updateAirports: (updates: Partial<GlobalSettings['airports']>) => Promise<void>
 
+  /** Add an airport to favorites for the specified data source */
+  addFavorite: (icao: string, source: DataSourceType) => Promise<void>
+
+  /** Remove an airport from favorites for the specified data source */
+  removeFavorite: (icao: string, source: DataSourceType) => Promise<void>
+
   /** Update server configuration */
   updateServer: (updates: Partial<GlobalSettings['server']>) => Promise<void>
 
@@ -505,6 +511,37 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
   updateAirports: async (updates: Partial<GlobalSettings['airports']>) => {
     const state = get()
     const newAirports = { ...state.airports, ...updates }
+    set({ airports: newAirports })
+    await saveSettings(get().getSettings())
+  },
+
+  addFavorite: async (icao: string, source: DataSourceType) => {
+    const state = get()
+    const currentFavorites = source === 'vatsim'
+      ? (state.airports.vatsimFavorites ?? [])
+      : (state.airports.realtrafficFavorites ?? [])
+
+    // Avoid duplicates
+    if (currentFavorites.includes(icao)) return
+
+    const newFavorites = [...currentFavorites, icao]
+    const newAirports = source === 'vatsim'
+      ? { ...state.airports, vatsimFavorites: newFavorites }
+      : { ...state.airports, realtrafficFavorites: newFavorites }
+    set({ airports: newAirports })
+    await saveSettings(get().getSettings())
+  },
+
+  removeFavorite: async (icao: string, source: DataSourceType) => {
+    const state = get()
+    const currentFavorites = source === 'vatsim'
+      ? (state.airports.vatsimFavorites ?? [])
+      : (state.airports.realtrafficFavorites ?? [])
+
+    const newFavorites = currentFavorites.filter(f => f !== icao)
+    const newAirports = source === 'vatsim'
+      ? { ...state.airports, vatsimFavorites: newFavorites }
+      : { ...state.airports, realtrafficFavorites: newFavorites }
     set({ airports: newAirports })
     await saveSettings(get().getSettings())
   },

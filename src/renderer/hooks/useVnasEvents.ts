@@ -102,6 +102,17 @@ export function useVnasEvents(): void {
             await connect()
             console.log('[vNAS] Connected after session restore')
 
+            // Fetch session info (airports available for 1Hz updates)
+            try {
+              const [artcc, airports] = await Promise.all([
+                getSessionArtcc(),
+                getSessionAirports()
+              ])
+              console.log('[vNAS] Session info after restore - ARTCC:', artcc, 'Airports:', airports)
+            } catch (err) {
+              console.warn('[vNAS] Failed to fetch session info after restore:', err)
+            }
+
             // Auto-subscribe to current airport if one is selected
             const currentAirport = useAirportStore.getState().currentAirport
             if (currentAirport?.icao) {

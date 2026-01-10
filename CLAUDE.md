@@ -355,7 +355,11 @@ if (version < 7) {
 1. Add to `GlobalSettings` interface in `types/settings.ts`
 2. Update `DEFAULT_GLOBAL_SETTINGS` in `types/settings.ts`
 3. Add corresponding update function in `globalSettingsStore.ts`
-4. Settings auto-sync via HTTP endpoints in remote mode
+4. **IMPORTANT:** Update the corresponding Rust struct in `src-tauri/src/settings.rs`
+   - The Rust backend deserializes/serializes settings to disk
+   - Fields not in the Rust struct will be silently dropped when saving
+   - Add `#[serde(default)]` for new optional fields
+5. Settings auto-sync via HTTP endpoints in remote mode
 
 ### Adding a New Keyboard Shortcut
 

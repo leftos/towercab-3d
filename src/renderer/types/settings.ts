@@ -1009,6 +1009,18 @@ export interface GlobalSettings {
      * Shared across all browser sessions
      */
     recentAirports: string[]
+
+    /**
+     * Favorite airports for VATSIM/vNAS mode (ICAO codes)
+     * Shared across all browser sessions
+     */
+    vatsimFavorites: string[]
+
+    /**
+     * Favorite airports for RealTraffic mode (ICAO codes)
+     * Shared across all browser sessions
+     */
+    realtrafficFavorites: string[]
   }
 
   /**
@@ -1100,7 +1112,9 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   },
   airports: {
     defaultIcao: '',
-    recentAirports: []
+    recentAirports: [],
+    vatsimFavorites: [],
+    realtrafficFavorites: []
   },
   server: {
     port: 8765,
