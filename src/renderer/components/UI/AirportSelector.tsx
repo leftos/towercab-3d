@@ -21,8 +21,13 @@ function AirportSelector() {
   const hasVnasSession = vnasState === 'subscribing' || vnasState === 'connected'
 
   // Check if a specific airport has 1Hz updates available in current session
+  // vNAS facility IDs don't have K prefix for US airports (KSFO -> SFO)
   const hasVnas1Hz = useCallback((icao: string) => {
-    return hasVnasSession && sessionFacilities.includes(icao)
+    if (!hasVnasSession) return false
+    const facilityId = icao.startsWith('K') && icao.length === 4
+      ? icao.slice(1)
+      : icao
+    return sessionFacilities.includes(facilityId) || sessionFacilities.includes(icao)
   }, [hasVnasSession, sessionFacilities])
 
   const [query, setQuery] = useState('')
