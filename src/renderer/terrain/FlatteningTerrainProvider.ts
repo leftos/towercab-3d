@@ -193,6 +193,38 @@ function metersToDegrees(distMeters: number, lat: number): number {
   return distMeters / avgMetersPerDegree
 }
 
+/**
+ * Project a point onto a runway gradient and get the interpolated elevation.
+ * Used to compute taxiway vertex elevation based on runway proximity.
+ */
+function projectToRunwayElevation(
+  lon: number,
+  lat: number,
+  gradientStart: [number, number],
+  gradientEnd: [number, number],
+  startElevation: number,
+  endElevation: number
+): number {
+  const [startLon, startLat] = gradientStart
+  const [endLon, endLat] = gradientEnd
+
+  // Vector from start to end
+  const dx = endLon - startLon
+  const dy = endLat - startLat
+  const lengthSq = dx * dx + dy * dy
+
+  if (lengthSq === 0) return startElevation
+
+  // Project point onto line
+  const px = lon - startLon
+  const py = lat - startLat
+  const t = (px * dx + py * dy) / lengthSq
+
+  // Clamp t to [0, 1] and interpolate elevation
+  const tClamped = Math.max(0, Math.min(1, t))
+  return startElevation + tClamped * (endElevation - startElevation)
+}
+
 // ============================================================================
 // Data Structures
 // ============================================================================
@@ -249,6 +281,12 @@ interface FloorBBox {
 /** Default tile cache size (will be overridden by user settings) */
 const DEFAULT_TILE_CACHE_SIZE = 500
 
+/**
+ * Distance (meters) from runway edge where taxiways should ramp to meet runway elevation.
+ * Creates smooth slopes at taxiway-runway junctions instead of abrupt elevation changes.
+ */
+const TAXIWAY_RAMP_DISTANCE_METERS = 200
+
 export function createFlatteningTerrainProvider(
   baseProvider: Cesium.CesiumTerrainProvider
 ): Cesium.CesiumTerrainProvider & {
@@ -259,6 +297,11 @@ export function createFlatteningTerrainProvider(
 } {
   // Store modification data by ID for fast lookup
   const floorDataMap = new Map<string, FloorData>()
+
+  // Pre-filtered list of runway floors (with gradient data) for taxiway elevation computation
+  // This is needed because taxiways may be on tiles that don't intersect any runway,
+  // but we still need runway data to compute their elevation based on the gradient
+  let runwayFloors: FloorData[] = []
 
   // Spatial index for fast polygon lookup (references FloorData by ID)
   const spatialIndex = new RBush<FloorBBox>()
@@ -476,6 +519,12 @@ export function createFlatteningTerrainProvider(
     // Bulk load spatial index (more efficient than individual inserts)
     spatialIndex.load(spatialItems)
 
+    // Build list of runway floors (with gradient data) for taxiway elevation computation
+    runwayFloors = Array.from(floorDataMap.values()).filter(
+      floor => floor.gradientStart !== undefined && floor.gradientEnd !== undefined &&
+               floor.startElevation !== undefined && floor.endElevation !== undefined
+    )
+
     console.log(`[FlatteningTerrainProvider] Set ${polygons.length} flattening polygons`)
   }
 
@@ -489,6 +538,7 @@ export function createFlatteningTerrainProvider(
     processedTileCache.clear()
     tileCacheTimestamps.clear()
     cacheTimestamp = 0
+    runwayFloors = []
     console.log('[FlatteningTerrainProvider] Cleared flattening polygons')
   }
 
@@ -606,6 +656,145 @@ export function createFlatteningTerrainProvider(
   }
 
   /**
+   * Compute field elevation using inverse distance weighting from runway thresholds.
+   *
+   * Creates a continuous elevation field across the airport that smoothly
+   * interpolates between runway threshold elevations. This prevents bumps
+   * between taxiway polygons that have different pre-computed elevations.
+   *
+   * @param lon - Longitude in degrees
+   * @param lat - Latitude in degrees
+   * @param runwayFloors - Array of runway FloorData (with gradient info)
+   * @param fallbackHeight - Elevation to use if no thresholds found
+   * @returns Weighted average elevation based on distance to thresholds
+   */
+  function computeFieldElevation(
+    lon: number,
+    lat: number,
+    runwayFloors: FloorData[],
+    fallbackHeight: number
+  ): number {
+    // Collect all threshold points and elevations
+    const thresholds: { lon: number; lat: number; elevation: number }[] = []
+
+    for (const floor of runwayFloors) {
+      if (floor.gradientStart === undefined || floor.gradientEnd === undefined ||
+          floor.startElevation === undefined || floor.endElevation === undefined) continue
+
+      // Add both runway threshold points
+      thresholds.push({
+        lon: floor.gradientStart[0],
+        lat: floor.gradientStart[1],
+        elevation: floor.startElevation
+      })
+      thresholds.push({
+        lon: floor.gradientEnd[0],
+        lat: floor.gradientEnd[1],
+        elevation: floor.endElevation
+      })
+    }
+
+    if (thresholds.length === 0) return fallbackHeight
+
+    // Inverse distance weighting with power 2 for smooth gradients
+    let sumWeight = 0
+    let sumWeightedElev = 0
+
+    for (const threshold of thresholds) {
+      // Approximate distance in degrees (faster than haversine for relative comparison)
+      const dLon = (lon - threshold.lon) * Math.cos(lat * Math.PI / 180)
+      const dLat = lat - threshold.lat
+      const distDegSq = dLon * dLon + dLat * dLat
+
+      // Avoid division by zero for points exactly on threshold
+      const minDistSq = 1e-12
+      const weight = 1 / Math.max(distDegSq, minDistSq)
+
+      sumWeight += weight
+      sumWeightedElev += weight * threshold.elevation
+    }
+
+    return sumWeightedElev / sumWeight
+  }
+
+  /**
+   * Compute elevation for a taxiway point based on nearest runway gradient.
+   *
+   * For airports with sloped runways, taxiways should follow the runway gradient
+   * rather than using a fixed elevation. This function:
+   * 1. Finds the nearest runway to the given point
+   * 2. Projects the point onto that runway's gradient
+   * 3. Applies ramp blending near runway edges for smooth transitions
+   * 4. Beyond ramp zone, uses continuous field elevation from all thresholds
+   *
+   * @param lon - Longitude in degrees
+   * @param lat - Latitude in degrees
+   * @param taxiwayBaseHeight - Fallback elevation if no runway found
+   * @param runwayFloors - Array of runway FloorData (with gradient info)
+   * @returns Computed elevation and closest runway info
+   */
+  function computeTaxiwayElevation(
+    lon: number,
+    lat: number,
+    taxiwayBaseHeight: number,
+    runwayFloors: FloorData[]
+  ): { height: number; closestRunway: FloorData | null; distanceToRunway: number } {
+    let closestRunwayHeight: number | null = null
+    let closestRunwayDistToEdge = Infinity
+    let closestRunway: FloorData | null = null
+
+    for (const floor of runwayFloors) {
+      // Only consider floors with complete gradient data
+      if (floor.gradientStart === undefined || floor.gradientEnd === undefined ||
+          floor.startElevation === undefined || floor.endElevation === undefined) continue
+
+      // Project position onto runway gradient to get elevation
+      const projectedHeight = projectToRunwayElevation(
+        lon, lat,
+        floor.gradientStart,
+        floor.gradientEnd,
+        floor.startElevation,
+        floor.endElevation
+      )
+
+      // Use distance to runway edge to pick closest runway
+      const distDeg = distanceToPolygonEdge(lon, lat, floor.exteriorX, floor.exteriorY, Infinity)
+      const distMeters = degreesToMeters(distDeg, lat)
+
+      if (distMeters < closestRunwayDistToEdge) {
+        closestRunwayDistToEdge = distMeters
+        closestRunwayHeight = projectedHeight
+        closestRunway = floor
+      }
+    }
+
+    if (closestRunwayHeight === null) {
+      // No runways found - use taxiway's pre-computed elevation
+      return { height: taxiwayBaseHeight, closestRunway: null, distanceToRunway: Infinity }
+    }
+
+    // Compute continuous field elevation for beyond-ramp-zone blending
+    // This creates a smooth gradient across the airport based on threshold positions
+    const fieldElevation = computeFieldElevation(lon, lat, runwayFloors, taxiwayBaseHeight)
+
+    let height: number
+    if (closestRunwayDistToEdge < TAXIWAY_RAMP_DISTANCE_METERS) {
+      // Within ramp zone - blend from runway edge toward field elevation
+      const t = closestRunwayDistToEdge / TAXIWAY_RAMP_DISTANCE_METERS
+      const easedT = t * t * (3 - 2 * t) // Smooth easing
+      // At runway edge (t=0): use runway elevation
+      // At ramp end (t=1): use field elevation
+      height = closestRunwayHeight + easedT * (fieldElevation - closestRunwayHeight)
+    } else {
+      // Beyond ramp zone - use continuous field elevation based on threshold distances
+      // This creates smooth gradients across the airport without polygon boundary jumps
+      height = fieldElevation
+    }
+
+    return { height, closestRunway, distanceToRunway: closestRunwayDistToEdge }
+  }
+
+  /**
    * Modify terrain vertex heights for flattening with edge blending
    *
    * Uses single-pass algorithm with optimized inline geometry functions:
@@ -703,35 +892,50 @@ export function createFlatteningTerrainProvider(
       if (insideFloors.length > 0) {
         // Inside one or more polygons (intersection case)
         // Prioritize runways (floors with gradient data) over flat pavements
-        let sumHeight = 0
-        let count = 0
         let hasRunway = false
 
         for (const f of insideFloors) {
           if (f.floor.gradientStart !== undefined) {
-            if (!hasRunway) {
-              // First runway found, reset sum to only include runways
-              sumHeight = 0
-              count = 0
-              hasRunway = true
-            }
-            sumHeight += f.height
-            count++
-          } else if (!hasRunway) {
-            // No runway yet, include non-runway floors
-            sumHeight += f.height
-            count++
+            hasRunway = true
+            break
           }
         }
 
-        finalHeight = count > 0 ? sumHeight / count : insideFloors[0].height
+        if (hasRunway) {
+          // Inside a runway - use runway's gradient elevation (authoritative)
+          let sumHeight = 0
+          let count = 0
+          for (const f of insideFloors) {
+            if (f.floor.gradientStart !== undefined) {
+              sumHeight += f.height
+              count++
+            }
+          }
+          finalHeight = count > 0 ? sumHeight / count : insideFloors[0].height
+        } else {
+          // Inside taxiway(s) only - compute elevation from nearest runway's gradient
+          // Use runwayFloors (global list) since the tile may not intersect any runway
+          const taxiwayBaseHeight = insideFloors[0].height
+          const result = computeTaxiwayElevation(lon, lat, taxiwayBaseHeight, runwayFloors)
+          finalHeight = result.height
+        }
       } else if (blendFloors.length > 0) {
         // In blend zone of one or more polygons
         // Weight by blend factor for smooth edge transitions
         let totalWeight = 0
         let weightedHeight = 0
+
+        // Check if any blend floor is a runway (has gradient data)
+        const hasRunwayInBlend = blendFloors.some(bf => bf.floor.gradientStart !== undefined)
+
         for (const bf of blendFloors) {
-          weightedHeight += bf.height * bf.factor
+          let heightToUse = bf.height
+          // For taxiway blend zones, use IDW field elevation instead of polygon's base height
+          // This ensures smooth transitions that respect the airport's terrain gradient
+          if (!hasRunwayInBlend && bf.floor.gradientStart === undefined && runwayFloors.length > 0) {
+            heightToUse = computeFieldElevation(lon, lat, runwayFloors, bf.height)
+          }
+          weightedHeight += heightToUse * bf.factor
           totalWeight += bf.factor
         }
         // Also factor in original height with remaining weight
@@ -982,16 +1186,31 @@ export function createFlatteningTerrainProvider(
     if (!isInsidePolygon || !matchingFloor) return null
 
     // Calculate height at this position
-    const height = getGradientElevation(lon, lat, matchingFloor)
+    let height: number
+    let closestRunway: FloorData | null = null
+
+    if (matchingFloor.gradientStart !== undefined) {
+      // Inside a runway - use runway's gradient elevation (authoritative)
+      height = getGradientElevation(lon, lat, matchingFloor)
+      closestRunway = matchingFloor
+    } else {
+      // Inside a taxiway - compute elevation from nearest runway's gradient
+      // Convert floorDataMap to array for the helper function
+      const allFloors = Array.from(floorDataMap.values())
+      const result = computeTaxiwayElevation(lon, lat, matchingFloor.floorHeight, allFloors)
+      height = result.height
+      closestRunway = result.closestRunway
+    }
 
     // Calculate slope in the aircraft's heading direction
     let slopeDegrees = 0
 
-    if (matchingFloor.gradientStart && matchingFloor.gradientEnd &&
-        matchingFloor.startElevation !== undefined && matchingFloor.endElevation !== undefined) {
+    // Use closest runway for slope calculation (works for both runways and taxiways)
+    if (closestRunway && closestRunway.gradientStart && closestRunway.gradientEnd &&
+        closestRunway.startElevation !== undefined && closestRunway.endElevation !== undefined) {
       // Runway with gradient - calculate slope
-      const [startLon, startLat] = matchingFloor.gradientStart
-      const [endLon, endLat] = matchingFloor.gradientEnd
+      const [startLon, startLat] = closestRunway.gradientStart
+      const [endLon, endLat] = closestRunway.gradientEnd
 
       // Calculate runway heading (direction from start to end threshold)
       const runwayHeadingRad = Math.atan2(
@@ -1010,7 +1229,7 @@ export function createFlatteningTerrainProvider(
 
       if (runwayLengthM > 0) {
         // Runway slope magnitude (positive = uphill from start to end)
-        const elevationDiff = matchingFloor.endElevation - matchingFloor.startElevation
+        const elevationDiff = closestRunway.endElevation - closestRunway.startElevation
         const runwaySlopeRad = Math.atan2(elevationDiff, runwayLengthM)
 
         // Calculate angle between aircraft heading and runway direction

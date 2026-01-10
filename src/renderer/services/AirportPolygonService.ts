@@ -115,6 +115,7 @@ function interpolateHeading(heading1: number, heading2: number, t: number): numb
   return ((result % 360) + 360) % 360
 }
 
+
 /**
  * Create a runway polygon from runway data using intermediate edge points
  *
@@ -400,7 +401,7 @@ class AirportPolygonService {
       if (isFlat) {
         console.log(`[AirportPolygonService] ${icao}: Flat airport detected, field elevation ${elevation.toFixed(1)}m MSL (${ellipsoidal.toFixed(1)}m ellipsoidal)`)
       } else {
-        console.log(`[AirportPolygonService] ${icao}: Variable runway elevations, using average ${elevation.toFixed(1)}m MSL (${ellipsoidal.toFixed(1)}m ellipsoidal) for taxiways`)
+        console.log(`[AirportPolygonService] ${icao}: Variable runway elevations (${elevation.toFixed(1)}m avg), taxiways will use runway-proximity elevation`)
       }
     }
 
@@ -414,14 +415,27 @@ class AirportPolygonService {
 
     // Add pavement polygons (taxiways, aprons) if available and enabled
     // Use ellipsoidal field elevation for terrain flattening
+    //
+    // For sloped airports, taxiways use the closest runway's AVERAGE elevation
+    // (not gradient-projected elevation). This gives consistent elevations within
+    // each runway's zone while accounting for overall airport slope.
+    // FlatteningTerrainProvider's ramp blending handles smooth transitions at
+    // runway edges.
     let pavementPolygons: FlatteningPolygon[] = []
     if (includePavements && airportSurfacesService.isLoaded()) {
       pavementPolygons = airportSurfacesService.getPavementPolygons(
         icao,
         ['a', 'c'], // asphalt and concrete
-        fieldElevationEllipsoidal ?? undefined // Pass ellipsoidal elevation
+        fieldElevationEllipsoidal ?? undefined // Default elevation
       )
+
       if (pavementPolygons.length > 0) {
+        // All taxiways use field elevation as their base.
+        // FlatteningTerrainProvider computes actual per-vertex elevation using
+        // continuous field elevation (inverse distance weighting from thresholds)
+        // and ramp blending near runway edges. This creates smooth gradients
+        // across the entire airport regardless of polygon boundaries.
+        console.log(`[AirportPolygonService] ${icao}: Added ${pavementPolygons.length} taxiway polygons at field elevation ${(fieldElevationEllipsoidal ?? 0).toFixed(1)}m`)
         polygons.push(...pavementPolygons)
       }
     }
@@ -429,7 +443,14 @@ class AirportPolygonService {
     // Create airport fill polygon to cover gaps between pavement polygons
     // This uses the convex hull of all runways and pavements to ensure complete coverage
     // Add it at the BEGINNING so specific polygons (runways, taxiways) take precedence
-    if (fieldElevationEllipsoidal !== null && (runways.length > 0 || pavementPolygons.length > 0)) {
+    //
+    // IMPORTANT: Only create fill polygon for FLAT airports!
+    // For airports with significant runway gradients (like YMML's 31m slope),
+    // a single-elevation fill polygon does more harm than good - it flattens
+    // areas to the wrong elevation. Better to leave gaps unfilled than to
+    // create large elevation discontinuities.
+    const isFlat = fieldElevationResult?.isFlat ?? false
+    if (isFlat && fieldElevationEllipsoidal !== null && (runways.length > 0 || pavementPolygons.length > 0)) {
       const fillPolygon = createAirportFillPolygon(
         runways,
         pavementPolygons,
@@ -439,8 +460,10 @@ class AirportPolygonService {
       if (fillPolygon) {
         // Insert at beginning - lower priority than specific polygons
         polygons.unshift(fillPolygon)
-        console.log(`[AirportPolygonService] ${icao}: Added airport fill polygon (convex hull of ${runways.length} runways + ${pavementPolygons.length} pavements)`)
+        console.log(`[AirportPolygonService] ${icao}: Added airport fill polygon at ${fieldElevationEllipsoidal.toFixed(1)}m`)
       }
+    } else if (!isFlat && fieldElevationResult) {
+      console.log(`[AirportPolygonService] ${icao}: Skipping fill polygon for sloped airport (runways have >10m elevation variation)`)
     }
 
     // Calculate overall bounding box
