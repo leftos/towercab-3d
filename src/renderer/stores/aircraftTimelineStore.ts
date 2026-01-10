@@ -966,6 +966,51 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
     for (const { callsign, observation, metadata } of batch) {
       const existing = updated.get(callsign)
 
+      // Skip VATSIM data when vNAS has recently provided data for this aircraft.
+      // VATSIM's last_updated has unknown per-aircraft latency from aggregating
+      // network-wide data, so we use a time-based buffer instead of comparing
+      // observation timestamps. If we've received vNAS data within the threshold,
+      // we trust vNAS and ignore VATSIM positions for this aircraft.
+      //
+      // Additionally, even after the threshold passes, we must ensure the VATSIM
+      // observation is actually newer than our existing data - otherwise we'd be
+      // inserting stale data into the middle of the timeline.
+      const VNAS_ACTIVE_THRESHOLD_MS = 5000  // 5 seconds
+      if (observation.source === 'vatsim' && existing && existing.lastSource === 'vnas') {
+        const timeSinceVnasUpdate = observation.receivedAt - existing.lastReceivedAt
+        const newestExisting = existing.observations[existing.observations.length - 1]
+
+        // Check 1: vNAS data is recent (within threshold)
+        if (timeSinceVnasUpdate < VNAS_ACTIVE_THRESHOLD_MS) {
+          // vNAS data is recent - skip VATSIM position data
+          // but preserve any metadata updates (flight plan info, etc.)
+          updated.set(callsign, {
+            ...existing,
+            metadata: {
+              ...existing.metadata,
+              // Only update metadata fields that VATSIM might have fresher info for
+              departure: metadata.departure ?? existing.metadata.departure,
+              arrival: metadata.arrival ?? existing.metadata.arrival,
+            }
+          })
+          continue
+        }
+
+        // Check 2: Even if threshold passed, don't insert if VATSIM observedAt
+        // is older than our newest observation (would insert stale data mid-timeline)
+        if (newestExisting && observation.observedAt <= newestExisting.observedAt) {
+          updated.set(callsign, {
+            ...existing,
+            metadata: {
+              ...existing.metadata,
+              departure: metadata.departure ?? existing.metadata.departure,
+              arrival: metadata.arrival ?? existing.metadata.arrival,
+            }
+          })
+          continue
+        }
+      }
+
       let observations: AircraftObservation[]
       let pruned = false
       let oldestBefore: number | null = null

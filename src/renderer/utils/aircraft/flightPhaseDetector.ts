@@ -14,6 +14,10 @@ import {
   calculateBearing,
   headingDifference
 } from './geoMath'
+import { geoidService } from '../../services/GeoidService'
+
+/** Meters to feet conversion factor */
+const METERS_TO_FEET = 3.28084
 
 // ============================================================================
 // CONSTANTS
@@ -459,14 +463,20 @@ export function detectFlightPhase(
   aircraft: InterpolatedAircraftState,
   context: SmartSortContext
 ): PhaseDetectionResult {
-  const altitudeFt = aircraft.interpolatedAltitude * 3.28084 // meters to feet
+  const lat = aircraft.interpolatedLatitude
+  const lon = aircraft.interpolatedLongitude
+
+  // Aircraft altitude is in meters ellipsoidal (WGS84), but airport elevation is in feet MSL.
+  // Convert ellipsoidal to MSL before calculating AGL to avoid geoid offset errors.
+  // At locations like KSFO (geoid height ≈ -32m), this can be a 100+ ft difference!
+  const altitudeMslMeters = geoidService.ellipsoidalToMsl(lat, lon, aircraft.interpolatedAltitude)
+  const altitudeFt = altitudeMslMeters * METERS_TO_FEET
   const aglFt = altitudeFt - context.airportElevationFt
+
   const speedKts = aircraft.interpolatedGroundspeed
   const heading = aircraft.interpolatedHeading
   const track = aircraft.track  // Direction of movement
-  const verticalRateFpm = aircraft.verticalRate * 3.28084 // m/min to ft/min
-  const lat = aircraft.interpolatedLatitude
-  const lon = aircraft.interpolatedLongitude
+  const verticalRateFpm = aircraft.verticalRate * METERS_TO_FEET // m/min to ft/min
 
   const distFromAirportNm = haversineDistanceNm(lat, lon, context.airportLat, context.airportLon)
 

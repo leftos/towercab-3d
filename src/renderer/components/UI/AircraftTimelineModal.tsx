@@ -69,13 +69,24 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
   const customTowerPosition = useAirportStore((state) => state.customTowerPosition)
   const labelVisibilityDistance = useGlobalSettingsStore((state) => state.display.labelVisibilityDistance)
   const playbackMode = useReplayStore((state) => state.playbackMode)
-  const dataSource = useGlobalSettingsStore((state) => state.realtraffic.dataSource)
 
   // Calculate visible time window based on container width
   const visibleDurationMs = useMemo(() => {
     const timelineWidth = containerWidth - LABEL_WIDTH
     return (timelineWidth / config.timeScale) * 1000
   }, [containerWidth, config.timeScale])
+
+  // Determine which sources are actively providing data
+  // This is used to draw source-specific "In TC3D" delay lines
+  const activeSources = useMemo(() => {
+    const sources = new Set<AircraftDataSource>()
+    for (const timeline of timelines.values()) {
+      if (timeline.observations.length > 0) {
+        sources.add(timeline.lastSource)
+      }
+    }
+    return sources
+  }, [timelines])
 
   // Filter and sort timelines
   const filteredTimelines = useMemo(() => {
@@ -192,15 +203,18 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
       }
     }
 
-    // Draw "In TC3D" indicator (where interpolated positions are rendered from)
-    const sourceDelay = SOURCE_DISPLAY_DELAYS[dataSource] ?? SOURCE_DISPLAY_DELAYS.vatsim
-    const displayTime = replayTime !== null ? replayTime : now - sourceDelay
-    const displayX = LABEL_WIDTH + ((displayTime - startTime) / 1000) * config.timeScale
-    if (displayX >= LABEL_WIDTH && displayX <= width) {
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'
-      ctx.font = 'bold 10px sans-serif'
-      ctx.textAlign = 'center'
-      ctx.fillText('In TC3D', displayX, 12)
+    // Draw "In TC3D" indicators for each active source (where interpolated positions are rendered from)
+    // Each source has a different display delay, so we show a labeled line for each
+    for (const source of activeSources) {
+      const sourceDelay = SOURCE_DISPLAY_DELAYS[source]
+      const displayTime = replayTime !== null ? replayTime : now - sourceDelay
+      const displayX = LABEL_WIDTH + ((displayTime - startTime) / 1000) * config.timeScale
+      if (displayX >= LABEL_WIDTH && displayX <= width) {
+        ctx.fillStyle = SOURCE_COLORS[source]
+        ctx.font = 'bold 10px sans-serif'
+        ctx.textAlign = 'center'
+        ctx.fillText(`In TC3D (${source})`, displayX, 12)
+      }
     }
 
     // Draw "REPLAY" indicator when in replay mode
@@ -214,7 +228,7 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
     }
 
     ctx.setTransform(1, 0, 0, 1, 0, 0)
-  }, [containerWidth, config.timeScale, dataSource])
+  }, [containerWidth, config.timeScale, activeSources])
 
   // Draw tracks
   const drawTracks = useCallback((now: number, startTime: number, endTime: number, replayTime: number | null) => {
@@ -286,19 +300,23 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
       }
     })
 
-    // Draw "In TC3D" line (where interpolated positions are rendered from)
-    // Uses the source-specific delay from SOURCE_DISPLAY_DELAYS
-    const sourceDelay = SOURCE_DISPLAY_DELAYS[dataSource] ?? SOURCE_DISPLAY_DELAYS.vatsim
-    const displayTime = replayTime !== null ? replayTime : now - sourceDelay
-    const displayX = LABEL_WIDTH + ((displayTime - startTime) / 1000) * config.timeScale
-    if (displayX >= LABEL_WIDTH && displayX <= width) {
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)'
-      ctx.lineWidth = 1.5
-      ctx.beginPath()
-      ctx.moveTo(displayX, 0)
-      ctx.lineTo(displayX, height)
-      ctx.stroke()
-      ctx.lineWidth = 1
+    // Draw "In TC3D" lines for each active source (where interpolated positions are rendered from)
+    // Each source has a different display delay, so we show a colored line for each
+    for (const source of activeSources) {
+      const sourceDelay = SOURCE_DISPLAY_DELAYS[source]
+      const displayTime = replayTime !== null ? replayTime : now - sourceDelay
+      const displayX = LABEL_WIDTH + ((displayTime - startTime) / 1000) * config.timeScale
+      if (displayX >= LABEL_WIDTH && displayX <= width) {
+        ctx.strokeStyle = SOURCE_COLORS[source]
+        ctx.globalAlpha = 0.7
+        ctx.lineWidth = 1.5
+        ctx.beginPath()
+        ctx.moveTo(displayX, 0)
+        ctx.lineTo(displayX, height)
+        ctx.stroke()
+        ctx.globalAlpha = 1
+        ctx.lineWidth = 1
+      }
     }
 
     // Draw playhead (NOW line) only in replay mode
@@ -332,7 +350,7 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
     }
 
     ctx.setTransform(1, 0, 0, 1, 0, 0)
-  }, [containerWidth, config.trackHeight, filteredTimelines, config.timeScale, dataSource])
+  }, [containerWidth, config.trackHeight, filteredTimelines, config.timeScale, activeSources])
 
   // Animation loop
   useEffect(() => {

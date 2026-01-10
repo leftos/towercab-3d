@@ -31,8 +31,8 @@ export interface VnasAircraft {
   lon: number
   trueHeading: number
   trueGroundTrack: number | null
-  altitudeTrue: number      // True altitude in meters
-  altitudeAgl: number       // Altitude above ground in meters
+  altitudeTrue: number      // True altitude in feet (MSL)
+  altitudeAgl: number       // Altitude above ground in feet
   voiceType: number         // 0=Unknown, 1=Full, 2=ReceiveOnly, 3=TextOnly
   timestamp: number         // Unix timestamp in ms
 }

@@ -73,6 +73,7 @@ interface TimelineRateState {
   prevGroundspeed: number | null
   smoothedVerticalRate: number
   smoothedTurnRate: number
+  smoothedAcceleration: number
   prevPitch: number | null
   prevRoll: number | null
 }
@@ -118,6 +119,7 @@ function timelineToInterpolatedState(
       prevGroundspeed: null,
       smoothedVerticalRate: 0,
       smoothedTurnRate: 0,
+      smoothedAcceleration: 0,
       prevPitch: null,
       prevRoll: null
     }
@@ -163,9 +165,15 @@ function timelineToInterpolatedState(
     }
 
     // Acceleration: groundspeed change per second
+    // Apply smoothing to reduce noise from GPS jitter, especially important for
+    // vNAS where groundspeed is calculated from position changes
     if (rateState.prevGroundspeed !== null) {
       const speedChange = timeline.groundspeed - rateState.prevGroundspeed
-      acceleration = (speedChange / frameDelta) * 1000 // knots/sec
+      const rawAcceleration = (speedChange / frameDelta) * 1000 // knots/sec
+      // Clamp to realistic limits (jets rarely exceed 5 kts/s acceleration)
+      const clampedAcceleration = Math.max(-10, Math.min(10, rawAcceleration))
+      acceleration = rateState.smoothedAcceleration + (clampedAcceleration - rateState.smoothedAcceleration) * RATE_SMOOTHING
+      rateState.smoothedAcceleration = acceleration
     }
   }
 

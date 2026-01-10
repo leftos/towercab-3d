@@ -30,6 +30,24 @@ export function useVnasEvents(): void {
   const subscribe = useVnasStore(state => state.subscribe)
   const getSessionArtcc = useVnasStore(state => state.getSessionArtcc)
   const getSessionAirports = useVnasStore(state => state.getSessionAirports)
+  const vnasState = useVnasStore(state => state.status.state)
+  const vnasFacilityId = useVnasStore(state => state.status.facilityId)
+  const currentAirport = useAirportStore(state => state.currentAirport)
+
+  // Auto-subscribe when airport changes and vNAS is ready
+  // This handles the race condition where vNAS connects before airport is loaded
+  useEffect(() => {
+    if (isRemoteMode()) return
+
+    // Only auto-subscribe when vNAS is in 'subscribing' state (connected but not subscribed yet)
+    // and we have a current airport that we're not already subscribed to
+    if (vnasState === 'subscribing' && currentAirport?.icao && vnasFacilityId !== currentAirport.icao) {
+      console.log('[vNAS] Auto-subscribing to airport:', currentAirport.icao)
+      subscribe(currentAirport.icao).catch(err => {
+        console.warn('[vNAS] Failed to auto-subscribe to airport:', err)
+      })
+    }
+  }, [vnasState, currentAirport?.icao, vnasFacilityId, subscribe])
 
   useEffect(() => {
     // Only set up listeners in Tauri mode (not remote browser)

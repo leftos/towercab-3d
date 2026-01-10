@@ -5,6 +5,10 @@ import type { AircraftObservation, AircraftMetadata } from '../types/aircraft-ti
 import { isRemoteMode } from '../utils/remoteMode'
 import { useAircraftTimelineStore } from './aircraftTimelineStore'
 import { SOURCE_DISPLAY_DELAYS } from '../constants/aircraft-timeline'
+import { geoidService } from '../services/GeoidService'
+
+/** Feet to meters conversion factor */
+const FEET_TO_METERS = 0.3048
 
 /**
  * vNAS Store
@@ -21,6 +25,28 @@ import { SOURCE_DISPLAY_DELAYS } from '../constants/aircraft-timeline'
  * 5. subscribe() registers for TowerCabAircraft updates
  * 6. Aircraft updates arrive via handleAircraftUpdate()
  */
+
+/**
+ * Calculate great circle distance between two points in meters.
+ * Uses the Haversine formula.
+ */
+function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371000 // Earth radius in meters
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLon = (lon2 - lon1) * Math.PI / 180
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return R * c
+}
+
+/**
+ * Convert meters per second to knots.
+ */
+function metersPerSecondToKnots(mps: number): number {
+  return mps * 1.94384
+}
 
 interface VnasStore {
   // Connection status
@@ -316,6 +342,36 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
     const now = Date.now()
     const { aircraftStates, previousStates } = get()
 
+    // Get existing state to calculate groundspeed from position change
+    const oldState = aircraftStates.get(aircraft.callsign)
+
+    // Calculate groundspeed from position change (vNAS doesn't provide it directly)
+    let calculatedGroundspeed = 0
+    if (oldState) {
+      const timeDeltaMs = now - (oldState.timestamp - 1000) // oldState.timestamp was set to now+1000
+      if (timeDeltaMs > 0 && timeDeltaMs < 5000) { // Sanity check: 0-5 seconds
+        const distanceMeters = haversineDistance(
+          oldState.latitude, oldState.longitude,
+          aircraft.lat, aircraft.lon
+        )
+        const metersPerSecond = distanceMeters / (timeDeltaMs / 1000)
+        calculatedGroundspeed = metersPerSecondToKnots(metersPerSecond)
+
+        // Clamp to reasonable range (0-600 knots) to filter out noise/teleports
+        if (calculatedGroundspeed > 600) {
+          calculatedGroundspeed = oldState.groundspeed // Keep previous if unreasonable
+        }
+      }
+    }
+
+    // Convert vNAS altitude from feet MSL to meters ellipsoidal (WGS84)
+    // This matches how VATSIM and RealTraffic altitudes are processed
+    const altitudeMetersEllipsoidal = geoidService.mslToEllipsoidal(
+      aircraft.lat,
+      aircraft.lon,
+      aircraft.altitudeTrue * FEET_TO_METERS
+    )
+
     // Convert vNAS aircraft to AircraftState format
     // Use trueGroundTrack for interpolation/extrapolation when available.
     // Ground track represents actual direction of travel, while heading
@@ -325,8 +381,8 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       cid: 0, // vNAS doesn't provide CID
       latitude: aircraft.lat,
       longitude: aircraft.lon,
-      altitude: aircraft.altitudeTrue,
-      groundspeed: 0, // Calculated from position changes or not available
+      altitude: altitudeMetersEllipsoidal,  // Meters ellipsoidal (WGS84)
+      groundspeed: calculatedGroundspeed,
       heading: aircraft.trueHeading,
       groundTrack: aircraft.trueGroundTrack, // Use for extrapolation if set
       transponder: '', // Not provided by vNAS
@@ -335,9 +391,6 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       arrival: null,   // Not provided by vNAS
       timestamp: now + 1000 // Target time (1 second from now for 1Hz updates)
     }
-
-    // Get existing state for interpolation continuity
-    const oldState = aircraftStates.get(aircraft.callsign)
 
     // Update state maps
     const newAircraftStates = new Map(aircraftStates)
@@ -370,9 +423,9 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
     const observation: AircraftObservation = {
       latitude: aircraft.lat,
       longitude: aircraft.lon,
-      altitude: aircraft.altitudeTrue,
+      altitude: altitudeMetersEllipsoidal,  // Meters ellipsoidal (WGS84)
       heading: aircraft.trueHeading,
-      groundspeed: 0,  // vNAS doesn't provide groundspeed directly
+      groundspeed: calculatedGroundspeed,  // Calculated from position changes
       groundTrack: aircraft.trueGroundTrack ?? null,
       headingIsTrue: true,  // vNAS heading is always reliable (from simulator)
       // Extended ADS-B data (not available from vNAS)
@@ -407,14 +460,46 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
     const newAircraftStates = new Map(aircraftStates)
     const newPreviousStates = new Map(previousStates)
 
+    // Track calculated values for the observation batch
+    const calculatedSpeeds = new Map<string, number>()
+    const calculatedAltitudes = new Map<string, number>()
+
     for (const ac of batchAircraft) {
+      const oldState = aircraftStates.get(ac.callsign)
+
+      // Calculate groundspeed from position change
+      let calculatedGroundspeed = 0
+      if (oldState) {
+        const timeDeltaMs = now - (oldState.timestamp - 1000)
+        if (timeDeltaMs > 0 && timeDeltaMs < 5000) {
+          const distanceMeters = haversineDistance(
+            oldState.latitude, oldState.longitude,
+            ac.lat, ac.lon
+          )
+          const metersPerSecond = distanceMeters / (timeDeltaMs / 1000)
+          calculatedGroundspeed = metersPerSecondToKnots(metersPerSecond)
+          if (calculatedGroundspeed > 600) {
+            calculatedGroundspeed = oldState.groundspeed
+          }
+        }
+      }
+      calculatedSpeeds.set(ac.callsign, calculatedGroundspeed)
+
+      // Convert vNAS altitude from feet MSL to meters ellipsoidal (WGS84)
+      const altitudeMetersEllipsoidal = geoidService.mslToEllipsoidal(
+        ac.lat,
+        ac.lon,
+        ac.altitudeTrue * FEET_TO_METERS
+      )
+      calculatedAltitudes.set(ac.callsign, altitudeMetersEllipsoidal)
+
       const newState: AircraftState = {
         callsign: ac.callsign,
         cid: 0,
         latitude: ac.lat,
         longitude: ac.lon,
-        altitude: ac.altitudeTrue,
-        groundspeed: 0,
+        altitude: altitudeMetersEllipsoidal,  // Meters ellipsoidal (WGS84)
+        groundspeed: calculatedGroundspeed,
         heading: ac.trueHeading,
         groundTrack: ac.trueGroundTrack, // Use for extrapolation if set
         transponder: '',
@@ -423,8 +508,6 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
         arrival: null,
         timestamp: now + 1000
       }
-
-      const oldState = aircraftStates.get(ac.callsign)
 
       newAircraftStates.set(ac.callsign, newState)
 
@@ -459,9 +542,9 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       const observation: AircraftObservation = {
         latitude: ac.lat,
         longitude: ac.lon,
-        altitude: ac.altitudeTrue,
+        altitude: calculatedAltitudes.get(ac.callsign) ?? 0,  // Meters ellipsoidal (WGS84)
         heading: ac.trueHeading,
-        groundspeed: 0,  // vNAS doesn't provide groundspeed directly
+        groundspeed: calculatedSpeeds.get(ac.callsign) ?? 0,
         groundTrack: ac.trueGroundTrack ?? null,
         headingIsTrue: true,  // vNAS heading is always reliable (from simulator)
         // Extended ADS-B data (not available from vNAS)

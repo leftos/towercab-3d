@@ -113,8 +113,15 @@ static LOG_GUARD: Mutex<Option<WorkerGuard>> = Mutex::new(None);
 /// Initialize tracing subscriber with optional file logging.
 /// If TOWERCAB_LOG_FILE env var is set, logs go to both stdout and the file.
 fn init_logging() {
+    // In release builds, disable logs from the private vNAS crate to keep implementation private.
+    // In debug builds, enable debug logging for both the main app and vNAS crate.
+    #[cfg(debug_assertions)]
+    let default_filter = "info,towercab_3d=debug,towercab_3d_vnas=debug";
+    #[cfg(not(debug_assertions))]
+    let default_filter = "info,towercab_3d=debug,towercab_3d_vnas=off";
+
     let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info,towercab_3d=debug,towercab_3d_vnas=debug"));
+        .unwrap_or_else(|_| EnvFilter::new(default_filter));
 
     if let Ok(path) = std::env::var("TOWERCAB_LOG_FILE") {
         // Create parent directories if needed
