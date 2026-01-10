@@ -4,12 +4,12 @@
 //! Uses quick-xml for robust parsing that handles various XML formats.
 //! Files are parsed in parallel using rayon for better performance with multiple files.
 
-use std::fs;
-use std::path::PathBuf;
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::PathBuf;
 
 use crate::normalize_path_string;
 

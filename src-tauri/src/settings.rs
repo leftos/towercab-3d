@@ -5,9 +5,9 @@
 //! - Reading/writing settings to disk
 //! - Settings shared across all browsers/devices
 
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use serde::{Deserialize, Serialize};
 use tauri::Manager;
 
 use crate::normalize_path_string;
@@ -125,7 +125,7 @@ pub struct GlobalCameraBookmark {
     pub position_offset_x: f64,
     pub position_offset_y: f64,
     pub position_offset_z: f64,
-    pub view_mode: String,  // "3d" or "topdown"
+    pub view_mode: String, // "3d" or "topdown"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub topdown_altitude: Option<f64>,
 }
@@ -141,7 +141,7 @@ pub struct GlobalAirportViewportConfig {
     #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
     pub bookmarks: std::collections::HashMap<String, GlobalCameraBookmark>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub datablock_position: Option<u8>,  // 1-9 numpad position
+    pub datablock_position: Option<u8>, // 1-9 numpad position
 }
 
 /// Global orbit camera settings (persisted across airports)
@@ -156,9 +156,9 @@ pub struct GlobalOrbitSettings {
 impl Default for GlobalOrbitSettings {
     fn default() -> Self {
         GlobalOrbitSettings {
-            distance: 500.0,  // ORBIT_DISTANCE_DEFAULT
-            heading: 0.0,     // ORBIT_HEADING_DEFAULT
-            pitch: 20.0,      // ORBIT_PITCH_DEFAULT
+            distance: 500.0, // ORBIT_DISTANCE_DEFAULT
+            heading: 0.0,    // ORBIT_HEADING_DEFAULT
+            pitch: 20.0,     // ORBIT_PITCH_DEFAULT
         }
     }
 }
@@ -429,7 +429,10 @@ pub fn read_global_settings(app: tauri::AppHandle) -> Result<GlobalSettings, Str
 /// This preserves fields that the frontend doesn't know about (like vnas_tokens)
 /// by reading the existing file and merging.
 #[tauri::command]
-pub fn write_global_settings(app: tauri::AppHandle, mut settings: GlobalSettings) -> Result<(), String> {
+pub fn write_global_settings(
+    app: tauri::AppHandle,
+    mut settings: GlobalSettings,
+) -> Result<(), String> {
     let settings_file = get_global_settings_file(&app)?;
 
     // Preserve vnas_tokens if incoming settings don't have it but existing file does

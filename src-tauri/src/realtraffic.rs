@@ -83,13 +83,18 @@ pub async fn realtraffic_auth(license_key: String) -> Result<RealTrafficAuthResu
         .map_err(|e| format!("Failed to read RealTraffic response: {}", e))?;
 
     // Parse as JSON
-    let data: serde_json::Value = serde_json::from_str(&response_text)
-        .map_err(|e| format!("Failed to parse RealTraffic JSON: {} - Response was: {}", e, response_text))?;
+    let data: serde_json::Value = serde_json::from_str(&response_text).map_err(|e| {
+        format!(
+            "Failed to parse RealTraffic JSON: {} - Response was: {}",
+            e, response_text
+        )
+    })?;
 
     // Check API status code (200 = success)
     let status = data.get("status").and_then(|v| v.as_i64()).unwrap_or(0);
     if status != 200 {
-        let message = data.get("message")
+        let message = data
+            .get("message")
             .and_then(|v| v.as_str())
             .unwrap_or("Authentication failed");
         return Ok(RealTrafficAuthResult {
@@ -108,7 +113,10 @@ pub async fn realtraffic_auth(license_key: String) -> Result<RealTrafficAuthResu
 
     Ok(RealTrafficAuthResult {
         success: true,
-        guid: data.get("GUID").and_then(|v| v.as_str()).map(|s| s.to_string()),
+        guid: data
+            .get("GUID")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
         is_pro: Some(is_pro),
         traffic_rate_limit: data.get("rrl").and_then(|v| v.as_u64()).map(|n| n as u32),
         weather_rate_limit: data.get("wrrl").and_then(|v| v.as_u64()).map(|n| n as u32),
@@ -219,7 +227,11 @@ pub async fn realtraffic_deauth(guid: String) -> Result<(), String> {
         if status == 200 {
             tracing::info!("[RealTraffic] Deauth successful");
         } else {
-            tracing::info!("[RealTraffic] Deauth returned status {}: {}", status, response_text);
+            tracing::info!(
+                "[RealTraffic] Deauth returned status {}: {}",
+                status,
+                response_text
+            );
         }
     }
 

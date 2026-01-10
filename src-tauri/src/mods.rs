@@ -6,9 +6,9 @@
 //! - Reading tower position files (mods/tower-positions/*.json)
 //! - Listing VMR files in the mods directory
 
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use serde::{Deserialize, Serialize};
 
 use crate::normalize_path_string;
 
@@ -37,7 +37,10 @@ pub fn get_mods_path(app: tauri::AppHandle, mod_type: String) -> Result<String, 
 
 /// List all mod directories for a given type (aircraft or towers)
 #[tauri::command]
-pub fn list_mod_directories(app: tauri::AppHandle, mod_type: String) -> Result<Vec<String>, String> {
+pub fn list_mod_directories(
+    app: tauri::AppHandle,
+    mod_type: String,
+) -> Result<Vec<String>, String> {
     let mods_root = find_mods_root(&app);
     let mods_path = mods_root.join(&mod_type);
 
@@ -61,8 +64,7 @@ pub fn read_mod_manifest(path: String) -> Result<serde_json::Value, String> {
     let manifest_path = PathBuf::from(&path).join("manifest.json");
     let content = fs::read_to_string(&manifest_path)
         .map_err(|e| format!("Failed to read manifest at {:?}: {}", manifest_path, e))?;
-    serde_json::from_str(&content)
-        .map_err(|e| format!("Failed to parse manifest JSON: {}", e))
+    serde_json::from_str(&content).map_err(|e| format!("Failed to parse manifest JSON: {}", e))
 }
 
 /// List all VMR (Visual Model Rules) files in the mods directory
@@ -165,7 +167,9 @@ pub fn read_tower_positions(app: tauri::AppHandle) -> Result<serde_json::Value, 
     let legacy_path = mods_root.join("tower-positions.json");
     if legacy_path.exists() {
         if let Ok(content) = fs::read_to_string(&legacy_path) {
-            if let Ok(legacy_positions) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&content) {
+            if let Ok(legacy_positions) =
+                serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&content)
+            {
                 for (icao, pos) in legacy_positions {
                     positions.insert(icao.to_uppercase(), pos);
                 }
@@ -179,7 +183,10 @@ pub fn read_tower_positions(app: tauri::AppHandle) -> Result<serde_json::Value, 
         if let Ok(entries) = fs::read_dir(&tower_positions_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.extension().map_or(false, |ext| ext.eq_ignore_ascii_case("json")) {
+                if path
+                    .extension()
+                    .map_or(false, |ext| ext.eq_ignore_ascii_case("json"))
+                {
                     if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
                         if let Ok(content) = fs::read_to_string(&path) {
                             if let Ok(pos) = serde_json::from_str::<serde_json::Value>(&content) {
@@ -239,8 +246,7 @@ pub fn update_tower_position(
     // Write to file with pretty formatting
     let output = serde_json::to_string_pretty(&entry)
         .map_err(|e| format!("Failed to serialize position: {}", e))?;
-    fs::write(&file_path, output)
-        .map_err(|e| format!("Failed to write position file: {}", e))?;
+    fs::write(&file_path, output).map_err(|e| format!("Failed to write position file: {}", e))?;
 
     Ok(())
 }

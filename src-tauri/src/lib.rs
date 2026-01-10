@@ -15,37 +15,37 @@
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
-use std::process::{Command, Child};
+use std::process::{Child, Command};
 use std::sync::Mutex;
 
-#[cfg(windows)]
-use std::os::windows::process::CommandExt;
+use serde::Serialize;
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 use tauri::Manager;
-use serde::Serialize;
 use tokio::sync::broadcast;
 
 // Module declarations
-pub mod mods;
-pub mod settings;
-pub mod realtraffic;
-pub mod vmr;
-pub mod msfs;
 pub mod files;
+pub mod mods;
+pub mod msfs;
+pub mod realtraffic;
 mod server;
+pub mod settings;
+pub mod vmr;
 mod vnas;
 
 // Re-export types used by other modules and server
-pub use settings::GlobalSettings;
 pub use msfs::SourceModelInfo;
+pub use settings::GlobalSettings;
 
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::CloseHandle;
 #[cfg(windows)]
 use windows_sys::Win32::System::JobObjects::{
-    AssignProcessToJobObject, CreateJobObjectW, SetInformationJobObject,
-    JobObjectExtendedLimitInformation, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+    AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
+    SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
     JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
 };
 
@@ -104,8 +104,8 @@ static LOG_FILE_PATH: Mutex<Option<String>> = Mutex::new(None);
 // UNIFIED LOGGING (tracing-based)
 // =============================================================================
 
-use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 use tracing_appender::non_blocking::WorkerGuard;
+use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 // Keep the non-blocking writer guard alive for the lifetime of the app
 static LOG_GUARD: Mutex<Option<WorkerGuard>> = Mutex::new(None);
@@ -376,12 +376,10 @@ fn get_log_file_path() -> Option<String> {
 fn create_text_file(path: String, content: String) -> Result<(), String> {
     // Create parent directories if needed
     if let Some(parent) = std::path::Path::new(&path).parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create directories: {}", e))?;
+        fs::create_dir_all(parent).map_err(|e| format!("Failed to create directories: {}", e))?;
     }
 
-    fs::write(&path, content)
-        .map_err(|e| format!("Failed to write file: {}", e))
+    fs::write(&path, content).map_err(|e| format!("Failed to write file: {}", e))
 }
 
 /// Append to a text file (creates if doesn't exist)
@@ -390,8 +388,7 @@ fn create_text_file(path: String, content: String) -> Result<(), String> {
 fn append_to_text_file(path: String, content: String) -> Result<(), String> {
     // Create parent directories if needed
     if let Some(parent) = std::path::Path::new(&path).parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create directories: {}", e))?;
+        fs::create_dir_all(parent).map_err(|e| format!("Failed to create directories: {}", e))?;
     }
 
     // Open file in append mode (creates if doesn't exist, seeks to end)
@@ -468,24 +465,29 @@ fn start_fsltl_conversion(
         PathBuf::from("fsltl_converter.exe"),
     ];
 
-    let converter_path = possible_paths
-        .iter()
-        .find(|p| p.exists())
-        .ok_or_else(|| {
-            format!(
+    let converter_path =
+        possible_paths
+            .iter()
+            .find(|p| p.exists())
+            .ok_or_else(|| {
+                format!(
                 "Converter executable not found. Tried: {:?}. Run 'npm run build:converter' first.",
                 possible_paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>()
             )
-        })?
-        .clone();
+            })?
+            .clone();
 
     // Build command arguments
     let mut cmd = Command::new(&converter_path);
     cmd.args([
-        "--source", &source_path,
-        "--output", &output_path,
-        "--texture-scale", &texture_scale,
-        "--progress-file", &progress_file,
+        "--source",
+        &source_path,
+        "--output",
+        &output_path,
+        "--texture-scale",
+        &texture_scale,
+        "--progress-file",
+        &progress_file,
     ]);
 
     // Only pass --models if specific models are requested (not "convert all")
@@ -510,7 +512,8 @@ fn start_fsltl_conversion(
     }
 
     // Start the new process
-    let child = cmd.spawn()
+    let child = cmd
+        .spawn()
         .map_err(|e| format!("Failed to start converter: {}", e))?;
 
     // On Windows, create a job object and assign the process to it
@@ -549,7 +552,10 @@ fn start_fsltl_conversion(
             return Err("Failed to assign process to job object".to_string());
         }
 
-        ProcessWithJob { child, job_handle: SendableHandle(job_handle) }
+        ProcessWithJob {
+            child,
+            job_handle: SendableHandle(job_handle),
+        }
     };
 
     #[cfg(not(windows))]
@@ -645,8 +651,9 @@ fn set_webview2_args() {
             "--force_high_performance_gpu",
             "--disable-renderer-backgrounding",
             "--disable-backgrounding-occluded-windows",
-            "--use-angle=gl",  // Use OpenGL instead of D3D11 for better shadow depth precision
-        ].join(" ");
+            "--use-angle=gl", // Use OpenGL instead of D3D11 for better shadow depth precision
+        ]
+        .join(" ");
 
         std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", args);
     }
@@ -673,11 +680,16 @@ pub fn run() {
         .setup(|app| {
             // Register updater plugin (desktop only)
             #[cfg(desktop)]
-            app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
+            app.handle()
+                .plugin(tauri_plugin_updater::Builder::new().build())?;
 
             // Set window title with version from config
             if let Some(window) = app.get_webview_window("main") {
-                let version = app.config().version.clone().unwrap_or_else(|| "dev".to_string());
+                let version = app
+                    .config()
+                    .version
+                    .clone()
+                    .unwrap_or_else(|| "dev".to_string());
                 let title = format!("TowerCab 3D v{}", version);
                 let _ = window.set_title(&title);
             }
@@ -692,29 +704,36 @@ pub fn run() {
                 let force_start = std::env::var("TOWERCAB_AUTO_SERVER").is_ok();
 
                 // Load settings to get port (and check enabled flag if not force-starting)
-                let (should_start, port) = if let Ok(settings_file) = settings::get_global_settings_file(&app_handle) {
-                    if settings_file.exists() {
-                        if let Ok(content) = std::fs::read_to_string(&settings_file) {
-                            if let Ok(settings) = serde_json::from_str::<settings::GlobalSettings>(&content) {
-                                (force_start || settings.server.enabled, settings.server.port)
+                let (should_start, port) =
+                    if let Ok(settings_file) = settings::get_global_settings_file(&app_handle) {
+                        if settings_file.exists() {
+                            if let Ok(content) = std::fs::read_to_string(&settings_file) {
+                                if let Ok(settings) =
+                                    serde_json::from_str::<settings::GlobalSettings>(&content)
+                                {
+                                    (force_start || settings.server.enabled, settings.server.port)
+                                } else {
+                                    (force_start, 8765) // Default port
+                                }
                             } else {
-                                (force_start, 8765) // Default port
+                                (force_start, 8765)
                             }
                         } else {
                             (force_start, 8765)
                         }
                     } else {
                         (force_start, 8765)
-                    }
-                } else {
-                    (force_start, 8765)
-                };
+                    };
 
                 if should_start {
                     tracing::info!(
                         "Auto-starting HTTP server on port {}{}",
                         port,
-                        if force_start { " (via TOWERCAB_AUTO_SERVER)" } else { "" }
+                        if force_start {
+                            " (via TOWERCAB_AUTO_SERVER)"
+                        } else {
+                            ""
+                        }
                     );
                     match server::start_server(app_handle.clone(), port).await {
                         Ok(handles) => {

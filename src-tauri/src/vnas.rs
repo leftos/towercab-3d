@@ -226,8 +226,14 @@ mod real_impl {
     fn save_tokens(app: &AppHandle, tokens: &StoredTokens) -> Result<(), String> {
         tracing::info!("[vNAS] save_tokens called");
         tracing::info!("[vNAS] Token environment: {:?}", tokens.environment);
-        tracing::info!("[vNAS] VATSIM token expires at: {:?}", tokens.vatsim_token.expiration);
-        tracing::info!("[vNAS] vNAS token length: {} chars", tokens.vnas_token.len());
+        tracing::info!(
+            "[vNAS] VATSIM token expires at: {:?}",
+            tokens.vatsim_token.expiration
+        );
+        tracing::info!(
+            "[vNAS] vNAS token length: {} chars",
+            tokens.vnas_token.len()
+        );
 
         let json = serde_json::to_string(tokens)
             .map_err(|e| format!("Failed to serialize tokens: {e}"))?;
@@ -270,8 +276,14 @@ mod real_impl {
 
         tracing::info!("[vNAS] Tokens loaded successfully:");
         tracing::info!("[vNAS]   Environment: {:?}", tokens.environment);
-        tracing::info!("[vNAS]   VATSIM token expires at: {:?}", tokens.vatsim_token.expiration);
-        tracing::info!("[vNAS]   vNAS token length: {} chars", tokens.vnas_token.len());
+        tracing::info!(
+            "[vNAS]   VATSIM token expires at: {:?}",
+            tokens.vatsim_token.expiration
+        );
+        tracing::info!(
+            "[vNAS]   vNAS token length: {} chars",
+            tokens.vnas_token.len()
+        );
 
         Ok(Some(tokens))
     }
@@ -351,7 +363,9 @@ mod real_impl {
                 Ok(true)
             }
             Ok(false) => {
-                tracing::info!("[vNAS] Stored tokens expired or invalid, user must re-authenticate");
+                tracing::info!(
+                    "[vNAS] Stored tokens expired or invalid, user must re-authenticate"
+                );
                 // Clear invalid tokens
                 clear_tokens(&app)?;
                 Ok(false)
@@ -443,8 +457,8 @@ mod real_impl {
         tracing::info!("[vNAS] Received OAuth callback: {}", callback_url);
 
         // Parse the callback URL to extract the authorization code
-        let url = url::Url::parse(&callback_url)
-            .map_err(|e| format!("Invalid callback URL: {}", e))?;
+        let url =
+            url::Url::parse(&callback_url).map_err(|e| format!("Invalid callback URL: {}", e))?;
 
         let code = url
             .query_pairs()
@@ -481,7 +495,9 @@ mod real_impl {
                 save_tokens(&app, &tokens)?;
             }
             None => {
-                tracing::info!("[vNAS] WARNING: get_stored_tokens() returned None - tokens not saved!");
+                tracing::info!(
+                    "[vNAS] WARNING: get_stored_tokens() returned None - tokens not saved!"
+                );
             }
         }
 
@@ -624,7 +640,10 @@ mod real_impl {
         facility_id: String,
     ) -> Result<(), String> {
         tracing::info!("[vNAS] vnas_subscribe called for facility: {}", facility_id);
-        tracing::info!("[vNAS] Current state before subscribe: {:?}", state.status().state);
+        tracing::info!(
+            "[vNAS] Current state before subscribe: {:?}",
+            state.status().state
+        );
 
         let service_guard = state.service.read().await;
         let service = service_guard
@@ -654,7 +673,10 @@ mod real_impl {
             tracing::info!("[vNAS] Failed to emit state change: {:?}", e);
         }
 
-        tracing::info!("[vNAS] Subscribed to TowerCabAircraft for {} - state is now Connected", facility_id);
+        tracing::info!(
+            "[vNAS] Subscribed to TowerCabAircraft for {} - state is now Connected",
+            facility_id
+        );
 
         Ok(())
     }
@@ -740,10 +762,7 @@ mod real_impl {
             .as_ref()
             .ok_or_else(|| "vNAS service not initialized".to_string())?;
 
-        service
-            .session_airports()
-            .await
-            .map_err(|e| e.to_string())
+        service.session_airports().await.map_err(|e| e.to_string())
     }
 
     /// Initialize vNAS state for Tauri app.

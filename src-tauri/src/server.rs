@@ -14,7 +14,10 @@ use flate2::read::GzDecoder;
 
 use axum::{
     body::Body,
-    extract::{ConnectInfo, Path, Query, State, WebSocketUpgrade, ws::{Message, WebSocket}},
+    extract::{
+        ws::{Message, WebSocket},
+        ConnectInfo, Path, Query, State, WebSocketUpgrade,
+    },
     http::{header, HeaderValue, Request, Response, StatusCode},
     middleware::{self, Next},
     response::IntoResponse,
@@ -30,10 +33,10 @@ use url::Url;
 use tauri::{Emitter, Manager};
 
 use crate::{
-    normalize_path_string,
     mods::{find_mods_root, read_tower_positions, TowerPositionEntry},
-    settings::{get_global_settings_file, GlobalSettings},
     msfs::ScannedConvertedModel,
+    normalize_path_string,
+    settings::{get_global_settings_file, GlobalSettings},
 };
 
 /// vNAS aircraft update for WebSocket broadcast
@@ -103,7 +106,10 @@ async fn auth_middleware(
     if state.require_local_network && !is_local_network_ip(&addr.ip()) {
         return Err((
             StatusCode::FORBIDDEN,
-            format!("Access denied: connections only allowed from local network. Your IP: {}", addr.ip()),
+            format!(
+                "Access denied: connections only allowed from local network. Your IP: {}",
+                addr.ip()
+            ),
         ));
     }
 
@@ -130,7 +136,8 @@ async fn auth_middleware(
             if is_api_route {
                 return Err((
                     StatusCode::UNAUTHORIZED,
-                    "Authentication required. Provide Bearer token in Authorization header.".to_string(),
+                    "Authentication required. Provide Bearer token in Authorization header."
+                        .to_string(),
                 ));
             }
         }
@@ -164,7 +171,10 @@ pub async fn start_server(
                 .map_err(|e| format!("Failed to read settings: {}", e))?;
             let settings: GlobalSettings = serde_json::from_str(&content)
                 .map_err(|e| format!("Failed to parse settings: {}", e))?;
-            (settings.server.auth_token, settings.server.require_local_network)
+            (
+                settings.server.auth_token,
+                settings.server.require_local_network,
+            )
         } else {
             (None, false)
         }
@@ -172,7 +182,8 @@ pub async fn start_server(
 
     tracing::info!(
         "[Server] Starting HTTP server on port {} (serving from {:?})",
-        port, dist_path
+        port,
+        dist_path
     );
     if auth_token.is_some() {
         tracing::info!("[Server] Authentication enabled");
@@ -210,13 +221,16 @@ pub async fn start_server(
 
     // Spawn the server task
     tokio::spawn(async move {
-        axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
-            .with_graceful_shutdown(async move {
-                let _ = shutdown_rx.recv().await;
-                tracing::info!("[Server] Shutting down...");
-            })
-            .await
-            .unwrap_or_else(|e| tracing::error!("[Server] Error: {}", e));
+        axum::serve(
+            listener,
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .with_graceful_shutdown(async move {
+            let _ = shutdown_rx.recv().await;
+            tracing::info!("[Server] Shutting down...");
+        })
+        .await
+        .unwrap_or_else(|e| tracing::error!("[Server] Error: {}", e));
     });
 
     Ok(ServerHandles {
@@ -239,8 +253,10 @@ fn find_dist_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         .as_ref()
         .map(|p| {
             let path_str = p.to_string_lossy();
-            path_str.contains("target/debug") || path_str.contains("target\\debug")
-                || path_str.contains("target/release") || path_str.contains("target\\release")
+            path_str.contains("target/debug")
+                || path_str.contains("target\\debug")
+                || path_str.contains("target/release")
+                || path_str.contains("target\\release")
         })
         .unwrap_or(false);
 
@@ -330,7 +346,10 @@ fn create_router(state: Arc<ServerState>) -> Router {
     Router::new()
         // API routes
         .route("/api/airport-surfaces", get(get_airport_surfaces))
-        .route("/api/global-settings", get(get_global_settings).post(update_global_settings))
+        .route(
+            "/api/global-settings",
+            get(get_global_settings).post(update_global_settings),
+        )
         .route("/api/mods/aircraft", get(list_aircraft_mods))
         .route("/api/mods/towers", get(list_tower_mods))
         .route("/api/mods/aircraft/*path", get(serve_aircraft_mod))
@@ -344,7 +363,10 @@ fn create_router(state: Arc<ServerState>) -> Router {
         // RealTraffic proxy endpoints (to bypass CORS)
         .route("/api/realtraffic/auth", post(realtraffic_auth))
         .route("/api/realtraffic/traffic", post(realtraffic_traffic))
-        .route("/api/realtraffic/parked-traffic", post(realtraffic_parked_traffic))
+        .route(
+            "/api/realtraffic/parked-traffic",
+            post(realtraffic_parked_traffic),
+        )
         .route("/api/realtraffic/deauth", post(realtraffic_deauth))
         // vNAS WebSocket endpoint for real-time aircraft updates
         .route("/api/vnas/ws", get(vnas_websocket_handler))
@@ -375,7 +397,12 @@ async fn get_airport_surfaces(
         .app_handle
         .path()
         .resource_dir()
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to get resource dir: {}", e)))?
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get resource dir: {}", e),
+            )
+        })?
         .join("airport-surfaces.json.gz");
 
     if !resource_path.exists() {
@@ -386,13 +413,21 @@ async fn get_airport_surfaces(
     }
 
     // Read and decompress the gzip file
-    let compressed_data = fs::read(&resource_path)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to read airport surfaces file: {}", e)))?;
+    let compressed_data = fs::read(&resource_path).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to read airport surfaces file: {}", e),
+        )
+    })?;
 
     let mut decoder = GzDecoder::new(&compressed_data[..]);
     let mut decompressed = String::new();
-    decoder.read_to_string(&mut decompressed)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to decompress airport surfaces: {}", e)))?;
+    decoder.read_to_string(&mut decompressed).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to decompress airport surfaces: {}", e),
+        )
+    })?;
 
     // Build response with JSON content type
     let mut resp = Response::builder()
@@ -425,11 +460,19 @@ async fn get_global_settings(
         return Ok(Json(GlobalSettings::default()));
     }
 
-    let content = fs::read_to_string(&settings_file)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to read settings: {}", e)))?;
+    let content = fs::read_to_string(&settings_file).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to read settings: {}", e),
+        )
+    })?;
 
-    let settings: GlobalSettings = serde_json::from_str(&content)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to parse settings: {}", e)))?;
+    let settings: GlobalSettings = serde_json::from_str(&content).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to parse settings: {}", e),
+        )
+    })?;
 
     Ok(Json(settings))
 }
@@ -444,8 +487,12 @@ async fn update_global_settings(
 
     // Ensure parent directory exists
     if let Some(parent) = settings_file.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to create directory: {}", e)))?;
+        fs::create_dir_all(parent).map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to create directory: {}", e),
+            )
+        })?;
     }
 
     // Preserve vnas_tokens if incoming settings don't have it but existing file does
@@ -461,11 +508,19 @@ async fn update_global_settings(
     }
 
     // Write settings to file
-    let content = serde_json::to_string_pretty(&settings)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to serialize settings: {}", e)))?;
+    let content = serde_json::to_string_pretty(&settings).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to serialize settings: {}", e),
+        )
+    })?;
 
-    fs::write(&settings_file, content)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to write settings: {}", e)))?;
+    fs::write(&settings_file, content).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to write settings: {}", e),
+        )
+    })?;
 
     tracing::info!("[Server] Updated global settings via API");
     Ok(Json(settings))
@@ -506,8 +561,12 @@ async fn list_mods(
         return Ok(Json(Vec::new()));
     }
 
-    let entries = fs::read_dir(&mods_path)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to read mods: {}", e)))?;
+    let entries = fs::read_dir(&mods_path).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to read mods: {}", e),
+        )
+    })?;
 
     let mut mods = Vec::new();
     for entry in entries.filter_map(|e| e.ok()) {
@@ -567,9 +626,9 @@ async fn serve_mod_file(
     let file_path = mods_root.join(mod_type).join(path);
 
     // Security: ensure the path is within mods directory
-    let canonical = file_path.canonicalize().map_err(|_| {
-        (StatusCode::NOT_FOUND, "File not found".to_string())
-    })?;
+    let canonical = file_path
+        .canonicalize()
+        .map_err(|_| (StatusCode::NOT_FOUND, "File not found".to_string()))?;
 
     let mods_canonical = mods_root.canonicalize().unwrap_or(mods_root.clone());
     if !canonical.starts_with(&mods_canonical) {
@@ -588,11 +647,19 @@ async fn list_fsltl_models(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
     let output_path = if settings_file.exists() {
-        let content = fs::read_to_string(&settings_file)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to read settings: {}", e)))?;
+        let content = fs::read_to_string(&settings_file).map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to read settings: {}", e),
+            )
+        })?;
 
-        let settings: GlobalSettings = serde_json::from_str(&content)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to parse settings: {}", e)))?;
+        let settings: GlobalSettings = serde_json::from_str(&content).map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to parse settings: {}", e),
+            )
+        })?;
 
         settings.fsltl.output_path
     } else {
@@ -622,11 +689,19 @@ async fn serve_fsltl_model(
     };
 
     let output_path = if settings_file.exists() {
-        let content = fs::read_to_string(&settings_file)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to read settings: {}", e)))?;
+        let content = fs::read_to_string(&settings_file).map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to read settings: {}", e),
+            )
+        })?;
 
-        let settings: GlobalSettings = serde_json::from_str(&content)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to parse settings: {}", e)))?;
+        let settings: GlobalSettings = serde_json::from_str(&content).map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to parse settings: {}", e),
+            )
+        })?;
 
         settings.fsltl.output_path
     } else {
@@ -634,17 +709,22 @@ async fn serve_fsltl_model(
     };
 
     let Some(output_path) = output_path else {
-        return Err((StatusCode::NOT_FOUND, "FSLTL output path not configured".to_string()));
+        return Err((
+            StatusCode::NOT_FOUND,
+            "FSLTL output path not configured".to_string(),
+        ));
     };
 
     let file_path = PathBuf::from(&output_path).join(&path);
 
     // Security: ensure the path is within output directory
-    let canonical = file_path.canonicalize().map_err(|_| {
-        (StatusCode::NOT_FOUND, "File not found".to_string())
-    })?;
+    let canonical = file_path
+        .canonicalize()
+        .map_err(|_| (StatusCode::NOT_FOUND, "File not found".to_string()))?;
 
-    let output_canonical = PathBuf::from(&output_path).canonicalize().unwrap_or(PathBuf::from(&output_path));
+    let output_canonical = PathBuf::from(&output_path)
+        .canonicalize()
+        .unwrap_or(PathBuf::from(&output_path));
     if !canonical.starts_with(&output_canonical) {
         return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
     }
@@ -672,16 +752,24 @@ async fn update_tower_position(
     let tower_positions_dir = mods_root.join("tower-positions");
 
     // Create tower-positions directory if it doesn't exist
-    fs::create_dir_all(&tower_positions_dir)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to create tower-positions directory: {}", e)))?;
+    fs::create_dir_all(&tower_positions_dir).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to create tower-positions directory: {}", e),
+        )
+    })?;
 
     // Write to individual file named {ICAO}.json
     let file_path = tower_positions_dir.join(format!("{}.json", icao.to_uppercase()));
 
     // If file exists, merge with existing data (preserve other view if only updating one)
     let mut entry = if file_path.exists() {
-        let content = fs::read_to_string(&file_path)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to read existing position file: {}", e)))?;
+        let content = fs::read_to_string(&file_path).map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to read existing position file: {}", e),
+            )
+        })?;
         serde_json::from_str::<TowerPositionEntry>(&content).unwrap_or(TowerPositionEntry {
             view_3d: None,
             view_2d: None,
@@ -702,13 +790,24 @@ async fn update_tower_position(
     }
 
     // Serialize and write
-    let content = serde_json::to_string_pretty(&entry)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to serialize position: {}", e)))?;
+    let content = serde_json::to_string_pretty(&entry).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to serialize position: {}", e),
+        )
+    })?;
 
-    fs::write(&file_path, content)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to write position file: {}", e)))?;
+    fs::write(&file_path, content).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to write position file: {}", e),
+        )
+    })?;
 
-    tracing::info!("[Server] Updated tower position for {} via API", icao.to_uppercase());
+    tracing::info!(
+        "[Server] Updated tower position for {} via API",
+        icao.to_uppercase()
+    );
     Ok(Json(entry))
 }
 
@@ -734,12 +833,19 @@ async fn get_vmr_rules(
             continue;
         }
 
-        let entries = fs::read_dir(dir)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to read dir: {}", e)))?;
+        let entries = fs::read_dir(dir).map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to read dir: {}", e),
+            )
+        })?;
 
         for entry in entries.filter_map(|e| e.ok()) {
             let path = entry.path();
-            if path.extension().map_or(false, |ext| ext.eq_ignore_ascii_case("vmr")) {
+            if path
+                .extension()
+                .map_or(false, |ext| ext.eq_ignore_ascii_case("vmr"))
+            {
                 if let Ok(content) = fs::read_to_string(&path) {
                     // Simple VMR XML parsing (just extract ModelMatchRule entries)
                     parse_vmr_content(&content, &mut rules);
@@ -831,12 +937,19 @@ async fn realtraffic_auth(
         .form(&form_data)
         .send()
         .await
-        .map_err(|e| (StatusCode::BAD_GATEWAY, format!("RealTraffic auth request failed: {}", e)))?;
+        .map_err(|e| {
+            (
+                StatusCode::BAD_GATEWAY,
+                format!("RealTraffic auth request failed: {}", e),
+            )
+        })?;
 
-    let body = response
-        .bytes()
-        .await
-        .map_err(|e| (StatusCode::BAD_GATEWAY, format!("Failed to read RealTraffic response: {}", e)))?;
+    let body = response.bytes().await.map_err(|e| {
+        (
+            StatusCode::BAD_GATEWAY,
+            format!("Failed to read RealTraffic response: {}", e),
+        )
+    })?;
 
     let mut resp = Response::builder()
         .status(StatusCode::OK)
@@ -879,12 +992,19 @@ async fn realtraffic_traffic(
         .form(&form_data)
         .send()
         .await
-        .map_err(|e| (StatusCode::BAD_GATEWAY, format!("RealTraffic traffic request failed: {}", e)))?;
+        .map_err(|e| {
+            (
+                StatusCode::BAD_GATEWAY,
+                format!("RealTraffic traffic request failed: {}", e),
+            )
+        })?;
 
-    let body = response
-        .bytes()
-        .await
-        .map_err(|e| (StatusCode::BAD_GATEWAY, format!("Failed to read RealTraffic response: {}", e)))?;
+    let body = response.bytes().await.map_err(|e| {
+        (
+            StatusCode::BAD_GATEWAY,
+            format!("Failed to read RealTraffic response: {}", e),
+        )
+    })?;
 
     let mut resp = Response::builder()
         .status(StatusCode::OK)
@@ -933,12 +1053,19 @@ async fn realtraffic_parked_traffic(
         .form(&form_data)
         .send()
         .await
-        .map_err(|e| (StatusCode::BAD_GATEWAY, format!("RealTraffic parked traffic request failed: {}", e)))?;
+        .map_err(|e| {
+            (
+                StatusCode::BAD_GATEWAY,
+                format!("RealTraffic parked traffic request failed: {}", e),
+            )
+        })?;
 
-    let body = response
-        .bytes()
-        .await
-        .map_err(|e| (StatusCode::BAD_GATEWAY, format!("Failed to read RealTraffic response: {}", e)))?;
+    let body = response.bytes().await.map_err(|e| {
+        (
+            StatusCode::BAD_GATEWAY,
+            format!("Failed to read RealTraffic response: {}", e),
+        )
+    })?;
 
     let mut resp = Response::builder()
         .status(StatusCode::OK)
@@ -976,12 +1103,19 @@ async fn realtraffic_deauth(
         .form(&form_data)
         .send()
         .await
-        .map_err(|e| (StatusCode::BAD_GATEWAY, format!("RealTraffic deauth request failed: {}", e)))?;
+        .map_err(|e| {
+            (
+                StatusCode::BAD_GATEWAY,
+                format!("RealTraffic deauth request failed: {}", e),
+            )
+        })?;
 
-    let body = response
-        .bytes()
-        .await
-        .map_err(|e| (StatusCode::BAD_GATEWAY, format!("Failed to read RealTraffic response: {}", e)))?;
+    let body = response.bytes().await.map_err(|e| {
+        (
+            StatusCode::BAD_GATEWAY,
+            format!("Failed to read RealTraffic response: {}", e),
+        )
+    })?;
 
     let mut resp = Response::builder()
         .status(StatusCode::OK)
@@ -1010,34 +1144,37 @@ async fn proxy_request(
     let url_str = &query.url;
 
     // Parse the URL properly to extract the host
-    let parsed_url = Url::parse(url_str).map_err(|e| {
-        (StatusCode::BAD_REQUEST, format!("Invalid URL: {}", e))
-    })?;
+    let parsed_url = Url::parse(url_str)
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("Invalid URL: {}", e)))?;
 
     // Get the host from the parsed URL
-    let host = parsed_url.host_str().ok_or_else(|| {
-        (StatusCode::BAD_REQUEST, "URL has no host".to_string())
-    })?;
+    let host = parsed_url
+        .host_str()
+        .ok_or_else(|| (StatusCode::BAD_REQUEST, "URL has no host".to_string()))?;
 
     // Check if the host matches any allowed domain (exact match or subdomain)
-    let is_allowed = allowed_domains.iter().any(|domain| {
-        host == *domain || host.ends_with(&format!(".{}", domain))
-    });
+    let is_allowed = allowed_domains
+        .iter()
+        .any(|domain| host == *domain || host.ends_with(&format!(".{}", domain)));
 
     if !is_allowed {
         return Err((
             StatusCode::FORBIDDEN,
-            format!("Domain '{}' not allowed. Allowed: {:?}", host, allowed_domains),
+            format!(
+                "Domain '{}' not allowed. Allowed: {:?}",
+                host, allowed_domains
+            ),
         ));
     }
 
     // Make the request
     let client = reqwest::Client::new();
-    let response = client
-        .get(url_str)
-        .send()
-        .await
-        .map_err(|e| (StatusCode::BAD_GATEWAY, format!("Proxy request failed: {}", e)))?;
+    let response = client.get(url_str).send().await.map_err(|e| {
+        (
+            StatusCode::BAD_GATEWAY,
+            format!("Proxy request failed: {}", e),
+        )
+    })?;
 
     let status = response.status();
     let content_type = response
@@ -1047,10 +1184,12 @@ async fn proxy_request(
         .unwrap_or("application/octet-stream")
         .to_string();
 
-    let body = response
-        .bytes()
-        .await
-        .map_err(|e| (StatusCode::BAD_GATEWAY, format!("Failed to read response: {}", e)))?;
+    let body = response.bytes().await.map_err(|e| {
+        (
+            StatusCode::BAD_GATEWAY,
+            format!("Failed to read response: {}", e),
+        )
+    })?;
 
     let mut resp = Response::builder()
         .status(status)
@@ -1059,7 +1198,8 @@ async fn proxy_request(
 
     resp.headers_mut().insert(
         header::CONTENT_TYPE,
-        HeaderValue::from_str(&content_type).unwrap_or(HeaderValue::from_static("application/octet-stream")),
+        HeaderValue::from_str(&content_type)
+            .unwrap_or(HeaderValue::from_static("application/octet-stream")),
     );
 
     Ok(resp)
@@ -1208,7 +1348,12 @@ async fn serve_static(
     let file_path = state.dist_path.join(path);
 
     // Debug: log what we're looking for
-    tracing::info!("[Server] Request: {} -> {:?} (exists: {})", path, file_path, file_path.exists());
+    tracing::info!(
+        "[Server] Request: {} -> {:?} (exists: {})",
+        path,
+        file_path,
+        file_path.exists()
+    );
 
     // Try the exact path first
     if file_path.exists() && file_path.is_file() {
@@ -1217,18 +1362,36 @@ async fn serve_static(
 
     // Check if this looks like a static asset request (has a file extension)
     // If so, don't serve index.html - return 404 instead
-    let has_extension = std::path::Path::new(path)
-        .extension()
-        .map_or(false, |ext| {
-            // Common static asset extensions that should NOT fall back to index.html
-            let ext = ext.to_string_lossy().to_lowercase();
-            matches!(
-                ext.as_str(),
-                "js" | "mjs" | "css" | "json" | "png" | "jpg" | "jpeg" | "gif" | "svg" | "ico"
-                    | "woff" | "woff2" | "ttf" | "eot" | "map" | "glb" | "gltf" | "bin"
-                    | "wasm" | "mp3" | "ogg" | "webp" | "avif" | "ktx2"
-            )
-        });
+    let has_extension = std::path::Path::new(path).extension().map_or(false, |ext| {
+        // Common static asset extensions that should NOT fall back to index.html
+        let ext = ext.to_string_lossy().to_lowercase();
+        matches!(
+            ext.as_str(),
+            "js" | "mjs"
+                | "css"
+                | "json"
+                | "png"
+                | "jpg"
+                | "jpeg"
+                | "gif"
+                | "svg"
+                | "ico"
+                | "woff"
+                | "woff2"
+                | "ttf"
+                | "eot"
+                | "map"
+                | "glb"
+                | "gltf"
+                | "bin"
+                | "wasm"
+                | "mp3"
+                | "ogg"
+                | "webp"
+                | "avif"
+                | "ktx2"
+        )
+    });
 
     if has_extension {
         // Static asset not found - return 404, don't serve index.html
@@ -1247,8 +1410,12 @@ async fn serve_static(
 
 /// Serve a single file with correct MIME type
 async fn serve_file(path: &PathBuf) -> Result<Response<Body>, (StatusCode, String)> {
-    let content = fs::read(path)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to read file: {}", e)))?;
+    let content = fs::read(path).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to read file: {}", e),
+        )
+    })?;
 
     let mime = mime_guess::from_path(path)
         .first_or_octet_stream()
@@ -1261,11 +1428,16 @@ async fn serve_file(path: &PathBuf) -> Result<Response<Body>, (StatusCode, Strin
 
     resp.headers_mut().insert(
         header::CONTENT_TYPE,
-        HeaderValue::from_str(&mime).unwrap_or(HeaderValue::from_static("application/octet-stream")),
+        HeaderValue::from_str(&mime)
+            .unwrap_or(HeaderValue::from_static("application/octet-stream")),
     );
 
     // Cache static assets for better performance
-    if mime.starts_with("image/") || mime.contains("javascript") || mime.contains("css") || mime.contains("font") {
+    if mime.starts_with("image/")
+        || mime.contains("javascript")
+        || mime.contains("css")
+        || mime.contains("font")
+    {
         resp.headers_mut().insert(
             header::CACHE_CONTROL,
             HeaderValue::from_static("public, max-age=31536000, immutable"),

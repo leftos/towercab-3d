@@ -7,10 +7,10 @@
 //! - Scanning converted models in output directories
 //! - Model index caching for performance
 
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
-use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager};
 
 #[cfg(windows)]
@@ -38,9 +38,9 @@ pub struct MSFSDetectionResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SourceModelInfo {
-    pub source: String,         // "fsltl" or "aig"
-    pub model_name: String,     // Display name (from aircraft.cfg title)
-    pub folder_name: String,    // Actual folder name (e.g., "FSLTL_A320_BAW_IAE")
+    pub source: String,               // "fsltl" or "aig"
+    pub model_name: String,           // Display name (from aircraft.cfg title)
+    pub folder_name: String,          // Actual folder name (e.g., "FSLTL_A320_BAW_IAE")
     pub aircraft_folder_path: String, // Full path to the aircraft folder
     pub gltf_path: String,
     pub texture_dirs: Vec<String>,
@@ -112,7 +112,8 @@ const MODEL_CACHE_VERSION: u32 = 5; // Bump when cache format changes (v5: fixed
 
 /// Get the modification time of a folder (recursive max mtime would be too slow)
 fn get_folder_mtime(path: &std::path::Path) -> Option<u64> {
-    fs::metadata(path).ok()
+    fs::metadata(path)
+        .ok()
         .and_then(|m| m.modified().ok())
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
         .map(|d| d.as_secs())
@@ -127,7 +128,11 @@ fn get_cache_path(cache_dir: &std::path::Path, source: &str) -> PathBuf {
 /// Load model index from cache if valid
 /// cache_dir: app data directory for storing cache files
 /// base_path: source folder path (for mtime validation)
-fn load_model_cache(cache_dir: &std::path::Path, base_path: &std::path::Path, source: &str) -> Option<Vec<SourceModelInfo>> {
+fn load_model_cache(
+    cache_dir: &std::path::Path,
+    base_path: &std::path::Path,
+    source: &str,
+) -> Option<Vec<SourceModelInfo>> {
     let cache_path = get_cache_path(cache_dir, source);
     if !cache_path.exists() {
         return None;
@@ -138,8 +143,12 @@ fn load_model_cache(cache_dir: &std::path::Path, base_path: &std::path::Path, so
 
     // Check version
     if cache.version != MODEL_CACHE_VERSION {
-        tracing::info!("[MSFSDetection] {} cache version mismatch (have {}, need {}), will rebuild",
-            source, cache.version, MODEL_CACHE_VERSION);
+        tracing::info!(
+            "[MSFSDetection] {} cache version mismatch (have {}, need {}), will rebuild",
+            source,
+            cache.version,
+            MODEL_CACHE_VERSION
+        );
         return None;
     }
 
@@ -152,16 +161,27 @@ fn load_model_cache(cache_dir: &std::path::Path, base_path: &std::path::Path, so
         return None;
     }
 
-    tracing::info!("[MSFSDetection] Loaded {} models from {} cache", cache.models.len(), source);
+    tracing::info!(
+        "[MSFSDetection] Loaded {} models from {} cache",
+        cache.models.len(),
+        source
+    );
     Some(cache.models)
 }
 
 /// Save model index to cache
 /// cache_dir: app data directory for storing cache files
 /// base_path: source folder path (for mtime)
-fn save_model_cache(cache_dir: &std::path::Path, base_path: &std::path::Path, source: &str, models: &[SourceModelInfo]) {
+fn save_model_cache(
+    cache_dir: &std::path::Path,
+    base_path: &std::path::Path,
+    source: &str,
+    models: &[SourceModelInfo],
+) {
     let airplanes = base_path.join("SimObjects").join("Airplanes");
-    let Some(folder_mtime) = get_folder_mtime(&airplanes) else { return };
+    let Some(folder_mtime) = get_folder_mtime(&airplanes) else {
+        return;
+    };
 
     let cache = ModelIndexCache {
         folder_mtime,
@@ -180,7 +200,11 @@ fn save_model_cache(cache_dir: &std::path::Path, base_path: &std::path::Path, so
         if let Err(e) = fs::write(&cache_path, content) {
             tracing::info!("[MSFSDetection] Failed to write {} cache: {}", source, e);
         } else {
-            tracing::info!("[MSFSDetection] Saved {} models to {} cache", models.len(), source);
+            tracing::info!(
+                "[MSFSDetection] Saved {} models to {} cache",
+                models.len(),
+                source
+            );
         }
     }
 }
@@ -305,7 +329,8 @@ fn parse_aircraft_cfg_all_liveries(aircraft_dir: &std::path::Path) -> Vec<Aircra
         if trimmed.starts_with('[') {
             // Save previous livery if complete
             if in_fltsim_section {
-                if let (Some(title), Some(texture)) = (current_title.take(), current_texture.take()) {
+                if let (Some(title), Some(texture)) = (current_title.take(), current_texture.take())
+                {
                     liveries.push(AircraftCfgLivery {
                         title,
                         texture_folder: texture,
@@ -316,7 +341,11 @@ fn parse_aircraft_cfg_all_liveries(aircraft_dir: &std::path::Path) -> Vec<Aircra
             in_fltsim_section = trimmed.to_uppercase().starts_with("[FLTSIM");
             current_title = None;
             // Default to empty texture (for FSLTL generic models)
-            current_texture = if in_fltsim_section { Some(String::new()) } else { None };
+            current_texture = if in_fltsim_section {
+                Some(String::new())
+            } else {
+                None
+            };
             current_icao_airline = None;
             continue;
         }
@@ -402,8 +431,11 @@ fn find_gltf_in_dir(aircraft_dir: &std::path::Path) -> Option<String> {
         .flatten()
         .filter_map(|e| e.ok())
         .filter(|e| {
-            e.path().is_dir() &&
-            e.file_name().to_string_lossy().to_lowercase().starts_with("model")
+            e.path().is_dir()
+                && e.file_name()
+                    .to_string_lossy()
+                    .to_lowercase()
+                    .starts_with("model")
         })
         .collect();
 
@@ -417,26 +449,35 @@ fn find_gltf_in_dir(aircraft_dir: &std::path::Path) -> Option<String> {
             .flatten()
             .filter_map(|e| e.ok())
             .filter(|e| {
-                e.path().extension()
+                e.path()
+                    .extension()
                     .map(|ext| ext.to_string_lossy().to_lowercase() == "gltf")
                     .unwrap_or(false)
             })
             .collect();
 
         // Prefer exterior model: exclude cockpit/interior files, prefer lower LOD numbers
-        let exterior_gltf = gltf_files.iter()
+        let exterior_gltf = gltf_files
+            .iter()
             .filter(|e| {
                 let name = e.file_name().to_string_lossy().to_lowercase();
                 !name.contains("cockpit") && !name.contains("interior")
             })
             .min_by_key(|e| {
                 let name = e.file_name().to_string_lossy().to_lowercase();
-                if name.contains("lod00") { 0 }
-                else if name.contains("lod01") { 1 }
-                else if name.contains("lod02") { 2 }
-                else if name.contains("lod03") { 3 }
-                else if name.contains("lod04") { 4 }
-                else { 5 }
+                if name.contains("lod00") {
+                    0
+                } else if name.contains("lod01") {
+                    1
+                } else if name.contains("lod02") {
+                    2
+                } else if name.contains("lod03") {
+                    3
+                } else if name.contains("lod04") {
+                    4
+                } else {
+                    5
+                }
             });
 
         if let Some(gltf_file) = exterior_gltf {
@@ -477,7 +518,11 @@ fn parse_aircraft_type(folder_name: &str, prefix: &str) -> String {
         if parts.len() >= 2 {
             parts[1].split('-').next().unwrap_or(parts[1]).to_string()
         } else {
-            without_prefix.split('-').next().unwrap_or(without_prefix).to_string()
+            without_prefix
+                .split('-')
+                .next()
+                .unwrap_or(without_prefix)
+                .to_string()
         }
     }
 }
@@ -492,7 +537,7 @@ fn list_models_unified(
     base_path: &std::path::Path,
     config: &SourceConfig,
     app: Option<&tauri::AppHandle>,
-    event_name: &str
+    event_name: &str,
 ) -> Vec<SourceModelInfo> {
     let airplanes = base_path.join("SimObjects").join("Airplanes");
     if !airplanes.exists() {
@@ -503,7 +548,8 @@ fn list_models_unified(
     // Maps aircraft_type -> (gltf_path, texture_dirs)
     // This is needed for FSLTL where livery folders reference a base model
     // For AIG, this is mostly unused but harmless
-    let mut base_models: std::collections::HashMap<String, (String, Vec<String>)> = std::collections::HashMap::new();
+    let mut base_models: std::collections::HashMap<String, (String, Vec<String>)> =
+        std::collections::HashMap::new();
 
     if let Ok(entries) = fs::read_dir(&airplanes) {
         for entry in entries.filter_map(|e| e.ok()) {
@@ -532,7 +578,9 @@ fn list_models_unified(
                     let aircraft_type = parse_aircraft_cfg_icao_type(&aircraft_dir)
                         .unwrap_or_else(|| parse_aircraft_type(&folder_name, config.folder_prefix));
                     let texture_dirs = collect_texture_dirs(&aircraft_dir);
-                    base_models.entry(aircraft_type).or_insert((gltf_path, texture_dirs));
+                    base_models
+                        .entry(aircraft_type)
+                        .or_insert((gltf_path, texture_dirs));
                 }
             }
         }
@@ -544,10 +592,15 @@ fn list_models_unified(
     // Count total folders for progress tracking
     let total_folders = fs::read_dir(&airplanes)
         .ok()
-        .map(|entries| entries.filter_map(|e| e.ok()).filter(|e| {
-            let folder_name = e.file_name().to_string_lossy().to_string();
-            e.path().is_dir() && folder_name.starts_with(config.folder_prefix)
-        }).count())
+        .map(|entries| {
+            entries
+                .filter_map(|e| e.ok())
+                .filter(|e| {
+                    let folder_name = e.file_name().to_string_lossy().to_string();
+                    e.path().is_dir() && folder_name.starts_with(config.folder_prefix)
+                })
+                .count()
+        })
         .unwrap_or(0);
 
     if let Ok(entries) = fs::read_dir(&airplanes) {
@@ -629,7 +682,8 @@ fn list_models_unified(
 
                     // Use icao_airline from aircraft.cfg (fall back to texture folder parsing if not present)
                     let airline_code = livery.icao_airline.clone().or_else(|| {
-                        livery.texture_folder
+                        livery
+                            .texture_folder
                             .split('-')
                             .next()
                             .map(|s| s.to_uppercase())
@@ -733,11 +787,14 @@ fn list_models_unified(
                 if pct >= last_reported_pct + 5 || processed == total_folders {
                     last_reported_pct = pct;
                     if let Some(app_handle) = app {
-                        let _ = app_handle.emit(event_name, serde_json::json!({
-                            "progress": pct,
-                            "processed": processed,
-                            "total": total_folders
-                        }));
+                        let _ = app_handle.emit(
+                            event_name,
+                            serde_json::json!({
+                                "progress": pct,
+                                "processed": processed,
+                                "total": total_folders
+                            }),
+                        );
                     }
                 }
             }
@@ -757,7 +814,10 @@ pub fn detect_msfs_installations(community_path: String) -> Result<MSFSDetection
     let base = PathBuf::from(&community_path);
 
     if !base.exists() {
-        return Err(format!("Community folder does not exist: {}", community_path));
+        return Err(format!(
+            "Community folder does not exist: {}",
+            community_path
+        ));
     }
 
     let mut result = MSFSDetectionResult {
@@ -788,9 +848,13 @@ pub fn detect_msfs_installations(community_path: String) -> Result<MSFSDetection
         }
     }
 
-    tracing::info!("[MSFSDetection] FSLTL: {} ({:?}), AIG: {} ({:?})",
-        result.fsltl_found, result.fsltl_model_count,
-        result.aig_found, result.aig_model_count);
+    tracing::info!(
+        "[MSFSDetection] FSLTL: {} ({:?}), AIG: {} ({:?})",
+        result.fsltl_found,
+        result.fsltl_model_count,
+        result.aig_found,
+        result.aig_model_count
+    );
 
     Ok(result)
 }
@@ -802,11 +866,16 @@ pub fn detect_msfs_installations(community_path: String) -> Result<MSFSDetection
 /// List available FSLTL models from source
 /// Uses unified listing logic that parses ALL FLTSIM sections from aircraft.cfg
 #[tauri::command]
-pub async fn list_fsltl_models(app: tauri::AppHandle, base_path: String) -> Result<Vec<SourceModelInfo>, String> {
+pub async fn list_fsltl_models(
+    app: tauri::AppHandle,
+    base_path: String,
+) -> Result<Vec<SourceModelInfo>, String> {
     // Run on background thread to avoid blocking UI
     tokio::task::spawn_blocking(move || {
         let base = PathBuf::from(&base_path);
-        let cache_dir = app.path().app_data_dir()
+        let cache_dir = app
+            .path()
+            .app_data_dir()
             .map_err(|e| format!("Failed to get app data dir: {}", e))?;
 
         // Try to load from cache first (much faster on subsequent launches)
@@ -824,7 +893,11 @@ pub async fn list_fsltl_models(app: tauri::AppHandle, base_path: String) -> Resu
         let models = list_models_unified(&base, &config, Some(&app), "msfs-indexing-progress");
 
         let elapsed = start_time.elapsed();
-        tracing::info!("[MSFSDetection] Indexed {} FSLTL liveries in {:?}", models.len(), elapsed);
+        tracing::info!(
+            "[MSFSDetection] Indexed {} FSLTL liveries in {:?}",
+            models.len(),
+            elapsed
+        );
 
         // Save to cache for faster subsequent launches
         save_model_cache(&cache_dir, &base, "fsltl", &models);
@@ -838,11 +911,16 @@ pub async fn list_fsltl_models(app: tauri::AppHandle, base_path: String) -> Resu
 /// List available AIG models from source
 /// Uses unified listing logic that parses ALL FLTSIM sections from aircraft.cfg
 #[tauri::command]
-pub async fn list_aig_models(app: tauri::AppHandle, base_path: String) -> Result<Vec<SourceModelInfo>, String> {
+pub async fn list_aig_models(
+    app: tauri::AppHandle,
+    base_path: String,
+) -> Result<Vec<SourceModelInfo>, String> {
     // Run on background thread to avoid blocking UI
     tokio::task::spawn_blocking(move || {
         let base = PathBuf::from(&base_path);
-        let cache_dir = app.path().app_data_dir()
+        let cache_dir = app
+            .path()
+            .app_data_dir()
             .map_err(|e| format!("Failed to get app data dir: {}", e))?;
 
         // Try to load from cache first
@@ -860,7 +938,11 @@ pub async fn list_aig_models(app: tauri::AppHandle, base_path: String) -> Result
         let models = list_models_unified(&base, &config, Some(&app), "msfs-indexing-progress");
 
         let elapsed = start_time.elapsed();
-        tracing::info!("[MSFSDetection] Indexed {} AIG liveries in {:?}", models.len(), elapsed);
+        tracing::info!(
+            "[MSFSDetection] Indexed {} AIG liveries in {:?}",
+            models.len(),
+            elapsed
+        );
 
         // Save to cache for faster subsequent launches
         save_model_cache(&cache_dir, &base, "aig", &models);
@@ -917,7 +999,8 @@ pub async fn convert_msfs_model(
         .iter()
         .find(|p| p.exists())
         .ok_or_else(|| {
-            "Converter executable not found. Ensure fsltl_converter.exe is in resources/".to_string()
+            "Converter executable not found. Ensure fsltl_converter.exe is in resources/"
+                .to_string()
         })?
         .clone();
 
@@ -928,9 +1011,12 @@ pub async fn convert_msfs_model(
     // Build command arguments
     let mut cmd = Command::new(&converter_path);
     cmd.args([
-        "--source", &source_path,
-        "--output", &output_dir,
-        "--texture-scale", &texture_scale,
+        "--source",
+        &source_path,
+        "--output",
+        &output_dir,
+        "--texture-scale",
+        &texture_scale,
     ]);
 
     // Pass the specific livery title to convert only that livery
@@ -975,10 +1061,12 @@ pub async fn convert_msfs_model(
         let output_path = PathBuf::from(&output_dir).join(&output_file);
         let output_path_str = normalize_path_string(&output_path);
 
-        tracing::info!("[MSFSConvert] Converted {} in {}ms -> {}",
+        tracing::info!(
+            "[MSFSConvert] Converted {} in {}ms -> {}",
             folder_name,
             duration_ms,
-            output_path_str);
+            output_path_str
+        );
         Ok(MSFSConversionResult {
             success: true,
             output_path: Some(output_path_str),
@@ -991,10 +1079,17 @@ pub async fn convert_msfs_model(
         } else if !stdout.is_empty() {
             stdout.to_string()
         } else {
-            format!("Conversion failed with exit code: {:?}", output.status.code())
+            format!(
+                "Conversion failed with exit code: {:?}",
+                output.status.code()
+            )
         };
 
-        tracing::info!("[MSFSConvert] Failed to convert {}: {}", folder_name, error_msg);
+        tracing::info!(
+            "[MSFSConvert] Failed to convert {}: {}",
+            folder_name,
+            error_msg
+        );
 
         Ok(MSFSConversionResult {
             success: false,
@@ -1026,8 +1121,8 @@ pub fn scan_converted_models(output_path: String) -> Result<Vec<ScannedConverted
     let mut models = Vec::new();
 
     // Iterate through aircraft type directories (e.g., B738, A320)
-    let type_dirs = fs::read_dir(&base_path)
-        .map_err(|e| format!("Failed to read output directory: {}", e))?;
+    let type_dirs =
+        fs::read_dir(&base_path).map_err(|e| format!("Failed to read output directory: {}", e))?;
 
     for type_entry in type_dirs.filter_map(|e| e.ok()) {
         let type_path = type_entry.path();
@@ -1069,9 +1164,7 @@ pub fn scan_converted_models(output_path: String) -> Result<Vec<ScannedConverted
             }
 
             // Get file size
-            let file_size = fs::metadata(&model_file)
-                .map(|m| m.len())
-                .unwrap_or(0);
+            let file_size = fs::metadata(&model_file).map(|m| m.len()).unwrap_or(0);
 
             // Determine airline code (None if "base" folder)
             let airline_code = if airline_folder.to_lowercase() == "base" {
@@ -1122,7 +1215,11 @@ pub fn scan_converted_models(output_path: String) -> Result<Vec<ScannedConverted
         }
     }
 
-    tracing::info!("[MSFS] Scanned {} existing models from {}", models.len(), output_path);
+    tracing::info!(
+        "[MSFS] Scanned {} existing models from {}",
+        models.len(),
+        output_path
+    );
     Ok(models)
 }
 
@@ -1145,8 +1242,18 @@ fn get_glb_converter_version(glb_path: &std::path::Path) -> Option<u32> {
     let mut chunk_header = [0u8; 8];
     file.read_exact(&mut chunk_header).ok()?;
 
-    let json_length = u32::from_le_bytes([chunk_header[0], chunk_header[1], chunk_header[2], chunk_header[3]]);
-    let chunk_type = u32::from_le_bytes([chunk_header[4], chunk_header[5], chunk_header[6], chunk_header[7]]);
+    let json_length = u32::from_le_bytes([
+        chunk_header[0],
+        chunk_header[1],
+        chunk_header[2],
+        chunk_header[3],
+    ]);
+    let chunk_type = u32::from_le_bytes([
+        chunk_header[4],
+        chunk_header[5],
+        chunk_header[6],
+        chunk_header[7],
+    ]);
 
     // Verify JSON chunk type (0x4E4F534A "JSON")
     if chunk_type != 0x4E4F534A {
@@ -1222,7 +1329,9 @@ mod tests {
     #[test]
     fn test_parse_aig_aircraft_cfg() {
         // Test parsing AIG aircraft.cfg files which use Windows-1252 encoding
-        let path = PathBuf::from(r"X:\Games\MSFlightSimPackages2024\Community\aig-aitraffic-oci\SimObjects\Airplanes\AIGAIM_FAIB_A320-200_IAE");
+        let path = PathBuf::from(
+            r"X:\Games\MSFlightSimPackages2024\Community\aig-aitraffic-oci\SimObjects\Airplanes\AIGAIM_FAIB_A320-200_IAE",
+        );
         if !path.exists() {
             tracing::info!("Skipping test - AIG path not found");
             return;
@@ -1233,19 +1342,27 @@ mod tests {
         assert!(!liveries.is_empty(), "Should have parsed some liveries");
 
         // Verify United Airlines is found with correct title format
-        let united = liveries.iter().find(|l| l.title.contains("United Airlines"));
+        let united = liveries
+            .iter()
+            .find(|l| l.title.contains("United Airlines"));
         assert!(united.is_some(), "Should find United Airlines livery");
 
         let u = united.unwrap();
         assert_eq!(u.title, "AIGAIM_United Airlines Airbus A320-200");
         assert_eq!(u.icao_airline.as_deref(), Some("UAL"));
-        tracing::info!("Found United: title='{}', icao_airline={:?}", u.title, u.icao_airline);
+        tracing::info!(
+            "Found United: title='{}', icao_airline={:?}",
+            u.title,
+            u.icao_airline
+        );
     }
 
     #[test]
     fn test_parse_fsltl_generic_model() {
         // Test parsing FSLTL generic models with empty texture fields
-        let path = PathBuf::from(r"X:\Games\MSFlightSimPackages2024\Community\fsltl-traffic-base\SimObjects\Airplanes\FSLTL_BCS3");
+        let path = PathBuf::from(
+            r"X:\Games\MSFlightSimPackages2024\Community\fsltl-traffic-base\SimObjects\Airplanes\FSLTL_BCS3",
+        );
         if !path.exists() {
             tracing::info!("Skipping test - FSLTL BCS3 path not found");
             return;
@@ -1262,8 +1379,12 @@ mod tests {
         let g = generic.unwrap();
         assert_eq!(g.title, "FSLTL_BCS3_ZZZZ");
         assert_eq!(g.texture_folder, ""); // Empty texture field
-        tracing::info!("Found generic: title='{}', texture_folder='{}', icao_airline={:?}",
-                 g.title, g.texture_folder, g.icao_airline);
+        tracing::info!(
+            "Found generic: title='{}', texture_folder='{}', icao_airline={:?}",
+            g.title,
+            g.texture_folder,
+            g.icao_airline
+        );
 
         // Verify texture folders are found
         let texture_dirs: Vec<String> = fs::read_dir(&path)
@@ -1279,13 +1400,17 @@ mod tests {
             .collect();
 
         tracing::info!("Texture folders: {:?}", texture_dirs);
-        assert!(!texture_dirs.is_empty(), "Should find at least one texture folder");
+        assert!(
+            !texture_dirs.is_empty(),
+            "Should find at least one texture folder"
+        );
     }
 
     #[test]
     fn test_fsltl_indexing_end_to_end() {
         // Test that FSLTL_BCS3_ZZZZ is properly indexed with correct model_name
-        let base_path = PathBuf::from(r"X:\Games\MSFlightSimPackages2024\Community\fsltl-traffic-base");
+        let base_path =
+            PathBuf::from(r"X:\Games\MSFlightSimPackages2024\Community\fsltl-traffic-base");
         if !base_path.exists() {
             tracing::info!("Skipping test - FSLTL base path not found");
             return;
@@ -1300,7 +1425,10 @@ mod tests {
 
         // Find FSLTL_BCS3_ZZZZ
         let bcs3_zzzz = models.iter().find(|m| m.model_name == "FSLTL_BCS3_ZZZZ");
-        assert!(bcs3_zzzz.is_some(), "Should find FSLTL_BCS3_ZZZZ in indexed models");
+        assert!(
+            bcs3_zzzz.is_some(),
+            "Should find FSLTL_BCS3_ZZZZ in indexed models"
+        );
 
         let model = bcs3_zzzz.unwrap();
         tracing::info!("Found model:");
@@ -1315,6 +1443,9 @@ mod tests {
 
         assert_eq!(model.model_name, "FSLTL_BCS3_ZZZZ");
         assert!(model.aircraft_folder_path.contains("FSLTL_BCS3"));
-        assert!(!model.texture_dirs.is_empty(), "Should have texture directories");
+        assert!(
+            !model.texture_dirs.is_empty(),
+            "Should have texture directories"
+        );
     }
 }

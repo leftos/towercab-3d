@@ -19,9 +19,7 @@ use crate::normalize_path_string;
 /// Pick a folder using native dialog
 #[tauri::command]
 pub async fn pick_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
-    let folder = app.dialog()
-        .file()
-        .blocking_pick_folder();
+    let folder = app.dialog().file().blocking_pick_folder();
 
     match folder {
         Some(file_path) => Ok(Some(file_path.to_string())),
@@ -34,7 +32,7 @@ pub async fn pick_folder(app: tauri::AppHandle) -> Result<Option<String>, String
 pub async fn pick_files(
     app: tauri::AppHandle,
     filter_name: Option<String>,
-    extensions: Option<Vec<String>>
+    extensions: Option<Vec<String>>,
 ) -> Result<Vec<String>, String> {
     let mut dialog = app.dialog().file();
 
@@ -59,8 +57,7 @@ pub async fn pick_files(
 /// Read a text file from disk
 #[tauri::command]
 pub fn read_text_file(path: String) -> Result<String, String> {
-    fs::read_to_string(&path)
-        .map_err(|e| format!("Failed to read file {}: {}", path, e))
+    fs::read_to_string(&path).map_err(|e| format!("Failed to read file {}: {}", path, e))
 }
 
 /// Write a text file to disk
@@ -68,12 +65,10 @@ pub fn read_text_file(path: String) -> Result<String, String> {
 pub fn write_text_file(path: String, content: String) -> Result<(), String> {
     // Create parent directories if needed
     if let Some(parent) = PathBuf::from(&path).parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create directories: {}", e))?;
+        fs::create_dir_all(parent).map_err(|e| format!("Failed to create directories: {}", e))?;
     }
 
-    fs::write(&path, content)
-        .map_err(|e| format!("Failed to write file {}: {}", path, e))
+    fs::write(&path, content).map_err(|e| format!("Failed to write file {}: {}", path, e))
 }
 
 /// Load and parse a model manifest.json file from a model directory
@@ -115,15 +110,13 @@ pub fn get_file_size(path: String) -> Result<u64, String> {
 /// Delete a file from disk
 #[tauri::command]
 pub fn delete_file(path: String) -> Result<(), String> {
-    fs::remove_file(&path)
-        .map_err(|e| format!("Failed to delete file {}: {}", path, e))
+    fs::remove_file(&path).map_err(|e| format!("Failed to delete file {}: {}", path, e))
 }
 
 /// Delete a cache file
 #[tauri::command]
 pub fn delete_cache_file(path: String) -> Result<(), String> {
-    fs::remove_file(&path)
-        .map_err(|e| format!("Failed to delete cache file: {}", e))
+    fs::remove_file(&path).map_err(|e| format!("Failed to delete cache file: {}", e))
 }
 
 /// Clear all GLB files in a cache directory
@@ -160,7 +153,7 @@ pub fn is_path_writable(path: &PathBuf) -> bool {
             let _ = fs::remove_file(&test_file);
             true
         }
-        Err(_) => false
+        Err(_) => false,
     }
 }
 
@@ -185,7 +178,7 @@ pub struct FSLTLConvertedModel {
 /// FSLTL conversion progress status
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct FSLTLProgress {
-    pub status: String,         // "idle" | "scanning" | "converting" | "complete" | "error"
+    pub status: String, // "idle" | "scanning" | "converting" | "complete" | "error"
     pub total: u32,
     pub completed: u32,
     pub current: Option<String>,
@@ -198,8 +191,8 @@ pub struct FSLTLProgress {
 /// Returns (default_path, is_writable)
 #[tauri::command]
 pub fn get_converted_models_default_path(app: tauri::AppHandle) -> Result<(String, bool), String> {
-    use tauri::Manager;
     use crate::mods::find_mods_root;
+    use tauri::Manager;
 
     let mods_root = find_mods_root(&app);
     let mods_path = mods_root.join("aircraft").join("fsltl");
@@ -270,7 +263,10 @@ pub fn list_fsltl_aircraft(source_path: String) -> Result<Vec<String>, String> {
 
 /// Check if a converted model GLB file exists in the output directory
 #[tauri::command]
-pub fn check_converted_model_exists(output_path: String, model_name: String) -> Result<bool, String> {
+pub fn check_converted_model_exists(
+    output_path: String,
+    model_name: String,
+) -> Result<bool, String> {
     // Models are stored as: output_path/TYPE/AIRLINE/model.glb or output_path/TYPE/base/model.glb
     let path = PathBuf::from(&output_path);
 
@@ -298,8 +294,7 @@ pub fn read_conversion_progress(progress_file: String) -> Result<FSLTLProgress, 
     let content = fs::read_to_string(&progress_file)
         .map_err(|e| format!("Failed to read progress file: {}", e))?;
 
-    serde_json::from_str(&content)
-        .map_err(|e| format!("Failed to parse progress JSON: {}", e))
+    serde_json::from_str(&content).map_err(|e| format!("Failed to parse progress JSON: {}", e))
 }
 
 /// Get the bundled converter executable path
