@@ -224,77 +224,38 @@ mod real_impl {
 
     /// Save tokens to global settings
     fn save_tokens(app: &AppHandle, tokens: &StoredTokens) -> Result<(), String> {
-        tracing::info!("[vNAS] save_tokens called");
-        tracing::info!("[vNAS] Token environment: {:?}", tokens.environment);
-        tracing::info!(
-            "[vNAS] VATSIM token expires at: {:?}",
-            tokens.vatsim_token.expiration
-        );
-        tracing::info!(
-            "[vNAS] vNAS token length: {} chars",
-            tokens.vnas_token.len()
-        );
-
         let json = serde_json::to_string(tokens)
             .map_err(|e| format!("Failed to serialize tokens: {e}"))?;
 
-        tracing::info!("[vNAS] Serialized tokens to JSON ({} bytes)", json.len());
-
         let mut settings = read_global_settings(app.clone())?;
-        settings.vnas_tokens = Some(json.clone());
-
-        tracing::info!("[vNAS] Writing global settings with vnas_tokens...");
+        settings.vnas_tokens = Some(json);
         write_global_settings(app.clone(), settings)?;
 
-        // Verify the write by reading back
-        let verify_settings = read_global_settings(app.clone())?;
-        if verify_settings.vnas_tokens.is_some() {
-            tracing::info!("[vNAS] Verified: Tokens saved to global settings successfully");
-        } else {
-            tracing::info!("[vNAS] WARNING: Tokens were not persisted!");
-        }
-
+        tracing::debug!("vNAS tokens saved");
         Ok(())
     }
 
     /// Load tokens from global settings
     fn load_tokens(app: &AppHandle) -> Result<Option<StoredTokens>, String> {
-        tracing::info!("[vNAS] load_tokens called");
-
         let settings = read_global_settings(app.clone())?;
-        tracing::info!("[vNAS] Read global settings");
 
         let Some(json) = settings.vnas_tokens else {
-            tracing::info!("[vNAS] No vnas_tokens field in global settings");
             return Ok(None);
         };
-
-        tracing::info!("[vNAS] Found stored tokens JSON ({} bytes)", json.len());
 
         let tokens: StoredTokens = serde_json::from_str(&json)
             .map_err(|e| format!("Failed to parse stored tokens: {e}"))?;
 
-        tracing::info!("[vNAS] Tokens loaded successfully:");
-        tracing::info!("[vNAS]   Environment: {:?}", tokens.environment);
-        tracing::info!(
-            "[vNAS]   VATSIM token expires at: {:?}",
-            tokens.vatsim_token.expiration
-        );
-        tracing::info!(
-            "[vNAS]   vNAS token length: {} chars",
-            tokens.vnas_token.len()
-        );
-
+        tracing::debug!("vNAS tokens loaded");
         Ok(Some(tokens))
     }
 
     /// Clear stored tokens from global settings
     fn clear_tokens(app: &AppHandle) -> Result<(), String> {
-        tracing::info!("[vNAS] clear_tokens called");
         let mut settings = read_global_settings(app.clone())?;
         settings.vnas_tokens = None;
         write_global_settings(app.clone(), settings)?;
-        tracing::info!("[vNAS] Tokens cleared from global settings");
+        tracing::debug!("vNAS tokens cleared");
         Ok(())
     }
 
@@ -324,11 +285,28 @@ mod real_impl {
         state: State<'_, VnasState>,
         environment: Environment,
     ) -> Result<bool, String> {
-        tracing::info!("[vNAS] Attempting to restore session from stored tokens...");
+        // Check if we already have an active service with the same environment
+        {
+            let existing_service = state.service.read().await;
+            if let Some(service) = existing_service.as_ref() {
+                let session_state = service.state().await;
+                // If already connected or connecting, don't create a new service
+                if matches!(
+                    session_state,
+                    VnasSessionState::Connected
+                        | VnasSessionState::Connecting
+                        | VnasSessionState::JoiningSession
+                        | VnasSessionState::Subscribing
+                        | VnasSessionState::WaitingForSession
+                ) {
+                    tracing::debug!("vNAS session already active, skipping restore");
+                    return Ok(true);
+                }
+            }
+        }
 
         // Load stored tokens
         let Some(tokens) = load_tokens(&app)? else {
-            tracing::info!("[vNAS] No stored tokens found");
             return Ok(false);
         };
 
@@ -342,7 +320,7 @@ mod real_impl {
         // Try to restore session
         match service.restore_session(tokens).await {
             Ok(true) => {
-                tracing::info!("[vNAS] Session restored successfully");
+                tracing::info!("vNAS session restored");
 
                 // Update status
                 let mut status = state.status();
@@ -363,16 +341,12 @@ mod real_impl {
                 Ok(true)
             }
             Ok(false) => {
-                tracing::info!(
-                    "[vNAS] Stored tokens expired or invalid, user must re-authenticate"
-                );
-                // Clear invalid tokens
+                tracing::debug!("vNAS tokens expired, re-authentication required");
                 clear_tokens(&app)?;
                 Ok(false)
             }
             Err(e) => {
-                tracing::info!("[vNAS] Failed to restore session: {}", e);
-                // Clear tokens on error
+                tracing::warn!("vNAS session restore failed: {}", e);
                 clear_tokens(&app)?;
                 Err(e.to_string())
             }
@@ -411,12 +385,7 @@ mod real_impl {
         // Store service for later use
         *state.service.write().await = Some(service);
 
-        tracing::info!(
-            "[vNAS] OAuth flow started for {:?} environment",
-            environment
-        );
-        tracing::info!("[vNAS] Auth URL: {}", auth_url);
-
+        tracing::info!("vNAS OAuth flow started for {:?}", environment);
         Ok(auth_url)
     }
 
@@ -431,15 +400,13 @@ mod real_impl {
             .ok_or("OAuth not started - call vnas_start_auth first")?;
 
         // Wait for OAuth callback (this blocks until user completes browser auth)
-        tracing::info!("[vNAS] Waiting for OAuth callback from browser...");
-
         service.complete_oauth().await.map_err(|e| {
             state.set_error(Some(e.to_string()));
             state.update_state(SessionState::Disconnected);
             format!("OAuth failed: {}", e)
         })?;
 
-        tracing::info!("[vNAS] OAuth completed successfully");
+        tracing::info!("vNAS OAuth completed");
         state.update_state(SessionState::Connecting);
 
         Ok(())
@@ -453,9 +420,6 @@ mod real_impl {
         state: State<'_, VnasState>,
         callback_url: String,
     ) -> Result<(), String> {
-        tracing::info!("[vNAS] vnas_handle_oauth_callback called");
-        tracing::info!("[vNAS] Received OAuth callback: {}", callback_url);
-
         // Parse the callback URL to extract the authorization code
         let url =
             url::Url::parse(&callback_url).map_err(|e| format!("Invalid callback URL: {}", e))?;
@@ -466,44 +430,29 @@ mod real_impl {
             .map(|(_, value)| value.to_string())
             .ok_or("No authorization code in callback URL")?;
 
-        let code_preview = if code.len() > 10 { &code[..10] } else { &code };
-        tracing::info!("[vNAS] Extracted authorization code: {}...", code_preview);
-
         // Get service reference
         let service_guard = state.service.read().await;
         let service = service_guard
             .as_ref()
             .ok_or("OAuth not started - call vnas_start_auth first")?;
 
-        tracing::info!("[vNAS] Calling complete_oauth_with_code...");
-
         // Complete OAuth with the authorization code from the deep link
         service.complete_oauth_with_code(&code).await.map_err(|e| {
-            tracing::info!("[vNAS] complete_oauth_with_code failed: {}", e);
             state.set_error(Some(e.to_string()));
             state.update_state(SessionState::Disconnected);
             format!("OAuth failed: {}", e)
         })?;
 
-        tracing::info!("[vNAS] OAuth completed successfully via deep link");
+        tracing::info!("vNAS OAuth completed via deep link");
 
         // Save tokens for future sessions
-        tracing::info!("[vNAS] Getting stored tokens from service...");
-        match service.get_stored_tokens().await {
-            Some(tokens) => {
-                tracing::info!("[vNAS] Got tokens from service, saving...");
-                save_tokens(&app, &tokens)?;
-            }
-            None => {
-                tracing::info!(
-                    "[vNAS] WARNING: get_stored_tokens() returned None - tokens not saved!"
-                );
-            }
+        if let Some(tokens) = service.get_stored_tokens().await {
+            save_tokens(&app, &tokens)?;
+        } else {
+            tracing::warn!("vNAS tokens not available after OAuth");
         }
 
         state.update_state(SessionState::Connecting);
-        tracing::info!("[vNAS] State updated to Connecting");
-
         Ok(())
     }
 
@@ -519,10 +468,6 @@ mod real_impl {
             | SessionState::WaitingForSession
             | SessionState::Subscribing
             | SessionState::Connected => {
-                tracing::info!(
-                    "[vNAS] Already connected or connecting (state: {:?}), skipping",
-                    current_state
-                );
                 return Ok(());
             }
             _ => {}
@@ -538,31 +483,25 @@ mod real_impl {
             return Err("Not authenticated - complete OAuth first".into());
         }
 
-        tracing::info!("[vNAS] Starting connection...");
         state.update_state(SessionState::Connecting);
         let _ = app.emit("vnas-state-changed", SessionState::Connecting);
 
         // Connect to SignalR hub
-        tracing::info!("[vNAS] Calling service.connect()...");
         service.connect().await.map_err(|e| {
-            tracing::info!("[vNAS] Connection failed: {}", e);
             state.set_error(Some(e.to_string()));
             state.update_state(SessionState::Disconnected);
             let _ = app.emit("vnas-state-changed", SessionState::Disconnected);
             format!("Connection failed: {}", e)
         })?;
 
-        tracing::info!("[vNAS] Connected to SignalR hub");
+        tracing::info!("vNAS connected to SignalR hub");
 
         // Check what state the service is in after connect
         // It may be Subscribing (session found and joined) or WaitingForSession (CRC not running)
         let service_state = service.state().await;
-        tracing::info!("[vNAS] Service state after connect: {:?}", service_state);
-
         let frontend_state: SessionState = service_state.into();
         state.update_state(frontend_state);
         let _ = app.emit("vnas-state-changed", frontend_state);
-        tracing::info!("[vNAS] State set to {:?}", frontend_state);
 
         // Start listening for events
         let event_tx = state.event_tx.clone();
@@ -639,44 +578,26 @@ mod real_impl {
         state: State<'_, VnasState>,
         facility_id: String,
     ) -> Result<(), String> {
-        tracing::info!("[vNAS] vnas_subscribe called for facility: {}", facility_id);
-        tracing::info!(
-            "[vNAS] Current state before subscribe: {:?}",
-            state.status().state
-        );
-
         let service_guard = state.service.read().await;
         let service = service_guard
             .as_ref()
             .ok_or("Not connected - call vnas_connect first")?;
-
-        tracing::info!("[vNAS] Service available, calling subscribe_towercab...");
 
         // Subscribe to TowerCabAircraft topic
         service
             .subscribe_towercab(&facility_id)
             .await
             .map_err(|e| {
-                tracing::info!("[vNAS] subscribe_towercab failed: {}", e);
                 state.set_error(Some(e.to_string()));
                 format!("Subscription failed: {}", e)
             })?;
 
-        tracing::info!("[vNAS] subscribe_towercab completed successfully");
-
         state.set_facility(Some(facility_id.clone()));
         state.update_state(SessionState::Connected);
 
-        tracing::info!("[vNAS] Emitting vnas-state-changed with Connected state");
-        let emit_result = app.emit("vnas-state-changed", SessionState::Connected);
-        if let Err(e) = emit_result {
-            tracing::info!("[vNAS] Failed to emit state change: {:?}", e);
-        }
+        let _ = app.emit("vnas-state-changed", SessionState::Connected);
 
-        tracing::info!(
-            "[vNAS] Subscribed to TowerCabAircraft for {} - state is now Connected",
-            facility_id
-        );
+        tracing::info!(facility_id, "Subscribed to TowerCabAircraft");
 
         Ok(())
     }
@@ -696,7 +617,7 @@ mod real_impl {
         status.error = None;
         state.set_status(status);
 
-        tracing::info!("[vNAS] Disconnected");
+        tracing::debug!("vNAS disconnected");
         Ok(())
     }
 
@@ -769,7 +690,6 @@ mod real_impl {
     /// Call this in the Tauri setup closure.
     pub fn init_vnas_state(app: &AppHandle) {
         app.manage(VnasState::new());
-        tracing::info!("[vNAS] State initialized (real implementation)");
     }
 }
 
