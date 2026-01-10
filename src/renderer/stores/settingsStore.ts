@@ -439,62 +439,39 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
     }),
     {
       name: 'settings-store',
-      version: 30, // Added terrain flattening settings
+      version: 30,
       migrate: (persistedState: unknown, version: number) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let state: any = persistedState
 
-        // Auto-migrate old flat structure to grouped structure
+        // ========================================================================
+        // MIGRATIONS WITH CUSTOM LOGIC
+        // ========================================================================
+        // Only explicit migrations are needed when:
+        // 1. Converting from flat to grouped structure (v1 → v2)
+        // 2. Renaming/splitting a field (v7: modelBrightness → builtin/fsltl)
+        // 3. Conditionally updating a value (v12: increase cache if user never changed it)
+        // 4. Changing defaults for existing users (v25: shadow/night defaults)
+        //
+        // For simple "add new setting with default value" changes:
+        // - Just add the field to the interface and DEFAULT_SETTINGS
+        // - Bump the version number
+        // - The repair step at the end handles it automatically
+        // ========================================================================
+
+        // v1 → v2: Convert flat structure to grouped structure
         if (version < 2) {
           console.log('[Settings] Migrating from flat structure (v1) to grouped structure (v2)')
           state = migrateOldSettings(state)
         }
 
-        // Migrate v2 to v3: add missing weather precipitation settings
-        if (version < 3) {
-          console.log('[Settings] Migrating v2 to v3: adding precipitation settings')
-          state = {
-            ...state,
-            weather: { ...DEFAULT_SETTINGS.weather, ...state.weather }
-          }
-        }
-
-        // Migrate v3 to v4: add weather interpolation and auto-airport switching
-        if (version < 4) {
-          console.log('[Settings] Migrating v3 to v4: adding weather interpolation and auto-airport switching')
-          state = {
-            ...state,
-            weather: { ...DEFAULT_SETTINGS.weather, ...state.weather },
-            camera: { ...DEFAULT_SETTINGS.camera, ...state.camera }
-          }
-        }
-
-        // Migrate v4 to v5: add model brightness setting
-        if (version < 5) {
-          console.log('[Settings] Migrating v4 to v5: adding model brightness setting')
-          state = {
-            ...state,
-            graphics: { ...DEFAULT_SETTINGS.graphics, ...state.graphics }
-          }
-        }
-
-        // Migrate v5 to v6: add FSLTL settings
-        if (version < 6) {
-          console.log('[Settings] Migrating v5 to v6: adding FSLTL settings')
-          state = {
-            ...state,
-            fsltl: { ...DEFAULT_SETTINGS.fsltl, ...state.fsltl }
-          }
-        }
-
-        // Migrate v6 to v7: split modelBrightness into builtinModelBrightness and fsltlModelBrightness
+        // v6 → v7: Split modelBrightness into separate builtin/fsltl settings
         if (version < 7) {
           console.log('[Settings] Migrating v6 to v7: splitting model brightness into built-in and FSLTL')
           const oldBrightness = state.graphics?.modelBrightness ?? 1.0
           state = {
             ...state,
             graphics: {
-              ...DEFAULT_SETTINGS.graphics,
               ...state.graphics,
               builtinModelBrightness: oldBrightness,
               fsltlModelBrightness: DEFAULT_SETTINGS.graphics.fsltlModelBrightness
@@ -502,152 +479,20 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
           }
         }
 
-        // Migrate v7 to v8: add pinFollowedAircraftToTop setting
-        if (version < 8) {
-          console.log('[Settings] Migrating v7 to v8: adding pinFollowedAircraftToTop setting')
-          state = {
-            ...state,
-            aircraft: { ...DEFAULT_SETTINGS.aircraft, ...state.aircraft }
-          }
-        }
-
-        // Migrate v8 to v9: add autoAvoidOverlaps setting
-        if (version < 9) {
-          console.log('[Settings] Migrating v8 to v9: adding autoAvoidOverlaps setting')
-          state = {
-            ...state,
-            aircraft: { ...DEFAULT_SETTINGS.aircraft, ...state.aircraft }
-          }
-        }
-
-        // Migrate v9 to v10: add leaderDistance setting
-        if (version < 10) {
-          console.log('[Settings] Migrating v9 to v10: adding leaderDistance setting')
-          state = {
-            ...state,
-            aircraft: { ...DEFAULT_SETTINGS.aircraft, ...state.aircraft }
-          }
-        }
-
-        // Migrate v10 to v11: add enableFsltlModels setting
-        if (version < 11) {
-          console.log('[Settings] Migrating v10 to v11: adding enableFsltlModels setting')
-          state = {
-            ...state,
-            fsltl: { ...DEFAULT_SETTINGS.fsltl, ...state.fsltl }
-          }
-        }
-
-        // Migrate v11 to v12: increase default tile cache from 500 to 2000
+        // v11 → v12: Increase default tile cache, but preserve user's value if they lowered it
         if (version < 12) {
           console.log('[Settings] Migrating v11 to v12: increasing default tile cache size')
           const currentCache = state.memory?.inMemoryTileCacheSize ?? 500
-          state = {
-            ...state,
-            memory: {
-              ...DEFAULT_SETTINGS.memory,
-              ...state.memory,
-              inMemoryTileCacheSize: currentCache >= 500 ? 2000 : currentCache
+          // Only increase if user was at or above the old default (500)
+          if (currentCache >= 500) {
+            state = {
+              ...state,
+              memory: { ...state.memory, inMemoryTileCacheSize: 2000 }
             }
           }
         }
 
-        // Migrate v12 to v13: add askToContributePositions UI setting
-        if (version < 13) {
-          console.log('[Settings] Migrating v12 to v13: adding askToContributePositions setting')
-          state = {
-            ...state,
-            ui: { ...DEFAULT_SETTINGS.ui, ...state.ui }
-          }
-        }
-
-        // Migrate v13 to v14: add defaultDatablockDirection setting
-        if (version < 14) {
-          console.log('[Settings] Migrating v13 to v14: adding defaultDatablockDirection setting')
-          state = {
-            ...state,
-            aircraft: { ...DEFAULT_SETTINGS.aircraft, ...state.aircraft }
-          }
-        }
-
-        // Migrate v14 to v15: add enableAircraftSilhouettes setting
-        if (version < 15) {
-          console.log('[Settings] Migrating v14 to v15: adding enableAircraftSilhouettes setting')
-          state = {
-            ...state,
-            graphics: { ...DEFAULT_SETTINGS.graphics, ...state.graphics }
-          }
-        }
-
-        // Migrate v15 to v16: add builtinModelTintColor setting
-        if (version < 16) {
-          console.log('[Settings] Migrating v15 to v16: adding builtinModelTintColor setting')
-          state = {
-            ...state,
-            graphics: { ...DEFAULT_SETTINGS.graphics, ...state.graphics }
-          }
-        }
-
-        // Migrate v16 to v17: add deviceOptimizationPromptDismissed setting
-        if (version < 17) {
-          console.log('[Settings] Migrating v16 to v17: adding deviceOptimizationPromptDismissed setting')
-          state = {
-            ...state,
-            ui: { ...DEFAULT_SETTINGS.ui, ...state.ui }
-          }
-        }
-
-        // Migrate v17 to v18: add joystickSensitivity setting
-        if (version < 18) {
-          console.log('[Settings] Migrating v17 to v18: adding joystickSensitivity setting')
-          state = {
-            ...state,
-            camera: { ...DEFAULT_SETTINGS.camera, ...state.camera }
-          }
-        }
-
-        // Migrate v18 to v19: add aircraftPanelWidth/Height UI settings
-        if (version < 19) {
-          console.log('[Settings] Migrating v18 to v19: adding aircraft panel dimension settings')
-          state = {
-            ...state,
-            ui: { ...DEFAULT_SETTINGS.ui, ...state.ui }
-          }
-        }
-
-        // Migrate v19 to v20: add datablockFontSize setting
-        if (version < 20) {
-          console.log('[Settings] Migrating v19 to v20: adding datablockFontSize setting')
-          state = {
-            ...state,
-            aircraft: { ...DEFAULT_SETTINGS.aircraft, ...state.aircraft }
-          }
-        }
-
-        // Migrate v20 to v21: add night darkening settings
-        if (version < 21) {
-          console.log('[Settings] Migrating v20 to v21: adding night darkening settings')
-          state = {
-            ...state,
-            graphics: { ...DEFAULT_SETTINGS.graphics, ...state.graphics }
-          }
-        }
-
-        // Migrate v22 to v23: repair broken migrations (early returns prevented chaining)
-        if (version < 23) {
-          console.log('[Settings] Migrating v22 to v23: repairing settings with defaults')
-        }
-
-        // Migrate v23 to v24: add aircraft night visibility setting
-        if (version < 24) {
-          console.log('[Settings] Migrating v23 to v24: adding aircraft night visibility setting')
-          state = {
-            ...state,
-            graphics: { ...DEFAULT_SETTINGS.graphics, ...state.graphics }
-          }
-        }
-
-        // Migrate v24 to v25: change shadow and night darkening defaults
+        // v24 → v25: Change defaults for existing users (shadow/night darkening)
         if (version < 25) {
           console.log('[Settings] Migrating v24 to v25: changing shadow and night darkening defaults')
           state = {
@@ -660,44 +505,16 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
           }
         }
 
-        // Migrate v25 to v26: add RealTraffic settings
-        if (version < 26) {
-          console.log('[Settings] Migrating v25 to v26: adding RealTraffic settings')
-          state = {
-            ...state,
-            realtraffic: { ...DEFAULT_SETTINGS.realtraffic, ...state.realtraffic }
-          }
-        }
-
-        // Migrate v27 to v28: add advanced settings (interpolation debug logs)
-        if (version < 28) {
-          console.log('[Settings] Migrating v27 to v28: adding advanced settings')
-          state = {
-            ...state,
-            advanced: { ...DEFAULT_SETTINGS.advanced, ...state.advanced }
-          }
-        }
-
-        // Migrate v28 to v29: add highQualityInsets graphics setting
-        if (version < 29) {
-          console.log('[Settings] Migrating v28 to v29: adding highQualityInsets graphics setting')
-          state = {
-            ...state,
-            graphics: { ...DEFAULT_SETTINGS.graphics, ...state.graphics }
-          }
-        }
-
-        // Migrate v29 to v30: add terrain flattening settings
-        if (version < 30) {
-          console.log('[Settings] Migrating v29 to v30: adding terrain flattening settings')
-          state = {
-            ...state,
-            cesium: { ...DEFAULT_SETTINGS.cesium, ...state.cesium }
-          }
-        }
-
-        // Repair step: ensure all settings groups have defaults filled in
-        // This catches any settings that were missed by migrations
+        // ========================================================================
+        // REPAIR STEP: Auto-fill missing settings from defaults
+        // ========================================================================
+        // This handles all simple "new setting with default" migrations.
+        // When you add a new setting:
+        // 1. Add the field to the interface in types/settings.ts
+        // 2. Add the default value to DEFAULT_SETTINGS in types/settings.ts
+        // 3. Bump the version number here
+        // That's it - this repair step merges defaults automatically.
+        // ========================================================================
         const repaired = {
           ...state,
           cesium: { ...DEFAULT_SETTINGS.cesium, ...state.cesium },

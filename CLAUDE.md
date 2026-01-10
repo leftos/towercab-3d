@@ -328,21 +328,28 @@ scripts/
 
 ### Adding a New Setting
 
-**Local Settings (per-browser):**
-1. Add to `types/settings.ts` grouped interface (cesium, graphics, camera, weather, memory, aircraft, or ui)
-2. Update `DEFAULT_SETTINGS` in `types/settings.ts`
-3. Add corresponding update function in `settingsStore.ts` (if needed)
-4. **IMPORTANT: Increment the `version` number in `settingsStore.ts` and add a migration** that merges the new defaults with existing user settings. Without this, existing users won't get the new settings and values will be `undefined`. Example migration:
-   ```typescript
-   if (version < NEW_VERSION) {
-     const state = persistedState as Partial<typeof DEFAULT_SETTINGS>
-     return {
-       ...state,
-       GROUP_NAME: { ...DEFAULT_SETTINGS.GROUP_NAME, ...state.GROUP_NAME }
-     }
-   }
-   ```
-5. Add UI control in appropriate settings tab
+**Local Settings (per-browser) - Simple Case:**
+
+For adding a new setting with a default value (most common):
+1. Add field to the interface in `types/settings.ts` (e.g., `CesiumSettings`, `GraphicsSettings`)
+2. Add default value to `DEFAULT_SETTINGS` in `types/settings.ts`
+3. Increment the `version` number in `settingsStore.ts`
+4. Add UI control in appropriate settings tab
+
+That's it! The migration system has a "repair step" that automatically merges `DEFAULT_SETTINGS` with existing user settings, so new fields get their defaults automatically.
+
+**When you DO need a custom migration:**
+- Renaming a field (e.g., `modelBrightness` → `builtinModelBrightness`)
+- Changing defaults for existing users (e.g., disabling a feature they had enabled)
+- Conditional updates (e.g., only increase cache size if user never lowered it)
+
+```typescript
+// Example: Renaming a field (v6 → v7)
+if (version < 7) {
+  const oldValue = state.graphics?.oldFieldName ?? 1.0
+  state = { ...state, graphics: { ...state.graphics, newFieldName: oldValue } }
+}
+```
 
 **Global Settings (shared across devices):**
 1. Add to `GlobalSettings` interface in `types/settings.ts`
