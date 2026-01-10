@@ -444,13 +444,12 @@ class AirportPolygonService {
     // This uses the convex hull of all runways and pavements to ensure complete coverage
     // Add it at the BEGINNING so specific polygons (runways, taxiways) take precedence
     //
-    // IMPORTANT: Only create fill polygon for FLAT airports!
-    // For airports with significant runway gradients (like YMML's 31m slope),
-    // a single-elevation fill polygon does more harm than good - it flattens
-    // areas to the wrong elevation. Better to leave gaps unfilled than to
-    // create large elevation discontinuities.
+    // For sloped airports (like YMML with 31m runway gradient), we create a fill polygon
+    // with useFieldElevation=true, which tells FlatteningTerrainProvider to compute
+    // elevation dynamically using inverse distance weighting from runway thresholds.
+    // This creates a smooth gradient across the fill polygon that matches the airport slope.
     const isFlat = fieldElevationResult?.isFlat ?? false
-    if (isFlat && fieldElevationEllipsoidal !== null && (runways.length > 0 || pavementPolygons.length > 0)) {
+    if (fieldElevationEllipsoidal !== null && (runways.length > 0 || pavementPolygons.length > 0)) {
       const fillPolygon = createAirportFillPolygon(
         runways,
         pavementPolygons,
@@ -458,12 +457,17 @@ class AirportPolygonService {
         blendDistance
       )
       if (fillPolygon) {
+        // For sloped airports, mark the fill polygon to use field elevation computation
+        // This uses IDW from runway thresholds for smooth gradient across the airport
+        if (!isFlat) {
+          fillPolygon.useFieldElevation = true
+          console.log(`[AirportPolygonService] ${icao}: Added gradient fill polygon (uses IDW from runway thresholds)`)
+        } else {
+          console.log(`[AirportPolygonService] ${icao}: Added airport fill polygon at ${fieldElevationEllipsoidal.toFixed(1)}m`)
+        }
         // Insert at beginning - lower priority than specific polygons
         polygons.unshift(fillPolygon)
-        console.log(`[AirportPolygonService] ${icao}: Added airport fill polygon at ${fieldElevationEllipsoidal.toFixed(1)}m`)
       }
-    } else if (!isFlat && fieldElevationResult) {
-      console.log(`[AirportPolygonService] ${icao}: Skipping fill polygon for sloped airport (runways have >10m elevation variation)`)
     }
 
     // Calculate overall bounding box

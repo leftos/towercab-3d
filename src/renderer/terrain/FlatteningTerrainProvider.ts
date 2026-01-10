@@ -241,6 +241,8 @@ interface FloorData {
   gradientEnd?: [number, number]   // [lon, lat]
   startElevation?: number
   endElevation?: number
+  // If true, use IDW from runway thresholds instead of fixed height
+  useFieldElevation?: boolean
 
   // Pre-computed data for fast geometry operations
   exteriorX: Float64Array    // Exterior ring X coordinates (longitude)
@@ -488,6 +490,8 @@ export function createFlatteningTerrainProvider(
         gradientEnd: polygon.gradientEnd,
         startElevation: polygon.startElevation,
         endElevation: polygon.endElevation,
+        // Copy field elevation flag (for sloped airport fill polygons)
+        useFieldElevation: polygon.useFieldElevation,
         // Pre-computed coordinate arrays
         exteriorX,
         exteriorY,
@@ -861,8 +865,15 @@ export function createFlatteningTerrainProvider(
 
         // Use inline ray-casting instead of turf.booleanPointInPolygon
         if (pointInPolygonWithHoles(lon, lat, floor.exteriorX, floor.exteriorY, floor.holesX, floor.holesY)) {
-          // Inside this polygon
-          const targetHeight = getGradientElevation(lon, lat, floor)
+          // Inside this polygon - compute target height
+          let targetHeight: number
+          if (floor.useFieldElevation && runwayFloors.length > 0) {
+            // Fill polygon with dynamic elevation - use IDW from runway thresholds
+            targetHeight = computeFieldElevation(lon, lat, runwayFloors, floor.floorHeight)
+          } else {
+            // Runway (gradient) or regular taxiway/apron (fixed height)
+            targetHeight = getGradientElevation(lon, lat, floor)
+          }
           insideFloors.push({ floor, height: targetHeight })
         } else if (floor.blendDistance > 0) {
           // Check if within blend distance using inline distance calculation
@@ -877,7 +888,15 @@ export function createFlatteningTerrainProvider(
             const distMeters = degreesToMeters(distDeg, lat)
 
             if (distMeters <= floor.blendDistance) {
-              const targetHeight = getGradientElevation(lon, lat, floor)
+              // Compute target height for blend zone
+              let targetHeight: number
+              if (floor.useFieldElevation && runwayFloors.length > 0) {
+                // Fill polygon with dynamic elevation - use IDW from runway thresholds
+                targetHeight = computeFieldElevation(lon, lat, runwayFloors, floor.floorHeight)
+              } else {
+                // Runway (gradient) or regular taxiway/apron (fixed height)
+                targetHeight = getGradientElevation(lon, lat, floor)
+              }
               const blendFactor = 1.0 - (distMeters / floor.blendDistance)
               const easedFactor = blendFactor * blendFactor * (3 - 2 * blendFactor)
               blendFloors.push({ floor, height: targetHeight, factor: easedFactor })
@@ -1193,6 +1212,19 @@ export function createFlatteningTerrainProvider(
       // Inside a runway - use runway's gradient elevation (authoritative)
       height = getGradientElevation(lon, lat, matchingFloor)
       closestRunway = matchingFloor
+    } else if (matchingFloor.useFieldElevation && runwayFloors.length > 0) {
+      // Inside a fill polygon with dynamic elevation - use IDW from runway thresholds
+      height = computeFieldElevation(lon, lat, runwayFloors, matchingFloor.floorHeight)
+      // Find closest runway for slope calculation
+      let minDist = Infinity
+      for (const floor of runwayFloors) {
+        const distDeg = distanceToPolygonEdge(lon, lat, floor.exteriorX, floor.exteriorY, Infinity)
+        const distMeters = degreesToMeters(distDeg, lat)
+        if (distMeters < minDist) {
+          minDist = distMeters
+          closestRunway = floor
+        }
+      }
     } else {
       // Inside a taxiway - compute elevation from nearest runway's gradient
       // Convert floorDataMap to array for the helper function

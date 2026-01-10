@@ -38,6 +38,13 @@ export interface FlatteningPolygon {
   startElevation?: number
   /** Elevation at the end point in meters ellipsoidal (WGS84) */
   endElevation?: number
+
+  /**
+   * If true, elevation is computed dynamically using inverse distance weighting
+   * from runway threshold elevations. Used for fill polygons at sloped airports
+   * to create a continuous gradient across the airport surface.
+   */
+  useFieldElevation?: boolean
 }
 
 /**
