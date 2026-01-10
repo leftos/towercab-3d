@@ -88,6 +88,43 @@ impl Drop for ProcessWithJob {
 }
 
 // =============================================================================
+// DEEP LINK PROTOCOL REGISTRATION (Windows)
+// =============================================================================
+
+/// Register the tc3d:// deep link protocol in Windows registry.
+/// This is a workaround for Tauri NSIS installer not registering deep links.
+/// See: https://github.com/tauri-apps/tauri/issues/10095
+#[cfg(windows)]
+fn register_deep_link_protocol() -> Result<(), Box<dyn std::error::Error>> {
+    use winreg::enums::*;
+    use winreg::RegKey;
+
+    let exe_path = std::env::current_exe()?;
+    let exe_path_str = exe_path.to_string_lossy();
+
+    // Open or create HKEY_CURRENT_USER\Software\Classes\tc3d
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    let (tc3d_key, _) = hkcu.create_subkey("Software\\Classes\\tc3d")?;
+
+    // Set the URL Protocol marker (empty string value)
+    tc3d_key.set_value("URL Protocol", &"")?;
+    // Set the default value (description)
+    tc3d_key.set_value("", &"URL:TowerCab 3D Protocol")?;
+
+    // Create DefaultIcon subkey
+    let (icon_key, _) = tc3d_key.create_subkey("DefaultIcon")?;
+    icon_key.set_value("", &format!("\"{}\",0", exe_path_str))?;
+
+    // Create shell\open\command subkey
+    let (shell_key, _) = tc3d_key.create_subkey("shell\\open\\command")?;
+    let command = format!("\"{}\" \"%1\"", exe_path_str);
+    shell_key.set_value("", &command)?;
+
+    tracing::info!("Registered tc3d:// deep link protocol -> {}", exe_path_str);
+    Ok(())
+}
+
+// =============================================================================
 // GLOBAL STATE
 // =============================================================================
 
@@ -683,6 +720,19 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        // Single-instance must be registered before deep-link for Windows deep link handling.
+        // When a second instance is launched with a tc3d:// URL, it will:
+        // 1. Detect the existing instance
+        // 2. Forward the deep link URL to the existing instance via deep-link event
+        // 3. Focus the existing window and exit the new instance
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            // Focus the main window when another instance tries to launch
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_focus();
+                let _ = window.unminimize();
+            }
+            tracing::info!("Single instance triggered with args: {:?}", argv);
+        }))
         .plugin(tauri_plugin_deep_link::init())
         .setup(|app| {
             // Register updater plugin (desktop only)
@@ -699,6 +749,16 @@ pub fn run() {
                     .unwrap_or_else(|| "dev".to_string());
                 let title = format!("TowerCab 3D v{}", version);
                 let _ = window.set_title(&title);
+            }
+
+            // Register tc3d:// deep link protocol on Windows
+            // This is a workaround for Tauri NSIS installer not registering deep links
+            // See: https://github.com/tauri-apps/tauri/issues/10095
+            #[cfg(windows)]
+            {
+                if let Err(e) = register_deep_link_protocol() {
+                    tracing::warn!("Failed to register deep link protocol: {}", e);
+                }
             }
 
             // Initialize vNAS state
