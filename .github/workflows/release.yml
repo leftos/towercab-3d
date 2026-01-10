@@ -140,6 +140,12 @@ jobs:
           fi
         shell: bash
 
+      - name: Regenerate lockfile with vnas from git
+        if: steps.vnas-check.outputs.vnas_available == 'true'
+        env:
+          CARGO_NET_GIT_FETCH_WITH_CLI: true
+        run: cd src-tauri && cargo generate-lockfile
+
       - name: Build Tauri app (with signing)
         if: steps.signing-check.outputs.signing_available == 'true'
         uses: tauri-apps/tauri-action@v0
