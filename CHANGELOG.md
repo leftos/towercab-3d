@@ -4,7 +4,12 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+## [0.0.30-alpha] - 2026-01-10
+
 ### Added
+- **vNAS Support**
+  - Use your existing CRC session to receive 1Hz updates for aircraft within a 30nm radius of your current airport, if the airport is an included facility in your session
+  - Lowers the display delay from 17 seconds for general VATSIM aircraft to 1.5 seconds for aircraft whose updates are delivered via vNAS
 - **Terrain flattening for airport surfaces**
   - Flattens runways, taxiways, and aprons for smooth aircraft movement
   - Smooths out bumps and undulations that caused aircraft to appear jumpy while taxiing
@@ -12,9 +17,14 @@ All notable changes to TowerCab 3D will be documented in this file.
   - Aircraft now pitch realistically on sloped runways instead of staying level
   - Toggle on/off in Settings → Graphics & Weather → Terrain
   - Configurable edge blend distance for natural terrain transitions
+- **Tabbed Airport Selector**
+  - Favorites (new!): Select airports to be stored as favorites for quick access
+  - Recent: Last 10 airports you've selected
+  - Popular: The airports across VATSIM with the most departures and arrivals at the moment
+  - vNAS: The airports underlying the facility in your current CRC session that can receive 1Hz updates
 
 ### Fixed
-- **Pushback detection fixes for VATSIM users**
+- **Pushback detection fixes**
 - **White FSLTL aircraft with wrong engine variant** - Some aircraft (like B772, B77W) have multiple engine variants (GE, PW, RR). Liveries referencing the wrong variant would load without textures, appearing all white. Now correctly reads the model XML to find the right GLTF file. 
 
 ## [0.0.29-alpha] - 2026-01-07

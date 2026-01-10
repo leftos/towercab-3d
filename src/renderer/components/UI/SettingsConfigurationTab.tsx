@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
 import { useRealTrafficStore } from '../../stores/realTrafficStore'
 import { useVatsimStore } from '../../stores/vatsimStore'
+import { useVnasStore } from '../../stores/vnasStore'
 import { useAirportStore } from '../../stores/airportStore'
 import { useViewportStore } from '../../stores/viewportStore'
 import { useAircraftTimelineStore } from '../../stores/aircraftTimelineStore'
@@ -9,6 +10,7 @@ import { shellApi, httpServerApi, type ServerStatus, isTauri } from '../../utils
 import MSFSModelSettingsPanel from './MSFSModelSettingsPanel'
 import CollapsibleSection from './settings/CollapsibleSection'
 import type { DataSourceType } from '../../types/realtraffic'
+import type { VnasEnvironment } from '../../types/vnas'
 import './ControlsBar.css'
 
 interface SettingsConfigurationTabProps {
@@ -36,6 +38,14 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
   const rtAuthenticate = useRealTrafficStore((state) => state.authenticate)
   const rtDisconnect = useRealTrafficStore((state) => state.disconnect)
 
+  // vNAS store for real-time updates (supplements VATSIM data)
+  const vnasStatus = useVnasStore((state) => state.status)
+  const vnasTryConnect = useVnasStore((state) => state.tryConnectWithStoredTokens)
+  const vnasStartAuth = useVnasStore((state) => state.startAuth)
+  const vnasHandleOAuthCallback = useVnasStore((state) => state.handleOAuthCallback)
+  const vnasDisconnect = useVnasStore((state) => state.disconnect)
+  const vnasCheckAvailability = useVnasStore((state) => state.checkAvailability)
+
   // HTTP Server state
   const serverSettings = useGlobalSettingsStore((state) => state.server)
   const updateServer = useGlobalSettingsStore((state) => state.updateServer)
@@ -50,6 +60,11 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
   // Local state for RealTraffic license key input
   const [rtLicenseInput, setRtLicenseInput] = useState('')
   const [rtLicenseSaved, setRtLicenseSaved] = useState(false)
+
+  // Local state for vNAS connection
+  const [vnasSelectedEnv, setVnasSelectedEnv] = useState<VnasEnvironment>('live')
+  const [vnasIsAuthenticating, setVnasIsAuthenticating] = useState(false)
+  const [vnasCallbackUrl, setVnasCallbackUrl] = useState('')
 
   // Sync token input with store value
   useEffect(() => {
@@ -68,6 +83,12 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
     if (!isTauri()) return
     httpServerApi.getStatus().then(setServerStatus).catch(console.error)
   }, [])
+
+  // Check vNAS availability on mount (only in Tauri)
+  useEffect(() => {
+    if (!isTauri()) return
+    vnasCheckAvailability()
+  }, [vnasCheckAvailability])
 
   const handleSaveToken = useCallback(async () => {
     if (tokenInput.trim() && tokenInput !== cesiumIonToken) {
@@ -98,6 +119,75 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
   const handleDisconnectRt = useCallback(() => {
     rtDisconnect()
   }, [rtDisconnect])
+
+  // vNAS connection handlers
+  const handleVnasStartAuth = useCallback(async () => {
+    try {
+      // First try to connect using stored tokens (avoids OAuth if possible)
+      const connected = await vnasTryConnect(vnasSelectedEnv)
+      if (connected) {
+        console.log('[vNAS] Connected using stored tokens')
+        return
+      }
+
+      // No valid tokens, start OAuth flow
+      setVnasIsAuthenticating(true)
+      setVnasCallbackUrl('')
+      const authUrl = await vnasStartAuth(vnasSelectedEnv)
+      console.log('[vNAS] Opening auth URL in browser:', authUrl)
+
+      // Open auth URL in system browser using Tauri shell plugin
+      const { open } = await import('@tauri-apps/plugin-shell')
+      await open(authUrl)
+
+      // Note: In production, the OAuth callback is handled by the deep-link handler in App.tsx
+      // In dev mode, deep links don't work, so user needs to paste the callback URL manually
+    } catch (error) {
+      console.error('vNAS auth failed:', error)
+      setVnasIsAuthenticating(false)
+    }
+  }, [vnasSelectedEnv, vnasTryConnect, vnasStartAuth])
+
+  const handleVnasManualCallback = useCallback(async () => {
+    if (!vnasCallbackUrl.trim()) return
+    try {
+      console.log('[vNAS] Processing manual callback URL:', vnasCallbackUrl)
+      await vnasHandleOAuthCallback(vnasCallbackUrl.trim())
+      setVnasCallbackUrl('')
+      setVnasIsAuthenticating(false)
+    } catch (error) {
+      console.error('vNAS manual callback failed:', error)
+    }
+  }, [vnasCallbackUrl, vnasHandleOAuthCallback])
+
+  const handleVnasCancelAuth = useCallback(() => {
+    setVnasIsAuthenticating(false)
+    setVnasCallbackUrl('')
+    vnasDisconnect()
+  }, [vnasDisconnect])
+
+  const handleVnasDisconnect = useCallback(async () => {
+    try {
+      await vnasDisconnect()
+    } catch (error) {
+      console.error('vNAS disconnect failed:', error)
+    }
+  }, [vnasDisconnect])
+
+  // Helper to get vNAS state label
+  const getVnasStateLabel = useCallback(() => {
+    switch (vnasStatus.state) {
+      case 'disconnected': return 'Disconnected'
+      case 'authenticating': return 'Authenticating...'
+      case 'connecting': return 'Connecting...'
+      case 'joiningSession': return 'Joining Session...'
+      case 'waitingForSession': return 'Waiting for CRC...'
+      case 'subscribing': return 'Ready for vNAS Airport...'
+      case 'connected': return 'Connected'
+      case 'unavailable': return 'Not Available'
+      default: return vnasStatus.state
+    }
+  }, [vnasStatus.state])
 
   const handleDataSourceChange = useCallback((newSource: DataSourceType) => {
     const currentDataSource = useGlobalSettingsStore.getState().realtraffic.dataSource
@@ -335,6 +425,119 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
           </>
         )}
       </CollapsibleSection>
+
+      {/* vNAS Real-Time Updates - only shown when VATSIM is selected and vNAS is available */}
+      {dataSource === 'vatsim' && isTauri() && vnasStatus.available && (
+        <CollapsibleSection title="Real-Time Updates (vNAS)">
+          <p className="setting-hint" style={{ marginBottom: '12px' }}>
+            vNAS provides 1-second position updates from the VATSIM network, improving aircraft smoothness within ~30NM of your position.
+          </p>
+
+          {/* Connection Status */}
+          <div className="setting-item">
+            <label>Status</label>
+            <span style={{
+              color: vnasStatus.state === 'connected' ? '#81c784' :
+                     ['authenticating', 'connecting', 'joiningSession', 'waitingForSession', 'subscribing'].includes(vnasStatus.state) ? '#ffb74d' :
+                     '#ef5350',
+              fontWeight: 600
+            }}>
+              {getVnasStateLabel()}
+              {vnasStatus.facilityId && vnasStatus.state === 'connected' && (
+                <span style={{ color: '#4fc3f7', marginLeft: '8px' }}>({vnasStatus.facilityId})</span>
+              )}
+            </span>
+          </div>
+
+          {/* Error display */}
+          {vnasStatus.error && (
+            <div className="setting-item">
+              <p className="setting-hint" style={{ color: '#f44336' }}>
+                {vnasStatus.error}
+              </p>
+            </div>
+          )}
+
+          {/* Disconnected state - show connect controls */}
+          {vnasStatus.state === 'disconnected' && !vnasIsAuthenticating && (
+            <>
+              <div className="setting-item">
+                <label>Environment</label>
+                <select
+                  value={vnasSelectedEnv}
+                  onChange={(e) => setVnasSelectedEnv(e.target.value as VnasEnvironment)}
+                  className="text-input"
+                  style={{ width: '150px' }}
+                >
+                  <option value="live">Live</option>
+                  <option value="sweatbox1">Sweatbox 1</option>
+                  <option value="sweatbox2">Sweatbox 2</option>
+                </select>
+              </div>
+
+              <div className="setting-item">
+                <button
+                  className="control-button"
+                  onClick={handleVnasStartAuth}
+                >
+                  Connect to vNAS
+                </button>
+                <p className="setting-hint" style={{ marginTop: '8px' }}>
+                  You&apos;ll be redirected to VATSIM to authorize TowerCab 3D.
+                </p>
+              </div>
+            </>
+          )}
+
+          {/* Authenticating state - show manual callback input (dev mode fallback) */}
+          {vnasIsAuthenticating && (
+            <>
+              <p className="setting-hint" style={{ marginBottom: '8px' }}>
+                Complete authorization in your browser. If the app doesn&apos;t automatically connect, paste the callback URL below:
+              </p>
+              <div className="setting-item">
+                <input
+                  type="text"
+                  className="text-input"
+                  placeholder="tc3d://oauth/callback?code=..."
+                  value={vnasCallbackUrl}
+                  onChange={(e) => setVnasCallbackUrl(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleVnasManualCallback()}
+                  style={{ width: '100%', marginBottom: '8px' }}
+                />
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    className="control-button"
+                    onClick={handleVnasManualCallback}
+                    disabled={!vnasCallbackUrl.trim()}
+                  >
+                    Submit
+                  </button>
+                  <button
+                    className="control-button"
+                    onClick={handleVnasCancelAuth}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Connected or connecting states - show disconnect button */}
+          {['connecting', 'joiningSession', 'waitingForSession', 'subscribing', 'connected'].includes(vnasStatus.state) && (
+            <div className="setting-item">
+              <button
+                className="control-button"
+                onClick={handleVnasDisconnect}
+                style={{ background: 'rgba(244, 67, 54, 0.2)', borderColor: 'rgba(244, 67, 54, 0.4)' }}
+              >
+                Disconnect
+              </button>
+            </div>
+          )}
+        </CollapsibleSection>
+      )}
 
       <MSFSModelSettingsPanel />
 

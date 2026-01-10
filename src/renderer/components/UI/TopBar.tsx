@@ -1,13 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useAirportStore } from '../../stores/airportStore'
 import { useVatsimStore } from '../../stores/vatsimStore'
 import { useRealTrafficStore } from '../../stores/realTrafficStore'
+import { useVnasStore } from '../../stores/vnasStore'
 import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
 import { useViewportStore } from '../../stores/viewportStore'
 import { useIsMobileLayout } from '../../hooks/useIsMobileLayout'
+import { isTauri } from '../../utils/tauriApi'
 import RemoteIndicator from './RemoteIndicator'
 import RemoteClientsIndicator from './RemoteClientsIndicator'
 import MobileToolsFlyout from './MobileToolsFlyout'
+import { VnasStatusPopover } from './VnasStatusPopover'
 import './TopBar.css'
 
 /**
@@ -46,6 +49,12 @@ function TopBar({ onCommandClick }: TopBarProps) {
   const rtStatus = useRealTrafficStore((state) => state.status)
   const rtTotalAircraft = useRealTrafficStore((state) => state.totalAircraftFromApi)
 
+  // vNAS state (provides 1Hz updates for VATSIM)
+  const vnasState = useVnasStore((state) => state.status.state)
+  const vnasAvailable = useVnasStore((state) => state.status.available)
+  const vnasConnected = vnasState === 'connected'
+  const vnasConnecting = ['authenticating', 'connecting', 'joiningSession', 'waitingForSession', 'subscribing'].includes(vnasState)
+
   // Determine connection status and count based on data source
   const isConnected = dataSource === 'realtraffic'
     ? rtStatus === 'connected'
@@ -61,6 +70,8 @@ function TopBar({ onCommandClick }: TopBarProps) {
     : 'VATSIM'
 
   const [zuluTime, setZuluTime] = useState('')
+  const [showVnasPopover, setShowVnasPopover] = useState(false)
+  const vnasToggleRef = useRef<HTMLButtonElement>(null)
 
   // Update Zulu time every second
   useEffect(() => {
@@ -111,8 +122,24 @@ function TopBar({ onCommandClick }: TopBarProps) {
             <div className="status-info">
               <span className="aircraft-count">{trafficCount} {countLabel}</span>
               <span className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>
-                {sourceLabel}: {isConnected ? 'Connected' : 'Disconnected'}
+                {sourceLabel}
               </span>
+              {/* vNAS indicator - shown when VATSIM is selected and vNAS is available (Tauri only) */}
+              {dataSource === 'vatsim' && vnasAvailable && isTauri() && (
+                <div className="vnas-indicator-wrapper">
+                  <button
+                    ref={vnasToggleRef}
+                    className={`vnas-indicator ${vnasConnected ? 'connected' : vnasConnecting ? 'connecting' : 'disconnected'}`}
+                    onClick={() => setShowVnasPopover(!showVnasPopover)}
+                    title={vnasConnected ? 'vNAS real-time updates active - Click to manage' : vnasConnecting ? 'vNAS connecting... - Click to manage' : 'Click to enable vNAS real-time updates'}
+                  >
+                    vNAS
+                  </button>
+                  {showVnasPopover && (
+                    <VnasStatusPopover onClose={() => setShowVnasPopover(false)} toggleRef={vnasToggleRef} />
+                  )}
+                </div>
+              )}
             </div>
             <RemoteIndicator />
           </>

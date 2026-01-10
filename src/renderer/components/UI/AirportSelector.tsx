@@ -97,7 +97,7 @@ function AirportSelector() {
 
     console.log('[AirportSelector] vNAS airports:', sessionFacilities.length, 'facilities ->', converted.length, 'airports')
     return converted
-  }, [sessionFacilities, airports, airports.size])
+  }, [sessionFacilities, airports])
 
   // Toggle favorite handler
   const toggleFavorite = useCallback((icao: string, e: React.MouseEvent) => {

@@ -1,0 +1,187 @@
+/* vNAS Status Popover - Quick access from TopBar */
+
+.vnas-popover {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  width: 280px;
+  background: rgba(20, 20, 30, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  backdrop-filter: blur(10px);
+}
+
+.vnas-popover-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.vnas-popover-close {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.vnas-popover-close:hover {
+  color: #fff;
+}
+
+.vnas-popover-content {
+  padding: 12px 14px;
+}
+
+.vnas-popover-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.vnas-popover-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.vnas-popover-status-text {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.vnas-popover-facility {
+  margin-left: auto;
+  font-size: 11px;
+  color: #4fc3f7;
+  font-weight: 600;
+}
+
+.vnas-popover-error {
+  padding: 8px 10px;
+  margin-bottom: 12px;
+  background: rgba(244, 67, 54, 0.15);
+  border: 1px solid rgba(244, 67, 54, 0.3);
+  border-radius: 4px;
+  color: #ef5350;
+  font-size: 11px;
+  word-break: break-word;
+}
+
+.vnas-popover-env {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.vnas-popover-env label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.vnas-popover-env select {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: #fff;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.vnas-popover-env select:focus {
+  outline: none;
+  border-color: rgba(79, 195, 247, 0.5);
+}
+
+.vnas-popover-callback {
+  margin-bottom: 12px;
+}
+
+.vnas-popover-callback p {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+  margin: 0 0 8px 0;
+  line-height: 1.4;
+}
+
+.vnas-popover-callback input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: #fff;
+  padding: 8px 10px;
+  font-size: 11px;
+  font-family: monospace;
+  box-sizing: border-box;
+}
+
+.vnas-popover-callback input:focus {
+  outline: none;
+  border-color: rgba(79, 195, 247, 0.5);
+}
+
+.vnas-popover-callback input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.vnas-popover-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.vnas-popover-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.vnas-popover-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.vnas-popover-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.vnas-popover-btn.primary {
+  background: rgba(79, 195, 247, 0.2);
+  border-color: rgba(79, 195, 247, 0.4);
+  color: #4fc3f7;
+}
+
+.vnas-popover-btn.primary:hover:not(:disabled) {
+  background: rgba(79, 195, 247, 0.3);
+}
+
+.vnas-popover-btn.danger {
+  background: rgba(244, 67, 54, 0.2);
+  border-color: rgba(244, 67, 54, 0.4);
+  color: #ef5350;
+}
+
+.vnas-popover-btn.danger:hover:not(:disabled) {
+  background: rgba(244, 67, 54, 0.3);
+}

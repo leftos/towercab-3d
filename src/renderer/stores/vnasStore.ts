@@ -65,6 +65,8 @@ interface VnasStore {
 
   // Actions
   tryRestoreSession: (environment: VnasEnvironment) => Promise<boolean>
+  /** Try to connect using stored tokens, returns true if successful, false if OAuth needed */
+  tryConnectWithStoredTokens: (environment: VnasEnvironment) => Promise<boolean>
   startAuth: (environment: VnasEnvironment) => Promise<string>
   completeAuth: () => Promise<void>
   handleOAuthCallback: (callbackUrl: string) => Promise<void>
@@ -128,6 +130,52 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       return restored
     } catch (error) {
       console.warn('[vNAS] Failed to restore session:', error)
+      return false
+    }
+  },
+
+  /**
+   * Try to connect using stored tokens without OAuth.
+   * Returns true if connection succeeded, false if OAuth is needed.
+   * Use this when the user clicks "Connect" to avoid unnecessary OAuth flows.
+   */
+  tryConnectWithStoredTokens: async (environment: VnasEnvironment): Promise<boolean> => {
+    if (isRemoteMode()) {
+      return false
+    }
+
+    // Clear any previous error
+    set(state => ({
+      status: {
+        ...state.status,
+        error: null
+      }
+    }))
+
+    try {
+      // First try to restore the session from stored tokens
+      const restored = await get().tryRestoreSession(environment)
+      if (!restored) {
+        console.log('[vNAS] No valid stored tokens, OAuth required')
+        return false
+      }
+
+      // Session restored, now connect
+      console.log('[vNAS] Connecting with restored tokens...')
+      await get().connect()
+
+      // Auto-subscribe to current airport if one is selected
+      const { useAirportStore } = await import('./airportStore')
+      const currentAirport = useAirportStore.getState().currentAirport
+      if (currentAirport?.icao) {
+        console.log('[vNAS] Auto-subscribing to current airport:', currentAirport.icao)
+        await get().subscribe(currentAirport.icao)
+      }
+
+      return true
+    } catch (error) {
+      console.warn('[vNAS] Failed to connect with stored tokens:', error)
+      // Don't set error state here - the caller will start OAuth flow
       return false
     }
   },
