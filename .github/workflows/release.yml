@@ -144,7 +144,15 @@ jobs:
         if: steps.vnas-check.outputs.vnas_available == 'true'
         env:
           CARGO_NET_GIT_FETCH_WITH_CLI: true
-        run: cd src-tauri && cargo update -p towercab-3d-vnas
+        run: |
+          cd src-tauri
+          # Only update if vnas is already in lockfile (otherwise build will fetch latest automatically)
+          if grep -q 'towercab-3d-vnas' Cargo.lock 2>/dev/null; then
+            cargo update -p towercab-3d-vnas
+          else
+            echo "vnas dep not in lockfile, will be fetched during build"
+          fi
+        shell: bash
 
       - name: Build Tauri app (with signing)
         if: steps.signing-check.outputs.signing_available == 'true'
