@@ -16,9 +16,14 @@ import type { VnasAircraft, VnasStatus } from '../types/vnas'
 
 type SessionState = VnasStatus['state']
 
+// Module-level flag to prevent double initialization from React Strict Mode.
+// Using module-level instead of useRef because Strict Mode unmount/remount
+// would reset the ref, but we want to prevent the second initialization entirely.
+let vnasInitialized = false
+
 export function useVnasEvents(): void {
   const handleAircraftUpdate = useVnasStore(state => state.handleAircraftUpdate)
-  const setStatus = useVnasStore(state => state.setStatus)
+  const setStateOnly = useVnasStore(state => state.setStateOnly)
   const setError = useVnasStore(state => state.setError)
   const tryRestoreSession = useVnasStore(state => state.tryRestoreSession)
   const connect = useVnasStore(state => state.connect)
@@ -32,6 +37,13 @@ export function useVnasEvents(): void {
       return
     }
 
+    // Prevent double initialization from React Strict Mode
+    if (vnasInitialized) {
+      console.log('[vNAS] Already initialized, skipping (Strict Mode protection)')
+      return
+    }
+    vnasInitialized = true
+
     let unlistenState: (() => void) | null = null
     let unlistenAircraft: (() => void) | null = null
     let unlistenDisconnected: (() => void) | null = null
@@ -44,12 +56,8 @@ export function useVnasEvents(): void {
         // Listen for state changes
         unlistenState = await listen<SessionState>('vnas-state-changed', async (event) => {
           console.log('[vNAS] State changed:', event.payload)
-          // Update status with new state while preserving other fields
-          const currentStatus = useVnasStore.getState().status
-          setStatus({
-            ...currentStatus,
-            state: event.payload
-          })
+          // Update just the state field using functional update to avoid race conditions
+          setStateOnly(event.payload)
 
           // Fetch session info when we've joined a session (subscribing or connected state)
           if (event.payload === 'subscribing' || event.payload === 'connected') {
@@ -120,5 +128,5 @@ export function useVnasEvents(): void {
       unlistenDisconnected?.()
       unlistenError?.()
     }
-  }, [handleAircraftUpdate, setStatus, setError, tryRestoreSession, connect, subscribe, getSessionArtcc, getSessionAirports])
+  }, [handleAircraftUpdate, setStateOnly, setError, tryRestoreSession, connect, subscribe, getSessionArtcc, getSessionAirports])
 }

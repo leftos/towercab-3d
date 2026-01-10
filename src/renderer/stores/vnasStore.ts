@@ -60,6 +60,7 @@ interface VnasStore {
 
   // Internal actions
   setStatus: (status: VnasStatus) => void
+  setStateOnly: (state: VnasStatus['state']) => void
   setError: (error: string | null) => void
 }
 
@@ -116,6 +117,14 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       throw new Error('vNAS not yet available in remote browser mode')
     }
 
+    // Clear any previous error when starting a new auth flow
+    set(state => ({
+      status: {
+        ...state.status,
+        error: null
+      }
+    }))
+
     try {
       const { invoke } = await import('@tauri-apps/api/core')
       const authUrl = await invoke<string>('vnas_start_auth', { environment })
@@ -167,6 +176,14 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
     }
 
     console.log('[vNAS] Handling OAuth callback:', callbackUrl)
+
+    // Clear any previous error when processing new callback
+    set(state => ({
+      status: {
+        ...state.status,
+        error: null
+      }
+    }))
 
     try {
       const { invoke } = await import('@tauri-apps/api/core')
@@ -633,6 +650,18 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
    */
   setStatus: (status: VnasStatus) => {
     set({ status })
+  },
+
+  /**
+   * Update just the state field of the status (avoids race conditions with snapshots).
+   */
+  setStateOnly: (state: VnasStatus['state']) => {
+    set(store => ({
+      status: {
+        ...store.status,
+        state
+      }
+    }))
   },
 
   /**

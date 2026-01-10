@@ -495,6 +495,23 @@ mod real_impl {
     /// This establishes the SignalR WebSocket connection.
     #[tauri::command]
     pub async fn vnas_connect(app: AppHandle, state: State<'_, VnasState>) -> Result<(), String> {
+        // Guard against double-connect (can happen with React Strict Mode)
+        let current_state = state.status().state;
+        match current_state {
+            SessionState::Connecting
+            | SessionState::JoiningSession
+            | SessionState::WaitingForSession
+            | SessionState::Subscribing
+            | SessionState::Connected => {
+                tracing::info!(
+                    "[vNAS] Already connected or connecting (state: {:?}), skipping",
+                    current_state
+                );
+                return Ok(());
+            }
+            _ => {}
+        }
+
         // Check if authenticated
         let service_guard = state.service.read().await;
         let service = service_guard
