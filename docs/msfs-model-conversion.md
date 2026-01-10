@@ -546,13 +546,13 @@ The `converterVersion` field tracks which version of the conversion logic was us
 - **Version 1**: Initial version with source metadata embedding
 - **Version 2**: Added animation baking for MSFS models (fixes misaligned flaps, slats, gear, spoilers, etc.)
 - **Version 3**: Fixed steering animations by using identity quaternion frame instead of frame 0
+- **Version 4**: Fixed model.cfg parsing to read GLTF filename from XML (fixes wrong engine variant textures causing white models)
 
 **Implementation:**
 - Python converter: `CONVERTER_VERSION` constant in `convert_fsltl_batch.py`
-- Rust backend: `CONVERTER_VERSION` constant in `msfs.rs`
 - TypeScript frontend: `CONVERTER_VERSION` constant in `MSFSModelConversionService.ts`
 
-All three must match. When loading cached models on startup, the frontend skips GLBs with old/missing converter versions, forcing automatic re-conversion when the model is next requested.
+Both must match. When loading cached models on startup, the frontend skips GLBs with old/missing converter versions, forcing automatic re-conversion when the model is next requested.
 
 ## File Locations
 

@@ -113,8 +113,9 @@ export interface MSFSDetectionResult {
  *   1: Initial version with source metadata embedding
  *   2: Added animation baking for MSFS models (fixes misaligned flaps, slats, gear, etc.)
  *   3: Fixed steering animations by using identity quaternion frame instead of frame 0
+ *   4: Fixed model.cfg parsing to read GLTF filename from XML (fixes wrong engine variant textures)
  */
-const CONVERTER_VERSION = 3
+const CONVERTER_VERSION = 4
 
 // =============================================================================
 // Service Class

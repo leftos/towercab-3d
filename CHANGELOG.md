@@ -14,7 +14,8 @@ All notable changes to TowerCab 3D will be documented in this file.
   - Configurable edge blend distance for natural terrain transitions
 
 ### Fixed
-- **Pushback detection fixes for VATSIM users** 
+- **Pushback detection fixes for VATSIM users**
+- **White FSLTL aircraft with wrong engine variant** - Some aircraft (like B772, B77W) have multiple engine variants (GE, PW, RR). Liveries referencing the wrong variant would load without textures, appearing all white. Now correctly reads the model XML to find the right GLTF file. 
 
 ## [0.0.29-alpha] - 2026-01-07
 

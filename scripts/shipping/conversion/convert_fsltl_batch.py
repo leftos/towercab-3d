@@ -99,7 +99,8 @@ except Exception as e:
 #   1: Initial version with source metadata embedding
 #   2: Added animation baking for MSFS models (fixes misaligned flaps, slats, gear, etc.)
 #   3: Fixed steering animations by using identity quaternion frame instead of frame 0
-CONVERTER_VERSION = 3
+#   4: Fixed model.cfg parsing to read GLTF filename from XML (fixes wrong engine variant textures)
+CONVERTER_VERSION = 4
 
 # Global texconv.exe path (downloaded on first use)
 _texconv_path: Path | None = None
@@ -905,6 +906,43 @@ def find_gltf_in_model_dir(model_dir: Path) -> Path | None:
     return exterior_gltf[0] if exterior_gltf else None
 
 
+def parse_model_xml(xml_path: Path) -> Path | None:
+    """
+    Parse an MSFS model XML file to find the GLTF filename.
+
+    MSFS model XMLs have a LODS section listing the model files:
+        <LODS>
+          <LOD minSize="8" ModelFile="B772_PW_LOD0.gltf"/>
+          <LOD minSize="1" ModelFile="B772_PW_LOD1.gltf"/>
+        </LODS>
+
+    Returns the path to the highest-quality LOD (highest minSize), or None.
+    """
+    if not xml_path.exists():
+        return None
+
+    try:
+        import xml.etree.ElementTree as ET
+        tree = ET.parse(xml_path)
+        root = tree.getroot()
+
+        # Find all LOD elements
+        lods = root.findall('.//LOD')
+        if not lods:
+            return None
+
+        # Sort by minSize (highest first = best quality)
+        best_lod = max(lods, key=lambda lod: int(lod.get('minSize', '0')))
+        model_file = best_lod.get('ModelFile')
+        if model_file:
+            gltf_path = xml_path.parent / model_file
+            if gltf_path.exists():
+                return gltf_path
+    except Exception:
+        pass
+    return None
+
+
 def parse_model_cfg(model_cfg_path: Path) -> Path | None:
     """
     Parse a model.cfg file to find the referenced base GLTF.
@@ -927,11 +965,19 @@ def parse_model_cfg(model_cfg_path: Path) -> Path | None:
                 if rel_path:
                     # Convert backslashes to forward slashes
                     rel_path = rel_path.replace('\\', '/')
-                    # The path points to an .xml file - find the corresponding GLTF
-                    # e.g., model.iae/FAIB_A320_IAE.xml -> model.iae/FAIB_A320_IAE_LOD0.gltf
+                    # The path points to an .xml file
                     if rel_path.endswith('.xml'):
-                        gltf_base = rel_path[:-4]  # Remove .xml
                         # Resolve relative to model.cfg's parent directory
+                        xml_path = (model_cfg_path.parent / rel_path).resolve()
+                        if xml_path.exists():
+                            # Parse the XML to get the actual GLTF filename
+                            gltf_from_xml = parse_model_xml(xml_path)
+                            if gltf_from_xml:
+                                return gltf_from_xml
+
+                        # Fallback: derive GLTF name from XML name
+                        # e.g., model.iae/FAIB_A320_IAE.xml -> model.iae/FAIB_A320_IAE_LOD0.gltf
+                        gltf_base = rel_path[:-4]  # Remove .xml
                         abs_path = (model_cfg_path.parent / gltf_base).resolve()
                         gltf_dir = abs_path.parent
                         gltf_stem = abs_path.name
