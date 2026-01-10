@@ -166,6 +166,7 @@ impl Default for GlobalOrbitSettings {
 /// Viewport settings (camera positions, bookmarks per airport)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub struct GlobalViewportSettings {
     #[serde(default)]
     pub airport_configs: std::collections::HashMap<String, GlobalAirportViewportConfig>,
@@ -175,15 +176,6 @@ pub struct GlobalViewportSettings {
     pub last_airport_icao: Option<String>,
 }
 
-impl Default for GlobalViewportSettings {
-    fn default() -> Self {
-        GlobalViewportSettings {
-            airport_configs: std::collections::HashMap::new(),
-            orbit_settings: GlobalOrbitSettings::default(),
-            last_airport_icao: None,
-        }
-    }
-}
 
 // =============================================================================
 // DISPLAY SETTINGS

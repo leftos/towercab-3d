@@ -242,7 +242,7 @@ fn get_lan_ip() -> Option<String> {
             // Try to resolve hostname to IP
             use std::net::ToSocketAddrs;
             if let Ok(mut addrs) = format!("{}:0", hostname).to_socket_addrs() {
-                while let Some(addr) = addrs.next() {
+                for addr in addrs {
                     if let std::net::SocketAddr::V4(v4) = addr {
                         let ip = v4.ip().to_string();
                         if !ip.starts_with("127.") {

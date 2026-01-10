@@ -844,7 +844,7 @@ async fn get_vmr_rules(
             let path = entry.path();
             if path
                 .extension()
-                .map_or(false, |ext| ext.eq_ignore_ascii_case("vmr"))
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("vmr"))
             {
                 if let Ok(content) = fs::read_to_string(&path) {
                     // Simple VMR XML parsing (just extract ModelMatchRule entries)
@@ -1362,7 +1362,7 @@ async fn serve_static(
 
     // Check if this looks like a static asset request (has a file extension)
     // If so, don't serve index.html - return 404 instead
-    let has_extension = std::path::Path::new(path).extension().map_or(false, |ext| {
+    let has_extension = std::path::Path::new(path).extension().is_some_and(|ext| {
         // Common static asset extensions that should NOT fall back to index.html
         let ext = ext.to_string_lossy().to_lowercase();
         matches!(

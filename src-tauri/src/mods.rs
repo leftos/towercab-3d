@@ -185,7 +185,7 @@ pub fn read_tower_positions(app: tauri::AppHandle) -> Result<serde_json::Value, 
                 let path = entry.path();
                 if path
                     .extension()
-                    .map_or(false, |ext| ext.eq_ignore_ascii_case("json"))
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("json"))
                 {
                     if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
                         if let Ok(content) = fs::read_to_string(&path) {

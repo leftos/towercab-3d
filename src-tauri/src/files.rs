@@ -127,12 +127,10 @@ pub fn clear_cache_directory(path: String) -> Result<(), String> {
         return Ok(());
     }
 
-    for entry in fs::read_dir(&dir).map_err(|e| format!("Failed to read directory: {}", e))? {
-        if let Ok(entry) = entry {
-            let path = entry.path();
-            if path.is_file() && path.extension().map(|e| e == "glb").unwrap_or(false) {
-                let _ = fs::remove_file(&path);
-            }
+    for entry in (fs::read_dir(&dir).map_err(|e| format!("Failed to read directory: {}", e))?).flatten() {
+        let path = entry.path();
+        if path.is_file() && path.extension().map(|e| e == "glb").unwrap_or(false) {
+            let _ = fs::remove_file(&path);
         }
     }
 
