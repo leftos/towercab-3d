@@ -19,6 +19,7 @@ import {
   GO_AROUND_APPROACH_WINDOW_MS,
   MIN_OBSERVATIONS_FOR_ANALYSIS,
   ACCELERATION_HYSTERESIS,
+  DISTANCE_HYSTERESIS,
   ROLL_PHASE_SCORES,
   METERS_TO_FEET,
   GO_AROUND_CLIMB_FPM,
@@ -26,6 +27,10 @@ import {
   PATTERN_ALTITUDE_FT,
 } from '../../constants/flightPhase'
 import { haversineDistanceNm } from './geoMath'
+
+// Minimum speed (kts) before transitioning from landing_roll to taxi
+// Aircraft below this speed can transition; above must stay in landing_roll
+const LANDING_ROLL_MIN_EXIT_SPEED_KTS = 35
 
 // ============================================================================
 // STATE MANAGEMENT
@@ -44,9 +49,11 @@ interface PhaseStabilizationState {
 
   // Hysteresis tracking
   accelState: 'accelerating' | 'decelerating' | 'neutral'
+  distanceState: 'short' | 'long' | 'beyond'  // For final approach hysteresis
 
   // Roll phase tracking
   rollPhaseEntrySpeed: number
+  rollPhaseEntryTime: number  // Track when we entered roll phase
   lastPhaseBeforeRoll: FlightPhase | null
 
   // Approach tracking for go-around
@@ -70,7 +77,9 @@ function getOrCreateState(callsign: string, initialPhase: FlightPhase): PhaseSta
       candidateStartTime: now,
       phaseEntryTime: now,
       accelState: 'neutral',
+      distanceState: 'beyond',
       rollPhaseEntrySpeed: 0,
+      rollPhaseEntryTime: 0,
       lastPhaseBeforeRoll: null,
       approachStartTime: null,
       wasOnSustainedApproach: false,
@@ -357,6 +366,42 @@ function updateAccelState(
   return 'neutral'
 }
 
+/**
+ * Apply hysteresis to distance state for final approach phases.
+ * Prevents oscillation between short_final and long_final at the 2nm boundary.
+ */
+function updateDistanceState(
+  currentState: 'short' | 'long' | 'beyond',
+  distanceNm: number | null
+): 'short' | 'long' | 'beyond' {
+  if (distanceNm === null) return 'beyond'
+
+  const { shortFinal, longFinal } = DISTANCE_HYSTERESIS
+
+  if (currentState === 'short') {
+    // Stay in short until distance exceeds exit threshold
+    if (distanceNm > shortFinal.exit) {
+      // Check if we're still in long final range
+      if (distanceNm < longFinal.exit) return 'long'
+      return 'beyond'
+    }
+    return 'short'
+  }
+
+  if (currentState === 'long') {
+    // Can transition to short if below entry threshold
+    if (distanceNm < shortFinal.enter) return 'short'
+    // Stay in long until distance exceeds exit threshold
+    if (distanceNm > longFinal.exit) return 'beyond'
+    return 'long'
+  }
+
+  // Beyond - check entry thresholds
+  if (distanceNm < shortFinal.enter) return 'short'
+  if (distanceNm < longFinal.enter) return 'long'
+  return 'beyond'
+}
+
 // ============================================================================
 // APPROACH TRACKING
 // ============================================================================
@@ -404,6 +449,7 @@ function updateRollTracking(
 
   if (isEnteringRoll) {
     state.rollPhaseEntrySpeed = speed
+    state.rollPhaseEntryTime = Date.now()
     state.lastPhaseBeforeRoll = currentPhase
   }
 }
@@ -447,6 +493,10 @@ export function stabilizePhase(
   const { acceleration } = computeWindowedAcceleration(timeline)
   state.accelState = updateAccelState(state.accelState, acceleration)
 
+  // Update distance state with hysteresis (for final approach phases)
+  const distanceNm = rawResult.runwayDistance
+  state.distanceState = updateDistanceState(state.distanceState, distanceNm)
+
   // Handle roll phase with multi-signal classification
   let effectiveRawPhase = rawPhase
   if (rawPhase === 'departure_roll' || rawPhase === 'landing_roll') {
@@ -461,6 +511,18 @@ export function stabilizePhase(
     }
   }
 
+  // Apply distance hysteresis to final approach phases
+  // If raw says short_final but hysteresis says 'long', use long_final
+  // If raw says long_final but hysteresis says 'short', use short_final
+  if (rawPhase === 'short_final' || rawPhase === 'long_final') {
+    if (state.distanceState === 'short') {
+      effectiveRawPhase = 'short_final'
+    } else if (state.distanceState === 'long') {
+      effectiveRawPhase = 'long_final'
+    }
+    // If beyond, keep raw phase (will be handled by dwell times)
+  }
+
   // Enhanced go-around detection using trajectory
   if (effectiveRawPhase === 'go_around') {
     if (!isValidGoAround(aircraft, timeline, nearestRunway, state, context)) {
@@ -470,6 +532,18 @@ export function stabilizePhase(
       } else {
         effectiveRawPhase = 'departing_climb'
       }
+    }
+  }
+
+  // Protect landing_roll from transitioning to taxi phases if still moving fast
+  // This prevents premature exit due to GPS position noise at runway edge
+  if (state.confirmedPhase === 'landing_roll') {
+    const isTaxiPhase = effectiveRawPhase === 'active_taxi' ||
+                        effectiveRawPhase === 'stopped_taxi' ||
+                        effectiveRawPhase === 'holding_short'
+    if (isTaxiPhase && aircraft.interpolatedGroundspeed > LANDING_ROLL_MIN_EXIT_SPEED_KTS) {
+      // Still too fast to be taxiing - stay in landing_roll
+      effectiveRawPhase = 'landing_roll'
     }
   }
 
