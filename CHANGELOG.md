@@ -4,6 +4,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- **Smoother vNAS groundspeed display** - Speed readings now use a 5-sample sliding window average, reducing oscillation caused by GPS jitter in 1Hz position updates
+
 ## [0.0.32-alpha] - 2026-01-11
 
 ### Fixed

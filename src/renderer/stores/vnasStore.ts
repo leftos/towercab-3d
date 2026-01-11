@@ -14,6 +14,39 @@ const FEET_TO_METERS = 0.3048
 let lastProcessedOAuthCallback: string | null = null
 
 /**
+ * Speed history for windowed averaging.
+ * Stores recent speed samples per aircraft to smooth out GPS jitter.
+ */
+const speedHistory = new Map<string, number[]>()
+
+/** Number of samples to keep in the speed history window */
+const SPEED_WINDOW_SIZE = 5
+
+/**
+ * Calculate windowed average speed for an aircraft.
+ * Adds the new sample to the history and returns the average.
+ */
+function addSpeedSampleAndGetAverage(callsign: string, newSpeed: number): number {
+  let history = speedHistory.get(callsign)
+  if (!history) {
+    history = []
+    speedHistory.set(callsign, history)
+  }
+
+  // Add new sample
+  history.push(newSpeed)
+
+  // Keep only the most recent samples
+  while (history.length > SPEED_WINDOW_SIZE) {
+    history.shift()
+  }
+
+  // Calculate average
+  const sum = history.reduce((acc, val) => acc + val, 0)
+  return sum / history.length
+}
+
+/**
  * vNAS Store
  *
  * Manages vNAS (Virtual Network Air Traffic Control System) connection and aircraft data.
@@ -384,6 +417,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
     try {
       const { invoke } = await import('@tauri-apps/api/core')
       await invoke('vnas_disconnect')
+      speedHistory.clear()
       set({
         status: DEFAULT_STATUS,
         aircraftStates: new Map(),
@@ -393,6 +427,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
     } catch (error) {
       console.error('vNAS disconnect failed:', error)
       // Still reset local state even if disconnect fails
+      speedHistory.clear()
       set({
         status: DEFAULT_STATUS,
         aircraftStates: new Map(),
@@ -428,11 +463,15 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
           aircraft.lat, aircraft.lon
         )
         const metersPerSecond = distanceMeters / (timeDeltaMs / 1000)
-        calculatedGroundspeed = metersPerSecondToKnots(metersPerSecond)
+        const instantaneousSpeed = metersPerSecondToKnots(metersPerSecond)
 
         // Clamp to reasonable range (0-600 knots) to filter out noise/teleports
-        if (calculatedGroundspeed > 600) {
-          calculatedGroundspeed = oldState.groundspeed // Keep previous if unreasonable
+        if (instantaneousSpeed > 600) {
+          // Keep previous average if unreasonable
+          calculatedGroundspeed = oldState.groundspeed
+        } else {
+          // Use windowed average to smooth out GPS jitter
+          calculatedGroundspeed = addSpeedSampleAndGetAverage(aircraft.callsign, instantaneousSpeed)
         }
       }
     }
@@ -558,9 +597,12 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
             ac.lat, ac.lon
           )
           const metersPerSecond = distanceMeters / (timeDeltaMs / 1000)
-          calculatedGroundspeed = metersPerSecondToKnots(metersPerSecond)
-          if (calculatedGroundspeed > 600) {
+          const instantaneousSpeed = metersPerSecondToKnots(metersPerSecond)
+          if (instantaneousSpeed > 600) {
             calculatedGroundspeed = oldState.groundspeed
+          } else {
+            // Use windowed average to smooth out GPS jitter
+            calculatedGroundspeed = addSpeedSampleAndGetAverage(ac.callsign, instantaneousSpeed)
           }
         }
       }
@@ -860,6 +902,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
 
     newAircraftStates.delete(callsign)
     newPreviousStates.delete(callsign)
+    speedHistory.delete(callsign)
 
     console.log(`[vNAS] Removed aircraft: ${callsign}`)
 
