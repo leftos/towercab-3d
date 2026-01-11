@@ -40,6 +40,7 @@ import {
 } from '../constants/aircraft-timeline'
 import { useViewportStore } from './viewportStore'
 import { useSettingsStore } from './settingsStore'
+import { useVnasStore } from './vnasStore'
 import { calculateBearing } from '../utils/aircraft/geoMath'
 
 
@@ -966,7 +967,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
     for (const { callsign, observation, metadata } of batch) {
       const existing = updated.get(callsign)
 
-      // Skip VATSIM data when vNAS has recently provided data for this aircraft.
+      // Skip VATSIM data when vNAS is actively tracking this aircraft.
       // VATSIM's last_updated has unknown per-aircraft latency from aggregating
       // network-wide data, so we use a time-based buffer instead of comparing
       // observation timestamps. If we've received vNAS data within the threshold,
@@ -975,6 +976,11 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       // Additionally, even after the threshold passes, we must ensure the VATSIM
       // observation is actually newer than our existing data - otherwise we'd be
       // inserting stale data into the middle of the timeline.
+      //
+      // IMPORTANT: vNAS intentionally stops sending updates for idle/parked aircraft
+      // to save bandwidth. As long as the aircraft is still in the vNAS store (meaning
+      // it hasn't been explicitly disconnected via SignalR), we should continue to
+      // use the vNAS position and suppress VATSIM data for that aircraft.
       const VNAS_ACTIVE_THRESHOLD_MS = 5000  // 5 seconds
       if (observation.source === 'vatsim' && existing && existing.lastSource === 'vnas') {
         const timeSinceVnasUpdate = observation.receivedAt - existing.lastReceivedAt
@@ -996,7 +1002,24 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
           continue
         }
 
-        // Check 2: Even if threshold passed, don't insert if VATSIM observedAt
+        // Check 2: Even if threshold passed, check if vNAS is still tracking this aircraft.
+        // vNAS stops sending updates for idle aircraft to save bandwidth, but keeps them
+        // in the store until explicitly disconnected. If still in store, suppress VATSIM.
+        const vnasState = useVnasStore.getState()
+        if (vnasState.status.state === 'connected' && vnasState.aircraftStates.has(callsign)) {
+          // Aircraft is still being tracked by vNAS (just idle), skip VATSIM data
+          updated.set(callsign, {
+            ...existing,
+            metadata: {
+              ...existing.metadata,
+              departure: metadata.departure ?? existing.metadata.departure,
+              arrival: metadata.arrival ?? existing.metadata.arrival,
+            }
+          })
+          continue
+        }
+
+        // Check 3: Even if vNAS is not tracking, don't insert if VATSIM observedAt
         // is older than our newest observation (would insert stale data mid-timeline)
         if (newestExisting && observation.observedAt <= newestExisting.observedAt) {
           updated.set(callsign, {

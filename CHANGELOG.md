@@ -24,8 +24,9 @@ All notable changes to TowerCab 3D will be documented in this file.
   - vNAS: The airports underlying the facility in your current CRC session that can receive 1Hz updates
 
 ### Fixed
-- **Pushback detection fixes**
-- **White FSLTL aircraft with wrong engine variant** - Some aircraft (like B772, B77W) have multiple engine variants (GE, PW, RR). Liveries referencing the wrong variant would load without textures, appearing all white. Now correctly reads the model XML to find the right GLTF file. 
+- **Flight phase detection fixes and tuning**
+- **White FSLTL aircraft with wrong engine variant** - Some aircraft (like B772, B77W) have multiple engine variants (GE, PW, RR). Liveries referencing the wrong variant would load without textures, appearing all white. Now correctly reads the model XML to find the right GLTF file.
+- **vNAS aircraft no longer revert to old VATSIM positions when idle** - Parked aircraft receiving vNAS updates now stay at their last known position instead of jumping backward when vNAS stops sending updates to save bandwidth 
 
 ## [0.0.29-alpha] - 2026-01-07
 

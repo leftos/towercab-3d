@@ -24,7 +24,6 @@ import {
   METERS_TO_FEET,
   GO_AROUND_CLIMB_FPM,
   GO_AROUND_DISTANCE_NM,
-  PATTERN_ALTITUDE_FT,
 } from '../../constants/flightPhase'
 import { haversineDistanceNm } from './geoMath'
 

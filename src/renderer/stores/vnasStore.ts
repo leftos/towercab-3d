@@ -93,6 +93,7 @@ interface VnasStore {
   setStatus: (status: VnasStatus) => void
   setStateOnly: (state: VnasStatus['state']) => void
   setError: (error: string | null) => void
+  removeAircraft: (callsign: string) => void
 }
 
 const DEFAULT_STATUS: VnasStatus = {
@@ -839,5 +840,32 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
         error
       }
     }))
+  },
+
+  /**
+   * Remove an aircraft from the store.
+   * Called when the SignalR hub sends an explicit disconnect message.
+   * This allows the aircraft to fall back to VATSIM data if available.
+   */
+  removeAircraft: (callsign: string) => {
+    const { aircraftStates, previousStates } = get()
+
+    // Only remove if the aircraft exists
+    if (!aircraftStates.has(callsign)) {
+      return
+    }
+
+    const newAircraftStates = new Map(aircraftStates)
+    const newPreviousStates = new Map(previousStates)
+
+    newAircraftStates.delete(callsign)
+    newPreviousStates.delete(callsign)
+
+    console.log(`[vNAS] Removed aircraft: ${callsign}`)
+
+    set({
+      aircraftStates: newAircraftStates,
+      previousStates: newPreviousStates
+    })
   }
 }))

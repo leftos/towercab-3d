@@ -23,6 +23,7 @@ let vnasInitialized = false
 
 export function useVnasEvents(): void {
   const handleAircraftUpdate = useVnasStore(state => state.handleAircraftUpdate)
+  const removeAircraft = useVnasStore(state => state.removeAircraft)
   const setStateOnly = useVnasStore(state => state.setStateOnly)
   const setError = useVnasStore(state => state.setError)
   const tryRestoreSession = useVnasStore(state => state.tryRestoreSession)
@@ -98,9 +99,11 @@ export function useVnasEvents(): void {
         })
 
         // Listen for aircraft disconnections
+        // This is an explicit message from the SignalR hub that the aircraft should be removed.
+        // Different from simply not receiving updates (idle aircraft at gate).
         unlistenDisconnected = await listen<string>('vnas-aircraft-disconnected', (event) => {
           console.log('[vNAS] Aircraft disconnected:', event.payload)
-          // TODO: Remove aircraft from store if needed
+          removeAircraft(event.payload)
         })
 
         // Listen for errors
@@ -157,5 +160,5 @@ export function useVnasEvents(): void {
       unlistenDisconnected?.()
       unlistenError?.()
     }
-  }, [handleAircraftUpdate, setStateOnly, setError, tryRestoreSession, connect, subscribe, getSessionArtcc, getSessionAirports])
+  }, [handleAircraftUpdate, removeAircraft, setStateOnly, setError, tryRestoreSession, connect, subscribe, getSessionArtcc, getSessionAirports])
 }
