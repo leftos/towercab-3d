@@ -4,6 +4,12 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Google Maps satellite imagery** as alternative to default Cesium Ion (Bing Maps)
+  - Bring your own Google Maps API key in Settings → Configuration → Imagery Provider
+  - Per-provider color adjustments (hue, saturation, brightness, contrast)
+  - Each provider remembers its own color settings when switching
+
 ## [0.0.30-alpha] - 2026-01-10
 
 ### Added
