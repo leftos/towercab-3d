@@ -41,6 +41,7 @@ A 3D tower cab view application for VATSIM air traffic controllers. View real-ti
 
 ### Live Traffic Integration
 - **VATSIM Network**: Real-time virtual ATC traffic (polled every 1 second, VATSIM updates ~15 seconds)
+- **vNAS Integration**: 1Hz real-time updates when using CRC (reduces display delay from 17s to 1.5s)
 - **RealTraffic**: Optional real-world ADS-B traffic with ~2-3s updates (requires license key)
 - Smooth 60 Hz interpolation for fluid aircraft movement between updates
 - Global aircraft search (Ctrl+K) to find and follow any aircraft (sorted by distance when airport selected)
@@ -50,7 +51,8 @@ A 3D tower cab view application for VATSIM air traffic controllers. View real-ti
 ### 3D Visualization
 - High-fidelity 3D globe with Cesium Ion satellite imagery
 - Configurable terrain quality (5 levels from Low to Ultra)
-- Optional 3D OpenStreetMap buildings
+- Terrain flattening for runways, taxiways, and aprons (15,000+ airports)
+- Optional 3D OpenStreetMap buildings with configurable quality
 - Dynamic time-of-day lighting (real-time or fixed hour)
 - Aircraft rendered as 3D models with realistic type-based sizing (39 aircraft types)
 - Aircraft physics emulation: pitch during climbs/descents, banking in turns, landing flare
@@ -90,9 +92,12 @@ A 3D tower cab view application for VATSIM air traffic controllers. View real-ti
 - Click-to-look: click any aircraft to pan camera to center on it
 
 ### Airport Selection
+- Tabbed selector: Favorites, Recent, Popular, and vNAS-enabled airports
 - Search 28,000+ airports by ICAO, IATA, name, or city
-- Recent airports history
-- Quick access to popular international hubs
+- Mark airports as favorites for quick access
+- Recent airports history (last 10 visited)
+- Popular airports ranked by current VATSIM traffic
+- vNAS tab shows airports with 1Hz update availability
 - Smooth camera animation when changing airports
 
 ### Measuring Tool
@@ -109,7 +114,8 @@ A 3D tower cab view application for VATSIM air traffic controllers. View real-ti
 ### Modding Support
 - Custom aircraft 3D models (glTF/GLB format)
 - Custom tower models for specific airports
-- FSLTL (FS Live Traffic Liveries) model import with airline-specific liveries
+- FSLTL and AIG model support with airline-specific liveries (on-demand conversion)
+- Custom VMR rules for advanced model matching
 - See [MODDING.md](MODDING.md) for details
 
 ## Requirements
@@ -300,55 +306,86 @@ This downloads the latest FAA Excel file and converts it to `src/renderer/public
 
 ## Settings Reference
 
-Settings are organized into tabs: General, Display, Graphics, Performance, and Help.
+Settings are organized into six tabs: Configuration, Aircraft & Labels, Graphics & Weather, Controls & Camera, Performance, and Advanced.
 
-### General Tab
-| Setting | Description | Range |
-|---------|-------------|-------|
+### Configuration Tab
+| Setting | Description | Range/Options |
+|---------|-------------|---------------|
 | Cesium Ion Token | API key for terrain/imagery (shared across devices) | Required |
 | Data Source | Choose VATSIM or RealTraffic | VATSIM/RealTraffic |
 | RealTraffic License Key | Required for RealTraffic data | Optional |
-| Theme | Light or dark interface | Light/Dark |
-| Default FOV | Starting field of view | 10-120° |
-| Camera Speed | WASD movement speed | 0.1x-3x |
-| Mouse Sensitivity | Right-click drag rotation speed | 0.1x-3x |
-| Joystick Sensitivity | Virtual joystick movement speed (touch devices) | 1-10 |
+| HTTP Server | Enable remote browser access on port 8765 | On/Off |
+| MSFS Community Path | Path to MSFS Community folder for model conversion | Directory path |
+| Enable FSLTL Models | Use converted FSLTL aircraft models | On/Off |
+| Enable AIG Models | Use converted AIG aircraft models | On/Off |
+| Model Priority | Which model source to prefer | FSLTL First/AIG First |
+| Texture Scale | Resolution for converted model textures | Full/2K/1K/512 |
+| Cache Directory | Where to store converted models | Directory path |
+| Cache Size Limit | Max disk space for model cache | 500 MB - 20 GB |
 
-### Display Tab
+### Aircraft & Labels Tab
 | Setting | Description | Options |
 |---------|-------------|---------|
-| Label Visibility Distance | How far to show aircraft labels | 5-100 nm |
-| Datablock Display | Label detail level | Full/Airline Codes Only/None |
-| Show Aircraft Panel | Toggle nearby aircraft list | On/Off |
+| Visibility Range | How far to show aircraft labels | 5-100 nm |
 | Show Ground Traffic | Display aircraft on ground | On/Off |
 | Show Airborne Traffic | Display flying aircraft | On/Off |
-| Max Aircraft | Limit displayed aircraft count | 10-500 |
+| Datablock Display | Label detail level | Full/Airline Codes Only/None |
+| Datablock Font Size | Size of label text | 8-20 px |
+| Leader Line Length | Distance from aircraft to label | 0.5-5.0 |
+| Default Datablock Direction | Default label position (numpad-style) | 1-9 |
+| Auto-Rearrange Datablocks | Prevent label overlaps | On/Off |
+| Ground Traffic Labels | Filter labels for ground aircraft | All/Moving/Active Only/None |
+| Built-in Model Tint | Color tint for generic models | White/Light Blue/Tan/Yellow/Orange/Gray |
+| Aircraft Silhouettes | Black outlines on built-in models (high GPU cost) | On/Off |
+| Orientation Emulation | Aircraft pitch/roll physics simulation | On/Off |
+| Emulation Intensity | Strength of pitch/roll effects | 25%-150% |
+| Show Aircraft Panel | Toggle nearby aircraft list | On/Off |
 
-### Graphics Tab
+### Graphics & Weather Tab
 | Setting | Description | Options |
 |---------|-------------|---------|
+| Max Framerate | Limit rendering framerate | 30/60/120/144/Unlimited |
+| MSAA Samples | Anti-aliasing quality | 1x/2x/4x/8x |
 | Terrain Quality | Level of terrain detail | Low to Ultra (5 levels) |
+| Terrain Flattening | Flatten runways/taxiways for smooth ground movement | On/Off |
+| Terrain Blend Distance | Transition zone between flat and natural terrain | 25-100 m |
 | Show 3D Buildings | OpenStreetMap 3D buildings | On/Off |
+| Building Quality | LOD for 3D buildings | Low/Medium/High |
 | Time of Day | Real-time or fixed local hour | Real/0-24h |
+| Enable Shadows | Render terrain and aircraft shadows | On/Off |
+| Shadow Mode | Which objects cast shadows | All/Aircraft Only |
 | Enable Fog | METAR-based fog effects | On/Off |
 | Fog Intensity | Fog opacity multiplier | 0.5x-2x |
 | Visibility Scale | Fog distance multiplier | 0.5x-2x |
 | Enable Clouds | Cloud layers at METAR ceilings | On/Off |
-| Ambient Occlusion | HBAO screen-space shading | On/Off |
+| Enable Precipitation | Rain/snow particle effects | On/Off |
+| Enable Lightning | Lightning flashes during storms | On/Off |
 
-### Display Tab (continued)
-| Setting | Description | Options |
-|---------|-------------|---------|
-| Orientation Emulation | Aircraft pitch/roll physics simulation | On/Off |
-| Emulation Intensity | Strength of pitch/roll effects | 25%-150% |
+### Controls & Camera Tab
+| Setting | Description | Range |
+|---------|-------------|-------|
+| Default FOV | Starting field of view | 10-120° |
+| Camera Speed | WASD movement speed | 1-10 |
+| Mouse Sensitivity | Right-click drag rotation speed | 0.1x-2x |
+| Joystick Sensitivity | Virtual joystick movement speed (touch devices) | 1-10 |
+| Auto-Switch Airport | Automatically switch to nearest airport when moving | On/Off |
 
 ### Performance Tab
 | Setting | Description | Range |
 |---------|-------------|-------|
 | In-Memory Tile Cache | Cached terrain tiles in memory | 50-5000 tiles |
 | Disk Cache Size | Persistent tile cache on disk | 0.1-10 GB |
-| Aircraft Data Radius | Data fetch radius (VATSIM/RealTraffic) | 50-500 nm |
+| Aircraft Data Radius | Data fetch radius (VATSIM/RealTraffic) | 10-500 nm |
+| Max Aircraft Count | Limit displayed aircraft | 10-1000 |
+| Max Replay Duration | How far back replay can go | 1-60 min |
 | Max Parked Aircraft | Max stationary aircraft (RealTraffic only) | 0-200 |
+
+### Advanced Tab
+| Setting | Description | Options |
+|---------|-------------|---------|
+| Theme | Light or dark interface | Light/Dark |
+| Interpolation Debug Logs | Log aircraft position calculations | On/Off |
+| Debug Coordinate Overlay | Show camera coordinates on screen | On/Off |
 
 ## Performance Tips
 

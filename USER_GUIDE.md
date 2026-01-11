@@ -17,11 +17,13 @@ Welcome to TowerCab 3D, a real-time 3D tower visualization tool for VATSIM air t
 11. [Replay System](#replay-system)
 12. [Measuring Tool](#measuring-tool)
 13. [Weather Effects](#weather-effects)
-14. [VR Support](#vr-support)
-15. [Settings](#settings)
-16. [Modding](#modding)
-17. [Keyboard Shortcuts Reference](#keyboard-shortcuts-reference)
-18. [Troubleshooting](#troubleshooting)
+14. [Terrain Flattening](#terrain-flattening)
+15. [VR Support](#vr-support)
+16. [Settings](#settings)
+17. [MSFS Model Support](#msfs-model-support)
+18. [Modding](#modding)
+19. [Keyboard Shortcuts Reference](#keyboard-shortcuts-reference)
+20. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -345,38 +347,44 @@ In Orbit mode, the camera circles around the aircraft, keeping it centered in vi
 
 Click the airport button in the top-left corner of the screen. This shows the current airport ICAO code, or "Select Airport" if none is selected.
 
+### Tabbed Interface
+
+The airport selector uses a tabbed interface for easy navigation:
+
+| Tab | Description |
+|-----|-------------|
+| **Favorites** | Airports you've starred for quick access (separate lists for VATSIM and RealTraffic modes) |
+| **Recent** | Last 10 airports you've visited |
+| **Popular** | Airports ranked by current VATSIM departures and arrivals |
+| **vNAS** | Airports in your CRC session that support 1Hz real-time updates |
+
+### Adding Favorites
+
+Click the star icon next to any airport to add it to your favorites. Favorites are saved separately for VATSIM and RealTraffic modes, so you can have different lists for virtual and real-world traffic.
+
 ### Searching for Airports
 
-The search supports multiple query types:
+Type in the search box to find airports. The search supports multiple query types:
 - **ICAO Code**: `KJFK`, `EGLL`, `RJTT`
 - **IATA Code**: `JFK`, `LHR`, `HND`
 - **Airport Name**: `John F Kennedy`, `Heathrow`
 - **City Name**: `New York`, `London`, `Tokyo`
 
-Results appear as you type, showing up to 50 matches.
+Results appear as you type, showing up to 50 matches. Press **Enter** to select the first result.
 
-### Recent Airports
+### vNAS Integration
 
-The selector remembers your last 10 selected airports for quick access. Recent airports appear at the top of the modal.
+When using VATSIM with CRC (vNAS), the **vNAS** tab shows airports in your current session that can receive 1Hz real-time updates. This reduces display delay from ~17 seconds (standard VATSIM) to ~1.5 seconds.
 
-### Popular Airports
-
-Quick-access buttons for major international hubs:
-- KJFK (New York JFK)
-- KLAX (Los Angeles)
-- EGLL (London Heathrow)
-- EDDF (Frankfurt)
-- LFPG (Paris CDG)
-- RJTT (Tokyo Haneda)
-- VHHH (Hong Kong)
-- YSSY (Sydney)
+Aircraft at vNAS-enabled airports show a green indicator in the aircraft panel when receiving live updates.
 
 ### Changing Airports
 
 When you select a new airport:
-1. The camera smoothly animates to the new location (2 seconds)
+1. The camera smoothly animates to the new location (5 seconds)
 2. Your camera settings for that airport are restored (if previously saved)
 3. The aircraft panel updates to show traffic near the new airport
+4. Terrain flattening data loads for the runway/taxiway surfaces
 
 ---
 
@@ -695,6 +703,41 @@ When weather effects are enabled:
 
 ---
 
+## Terrain Flattening
+
+TowerCab 3D automatically flattens airport surfaces to eliminate terrain bumps that cause unrealistic aircraft movement.
+
+### How It Works
+
+The terrain flattening system:
+- Flattens runways to their proper elevations
+- Smooths taxiways and apron areas
+- Creates natural transitions at surface edges
+- Preserves realistic runway slopes (aircraft pitch appropriately on sloped runways)
+
+### Coverage
+
+Terrain flattening data is available for over 15,000 airports worldwide:
+- **Runways**: Elevation data from OurAirports database
+- **Taxiways/Aprons**: Polygon data from X-Plane apt.dat files
+
+### Settings
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| Enable Terrain Flattening | Master toggle for the feature | On |
+| Terrain Blend Distance | Width of transition zone between flat and natural terrain | 50m |
+
+Access these settings in **Settings > Graphics & Weather > Terrain**.
+
+### Tips
+
+- If aircraft appear to "float" at an airport, the terrain data may not be available for that location
+- Increase blend distance (up to 100m) for smoother transitions at the cost of flattening more surrounding area
+- Decrease blend distance (minimum 25m) for more precise runway boundaries
+
+---
+
 ## VR Support
 
 TowerCab 3D includes experimental WebXR support for VR headsets.
@@ -731,17 +774,25 @@ Interpupillary distance (IPD) can be adjusted in settings for proper stereo sepa
 
 ## Settings
 
-Access settings by clicking the gear icon in the bottom-right corner. Settings are organized into five tabs.
+Access settings by clicking the gear icon in the bottom-right corner. Settings are organized into six tabs.
 
-### General Tab
+### Configuration Tab
 
 | Setting | Description | Default |
 |---------|-------------|---------|
 | **Cesium Ion Token** | API key for terrain/imagery (required) | - |
-| **Theme** | Light or dark interface | Dark |
-| **Default FOV** | Starting field of view | 60° |
-| **Camera Speed** | WASD movement speed multiplier | 1x |
-| **Mouse Sensitivity** | Right-click drag rotation speed | 1x |
+| **Data Source** | VATSIM or RealTraffic | VATSIM |
+| **RealTraffic License Key** | Required for RealTraffic data | - |
+| **HTTP Server** | Enable remote browser access on port 8765 | Off |
+| **MSFS Community Path** | Path to MSFS Community folder | Auto-detected |
+| **Enable FSLTL Models** | Use converted FSLTL aircraft models | On |
+| **Enable AIG Models** | Use converted AIG aircraft models | On |
+| **Model Priority** | Which model source to prefer | FSLTL First |
+| **Texture Scale** | Resolution for converted textures | 1K |
+| **Cache Directory** | Where to store converted models | App temp folder |
+| **Cache Size Limit** | Max disk space for model cache | 5 GB |
+
+See the [MSFS Model Support](#msfs-model-support) section for details on using FSLTL and AIG models.
 
 **Getting a Cesium Ion Token:**
 1. Create a free account at [cesium.com/ion](https://cesium.com/ion)
@@ -749,40 +800,60 @@ Access settings by clicking the gear icon in the bottom-right corner. Settings a
 3. Create a new token with default permissions
 4. Paste the token in the settings field
 
-### Display Tab
+### Aircraft & Labels Tab
 
 | Setting | Description | Default |
 |---------|-------------|---------|
-| **Label Visibility Distance** | How far aircraft labels appear | 30 nm |
-| **Datablock Display** | Label detail level | Full |
-| **Show Aircraft Panel** | Toggle the right-side aircraft list | On |
+| **Visibility Range** | How far aircraft labels appear | 30 nm |
 | **Show Ground Traffic** | Display aircraft on ground | On |
 | **Show Airborne Traffic** | Display flying aircraft | On |
-| **Max Aircraft** | Limit displayed aircraft count | 100 |
+| **Datablock Display** | Label detail level | Full |
+| **Datablock Font Size** | Size of label text | 12 px |
+| **Leader Line Length** | Distance from aircraft to label | 2.0 |
+| **Default Datablock Direction** | Default label position (numpad-style) | 7 (top-left) |
+| **Auto-Rearrange Datablocks** | Prevent label overlaps | On |
+| **Ground Traffic Labels** | Filter labels for ground aircraft | All |
+| **Built-in Model Tint** | Color tint for generic models | Light Blue |
+| **Aircraft Silhouettes** | Black outlines on built-in models (high GPU cost) | Off |
+| **Orientation Emulation** | Aircraft pitch/roll physics simulation | On |
+| **Emulation Intensity** | Strength of pitch/roll effects | 100% |
+| **Show Aircraft Panel** | Toggle the right-side aircraft list | On |
 
 **Datablock Display Modes:**
 - **Full**: Shows callsign, aircraft type, altitude, and speed
 - **Airline Codes Only**: Shows only the airline ICAO code (e.g., "UAL" instead of "UAL123")
 - **None**: Hides labels entirely, showing only aircraft models
 
-### Graphics Tab
+**Ground Traffic Label Modes:**
+- **All**: Show labels for all ground aircraft
+- **Moving Only**: Show labels only for aircraft above a speed threshold
+- **Active Only**: Show labels only for aircraft above 5 knots
+- **None**: Hide all ground aircraft labels (models still visible)
+
+### Graphics & Weather Tab
 
 | Setting | Description | Default |
 |---------|-------------|---------|
-| **Terrain Quality** | Level of terrain detail | High |
+| **Max Framerate** | Limit rendering framerate | 60 |
+| **MSAA Samples** | Anti-aliasing quality | 4x |
+| **Terrain Quality** | Level of terrain detail | High (3) |
+| **Terrain Flattening** | Flatten runways/taxiways for smooth ground movement | On |
+| **Terrain Blend Distance** | Transition zone at surface edges | 50m |
 | **Show 3D Buildings** | OpenStreetMap building models | Off |
+| **Building Quality** | LOD for 3D buildings | Low |
 | **Time of Day** | Real-time or fixed local hour | Real |
+| **Enable Shadows** | Render terrain and aircraft shadows | On |
+| **Shadow Mode** | Which objects cast shadows | Aircraft Only |
 | **Enable Fog** | METAR-based fog effects | On |
 | **Fog Intensity** | Fog opacity multiplier | 1x |
 | **Visibility Scale** | Fog distance multiplier | 1x |
 | **Enable Clouds** | Cloud layers at METAR ceilings | On |
-| **Ambient Occlusion** | HBAO screen-space shading | Off |
-| **Orientation Emulation** | Aircraft pitch/roll physics simulation | On |
-| **Emulation Intensity** | Strength of pitch/roll effects | 100% |
+| **Enable Precipitation** | Rain/snow particle effects | On |
+| **Enable Lightning** | Lightning flashes during storms | On |
 
 **Terrain Quality Levels:**
 1. **Low**: Fastest loading, minimal detail
-2. **Medium**: Balanced performance
+2. **Medium-Low**: Balanced performance
 3. **High**: Good detail (default)
 4. **Very High**: Detailed terrain
 5. **Ultra**: Maximum detail (may impact performance)
@@ -791,53 +862,90 @@ Access settings by clicking the gear icon in the bottom-right corner. Settings a
 - **Real Time**: Uses current UTC time for sun position
 - **Fixed Time**: Set a specific local hour (0-24) at the tower location
 
-Fixed time is useful for consistent lighting, viewing dawn/dusk conditions, or avoiding harsh midday shadows.
+### Controls & Camera Tab
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| **Default FOV** | Starting field of view | 60° |
+| **Camera Speed** | WASD movement speed | 5 |
+| **Mouse Sensitivity** | Right-click drag rotation speed | 1.0x |
+| **Joystick Sensitivity** | Virtual joystick speed (touch devices) | 5 |
+| **Auto-Switch Airport** | Switch to nearest airport when moving | Off |
 
 ### Performance Tab
 
 | Setting | Description | Default |
 |---------|-------------|---------|
-| **In-Memory Tile Cache** | Cached terrain tiles in memory | 150 tiles |
-| **Disk Cache Size** | Persistent tile cache on disk | 1 GB |
-| **Aircraft Data Radius** | VATSIM data fetch radius | 100 nm |
+| **In-Memory Tile Cache** | Cached terrain tiles in memory | 2000 tiles |
+| **Disk Cache Size** | Persistent tile cache on disk | 2 GB |
+| **Aircraft Data Radius** | Data fetch radius | 100 nm |
+| **Max Aircraft Count** | Limit displayed aircraft | 200 |
+| **Max Replay Duration** | How far back replay can go | 15 min |
 
 **Performance Tips:**
 - Lower terrain quality for smoother performance on older hardware
 - Disable 3D buildings if experiencing frame drops
-- Reduce label visibility distance to decrease rendered aircraft
+- Reduce visibility range to decrease rendered aircraft
 - Close unused inset viewports
+- Use "Aircraft Only" shadow mode for better performance
 
-### Help Tab
+### Advanced Tab
 
-The Help tab includes:
-- Complete keyboard shortcuts reference
-- Follow mode controls
-- Mouse controls overview
-- Links to documentation
+| Setting | Description | Default |
+|---------|-------------|---------|
+| **Theme** | Light or dark interface | Dark |
+| **Interpolation Debug Logs** | Log aircraft position calculations | Off |
+| **Debug Coordinate Overlay** | Show camera coordinates | Off |
+
+---
+
+## MSFS Model Support
+
+TowerCab 3D can use aircraft models from FSLTL (FS Live Traffic Liveries) and AIG (AI Ground) add-ons for Microsoft Flight Simulator. Models are converted on-demand when first needed.
+
+### How It Works
+
+1. **Automatic Detection**: TowerCab 3D scans your MSFS Community folder for FSLTL and AIG installations
+2. **On-Demand Conversion**: Models are converted automatically when an aircraft with that livery appears
+3. **Smart Matching**: Aircraft are matched by type code and airline ICAO (e.g., UAL123 → United B738)
+4. **Caching**: Converted models are cached to disk for instant loading on subsequent uses
+
+### Setup
+
+1. Open **Settings > Configuration**
+2. Set your **MSFS Community folder path** (auto-detected if MSFS is installed)
+3. Enable **FSLTL** and/or **AIG** models as desired
+4. Set **Model Priority** to choose which source takes precedence when both have a livery
+5. Optionally configure a **Cache Directory** for persistent storage
+
+### Model Matching
+
+TowerCab 3D matches aircraft to models in this order:
+
+1. **Exact Match**: Aircraft type + airline code (e.g., B738 + UAL → United B738)
+2. **Airline Fallback**: Any model for the airline (when exact type unavailable)
+3. **Dimension Match**: Closest model by wingspan/length with automatic scaling
+4. **Generic Fallback**: Built-in B738 model
+
+### Features
+
+- **Landing Gear Animation**: Gear extends below 2,000ft AGL, retracts above 500ft
+- **Multiple Engine Variants**: Supports aircraft with GE, PW, or RR engine variants
+- **Texture Scaling**: Choose texture resolution (Full 4K, 2K, 1K, or 512) to balance quality and storage
+- **LRU Cache**: Automatic cleanup when cache limit is reached
+- **3D Preview**: Press F3 to open the Model Matching dialog and preview any aircraft's 3D model
+
+### Custom VMR Rules
+
+For advanced model matching control, you can add custom VMR (Visual Model Rules) files. These are XML files that map specific airlines and aircraft types to model folders. Place `.vmr` files in your `mods/` folder.
+
+See [MODDING.md](MODDING.md) for VMR file format documentation.
 
 ---
 
 ## Modding
 
-TowerCab 3D supports custom 3D models for aircraft and towers, plus FSLTL airline liveries.
-
-### FSLTL Aircraft Models
-
-Import airline-specific liveries from the FS Live Traffic Liveries (FSLTL) package:
-
-1. Click **Settings** (gear icon)
-2. Go to **General > FSLTL Aircraft Models**
-3. Click **Select FSLTL Directory** and choose your FSLTL installation folder
-4. Select which airlines and aircraft types to convert
-5. Choose texture quality (Full 4K, 2K, 1K recommended, or 512px)
-6. Click **Start Conversion**
-7. Models are stored in IndexedDB and automatically matched by airline ICAO code
-
-**Features:**
-- Airline-specific liveries matched by callsign (e.g., UAL123 uses United livery)
-- Fallback to generic/base liveries when airline model unavailable
-- Landing gear animations (extends below 2,000ft AGL, retracts above 500ft)
-- Converted models persist across sessions
+TowerCab 3D supports custom 3D models for aircraft and control towers.
 
 ### Installing Custom Mods
 
@@ -855,15 +963,12 @@ Add custom aircraft models with airline-specific liveries. Mods match by ICAO ai
 
 Add custom control tower models for specific airports. Mods match by ICAO airport code (e.g., KJFK, EGLL).
 
-### VMR Model Matching Rules
+### Custom Tower Positions
 
-For advanced users, VMR (Visual Model Rules) files allow you to define custom model matching rules:
-
-1. Create a `.vmr` file in the `mods/` folder
-2. Define rules mapping aircraft types and airlines to your model folders
-3. Restart the application to load your VMR rules
-
-VMR files use the same XML format as Microsoft Flight Simulator traffic, making them easy to create if you're familiar with that system.
+Define default camera positions for airports without creating a full tower mod:
+1. Create JSON files in `mods/tower-positions/{ICAO}.json`
+2. Specify 3D view (lat/lon/height/heading) and 2D view (altitude/heading) positions
+3. Or use **Shift+Click "Save App Default"** in the app to save your current view
 
 ### Full Documentation
 
@@ -871,6 +976,7 @@ See [MODDING.md](MODDING.md) for complete modding instructions including:
 - Manifest file format
 - Model requirements and guidelines
 - VMR file format and examples
+- Tower position file format
 - Blender export settings
 - Troubleshooting tips
 

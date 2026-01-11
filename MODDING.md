@@ -8,6 +8,12 @@ TowerCab 3D supports loading custom 3D models in multiple formats. You can creat
 - **Aircraft models**: Add custom aircraft models with airline-specific liveries
 - **Tower models**: Add custom control tower models for specific airports
 
+Additionally, TowerCab 3D can automatically use models from:
+- **FSLTL (FS Live Traffic Liveries)**: High-quality airline liveries for MSFS
+- **AIG (AI Ground)**: Additional AI traffic models for MSFS
+
+FSLTL and AIG models are converted on-demand when aircraft appear. See the **Settings > Configuration** tab to configure model sources and priorities.
+
 ### Supported Formats
 
 | Format | Extension | Recommended | Notes |
@@ -576,10 +582,12 @@ When VMR rules are present, they take **highest priority** over other model sour
 
 1. **Custom VMR** - Airline+type specific match
 2. **Custom VMR** - Type-only (base livery)
-3. **FSLTL** - Converted airline models
-4. **FSLTL** - Base liveries
+3. **FSLTL/AIG** - Converted airline models (priority order configurable in Settings)
+4. **FSLTL/AIG** - Base liveries
 5. **Custom Mods** - manifest.json based (no VMR)
 6. **Built-in** - Default models
+
+**Note:** You can configure whether FSLTL or AIG takes priority in **Settings > Configuration > Model Priority**.
 
 ### Example Folder Structure
 
