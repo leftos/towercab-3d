@@ -21,7 +21,14 @@ import {
   MAX_PITCH_DEGREES,
   MAX_ROLL_DEGREES,
   MAX_PITCH_RATE_DEG_PER_SEC,
-  MAX_ROLL_RATE_DEG_PER_SEC
+  MAX_ROLL_RATE_DEG_PER_SEC,
+  MAX_HEADING_RATE_DEG_PER_SEC_AIR,
+  MAX_HEADING_RATE_DEG_PER_SEC_GROUND,
+  LANDING_BLEND_START_AGL,
+  LANDING_BLEND_END_AGL,
+  LANDING_BLEND_DESCENT_RATE,
+  DEPARTURE_BLEND_START_AGL,
+  DEPARTURE_BLEND_END_AGL
 } from '../constants/rendering'
 
 // SINGLETON: Shared interpolated states map and animation loop
@@ -76,6 +83,7 @@ interface TimelineRateState {
   smoothedAcceleration: number
   prevPitch: number | null
   prevRoll: number | null
+  smoothedHeading: number | null  // Rate-limited heading for smooth yaw
 }
 
 // Consolidated state Maps (3 Maps instead of 16)
@@ -121,7 +129,8 @@ function timelineToInterpolatedState(
       smoothedTurnRate: 0,
       smoothedAcceleration: 0,
       prevPitch: null,
-      prevRoll: null
+      prevRoll: null,
+      smoothedHeading: null
     }
     sharedTimelineRateStateRef.current.set(callsign, rateState)
   }
@@ -243,6 +252,47 @@ function timelineToInterpolatedState(
   // Calculate track from groundTrack or default to heading
   const track = timeline.groundTrack ?? timeline.heading
 
+  // ============================================================================
+  // HEADING RATE LIMITING
+  // ============================================================================
+  // Apply rate limiting to heading to smooth out noisy yaw from 1Hz vNAS data.
+  // This prevents jerky heading changes while preserving realistic turn behavior.
+  // Ground aircraft get higher rate limit since they can pivot faster during taxi.
+
+  let smoothedHeading = timeline.heading
+
+  if (frameDelta > 0 && frameDelta < 100) {
+    const targetHeading = timeline.heading
+    const prevSmoothedHeading = rateState.smoothedHeading ?? targetHeading
+
+    // Determine rate limit based on ground/air state
+    const isOnGround = timeline.onGround === true || timeline.groundspeed < 40
+    const maxHeadingRate = isOnGround
+      ? MAX_HEADING_RATE_DEG_PER_SEC_GROUND
+      : MAX_HEADING_RATE_DEG_PER_SEC_AIR
+
+    const dtSeconds = frameDelta / 1000
+    const maxHeadingChange = maxHeadingRate * dtSeconds
+
+    // Calculate heading delta with wraparound handling (shortest path)
+    let headingDelta = targetHeading - prevSmoothedHeading
+    if (headingDelta > 180) headingDelta -= 360
+    if (headingDelta < -180) headingDelta += 360
+
+    // Apply rate limiting
+    if (Math.abs(headingDelta) > maxHeadingChange) {
+      smoothedHeading = prevSmoothedHeading + Math.sign(headingDelta) * maxHeadingChange
+    } else {
+      smoothedHeading = targetHeading
+    }
+
+    // Normalize to 0-360
+    smoothedHeading = ((smoothedHeading % 360) + 360) % 360
+
+    // Store for next frame
+    rateState.smoothedHeading = smoothedHeading
+  }
+
   // Build the InterpolatedAircraftState
   return {
     // Base AircraftState fields
@@ -260,11 +310,11 @@ function timelineToInterpolatedState(
     arrival: timeline.arrival,
     timestamp: now,
 
-    // Interpolated values (same as raw for timeline-based)
+    // Interpolated values (same as raw for timeline-based, except heading is rate-limited)
     interpolatedLatitude: timeline.latitude,
     interpolatedLongitude: timeline.longitude,
     interpolatedAltitude: timeline.altitude,
-    interpolatedHeading: timeline.heading,
+    interpolatedHeading: smoothedHeading,
     interpolatedGroundspeed: timeline.groundspeed,
 
     // Orientation
@@ -439,66 +489,85 @@ function updateInterpolation() {
       ? reportedEllipsoidHeight - sampledTerrainHeight
       : reportedEllipsoidHeight - geoidService.mslToEllipsoidal(entry.interpolatedLatitude, entry.interpolatedLongitude, groundElevationMetersMsl)
 
-    // Determine if aircraft is on ground using BOTH speed and altitude:
-    // - Low speed (< 5 kts): definitely on ground (handles altitude/terrain mismatch)
-    // - Low altitude AGL (< 10m): also on ground (handles fast takeoff/landing roll)
-    const isLowSpeed = entry.interpolatedGroundspeed < 5
-    const isLowAltitude = altitudeAGL < 10
-    const isOnGround = isLowSpeed || isLowAltitude
+    // ========================================================================
+    // PROGRESSIVE LANDING/DEPARTURE BLENDING
+    // ========================================================================
+    // Instead of binary ground/air clamping, we progressively blend between
+    // terrain-clamped height and reported altitude based on:
+    // - Landing: descending aircraft blend toward terrain starting at 50m AGL
+    // - Departure: low aircraft blend toward reported as altitude increases
+    // This eliminates the visual "pop" when crossing altitude thresholds.
 
-    // Determine if we should clamp to terrain:
-    // 1. Altitude AGL is low (definitely on ground), OR
-    // 2. Terrain sample exists AND is higher than reported altitude (prevents going underground)
-    let shouldClampToTerrain = false
+    // Get vertical rate for landing detection (m/min, negative = descending)
+    const verticalRate = entry.verticalRate ?? 0
+
+    // Calculate both terrain-clamped and reported heights
+    let terrainClampedHeight: number
+
+    // Update smoothed terrain height when we have terrain data
     if (sampledTerrainHeight !== undefined) {
-      const terrainEllipsoidHeight = sampledTerrainHeight + GROUND_AIRCRAFT_TERRAIN_OFFSET
-      shouldClampToTerrain = isOnGround || (terrainEllipsoidHeight > reportedEllipsoidHeight)
-    } else {
-      shouldClampToTerrain = isOnGround
-    }
-
-    let targetHeight: number
-
-    if (shouldClampToTerrain && sampledTerrainHeight !== undefined) {
-      // Clamp to terrain: use terrain-sampled height (smoothed for consistency)
-      // Initialize smoothed height if this is the first terrain sample
       if (terrainState.smoothedTerrainHeight === 0) {
         terrainState.smoothedTerrainHeight = sampledTerrainHeight
       }
       terrainState.smoothedTerrainHeight += (sampledTerrainHeight - terrainState.smoothedTerrainHeight) * TERRAIN_SMOOTHING_LERP_FACTOR
-
-      // Target height: smoothed terrain + offset
-      targetHeight = terrainState.smoothedTerrainHeight + GROUND_AIRCRAFT_TERRAIN_OFFSET
-    } else if (isOnGround) {
-      // Low groundspeed but no terrain sample - use fallback
-      // Convert MSL ground elevation to ellipsoidal using aircraft's position
-      const groundEllipsoidHeight = geoidService.mslToEllipsoidal(entry.interpolatedLatitude, entry.interpolatedLongitude, groundElevationMetersMsl)
-      targetHeight = Math.max(reportedEllipsoidHeight, groundEllipsoidHeight) + GROUND_AIRCRAFT_TERRAIN_OFFSET
+      terrainClampedHeight = terrainState.smoothedTerrainHeight + GROUND_AIRCRAFT_TERRAIN_OFFSET
     } else {
-      // Moving fast (>= 40 kts) but not necessarily airborne yet
-      // Scale the flying offset based on actual altitude above ground
-      // This prevents the 5m jump when aircraft is still on the runway during takeoff roll
-      let flyingOffset = FLYING_AIRCRAFT_TERRAIN_OFFSET
-      if (sampledTerrainHeight !== undefined) {
-        const altitudeAGLCalc = reportedEllipsoidHeight - sampledTerrainHeight
-        // Gradually increase offset from 0.1m (ground) to 5m (fully airborne at 30m AGL)
-        // This creates a smooth visual transition during takeoff/landing
-        const transitionProgress = Math.min(1.0, Math.max(0, altitudeAGLCalc / 30))
-        flyingOffset = GROUND_AIRCRAFT_TERRAIN_OFFSET +
-          (FLYING_AIRCRAFT_TERRAIN_OFFSET - GROUND_AIRCRAFT_TERRAIN_OFFSET) * transitionProgress
-      }
-      targetHeight = reportedEllipsoidHeight + flyingOffset
+      // Fallback: use MSL ground elevation
+      const groundEllipsoidHeight = geoidService.mslToEllipsoidal(entry.interpolatedLatitude, entry.interpolatedLongitude, groundElevationMetersMsl)
+      terrainClampedHeight = groundEllipsoidHeight + GROUND_AIRCRAFT_TERRAIN_OFFSET
+    }
 
-      // Reset smoothed terrain height for aircraft that are truly airborne
-      if (sampledTerrainHeight !== undefined) {
-        const altitudeAGLCalc = reportedEllipsoidHeight - sampledTerrainHeight
-        if (altitudeAGLCalc > 50) {
-          // Only reset once truly airborne (50m+ AGL)
-          terrainState.smoothedTerrainHeight = 0
-        }
+    // Calculate flying height with progressive offset (0.1m at ground → 5m at 30m AGL)
+    let flyingOffset = FLYING_AIRCRAFT_TERRAIN_OFFSET
+    if (sampledTerrainHeight !== undefined) {
+      const transitionProgress = Math.min(1.0, Math.max(0, altitudeAGL / 30))
+      flyingOffset = GROUND_AIRCRAFT_TERRAIN_OFFSET +
+        (FLYING_AIRCRAFT_TERRAIN_OFFSET - GROUND_AIRCRAFT_TERRAIN_OFFSET) * transitionProgress
+    }
+    const reportedHeightWithOffset = reportedEllipsoidHeight + flyingOffset
+
+    // Determine ground blend weight (0 = fully airborne/reported, 1 = fully on terrain)
+    let groundBlendWeight: number
+    const isLowSpeed = entry.interpolatedGroundspeed < 5
+
+    if (isLowSpeed) {
+      // Very low speed = definitely on ground, full terrain clamping
+      groundBlendWeight = 1.0
+    } else if (sampledTerrainHeight !== undefined && terrainClampedHeight > reportedHeightWithOffset) {
+      // Terrain higher than reported = prevent going underground
+      groundBlendWeight = 1.0
+    } else if (verticalRate < LANDING_BLEND_DESCENT_RATE && altitudeAGL < LANDING_BLEND_START_AGL) {
+      // LANDING: Aircraft is descending and low - blend toward terrain
+      // At LANDING_BLEND_START_AGL (50m): start blending (weight = 0)
+      // At LANDING_BLEND_END_AGL (10m): full ground (weight = 1)
+      const blendRange = LANDING_BLEND_START_AGL - LANDING_BLEND_END_AGL
+      groundBlendWeight = Math.min(1.0, Math.max(0, (LANDING_BLEND_START_AGL - altitudeAGL) / blendRange))
+    } else if (altitudeAGL > 0 && altitudeAGL < DEPARTURE_BLEND_END_AGL) {
+      // DEPARTURE: Low altitude, possibly lifting off - blend toward reported
+      // At DEPARTURE_BLEND_START_AGL (5m): full ground (weight = 1)
+      // At DEPARTURE_BLEND_END_AGL (35m): full airborne (weight = 0)
+      const blendRange = DEPARTURE_BLEND_END_AGL - DEPARTURE_BLEND_START_AGL
+      if (altitudeAGL <= DEPARTURE_BLEND_START_AGL) {
+        groundBlendWeight = 1.0
       } else {
-        terrainState.smoothedTerrainHeight = 0
+        groundBlendWeight = Math.min(1.0, Math.max(0, 1.0 - (altitudeAGL - DEPARTURE_BLEND_START_AGL) / blendRange))
       }
+    } else {
+      // Fully airborne - use reported altitude
+      groundBlendWeight = 0
+    }
+
+    // Blend between terrain and reported heights
+    const targetHeight = terrainClampedHeight * groundBlendWeight + reportedHeightWithOffset * (1 - groundBlendWeight)
+
+    // For state transition tracking, consider "clamped" if blend weight > 0.5
+    const shouldClampToTerrain = groundBlendWeight > 0.5
+
+    // Reset smoothed terrain height for aircraft that are truly airborne
+    if (groundBlendWeight === 0 && sampledTerrainHeight !== undefined && altitudeAGL > 50) {
+      terrainState.smoothedTerrainHeight = 0
+    } else if (groundBlendWeight === 0 && sampledTerrainHeight === undefined) {
+      terrainState.smoothedTerrainHeight = 0
     }
 
     // Smooth transition when switching between clamped/unclamped states

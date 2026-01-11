@@ -526,3 +526,76 @@ export const MAX_PITCH_RATE_DEG_PER_SEC = 5
  * Transport aircraft typically roll at 10-15 degrees/sec.
  */
 export const MAX_ROLL_RATE_DEG_PER_SEC = 10
+
+/**
+ * Maximum heading rate for airborne aircraft (degrees per second)
+ *
+ * Limits how quickly heading can change to prevent jerky yaw from noisy data.
+ * Standard rate turn is 3 deg/sec; allow 6 deg/sec to capture snappy turns
+ * while filtering out GPS/sensor jitter.
+ */
+export const MAX_HEADING_RATE_DEG_PER_SEC_AIR = 6
+
+/**
+ * Maximum heading rate for ground aircraft (degrees per second)
+ *
+ * Ground aircraft can pivot faster during taxi (sharp turns at intersections).
+ * Allow higher rate than airborne to accommodate realistic taxi maneuvers.
+ */
+export const MAX_HEADING_RATE_DEG_PER_SEC_GROUND = 20
+
+// ============================================================================
+// PROGRESSIVE LANDING/DEPARTURE BLENDING
+// ============================================================================
+
+/**
+ * Altitude AGL (meters) where landing blend toward terrain begins
+ *
+ * When aircraft is descending and below this altitude, we start progressively
+ * blending from reported altitude toward terrain-clamped height. This creates
+ * a smooth transition during landing instead of an abrupt "snap" to ground.
+ *
+ * Default: 50 meters (~165 feet) - covers short final approach
+ */
+export const LANDING_BLEND_START_AGL = 50
+
+/**
+ * Altitude AGL (meters) where landing blend is complete (fully on terrain)
+ *
+ * At this altitude and below, the aircraft is fully blended to terrain height.
+ * Should be low enough that aircraft appears to touch down smoothly.
+ *
+ * Default: 10 meters (~33 feet)
+ */
+export const LANDING_BLEND_END_AGL = 10
+
+/**
+ * Descent rate threshold (m/min) to trigger landing blend
+ *
+ * Aircraft must be descending faster than this rate (negative value) to
+ * activate the progressive landing blend. Prevents blending during level
+ * flight at low altitude (e.g., low passes, pattern work).
+ *
+ * Default: -50 m/min (~164 fpm) - light descent triggers blend
+ * Note: Typical approach is 180-250 m/min (600-800 fpm)
+ */
+export const LANDING_BLEND_DESCENT_RATE = -50
+
+/**
+ * Altitude AGL (meters) where departure blend toward reported altitude begins
+ *
+ * When aircraft is on ground/low altitude and reported altitude starts rising
+ * above terrain, we progressively blend from terrain toward reported altitude.
+ *
+ * Default: 5 meters - accounts for GPS error during ground roll
+ */
+export const DEPARTURE_BLEND_START_AGL = 5
+
+/**
+ * Altitude AGL (meters) where departure blend is complete (fully on reported)
+ *
+ * At this altitude, aircraft uses full reported altitude with flying offset.
+ *
+ * Default: 35 meters (~115 feet) - generous transition zone
+ */
+export const DEPARTURE_BLEND_END_AGL = 35
