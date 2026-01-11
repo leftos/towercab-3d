@@ -4,6 +4,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+## [0.0.31-alpha] - 2026-01-10
+
 ### Added
 - **Google Maps satellite imagery** as alternative to default Cesium Ion (Bing Maps)
   - Bring your own Google Maps API key in Settings → Configuration → Imagery Provider
