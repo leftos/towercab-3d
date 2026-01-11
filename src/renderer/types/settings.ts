@@ -237,6 +237,133 @@ export interface CesiumSettings {
 }
 
 /**
+ * MSAA (Multi-Sample Anti-Aliasing) preset for inset viewports
+ *
+ * - 'low': 2x MSAA (minimal quality, best performance)
+ * - 'medium': 4x MSAA (balanced quality/performance)
+ * - 'match': Use same MSAA level as main viewport
+ */
+export type InsetMsaaPreset = 'low' | 'medium' | 'match'
+
+/**
+ * Terrain detail preset for inset viewports
+ *
+ * Controls the screen-space error threshold for terrain tiles:
+ * - 'low': SSE 16 (fastest loading, less detail)
+ * - 'medium': SSE 12 (balanced)
+ * - 'match': Use same terrain detail as main viewport
+ */
+export type InsetTerrainPreset = 'low' | 'medium' | 'match'
+
+/**
+ * Tile caching preset for inset viewports
+ *
+ * Controls in-memory tile cache size:
+ * - 'minimal': 50 tiles (lowest memory, more reloading)
+ * - 'standard': 200 tiles (balanced memory/performance)
+ * - 'match': Use same cache size as main viewport
+ */
+export type InsetCachePreset = 'minimal' | 'standard' | 'match'
+
+/**
+ * Inset viewport graphics settings
+ *
+ * Fine-grained control over rendering quality for inset (picture-in-picture) viewports.
+ * Each setting allows trading off visual quality vs performance.
+ *
+ * NOTE: Each inset viewport is a separate WebGL context with its own GPU resources.
+ * Enabling multiple high-quality features across multiple insets can significantly
+ * impact performance on mid-range GPUs.
+ */
+export interface InsetGraphicsSettings {
+  /**
+   * Master toggle for enhanced inset rendering (default: false)
+   *
+   * When enabled, the individual settings below control inset quality.
+   * When disabled, all insets use performance mode (all features off, 2x MSAA, minimal cache).
+   *
+   * TIP: Enable this first, then customize individual settings below.
+   */
+  enabled: boolean
+
+  /**
+   * Enable 3D buildings in insets (default: false)
+   *
+   * Shows OSM 3D buildings in inset viewports (requires global "Show 3D Buildings" to be enabled).
+   * Performance impact: Medium (additional tile loading and rendering)
+   */
+  buildings: boolean
+
+  /**
+   * Enable shadows in insets (default: false)
+   *
+   * Renders shadows from aircraft and terrain in inset viewports.
+   * Performance impact: High (shadow map generation per inset)
+   */
+  shadows: boolean
+
+  /**
+   * Enable aircraft silhouette outlines in insets (default: false)
+   *
+   * Adds edge detection outlines to built-in aircraft models for visibility.
+   * Performance impact: Medium-High (full-screen post-processing shader)
+   */
+  silhouettes: boolean
+
+  /**
+   * MSAA quality for insets (default: 'low')
+   *
+   * Anti-aliasing level for inset viewports:
+   * - 'low': 2x MSAA (fastest)
+   * - 'medium': 4x MSAA (balanced)
+   * - 'match': Same as main viewport setting
+   */
+  msaa: InsetMsaaPreset
+
+  /**
+   * Terrain detail level for insets (default: 'low')
+   *
+   * Controls terrain tile quality and loading priority:
+   * - 'low': Load less detailed tiles (faster)
+   * - 'medium': Balanced detail
+   * - 'match': Same as main viewport setting
+   */
+  terrain: InsetTerrainPreset
+
+  /**
+   * Tile caching for insets (default: 'minimal')
+   *
+   * Controls how many terrain/imagery tiles are cached in memory:
+   * - 'minimal': 50 tiles (lowest memory usage)
+   * - 'standard': 200 tiles (smoother panning)
+   * - 'match': Same as main viewport setting
+   */
+  cache: InsetCachePreset
+
+  /**
+   * Enable tile preloading for insets (default: false)
+   *
+   * Preloads ancestor and sibling tiles for smoother camera movement.
+   * Performance impact: Low-Medium (uses more bandwidth and memory)
+   */
+  preloadTiles: boolean
+}
+
+/**
+ * Default inset graphics settings (performance mode)
+ */
+export const DEFAULT_INSET_GRAPHICS_SETTINGS: InsetGraphicsSettings = {
+  enabled: false,
+  buildings: false,
+  shadows: false,
+  silhouettes: false,
+  msaa: 'low',
+  terrain: 'low',
+  cache: 'minimal',
+  preloadTiles: false
+}
+
+/**
  * Graphics and rendering settings
  *
  * Settings for shadows, anti-aliasing, and post-processing effects.
@@ -398,27 +525,12 @@ export interface GraphicsSettings {
   maxFramerate: number
 
   /**
-   * Enable high-quality rendering for inset viewports (default: false)
+   * Inset viewport graphics settings
    *
-   * When enabled, inset viewports use the same graphics settings as the main viewport:
-   * - OSM 3D buildings (if enabled)
-   * - Full shadow rendering (if enabled)
-   * - Aircraft silhouette outlines (if enabled)
-   * - User-configured MSAA level
-   * - Full tile cache size
-   * - High terrain detail
-   * - Tile preloading
-   *
-   * When disabled (performance mode), insets use reduced quality settings:
-   * - No buildings, shadows, or silhouettes
-   * - 2x MSAA (fixed)
-   * - 50 tile cache
-   * - Lower terrain detail
-   *
-   * WARNING: High-quality mode significantly increases GPU/CPU load per inset.
-   * Only enable if you have a powerful GPU and few insets (1-2 max recommended).
+   * Fine-grained control over rendering quality for inset (picture-in-picture) viewports.
+   * @see InsetGraphicsSettings for individual setting descriptions
    */
-  highQualityInsets: boolean
+  insetGraphics: InsetGraphicsSettings
 
 }
 
@@ -1467,7 +1579,7 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     nightDarkeningIntensity: 0.7,
     aircraftNightVisibility: 1.5,
     maxFramerate: 60,
-    highQualityInsets: false
+    insetGraphics: DEFAULT_INSET_GRAPHICS_SETTINGS
   },
   camera: {
     defaultFov: 60,

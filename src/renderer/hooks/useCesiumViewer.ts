@@ -6,14 +6,15 @@ import {
   getModelColorBlendAmount
 } from '../constants/rendering'
 import { applyCesiumDebugPatch } from '../utils/cesiumDebugPatch'
+import type { InsetGraphicsSettings } from '../types/settings'
 
 export interface CesiumViewerSettings {
   /** Cesium Ion access token for terrain/imagery */
   cesiumIonToken: string
   /** Whether this is an inset viewport (uses reduced settings for performance) */
   isInset: boolean
-  /** Enable high-quality rendering for inset viewports (default: false) */
-  highQualityInsets: boolean
+  /** Inset graphics settings (fine-grained control over inset quality) */
+  insetGraphics: InsetGraphicsSettings
   /** MSAA samples (2, 4, 8, etc.) */
   msaaSamples: number
   /** Enable sun-based lighting */
@@ -135,7 +136,7 @@ export function useCesiumViewer(
   const {
     cesiumIonToken,
     isInset,
-    highQualityInsets,
+    insetGraphics,
     msaaSamples,
     enableLighting,
     enableLogDepth,
@@ -191,9 +192,21 @@ export function useCesiumViewer(
       silhouetteStageRef.current = null
     }
 
-    // Log MSAA setting for debugging
-    // Insets use 2x MSAA unless highQualityInsets is enabled
-    const effectiveMsaa = (isInset && !highQualityInsets) ? 2 : msaaSamples
+    // Determine effective MSAA for insets based on insetGraphics settings
+    // If inset with enhanced rendering disabled: use 2x MSAA
+    // If inset with enhanced rendering enabled: use the msaa preset ('low'=2, 'medium'=4, 'match'=main setting)
+    let effectiveMsaa = msaaSamples
+    if (isInset) {
+      if (!insetGraphics.enabled) {
+        effectiveMsaa = 2
+      } else {
+        switch (insetGraphics.msaa) {
+          case 'low': effectiveMsaa = 2; break
+          case 'medium': effectiveMsaa = 4; break
+          case 'match': effectiveMsaa = msaaSamples; break
+        }
+      }
+    }
 
     // Set Ion access token
     Cesium.Ion.defaultAccessToken = cesiumIonToken
@@ -234,8 +247,9 @@ export function useCesiumViewer(
     // The selected array will be populated by useAircraftModels with built-in models only
     // Deferred with multiple render frames to avoid shader cache initialization race condition
     // (Cesium bug: "Cannot set properties of undefined (setting 'czm_edge_detection_combine')")
-    // Enabled for main viewports or insets with highQualityInsets
-    if ((!isInset || highQualityInsets) && enableAircraftSilhouettes) {
+    // Enabled for main viewports or insets with enhanced rendering + silhouettes enabled
+    const insetSilhouettesEnabled = isInset && insetGraphics.enabled && insetGraphics.silhouettes
+    if ((!isInset || insetSilhouettesEnabled) && enableAircraftSilhouettes) {
       let frameCount = 0
       const initSilhouetteStage = () => {
         // Wait for several frames to ensure WebGL context and shader cache are ready
@@ -278,9 +292,10 @@ export function useCesiumViewer(
     newViewer.scene.globe.showGroundAtmosphere = enableGroundAtmosphere
     newViewer.scene.globe.baseColor = Cesium.Color.fromCssColorString('#1a1a2e')
 
-    // Shadows - from settings, but disabled for insets for performance (unless highQualityInsets)
+    // Shadows - from settings, but disabled for insets for performance (unless enhanced + shadows enabled)
     // Uses cascaded shadow maps with configurable settings
-    if (isInset && !highQualityInsets) {
+    const insetShadowsEnabled = isInset && insetGraphics.enabled && insetGraphics.shadows
+    if (isInset && !insetShadowsEnabled) {
       newViewer.shadows = false
       newViewer.terrainShadows = Cesium.ShadowMode.DISABLED
     } else {
@@ -299,14 +314,28 @@ export function useCesiumViewer(
       }
     }
 
-    // In-memory tile cache - reduced for insets (50 vs user setting) unless highQualityInsets
-    newViewer.scene.globe.tileCacheSize = (isInset && !highQualityInsets) ? 50 : inMemoryTileCacheSize
+    // In-memory tile cache - based on inset settings
+    // 'minimal': 50 tiles, 'standard': 200 tiles, 'match': use main viewport setting
+    let effectiveTileCache = inMemoryTileCacheSize
+    if (isInset) {
+      if (!insetGraphics.enabled) {
+        effectiveTileCache = 50
+      } else {
+        switch (insetGraphics.cache) {
+          case 'minimal': effectiveTileCache = 50; break
+          case 'standard': effectiveTileCache = 200; break
+          case 'match': effectiveTileCache = inMemoryTileCacheSize; break
+        }
+      }
+    }
+    newViewer.scene.globe.tileCacheSize = effectiveTileCache
 
-    // Patch Cesium's tile eviction to be less aggressive (main viewport or highQualityInsets)
+    // Patch Cesium's tile eviction to be less aggressive (main viewport or insets with standard/match cache)
     // Cesium's TileReplacementQueue.trimTiles() evicts tiles every frame when
     // the count exceeds tileCacheSize. By overriding it to use 10x the limit,
     // we dramatically reduce eviction frequency and keep more tiles in memory.
-    if (!isInset || highQualityInsets) {
+    const useAggressiveCaching = !isInset || (insetGraphics.enabled && insetGraphics.cache !== 'minimal')
+    if (useAggressiveCaching) {
       const surface = (newViewer.scene.globe as unknown as { _surface?: { _tileReplacementQueue?: { trimTiles: (max: number) => void } } })._surface
       if (surface?._tileReplacementQueue) {
         const queue = surface._tileReplacementQueue
@@ -318,15 +347,24 @@ export function useCesiumViewer(
       }
     }
 
-    // Tile quality - insets use higher screen space error (lower quality) for performance
-    // unless highQualityInsets is enabled
-    if (isInset && !highQualityInsets) {
-      newViewer.scene.globe.maximumScreenSpaceError = 16  // Lower quality tiles
+    // Tile quality - based on inset terrain setting
+    // 'low': SSE 16 (lower quality), 'medium': SSE 12, 'match': default (typically 2)
+    if (isInset) {
+      if (!insetGraphics.enabled) {
+        newViewer.scene.globe.maximumScreenSpaceError = 16  // Lower quality tiles
+      } else {
+        switch (insetGraphics.terrain) {
+          case 'low': newViewer.scene.globe.maximumScreenSpaceError = 16; break
+          case 'medium': newViewer.scene.globe.maximumScreenSpaceError = 12; break
+          case 'match': /* leave default */ break
+        }
+      }
     }
 
-    // Preload nearby tiles for smoother camera movement (disabled for insets unless highQualityInsets)
-    newViewer.scene.globe.preloadAncestors = !isInset || highQualityInsets
-    newViewer.scene.globe.preloadSiblings = !isInset || highQualityInsets
+    // Preload nearby tiles for smoother camera movement (based on inset settings)
+    const enablePreloading = !isInset || (insetGraphics.enabled && insetGraphics.preloadTiles)
+    newViewer.scene.globe.preloadAncestors = enablePreloading
+    newViewer.scene.globe.preloadSiblings = enablePreloading
 
     // Suppress verbose tile loading errors (transient, Cesium retries automatically)
     const imageryLayers = newViewer.imageryLayers

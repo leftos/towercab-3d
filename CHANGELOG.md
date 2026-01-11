@@ -4,6 +4,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Customizable inset viewport graphics** - The "Enhanced Insets" toggle is now an expandable panel with individual settings for 3D buildings, shadows, silhouettes, MSAA quality, terrain detail, tile caching, and tile preloading. Fine-tune inset quality vs performance based on your GPU.
+
 ### Changed
 - **Increased replay buffer to 5 minutes for all data sources** - Previously vNAS 1Hz updates only kept 30 seconds of history; now all sources keep 5 minutes for consistent replay scrubbing
 

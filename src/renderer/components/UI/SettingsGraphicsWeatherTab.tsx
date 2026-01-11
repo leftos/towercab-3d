@@ -2,7 +2,7 @@ import { useSettingsStore } from '../../stores/settingsStore'
 import { useWeatherStore } from '../../stores/weatherStore'
 import { formatTimeHour } from '../../utils/formatting'
 import CollapsibleSection from './settings/CollapsibleSection'
-import type { BuildingQuality } from '../../types'
+import type { BuildingQuality, InsetMsaaPreset, InsetTerrainPreset, InsetCachePreset } from '../../types'
 import './ControlsBar.css'
 
 function SettingsGraphicsWeatherTab() {
@@ -12,7 +12,7 @@ function SettingsGraphicsWeatherTab() {
   const enableFxaa = useSettingsStore((state) => state.graphics.enableFxaa)
   const enableHdr = useSettingsStore((state) => state.graphics.enableHdr)
   const enableLogDepth = useSettingsStore((state) => state.graphics.enableLogDepth)
-  const highQualityInsets = useSettingsStore((state) => state.graphics.highQualityInsets)
+  const insetGraphics = useSettingsStore((state) => state.graphics.insetGraphics)
   const updateGraphicsSettings = useSettingsStore((state) => state.updateGraphicsSettings)
 
   // Terrain settings
@@ -152,15 +152,143 @@ function SettingsGraphicsWeatherTab() {
           <label>
             <input
               type="checkbox"
-              checked={highQualityInsets}
-              onChange={(e) => updateGraphicsSettings({ highQualityInsets: e.target.checked })}
+              checked={insetGraphics.enabled}
+              onChange={(e) => updateGraphicsSettings({
+                insetGraphics: { ...insetGraphics, enabled: e.target.checked }
+              })}
             />
-            High-Quality Inset Rendering
+            Enhanced Inset Rendering
           </label>
           <p className="setting-hint">
-            Use same graphics settings on inset viewports as main viewport (buildings, shadows, full MSAA, etc.). WARNING: Significantly increases GPU/CPU load. Only enable with powerful GPU and 1-2 insets max.
+            Enable customizable graphics quality for inset viewports. When disabled, insets use performance mode (minimal quality).
           </p>
         </div>
+
+        {insetGraphics.enabled && (
+          <div className="inset-settings-group">
+            <p className="setting-hint" style={{ marginBottom: '12px', color: '#ffa500' }}>
+              Each inset viewport uses separate GPU resources. Enable features sparingly with multiple insets.
+            </p>
+
+            <div className="setting-item">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={insetGraphics.buildings}
+                  onChange={(e) => updateGraphicsSettings({
+                    insetGraphics: { ...insetGraphics, buildings: e.target.checked }
+                  })}
+                />
+                3D Buildings in Insets
+              </label>
+              <p className="setting-hint">
+                Show OSM 3D buildings in insets (requires main 3D Buildings enabled). Impact: Medium
+              </p>
+            </div>
+
+            <div className="setting-item">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={insetGraphics.shadows}
+                  onChange={(e) => updateGraphicsSettings({
+                    insetGraphics: { ...insetGraphics, shadows: e.target.checked }
+                  })}
+                />
+                Shadows in Insets
+              </label>
+              <p className="setting-hint">
+                Enable shadow rendering in insets. Impact: High
+              </p>
+            </div>
+
+            <div className="setting-item">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={insetGraphics.silhouettes}
+                  onChange={(e) => updateGraphicsSettings({
+                    insetGraphics: { ...insetGraphics, silhouettes: e.target.checked }
+                  })}
+                />
+                Aircraft Silhouettes in Insets
+              </label>
+              <p className="setting-hint">
+                Show edge outlines on aircraft models. Impact: Medium-High
+              </p>
+            </div>
+
+            <div className="setting-item">
+              <label>Inset MSAA Quality</label>
+              <select
+                value={insetGraphics.msaa}
+                onChange={(e) => updateGraphicsSettings({
+                  insetGraphics: { ...insetGraphics, msaa: e.target.value as InsetMsaaPreset }
+                })}
+                className="select-input"
+              >
+                <option value="low">Low (2x MSAA)</option>
+                <option value="medium">Medium (4x MSAA)</option>
+                <option value="match">Match Main Viewport</option>
+              </select>
+              <p className="setting-hint">
+                Anti-aliasing quality for inset viewports.
+              </p>
+            </div>
+
+            <div className="setting-item">
+              <label>Inset Terrain Detail</label>
+              <select
+                value={insetGraphics.terrain}
+                onChange={(e) => updateGraphicsSettings({
+                  insetGraphics: { ...insetGraphics, terrain: e.target.value as InsetTerrainPreset }
+                })}
+                className="select-input"
+              >
+                <option value="low">Low (fast loading)</option>
+                <option value="medium">Medium (balanced)</option>
+                <option value="match">Match Main Viewport</option>
+              </select>
+              <p className="setting-hint">
+                Terrain tile quality and loading priority.
+              </p>
+            </div>
+
+            <div className="setting-item">
+              <label>Inset Tile Caching</label>
+              <select
+                value={insetGraphics.cache}
+                onChange={(e) => updateGraphicsSettings({
+                  insetGraphics: { ...insetGraphics, cache: e.target.value as InsetCachePreset }
+                })}
+                className="select-input"
+              >
+                <option value="minimal">Minimal (50 tiles)</option>
+                <option value="standard">Standard (200 tiles)</option>
+                <option value="match">Match Main Viewport</option>
+              </select>
+              <p className="setting-hint">
+                How many terrain/imagery tiles to cache in memory.
+              </p>
+            </div>
+
+            <div className="setting-item">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={insetGraphics.preloadTiles}
+                  onChange={(e) => updateGraphicsSettings({
+                    insetGraphics: { ...insetGraphics, preloadTiles: e.target.checked }
+                  })}
+                />
+                Preload Tiles in Insets
+              </label>
+              <p className="setting-hint">
+                Preload nearby tiles for smoother camera movement. Impact: Low-Medium
+              </p>
+            </div>
+          </div>
+        )}
       </CollapsibleSection>
 
       <CollapsibleSection title="Terrain & Buildings">

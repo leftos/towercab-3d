@@ -113,7 +113,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   const aircraftShadowsOnly = useSettingsStore((state) => state.graphics.aircraftShadowsOnly)
   const enableAmbientOcclusion = useSettingsStore((state) => state.graphics.enableAmbientOcclusion)
   const enableAircraftSilhouettes = useSettingsStore((state) => state.graphics.enableAircraftSilhouettes)
-  const highQualityInsets = useSettingsStore((state) => state.graphics.highQualityInsets)
+  const insetGraphics = useSettingsStore((state) => state.graphics.insetGraphics)
   // New shadow bias settings - use defaults if not yet migrated in localStorage
   const shadowDepthBias = useSettingsStore((state) => state.graphics.shadowDepthBias) ?? 0.0004
   const shadowPolygonOffsetFactor = useSettingsStore((state) => state.graphics.shadowPolygonOffsetFactor) ?? 1.1
@@ -215,7 +215,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   const { viewer, modelPoolRefs, silhouetteRefs } = useCesiumViewer(containerRef, viewportId, {
     cesiumIonToken,
     isInset,
-    highQualityInsets,
+    insetGraphics,
     msaaSamples,
     enableLighting,
     enableLogDepth,
@@ -274,7 +274,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   // =========================================================================
   useCesiumLighting(viewer, {
     isInset,
-    highQualityInsets,
+    insetGraphics,
     viewMode,
     enableLighting,
     enableGroundAtmosphere,
@@ -587,11 +587,12 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
 
   // Manage OSM 3D Buildings tileset
   // Skip loading buildings for inset viewports to reduce memory usage and prevent WebGL context issues
-  // Unless highQualityInsets is enabled
+  // Unless enhanced insets with buildings enabled
   useEffect(() => {
     if (!viewer) return
-    // Skip buildings for insets unless highQualityInsets is enabled
-    if (isInset && !highQualityInsets) return
+    // Skip buildings for insets unless enhanced + buildings enabled
+    const insetBuildingsEnabled = isInset && insetGraphics.enabled && insetGraphics.buildings
+    if (isInset && !insetBuildingsEnabled) return
 
     let currentTileset: Cesium.Cesium3DTileset | null = null
     let isCancelled = false
@@ -637,7 +638,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
         setBuildingsTileset(null)
       }
     }
-  }, [viewer, show3DBuildings, buildingQuality, isInset, highQualityInsets, aircraftShadowsOnly])
+  }, [viewer, show3DBuildings, buildingQuality, isInset, insetGraphics, aircraftShadowsOnly])
 
   // Update building shadows when aircraftShadowsOnly changes
   useEffect(() => {

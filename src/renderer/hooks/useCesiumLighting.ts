@@ -1,12 +1,12 @@
 import { useEffect } from 'react'
 import * as Cesium from 'cesium'
-import type { ViewMode } from '@/types'
+import type { ViewMode, InsetGraphicsSettings } from '@/types'
 
 export interface CesiumLightingSettings {
   /** Whether this is an inset viewport (disables shadows for performance) */
   isInset: boolean
-  /** Enable high-quality rendering for inset viewports (default: false) */
-  highQualityInsets: boolean
+  /** Inset graphics settings (fine-grained control over inset quality) */
+  insetGraphics: InsetGraphicsSettings
   /** Current view mode ('3d' or 'topdown') - shadows disabled in topdown */
   viewMode?: ViewMode
   /** Enable realistic sun-based lighting on terrain */
@@ -84,7 +84,7 @@ export function useCesiumLighting(
 ) {
   const {
     isInset,
-    highQualityInsets,
+    insetGraphics,
     viewMode,
     enableLighting,
     enableGroundAtmosphere,
@@ -111,9 +111,10 @@ export function useCesiumLighting(
     // Update lighting
     viewer.scene.globe.enableLighting = enableLighting
 
-    // Update shadows - disabled for insets (unless highQualityInsets), aircraft-only for topdown, configurable for main 3D viewport
+    // Update shadows - disabled for insets (unless enhanced + shadows enabled), aircraft-only for topdown, configurable for main 3D viewport
     const isTopDown = viewMode === 'topdown'
-    if (isInset && !highQualityInsets) {
+    const insetShadowsEnabled = isInset && insetGraphics.enabled && insetGraphics.shadows
+    if (isInset && !insetShadowsEnabled) {
       viewer.shadows = false
       viewer.terrainShadows = Cesium.ShadowMode.DISABLED
     } else if (isTopDown) {
@@ -181,6 +182,7 @@ export function useCesiumLighting(
   }, [
     viewer,
     isInset,
+    insetGraphics,
     viewMode,
     enableLighting,
     enableGroundAtmosphere,
@@ -194,7 +196,6 @@ export function useCesiumLighting(
     aircraftShadowsOnly,
     shadowDepthBias,
     shadowPolygonOffsetFactor,
-    shadowPolygonOffsetUnits,
-    highQualityInsets
+    shadowPolygonOffsetUnits
   ])
 }

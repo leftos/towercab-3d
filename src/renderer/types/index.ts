@@ -149,6 +149,12 @@ export type {
   MSFSModelSource,
   MSFSModelSettings,
 
+  // Inset graphics settings (fine-grained control)
+  InsetMsaaPreset,
+  InsetTerrainPreset,
+  InsetCachePreset,
+  InsetGraphicsSettings,
+
   // Settings groups
   CesiumSettings,
   GraphicsSettings,
@@ -198,7 +204,10 @@ export {
   MSFS_CACHE_LIMIT,
 
   // Default MSFS model settings
-  DEFAULT_MSFS_MODEL_SETTINGS
+  DEFAULT_MSFS_MODEL_SETTINGS,
+
+  // Default inset graphics settings
+  DEFAULT_INSET_GRAPHICS_SETTINGS
 } from './settings'
 
 // ============================================================================

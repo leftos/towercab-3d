@@ -10,9 +10,10 @@ import type {
   UISettings,
   FSLTLSettings,
   RealTrafficSettings,
-  AdvancedSettings
+  AdvancedSettings,
+  InsetGraphicsSettings
 } from '../types/settings'
-import { DEFAULT_SETTINGS } from '../types/settings'
+import { DEFAULT_SETTINGS, DEFAULT_INSET_GRAPHICS_SETTINGS } from '../types/settings'
 
 // ============================================================================
 // Preset System Types and Constants
@@ -439,7 +440,7 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
     }),
     {
       name: 'settings-store',
-      version: 30,
+      version: 31,
       migrate: (persistedState: unknown, version: number) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let state: any = persistedState
@@ -503,6 +504,35 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
               enableNightDarkening: false
             }
           }
+        }
+
+        // v30 → v31: Convert highQualityInsets boolean to insetGraphics object
+        if (version < 31) {
+          console.log('[Settings] Migrating v30 to v31: converting highQualityInsets to insetGraphics settings')
+          const hadHighQuality = state.graphics?.highQualityInsets ?? false
+          // If user had highQualityInsets enabled, convert to "match main viewport" settings
+          const insetGraphics: InsetGraphicsSettings = hadHighQuality
+            ? {
+                enabled: true,
+                buildings: true,
+                shadows: true,
+                silhouettes: true,
+                msaa: 'match',
+                terrain: 'match',
+                cache: 'match',
+                preloadTiles: true
+              }
+            : DEFAULT_INSET_GRAPHICS_SETTINGS
+
+          state = {
+            ...state,
+            graphics: {
+              ...state.graphics,
+              insetGraphics
+            }
+          }
+          // Remove old highQualityInsets property
+          delete state.graphics.highQualityInsets
         }
 
         // ========================================================================
@@ -603,8 +633,18 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
         oldSettings.aircraftNightVisibility ?? DEFAULT_SETTINGS.graphics.aircraftNightVisibility,
       maxFramerate:
         oldSettings.maxFramerate ?? DEFAULT_SETTINGS.graphics.maxFramerate,
-      highQualityInsets:
-        oldSettings.highQualityInsets ?? DEFAULT_SETTINGS.graphics.highQualityInsets
+      insetGraphics: oldSettings.highQualityInsets
+        ? {
+            enabled: true,
+            buildings: true,
+            shadows: true,
+            silhouettes: true,
+            msaa: 'match' as const,
+            terrain: 'match' as const,
+            cache: 'match' as const,
+            preloadTiles: true
+          }
+        : DEFAULT_SETTINGS.graphics.insetGraphics
     },
     camera: {
       defaultFov: oldSettings.defaultFov ?? DEFAULT_SETTINGS.camera.defaultFov,
