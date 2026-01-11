@@ -6,8 +6,10 @@
  *
  * ## Key Concepts
  *
- * 1. **Observation Timeline**: Each aircraft maintains a ring buffer of recent
- *    position observations, each tagged with when it was observed and from which source.
+ * 1. **Observation Timeline**: Each aircraft maintains a buffer of recent
+ *    position observations (up to 5 minutes), each tagged with when it was
+ *    observed and from which source. Time-based pruning ensures consistent
+ *    replay duration across all data sources.
  *
  * 2. **Display Delay**: Each source has a different delay (VATSIM 15s, vNAS 2s,
  *    RealTraffic 5s). The delay for an aircraft is determined by its most recent source.
@@ -32,6 +34,7 @@ import type {
 import type { VatsimSnapshot } from '../types/replay'
 import {
   SOURCE_DISPLAY_DELAYS,
+  MAX_OBSERVATION_AGE_MS,
   MAX_OBSERVATIONS_PER_AIRCRAFT,
   MAX_EXTRAPOLATION_TIME,
   AIRCRAFT_TIMEOUT,
@@ -244,6 +247,43 @@ function extrapolatePosition(
     latitude: obs.latitude + latOffset,
     longitude: obs.longitude + lonOffset,
     altitude
+  }
+}
+
+/**
+ * Prune observations by age and count.
+ *
+ * Removes observations older than MAX_OBSERVATION_AGE_MS, while also
+ * enforcing MAX_OBSERVATIONS_PER_AIRCRAFT as a hard cap.
+ *
+ * @param observations - Array of observations (oldest first)
+ * @param now - Current time in ms (for age calculation)
+ * @returns Pruned array and whether any pruning occurred
+ */
+function pruneObservations(
+  observations: AircraftObservation[],
+  now: number
+): { pruned: AircraftObservation[]; wasPruned: boolean } {
+  const cutoffTime = now - MAX_OBSERVATION_AGE_MS
+
+  // Filter out observations older than the cutoff
+  let result = observations.filter(obs => obs.observedAt >= cutoffTime)
+
+  // Always keep at least 2 observations for interpolation (if we have them)
+  if (result.length < 2 && observations.length >= 2) {
+    result = observations.slice(-2)
+  } else if (result.length < 1 && observations.length >= 1) {
+    result = observations.slice(-1)
+  }
+
+  // Apply hard cap as safety limit
+  if (result.length > MAX_OBSERVATIONS_PER_AIRCRAFT) {
+    result = result.slice(-MAX_OBSERVATIONS_PER_AIRCRAFT)
+  }
+
+  return {
+    pruned: result,
+    wasPruned: result.length !== observations.length
   }
 }
 
@@ -920,11 +960,10 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       // Add to existing timeline
       observations = [...existing.observations, observation]
 
-      // Trim to max size
-      if (observations.length > MAX_OBSERVATIONS_PER_AIRCRAFT) {
-        pruned = true
-        observations = observations.slice(-MAX_OBSERVATIONS_PER_AIRCRAFT)
-      }
+      // Prune old observations by age (and hard cap)
+      const pruneResult = pruneObservations(observations, observation.receivedAt)
+      observations = pruneResult.pruned
+      pruned = pruneResult.wasPruned
 
       oldestAfter = observations[0]?.observedAt ?? null
     } else {
@@ -1056,10 +1095,11 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
         }
 
         observations = [...existing.observations, observation]
-        if (observations.length > MAX_OBSERVATIONS_PER_AIRCRAFT) {
-          pruned = true
-          observations = observations.slice(-MAX_OBSERVATIONS_PER_AIRCRAFT)
-        }
+
+        // Prune old observations by age (and hard cap)
+        const pruneResult = pruneObservations(observations, observation.receivedAt)
+        observations = pruneResult.pruned
+        pruned = pruneResult.wasPruned
 
         oldestAfter = observations[0]?.observedAt ?? null
       } else {
@@ -1366,11 +1406,11 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       }
     }
 
-    // Trim observations to max size (keep most recent)
+    // Prune observations by age (relative to latest snapshot)
+    const latestSnapshotTime = snapshots[snapshots.length - 1]?.timestamp ?? Date.now()
     for (const timeline of timelines.values()) {
-      if (timeline.observations.length > MAX_OBSERVATIONS_PER_AIRCRAFT) {
-        timeline.observations = timeline.observations.slice(-MAX_OBSERVATIONS_PER_AIRCRAFT)
-      }
+      const { pruned } = pruneObservations(timeline.observations, latestSnapshotTime)
+      timeline.observations = pruned
     }
 
     set({ timelines, lastKnownHeadings: new Map() })

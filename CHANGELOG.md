@@ -4,6 +4,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **Increased replay buffer to 5 minutes for all data sources** - Previously vNAS 1Hz updates only kept 30 seconds of history; now all sources keep 5 minutes for consistent replay scrubbing
+
 ### Fixed
 - **Smoother vNAS groundspeed display** - Speed readings now use a 5-sample sliding window average, reducing oscillation caused by GPS jitter in 1Hz position updates
 

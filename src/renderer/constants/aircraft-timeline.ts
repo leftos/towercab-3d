@@ -24,17 +24,26 @@ export const SOURCE_DISPLAY_DELAYS: Record<AircraftDataSource, number> = {
 }
 
 /**
- * Maximum observations to keep per aircraft.
+ * Maximum age of observations to keep per aircraft (ms).
  *
- * This determines the ring buffer size. We need enough to cover:
- * - The longest display delay (VATSIM 15s)
- * - Plus some buffer for transitions
+ * Observations older than this are pruned to limit memory usage while
+ * providing consistent replay history across all data sources.
  *
- * At worst case (VATSIM 15s intervals), we need ~2-3 observations.
- * At best case (vNAS 1Hz), we'd have 15+ observations.
- * 30 provides headroom for all sources.
+ * 5 minutes provides:
+ * - VATSIM (15s intervals): ~20 observations
+ * - vNAS (1Hz): ~300 observations
+ * - RealTraffic (~2s): ~150 observations
  */
-export const MAX_OBSERVATIONS_PER_AIRCRAFT = 30
+export const MAX_OBSERVATION_AGE_MS = 5 * 60 * 1000  // 5 minutes
+
+/**
+ * Hard cap on observations per aircraft as a safety limit.
+ *
+ * Even with time-based pruning, we cap the count to prevent unbounded
+ * growth if timestamps are corrupted or clock skew occurs.
+ * At 1Hz for 5 minutes = 300, so 400 provides some headroom.
+ */
+export const MAX_OBSERVATIONS_PER_AIRCRAFT = 400
 
 /**
  * Maximum extrapolation time before clamping (ms).
