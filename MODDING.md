@@ -184,7 +184,12 @@ When these are set, they become the default camera position for that airport (us
 
 ## Custom Tower Positions
 
-Instead of creating a full tower mod, you can define custom camera positions for airports using simple JSON files. This is useful for setting up preferred viewing angles without needing a 3D model.
+TowerCab 3D includes bundled tower positions for **536 US airports** based on FAA obstruction data. These provide accurate tower cab locations and heights, with default headings pointing toward the primary runway approach.
+
+You can override or supplement these bundled positions by creating custom JSON files. This is useful for:
+- Correcting inaccurate bundled positions
+- Adding positions for airports not in the bundled data
+- Customizing view settings for your preferences
 
 ### File Location and Format
 
@@ -273,8 +278,9 @@ For camera position, the system uses this priority (highest to lowest):
 1. **User-saved default** - Explicitly saved by clicking "Save My Default"
 2. **Last position** - Auto-saved every 5 seconds
 3. **Tower mod cabPosition** - From a tower mod manifest.json
-4. **tower-positions/{ICAO}.json** - From individual position files
-5. **Hardcoded app default** - Built-in values
+4. **User tower-positions** - From `mods/tower-positions/{ICAO}.json`
+5. **Bundled tower-positions** - Pre-installed data for 536 US airports
+6. **Estimated default** - Calculated based on airport classification
 
 ### Examples
 

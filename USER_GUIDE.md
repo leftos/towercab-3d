@@ -963,12 +963,17 @@ Add custom aircraft models with airline-specific liveries. Mods match by ICAO ai
 
 Add custom control tower models for specific airports. Mods match by ICAO airport code (e.g., KJFK, EGLL).
 
+### Bundled Tower Positions
+
+TowerCab 3D includes accurate tower positions for **536 US airports** based on FAA obstruction data. These provide correct tower cab locations, heights, and default headings pointing toward primary runway approaches.
+
 ### Custom Tower Positions
 
-Define default camera positions for airports without creating a full tower mod:
+You can override bundled positions or add new ones for airports not included:
 1. Create JSON files in `mods/tower-positions/{ICAO}.json`
 2. Specify 3D view (lat/lon/height/heading) and 2D view (altitude/heading) positions
 3. Or use **Shift+Click "Save App Default"** in the app to save your current view
+4. User positions in `mods/tower-positions/` take priority over bundled data
 
 ### Full Documentation
 
