@@ -4,6 +4,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+## [0.0.32-alpha] - 2026-01-11
+
 ### Fixed
 - **Improved tower cab positioning accuracy** - Tower heights now correctly convert from MSL to ellipsoidal coordinates, fixing positioning errors of up to 100 meters in some locations
 
