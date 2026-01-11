@@ -412,10 +412,15 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
     // Get existing state to calculate groundspeed from position change
     const oldState = aircraftStates.get(aircraft.callsign)
 
+    // Use the Rust-side receive timestamp (more accurate than JS Date.now())
+    // This is when the UDP packet was received on the backend
+    const observationTime = aircraft.timestamp
+
     // Calculate groundspeed from position change (vNAS doesn't provide it directly)
+    // Use actual time delta between observations, not assumed 1 second
     let calculatedGroundspeed = 0
-    if (oldState) {
-      const timeDeltaMs = now - (oldState.timestamp - 1000) // oldState.timestamp was set to now+1000
+    if (oldState && oldState.vnasTimestamp) {
+      const timeDeltaMs = observationTime - oldState.vnasTimestamp
       if (timeDeltaMs > 0 && timeDeltaMs < 5000) { // Sanity check: 0-5 seconds
         const distanceMeters = haversineDistance(
           oldState.latitude, oldState.longitude,
@@ -456,7 +461,8 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       aircraftType: aircraft.typeCode || null,
       departure: null, // Not provided by vNAS
       arrival: null,   // Not provided by vNAS
-      timestamp: now + 1000 // Target time (1 second from now for 1Hz updates)
+      timestamp: now + 1000, // Target time (1 second from now for 1Hz updates)
+      vnasTimestamp: observationTime // Actual observation time for groundspeed calculation
     }
 
     // Update state maps
@@ -499,7 +505,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       onGround: null,
       roll: null,
       verticalRate: null,
-      observedAt: now,  // vNAS data is real-time
+      observedAt: observationTime,  // Use Rust-side receive time for accurate timeline
       receivedAt: now,
       source: 'vnas',
       displayDelay: SOURCE_DISPLAY_DELAYS.vnas
@@ -531,13 +537,20 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
     const calculatedSpeeds = new Map<string, number>()
     const calculatedAltitudes = new Map<string, number>()
 
+    // Track vNAS timestamps for the observation batch
+    const vnasTimestamps = new Map<string, number>()
+
     for (const ac of batchAircraft) {
       const oldState = aircraftStates.get(ac.callsign)
 
-      // Calculate groundspeed from position change
+      // Use the Rust-side receive timestamp for accurate time delta
+      const observationTime = ac.timestamp
+      vnasTimestamps.set(ac.callsign, observationTime)
+
+      // Calculate groundspeed from position change using actual time delta
       let calculatedGroundspeed = 0
-      if (oldState) {
-        const timeDeltaMs = now - (oldState.timestamp - 1000)
+      if (oldState && oldState.vnasTimestamp) {
+        const timeDeltaMs = observationTime - oldState.vnasTimestamp
         if (timeDeltaMs > 0 && timeDeltaMs < 5000) {
           const distanceMeters = haversineDistance(
             oldState.latitude, oldState.longitude,
@@ -573,7 +586,8 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
         aircraftType: ac.typeCode || null,
         departure: null,
         arrival: null,
-        timestamp: now + 1000
+        timestamp: now + 1000,
+        vnasTimestamp: observationTime
       }
 
       newAircraftStates.set(ac.callsign, newState)
@@ -606,6 +620,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
     }> = []
 
     for (const ac of batchAircraft) {
+      const observationTime = vnasTimestamps.get(ac.callsign) ?? now
       const observation: AircraftObservation = {
         latitude: ac.lat,
         longitude: ac.lon,
@@ -618,7 +633,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
         onGround: null,
         roll: null,
         verticalRate: null,
-        observedAt: now,  // vNAS data is real-time
+        observedAt: observationTime,  // Use Rust-side receive time for accurate timeline
         receivedAt: now,
         source: 'vnas',
         displayDelay: SOURCE_DISPLAY_DELAYS.vnas

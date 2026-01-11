@@ -192,6 +192,12 @@ export interface AircraftState {
   arrival: string | null
   timestamp: number
   /**
+   * vNAS source timestamp (Rust-side receive time in ms).
+   * Used for accurate time delta calculation in groundspeed computation.
+   * Only set for vNAS-sourced aircraft.
+   */
+  vnasTimestamp?: number
+  /**
    * Flag indicating this is a parked aircraft from RealTraffic parkedtraffic query.
    * Parked aircraft are culled first when total exceeds maxAircraftDisplay.
    */

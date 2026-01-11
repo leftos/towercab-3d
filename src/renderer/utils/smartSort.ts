@@ -23,14 +23,17 @@ import type {
 } from './aircraft/types'
 import {
   detectFlightPhase,
-  recordPhase,
-  cleanupPhaseHistory
+  cleanupPhaseHistory,
+  cleanupStabilizationStates,
+  clearStabilizationStates
 } from './aircraft/flightPhaseDetector'
+import { useAircraftTimelineStore } from '../stores/aircraftTimelineStore'
 import { haversineDistanceNm } from './aircraft/geoMath'
 
 // Re-export types for backwards compatibility
 export type { FlightPhase, PriorityTier, SmartSortResult, SmartSortContext }
 export { cleanupPhaseHistory, clearPhaseHistory } from './aircraft/flightPhaseDetector'
+export { cleanupStabilizationStates, clearStabilizationStates }
 
 // ============================================================================
 // CONSTANTS
@@ -113,16 +116,24 @@ export function calculateSmartSort(
 ): SmartSortResult[] {
   const results: SmartSortResult[] = []
 
-  // Periodically clean up stale phase history (roughly every call is fine, it's cheap)
+  // Get timeline store for trajectory analysis
+  const timelineStore = useAircraftTimelineStore.getState()
+
+  // Build set of active callsigns for cleanup
+  const activeCallsigns = new Set(aircraft.map(ac => ac.callsign))
+
+  // Periodically clean up stale phase history and stabilization states
   cleanupPhaseHistory()
+  cleanupStabilizationStates(activeCallsigns)
 
   for (const ac of aircraft) {
-    const { phase, runway, runwayDistance } = detectFlightPhase(ac, context)
+    // Get timeline for trajectory-based phase detection
+    const timeline = timelineStore.getTimeline(ac.callsign)
+
+    // Detect phase with stabilization (includes phase history recording)
+    const { phase, runway, runwayDistance } = detectFlightPhase(ac, context, timeline)
     const score = calculatePriorityScore(ac, phase, context)
     const tier = getTierFromScore(score)
-
-    // Record phase for go-around detection (need history of approach phases)
-    recordPhase(ac.callsign, phase)
 
     results.push({
       callsign: ac.callsign,

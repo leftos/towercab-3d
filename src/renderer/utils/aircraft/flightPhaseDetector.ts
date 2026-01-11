@@ -7,6 +7,7 @@
 
 import type { Runway } from '../../types/airport'
 import type { InterpolatedAircraftState } from '../../types/vatsim'
+import type { AircraftTimeline } from '../../types/aircraft-timeline'
 import type { FlightPhase, SmartSortContext, PhaseDetectionResult, RunwayProximity } from './types'
 import {
   haversineDistanceNm,
@@ -15,6 +16,11 @@ import {
   headingDifference
 } from './geoMath'
 import { geoidService } from '../../services/GeoidService'
+import {
+  stabilizePhase,
+  cleanupStabilizationStates,
+  clearStabilizationStates
+} from './phaseStabilization'
 
 /** Meters to feet conversion factor */
 const METERS_TO_FEET = 3.28084
@@ -453,16 +459,24 @@ function findNearestRunwayThreshold(
 }
 
 // ============================================================================
-// MAIN DETECTION FUNCTION
+// RAW DETECTION FUNCTION (internal)
 // ============================================================================
 
 /**
- * Detect the flight phase of an aircraft
+ * Extended result from raw detection, includes runway proximity for stabilization
  */
-export function detectFlightPhase(
+interface RawPhaseDetectionResult extends PhaseDetectionResult {
+  nearestRunway: RunwayProximity | null
+}
+
+/**
+ * Detect the flight phase of an aircraft (raw, without stabilization).
+ * This is the internal detection logic - use detectFlightPhase for stable results.
+ */
+function detectRawFlightPhase(
   aircraft: InterpolatedAircraftState,
   context: SmartSortContext
-): PhaseDetectionResult {
+): RawPhaseDetectionResult {
   const lat = aircraft.interpolatedLatitude
   const lon = aircraft.interpolatedLongitude
 
@@ -509,12 +523,12 @@ export function detectFlightPhase(
 
     if (!isAlignedWithRwy) {
       // Crossing the runway (not aligned with runway heading)
-      return { phase: 'active_taxi', runway: null, runwayDistance: null }
+      return { phase: 'active_taxi', runway: null, runwayDistance: null, nearestRunway: nearestRwy }
     }
 
     if (speedKts < STOPPED_SPEED_KTS) {
       // Stopped on runway = lined up
-      return { phase: 'lined_up', runway: runwayIdent, runwayDistance: runwayDistanceNm }
+      return { phase: 'lined_up', runway: runwayIdent, runwayDistance: runwayDistanceNm, nearestRunway: nearestRwy }
     }
 
     // Moving on runway - use acceleration to determine departure vs landing roll
@@ -527,32 +541,32 @@ export function detectFlightPhase(
       // Accelerating on runway - check if this is a go-around (balked landing)
       // If aircraft was recently on approach, this is a rejected landing, not a departure
       if (wasRecentlyOnApproach(aircraft.callsign)) {
-        return { phase: 'go_around', runway: runwayIdent, runwayDistance: runwayDistanceNm }
+        return { phase: 'go_around', runway: runwayIdent, runwayDistance: runwayDistanceNm, nearestRunway: nearestRwy }
       }
       // Normal departure roll
-      return { phase: 'departure_roll', runway: runwayIdent, runwayDistance: runwayDistanceNm }
+      return { phase: 'departure_roll', runway: runwayIdent, runwayDistance: runwayDistanceNm, nearestRunway: nearestRwy }
     } else if (accel < -ACCEL_THRESHOLD) {
       // Decelerating = landing roll
-      return { phase: 'landing_roll', runway: runwayIdent, runwayDistance: runwayDistanceNm }
+      return { phase: 'landing_roll', runway: runwayIdent, runwayDistance: runwayDistanceNm, nearestRunway: nearestRwy }
     } else {
       // Acceleration near zero - use speed + flight plan as fallback
       // High speed (>60 kts) on runway is almost certainly a roll, not stopped
       if (speedKts > 60) {
         // At high speed, use flight plan to determine direction
         if (isArrivingHere) {
-          return { phase: 'landing_roll', runway: runwayIdent, runwayDistance: runwayDistanceNm }
+          return { phase: 'landing_roll', runway: runwayIdent, runwayDistance: runwayDistanceNm, nearestRunway: nearestRwy }
         } else {
-          return { phase: 'departure_roll', runway: runwayIdent, runwayDistance: runwayDistanceNm }
+          return { phase: 'departure_roll', runway: runwayIdent, runwayDistance: runwayDistanceNm, nearestRunway: nearestRwy }
         }
       }
       // Lower speed with neutral acceleration - use flight plan
       if (isArrivingHere) {
-        return { phase: 'landing_roll', runway: runwayIdent, runwayDistance: runwayDistanceNm }
+        return { phase: 'landing_roll', runway: runwayIdent, runwayDistance: runwayDistanceNm, nearestRunway: nearestRwy }
       } else if (isDepartingHere) {
-        return { phase: 'departure_roll', runway: runwayIdent, runwayDistance: runwayDistanceNm }
+        return { phase: 'departure_roll', runway: runwayIdent, runwayDistance: runwayDistanceNm, nearestRunway: nearestRwy }
       } else {
         // No clear signal - default to departure (lined up for takeoff)
-        return { phase: 'departure_roll', runway: runwayIdent, runwayDistance: runwayDistanceNm }
+        return { phase: 'departure_roll', runway: runwayIdent, runwayDistance: runwayDistanceNm, nearestRunway: nearestRwy }
       }
     }
   }
@@ -565,7 +579,7 @@ export function detectFlightPhase(
   if (isOnGround) {
     // Near runway threshold but not on it
     if (nearestRwy && nearestRwy.distanceFt < HOLDING_SHORT_DISTANCE_FT && speedKts < STOPPED_SPEED_KTS) {
-      return { phase: 'holding_short', runway: runwayIdent, runwayDistance: runwayDistanceNm }
+      return { phase: 'holding_short', runway: runwayIdent, runwayDistance: runwayDistanceNm, nearestRunway: nearestRwy }
     }
 
     // Check for pushback: moving with track opposite to heading
@@ -578,17 +592,17 @@ export function detectFlightPhase(
       // If track is 90-180° from heading, aircraft is moving backwards or sideways
       // Use 90° threshold to catch curved pushbacks (not just straight back)
       if (trackHeadingDiff > 90) {
-        return { phase: 'pushback', runway: null, runwayDistance: null }
+        return { phase: 'pushback', runway: null, runwayDistance: null, nearestRunway: nearestRwy }
       }
     }
 
     // If moving at all, it's taxi - stopped is the last resort
     if (speedKts > STOPPED_SPEED_KTS) {
-      return { phase: 'active_taxi', runway: null, runwayDistance: null }
+      return { phase: 'active_taxi', runway: null, runwayDistance: null, nearestRunway: nearestRwy }
     }
 
     // Truly stationary - stopped is the fallback when nothing else matches
-    return { phase: 'stopped_taxi', runway: null, runwayDistance: null }
+    return { phase: 'stopped_taxi', runway: null, runwayDistance: null, nearestRunway: nearestRwy }
   }
 
   // === AIRBORNE PHASES ===
@@ -610,11 +624,11 @@ export function detectFlightPhase(
   if (alignedRunwayByTrack && alignedRunwayByTrack.isInbound) {
     if (alignedRunwayByTrack.distanceNm < SHORT_FINAL_NM) {
       // Within 2nm and aligned = definitely short final
-      return { phase: 'short_final', runway: alignedRunwayByTrack.endIdent, runwayDistance: alignedRunwayByTrack.distanceNm }
+      return { phase: 'short_final', runway: alignedRunwayByTrack.endIdent, runwayDistance: alignedRunwayByTrack.distanceNm, nearestRunway: nearestRwy }
     } else if (alignedRunwayByTrack.distanceNm < LONG_FINAL_NM) {
       // Within 6nm, aligned, inbound = on approach (accept any non-climbing)
       if (!isClimbing) {
-        return { phase: 'long_final', runway: alignedRunwayByTrack.endIdent, runwayDistance: alignedRunwayByTrack.distanceNm }
+        return { phase: 'long_final', runway: alignedRunwayByTrack.endIdent, runwayDistance: alignedRunwayByTrack.distanceNm, nearestRunway: nearestRwy }
       }
     }
   }
@@ -627,7 +641,7 @@ export function detectFlightPhase(
     if (goAroundRunway && goAroundRunway.distanceNm < GO_AROUND_DISTANCE_NM) {
       // Only flag as go-around if we recently saw this aircraft on approach
       if (wasRecentlyOnApproach(aircraft.callsign)) {
-        return { phase: 'go_around', runway: goAroundRunway.endIdent, runwayDistance: goAroundRunway.distanceNm }
+        return { phase: 'go_around', runway: goAroundRunway.endIdent, runwayDistance: goAroundRunway.distanceNm, nearestRunway: nearestRwy }
       }
     }
   }
@@ -636,10 +650,10 @@ export function detectFlightPhase(
   if (isClimbing && distFromAirportNm < 10) {
     if (alignedRunwayByHeading && !alignedRunwayByHeading.isInbound) {
       // Climbing and aligned with runway heading = departing that runway
-      return { phase: 'departing_climb', runway: alignedRunwayByHeading.endIdent, runwayDistance: alignedRunwayByHeading.distanceNm }
+      return { phase: 'departing_climb', runway: alignedRunwayByHeading.endIdent, runwayDistance: alignedRunwayByHeading.distanceNm, nearestRunway: nearestRwy }
     } else {
       // Climbing but not aligned (turned out) - don't show runway
-      return { phase: 'departing_climb', runway: null, runwayDistance: null }
+      return { phase: 'departing_climb', runway: null, runwayDistance: null, nearestRunway: nearestRwy }
     }
   }
 
@@ -647,7 +661,7 @@ export function detectFlightPhase(
   // This should be treated as approach, not pattern
   if (nearestRwy && nearestRwy.distanceNm < 2 && nearestRwy.isInbound && isDescending) {
     // Close, heading toward runway, descending = on approach even if not perfectly aligned
-    return { phase: 'long_final', runway: nearestRwy.endIdent, runwayDistance: nearestRwy.distanceNm }
+    return { phase: 'long_final', runway: nearestRwy.endIdent, runwayDistance: nearestRwy.distanceNm, nearestRunway: nearestRwy }
   }
 
   // Pattern work: within pattern airspace, low altitude, NOT on approach
@@ -675,7 +689,7 @@ export function detectFlightPhase(
 
       if (!isApproachingAnyRunway) {
         // Not heading toward any runway = pattern work
-        return { phase: 'pattern', runway: null, runwayDistance: null }
+        return { phase: 'pattern', runway: null, runwayDistance: null, nearestRunway: nearestRwy }
       }
     }
   }
@@ -684,8 +698,61 @@ export function detectFlightPhase(
   const bearingToAirport = calculateBearing(lat, lon, context.airportLat, context.airportLon)
   const isHeadingToAirport = Math.abs(headingDifference(heading, bearingToAirport)) < 45
   if (isHeadingToAirport && (isDescending || isArrivingHere)) {
-    return { phase: 'distant_arrival', runway: null, runwayDistance: null }
+    return { phase: 'distant_arrival', runway: null, runwayDistance: null, nearestRunway: nearestRwy }
   }
 
-  return { phase: 'unknown', runway: null, runwayDistance: null }
+  return { phase: 'unknown', runway: null, runwayDistance: null, nearestRunway: nearestRwy }
 }
+
+// ============================================================================
+// STABILIZED DETECTION FUNCTION (exported)
+// ============================================================================
+
+/**
+ * Detect the flight phase of an aircraft with stabilization.
+ *
+ * This is the main entry point for phase detection. It wraps the raw detection
+ * with a state machine that:
+ * - Applies dwell times to prevent rapid oscillation
+ * - Uses hysteresis on thresholds
+ * - Computes acceleration from a window of observations (more stable)
+ * - Uses multi-signal classification for roll phases
+ * - Verifies go-around with trajectory analysis
+ *
+ * @param aircraft Current interpolated aircraft state
+ * @param context Smart sort context (airport info, runways)
+ * @param timeline Aircraft timeline for trajectory analysis (optional)
+ * @returns Stabilized phase detection result
+ */
+export function detectFlightPhase(
+  aircraft: InterpolatedAircraftState,
+  context: SmartSortContext,
+  timeline?: AircraftTimeline
+): PhaseDetectionResult {
+  // Get raw detection (instantaneous, may oscillate)
+  const raw = detectRawFlightPhase(aircraft, context)
+
+  // Apply stabilization (state machine, hysteresis, dwell times)
+  const stabilizedPhase = stabilizePhase(
+    aircraft.callsign,
+    raw,
+    aircraft,
+    context,
+    timeline,
+    raw.nearestRunway
+  )
+
+  // Record phase for go-around detection history
+  recordPhase(aircraft.callsign, stabilizedPhase)
+
+  return {
+    phase: stabilizedPhase,
+    runway: raw.runway,
+    runwayDistance: raw.runwayDistance
+  }
+}
+
+/**
+ * Re-export cleanup functions for use by consumers
+ */
+export { cleanupStabilizationStates, clearStabilizationStates }
