@@ -15,6 +15,7 @@ import { useAircraftInterpolation, setInterpolationTerrainData } from '../../hoo
 import { useCesiumCamera } from '../../hooks/useCesiumCamera'
 import { useBabylonOverlay } from '../../hooks/useBabylonOverlay'
 import { useCesiumViewer } from '../../hooks/useCesiumViewer'
+import { useImageryProvider } from '../../hooks/useImageryProvider'
 import { useTerrainQuality } from '../../hooks/useTerrainQuality'
 import { useCesiumLighting } from '../../hooks/useCesiumLighting'
 import { useSunElevation } from '../../hooks/useSunElevation'
@@ -76,6 +77,8 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   // Store state
   // Cesium token from global settings (shared across browsers)
   const cesiumIonToken = useGlobalSettingsStore((state) => state.cesiumIonToken)
+  // Imagery provider settings (shared across browsers)
+  const imagerySettings = useGlobalSettingsStore((state) => state.imagery)
   const currentAirport = useAirportStore((state) => state.currentAirport)
   const towerHeight = useAirportStore((state) => state.towerHeight)
   const customTowerPosition = useAirportStore((state) => state.customTowerPosition)
@@ -230,6 +233,16 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
     shadowNormalOffset,
     inMemoryTileCacheSize,
     modelBrightness: builtinModelBrightness  // Initial pool uses built-in brightness
+  })
+
+  // =========================================================================
+  // 1a. Imagery Provider Management
+  // =========================================================================
+  // Manages runtime switching between Cesium Ion (Bing Maps) and Google Maps imagery
+  useImageryProvider(viewer, {
+    provider: imagerySettings.provider,
+    googleMapsApiKey: imagerySettings.googleMapsApiKey,
+    cesiumIonToken
   })
 
   // =========================================================================

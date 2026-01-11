@@ -267,6 +267,9 @@ interface GlobalSettingsState extends GlobalSettings {
   /** Update RealTraffic settings (data source, license key, radius) */
   updateRealTraffic: (updates: Partial<GlobalSettings['realtraffic']>) => Promise<void>
 
+  /** Update imagery provider settings */
+  updateImagery: (updates: Partial<GlobalSettings['imagery']>) => Promise<void>
+
   /** Update display settings (datablocks, labels, filtering - synced across devices) */
   updateDisplay: (updates: Partial<GlobalDisplaySettings>) => Promise<void>
 
@@ -321,6 +324,7 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
         ...DEFAULT_GLOBAL_SETTINGS,
         ...settings,
         // Deep merge nested objects to preserve existing values while adding new fields
+        imagery: { ...DEFAULT_GLOBAL_SETTINGS.imagery, ...settings.imagery },
         msfsModels: { ...DEFAULT_MSFS_MODEL_SETTINGS, ...settings.msfsModels },
         fsltl: { ...DEFAULT_GLOBAL_SETTINGS.fsltl, ...settings.fsltl },
         airports: { ...DEFAULT_GLOBAL_SETTINGS.airports, ...settings.airports },
@@ -605,6 +609,20 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
     await saveSettings(get().getSettings())
   },
 
+  updateImagery: async (updates: Partial<GlobalSettings['imagery']>) => {
+    const state = get()
+    const newImagery = {
+      ...state.imagery,
+      ...updates,
+      // Validate provider
+      provider: (updates.provider && ['cesium', 'google'].includes(updates.provider)
+        ? updates.provider
+        : state.imagery.provider) as GlobalSettings['imagery']['provider']
+    }
+    set({ imagery: newImagery })
+    await saveSettings(get().getSettings())
+  },
+
   updateDisplay: async (updates: Partial<GlobalDisplaySettings>) => {
     const state = get()
     const newDisplay: GlobalDisplaySettings = {
@@ -642,6 +660,7 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
     const state = get()
     return {
       cesiumIonToken: state.cesiumIonToken,
+      imagery: state.imagery,
       msfsModels: state.msfsModels,
       fsltl: state.fsltl,
       airports: state.airports,
@@ -661,6 +680,7 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
       const mergedSettings = {
         ...DEFAULT_GLOBAL_SETTINGS,
         ...settings,
+        imagery: { ...DEFAULT_GLOBAL_SETTINGS.imagery, ...settings.imagery },
         msfsModels: { ...DEFAULT_MSFS_MODEL_SETTINGS, ...settings.msfsModels },
         fsltl: { ...DEFAULT_GLOBAL_SETTINGS.fsltl, ...settings.fsltl },
         airports: { ...DEFAULT_GLOBAL_SETTINGS.airports, ...settings.airports },

@@ -198,10 +198,12 @@ export function useCesiumViewer(
     // Set Ion access token
     Cesium.Ion.defaultAccessToken = cesiumIonToken
 
-    // Create viewer with default terrain and imagery
+    // Create viewer with terrain but no base imagery layer
+    // Imagery is managed by useImageryProvider hook for runtime switching
     // Insets use reduced quality for performance
     const newViewer = new Cesium.Viewer(containerRef.current, {
       terrain: Cesium.Terrain.fromWorldTerrain(),
+      baseLayer: false, // No default imagery - managed by useImageryProvider
       animation: false,
       baseLayerPicker: false,
       fullscreenButton: false,

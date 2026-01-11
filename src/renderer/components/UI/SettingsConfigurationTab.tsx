@@ -24,6 +24,10 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
   const cesiumIonToken = useGlobalSettingsStore((state) => state.cesiumIonToken)
   const setCesiumIonToken = useGlobalSettingsStore((state) => state.setCesiumIonToken)
 
+  // Imagery provider settings
+  const imagerySettings = useGlobalSettingsStore((state) => state.imagery)
+  const updateImagery = useGlobalSettingsStore((state) => state.updateImagery)
+
   // Traffic source settings
   const dataSource = useGlobalSettingsStore((state) => state.realtraffic.dataSource)
   const licenseKey = useGlobalSettingsStore((state) => state.realtraffic.licenseKey)
@@ -57,6 +61,10 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
   const [tokenInput, setTokenInput] = useState('')
   const [tokenSaved, setTokenSaved] = useState(false)
 
+  // Local state for Google Maps API key input
+  const [googleApiKeyInput, setGoogleApiKeyInput] = useState('')
+  const [googleApiKeySaved, setGoogleApiKeySaved] = useState(false)
+
   // Local state for RealTraffic license key input
   const [rtLicenseInput, setRtLicenseInput] = useState('')
   const [rtLicenseSaved, setRtLicenseSaved] = useState(false)
@@ -78,6 +86,12 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
     setRtLicenseSaved(false)
   }, [licenseKey])
 
+  // Sync Google Maps API key input with store value
+  useEffect(() => {
+    setGoogleApiKeyInput(imagerySettings.googleMapsApiKey)
+    setGoogleApiKeySaved(false)
+  }, [imagerySettings.googleMapsApiKey])
+
   // Get server status on mount (only in Tauri)
   useEffect(() => {
     if (!isTauri()) return
@@ -97,6 +111,14 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
       setTimeout(() => setTokenSaved(false), 2000)
     }
   }, [tokenInput, cesiumIonToken, setCesiumIonToken])
+
+  const handleSaveGoogleApiKey = useCallback(async () => {
+    if (googleApiKeyInput.trim() !== imagerySettings.googleMapsApiKey) {
+      await updateImagery({ googleMapsApiKey: googleApiKeyInput.trim() })
+      setGoogleApiKeySaved(true)
+      setTimeout(() => setGoogleApiKeySaved(false), 2000)
+    }
+  }, [googleApiKeyInput, imagerySettings.googleMapsApiKey, updateImagery])
 
   const handleConnectRt = useCallback(async () => {
     const keyToUse = rtLicenseInput.trim() || licenseKey
@@ -303,6 +325,70 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
             . Changes require saving to take effect.
           </p>
         </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection title="Imagery Provider">
+        <div className="setting-item">
+          <label>Satellite Imagery Source</label>
+          <div className="radio-group">
+            <label>
+              <input
+                type="radio"
+                name="imageryProvider"
+                value="cesium"
+                checked={imagerySettings.provider === 'cesium'}
+                onChange={() => updateImagery({ provider: 'cesium' })}
+              />
+              Cesium Ion (Bing Maps)
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="imageryProvider"
+                value="google"
+                checked={imagerySettings.provider === 'google'}
+                onChange={() => updateImagery({ provider: 'google' })}
+              />
+              Google Maps
+            </label>
+          </div>
+          <p className="setting-hint">
+            Cesium Ion uses Bing Maps satellite imagery (default). Google Maps requires your own API key.
+          </p>
+        </div>
+
+        {imagerySettings.provider === 'google' && (
+          <div className="setting-item">
+            <label>Google Maps API Key</label>
+            <div className="token-input-row">
+              <input
+                type="text"
+                value={googleApiKeyInput}
+                onChange={(e) => setGoogleApiKeyInput(e.target.value)}
+                placeholder="Enter your Google Maps API key"
+                className="text-input token-input"
+              />
+              <button
+                className={`token-save-button ${googleApiKeySaved ? 'saved' : ''}`}
+                onClick={handleSaveGoogleApiKey}
+                disabled={googleApiKeyInput.trim() === imagerySettings.googleMapsApiKey}
+              >
+                {googleApiKeySaved ? 'Saved!' : 'Save'}
+              </button>
+            </div>
+            <p className="setting-hint">
+              Get a key at{' '}
+              <a
+                href="#"
+                onClick={(e) => { e.preventDefault(); shellApi.openExternal('https://console.cloud.google.com/apis/credentials') }}
+                className="external-link"
+              >
+                Google Cloud Console
+              </a>
+              . Enable the Map Tiles API for your project.
+            </p>
+          </div>
+        )}
       </CollapsibleSection>
 
       <CollapsibleSection title="Traffic Source">

@@ -100,6 +100,35 @@ impl Default for GlobalRealTrafficSettings {
 }
 
 // =============================================================================
+// IMAGERY SETTINGS
+// =============================================================================
+
+fn default_imagery_provider() -> String {
+    "cesium".to_string()
+}
+
+/// Imagery provider configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlobalImagerySettings {
+    /// Selected imagery provider: "cesium" or "google"
+    #[serde(default = "default_imagery_provider")]
+    pub provider: String,
+    /// Google Maps API key (required when provider is "google")
+    #[serde(default)]
+    pub google_maps_api_key: String,
+}
+
+impl Default for GlobalImagerySettings {
+    fn default() -> Self {
+        GlobalImagerySettings {
+            provider: "cesium".to_string(),
+            google_maps_api_key: String::new(),
+        }
+    }
+}
+
+// =============================================================================
 // VIEWPORT SETTINGS (per-airport camera positions, bookmarks)
 // =============================================================================
 
@@ -327,6 +356,8 @@ impl Default for MsfsModelSettings {
 #[serde(rename_all = "camelCase")]
 pub struct GlobalSettings {
     pub cesium_ion_token: String,
+    #[serde(default)]
+    pub imagery: GlobalImagerySettings,
     pub fsltl: GlobalFsltlSettings,
     #[serde(default)]
     pub msfs_models: MsfsModelSettings,
@@ -348,6 +379,7 @@ impl Default for GlobalSettings {
     fn default() -> Self {
         GlobalSettings {
             cesium_ion_token: String::new(),
+            imagery: GlobalImagerySettings::default(),
             fsltl: GlobalFsltlSettings {
                 source_path: None,
                 output_path: None,

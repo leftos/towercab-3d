@@ -142,6 +142,7 @@ export type {
   DataSourceType,
   BuildingQuality,
   GroundLabelMode,
+  ImageryProviderType,
 
   // MSFS model types (on-the-fly conversion)
   MSFSModelSource,

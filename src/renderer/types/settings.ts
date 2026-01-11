@@ -127,6 +127,15 @@ export type BuildingQuality = 'low' | 'medium' | 'high'
 export type GroundLabelMode = 'all' | 'moving' | 'activeOnly' | 'none'
 
 /**
+ * Imagery provider selection
+ *
+ * Controls which imagery provider is used for the globe:
+ * - 'cesium': Cesium Ion default (Bing Maps satellite imagery)
+ * - 'google': Google Maps 2D satellite imagery (requires user API key)
+ */
+export type ImageryProviderType = 'cesium' | 'google'
+
+/**
  * Cesium-specific configuration
  *
  * Settings related to the Cesium globe, terrain, and lighting system.
@@ -960,6 +969,25 @@ export interface GlobalSettings {
   cesiumIonToken: string
 
   /**
+   * Imagery provider configuration
+   * Controls which satellite imagery is displayed on the globe
+   */
+  imagery: {
+    /**
+     * Selected imagery provider (default: 'cesium')
+     * - 'cesium': Cesium Ion default (Bing Maps satellite)
+     * - 'google': Google Maps 2D satellite imagery
+     */
+    provider: ImageryProviderType
+
+    /**
+     * Google Maps API key (required when provider is 'google')
+     * Get a key at https://console.cloud.google.com/apis/credentials
+     */
+    googleMapsApiKey: string
+  }
+
+  /**
    * MSFS model configuration (on-the-fly conversion)
    * Replaces the old fsltl settings with support for FSLTL + AIG
    */
@@ -1102,6 +1130,10 @@ export interface GlobalSettings {
  */
 export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   cesiumIonToken: '',
+  imagery: {
+    provider: 'cesium',
+    googleMapsApiKey: ''
+  },
   msfsModels: DEFAULT_MSFS_MODEL_SETTINGS,
   // @deprecated - kept for migration only
   fsltl: {
