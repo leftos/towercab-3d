@@ -261,11 +261,16 @@ function App() {
     // Only handle deep links in desktop mode (not remote browser)
     if (isRemoteMode()) return
 
+    // Flag to prevent stale async operations (Strict Mode double-mount)
+    let isActive = true
     let cleanup: (() => void) | undefined
 
     async function setupDeepLinkHandler() {
       try {
         const { onOpenUrl } = await import('@tauri-apps/plugin-deep-link')
+
+        // Abort if effect was cleaned up while async import was pending
+        if (!isActive) return
 
         cleanup = await onOpenUrl((urls) => {
           console.log('[App] Deep link received:', urls)
@@ -295,6 +300,7 @@ function App() {
     setupDeepLinkHandler()
 
     return () => {
+      isActive = false
       if (cleanup) cleanup()
     }
   }, [showFeedback])

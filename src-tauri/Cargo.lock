@@ -5450,7 +5450,6 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "windows-sys 0.59.0",
- "winreg",
 ]
 
 [[package]]

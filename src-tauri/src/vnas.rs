@@ -178,6 +178,8 @@ mod real_impl {
         event_tx: broadcast::Sender<VnasAircraft>,
         /// App handle for emitting events
         app_handle: RwLock<Option<AppHandle>>,
+        /// Last processed OAuth callback URL (for deduplication)
+        last_oauth_callback: RwLock<Option<String>>,
     }
 
     impl VnasState {
@@ -188,6 +190,7 @@ mod real_impl {
                 service: TokioRwLock::new(None),
                 event_tx,
                 app_handle: RwLock::new(None),
+                last_oauth_callback: RwLock::new(None),
             }
         }
 
@@ -420,6 +423,30 @@ mod real_impl {
         state: State<'_, VnasState>,
         callback_url: String,
     ) -> Result<(), String> {
+        tracing::info!("vNAS OAuth callback received: {}", callback_url);
+
+        // Deduplication: Check if we've already processed this callback URL.
+        // With single-instance as the first plugin, duplicates should be rare,
+        // but we keep this as a safety net.
+        {
+            let mut last_callback = state.last_oauth_callback.write();
+            if last_callback.as_ref() == Some(&callback_url) {
+                tracing::debug!("Ignoring duplicate OAuth callback");
+                return Ok(());
+            }
+            *last_callback = Some(callback_url.clone());
+        }
+
+        // Guard: Only process callback if we're in authenticating state.
+        let current_state = state.status().state;
+        if current_state != SessionState::Authenticating {
+            tracing::debug!(
+                "OAuth callback skipped - not in authenticating state (current: {:?})",
+                current_state
+            );
+            return Ok(());
+        }
+
         // Parse the callback URL to extract the authorization code
         let url =
             url::Url::parse(&callback_url).map_err(|e| format!("Invalid callback URL: {}", e))?;
@@ -452,7 +479,9 @@ mod real_impl {
             tracing::warn!("vNAS tokens not available after OAuth");
         }
 
-        state.update_state(SessionState::Connecting);
+        // Note: We don't set state to Connecting here - that's connect()'s job.
+        // The state remains Authenticating until connect() is explicitly called.
+        // This ensures the connect() guard doesn't skip the actual connection.
         Ok(())
     }
 

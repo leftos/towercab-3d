@@ -657,13 +657,7 @@ Section Install
     {{/each}}
   {{/each}}
 
-  ; Register deep links
-  {{#each deep_link_protocols as |protocol| ~}}
-    WriteRegStr SHCTX "Software\Classes\\{{protocol}}" "URL Protocol" ""
-    WriteRegStr SHCTX "Software\Classes\\{{protocol}}" "" "URL:${BUNDLEID} protocol"
-    WriteRegStr SHCTX "Software\Classes\\{{protocol}}\DefaultIcon" "" "$\"$INSTDIR\${MAINBINARYNAME}.exe$\",0"
-    WriteRegStr SHCTX "Software\Classes\\{{protocol}}\shell\open\command" "" "$\"$INSTDIR\${MAINBINARYNAME}.exe$\" $\"%1$\""
-  {{/each}}
+  ; Deep links are registered at runtime by the app, not by the installer
 
   ; Create uninstaller
   WriteUninstaller "$INSTDIR\uninstall.exe"
@@ -792,14 +786,7 @@ Section Uninstall
     {{/each}}
   {{/each}}
 
-  ; Delete deep links
-  {{#each deep_link_protocols as |protocol| ~}}
-    ReadRegStr $R7 SHCTX "Software\Classes\\{{protocol}}\shell\open\command" ""
-    ${If} $R7 == "$\"$INSTDIR\${MAINBINARYNAME}.exe$\" $\"%1$\""
-      DeleteRegKey SHCTX "Software\Classes\\{{protocol}}"
-    ${EndIf}
-  {{/each}}
-
+  ; Deep links are managed at runtime by the app, not removed by the uninstaller
 
   ; Delete uninstaller
   Delete "$INSTDIR\uninstall.exe"

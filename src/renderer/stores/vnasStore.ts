@@ -10,6 +10,9 @@ import { geoidService } from '../services/GeoidService'
 /** Feet to meters conversion factor */
 const FEET_TO_METERS = 0.3048
 
+/** Last processed OAuth callback URL (for frontend-side deduplication) */
+let lastProcessedOAuthCallback: string | null = null
+
 /**
  * vNAS Store
  *
@@ -191,6 +194,9 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       throw new Error('vNAS not yet available in remote browser mode')
     }
 
+    // Reset frontend deduplication for new auth flow
+    lastProcessedOAuthCallback = null
+
     // Clear any previous error when starting a new auth flow
     set(state => ({
       status: {
@@ -249,6 +255,14 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       throw new Error('vNAS not yet available in remote browser mode')
     }
 
+    // Frontend-side deduplication (complements backend deduplication)
+    // This catches duplicates from React Strict Mode double-effect or duplicate events
+    if (lastProcessedOAuthCallback === callbackUrl) {
+      console.log('[vNAS] Ignoring duplicate OAuth callback (frontend dedup)')
+      return
+    }
+    lastProcessedOAuthCallback = callbackUrl
+
     console.log('[vNAS] Handling OAuth callback:', callbackUrl)
 
     // Clear any previous error when processing new callback
@@ -300,6 +314,11 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
     try {
       const { invoke } = await import('@tauri-apps/api/core')
       await invoke('vnas_connect')
+
+      // Explicitly fetch and update status after connection.
+      // This ensures UI updates even if event listeners have issues.
+      const status = await invoke<VnasStatus>('vnas_get_status')
+      set({ status })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       set(state => ({
@@ -335,12 +354,12 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
     try {
       const { invoke } = await import('@tauri-apps/api/core')
       await invoke('vnas_subscribe', { facilityId })
-      set(state => ({
-        status: {
-          ...state.status,
-          facilityId: icaoCode  // Store original ICAO for UI display
-        }
-      }))
+
+      // Explicitly fetch and update status after subscription.
+      // This ensures UI updates even if event listeners have issues.
+      const status = await invoke<VnasStatus>('vnas_get_status')
+      // Override facilityId with original ICAO for UI display (backend uses stripped version)
+      set({ status: { ...status, facilityId: icaoCode } })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       set(state => ({

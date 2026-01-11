@@ -88,43 +88,6 @@ impl Drop for ProcessWithJob {
 }
 
 // =============================================================================
-// DEEP LINK PROTOCOL REGISTRATION (Windows)
-// =============================================================================
-
-/// Register the tc3d:// deep link protocol in Windows registry.
-/// This is a workaround for Tauri NSIS installer not registering deep links.
-/// See: https://github.com/tauri-apps/tauri/issues/10095
-#[cfg(windows)]
-fn register_deep_link_protocol() -> Result<(), Box<dyn std::error::Error>> {
-    use winreg::enums::*;
-    use winreg::RegKey;
-
-    let exe_path = std::env::current_exe()?;
-    let exe_path_str = exe_path.to_string_lossy();
-
-    // Open or create HKEY_CURRENT_USER\Software\Classes\tc3d
-    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-    let (tc3d_key, _) = hkcu.create_subkey("Software\\Classes\\tc3d")?;
-
-    // Set the URL Protocol marker (empty string value)
-    tc3d_key.set_value("URL Protocol", &"")?;
-    // Set the default value (description)
-    tc3d_key.set_value("", &"URL:TowerCab 3D Protocol")?;
-
-    // Create DefaultIcon subkey
-    let (icon_key, _) = tc3d_key.create_subkey("DefaultIcon")?;
-    icon_key.set_value("", &format!("\"{}\",0", exe_path_str))?;
-
-    // Create shell\open\command subkey
-    let (shell_key, _) = tc3d_key.create_subkey("shell\\open\\command")?;
-    let command = format!("\"{}\" \"%1\"", exe_path_str);
-    shell_key.set_value("", &command)?;
-
-    tracing::info!("Registered tc3d:// deep link protocol -> {}", exe_path_str);
-    Ok(())
-}
-
-// =============================================================================
 // GLOBAL STATE
 // =============================================================================
 
@@ -716,15 +679,10 @@ pub fn run() {
     set_webview2_args();
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_window_state::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
-        // Single-instance must be registered before deep-link for Windows deep link handling.
-        // When a second instance is launched with a tc3d:// URL, it will:
-        // 1. Detect the existing instance
-        // 2. Forward the deep link URL to the existing instance via deep-link event
-        // 3. Focus the existing window and exit the new instance
+        // IMPORTANT: Single-instance MUST be the first plugin registered.
+        // See: https://v2.tauri.app/plugin/deep-linking/
+        // With the deep-link feature, it intercepts CLI args containing tc3d:// URLs,
+        // forwards them to the existing instance, and exits before other plugins initialize.
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             // Focus the main window when another instance tries to launch
             if let Some(window) = app.get_webview_window("main") {
@@ -734,6 +692,10 @@ pub fn run() {
             tracing::info!("Single instance triggered with args: {:?}", argv);
         }))
         .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_window_state::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             // Register updater plugin (desktop only)
             #[cfg(desktop)]
@@ -751,12 +713,14 @@ pub fn run() {
                 let _ = window.set_title(&title);
             }
 
-            // Register tc3d:// deep link protocol on Windows
-            // This is a workaround for Tauri NSIS installer not registering deep links
-            // See: https://github.com/tauri-apps/tauri/issues/10095
-            #[cfg(windows)]
+            // Register tc3d:// deep link protocol at runtime
+            // On Windows, NSIS installer doesn't register deep links properly (tauri#10095)
+            // On Linux, AppImage requires runtime registration
+            // See: https://v2.tauri.app/plugin/deep-linking/
+            #[cfg(any(windows, target_os = "linux"))]
             {
-                if let Err(e) = register_deep_link_protocol() {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                if let Err(e) = app.deep_link().register_all() {
                     tracing::warn!("Failed to register deep link protocol: {}", e);
                 }
             }

@@ -93,7 +93,7 @@
 }
 
 .vnas-popover-env select {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(30, 30, 40, 0.95);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 4px;
   color: #fff;
@@ -105,6 +105,11 @@
 .vnas-popover-env select:focus {
   outline: none;
   border-color: rgba(79, 195, 247, 0.5);
+}
+
+.vnas-popover-env select option {
+  background: rgb(30, 30, 40);
+  color: #fff;
 }
 
 .vnas-popover-callback {
