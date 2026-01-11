@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
 Generate tower positions by combining:
-- FAA DOF (tower existence + heights)
-- vNAS API (refined positions + headings)
+- FAA DOF (tower locations + AGL heights)
 - OurAirports (runway data for heading estimation)
 - mwgg/Airports (ICAO code mapping)
 
@@ -17,7 +16,6 @@ import argparse
 import csv
 import json
 import math
-import time
 from io import StringIO
 from pathlib import Path
 
@@ -28,14 +26,9 @@ except ImportError:
     exit(1)
 
 # Configuration
-ARTCCS = [
-    "ZAB", "ZAN", "ZAU", "ZBW", "ZDC", "ZDV", "ZFW", "ZHU", "ZID", "ZJX", "ZKC",
-    "ZLA", "ZLC", "ZMA", "ZME", "ZMP", "ZNY", "ZOA", "ZOB", "ZSE", "ZTL", "ZHN"
-]
 DEFAULT_DOF_PATH = Path("X:/Downloads/DOF_251026/DOF.DAT")
 AIRPORTS_URL = "https://raw.githubusercontent.com/mwgg/Airports/master/airports.json"
 RUNWAYS_URL = "https://davidmegginson.github.io/ourairports-data/runways.csv"
-VNAS_MATCH_RADIUS = 500    # meters - for matching vNAS to DOF
 AIRPORT_MATCH_RADIUS = 3000  # meters - for matching DOF to airport ICAO
 
 # Caching
@@ -101,7 +94,7 @@ def parse_dof(path: Path) -> list[dict]:
                     'lon': lon,
                     'agl_m': agl_ft * 0.3048
                 })
-            except (ValueError, IndexError) as e:
+            except (ValueError, IndexError):
                 # Skip malformed lines
                 continue
     return towers
@@ -146,44 +139,6 @@ def load_runways() -> dict[str, list]:
         except ValueError:
             continue
     return runways_by_icao
-
-
-def fetch_vnas_towers() -> dict:
-    """Fetch all tower positions from vNAS ARTCCs."""
-    towers = {}
-    for artcc in ARTCCS:
-        print(f"  Fetching {artcc}...")
-        try:
-            resp = requests.get(
-                f"https://data-api.vnas.vatsim.net/api/artccs/{artcc}",
-                timeout=30
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            # API returns {"facility": {...}} wrapper
-            if "facility" in data:
-                extract_vnas_towers(data["facility"], towers)
-            else:
-                extract_vnas_towers(data, towers)
-        except Exception as e:
-            print(f"    Error: {e}")
-        time.sleep(0.3)
-    return towers
-
-
-def extract_vnas_towers(facility: dict, towers: dict) -> None:
-    """Recursively extract towerCabConfiguration."""
-    if "towerCabConfiguration" in facility:
-        cfg = facility["towerCabConfiguration"]
-        if "towerLocation" in cfg:
-            towers[facility["id"]] = {
-                "lat": cfg["towerLocation"]["lat"],
-                "lon": cfg["towerLocation"]["lon"],
-                "heading": cfg.get("defaultRotation", None),
-                "zoomRange": cfg.get("defaultZoomRange", None)  # NM for 2D view
-            }
-    for child in facility.get("childFacilities", []):
-        extract_vnas_towers(child, towers)
 
 
 def find_nearest(
@@ -240,7 +195,7 @@ def estimate_heading_from_runways(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate tower positions from FAA DOF, vNAS, and OurAirports data"
+        description="Generate tower positions from FAA DOF and OurAirports data"
     )
     parser.add_argument(
         '--dof-path',
@@ -251,8 +206,8 @@ def main():
     parser.add_argument(
         '--output-dir',
         type=Path,
-        default=Path("mods/tower-positions"),
-        help="Output directory for tower position JSON files"
+        default=Path("src-tauri/resources/tower-positions"),
+        help="Output directory for tower position JSON files (bundled with app)"
     )
     parser.add_argument(
         '--force',
@@ -279,11 +234,6 @@ def main():
     runways = load_runways()
     print(f"  Runways: {len(runways)} airports with runway data")
 
-    # Fetch vNAS towers
-    print("Fetching vNAS tower data...")
-    vnas_towers = fetch_vnas_towers()
-    print(f"  vNAS: {len(vnas_towers)} towers")
-
     # Process each DOF tower
     print("\nProcessing towers...")
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -291,8 +241,6 @@ def main():
     stats = {
         'written': 0,
         'skipped': 0,
-        'vnas_match': 0,
-        'vnas_2d_heading': 0,
         'runway_heading': 0,
         'no_airport': 0
     }
@@ -315,49 +263,23 @@ def main():
             stats['skipped'] += 1
             continue
 
-        # Check for vNAS match (better position precision + 2D view heading)
-        # vNAS uses 3-letter codes (SFO), airports use 4-letter ICAOs (KSFO)
-        vnas = vnas_towers.get(icao)
-        if not vnas and icao.startswith('K') and len(icao) == 4:
-            # Try without K prefix for US airports
-            vnas = vnas_towers.get(icao[1:])
+        lat, lon = dof['lat'], dof['lon']
 
-        vnas_heading = None
-        vnas_zoom = None
-        if vnas and haversine(dof['lat'], dof['lon'], vnas['lat'], vnas['lon']) <= VNAS_MATCH_RADIUS:
-            lat, lon = vnas['lat'], vnas['lon']
-            vnas_heading = vnas.get('heading')  # For 2D view rotation
-            vnas_zoom = vnas.get('zoomRange')  # For 2D view altitude
-            stats['vnas_match'] += 1
-        else:
-            lat, lon = dof['lat'], dof['lon']
-
-        # Calculate 3D heading by pointing at approach end of longest runway
-        heading_3d = estimate_heading_from_runways(lat, lon, runways.get(icao, []))
-        if heading_3d is not None:
+        # Calculate heading by pointing at approach end of longest runway
+        heading = estimate_heading_from_runways(lat, lon, runways.get(icao, []))
+        if heading is not None:
             stats['runway_heading'] += 1
         else:
-            heading_3d = 0  # Final fallback
+            heading = 0  # Final fallback
 
-        position: dict = {
+        position = {
             "view3d": {
                 "lat": lat,
                 "lon": lon,
                 "aglHeight": round(dof['agl_m'], 1),
-                "heading": round(heading_3d, 1)
+                "heading": round(heading, 1)
             }
         }
-
-        # Add 2D view defaults if vNAS data is available
-        if vnas_heading is not None or vnas_zoom is not None:
-            view2d: dict = {}
-            if vnas_heading is not None:
-                view2d["heading"] = round(vnas_heading, 1)
-            if vnas_zoom is not None:
-                # Store raw vNAS range value - converted to altitude at runtime
-                view2d["vNasRange"] = round(vnas_zoom, 1)
-            position["view2d"] = view2d
-            stats['vnas_2d_heading'] += 1
 
         path.write_text(json.dumps(position, indent=2))
         stats['written'] += 1
@@ -365,9 +287,7 @@ def main():
     print(f"\nResults:")
     print(f"  Written: {stats['written']}")
     print(f"  Skipped (existing): {stats['skipped']}")
-    print(f"  vNAS position: {stats['vnas_match']}")
-    print(f"  vNAS 2D heading: {stats['vnas_2d_heading']}")
-    print(f"  Runway-based 3D heading: {stats['runway_heading']}")
+    print(f"  Runway-based heading: {stats['runway_heading']}")
     print(f"  No airport match: {stats['no_airport']}")
 
 

@@ -4,6 +4,12 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Bundled tower positions for 536 US airports** - Tower cab locations and heights from FAA obstruction data, with automatic heading toward the primary runway approach
+
+### Fixed
+- **Improved tower cab positioning accuracy** - Tower heights now correctly convert from MSL to ellipsoidal coordinates, fixing positioning errors of up to 100 meters in some locations
+
 ## [0.0.31-alpha] - 2026-01-10
 
 ### Added

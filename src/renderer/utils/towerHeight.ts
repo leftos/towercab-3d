@@ -2,6 +2,7 @@
 
 import type { Airport } from '../types/airport'
 import { KNOWN_TOWER_HEIGHTS, classifyAirport } from '../types/airport'
+import { geoidService } from '../services/GeoidService'
 
 // Height estimates by airport type (in meters)
 const HEIGHT_BY_TYPE = {
@@ -29,11 +30,15 @@ export function getTowerHeight(airport: Airport): number {
 }
 
 /**
- * Get tower position (lat, lon, height in meters MSL) for 3D view
+ * Get tower position (lat, lon, height in meters) for 3D view
  * @param airport - Airport data
  * @param customHeight - Optional height in meters above ground level (AGL). If provided, used instead of estimated height.
  * @param view3dPosition - Optional custom 3D view position from tower-positions file
- * @returns Tower position in {latitude, longitude, height} where height is MSL (meters)
+ * @returns Tower position in {latitude, longitude, height} where height is WGS84 ellipsoidal (meters)
+ *
+ * Note: The returned height is converted from MSL to ellipsoidal using the EGM96 geoid model.
+ * This is required because Cesium's Cartesian3.fromDegrees() expects ellipsoidal height.
+ * The geoid undulation can be significant (up to ~100m in some areas).
  */
 export function getTowerPosition(
   airport: Airport,
@@ -59,13 +64,18 @@ export function getTowerPosition(
   }
 
   // Convert airport elevation from feet to meters and add AGL height
+  // This gives us MSL (Mean Sea Level) height
   const elevationMeters = airport.elevation * 0.3048
-  const totalHeight = elevationMeters + aglHeight
+  const mslHeight = elevationMeters + aglHeight
+
+  // Convert MSL to ellipsoidal height for Cesium
+  // Cesium uses WGS84 ellipsoidal heights, not MSL
+  const ellipsoidalHeight = geoidService.mslToEllipsoidal(latitude, longitude, mslHeight)
 
   return {
     latitude,
     longitude,
-    height: totalHeight
+    height: ellipsoidalHeight
   }
 }
 

@@ -47,6 +47,7 @@
       "resources/airports.json",
       "resources/runways.csv",
       "resources/airport-surfaces.json.gz",
+      "resources/tower-positions/**/*",
       "mods/**/*",
       "../dist/**/*"
     ],

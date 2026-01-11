@@ -12,7 +12,7 @@ use std::path::PathBuf;
 
 use crate::normalize_path_string;
 
-/// Find the mods root directory, checking multiple locations
+/// Find the mods root directory (user-modifiable content)
 /// Returns the first path that exists, or the first candidate if none exist
 pub fn find_mods_root(app: &tauri::AppHandle) -> PathBuf {
     use tauri::Manager;
@@ -25,6 +25,14 @@ pub fn find_mods_root(app: &tauri::AppHandle) -> PathBuf {
         // Fallback to resource path (will be created if needed)
         mods_path
     }
+}
+
+/// Find the bundled resources directory (read-only, shipped with app)
+/// Contains preset data like bundled tower positions
+pub fn find_resources_root(app: &tauri::AppHandle) -> PathBuf {
+    use tauri::Manager;
+    let resource_path = app.path().resource_dir().unwrap_or_default();
+    resource_path.join("resources")
 }
 
 /// Get the path to a mod type directory (aircraft or towers)
@@ -154,33 +162,15 @@ pub struct TowerPositionEntry {
     pub view_2d: Option<View2dPosition>,
 }
 
-/// Read custom tower positions from mods/tower-positions/*.json files
-/// Each file is named {ICAO}.json (case-insensitive)
-/// Also reads legacy mods/tower-positions.json for backward compatibility
-/// Returns the merged JSON as a serde_json::Value
-#[tauri::command]
-pub fn read_tower_positions(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
-    let mods_root = find_mods_root(&app);
-    let mut positions: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
+/// Helper to read tower position files from a directory
+/// Returns a map of ICAO codes to position data
+fn read_tower_positions_from_dir(
+    dir: &PathBuf,
+) -> serde_json::Map<String, serde_json::Value> {
+    let mut positions = serde_json::Map::new();
 
-    // Read legacy tower-positions.json if it exists (lower priority)
-    let legacy_path = mods_root.join("tower-positions.json");
-    if legacy_path.exists() {
-        if let Ok(content) = fs::read_to_string(&legacy_path) {
-            if let Ok(legacy_positions) =
-                serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&content)
-            {
-                for (icao, pos) in legacy_positions {
-                    positions.insert(icao.to_uppercase(), pos);
-                }
-            }
-        }
-    }
-
-    // Read individual files from tower-positions/ folder (higher priority, overwrites legacy)
-    let tower_positions_dir = mods_root.join("tower-positions");
-    if tower_positions_dir.exists() && tower_positions_dir.is_dir() {
-        if let Ok(entries) = fs::read_dir(&tower_positions_dir) {
+    if dir.exists() && dir.is_dir() {
+        if let Ok(entries) = fs::read_dir(dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path
@@ -197,6 +187,48 @@ pub fn read_tower_positions(app: tauri::AppHandle) -> Result<serde_json::Value, 
                 }
             }
         }
+    }
+
+    positions
+}
+
+/// Read tower positions from multiple sources with layered priority:
+/// 1. Bundled positions from resources/tower-positions/*.json (lowest priority)
+/// 2. Legacy mods/tower-positions.json (backward compatibility)
+/// 3. User positions from mods/tower-positions/*.json (highest priority, overwrites others)
+///
+/// Each file is named {ICAO}.json (case-insensitive)
+/// Returns the merged JSON as a serde_json::Value
+#[tauri::command]
+pub fn read_tower_positions(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    let mods_root = find_mods_root(&app);
+    let resources_root = find_resources_root(&app);
+    let mut positions: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
+
+    // 1. Read bundled tower positions from resources/ (lowest priority)
+    let bundled_dir = resources_root.join("tower-positions");
+    for (icao, pos) in read_tower_positions_from_dir(&bundled_dir) {
+        positions.insert(icao, pos);
+    }
+
+    // 2. Read legacy tower-positions.json if it exists (overwrites bundled)
+    let legacy_path = mods_root.join("tower-positions.json");
+    if legacy_path.exists() {
+        if let Ok(content) = fs::read_to_string(&legacy_path) {
+            if let Ok(legacy_positions) =
+                serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&content)
+            {
+                for (icao, pos) in legacy_positions {
+                    positions.insert(icao.to_uppercase(), pos);
+                }
+            }
+        }
+    }
+
+    // 3. Read user positions from mods/tower-positions/ (highest priority, overwrites all)
+    let user_dir = mods_root.join("tower-positions");
+    for (icao, pos) in read_tower_positions_from_dir(&user_dir) {
+        positions.insert(icao, pos);
     }
 
     Ok(serde_json::Value::Object(positions))
