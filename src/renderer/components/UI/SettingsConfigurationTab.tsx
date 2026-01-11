@@ -11,6 +11,8 @@ import MSFSModelSettingsPanel from './MSFSModelSettingsPanel'
 import CollapsibleSection from './settings/CollapsibleSection'
 import type { DataSourceType } from '../../types/realtraffic'
 import type { VnasEnvironment } from '../../types/vnas'
+import type { ImageryAdjustments } from '../../types/settings'
+import { DEFAULT_IMAGERY_ADJUSTMENTS } from '../../types/settings'
 import './ControlsBar.css'
 
 interface SettingsConfigurationTabProps {
@@ -389,6 +391,109 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
             </p>
           </div>
         )}
+
+        {/* Color Adjustments for current provider */}
+        <div className="setting-item">
+          <label>
+            Color Adjustments ({imagerySettings.provider === 'google' ? 'Google Maps' : 'Cesium Ion'})
+          </label>
+          <p className="setting-hint">
+            Adjust colors for the current imagery provider. Each provider saves its own settings.
+          </p>
+        </div>
+
+        {(() => {
+          const currentAdjustments = imagerySettings.provider === 'google'
+            ? imagerySettings.googleAdjustments
+            : imagerySettings.cesiumAdjustments
+          const adjustmentsKey = imagerySettings.provider === 'google'
+            ? 'googleAdjustments'
+            : 'cesiumAdjustments'
+
+          const updateAdjustment = (field: keyof ImageryAdjustments, value: number) => {
+            updateImagery({
+              [adjustmentsKey]: {
+                ...currentAdjustments,
+                [field]: value
+              }
+            })
+          }
+
+          const resetAdjustments = () => {
+            updateImagery({
+              [adjustmentsKey]: DEFAULT_IMAGERY_ADJUSTMENTS
+            })
+          }
+
+          return (
+            <>
+              <div className="setting-item slider-item">
+                <label>Hue Shift: {currentAdjustments?.hueShift ?? 0}°</label>
+                <input
+                  type="range"
+                  min="-180"
+                  max="180"
+                  step="5"
+                  value={currentAdjustments?.hueShift ?? 0}
+                  onChange={(e) => updateAdjustment('hueShift', Number(e.target.value))}
+                  className="slider-input"
+                />
+                <p className="setting-hint">Shift colors warmer (positive) or cooler (negative)</p>
+              </div>
+
+              <div className="setting-item slider-item">
+                <label>Saturation: {((currentAdjustments?.saturation ?? 1) * 100).toFixed(0)}%</label>
+                <input
+                  type="range"
+                  min="0"
+                  max="200"
+                  step="5"
+                  value={(currentAdjustments?.saturation ?? 1) * 100}
+                  onChange={(e) => updateAdjustment('saturation', Number(e.target.value) / 100)}
+                  className="slider-input"
+                />
+                <p className="setting-hint">Adjust color intensity (100% = default)</p>
+              </div>
+
+              <div className="setting-item slider-item">
+                <label>Brightness: {((currentAdjustments?.brightness ?? 1) * 100).toFixed(0)}%</label>
+                <input
+                  type="range"
+                  min="50"
+                  max="150"
+                  step="5"
+                  value={(currentAdjustments?.brightness ?? 1) * 100}
+                  onChange={(e) => updateAdjustment('brightness', Number(e.target.value) / 100)}
+                  className="slider-input"
+                />
+                <p className="setting-hint">Adjust overall brightness (100% = default)</p>
+              </div>
+
+              <div className="setting-item slider-item">
+                <label>Contrast: {((currentAdjustments?.contrast ?? 1) * 100).toFixed(0)}%</label>
+                <input
+                  type="range"
+                  min="50"
+                  max="150"
+                  step="5"
+                  value={(currentAdjustments?.contrast ?? 1) * 100}
+                  onChange={(e) => updateAdjustment('contrast', Number(e.target.value) / 100)}
+                  className="slider-input"
+                />
+                <p className="setting-hint">Adjust contrast between light and dark areas (100% = default)</p>
+              </div>
+
+              <div className="setting-item">
+                <button
+                  className="secondary-button"
+                  onClick={resetAdjustments}
+                >
+                  Reset to Default
+                </button>
+              </div>
+            </>
+          )
+        })()}
       </CollapsibleSection>
 
       <CollapsibleSection title="Traffic Source">

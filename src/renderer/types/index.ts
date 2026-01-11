@@ -143,6 +143,7 @@ export type {
   BuildingQuality,
   GroundLabelMode,
   ImageryProviderType,
+  ImageryAdjustments,
 
   // MSFS model types (on-the-fly conversion)
   MSFSModelSource,
@@ -189,6 +190,9 @@ export {
 
   // Default global viewport settings values
   DEFAULT_GLOBAL_VIEWPORT_SETTINGS,
+
+  // Default imagery adjustments
+  DEFAULT_IMAGERY_ADJUSTMENTS,
 
   // MSFS model cache limits
   MSFS_CACHE_LIMIT,

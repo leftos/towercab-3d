@@ -107,6 +107,47 @@ fn default_imagery_provider() -> String {
     "cesium".to_string()
 }
 
+fn default_saturation() -> f64 {
+    1.0
+}
+
+fn default_brightness() -> f64 {
+    1.0
+}
+
+fn default_contrast() -> f64 {
+    1.0
+}
+
+/// Per-provider color adjustment settings
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageryAdjustments {
+    /// Hue shift in degrees (-180 to 180)
+    #[serde(default)]
+    pub hue_shift: f64,
+    /// Saturation multiplier (0.0 to 2.0)
+    #[serde(default = "default_saturation")]
+    pub saturation: f64,
+    /// Brightness multiplier (0.5 to 1.5)
+    #[serde(default = "default_brightness")]
+    pub brightness: f64,
+    /// Contrast multiplier (0.5 to 1.5)
+    #[serde(default = "default_contrast")]
+    pub contrast: f64,
+}
+
+impl Default for ImageryAdjustments {
+    fn default() -> Self {
+        ImageryAdjustments {
+            hue_shift: 0.0,
+            saturation: 1.0,
+            brightness: 1.0,
+            contrast: 1.0,
+        }
+    }
+}
+
 /// Imagery provider configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -117,6 +158,12 @@ pub struct GlobalImagerySettings {
     /// Google Maps API key (required when provider is "google")
     #[serde(default)]
     pub google_maps_api_key: String,
+    /// Color adjustments for Cesium Ion (Bing Maps) imagery
+    #[serde(default)]
+    pub cesium_adjustments: ImageryAdjustments,
+    /// Color adjustments for Google Maps imagery
+    #[serde(default)]
+    pub google_adjustments: ImageryAdjustments,
 }
 
 impl Default for GlobalImagerySettings {
@@ -124,6 +171,8 @@ impl Default for GlobalImagerySettings {
         GlobalImagerySettings {
             provider: "cesium".to_string(),
             google_maps_api_key: String::new(),
+            cesium_adjustments: ImageryAdjustments::default(),
+            google_adjustments: ImageryAdjustments::default(),
         }
     }
 }

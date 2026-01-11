@@ -136,6 +136,50 @@ export type GroundLabelMode = 'all' | 'moving' | 'activeOnly' | 'none'
 export type ImageryProviderType = 'cesium' | 'google'
 
 /**
+ * Color adjustments for imagery layers
+ *
+ * These settings apply per-provider, allowing different adjustments
+ * for Cesium Ion and Google Maps imagery.
+ */
+export interface ImageryAdjustments {
+  /**
+   * Hue shift in degrees (-180 to 180, default: 0)
+   * Positive values shift towards warm colors (yellow/orange),
+   * negative values shift towards cool colors (blue/purple).
+   */
+  hueShift: number
+
+  /**
+   * Saturation multiplier (0.0 to 2.0, default: 1.0)
+   * Values below 1.0 reduce color intensity (more gray),
+   * values above 1.0 increase color intensity.
+   */
+  saturation: number
+
+  /**
+   * Brightness multiplier (0.5 to 1.5, default: 1.0)
+   * Controls overall brightness of the imagery.
+   */
+  brightness: number
+
+  /**
+   * Contrast multiplier (0.5 to 1.5, default: 1.0)
+   * Controls the contrast between light and dark areas.
+   */
+  contrast: number
+}
+
+/**
+ * Default imagery adjustments (no modifications)
+ */
+export const DEFAULT_IMAGERY_ADJUSTMENTS: ImageryAdjustments = {
+  hueShift: 0,
+  saturation: 1.0,
+  brightness: 1.0,
+  contrast: 1.0
+}
+
+/**
  * Cesium-specific configuration
  *
  * Settings related to the Cesium globe, terrain, and lighting system.
@@ -985,6 +1029,16 @@ export interface GlobalSettings {
      * Get a key at https://console.cloud.google.com/apis/credentials
      */
     googleMapsApiKey: string
+
+    /**
+     * Color adjustments for Cesium Ion (Bing Maps) imagery
+     */
+    cesiumAdjustments: ImageryAdjustments
+
+    /**
+     * Color adjustments for Google Maps imagery
+     */
+    googleAdjustments: ImageryAdjustments
   }
 
   /**
@@ -1132,7 +1186,9 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   cesiumIonToken: '',
   imagery: {
     provider: 'cesium',
-    googleMapsApiKey: ''
+    googleMapsApiKey: '',
+    cesiumAdjustments: DEFAULT_IMAGERY_ADJUSTMENTS,
+    googleAdjustments: DEFAULT_IMAGERY_ADJUSTMENTS
   },
   msfsModels: DEFAULT_MSFS_MODEL_SETTINGS,
   // @deprecated - kept for migration only

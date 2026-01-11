@@ -242,7 +242,9 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   useImageryProvider(viewer, {
     provider: imagerySettings.provider,
     googleMapsApiKey: imagerySettings.googleMapsApiKey,
-    cesiumIonToken
+    cesiumIonToken,
+    cesiumAdjustments: imagerySettings.cesiumAdjustments,
+    googleAdjustments: imagerySettings.googleAdjustments
   })
 
   // =========================================================================

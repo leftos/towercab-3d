@@ -324,7 +324,13 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
         ...DEFAULT_GLOBAL_SETTINGS,
         ...settings,
         // Deep merge nested objects to preserve existing values while adding new fields
-        imagery: { ...DEFAULT_GLOBAL_SETTINGS.imagery, ...settings.imagery },
+        imagery: {
+          ...DEFAULT_GLOBAL_SETTINGS.imagery,
+          ...settings.imagery,
+          // Deep merge per-provider adjustments
+          cesiumAdjustments: { ...DEFAULT_GLOBAL_SETTINGS.imagery.cesiumAdjustments, ...settings.imagery?.cesiumAdjustments },
+          googleAdjustments: { ...DEFAULT_GLOBAL_SETTINGS.imagery.googleAdjustments, ...settings.imagery?.googleAdjustments }
+        },
         msfsModels: { ...DEFAULT_MSFS_MODEL_SETTINGS, ...settings.msfsModels },
         fsltl: { ...DEFAULT_GLOBAL_SETTINGS.fsltl, ...settings.fsltl },
         airports: { ...DEFAULT_GLOBAL_SETTINGS.airports, ...settings.airports },
@@ -617,7 +623,14 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
       // Validate provider
       provider: (updates.provider && ['cesium', 'google'].includes(updates.provider)
         ? updates.provider
-        : state.imagery.provider) as GlobalSettings['imagery']['provider']
+        : state.imagery.provider) as GlobalSettings['imagery']['provider'],
+      // Deep merge adjustments if provided
+      cesiumAdjustments: updates.cesiumAdjustments
+        ? { ...state.imagery.cesiumAdjustments, ...updates.cesiumAdjustments }
+        : state.imagery.cesiumAdjustments,
+      googleAdjustments: updates.googleAdjustments
+        ? { ...state.imagery.googleAdjustments, ...updates.googleAdjustments }
+        : state.imagery.googleAdjustments
     }
     set({ imagery: newImagery })
     await saveSettings(get().getSettings())
@@ -680,7 +693,12 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
       const mergedSettings = {
         ...DEFAULT_GLOBAL_SETTINGS,
         ...settings,
-        imagery: { ...DEFAULT_GLOBAL_SETTINGS.imagery, ...settings.imagery },
+        imagery: {
+          ...DEFAULT_GLOBAL_SETTINGS.imagery,
+          ...settings.imagery,
+          cesiumAdjustments: { ...DEFAULT_GLOBAL_SETTINGS.imagery.cesiumAdjustments, ...settings.imagery?.cesiumAdjustments },
+          googleAdjustments: { ...DEFAULT_GLOBAL_SETTINGS.imagery.googleAdjustments, ...settings.imagery?.googleAdjustments }
+        },
         msfsModels: { ...DEFAULT_MSFS_MODEL_SETTINGS, ...settings.msfsModels },
         fsltl: { ...DEFAULT_GLOBAL_SETTINGS.fsltl, ...settings.fsltl },
         airports: { ...DEFAULT_GLOBAL_SETTINGS.airports, ...settings.airports },
