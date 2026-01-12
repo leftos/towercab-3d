@@ -1021,6 +1021,123 @@
 }
 
 /* ============================================================================
+   DEFAULTS DROPDOWN
+   ============================================================================ */
+
+.defaults-dropdown {
+  position: relative;
+}
+
+.defaults-dropdown-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  min-width: 140px;
+  background: rgba(20, 20, 30, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  padding: 6px;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(10px);
+  animation: dropdownSlideUp 0.15s ease-out;
+  z-index: 150;
+}
+
+@keyframes dropdownSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.defaults-dropdown-item {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.defaults-dropdown-item:hover:not(.disabled) {
+  background: rgba(79, 195, 247, 0.15);
+  color: #4fc3f7;
+}
+
+.defaults-dropdown-item:active:not(.disabled) {
+  background: rgba(79, 195, 247, 0.25);
+}
+
+.defaults-dropdown-item.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ============================================================================
+   RUNWAY DROPDOWN
+   ============================================================================ */
+
+.runway-dropdown {
+  position: relative;
+}
+
+/* Make the Look At button wider */
+.runway-dropdown .control-button {
+  min-width: 120px;
+}
+
+.runway-dropdown-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  min-width: 120px;
+  max-height: 250px;
+  overflow-y: auto;
+  background: rgba(20, 20, 30, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  padding: 6px;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(10px);
+  animation: dropdownSlideUp 0.15s ease-out;
+  z-index: 150;
+}
+
+.runway-dropdown-item {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.runway-dropdown-item:hover {
+  background: rgba(79, 195, 247, 0.15);
+  color: #4fc3f7;
+}
+
+.runway-dropdown-item:active {
+  background: rgba(79, 195, 247, 0.25);
+}
+
+/* ============================================================================
    RESPONSIVE STYLES FOR SMALLER SCREENS
    ============================================================================ */
 

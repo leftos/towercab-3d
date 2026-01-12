@@ -1,24 +1,28 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useMeasureStore } from '../../stores/measureStore'
 import { useViewportStore } from '../../stores/viewportStore'
 import { useAirportStore } from '../../stores/airportStore'
 import { useReplayStore } from '../../stores/replayStore'
 import { useUIFeedbackStore } from '../../stores/uiFeedbackStore'
+import { useRunwayStore } from '../../stores/runwayStore'
 import { useActiveViewportCamera } from '../../hooks/useActiveViewportCamera'
 import { calculateShareable3dPosition, calculateShareable2dPosition } from '../../utils/cameraGeometry'
 import { hasViewingContext } from '../../utils/viewingContext'
+import { calculateBearing, haversineDistanceNm } from '../../utils/aircraft/geoMath'
 import { modService } from '../../services/ModService'
 import { modApi } from '../../utils/tauriApi'
 import GlobalSearchPanel from './GlobalSearchPanel'
 import VRButton from '../VR/VRButton'
 import MoreMenu from './MoreMenu'
+import type { MoreMenuSubmenuItem } from './MoreMenu'
 import ImportModal from './ImportModal'
 import ExportWizardModal from './ExportWizardModal'
 import BookmarkManagerModal from './BookmarkManagerModal'
 import SettingsModal from './SettingsModal'
 import ReplayControls from './ReplayControls'
 import ContributeDialog, { type ContributeDialogData } from './ContributeDialog'
+import type { RunwayEnd } from '../../types'
 import './ControlsBar.css'
 
 type BarMode = 'controls' | 'replay'
@@ -29,6 +33,8 @@ function ControlsBar() {
   const [showExportModal, setShowExportModal] = useState(false)
   const [showBookmarkModal, setShowBookmarkModal] = useState(false)
   const [showExitConfirm, setShowExitConfirm] = useState(false)
+  const [showRunwayDropdown, setShowRunwayDropdown] = useState(false)
+  const [showDefaultsDropdown, setShowDefaultsDropdown] = useState(false)
   const [barMode, setBarMode] = useState<BarMode>('controls')
   const [importStatus, setImportStatus] = useState<'idle' | 'success' | 'error'>('idle')
 
@@ -59,8 +65,7 @@ function ControlsBar() {
     orbitDistance,
     positionOffsetX,
     positionOffsetY,
-    positionOffsetZ,
-    resetView
+    positionOffsetZ
   } = useActiveViewportCamera()
 
   // Viewport store - for default saving (shared across viewports)
@@ -88,6 +93,99 @@ function ControlsBar() {
   // Replay store - for isLive indicator
   const playbackMode = useReplayStore((state) => state.playbackMode)
   const isLive = playbackMode === 'live'
+
+  // Runway store - for look-at runway feature
+  const getRunwaysWithCoordinates = useRunwayStore((state) => state.getRunwaysWithCoordinates)
+
+  // Get setLookAtTarget from camera hook
+  const { setLookAtTarget } = useActiveViewportCamera()
+
+  // Get all runway thresholds for the current airport
+  const runwayThresholds = useMemo((): MoreMenuSubmenuItem[] => {
+    if (!currentAirport) return []
+
+    const runways = getRunwaysWithCoordinates(currentAirport.icao)
+    if (!runways.length) return []
+
+    // Collect all valid thresholds
+    const thresholds: { end: RunwayEnd; label: string }[] = []
+
+    for (const runway of runways) {
+      // Check if lowEnd has valid coordinates
+      if (runway.lowEnd.lat !== 0 || runway.lowEnd.lon !== 0) {
+        thresholds.push({ end: runway.lowEnd, label: runway.lowEnd.ident })
+      }
+      // Check if highEnd has valid coordinates
+      if (runway.highEnd.lat !== 0 || runway.highEnd.lon !== 0) {
+        thresholds.push({ end: runway.highEnd, label: runway.highEnd.ident })
+      }
+    }
+
+    // Sort by runway number (parse the numeric part)
+    thresholds.sort((a, b) => {
+      const numA = parseInt(a.label.replace(/[^0-9]/g, ''), 10) || 0
+      const numB = parseInt(b.label.replace(/[^0-9]/g, ''), 10) || 0
+      if (numA !== numB) return numA - numB
+      // If same number, sort by suffix (L < C < R)
+      return a.label.localeCompare(b.label)
+    })
+
+    // Calculate camera position (tower position with offsets)
+    const towerLat = currentAirport.lat
+    const towerLon = currentAirport.lon
+    const towerAltFt = (currentAirport.elevation || 0) + towerHeight
+
+    return thresholds.map((t) => ({
+      id: t.label,
+      label: `RWY ${t.label}`,
+      onClick: () => {
+        // Calculate bearing from tower to threshold
+        const bearing = calculateBearing(towerLat, towerLon, t.end.lat, t.end.lon)
+
+        // Calculate pitch: arctan(altitude_diff / distance)
+        const distanceNm = haversineDistanceNm(towerLat, towerLon, t.end.lat, t.end.lon)
+        const distanceFt = distanceNm * 6076.12
+        const altDiffFt = towerAltFt - t.end.elevationFt
+        const pitchRad = Math.atan2(altDiffFt, distanceFt)
+        const pitchAngle = -(pitchRad * 180 / Math.PI) // Negative because looking down
+
+        setLookAtTarget(bearing, pitchAngle)
+        setShowRunwayDropdown(false)
+      }
+    }))
+  }, [currentAirport, towerHeight, getRunwaysWithCoordinates, setLookAtTarget])
+
+  // Refs for dropdowns to handle click outside
+  const runwayDropdownRef = useRef<HTMLDivElement>(null)
+  const defaultsDropdownRef = useRef<HTMLDivElement>(null)
+
+  // Close runway dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (runwayDropdownRef.current && !runwayDropdownRef.current.contains(e.target as Node)) {
+        setShowRunwayDropdown(false)
+      }
+    }
+
+    if (showRunwayDropdown) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showRunwayDropdown])
+
+  // Close defaults dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (defaultsDropdownRef.current && !defaultsDropdownRef.current.contains(e.target as Node)) {
+        setShowDefaultsDropdown(false)
+      }
+    }
+
+    if (showDefaultsDropdown) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showDefaultsDropdown])
 
   // Track Shift key for button label updates
   useEffect(() => {
@@ -158,10 +256,6 @@ function ControlsBar() {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [currentAirport])
-
-  const handleResetView = () => {
-    resetView()
-  }
 
   const handleSaveAsDefault = async (e: React.MouseEvent) => {
     // Shift+click saves to tower-positions/{ICAO}.json for sharing
@@ -356,19 +450,6 @@ function ControlsBar() {
             <div className="controls-left">
               <button
                 className="control-button"
-                onClick={handleResetView}
-                title="Reset View (Shift+R)"
-                disabled={!hasReference}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                  <path d="M3 3v5h5" />
-                </svg>
-                <span className="button-label">Reset</span>
-              </button>
-
-              <button
-                className="control-button"
                 onClick={toggleViewMode}
                 title="Toggle View Mode (T)"
                 disabled={!hasReference}
@@ -389,68 +470,84 @@ function ControlsBar() {
                 <span className="button-label">{viewMode === '3d' ? '3D' : '2D'}</span>
               </button>
 
-              {/* Set Default - hidden on mobile, in MoreMenu */}
-              <button
-                className={`control-button hide-on-mobile ${defaultSaved ? 'success' : ''}`}
-                onClick={handleSaveAsDefault}
-                title={shiftPressed ? "Save to tower-positions file (for sharing)" : "Set Default View"}
-                disabled={!currentAirport}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-                  <polyline points="17 21 17 13 7 13 7 21" />
-                  <polyline points="7 3 7 8 15 8" />
-                </svg>
-                {defaultSaved ? 'Saved!' : (shiftPressed ? 'Save Tower Pos' : 'Set Default')}
-              </button>
+              {/* Defaults dropdown - Set Default / To Default */}
+              <div className="defaults-dropdown" ref={defaultsDropdownRef}>
+                <button
+                  className={`control-button ${showDefaultsDropdown ? 'active' : ''} ${defaultSaved || defaultLoaded ? 'success' : ''}`}
+                  onClick={() => setShowDefaultsDropdown(!showDefaultsDropdown)}
+                  title="Default View Options"
+                  disabled={!currentAirport}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                    <polyline points="9 22 9 12 15 12 15 22" />
+                  </svg>
+                  <span className="button-label">{defaultSaved ? 'Saved!' : defaultLoaded ? 'Loaded!' : 'Defaults'}</span>
+                </button>
+                {showDefaultsDropdown && (
+                  <div className="defaults-dropdown-menu">
+                    <button
+                      className="defaults-dropdown-item"
+                      onClick={(e) => {
+                        handleSaveAsDefault(e)
+                        setShowDefaultsDropdown(false)
+                      }}
+                    >
+                      {shiftPressed ? 'Save Tower Pos' : 'Set Default'}
+                    </button>
+                    <button
+                      className={`defaults-dropdown-item ${(!hasCustomDefault() && !shiftPressed) ? 'disabled' : ''}`}
+                      onClick={(e) => {
+                        if (hasCustomDefault() || shiftPressed) {
+                          handleResetToDefault(e)
+                          setShowDefaultsDropdown(false)
+                        }
+                      }}
+                      disabled={!hasCustomDefault() && !shiftPressed}
+                    >
+                      {shiftPressed ? 'Load Tower Pos' : 'To Default'}
+                    </button>
+                  </div>
+                )}
+              </div>
 
-              {/* To Default - hidden on mobile, in MoreMenu */}
-              <button
-                className={`control-button hide-on-mobile ${defaultLoaded ? 'success' : ''} ${(!currentAirport || (!hasCustomDefault() && !shiftPressed)) ? 'disabled' : ''}`}
-                onClick={handleResetToDefault}
-                disabled={!currentAirport || (!hasCustomDefault() && !shiftPressed)}
-                title={shiftPressed ? "Load app default (from tower-positions file)" : "Load your saved default view"}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                  <polyline points="9 22 9 12 15 12 15 22" />
-                </svg>
-                {defaultLoaded ? 'Loaded!' : (shiftPressed ? 'Load Tower Pos' : 'To Default')}
-              </button>
+              {/* Look at Runway - dropdown button */}
+              <div className="runway-dropdown" ref={runwayDropdownRef}>
+                <button
+                  className={`control-button ${showRunwayDropdown ? 'active' : ''}`}
+                  onClick={() => setShowRunwayDropdown(!showRunwayDropdown)}
+                  title="Look at Runway"
+                  disabled={!currentAirport || runwayThresholds.length === 0}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                  <span className="button-label">Look at Rwy</span>
+                </button>
+                {showRunwayDropdown && runwayThresholds.length > 0 && (
+                  <div className="runway-dropdown-menu">
+                    {runwayThresholds.map((item) => (
+                      <button
+                        key={item.id}
+                        className="runway-dropdown-item"
+                        onClick={item.onClick}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               {/* Search - hidden on compact, has Ctrl+K shortcut */}
               <span className="hide-on-mobile">
                 <GlobalSearchPanel />
               </span>
 
-              {/* Left MoreMenu for compact screens - groups left-side buttons */}
+              {/* Left MoreMenu for compact screens - search only (defaults and look-at are always visible) */}
               <MoreMenu
                 items={[
-                  {
-                    id: 'setDefault',
-                    label: shiftPressed ? 'Save Tower Pos' : 'Set Default',
-                    icon: (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-                        <polyline points="17 21 17 13 7 13 7 21" />
-                        <polyline points="7 3 7 8 15 8" />
-                      </svg>
-                    ),
-                    onClick: () => handleSaveAsDefault({ shiftKey: shiftPressed } as React.MouseEvent),
-                    disabled: !currentAirport
-                  },
-                  {
-                    id: 'toDefault',
-                    label: shiftPressed ? 'Load Tower Pos' : 'To Default',
-                    icon: (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                        <polyline points="9 22 9 12 15 12 15 22" />
-                      </svg>
-                    ),
-                    onClick: () => handleResetToDefault({ shiftKey: shiftPressed } as React.MouseEvent),
-                    disabled: !currentAirport || (!hasCustomDefault() && !shiftPressed)
-                  },
                   {
                     id: 'search',
                     label: 'Search Flights',

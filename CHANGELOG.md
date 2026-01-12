@@ -4,6 +4,12 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Look at Runway** - New dropdown button in the controls bar lets you quickly point the camera at any runway threshold. Calculates the correct heading and pitch angle from your tower position to the selected runway end.
+
+### Changed
+- **Reorganized controls bar** - "Set Default" and "To Default" are now in a single "Defaults" dropdown menu. Removed the Reset button to reduce clutter.
+
 ## [0.0.33-alpha] - 2026-01-11
 
 ### Added
