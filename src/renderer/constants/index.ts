@@ -82,7 +82,11 @@ export {
   TOPDOWN_ALTITUDE_MAX,
 
   // Airport transition
-  AIRPORT_FLYTO_DURATION
+  AIRPORT_FLYTO_DURATION,
+
+  // Globe view (main menu)
+  GLOBE_VIEW_HEIGHT,
+  GLOBE_FLYTO_DURATION
 } from './camera'
 
 // ============================================================================

@@ -232,3 +232,20 @@ export const CAMERA_MIN_AGL = 5
  * and give a smoother transition between airports.
  */
 export const AIRPORT_FLYTO_DURATION = 5.0
+
+// ============================================================================
+// GLOBE VIEW (MAIN MENU)
+// ============================================================================
+
+/**
+ * Camera height above Earth surface for globe view (meters)
+ *
+ * ~20,000 km shows the full globe nicely from space.
+ * This is the view shown when returning to the main menu from an airport.
+ */
+export const GLOBE_VIEW_HEIGHT = 20_000_000
+
+/**
+ * Duration of fly-to animation when exiting to globe view (seconds)
+ */
+export const GLOBE_FLYTO_DURATION = 3.0

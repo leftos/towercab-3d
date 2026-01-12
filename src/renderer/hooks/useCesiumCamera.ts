@@ -11,7 +11,7 @@ import {
   feetToMeters,
   calculateHorizontalDistance
 } from '../utils/cameraGeometry'
-import { CAMERA_MIN_AGL, AIRPORT_FLYTO_DURATION } from '../constants/camera'
+import { CAMERA_MIN_AGL, AIRPORT_FLYTO_DURATION, GLOBE_VIEW_HEIGHT, GLOBE_FLYTO_DURATION } from '../constants/camera'
 import { useCameraInput } from './useCameraInput'
 import type { InterpolatedAircraftState } from '../types/vatsim'
 
@@ -556,6 +556,10 @@ export function useCesiumCamera(
       previousAirportRef.current !== null &&
       previousAirportRef.current !== currentIcao
 
+    // Detect exiting to globe (main menu)
+    const isExitingToGlobe = currentIcao === null &&
+      previousAirportRef.current !== null
+
     // Update the ref for next comparison
     previousAirportRef.current = currentIcao
 
@@ -583,6 +587,36 @@ export function useCesiumCamera(
     // This effect only needs to early-return to avoid conflicting camera updates
     if (followingCallsign && followMode === 'orbit') {
       // preRender handler manages camera position during active orbit following
+      return
+    }
+
+    // Handle exiting to globe (main menu) - fly out to show Earth
+    if (isExitingToGlobe) {
+      isFlyingToAirportRef.current = true
+
+      // Get current camera position to fly out from there
+      const currentCartographic = viewer.camera.positionCartographic
+      const globePosition = Cesium.Cartesian3.fromRadians(
+        currentCartographic.longitude,
+        currentCartographic.latitude,
+        GLOBE_VIEW_HEIGHT
+      )
+
+      viewer.camera.flyTo({
+        destination: globePosition,
+        orientation: {
+          heading: 0,
+          pitch: Cesium.Math.toRadians(-90), // Look straight down at Earth
+          roll: 0
+        },
+        duration: GLOBE_FLYTO_DURATION,
+        complete: () => {
+          isFlyingToAirportRef.current = false
+        },
+        cancel: () => {
+          isFlyingToAirportRef.current = false
+        }
+      })
       return
     }
 
