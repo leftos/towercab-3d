@@ -378,6 +378,9 @@ pub struct MsfsModelSettings {
     /// Texture downscaling preference
     #[serde(default = "default_texture_scale")]
     pub texture_scale: String,
+    /// Skip VMR rules that map to generic/base livery models (e.g., _ZZZZ)
+    #[serde(default)]
+    pub skip_generic_vmr_matches: bool,
 }
 
 impl Default for MsfsModelSettings {
@@ -391,6 +394,7 @@ impl Default for MsfsModelSettings {
             cache_directory: None,
             cache_limit_mb: default_cache_limit(),
             texture_scale: "1k".to_string(),
+            skip_generic_vmr_matches: false,
         }
     }
 }

@@ -638,7 +638,18 @@ class AircraftModelServiceClass {
     // 1. Try VMR rules first (highest priority)
     // Get settings to respect source priority and enabled state
     const msfsSettings = MSFSModelConversionService.getSettings()
-    const alternatives = userVMRService.getAlternatives(aircraftType, airlineCode)
+    let alternatives = userVMRService.getAlternatives(aircraftType, airlineCode)
+
+    // Filter out generic models if skipGenericVmrMatches is enabled
+    // Generic models are identified by "_ZZZZ" in the name (base/no-livery variants)
+    if (msfsSettings.skipGenericVmrMatches && alternatives.length > 0) {
+      const originalCount = alternatives.length
+      alternatives = alternatives.filter(name => !name.toUpperCase().includes('_ZZZZ'))
+      if (alternatives.length < originalCount) {
+        log('1. VMR rules', `filtered ${originalCount - alternatives.length} generic models (skipGenericVmrMatches=true)`)
+      }
+    }
+
     if (alternatives.length > 0) {
       log('1. VMR rules', `found ${alternatives.length} alternatives: ${alternatives.join(', ')}`)
     } else if (!userVMRService.hasRules()) {

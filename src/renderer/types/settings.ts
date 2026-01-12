@@ -904,6 +904,22 @@ export interface MSFSModelSettings {
    * Default: '1k' (balanced quality/size)
    */
   textureScale: FSLTLTextureScale
+
+  /**
+   * Skip VMR rules that only map to generic/base livery models (default: false)
+   *
+   * When enabled, VMR rules that map to models with "_ZZZZ" in the name
+   * (indicating a generic/base livery) are ignored. This allows the system
+   * to fall through to dimension-based matching, which can find an actual
+   * airline-liveried aircraft and scale it appropriately.
+   *
+   * Example: AFR+B738 with this disabled → FSLTL_B738_ZZZZ (generic white 737)
+   *          AFR+B738 with this enabled → FSLTL_A319_AFR scaled (actual Air France livery)
+   *
+   * Useful when you prefer seeing the actual airline livery (even scaled)
+   * over a perfectly-sized generic white aircraft.
+   */
+  skipGenericVmrMatches: boolean
 }
 
 /**
@@ -917,7 +933,8 @@ export const DEFAULT_MSFS_MODEL_SETTINGS: MSFSModelSettings = {
   vmrFiles: [],
   cacheDirectory: null,
   cacheLimitMB: MSFS_CACHE_LIMIT.DEFAULT_MB,
-  textureScale: '1k'
+  textureScale: '1k',
+  skipGenericVmrMatches: false
 }
 
 // ============================================================================

@@ -416,6 +416,28 @@ function MSFSModelSettingsPanel() {
           </p>
         </div>
 
+        {/* Skip Generic VMR Matches */}
+        <div className="fsltl-section">
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={settings.skipGenericVmrMatches ?? false}
+              onChange={(e) => {
+                updateMsfsModels({ skipGenericVmrMatches: e.target.checked })
+                // Invalidate model cache so aircraft re-match with new setting
+                aircraftModelService.clearCache()
+                console.log('[MSFSSettings] Model cache invalidated after skipGenericVmrMatches change')
+              }}
+            />
+            <span>Skip generic VMR matches</span>
+          </label>
+          <p className="setting-hint">
+            When enabled, VMR rules that map to generic models (e.g., FSLTL_B738_ZZZZ) are ignored.
+            This allows the system to find an airline-liveried model and scale it instead of using
+            a perfectly-sized generic white aircraft.
+          </p>
+        </div>
+
         {/* Texture Quality */}
         <div className="fsltl-section">
           <label>Texture Quality</label>
