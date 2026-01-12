@@ -4,14 +4,18 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+## [0.0.33-alpha] - 2026-01-11
+
 ### Added
 - **Customizable inset viewport graphics** - The "Enhanced Insets" toggle is now an expandable panel with individual settings for 3D buildings, shadows, silhouettes, MSAA quality, terrain detail, tile caching, and tile preloading. Fine-tune inset quality vs performance based on your GPU.
+- **Skip generic VMR matches option** - New setting in MSFS Aircraft Models to prefer airline-liveried aircraft over generic white models. When enabled, VMR rules mapping to generic models (e.g., FSLTL_B738_ZZZZ) are skipped, allowing the system to find an actual airline livery and scale it instead.
 
 ### Changed
 - **Increased replay buffer to 5 minutes for all data sources** - Previously vNAS 1Hz updates only kept 30 seconds of history; now all sources keep 5 minutes for consistent replay scrubbing
 
 ### Fixed
 - **Smoother vNAS groundspeed display** - Speed readings now use a 5-sample sliding window average, reducing oscillation caused by GPS jitter in 1Hz position updates
+- **MSAA setting changes no longer crash the app** - Changing MSAA samples now shows a dialog explaining the change takes effect on next app start, instead of attempting a live viewer reload that caused crashes for some users
 
 ## [0.0.32-alpha] - 2026-01-11
 
