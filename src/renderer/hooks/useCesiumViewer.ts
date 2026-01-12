@@ -170,8 +170,12 @@ export function useCesiumViewer(
   const edgeDetectionRef = useRef<Cesium.PostProcessStage | null>(null)
   const silhouetteStageRef = useRef<Cesium.PostProcessStageComposite | null>(null)
 
+  // Capture initial MSAA value - changing MSAA requires app restart
+  // (WebGL context cannot change MSAA samples after creation)
+  const initialMsaaSamplesRef = useRef(msaaSamples)
+
   // Initialize Cesium viewer
-  // This effect re-runs when MSAA changes, recreating the viewer with new settings
+  // MSAA is captured at first render - changes require app restart
   useEffect(() => {
     // Require a valid Cesium Ion token before creating the viewer
     // Without a token, terrain and imagery loading will fail
@@ -193,9 +197,11 @@ export function useCesiumViewer(
     }
 
     // Determine effective MSAA for insets based on insetGraphics settings
+    // Use initial MSAA value - changes require app restart (WebGL limitation)
     // If inset with enhanced rendering disabled: use 2x MSAA
     // If inset with enhanced rendering enabled: use the msaa preset ('low'=2, 'medium'=4, 'match'=main setting)
-    let effectiveMsaa = msaaSamples
+    const initialMsaa = initialMsaaSamplesRef.current
+    let effectiveMsaa = initialMsaa
     if (isInset) {
       if (!insetGraphics.enabled) {
         effectiveMsaa = 2
@@ -203,7 +209,7 @@ export function useCesiumViewer(
         switch (insetGraphics.msaa) {
           case 'low': effectiveMsaa = 2; break
           case 'medium': effectiveMsaa = 4; break
-          case 'match': effectiveMsaa = msaaSamples; break
+          case 'match': effectiveMsaa = initialMsaa; break
         }
       }
     }
@@ -446,8 +452,8 @@ export function useCesiumViewer(
       edgeDetectionRef.current = null
       silhouetteStageRef.current = null
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- graphics settings used at init only; runtime updates handled by separate hooks
-  }, [cesiumIonToken, isInset, msaaSamples, viewportId])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- graphics settings used at init only; msaaSamples captured in ref (requires restart)
+  }, [cesiumIonToken, isInset, viewportId])
 
   // Update model colors and blend amount when brightness setting changes
   useEffect(() => {

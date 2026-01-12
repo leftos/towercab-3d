@@ -996,6 +996,30 @@
   border-color: rgba(239, 83, 80, 0.6);
 }
 
+/* Restart Required Dialog */
+.restart-dialog {
+  background: rgba(30, 30, 40, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  padding: 24px;
+  min-width: 300px;
+  max-width: 90vw;
+  text-align: center;
+}
+
+.restart-dialog h3 {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  font-weight: 500;
+  color: white;
+}
+
+.restart-dialog p {
+  margin: 0 0 20px 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+}
+
 /* ============================================================================
    RESPONSIVE STYLES FOR SMALLER SCREENS
    ============================================================================ */

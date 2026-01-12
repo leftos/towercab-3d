@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useWeatherStore } from '../../stores/weatherStore'
 import { formatTimeHour } from '../../utils/formatting'
@@ -6,6 +7,9 @@ import type { BuildingQuality, InsetMsaaPreset, InsetTerrainPreset, InsetCachePr
 import './ControlsBar.css'
 
 function SettingsGraphicsWeatherTab() {
+  // Restart required dialog state
+  const [showRestartDialog, setShowRestartDialog] = useState(false)
+
   // Rendering quality settings
   const maxFramerate = useSettingsStore((state) => state.graphics.maxFramerate) ?? 60
   const msaaSamples = useSettingsStore((state) => state.graphics.msaaSamples)
@@ -93,7 +97,10 @@ function SettingsGraphicsWeatherTab() {
           <label>MSAA Samples</label>
           <select
             value={msaaSamples}
-            onChange={(e) => updateGraphicsSettings({ msaaSamples: Number(e.target.value) as 1 | 2 | 4 | 8 })}
+            onChange={(e) => {
+              updateGraphicsSettings({ msaaSamples: Number(e.target.value) as 1 | 2 | 4 | 8 })
+              setShowRestartDialog(true)
+            }}
             className="select-input"
           >
             <option value={1}>1 (Off)</option>
@@ -102,7 +109,7 @@ function SettingsGraphicsWeatherTab() {
             <option value={8}>8x</option>
           </select>
           <p className="setting-hint">
-            Multisample anti-aliasing. Changing this will briefly reload the 3D view.
+            Multisample anti-aliasing. Higher values reduce jagged edges.
           </p>
         </div>
 
@@ -911,6 +918,25 @@ function SettingsGraphicsWeatherTab() {
           </p>
         </div>
       </CollapsibleSection>
+
+      {/* Restart required dialog for MSAA changes */}
+      {showRestartDialog && (
+        <div className="modal-overlay" onClick={() => setShowRestartDialog(false)}>
+          <div className="restart-dialog" onClick={(e) => e.stopPropagation()}>
+            <h3>Restart Required</h3>
+            <p>MSAA changes will take effect the next time you start the app.</p>
+            <div className="modal-buttons">
+              <button
+                className="modal-button confirm"
+                onClick={() => setShowRestartDialog(false)}
+                style={{ background: 'rgba(79, 195, 247, 0.2)', borderColor: 'rgba(79, 195, 247, 0.4)', color: '#4fc3f7' }}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
