@@ -77,3 +77,6 @@ __pycache__/
 # Airport surfaces memo files
 src-tauri/resources/.airport-surfaces-memo.json
 src-tauri/resources/airport-surfaces.debug.json
+
+# Claude temporary files
+tmpclaude*
