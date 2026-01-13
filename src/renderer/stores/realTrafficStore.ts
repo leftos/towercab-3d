@@ -9,11 +9,9 @@
  */
 
 import { create } from 'zustand'
-import type { AircraftState } from '../types/vatsim'
 import type { RTConnectionStatus } from '../types/realtraffic'
 import type { AircraftObservation, AircraftMetadata } from '../types/aircraft-timeline'
 import { realTrafficService } from '../services/RealTrafficService'
-import { interpolateAircraftState } from '../utils/interpolation'
 import { useGlobalSettingsStore } from './globalSettingsStore'
 import { useAircraftTimelineStore } from './aircraftTimelineStore'
 import {
@@ -40,10 +38,6 @@ interface RealTrafficStore {
 
   // Reference position for bounding box queries
   referencePosition: ReferencePosition | null
-
-  // Aircraft data (same structure as vatsimStore for compatibility)
-  aircraftStates: Map<string, AircraftState>
-  previousStates: Map<string, AircraftState>
 
   // Timing
   lastUpdate: number
@@ -76,8 +70,6 @@ export const useRealTrafficStore = create<RealTrafficStore>((set, get) => ({
   trafficRateLimit: REALTRAFFIC_DEFAULT_POLL_INTERVAL,
   timeOffset: 0,
   referencePosition: null,
-  aircraftStates: new Map(),
-  previousStates: new Map(),
   lastUpdate: 0,
   updateInterval: REALTRAFFIC_DEFAULT_POLL_INTERVAL,
   isPolling: false,
@@ -138,8 +130,6 @@ export const useRealTrafficStore = create<RealTrafficStore>((set, get) => ({
       error: null,
       isPolling: false,
       pollingTimeout: null,
-      aircraftStates: new Map(),
-      previousStates: new Map(),
       totalAircraftFromApi: 0
     })
   },
@@ -294,101 +284,16 @@ export const useRealTrafficStore = create<RealTrafficStore>((set, get) => ({
       timelineStore.addObservationBatch(observationBatch)
     }
 
-    // =========================================================================
-    // Legacy interpolation logic (kept for backward compatibility during transition)
-    // TODO: Remove once rendering is fully switched to timeline store
-    // =========================================================================
-
-    // Get current state maps for calculating interpolated positions
-    const oldCurrentStates = get().aircraftStates
-    const oldPreviousStates = get().previousStates
-
-    // Use ACTUAL time since last update for interpolation timing (like VATSIM does)
-    // This is more accurate than using the rate limit, which is just a minimum
-    const lastUpdate = get().lastUpdate
-    const actualInterval = lastUpdate > 0 ? now - lastUpdate : (result.trafficRateLimit ?? get().trafficRateLimit)
-
-    // Build new aircraft states (TARGET positions)
-    // RealTraffic provides true_heading (nose direction) separately from track
-    // (direction of movement), so we don't need to calculate heading from position changes
-    const newAircraftStates = new Map<string, AircraftState>()
-    const newPreviousStates = new Map<string, AircraftState>()
-
-    for (const state of aircraft) {
-      const callsign = state.callsign
-      const oldCurrentState = oldCurrentStates.get(callsign)
-      const oldPrevState = oldPreviousStates.get(callsign)
-
-      // STALE DATA DETECTION:
-      // apiTimestamp is when the ADS-B position was observed (Unix seconds).
-      // If it hasn't changed since our last fetch, the data is stale.
-      // This works for both moving AND stopped aircraft.
-      const newApiTimestamp = state.apiTimestamp ?? 0
-      const oldApiTimestamp = oldCurrentState?.apiTimestamp ?? 0
-      const isStale = oldCurrentState && oldPrevState && newApiTimestamp === oldApiTimestamp
-
-      if (isStale) {
-        // Data is stale - keep existing states to continue extrapolating
-        // Just update metadata (transponder, etc.) but preserve position/timing
-        newAircraftStates.set(callsign, {
-          ...oldCurrentState,
-          transponder: state.transponder,
-          aircraftType: state.aircraftType,
-          departure: state.departure,
-          arrival: state.arrival
-        })
-        newPreviousStates.set(callsign, oldPrevState)
-      } else {
-        // Fresh data - create new interpolation target
-        //
-        // Use the same timing model as VATSIM: target timestamp is now + actualInterval
-        // (when we expect the NEXT update to arrive). The apiTimestamp is only used
-        // for stale detection, not for timing calculations.
-        //
-        // All RealTraffic data is in the past when we receive it, but we interpolate
-        // from our current visual position to the new reported position over the
-        // expected poll interval.
-        const updatedState = {
-          ...state,
-          timestamp: now + actualInterval  // When we expect to arrive at this position
-        }
-        newAircraftStates.set(callsign, updatedState)
-
-        // Build previous state (START position - current visual position)
-        if (oldCurrentState && oldPrevState) {
-          // Aircraft existed before - calculate its current visual position
-          const interpolated = interpolateAircraftState(oldPrevState, oldCurrentState, now)
-
-          // Use the current interpolated position as the starting point
-          // Timestamp is NOW because that's where the aircraft visually is
-          newPreviousStates.set(callsign, {
-            ...updatedState, // Use new state for metadata
-            latitude: interpolated.interpolatedLatitude,
-            longitude: interpolated.interpolatedLongitude,
-            altitude: interpolated.interpolatedAltitude,
-            heading: interpolated.interpolatedHeading,
-            groundspeed: interpolated.interpolatedGroundspeed,
-            timestamp: now
-          })
-        } else {
-          // New aircraft - start from its reported position
-          // Timestamp is NOW (when we received it), just like VATSIM
-          newPreviousStates.set(callsign, {
-            ...updatedState,
-            timestamp: now
-          })
-        }
-      }
-    }
-
     // Guard against NaN/undefined - keep existing rate limit if new one is invalid
     const newRateLimit = (typeof result.trafficRateLimit === 'number' && !isNaN(result.trafficRateLimit))
       ? result.trafficRateLimit
       : get().trafficRateLimit
 
+    // Calculate actual interval for timing reference
+    const lastUpdate = get().lastUpdate
+    const actualInterval = lastUpdate > 0 ? now - lastUpdate : newRateLimit
+
     set({
-      aircraftStates: newAircraftStates,
-      previousStates: newPreviousStates,
       lastUpdate: now,
       updateInterval: actualInterval,
       trafficRateLimit: newRateLimit,
@@ -501,5 +406,5 @@ export const useRealTrafficStore = create<RealTrafficStore>((set, get) => ({
  * Selector for checking if RealTraffic is active and connected
  */
 export const selectIsRealTrafficActive = (state: RealTrafficStore): boolean => {
-  return state.status === 'connected' && state.aircraftStates.size > 0
+  return state.status === 'connected' && state.totalAircraftFromApi > 0
 }

@@ -1,8 +1,8 @@
 import { useMemo, useEffect, useState, useCallback } from 'react'
 import { useVatsimStore } from '../../stores/vatsimStore'
-import { useRealTrafficStore } from '../../stores/realTrafficStore'
 import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { useAircraftTimelineStore } from '../../stores/aircraftTimelineStore'
 import { aircraftModelService, type ModelInfo } from '../../services/AircraftModelService'
 import { userVMRService } from '../../services/UserVMRService'
 import { ModelPreviewModal } from './ModelPreviewModal'
@@ -29,7 +29,7 @@ interface TestResult {
 function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
   const dataSource = useGlobalSettingsStore((state) => state.realtraffic.dataSource)
   const pilots = useVatsimStore((state) => state.pilots)
-  const rtAircraftStates = useRealTrafficStore((state) => state.aircraftStates)
+  const timelines = useAircraftTimelineStore((state) => state.timelines)
   const aircraftDataRadiusNM = useSettingsStore((state) => state.memory.aircraftDataRadiusNM)
 
   // Counter to force re-render when model conversions complete
@@ -115,13 +115,13 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
   // Build model matching data for all aircraft in range
   const aircraftData = useMemo<AircraftModelData[]>(() => {
     if (dataSource === 'realtraffic') {
-      // RealTraffic mode: use aircraftStates from realTrafficStore
-      return Array.from(rtAircraftStates.values())
-        .map((state) => {
-          const aircraftType = state.aircraftType
-          const modelInfo = aircraftModelService.getModelInfo(aircraftType, state.callsign)
+      // RealTraffic mode: use timelines from timeline store
+      return Array.from(timelines.values())
+        .map((timeline) => {
+          const aircraftType = timeline.metadata.aircraftType
+          const modelInfo = aircraftModelService.getModelInfo(aircraftType, timeline.callsign)
           return {
-            callsign: state.callsign,
+            callsign: timeline.callsign,
             aircraftType: aircraftType || 'N/A',
             modelInfo
           }
@@ -143,7 +143,7 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
       })
       .sort((a, b) => a.callsign.localeCompare(b.callsign))
   // eslint-disable-next-line react-hooks/exhaustive-deps -- conversionVersion triggers refresh when models finish converting
-  }, [dataSource, pilots, rtAircraftStates, conversionVersion])
+  }, [dataSource, pilots, timelines, conversionVersion])
 
   // Format scale for display
   const formatScale = (scale: { x: number; y: number; z: number }): { text: string; isScaled: boolean } => {

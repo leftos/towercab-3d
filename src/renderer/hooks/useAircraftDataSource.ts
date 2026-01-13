@@ -213,10 +213,14 @@ export function getAircraftDataSource(): AircraftDataSource {
       const rtState = useRealTrafficStore.getState()
 
       // Only use RealTraffic if connected and has data
-      if (rtState.status === 'connected' && rtState.aircraftStates.size > 0) {
+      // Note: We check totalAircraftFromApi since the actual interpolation
+      // is handled by the timeline store, not the legacy aircraftStates Map
+      if (rtState.status === 'connected' && rtState.totalAircraftFromApi > 0) {
         return {
-          aircraftStates: rtState.aircraftStates,
-          previousStates: rtState.previousStates,
+          // Legacy Maps - no longer used for interpolation (timeline store handles it)
+          // but kept for interface compatibility
+          aircraftStates: new Map(),
+          previousStates: new Map(),
           timestamp: Date.now(),
           updateInterval: rtState.updateInterval,
           playbackMode: 'live'
