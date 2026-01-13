@@ -31,6 +31,7 @@ export {
   fromGlobalCameraBookmark,
   mergeGlobalAirportConfig,
   scheduleGlobalSync,
+  flushPendingGlobalSync,
   createSyncToGlobalSettings,
   createLoadFromGlobalSettings
 } from './globalSettingsSync'

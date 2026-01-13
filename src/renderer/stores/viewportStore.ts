@@ -814,15 +814,19 @@ export const useViewportStore = create<ViewportStore>()(
               // Save current viewport config before deselecting
               if (state.currentAirportIcao) {
                 const airportViewportConfigs = { ...state.airportViewportConfigs }
+                const existingConfig = airportViewportConfigs[state.currentAirportIcao]
                 airportViewportConfigs[state.currentAirportIcao] = {
                   viewports: state.viewports.map(v => ({
                     ...v,
                     cameraState: { ...v.cameraState, followingCallsign: null, preFollowState: null }
                   })),
                   activeViewportId: state.activeViewportId,
-                  defaultConfig: airportViewportConfigs[state.currentAirportIcao]?.defaultConfig,
-                  bookmarks: airportViewportConfigs[state.currentAirportIcao]?.bookmarks,
-                  datablockPosition: airportViewportConfigs[state.currentAirportIcao]?.datablockPosition
+                  // Preserve all saved settings from the existing config
+                  defaultConfig: existingConfig?.defaultConfig,
+                  default3d: existingConfig?.default3d,
+                  default2d: existingConfig?.default2d,
+                  bookmarks: existingConfig?.bookmarks,
+                  datablockPosition: existingConfig?.datablockPosition
                 }
                 set({ airportViewportConfigs, currentAirportIcao: null })
               }
@@ -834,15 +838,19 @@ export const useViewportStore = create<ViewportStore>()(
             // Save current viewport config before switching (if we have an airport)
             if (state.currentAirportIcao && state.currentAirportIcao !== normalizedIcao) {
               const airportViewportConfigs = { ...state.airportViewportConfigs }
+              const existingConfig = airportViewportConfigs[state.currentAirportIcao]
               airportViewportConfigs[state.currentAirportIcao] = {
                 viewports: state.viewports.map(v => ({
                   ...v,
                   cameraState: { ...v.cameraState, followingCallsign: null, preFollowState: null }
                 })),
                 activeViewportId: state.activeViewportId,
-                defaultConfig: airportViewportConfigs[state.currentAirportIcao]?.defaultConfig,
-                bookmarks: airportViewportConfigs[state.currentAirportIcao]?.bookmarks,  // Preserve bookmarks
-                datablockPosition: airportViewportConfigs[state.currentAirportIcao]?.datablockPosition  // Preserve datablock position
+                // Preserve all saved settings from the existing config
+                defaultConfig: existingConfig?.defaultConfig,
+                default3d: existingConfig?.default3d,
+                default2d: existingConfig?.default2d,
+                bookmarks: existingConfig?.bookmarks,
+                datablockPosition: existingConfig?.datablockPosition
               }
               set({ airportViewportConfigs })
             }

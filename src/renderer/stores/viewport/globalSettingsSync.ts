@@ -28,6 +28,9 @@ import { createMainViewport } from './viewportHelpers'
 let globalSyncTimer: ReturnType<typeof setTimeout> | null = null
 const GLOBAL_SYNC_DELAY = 2000 // 2 seconds
 
+/** Stores the pending sync function so it can be flushed on demand */
+let pendingSyncFunc: (() => void) | null = null
+
 /**
  * Flag to prevent bidirectional sync loops
  * When true, changes originated from global settings and should not be synced back
@@ -44,6 +47,21 @@ export const getIsLoadingFromGlobal = () => isLoadingFromGlobal
  */
 export const setIsLoadingFromGlobal = (value: boolean) => {
   isLoadingFromGlobal = value
+}
+
+/**
+ * Flush any pending sync immediately (cancel debounce and sync now)
+ * Call this before app closes to ensure changes are persisted
+ */
+export const flushPendingGlobalSync = () => {
+  if (globalSyncTimer) {
+    clearTimeout(globalSyncTimer)
+    globalSyncTimer = null
+  }
+  if (pendingSyncFunc) {
+    pendingSyncFunc()
+    pendingSyncFunc = null
+  }
 }
 
 // =============================================================================
@@ -250,10 +268,16 @@ export const fromGlobalInsetViewport = (global: GlobalInsetViewport): Viewport =
 /**
  * Merge global AirportViewportConfig into local config
  * Preserves local viewport state while updating persisted fields
+ *
+ * @param local - The local config (may be undefined if no local state exists)
+ * @param global - The global config to merge from
+ * @param fallbackMainViewport - Optional main viewport to use when local is undefined
+ *                               (used when restoring from global settings only)
  */
 export const mergeGlobalAirportConfig = (
   local: AirportViewportConfig | undefined,
-  global: GlobalAirportViewportConfig
+  global: GlobalAirportViewportConfig,
+  fallbackMainViewport?: Viewport
 ): Partial<AirportViewportConfig> => {
   const updates: Partial<AirportViewportConfig> = {}
 
@@ -275,13 +299,17 @@ export const mergeGlobalAirportConfig = (
   if (global.datablockPosition !== undefined) {
     updates.datablockPosition = global.datablockPosition as DatablockPosition
   }
-  // Merge inset viewports from global - preserve existing local insets if global is empty
+  // Merge inset viewports from global
   if (global.insets && global.insets.length > 0) {
-    // If we have local viewports, update insets (keeping main viewport from local)
+    const insetViewports = global.insets.map(fromGlobalInsetViewport)
+
     if (local?.viewports && local.viewports.length > 0) {
+      // Have local viewports - keep local main viewport, replace insets from global
       const mainViewport = local.viewports[0]
-      const insetViewports = global.insets.map(fromGlobalInsetViewport)
       updates.viewports = [mainViewport, ...insetViewports]
+    } else if (fallbackMainViewport) {
+      // No local viewports but have a fallback - use fallback main + global insets
+      updates.viewports = [fallbackMainViewport, ...insetViewports]
     }
   }
 
@@ -294,18 +322,22 @@ export const mergeGlobalAirportConfig = (
 
 /**
  * Schedule a debounced sync to globalSettingsStore
+ * Stores the sync function so it can be flushed immediately via flushPendingGlobalSync()
  */
 export const scheduleGlobalSync = (syncFunc: () => void) => {
   // Don't schedule sync if we're currently loading from global (prevents sync loops)
   if (isLoadingFromGlobal) {
     return
   }
+  // Store the function so it can be flushed on demand (e.g., before app closes)
+  pendingSyncFunc = syncFunc
   if (globalSyncTimer) {
     clearTimeout(globalSyncTimer)
   }
   globalSyncTimer = setTimeout(() => {
     syncFunc()
     globalSyncTimer = null
+    pendingSyncFunc = null
   }, GLOBAL_SYNC_DELAY)
 }
 
@@ -387,19 +419,25 @@ export const createLoadFromGlobalSettings = (
         }
 
         const localConfig = updatedConfigs[icao]
-        const mergedUpdates = mergeGlobalAirportConfig(localConfig, globalConfig)
 
         if (localConfig) {
           // Merge into existing config
+          const mergedUpdates = mergeGlobalAirportConfig(localConfig, globalConfig)
           updatedConfigs[icao] = { ...localConfig, ...mergedUpdates }
         } else {
-          // Create new config with just the global data
+          // No local config - create new config and restore from global
+          // Create a main viewport first so we can restore insets from global
           const orbitSettings = globalViewports.orbitSettings && typeof globalViewports.orbitSettings === 'object'
             ? globalViewports.orbitSettings
             : undefined
           const mainViewport = createMainViewport(undefined, orbitSettings)
+
+          // Pass the main viewport as fallback so insets can be restored from global
+          const mergedUpdates = mergeGlobalAirportConfig(undefined, globalConfig, mainViewport)
+
+          // Start with main viewport, then apply merged updates (which may include restored insets)
           updatedConfigs[icao] = {
-            viewports: [mainViewport],
+            viewports: mergedUpdates.viewports || [mainViewport],
             activeViewportId: mainViewport.id,
             ...mergedUpdates
           }

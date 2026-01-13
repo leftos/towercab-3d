@@ -30,6 +30,7 @@ import { useSettingsStore } from './stores/settingsStore'
 import { useGlobalSettingsStore, initializeGlobalSettings } from './stores/globalSettingsStore'
 import { useWeatherStore } from './stores/weatherStore'
 import { useViewportStore } from './stores/viewportStore'
+import { flushPendingGlobalSync } from './stores/viewport'
 import { useVRStore } from './stores/vrStore'
 import { useUIFeedbackStore } from './stores/uiFeedbackStore'
 import { useRunwayStore } from './stores/runwayStore'
@@ -315,10 +316,14 @@ function App() {
     }
   }, [showFeedback])
 
-  // Cleanup RealTraffic session when app is closing
-  // This releases the server-side session to allow immediate reconnection
+  // Cleanup and save state when app is closing
   useEffect(() => {
     const handleBeforeUnload = () => {
+      // Flush any pending viewport settings sync before closing
+      // This ensures camera positions, insets, etc. are saved even if the
+      // debounced sync timer (2s) hasn't fired yet
+      flushPendingGlobalSync()
+
       // Fire-and-forget deauth - we don't await since the window is closing
       realTrafficService.deauthenticate().catch(() => {
         // Ignore errors during shutdown
@@ -329,7 +334,8 @@ function App() {
 
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload)
-      // Also deauth when the component unmounts (e.g., hot reload in dev)
+      // Also flush and deauth when the component unmounts (e.g., hot reload in dev)
+      flushPendingGlobalSync()
       realTrafficService.deauthenticate().catch(() => {})
     }
   }, [])
