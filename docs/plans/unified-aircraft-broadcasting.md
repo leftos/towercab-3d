@@ -96,18 +96,66 @@ interface BroadcastMessage {
 - Cruising aircraft: 60% reduction (position changes, orientation stable)
 - Maneuvering aircraft: 30% reduction (most fields change)
 
-### 3. Adaptive Rate Control
+### 3. Consumer-Driven Rate Control
 
-Reduce broadcast frequency based on aircraft count and network conditions.
+Each consumer reports its processing capability; the broadcaster adjusts per-consumer.
 
+**Consumer → Host feedback (every 500ms):**
 ```typescript
-function calculateBroadcastInterval(aircraftCount: number): number {
-  if (aircraftCount < 50) return 33    // 30Hz
-  if (aircraftCount < 100) return 50   // 20Hz
-  if (aircraftCount < 200) return 66   // 15Hz
-  return 100                           // 10Hz
+interface ConsumerFeedback {
+  consumerId: string
+  lastReceivedSeq: number      // Sequence number of last processed message
+  bufferDepth: number          // Messages waiting to be processed
+  avgProcessingMs: number      // Rolling average time to apply delta
 }
 ```
+
+**Host rate adjustment per consumer:**
+```typescript
+class ConsumerRateController {
+  private consumers = new Map<string, ConsumerState>()
+
+  // Called when feedback received from consumer
+  onFeedback(feedback: ConsumerFeedback): void {
+    const state = this.consumers.get(feedback.consumerId)
+    if (!state) return
+
+    // Calculate how far behind consumer is
+    const lag = state.lastSentSeq - feedback.lastReceivedSeq
+
+    // Adjust interval based on lag and buffer depth
+    if (lag > 5 || feedback.bufferDepth > 3) {
+      // Consumer falling behind - slow down
+      state.interval = Math.min(state.interval * 1.5, 200) // Max 5Hz
+    } else if (lag <= 1 && feedback.bufferDepth === 0) {
+      // Consumer keeping up - can speed up
+      state.interval = Math.max(state.interval * 0.8, 33)  // Max 30Hz
+    }
+  }
+
+  // Check if we should send to this consumer now
+  shouldSend(consumerId: string, now: number): boolean {
+    const state = this.consumers.get(consumerId)
+    if (!state) return false
+    return now - state.lastSendTime >= state.interval
+  }
+}
+```
+
+**WebSocket backpressure (additional signal):**
+```typescript
+// Don't send if WebSocket buffer is backing up
+if (ws.bufferedAmount > 50000) {
+  // Skip this frame for this consumer
+  return
+}
+```
+
+**Benefits:**
+- Fast consumers get 30Hz updates
+- Slow consumers (weak tablets, poor WiFi) automatically get reduced rate
+- No dropped frames - rate adapts instead of dropping
+- Per-consumer optimization (insets fast, remote iPad slower)
 
 ### 4. Quantization
 
@@ -151,9 +199,9 @@ For insets with different camera views, only send aircraft visible to each viewp
 - (10 × 80) + (30 × 50) + (60 × 10) = 2,900 bytes per frame
 - 2,900 × 30Hz = **87 KB/s**
 
-### With Adaptive Rate (200 aircraft scenario)
-- 10Hz instead of 30Hz
-- **29 KB/s**
+### With Consumer-Driven Rate (slow consumer scenario)
+- Tablet on weak WiFi adapts to 10Hz
+- **29 KB/s** for that consumer, others stay at 30Hz
 
 ---
 
@@ -166,45 +214,97 @@ For insets with different camera views, only send aircraft visible to each viewp
 ```typescript
 import { encode } from '@msgpack/msgpack'
 
+interface ConsumerState {
+  id: string
+  lastSentSeq: number
+  lastSendTime: number
+  interval: number              // ms between sends (adapts based on feedback)
+  transport: 'sharedworker' | 'websocket'
+  port?: MessagePort            // For SharedWorker consumers
+  ws?: WebSocket                // For WebSocket consumers
+}
+
 interface BroadcastState {
   lastBroadcast: Map<string, AircraftSnapshot>
-  lastBroadcastTime: number
+  sequence: number
 }
 
 class AircraftBroadcastService {
   private state: BroadcastState = {
     lastBroadcast: new Map(),
-    lastBroadcastTime: 0,
+    sequence: 0,
   }
 
-  private sharedWorker: SharedWorker | null = null
-  private wsConnections: Set<WebSocket> = new Set()
+  private consumers = new Map<string, ConsumerState>()
 
   /**
    * Called from interpolation loop at 60Hz.
-   * Throttles and optimizes before broadcasting.
+   * Sends to each consumer based on their individual rate.
    */
   broadcast(
     aircraft: Map<string, InterpolatedAircraftState>,
     now: number
   ): void {
-    // Adaptive rate control
-    const interval = this.calculateInterval(aircraft.size)
-    if (now - this.state.lastBroadcastTime < interval) return
-
-    // Build delta message
+    // Build delta message once (shared across all consumers)
     const message = this.buildDeltaMessage(aircraft, now)
-
-    // Encode to MessagePack
     const encoded = encode(message)
 
-    // Broadcast to all channels
-    this.broadcastToSharedWorker(encoded)
-    this.broadcastToWebSockets(encoded)
+    this.state.sequence++
 
-    // Update state
-    this.state.lastBroadcastTime = now
+    // Send to each consumer if their interval has elapsed
+    for (const [id, consumer] of this.consumers) {
+      if (now - consumer.lastSendTime < consumer.interval) continue
+
+      // Check backpressure for WebSocket consumers
+      if (consumer.ws && consumer.ws.bufferedAmount > 50000) continue
+
+      this.sendToConsumer(consumer, encoded)
+      consumer.lastSendTime = now
+      consumer.lastSentSeq = this.state.sequence
+    }
+
     this.updateLastBroadcast(aircraft)
+  }
+
+  /**
+   * Handle feedback from a consumer to adjust their rate.
+   */
+  onConsumerFeedback(feedback: ConsumerFeedback): void {
+    const consumer = this.consumers.get(feedback.consumerId)
+    if (!consumer) return
+
+    const lag = consumer.lastSentSeq - feedback.lastReceivedSeq
+
+    if (lag > 5 || feedback.bufferDepth > 3) {
+      // Consumer falling behind - slow down (min 5Hz)
+      consumer.interval = Math.min(consumer.interval * 1.5, 200)
+    } else if (lag <= 1 && feedback.bufferDepth === 0 && feedback.avgProcessingMs < 10) {
+      // Consumer keeping up easily - speed up (max 30Hz)
+      consumer.interval = Math.max(consumer.interval * 0.8, 33)
+    }
+  }
+
+  /**
+   * Register a new consumer (inset or remote browser).
+   */
+  registerConsumer(
+    id: string,
+    transport: 'sharedworker' | 'websocket',
+    connection: MessagePort | WebSocket
+  ): void {
+    this.consumers.set(id, {
+      id,
+      lastSentSeq: 0,
+      lastSendTime: 0,
+      interval: 33, // Start at 30Hz
+      transport,
+      port: transport === 'sharedworker' ? connection as MessagePort : undefined,
+      ws: transport === 'websocket' ? connection as WebSocket : undefined,
+    })
+  }
+
+  unregisterConsumer(id: string): void {
+    this.consumers.delete(id)
   }
 
   private buildDeltaMessage(
@@ -263,19 +363,47 @@ export const aircraftBroadcastService = new AircraftBroadcastService()
 **File: `src/renderer/workers/aircraft-broadcast.worker.ts`**
 
 ```typescript
-// SharedWorker that receives broadcasts and fans out to insets
-const ports: Set<MessagePort> = new Set()
+// SharedWorker bridges main app ↔ inset iframes
+// Main app sends broadcasts, insets send feedback
+
+interface PortState {
+  port: MessagePort
+  consumerId: string
+}
+
+const insetPorts = new Map<string, PortState>()
+let mainPort: MessagePort | null = null
 
 self.onconnect = (e: MessageEvent) => {
   const port = e.ports[0]
-  ports.add(port)
 
   port.onmessage = (event) => {
-    if (event.data.type === 'broadcast') {
-      // Forward to all connected insets
-      for (const p of ports) {
-        if (p !== port) p.postMessage(event.data)
-      }
+    const { type, consumerId, data } = event.data
+
+    switch (type) {
+      case 'register-main':
+        // Main app registers to send broadcasts
+        mainPort = port
+        break
+
+      case 'register-inset':
+        // Inset registers to receive broadcasts
+        insetPorts.set(consumerId, { port, consumerId })
+        // Notify main app of new consumer
+        mainPort?.postMessage({ type: 'consumer-connected', consumerId })
+        break
+
+      case 'broadcast':
+        // Main app sending broadcast - forward to all insets
+        for (const { port: insetPort } of insetPorts.values()) {
+          insetPort.postMessage({ type: 'aircraft', data })
+        }
+        break
+
+      case 'feedback':
+        // Inset sending feedback - forward to main app
+        mainPort?.postMessage({ type: 'feedback', consumerId, data })
+        break
     }
   }
 
@@ -287,33 +415,79 @@ self.onconnect = (e: MessageEvent) => {
 
 **File: `src-tauri/src/server.rs`**
 
+The WebSocket is bidirectional: host sends aircraft data, remote sends feedback.
+
 ```rust
-// Receives MessagePack from frontend, broadcasts to WebSocket clients
-async fn aircraft_broadcast_handler(
-    State(state): State<Arc<ServerState>>,
-    body: Bytes,
-) -> StatusCode {
-    // Forward raw MessagePack to all connected WebSocket clients
-    let _ = state.aircraft_tx.send(body.to_vec());
-    StatusCode::OK
+/// Per-consumer state tracked by the server
+struct RemoteConsumer {
+    id: String,
+    tx: mpsc::Sender<Vec<u8>>,  // Channel to send data to this consumer
 }
 
-async fn aircraft_websocket_handler(
-    ws: WebSocketUpgrade,
-    State(state): State<Arc<ServerState>>,
-) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_aircraft_ws(socket, state))
-}
+/// Handle aircraft WebSocket - bidirectional for data + feedback
+async fn handle_aircraft_ws(
+    socket: WebSocket,
+    state: Arc<ServerState>,
+    app_handle: AppHandle,
+) {
+    let (mut ws_sender, mut ws_receiver) = socket.split();
 
-async fn handle_aircraft_ws(socket: WebSocket, state: Arc<ServerState>) {
-    let (mut sender, _) = socket.split();
-    let mut rx = state.aircraft_tx.subscribe();
+    // Generate unique consumer ID
+    let consumer_id = Uuid::new_v4().to_string();
 
-    while let Ok(data) = rx.recv().await {
-        if sender.send(Message::Binary(data)).await.is_err() {
-            break;
+    // Create channel for this consumer's outbound messages
+    let (tx, mut rx) = mpsc::channel::<Vec<u8>>(32);
+
+    // Register consumer with frontend via Tauri event
+    app_handle.emit("consumer-connected", &consumer_id).ok();
+
+    // Task: Forward messages from channel to WebSocket
+    let send_task = tokio::spawn(async move {
+        while let Some(data) = rx.recv().await {
+            if ws_sender.send(Message::Binary(data)).await.is_err() {
+                break;
+            }
         }
+    });
+
+    // Task: Receive feedback from WebSocket, forward to frontend
+    let consumer_id_clone = consumer_id.clone();
+    let app_handle_clone = app_handle.clone();
+    let recv_task = tokio::spawn(async move {
+        while let Some(Ok(msg)) = ws_receiver.next().await {
+            if let Message::Binary(data) = msg {
+                // Forward feedback to frontend
+                app_handle_clone.emit("consumer-feedback", (&consumer_id_clone, data)).ok();
+            }
+        }
+    });
+
+    // Store consumer for broadcasting
+    state.remote_consumers.lock().await.insert(consumer_id.clone(), tx);
+
+    // Wait for either task to complete (disconnect)
+    tokio::select! {
+        _ = send_task => {},
+        _ = recv_task => {},
     }
+
+    // Cleanup
+    state.remote_consumers.lock().await.remove(&consumer_id);
+    app_handle.emit("consumer-disconnected", &consumer_id).ok();
+}
+
+/// Called by frontend to send data to a specific remote consumer
+#[tauri::command]
+async fn send_to_remote_consumer(
+    state: State<'_, Arc<ServerState>>,
+    consumer_id: String,
+    data: Vec<u8>,
+) -> Result<(), String> {
+    let consumers = state.remote_consumers.lock().await;
+    if let Some(tx) = consumers.get(&consumer_id) {
+        tx.send(data).await.map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 ```
 
@@ -322,45 +496,88 @@ async fn handle_aircraft_ws(socket: WebSocket, state: Arc<ServerState>) {
 **File: `src/renderer/hooks/useBroadcastAircraft.ts`**
 
 ```typescript
-import { decode } from '@msgpack/msgpack'
+import { decode, encode } from '@msgpack/msgpack'
 
 /**
  * Hook for consuming broadcast aircraft data.
  * Used by both insets (SharedWorker) and remote clients (WebSocket).
+ * Sends periodic feedback to host for rate adaptation.
  */
 export function useBroadcastAircraft(): Map<string, InterpolatedAircraftState> {
   const [aircraft, setAircraft] = useState(new Map())
   const stateRef = useRef(new Map())
+  const statsRef = useRef({
+    lastReceivedSeq: 0,
+    bufferDepth: 0,
+    processingTimes: [] as number[],
+  })
 
   useEffect(() => {
     const isInset = isInsetContext()
     const isRemote = isRemoteMode()
 
-    if (!isInset && !isRemote) return // Main app doesn't consume
+    if (!isInset && !isRemote) return
 
+    const consumerId = crypto.randomUUID()
+    let sendFeedback: (feedback: ConsumerFeedback) => void
     let cleanup: () => void
 
     if (isInset) {
       // Connect to SharedWorker
       const worker = new SharedWorker('/workers/aircraft-broadcast.worker.js')
-      worker.port.onmessage = (e) => handleMessage(e.data)
+      worker.port.postMessage({ type: 'register-inset', consumerId })
+      worker.port.onmessage = (e) => {
+        if (e.data.type === 'aircraft') handleMessage(e.data.data)
+      }
       worker.port.start()
+
+      sendFeedback = (fb) => worker.port.postMessage({ type: 'feedback', consumerId, data: fb })
       cleanup = () => worker.port.close()
     } else {
       // Connect to WebSocket
       const ws = new WebSocket(`ws://${getHostAddress()}/api/aircraft-ws`)
       ws.binaryType = 'arraybuffer'
       ws.onmessage = (e) => handleMessage(new Uint8Array(e.data))
+
+      sendFeedback = (fb) => ws.send(encode(fb))
       cleanup = () => ws.close()
     }
 
     function handleMessage(data: Uint8Array) {
+      const startTime = performance.now()
+
       const msg = decode(data) as BroadcastMessage
+      statsRef.current.lastReceivedSeq = msg.seq
       applyDelta(stateRef.current, msg)
       setAircraft(new Map(stateRef.current))
+
+      // Track processing time (rolling window of 10)
+      const processingTime = performance.now() - startTime
+      statsRef.current.processingTimes.push(processingTime)
+      if (statsRef.current.processingTimes.length > 10) {
+        statsRef.current.processingTimes.shift()
+      }
     }
 
-    return cleanup
+    // Send feedback every 500ms
+    const feedbackInterval = setInterval(() => {
+      const times = statsRef.current.processingTimes
+      const avgProcessingMs = times.length > 0
+        ? times.reduce((a, b) => a + b, 0) / times.length
+        : 0
+
+      sendFeedback({
+        consumerId,
+        lastReceivedSeq: statsRef.current.lastReceivedSeq,
+        bufferDepth: 0, // Could track if using a queue
+        avgProcessingMs,
+      })
+    }, 500)
+
+    return () => {
+      clearInterval(feedbackInterval)
+      cleanup()
+    }
   }, [])
 
   return aircraft
@@ -438,29 +655,31 @@ The iframe-inset-isolation plan's SharedWorker data broadcasting is superseded b
 
 | iframe-inset-isolation.md | This Plan |
 |---------------------------|-----------|
-| Posts every frame (60Hz) | Throttled (30Hz adaptive) |
+| Posts every frame (60Hz) | Consumer-driven (5-30Hz) |
 | Full JSON objects | Delta + MessagePack |
 | Inset-only SharedWorker | Unified for insets + remote |
 | Separate from remote plan | Single broadcast service |
+| Fixed rate for all | Per-consumer adaptive rate |
 
 ---
 
 ## Estimated Effort
 
-- Phase 1 (Core service + delta compression): 3-4 hours
-- Phase 2 (SharedWorker transport): 2 hours
-- Phase 3 (WebSocket transport): 2 hours
-- Phase 4 (Consumer hooks): 2 hours
-- Phase 5 (Integration): 1 hour
-- Testing: 2-3 hours
+- Phase 1 (Core service + delta compression + rate control): 4-5 hours
+- Phase 2 (SharedWorker transport + feedback): 2-3 hours
+- Phase 3 (WebSocket transport + feedback): 3-4 hours
+- Phase 4 (Consumer hooks + feedback): 2-3 hours
+- Phase 5 (Integration): 1-2 hours
+- Testing: 3-4 hours
 
-**Total: ~12-15 hours**
+**Total: ~15-21 hours**
 
 ---
 
-## Future Optimizations (Phase 2)
+## Future Optimizations
 
-1. **Viewport culling** - Only send aircraft visible to each consumer
+1. **Viewport culling** - Only send aircraft visible to each consumer's camera frustum
 2. **Priority tiers** - Higher update rate for followed/selected aircraft
 3. **Compression** - Apply zlib/brotli on top of MessagePack for very large fleets
 4. **Binary protocol** - Custom binary format for maximum efficiency
+5. **Predictive sending** - Send fuller updates when consumer rate is low to enable client-side extrapolation
