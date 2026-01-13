@@ -179,6 +179,9 @@ export type {
   GlobalViewModeDefaults,
   GlobalCameraBookmark,
   GlobalDatablockPosition,
+  GlobalInsetLayout,
+  GlobalInsetCameraState,
+  GlobalInsetViewport,
   GlobalAirportViewportConfig,
   GlobalOrbitSettings,
   GlobalViewportSettings

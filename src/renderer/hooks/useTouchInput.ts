@@ -32,6 +32,13 @@ import { isTouchDevice } from '../utils/deviceDetection'
 interface UseTouchInputOptions {
   /** Callback when user manually breaks out of tower follow mode */
   onBreakTowerFollow?: () => void
+  /**
+   * When false, all touch input processing is disabled.
+   * Used for iframe insets where input should only be processed when
+   * the inset is activated by the parent window.
+   * Defaults to true.
+   */
+  isInputEnabled?: boolean
 }
 
 interface PinchState {
@@ -72,7 +79,7 @@ export function useTouchInput(
   viewportId: string,
   options: UseTouchInputOptions = {}
 ): void {
-  const { onBreakTowerFollow } = options
+  const { onBreakTowerFollow, isInputEnabled = true } = options
 
   // Settings
   const touchSensitivity = useSettingsStore((state) => state.camera.mouseSensitivity) // Reuse mouse sensitivity for touch
@@ -108,6 +115,8 @@ export function useTouchInput(
   touchSensitivityRef.current = touchSensitivity
 
   useEffect(() => {
+    // Skip touch handling when input is disabled (e.g., inactive iframe inset)
+    if (!isInputEnabled) return
     if (!viewer || viewer.isDestroyed()) return
 
     // Only enable touch input on touch-capable devices
@@ -306,7 +315,8 @@ export function useTouchInput(
     moveForward,
     moveRight,
     clearLookAtTarget,
-    onBreakTowerFollow
+    onBreakTowerFollow,
+    isInputEnabled
   ])
 }
 

@@ -171,6 +171,14 @@ export interface ViewportCameraState {
   lookAtTarget: { heading: number; pitch: number } | null
 
   /**
+   * Pending geographic position to look at.
+   * Set by lookAtPosition() with raw coordinates, forwarded to insets via postMessage.
+   * Each viewport calculates its own heading/pitch from this position.
+   * Cleared after processing.
+   */
+  pendingLookAtPosition: { lat: number; lon: number; altitudeFt: number } | null
+
+  /**
    * Version counter to force camera recalculation
    * Incremented when terrain changes (e.g., flattening toggle) to trigger
    * the camera position effect to re-run with updated terrain heights.

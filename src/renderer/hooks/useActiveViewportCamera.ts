@@ -237,6 +237,7 @@ export function useActiveViewportCamera() {
   const adjustOrbitPitch = useViewportStore((state) => state.adjustOrbitPitch)
   const followAircraftInOrbit = useViewportStore((state) => state.followAircraftInOrbit)
   const setLookAtTarget = useViewportStore((state) => state.setLookAtTarget)
+  const lookAtPosition = useViewportStore((state) => state.lookAtPosition)
   const clearLookAtTarget = useViewportStore((state) => state.clearLookAtTarget)
 
   return {
@@ -291,6 +292,7 @@ export function useActiveViewportCamera() {
     adjustOrbitPitch,
     followAircraftInOrbit,
     setLookAtTarget,
+    lookAtPosition,
     clearLookAtTarget
   }
 }

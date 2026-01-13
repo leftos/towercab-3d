@@ -10,7 +10,7 @@ import { useAircraftFiltering } from '../../hooks/useAircraftFiltering'
 import { calculateBearing, calculateDistanceNM } from '../../utils/interpolation'
 import { formatAltitude, formatGroundspeed, formatHeading, getTowerPosition } from '../../utils/towerHeight'
 import { geoidService } from '../../services/GeoidService'
-import { applyPositionOffsets, calculatePitchToTarget } from '../../utils/cameraGeometry'
+import { applyPositionOffsets } from '../../utils/cameraGeometry'
 import {
   calculateSmartSort,
   clearPhaseHistory,
@@ -151,7 +151,7 @@ function AircraftPanel() {
     stopFollowing,
     followMode,
     toggleFollowMode,
-    setLookAtTarget,
+    lookAtPosition,
     positionOffsetX,
     positionOffsetY,
     positionOffsetZ
@@ -294,47 +294,22 @@ function AircraftPanel() {
   /**
    * Look at an aircraft without engaging follow mode.
    * Smoothly animates the camera heading and pitch to center the aircraft on screen.
-   * Uses the actual camera position (tower + WASD offsets) to calculate accurate bearing.
+   * Uses lookAtPosition() which calculates heading/pitch from the active viewport's
+   * actual camera position (tower + WASD offsets), enabling proper inset support.
    */
   const handleLookAt = (aircraft: AircraftListItem) => {
-    if (!currentAirport) return
-
     // Get the aircraft's current interpolated position (real-time, not cached)
     const currentAircraft = interpolatedAircraft.get(aircraft.callsign)
     if (!currentAircraft) return
 
-    // Calculate actual camera position (tower + WASD offsets)
-    // This matches how useCesiumCamera calculates the camera position
-    const towerPos = getTowerPosition(currentAirport, towerHeight, customTowerPosition ?? undefined)
-    const cameraPos = applyPositionOffsets(
-      { latitude: towerPos.latitude, longitude: towerPos.longitude, height: towerPos.height },
-      { x: positionOffsetX, y: positionOffsetY, z: positionOffsetZ }
-    )
-
-    // Calculate bearing from actual camera position to aircraft
-    const bearing = calculateBearing(
-      cameraPos.latitude,
-      cameraPos.longitude,
-      currentAircraft.interpolatedLatitude,
-      currentAircraft.interpolatedLongitude
-    )
-
-    // Calculate pitch using the same function as follow mode
-    // This properly calculates horizontal distance from camera to aircraft
-    const pitch = calculatePitchToTarget(
-      cameraPos.latitude,
-      cameraPos.longitude,
-      cameraPos.height,
+    // Use lookAtPosition with geographic coordinates - it will:
+    // 1. Calculate heading/pitch from the active viewport's camera position (including offsets)
+    // 2. Set pendingLookAtPosition so insets can calculate their own heading/pitch
+    lookAtPosition(
       currentAircraft.interpolatedLatitude,
       currentAircraft.interpolatedLongitude,
-      currentAircraft.interpolatedAltitude
+      currentAircraft.interpolatedAltitude * 3.28084 // Convert meters to feet
     )
-
-    // Clamp pitch to reasonable range
-    const clampedPitch = Math.max(-60, Math.min(60, pitch))
-
-    // Set the look-at target for smooth animation
-    setLookAtTarget(bearing, clampedPitch)
   }
 
   if (!showAircraftPanel) return null

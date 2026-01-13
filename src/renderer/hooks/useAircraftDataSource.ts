@@ -14,6 +14,10 @@
  *
  * In REPLAY/IMPORTED mode:
  *   - Returns cached deserialized snapshot data from replayStore
+ *
+ * In INSET mode (iframe with SharedWorker):
+ *   - Returns pre-interpolated data received from main app via SharedWorker
+ *   - No local interpolation needed since data is already interpolated at 30Hz
  */
 
 import { useReplayStore } from '../stores/replayStore'
@@ -24,6 +28,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useGlobalSettingsStore } from '../stores/globalSettingsStore'
 import { SNAPSHOT_INTERVAL_MS } from '../constants/replay'
 import { calculateDistanceNM } from '../utils/interpolation'
+import { isInsetContext, getInsetAircraftData } from './useInsetStoreSync'
 import type { AircraftState } from '../types/vatsim'
 import type { PlaybackMode, SerializedAircraftState } from '../types/replay'
 
@@ -159,6 +164,43 @@ function filterToMatchCallsigns(
  * @returns AircraftDataSource with current/previous states and timing info
  */
 export function getAircraftDataSource(): AircraftDataSource {
+  // INSET MODE: Use pre-interpolated data from SharedWorker
+  // Insets receive already-interpolated positions at ~30Hz from the main app
+  if (isInsetContext()) {
+    const { aircraft, timestamp } = getInsetAircraftData()
+
+    // Convert SerializedAircraftState to AircraftState
+    // Use INTERPOLATED positions for smooth movement (already calculated at 30Hz by main app)
+    const aircraftStates = new Map<string, AircraftState>()
+    for (const [callsign, state] of aircraft) {
+      aircraftStates.set(callsign, {
+        callsign: state.callsign,
+        cid: state.cid,
+        // Use interpolated positions for smooth movement
+        latitude: state.interpolatedLatitude,
+        longitude: state.interpolatedLongitude,
+        altitude: state.interpolatedAltitude,
+        groundspeed: state.interpolatedGroundspeed,
+        heading: state.interpolatedHeading,
+        transponder: state.transponder,
+        aircraftType: state.aircraftType,
+        departure: state.departure,
+        arrival: state.arrival,
+        timestamp: state.timestamp
+      })
+    }
+
+    // Return with minimal interpolation interval since data is already interpolated
+    // Using same states for previous/current with timestamp = now effectively skips interpolation
+    return {
+      aircraftStates,
+      previousStates: aircraftStates, // Same - no interpolation needed
+      timestamp: timestamp || Date.now(),
+      updateInterval: 33, // ~30Hz refresh from SharedWorker
+      playbackMode: 'live'
+    }
+  }
+
   const replayState = useReplayStore.getState()
   const { playbackMode, currentIndex, segmentProgress, getActiveSnapshots } = replayState
 

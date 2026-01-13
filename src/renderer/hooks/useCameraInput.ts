@@ -37,6 +37,13 @@ interface UseCameraInputOptions {
   onBreakTowerFollow?: () => void
   /** Callback when user escapes orbit mode via WASD */
   onEscapeOrbitMode?: () => void
+  /**
+   * When false, all mouse and keyboard input processing is disabled.
+   * Used for iframe insets where input should only be processed when
+   * the inset is activated by the parent window.
+   * Defaults to true.
+   */
+  isInputEnabled?: boolean
 }
 
 /**
@@ -189,7 +196,7 @@ export function useCameraInput(
   viewportId: string,
   options: UseCameraInputOptions = {}
 ): void {
-  const { onBreakTowerFollow, onEscapeOrbitMode } = options
+  const { onBreakTowerFollow, onEscapeOrbitMode, isInputEnabled = true } = options
 
   // Settings store
   const mouseSensitivity = useSettingsStore((state) => state.camera.mouseSensitivity)
@@ -295,6 +302,8 @@ export function useCameraInput(
 
   // Mouse drag controls for panning/tilting using Cesium's event handler
   useEffect(() => {
+    // Skip all mouse input handling when input is disabled (e.g., inactive iframe inset)
+    if (!isInputEnabled) return
     if (!viewer || viewer.isDestroyed()) return
 
     // Use Cesium's ScreenSpaceEventHandler for reliable mouse event handling
@@ -444,10 +453,12 @@ export function useCameraInput(
       window.removeEventListener('mouseup', handleGlobalMouseUp)
       window.removeEventListener('mousemove', handleGlobalMouseMove)
     }
-  }, [viewer, adjustHeading, adjustPitch, adjustOrbitHeading, adjustOrbitPitch, moveForward, moveRight, onBreakTowerFollow, setActiveViewport, clearLookAtTarget])
+  }, [viewer, adjustHeading, adjustPitch, adjustOrbitHeading, adjustOrbitPitch, moveForward, moveRight, onBreakTowerFollow, setActiveViewport, clearLookAtTarget, isInputEnabled])
 
   // Mouse wheel for zoom - adds impulse for smooth scrolling
   useEffect(() => {
+    // Skip wheel handling when input is disabled (e.g., inactive iframe inset)
+    if (!isInputEnabled) return
     if (!viewer || viewer.isDestroyed()) return
 
     const handleWheel = (event: WheelEvent) => {
@@ -466,15 +477,30 @@ export function useCameraInput(
     return () => {
       canvas.removeEventListener('wheel', handleWheel)
     }
-  }, [viewer])
+  }, [viewer, isInputEnabled])
 
   // Smooth keyboard controls with animation loop
   useEffect(() => {
-    if (!viewer || viewer.isDestroyed()) return
+    // Skip keyboard handling when input is disabled (e.g., inactive iframe inset)
+    console.log(`[useCameraInput ${viewportId}] Keyboard effect running, isInputEnabled:`, isInputEnabled)
+    if (!isInputEnabled) {
+      console.log(`[useCameraInput ${viewportId}] Skipping keyboard setup - input disabled`)
+      return
+    }
+    if (!viewer || viewer.isDestroyed()) {
+      console.log(`[useCameraInput ${viewportId}] Skipping keyboard setup - no viewer`)
+      return
+    }
+
+    console.log(`[useCameraInput ${viewportId}] Setting up keyboard listeners`)
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      console.log(`[useCameraInput ${viewportId}] KeyDown received:`, event.key, 'isActiveRef:', isActiveRef.current)
       // Only process keyboard input if this viewport is active
-      if (!isActiveRef.current) return
+      if (!isActiveRef.current) {
+        console.log(`[useCameraInput ${viewportId}] Ignoring key - viewport not active`)
+        return
+      }
 
       // Ignore if typing in an input
       if (event.target instanceof HTMLInputElement ||
@@ -630,6 +656,10 @@ export function useCameraInput(
 
       // Only process input if this viewport is active
       if (!isActiveRef.current) {
+        // Log periodically (every ~1 second) to avoid spam
+        if (Math.floor(currentTime / 1000) !== Math.floor(lastFrameTimeRef.current / 1000)) {
+          console.log(`[useCameraInput ${viewportIdRef.current}] Animation skipping - isActiveRef is false, activeViewportId:`, useViewportStore.getState().activeViewportId)
+        }
         // Still need to schedule next frame but skip processing
         animationFrameRef.current = requestAnimationFrame(animate)
         return
@@ -819,6 +849,7 @@ export function useCameraInput(
     const pressedKeys = pressedKeysRef.current
 
     return () => {
+      console.log(`[useCameraInput] Cleaning up keyboard listeners`)
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current)
       }
@@ -850,11 +881,26 @@ export function useCameraInput(
     onEscapeOrbitMode,
     setHeading,
     setPitch,
-    clearLookAtTarget
+    clearLookAtTarget,
+    isInputEnabled,
+    viewportId
   ])
 
+  // NOTE: Viewport activation is handled ONLY by canvas clicks (LEFT_DOWN, RIGHT_DOWN, MIDDLE_DOWN)
+  // in the mouse input effect above. We deliberately do NOT activate main viewport on window focus
+  // events because:
+  // 1. Clicking on UI panels (like nearby aircraft panel) gives focus to main window but shouldn't
+  //    change which viewport is active - the user is interacting with the UI, not the viewport
+  // 2. Actions triggered from UI panels (like "Look At Runway") should target the currently active
+  //    viewport, even if that's an inset
+  // 3. If an inset is active and user clicks the main viewport's canvas, the LEFT_DOWN/RIGHT_DOWN
+  //    handler will activate main viewport correctly
+  // 4. Keyboard input naturally goes to whichever window has focus - if user clicked on main window
+  //    UI, they need to click on the inset to send keyboard input there again
+
   // Touch input support for iPad/mobile devices
-  useTouchInput(viewer, viewportId, { onBreakTowerFollow })
+  // Only enable touch input when input is enabled (activated inset or main viewport)
+  useTouchInput(viewer, viewportId, { onBreakTowerFollow, isInputEnabled })
 }
 
 export default useCameraInput

@@ -115,7 +115,9 @@ interface CameraControls {
 export function useCesiumCamera(
   viewer: Cesium.Viewer | null,
   viewportId: string,
-  interpolatedAircraft?: Map<string, InterpolatedAircraftState>
+  interpolatedAircraft?: Map<string, InterpolatedAircraftState>,
+  /** When false, disables camera input (keyboard/mouse). Used for inactive inset iframes. */
+  isInputEnabled: boolean = true
 ): CameraControls {
   const currentAirport = useAirportStore((state) => state.currentAirport)
   const towerHeight = useAirportStore((state) => state.towerHeight)
@@ -235,7 +237,8 @@ export function useCesiumCamera(
   // Use camera input hook for keyboard/mouse handling
   useCameraInput(viewer, viewportId, {
     onBreakTowerFollow: handleBreakTowerFollow,
-    onEscapeOrbitMode: handleEscapeOrbitMode
+    onEscapeOrbitMode: handleEscapeOrbitMode,
+    isInputEnabled
   })
 
   // Get tower position (3D) and custom 2D center position

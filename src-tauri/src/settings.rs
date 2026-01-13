@@ -212,6 +212,47 @@ pub struct GlobalCameraBookmark {
     pub topdown_altitude: Option<f64>,
 }
 
+/// Inset viewport layout
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlobalInsetLayout {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+    pub z_index: i32,
+}
+
+/// Inset viewport camera state
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlobalInsetCameraState {
+    pub view_mode: String, // "3d" or "topdown"
+    pub heading: f64,
+    pub pitch: f64,
+    pub fov: f64,
+    pub position_offset_x: f64,
+    pub position_offset_y: f64,
+    pub position_offset_z: f64,
+    pub topdown_altitude: f64,
+    pub follow_mode: String, // "tower" or "orbit"
+    pub follow_zoom: f64,
+    pub orbit_distance: f64,
+    pub orbit_heading: f64,
+    pub orbit_pitch: f64,
+}
+
+/// Inset viewport configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlobalInsetViewport {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    pub layout: GlobalInsetLayout,
+    pub camera_state: GlobalInsetCameraState,
+}
+
 /// Per-airport viewport configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -224,6 +265,9 @@ pub struct GlobalAirportViewportConfig {
     pub bookmarks: std::collections::HashMap<String, GlobalCameraBookmark>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub datablock_position: Option<u8>, // 1-9 numpad position
+    /// Inset viewport configurations (geometry and camera state)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub insets: Vec<GlobalInsetViewport>,
 }
 
 /// Global orbit camera settings (persisted across airports)

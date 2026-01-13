@@ -10,7 +10,9 @@ import type {
   GlobalViewportSettings,
   GlobalAirportViewportConfig,
   GlobalCameraBookmark,
-  GlobalViewModeDefaults
+  GlobalViewModeDefaults,
+  GlobalInsetViewport,
+  Viewport
 } from '../../types'
 import { DEFAULT_GLOBAL_VIEWPORT_SETTINGS } from '../../types'
 import { TOPDOWN_ALTITUDE_DEFAULT } from '../../constants'
@@ -77,8 +79,39 @@ export const toGlobalCameraBookmark = (local: CameraBookmark): GlobalCameraBookm
 })
 
 /**
+ * Convert local Viewport to global inset format
+ * Only includes essential fields for persistence
+ */
+export const toGlobalInsetViewport = (local: Viewport): GlobalInsetViewport => ({
+  id: local.id,
+  label: local.label,
+  layout: {
+    x: local.layout.x,
+    y: local.layout.y,
+    width: local.layout.width,
+    height: local.layout.height,
+    zIndex: local.layout.zIndex
+  },
+  cameraState: {
+    viewMode: local.cameraState.viewMode,
+    heading: local.cameraState.heading,
+    pitch: local.cameraState.pitch,
+    fov: local.cameraState.fov,
+    positionOffsetX: local.cameraState.positionOffsetX,
+    positionOffsetY: local.cameraState.positionOffsetY,
+    positionOffsetZ: local.cameraState.positionOffsetZ,
+    topdownAltitude: local.cameraState.topdownAltitude,
+    followMode: local.cameraState.followMode,
+    followZoom: local.cameraState.followZoom,
+    orbitDistance: local.cameraState.orbitDistance,
+    orbitHeading: local.cameraState.orbitHeading,
+    orbitPitch: local.cameraState.orbitPitch
+  }
+})
+
+/**
  * Convert local AirportViewportConfig to global format
- * Only exports the persisted fields (defaults, bookmarks, datablockPosition)
+ * Exports defaults, bookmarks, datablockPosition, and inset viewport configs
  */
 export const toGlobalAirportConfig = (local: AirportViewportConfig): GlobalAirportViewportConfig => {
   const global: GlobalAirportViewportConfig = {}
@@ -100,6 +133,10 @@ export const toGlobalAirportConfig = (local: AirportViewportConfig): GlobalAirpo
   }
   if (local.datablockPosition !== undefined) {
     global.datablockPosition = local.datablockPosition
+  }
+  // Export inset viewports (all viewports except the first one which is main)
+  if (local.viewports && local.viewports.length > 1) {
+    global.insets = local.viewports.slice(1).map(toGlobalInsetViewport)
   }
 
   return global
@@ -166,6 +203,51 @@ export const fromGlobalCameraBookmark = (global: GlobalCameraBookmark): CameraBo
 })
 
 /**
+ * Validate and convert followMode string to FollowMode type
+ */
+const validateFollowMode = (followMode: string): 'tower' | 'orbit' => {
+  if (followMode === 'tower' || followMode === 'orbit') {
+    return followMode
+  }
+  return 'tower'
+}
+
+/**
+ * Convert global inset viewport to local Viewport format
+ */
+export const fromGlobalInsetViewport = (global: GlobalInsetViewport): Viewport => ({
+  id: global.id,
+  label: global.label,
+  layout: {
+    x: global.layout.x,
+    y: global.layout.y,
+    width: global.layout.width,
+    height: global.layout.height,
+    zIndex: global.layout.zIndex
+  },
+  cameraState: {
+    viewMode: validateViewMode(global.cameraState.viewMode),
+    heading: global.cameraState.heading,
+    pitch: global.cameraState.pitch,
+    fov: global.cameraState.fov,
+    positionOffsetX: global.cameraState.positionOffsetX,
+    positionOffsetY: global.cameraState.positionOffsetY,
+    positionOffsetZ: global.cameraState.positionOffsetZ,
+    topdownAltitude: global.cameraState.topdownAltitude,
+    followingCallsign: null,
+    followMode: validateFollowMode(global.cameraState.followMode),
+    followZoom: global.cameraState.followZoom,
+    preFollowState: null,
+    orbitDistance: global.cameraState.orbitDistance,
+    orbitHeading: global.cameraState.orbitHeading,
+    orbitPitch: global.cameraState.orbitPitch,
+    lookAtTarget: null,
+    pendingLookAtPosition: null,
+    cameraVersion: 0
+  }
+})
+
+/**
  * Merge global AirportViewportConfig into local config
  * Preserves local viewport state while updating persisted fields
  */
@@ -192,6 +274,15 @@ export const mergeGlobalAirportConfig = (
   }
   if (global.datablockPosition !== undefined) {
     updates.datablockPosition = global.datablockPosition as DatablockPosition
+  }
+  // Merge inset viewports from global - preserve existing local insets if global is empty
+  if (global.insets && global.insets.length > 0) {
+    // If we have local viewports, update insets (keeping main viewport from local)
+    if (local?.viewports && local.viewports.length > 0) {
+      const mainViewport = local.viewports[0]
+      const insetViewports = global.insets.map(fromGlobalInsetViewport)
+      updates.viewports = [mainViewport, ...insetViewports]
+    }
   }
 
   return updates

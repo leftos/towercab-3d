@@ -6,6 +6,9 @@ import { useAirportStore } from './airportStore'
 import { useGlobalSettingsStore } from './globalSettingsStore'
 import { useDatablockPositionStore, type DatablockPosition } from './datablockPositionStore'
 import { modService } from '../services/ModService'
+import { getTowerPosition } from '../utils/towerHeight'
+import { calculateBearing, haversineDistanceNm } from '../utils/aircraft/geoMath'
+import { applyPositionOffsets } from '../utils/cameraGeometry'
 import {
   HEADING_DEFAULT,
   PITCH_DEFAULT,
@@ -99,6 +102,8 @@ interface ViewportStore {
 
   // Look-at animation (smooth pan to target heading/pitch)
   setLookAtTarget: (heading: number, pitch: number) => void
+  /** Look at a geographic position - calculates heading/pitch from current camera position */
+  lookAtPosition: (lat: number, lon: number, altitudeFt: number) => void
   clearLookAtTarget: () => void
 
   // Follow actions
@@ -515,11 +520,56 @@ export const useViewportStore = create<ViewportStore>()(
             })
           },
 
+          lookAtPosition: (lat, lon, altitudeFt) => {
+            // Get tower position from airport store
+            const { currentAirport, towerHeight, customTowerPosition } = useAirportStore.getState()
+            if (!currentAirport) return
+
+            const towerPos = getTowerPosition(currentAirport, towerHeight, customTowerPosition ?? undefined)
+            if (!towerPos) return
+
+            // Get the active viewport's position offsets to calculate actual camera position
+            const { activeViewportId, viewports } = get()
+            const activeViewport = viewports.find(v => v.id === activeViewportId)
+            const positionOffsetX = activeViewport?.cameraState?.positionOffsetX ?? 0
+            const positionOffsetY = activeViewport?.cameraState?.positionOffsetY ?? 0
+            const positionOffsetZ = activeViewport?.cameraState?.positionOffsetZ ?? 0
+
+            // Apply position offsets to get actual camera position
+            const cameraPos = applyPositionOffsets(
+              { latitude: towerPos.latitude, longitude: towerPos.longitude, height: towerPos.height },
+              { x: positionOffsetX, y: positionOffsetY, z: positionOffsetZ }
+            )
+
+            // Calculate bearing from actual camera position to target
+            const bearing = calculateBearing(cameraPos.latitude, cameraPos.longitude, lat, lon)
+
+            // Calculate pitch: arctan(altitude_diff / distance) from actual camera position
+            const distanceNm = haversineDistanceNm(cameraPos.latitude, cameraPos.longitude, lat, lon)
+            const distanceFt = distanceNm * 6076.12
+            const cameraAltFt = cameraPos.height * 3.28084 // Convert meters to feet
+            const altDiffFt = cameraAltFt - altitudeFt
+            const pitchRad = Math.atan2(altDiffFt, distanceFt)
+            const pitchAngle = -(pitchRad * 180 / Math.PI) // Negative because looking down
+
+            // Set both lookAtTarget (calculated heading/pitch) and pendingLookAtPosition (raw coords)
+            // The pendingLookAtPosition is forwarded to insets so they can calculate their own heading/pitch
+            const normalizedHeading = ((bearing % 360) + 360) % 360
+            const clampedPitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, pitchAngle))
+            set({
+              viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
+                lookAtTarget: { heading: normalizedHeading, pitch: clampedPitch },
+                pendingLookAtPosition: { lat, lon, altitudeFt }
+              }))
+            })
+          },
+
           clearLookAtTarget: () => {
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
-                lookAtTarget: null
+                lookAtTarget: null,
+                pendingLookAtPosition: null
               }))
             })
           },
@@ -1352,6 +1402,17 @@ useViewportStore.subscribe(
     // Don't sync if global settings not initialized yet
     if (!useGlobalSettingsStore.getState().initialized) {
       return
+    }
+
+    // Don't sync from inset iframes - they should never write to global settings
+    // Insets receive data from the main app via SharedWorker, not from disk
+    try {
+      const params = new URLSearchParams(window.location.search)
+      if (params.has('viewportId') && params.has('parentOrigin')) {
+        return // In inset mode, skip sync
+      }
+    } catch {
+      // Ignore URL parsing errors
     }
 
     // Debounce the sync to avoid too many writes

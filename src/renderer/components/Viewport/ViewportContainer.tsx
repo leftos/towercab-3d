@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, type ReactNode, type MouseEvent } from 'react'
+import { useCallback, useMemo, useRef, useState, type ReactNode, type MouseEvent, type KeyboardEvent, useEffect } from 'react'
 import { useViewportStore } from '../../stores/viewportStore'
 import { useDragResize, type ResizeDirection } from '../../hooks/useDragResize'
 import './ViewportContainer.css'
@@ -19,11 +19,17 @@ const RESIZE_HANDLES: ResizeDirection[] = ['n', 's', 'e', 'w', 'ne', 'nw', 'se',
  */
 function ViewportContainer({ viewportId, isInset = false, children }: ViewportContainerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const labelInputRef = useRef<HTMLInputElement>(null)
+
+  // State for inline label editing
+  const [isEditingLabel, setIsEditingLabel] = useState(false)
+  const [editLabelValue, setEditLabelValue] = useState('')
 
   const activeViewportId = useViewportStore((state) => state.activeViewportId)
   const setActiveViewport = useViewportStore((state) => state.setActiveViewport)
   const bringToFront = useViewportStore((state) => state.bringToFront)
   const updateViewportLayout = useViewportStore((state) => state.updateViewportLayout)
+  const setViewportLabel = useViewportStore((state) => state.setViewportLabel)
   const viewports = useViewportStore((state) => state.viewports)
 
   // Find viewport from the viewports array - memoized to prevent unnecessary recalculations
@@ -65,6 +71,42 @@ function ViewportContainer({ viewportId, isInset = false, children }: ViewportCo
     }
   }, [isActive, viewportId, isInset, setActiveViewport, bringToFront])
 
+  // Start editing label on double-click
+  const handleLabelDoubleClick = useCallback((e: MouseEvent) => {
+    e.stopPropagation()
+    e.preventDefault()
+    setEditLabelValue(viewport?.label || 'Inset')
+    setIsEditingLabel(true)
+  }, [viewport?.label])
+
+  // Save label on blur or Enter
+  const handleLabelSave = useCallback(() => {
+    const trimmedLabel = editLabelValue.trim()
+    if (trimmedLabel && trimmedLabel !== viewport?.label) {
+      setViewportLabel(viewportId, trimmedLabel)
+    }
+    setIsEditingLabel(false)
+  }, [editLabelValue, viewport?.label, viewportId, setViewportLabel])
+
+  // Handle key events in label input
+  const handleLabelKeyDown = useCallback((e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleLabelSave()
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      setIsEditingLabel(false)
+    }
+  }, [handleLabelSave])
+
+  // Focus input when editing starts
+  useEffect(() => {
+    if (isEditingLabel && labelInputRef.current) {
+      labelInputRef.current.focus()
+      labelInputRef.current.select()
+    }
+  }, [isEditingLabel])
+
   // For insets, use position/size from drag hook (live updates during drag)
   // For main viewport, no positioning needed
   const insetStyle = isInset && viewport ? {
@@ -85,7 +127,27 @@ function ViewportContainer({ viewportId, isInset = false, children }: ViewportCo
     >
       {isInset && (
         <div className="viewport-header" {...dragHandleProps}>
-          <span className="viewport-label">{viewport?.label || 'Inset'}</span>
+          {isEditingLabel ? (
+            <input
+              ref={labelInputRef}
+              type="text"
+              className="viewport-label-input"
+              value={editLabelValue}
+              onChange={(e) => setEditLabelValue(e.target.value)}
+              onBlur={handleLabelSave}
+              onKeyDown={handleLabelKeyDown}
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <span
+              className="viewport-label"
+              onDoubleClick={handleLabelDoubleClick}
+              title="Double-click to rename"
+            >
+              {viewport?.label || 'Inset'}
+            </span>
+          )}
           <button
             className="viewport-close-button"
             onClick={(e) => {

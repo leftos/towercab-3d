@@ -46,6 +46,8 @@ import { isOrbitWithoutAirport } from './utils/viewingContext'
 import { isRemoteMode } from './utils/remoteMode'
 import { usePresenceWebSocket } from './hooks/usePresenceWebSocket'
 import { useVnasEvents } from './hooks/useVnasEvents'
+import { useAircraftInterpolation } from './hooks/useAircraftInterpolation'
+import { useSharedWorkerProvider } from './hooks/useSharedWorkerProvider'
 
 function App() {
   const startPolling = useVatsimStore((state) => state.startPolling)
@@ -131,6 +133,14 @@ function App() {
 
   // Set up vNAS event listeners (receives real-time aircraft updates from Rust backend)
   useVnasEvents()
+
+  // Get interpolated aircraft for SharedWorker broadcasting to inset iframes
+  // This uses the singleton pattern - the actual interpolation loop may be shared with CesiumViewer
+  const interpolatedAircraft = useAircraftInterpolation()
+
+  // Broadcast data to inset iframes via SharedWorker
+  // Only active when there are inset viewports (handled internally)
+  useSharedWorkerProvider(interpolatedAircraft)
 
   const handleViewerReady = useCallback((viewer: Viewer | null) => {
     setCesiumViewer(viewer)

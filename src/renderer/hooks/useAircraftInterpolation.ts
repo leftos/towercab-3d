@@ -3,6 +3,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useReplayStore } from '../stores/replayStore'
 import { useAircraftTimelineStore } from '../stores/aircraftTimelineStore'
 import { getAircraftDataSource } from './useAircraftDataSource'
+import { isInsetContext } from './useInsetStoreSync'
 import { calculateFlarePitch, angleDifference } from '../utils/interpolation'
 import { performanceMonitor } from '../utils/performanceMonitor'
 import { geoidService } from '../services/GeoidService'
@@ -391,6 +392,93 @@ function updateInterpolation() {
   }
 
   // ============================================================================
+  // INSET CONTEXT: Use pre-interpolated data from SharedWorker
+  // ============================================================================
+  // Insets receive already-interpolated aircraft data from the main app via
+  // SharedWorker. We skip the timeline store and use the data directly.
+  // This is necessary because insets don't run vatsim/vnas/realtraffic stores.
+
+  if (isInsetContext()) {
+    // Use pre-interpolated data from SharedWorker
+    for (const [callsign, aircraft] of source.aircraftStates) {
+      activeCallsigns.add(callsign)
+
+      // Convert AircraftState to InterpolatedAircraftState
+      // The source data includes pre-interpolated fields from the main app
+      const sourceAny = aircraft as AircraftState & {
+        interpolatedLatitude?: number
+        interpolatedLongitude?: number
+        interpolatedAltitude?: number
+        interpolatedHeading?: number
+        interpolatedGroundspeed?: number
+        interpolatedPitch?: number
+        interpolatedRoll?: number
+        verticalRate?: number
+        turnRate?: number
+        acceleration?: number
+        track?: number
+        isInterpolated?: boolean
+      }
+
+      const interpolated: InterpolatedAircraftState = {
+        callsign: aircraft.callsign,
+        cid: aircraft.cid,
+        latitude: aircraft.latitude,
+        longitude: aircraft.longitude,
+        altitude: aircraft.altitude,
+        groundspeed: aircraft.groundspeed,
+        heading: aircraft.heading,
+        groundTrack: aircraft.groundTrack,
+        transponder: aircraft.transponder,
+        aircraftType: aircraft.aircraftType,
+        departure: aircraft.departure,
+        arrival: aircraft.arrival,
+        timestamp: aircraft.timestamp,
+
+        // Use pre-interpolated values if available, fallback to base values
+        interpolatedLatitude: sourceAny.interpolatedLatitude ?? aircraft.latitude,
+        interpolatedLongitude: sourceAny.interpolatedLongitude ?? aircraft.longitude,
+        interpolatedAltitude: sourceAny.interpolatedAltitude ?? aircraft.altitude,
+        interpolatedHeading: sourceAny.interpolatedHeading ?? aircraft.heading,
+        interpolatedGroundspeed: sourceAny.interpolatedGroundspeed ?? aircraft.groundspeed,
+        interpolatedPitch: sourceAny.interpolatedPitch ?? 0,
+        interpolatedRoll: sourceAny.interpolatedRoll ?? 0,
+
+        verticalRate: sourceAny.verticalRate ?? 0,
+        turnRate: sourceAny.turnRate ?? 0,
+        acceleration: sourceAny.acceleration ?? 0,
+        track: sourceAny.track ?? aircraft.heading,
+
+        isInterpolated: sourceAny.isInterpolated ?? true
+      }
+
+      // Reuse existing entry or create new one
+      const existing = statesMap.get(callsign)
+      if (existing) {
+        // Update in place to avoid object allocation
+        existing.callsign = interpolated.callsign
+        existing.interpolatedLatitude = interpolated.interpolatedLatitude
+        existing.interpolatedLongitude = interpolated.interpolatedLongitude
+        existing.interpolatedAltitude = interpolated.interpolatedAltitude
+        existing.interpolatedGroundspeed = interpolated.interpolatedGroundspeed
+        existing.interpolatedHeading = interpolated.interpolatedHeading
+        existing.interpolatedPitch = interpolated.interpolatedPitch
+        existing.interpolatedRoll = interpolated.interpolatedRoll
+        existing.aircraftType = interpolated.aircraftType
+        existing.departure = interpolated.departure
+        existing.arrival = interpolated.arrival
+        existing.isInterpolated = interpolated.isInterpolated
+        existing.verticalRate = interpolated.verticalRate
+        existing.turnRate = interpolated.turnRate
+        existing.acceleration = interpolated.acceleration
+        existing.track = interpolated.track
+        existing.timestamp = interpolated.timestamp
+      } else {
+        statesMap.set(callsign, interpolated)
+      }
+    }
+  } else {
+  // ============================================================================
   // UNIFIED TIMELINE-BASED INTERPOLATION (ALL MODES)
   // ============================================================================
   // Use the timeline store for smooth position interpolation.
@@ -451,6 +539,7 @@ function updateInterpolation() {
     // Update frame timestamp for rate calculations
     sharedTimelineLastFrameTimeRef.current = now
   }
+  } // End of else block (non-inset context)
 
   // ============================================================================
   // TERRAIN CORRECTION AND FLARE PITCH (applies to ALL aircraft)

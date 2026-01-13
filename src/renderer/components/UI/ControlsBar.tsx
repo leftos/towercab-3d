@@ -9,7 +9,6 @@ import { useRunwayStore } from '../../stores/runwayStore'
 import { useActiveViewportCamera } from '../../hooks/useActiveViewportCamera'
 import { calculateShareable3dPosition, calculateShareable2dPosition } from '../../utils/cameraGeometry'
 import { hasViewingContext } from '../../utils/viewingContext'
-import { calculateBearing, haversineDistanceNm } from '../../utils/aircraft/geoMath'
 import { modService } from '../../services/ModService'
 import { modApi } from '../../utils/tauriApi'
 import GlobalSearchPanel from './GlobalSearchPanel'
@@ -97,8 +96,8 @@ function ControlsBar() {
   // Runway store - for look-at runway feature
   const getRunwaysWithCoordinates = useRunwayStore((state) => state.getRunwaysWithCoordinates)
 
-  // Get setLookAtTarget from camera hook
-  const { setLookAtTarget } = useActiveViewportCamera()
+  // Get lookAtPosition from camera hook - calculates heading/pitch from active viewport's camera position
+  const { lookAtPosition } = useActiveViewportCamera()
 
   // Get all runway thresholds for the current airport
   const runwayThresholds = useMemo((): MoreMenuSubmenuItem[] => {
@@ -130,30 +129,17 @@ function ControlsBar() {
       return a.label.localeCompare(b.label)
     })
 
-    // Calculate camera position (tower position with offsets)
-    const towerLat = currentAirport.lat
-    const towerLon = currentAirport.lon
-    const towerAltFt = (currentAirport.elevation || 0) + towerHeight
-
     return thresholds.map((t) => ({
       id: t.label,
       label: `RWY ${t.label}`,
       onClick: () => {
-        // Calculate bearing from tower to threshold
-        const bearing = calculateBearing(towerLat, towerLon, t.end.lat, t.end.lon)
-
-        // Calculate pitch: arctan(altitude_diff / distance)
-        const distanceNm = haversineDistanceNm(towerLat, towerLon, t.end.lat, t.end.lon)
-        const distanceFt = distanceNm * 6076.12
-        const altDiffFt = towerAltFt - t.end.elevationFt
-        const pitchRad = Math.atan2(altDiffFt, distanceFt)
-        const pitchAngle = -(pitchRad * 180 / Math.PI) // Negative because looking down
-
-        setLookAtTarget(bearing, pitchAngle)
+        // Pass geographic coordinates - lookAtPosition calculates heading/pitch
+        // from the active viewport's camera position (works correctly for insets)
+        lookAtPosition(t.end.lat, t.end.lon, t.end.elevationFt)
         setShowRunwayDropdown(false)
       }
     }))
-  }, [currentAirport, towerHeight, getRunwaysWithCoordinates, setLookAtTarget])
+  }, [currentAirport, getRunwaysWithCoordinates, lookAtPosition])
 
   // Refs for dropdowns to handle click outside
   const runwayDropdownRef = useRef<HTMLDivElement>(null)

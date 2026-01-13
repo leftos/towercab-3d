@@ -75,6 +75,7 @@ export const createDefaultCameraState = (
   orbitHeading: globalOrbit?.heading ?? ORBIT_HEADING_DEFAULT,
   orbitPitch: globalOrbit?.pitch ?? ORBIT_PITCH_DEFAULT,
   lookAtTarget: null,
+  pendingLookAtPosition: null,
   cameraVersion: 0
 })
 

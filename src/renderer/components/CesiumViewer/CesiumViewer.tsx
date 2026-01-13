@@ -42,6 +42,13 @@ interface CesiumViewerProps {
   viewportId?: string
   /** Whether this is an inset viewport (uses reduced quality settings for performance) */
   isInset?: boolean
+  /**
+   * Whether this viewport is activated and should receive camera input.
+   * When false, mouse and keyboard input is disabled.
+   * Used by iframe insets to only accept input when activated by parent.
+   * Defaults to true.
+   */
+  isActivated?: boolean
   onViewerReady?: (viewer: Cesium.Viewer | null) => void
 }
 
@@ -60,7 +67,7 @@ interface CesiumViewerProps {
  * 6. useCesiumLabels - datablock labels
  * 7. useBabylonOverlay - screen-space labels, leader lines, weather effects (requires viewer fully initialized)
  */
-function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: CesiumViewerProps) {
+function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true, onViewerReady }: CesiumViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null!)
   const babylonCanvasRef = useRef<HTMLCanvasElement>(null)
   const rootNodeSetupRef = useRef(false)
@@ -444,7 +451,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, onViewerReady }: C
   // =========================================================================
   // 9. Camera Controls
   // =========================================================================
-  useCesiumCamera(viewer, viewportId, interpolatedAircraft)
+  useCesiumCamera(viewer, viewportId, interpolatedAircraft, isActivated)
 
   // =========================================================================
   // 10. Auto-Airport Switching (only on main viewport)

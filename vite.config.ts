@@ -64,6 +64,11 @@ export default defineConfig({
     target: 'esnext',
     sourcemap: false,
     rollupOptions: {
+      // Multi-entry build: main app + inset iframe app
+      input: {
+        main: resolve('src/renderer/index.html'),
+        inset: resolve('src/renderer/inset.html')
+      },
       output: {
         manualChunks: {
           'cesium': ['cesium'],

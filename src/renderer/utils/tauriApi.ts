@@ -17,6 +17,19 @@ export function isTauri(): boolean {
 }
 
 /**
+ * Check if running in an inset iframe context
+ * Insets should NOT write to global settings - they receive data via SharedWorker
+ */
+export function isInsetContext(): boolean {
+  try {
+    const params = new URLSearchParams(window.location.search)
+    return params.has('viewportId') && params.has('parentOrigin')
+  } catch {
+    return false
+  }
+}
+
+/**
  * Mod info returned from API
  */
 interface ModInfo {
@@ -222,8 +235,16 @@ export const globalSettingsApi = {
   /**
    * Write global settings to disk
    * In browser mode, sends to HTTP API
+   * IMPORTANT: Inset iframes are blocked from writing to prevent settings corruption
    */
   write: async (settings: GlobalSettings): Promise<void> => {
+    // Insets must NOT write to global settings - they receive data via SharedWorker
+    // and writing would overwrite the main app's settings
+    if (isInsetContext()) {
+      console.log('[globalSettingsApi] Blocked write from inset context')
+      return
+    }
+
     if (isTauri()) {
       return invoke<void>('write_global_settings', { settings })
     }

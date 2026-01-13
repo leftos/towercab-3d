@@ -982,6 +982,47 @@ export interface GlobalCameraBookmark {
 export type GlobalDatablockPosition = 1 | 2 | 3 | 4 | 6 | 7 | 8 | 9
 
 /**
+ * Inset viewport layout stored globally
+ */
+export interface GlobalInsetLayout {
+  x: number
+  y: number
+  width: number
+  height: number
+  zIndex: number
+}
+
+/**
+ * Inset viewport camera state stored globally
+ * Subset of ViewportCameraState - only the fields we need to restore
+ */
+export interface GlobalInsetCameraState {
+  viewMode: '3d' | 'topdown'
+  heading: number
+  pitch: number
+  fov: number
+  positionOffsetX: number
+  positionOffsetY: number
+  positionOffsetZ: number
+  topdownAltitude: number
+  followMode: 'tower' | 'orbit'
+  followZoom: number
+  orbitDistance: number
+  orbitHeading: number
+  orbitPitch: number
+}
+
+/**
+ * Inset viewport configuration stored globally
+ */
+export interface GlobalInsetViewport {
+  id: string
+  label?: string
+  layout: GlobalInsetLayout
+  cameraState: GlobalInsetCameraState
+}
+
+/**
  * Per-airport viewport configuration stored globally
  * Contains camera defaults and bookmarks shared across all devices
  */
@@ -994,6 +1035,8 @@ export interface GlobalAirportViewportConfig {
   bookmarks?: Record<number, GlobalCameraBookmark>
   /** Global datablock position for this airport */
   datablockPosition?: GlobalDatablockPosition
+  /** Inset viewport configurations (excluding main viewport) */
+  insets?: GlobalInsetViewport[]
 }
 
 /**

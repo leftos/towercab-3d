@@ -1,0 +1,178 @@
+/**
+ * Hook to synchronize SharedWorker data to local stores in inset iframes
+ *
+ * This hook populates the inset's local Zustand stores with data received
+ * from the main app via SharedWorker. Since iframes have their own JavaScript
+ * context, they have their own store instances that need to be populated.
+ *
+ * Syncs:
+ * - globalSettingsStore: Cesium Ion token
+ * - settingsStore: Graphics, cesium, aircraft, weather settings
+ * - weatherStore: METAR and fog data
+ * - Aircraft data: Injected into interpolation system
+ */
+
+import { useEffect, useRef } from 'react'
+import { useGlobalSettingsStore } from '../stores/globalSettingsStore'
+import { useSettingsStore } from '../stores/settingsStore'
+import { useWeatherStore } from '../stores/weatherStore'
+import { useAirportStore } from '../stores/airportStore'
+import type {
+  SerializedSettings,
+  SerializedWeather,
+  SerializedAircraftState,
+  SerializedAirport
+} from '../types/shared-worker'
+// Re-export isInsetContext from tauriApi for backward compatibility
+export { isInsetContext } from '../utils/tauriApi'
+
+// Reference to aircraft data for the interpolation system to read
+// This allows the inset's interpolation singleton to use SharedWorker data
+let sharedAircraftData: Map<string, SerializedAircraftState> = new Map()
+let lastAircraftUpdateTime = 0
+
+/**
+ * Get the current aircraft data from SharedWorker (for use by interpolation)
+ */
+export function getInsetAircraftData(): {
+  aircraft: Map<string, SerializedAircraftState>
+  timestamp: number
+} {
+  return {
+    aircraft: sharedAircraftData,
+    timestamp: lastAircraftUpdateTime
+  }
+}
+
+interface UseInsetStoreSyncOptions {
+  settings: SerializedSettings | null
+  weather: SerializedWeather | null
+  cesiumToken: string | null
+  airport: SerializedAirport | null
+  aircraft: Map<string, SerializedAircraftState>
+  lastUpdate: number
+}
+
+/**
+ * Synchronize SharedWorker data to local stores
+ *
+ * @param options - Data received from SharedWorker via useSharedWorkerConsumer
+ */
+export function useInsetStoreSync({
+  settings,
+  weather,
+  cesiumToken,
+  airport,
+  aircraft,
+  lastUpdate
+}: UseInsetStoreSyncOptions) {
+  const initializedRef = useRef(false)
+
+  // Sync Cesium Ion token to globalSettingsStore
+  useEffect(() => {
+    if (cesiumToken) {
+      const store = useGlobalSettingsStore.getState()
+      if (store.cesiumIonToken !== cesiumToken) {
+        // Directly set the token without calling the async setter
+        useGlobalSettingsStore.setState({ cesiumIonToken: cesiumToken })
+      }
+    }
+  }, [cesiumToken])
+
+  // Sync settings to settingsStore
+  useEffect(() => {
+    if (!settings) return
+
+    const store = useSettingsStore.getState()
+
+    // Update settings groups directly since they match the store types
+    store.updateGraphicsSettings(settings.graphics)
+    store.updateCesiumSettings(settings.cesium)
+    store.updateAircraftSettings(settings.aircraft)
+    store.updateWeatherSettings(settings.weather)
+    store.updateCameraSettings(settings.camera)
+    store.updateMemorySettings(settings.memory)
+    store.updateUISettings(settings.ui)
+  }, [settings])
+
+  // Sync weather to weatherStore
+  useEffect(() => {
+    if (!weather) return
+
+    // Update fog density, cloud layers, and minimal METAR for visibility culling
+    // The visibility check in isDatablockVisibleByWeather requires currentMetar.visib
+    useWeatherStore.setState({
+      fogDensity: weather.fogDensity,
+      cloudLayers: weather.cloudLayers.map(layer => ({
+        altitude: layer.altitude,
+        coverage: layer.coverage,
+        type: layer.type
+      })),
+      // Set minimal METAR with visibility for weather-based datablock culling
+      // Only the visib field is needed for the visibility check
+      currentMetar: {
+        icaoId: '',
+        visib: weather.visibility,
+        clouds: [],
+        fltCat: 'VFR',
+        obsTime: Date.now(),
+        rawOb: '',
+        precipitation: [],
+        hasThunderstorm: false,
+        wind: { direction: 0, speed: 0, gustSpeed: null, isVariable: false }
+      }
+    })
+  }, [weather])
+
+  // Sync airport to airportStore
+  useEffect(() => {
+    if (!airport) return
+
+    // Create airport object matching Airport interface
+    // Non-essential fields (iata, city, state, country, tz) use defaults since
+    // they're not needed for the inset's rendering - only position/elevation matter
+    const airportData = {
+      icao: airport.icao,
+      iata: '',
+      name: airport.name,
+      city: '',
+      state: '',
+      country: '',
+      lat: airport.latitude,
+      lon: airport.longitude,
+      elevation: airport.elevation,
+      tz: ''
+    }
+
+    // Update airport store with received airport
+    useAirportStore.setState({
+      currentAirport: airportData,
+      towerHeight: airport.towerHeight
+    })
+  }, [airport])
+
+  // Update aircraft data reference for interpolation system
+  useEffect(() => {
+    if (aircraft.size > 0) {
+      sharedAircraftData = aircraft
+      lastAircraftUpdateTime = lastUpdate
+    }
+  }, [aircraft, lastUpdate])
+
+  // Mark as initialized once we have essential data
+  useEffect(() => {
+    if (cesiumToken && !initializedRef.current) {
+      initializedRef.current = true
+
+      // Initialize the globalSettingsStore as if it loaded from disk
+      // This prevents the "not initialized" checks from blocking
+      useGlobalSettingsStore.setState({ initialized: true })
+    }
+  }, [cesiumToken])
+
+  return {
+    isReady: !!cesiumToken && initializedRef.current
+  }
+}
+
+export default useInsetStoreSync
