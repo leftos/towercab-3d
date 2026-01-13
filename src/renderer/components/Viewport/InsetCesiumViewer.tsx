@@ -63,61 +63,37 @@ function InsetCesiumViewer({ viewportId }: InsetCesiumViewerProps) {
 
   // Handle messages from the iframe
   const handleMessage = useCallback((event: MessageEvent<InsetMessage>) => {
-    // Log all incoming messages for debugging
-    console.log(`[InsetCesiumViewer ${viewportId}] Received message event:`, {
-      origin: event.origin,
-      expectedOrigin: window.location.origin,
-      hasData: !!event.data,
-      dataType: event.data?.type,
-      dataViewportId: event.data?.viewportId,
-      hasIframeRef: !!iframeRef.current,
-      sourceMatchesIframe: event.source === iframeRef.current?.contentWindow
-    })
-
     // Verify origin (same origin for security)
     if (event.origin !== window.location.origin) {
-      console.log(`[InsetCesiumViewer ${viewportId}] Origin mismatch - ignoring message`)
       return
     }
 
     // Verify source is our iframe
     if (event.source !== iframeRef.current?.contentWindow) {
-      console.log(`[InsetCesiumViewer ${viewportId}] Source mismatch - ignoring message. event.source:`, event.source, 'iframeRef.contentWindow:', iframeRef.current?.contentWindow)
       return
     }
 
     const { type, viewportId: msgViewportId, payload } = event.data
 
     // Handle debug-log messages from inset (these don't have viewportId)
-    if (type === 'debug-log' && payload && typeof payload === 'object' && 'message' in payload) {
-      console.log(`[InsetCesiumViewer ${viewportId}] Debug from inset:`, (payload as { message: string }).message)
-      return
-    }
-    // Also handle the simpler format: { type: 'debug-log', message: '...' }
-    if (type === 'debug-log' && 'message' in event.data) {
-      console.log(`[InsetCesiumViewer ${viewportId}] Debug from inset:`, (event.data as unknown as { message: string }).message)
+    if (type === 'debug-log') {
+      // Debug messages are silently ignored in production
       return
     }
 
     // Ignore messages for other viewports
     if (msgViewportId !== viewportId) {
-      console.log(`[InsetCesiumViewer ${viewportId}] ViewportId mismatch - ignoring message for ${msgViewportId}`)
       return
     }
-
-    console.log(`[InsetCesiumViewer ${viewportId}] Processing message:`, type)
 
     switch (type) {
       case 'inset-ready':
         setIframeReady(true)
-        console.log(`[InsetCesiumViewer] Inset ${viewportId} is ready`)
         break
 
       case 'inset-focus':
         // User clicked/interacted with the inset - activate this viewport
-        console.log(`[InsetCesiumViewer ${viewportId}] Received inset-focus, calling setActiveViewport`)
         useViewportStore.getState().setActiveViewport(viewportId)
-        console.log(`[InsetCesiumViewer ${viewportId}] setActiveViewport called, new activeViewportId:`, useViewportStore.getState().activeViewportId)
         break
 
       case 'camera-change':
@@ -162,10 +138,7 @@ function InsetCesiumViewer({ viewportId }: InsetCesiumViewerProps) {
 
       case 'aircraft-select':
         // Propagate aircraft selection to main app
-        if (payload && typeof payload === 'object' && 'callsign' in payload) {
-          // TODO: This should update the selected aircraft in the main UI
-          console.log(`[InsetCesiumViewer] Aircraft selected in ${viewportId}:`, (payload as { callsign: string }).callsign)
-        }
+        // TODO: This should update the selected aircraft in the main UI
         break
 
       case 'follow-request':
@@ -197,9 +170,7 @@ function InsetCesiumViewer({ viewportId }: InsetCesiumViewerProps) {
 
   // Send message to iframe
   const sendToIframe = useCallback((type: string, payload?: unknown) => {
-    console.log(`[InsetCesiumViewer ${viewportId}] sendToIframe:`, type, 'iframeReady:', iframeReady, 'hasContentWindow:', !!iframeRef.current?.contentWindow)
     if (!iframeRef.current?.contentWindow || !iframeReady) {
-      console.log(`[InsetCesiumViewer ${viewportId}] Cannot send - iframe not ready`)
       return
     }
 
@@ -208,7 +179,6 @@ function InsetCesiumViewer({ viewportId }: InsetCesiumViewerProps) {
         { type, viewportId, payload },
         window.location.origin
       )
-      console.log(`[InsetCesiumViewer ${viewportId}] postMessage sent to iframe successfully`)
     } catch (err) {
       console.error('[InsetCesiumViewer] Failed to send message to iframe:', err)
     }
@@ -220,7 +190,6 @@ function InsetCesiumViewer({ viewportId }: InsetCesiumViewerProps) {
 
     // Send initial activation state
     const initialActive = useViewportStore.getState().activeViewportId === viewportId
-    console.log(`[InsetCesiumViewer] Sending initial activation state to ${viewportId}:`, initialActive)
     sendToIframe('set-activated', { activated: initialActive })
 
     // Subscribe to changes
@@ -228,7 +197,6 @@ function InsetCesiumViewer({ viewportId }: InsetCesiumViewerProps) {
       (state) => state.activeViewportId,
       (activeId) => {
         const isActive = activeId === viewportId
-        console.log(`[InsetCesiumViewer] Active viewport changed to ${activeId}, sending activation to ${viewportId}:`, isActive)
         sendToIframe('set-activated', { activated: isActive })
       }
     )
@@ -296,7 +264,6 @@ function InsetCesiumViewer({ viewportId }: InsetCesiumViewerProps) {
         // If this inset is active and followingCallsign changed, re-focus the iframe
         // This catches follow/unfollow actions triggered from main app UI
         if (isActive && followingCallsign !== prevFollowingCallsign) {
-          console.log(`[InsetCesiumViewer ${viewportId}] Follow state changed while active, requesting iframe focus`)
           sendToIframe('request-focus', {})
         }
         prevFollowingCallsign = followingCallsign
@@ -309,7 +276,6 @@ function InsetCesiumViewer({ viewportId }: InsetCesiumViewerProps) {
           pendingLookAtPosition.lon !== prevLookAtPosition.lon
         )
         if (isActive && lookAtChanged) {
-          console.log(`[InsetCesiumViewer ${viewportId}] Look-at position changed while active, requesting iframe focus`)
           sendToIframe('request-focus', {})
         }
         prevLookAtPosition = pendingLookAtPosition

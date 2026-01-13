@@ -41,9 +41,7 @@ const airportCallbacks = new Set<(airport: SerializedAirport | null) => void>()
 function getSharedWorkerConnection(): { worker: SharedWorker; port: MessagePort } | null {
   if (!sharedWorker) {
     try {
-      // Log the SharedWorker URL for debugging
       const workerUrl = new URL('../workers/shared-data.worker.ts', import.meta.url)
-      console.log('[SharedWorkerConsumer] Creating SharedWorker with URL:', workerUrl.href)
 
       // Connect to existing SharedWorker
       sharedWorker = new SharedWorker(
@@ -58,21 +56,9 @@ function getSharedWorkerConnection(): { worker: SharedWorker; port: MessagePort 
 
       sharedWorkerPort = sharedWorker.port
 
-      // Track message count for debugging
-      let messageCount = 0
-      let lastMessageLogTime = 0
-
       // Handle incoming messages
       sharedWorkerPort.onmessage = (event: MessageEvent<SharedWorkerOutboundMessage>) => {
         const { type, payload } = event.data
-        messageCount++
-
-        // Log message receipt occasionally
-        const now = Date.now()
-        if (now - lastMessageLogTime > 5000) {
-          console.log(`[SharedWorkerConsumer] Message #${messageCount} received: ${type}`)
-          lastMessageLogTime = now
-        }
 
         switch (type) {
           case 'aircraft-update':
@@ -106,19 +92,7 @@ function getSharedWorkerConnection(): { worker: SharedWorker; port: MessagePort 
             break
 
           case 'debug-info':
-            // Debug message from SharedWorker - log it and relay to parent
-            if (payload && typeof payload === 'object' && 'message' in payload) {
-              const msg = (payload as { message: string }).message
-              console.log('[SharedWorkerConsumer] Debug from worker:', msg)
-              try {
-                window.parent?.postMessage(
-                  { type: 'debug-log', message: `[SharedWorker] ${msg}` },
-                  '*'
-                )
-              } catch {
-                // Ignore if parent is same-origin blocked
-              }
-            }
+            // Debug messages from SharedWorker are silently ignored
             break
         }
       }
@@ -128,28 +102,8 @@ function getSharedWorkerConnection(): { worker: SharedWorker; port: MessagePort 
       }
 
       sharedWorkerPort.start()
-      console.log('[SharedWorkerConsumer] Connected to SharedWorker')
-
-      // Report to parent window for visibility in Tauri logs
-      try {
-        window.parent?.postMessage(
-          { type: 'debug-log', message: '[SharedWorkerConsumer] Connected to SharedWorker' },
-          '*'
-        )
-      } catch {
-        // Ignore if parent is same-origin blocked
-      }
     } catch (error) {
       console.error('[SharedWorkerConsumer] Failed to connect to SharedWorker:', error)
-      // Report error to parent window
-      try {
-        window.parent?.postMessage(
-          { type: 'debug-log', message: `[SharedWorkerConsumer] Error: ${error}` },
-          '*'
-        )
-      } catch {
-        // Ignore
-      }
       return null
     }
   }
@@ -232,10 +186,6 @@ export function useSharedWorkerConsumer(viewportId: string): SharedWorkerConsume
       registeredRef.current = true
     }
 
-    // Track last log time to avoid spam
-    let lastAircraftLogTime = 0
-    let aircraftUpdateCount = 0
-
     // Set up callbacks
     const handleAircraft = (data: SerializedAircraftState[]) => {
       const newMap = new Map<string, SerializedAircraftState>()
@@ -244,24 +194,6 @@ export function useSharedWorkerConsumer(viewportId: string): SharedWorkerConsume
       }
       setAircraft(newMap)
       setLastUpdate(Date.now())
-      aircraftUpdateCount++
-
-      // Log occasionally (every ~2 seconds) to confirm data is flowing
-      const now = Date.now()
-      if (now - lastAircraftLogTime > 2000) {
-        const msg = `Received ${data.length} aircraft (update #${aircraftUpdateCount})`
-        console.log(`[SharedWorkerConsumer] ${msg}`)
-        // Relay to parent window so it appears in Tauri logs
-        try {
-          window.parent?.postMessage(
-            { type: 'debug-log', message: `[SharedWorkerConsumer] ${msg}` },
-            '*'
-          )
-        } catch {
-          // Ignore if blocked
-        }
-        lastAircraftLogTime = now
-      }
     }
 
     const handleSettings = (data: SerializedSettings) => {

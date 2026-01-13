@@ -17,25 +17,19 @@ function RemoteClientsIndicator() {
     // Only show on desktop app (not in remote/browser mode)
     const inRemote = isRemoteMode()
     const inTauri = isTauri()
-    console.log('[RemoteClientsIndicator] isRemoteMode:', inRemote, 'isTauri:', inTauri)
 
     if (inRemote || !inTauri) {
-      console.log('[RemoteClientsIndicator] Not showing - remote or not Tauri')
       return
     }
 
-    console.log('[RemoteClientsIndicator] Setting up Tauri event listener...')
     let unlisten: (() => void) | null = null
 
     const setupListener = async () => {
       try {
         const { listen } = await import('@tauri-apps/api/event')
-        console.log('[RemoteClientsIndicator] Got listen function, subscribing to remote-clients-changed...')
         unlisten = await listen<number>('remote-clients-changed', (event) => {
-          console.log('[RemoteClientsIndicator] Received event, payload:', event.payload)
           setClientCount(event.payload)
         })
-        console.log('[RemoteClientsIndicator] Listener setup complete')
       } catch (error) {
         console.error('[RemoteClientsIndicator] Failed to setup listener:', error)
       }
@@ -44,7 +38,6 @@ function RemoteClientsIndicator() {
     setupListener()
 
     return () => {
-      console.log('[RemoteClientsIndicator] Cleaning up listener')
       if (unlisten) {
         unlisten()
       }

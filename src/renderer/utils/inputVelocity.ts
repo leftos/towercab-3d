@@ -45,7 +45,8 @@ export const MOVEMENT_CONFIG = {
   MAX_ZOOM_SPEED: 30,      // Max FOV change speed (degrees per second)
   MAX_ALTITUDE_SPEED: 1500, // Max altitude change speed (meters per second)
   MAX_ORBIT_DIST_SPEED: 500, // Max orbit distance change speed (meters per second)
-  WHEEL_IMPULSE_STRENGTH: 80, // How much velocity each unit of wheel adds
+  WHEEL_IMPULSE_STRENGTH: 120, // How much velocity each unit of wheel adds
+  WHEEL_IMPULSE_DECAY: 12,  // Impulse decay rate (higher = faster decay)
   VELOCITY_THRESHOLD: 0.01  // Minimum velocity to apply
 } as const
 
@@ -261,14 +262,12 @@ export function applyWheelImpulse(
     if (Math.sign(impulseAmount) !== Math.sign(velocity.zoom) && velocity.zoom !== 0) {
       velocity.zoom = 0
     }
-    velocity.zoom += impulseAmount * 0.08
+    velocity.zoom += impulseAmount * 0.15  // Increased from 0.08 for more responsive wheel zoom
   }
 
   // Decay the impulse using time-based exponential decay
-  // At 60 FPS (dt=0.016), this gives ~0.6 decay per frame (matching old behavior)
-  // At 30 FPS (dt=0.033), decay is stronger per frame but same per second
-  const decayRate = 30  // Higher = faster decay
-  let decayedImpulse = wheelImpulse * Math.exp(-decayRate * dt)
+  // Lower decay rate = impulse persists longer for smoother scrolling
+  let decayedImpulse = wheelImpulse * Math.exp(-MOVEMENT_CONFIG.WHEEL_IMPULSE_DECAY * dt)
   if (Math.abs(decayedImpulse) < 0.01) {
     decayedImpulse = 0
   }

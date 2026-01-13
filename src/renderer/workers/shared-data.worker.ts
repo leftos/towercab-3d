@@ -97,10 +97,6 @@ let mainAppPort: MessagePort | null = null
 /** Track inset viewport IDs and their ports */
 const insetPorts: Map<string, MessagePort> = new Map()
 
-// Debug tracking
-let lastBroadcastTime = 0
-let broadcastCount = 0
-
 /** Latest data cache (for new connections) */
 const dataCache = {
   aircraft: null as SerializedAircraftState[] | null,
@@ -126,17 +122,8 @@ function handleMessage(port: MessagePort, event: MessageEvent<SharedWorkerInboun
       // Register an inset viewport
       if (viewportId) {
         insetPorts.set(viewportId, port)
-        console.log(`[SharedWorker] Registered inset ${viewportId}, total insets: ${insetPorts.size}`)
-        // Send debug info back to the inset
-        port.postMessage({
-          type: 'debug-info' as SharedWorkerMessageType,
-          payload: { message: `Registered successfully, ${insetPorts.size} insets total, cached aircraft: ${dataCache.aircraft?.length ?? 0}` },
-          timestamp: Date.now()
-        })
         // Send cached data to newly connected inset
         sendCachedDataToPort(port)
-      } else {
-        console.warn('[SharedWorker] register-inset called without viewportId')
       }
       break
 
@@ -153,14 +140,7 @@ function handleMessage(port: MessagePort, event: MessageEvent<SharedWorkerInboun
         const aircraftPayload = payload as SerializedAircraftState[]
         dataCache.aircraft = aircraftPayload
         dataCache.timestamp = Date.now()
-        // Log occasionally to confirm receipt
-        const now = Date.now()
-        if (now - lastBroadcastTime > 2000) {
-          console.log(`[SharedWorker] Received aircraft-update: ${aircraftPayload.length} aircraft, insets: ${insetPorts.size}`)
-        }
         broadcastToInsets({ type, payload, timestamp: dataCache.timestamp })
-      } else {
-        console.warn('[SharedWorker] Rejected aircraft-update from non-main source')
       }
       break
 
@@ -254,30 +234,15 @@ function sendCachedDataToPort(port: MessagePort) {
  * Broadcast a message to all connected inset ports
  */
 function broadcastToInsets(message: SharedWorkerOutboundMessage) {
-  const now = Date.now()
-  broadcastCount++
-
-  // Log every ~2 seconds to track broadcast activity
-  if (now - lastBroadcastTime > 2000) {
-    console.log(`[SharedWorker] Broadcasting ${message.type} to ${insetPorts.size} insets (broadcast #${broadcastCount})`)
-    lastBroadcastTime = now
-  }
-
   if (insetPorts.size === 0) {
-    // No insets registered - this is the likely issue!
-    if (now - lastBroadcastTime > 2000) {
-      console.warn('[SharedWorker] No insets registered to receive broadcasts!')
-    }
     return
   }
 
   for (const [viewportId, port] of insetPorts.entries()) {
     try {
       port.postMessage(message)
-    } catch (error) {
-      // Port may have been disconnected
-      console.warn(`[SharedWorker] Failed to post to inset port ${viewportId}:`, error)
-      // Remove disconnected port
+    } catch {
+      // Port may have been disconnected - remove it
       insetPorts.delete(viewportId)
     }
   }
@@ -297,7 +262,6 @@ workerSelf.onconnect = (event: MessageEvent) => {
   // First connection is assumed to be main app
   if (!mainAppPort) {
     mainAppPort = port
-    console.log('[SharedWorker] Main app connected')
   }
 
   port.onmessage = (messageEvent: MessageEvent<SharedWorkerInboundMessage>) => {
@@ -311,34 +275,4 @@ workerSelf.onconnect = (event: MessageEvent) => {
   // Handle port close (if supported)
   // Note: MessagePort doesn't have onclose, we rely on error handling
   port.start()
-
-  console.log('[SharedWorker] New port connected, total:', connectedPorts.size)
 }
-
-// Log worker initialization
-console.log('[SharedWorker] Initialized')
-
-// Periodic status broadcast for debugging
-// Send status to all connected ports every 10 seconds
-setInterval(() => {
-  const status = {
-    connectedPorts: connectedPorts.size,
-    insetPorts: insetPorts.size,
-    hasMainApp: mainAppPort !== null,
-    cachedAircraft: dataCache.aircraft?.length ?? 0,
-    broadcastCount
-  }
-
-  // Send to all connected ports (not just insets)
-  for (const port of connectedPorts) {
-    try {
-      port.postMessage({
-        type: 'debug-info',
-        payload: { message: `Status: ${JSON.stringify(status)}` },
-        timestamp: Date.now()
-      })
-    } catch {
-      // Port may be disconnected
-    }
-  }
-}, 10000)

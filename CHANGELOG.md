@@ -12,9 +12,6 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ### Fixed
 - **3D buildings now render correctly in inset viewports** - Insets now use isolated rendering contexts, fixing a Cesium bug that prevented 3D buildings from appearing in secondary viewports
-- **Look at aircraft/runway now works correctly in insets** - Camera heading and pitch are now calculated from the inset's actual camera position (including WASD offsets), so targets are properly centered
-- **Clicking UI panels no longer switches active viewport** - You can now interact with dropdown menus and panels while an inset is active without the focus unexpectedly jumping to the main viewport
-- **Weather visibility culling works in insets** - Datablocks are now properly hidden based on fog and cloud conditions in inset viewports
 
 ## [0.0.33-alpha] - 2026-01-11
 

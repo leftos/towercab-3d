@@ -465,10 +465,11 @@ export function useCameraInput(
       event.preventDefault()
 
       // Normalize wheel delta and add to impulse (accumulates for fast scrolling)
-      const normalizedDelta = Math.sign(event.deltaY) * Math.min(Math.abs(event.deltaY), 100) / 100
+      // Cap at 150 to handle high-DPI mice, divide by 100 for unit scale
+      const normalizedDelta = Math.sign(event.deltaY) * Math.min(Math.abs(event.deltaY), 150) / 100
       wheelImpulseRef.current += normalizedDelta
-      // Clamp total impulse to prevent excessive buildup
-      wheelImpulseRef.current = Math.max(-3, Math.min(3, wheelImpulseRef.current))
+      // Clamp total impulse to prevent excessive buildup from rapid scrolling
+      wheelImpulseRef.current = Math.max(-4, Math.min(4, wheelImpulseRef.current))
     }
 
     const canvas = viewer.canvas
@@ -482,23 +483,16 @@ export function useCameraInput(
   // Smooth keyboard controls with animation loop
   useEffect(() => {
     // Skip keyboard handling when input is disabled (e.g., inactive iframe inset)
-    console.log(`[useCameraInput ${viewportId}] Keyboard effect running, isInputEnabled:`, isInputEnabled)
     if (!isInputEnabled) {
-      console.log(`[useCameraInput ${viewportId}] Skipping keyboard setup - input disabled`)
       return
     }
     if (!viewer || viewer.isDestroyed()) {
-      console.log(`[useCameraInput ${viewportId}] Skipping keyboard setup - no viewer`)
       return
     }
 
-    console.log(`[useCameraInput ${viewportId}] Setting up keyboard listeners`)
-
     const handleKeyDown = (event: KeyboardEvent) => {
-      console.log(`[useCameraInput ${viewportId}] KeyDown received:`, event.key, 'isActiveRef:', isActiveRef.current)
       // Only process keyboard input if this viewport is active
       if (!isActiveRef.current) {
-        console.log(`[useCameraInput ${viewportId}] Ignoring key - viewport not active`)
         return
       }
 
@@ -656,10 +650,6 @@ export function useCameraInput(
 
       // Only process input if this viewport is active
       if (!isActiveRef.current) {
-        // Log periodically (every ~1 second) to avoid spam
-        if (Math.floor(currentTime / 1000) !== Math.floor(lastFrameTimeRef.current / 1000)) {
-          console.log(`[useCameraInput ${viewportIdRef.current}] Animation skipping - isActiveRef is false, activeViewportId:`, useViewportStore.getState().activeViewportId)
-        }
         // Still need to schedule next frame but skip processing
         animationFrameRef.current = requestAnimationFrame(animate)
         return
@@ -849,7 +839,6 @@ export function useCameraInput(
     const pressedKeys = pressedKeysRef.current
 
     return () => {
-      console.log(`[useCameraInput] Cleaning up keyboard listeners`)
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current)
       }

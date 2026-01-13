@@ -198,14 +198,12 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
 
   // Send camera updates to parent
   const sendToParent = useCallback((message: InsetToParentMessage) => {
-    console.log(`[InsetApp ${viewportId}] sendToParent:`, message.type, 'parentOrigin:', parentOrigin)
     try {
       window.parent.postMessage(message, parentOrigin)
-      console.log(`[InsetApp ${viewportId}] postMessage sent successfully`)
     } catch (err) {
       console.error('[InsetApp] Failed to post message to parent:', err)
     }
-  }, [viewportId, parentOrigin])
+  }, [parentOrigin])
 
   // Handle aircraft selection in this inset (for future use)
   const _handleAircraftSelect = useCallback((callsign: string) => {
@@ -229,36 +227,19 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
   // Listen for messages from parent
   useEffect(() => {
     const handleMessage = (event: MessageEvent<ParentToInsetMessage>) => {
-      // Log all incoming messages for debugging
-      console.log(`[InsetApp ${viewportId}] Received message event:`, {
-        origin: event.origin,
-        expectedOrigin: parentOrigin,
-        hasData: !!event.data,
-        dataType: event.data?.type,
-        dataViewportId: event.data?.viewportId
-      })
-
       // Verify origin
-      if (event.origin !== parentOrigin) {
-        console.log(`[InsetApp ${viewportId}] Origin mismatch - ignoring message`)
-        return
-      }
+      if (event.origin !== parentOrigin) return
 
       const { type, viewportId: msgViewportId, payload } = event.data
 
       // Ignore messages for other viewports
-      if (msgViewportId !== viewportId) {
-        console.log(`[InsetApp ${viewportId}] ViewportId mismatch - ignoring message for ${msgViewportId}`)
-        return
-      }
+      if (msgViewportId !== viewportId) return
 
-      console.log(`[InsetApp ${viewportId}] Processing message:`, type)
       const store = useViewportStore.getState()
 
       switch (type) {
         case 'camera-update':
           // Parent is updating our camera state (e.g., loading bookmark, follow aircraft, look at runway)
-          console.log(`[InsetApp ${viewportId}] Received camera-update:`, payload)
           if (payload && typeof payload === 'object') {
             const updates = payload as CameraStateUpdate & {
               followingCallsign?: string | null
@@ -290,7 +271,6 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
             if ('pendingLookAtPosition' in updates) {
               if (updates.pendingLookAtPosition) {
                 const { lat, lon, altitudeFt } = updates.pendingLookAtPosition
-                console.log(`[InsetApp ${viewportId}] Received pendingLookAtPosition:`, lat, lon, altitudeFt)
                 store.lookAtPosition(lat, lon, altitudeFt)
                 hasLookAtPosition = true
               } else {
@@ -331,11 +311,9 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
           // Parent is telling us whether we're the activated viewport
           if (payload && typeof payload === 'object' && 'activated' in payload) {
             const activated = (payload as { activated: boolean }).activated
-            console.log(`[InsetApp ${viewportId}] Received set-activated:`, activated)
             setIsActivatedByParent(activated)
             // Ensure this iframe has keyboard focus when activated
             if (activated) {
-              console.log(`[InsetApp ${viewportId}] Focusing window for keyboard input`)
               window.focus()
             }
           }
@@ -343,7 +321,6 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
 
         case 'request-focus':
           // Parent is requesting we focus this iframe (e.g., after a UI action targeted this inset)
-          console.log(`[InsetApp ${viewportId}] Received request-focus, focusing window`)
           window.focus()
           break
       }
@@ -390,15 +367,11 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
     })
   }, [viewportId, sendToParent])
 
-  // Track if we've already sent focus notification (to avoid spam)
-  const hasSentFocusRef = useRef(false)
-
   // Document-level focus detection - captures ALL interactions including Cesium canvas
   // This is needed because Cesium captures mouse events on its canvas
   useEffect(() => {
     // Send focus on any mousedown/touchstart in the document
-    const handleDocumentInteraction = (e: Event) => {
-      console.log(`[InsetApp ${viewportId}] Document interaction detected:`, e.type, 'hasSentFocus:', hasSentFocusRef.current)
+    const handleDocumentInteraction = (_e: Event) => {
       // Always send focus when user interacts - the parent will debounce if needed
       // Don't skip based on hasSentFocusRef since that prevents re-activation after clicking elsewhere
       sendToParent({
@@ -485,9 +458,6 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
       </div>
     )
   }
-
-  // Log activation state changes
-  console.log(`[InsetApp ${viewportId}] Render - isActivatedByParent:`, isActivatedByParent)
 
   // Render the isolated CesiumViewer
   // The viewer uses local stores that are populated from SharedWorker data

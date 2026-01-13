@@ -43,12 +43,9 @@ const SETTINGS_DEBOUNCE_MS = 100
 function getSharedWorker(): { worker: SharedWorker; port: MessagePort } | null {
   if (!sharedWorker) {
     try {
-      // Log the SharedWorker URL for debugging
       const workerUrl = new URL('../workers/shared-data.worker.ts', import.meta.url)
-      console.log('[SharedWorkerProvider] Creating SharedWorker with URL:', workerUrl.href)
 
       // Create SharedWorker with module type
-      // Note: The worker URL needs to be handled by Vite
       sharedWorker = new SharedWorker(
         workerUrl,
         { type: 'module', name: 'towercab-shared' }
@@ -66,7 +63,6 @@ function getSharedWorker(): { worker: SharedWorker; port: MessagePort } | null {
       }
 
       sharedWorkerPort.start()
-      console.log('[SharedWorkerProvider] SharedWorker initialized')
     } catch (error) {
       console.error('[SharedWorkerProvider] Failed to create SharedWorker:', error)
       return null
@@ -213,11 +209,6 @@ export function useSharedWorkerProvider(
   const insetCount = useViewportStore(state => state.viewports.length - 1)
   const hasInsets = insetCount > 0
 
-  // Debug logging for inset count
-  useEffect(() => {
-    console.log(`[SharedWorkerProvider] Inset count changed: ${insetCount}, hasInsets: ${hasInsets}`)
-  }, [insetCount, hasInsets])
-
   // Initialize SharedWorker and push initial data
   useEffect(() => {
     if (!enabled || !hasInsets) return
@@ -228,22 +219,13 @@ export function useSharedWorkerProvider(
     if (!worker) return
 
     // Listen for messages from SharedWorker (camera updates from insets)
-    // Note: Currently we just log these for debugging. Bidirectional camera sync
-    // is complex because setHeading/setPitch operate on the active viewport,
-    // not a specific viewport ID. For now, insets manage their own camera state.
-    worker.port.onmessage = (event: MessageEvent<SharedWorkerOutboundMessage>) => {
-      const { type, viewportId, payload } = event.data
-
-      if (type === 'viewport-camera' && viewportId) {
-        // Camera updates from insets are received but not applied to main app's viewportStore
-        // The inset manages its own camera state independently
-        // Future: Could store this for bookmarking or viewport state persistence
-      }
-
-      if (type === 'debug-info' && payload && typeof payload === 'object' && 'message' in payload) {
-        // Log debug info from SharedWorker
-        console.log(`[SharedWorkerProvider] ${(payload as { message: string }).message}`)
-      }
+    // Note: Bidirectional camera sync is complex because setHeading/setPitch operate
+    // on the active viewport, not a specific viewport ID. For now, insets manage
+    // their own camera state. Future: Could store this for bookmarking or viewport
+    // state persistence.
+    worker.port.onmessage = (_event: MessageEvent<SharedWorkerOutboundMessage>) => {
+      // Camera updates from insets are received but not applied to main app's viewportStore
+      // The inset manages its own camera state independently
     }
 
     // Push Cesium Ion token immediately
@@ -383,9 +365,6 @@ export function useSharedWorkerProvider(
     }
   }, [enabled, hasInsets])
 
-  // Track last log time for throttled logging
-  const lastPushLogTimeRef = useRef(0)
-
   // Push aircraft updates on animation frame
   const pushAircraftUpdate = useCallback(() => {
     if (!enabled || !hasInsets || !interpolatedAircraft) {
@@ -410,11 +389,6 @@ export function useSharedWorkerProvider(
       })
       lastAircraftCountRef.current = aircraftCount
       lastPushTimeRef.current = now
-      // Log occasionally to confirm data is flowing
-      if (now - lastPushLogTimeRef.current > 2000) {
-        console.log(`[SharedWorkerProvider] Pushed ${aircraftCount} aircraft to SharedWorker`)
-        lastPushLogTimeRef.current = now
-      }
     }
 
     animationFrameRef.current = requestAnimationFrame(pushAircraftUpdate)
@@ -423,11 +397,9 @@ export function useSharedWorkerProvider(
   // Start aircraft push loop
   useEffect(() => {
     if (!enabled || !hasInsets) {
-      console.log(`[SharedWorkerProvider] Not starting aircraft loop: enabled=${enabled}, hasInsets=${hasInsets}`)
       return
     }
 
-    console.log(`[SharedWorkerProvider] Starting aircraft push loop`)
     animationFrameRef.current = requestAnimationFrame(pushAircraftUpdate)
 
     return () => {
