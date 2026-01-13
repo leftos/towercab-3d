@@ -227,11 +227,21 @@ class RealTrafficService {
         const responseText = await invoke<string>('realtraffic_traffic', { params })
         const data: RTTrafficResponse = JSON.parse(responseText)
 
-        // Check for API error status (e.g., 406 rate limit violation)
+        // Check for API error status (e.g., 406 rate limit violation, 401 session expired)
         // The API returns { status: 406, message: "...", server: "..." } when rate limited
         if (data.status && data.status !== 200) {
           const errorMessage = data.message || `API error: ${data.status}`
           console.warn('[RealTraffic] API error:', data.status, errorMessage)
+
+          // Handle 401 (GUID not found / session expired) - clear session so store can re-auth
+          if (data.status === 401) {
+            this.sessionGuid = null
+            return {
+              success: false,
+              error: 'Session expired, please re-authenticate'
+            }
+          }
+
           return {
             success: false,
             error: errorMessage,
@@ -459,6 +469,16 @@ class RealTrafficService {
         if (data.status && data.status !== 200) {
           const errorMessage = data.message || `API error: ${data.status}`
           console.warn('[RealTraffic] Parked traffic API error:', data.status, errorMessage)
+
+          // Handle 401 (GUID not found / session expired) - clear session so store can re-auth
+          if (data.status === 401) {
+            this.sessionGuid = null
+            return {
+              success: false,
+              error: 'Session expired, please re-authenticate'
+            }
+          }
+
           return {
             success: false,
             error: errorMessage,
