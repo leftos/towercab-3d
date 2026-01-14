@@ -235,13 +235,42 @@ export function useCesiumViewer(
       navigationHelpButton: false,
       navigationInstructionsInitiallyVisible: false,
       creditContainer: document.createElement('div'), // Hide credits
-      msaaSamples: effectiveMsaa
+      msaaSamples: effectiveMsaa,
+      // WebGL context options - desynchronized hints browser to skip VSync
+      // powerPreference ensures discrete GPU is used
+      contextOptions: {
+        webgl: {
+          desynchronized: true,
+          powerPreference: 'high-performance'
+        } as WebGLContextAttributes
+      }
     })
 
     // Configure scene - use settings from store
     newViewer.scene.globe.enableLighting = enableLighting
     newViewer.scene.fog.enabled = true
     newViewer.scene.globe.depthTestAgainstTerrain = true
+    
+    newViewer.scene.screenSpaceCameraController.enableRotate = false;
+    newViewer.scene.screenSpaceCameraController.enableTranslate = false;
+    newViewer.scene.screenSpaceCameraController.enableZoom = false;
+    newViewer.scene.screenSpaceCameraController.enableTilt = false;
+    newViewer.scene.screenSpaceCameraController.enableLook = false;
+
+    // Remove Cesium's default LEFT_CLICK and LEFT_DOUBLE_CLICK handlers from the viewer's
+    // built-in screenSpaceEventHandler. These handlers perform entity picking which causes
+    // brief scene state changes, leading to aircraft flickering as the culling system
+    // produces different results during the pick operation.
+    // Note: selectionIndicator: false and infoBox: false disable the visual feedback but
+    // NOT the underlying click handlers that trigger entity picking.
+    newViewer.screenSpaceEventHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_CLICK);
+    newViewer.screenSpaceEventHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
+
+    // Reduce resolution for insets to lower GPU load
+    // 0.75 = render at 75% resolution, good balance of quality vs performance
+    if (isInset && !insetGraphics.enabled) {
+      newViewer.resolutionScale = 0.75
+    }
 
     // Rendering quality improvements - from settings
     newViewer.scene.logarithmicDepthBuffer = enableLogDepth

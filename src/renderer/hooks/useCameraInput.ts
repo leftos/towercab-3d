@@ -325,6 +325,13 @@ export function useCameraInput(
       isLeftDraggingRef.current = false
     }, Cesium.ScreenSpaceEventType.LEFT_UP)
 
+    // Intercept LEFT_CLICK to prevent Cesium's default behavior
+    // This fixes aircraft flickering on click (Cesium does internal processing on click
+    // that briefly affects the scene state, causing culling to produce different results)
+    handler.setInputAction(() => {
+      // Intentionally empty - just intercepts the event
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK)
+
     // Right-click drag start
     handler.setInputAction((movement: { position: Cesium.Cartesian2 }) => {
       // Activate this viewport on click - update ref immediately so keyboard works without waiting for re-render
@@ -466,7 +473,15 @@ export function useCameraInput(
 
       // Normalize wheel delta and add to impulse (accumulates for fast scrolling)
       // Cap at 150 to handle high-DPI mice, divide by 100 for unit scale
-      const normalizedDelta = Math.sign(event.deltaY) * Math.min(Math.abs(event.deltaY), 150) / 100
+      let normalizedDelta = Math.sign(event.deltaY) * Math.min(Math.abs(event.deltaY), 150) / 100
+
+      // Scale wheel sensitivity based on viewport size
+      // Smaller viewports get reduced sensitivity to prevent aggressive zooming
+      // Reference size is 800px - viewports smaller than this get proportionally reduced sensitivity
+      const viewportSize = Math.min(canvas.clientWidth, canvas.clientHeight)
+      const sizeScale = Math.min(1, Math.max(0.2, viewportSize / 800))
+      normalizedDelta *= sizeScale
+
       wheelImpulseRef.current += normalizedDelta
       // Clamp total impulse to prevent excessive buildup from rapid scrolling
       wheelImpulseRef.current = Math.max(-4, Math.min(4, wheelImpulseRef.current))
