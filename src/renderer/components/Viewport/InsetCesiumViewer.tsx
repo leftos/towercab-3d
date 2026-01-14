@@ -17,10 +17,6 @@ import { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { useViewportStore } from '../../stores/viewportStore'
 import type { CameraStateUpdate } from '../../types/shared-worker'
 
-// Debounce time for saving inset camera state (ms)
-// Only save after camera has been idle for this long to avoid feedback loops
-const CAMERA_SAVE_DEBOUNCE_MS = 2500
-
 interface InsetCesiumViewerProps {
   viewportId: string
 }
@@ -32,6 +28,8 @@ interface InsetMessage {
   type: 'inset-ready' | 'inset-focus' | 'camera-change' | 'aircraft-select' | 'follow-request' | 'error' | 'debug-log'
   viewportId: string
   payload?: unknown
+  /** When true, manipulation has ended and this is the final state to persist */
+  final?: boolean
 }
 
 /**
@@ -45,9 +43,6 @@ function InsetCesiumViewer({ viewportId }: InsetCesiumViewerProps) {
   const [isReady, setIsReady] = useState(false)
   const [iframeReady, setIframeReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  // Debounce timer for camera state persistence
-  const cameraSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Track when we're processing a camera update FROM the inset
   // Used to prevent echoing the same update back to the inset
@@ -100,53 +95,70 @@ function InsetCesiumViewer({ viewportId }: InsetCesiumViewerProps) {
         useViewportStore.getState().setActiveViewport(viewportId)
         break
 
-      case 'camera-change':
-        // Debounced camera state persistence - only save after camera is idle
-        // This avoids feedback loops during active camera manipulation
+      case 'camera-change': {
+        // Camera state update from inset
+        // - Always update live state (viewports) immediately
+        // - Only persist (airportViewportConfigs) when final=true (manipulation ended)
         if (payload && typeof payload === 'object') {
           const cameraUpdate = payload as CameraStateUpdate
+          const isFinal = event.data.final === true
 
-          // Clear existing timer
-          if (cameraSaveTimerRef.current) {
-            clearTimeout(cameraSaveTimerRef.current)
-          }
+          const store = useViewportStore.getState()
+          const viewportIndex = store.viewports.findIndex(v => v.id === viewportId)
 
-          // Set new debounced save
-          cameraSaveTimerRef.current = setTimeout(() => {
-            const store = useViewportStore.getState()
-            const viewportIndex = store.viewports.findIndex(v => v.id === viewportId)
+          if (viewportIndex >= 0) {
+            // Set flag to prevent echoing this update back to the inset
+            insetCameraUpdateInProgressRef.current = true
 
-            if (viewportIndex >= 0) {
-              // Set flag to prevent echoing this update back to the inset
-              insetCameraUpdateInProgressRef.current = true
-
-              // Directly update this viewport's cameraState without changing activeViewport
-              const updatedViewports = [...store.viewports]
-              updatedViewports[viewportIndex] = {
-                ...updatedViewports[viewportIndex],
-                cameraState: {
-                  ...updatedViewports[viewportIndex].cameraState,
-                  ...(cameraUpdate.heading !== undefined && { heading: cameraUpdate.heading }),
-                  ...(cameraUpdate.pitch !== undefined && { pitch: cameraUpdate.pitch }),
-                  ...(cameraUpdate.fov !== undefined && { fov: cameraUpdate.fov }),
-                  ...(cameraUpdate.positionOffsetX !== undefined && { positionOffsetX: cameraUpdate.positionOffsetX }),
-                  ...(cameraUpdate.positionOffsetY !== undefined && { positionOffsetY: cameraUpdate.positionOffsetY }),
-                  ...(cameraUpdate.positionOffsetZ !== undefined && { positionOffsetZ: cameraUpdate.positionOffsetZ }),
-                  ...(cameraUpdate.orbitDistance !== undefined && { orbitDistance: cameraUpdate.orbitDistance }),
-                  ...(cameraUpdate.orbitHeading !== undefined && { orbitHeading: cameraUpdate.orbitHeading }),
-                  ...(cameraUpdate.orbitPitch !== undefined && { orbitPitch: cameraUpdate.orbitPitch })
-                }
+            // Directly update this viewport's cameraState without changing activeViewport
+            const updatedViewports = [...store.viewports]
+            updatedViewports[viewportIndex] = {
+              ...updatedViewports[viewportIndex],
+              cameraState: {
+                ...updatedViewports[viewportIndex].cameraState,
+                ...(cameraUpdate.heading !== undefined && { heading: cameraUpdate.heading }),
+                ...(cameraUpdate.pitch !== undefined && { pitch: cameraUpdate.pitch }),
+                ...(cameraUpdate.fov !== undefined && { fov: cameraUpdate.fov }),
+                ...(cameraUpdate.positionOffsetX !== undefined && { positionOffsetX: cameraUpdate.positionOffsetX }),
+                ...(cameraUpdate.positionOffsetY !== undefined && { positionOffsetY: cameraUpdate.positionOffsetY }),
+                ...(cameraUpdate.positionOffsetZ !== undefined && { positionOffsetZ: cameraUpdate.positionOffsetZ }),
+                ...(cameraUpdate.orbitDistance !== undefined && { orbitDistance: cameraUpdate.orbitDistance }),
+                ...(cameraUpdate.orbitHeading !== undefined && { orbitHeading: cameraUpdate.orbitHeading }),
+                ...(cameraUpdate.orbitPitch !== undefined && { orbitPitch: cameraUpdate.orbitPitch })
               }
-              useViewportStore.setState({ viewports: updatedViewports })
-
-              // Clear flag after a microtask to allow subscription to check it
-              queueMicrotask(() => {
-                insetCameraUpdateInProgressRef.current = false
-              })
             }
-          }, CAMERA_SAVE_DEBOUNCE_MS)
+
+            if (isFinal) {
+              // Manipulation ended - persist to airportViewportConfigs for global-settings.json sync
+              const icao = store.currentAirportIcao
+              if (icao) {
+                const airportViewportConfigs = { ...store.airportViewportConfigs }
+                const existingConfig = airportViewportConfigs[icao]
+                airportViewportConfigs[icao] = {
+                  ...existingConfig,
+                  viewports: updatedViewports.map(v => ({
+                    ...v,
+                    cameraState: { ...v.cameraState, followingCallsign: null, preFollowState: null }
+                  })),
+                  activeViewportId: store.activeViewportId
+                }
+                useViewportStore.setState({ viewports: updatedViewports, airportViewportConfigs })
+              } else {
+                useViewportStore.setState({ viewports: updatedViewports })
+              }
+            } else {
+              // Still manipulating - only update live state, don't persist yet
+              useViewportStore.setState({ viewports: updatedViewports })
+            }
+
+            // Clear flag after a microtask to allow subscription to check it
+            queueMicrotask(() => {
+              insetCameraUpdateInProgressRef.current = false
+            })
+          }
         }
         break
+      }
 
       case 'aircraft-select':
         // Propagate aircraft selection to main app

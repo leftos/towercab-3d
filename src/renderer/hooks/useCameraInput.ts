@@ -1,6 +1,7 @@
 import { useEffect, useRef, useMemo } from 'react'
 import * as Cesium from 'cesium'
 import { useViewportStore } from '../stores/viewportStore'
+import { startManipulation, endManipulation } from '../stores/viewport/viewportHelpers'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useGlobalSettingsStore } from '../stores/globalSettingsStore'
 import { useUIFeedbackStore } from '../stores/uiFeedbackStore'
@@ -314,6 +315,7 @@ export function useCameraInput(
       // Activate this viewport on click - update ref immediately so keyboard works without waiting for re-render
       setActiveViewport(viewportIdRef.current)
       isActiveRef.current = true
+      startManipulation()
       if (viewModeRef.current === 'topdown') {
         isLeftDraggingRef.current = true
         lastMousePosRef.current = { x: movement.position.x, y: movement.position.y }
@@ -323,6 +325,7 @@ export function useCameraInput(
     // Left-click drag end
     handler.setInputAction(() => {
       isLeftDraggingRef.current = false
+      endManipulation()
     }, Cesium.ScreenSpaceEventType.LEFT_UP)
 
     // Intercept LEFT_CLICK to prevent Cesium's default behavior
@@ -338,6 +341,7 @@ export function useCameraInput(
       setActiveViewport(viewportIdRef.current)
       isActiveRef.current = true
       isDraggingRef.current = true
+      startManipulation()
       lastMousePosRef.current = { x: movement.position.x, y: movement.position.y }
 
       // Cancel any ongoing look-at animation when user manually moves camera
@@ -357,6 +361,7 @@ export function useCameraInput(
       setActiveViewport(viewportIdRef.current)
       isActiveRef.current = true
       isDraggingRef.current = true
+      startManipulation()
       lastMousePosRef.current = { x: movement.position.x, y: movement.position.y }
 
       // Cancel any ongoing look-at animation when user manually moves camera
@@ -414,11 +419,13 @@ export function useCameraInput(
     // Right-click drag end
     handler.setInputAction(() => {
       isDraggingRef.current = false
+      endManipulation()
     }, Cesium.ScreenSpaceEventType.RIGHT_UP)
 
     // Middle-click drag end
     handler.setInputAction(() => {
       isDraggingRef.current = false
+      endManipulation()
     }, Cesium.ScreenSpaceEventType.MIDDLE_UP)
 
     // Prevent context menu on right-click
@@ -433,21 +440,28 @@ export function useCameraInput(
       // Right button (button 2) or middle button (button 1)
       if (event.button === 2 || event.button === 1) {
         isDraggingRef.current = false
+        endManipulation()
       }
       // Left button (button 0)
       if (event.button === 0) {
         isLeftDraggingRef.current = false
+        endManipulation()
       }
     }
 
     // Also check button state on any mouse move - if button is no longer pressed, end drag
     const handleGlobalMouseMove = (event: MouseEvent) => {
       // event.buttons is a bitmask: 1=left, 2=right, 4=middle
+      const wasManipulating = isDraggingRef.current || isLeftDraggingRef.current
       if (isDraggingRef.current && !(event.buttons & 2) && !(event.buttons & 4)) {
         isDraggingRef.current = false
       }
       if (isLeftDraggingRef.current && !(event.buttons & 1)) {
         isLeftDraggingRef.current = false
+      }
+      // If we were manipulating but now all buttons are released, end manipulation
+      if (wasManipulating && !isDraggingRef.current && !isLeftDraggingRef.current) {
+        endManipulation()
       }
     }
 

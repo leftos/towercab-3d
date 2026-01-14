@@ -193,22 +193,49 @@ export const updateViewportCameraState = (
 }
 
 // =============================================================================
-// Debounce Utilities
+// Manipulation Tracking & Auto-Save
 // =============================================================================
 
-/** Debounce timer for auto-save */
-let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
-const AUTO_SAVE_DELAY = 5000 // 5 seconds
+/** Whether camera is being actively manipulated (mouse dragging) */
+let isManipulating = false
+/** Pending save function to execute when manipulation ends */
+let pendingSaveFunc: (() => void) | null = null
 
 /**
- * Schedule a debounced auto-save
+ * Check if camera is being manipulated
+ */
+export const getIsManipulating = () => isManipulating
+
+/**
+ * Signal that camera manipulation has started (mouse button down)
+ */
+export const startManipulation = () => {
+  isManipulating = true
+}
+
+/**
+ * Signal that camera manipulation has ended (mouse button up)
+ * Executes any pending save immediately
+ */
+export const endManipulation = () => {
+  isManipulating = false
+  if (pendingSaveFunc) {
+    pendingSaveFunc()
+    pendingSaveFunc = null
+  }
+}
+
+/**
+ * Schedule a save that respects manipulation state
+ * - If manipulating: stores the save function to execute when manipulation ends
+ * - If not manipulating: executes immediately
  */
 export const scheduleAutoSave = (saveFunc: () => void) => {
-  if (autoSaveTimer) {
-    clearTimeout(autoSaveTimer)
-  }
-  autoSaveTimer = setTimeout(() => {
+  if (isManipulating) {
+    // Store the save to execute when manipulation ends
+    pendingSaveFunc = saveFunc
+  } else {
+    // Not manipulating - save immediately
     saveFunc()
-    autoSaveTimer = null
-  }, AUTO_SAVE_DELAY)
+  }
 }

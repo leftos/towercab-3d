@@ -36,6 +36,8 @@ interface InsetToParentMessage {
   type: 'inset-ready' | 'inset-focus' | 'camera-change' | 'aircraft-select' | 'follow-request' | 'error'
   viewportId: string
   payload?: unknown
+  /** When true, manipulation has ended and this is the final state to persist */
+  final?: boolean
 }
 
 /**
@@ -79,6 +81,10 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
   const viewportInitializedRef = useRef(false)
   // Track last sent camera state to avoid redundant updates
   const lastSentCameraRef = useRef<string>('')
+  // Track mouse/pointer button state for manipulation detection
+  const isManipulatingRef = useRef(false)
+  // Store pending camera update to send when manipulation ends
+  const pendingCameraUpdateRef = useRef<CameraStateUpdate | null>(null)
 
   // Send messages to parent window via postMessage
   const sendToParent = useCallback((message: InsetToParentMessage) => {
@@ -157,6 +163,43 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
     return unsubscribe
   }, [viewportId])
 
+  // Track manipulation state via document-level mouse/pointer events
+  useEffect(() => {
+    const handlePointerDown = () => {
+      isManipulatingRef.current = true
+    }
+
+    const handlePointerUp = () => {
+      isManipulatingRef.current = false
+      // Send any pending camera update as final when manipulation ends
+      if (pendingCameraUpdateRef.current) {
+        sendToParent({
+          type: 'camera-change',
+          viewportId,
+          payload: pendingCameraUpdateRef.current,
+          final: true
+        })
+        pendingCameraUpdateRef.current = null
+      }
+    }
+
+    // Use capture phase to catch events before Cesium
+    document.addEventListener('pointerdown', handlePointerDown, true)
+    document.addEventListener('pointerup', handlePointerUp, true)
+    document.addEventListener('pointercancel', handlePointerUp, true)
+    // Also handle mouse events as fallback
+    document.addEventListener('mousedown', handlePointerDown, true)
+    document.addEventListener('mouseup', handlePointerUp, true)
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown, true)
+      document.removeEventListener('pointerup', handlePointerUp, true)
+      document.removeEventListener('pointercancel', handlePointerUp, true)
+      document.removeEventListener('mousedown', handlePointerDown, true)
+      document.removeEventListener('mouseup', handlePointerUp, true)
+    }
+  }, [viewportId, sendToParent])
+
   // Subscribe to camera state changes and send to main app
   useEffect(() => {
     const unsubscribe = useViewportStore.subscribe((state, prevState) => {
@@ -202,11 +245,24 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
 
       // Only send if there are actual changes
       if (Object.keys(updates).length > 0) {
-        sendToParent({
-          type: 'camera-change',
-          viewportId,
-          payload: updates
-        })
+        if (isManipulatingRef.current) {
+          // During manipulation, store update but don't mark as final
+          pendingCameraUpdateRef.current = { ...pendingCameraUpdateRef.current, ...updates }
+          sendToParent({
+            type: 'camera-change',
+            viewportId,
+            payload: updates,
+            final: false
+          })
+        } else {
+          // Not manipulating (e.g., keyboard input, follow mode) - send as final immediately
+          sendToParent({
+            type: 'camera-change',
+            viewportId,
+            payload: updates,
+            final: true
+          })
+        }
       }
     })
 
