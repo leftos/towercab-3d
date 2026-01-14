@@ -461,7 +461,7 @@ class AircraftModelServiceClass {
     result: string
   ): void {
     if (!callsign || this.loggedCallsigns.has(callsign)) return
-    console.log(`[ModelMatch] ${callsign} (${aircraftType}/${airlineCode ?? 'no-airline'}): ${step} -> ${result}`)
+    //console.log(`[ModelMatch] ${callsign} (${aircraftType}/${airlineCode ?? 'no-airline'}): ${step} -> ${result}`)
   }
 
   /**
@@ -593,10 +593,10 @@ class AircraftModelServiceClass {
       scale: { x: number; y: number; z: number } = uniformScale
     ): ModelInfo => {
       this.pendingConversions.add(cacheKey)
-      console.log(`[ModelMatch] Starting conversion for ${sourceInfo.modelName}, cacheKey=${cacheKey}`)
+      //console.log(`[ModelMatch] Starting conversion for ${sourceInfo.modelName}, cacheKey=${cacheKey}`)
       MSFSModelConversionService.convertModel(sourceInfo)
         .then((result) => {
-          console.log(`[ModelMatch] Conversion completed for ${sourceInfo.modelName}:`, result.success ? 'success' : 'failed', result.glbPath || result.error)
+          //console.log(`[ModelMatch] Conversion completed for ${sourceInfo.modelName}:`, result.success ? 'success' : 'failed', result.glbPath || result.error)
           this.invalidateCacheForModel(sourceInfo.modelName)
         })
         .catch((err) => {
