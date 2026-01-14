@@ -1,11 +1,18 @@
 /**
  * SettingsSharedWorkerService
  *
- * Service for broadcasting settings, weather, airport, and Cesium token to inset iframes
- * via SharedWorker. Uses the same pattern as AircraftBroadcastService which works correctly.
+ * Service for broadcasting settings, weather, airport, Cesium token, and aircraft observations
+ * to inset iframes via SharedWorker.
  *
- * @see AircraftBroadcastService - The working pattern this is based on
+ * This service acts as the main app's connection to the SharedWorker, enabling one-way
+ * data flow to insets for:
+ * - Settings (Cesium, graphics, camera, etc.)
+ * - Weather data (fog, clouds)
+ * - Airport info
+ * - Aircraft observations (for inset-local interpolation)
+ *
  * @see shared-data.worker.ts - SharedWorker implementation
+ * @see useSharedWorkerConsumer - Inset consumer hook
  */
 
 import { useSettingsStore } from '../stores/settingsStore'
@@ -13,13 +20,16 @@ import { useGlobalSettingsStore } from '../stores/globalSettingsStore'
 import { useWeatherStore } from '../stores/weatherStore'
 import { useAirportStore } from '../stores/airportStore'
 import { useViewportStore } from '../stores/viewportStore'
+import { registerBroadcastCallbacks } from '../stores/aircraftTimelineStore'
 import type {
   SharedWorkerInboundMessage,
   SerializedSettings,
   SerializedWeather,
   SerializedAirport,
-  SerializedImagery
+  SerializedImagery,
+  SerializedModelInfo
 } from '../types/shared-worker'
+import type { AircraftObservation, AircraftMetadata } from '../types/aircraft-timeline'
 
 const SETTINGS_DEBOUNCE_MS = 100
 
@@ -62,9 +72,19 @@ class SettingsSharedWorkerService {
         console.error('[SettingsSharedWorkerService] Message error:', error)
       }
 
-      // Set up message handler (we don't process incoming messages, but need handler for start())
-      this.port.onmessage = () => {
-        // Camera updates from insets are received but not applied to main app
+      // Set up message handler for messages from insets
+      this.port.onmessage = (event: MessageEvent) => {
+        const { type, payload, viewportId } = event.data || {}
+
+        switch (type) {
+          case 'inset-log':
+            // Log messages forwarded from insets
+            if (viewportId && payload) {
+              this.handleInsetLog(viewportId, payload as string)
+            }
+            break
+          // Camera updates from insets could be handled here if needed
+        }
       }
 
       // Start the port
@@ -94,6 +114,13 @@ class SettingsSharedWorkerService {
 
       // Subscribe to settings/weather/airport changes
       this.subscribeToStoreChanges()
+
+      // Register broadcast callbacks with timeline store
+      // This enables automatic broadcasting of observations/removals to insets
+      registerBroadcastCallbacks(
+        (observations) => this.broadcastObservations(observations),
+        (callsigns) => this.broadcastRemovals(callsigns)
+      )
 
       this.isInitialized = true
       console.log('[SettingsSharedWorkerService] Initialization complete')
@@ -309,6 +336,70 @@ class SettingsSharedWorkerService {
       cesiumAdjustments: imagery.cesiumAdjustments,
       googleAdjustments: imagery.googleAdjustments
     }
+  }
+
+  // ============================================================================
+  // OBSERVATION BROADCASTING
+  // ============================================================================
+  // These methods are called by the timeline store when observations are added.
+  // Observations are broadcast to insets which maintain their own timelines.
+
+  /**
+   * Broadcast a batch of observations to all insets.
+   * Called by the timeline store when new observations arrive.
+   */
+  broadcastObservations(
+    observations: Array<{
+      callsign: string
+      observation: AircraftObservation
+      metadata: AircraftMetadata
+    }>
+  ): void {
+    if (!this.hasInsets() || observations.length === 0) return
+
+    this.postMessage({
+      type: 'observations-update',
+      payload: observations,
+      source: 'main'
+    })
+  }
+
+  /**
+   * Broadcast aircraft removals to all insets.
+   * Called by the timeline store when aircraft are removed.
+   */
+  broadcastRemovals(callsigns: string[]): void {
+    if (!this.hasInsets() || callsigns.length === 0) return
+
+    this.postMessage({
+      type: 'aircraft-removals',
+      payload: callsigns,
+      source: 'main'
+    })
+  }
+
+  /**
+   * Broadcast model info updates to all insets.
+   * Called when model assignments change for aircraft (new model resolved, conversion complete).
+   */
+  broadcastModelInfo(models: SerializedModelInfo[]): void {
+    if (!this.hasInsets() || models.length === 0) return
+
+    this.postMessage({
+      type: 'model-info-update',
+      payload: {
+        models,
+        timestamp: Date.now()
+      },
+      source: 'main'
+    })
+  }
+
+  /**
+   * Handle log messages from insets (forwarded via SharedWorker).
+   */
+  private handleInsetLog(viewportId: string, message: string): void {
+    console.log(`[Inset:${viewportId}] ${message}`)
   }
 }
 

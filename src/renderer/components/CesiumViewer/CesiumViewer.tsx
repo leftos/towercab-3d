@@ -12,7 +12,7 @@ import { useDatablockPositionStore } from '../../stores/datablockPositionStore'
 import { useUIFeedbackStore } from '../../stores/uiFeedbackStore'
 import { useRunwayStore } from '../../stores/runwayStore'
 import { useAircraftInterpolation, setInterpolationTerrainData } from '../../hooks/useAircraftInterpolation'
-import { registerRenderRequestCallback, insetLog } from '../../hooks/useBroadcastAircraft'
+import { insetLog } from '../../hooks/useSharedWorkerConsumer'
 import { useCesiumCamera } from '../../hooks/useCesiumCamera'
 import { useBabylonOverlay } from '../../hooks/useBabylonOverlay'
 import { useCesiumViewer } from '../../hooks/useCesiumViewer'
@@ -558,35 +558,53 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
     void clearCache()
   }, [clearTerrainCacheRequested, viewer, acknowledgeClearTerrainCache, showFeedback])
 
-  // Apply target frame rate limit (0 = unlimited)
-  // Insets are capped at 30fps to reduce GPU contention with main viewport
+  // Apply target frame rate limit for main viewport (0 = unlimited)
+  // Insets use their own RAF loop with separate frame rate control
   useEffect(() => {
-    if (!viewer) return
+    if (!viewer || isInset) return
     // Cesium's targetFrameRate: undefined means unlimited (uses requestAnimationFrame)
     // A number limits the frame rate to that value
-    // Insets cap at 30fps regardless of setting to reduce GPU contention
-    const insetMaxFps = 30
-    const effectiveFramerate = isInset
-      ? insetMaxFps
-      : (maxFramerate > 0 ? maxFramerate : undefined)
+    const effectiveFramerate = maxFramerate > 0 ? maxFramerate : undefined
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ;(viewer as any).targetFrameRate = effectiveFramerate
   }, [viewer, maxFramerate, isInset])
 
-  // For inset viewports: Force renders when broadcast data arrives
-  // Browsers aggressively throttle requestAnimationFrame in iframes, causing slow updates.
-  // With requestRenderMode: true set during viewer creation, Cesium doesn't run its own RAF loop.
-  // We trigger renders explicitly via scene.render() when broadcast data arrives.
+  // For inset viewports: Run our own RAF loop for vsync-aligned rendering
+  // With requestRenderMode: true, Cesium doesn't run its own RAF loop.
+  // We run a continuous RAF loop that renders at display refresh rate,
+  // reading from sharedInterpolatedStates which is updated by broadcast reception.
+  // This decouples data arrival timing from render timing for smooth animation.
   useEffect(() => {
     if (!viewer || !isInset) return
 
-    // FPS tracking for benchmark
+    // Calculate effective frame rate for insets
+    // 'match' uses main viewport's maxFramerate setting, otherwise use the explicit value
+    // Default to 'match' if maxFramerate field is missing (old settings)
+    const insetFramerateSetting = insetGraphics?.maxFramerate ?? 'match'
+    const insetMaxFps = insetFramerateSetting === 'match'
+      ? maxFramerate
+      : insetFramerateSetting
+    // 0 means unlimited (render every RAF frame)
+    const minFrameInterval = insetMaxFps > 0 ? 1000 / insetMaxFps : 0
+
+    let running = true
+    let frameId: number
+    let lastRenderTime = 0
+
+    // FPS tracking for monitoring
     let renderCount = 0
     let lastFpsLogTime = performance.now()
 
-    // Register callback that forces a Cesium render when broadcast data arrives
-    const forceRender = () => {
-      if (viewer.isDestroyed()) return
+    const renderLoop = (timestamp: number) => {
+      if (!running || viewer.isDestroyed()) return
+
+      // Frame rate limiting: skip render if not enough time has passed
+      if (minFrameInterval > 0 && timestamp - lastRenderTime < minFrameInterval) {
+        frameId = requestAnimationFrame(renderLoop)
+        return
+      }
+      lastRenderTime = timestamp
+
       viewer.scene.render()
       renderCount++
 
@@ -598,14 +616,17 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
         renderCount = 0
         lastFpsLogTime = now
       }
+
+      frameId = requestAnimationFrame(renderLoop)
     }
 
-    registerRenderRequestCallback(forceRender)
+    frameId = requestAnimationFrame(renderLoop)
 
     return () => {
-      registerRenderRequestCallback(null)
+      running = false
+      cancelAnimationFrame(frameId)
     }
-  }, [viewer, isInset])
+  }, [viewer, isInset, insetGraphics?.maxFramerate, maxFramerate])
 
   // Time of day control (real time vs fixed time)
   useEffect(() => {
@@ -636,11 +657,11 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
 
   // Manage OSM 3D Buildings tileset
   // Skip loading buildings for inset viewports to reduce memory usage and prevent WebGL context issues
-  // Unless enhanced insets with buildings enabled
+  // Unless inset buildings setting is enabled
   useEffect(() => {
     if (!viewer) return
-    // Skip buildings for insets unless enhanced + buildings enabled
-    const insetBuildingsEnabled = isInset && insetGraphics.enabled && insetGraphics.buildings
+    // Skip buildings for insets unless buildings enabled
+    const insetBuildingsEnabled = isInset && insetGraphics.buildings
     if (isInset && !insetBuildingsEnabled) return
 
     let currentTileset: Cesium.Cesium3DTileset | null = null

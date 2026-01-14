@@ -220,6 +220,7 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
           headingIsTrue: true,  // VATSIM heading is always reliable (from simulator)
           // Extended ADS-B data (not available from VATSIM)
           onGround: null,
+          pitch: null,
           roll: null,
           verticalRate: null,
           observedAt: vatsimTimestamp,  // When VATSIM says this was true
@@ -409,6 +410,7 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
           groundTrack: null,
           headingIsTrue: true,
           onGround: null,
+          pitch: null,
           roll: null,
           verticalRate: null,
           observedAt: lastVatsimTimestamp || now,

@@ -99,6 +99,9 @@ interface ViewportStore {
   moveRight: (distance: number) => void
   moveUp: (distance: number) => void
   resetPosition: () => void
+  setPositionOffsetX: (x: number) => void
+  setPositionOffsetY: (y: number) => void
+  setPositionOffsetZ: (z: number) => void
 
   // Look-at animation (smooth pan to target heading/pitch)
   setLookAtTarget: (heading: number, pitch: number) => void
@@ -212,17 +215,21 @@ const loadFromGlobalSettings = () => {
       }
 
       const localConfig = updatedConfigs[icao]
-      const mergedUpdates = mergeGlobalAirportConfig(localConfig, globalConfig)
 
       if (localConfig) {
+        // Have local config - merge global updates into it
+        const mergedUpdates = mergeGlobalAirportConfig(localConfig, globalConfig)
         updatedConfigs[icao] = { ...localConfig, ...mergedUpdates }
       } else {
+        // No local config - need to create one and pass fallback viewport
+        // so mergeGlobalAirportConfig can restore insets from global
         const orbitSettings = globalViewports.orbitSettings && typeof globalViewports.orbitSettings === 'object'
           ? globalViewports.orbitSettings
           : undefined
         const mainViewport = createMainViewport(undefined, orbitSettings)
+        const mergedUpdates = mergeGlobalAirportConfig(undefined, globalConfig, mainViewport)
         updatedConfigs[icao] = {
-          viewports: [mainViewport],
+          viewports: mergedUpdates.viewports || [mainViewport],
           activeViewportId: mainViewport.id,
           ...mergedUpdates
         }
@@ -506,6 +513,33 @@ export const useViewportStore = create<ViewportStore>()(
                 positionOffsetX: 0,
                 positionOffsetY: 0,
                 positionOffsetZ: 0
+              }))
+            })
+          },
+
+          setPositionOffsetX: (x) => {
+            const { activeViewportId, viewports } = get()
+            set({
+              viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
+                positionOffsetX: x
+              }))
+            })
+          },
+
+          setPositionOffsetY: (y) => {
+            const { activeViewportId, viewports } = get()
+            set({
+              viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
+                positionOffsetY: y
+              }))
+            })
+          },
+
+          setPositionOffsetZ: (z) => {
+            const { activeViewportId, viewports } = get()
+            set({
+              viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
+                positionOffsetZ: z
               }))
             })
           },

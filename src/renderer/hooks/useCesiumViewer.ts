@@ -198,19 +198,14 @@ export function useCesiumViewer(
 
     // Determine effective MSAA for insets based on insetGraphics settings
     // Use initial MSAA value - changes require app restart (WebGL limitation)
-    // If inset with enhanced rendering disabled: use 2x MSAA
-    // If inset with enhanced rendering enabled: use the msaa preset ('low'=2, 'medium'=4, 'match'=main setting)
+    // Insets use msaa preset ('low'=2, 'medium'=4, 'match'=main setting)
     const initialMsaa = initialMsaaSamplesRef.current
     let effectiveMsaa = initialMsaa
     if (isInset) {
-      if (!insetGraphics.enabled) {
-        effectiveMsaa = 2
-      } else {
-        switch (insetGraphics.msaa) {
-          case 'low': effectiveMsaa = 2; break
-          case 'medium': effectiveMsaa = 4; break
-          case 'match': effectiveMsaa = initialMsaa; break
-        }
+      switch (insetGraphics.msaa) {
+        case 'low': effectiveMsaa = 2; break
+        case 'medium': effectiveMsaa = 4; break
+        case 'match': effectiveMsaa = initialMsaa; break
       }
     }
 
@@ -271,12 +266,6 @@ export function useCesiumViewer(
     newViewer.screenSpaceEventHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_CLICK);
     newViewer.screenSpaceEventHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
 
-    // Reduce resolution for insets to lower GPU load
-    // 0.75 = render at 75% resolution, good balance of quality vs performance
-    if (isInset && !insetGraphics.enabled) {
-      newViewer.resolutionScale = 0.75
-    }
-
     // Rendering quality improvements - from settings
     newViewer.scene.logarithmicDepthBuffer = enableLogDepth
     newViewer.scene.highDynamicRange = enableHdr
@@ -287,8 +276,8 @@ export function useCesiumViewer(
     // The selected array will be populated by useAircraftModels with built-in models only
     // Deferred with multiple render frames to avoid shader cache initialization race condition
     // (Cesium bug: "Cannot set properties of undefined (setting 'czm_edge_detection_combine')")
-    // Enabled for main viewports or insets with enhanced rendering + silhouettes enabled
-    const insetSilhouettesEnabled = isInset && insetGraphics.enabled && insetGraphics.silhouettes
+    // Enabled for main viewports or insets with silhouettes enabled
+    const insetSilhouettesEnabled = isInset && insetGraphics.silhouettes
     if ((!isInset || insetSilhouettesEnabled) && enableAircraftSilhouettes) {
       let frameCount = 0
       const initSilhouetteStage = () => {
@@ -332,9 +321,9 @@ export function useCesiumViewer(
     newViewer.scene.globe.showGroundAtmosphere = enableGroundAtmosphere
     newViewer.scene.globe.baseColor = Cesium.Color.fromCssColorString('#1a1a2e')
 
-    // Shadows - from settings, but disabled for insets for performance (unless enhanced + shadows enabled)
+    // Shadows - from settings, but disabled for insets by default for performance
     // Uses cascaded shadow maps with configurable settings
-    const insetShadowsEnabled = isInset && insetGraphics.enabled && insetGraphics.shadows
+    const insetShadowsEnabled = isInset && insetGraphics.shadows
     if (isInset && !insetShadowsEnabled) {
       newViewer.shadows = false
       newViewer.terrainShadows = Cesium.ShadowMode.DISABLED
@@ -358,14 +347,10 @@ export function useCesiumViewer(
     // 'minimal': 50 tiles, 'standard': 200 tiles, 'match': use main viewport setting
     let effectiveTileCache = inMemoryTileCacheSize
     if (isInset) {
-      if (!insetGraphics.enabled) {
-        effectiveTileCache = 50
-      } else {
-        switch (insetGraphics.cache) {
-          case 'minimal': effectiveTileCache = 50; break
-          case 'standard': effectiveTileCache = 200; break
-          case 'match': effectiveTileCache = inMemoryTileCacheSize; break
-        }
+      switch (insetGraphics.cache) {
+        case 'minimal': effectiveTileCache = 50; break
+        case 'standard': effectiveTileCache = 200; break
+        case 'match': effectiveTileCache = inMemoryTileCacheSize; break
       }
     }
     newViewer.scene.globe.tileCacheSize = effectiveTileCache
@@ -374,7 +359,7 @@ export function useCesiumViewer(
     // Cesium's TileReplacementQueue.trimTiles() evicts tiles every frame when
     // the count exceeds tileCacheSize. By overriding it to use 10x the limit,
     // we dramatically reduce eviction frequency and keep more tiles in memory.
-    const useAggressiveCaching = !isInset || (insetGraphics.enabled && insetGraphics.cache !== 'minimal')
+    const useAggressiveCaching = !isInset || insetGraphics.cache !== 'minimal'
     if (useAggressiveCaching) {
       const surface = (newViewer.scene.globe as unknown as { _surface?: { _tileReplacementQueue?: { trimTiles: (max: number) => void } } })._surface
       if (surface?._tileReplacementQueue) {
@@ -390,19 +375,15 @@ export function useCesiumViewer(
     // Tile quality - based on inset terrain setting
     // 'low': SSE 16 (lower quality), 'medium': SSE 12, 'match': default (typically 2)
     if (isInset) {
-      if (!insetGraphics.enabled) {
-        newViewer.scene.globe.maximumScreenSpaceError = 16  // Lower quality tiles
-      } else {
-        switch (insetGraphics.terrain) {
-          case 'low': newViewer.scene.globe.maximumScreenSpaceError = 16; break
-          case 'medium': newViewer.scene.globe.maximumScreenSpaceError = 12; break
-          case 'match': /* leave default */ break
-        }
+      switch (insetGraphics.terrain) {
+        case 'low': newViewer.scene.globe.maximumScreenSpaceError = 16; break
+        case 'medium': newViewer.scene.globe.maximumScreenSpaceError = 12; break
+        case 'match': /* leave default */ break
       }
     }
 
     // Preload nearby tiles for smoother camera movement (based on inset settings)
-    const enablePreloading = !isInset || (insetGraphics.enabled && insetGraphics.preloadTiles)
+    const enablePreloading = !isInset || insetGraphics.preloadTiles
     newViewer.scene.globe.preloadAncestors = enablePreloading
     newViewer.scene.globe.preloadSiblings = enablePreloading
 

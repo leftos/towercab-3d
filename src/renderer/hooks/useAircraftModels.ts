@@ -6,7 +6,9 @@ import type { ViewMode } from '../types'
 import { aircraftModelService } from '../services/AircraftModelService'
 import { performanceMonitor } from '../utils/performanceMonitor'
 import { isInsetContext } from './useInsetStoreSync'
-import { insetLog } from './useBroadcastAircraft'
+import { insetLog, getModelInfoForCallsign } from './useSharedWorkerConsumer'
+import { settingsSharedWorkerService } from '../services/SettingsSharedWorkerService'
+import type { SerializedModelInfo } from '../types/shared-worker'
 import {
   getModelColorRgb,
   getModelColorBlendAmount,
@@ -137,6 +139,13 @@ export function useAircraftModels(
   // Track URLs that have failed to load (avoid repeated error logging)
   const failedModelUrlsRef = useRef<Set<string>>(new Set())
 
+  // Track current model info per callsign for broadcast change detection (main app only)
+  // Key: callsign, Value: serialized model info string for comparison
+  const broadcastedModelInfoRef = useRef<Map<string, string>>(new Map())
+
+  // Whether this is an inset context (cached once to avoid repeated checks)
+  const isInset = isInsetContext()
+
   // Update aircraft models
   const updateAircraftModels = useCallback(() => {
     if (!viewer || !modelPoolReady.current) return
@@ -152,6 +161,57 @@ export function useAircraftModels(
       }
     }
 
+    // ========================================================================
+    // MODEL INFO RESOLUTION & BROADCAST (main app only, ALL aircraft)
+    // ========================================================================
+    // Resolve model info for ALL aircraft regardless of render culling.
+    // This ensures insets can display proper models even for aircraft that
+    // are culled from the main viewport but visible in an inset.
+    const modelInfoChanges: SerializedModelInfo[] = []
+
+    if (!isInset) {
+      for (const aircraft of interpolatedAircraft.values()) {
+        // Resolve model via service
+        const resolvedModelInfo = aircraftModelService.getModelInfo(aircraft.aircraftType, aircraft.callsign)
+
+        // Track model info for broadcast to insets
+        // Only broadcast when model info changes (new aircraft, conversion complete, etc.)
+        const modelUrl = resolvedModelInfo.modelUrl || null
+        const serialized: SerializedModelInfo = {
+          callsign: aircraft.callsign,
+          modelUrl,
+          scale: [resolvedModelInfo.scale.x, resolvedModelInfo.scale.y, resolvedModelInfo.scale.z],
+          rotationOffset: resolvedModelInfo.rotationOffset ?? 0,
+          isFsltl: resolvedModelInfo.isFsltl === true
+        }
+        const serializedKey = `${modelUrl}|${serialized.scale.join(',')}|${serialized.rotationOffset}|${serialized.isFsltl}`
+        const previousKey = broadcastedModelInfoRef.current.get(aircraft.callsign)
+
+        if (serializedKey !== previousKey) {
+          broadcastedModelInfoRef.current.set(aircraft.callsign, serializedKey)
+          // Only broadcast if we have a valid model URL (skip pending conversions)
+          if (modelUrl) {
+            modelInfoChanges.push(serialized)
+          }
+        }
+      }
+
+      // Broadcast model info changes to insets immediately
+      if (modelInfoChanges.length > 0) {
+        settingsSharedWorkerService.broadcastModelInfo(modelInfoChanges)
+      }
+
+      // Clean up broadcast tracking for aircraft no longer in the data
+      for (const callsign of broadcastedModelInfoRef.current.keys()) {
+        if (!interpolatedAircraft.has(callsign)) {
+          broadcastedModelInfoRef.current.delete(callsign)
+        }
+      }
+    }
+
+    // ========================================================================
+    // RENDER CULLING & MODEL RENDERING
+    // ========================================================================
     // Apply render culling: filter by distance, frustum, and screen-space size
     // This runs every frame to keep the closest aircraft visible as camera moves
     const { filteredAircraft } = filterAircraftForRendering({
@@ -183,19 +243,43 @@ export function useAircraftModels(
 
       // Get the correct model info for this aircraft type (and callsign for FSLTL livery matching)
       // For insets, use broadcast model info if available (populated from main app)
-      // For main app, use aircraftModelService to resolve model
-      const modelInfo = aircraft.broadcastModelUrl !== undefined
-        ? {
-            // Inset context: use model info from broadcast
-            modelUrl: aircraft.broadcastModelUrl || './b738.glb',
-            scale: aircraft.broadcastModelScale
-              ? { x: aircraft.broadcastModelScale[0], y: aircraft.broadcastModelScale[1], z: aircraft.broadcastModelScale[2] }
-              : { x: 1, y: 1, z: 1 },
-            rotationOffset: aircraft.broadcastRotationOffset ?? 0,
-            isFsltl: aircraft.broadcastIsFsltl ?? null,
+      // For main app, use aircraftModelService to resolve model (already resolved in broadcast pass above)
+      let modelInfo: {
+        modelUrl: string
+        scale: { x: number; y: number; z: number }
+        rotationOffset?: number
+        isFsltl?: boolean | null
+      }
+
+      if (isInset) {
+        // Inset context: use model info from broadcast cache
+        const broadcastModel = getModelInfoForCallsign(aircraft.callsign)
+        if (broadcastModel && broadcastModel.modelUrl) {
+          modelInfo = {
+            modelUrl: broadcastModel.modelUrl,
+            scale: {
+              x: broadcastModel.scale[0],
+              y: broadcastModel.scale[1],
+              z: broadcastModel.scale[2]
+            },
+            rotationOffset: broadcastModel.rotationOffset,
+            isFsltl: broadcastModel.isFsltl
           }
-        : // Main app context: resolve model via service
-          aircraftModelService.getModelInfo(aircraft.aircraftType, aircraft.callsign)
+        } else {
+          // Fallback to generic model if no broadcast info yet
+          modelInfo = {
+            modelUrl: './b738.glb',
+            scale: { x: 1, y: 1, z: 1 },
+            rotationOffset: 0,
+            isFsltl: false
+          }
+        }
+      } else {
+        // Main app context: resolve model via service
+        // Note: Model info broadcast to insets is handled in the separate pass above
+        // which runs on ALL aircraft, not just those passing render culling
+        modelInfo = aircraftModelService.getModelInfo(aircraft.aircraftType, aircraft.callsign)
+      }
 
       // Model height: interpolatedAltitude is already terrain-corrected by interpolation system
       // (includes terrain sampling, ground/air transitions, and all offsets)
@@ -488,7 +572,8 @@ export function useAircraftModels(
     silhouetteRefs,
     enableNightDarkening,
     aircraftNightVisibility,
-    sunElevation
+    sunElevation,
+    isInset
   ])
 
   // Keep callback in a ref so the listener doesn't need to be re-attached when dependencies change

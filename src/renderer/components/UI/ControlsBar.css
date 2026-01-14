@@ -1303,3 +1303,72 @@
   border-radius: 8px;
   margin-left: 2px;
 }
+
+/* Side-by-side settings for main/inset controls */
+.setting-pair {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.setting-pair > .setting-column {
+  flex: 1;
+  min-width: 0;
+}
+
+.setting-pair > .setting-column:first-child {
+  flex: 1.2;
+}
+
+.setting-column-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.setting-column .select-input {
+  font-size: 12px;
+  padding: 8px 10px;
+}
+
+/* 3-way toggle (On / Main only / Off) */
+.three-way-toggle {
+  display: flex;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.three-way-toggle button {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 12px;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.three-way-toggle button:not(:last-child) {
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.three-way-toggle button:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.three-way-toggle button.active {
+  background: rgba(79, 195, 247, 0.2);
+  color: #4fc3f7;
+}
+
+.three-way-toggle button.active-off {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.5);
+}

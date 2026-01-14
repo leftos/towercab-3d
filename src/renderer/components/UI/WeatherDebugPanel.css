@@ -256,3 +256,39 @@
   background: #633;
   color: #faa;
 }
+
+/* Broadcast Debug Panel */
+.broadcast-debug-toggle {
+  left: 50px;
+}
+
+.broadcast-debug-panel {
+  left: 50px;
+}
+
+.broadcast-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  border-bottom: 1px solid #333;
+}
+
+.broadcast-stat-row:last-child {
+  border-bottom: none;
+}
+
+.broadcast-stat-value {
+  color: #0af;
+  font-weight: bold;
+}
+
+.weather-debug-hint {
+  margin-top: 8px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+  color: #888;
+  font-size: 11px;
+  line-height: 1.4;
+}

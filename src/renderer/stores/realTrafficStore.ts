@@ -84,11 +84,22 @@ export const useRealTrafficStore = create<RealTrafficStore>((set, get) => ({
    * @returns true if authentication succeeded
    */
   authenticate: async (licenseKey: string): Promise<boolean> => {
+    const { isPolling } = get()
+    console.log('[RealTraffic] authenticate() called, current isPolling:', isPolling)
+
+    // If we're currently polling, stop it first to prevent race conditions
+    // This can happen during re-authentication or React StrictMode double-mount
+    if (isPolling) {
+      console.log('[RealTraffic] Stopping existing polling before re-authentication')
+      get().stopPolling()
+    }
+
     set({ status: 'connecting', error: null })
 
     const result = await realTrafficService.authenticate(licenseKey)
 
     if (result.success) {
+      console.log('[RealTraffic] Authentication successful, isPro:', result.isPro)
       set({
         status: 'connected',
         isPro: result.isPro ?? false,
@@ -98,6 +109,7 @@ export const useRealTrafficStore = create<RealTrafficStore>((set, get) => ({
       })
       return true
     } else {
+      console.warn('[RealTraffic] Authentication failed:', result.error)
       set({
         status: 'error',
         error: result.error ?? 'Authentication failed'
@@ -138,10 +150,15 @@ export const useRealTrafficStore = create<RealTrafficStore>((set, get) => ({
    * Fetch traffic data from RealTraffic API
    */
   fetchData: async () => {
-    const { referencePosition, status, timeOffset, isLoading } = get()
+    const { referencePosition, status, timeOffset, isLoading, isPolling } = get()
 
-    // Skip if not connected
+    // Skip if not connected - but clean up polling state to prevent silent death
+    // This can happen if status changes (e.g., re-auth starts) while we're polling
     if (status !== 'connected') {
+      if (isPolling) {
+        console.warn('[RealTraffic] fetchData called but status is', status, '- stopping polling')
+        get().stopPolling()
+      }
       return
     }
 
@@ -172,14 +189,31 @@ export const useRealTrafficStore = create<RealTrafficStore>((set, get) => ({
     )
 
     if (!result.success) {
-      // Handle authentication errors specially - stop polling
+      // Handle authentication errors specially - attempt automatic reconnection
       if (result.error?.includes('Session expired') || result.error?.includes('Not authenticated')) {
+        console.log('[RealTraffic] Session expired, attempting automatic reconnection...')
+        set({ isLoading: false })
+
+        // Get the license key from settings and attempt re-authentication
+        const licenseKey = useGlobalSettingsStore.getState().realtraffic.licenseKey
+        if (licenseKey) {
+          // Stop current polling before re-auth (authenticate() will handle this too, but be explicit)
+          get().stopPolling()
+
+          const authSuccess = await get().authenticate(licenseKey)
+          if (authSuccess) {
+            console.log('[RealTraffic] Automatic reconnection successful, resuming polling')
+            get().startPolling()
+            return
+          }
+        }
+
+        // Re-auth failed or no license key - give up
+        console.warn('[RealTraffic] Automatic reconnection failed')
         set({
           status: 'error',
-          error: result.error,
-          isLoading: false
+          error: 'Session expired and reconnection failed. Please reconnect manually.'
         })
-        get().stopPolling()
         return
       }
 
@@ -258,6 +292,7 @@ export const useRealTrafficStore = create<RealTrafficStore>((set, get) => ({
           headingIsTrue: state.trueHeading != null,
           // Extended ADS-B data
           onGround: state.onGround != null ? state.onGround === 1 : null,
+          pitch: null, // Not provided by RealTraffic ADS-B
           roll: state.roll ?? null,
           verticalRate: state.baroRate ?? null, // Actual ADS-B vertical rate in fpm
           observedAt: state.apiTimestamp * 1000,  // Convert seconds to ms
@@ -345,9 +380,11 @@ export const useRealTrafficStore = create<RealTrafficStore>((set, get) => ({
 
     // Don't start if already polling or not connected
     if (isPolling || status !== 'connected') {
+      console.log('[RealTraffic] startPolling() skipped: isPolling=', isPolling, 'status=', status)
       return
     }
 
+    console.log('[RealTraffic] Starting polling')
     // Set polling flag and fetch immediately
     set({ isPolling: true })
     get().fetchData()
@@ -357,6 +394,7 @@ export const useRealTrafficStore = create<RealTrafficStore>((set, get) => ({
    * Stop polling for traffic data
    */
   stopPolling: () => {
+    console.log('[RealTraffic] Stopping polling')
     const { pollingTimeout } = get()
     if (pollingTimeout) {
       clearTimeout(pollingTimeout)

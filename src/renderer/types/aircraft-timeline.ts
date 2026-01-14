@@ -9,7 +9,7 @@
 /**
  * Data source identifier
  */
-export type AircraftDataSource = 'vatsim' | 'vnas' | 'realtraffic' | 'replay'
+export type AircraftDataSource = 'vatsim' | 'vnas' | 'realtraffic' | 'replay' | 'broadcast'
 
 /**
  * Single position observation for an aircraft.
@@ -42,6 +42,14 @@ export interface AircraftObservation {
    * Use this instead of groundspeed threshold when available.
    */
   onGround: boolean | null
+
+  /**
+   * Pitch angle in degrees.
+   * For broadcast source: pre-interpolated pitch from main app.
+   * For other sources: null (calculated from vertical rate).
+   * Positive = nose up, negative = nose down.
+   */
+  pitch: number | null
 
   /**
    * Bank/roll angle in degrees from ADS-B.
@@ -132,6 +140,13 @@ export interface TimelineInterpolationResult {
    * true = on ground, false = airborne, null = unknown.
    */
   onGround: boolean | null
+
+  /**
+   * Pitch angle in degrees (interpolated from observations if available).
+   * For broadcast source: pre-interpolated pitch from main app.
+   * For other sources: null (calculated by rendering layer from vertical rate).
+   */
+  pitch: number | null
 
   /**
    * Bank/roll angle in degrees from ADS-B (interpolated).

@@ -543,6 +543,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       headingIsTrue: true,  // vNAS heading is always reliable (from simulator)
       // Extended ADS-B data (not available from vNAS)
       onGround: null,
+      pitch: null,
       roll: null,
       verticalRate: null,
       observedAt: observationTime,  // Use Rust-side receive time for accurate timeline
@@ -674,6 +675,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
         headingIsTrue: true,  // vNAS heading is always reliable (from simulator)
         // Extended ADS-B data (not available from vNAS)
         onGround: null,
+        pitch: null,
         roll: null,
         verticalRate: null,
         observedAt: observationTime,  // Use Rust-side receive time for accurate timeline

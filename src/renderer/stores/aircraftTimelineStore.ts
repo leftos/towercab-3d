@@ -46,6 +46,35 @@ import { useSettingsStore } from './settingsStore'
 import { useVnasStore } from './vnasStore'
 import { calculateBearing } from '../utils/aircraft/geoMath'
 
+// ============================================================================
+// BROADCAST CALLBACK FOR INSET SYNCHRONIZATION
+// ============================================================================
+// The main app registers a callback to broadcast observations to insets.
+// Insets don't register a callback, so they receive but don't re-broadcast.
+
+type ObservationBroadcastCallback = (observations: Array<{
+  callsign: string
+  observation: AircraftObservation
+  metadata: AircraftMetadata
+}>) => void
+
+type RemovalBroadcastCallback = (callsigns: string[]) => void
+
+let observationBroadcastCallback: ObservationBroadcastCallback | null = null
+let removalBroadcastCallback: RemovalBroadcastCallback | null = null
+
+/**
+ * Register callbacks for broadcasting observations/removals to insets.
+ * Called by SettingsSharedWorkerService in main app context only.
+ */
+export function registerBroadcastCallbacks(
+  onObservations: ObservationBroadcastCallback,
+  onRemovals: RemovalBroadcastCallback
+): void {
+  observationBroadcastCallback = onObservations
+  removalBroadcastCallback = onRemovals
+}
+
 
 interface AircraftTimelineStore {
   // State
@@ -595,6 +624,7 @@ function interpolateTimeline(
   let groundspeed: number
   let groundTrack: number | null
   let onGround: boolean | null
+  let pitch: number | null
   let roll: number | null
   let verticalRate: number | null
   let isExtrapolating = false
@@ -742,6 +772,9 @@ function interpolateTimeline(
 
     // Interpolate ADS-B data if available on both observations
     onGround = after.onGround  // Use the later observation's ground state
+    pitch = before.pitch !== null && after.pitch !== null
+      ? lerp(before.pitch, after.pitch, t)
+      : (after.pitch ?? before.pitch)
     roll = before.roll !== null && after.roll !== null
       ? lerp(before.roll, after.roll, t)
       : (after.roll ?? before.roll)
@@ -807,6 +840,7 @@ function interpolateTimeline(
 
     // Pass through ADS-B data from last observation
     onGround = before.onGround
+    pitch = before.pitch
     roll = before.roll
 
     // Clear reconciliation during extrapolation - we'll start fresh when new data arrives
@@ -842,6 +876,7 @@ function interpolateTimeline(
     groundTrack = after.groundTrack
     // Pass through ADS-B data
     onGround = after.onGround
+    pitch = after.pitch
     roll = after.roll
     verticalRate = after.verticalRate
     isExtrapolating = true
@@ -900,6 +935,7 @@ function interpolateTimeline(
       groundTrack,
       // Extended ADS-B data
       onGround,
+      pitch,
       roll,
       verticalRate,
       // Metadata
@@ -1130,6 +1166,11 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
     }
 
     set({ timelines: updated })
+
+    // Broadcast observations to insets (if callback registered by main app)
+    if (observationBroadcastCallback && batch.length > 0) {
+      observationBroadcastCallback(batch)
+    }
   },
 
   /**
@@ -1156,6 +1197,11 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
         lastRenderedPositions: updatedPositions,
         reconciliationStates: updatedReconciliations
       })
+
+      // Broadcast removal to insets (if callback registered by main app)
+      if (removalBroadcastCallback) {
+        removalBroadcastCallback([callsign])
+      }
     }
   },
 
@@ -1165,7 +1211,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
   pruneStaleAircraft: () => {
     const { timelines, lastKnownHeadings, lastRenderedPositions, reconciliationStates } = get()
     const now = Date.now()
-    let hasChanges = false
+    const removedCallsigns: string[] = []
 
     const updatedTimelines = new Map(timelines)
     const updatedHeadings = new Map(lastKnownHeadings)
@@ -1178,17 +1224,22 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
         updatedHeadings.delete(callsign)
         updatedPositions.delete(callsign)
         updatedReconciliations.delete(callsign)
-        hasChanges = true
+        removedCallsigns.push(callsign)
       }
     }
 
-    if (hasChanges) {
+    if (removedCallsigns.length > 0) {
       set({
         timelines: updatedTimelines,
         lastKnownHeadings: updatedHeadings,
         lastRenderedPositions: updatedPositions,
         reconciliationStates: updatedReconciliations
       })
+
+      // Broadcast removals to insets (if callback registered by main app)
+      if (removalBroadcastCallback) {
+        removalBroadcastCallback(removedCallsigns)
+      }
     }
   },
 
@@ -1370,6 +1421,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
           groundTrack: state.groundTrack ?? null,
           headingIsTrue: false, // Assume not true heading for VATSIM data
           onGround: state.onGround === 1 ? true : state.onGround === 0 ? false : null,
+          pitch: null, // Not available in replay data
           roll: state.roll ?? null,
           verticalRate: state.baroRate ?? null,
           source: 'replay',

@@ -49,6 +49,10 @@ function InsetCesiumViewer({ viewportId }: InsetCesiumViewerProps) {
   // Debounce timer for camera state persistence
   const cameraSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Track when we're processing a camera update FROM the inset
+  // Used to prevent echoing the same update back to the inset
+  const insetCameraUpdateInProgressRef = useRef(false)
+
   // Build iframe URL with viewport ID and parent origin
   const iframeSrc = useMemo(() => {
     // In dev mode, inset.html is served from the same origin
@@ -113,6 +117,9 @@ function InsetCesiumViewer({ viewportId }: InsetCesiumViewerProps) {
             const viewportIndex = store.viewports.findIndex(v => v.id === viewportId)
 
             if (viewportIndex >= 0) {
+              // Set flag to prevent echoing this update back to the inset
+              insetCameraUpdateInProgressRef.current = true
+
               // Directly update this viewport's cameraState without changing activeViewport
               const updatedViewports = [...store.viewports]
               updatedViewports[viewportIndex] = {
@@ -131,6 +138,11 @@ function InsetCesiumViewer({ viewportId }: InsetCesiumViewerProps) {
                 }
               }
               useViewportStore.setState({ viewports: updatedViewports })
+
+              // Clear flag after a microtask to allow subscription to check it
+              queueMicrotask(() => {
+                insetCameraUpdateInProgressRef.current = false
+              })
             }
           }, CAMERA_SAVE_DEBOUNCE_MS)
         }
@@ -208,33 +220,49 @@ function InsetCesiumViewer({ viewportId }: InsetCesiumViewerProps) {
   useEffect(() => {
     if (!iframeReady) return
 
+    // Helper to build camera update payload
+    const buildCameraPayload = (cameraState: NonNullable<ReturnType<typeof useViewportStore.getState>['viewports'][0]['cameraState']>) => ({
+      heading: cameraState.heading,
+      pitch: cameraState.pitch,
+      fov: cameraState.fov,
+      positionOffsetX: cameraState.positionOffsetX,
+      positionOffsetY: cameraState.positionOffsetY,
+      positionOffsetZ: cameraState.positionOffsetZ,
+      followingCallsign: cameraState.followingCallsign,
+      followMode: cameraState.followMode,
+      // Forward geographic position for look-at (inset calculates its own heading/pitch)
+      pendingLookAtPosition: cameraState.pendingLookAtPosition,
+      orbitDistance: cameraState.orbitDistance,
+      orbitHeading: cameraState.orbitHeading,
+      orbitPitch: cameraState.orbitPitch
+    })
+
+    // Send initial camera state when inset becomes ready
+    // This restores saved 6DOF camera position from global settings
+    const initialViewport = useViewportStore.getState().viewports.find(v => v.id === viewportId)
+    if (initialViewport?.cameraState) {
+      sendToIframe('camera-update', buildCameraPayload(initialViewport.cameraState))
+    }
+
+    // Subscribe to future changes
     const unsubscribe = useViewportStore.subscribe(
       (state) => {
         const viewport = state.viewports.find(v => v.id === viewportId)
         return viewport?.cameraState
       },
       (cameraState) => {
+        // Skip if this update originated from the inset itself (prevents feedback loop)
+        if (insetCameraUpdateInProgressRef.current) {
+          return
+        }
+
         if (cameraState) {
           // Forward camera state to iframe
           // NOTE: We do NOT forward lookAtTarget (heading/pitch) because those are
           // calculated from the main viewport's camera position. Instead we forward
           // pendingLookAtPosition (geographic coordinates) so the inset can calculate
           // its own heading/pitch from its camera position.
-          sendToIframe('camera-update', {
-            heading: cameraState.heading,
-            pitch: cameraState.pitch,
-            fov: cameraState.fov,
-            positionOffsetX: cameraState.positionOffsetX,
-            positionOffsetY: cameraState.positionOffsetY,
-            positionOffsetZ: cameraState.positionOffsetZ,
-            followingCallsign: cameraState.followingCallsign,
-            followMode: cameraState.followMode,
-            // Forward geographic position for look-at (inset calculates its own heading/pitch)
-            pendingLookAtPosition: cameraState.pendingLookAtPosition,
-            orbitDistance: cameraState.orbitDistance,
-            orbitHeading: cameraState.orbitHeading,
-            orbitPitch: cameraState.orbitPitch
-          })
+          sendToIframe('camera-update', buildCameraPayload(cameraState))
         }
       }
     )

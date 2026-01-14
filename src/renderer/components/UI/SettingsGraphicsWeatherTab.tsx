@@ -3,7 +3,7 @@ import { useSettingsStore } from '../../stores/settingsStore'
 import { useWeatherStore } from '../../stores/weatherStore'
 import { formatTimeHour } from '../../utils/formatting'
 import CollapsibleSection from './settings/CollapsibleSection'
-import type { BuildingQuality, InsetMsaaPreset, InsetTerrainPreset, InsetCachePreset } from '../../types'
+import type { BuildingQuality, InsetMsaaPreset, InsetTerrainPreset, InsetCachePreset, InsetFrameratePreset } from '../../types'
 import './ControlsBar.css'
 
 function SettingsGraphicsWeatherTab() {
@@ -26,6 +26,10 @@ function SettingsGraphicsWeatherTab() {
   const enableTerrainFlattening = useSettingsStore((state) => state.cesium.enableTerrainFlattening)
   const terrainBlendDistance = useSettingsStore((state) => state.cesium.terrainBlendDistance)
   const updateCesiumSettings = useSettingsStore((state) => state.updateCesiumSettings)
+
+  // Memory settings
+  const inMemoryTileCacheSize = useSettingsStore((state) => state.memory.inMemoryTileCacheSize)
+  const updateMemorySettings = useSettingsStore((state) => state.updateMemorySettings)
 
   // Lighting & atmosphere settings
   const timeMode = useSettingsStore((state) => state.cesium.timeMode)
@@ -77,39 +81,84 @@ function SettingsGraphicsWeatherTab() {
       <CollapsibleSection title="Rendering Quality">
         <div className="setting-item">
           <label>Max Framerate</label>
-          <select
-            value={maxFramerate}
-            onChange={(e) => updateGraphicsSettings({ maxFramerate: Number(e.target.value) })}
-            className="select-input"
-          >
-            <option value={30}>30 FPS</option>
-            <option value={60}>60 FPS (Default)</option>
-            <option value={120}>120 FPS</option>
-            <option value={144}>144 FPS</option>
-            <option value={0}>Unlimited</option>
-          </select>
+          <div className="setting-pair">
+            <div className="setting-column">
+              <div className="setting-column-label">Main</div>
+              <select
+                value={maxFramerate}
+                onChange={(e) => updateGraphicsSettings({ maxFramerate: Number(e.target.value) })}
+                className="select-input"
+              >
+                <option value={30}>30 FPS</option>
+                <option value={60}>60 FPS</option>
+                <option value={120}>120 FPS</option>
+                <option value={144}>144 FPS</option>
+                <option value={0}>Unlimited</option>
+              </select>
+            </div>
+            <div className="setting-column">
+              <div className="setting-column-label">Insets</div>
+              <select
+                value={insetGraphics.maxFramerate ?? 'match'}
+                onChange={(e) => {
+                  const value = e.target.value
+                  const frameRate: InsetFrameratePreset = value === 'match' ? 'match' : Number(value) as 30 | 60 | 120 | 144 | 0
+                  updateGraphicsSettings({
+                    insetGraphics: { ...insetGraphics, maxFramerate: frameRate }
+                  })
+                }}
+                className="select-input"
+              >
+                <option value="match">Match Main</option>
+                <option value={30}>30 FPS</option>
+                <option value={60}>60 FPS</option>
+                <option value={120}>120 FPS</option>
+                <option value={144}>144 FPS</option>
+                <option value={0}>Unlimited</option>
+              </select>
+            </div>
+          </div>
           <p className="setting-hint">
-            Limits rendering to reduce GPU usage and heat. Use 60 FPS for most displays.
+            Limits rendering to reduce GPU usage. Use 60 FPS for most displays.
           </p>
         </div>
 
         <div className="setting-item">
           <label>MSAA Samples</label>
-          <select
-            value={msaaSamples}
-            onChange={(e) => {
-              updateGraphicsSettings({ msaaSamples: Number(e.target.value) as 1 | 2 | 4 | 8 })
-              setShowRestartDialog(true)
-            }}
-            className="select-input"
-          >
-            <option value={1}>1 (Off)</option>
-            <option value={2}>2x</option>
-            <option value={4}>4x (Default)</option>
-            <option value={8}>8x</option>
-          </select>
+          <div className="setting-pair">
+            <div className="setting-column">
+              <div className="setting-column-label">Main</div>
+              <select
+                value={msaaSamples}
+                onChange={(e) => {
+                  updateGraphicsSettings({ msaaSamples: Number(e.target.value) as 1 | 2 | 4 | 8 })
+                  setShowRestartDialog(true)
+                }}
+                className="select-input"
+              >
+                <option value={1}>Off</option>
+                <option value={2}>2x</option>
+                <option value={4}>4x</option>
+                <option value={8}>8x</option>
+              </select>
+            </div>
+            <div className="setting-column">
+              <div className="setting-column-label">Insets</div>
+              <select
+                value={insetGraphics.msaa}
+                onChange={(e) => updateGraphicsSettings({
+                  insetGraphics: { ...insetGraphics, msaa: e.target.value as InsetMsaaPreset }
+                })}
+                className="select-input"
+              >
+                <option value="match">Match Main</option>
+                <option value="low">2x</option>
+                <option value="medium">4x</option>
+              </select>
+            </div>
+          </div>
           <p className="setting-hint">
-            Multisample anti-aliasing. Higher values reduce jagged edges.
+            Multisample anti-aliasing. Higher values reduce jagged edges. Main viewport changes require restart.
           </p>
         </div>
 
@@ -154,97 +203,28 @@ function SettingsGraphicsWeatherTab() {
             Improves depth precision at large distances. Reduces z-fighting artifacts.
           </p>
         </div>
+      </CollapsibleSection>
 
+      <CollapsibleSection title="Terrain & Buildings">
         <div className="setting-item">
-          <label>
-            <input
-              type="checkbox"
-              checked={insetGraphics.enabled}
-              onChange={(e) => updateGraphicsSettings({
-                insetGraphics: { ...insetGraphics, enabled: e.target.checked }
-              })}
-            />
-            Enhanced Inset Rendering
-          </label>
-          <p className="setting-hint">
-            Enable customizable graphics quality for inset viewports. When disabled, insets use performance mode (minimal quality).
-          </p>
-        </div>
-
-        {insetGraphics.enabled && (
-          <div className="inset-settings-group">
-            <p className="setting-hint" style={{ marginBottom: '12px', color: '#ffa500' }}>
-              Each inset viewport uses separate GPU resources. Enable features sparingly with multiple insets.
-            </p>
-
-            <div className="setting-item">
-              <label>
+          <label>Terrain Quality</label>
+          <div className="setting-pair">
+            <div className="setting-column">
+              <div className="setting-column-label">Main</div>
+              <div className="slider-with-value">
                 <input
-                  type="checkbox"
-                  checked={insetGraphics.buildings}
-                  onChange={(e) => updateGraphicsSettings({
-                    insetGraphics: { ...insetGraphics, buildings: e.target.checked }
-                  })}
+                  type="range"
+                  min="1"
+                  max="5"
+                  step="1"
+                  value={terrainQuality}
+                  onChange={(e) => updateCesiumSettings({ terrainQuality: Number(e.target.value) as 1 | 2 | 3 | 4 | 5 })}
                 />
-                3D Buildings in Insets
-              </label>
-              <p className="setting-hint">
-                Show OSM 3D buildings in insets (requires main 3D Buildings enabled). Impact: Medium
-              </p>
+                <span>{['Low', 'Med', 'High', 'VHigh', 'Ultra'][terrainQuality - 1]}</span>
+              </div>
             </div>
-
-            <div className="setting-item">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={insetGraphics.shadows}
-                  onChange={(e) => updateGraphicsSettings({
-                    insetGraphics: { ...insetGraphics, shadows: e.target.checked }
-                  })}
-                />
-                Shadows in Insets
-              </label>
-              <p className="setting-hint">
-                Enable shadow rendering in insets. Impact: High
-              </p>
-            </div>
-
-            <div className="setting-item">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={insetGraphics.silhouettes}
-                  onChange={(e) => updateGraphicsSettings({
-                    insetGraphics: { ...insetGraphics, silhouettes: e.target.checked }
-                  })}
-                />
-                Aircraft Silhouettes in Insets
-              </label>
-              <p className="setting-hint">
-                Show edge outlines on aircraft models. Impact: Medium-High
-              </p>
-            </div>
-
-            <div className="setting-item">
-              <label>Inset MSAA Quality</label>
-              <select
-                value={insetGraphics.msaa}
-                onChange={(e) => updateGraphicsSettings({
-                  insetGraphics: { ...insetGraphics, msaa: e.target.value as InsetMsaaPreset }
-                })}
-                className="select-input"
-              >
-                <option value="low">Low (2x MSAA)</option>
-                <option value="medium">Medium (4x MSAA)</option>
-                <option value="match">Match Main Viewport</option>
-              </select>
-              <p className="setting-hint">
-                Anti-aliasing quality for inset viewports.
-              </p>
-            </div>
-
-            <div className="setting-item">
-              <label>Inset Terrain Detail</label>
+            <div className="setting-column">
+              <div className="setting-column-label">Insets</div>
               <select
                 value={insetGraphics.terrain}
                 onChange={(e) => updateGraphicsSettings({
@@ -252,65 +232,11 @@ function SettingsGraphicsWeatherTab() {
                 })}
                 className="select-input"
               >
-                <option value="low">Low (fast loading)</option>
-                <option value="medium">Medium (balanced)</option>
-                <option value="match">Match Main Viewport</option>
+                <option value="match">Match Main</option>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
               </select>
-              <p className="setting-hint">
-                Terrain tile quality and loading priority.
-              </p>
             </div>
-
-            <div className="setting-item">
-              <label>Inset Tile Caching</label>
-              <select
-                value={insetGraphics.cache}
-                onChange={(e) => updateGraphicsSettings({
-                  insetGraphics: { ...insetGraphics, cache: e.target.value as InsetCachePreset }
-                })}
-                className="select-input"
-              >
-                <option value="minimal">Minimal (50 tiles)</option>
-                <option value="standard">Standard (200 tiles)</option>
-                <option value="match">Match Main Viewport</option>
-              </select>
-              <p className="setting-hint">
-                How many terrain/imagery tiles to cache in memory.
-              </p>
-            </div>
-
-            <div className="setting-item">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={insetGraphics.preloadTiles}
-                  onChange={(e) => updateGraphicsSettings({
-                    insetGraphics: { ...insetGraphics, preloadTiles: e.target.checked }
-                  })}
-                />
-                Preload Tiles in Insets
-              </label>
-              <p className="setting-hint">
-                Preload nearby tiles for smoother camera movement. Impact: Low-Medium
-              </p>
-            </div>
-          </div>
-        )}
-      </CollapsibleSection>
-
-      <CollapsibleSection title="Terrain & Buildings">
-        <div className="setting-item">
-          <label>Terrain Quality</label>
-          <div className="slider-with-value">
-            <input
-              type="range"
-              min="1"
-              max="5"
-              step="1"
-              value={terrainQuality}
-              onChange={(e) => updateCesiumSettings({ terrainQuality: Number(e.target.value) as 1 | 2 | 3 | 4 | 5 })}
-            />
-            <span>{['Low', 'Medium', 'High', 'Very High', 'Ultra'][terrainQuality - 1]}</span>
           </div>
           <p className="setting-hint">
             Lower quality loads faster. Higher quality shows more detail at distance.
@@ -318,14 +244,36 @@ function SettingsGraphicsWeatherTab() {
         </div>
 
         <div className="setting-item">
-          <label>
-            <input
-              type="checkbox"
-              checked={show3DBuildings}
-              onChange={(e) => updateCesiumSettings({ show3DBuildings: e.target.checked })}
-            />
-            Show 3D Buildings (OSM)
-          </label>
+          <label>Show 3D Buildings (OSM)</label>
+          <div className="three-way-toggle">
+            <button
+              className={show3DBuildings && insetGraphics.buildings ? 'active' : ''}
+              onClick={() => {
+                updateCesiumSettings({ show3DBuildings: true })
+                updateGraphicsSettings({ insetGraphics: { ...insetGraphics, buildings: true } })
+              }}
+            >
+              On
+            </button>
+            <button
+              className={show3DBuildings && !insetGraphics.buildings ? 'active' : ''}
+              onClick={() => {
+                updateCesiumSettings({ show3DBuildings: true })
+                updateGraphicsSettings({ insetGraphics: { ...insetGraphics, buildings: false } })
+              }}
+            >
+              Main Only
+            </button>
+            <button
+              className={!show3DBuildings ? 'active-off' : ''}
+              onClick={() => {
+                updateCesiumSettings({ show3DBuildings: false })
+                updateGraphicsSettings({ insetGraphics: { ...insetGraphics, buildings: false } })
+              }}
+            >
+              Off
+            </button>
+          </div>
           <p className="setting-hint">
             Display OpenStreetMap 3D buildings. May impact performance.
           </p>
@@ -347,6 +295,58 @@ function SettingsGraphicsWeatherTab() {
             </p>
           </div>
         )}
+
+        <div className="setting-item">
+          <label>Tile Caching</label>
+          <div className="setting-pair">
+            <div className="setting-column">
+              <div className="setting-column-label">Main</div>
+              <select
+                value={inMemoryTileCacheSize}
+                onChange={(e) => updateMemorySettings({ inMemoryTileCacheSize: Number(e.target.value) })}
+                className="select-input"
+              >
+                <option value={500}>500 tiles</option>
+                <option value={1000}>1000 tiles</option>
+                <option value={2000}>2000 tiles</option>
+                <option value={4000}>4000 tiles</option>
+              </select>
+            </div>
+            <div className="setting-column">
+              <div className="setting-column-label">Insets</div>
+              <select
+                value={insetGraphics.cache}
+                onChange={(e) => updateGraphicsSettings({
+                  insetGraphics: { ...insetGraphics, cache: e.target.value as InsetCachePreset }
+                })}
+                className="select-input"
+              >
+                <option value="match">Match Main</option>
+                <option value="minimal">50 tiles</option>
+                <option value="standard">200 tiles</option>
+              </select>
+            </div>
+          </div>
+          <p className="setting-hint">
+            How many terrain/imagery tiles to cache in memory. Higher uses more RAM.
+          </p>
+        </div>
+
+        <div className="setting-item">
+          <label>
+            <input
+              type="checkbox"
+              checked={insetGraphics.preloadTiles}
+              onChange={(e) => updateGraphicsSettings({
+                insetGraphics: { ...insetGraphics, preloadTiles: e.target.checked }
+              })}
+            />
+            Preload Tiles in Insets
+          </label>
+          <p className="setting-hint">
+            Preload nearby tiles for smoother camera movement in inset viewports.
+          </p>
+        </div>
 
         <div className="setting-item">
           <label>
@@ -514,16 +514,44 @@ function SettingsGraphicsWeatherTab() {
 
       <CollapsibleSection title="Shadows">
         <div className="setting-item">
-          <label>
-            <input
-              type="checkbox"
-              checked={enableShadows}
-              onChange={(e) => updateGraphicsSettings({ enableShadows: e.target.checked })}
-            />
-            Enable Shadows
-          </label>
+          <label>Enable Shadows</label>
+          <div className="three-way-toggle">
+            <button
+              className={enableShadows && insetGraphics.shadows ? 'active' : ''}
+              onClick={() => {
+                updateGraphicsSettings({
+                  enableShadows: true,
+                  insetGraphics: { ...insetGraphics, shadows: true }
+                })
+              }}
+            >
+              On
+            </button>
+            <button
+              className={enableShadows && !insetGraphics.shadows ? 'active' : ''}
+              onClick={() => {
+                updateGraphicsSettings({
+                  enableShadows: true,
+                  insetGraphics: { ...insetGraphics, shadows: false }
+                })
+              }}
+            >
+              Main Only
+            </button>
+            <button
+              className={!enableShadows ? 'active-off' : ''}
+              onClick={() => {
+                updateGraphicsSettings({
+                  enableShadows: false,
+                  insetGraphics: { ...insetGraphics, shadows: false }
+                })
+              }}
+            >
+              Off
+            </button>
+          </div>
           <p className="setting-hint">
-            Enables shadow casting for terrain and 3D models. Performance impact.
+            Enables shadow casting for terrain and 3D models. High performance impact for insets.
           </p>
         </div>
 

@@ -14,12 +14,15 @@
  */
 
 import { useEffect, useCallback, useState, useRef } from 'react'
-import { useSharedWorkerConsumer, sendCameraUpdate } from '../hooks/useSharedWorkerConsumer'
-import { useBroadcastAircraft } from '../hooks/useBroadcastAircraft'
+import { useSharedWorkerConsumer, enableObservationAutoFeed } from '../hooks/useSharedWorkerConsumer'
 import { useInsetStoreSync } from '../hooks/useInsetStoreSync'
 import { useViewportStore } from '../stores/viewportStore'
 import CesiumViewer from './CesiumViewer/CesiumViewer'
 import type { CameraStateUpdate } from '../types/shared-worker'
+
+// Enable automatic feeding of observations to the timeline store
+// This allows the inset to interpolate aircraft positions locally
+enableObservationAutoFeed()
 
 interface InsetAppProps {
   viewportId: string
@@ -51,7 +54,8 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
   // Only process camera input when activated
   const [isActivatedByParent, setIsActivatedByParent] = useState(false)
 
-  // Get settings/weather/token/airport/imagery from SharedWorker (non-aircraft data)
+  // Get settings/weather/token/airport/imagery from SharedWorker
+  // Aircraft observations are automatically fed to the timeline store via enableObservationAutoFeed()
   const {
     settings,
     weather,
@@ -61,12 +65,8 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
     connected,
   } = useSharedWorkerConsumer(viewportId)
 
-  // Initialize broadcast aircraft receiver (updates module-level variable directly)
-  // The rendering system reads aircraft data via getBroadcastAircraftData()
-  useBroadcastAircraft()
-
   // Sync SharedWorker data to local stores (settings, weather, airport, imagery)
-  // Aircraft data is NOT synced here - it's handled directly by useBroadcastAircraft
+  // Aircraft data is handled by useSharedWorkerConsumer -> timeline store
   const { isReady: storesReady } = useInsetStoreSync({
     settings,
     weather,
@@ -79,6 +79,15 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
   const viewportInitializedRef = useRef(false)
   // Track last sent camera state to avoid redundant updates
   const lastSentCameraRef = useRef<string>('')
+
+  // Send messages to parent window via postMessage
+  const sendToParent = useCallback((message: InsetToParentMessage) => {
+    try {
+      window.parent.postMessage(message, parentOrigin)
+    } catch (err) {
+      console.error('[InsetApp] Failed to post message to parent:', err)
+    }
+  }, [parentOrigin])
 
   // Initialize viewport in local viewportStore when component mounts
   // The inset's viewportStore may have rehydrated state from localStorage (shared with main app)
@@ -193,21 +202,16 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
 
       // Only send if there are actual changes
       if (Object.keys(updates).length > 0) {
-        sendCameraUpdate(viewportId, updates)
+        sendToParent({
+          type: 'camera-change',
+          viewportId,
+          payload: updates
+        })
       }
     })
 
     return () => unsubscribe()
-  }, [viewportId])
-
-  // Send camera updates to parent
-  const sendToParent = useCallback((message: InsetToParentMessage) => {
-    try {
-      window.parent.postMessage(message, parentOrigin)
-    } catch (err) {
-      console.error('[InsetApp] Failed to post message to parent:', err)
-    }
-  }, [parentOrigin])
+  }, [viewportId, sendToParent])
 
   // Handle aircraft selection in this inset (for future use)
   const _handleAircraftSelect = useCallback((callsign: string) => {
@@ -291,6 +295,11 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
               if (updates.pitch !== undefined) store.setPitch(updates.pitch)
             }
             if (updates.fov !== undefined) store.setFov(updates.fov)
+
+            // Handle position offsets (camera 6DOF position)
+            if (updates.positionOffsetX !== undefined) store.setPositionOffsetX(updates.positionOffsetX)
+            if (updates.positionOffsetY !== undefined) store.setPositionOffsetY(updates.positionOffsetY)
+            if (updates.positionOffsetZ !== undefined) store.setPositionOffsetZ(updates.positionOffsetZ)
 
             // Handle orbit parameters
             if (updates.orbitDistance !== undefined) store.setOrbitDistance(updates.orbitDistance)
@@ -465,7 +474,7 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
 
   // Render the isolated CesiumViewer
   // The viewer uses local stores that are populated from SharedWorker data
-  // Aircraft data is accessed via getAircraftDataSource() which detects inset context
+  // Aircraft observations are received via SharedWorker and interpolated locally
   return (
     <div
       style={{

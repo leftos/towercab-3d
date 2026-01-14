@@ -3,13 +3,9 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useReplayStore } from '../stores/replayStore'
 import { useAircraftTimelineStore } from '../stores/aircraftTimelineStore'
 import { getAircraftDataSource } from './useAircraftDataSource'
-import { isInsetContext } from './useInsetStoreSync'
-import { registerSharedStatesUpdater } from './useBroadcastAircraft'
 import { calculateFlarePitch, angleDifference } from '../utils/interpolation'
 import { performanceMonitor } from '../utils/performanceMonitor'
 import { geoidService } from '../services/GeoidService'
-import { aircraftBroadcastService } from '../services/AircraftBroadcastService'
-import { isTauriMode } from '../utils/remoteMode'
 import type { InterpolatedAircraftState, AircraftState } from '../types/vatsim'
 import type { TimelineInterpolationResult } from '../types/aircraft-timeline'
 import type { TerrainData } from './useGroundAircraftTerrain'
@@ -41,86 +37,6 @@ const sharedInterpolatedStates = new Map<string, InterpolatedAircraftState>()
 let animationLoopRunning = false
 let animationFrameId: number | null = null
 let hookInstanceCount = 0
-
-// ============================================================================
-// INSET DIRECT UPDATE (no interpolation)
-// ============================================================================
-// For insets, we skip the animation loop entirely and update the shared states
-// directly when broadcast data arrives. This is called from useBroadcastAircraft.
-
-/**
- * Directly update shared interpolated states from broadcast data (for insets only).
- * This bypasses the animation loop - insets should NOT interpolate/extrapolate.
- *
- * @param broadcastAircraft - Map of aircraft states from broadcast
- */
-export function updateSharedStatesFromBroadcast(
-  broadcastAircraft: Map<string, InterpolatedAircraftState>
-): void {
-  // Track which callsigns are in the broadcast
-  const activeCallsigns = new Set<string>()
-
-  for (const [callsign, broadcast] of broadcastAircraft) {
-    activeCallsigns.add(callsign)
-
-    // Get or create entry in shared states
-    let existing = sharedInterpolatedStates.get(callsign)
-    if (!existing) {
-      existing = { ...broadcast }
-      sharedInterpolatedStates.set(callsign, existing)
-    } else {
-      // Update existing entry in place
-      existing.callsign = broadcast.callsign
-      existing.cid = broadcast.cid
-      existing.latitude = broadcast.latitude
-      existing.longitude = broadcast.longitude
-      existing.altitude = broadcast.altitude
-      existing.groundspeed = broadcast.groundspeed
-      existing.heading = broadcast.heading
-      existing.groundTrack = broadcast.groundTrack
-      existing.transponder = broadcast.transponder
-      existing.aircraftType = broadcast.aircraftType
-      existing.departure = broadcast.departure
-      existing.arrival = broadcast.arrival
-      existing.timestamp = broadcast.timestamp
-      existing.interpolatedLatitude = broadcast.interpolatedLatitude
-      existing.interpolatedLongitude = broadcast.interpolatedLongitude
-      existing.interpolatedAltitude = broadcast.interpolatedAltitude
-      existing.interpolatedHeading = broadcast.interpolatedHeading
-      existing.interpolatedGroundspeed = broadcast.interpolatedGroundspeed
-      existing.interpolatedPitch = broadcast.interpolatedPitch
-      existing.interpolatedRoll = broadcast.interpolatedRoll
-      existing.verticalRate = broadcast.verticalRate
-      existing.turnRate = broadcast.turnRate
-      existing.acceleration = broadcast.acceleration
-      existing.track = broadcast.track
-      existing.isInterpolated = broadcast.isInterpolated
-      existing.broadcastModelUrl = broadcast.broadcastModelUrl
-      existing.broadcastModelScale = broadcast.broadcastModelScale
-      existing.broadcastRotationOffset = broadcast.broadcastRotationOffset
-      existing.broadcastIsFsltl = broadcast.broadcastIsFsltl
-    }
-  }
-
-  // Remove aircraft that are no longer in broadcast
-  for (const callsign of sharedInterpolatedStates.keys()) {
-    if (!activeCallsigns.has(callsign)) {
-      sharedInterpolatedStates.delete(callsign)
-    }
-  }
-
-  // Notify React subscribers if aircraft count changed
-  // This is needed because insets don't run the animation loop which normally notifies
-  // We only notify on count changes to avoid excessive re-renders - position updates
-  // within the Map are read directly by the Cesium render loop
-  const currentCount = sharedInterpolatedStates.size
-  if (currentCount !== sharedLastAircraftCountRef.current) {
-    sharedLastAircraftCountRef.current = currentCount
-    for (const callback of subscribers) {
-      callback()
-    }
-  }
-}
 
 // Shared state for animation loop (accessed by singleton loop)
 const sharedAircraftStatesRef = { current: new Map<string, AircraftState>() }
@@ -279,7 +195,15 @@ function timelineToInterpolatedState(
   let pitch = 0
   let roll = 0
 
-  if (orientationEnabled) {
+  // For broadcast source (insets), use pre-interpolated pitch/roll from main app
+  // This avoids redundant calculations and ensures visual consistency between viewports
+  if (timeline.source === 'broadcast' && timeline.pitch !== null && timeline.roll !== null) {
+    pitch = timeline.pitch
+    roll = timeline.roll
+    // Store for next frame (in case source changes)
+    rateState.prevPitch = pitch
+    rateState.prevRoll = roll
+  } else if (orientationEnabled) {
     // Pitch from vertical rate
     // ~1000 fpm climb = ~5 degrees pitch (standard approximation)
     // verticalRate is in m/min, convert to fpm for calculation
@@ -475,22 +399,21 @@ function updateInterpolation() {
   }
 
   // ============================================================================
-  // UNIFIED TIMELINE-BASED INTERPOLATION (MAIN APP ONLY)
+  // UNIFIED TIMELINE-BASED INTERPOLATION (both main app and insets)
   // ============================================================================
-  // NOTE: Insets do NOT run this animation loop. They receive pre-interpolated
-  // data from broadcasts and update sharedInterpolatedStates directly via
-  // updateSharedStatesFromBroadcast() called from useBroadcastAircraft.
-  //
-  // Use the timeline store for smooth position interpolation.
-  // - Live mode: Uses VATSIM/vNAS/RealTraffic with source-specific display delays
+  // Use the timeline store for smooth position interpolation:
+  // - Main app: Uses VATSIM/vNAS/RealTraffic with source-specific display delays
+  // - Insets: Uses broadcast observations (fed from useBroadcastAircraft)
   // - Buffer replay: Scrubs through existing timeline with virtual "now" time
   // - Imported replay: Uses loaded snapshots with zero display delay
   //
   // The timeline store handles interpolation uniformly for all sources.
 
   // Get interpolated states from timeline store
-    const timelineStore = useAircraftTimelineStore.getState()
-    const timelineStates = timelineStore.getInterpolatedStates(now)
+  const timelineStore = useAircraftTimelineStore.getState()
+  const timelineStates = timelineStore.getInterpolatedStates(now)
+
+  {
 
     for (const [callsign, timeline] of timelineStates) {
       // Skip aircraft with fewer than 2 observations - we need at least 2 data points
@@ -534,6 +457,7 @@ function updateInterpolation() {
         statesMap.set(callsign, interpolated)
       }
     }
+  }
 
   // Update frame timestamp for rate calculations
   sharedTimelineLastFrameTimeRef.current = now
@@ -828,12 +752,6 @@ function updateInterpolation() {
 
   performanceMonitor.endTimer('interpolation')
 
-  // Broadcast interpolated aircraft to insets and remote browsers
-  // Only the main Tauri app broadcasts; insets receive via SharedWorker
-  if (isTauriMode() && !isInsetContext()) {
-    aircraftBroadcastService.broadcast(statesMap, now)
-  }
-
   // Schedule next frame
   animationFrameId = requestAnimationFrame(updateInterpolation)
 }
@@ -984,13 +902,6 @@ export function useAircraftInterpolation(): Map<string, InterpolatedAircraftStat
   useEffect(() => {
     hookInstanceCount++
 
-    // For insets: Register the broadcast updater to directly update shared states
-    // This connects the broadcast receiver to the rendering system without running
-    // an interpolation loop - insets just pass through pre-interpolated data
-    if (isInsetContext()) {
-      registerSharedStatesUpdater(updateSharedStatesFromBroadcast)
-    }
-
     // Subscribe to settings for orientation emulation
     const unsubscribeSettings = useSettingsStore.subscribe((state) => {
       sharedOrientationEnabledRef.current = state.aircraft.orientationEmulation
@@ -1016,11 +927,6 @@ export function useAircraftInterpolation(): Map<string, InterpolatedAircraftStat
       unsubscribeSettings()
       subscribers.delete(updateCallback)
 
-      // For insets: Unregister the broadcast updater
-      if (isInsetContext()) {
-        registerSharedStatesUpdater(null)
-      }
-
       // Stop animation loop when last component unmounts
       if (hookInstanceCount === 0 && animationFrameId !== null) {
         cancelAnimationFrame(animationFrameId)
@@ -1031,11 +937,10 @@ export function useAircraftInterpolation(): Map<string, InterpolatedAircraftStat
   }, [])
 
   // Start singleton animation loop (only once, regardless of hook calls)
-  // IMPORTANT: Insets do NOT run the animation loop - they receive pre-interpolated
-  // data from broadcasts and update sharedInterpolatedStates directly via
-  // updateSharedStatesFromBroadcast() called from useBroadcastAircraft.
+  // Both main app and insets now run the animation loop - insets use the timeline
+  // store populated by useBroadcastAircraft for smooth interpolation.
   useEffect(() => {
-    if (!animationLoopRunning && !isInsetContext()) {
+    if (!animationLoopRunning) {
       animationLoopRunning = true
       animationFrameId = requestAnimationFrame(updateInterpolation)
     }

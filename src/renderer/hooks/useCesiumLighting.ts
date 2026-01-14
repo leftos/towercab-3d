@@ -111,9 +111,9 @@ export function useCesiumLighting(
     // Update lighting
     viewer.scene.globe.enableLighting = enableLighting
 
-    // Update shadows - disabled for insets (unless enhanced + shadows enabled), aircraft-only for topdown, configurable for main 3D viewport
+    // Update shadows - disabled for insets by default, aircraft-only for topdown, configurable for main 3D viewport
     const isTopDown = viewMode === 'topdown'
-    const insetShadowsEnabled = isInset && insetGraphics.enabled && insetGraphics.shadows
+    const insetShadowsEnabled = isInset && insetGraphics.shadows
     if (isInset && !insetShadowsEnabled) {
       viewer.shadows = false
       viewer.terrainShadows = Cesium.ShadowMode.DISABLED

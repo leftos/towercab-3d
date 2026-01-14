@@ -440,7 +440,7 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
     }),
     {
       name: 'settings-store',
-      version: 31,
+      version: 32,
       migrate: (persistedState: unknown, version: number) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let state: any = persistedState
@@ -520,7 +520,8 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
                 msaa: 'match',
                 terrain: 'match',
                 cache: 'match',
-                preloadTiles: true
+                preloadTiles: true,
+                maxFramerate: 'match'
               }
             : DEFAULT_INSET_GRAPHICS_SETTINGS
 
@@ -533,6 +534,33 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
           }
           // Remove old highQualityInsets property
           delete state.graphics.highQualityInsets
+        }
+
+        // v31 → v32: Remove insetGraphics.enabled master toggle - now individual settings control insets directly
+        // If enabled was false, ensure all individual settings are set to minimal (main viewport only)
+        if (version < 32) {
+          console.log('[Settings] Migrating v31 to v32: removing insetGraphics.enabled master toggle')
+          const insetGraphics = state.graphics?.insetGraphics
+          if (insetGraphics && !insetGraphics.enabled) {
+            // User had "performance mode" - set all individual settings to minimal
+            state = {
+              ...state,
+              graphics: {
+                ...state.graphics,
+                insetGraphics: {
+                  ...insetGraphics,
+                  buildings: false,
+                  shadows: false,
+                  silhouettes: false,
+                  msaa: 'low',
+                  terrain: 'low',
+                  cache: 'minimal',
+                  preloadTiles: false,
+                  maxFramerate: 60  // Reasonable default for performance mode
+                }
+              }
+            }
+          }
         }
 
         // ========================================================================
@@ -548,7 +576,12 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
         const repaired = {
           ...state,
           cesium: { ...DEFAULT_SETTINGS.cesium, ...state.cesium },
-          graphics: { ...DEFAULT_SETTINGS.graphics, ...state.graphics },
+          graphics: {
+            ...DEFAULT_SETTINGS.graphics,
+            ...state.graphics,
+            // Deep merge nested objects that may have new fields
+            insetGraphics: { ...DEFAULT_INSET_GRAPHICS_SETTINGS, ...state.graphics?.insetGraphics }
+          },
           camera: { ...DEFAULT_SETTINGS.camera, ...state.camera },
           weather: { ...DEFAULT_SETTINGS.weather, ...state.weather },
           memory: { ...DEFAULT_SETTINGS.memory, ...state.memory },
@@ -642,7 +675,8 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
             msaa: 'match' as const,
             terrain: 'match' as const,
             cache: 'match' as const,
-            preloadTiles: true
+            preloadTiles: true,
+            maxFramerate: 'match' as const
           }
         : DEFAULT_SETTINGS.graphics.insetGraphics
     },

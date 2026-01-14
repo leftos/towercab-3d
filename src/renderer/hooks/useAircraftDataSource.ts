@@ -1,9 +1,8 @@
 /**
  * Unified Aircraft Data Source
  *
- * Provides a single interface for aircraft state data that works for both
- * live VATSIM mode and replay mode. This abstraction allows the interpolation
- * system to remain agnostic about where the data comes from.
+ * Provides timing and mode information for the interpolation system.
+ * The actual aircraft data comes from the timeline store, not this function.
  *
  * ## Data Sources
  *
@@ -15,9 +14,9 @@
  * In REPLAY/IMPORTED mode:
  *   - Returns cached deserialized snapshot data from replayStore
  *
- * In INSET mode (iframe with SharedWorker):
- *   - Returns pre-interpolated data received from main app via SharedWorker
- *   - No local interpolation needed since data is already interpolated at 30Hz
+ * Note: Both main app and insets use the same code path. Insets receive
+ * raw observations via SharedWorker and interpolate locally using their
+ * own timeline store instance.
  */
 
 import { useReplayStore } from '../stores/replayStore'
@@ -28,7 +27,6 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useGlobalSettingsStore } from '../stores/globalSettingsStore'
 import { SNAPSHOT_INTERVAL_MS } from '../constants/replay'
 import { calculateDistanceNM } from '../utils/interpolation'
-import { isInsetContext, getInsetAircraftData } from './useInsetStoreSync'
 import type { AircraftState } from '../types/vatsim'
 import type { PlaybackMode, SerializedAircraftState } from '../types/replay'
 
@@ -164,43 +162,6 @@ function filterToMatchCallsigns(
  * @returns AircraftDataSource with current/previous states and timing info
  */
 export function getAircraftDataSource(): AircraftDataSource {
-  // INSET MODE: Use pre-interpolated data from broadcast service
-  // Insets receive already-interpolated positions via delta-compressed broadcasts
-  if (isInsetContext()) {
-    const { aircraft, timestamp } = getInsetAircraftData()
-
-    // Convert InterpolatedAircraftState to AircraftState
-    // Use INTERPOLATED positions for smooth movement (already calculated by main app)
-    const aircraftStates = new Map<string, AircraftState>()
-    for (const [callsign, state] of aircraft) {
-      aircraftStates.set(callsign, {
-        callsign: state.callsign,
-        cid: state.cid ?? 0,
-        // Use interpolated positions for smooth movement
-        latitude: state.interpolatedLatitude,
-        longitude: state.interpolatedLongitude,
-        altitude: state.interpolatedAltitude,
-        groundspeed: state.interpolatedGroundspeed,
-        heading: state.interpolatedHeading,
-        transponder: state.transponder ?? '',
-        aircraftType: state.aircraftType,
-        departure: state.departure,
-        arrival: state.arrival,
-        timestamp: state.timestamp ?? Date.now()
-      })
-    }
-
-    // Return with minimal interpolation interval since data is already interpolated
-    // Using same states for previous/current with timestamp = now effectively skips interpolation
-    return {
-      aircraftStates,
-      previousStates: aircraftStates, // Same - no interpolation needed
-      timestamp: timestamp || Date.now(),
-      updateInterval: 33, // ~30Hz refresh from broadcast service
-      playbackMode: 'live'
-    }
-  }
-
   const replayState = useReplayStore.getState()
   const { playbackMode, currentIndex, segmentProgress, getActiveSnapshots } = replayState
 

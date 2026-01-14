@@ -33,6 +33,7 @@ function SettingsAircraftLabelsTab() {
   const builtinModelTintColor = useSettingsStore((state) => state.graphics.builtinModelTintColor) ?? 'lightBlue'
   const fsltlModelBrightness = useSettingsStore((state) => state.graphics.fsltlModelBrightness) ?? 1.0
   const enableAircraftSilhouettes = useSettingsStore((state) => state.graphics.enableAircraftSilhouettes)
+  const insetGraphics = useSettingsStore((state) => state.graphics.insetGraphics)
   const updateGraphicsSettings = useSettingsStore((state) => state.updateGraphicsSettings)
 
   return (
@@ -370,14 +371,42 @@ function SettingsAircraftLabelsTab() {
         </div>
 
         <div className="setting-item">
-          <label>
-            <input
-              type="checkbox"
-              checked={enableAircraftSilhouettes}
-              onChange={(e) => updateGraphicsSettings({ enableAircraftSilhouettes: e.target.checked })}
-            />
-            Aircraft Outlines
-          </label>
+          <label>Aircraft Outlines</label>
+          <div className="three-way-toggle">
+            <button
+              className={enableAircraftSilhouettes && insetGraphics.silhouettes ? 'active' : ''}
+              onClick={() => {
+                updateGraphicsSettings({
+                  enableAircraftSilhouettes: true,
+                  insetGraphics: { ...insetGraphics, silhouettes: true }
+                })
+              }}
+            >
+              On
+            </button>
+            <button
+              className={enableAircraftSilhouettes && !insetGraphics.silhouettes ? 'active' : ''}
+              onClick={() => {
+                updateGraphicsSettings({
+                  enableAircraftSilhouettes: true,
+                  insetGraphics: { ...insetGraphics, silhouettes: false }
+                })
+              }}
+            >
+              Main Only
+            </button>
+            <button
+              className={!enableAircraftSilhouettes ? 'active-off' : ''}
+              onClick={() => {
+                updateGraphicsSettings({
+                  enableAircraftSilhouettes: false,
+                  insetGraphics: { ...insetGraphics, silhouettes: false }
+                })
+              }}
+            >
+              Off
+            </button>
+          </div>
           <p className="setting-hint">
             Adds black edge outlines to built-in (FR24) aircraft models. High GPU cost (~20%) - use Aircraft Tint instead for better performance.
           </p>

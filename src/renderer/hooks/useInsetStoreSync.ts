@@ -10,9 +10,9 @@
  * - settingsStore: Graphics, cesium, aircraft, weather settings
  * - weatherStore: METAR and fog data
  *
- * Note: Aircraft data is NOT synced here. It's handled directly by the
- * useBroadcastAircraft hook which updates a module-level variable that
- * the rendering system reads directly (bypassing React state batching).
+ * Note: Aircraft observations are handled by useSharedWorkerConsumer which
+ * feeds them to the timeline store (via enableObservationAutoFeed) for
+ * interpolation by useAircraftInterpolation.
  */
 
 import { useEffect, useRef } from 'react'
@@ -29,10 +29,6 @@ import type {
 import type { GlobalDisplaySettings } from '../types/settings'
 // Re-export isInsetContext from tauriApi for backward compatibility
 export { isInsetContext } from '../utils/tauriApi'
-
-// Re-export getBroadcastAircraftData for backward compatibility
-// The interpolation system now reads directly from useBroadcastAircraft module
-export { getBroadcastAircraftData as getInsetAircraftData } from './useBroadcastAircraft'
 
 interface UseInsetStoreSyncOptions {
   settings: SerializedSettings | null

@@ -26,6 +26,9 @@ import type { AircraftState } from './vatsim'
  */
 export type SharedWorkerMessageType =
   | 'aircraft-update'
+  | 'observations-update'  // Raw observations for timeline-based interpolation
+  | 'aircraft-removals'    // Aircraft that have been removed
+  | 'model-info-update'    // Model assignments for callsigns
   | 'settings-update'
   | 'weather-update'
   | 'cesium-token'
@@ -34,8 +37,7 @@ export type SharedWorkerMessageType =
   | 'viewport-camera'
   | 'register-inset'
   | 'unregister-inset'
-  | 'debug-info'
-  | 'debug-log'
+  | 'inset-log'            // Log forwarding from inset to main
 
 /**
  * Inbound message from main app or inset
@@ -201,6 +203,31 @@ export interface SerializedAirport {
  */
 export interface AirportUpdatePayload {
   airport: SerializedAirport | null
+}
+
+/**
+ * Serialized model info for a callsign
+ * Contains the resolved model URL and rendering parameters
+ */
+export interface SerializedModelInfo {
+  callsign: string
+  /** URL/path to the GLB model file (null if pending conversion) */
+  modelUrl: string | null
+  /** Non-uniform scale [x, y, z] */
+  scale: [number, number, number]
+  /** Rotation offset in degrees (180 for FSLTL models) */
+  rotationOffset: number
+  /** Whether this is an FSLTL/VMR model (affects brightness/livery handling) */
+  isFsltl: boolean
+}
+
+/**
+ * Model info update payload
+ * Sent when model assignments change for aircraft
+ */
+export interface ModelInfoUpdatePayload {
+  models: SerializedModelInfo[]
+  timestamp: number
 }
 
 /**

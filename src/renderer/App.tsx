@@ -43,7 +43,6 @@ import { modService } from './services/ModService'
 import { userVMRService } from './services/UserVMRService'
 import { MSFSModelConversionService } from './services/MSFSModelConversionService'
 import { realTrafficService } from './services/RealTrafficService'
-import { aircraftBroadcastService } from './services/AircraftBroadcastService'
 import { isOrbitWithoutAirport } from './utils/viewingContext'
 import { isRemoteMode } from './utils/remoteMode'
 import { usePresenceWebSocket } from './hooks/usePresenceWebSocket'
@@ -137,15 +136,13 @@ function App() {
   useVnasEvents()
 
   // Initialize aircraft interpolation (singleton pattern - shared with CesiumViewer)
-  // The interpolation loop now broadcasts to insets via AircraftBroadcastService
+  // Both main app and insets run this - observations are shared via SharedWorker
   useAircraftInterpolation()
 
-  // Initialize services for inset iframes
-  // - SettingsSharedWorkerService: broadcasts settings/weather/airport/token via SharedWorker
-  // - AircraftBroadcastService: delta-compressed aircraft updates via SharedWorker
+  // Initialize SettingsSharedWorkerService for inset iframes
+  // Broadcasts settings, weather, airport, token, and aircraft observations via SharedWorker
   useEffect(() => {
     settingsSharedWorkerService.initialize()
-    aircraftBroadcastService.initialize()
   }, [])
 
   const handleViewerReady = useCallback((viewer: Viewer | null) => {

@@ -23,20 +23,110 @@ import type {
   SerializedSettings,
   SerializedWeather,
   SerializedAirport,
-  SerializedImagery
+  SerializedImagery,
+  SerializedModelInfo,
+  ModelInfoUpdatePayload
 } from '../types/shared-worker'
+import type { AircraftObservation, AircraftMetadata } from '../types/aircraft-timeline'
+import { useAircraftTimelineStore } from '../stores/aircraftTimelineStore'
+
+/**
+ * Batch of observations received from the main app
+ */
+export type ObservationsBatch = Array<{
+  callsign: string
+  observation: AircraftObservation
+  metadata: AircraftMetadata
+}>
+
+/**
+ * Whether this hook should automatically feed observations to the timeline store.
+ * Set to true when used in inset context.
+ */
+let autoFeedToTimeline = false
+
+/**
+ * Enable automatic feeding of observations to timeline store.
+ * Call this once in inset context before using useSharedWorkerConsumer.
+ */
+export function enableObservationAutoFeed(): void {
+  autoFeedToTimeline = true
+}
+
+/**
+ * Default handler that feeds observations to the timeline store
+ */
+function handleObservationsForTimeline(observations: ObservationsBatch): void {
+  if (!autoFeedToTimeline) return
+  const timelineStore = useAircraftTimelineStore.getState()
+  timelineStore.addObservationBatch(observations)
+}
+
+/**
+ * Default handler that removes aircraft from the timeline store
+ */
+function handleRemovalsForTimeline(callsigns: string[]): void {
+  if (!autoFeedToTimeline) return
+  const timelineStore = useAircraftTimelineStore.getState()
+  for (const callsign of callsigns) {
+    timelineStore.removeAircraft(callsign)
+  }
+}
 
 // Singleton SharedWorker instance for insets
 let sharedWorker: SharedWorker | null = null
 let sharedWorkerPort: MessagePort | null = null
 
 // Callbacks registered by consumer instances
-// NOTE: Aircraft callbacks removed - aircraft data now comes from useBroadcastAircraft
 const settingsCallbacks = new Set<(settings: SerializedSettings) => void>()
 const imageryCallbacks = new Set<(imagery: SerializedImagery) => void>()
 const weatherCallbacks = new Set<(weather: SerializedWeather) => void>()
 const tokenCallbacks = new Set<(token: string) => void>()
 const airportCallbacks = new Set<(airport: SerializedAirport | null) => void>()
+const observationsCallbacks = new Set<(observations: ObservationsBatch) => void>()
+const removalsCallbacks = new Set<(callsigns: string[]) => void>()
+const modelInfoCallbacks = new Set<(models: SerializedModelInfo[]) => void>()
+
+// ============================================================================
+// MODEL INFO STORAGE (for insets)
+// ============================================================================
+// Model info received from main app, keyed by callsign.
+// This allows useAircraftModels to look up model info for rendering.
+const modelInfoCache = new Map<string, SerializedModelInfo>()
+
+/**
+ * Get model info for a callsign (for inset rendering).
+ * Returns null if no model info has been received from the main app.
+ */
+export function getModelInfoForCallsign(callsign: string): SerializedModelInfo | null {
+  return modelInfoCache.get(callsign) ?? null
+}
+
+/**
+ * Default handler that stores model info in the cache
+ */
+function handleModelInfoForCache(models: SerializedModelInfo[]): void {
+  if (!autoFeedToTimeline) return // Only active in inset context
+  for (const model of models) {
+    modelInfoCache.set(model.callsign, model)
+  }
+}
+
+/**
+ * Default handler that removes model info when aircraft are removed
+ */
+function handleRemovalsForModelCache(callsigns: string[]): void {
+  if (!autoFeedToTimeline) return
+  for (const callsign of callsigns) {
+    modelInfoCache.delete(callsign)
+  }
+}
+
+// Register the default handlers (always active, will check autoFeedToTimeline flag)
+observationsCallbacks.add(handleObservationsForTimeline)
+removalsCallbacks.add(handleRemovalsForTimeline)
+removalsCallbacks.add(handleRemovalsForModelCache)
+modelInfoCallbacks.add(handleModelInfoForCache)
 
 /**
  * Get or create the singleton SharedWorker connection for insets
@@ -99,8 +189,28 @@ function getSharedWorkerConnection(): { worker: SharedWorker; port: MessagePort 
             }
             break
 
-          case 'debug-info':
-            // Debug messages from SharedWorker are silently ignored
+          case 'observations-update':
+            // Raw observations for timeline-based interpolation
+            for (const callback of observationsCallbacks) {
+              callback(payload as ObservationsBatch)
+            }
+            break
+
+          case 'aircraft-removals':
+            // Aircraft removal notifications
+            for (const callback of removalsCallbacks) {
+              callback(payload as string[])
+            }
+            break
+
+          case 'model-info-update':
+            // Model info updates from main app
+            {
+              const modelPayload = payload as ModelInfoUpdatePayload
+              for (const callback of modelInfoCallbacks) {
+                callback(modelPayload.models)
+              }
+            }
             break
         }
       }
@@ -132,6 +242,20 @@ function postToWorker(message: SharedWorkerInboundMessage) {
       console.error('[SharedWorkerConsumer] Failed to post message:', error)
     }
   }
+}
+
+/**
+ * Forward a log message from inset to main app via SharedWorker.
+ * Also logs locally for iframe devtools.
+ */
+export function insetLog(message: string, viewportId?: string): void {
+  console.log(message)
+  postToWorker({
+    type: 'inset-log',
+    payload: message,
+    viewportId,
+    source: 'inset'
+  })
 }
 
 /**

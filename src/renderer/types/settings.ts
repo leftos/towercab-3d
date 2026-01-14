@@ -291,6 +291,16 @@ export type InsetTerrainPreset = 'low' | 'medium' | 'match'
 export type InsetCachePreset = 'minimal' | 'standard' | 'match'
 
 /**
+ * Framerate preset for inset viewports
+ *
+ * Controls the maximum frame rate for inset rendering:
+ * - 30, 60, 120, 144: Fixed frame rate limits
+ * - 0: Unlimited (uses display refresh rate)
+ * - 'match': Use same frame rate as main viewport
+ */
+export type InsetFrameratePreset = 30 | 60 | 120 | 144 | 0 | 'match'
+
+/**
  * Inset viewport graphics settings
  *
  * Fine-grained control over rendering quality for inset (picture-in-picture) viewports.
@@ -372,6 +382,16 @@ export interface InsetGraphicsSettings {
    * Performance impact: Low-Medium (uses more bandwidth and memory)
    */
   preloadTiles: boolean
+
+  /**
+   * Maximum frame rate for insets (default: 'match')
+   *
+   * Controls the rendering frame rate limit for inset viewports:
+   * - 30, 60, 120, 144: Fixed frame rate limits
+   * - 0: Unlimited (uses display refresh rate)
+   * - 'match': Use same frame rate as main viewport setting
+   */
+  maxFramerate: InsetFrameratePreset
 }
 
 /**
@@ -385,7 +405,8 @@ export const DEFAULT_INSET_GRAPHICS_SETTINGS: InsetGraphicsSettings = {
   msaa: 'low',
   terrain: 'low',
   cache: 'minimal',
-  preloadTiles: false
+  preloadTiles: false,
+  maxFramerate: 'match'
 }
 
 /**
@@ -1106,6 +1127,8 @@ export interface GlobalInsetViewport {
  * Contains camera defaults and bookmarks shared across all devices
  */
 export interface GlobalAirportViewportConfig {
+  /** Main viewport camera state */
+  mainCamera?: GlobalInsetCameraState
   /** Camera defaults for 3D view mode */
   default3d?: GlobalViewModeDefaults
   /** Camera defaults for 2D/top-down view mode */

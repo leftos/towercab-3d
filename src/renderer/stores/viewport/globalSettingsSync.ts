@@ -128,12 +128,35 @@ export const toGlobalInsetViewport = (local: Viewport): GlobalInsetViewport => (
 })
 
 /**
+ * Convert a viewport's camera state to global format
+ */
+const toGlobalCameraState = (cameraState: Viewport['cameraState']) => ({
+  viewMode: cameraState.viewMode,
+  heading: cameraState.heading,
+  pitch: cameraState.pitch,
+  fov: cameraState.fov,
+  positionOffsetX: cameraState.positionOffsetX,
+  positionOffsetY: cameraState.positionOffsetY,
+  positionOffsetZ: cameraState.positionOffsetZ,
+  topdownAltitude: cameraState.topdownAltitude,
+  followMode: cameraState.followMode,
+  followZoom: cameraState.followZoom,
+  orbitDistance: cameraState.orbitDistance,
+  orbitHeading: cameraState.orbitHeading,
+  orbitPitch: cameraState.orbitPitch
+})
+
+/**
  * Convert local AirportViewportConfig to global format
- * Exports defaults, bookmarks, datablockPosition, and inset viewport configs
+ * Exports main viewport camera, defaults, bookmarks, datablockPosition, and inset viewport configs
  */
 export const toGlobalAirportConfig = (local: AirportViewportConfig): GlobalAirportViewportConfig => {
   const global: GlobalAirportViewportConfig = {}
 
+  // Export main viewport camera state
+  if (local.viewports && local.viewports.length > 0) {
+    global.mainCamera = toGlobalCameraState(local.viewports[0].cameraState)
+  }
   if (local.default3d) {
     global.default3d = toGlobalViewModeDefaults(local.default3d)
   }
@@ -266,6 +289,33 @@ export const fromGlobalInsetViewport = (global: GlobalInsetViewport): Viewport =
 })
 
 /**
+ * Convert global camera state to local ViewportCameraState
+ */
+const fromGlobalCameraState = (global: GlobalAirportViewportConfig['mainCamera']): Viewport['cameraState'] | null => {
+  if (!global) return null
+  return {
+    viewMode: validateViewMode(global.viewMode),
+    heading: global.heading,
+    pitch: global.pitch,
+    fov: global.fov,
+    positionOffsetX: global.positionOffsetX,
+    positionOffsetY: global.positionOffsetY,
+    positionOffsetZ: global.positionOffsetZ,
+    topdownAltitude: global.topdownAltitude,
+    followingCallsign: null,
+    followMode: validateFollowMode(global.followMode),
+    followZoom: global.followZoom,
+    preFollowState: null,
+    orbitDistance: global.orbitDistance,
+    orbitHeading: global.orbitHeading,
+    orbitPitch: global.orbitPitch,
+    lookAtTarget: null,
+    pendingLookAtPosition: null,
+    cameraVersion: 0
+  }
+}
+
+/**
  * Merge global AirportViewportConfig into local config
  * Preserves local viewport state while updating persisted fields
  *
@@ -299,18 +349,27 @@ export const mergeGlobalAirportConfig = (
   if (global.datablockPosition !== undefined) {
     updates.datablockPosition = global.datablockPosition as DatablockPosition
   }
-  // Merge inset viewports from global
-  if (global.insets && global.insets.length > 0) {
-    const insetViewports = global.insets.map(fromGlobalInsetViewport)
 
-    if (local?.viewports && local.viewports.length > 0) {
-      // Have local viewports - keep local main viewport, replace insets from global
-      const mainViewport = local.viewports[0]
-      updates.viewports = [mainViewport, ...insetViewports]
-    } else if (fallbackMainViewport) {
-      // No local viewports but have a fallback - use fallback main + global insets
-      updates.viewports = [fallbackMainViewport, ...insetViewports]
+  // Build viewports array with main camera and insets from global
+  const insetViewports = global.insets?.map(fromGlobalInsetViewport) ?? []
+  const mainCameraState = fromGlobalCameraState(global.mainCamera)
+
+  if (local?.viewports && local.viewports.length > 0) {
+    // Have local viewports - update main viewport camera from global, replace insets
+    const mainViewport = {
+      ...local.viewports[0],
+      cameraState: mainCameraState ?? local.viewports[0].cameraState
     }
+    updates.viewports = [mainViewport, ...insetViewports]
+  } else if (fallbackMainViewport) {
+    // No local viewports - use fallback main with global camera state + global insets
+    const mainViewport = mainCameraState
+      ? { ...fallbackMainViewport, cameraState: mainCameraState }
+      : fallbackMainViewport
+    updates.viewports = [mainViewport, ...insetViewports]
+  } else if (mainCameraState || insetViewports.length > 0) {
+    // No local or fallback - can't create viewports without a main viewport base
+    // This case shouldn't happen in practice
   }
 
   return updates

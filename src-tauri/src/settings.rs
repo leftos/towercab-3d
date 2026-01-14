@@ -74,6 +74,10 @@ fn default_radius_nm() -> u32 {
     100
 }
 
+fn default_max_parked_aircraft() -> u32 {
+    50
+}
+
 /// RealTraffic data source settings
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -87,6 +91,9 @@ pub struct GlobalRealTrafficSettings {
     /// Query radius in nautical miles
     #[serde(default = "default_radius_nm")]
     pub radius_nm: u32,
+    /// Maximum parked aircraft to fetch (0-200, default: 50)
+    #[serde(default = "default_max_parked_aircraft")]
+    pub max_parked_aircraft: u32,
 }
 
 impl Default for GlobalRealTrafficSettings {
@@ -95,6 +102,7 @@ impl Default for GlobalRealTrafficSettings {
             data_source: "vatsim".to_string(),
             license_key: String::new(),
             radius_nm: 100,
+            max_parked_aircraft: 50,
         }
     }
 }
@@ -257,6 +265,9 @@ pub struct GlobalInsetViewport {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct GlobalAirportViewportConfig {
+    /// Main viewport camera state
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub main_camera: Option<GlobalInsetCameraState>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default_3d: Option<GlobalViewModeDefaults>,
     #[serde(skip_serializing_if = "Option::is_none")]

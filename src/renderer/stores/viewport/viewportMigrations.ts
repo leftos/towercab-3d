@@ -97,6 +97,8 @@ export const migrateCameraStoreBookmarks = (
 
 /**
  * Migrate viewport data from localStorage to global settings (one-time migration)
+ * After migration, clears airportViewportConfigs from localStorage since all
+ * viewport data should now be stored globally.
  */
 export const migrateToGlobalSettings = (
   getGlobalSettingsState: () => {
@@ -110,7 +112,8 @@ export const migrateToGlobalSettings = (
   },
   syncToGlobalSettings: () => void
 ) => {
-  const MIGRATION_KEY = 'viewport-store-global-migration-v1'
+  // v2 includes mainCamera which wasn't synced in v1
+  const MIGRATION_KEY = 'viewport-store-global-migration-v2'
   if (localStorage.getItem(MIGRATION_KEY)) {
     return // Already migrated
   }
@@ -121,24 +124,31 @@ export const migrateToGlobalSettings = (
     return
   }
 
-  // Check if global settings already has viewport data
-  const hasGlobalData = globalState.viewports &&
-    Object.keys(globalState.viewports.airportConfigs).length > 0
-
-  if (hasGlobalData) {
-    // Global settings already has data, don't overwrite
-    localStorage.setItem(MIGRATION_KEY, 'done')
-    console.log('[ViewportMigrations] Global settings already has viewport data, skipping migration')
-    return
-  }
-
   // Get local viewport data
   const state = getViewportState()
-  const hasLocalData = Object.keys(state.airportViewportConfigs).length > 0
+  const localAirportCount = Object.keys(state.airportViewportConfigs).length
 
-  if (hasLocalData) {
-    console.log('[ViewportMigrations] Migrating viewport data to global settings...')
+  // Migrate if local has data (sync will merge with existing global data)
+  if (localAirportCount > 0) {
+    console.log(`[ViewportMigrations] Migrating ${localAirportCount} airport configs to global settings...`)
     syncToGlobalSettings()
+  }
+
+  // Clear airportViewportConfigs from localStorage after migration
+  // The data is now in global-settings.json and should be the source of truth
+  try {
+    const viewportStoreRaw = localStorage.getItem('viewport-store')
+    if (viewportStoreRaw) {
+      const viewportStoreData = JSON.parse(viewportStoreRaw)
+      if (viewportStoreData?.state?.airportViewportConfigs) {
+        // Keep only essential state, clear the per-airport configs
+        viewportStoreData.state.airportViewportConfigs = {}
+        localStorage.setItem('viewport-store', JSON.stringify(viewportStoreData))
+        console.log('[ViewportMigrations] Cleared airportViewportConfigs from localStorage')
+      }
+    }
+  } catch (e) {
+    console.error('[ViewportMigrations] Failed to clear localStorage:', e)
   }
 
   localStorage.setItem(MIGRATION_KEY, 'done')

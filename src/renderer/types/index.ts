@@ -155,6 +155,7 @@ export type {
   InsetMsaaPreset,
   InsetTerrainPreset,
   InsetCachePreset,
+  InsetFrameratePreset,
   InsetGraphicsSettings,
 
   // Inset display settings (datablock/label visibility)
@@ -440,33 +441,6 @@ export {
   // Surface type name mapping
   SURFACE_TYPE_NAMES
 } from './airportSurfaces'
-
-// ============================================================================
-// BROADCAST TYPES (Unified Aircraft Broadcasting)
-// ============================================================================
-
-export type {
-  // Aircraft state messages
-  AircraftFull,
-  AircraftDelta,
-  BroadcastMessage,
-
-  // Consumer feedback for rate control
-  ConsumerFeedback,
-  ConsumerState,
-
-  // SharedWorker communication
-  SharedWorkerMessageType,
-  SharedWorkerMessage
-} from './broadcast'
-
-export {
-  // Delta compression thresholds
-  DELTA_THRESHOLDS,
-
-  // Rate control constants
-  RATE_CONTROL
-} from './broadcast'
 
 // ============================================================================
 // TYPE ORGANIZATION NOTES

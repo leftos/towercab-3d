@@ -39,6 +39,9 @@ const workerSelf = self as unknown as SharedWorkerGlobalScopeType
 
 type SharedWorkerMessageType =
   | 'aircraft-update'
+  | 'observations-update'  // Raw observations for timeline-based interpolation
+  | 'aircraft-removals'    // Aircraft that have been removed
+  | 'model-info-update'    // Model assignments for callsigns
   | 'settings-update'
   | 'weather-update'
   | 'cesium-token'
@@ -47,6 +50,7 @@ type SharedWorkerMessageType =
   | 'viewport-camera'
   | 'register-inset'
   | 'unregister-inset'
+  | 'inset-log'
 
 interface SharedWorkerInboundMessage {
   type: SharedWorkerMessageType
@@ -92,6 +96,14 @@ interface SerializedImagery {
   googleAdjustments: unknown
 }
 
+interface SerializedModelInfo {
+  callsign: string
+  modelUrl: string | null
+  scale: [number, number, number]
+  rotationOffset: number
+  isFsltl: boolean
+}
+
 // ============================================================================
 // SHARED WORKER STATE
 // ============================================================================
@@ -113,6 +125,8 @@ const dataCache = {
   cesiumToken: null as string | null,
   imagery: null as SerializedImagery | null,
   airport: null as SerializedAirport | null,
+  /** Model info per callsign - merged incrementally as updates arrive */
+  modelInfo: new Map<string, SerializedModelInfo>(),
   timestamp: 0
 }
 
@@ -207,6 +221,51 @@ function handleMessage(port: MessagePort, event: MessageEvent<SharedWorkerInboun
         mainAppPort.postMessage({ type, payload, viewportId, timestamp: Date.now() })
       }
       break
+
+    case 'observations-update':
+      // Raw observations for timeline-based interpolation (main → insets)
+      if (source === 'main' || port === mainAppPort) {
+        // Don't cache observations - they're time-sensitive and insets should
+        // handle missing initial data gracefully (timeline will build up)
+        broadcastToInsets({ type, payload, timestamp: Date.now() })
+      }
+      break
+
+    case 'aircraft-removals':
+      // Aircraft that have been removed (main → insets)
+      if (source === 'main' || port === mainAppPort) {
+        // Remove model info for removed aircraft
+        const removedCallsigns = payload as string[]
+        for (const callsign of removedCallsigns) {
+          dataCache.modelInfo.delete(callsign)
+        }
+        broadcastToInsets({ type, payload, timestamp: Date.now() })
+      }
+      break
+
+    case 'model-info-update':
+      // Model assignments for aircraft (main → insets)
+      if (source === 'main' || port === mainAppPort) {
+        const modelPayload = payload as { models: SerializedModelInfo[], timestamp: number }
+        // Update cache with new model info
+        for (const model of modelPayload.models) {
+          dataCache.modelInfo.set(model.callsign, model)
+        }
+        broadcastToInsets({ type, payload, timestamp: Date.now() })
+      }
+      break
+
+    case 'inset-log':
+      // Log forwarding from inset to main app
+      if (source === 'inset' && mainAppPort) {
+        mainAppPort.postMessage({
+          type: 'inset-log',
+          payload,
+          viewportId,
+          timestamp: Date.now()
+        })
+      }
+      break
   }
 }
 
@@ -261,6 +320,18 @@ function sendCachedDataToPort(port: MessagePort) {
       type: 'aircraft-update',
       payload: dataCache.aircraft,
       timestamp: dataCache.timestamp
+    })
+  }
+
+  // Send cached model info
+  if (dataCache.modelInfo.size > 0) {
+    port.postMessage({
+      type: 'model-info-update',
+      payload: {
+        models: Array.from(dataCache.modelInfo.values()),
+        timestamp: Date.now()
+      },
+      timestamp: Date.now()
     })
   }
 }
