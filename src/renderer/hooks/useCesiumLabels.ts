@@ -3,6 +3,7 @@ import * as Cesium from 'cesium'
 import type { InterpolatedAircraftState } from '../types/vatsim'
 import type { ViewMode } from '../types'
 import type { TerrainData } from './useGroundAircraftTerrain'
+import type { InsetDisplaySettings, InsetGroundLabelMode } from '../types/settings'
 import { aircraftModelService } from '../services/AircraftModelService'
 import { geoidService } from '../services/GeoidService'
 import { calculateDistanceNM } from '../utils/interpolation'
@@ -12,8 +13,52 @@ import { useGlobalSettingsStore } from '../stores/globalSettingsStore'
 import { GROUNDSPEED_THRESHOLD_KNOTS, DATABLOCK_LEADER_LINE_HEIGHT_MULTIPLIER } from '../constants/rendering'
 import { filterAircraftForRendering } from './useRenderCulling'
 import { layoutLabels, layoutLabelsSimple, type LabelAircraftData, type LayoutConfig } from '../utils/labelLayout'
+import { DEFAULT_INSET_DISPLAY_SETTINGS } from '../types/settings'
 
 export type DatablockMode = 'none' | 'full' | 'airline'
+
+/**
+ * Crucial flight phases that should always show datablocks in insets.
+ * These are operationally important phases that controllers need to see.
+ */
+const CRUCIAL_FLIGHT_PHASES = new Set([
+  'holding_short',
+  'lined_up',
+  'departure_roll',
+  'landing_roll',
+  'go_around',
+  'short_final'
+])
+
+/**
+ * Check if a ground aircraft is in a "crucial phase" based on heuristics.
+ * This is used when flightPhase isn't available on the aircraft state.
+ *
+ * Crucial = operationally important: actively taxiing, accelerating/decelerating
+ * on runway, or about to enter runway.
+ */
+function isGroundAircraftInCrucialPhase(aircraft: InterpolatedAircraftState): boolean {
+  // If we have actual flight phase data, use it
+  if (aircraft.flightPhase) {
+    return CRUCIAL_FLIGHT_PHASES.has(aircraft.flightPhase)
+  }
+
+  // Heuristic fallback when flight phase isn't available:
+  // 1. Moving faster than 5 kts = actively taxiing or on roll
+  if (aircraft.interpolatedGroundspeed > 5) {
+    return true
+  }
+
+  // 2. Significant acceleration = likely on runway (departure or landing roll)
+  // |accel| > 0.5 kts/s is significant movement
+  if (Math.abs(aircraft.acceleration) > 0.5) {
+    return true
+  }
+
+  // Aircraft is stationary with no significant acceleration - not crucial
+  // (This filters out parked aircraft at gates)
+  return false
+}
 
 interface BabylonOverlay {
   updateAircraftLabel: (callsign: string, text: string, r: number, g: number, b: number) => void
@@ -48,6 +93,8 @@ interface UseCesiumLabelsParams {
   isOrbitModeWithoutAirport: boolean
   // Ground aircraft terrain data (height and slope, sampled 10x per second)
   groundAircraftTerrain: Map<string, TerrainData>
+  /** Whether this is an inset viewport (uses more restrictive datablock filtering) */
+  isInset?: boolean
 }
 
 /**
@@ -139,7 +186,8 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
     searchQuery,
     filterAirportTraffic,
     isOrbitModeWithoutAirport,
-    groundAircraftTerrain: _groundAircraftTerrain
+    groundAircraftTerrain: _groundAircraftTerrain,
+    isInset = false
   } = params
 
   // Update labels
@@ -225,13 +273,33 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
         // Only applies to ground aircraft, not airborne
         if (showDatablock && !isAirborne) {
           const displaySettings = useGlobalSettingsStore.getState().display
-          const groundLabelMode = displaySettings.groundLabelMode ?? 'all'
+          const mainGroundLabelMode = displaySettings.groundLabelMode ?? 'all'
           const groundLabelMinSpeed = displaySettings.groundLabelMinSpeed ?? 2
 
-          switch (groundLabelMode) {
+          // For insets, use inset-specific ground label mode (with 'match' fallback to main)
+          const insetSettings: InsetDisplaySettings = displaySettings.inset ?? DEFAULT_INSET_DISPLAY_SETTINGS
+          const insetGroundLabelMode = insetSettings.groundLabelMode ?? 'crucialPhases'
+
+          // Determine effective ground label mode
+          let effectiveGroundLabelMode: string
+          if (isInset) {
+            effectiveGroundLabelMode = insetGroundLabelMode === 'match'
+              ? mainGroundLabelMode
+              : insetGroundLabelMode
+          } else {
+            effectiveGroundLabelMode = mainGroundLabelMode
+          }
+
+          switch (effectiveGroundLabelMode) {
             case 'none':
               // Hide all ground labels
               showDatablock = false
+              break
+            case 'crucialPhases':
+              // Only show aircraft in crucial flight phases (inset-specific)
+              if (!isGroundAircraftInCrucialPhase(aircraft)) {
+                showDatablock = false
+              }
               break
             case 'activeOnly':
               // Only show actively taxiing aircraft (> 5 kts)
@@ -269,35 +337,62 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
       }
 
       // Format datablock text based on datablockMode setting
+      // For insets, determine effective datablock mode from inset settings
       let labelText = ''
       if (datablockMode !== 'none' && showDatablock) {
-        const type = aircraft.aircraftType || '????'
-        const speedTens = Math.round(aircraft.interpolatedGroundspeed / 10).toString().padStart(2, '0')
-        // Convert ellipsoidal altitude to MSL (pilots report MSL), then to feet for FL display
-        const altitudeMsl = geoidService.ellipsoidalToMsl(
-          aircraft.interpolatedLatitude,
-          aircraft.interpolatedLongitude,
-          aircraft.interpolatedAltitude
-        )
-        const altitudeFeet = Math.max(0, altitudeMsl / 0.3048)
-        const dataLine = isAirborne
-          ? `${Math.round(altitudeFeet / 100).toString().padStart(3, '0')} ${speedTens}`
-          : speedTens
+        const displaySettings = useGlobalSettingsStore.getState().display
+        const insetSettings: InsetDisplaySettings = displaySettings.inset ?? DEFAULT_INSET_DISPLAY_SETTINGS
+        const insetDatablockMode = insetSettings.datablockMode ?? 'callsign'
 
-        // Format callsign based on mode
-        let displayCallsign = aircraft.callsign
-        if (datablockMode === 'airline') {
-          // Check if callsign matches airline pattern: exactly 3 letters followed by 1-4 digits
-          const airlinePattern = /^([A-Z]{3})\d{1,4}$/
-          const match = aircraft.callsign.match(airlinePattern)
-          if (match) {
-            // Show only the airline ICAO code (first 3 letters)
-            displayCallsign = match[1]
+        // Determine effective datablock mode
+        // - For insets: use inset setting (with 'match' fallback to main viewport setting)
+        // - For main viewport: use the main datablockMode
+        let effectiveDatablockMode: 'full' | 'airline' | 'callsign'
+        if (isInset) {
+          if (insetDatablockMode === 'match') {
+            // 'match' maps to main viewport mode (but 'airline' maps to 'airline', not 'callsign')
+            effectiveDatablockMode = datablockMode === 'airline' ? 'airline' : 'full'
+          } else {
+            effectiveDatablockMode = insetDatablockMode
           }
-          // If doesn't match pattern, show full callsign (e.g., N12345)
+        } else {
+          // Main viewport: map DatablockMode to effective mode
+          effectiveDatablockMode = datablockMode === 'airline' ? 'airline' : 'full'
         }
 
-        labelText = `${displayCallsign}\n${type} ${dataLine}`
+        // 'callsign' mode: show only the callsign (single line, no type/altitude/speed)
+        if (effectiveDatablockMode === 'callsign') {
+          labelText = aircraft.callsign
+        } else {
+          // 'full' or 'airline' mode: show callsign + type + altitude/speed
+          const type = aircraft.aircraftType || '????'
+          const speedTens = Math.round(aircraft.interpolatedGroundspeed / 10).toString().padStart(2, '0')
+          // Convert ellipsoidal altitude to MSL (pilots report MSL), then to feet for FL display
+          const altitudeMsl = geoidService.ellipsoidalToMsl(
+            aircraft.interpolatedLatitude,
+            aircraft.interpolatedLongitude,
+            aircraft.interpolatedAltitude
+          )
+          const altitudeFeet = Math.max(0, altitudeMsl / 0.3048)
+          const dataLine = isAirborne
+            ? `${Math.round(altitudeFeet / 100).toString().padStart(3, '0')} ${speedTens}`
+            : speedTens
+
+          // Format callsign based on mode
+          let displayCallsign = aircraft.callsign
+          if (effectiveDatablockMode === 'airline') {
+            // Check if callsign matches airline pattern: exactly 3 letters followed by 1-4 digits
+            const airlinePattern = /^([A-Z]{3})\d{1,4}$/
+            const match = aircraft.callsign.match(airlinePattern)
+            if (match) {
+              // Show only the airline ICAO code (first 3 letters)
+              displayCallsign = match[1]
+            }
+            // If doesn't match pattern, show full callsign (e.g., N12345)
+          }
+
+          labelText = `${displayCallsign}\n${type} ${dataLine}`
+        }
       }
 
       // Get color
@@ -406,6 +501,30 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
       const aircraftWindowPos = Cesium.SceneTransforms.worldToWindowCoordinates(viewer.scene, data.cesiumPosition)
       if (!aircraftWindowPos) continue
 
+      // For insets: Apply visibility margin check
+      // Skip aircraft that are too close to the edge of the viewport
+      if (isInset && !data.isFollowed) {
+        const displaySettings = useGlobalSettingsStore.getState().display
+        const insetSettings: InsetDisplaySettings = displaySettings.inset ?? DEFAULT_INSET_DISPLAY_SETTINGS
+        const visibilityMargin = insetSettings.visibilityMargin ?? 0.15
+
+        // Calculate margin in pixels
+        const marginX = screenWidth * visibilityMargin
+        const marginY = screenHeight * visibilityMargin
+
+        // Check if aircraft is within the margin zone (too close to edge)
+        const isInMargin = (
+          aircraftWindowPos.x < marginX ||
+          aircraftWindowPos.x > screenWidth - marginX ||
+          aircraftWindowPos.y < marginY ||
+          aircraftWindowPos.y > screenHeight - marginY
+        )
+
+        if (isInMargin) {
+          continue // Skip this aircraft - too close to viewport edge in inset
+        }
+      }
+
       // Project a point slightly above the aircraft for leader line attachment
       // Scale height based on wingspan so small aircraft get shorter leader lines
       const leaderAttachHeightMeters = data.wingspanMeters * DATABLOCK_LEADER_LINE_HEIGHT_MULTIPLIER
@@ -493,7 +612,8 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
     showAirborneTraffic,
     searchQuery,
     filterAirportTraffic,
-    isOrbitModeWithoutAirport
+    isOrbitModeWithoutAirport,
+    isInset
   ])
 
   // Keep callback in a ref so the listener doesn't need to be re-attached when dependencies change

@@ -143,68 +143,46 @@ function toDelta(aircraft: AircraftData, last: AircraftSnapshot): AircraftDelta 
   const delta: AircraftDelta = { c: aircraft.callsign }
   let hasChanges = false
 
+  // Quantize all values first
   const la = quantize(aircraft.interpolatedLatitude, 6)
-  if (Math.abs(la - last.la) > DELTA_THRESHOLDS.position) {
-    delta.la = la
-    hasChanges = true
-  }
-
   const lo = quantize(aircraft.interpolatedLongitude, 6)
-  if (Math.abs(lo - last.lo) > DELTA_THRESHOLDS.position) {
-    delta.lo = lo
-    hasChanges = true
-  }
-
   const al = Math.round(aircraft.interpolatedAltitude)
-  if (Math.abs(al - last.al) > DELTA_THRESHOLDS.altitude) {
-    delta.al = al
-    hasChanges = true
-  }
-
   const hd = quantize(aircraft.interpolatedHeading, 1)
-  if (angleDiff(hd, last.hd) > DELTA_THRESHOLDS.angle) {
-    delta.hd = hd
-    hasChanges = true
-  }
-
   const gs = quantize(aircraft.interpolatedGroundspeed, 1)
-  if (Math.abs(gs - last.gs) > DELTA_THRESHOLDS.speed) {
-    delta.gs = gs
-    hasChanges = true
-  }
-
   const pi = quantize(aircraft.interpolatedPitch, 1)
-  if (Math.abs(pi - last.pi) > DELTA_THRESHOLDS.angle) {
-    delta.pi = pi
-    hasChanges = true
-  }
-
   const ro = quantize(aircraft.interpolatedRoll, 1)
-  if (Math.abs(ro - last.ro) > DELTA_THRESHOLDS.angle) {
-    delta.ro = ro
-    hasChanges = true
-  }
-
   const vr = Math.round(aircraft.verticalRate)
-  if (Math.abs(vr - last.vr) > DELTA_THRESHOLDS.verticalRate) {
-    delta.vr = vr
-    hasChanges = true
-  }
-
   const tr = quantize(aircraft.turnRate, 1)
-  if (Math.abs(tr - last.tr) > DELTA_THRESHOLDS.turnRate) {
-    delta.tr = tr
-    hasChanges = true
-  }
-
   const ac = quantize(aircraft.acceleration, 1)
-  if (Math.abs(ac - last.ac) > DELTA_THRESHOLDS.acceleration) {
-    delta.ac = ac
-    hasChanges = true
-  }
-
   const tk = quantize(aircraft.track, 1)
-  if (angleDiff(tk, last.tk) > DELTA_THRESHOLDS.angle) {
+
+  // Check if ANY core field changed enough to warrant a delta
+  const positionChanged = Math.abs(la - last.la) > DELTA_THRESHOLDS.position ||
+                          Math.abs(lo - last.lo) > DELTA_THRESHOLDS.position
+  const altitudeChanged = Math.abs(al - last.al) > DELTA_THRESHOLDS.altitude
+  const headingChanged = angleDiff(hd, last.hd) > DELTA_THRESHOLDS.angle
+  const speedChanged = Math.abs(gs - last.gs) > DELTA_THRESHOLDS.speed
+  const pitchChanged = Math.abs(pi - last.pi) > DELTA_THRESHOLDS.angle
+  const rollChanged = Math.abs(ro - last.ro) > DELTA_THRESHOLDS.angle
+  const vrChanged = Math.abs(vr - last.vr) > DELTA_THRESHOLDS.verticalRate
+  const trChanged = Math.abs(tr - last.tr) > DELTA_THRESHOLDS.turnRate
+  const acChanged = Math.abs(ac - last.ac) > DELTA_THRESHOLDS.acceleration
+  const tkChanged = angleDiff(tk, last.tk) > DELTA_THRESHOLDS.angle
+
+  // If ANY field changed, include ALL core display fields to keep inset in sync
+  // This prevents drift where position updates but altitude/speed don't
+  if (positionChanged || altitudeChanged || headingChanged || speedChanged ||
+      pitchChanged || rollChanged || vrChanged || trChanged || acChanged || tkChanged) {
+    delta.la = la
+    delta.lo = lo
+    delta.al = al
+    delta.hd = hd
+    delta.gs = gs
+    delta.pi = pi
+    delta.ro = ro
+    delta.vr = vr
+    delta.tr = tr
+    delta.ac = ac
     delta.tk = tk
     hasChanges = true
   }

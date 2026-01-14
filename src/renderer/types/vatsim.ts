@@ -252,4 +252,14 @@ export interface InterpolatedAircraftState extends AircraftState {
    * Whether this is an FSLTL/VMR model (for color blend logic).
    */
   broadcastIsFsltl?: boolean | null
+
+  /**
+   * Detected flight phase for this aircraft.
+   * Computed during interpolation when airport context is available.
+   * Used for smart filtering (e.g., showing datablocks only for crucial phases).
+   *
+   * Note: This is optional because phase detection requires runway data
+   * and may not be available for all aircraft.
+   */
+  flightPhase?: import('../utils/aircraft/types').FlightPhase
 }

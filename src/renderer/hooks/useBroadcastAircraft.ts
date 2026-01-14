@@ -8,6 +8,11 @@
  * - Sending feedback for consumer-driven rate control
  * - Cleanup on unmount
  *
+ * IMPORTANT: Aircraft data is stored in a module-level variable and updated
+ * directly when broadcasts arrive. This bypasses React state batching to ensure
+ * immediate updates at 30Hz. The interpolation system reads this data directly
+ * via getBroadcastAircraftData() - no React re-render cycle needed.
+ *
  * @see docs/plans/unified-aircraft-broadcasting.md
  */
 
@@ -21,6 +26,83 @@ import type {
 } from '../types/broadcast'
 import { RATE_CONTROL } from '../types/broadcast'
 import type { InterpolatedAircraftState } from '../types/vatsim'
+
+// ============================================================================
+// MODULE-LEVEL AIRCRAFT DATA
+// ============================================================================
+// Aircraft data is stored here and updated directly when broadcasts arrive.
+// This bypasses React state batching for immediate 30Hz updates.
+// The rendering system reads this via getBroadcastAircraftData().
+
+let broadcastAircraftData: Map<string, InterpolatedAircraftState> = new Map()
+let broadcastLastUpdateTime = 0
+let broadcastLastSeq = 0
+
+// Track worker port for log forwarding
+let workerPort: MessagePort | null = null
+let loggedConsumerId: string | null = null
+
+/**
+ * Forward a log message from inset to main app via SharedWorker.
+ * Can be called from any code running in an inset context.
+ * If not connected to SharedWorker yet, just logs locally.
+ */
+export function insetLog(message: string): void {
+  // Also log locally for iframe devtools
+  console.log(message)
+
+  // Forward to main app if we have a port
+  if (workerPort && loggedConsumerId) {
+    workerPort.postMessage({
+      type: 'inset-log',
+      consumerId: loggedConsumerId,
+      logMessage: message,
+    })
+  }
+}
+
+// Callback to update shared interpolated states (registered by useAircraftInterpolation)
+// This avoids circular dependencies while allowing direct updates to the rendering system
+type SharedStatesUpdater = (aircraft: Map<string, InterpolatedAircraftState>) => void
+let sharedStatesUpdater: SharedStatesUpdater | null = null
+
+// Callback to request a Cesium render (registered by CesiumViewer)
+// This forces Cesium to render a frame, bypassing browser RAF throttling in iframes
+type RenderRequestCallback = () => void
+let renderRequestCallback: RenderRequestCallback | null = null
+
+/**
+ * Register a callback to update shared interpolated states when broadcasts arrive.
+ * Called by useAircraftInterpolation to connect the broadcast receiver to the rendering system.
+ */
+export function registerSharedStatesUpdater(updater: SharedStatesUpdater | null): void {
+  sharedStatesUpdater = updater
+}
+
+/**
+ * Register a callback to request a Cesium render when broadcasts arrive.
+ * This forces Cesium to render even when browser throttles iframe RAF callbacks.
+ * Called by CesiumViewer to connect the broadcast receiver to the rendering system.
+ */
+export function registerRenderRequestCallback(callback: RenderRequestCallback | null): void {
+  renderRequestCallback = callback
+}
+
+/**
+ * Get current broadcast aircraft data (for use by rendering/interpolation system)
+ * This is the primary way to access aircraft data - no React state involved.
+ */
+export function getBroadcastAircraftData(): {
+  aircraft: Map<string, InterpolatedAircraftState>
+  timestamp: number
+  seq: number
+} {
+  return {
+    aircraft: broadcastAircraftData,
+    timestamp: broadcastLastUpdateTime,
+    seq: broadcastLastSeq,
+  }
+}
 
 /** Local aircraft state maintained from broadcasts */
 export interface BroadcastAircraftState {
@@ -167,43 +249,51 @@ export function useBroadcastAircraft(): BroadcastAircraftState {
       }
 
       // Process incoming broadcast message
+      // Updates module-level variable directly for immediate access by rendering system
       const processMessage = (message: BroadcastMessage) => {
         const startTime = performance.now()
         pendingMessagesRef.current++
 
-        setState((prev) => {
-          const newAircraft = new Map(prev.aircraft)
+        // Update module-level variable directly (bypasses React batching)
+        const newAircraft = new Map(broadcastAircraftData)
 
-          // Add new aircraft (full state)
-          for (const full of message.f) {
-            newAircraft.set(full.c, toInterpolatedState(full))
+        // Add new aircraft (full state)
+        for (const full of message.f) {
+          newAircraft.set(full.c, toInterpolatedState(full))
+        }
+
+        // Apply delta updates
+        for (const delta of message.d) {
+          const existing = newAircraft.get(delta.c)
+          if (existing) {
+            newAircraft.set(delta.c, applyDelta(existing, delta))
+          } else {
+            // Shouldn't happen, but handle gracefully
+            insetLog(`[BroadcastConsumer] Delta for unknown aircraft: ${delta.c}`)
           }
+        }
 
-          // Apply delta updates
-          for (const delta of message.d) {
-            const existing = newAircraft.get(delta.c)
-            if (existing) {
-              newAircraft.set(delta.c, applyDelta(existing, delta))
-            } else {
-              // Shouldn't happen, but handle gracefully
-              console.warn(`[BroadcastConsumer] Delta for unknown aircraft: ${delta.c}`)
-            }
-          }
+        // Remove aircraft
+        for (const callsign of message.r) {
+          newAircraft.delete(callsign)
+        }
 
-          // Remove aircraft
-          for (const callsign of message.r) {
-            newAircraft.delete(callsign)
-          }
+        // Update module-level state immediately (no React batching delay)
+        broadcastAircraftData = newAircraft
+        broadcastLastUpdateTime = Date.now()
+        broadcastLastSeq = message.seq
+        lastSeqRef.current = message.seq
 
-          // Update ref for feedback (doesn't cause re-render cascade)
-          lastSeqRef.current = message.seq
+        // Update shared interpolated states for rendering system (if registered)
+        if (sharedStatesUpdater) {
+          sharedStatesUpdater(newAircraft)
+        }
 
-          return {
-            ...prev,
-            aircraft: newAircraft,
-            lastSeq: message.seq,
-          }
-        })
+        // Request Cesium render to bypass browser RAF throttling in iframes
+        // This forces Cesium to render even when the browser throttles the iframe's RAF
+        if (renderRequestCallback) {
+          renderRequestCallback()
+        }
 
         // Track processing time
         const processTime = performance.now() - startTime
@@ -227,12 +317,12 @@ export function useBroadcastAircraft(): BroadcastAircraftState {
           case 'registered':
             // We've been assigned a consumer ID
             consumerIdRef.current = message.consumerId
+            loggedConsumerId = message.consumerId  // Store for log forwarding
             setState((prev) => ({
               ...prev,
               isConnected: true,
               consumerId: message.consumerId,
             }))
-            console.log(`[BroadcastConsumer] Registered as ${message.consumerId}`)
             break
 
           case 'aircraft-update':
@@ -241,7 +331,7 @@ export function useBroadcastAircraft(): BroadcastAircraftState {
               const decoded = decode(message.data) as BroadcastMessage
               processMessage(decoded)
             } catch (error) {
-              console.warn('[BroadcastConsumer] Failed to decode message:', error)
+              insetLog(`[BroadcastConsumer] Failed to decode message: ${error}`)
             }
             break
         }
@@ -251,23 +341,34 @@ export function useBroadcastAircraft(): BroadcastAircraftState {
       worker.port.postMessage({ type: 'register-inset' })
       worker.port.start()
 
+      // Store port reference for log forwarding
+      workerPort = worker.port
       workerRef.current = worker
 
       return () => {
         // Notify worker we're disconnecting
-        if (consumerIdRef.current) {
-          worker.port.postMessage({
-            type: 'disconnect',
-            consumerId: consumerIdRef.current,
-          })
-        }
+        // Always send disconnect - worker can look up by port if consumerId not yet assigned
+        worker.port.postMessage({
+          type: 'disconnect',
+          consumerId: consumerIdRef.current, // May be null if cleanup races registration
+        })
         worker.port.close()
         workerRef.current = null
+        workerPort = null
+        loggedConsumerId = null
       }
     } catch (error) {
+      // Can't use insetLog here since worker failed to connect
       console.warn('[BroadcastConsumer] SharedWorker not available:', error)
     }
   }, []) // Empty deps - run once on mount
 
-  return state
+  // Return combined state: connection info from React state, aircraft from module-level
+  // This ensures aircraft data is always current (not delayed by React batching)
+  return {
+    aircraft: broadcastAircraftData,
+    isConnected: state.isConnected,
+    lastSeq: broadcastLastSeq,
+    consumerId: state.consumerId,
+  }
 }

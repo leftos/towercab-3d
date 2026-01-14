@@ -116,19 +116,19 @@ export interface ConsumerState {
  */
 export const DELTA_THRESHOLDS = {
   /** Position change threshold in degrees (~1.1m at equator) */
-  position: 0.00001,
+  position: 0.000001,
   /** Altitude change threshold in meters */
-  altitude: 1,
+  altitude: 0.1,
   /** Angle change threshold in degrees (heading, pitch, roll, track) */
-  angle: 0.5,
+  angle: 0.05,
   /** Speed change threshold in knots */
-  speed: 0.5,
+  speed: 0.05,
   /** Vertical rate change threshold in m/min */
-  verticalRate: 10,
+  verticalRate: 5,
   /** Turn rate change threshold in deg/sec */
-  turnRate: 0.5,
+  turnRate: 0.25,
   /** Acceleration change threshold in knots/sec */
-  acceleration: 0.5,
+  acceleration: 0.25,
 } as const
 
 /**

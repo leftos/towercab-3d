@@ -136,6 +136,7 @@ function handleMessage(port: MessagePort, event: MessageEvent<SharedWorkerInboun
     case 'register-inset':
       // Register an inset viewport
       if (viewportId) {
+        console.log('[SharedWorker] Registering inset:', viewportId, 'cached token:', dataCache.cesiumToken ? 'exists' : 'missing')
         insetPorts.set(viewportId, port)
         // Send cached data to newly connected inset
         sendCachedDataToPort(port)
@@ -178,6 +179,7 @@ function handleMessage(port: MessagePort, event: MessageEvent<SharedWorkerInboun
     case 'cesium-token':
       // Only accept token from main app
       if (source === 'main' || port === mainAppPort) {
+        console.log('[SharedWorker] Received cesium-token, caching it')
         dataCache.cesiumToken = payload as string
         broadcastToInsets({ type, payload, timestamp: Date.now() })
       }
@@ -212,7 +214,9 @@ function handleMessage(port: MessagePort, event: MessageEvent<SharedWorkerInboun
  * Send cached data to a newly connected port
  */
 function sendCachedDataToPort(port: MessagePort) {
+  console.log('[SharedWorker] Sending cached data to port, token:', dataCache.cesiumToken ? 'exists' : 'missing')
   if (dataCache.cesiumToken) {
+    console.log('[SharedWorker] Sending cesium-token to port')
     port.postMessage({
       type: 'cesium-token',
       payload: dataCache.cesiumToken,
@@ -289,10 +293,12 @@ function broadcastToInsets(message: SharedWorkerOutboundMessage) {
 workerSelf.onconnect = (event: MessageEvent) => {
   const port = event.ports[0]
   connectedPorts.add(port)
+  console.log('[SharedWorker] New connection, total ports:', connectedPorts.size, 'mainAppPort:', mainAppPort ? 'set' : 'unset')
 
   // First connection is assumed to be main app
   if (!mainAppPort) {
     mainAppPort = port
+    console.log('[SharedWorker] Set as main app port')
   }
 
   port.onmessage = (messageEvent: MessageEvent<SharedWorkerInboundMessage>) => {

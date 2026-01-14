@@ -17,8 +17,8 @@
  */
 
 import { create } from 'zustand'
-import type { GlobalSettings, GlobalViewportSettings, GlobalDisplaySettings, MSFSModelSettings, FSLTLTextureScale, DataSourceType, DatablockMode, DatablockDirection, MSFSModelSource } from '@/types'
-import { DEFAULT_GLOBAL_SETTINGS, DEFAULT_GLOBAL_DISPLAY_SETTINGS, DEFAULT_MSFS_MODEL_SETTINGS, MSFS_CACHE_LIMIT } from '@/types'
+import type { GlobalSettings, GlobalViewportSettings, GlobalDisplaySettings, GlobalDisplaySettingsUpdate, MSFSModelSettings, FSLTLTextureScale, DataSourceType, DatablockMode, DatablockDirection, MSFSModelSource, InsetDisplaySettings } from '@/types'
+import { DEFAULT_GLOBAL_SETTINGS, DEFAULT_GLOBAL_DISPLAY_SETTINGS, DEFAULT_MSFS_MODEL_SETTINGS, MSFS_CACHE_LIMIT, DEFAULT_INSET_DISPLAY_SETTINGS } from '@/types'
 import { globalSettingsApi, isTauri } from '@/utils/tauriApi'
 import { listVmrFiles } from '@/services/fsltlApi'
 
@@ -271,7 +271,7 @@ interface GlobalSettingsState extends GlobalSettings {
   updateImagery: (updates: Partial<GlobalSettings['imagery']>) => Promise<void>
 
   /** Update display settings (datablocks, labels, filtering - synced across devices) */
-  updateDisplay: (updates: Partial<GlobalDisplaySettings>) => Promise<void>
+  updateDisplay: (updates: GlobalDisplaySettingsUpdate) => Promise<void>
 
   /** Reset to default settings */
   resetToDefaults: () => Promise<void>
@@ -636,8 +636,21 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
     await saveSettings(get().getSettings())
   },
 
-  updateDisplay: async (updates: Partial<GlobalDisplaySettings>) => {
+  updateDisplay: async (updates: GlobalDisplaySettingsUpdate) => {
     const state = get()
+    // Handle nested inset object - merge instead of replace
+    const currentInset = state.display.inset ?? DEFAULT_INSET_DISPLAY_SETTINGS
+    const updatedInset: InsetDisplaySettings = updates.inset
+      ? {
+          ...currentInset,
+          ...updates.inset,
+          // Validate visibilityMargin (0.0-0.3)
+          visibilityMargin: updates.inset.visibilityMargin !== undefined
+            ? Math.max(0, Math.min(0.3, updates.inset.visibilityMargin))
+            : currentInset.visibilityMargin
+        }
+      : currentInset
+
     const newDisplay: GlobalDisplaySettings = {
       ...state.display,
       ...updates,
@@ -658,7 +671,9 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
       // Validate labelVisibilityDistance (1-100)
       labelVisibilityDistance: updates.labelVisibilityDistance !== undefined
         ? Math.max(1, Math.min(100, updates.labelVisibilityDistance))
-        : state.display.labelVisibilityDistance
+        : state.display.labelVisibilityDistance,
+      // Use properly merged inset settings
+      inset: updatedInset
     }
     set({ display: newDisplay })
     await saveSettings(get().getSettings())

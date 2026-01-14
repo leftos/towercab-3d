@@ -3,7 +3,8 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useReplayStore } from '../stores/replayStore'
 import { useAircraftTimelineStore } from '../stores/aircraftTimelineStore'
 import { getAircraftDataSource } from './useAircraftDataSource'
-import { isInsetContext, getInsetAircraftData } from './useInsetStoreSync'
+import { isInsetContext } from './useInsetStoreSync'
+import { registerSharedStatesUpdater } from './useBroadcastAircraft'
 import { calculateFlarePitch, angleDifference } from '../utils/interpolation'
 import { performanceMonitor } from '../utils/performanceMonitor'
 import { geoidService } from '../services/GeoidService'
@@ -40,6 +41,86 @@ const sharedInterpolatedStates = new Map<string, InterpolatedAircraftState>()
 let animationLoopRunning = false
 let animationFrameId: number | null = null
 let hookInstanceCount = 0
+
+// ============================================================================
+// INSET DIRECT UPDATE (no interpolation)
+// ============================================================================
+// For insets, we skip the animation loop entirely and update the shared states
+// directly when broadcast data arrives. This is called from useBroadcastAircraft.
+
+/**
+ * Directly update shared interpolated states from broadcast data (for insets only).
+ * This bypasses the animation loop - insets should NOT interpolate/extrapolate.
+ *
+ * @param broadcastAircraft - Map of aircraft states from broadcast
+ */
+export function updateSharedStatesFromBroadcast(
+  broadcastAircraft: Map<string, InterpolatedAircraftState>
+): void {
+  // Track which callsigns are in the broadcast
+  const activeCallsigns = new Set<string>()
+
+  for (const [callsign, broadcast] of broadcastAircraft) {
+    activeCallsigns.add(callsign)
+
+    // Get or create entry in shared states
+    let existing = sharedInterpolatedStates.get(callsign)
+    if (!existing) {
+      existing = { ...broadcast }
+      sharedInterpolatedStates.set(callsign, existing)
+    } else {
+      // Update existing entry in place
+      existing.callsign = broadcast.callsign
+      existing.cid = broadcast.cid
+      existing.latitude = broadcast.latitude
+      existing.longitude = broadcast.longitude
+      existing.altitude = broadcast.altitude
+      existing.groundspeed = broadcast.groundspeed
+      existing.heading = broadcast.heading
+      existing.groundTrack = broadcast.groundTrack
+      existing.transponder = broadcast.transponder
+      existing.aircraftType = broadcast.aircraftType
+      existing.departure = broadcast.departure
+      existing.arrival = broadcast.arrival
+      existing.timestamp = broadcast.timestamp
+      existing.interpolatedLatitude = broadcast.interpolatedLatitude
+      existing.interpolatedLongitude = broadcast.interpolatedLongitude
+      existing.interpolatedAltitude = broadcast.interpolatedAltitude
+      existing.interpolatedHeading = broadcast.interpolatedHeading
+      existing.interpolatedGroundspeed = broadcast.interpolatedGroundspeed
+      existing.interpolatedPitch = broadcast.interpolatedPitch
+      existing.interpolatedRoll = broadcast.interpolatedRoll
+      existing.verticalRate = broadcast.verticalRate
+      existing.turnRate = broadcast.turnRate
+      existing.acceleration = broadcast.acceleration
+      existing.track = broadcast.track
+      existing.isInterpolated = broadcast.isInterpolated
+      existing.broadcastModelUrl = broadcast.broadcastModelUrl
+      existing.broadcastModelScale = broadcast.broadcastModelScale
+      existing.broadcastRotationOffset = broadcast.broadcastRotationOffset
+      existing.broadcastIsFsltl = broadcast.broadcastIsFsltl
+    }
+  }
+
+  // Remove aircraft that are no longer in broadcast
+  for (const callsign of sharedInterpolatedStates.keys()) {
+    if (!activeCallsigns.has(callsign)) {
+      sharedInterpolatedStates.delete(callsign)
+    }
+  }
+
+  // Notify React subscribers if aircraft count changed
+  // This is needed because insets don't run the animation loop which normally notifies
+  // We only notify on count changes to avoid excessive re-renders - position updates
+  // within the Map are read directly by the Cesium render loop
+  const currentCount = sharedInterpolatedStates.size
+  if (currentCount !== sharedLastAircraftCountRef.current) {
+    sharedLastAircraftCountRef.current = currentCount
+    for (const callback of subscribers) {
+      callback()
+    }
+  }
+}
 
 // Shared state for animation loop (accessed by singleton loop)
 const sharedAircraftStatesRef = { current: new Map<string, AircraftState>() }
@@ -394,112 +475,12 @@ function updateInterpolation() {
   }
 
   // ============================================================================
-  // INSET CONTEXT: Use pre-interpolated data from SharedWorker
+  // UNIFIED TIMELINE-BASED INTERPOLATION (MAIN APP ONLY)
   // ============================================================================
-  // Insets receive already-interpolated aircraft data from the main app via
-  // SharedWorker. We skip the timeline store and use the data directly.
-  // This is necessary because insets don't run vatsim/vnas/realtraffic stores.
-
-  if (isInsetContext()) {
-    // Use pre-interpolated data from SharedWorker
-    // Get the original broadcast data which includes model info
-    const { aircraft: broadcastAircraft } = getInsetAircraftData()
-
-    for (const [callsign, aircraft] of source.aircraftStates) {
-      activeCallsigns.add(callsign)
-
-      // Get original broadcast data to preserve model info
-      const originalBroadcast = broadcastAircraft.get(callsign)
-
-      // Convert AircraftState to InterpolatedAircraftState
-      // The source data includes pre-interpolated fields from the main app
-      const sourceAny = aircraft as AircraftState & {
-        interpolatedLatitude?: number
-        interpolatedLongitude?: number
-        interpolatedAltitude?: number
-        interpolatedHeading?: number
-        interpolatedGroundspeed?: number
-        interpolatedPitch?: number
-        interpolatedRoll?: number
-        verticalRate?: number
-        turnRate?: number
-        acceleration?: number
-        track?: number
-        isInterpolated?: boolean
-      }
-
-      const interpolated: InterpolatedAircraftState = {
-        callsign: aircraft.callsign,
-        cid: aircraft.cid,
-        latitude: aircraft.latitude,
-        longitude: aircraft.longitude,
-        altitude: aircraft.altitude,
-        groundspeed: aircraft.groundspeed,
-        heading: aircraft.heading,
-        groundTrack: aircraft.groundTrack,
-        transponder: aircraft.transponder,
-        aircraftType: aircraft.aircraftType,
-        departure: aircraft.departure,
-        arrival: aircraft.arrival,
-        timestamp: aircraft.timestamp,
-
-        // Use pre-interpolated values if available, fallback to base values
-        interpolatedLatitude: sourceAny.interpolatedLatitude ?? aircraft.latitude,
-        interpolatedLongitude: sourceAny.interpolatedLongitude ?? aircraft.longitude,
-        interpolatedAltitude: sourceAny.interpolatedAltitude ?? aircraft.altitude,
-        interpolatedHeading: sourceAny.interpolatedHeading ?? aircraft.heading,
-        interpolatedGroundspeed: sourceAny.interpolatedGroundspeed ?? aircraft.groundspeed,
-        interpolatedPitch: sourceAny.interpolatedPitch ?? 0,
-        interpolatedRoll: sourceAny.interpolatedRoll ?? 0,
-
-        verticalRate: sourceAny.verticalRate ?? 0,
-        turnRate: sourceAny.turnRate ?? 0,
-        acceleration: sourceAny.acceleration ?? 0,
-        track: sourceAny.track ?? aircraft.heading,
-
-        isInterpolated: sourceAny.isInterpolated ?? true,
-
-        // Preserve model info from original broadcast data
-        broadcastModelUrl: originalBroadcast?.broadcastModelUrl,
-        broadcastModelScale: originalBroadcast?.broadcastModelScale,
-        broadcastRotationOffset: originalBroadcast?.broadcastRotationOffset,
-        broadcastIsFsltl: originalBroadcast?.broadcastIsFsltl,
-      }
-
-      // Reuse existing entry or create new one
-      const existing = statesMap.get(callsign)
-      if (existing) {
-        // Update in place to avoid object allocation
-        existing.callsign = interpolated.callsign
-        existing.interpolatedLatitude = interpolated.interpolatedLatitude
-        existing.interpolatedLongitude = interpolated.interpolatedLongitude
-        existing.interpolatedAltitude = interpolated.interpolatedAltitude
-        existing.interpolatedGroundspeed = interpolated.interpolatedGroundspeed
-        existing.interpolatedHeading = interpolated.interpolatedHeading
-        existing.interpolatedPitch = interpolated.interpolatedPitch
-        existing.interpolatedRoll = interpolated.interpolatedRoll
-        existing.aircraftType = interpolated.aircraftType
-        existing.departure = interpolated.departure
-        existing.arrival = interpolated.arrival
-        existing.isInterpolated = interpolated.isInterpolated
-        existing.verticalRate = interpolated.verticalRate
-        existing.turnRate = interpolated.turnRate
-        existing.acceleration = interpolated.acceleration
-        existing.track = interpolated.track
-        existing.timestamp = interpolated.timestamp
-        // Preserve model info
-        existing.broadcastModelUrl = interpolated.broadcastModelUrl
-        existing.broadcastModelScale = interpolated.broadcastModelScale
-        existing.broadcastRotationOffset = interpolated.broadcastRotationOffset
-        existing.broadcastIsFsltl = interpolated.broadcastIsFsltl
-      } else {
-        statesMap.set(callsign, interpolated)
-      }
-    }
-  } else {
-  // ============================================================================
-  // UNIFIED TIMELINE-BASED INTERPOLATION (ALL MODES)
-  // ============================================================================
+  // NOTE: Insets do NOT run this animation loop. They receive pre-interpolated
+  // data from broadcasts and update sharedInterpolatedStates directly via
+  // updateSharedStatesFromBroadcast() called from useBroadcastAircraft.
+  //
   // Use the timeline store for smooth position interpolation.
   // - Live mode: Uses VATSIM/vNAS/RealTraffic with source-specific display delays
   // - Buffer replay: Scrubs through existing timeline with virtual "now" time
@@ -507,8 +488,7 @@ function updateInterpolation() {
   //
   // The timeline store handles interpolation uniformly for all sources.
 
-  {
-    // Get interpolated states from timeline store
+  // Get interpolated states from timeline store
     const timelineStore = useAircraftTimelineStore.getState()
     const timelineStates = timelineStore.getInterpolatedStates(now)
 
@@ -555,10 +535,8 @@ function updateInterpolation() {
       }
     }
 
-    // Update frame timestamp for rate calculations
-    sharedTimelineLastFrameTimeRef.current = now
-  }
-  } // End of else block (non-inset context)
+  // Update frame timestamp for rate calculations
+  sharedTimelineLastFrameTimeRef.current = now
 
   // ============================================================================
   // TERRAIN CORRECTION AND FLARE PITCH (applies to ALL aircraft)
@@ -1006,6 +984,13 @@ export function useAircraftInterpolation(): Map<string, InterpolatedAircraftStat
   useEffect(() => {
     hookInstanceCount++
 
+    // For insets: Register the broadcast updater to directly update shared states
+    // This connects the broadcast receiver to the rendering system without running
+    // an interpolation loop - insets just pass through pre-interpolated data
+    if (isInsetContext()) {
+      registerSharedStatesUpdater(updateSharedStatesFromBroadcast)
+    }
+
     // Subscribe to settings for orientation emulation
     const unsubscribeSettings = useSettingsStore.subscribe((state) => {
       sharedOrientationEnabledRef.current = state.aircraft.orientationEmulation
@@ -1031,6 +1016,11 @@ export function useAircraftInterpolation(): Map<string, InterpolatedAircraftStat
       unsubscribeSettings()
       subscribers.delete(updateCallback)
 
+      // For insets: Unregister the broadcast updater
+      if (isInsetContext()) {
+        registerSharedStatesUpdater(null)
+      }
+
       // Stop animation loop when last component unmounts
       if (hookInstanceCount === 0 && animationFrameId !== null) {
         cancelAnimationFrame(animationFrameId)
@@ -1041,8 +1031,11 @@ export function useAircraftInterpolation(): Map<string, InterpolatedAircraftStat
   }, [])
 
   // Start singleton animation loop (only once, regardless of hook calls)
+  // IMPORTANT: Insets do NOT run the animation loop - they receive pre-interpolated
+  // data from broadcasts and update sharedInterpolatedStates directly via
+  // updateSharedStatesFromBroadcast() called from useBroadcastAircraft.
   useEffect(() => {
-    if (!animationLoopRunning) {
+    if (!animationLoopRunning && !isInsetContext()) {
       animationLoopRunning = true
       animationFrameId = requestAnimationFrame(updateInterpolation)
     }

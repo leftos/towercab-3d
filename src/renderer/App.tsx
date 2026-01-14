@@ -49,7 +49,7 @@ import { isRemoteMode } from './utils/remoteMode'
 import { usePresenceWebSocket } from './hooks/usePresenceWebSocket'
 import { useVnasEvents } from './hooks/useVnasEvents'
 import { useAircraftInterpolation } from './hooks/useAircraftInterpolation'
-import { useSharedWorkerProvider } from './hooks/useSharedWorkerProvider'
+import { settingsSharedWorkerService } from './services/SettingsSharedWorkerService'
 
 function App() {
   const startPolling = useVatsimStore((state) => state.startPolling)
@@ -140,12 +140,11 @@ function App() {
   // The interpolation loop now broadcasts to insets via AircraftBroadcastService
   useAircraftInterpolation()
 
-  // Broadcast settings/weather/airport to inset iframes via SharedWorker
-  // Aircraft broadcasting is handled separately by AircraftBroadcastService
-  useSharedWorkerProvider()
-
-  // Initialize aircraft broadcast service for delta-compressed updates to insets/remote browsers
+  // Initialize services for inset iframes
+  // - SettingsSharedWorkerService: broadcasts settings/weather/airport/token via SharedWorker
+  // - AircraftBroadcastService: delta-compressed aircraft updates via SharedWorker
   useEffect(() => {
+    settingsSharedWorkerService.initialize()
     aircraftBroadcastService.initialize()
   }, [])
 

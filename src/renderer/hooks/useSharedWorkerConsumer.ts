@@ -29,7 +29,6 @@ import type {
 // Singleton SharedWorker instance for insets
 let sharedWorker: SharedWorker | null = null
 let sharedWorkerPort: MessagePort | null = null
-let consumerInstanceCount = 0
 
 // Callbacks registered by consumer instances
 // NOTE: Aircraft callbacks removed - aircraft data now comes from useBroadcastAircraft
@@ -46,6 +45,7 @@ function getSharedWorkerConnection(): { worker: SharedWorker; port: MessagePort 
   if (!sharedWorker) {
     try {
       const workerUrl = new URL('../workers/shared-data.worker.ts', import.meta.url)
+      console.log('[SharedWorkerConsumer] Creating SharedWorker:', workerUrl.href)
 
       // Connect to existing SharedWorker
       sharedWorker = new SharedWorker(
@@ -63,6 +63,7 @@ function getSharedWorkerConnection(): { worker: SharedWorker; port: MessagePort 
       // Handle incoming messages
       sharedWorkerPort.onmessage = (event: MessageEvent<SharedWorkerOutboundMessage>) => {
         const { type, payload } = event.data
+        console.log('[SharedWorkerConsumer] Received message:', type)
 
         switch (type) {
           // NOTE: 'aircraft-update' removed - aircraft data now comes from useBroadcastAircraft
@@ -80,6 +81,7 @@ function getSharedWorkerConnection(): { worker: SharedWorker; port: MessagePort 
             break
 
           case 'cesium-token':
+            console.log('[SharedWorkerConsumer] Got cesium-token, callbacks:', tokenCallbacks.size)
             for (const callback of tokenCallbacks) {
               callback(payload as string)
             }
@@ -173,8 +175,7 @@ export function useSharedWorkerConsumer(viewportId: string): SharedWorkerConsume
 
   // Initialize connection and register as inset
   useEffect(() => {
-    consumerInstanceCount++
-
+    console.log('[SharedWorkerConsumer] Effect running for viewport:', viewportId)
     // Set up callbacks FIRST, before connecting
     // This ensures callbacks are registered before any messages arrive from the SharedWorker
     // (e.g., cached data sent immediately on registration)
@@ -189,6 +190,7 @@ export function useSharedWorkerConsumer(viewportId: string): SharedWorkerConsume
     }
 
     const handleToken = (token: string) => {
+      console.log('[SharedWorkerConsumer] Received token:', token ? 'exists' : 'missing')
       setCesiumToken(token)
     }
 
@@ -207,17 +209,20 @@ export function useSharedWorkerConsumer(viewportId: string): SharedWorkerConsume
     airportCallbacks.add(handleAirport)
 
     // Now connect to the SharedWorker
+    console.log('[SharedWorkerConsumer] Connecting to SharedWorker...')
     const worker = getSharedWorkerConnection()
     if (!worker) {
       console.error('[SharedWorkerConsumer] Could not connect to SharedWorker')
       return
     }
 
+    console.log('[SharedWorkerConsumer] Connected to SharedWorker')
     setConnected(true)
 
     // Register this inset with the worker
     // The SharedWorker will send cached data (including token) in response
     if (!registeredRef.current) {
+      console.log('[SharedWorkerConsumer] Registering inset:', viewportId)
       postToWorker({
         type: 'register-inset',
         viewportId,
@@ -227,31 +232,19 @@ export function useSharedWorkerConsumer(viewportId: string): SharedWorkerConsume
     }
 
     return () => {
-      consumerInstanceCount--
-
-      // Remove callbacks
+      // Remove callbacks specific to this effect invocation
       settingsCallbacks.delete(handleSettings)
       weatherCallbacks.delete(handleWeather)
       tokenCallbacks.delete(handleToken)
       imageryCallbacks.delete(handleImagery)
       airportCallbacks.delete(handleAirport)
 
-      // Unregister from worker
-      if (registeredRef.current) {
-        postToWorker({
-          type: 'unregister-inset',
-          viewportId,
-          source: 'inset'
-        })
-        registeredRef.current = false
-      }
-
-      // Clean up SharedWorker when last consumer unmounts
-      if (consumerInstanceCount === 0 && sharedWorker) {
-        sharedWorkerPort?.close()
-        sharedWorker = null
-        sharedWorkerPort = null
-      }
+      // Don't unregister or close SharedWorker connection during cleanup
+      // SharedWorkers are long-lived browser resources that persist across
+      // React Strict Mode's double-mount cycle. Closing the port here would
+      // break the connection when React re-mounts the component.
+      // The SharedWorker will clean up stale ports automatically when they
+      // fail to receive messages.
     }
   }, [viewportId])
 

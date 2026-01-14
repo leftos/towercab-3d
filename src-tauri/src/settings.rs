@@ -328,6 +328,44 @@ fn default_ground_label_min_speed() -> f64 {
     2.0
 }
 
+/// Inset viewport display settings
+/// These control datablock appearance for inset (picture-in-picture) viewports
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InsetDisplaySettings {
+    /// Datablock mode for insets: "callsign", "full", or "match" (default: "callsign")
+    #[serde(default = "default_inset_datablock_mode")]
+    pub datablock_mode: String,
+    /// Ground label mode for insets: "crucialPhases", "moving", "activeOnly", "all", "none", "match" (default: "crucialPhases")
+    #[serde(default = "default_inset_ground_label_mode")]
+    pub ground_label_mode: String,
+    /// Visibility margin (0.0-0.3, default: 0.15)
+    #[serde(default = "default_inset_visibility_margin")]
+    pub visibility_margin: f64,
+}
+
+fn default_inset_datablock_mode() -> String {
+    "callsign".to_string()
+}
+
+fn default_inset_ground_label_mode() -> String {
+    "crucialPhases".to_string()
+}
+
+fn default_inset_visibility_margin() -> f64 {
+    0.15
+}
+
+impl Default for InsetDisplaySettings {
+    fn default() -> Self {
+        InsetDisplaySettings {
+            datablock_mode: "callsign".to_string(),
+            ground_label_mode: "crucialPhases".to_string(),
+            visibility_margin: 0.15,
+        }
+    }
+}
+
 /// Display settings shared across all browsers for consistent appearance
 /// These control datablock labels, leader lines, and filtering
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -360,6 +398,9 @@ pub struct GlobalDisplaySettings {
     /// Minimum groundspeed (kts) for ground labels when mode is "moving" (default: 2)
     #[serde(default = "default_ground_label_min_speed")]
     pub ground_label_min_speed: f64,
+    /// Inset viewport display settings
+    #[serde(default)]
+    pub inset: InsetDisplaySettings,
 }
 
 impl Default for GlobalDisplaySettings {
@@ -374,6 +415,7 @@ impl Default for GlobalDisplaySettings {
             auto_avoid_overlaps: true,
             ground_label_mode: "all".to_string(),
             ground_label_min_speed: 2.0,
+            inset: InsetDisplaySettings::default(),
         }
     }
 }

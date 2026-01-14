@@ -59,22 +59,20 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
     imagery,
     airport,
     connected,
-    lastUpdate
   } = useSharedWorkerConsumer(viewportId)
 
-  // Get aircraft data from broadcast service (delta-compressed, rate-controlled)
-  const broadcastState = useBroadcastAircraft()
+  // Initialize broadcast aircraft receiver (updates module-level variable directly)
+  // The rendering system reads aircraft data via getBroadcastAircraftData()
+  useBroadcastAircraft()
 
-  // Sync SharedWorker data to local stores
-  // Aircraft data comes from the broadcast service with delta compression
+  // Sync SharedWorker data to local stores (settings, weather, airport, imagery)
+  // Aircraft data is NOT synced here - it's handled directly by useBroadcastAircraft
   const { isReady: storesReady } = useInsetStoreSync({
     settings,
     weather,
     cesiumToken,
     imagery,
     airport,
-    aircraft: broadcastState.aircraft,
-    lastUpdate
   })
 
   // Track if we've initialized the viewport

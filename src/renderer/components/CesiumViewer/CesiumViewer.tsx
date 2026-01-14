@@ -12,6 +12,7 @@ import { useDatablockPositionStore } from '../../stores/datablockPositionStore'
 import { useUIFeedbackStore } from '../../stores/uiFeedbackStore'
 import { useRunwayStore } from '../../stores/runwayStore'
 import { useAircraftInterpolation, setInterpolationTerrainData } from '../../hooks/useAircraftInterpolation'
+import { registerRenderRequestCallback, insetLog } from '../../hooks/useBroadcastAircraft'
 import { useCesiumCamera } from '../../hooks/useCesiumCamera'
 import { useBabylonOverlay } from '../../hooks/useBabylonOverlay'
 import { useCesiumViewer } from '../../hooks/useCesiumViewer'
@@ -445,7 +446,8 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
     searchQuery,
     filterAirportTraffic,
     isOrbitModeWithoutAirport,
-    groundAircraftTerrain  // Pass terrain heights for correct label attachment
+    groundAircraftTerrain,  // Pass terrain heights for correct label attachment
+    isInset  // Use more restrictive datablock filtering for inset viewports
   })
 
   // =========================================================================
@@ -570,6 +572,40 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ;(viewer as any).targetFrameRate = effectiveFramerate
   }, [viewer, maxFramerate, isInset])
+
+  // For inset viewports: Force renders when broadcast data arrives
+  // Browsers aggressively throttle requestAnimationFrame in iframes, causing slow updates.
+  // With requestRenderMode: true set during viewer creation, Cesium doesn't run its own RAF loop.
+  // We trigger renders explicitly via scene.render() when broadcast data arrives.
+  useEffect(() => {
+    if (!viewer || !isInset) return
+
+    // FPS tracking for benchmark
+    let renderCount = 0
+    let lastFpsLogTime = performance.now()
+
+    // Register callback that forces a Cesium render when broadcast data arrives
+    const forceRender = () => {
+      if (viewer.isDestroyed()) return
+      viewer.scene.render()
+      renderCount++
+
+      // Log FPS every 5 seconds
+      const now = performance.now()
+      if (now - lastFpsLogTime >= 5000) {
+        const fps = (renderCount / (now - lastFpsLogTime)) * 1000
+        insetLog(`[Inset FPS] ${fps.toFixed(1)} FPS (${renderCount} frames in ${((now - lastFpsLogTime) / 1000).toFixed(1)}s)`)
+        renderCount = 0
+        lastFpsLogTime = now
+      }
+    }
+
+    registerRenderRequestCallback(forceRender)
+
+    return () => {
+      registerRenderRequestCallback(null)
+    }
+  }, [viewer, isInset])
 
   // Time of day control (real time vs fixed time)
   useEffect(() => {

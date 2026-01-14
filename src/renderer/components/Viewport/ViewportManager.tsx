@@ -4,10 +4,6 @@ import ViewportContainer from './ViewportContainer'
 import InsetCesiumViewer from './InsetCesiumViewer'
 import './ViewportManager.css'
 
-// Performance warning thresholds
-const PERF_WARNING_THRESHOLD = 3  // Show warning at this many insets
-const PERF_LIMIT_THRESHOLD = 6    // Suggest limiting at this many insets
-
 interface ViewportManagerProps {
   /** The main viewport content (CesiumViewer + overlays) */
   mainViewportContent: ReactNode
@@ -21,16 +17,11 @@ interface ViewportManagerProps {
  */
 function ViewportManager({ mainViewportContent, children }: ViewportManagerProps) {
   const viewports = useViewportStore((state) => state.viewports)
-  const [dismissedWarning, setDismissedWarning] = useState(false)
 
   // Main viewport is always the first one
   const mainViewport = viewports[0]
   // Inset viewports are all others
   const insetViewports = viewports.slice(1)
-
-  // Show performance warning when many insets are active
-  const showPerfWarning = !dismissedWarning && insetViewports.length >= PERF_WARNING_THRESHOLD
-  const isAtLimit = insetViewports.length >= PERF_LIMIT_THRESHOLD
 
   return (
     <div className="viewport-manager">
@@ -52,26 +43,6 @@ function ViewportManager({ mainViewportContent, children }: ViewportManagerProps
               <InsetCesiumViewer viewportId={viewport.id} />
             </ViewportContainer>
           ))}
-        </div>
-      )}
-
-      {/* Performance warning */}
-      {showPerfWarning && (
-        <div className={`viewport-perf-warning ${isAtLimit ? 'severe' : ''}`}>
-          <span className="warning-icon">⚠</span>
-          <span className="warning-text">
-            {isAtLimit
-              ? `${insetViewports.length} inset viewports may impact performance. Consider closing some.`
-              : `Multiple inset viewports (${insetViewports.length}) active. Each uses significant GPU memory.`
-            }
-          </span>
-          <button
-            className="warning-dismiss"
-            onClick={() => setDismissedWarning(true)}
-            title="Dismiss warning"
-          >
-            ×
-          </button>
         </div>
       )}
     </div>

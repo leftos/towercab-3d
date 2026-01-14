@@ -142,6 +142,8 @@ export type {
   DataSourceType,
   BuildingQuality,
   GroundLabelMode,
+  InsetDatablockMode,
+  InsetGroundLabelMode,
   ImageryProviderType,
   ImageryAdjustments,
 
@@ -154,6 +156,9 @@ export type {
   InsetTerrainPreset,
   InsetCachePreset,
   InsetGraphicsSettings,
+
+  // Inset display settings (datablock/label visibility)
+  InsetDisplaySettings,
 
   // Settings groups
   CesiumSettings,
@@ -174,6 +179,7 @@ export type {
 
   // Global display settings (shared across browsers for consistent appearance)
   GlobalDisplaySettings,
+  GlobalDisplaySettingsUpdate,
 
   // Global viewport settings (stored on host, shared across browsers)
   GlobalViewModeDefaults,
@@ -210,7 +216,10 @@ export {
   DEFAULT_MSFS_MODEL_SETTINGS,
 
   // Default inset graphics settings
-  DEFAULT_INSET_GRAPHICS_SETTINGS
+  DEFAULT_INSET_GRAPHICS_SETTINGS,
+
+  // Default inset display settings
+  DEFAULT_INSET_DISPLAY_SETTINGS
 } from './settings'
 
 // ============================================================================

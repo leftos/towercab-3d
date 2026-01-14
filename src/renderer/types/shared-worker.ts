@@ -16,7 +16,8 @@ import type {
   AircraftSettings,
   UISettings,
   ImageryProviderType,
-  ImageryAdjustments
+  ImageryAdjustments,
+  GlobalDisplaySettings
 } from './settings'
 import type { AircraftState } from './vatsim'
 
@@ -105,6 +106,8 @@ export interface SerializedSettings {
   memory: MemorySettings
   aircraft: AircraftSettings
   ui: UISettings
+  /** Global display settings (datablocks, labels, inset settings) */
+  display: GlobalDisplaySettings
 }
 
 /**

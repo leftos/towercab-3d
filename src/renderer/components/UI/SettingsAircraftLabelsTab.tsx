@@ -1,7 +1,7 @@
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
 import CollapsibleSection from './settings/CollapsibleSection'
-import type { GroundLabelMode } from '../../types'
+import type { GroundLabelMode, InsetDatablockMode, InsetGroundLabelMode } from '../../types'
 import type { AircraftTintColor } from '../../types/settings'
 import './ControlsBar.css'
 
@@ -16,6 +16,7 @@ function SettingsAircraftLabelsTab() {
   const defaultDatablockDirection = useGlobalSettingsStore((state) => state.display.defaultDatablockDirection)
   const groundLabelMode = useGlobalSettingsStore((state) => state.display.groundLabelMode)
   const groundLabelMinSpeed = useGlobalSettingsStore((state) => state.display.groundLabelMinSpeed)
+  const insetSettings = useGlobalSettingsStore((state) => state.display.inset)
   const updateDisplay = useGlobalSettingsStore((state) => state.updateDisplay)
 
   // Local settings (per-device)
@@ -221,6 +222,62 @@ function SettingsAircraftLabelsTab() {
             )}
           </>
         )}
+      </CollapsibleSection>
+
+      <CollapsibleSection title="Inset Viewport Datablocks">
+        <p className="setting-hint" style={{ marginBottom: '12px' }}>
+          Inset viewports (picture-in-picture) use separate label settings to reduce clutter.
+        </p>
+
+        <div className="setting-item">
+          <label>Inset Datablock Mode</label>
+          <select
+            value={insetSettings?.datablockMode ?? 'callsign'}
+            onChange={(e) => updateDisplay({ inset: { datablockMode: e.target.value as InsetDatablockMode } })}
+          >
+            <option value="callsign">Callsign Only (single line)</option>
+            <option value="full">Full (callsign + type + altitude + speed)</option>
+            <option value="match">Match Main Viewport</option>
+          </select>
+          <p className="setting-hint">
+            Controls what information is shown in aircraft labels for inset viewports.
+          </p>
+        </div>
+
+        <div className="setting-item">
+          <label>Inset Ground Labels</label>
+          <select
+            value={insetSettings?.groundLabelMode ?? 'crucialPhases'}
+            onChange={(e) => updateDisplay({ inset: { groundLabelMode: e.target.value as InsetGroundLabelMode } })}
+          >
+            <option value="crucialPhases">Crucial Phases Only (hold short, lined up, etc.)</option>
+            <option value="moving">Moving Aircraft Only</option>
+            <option value="activeOnly">Active Only (&gt; 5 kts)</option>
+            <option value="all">All Ground Aircraft</option>
+            <option value="none">Hide All Ground Labels</option>
+            <option value="match">Match Main Viewport</option>
+          </select>
+          <p className="setting-hint">
+            &quot;Crucial Phases&quot; shows labels for aircraft holding short, lined up, taking off, landing, or on go-around.
+          </p>
+        </div>
+
+        <div className="setting-item">
+          <label>Edge Visibility Margin</label>
+          <div className="slider-with-value">
+            <input
+              type="range"
+              min="0"
+              max="30"
+              value={Math.round((insetSettings?.visibilityMargin ?? 0.15) * 100)}
+              onChange={(e) => updateDisplay({ inset: { visibilityMargin: Number(e.target.value) / 100 } })}
+            />
+            <span>{Math.round((insetSettings?.visibilityMargin ?? 0.15) * 100)}%</span>
+          </div>
+          <p className="setting-hint">
+            Hide datablocks for aircraft near viewport edges. 0% = show all, 30% = very restrictive.
+          </p>
+        </div>
       </CollapsibleSection>
 
       <CollapsibleSection title="Aircraft Rendering">

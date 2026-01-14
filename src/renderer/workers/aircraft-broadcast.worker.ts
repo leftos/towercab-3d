@@ -43,9 +43,20 @@ self.onconnect = (event: MessageEvent) => {
  */
 function handleMessage(
   port: MessagePort,
-  message: { type: string; consumerId?: string; data?: unknown }
+  message: { type: string; consumerId?: string; data?: unknown; logMessage?: string }
 ): void {
   switch (message.type) {
+    case 'inset-log':
+      // Forward log message from inset to main app
+      if (mainPort && message.logMessage) {
+        mainPort.postMessage({
+          type: 'inset-log',
+          logMessage: message.logMessage,
+          consumerId: message.consumerId,
+        })
+      }
+      break
+
     case 'register-main':
       // Main app registering itself
       mainPort = port
@@ -67,6 +78,8 @@ function handleMessage(
             type: 'aircraft-update',
             data: message.data,
           })
+        } else {
+          console.warn(`[BroadcastWorker] Consumer not found: ${message.consumerId}`)
         }
       } else {
         // Broadcast to all consumers
@@ -94,6 +107,9 @@ function handleMessage(
       // Consumer explicitly disconnecting
       if (message.consumerId) {
         unregisterConsumer(message.consumerId)
+      } else {
+        // No consumerId provided - find by port (handles StrictMode cleanup race)
+        unregisterConsumerByPort(port)
       }
       break
   }
@@ -128,7 +144,7 @@ function registerConsumer(port: MessagePort): void {
 }
 
 /**
- * Unregister a consumer.
+ * Unregister a consumer by ID.
  */
 function unregisterConsumer(consumerId: string): void {
   consumers.delete(consumerId)
@@ -142,6 +158,20 @@ function unregisterConsumer(consumerId: string): void {
   }
 
   console.log(`[BroadcastWorker] Consumer disconnected: ${consumerId}`)
+}
+
+/**
+ * Unregister a consumer by port (for cleanup race conditions).
+ */
+function unregisterConsumerByPort(port: MessagePort): void {
+  for (const [consumerId, consumerPort] of consumers.entries()) {
+    if (consumerPort === port) {
+      unregisterConsumer(consumerId)
+      return
+    }
+  }
+  // Port not found in consumers - might not have been registered yet
+  console.log('[BroadcastWorker] Disconnect request for unregistered port')
 }
 
 export {}

@@ -5,6 +5,8 @@ import type { InterpolatedAircraftState } from '../types/vatsim'
 import type { ViewMode } from '../types'
 import { aircraftModelService } from '../services/AircraftModelService'
 import { performanceMonitor } from '../utils/performanceMonitor'
+import { isInsetContext } from './useInsetStoreSync'
+import { insetLog } from './useBroadcastAircraft'
 import {
   getModelColorRgb,
   getModelColorBlendAmount,
@@ -498,6 +500,14 @@ export function useAircraftModels(
   // Use preRender (not postRender) so aircraft positions are set BEFORE the frame renders,
   // matching the camera follow calculations which also happen in preRender
   useEffect(() => {
+    // DEBUG: Log setup
+    const logMsg = `[AircraftModels] Setup effect: viewer=${!!viewer}`
+    if (isInsetContext()) {
+      insetLog(logMsg)
+    } else {
+      console.log(logMsg)
+    }
+
     if (!viewer) return
 
     // Use a wrapper that calls the ref, so the same listener stays attached
@@ -507,6 +517,14 @@ export function useAircraftModels(
     }
 
     const removeListener = viewer.scene.preRender.addEventListener(onPreRender)
+
+    // DEBUG: Log that listener is attached
+    const attachMsg = '[AircraftModels] preRender listener attached'
+    if (isInsetContext()) {
+      insetLog(attachMsg)
+    } else {
+      console.log(attachMsg)
+    }
 
     return () => {
       removeListener()

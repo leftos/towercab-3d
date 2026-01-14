@@ -183,7 +183,7 @@ class AircraftBroadcastService {
   /**
    * Handle messages from the SharedWorker.
    */
-  private handleSharedWorkerMessage(message: { type: string; consumerId?: string; data?: unknown }): void {
+  private handleSharedWorkerMessage(message: { type: string; consumerId?: string; data?: unknown; logMessage?: string }): void {
     switch (message.type) {
       case 'consumer-connected':
         if (message.consumerId) {
@@ -205,6 +205,13 @@ class AircraftBroadcastService {
             ...(message.data as ConsumerFeedback),
             consumerId: message.consumerId,
           })
+        }
+        break
+
+      case 'inset-log':
+        // Forward log from inset to main app console (which goes to log file)
+        if (message.logMessage) {
+          console.log(`[Inset:${message.consumerId}] ${message.logMessage}`)
         }
         break
     }
@@ -233,7 +240,6 @@ class AircraftBroadcastService {
       if (needsFullSync && response.fullSyncEncoded) {
         this.sendToConsumer(consumer, response.fullSyncEncoded)
         consumer.needsFullSync = false
-        console.log(`[Broadcast] Sent full sync to ${consumer.id}`)
       } else if (response.deltaEncoded) {
         this.sendToConsumer(consumer, response.deltaEncoded)
       }
@@ -315,7 +321,8 @@ class AircraftBroadcastService {
     const consumersNeedingFullSync: string[] = []
 
     for (const consumer of this.consumers.values()) {
-      if (now - consumer.lastSendTime < consumer.interval) continue
+      // BENCHMARK: Throttling disabled - send every frame
+      // if (now - consumer.lastSendTime < consumer.interval) continue
 
       consumersToSend.push({
         consumer,

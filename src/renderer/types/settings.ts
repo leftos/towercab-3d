@@ -127,6 +127,31 @@ export type BuildingQuality = 'low' | 'medium' | 'high'
 export type GroundLabelMode = 'all' | 'moving' | 'activeOnly' | 'none'
 
 /**
+ * Inset viewport datablock display mode
+ *
+ * Controls what information is shown in aircraft labels for inset viewports:
+ * - 'callsign': Show only callsign (single line, minimal clutter)
+ * - 'full': Show callsign, altitude, speed (full ATC datablock)
+ * - 'match': Use same mode as main viewport
+ */
+export type InsetDatablockMode = 'callsign' | 'full' | 'match'
+
+/**
+ * Inset viewport ground label display mode
+ *
+ * Controls which ground aircraft display labels in inset viewports:
+ * - 'crucialPhases': Only aircraft in crucial phases (holding short, lined up, departure/landing roll)
+ * - 'moving': Show labels only for aircraft with groundspeed > minSpeed
+ * - 'activeOnly': Show labels only for aircraft that are actively taxiing (> 5 kts)
+ * - 'all': Show labels for all ground aircraft (most cluttered)
+ * - 'none': Hide all ground aircraft labels
+ * - 'match': Use same mode as main viewport
+ *
+ * Note: 'crucialPhases' is recommended for insets to focus on operationally important aircraft.
+ */
+export type InsetGroundLabelMode = 'crucialPhases' | 'moving' | 'activeOnly' | 'all' | 'none' | 'match'
+
+/**
  * Imagery provider selection
  *
  * Controls which imagery provider is used for the globe:
@@ -361,6 +386,60 @@ export const DEFAULT_INSET_GRAPHICS_SETTINGS: InsetGraphicsSettings = {
   terrain: 'low',
   cache: 'minimal',
   preloadTiles: false
+}
+
+/**
+ * Inset viewport display settings
+ *
+ * Controls datablock appearance and filtering for inset (picture-in-picture) viewports.
+ * These settings allow insets to have less cluttered displays than the main viewport.
+ *
+ * NOTE: These settings are designed to reduce visual clutter in insets while
+ * maintaining situational awareness for critical aircraft phases.
+ */
+export interface InsetDisplaySettings {
+  /**
+   * Datablock display mode for insets (default: 'callsign')
+   *
+   * - 'callsign': Show only callsign (minimal, single-line display)
+   * - 'full': Show full datablock (callsign, type, altitude, speed)
+   * - 'match': Use same mode as main viewport
+   */
+  datablockMode: InsetDatablockMode
+
+  /**
+   * Ground label filter mode for insets (default: 'crucialPhases')
+   *
+   * - 'crucialPhases': Only show labels for aircraft in crucial phases:
+   *   holding_short, lined_up, departure_roll, landing_roll, go_around, short_final
+   * - 'moving': Show labels for moving aircraft only
+   * - 'activeOnly': Show labels for actively taxiing aircraft (> 5 kts)
+   * - 'all': Show all ground labels
+   * - 'none': Hide all ground labels
+   * - 'match': Use same mode as main viewport
+   */
+  groundLabelMode: InsetGroundLabelMode
+
+  /**
+   * Visibility margin for datablocks (default: 0.15)
+   *
+   * Fraction of viewport edge to use as margin. Aircraft screen positions
+   * closer to the edge than this margin won't show datablocks.
+   * Range: 0.0 (no margin, show all) to 0.3 (30% margin, very restrictive)
+   *
+   * This prevents datablocks from appearing for aircraft that are barely
+   * visible at the edge of the inset viewport.
+   */
+  visibilityMargin: number
+}
+
+/**
+ * Default inset display settings (reduced clutter mode)
+ */
+export const DEFAULT_INSET_DISPLAY_SETTINGS: InsetDisplaySettings = {
+  datablockMode: 'callsign',
+  groundLabelMode: 'crucialPhases',
+  visibilityMargin: 0.15
 }
 
 /**
@@ -1144,6 +1223,14 @@ export interface GlobalDisplaySettings {
    * when groundLabelMode is 'moving'. Range: 1-10 kts.
    */
   groundLabelMinSpeed: number
+
+  /**
+   * Inset viewport display settings
+   *
+   * Controls how datablocks appear in inset (picture-in-picture) viewports.
+   * Insets default to reduced clutter settings for better visibility.
+   */
+  inset: InsetDisplaySettings
 }
 
 /**
@@ -1158,7 +1245,17 @@ export const DEFAULT_GLOBAL_DISPLAY_SETTINGS: GlobalDisplaySettings = {
   showAirborneTraffic: true,
   autoAvoidOverlaps: true,
   groundLabelMode: 'all',
-  groundLabelMinSpeed: 2
+  groundLabelMinSpeed: 2,
+  inset: DEFAULT_INSET_DISPLAY_SETTINGS
+}
+
+/**
+ * Type for updating display settings with support for partial inset updates.
+ * Used by updateDisplay() to allow individual inset property changes without
+ * requiring the full InsetDisplaySettings object.
+ */
+export type GlobalDisplaySettingsUpdate = Omit<Partial<GlobalDisplaySettings>, 'inset'> & {
+  inset?: Partial<InsetDisplaySettings>
 }
 
 /**

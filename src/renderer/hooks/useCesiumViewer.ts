@@ -236,6 +236,11 @@ export function useCesiumViewer(
       navigationInstructionsInitiallyVisible: false,
       creditContainer: document.createElement('div'), // Hide credits
       msaaSamples: effectiveMsaa,
+      // For insets: enable explicit render mode to bypass browser RAF throttling in iframes.
+      // We control when renders happen via scene.render() calls triggered by broadcast data.
+      requestRenderMode: isInset,
+      // When using requestRenderMode, set max render rate (0 = unlimited when explicitly requested)
+      maximumRenderTimeChange: isInset ? Infinity : undefined,
       // WebGL context options - desynchronized hints browser to skip VSync
       // powerPreference ensures discrete GPU is used
       contextOptions: {

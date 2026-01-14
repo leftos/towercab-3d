@@ -9,7 +9,10 @@
  * - globalSettingsStore: Cesium Ion token, imagery provider settings
  * - settingsStore: Graphics, cesium, aircraft, weather settings
  * - weatherStore: METAR and fog data
- * - Aircraft data: Injected into interpolation system
+ *
+ * Note: Aircraft data is NOT synced here. It's handled directly by the
+ * useBroadcastAircraft hook which updates a module-level variable that
+ * the rendering system reads directly (bypassing React state batching).
  */
 
 import { useEffect, useRef } from 'react'
@@ -23,27 +26,13 @@ import type {
   SerializedAirport,
   SerializedImagery
 } from '../types/shared-worker'
-import type { InterpolatedAircraftState } from '../types/vatsim'
+import type { GlobalDisplaySettings } from '../types/settings'
 // Re-export isInsetContext from tauriApi for backward compatibility
 export { isInsetContext } from '../utils/tauriApi'
 
-// Reference to aircraft data for the interpolation system to read
-// This allows the inset's interpolation singleton to use broadcast data
-let sharedAircraftData: Map<string, InterpolatedAircraftState> = new Map()
-let lastAircraftUpdateTime = 0
-
-/**
- * Get the current aircraft data from broadcast service (for use by interpolation)
- */
-export function getInsetAircraftData(): {
-  aircraft: Map<string, InterpolatedAircraftState>
-  timestamp: number
-} {
-  return {
-    aircraft: sharedAircraftData,
-    timestamp: lastAircraftUpdateTime
-  }
-}
+// Re-export getBroadcastAircraftData for backward compatibility
+// The interpolation system now reads directly from useBroadcastAircraft module
+export { getBroadcastAircraftData as getInsetAircraftData } from './useBroadcastAircraft'
 
 interface UseInsetStoreSyncOptions {
   settings: SerializedSettings | null
@@ -51,8 +40,6 @@ interface UseInsetStoreSyncOptions {
   cesiumToken: string | null
   imagery: SerializedImagery | null
   airport: SerializedAirport | null
-  aircraft: Map<string, InterpolatedAircraftState>
-  lastUpdate: number
 }
 
 /**
@@ -66,8 +53,6 @@ export function useInsetStoreSync({
   cesiumToken,
   imagery,
   airport,
-  aircraft,
-  lastUpdate
 }: UseInsetStoreSyncOptions) {
   const initializedRef = useRef(false)
 
@@ -120,6 +105,15 @@ export function useInsetStoreSync({
     store.updateCameraSettings(settings.camera)
     store.updateMemorySettings(settings.memory)
     store.updateUISettings(settings.ui)
+
+    // Sync global display settings (datablocks, labels, inset settings)
+    if (settings.display) {
+      const currentDisplay = useGlobalSettingsStore.getState().display
+      // Only update if display settings have changed
+      if (JSON.stringify(currentDisplay) !== JSON.stringify(settings.display)) {
+        useGlobalSettingsStore.setState({ display: settings.display })
+      }
+    }
   }, [settings])
 
   // Sync weather to weatherStore
@@ -177,14 +171,6 @@ export function useInsetStoreSync({
       towerHeight: airport.towerHeight
     })
   }, [airport])
-
-  // Update aircraft data reference for interpolation system
-  useEffect(() => {
-    if (aircraft.size > 0) {
-      sharedAircraftData = aircraft
-      lastAircraftUpdateTime = lastUpdate
-    }
-  }, [aircraft, lastUpdate])
 
   // Mark as initialized once we have essential data
   useEffect(() => {
