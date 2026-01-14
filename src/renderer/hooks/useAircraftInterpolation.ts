@@ -3,10 +3,12 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useReplayStore } from '../stores/replayStore'
 import { useAircraftTimelineStore } from '../stores/aircraftTimelineStore'
 import { getAircraftDataSource } from './useAircraftDataSource'
-import { isInsetContext } from './useInsetStoreSync'
+import { isInsetContext, getInsetAircraftData } from './useInsetStoreSync'
 import { calculateFlarePitch, angleDifference } from '../utils/interpolation'
 import { performanceMonitor } from '../utils/performanceMonitor'
 import { geoidService } from '../services/GeoidService'
+import { aircraftBroadcastService } from '../services/AircraftBroadcastService'
+import { isTauriMode } from '../utils/remoteMode'
 import type { InterpolatedAircraftState, AircraftState } from '../types/vatsim'
 import type { TimelineInterpolationResult } from '../types/aircraft-timeline'
 import type { TerrainData } from './useGroundAircraftTerrain'
@@ -400,8 +402,14 @@ function updateInterpolation() {
 
   if (isInsetContext()) {
     // Use pre-interpolated data from SharedWorker
+    // Get the original broadcast data which includes model info
+    const { aircraft: broadcastAircraft } = getInsetAircraftData()
+
     for (const [callsign, aircraft] of source.aircraftStates) {
       activeCallsigns.add(callsign)
+
+      // Get original broadcast data to preserve model info
+      const originalBroadcast = broadcastAircraft.get(callsign)
 
       // Convert AircraftState to InterpolatedAircraftState
       // The source data includes pre-interpolated fields from the main app
@@ -449,7 +457,13 @@ function updateInterpolation() {
         acceleration: sourceAny.acceleration ?? 0,
         track: sourceAny.track ?? aircraft.heading,
 
-        isInterpolated: sourceAny.isInterpolated ?? true
+        isInterpolated: sourceAny.isInterpolated ?? true,
+
+        // Preserve model info from original broadcast data
+        broadcastModelUrl: originalBroadcast?.broadcastModelUrl,
+        broadcastModelScale: originalBroadcast?.broadcastModelScale,
+        broadcastRotationOffset: originalBroadcast?.broadcastRotationOffset,
+        broadcastIsFsltl: originalBroadcast?.broadcastIsFsltl,
       }
 
       // Reuse existing entry or create new one
@@ -473,6 +487,11 @@ function updateInterpolation() {
         existing.acceleration = interpolated.acceleration
         existing.track = interpolated.track
         existing.timestamp = interpolated.timestamp
+        // Preserve model info
+        existing.broadcastModelUrl = interpolated.broadcastModelUrl
+        existing.broadcastModelScale = interpolated.broadcastModelScale
+        existing.broadcastRotationOffset = interpolated.broadcastRotationOffset
+        existing.broadcastIsFsltl = interpolated.broadcastIsFsltl
       } else {
         statesMap.set(callsign, interpolated)
       }
@@ -830,6 +849,12 @@ function updateInterpolation() {
   }
 
   performanceMonitor.endTimer('interpolation')
+
+  // Broadcast interpolated aircraft to insets and remote browsers
+  // Only the main Tauri app broadcasts; insets receive via SharedWorker
+  if (isTauriMode() && !isInsetContext()) {
+    aircraftBroadcastService.broadcast(statesMap, now)
+  }
 
   // Schedule next frame
   animationFrameId = requestAnimationFrame(updateInterpolation)

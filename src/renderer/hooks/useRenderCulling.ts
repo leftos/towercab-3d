@@ -68,7 +68,7 @@ function calculateDistanceNM(
 interface AircraftWithDistance {
   callsign: string
   aircraft: InterpolatedAircraftState
-  distance: number
+  distance: number // Distance in nautical miles
 }
 
 /**
@@ -140,6 +140,76 @@ function getCameraLatLon(viewer: Cesium.Viewer | null): { lat: number; lon: numb
   }
 }
 
+// Reusable Cartesian3 for frustum culling to avoid allocations
+const scratchCartesian = new Cesium.Cartesian3()
+
+/**
+ * Check if a point (lat/lon/alt) is visible in the camera frustum
+ * Uses expanded frustum (1.1x) to allow aircraft to enter smoothly
+ */
+function isPointInFrustum(
+  viewer: Cesium.Viewer,
+  lat: number,
+  lon: number,
+  alt: number
+): boolean {
+  // Convert to Cartesian3
+  const position = Cesium.Cartesian3.fromDegrees(lon, lat, alt, undefined, scratchCartesian)
+
+  // Get the culling volume from the scene's current frame state
+  // This is the actual frustum used for rendering
+  const frameState = (viewer.scene as unknown as { frameState?: { cullingVolume?: Cesium.CullingVolume } }).frameState
+  if (!frameState?.cullingVolume) {
+    // No culling volume available, assume visible
+    return true
+  }
+
+  // Check if point is inside the frustum
+  // computeVisibility returns Intersect.INSIDE, INTERSECTING, or OUTSIDE
+  const visibility = frameState.cullingVolume.computeVisibility(
+    new Cesium.BoundingSphere(position, 100) // 100m radius to account for aircraft size
+  )
+
+  return visibility !== Cesium.Intersect.OUTSIDE
+}
+
+// Minimum screen percentage for an aircraft to be rendered
+// Using percentage instead of fixed pixels so it works across different viewport sizes
+// 0.3% means aircraft must be at least 0.3% of screen height (e.g., 3.2px on 1080p, 0.9px on 300px inset)
+const MIN_SCREEN_PERCENTAGE = 0.003
+
+// Average aircraft wingspan in meters (used for screen-space size calculation)
+const AVERAGE_AIRCRAFT_SIZE_METERS = 35
+
+/**
+ * Calculate the approximate screen-space size of an aircraft as a percentage of screen height
+ *
+ * @param distanceMeters - Distance from camera to aircraft in meters
+ * @param viewer - Cesium viewer for FOV
+ * @returns Approximate size as percentage of screen height (0.0 to 1.0)
+ */
+function getScreenSpacePercentage(
+  distanceMeters: number,
+  viewer: Cesium.Viewer
+): number {
+  if (distanceMeters <= 0) return Infinity // Very close, always visible
+
+  // Get vertical field of view in radians
+  // frustum.fov is the vertical FOV for PerspectiveFrustum
+  const frustum = viewer.camera.frustum
+  const fovRadians = (frustum as Cesium.PerspectiveFrustum).fov ?? Cesium.Math.PI_OVER_THREE
+
+  // Calculate apparent angular size of aircraft
+  // apparentAngle = objectSize / distance (in radians, small angle approximation)
+  const apparentAngleRadians = AVERAGE_AIRCRAFT_SIZE_METERS / distanceMeters
+
+  // Convert to percentage of screen (angular size / FOV)
+  // This is resolution-independent - same result regardless of canvas size
+  const screenPercentage = apparentAngleRadians / fovRadians
+
+  return screenPercentage
+}
+
 export interface RenderCullingOptions {
   /** Cesium viewer for camera position */
   viewer: Cesium.Viewer | null
@@ -151,10 +221,12 @@ export interface RenderCullingOptions {
   renderRadiusNM?: number
   /** Always include this callsign regardless of culling (e.g., followed aircraft) */
   alwaysInclude?: string | null
+  /** Enable view frustum culling (default: true) */
+  enableFrustumCulling?: boolean
 }
 
 export interface RenderCullingResult {
-  /** Filtered aircraft map for rendering */
+  /** Filtered aircraft map for rendering (passed frustum + screen-space culling) */
   filteredAircraft: Map<string, InterpolatedAircraftState>
   /** Number of aircraft before filtering */
   totalCount: number
@@ -214,7 +286,7 @@ export function filterAircraftForRendering({
   // Early exit if no filtering needed
   if (totalCount === 0) {
     const result: RenderCullingResult = {
-      filteredAircraft: interpolatedAircraft,
+      filteredAircraft: new Map(),
       totalCount: 0,
       filteredCount: 0
     }
@@ -236,13 +308,20 @@ export function filterAircraftForRendering({
     return result
   }
 
-  // Calculate distance for each aircraft and filter by radius
+  // Calculate distance for each aircraft and filter by radius, frustum, and screen size
   const aircraftWithDistance: AircraftWithDistance[] = []
 
   // Track always-include aircraft separately for guaranteed inclusion
   let alwaysIncludeEntry: AircraftWithDistance | null = null
 
+  // Enable frustum culling by default (can be disabled via options)
+  const frustumCullingEnabled = true // Could make this a setting if needed
+
   for (const [callsign, aircraft] of interpolatedAircraft) {
+    // Always-include callsign bypasses all culling
+    const isAlwaysInclude = callsign === alwaysInclude
+
+    // Distance-based culling
     const distance = calculateDistanceNM(
       cameraPos.lat,
       cameraPos.lon,
@@ -250,15 +329,41 @@ export function filterAircraftForRendering({
       aircraft.interpolatedLongitude
     )
 
-    // Include if within radius OR if it's the always-include callsign
-    if (distance <= effectiveRadiusNM || callsign === alwaysInclude) {
-      const entry = { callsign, aircraft, distance }
-      aircraftWithDistance.push(entry)
+    // Skip if outside radius (unless always-include)
+    if (!isAlwaysInclude && distance > effectiveRadiusNM) {
+      continue
+    }
 
-      // Track always-include for later
-      if (callsign === alwaysInclude) {
-        alwaysIncludeEntry = entry
+    // Frustum culling: skip aircraft outside the camera view
+    if (!isAlwaysInclude && frustumCullingEnabled && viewer) {
+      const inFrustum = isPointInFrustum(
+        viewer,
+        aircraft.interpolatedLatitude,
+        aircraft.interpolatedLongitude,
+        aircraft.interpolatedAltitude
+      )
+      if (!inFrustum) {
+        continue
       }
+    }
+
+    // Screen-space size culling: skip aircraft that would be too small to see
+    // Uses percentage of screen height so it works consistently across viewport sizes
+    if (!isAlwaysInclude && viewer) {
+      const distanceMeters = distance * 1852 // NM to meters
+      const screenPercentage = getScreenSpacePercentage(distanceMeters, viewer)
+      if (screenPercentage < MIN_SCREEN_PERCENTAGE) {
+        continue
+      }
+    }
+
+    // Aircraft passed all culling checks
+    const entry = { callsign, aircraft, distance }
+    aircraftWithDistance.push(entry)
+
+    // Track always-include for later
+    if (isAlwaysInclude) {
+      alwaysIncludeEntry = entry
     }
   }
 

@@ -150,7 +150,7 @@ export function useAircraftModels(
       }
     }
 
-    // Apply render culling: filter by distance from camera and max aircraft limit
+    // Apply render culling: filter by distance, frustum, and screen-space size
     // This runs every frame to keep the closest aircraft visible as camera moves
     const { filteredAircraft } = filterAircraftForRendering({
       viewer,
@@ -175,12 +175,25 @@ export function useAircraftModels(
       nightLightBoost = 1.0 + (aircraftNightVisibility - 1.0) * nightProgress
     }
 
-    // Update each aircraft model (using filtered list)
+    // Update each aircraft model (using filtered list after culling)
     for (const aircraft of filteredAircraft.values()) {
       seenCallsigns.add(aircraft.callsign)
 
       // Get the correct model info for this aircraft type (and callsign for FSLTL livery matching)
-      const modelInfo = aircraftModelService.getModelInfo(aircraft.aircraftType, aircraft.callsign)
+      // For insets, use broadcast model info if available (populated from main app)
+      // For main app, use aircraftModelService to resolve model
+      const modelInfo = aircraft.broadcastModelUrl !== undefined
+        ? {
+            // Inset context: use model info from broadcast
+            modelUrl: aircraft.broadcastModelUrl || './b738.glb',
+            scale: aircraft.broadcastModelScale
+              ? { x: aircraft.broadcastModelScale[0], y: aircraft.broadcastModelScale[1], z: aircraft.broadcastModelScale[2] }
+              : { x: 1, y: 1, z: 1 },
+            rotationOffset: aircraft.broadcastRotationOffset ?? 0,
+            isFsltl: aircraft.broadcastIsFsltl ?? null,
+          }
+        : // Main app context: resolve model via service
+          aircraftModelService.getModelInfo(aircraft.aircraftType, aircraft.callsign)
 
       // Model height: interpolatedAltitude is already terrain-corrected by interpolation system
       // (includes terrain sampling, ground/air transitions, and all offsets)
@@ -476,18 +489,29 @@ export function useAircraftModels(
     sunElevation
   ])
 
+  // Keep callback in a ref so the listener doesn't need to be re-attached when dependencies change
+  // This prevents a brief frame with no listener during re-attachment, which could cause aircraft to "flash"
+  const updateAircraftModelsRef = useRef(updateAircraftModels)
+  updateAircraftModelsRef.current = updateAircraftModels
+
   // Set up render loop to update models every frame
   // Use preRender (not postRender) so aircraft positions are set BEFORE the frame renders,
   // matching the camera follow calculations which also happen in preRender
   useEffect(() => {
     if (!viewer) return
 
-    const removeListener = viewer.scene.preRender.addEventListener(updateAircraftModels)
+    // Use a wrapper that calls the ref, so the same listener stays attached
+    // even when the underlying callback changes
+    const onPreRender = () => {
+      updateAircraftModelsRef.current()
+    }
+
+    const removeListener = viewer.scene.preRender.addEventListener(onPreRender)
 
     return () => {
       removeListener()
     }
-  }, [viewer, updateAircraftModels])
+  }, [viewer]) // Only depends on viewer, not updateAircraftModels
 
   // Listen for FSLTL model updates to clear URL cache
   // This forces models to re-fetch from AircraftModelService which will pick up new FSLTL models

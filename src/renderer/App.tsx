@@ -43,6 +43,7 @@ import { modService } from './services/ModService'
 import { userVMRService } from './services/UserVMRService'
 import { MSFSModelConversionService } from './services/MSFSModelConversionService'
 import { realTrafficService } from './services/RealTrafficService'
+import { aircraftBroadcastService } from './services/AircraftBroadcastService'
 import { isOrbitWithoutAirport } from './utils/viewingContext'
 import { isRemoteMode } from './utils/remoteMode'
 import { usePresenceWebSocket } from './hooks/usePresenceWebSocket'
@@ -135,13 +136,18 @@ function App() {
   // Set up vNAS event listeners (receives real-time aircraft updates from Rust backend)
   useVnasEvents()
 
-  // Get interpolated aircraft for SharedWorker broadcasting to inset iframes
-  // This uses the singleton pattern - the actual interpolation loop may be shared with CesiumViewer
-  const interpolatedAircraft = useAircraftInterpolation()
+  // Initialize aircraft interpolation (singleton pattern - shared with CesiumViewer)
+  // The interpolation loop now broadcasts to insets via AircraftBroadcastService
+  useAircraftInterpolation()
 
-  // Broadcast data to inset iframes via SharedWorker
-  // Only active when there are inset viewports (handled internally)
-  useSharedWorkerProvider(interpolatedAircraft)
+  // Broadcast settings/weather/airport to inset iframes via SharedWorker
+  // Aircraft broadcasting is handled separately by AircraftBroadcastService
+  useSharedWorkerProvider()
+
+  // Initialize aircraft broadcast service for delta-compressed updates to insets/remote browsers
+  useEffect(() => {
+    aircraftBroadcastService.initialize()
+  }, [])
 
   const handleViewerReady = useCallback((viewer: Viewer | null) => {
     setCesiumViewer(viewer)

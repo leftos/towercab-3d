@@ -42,6 +42,7 @@ type SharedWorkerMessageType =
   | 'settings-update'
   | 'weather-update'
   | 'cesium-token'
+  | 'imagery-update'
   | 'airport-update'
   | 'viewport-camera'
   | 'register-inset'
@@ -84,6 +85,13 @@ interface SerializedAirport {
   towerHeight: number
 }
 
+interface SerializedImagery {
+  provider: string
+  googleMapsApiKey: string
+  cesiumAdjustments: unknown
+  googleAdjustments: unknown
+}
+
 // ============================================================================
 // SHARED WORKER STATE
 // ============================================================================
@@ -103,6 +111,7 @@ const dataCache = {
   settings: null as SerializedSettings | null,
   weather: null as SerializedWeather | null,
   cesiumToken: null as string | null,
+  imagery: null as SerializedImagery | null,
   airport: null as SerializedAirport | null,
   timestamp: 0
 }
@@ -116,6 +125,12 @@ const dataCache = {
  */
 function handleMessage(port: MessagePort, event: MessageEvent<SharedWorkerInboundMessage>) {
   const { type, payload, viewportId, source } = event.data
+
+  // If this message is from 'main' source, update mainAppPort to handle reconnection (e.g., F5 reload)
+  // SharedWorkers persist across page reloads, so the main app may reconnect with a new port
+  if (source === 'main' && port !== mainAppPort) {
+    mainAppPort = port
+  }
 
   switch (type) {
     case 'register-inset':
@@ -168,6 +183,14 @@ function handleMessage(port: MessagePort, event: MessageEvent<SharedWorkerInboun
       }
       break
 
+    case 'imagery-update':
+      // Only accept imagery settings from main app
+      if (source === 'main' || port === mainAppPort) {
+        dataCache.imagery = payload as SerializedImagery
+        broadcastToInsets({ type, payload, timestamp: Date.now() })
+      }
+      break
+
     case 'airport-update':
       // Only accept airport updates from main app
       if (source === 'main' || port === mainAppPort) {
@@ -209,6 +232,14 @@ function sendCachedDataToPort(port: MessagePort) {
     port.postMessage({
       type: 'weather-update',
       payload: dataCache.weather,
+      timestamp: Date.now()
+    })
+  }
+
+  if (dataCache.imagery) {
+    port.postMessage({
+      type: 'imagery-update',
+      payload: dataCache.imagery,
       timestamp: Date.now()
     })
   }

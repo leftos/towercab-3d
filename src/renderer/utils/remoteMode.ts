@@ -17,6 +17,14 @@ export function isRemoteMode(): boolean {
 }
 
 /**
+ * Check if we're running in the Tauri desktop app (as opposed to remote browser mode)
+ * Inverse of isRemoteMode().
+ */
+export function isTauriMode(): boolean {
+  return ('__TAURI__' in window) || ('__TAURI_INTERNALS__' in window)
+}
+
+/**
  * Get the API base URL for HTTP requests
  * In remote mode: the origin of the current page (e.g., http://192.168.1.100:8765)
  * In Tauri mode: always use localhost:8765 since Vite dev server is on different port

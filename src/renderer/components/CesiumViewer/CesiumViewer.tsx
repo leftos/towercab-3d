@@ -557,13 +557,19 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
   }, [clearTerrainCacheRequested, viewer, acknowledgeClearTerrainCache, showFeedback])
 
   // Apply target frame rate limit (0 = unlimited)
+  // Insets are capped at 30fps to reduce GPU contention with main viewport
   useEffect(() => {
     if (!viewer) return
     // Cesium's targetFrameRate: undefined means unlimited (uses requestAnimationFrame)
     // A number limits the frame rate to that value
+    // Insets cap at 30fps regardless of setting to reduce GPU contention
+    const insetMaxFps = 30
+    const effectiveFramerate = isInset
+      ? insetMaxFps
+      : (maxFramerate > 0 ? maxFramerate : undefined)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ;(viewer as any).targetFrameRate = maxFramerate > 0 ? maxFramerate : undefined
-  }, [viewer, maxFramerate])
+    ;(viewer as any).targetFrameRate = effectiveFramerate
+  }, [viewer, maxFramerate, isInset])
 
   // Time of day control (real time vs fixed time)
   useEffect(() => {
@@ -709,7 +715,17 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
   useEffect(() => {
     if (!viewer) return
 
-    // Mark preRender for accurate Cesium render timing
+    // Track Cesium update phase (scene graph updates, culling, animations)
+    const removePreUpdate = viewer.scene.preUpdate.addEventListener(() => {
+      performanceMonitor.startFrame()
+      performanceMonitor.markCesiumPreUpdate()
+    })
+
+    const removePostUpdate = viewer.scene.postUpdate.addEventListener(() => {
+      performanceMonitor.markCesiumPostUpdate()
+    })
+
+    // Track Cesium render/draw phase (actual GPU drawing)
     const removePreRender = viewer.scene.preRender.addEventListener(() => {
       performanceMonitor.markCesiumPreRender()
     })
@@ -725,8 +741,6 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
       const tilesLoaded = surface?.tileProvider?._tilesToRenderByTextureCount?.length ?? 0
       const tilesLoading = (globe as unknown as { _tilesLoading?: number })._tilesLoading ?? 0
       performanceMonitor.markCesiumPostRender(primitiveCount, tilesLoaded, tilesLoading)
-
-      performanceMonitor.startFrame()
 
       performanceMonitor.startTimer('babylonSync')
       babylonOverlay.syncCamera()
@@ -777,6 +791,8 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
     })
 
     return () => {
+      removePreUpdate()
+      removePostUpdate()
       removePreRender()
       removePostRender()
     }

@@ -6,7 +6,7 @@
  * context, they have their own store instances that need to be populated.
  *
  * Syncs:
- * - globalSettingsStore: Cesium Ion token
+ * - globalSettingsStore: Cesium Ion token, imagery provider settings
  * - settingsStore: Graphics, cesium, aircraft, weather settings
  * - weatherStore: METAR and fog data
  * - Aircraft data: Injected into interpolation system
@@ -20,22 +20,23 @@ import { useAirportStore } from '../stores/airportStore'
 import type {
   SerializedSettings,
   SerializedWeather,
-  SerializedAircraftState,
-  SerializedAirport
+  SerializedAirport,
+  SerializedImagery
 } from '../types/shared-worker'
+import type { InterpolatedAircraftState } from '../types/vatsim'
 // Re-export isInsetContext from tauriApi for backward compatibility
 export { isInsetContext } from '../utils/tauriApi'
 
 // Reference to aircraft data for the interpolation system to read
-// This allows the inset's interpolation singleton to use SharedWorker data
-let sharedAircraftData: Map<string, SerializedAircraftState> = new Map()
+// This allows the inset's interpolation singleton to use broadcast data
+let sharedAircraftData: Map<string, InterpolatedAircraftState> = new Map()
 let lastAircraftUpdateTime = 0
 
 /**
- * Get the current aircraft data from SharedWorker (for use by interpolation)
+ * Get the current aircraft data from broadcast service (for use by interpolation)
  */
 export function getInsetAircraftData(): {
-  aircraft: Map<string, SerializedAircraftState>
+  aircraft: Map<string, InterpolatedAircraftState>
   timestamp: number
 } {
   return {
@@ -48,8 +49,9 @@ interface UseInsetStoreSyncOptions {
   settings: SerializedSettings | null
   weather: SerializedWeather | null
   cesiumToken: string | null
+  imagery: SerializedImagery | null
   airport: SerializedAirport | null
-  aircraft: Map<string, SerializedAircraftState>
+  aircraft: Map<string, InterpolatedAircraftState>
   lastUpdate: number
 }
 
@@ -62,6 +64,7 @@ export function useInsetStoreSync({
   settings,
   weather,
   cesiumToken,
+  imagery,
   airport,
   aircraft,
   lastUpdate
@@ -78,6 +81,30 @@ export function useInsetStoreSync({
       }
     }
   }, [cesiumToken])
+
+  // Sync imagery settings to globalSettingsStore
+  // This ensures insets use the same imagery provider as the main app
+  useEffect(() => {
+    if (!imagery) return
+
+    const currentImagery = useGlobalSettingsStore.getState().imagery
+    // Only update if imagery settings have changed
+    if (
+      currentImagery.provider !== imagery.provider ||
+      currentImagery.googleMapsApiKey !== imagery.googleMapsApiKey ||
+      currentImagery.cesiumAdjustments !== imagery.cesiumAdjustments ||
+      currentImagery.googleAdjustments !== imagery.googleAdjustments
+    ) {
+      useGlobalSettingsStore.setState({
+        imagery: {
+          provider: imagery.provider,
+          googleMapsApiKey: imagery.googleMapsApiKey,
+          cesiumAdjustments: imagery.cesiumAdjustments,
+          googleAdjustments: imagery.googleAdjustments
+        }
+      })
+    }
+  }, [imagery])
 
   // Sync settings to settingsStore
   useEffect(() => {

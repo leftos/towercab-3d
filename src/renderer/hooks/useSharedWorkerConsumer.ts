@@ -3,24 +3,27 @@
  *
  * This hook:
  * - Connects to the SharedWorker as an inset
- * - Receives interpolated aircraft state
  * - Receives settings updates
  * - Receives weather updates
  * - Receives Cesium Ion token
  * - Provides state for the inset app to render
  *
+ * NOTE: Aircraft data is handled separately by useBroadcastAircraft hook
+ * which uses delta-compressed broadcasts via aircraft-broadcast.worker.ts
+ *
  * @see useSharedWorkerProvider - Provider hook for main app
  * @see shared-data.worker.ts - SharedWorker implementation
+ * @see useBroadcastAircraft - Hook for receiving aircraft broadcasts
  */
 
 import { useEffect, useState, useRef } from 'react'
 import type {
   SharedWorkerInboundMessage,
   SharedWorkerOutboundMessage,
-  SerializedAircraftState,
   SerializedSettings,
   SerializedWeather,
-  SerializedAirport
+  SerializedAirport,
+  SerializedImagery
 } from '../types/shared-worker'
 
 // Singleton SharedWorker instance for insets
@@ -29,8 +32,9 @@ let sharedWorkerPort: MessagePort | null = null
 let consumerInstanceCount = 0
 
 // Callbacks registered by consumer instances
-const aircraftCallbacks = new Set<(aircraft: SerializedAircraftState[]) => void>()
+// NOTE: Aircraft callbacks removed - aircraft data now comes from useBroadcastAircraft
 const settingsCallbacks = new Set<(settings: SerializedSettings) => void>()
+const imageryCallbacks = new Set<(imagery: SerializedImagery) => void>()
 const weatherCallbacks = new Set<(weather: SerializedWeather) => void>()
 const tokenCallbacks = new Set<(token: string) => void>()
 const airportCallbacks = new Set<(airport: SerializedAirport | null) => void>()
@@ -61,11 +65,7 @@ function getSharedWorkerConnection(): { worker: SharedWorker; port: MessagePort 
         const { type, payload } = event.data
 
         switch (type) {
-          case 'aircraft-update':
-            for (const callback of aircraftCallbacks) {
-              callback(payload as SerializedAircraftState[])
-            }
-            break
+          // NOTE: 'aircraft-update' removed - aircraft data now comes from useBroadcastAircraft
 
           case 'settings-update':
             for (const callback of settingsCallbacks) {
@@ -82,6 +82,12 @@ function getSharedWorkerConnection(): { worker: SharedWorker; port: MessagePort 
           case 'cesium-token':
             for (const callback of tokenCallbacks) {
               callback(payload as string)
+            }
+            break
+
+          case 'imagery-update':
+            for (const callback of imageryCallbacks) {
+              callback(payload as SerializedImagery)
             }
             break
 
@@ -128,16 +134,17 @@ function postToWorker(message: SharedWorkerInboundMessage) {
 
 /**
  * State provided to inset consumers
+ * NOTE: Aircraft data comes from useBroadcastAircraft hook, not here
  */
 export interface SharedWorkerConsumerState {
-  /** Interpolated aircraft states from main app */
-  aircraft: Map<string, SerializedAircraftState>
   /** Settings snapshot from main app */
   settings: SerializedSettings | null
   /** Weather data from main app */
   weather: SerializedWeather | null
   /** Cesium Ion token from main app */
   cesiumToken: string | null
+  /** Imagery provider settings from main app */
+  imagery: SerializedImagery | null
   /** Airport data from main app */
   airport: SerializedAirport | null
   /** Whether connected to SharedWorker */
@@ -150,13 +157,13 @@ export interface SharedWorkerConsumerState {
  * Hook for inset iframes to consume data from SharedWorker
  *
  * @param viewportId - Unique ID for this inset viewport
- * @returns Consumer state with aircraft, settings, weather, and cesium token
+ * @returns Consumer state with settings, weather, and cesium token
  */
 export function useSharedWorkerConsumer(viewportId: string): SharedWorkerConsumerState {
-  const [aircraft, setAircraft] = useState<Map<string, SerializedAircraftState>>(new Map())
   const [settings, setSettings] = useState<SerializedSettings | null>(null)
   const [weather, setWeather] = useState<SerializedWeather | null>(null)
   const [cesiumToken, setCesiumToken] = useState<string | null>(null)
+  const [imagery, setImagery] = useState<SerializedImagery | null>(null)
   const [airport, setAirport] = useState<SerializedAirport | null>(null)
   const [connected, setConnected] = useState(false)
   const [lastUpdate, setLastUpdate] = useState(0)
@@ -168,6 +175,38 @@ export function useSharedWorkerConsumer(viewportId: string): SharedWorkerConsume
   useEffect(() => {
     consumerInstanceCount++
 
+    // Set up callbacks FIRST, before connecting
+    // This ensures callbacks are registered before any messages arrive from the SharedWorker
+    // (e.g., cached data sent immediately on registration)
+    const handleSettings = (data: SerializedSettings) => {
+      setSettings(data)
+      setLastUpdate(Date.now())
+    }
+
+    const handleWeather = (data: SerializedWeather) => {
+      setWeather(data)
+      setLastUpdate(Date.now())
+    }
+
+    const handleToken = (token: string) => {
+      setCesiumToken(token)
+    }
+
+    const handleImagery = (data: SerializedImagery) => {
+      setImagery(data)
+    }
+
+    const handleAirport = (data: SerializedAirport | null) => {
+      setAirport(data)
+    }
+
+    settingsCallbacks.add(handleSettings)
+    weatherCallbacks.add(handleWeather)
+    tokenCallbacks.add(handleToken)
+    imageryCallbacks.add(handleImagery)
+    airportCallbacks.add(handleAirport)
+
+    // Now connect to the SharedWorker
     const worker = getSharedWorkerConnection()
     if (!worker) {
       console.error('[SharedWorkerConsumer] Could not connect to SharedWorker')
@@ -177,6 +216,7 @@ export function useSharedWorkerConsumer(viewportId: string): SharedWorkerConsume
     setConnected(true)
 
     // Register this inset with the worker
+    // The SharedWorker will send cached data (including token) in response
     if (!registeredRef.current) {
       postToWorker({
         type: 'register-inset',
@@ -186,46 +226,14 @@ export function useSharedWorkerConsumer(viewportId: string): SharedWorkerConsume
       registeredRef.current = true
     }
 
-    // Set up callbacks
-    const handleAircraft = (data: SerializedAircraftState[]) => {
-      const newMap = new Map<string, SerializedAircraftState>()
-      for (const ac of data) {
-        newMap.set(ac.callsign, ac)
-      }
-      setAircraft(newMap)
-      setLastUpdate(Date.now())
-    }
-
-    const handleSettings = (data: SerializedSettings) => {
-      setSettings(data)
-    }
-
-    const handleWeather = (data: SerializedWeather) => {
-      setWeather(data)
-    }
-
-    const handleToken = (token: string) => {
-      setCesiumToken(token)
-    }
-
-    const handleAirport = (data: SerializedAirport | null) => {
-      setAirport(data)
-    }
-
-    aircraftCallbacks.add(handleAircraft)
-    settingsCallbacks.add(handleSettings)
-    weatherCallbacks.add(handleWeather)
-    tokenCallbacks.add(handleToken)
-    airportCallbacks.add(handleAirport)
-
     return () => {
       consumerInstanceCount--
 
       // Remove callbacks
-      aircraftCallbacks.delete(handleAircraft)
       settingsCallbacks.delete(handleSettings)
       weatherCallbacks.delete(handleWeather)
       tokenCallbacks.delete(handleToken)
+      imageryCallbacks.delete(handleImagery)
       airportCallbacks.delete(handleAirport)
 
       // Unregister from worker
@@ -248,10 +256,10 @@ export function useSharedWorkerConsumer(viewportId: string): SharedWorkerConsume
   }, [viewportId])
 
   return {
-    aircraft,
     settings,
     weather,
     cesiumToken,
+    imagery,
     airport,
     connected,
     lastUpdate

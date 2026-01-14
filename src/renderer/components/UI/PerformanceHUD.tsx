@@ -27,22 +27,26 @@ export function PerformanceHUD({ visible }: PerformanceHUDProps) {
 
   // Calculate percentages of total frame interval
   const frameTotal = metrics.frameInterval || 1
-  const opsTotal = metrics.totalFrame || 1
 
-  const cesiumRenderPct = ((metrics.cesiumRender / frameTotal) * 100).toFixed(1)
+  // Our work time breakdown
   const operationsPct = ((metrics.totalFrame / frameTotal) * 100).toFixed(1)
+  const idlePct = ((metrics.idleTime / frameTotal) * 100).toFixed(1)
 
+  // Individual component percentages of operations
+  const opsTotal = metrics.totalFrame || 1
   const interpolationPct = ((metrics.interpolation / opsTotal) * 100).toFixed(1)
   const aircraftUpdatePct = ((metrics.aircraftUpdate / opsTotal) * 100).toFixed(1)
   const babylonSyncPct = ((metrics.babylonSync / opsTotal) * 100).toFixed(1)
   const babylonRenderPct = ((metrics.babylonRender / opsTotal) * 100).toFixed(1)
+  const cesiumRenderPct = ((metrics.cesiumRender / opsTotal) * 100).toFixed(1)
+  const unaccountedPct = ((metrics.unaccountedTime / opsTotal) * 100).toFixed(1)
 
   // Color code based on performance
   const fpsColor = metrics.fps >= 55 ? '#0f0' : metrics.fps >= 30 ? '#ff0' : '#f00'
   const frameColor = metrics.totalFrame <= 16.67 ? '#0f0' : metrics.totalFrame <= 33.33 ? '#ff0' : '#f00'
 
-  // Frame interval (time between frames)
-  const frameInterval = metrics.fps > 0 ? 1000 / metrics.fps : 0
+  // Frame interval comes directly from metrics now
+  const frameInterval = metrics.frameInterval
 
   return (
     <div className="performance-hud">
@@ -62,22 +66,93 @@ export function PerformanceHUD({ visible }: PerformanceHUDProps) {
         </span>
       </div>
 
+      <div className="performance-divider" />
+
+      {/* Frame breakdown - these should add up to frame interval */}
       <div className="performance-row">
-        <span className="performance-label">Operations:</span>
+        <span className="performance-label">Work Time:</span>
         <span className="performance-value" style={{ color: frameColor }}>
           {formatMs(metrics.totalFrame)}ms
+          <span className="performance-pct">({operationsPct}%)</span>
+        </span>
+      </div>
+
+      <div className="performance-row">
+        <span className="performance-label">Idle/VSync:</span>
+        <span className="performance-value">
+          {formatMs(metrics.idleTime)}ms
+          <span className="performance-pct">({idlePct}%)</span>
         </span>
       </div>
 
       <div className="performance-divider" />
 
+      {/* Work breakdown - these should add up to Work Time */}
       <div className="performance-row">
-        <span className="performance-label">Cesium Render:</span>
+        <span className="performance-label">  Cesium:</span>
         <span className="performance-value">
           {formatMs(metrics.cesiumRender)}ms
-          <span className="performance-pct">({cesiumRenderPct}% frame)</span>
+          <span className="performance-pct">({cesiumRenderPct}%)</span>
         </span>
       </div>
+
+      <div className="performance-row">
+        <span className="performance-label">    Update:</span>
+        <span className="performance-value" style={{ color: '#888' }}>
+          {formatMs(metrics.cesiumUpdate)}ms
+        </span>
+      </div>
+
+      <div className="performance-row">
+        <span className="performance-label">    Draw:</span>
+        <span className="performance-value" style={{ color: '#888' }}>
+          {formatMs(metrics.cesiumDraw)}ms
+        </span>
+      </div>
+
+      <div className="performance-row">
+        <span className="performance-label">  Interpolation:</span>
+        <span className="performance-value">
+          {formatMs(metrics.interpolation)}ms
+          <span className="performance-pct">({interpolationPct}%)</span>
+        </span>
+      </div>
+
+      <div className="performance-row">
+        <span className="performance-label">  Aircraft:</span>
+        <span className="performance-value">
+          {formatMs(metrics.aircraftUpdate)}ms
+          <span className="performance-pct">({aircraftUpdatePct}%)</span>
+        </span>
+      </div>
+
+      <div className="performance-row">
+        <span className="performance-label">  Babylon Sync:</span>
+        <span className="performance-value">
+          {formatMs(metrics.babylonSync)}ms
+          <span className="performance-pct">({babylonSyncPct}%)</span>
+        </span>
+      </div>
+
+      <div className="performance-row">
+        <span className="performance-label">  Babylon Render:</span>
+        <span className="performance-value">
+          {formatMs(metrics.babylonRender)}ms
+          <span className="performance-pct">({babylonRenderPct}%)</span>
+        </span>
+      </div>
+
+      {metrics.unaccountedTime > 0.5 && (
+        <div className="performance-row">
+          <span className="performance-label">  Other:</span>
+          <span className="performance-value" style={{ color: '#ff0' }}>
+            {formatMs(metrics.unaccountedTime)}ms
+            <span className="performance-pct">({unaccountedPct}%)</span>
+          </span>
+        </div>
+      )}
+
+      <div className="performance-divider" />
 
       <div className="performance-row">
         <span className="performance-label">  Primitives:</span>
@@ -94,50 +169,8 @@ export function PerformanceHUD({ visible }: PerformanceHUDProps) {
         </span>
       </div>
 
-      <div className="performance-row">
-        <span className="performance-label">Our Operations:</span>
-        <span className="performance-value">
-          {formatMs(metrics.totalFrame)}ms
-          <span className="performance-pct">({operationsPct}% frame)</span>
-        </span>
-      </div>
-
-      <div className="performance-divider" />
-
-      <div className="performance-row">
-        <span className="performance-label">  Interpolation:</span>
-        <span className="performance-value">
-          {formatMs(metrics.interpolation)}ms
-          <span className="performance-pct">({interpolationPct}% ops)</span>
-        </span>
-      </div>
-
-      <div className="performance-row">
-        <span className="performance-label">  Aircraft Update:</span>
-        <span className="performance-value">
-          {formatMs(metrics.aircraftUpdate)}ms
-          <span className="performance-pct">({aircraftUpdatePct}% ops)</span>
-        </span>
-      </div>
-
-      <div className="performance-row">
-        <span className="performance-label">  Babylon Sync:</span>
-        <span className="performance-value">
-          {formatMs(metrics.babylonSync)}ms
-          <span className="performance-pct">({babylonSyncPct}% ops)</span>
-        </span>
-      </div>
-
-      <div className="performance-row">
-        <span className="performance-label">  Babylon Render:</span>
-        <span className="performance-value">
-          {formatMs(metrics.babylonRender)}ms
-          <span className="performance-pct">({babylonRenderPct}% ops)</span>
-        </span>
-      </div>
-
       <div className="performance-footer">
-        Target: 60 FPS (16.67ms interval, &lt;16ms ops)
+        Target: 60 FPS (16.67ms interval)
       </div>
     </div>
   )

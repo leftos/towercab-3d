@@ -330,7 +330,9 @@ export const useViewportStore = create<ViewportStore>()(
 
           setActiveViewport: (id) => {
             const state = get()
-            if (state.viewports.some(v => v.id === id)) {
+            // Only update if viewport exists AND is not already active
+            // This prevents unnecessary re-renders on repeated clicks
+            if (state.activeViewportId !== id && state.viewports.some(v => v.id === id)) {
               set({ activeViewportId: id })
             }
           },

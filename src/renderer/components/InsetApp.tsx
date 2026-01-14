@@ -15,6 +15,7 @@
 
 import { useEffect, useCallback, useState, useRef } from 'react'
 import { useSharedWorkerConsumer, sendCameraUpdate } from '../hooks/useSharedWorkerConsumer'
+import { useBroadcastAircraft } from '../hooks/useBroadcastAircraft'
 import { useInsetStoreSync } from '../hooks/useInsetStoreSync'
 import { useViewportStore } from '../stores/viewportStore'
 import CesiumViewer from './CesiumViewer/CesiumViewer'
@@ -50,24 +51,29 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
   // Only process camera input when activated
   const [isActivatedByParent, setIsActivatedByParent] = useState(false)
 
-  // Get data from SharedWorker
+  // Get settings/weather/token/airport/imagery from SharedWorker (non-aircraft data)
   const {
-    aircraft,
     settings,
     weather,
     cesiumToken,
+    imagery,
     airport,
     connected,
     lastUpdate
   } = useSharedWorkerConsumer(viewportId)
 
+  // Get aircraft data from broadcast service (delta-compressed, rate-controlled)
+  const broadcastState = useBroadcastAircraft()
+
   // Sync SharedWorker data to local stores
+  // Aircraft data comes from the broadcast service with delta compression
   const { isReady: storesReady } = useInsetStoreSync({
     settings,
     weather,
     cesiumToken,
+    imagery,
     airport,
-    aircraft,
+    aircraft: broadcastState.aircraft,
     lastUpdate
   })
 

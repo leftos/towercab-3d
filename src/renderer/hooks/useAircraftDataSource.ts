@@ -164,29 +164,29 @@ function filterToMatchCallsigns(
  * @returns AircraftDataSource with current/previous states and timing info
  */
 export function getAircraftDataSource(): AircraftDataSource {
-  // INSET MODE: Use pre-interpolated data from SharedWorker
-  // Insets receive already-interpolated positions at ~30Hz from the main app
+  // INSET MODE: Use pre-interpolated data from broadcast service
+  // Insets receive already-interpolated positions via delta-compressed broadcasts
   if (isInsetContext()) {
     const { aircraft, timestamp } = getInsetAircraftData()
 
-    // Convert SerializedAircraftState to AircraftState
-    // Use INTERPOLATED positions for smooth movement (already calculated at 30Hz by main app)
+    // Convert InterpolatedAircraftState to AircraftState
+    // Use INTERPOLATED positions for smooth movement (already calculated by main app)
     const aircraftStates = new Map<string, AircraftState>()
     for (const [callsign, state] of aircraft) {
       aircraftStates.set(callsign, {
         callsign: state.callsign,
-        cid: state.cid,
+        cid: state.cid ?? 0,
         // Use interpolated positions for smooth movement
         latitude: state.interpolatedLatitude,
         longitude: state.interpolatedLongitude,
         altitude: state.interpolatedAltitude,
         groundspeed: state.interpolatedGroundspeed,
         heading: state.interpolatedHeading,
-        transponder: state.transponder,
+        transponder: state.transponder ?? '',
         aircraftType: state.aircraftType,
         departure: state.departure,
         arrival: state.arrival,
-        timestamp: state.timestamp
+        timestamp: state.timestamp ?? Date.now()
       })
     }
 
@@ -196,7 +196,7 @@ export function getAircraftDataSource(): AircraftDataSource {
       aircraftStates,
       previousStates: aircraftStates, // Same - no interpolation needed
       timestamp: timestamp || Date.now(),
-      updateInterval: 33, // ~30Hz refresh from SharedWorker
+      updateInterval: 33, // ~30Hz refresh from broadcast service
       playbackMode: 'live'
     }
   }

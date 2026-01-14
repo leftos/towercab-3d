@@ -3,16 +3,19 @@
  *
  * This hook:
  * - Initializes the SharedWorker connection
- * - Pushes interpolated aircraft state on each frame
  * - Pushes settings changes (debounced)
  * - Pushes weather updates
  * - Pushes Cesium Ion token on init
  *
+ * NOTE: Aircraft broadcasting is now handled by AircraftBroadcastService
+ * with delta compression and consumer-driven rate control.
+ *
  * @see useSharedWorkerConsumer - Consumer hook for inset iframes
  * @see shared-data.worker.ts - SharedWorker implementation
+ * @see AircraftBroadcastService - Delta-compressed aircraft broadcasting
  */
 
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect } from 'react'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useGlobalSettingsStore } from '../stores/globalSettingsStore'
 import { useWeatherStore } from '../stores/weatherStore'
@@ -21,12 +24,11 @@ import { useAirportStore } from '../stores/airportStore'
 import type {
   SharedWorkerInboundMessage,
   SharedWorkerOutboundMessage,
-  SerializedAircraftState,
   SerializedSettings,
   SerializedWeather,
-  SerializedAirport
+  SerializedAirport,
+  SerializedImagery
 } from '../types/shared-worker'
-import type { InterpolatedAircraftState } from '../types/vatsim'
 
 // Singleton SharedWorker instance (shared across all hook calls)
 let sharedWorker: SharedWorker | null = null
@@ -72,50 +74,6 @@ function getSharedWorker(): { worker: SharedWorker; port: MessagePort } | null {
   return sharedWorker && sharedWorkerPort
     ? { worker: sharedWorker, port: sharedWorkerPort }
     : null
-}
-
-/**
- * Serialize interpolated aircraft states for SharedWorker transfer
- */
-function serializeAircraftStates(
-  states: Map<string, InterpolatedAircraftState>
-): SerializedAircraftState[] {
-  const serialized: SerializedAircraftState[] = []
-
-  for (const [, aircraft] of states) {
-    serialized.push({
-      callsign: aircraft.callsign,
-      cid: aircraft.cid,
-      latitude: aircraft.latitude,
-      longitude: aircraft.longitude,
-      altitude: aircraft.altitude,
-      groundspeed: aircraft.groundspeed,
-      heading: aircraft.heading,
-      groundTrack: aircraft.groundTrack ?? null,
-      transponder: aircraft.transponder,
-      aircraftType: aircraft.aircraftType ?? '',
-      departure: aircraft.departure ?? '',
-      arrival: aircraft.arrival ?? '',
-      timestamp: aircraft.timestamp,
-
-      interpolatedLatitude: aircraft.interpolatedLatitude,
-      interpolatedLongitude: aircraft.interpolatedLongitude,
-      interpolatedAltitude: aircraft.interpolatedAltitude,
-      interpolatedHeading: aircraft.interpolatedHeading,
-      interpolatedGroundspeed: aircraft.interpolatedGroundspeed,
-      interpolatedPitch: aircraft.interpolatedPitch,
-      interpolatedRoll: aircraft.interpolatedRoll,
-
-      verticalRate: aircraft.verticalRate,
-      turnRate: aircraft.turnRate,
-      acceleration: aircraft.acceleration,
-      track: aircraft.track,
-
-      isInterpolated: aircraft.isInterpolated
-    })
-  }
-
-  return serialized
 }
 
 /**
@@ -174,6 +132,21 @@ function serializeAirport(): SerializedAirport | null {
 }
 
 /**
+ * Serialize imagery settings for SharedWorker transfer
+ */
+function serializeImagery(): SerializedImagery {
+  const globalSettings = useGlobalSettingsStore.getState()
+  const imagery = globalSettings.imagery
+
+  return {
+    provider: imagery.provider,
+    googleMapsApiKey: imagery.googleMapsApiKey,
+    cesiumAdjustments: imagery.cesiumAdjustments,
+    googleAdjustments: imagery.googleAdjustments
+  }
+}
+
+/**
  * Post a message to the SharedWorker
  */
 function postToWorker(message: SharedWorkerInboundMessage) {
@@ -194,16 +167,12 @@ function postToWorker(message: SharedWorkerInboundMessage) {
  * It sets up the SharedWorker connection and subscribes to store changes
  * to push updates to connected insets.
  *
- * @param interpolatedAircraft - Map of interpolated aircraft states (from useAircraftInterpolation)
+ * NOTE: Aircraft broadcasting is now handled separately by AircraftBroadcastService
+ * with delta compression and consumer-driven rate control.
+ *
  * @param enabled - Whether to enable SharedWorker communication (default: true)
  */
-export function useSharedWorkerProvider(
-  interpolatedAircraft: Map<string, InterpolatedAircraftState> | null,
-  enabled: boolean = true
-) {
-  const lastAircraftCountRef = useRef(0)
-  const lastPushTimeRef = useRef(0)
-  const animationFrameRef = useRef<number | null>(null)
+export function useSharedWorkerProvider(enabled: boolean = true) {
 
   // Get inset viewport count to determine if we should push data
   const insetCount = useViewportStore(state => state.viewports.length - 1)
@@ -237,6 +206,13 @@ export function useSharedWorkerProvider(
         source: 'main'
       })
     }
+
+    // Push initial imagery settings
+    postToWorker({
+      type: 'imagery-update',
+      payload: serializeImagery(),
+      source: 'main'
+    })
 
     // Push initial settings
     postToWorker({
@@ -298,6 +274,15 @@ export function useSharedWorkerProvider(
         postToWorker({
           type: 'cesium-token',
           payload: state.cesiumIonToken,
+          source: 'main'
+        })
+      }
+
+      // Push imagery settings changes
+      if (state.imagery !== prevState.imagery) {
+        postToWorker({
+          type: 'imagery-update',
+          payload: serializeImagery(),
           source: 'main'
         })
       }
@@ -365,50 +350,9 @@ export function useSharedWorkerProvider(
     }
   }, [enabled, hasInsets])
 
-  // Push aircraft updates on animation frame
-  const pushAircraftUpdate = useCallback(() => {
-    if (!enabled || !hasInsets || !interpolatedAircraft) {
-      animationFrameRef.current = requestAnimationFrame(pushAircraftUpdate)
-      return
-    }
-
-    const now = performance.now()
-    const aircraftCount = interpolatedAircraft.size
-
-    // Throttle to ~30 Hz to reduce SharedWorker overhead
-    // Only push if aircraft count changed or 33ms elapsed
-    const shouldPush =
-      aircraftCount !== lastAircraftCountRef.current ||
-      now - lastPushTimeRef.current > 33
-
-    if (shouldPush && aircraftCount > 0) {
-      postToWorker({
-        type: 'aircraft-update',
-        payload: serializeAircraftStates(interpolatedAircraft),
-        source: 'main'
-      })
-      lastAircraftCountRef.current = aircraftCount
-      lastPushTimeRef.current = now
-    }
-
-    animationFrameRef.current = requestAnimationFrame(pushAircraftUpdate)
-  }, [enabled, hasInsets, interpolatedAircraft])
-
-  // Start aircraft push loop
-  useEffect(() => {
-    if (!enabled || !hasInsets) {
-      return
-    }
-
-    animationFrameRef.current = requestAnimationFrame(pushAircraftUpdate)
-
-    return () => {
-      if (animationFrameRef.current !== null) {
-        cancelAnimationFrame(animationFrameRef.current)
-        animationFrameRef.current = null
-      }
-    }
-  }, [enabled, hasInsets, pushAircraftUpdate])
+  // NOTE: Aircraft updates are now handled by AircraftBroadcastService
+  // with delta compression and consumer-driven rate control.
+  // See: src/renderer/services/AircraftBroadcastService.ts
 }
 
 export default useSharedWorkerProvider

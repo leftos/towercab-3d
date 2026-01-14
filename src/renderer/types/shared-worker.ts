@@ -14,7 +14,9 @@ import type {
   WeatherSettings,
   MemorySettings,
   AircraftSettings,
-  UISettings
+  UISettings,
+  ImageryProviderType,
+  ImageryAdjustments
 } from './settings'
 import type { AircraftState } from './vatsim'
 
@@ -26,6 +28,7 @@ export type SharedWorkerMessageType =
   | 'settings-update'
   | 'weather-update'
   | 'cesium-token'
+  | 'imagery-update'
   | 'airport-update'
   | 'viewport-camera'
   | 'register-inset'
@@ -116,6 +119,21 @@ export interface SerializedWeather {
     coverage: number
     type: string
   }>
+}
+
+/**
+ * Imagery settings sent to insets
+ * Allows insets to use the same imagery provider as the main app
+ */
+export interface SerializedImagery {
+  /** Selected imagery provider ('cesium' or 'google') */
+  provider: ImageryProviderType
+  /** Google Maps API key (required when provider is 'google') */
+  googleMapsApiKey: string
+  /** Color adjustments for Cesium Ion imagery */
+  cesiumAdjustments: ImageryAdjustments
+  /** Color adjustments for Google Maps imagery */
+  googleAdjustments: ImageryAdjustments
 }
 
 /**

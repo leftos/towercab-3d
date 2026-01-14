@@ -232,4 +232,24 @@ export interface InterpolatedAircraftState extends AircraftState {
   track: number
   // True if we have previous state data for interpolation, false if showing raw data
   isInterpolated: boolean
+
+  // Model info from broadcast (populated in insets, undefined in main app)
+  // When present, useAircraftModels uses these instead of calling aircraftModelService
+  /**
+   * Model URL (file path to GLB). Populated from broadcast for insets.
+   * In main app, this is undefined and aircraftModelService is used instead.
+   */
+  broadcastModelUrl?: string | null
+  /**
+   * Model scale [x, y, z]. Populated from broadcast for insets.
+   */
+  broadcastModelScale?: [number, number, number] | null
+  /**
+   * Model rotation offset in degrees. Populated from broadcast for insets.
+   */
+  broadcastRotationOffset?: number | null
+  /**
+   * Whether this is an FSLTL/VMR model (for color blend logic).
+   */
+  broadcastIsFsltl?: boolean | null
 }

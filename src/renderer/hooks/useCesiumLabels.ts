@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useRef } from 'react'
 import * as Cesium from 'cesium'
 import type { InterpolatedAircraftState } from '../types/vatsim'
 import type { ViewMode } from '../types'
@@ -496,14 +496,25 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
     isOrbitModeWithoutAirport
   ])
 
+  // Keep callback in a ref so the listener doesn't need to be re-attached when dependencies change
+  // This prevents a brief frame with no listener during re-attachment, which could cause labels to "flash"
+  const updateLabelsRef = useRef(updateLabels)
+  updateLabelsRef.current = updateLabels
+
   // Set up render loop to update labels every frame
   useEffect(() => {
     if (!viewer) return
 
-    const removeListener = viewer.scene.postRender.addEventListener(updateLabels)
+    // Use a wrapper that calls the ref, so the same listener stays attached
+    // even when the underlying callback changes
+    const onPostRender = () => {
+      updateLabelsRef.current()
+    }
+
+    const removeListener = viewer.scene.postRender.addEventListener(onPostRender)
 
     return () => {
       removeListener()
     }
-  }, [viewer, updateLabels])
+  }, [viewer]) // Only depends on viewer, not updateLabels
 }
