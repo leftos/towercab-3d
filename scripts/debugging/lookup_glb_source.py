@@ -20,7 +20,6 @@ import argparse
 import json
 import struct
 import sys
-import re
 from pathlib import Path
 
 
@@ -252,13 +251,13 @@ def read_glb_gltf(glb_path: Path) -> dict | None:
             # Read header
             magic, version, length = struct.unpack('<4sII', f.read(12))
             if magic != b'glTF':
-                print(f"Error: Not a valid GLB file")
+                print("Error: Not a valid GLB file")
                 return None
 
             # Read JSON chunk
             json_len, json_type = struct.unpack('<II', f.read(8))
             if json_type != 0x4E4F534A:  # "JSON"
-                print(f"Error: First chunk is not JSON")
+                print("Error: First chunk is not JSON")
                 return None
 
             json_bytes = f.read(json_len)
@@ -465,7 +464,7 @@ def main():
 
     # Also show the source GLTF's node structure if requested
     if result['gltf_path'] and result['gltf_path'].exists():
-        print(f"\n=== Source GLTF ===")
+        print("\n=== Source GLTF ===")
         print(f"Path: {result['gltf_path']}")
 
         # Read and show basic info

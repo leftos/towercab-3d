@@ -19,11 +19,10 @@ Options:
 import argparse
 import gzip
 import json
-import os
 import sys
 import time
 from pathlib import Path
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from typing import Optional
 
 # Coordinate precision (6 decimals = ~10cm accuracy, sufficient for our needs)

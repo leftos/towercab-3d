@@ -284,7 +284,7 @@ def main():
         path.write_text(json.dumps(position, indent=2))
         stats['written'] += 1
 
-    print(f"\nResults:")
+    print("\nResults:")
     print(f"  Written: {stats['written']}")
     print(f"  Skipped (existing): {stats['skipped']}")
     print(f"  Runway-based heading: {stats['runway_heading']}")

@@ -168,7 +168,7 @@ def analyze_animation(gltf: dict, bin_data: bytes, anim_index: int, specific_ani
 
         # Show first, middle, and last keyframes
         if target_path == 'rotation':
-            print(f"\n  Frame    Time      Quaternion [x, y, z, w]              Euler (r, p, y)           Angle from Identity")
+            print("\n  Frame    Time      Quaternion [x, y, z, w]              Euler (r, p, y)           Angle from Identity")
             print(f"  {'-'*100}")
 
             # Find frame closest to identity
@@ -197,7 +197,7 @@ def analyze_animation(gltf: dict, bin_data: bytes, anim_index: int, specific_ani
                 print(f"  {i:5d}    {t:7.3f}   [{v[0]:7.4f}, {v[1]:7.4f}, {v[2]:7.4f}, {v[3]:7.4f}]   ({euler[0]:7.2f}, {euler[1]:7.2f}, {euler[2]:7.2f})   {angle:7.2f} deg{marker}")
 
         else:
-            print(f"\n  Frame    Time      Value")
+            print("\n  Frame    Time      Value")
             print(f"  {'-'*50}")
             indices_to_show = [0, len(values) // 2, len(values) - 1]
             for i in indices_to_show:

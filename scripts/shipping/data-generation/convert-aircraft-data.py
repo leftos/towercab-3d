@@ -11,7 +11,6 @@ Data source: https://www.faa.gov/airports/engineering/aircraft_char_database
 """
 
 import json
-import os
 import urllib.request
 from pathlib import Path
 
@@ -105,7 +104,7 @@ def main():
                     icao_col = col
                     break
 
-        print(f"\nDetected columns:")
+        print("\nDetected columns:")
         print(f"  ICAO: {icao_col}")
         print(f"  Wingspan (with winglets): {wingspan_with_winglets_col}")
         print(f"  Wingspan (without winglets): {wingspan_without_winglets_col}")
