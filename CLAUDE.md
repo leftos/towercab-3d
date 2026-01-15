@@ -34,6 +34,14 @@ npm run vite:dev      # Frontend only (internal, used by Tauri)
 npm run vite:build    # Build frontend only (internal, used by Tauri)
 ```
 
+### Rust Documentation
+
+```bash
+cd src-tauri && cargo doc --open   # Generate and view Rust API docs
+```
+
+Generated docs are output to `src-tauri/target/doc/`. These provide detailed documentation for the Tauri backend modules (msfs, server, settings, etc.). Consult these when working on Rust code.
+
 ### vNAS Integration
 
 The optional `vnas` feature enables 1Hz real-time aircraft updates via the private `towercab-3d-vnas` crate. Without it, the app uses 15-second VATSIM HTTP polling.
