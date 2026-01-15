@@ -889,6 +889,14 @@ export interface UISettings {
    * 0 means auto height (fills available space up to max-height).
    */
   aircraftPanelHeight: number
+
+  /**
+   * Settings modal position offset from center (default: { x: 0, y: 0 })
+   *
+   * The modal can be dragged by its header, and the position is persisted.
+   * Values are pixel offsets from the centered position.
+   */
+  settingsModalPosition: { x: number; y: number }
 }
 
 /**
@@ -1808,7 +1816,8 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     askToContributePositions: true,
     deviceOptimizationPromptDismissed: false,
     aircraftPanelWidth: 280,
-    aircraftPanelHeight: 0
+    aircraftPanelHeight: 0,
+    settingsModalPosition: { x: 0, y: 0 }
   },
   fsltl: {
     sourcePath: null,
