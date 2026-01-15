@@ -43,10 +43,12 @@ export interface SourceModelInfo {
   gltfPath: string
   /** Paths to texture directories */
   textureDirs: string[]
-  /** Aircraft type code (e.g., "B738") */
+  /** Aircraft type code (e.g., "B738") - ICAO type designator */
   aircraftType: string
-  /** Airline code (e.g., "AAL") or null for generic */
+  /** Airline code (e.g., "AAL"), "ZZZZ" for generic white livery, or null for private aircraft */
   airlineCode: string | null
+  /** Aircraft registration (e.g., "N100VE") - for private aircraft matching by exact callsign */
+  atcId: string | null
 }
 
 /** Result of a model conversion */
@@ -580,6 +582,13 @@ class MSFSModelConversionServiceClass {
   /**
    * Find model by aircraft type and airline code
    * Used for model matching when exact model name is not known
+   *
+   * Matching logic:
+   * 1. Exact airline match: aircraftType + airlineCode
+   * 2. Generic fallback: aircraftType + airlineCode="ZZZZ" (guaranteed white livery)
+   *
+   * Note: Models with null airlineCode are private aircraft (e.g., N100VE) and should
+   * only be matched via findModelByCallsign() with exact registration match.
    */
   findModelByTypeAndAirline(
     aircraftType: string,
@@ -603,9 +612,46 @@ class MSFSModelConversionServiceClass {
         }
       }
 
-      // Fall back to generic model (no airline)
+      // Fall back to generic ZZZZ model (guaranteed white livery)
+      // Do NOT use models with null airlineCode - those are private aircraft
       for (const model of models.values()) {
-        if (model.aircraftType === aircraftType && !model.airlineCode) {
+        if (model.aircraftType === aircraftType && model.airlineCode === 'ZZZZ') {
+          return model
+        }
+      }
+    }
+
+    return null
+  }
+
+  /**
+   * Find model by aircraft type and exact callsign (for private aircraft)
+   * Used when callsign matches aircraft registration (atc_id)
+   *
+   * Private aircraft (models with null airlineCode) should only be matched
+   * when the callsign exactly matches the atc_id (e.g., "N100VE")
+   */
+  findModelByCallsign(
+    aircraftType: string,
+    callsign: string
+  ): SourceModelInfo | null {
+    const settings = this.getSettings()
+    const callsignUpper = callsign.toUpperCase()
+
+    // Search in priority order
+    for (const source of settings.priority) {
+      const models = source === 'fsltl' ? this.fsltlModels : this.aigModels
+      const enabled = source === 'fsltl' ? settings.enableFsltl : settings.enableAig
+
+      if (!enabled) continue
+
+      // Find private aircraft (null airlineCode) where atc_id matches callsign exactly
+      for (const model of models.values()) {
+        if (
+          model.aircraftType === aircraftType &&
+          model.airlineCode === null &&
+          model.atcId?.toUpperCase() === callsignUpper
+        ) {
           return model
         }
       }
@@ -893,14 +939,17 @@ class MSFSModelConversionServiceClass {
         textureScale: settings.textureScale,
         // Pass the specific livery title to convert only this livery
         liveryTitle: sourceInfo.modelName,
+        // Pass explicit GLTF path (critical for AIG shared models where GLTF
+        // is in a different folder than the livery aircraft.cfg)
+        gltfPath: sourceInfo.gltfPath,
         // Pass explicit texture directories from indexing (critical for AIG models
         // where multiple liveries share the same base model folder)
         textureDirs: sourceInfo.textureDirs
       })
 
-      console.log(`[MSFSConversion] Converted ${modelKey} in ${result.durationMs}ms`)
-
       if (result.success && result.outputPath) {
+        console.log(`[MSFSConversion] Converted ${modelKey} in ${result.durationMs}ms`)
+
         // Get file size from disk
         const fileSize = await invoke<number>('get_file_size', { path: result.outputPath })
 
@@ -915,8 +964,8 @@ class MSFSModelConversionServiceClass {
       } else {
         // Track as failed so we skip it on subsequent requests
         this.failedConversions.add(modelKey)
-        console.warn(`[MSFSConversion] Marking ${modelKey} as failed: ${result.error || 'No output file'}`)
-        console.warn(`[MSFSConversion] Output directory: ${outputDir}`)
+        console.warn(`[MSFSConversion] Conversion failed for ${modelKey} (${result.durationMs}ms): ${result.error || 'No output file'}`)
+        console.warn(`[MSFSConversion] Source: ${sourcePath}, Output dir: ${outputDir}`)
         resolve({
           success: false,
           error: result.error || 'Unknown conversion error'

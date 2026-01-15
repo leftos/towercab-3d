@@ -684,56 +684,71 @@ class AircraftModelServiceClass {
       // No source for this alternative - continue to next
     }
 
-    // 2. Try type+airline exact match from indexed models
+    // 2. Try exact callsign match for private aircraft (e.g., N100VE)
+    // Private aircraft have null airlineCode and should only match when callsign === atc_id
+    if (callsign) {
+      const callsignSource = MSFSModelConversionService.findModelByCallsign(aircraftType, callsign)
+      if (callsignSource) {
+        const result = trySourceModel(callsignSource)
+        if (result) {
+          log('2. callsign', `MATCH ${result.matchType} ${callsignSource.modelName}`)
+          return result
+        }
+      } else {
+        log('2. callsign', `no private aircraft match for ${callsign}`)
+      }
+    }
+
+    // 3. Try type+airline exact match from indexed models
     if (airlineCode) {
       const typeAirlineSource = MSFSModelConversionService.findModelByTypeAndAirline(aircraftType, airlineCode)
       if (typeAirlineSource) {
         const result = trySourceModel(typeAirlineSource)
         if (result) {
-          log('2. type+airline', `MATCH ${result.matchType} ${typeAirlineSource.modelName}`)
+          log('3. type+airline', `MATCH ${result.matchType} ${typeAirlineSource.modelName}`)
           return result
         }
       } else {
-        log('2. type+airline', `no match for ${aircraftType}+${airlineCode}`)
+        log('3. type+airline', `no match for ${aircraftType}+${airlineCode}`)
       }
     }
 
-    // 3. Try closest airline model (scaled) - same airline, different but similar type
+    // 4. Try closest airline model (scaled) - same airline, different but similar type
     if (airlineCode) {
       const closestAirline = MSFSModelConversionService.findClosestModelForAirline(aircraftType, airlineCode)
       if (closestAirline) {
         const result = trySourceModel(closestAirline.model, closestAirline.scale)
         if (result) {
-          log('3. closest airline', `MATCH ${result.matchType} ${closestAirline.model.modelName} (dist=${closestAirline.distance.toFixed(3)})`)
+          log('4. closest airline', `MATCH ${result.matchType} ${closestAirline.model.modelName} (dist=${closestAirline.distance.toFixed(3)})`)
           return result
         }
       } else {
-        log('3. closest airline', `no similar model for airline ${airlineCode}`)
+        log('4. closest airline', `no similar model for airline ${airlineCode}`)
       }
     }
 
-    // 4. Try type-only match (base livery)
+    // 5. Try type-only match (ZZZZ generic livery)
     const typeOnlySource = MSFSModelConversionService.findModelByTypeAndAirline(aircraftType, null)
     if (typeOnlySource) {
       const result = trySourceModel(typeOnlySource)
       if (result) {
-        log('4. type-only base', `MATCH ${result.matchType} ${typeOnlySource.modelName}`)
+        log('5. type-only ZZZZ', `MATCH ${result.matchType} ${typeOnlySource.modelName}`)
         return result
       }
     } else {
-      log('4. type-only base', `no base livery for ${aircraftType}`)
+      log('5. type-only ZZZZ', `no ZZZZ generic livery for ${aircraftType}`)
     }
 
-    // 5. Try closest any model (scaled) - any MSFS model close in size
+    // 6. Try closest any model (scaled) - any MSFS model close in size
     const closestAny = MSFSModelConversionService.findClosestModel(aircraftType)
     if (closestAny) {
       const result = trySourceModel(closestAny.model, closestAny.scale)
       if (result) {
-        log('5. closest any', `MATCH ${result.matchType} ${closestAny.model.modelName} (dist=${closestAny.distance.toFixed(3)})`)
+        log('6. closest any', `MATCH ${result.matchType} ${closestAny.model.modelName} (dist=${closestAny.distance.toFixed(3)})`)
         return result
       }
     } else {
-      log('5. closest any', `no similar model found`)
+      log('6. closest any', `no similar model found`)
     }
 
     // No MSFS model available (will fall back to built-in)

@@ -34,6 +34,7 @@ export interface SourceModelInfo {
   textureDirs: string[]
   aircraftType: string
   airlineCode: string | null
+  atcId: string | null
 }
 
 // =============================================================================
@@ -123,6 +124,7 @@ interface AircraftCfgLivery {
   title: string
   textureFolder: string
   icaoAirline: string | null
+  atcId: string | null
 }
 
 /**
@@ -175,6 +177,7 @@ function parseAircraftCfgAllLiveries(aircraftDir: string): AircraftCfgLivery[] {
   let currentTitle: string | null = null
   let currentTexture: string | null = null
   let currentIcaoAirline: string | null = null
+  let currentAtcId: string | null = null
 
   for (const line of content.split('\n')) {
     const trimmed = line.trim()
@@ -187,6 +190,7 @@ function parseAircraftCfgAllLiveries(aircraftDir: string): AircraftCfgLivery[] {
           title: currentTitle,
           textureFolder: currentTexture,
           icaoAirline: currentIcaoAirline,
+          atcId: currentAtcId,
         })
       }
 
@@ -194,6 +198,7 @@ function parseAircraftCfgAllLiveries(aircraftDir: string): AircraftCfgLivery[] {
       currentTitle = null
       currentTexture = inFltsimSection ? '' : null
       currentIcaoAirline = null
+      currentAtcId = null
       continue
     }
 
@@ -228,6 +233,15 @@ function parseAircraftCfgAllLiveries(aircraftDir: string): AircraftCfgLivery[] {
         value = value.trim().replace(/^"|"$/g, '').trim()
         if (value) currentIcaoAirline = value.toUpperCase()
       }
+    } else if (lower.startsWith('atc_id')) {
+      const eqPos = trimmed.indexOf('=')
+      if (eqPos !== -1) {
+        let value = trimmed.slice(eqPos + 1)
+        const semiPos = value.indexOf(';')
+        if (semiPos !== -1) value = value.slice(0, semiPos)
+        value = value.trim().replace(/^"|"$/g, '').trim()
+        if (value) currentAtcId = value.toUpperCase()
+      }
     }
   }
 
@@ -237,6 +251,7 @@ function parseAircraftCfgAllLiveries(aircraftDir: string): AircraftCfgLivery[] {
       title: currentTitle,
       textureFolder: currentTexture,
       icaoAirline: currentIcaoAirline,
+      atcId: currentAtcId,
     })
   }
 
@@ -430,6 +445,7 @@ export function scanMSFSModels(
         textureDirs,
         aircraftType,
         airlineCode,
+        atcId: livery.atcId,
       })
     }
   }

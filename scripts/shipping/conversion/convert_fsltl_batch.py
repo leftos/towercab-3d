@@ -1072,7 +1072,7 @@ def find_gltf_for_aircraft(aircraft_dir: Path) -> tuple[Path | None, Path | None
     return None, None
 
 
-def discover_liveries_in_source(source_path: Path, requested_titles: set[str] | None = None) -> list[dict]:
+def discover_liveries_in_source(source_path: Path, requested_titles: set[str] | None = None, explicit_gltf_path: Path | None = None) -> list[dict]:
     """
     Discover liveries in source path (smart detection).
 
@@ -1087,6 +1087,8 @@ def discover_liveries_in_source(source_path: Path, requested_titles: set[str] | 
     Args:
         source_path: Path to source (traffic base or specific aircraft folder)
         requested_titles: Optional set of livery titles to find. Enables early stopping in parsing.
+        explicit_gltf_path: Optional explicit GLTF path for AIG shared models where the
+                           GLTF is in a different folder than the livery aircraft.cfg
 
     Returns list of dicts with livery information.
     """
@@ -1099,7 +1101,13 @@ def discover_liveries_in_source(source_path: Path, requested_titles: set[str] | 
             return []
 
         # Find GLTF (handles both direct and referenced models)
-        gltf_path, base_model_dir = find_gltf_for_aircraft(source_path)
+        # Use explicit path if provided (for AIG shared models)
+        if explicit_gltf_path and explicit_gltf_path.exists():
+            gltf_path = explicit_gltf_path
+            # Base model dir is two levels up from GLTF: model.xxx/file.gltf -> aircraft folder
+            base_model_dir = explicit_gltf_path.parent.parent
+        else:
+            gltf_path, base_model_dir = find_gltf_for_aircraft(source_path)
 
         if not gltf_path:
             return []
@@ -1312,12 +1320,12 @@ def main():
         print(f"  Python: {sys.version}")
         print(f"  PIL: {Image.__version__ if hasattr(Image, '__version__') else 'OK'}")
         print(f"  NumPy: {np.__version__}")
-        print(f"  Struct: OK")
-        print(f"  Concurrent.futures: OK")
+        print("  Struct: OK")
+        print("  Concurrent.futures: OK")
         # Quick numpy operation test
         arr = np.array([1, 2, 3], dtype=np.float32)
         assert arr.sum() == 6.0, "NumPy operation failed"
-        print(f"  NumPy operations: OK")
+        print("  NumPy operations: OK")
         print("Self-test PASSED: All dependencies working correctly.")
         return 0
 
@@ -1347,6 +1355,8 @@ Examples:
                         help='Texture scaling (default: 1k)')
     parser.add_argument('--liveries', help='Comma-separated list of livery titles to convert. If not specified, converts all liveries.')
     parser.add_argument('--liveries-file', help='Path to file containing livery titles (one per line)')
+    parser.add_argument('--gltf-path', help='Explicit path to GLTF file (for AIG shared models where GLTF is in a different folder)')
+    parser.add_argument('--texture-dirs', help='Comma-separated list of texture directories to use (overrides auto-detection)')
     parser.add_argument('--progress-file', help='Path to write progress JSON')
     parser.add_argument('--workers', type=int, default=0, help='Number of parallel workers (0=auto)')
     parser.add_argument('--log-file', help='Write output to log file instead of console')
@@ -1380,14 +1390,30 @@ Examples:
     else:
         requested_titles = None
 
+    # Parse explicit overrides for AIG shared models (where GLTF is in a different folder)
+    explicit_gltf_path = Path(args.gltf_path) if args.gltf_path else None
+    explicit_texture_dirs = [Path(d.strip()) for d in args.texture_dirs.split(',') if d.strip()] if args.texture_dirs else None
+
     # Discover liveries (auto-detects batch vs on-demand based on source path)
     # Pass requested_titles for early stopping optimization if specified
+    # Pass explicit_gltf_path to allow discovery even when source folder has no GLTF
     print(f"Discovering liveries in {source_path}...")
-    all_liveries = discover_liveries_in_source(source_path, requested_titles)
+    all_liveries = discover_liveries_in_source(source_path, requested_titles, explicit_gltf_path)
 
     if not all_liveries:
         print("ERROR: No liveries found in source directory")
         return 1
+
+    # Apply explicit overrides if provided (for AIG shared models)
+    if explicit_gltf_path or explicit_texture_dirs:
+        for livery in all_liveries:
+            if explicit_gltf_path:
+                livery['gltf_path'] = explicit_gltf_path
+                # Also update base_model_dir to the folder containing the GLTF
+                livery['base_model_dir'] = explicit_gltf_path.parent.parent
+            if explicit_texture_dirs:
+                # Prepend explicit texture dirs (they take priority)
+                livery['texture_dirs'] = explicit_texture_dirs + livery.get('texture_dirs', [])
 
     folder_name = source_path.name
     if folder_name.startswith("FSLTL_") or folder_name.startswith("AIGAIM_"):
@@ -1403,7 +1429,7 @@ Examples:
         # If specific liveries were requested but none found, that's an error
         if not liveries_to_convert:
             not_found = requested_titles - {l['livery_title'] for l in all_liveries}
-            print(f"ERROR: None of the requested liveries were found in source", file=sys.stderr)
+            print("ERROR: None of the requested liveries were found in source", file=sys.stderr)
             print(f"Requested: {requested_titles}", file=sys.stderr)
             if not_found:
                 print(f"Not found: {not_found}", file=sys.stderr)

@@ -431,6 +431,28 @@ describe('Custom Matching Queries', () => {
 
   // Add your custom queries below this line:
   testMatch('B738', 'AFR', 'Air France B737-800')
+  testMatch('CRJ2', 'SCW', 'SkyWest Charter CRJ-200')
+
+  // Investigate CRJ-200 shared model issue
+  it('investigate: CRJ2 models available (shared model test)', () => {
+    const crj2Models = [...fsltlModels, ...aigModels].filter(
+      m => m.aircraftType === 'CRJ2'
+    )
+    console.log(`\n=== CRJ2 Models in Library (${crj2Models.length} total) ===`)
+    for (const m of crj2Models.slice(0, 10)) {
+      console.log(`  - ${m.source}: ${m.modelName}`)
+      console.log(`    Folder: ${m.folderName}`)
+      console.log(`    GLTF: ${m.gltfPath}`)
+    }
+    if (crj2Models.length > 10) {
+      console.log(`  ... and ${crj2Models.length - 10} more`)
+    }
+    if (crj2Models.length === 0) {
+      console.log('  NO CRJ2 MODELS FOUND - this is the AIG shared model bug!')
+      console.log('  CRJ-200 liveries are in AIGAIM_RFSL_CRJ-200 but the GLTF')
+      console.log('  is in AIGAIM_RFSL_CRJ-100/model.200/')
+    }
+  })
 
   // Check what AFR models exist in the library
   it('investigate: AFR models available', () => {
