@@ -26,7 +26,6 @@ import type {
   SerializedAirport,
   SerializedImagery
 } from '../types/shared-worker'
-import type { GlobalDisplaySettings } from '../types/settings'
 // Re-export isInsetContext from tauriApi for backward compatibility
 export { isInsetContext } from '../utils/tauriApi'
 

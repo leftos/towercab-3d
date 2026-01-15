@@ -173,10 +173,9 @@ The bottom bar has two modes, toggled by the button on the far left:
 
 **Left Section:**
 - **Mode Toggle**: Switch to replay controls
-- **Reset View** (Shift+R): Returns camera to default position
 - **View Toggle** (T): Switches between 3D and top-down views
-- **Set Default**: Saves current view as default for this airport
-- **Reset to Default**: Returns to saved default view
+- **Defaults Dropdown**: Contains "Set Default" (saves current view) and "To Default" (returns to saved view)
+- **Look at Rwy Dropdown**: Point camera at any runway threshold with calculated heading and pitch
 - **Global Search**: Opens aircraft search (Ctrl+K)
 - **Camera Info**: Shows current HDG/PIT/FOV (3D) or ALT (top-down)
 

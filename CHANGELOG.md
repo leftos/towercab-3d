@@ -4,25 +4,23 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+## [0.0.33-alpha] - 2026-01-14
+
 ### Added
 - **Look at Runway** - New dropdown button in the controls bar lets you quickly point the camera at any runway threshold. Calculates the correct heading and pitch angle from your tower position to the selected runway end.
-
-### Changed
-- **Reorganized controls bar** - "Set Default" and "To Default" are now in a single "Defaults" dropdown menu. Removed the Reset button to reduce clutter.
-
-### Fixed
-- **3D buildings now render correctly in inset viewports** - Insets now use isolated rendering contexts, fixing a Cesium bug that prevented 3D buildings from appearing in secondary viewports
-
-## [0.0.33-alpha] - 2026-01-11
-
-### Added
+- **Globe view when exiting airport** - Camera now smoothly flies out to a globe view showing Earth from space when leaving an airport, providing a "main menu" experience before the airport selector opens.
 - **Customizable inset viewport graphics** - The "Enhanced Insets" toggle is now an expandable panel with individual settings for 3D buildings, shadows, silhouettes, MSAA quality, terrain detail, tile caching, and tile preloading. Fine-tune inset quality vs performance based on your GPU.
 - **Skip generic VMR matches option** - New setting in MSFS Aircraft Models to prefer airline-liveried aircraft over generic white models. When enabled, VMR rules mapping to generic models (e.g., FSLTL_B738_ZZZZ) are skipped, allowing the system to find an actual airline livery and scale it instead.
 
 ### Changed
+- **Reorganized controls bar** - "Set Default" and "To Default" are now in a single "Defaults" dropdown menu. Removed the Reset button to reduce clutter.
 - **Increased replay buffer to 5 minutes for all data sources** - Previously vNAS 1Hz updates only kept 30 seconds of history; now all sources keep 5 minutes for consistent replay scrubbing
 
 ### Fixed
+- **3D buildings now render correctly in inset viewports** - Insets now use isolated rendering contexts, fixing a Cesium bug that prevented 3D buildings from appearing in secondary viewports
+- **Aircraft no longer flicker when clicking** - Removed Cesium's default click handlers that caused brief scene state changes during entity picking
+- **Inset viewport settings now persist across app restarts** - Fixed viewport restoration when localStorage is cleared or on new browsers
+- **RealTraffic session expiration handled gracefully** - API responses indicating session expiration now trigger proper reconnection instead of failing silently
 - **Smoother vNAS groundspeed display** - Speed readings now use a 5-sample sliding window average, reducing oscillation caused by GPS jitter in 1Hz position updates
 - **MSAA setting changes no longer crash the app** - Changing MSAA samples now shows a dialog explaining the change takes effect on next app start, instead of attempting a live viewer reload that caused crashes for some users
 

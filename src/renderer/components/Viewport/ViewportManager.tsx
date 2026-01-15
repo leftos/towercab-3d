@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react'
+import type { ReactNode } from 'react'
 import { useViewportStore } from '../../stores/viewportStore'
 import ViewportContainer from './ViewportContainer'
 import InsetCesiumViewer from './InsetCesiumViewer'

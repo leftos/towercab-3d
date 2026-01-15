@@ -84,9 +84,11 @@ def parse_dof(path: Path) -> list[dict]:
             try:
                 city = line[18:34].strip()
                 lat = int(line[35:37]) + int(line[38:40])/60 + float(line[41:46])/3600
-                if line[46] == 'S': lat = -lat
+                if line[46] == 'S':
+                    lat = -lat
                 lon = int(line[48:51]) + int(line[52:54])/60 + float(line[55:60])/3600
-                if line[60] == 'W': lon = -lon
+                if line[60] == 'W':
+                    lon = -lon
                 agl_ft = int(line[83:88])
                 towers.append({
                     'city': city,

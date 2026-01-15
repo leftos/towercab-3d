@@ -158,12 +158,18 @@ def find_gltf_in_dir(aircraft_dir: Path) -> Path | None:
         # Sort by LOD (prefer LOD0)
         def lod_key(p: Path):
             name = p.stem.upper()
-            if 'LOD00' in name: return 0
-            if 'LOD01' in name: return 1
-            if 'LOD0' in name: return 0
-            if 'LOD1' in name: return 1
-            if 'LOD2' in name: return 2
-            if 'LOD3' in name: return 3
+            if 'LOD00' in name:
+                return 0
+            if 'LOD01' in name:
+                return 1
+            if 'LOD0' in name:
+                return 0
+            if 'LOD1' in name:
+                return 1
+            if 'LOD2' in name:
+                return 2
+            if 'LOD3' in name:
+                return 3
             return 5
 
         exterior.sort(key=lod_key)

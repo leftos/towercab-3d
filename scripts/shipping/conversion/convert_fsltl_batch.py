@@ -75,8 +75,6 @@ try:
     import os
     import subprocess
     import tempfile
-    import urllib.request
-    import zipfile
     from concurrent.futures import ThreadPoolExecutor, as_completed
     import threading
 except ImportError as e:
@@ -1423,18 +1421,18 @@ Examples:
 
     # Filter by requested liveries if specified
     if requested_titles:
-        liveries_to_convert = [l for l in all_liveries if l['livery_title'] in requested_titles]
+        liveries_to_convert = [liv for liv in all_liveries if liv['livery_title'] in requested_titles]
         print(f"Filtering to {len(liveries_to_convert)} requested liveries")
 
         # If specific liveries were requested but none found, that's an error
         if not liveries_to_convert:
-            not_found = requested_titles - {l['livery_title'] for l in all_liveries}
+            not_found = requested_titles - {liv['livery_title'] for liv in all_liveries}
             print("ERROR: None of the requested liveries were found in source", file=sys.stderr)
             print(f"Requested: {requested_titles}", file=sys.stderr)
             if not_found:
                 print(f"Not found: {not_found}", file=sys.stderr)
             # Show some available liveries for debugging
-            available = [l['livery_title'] for l in all_liveries[:10]]
+            available = [liv['livery_title'] for liv in all_liveries[:10]]
             print(f"Available (first 10): {available}", file=sys.stderr)
             return 1
     else:
