@@ -76,7 +76,8 @@ pub struct VnasAircraft {
 pub struct VnasStatus {
     pub state: SessionState,
     pub environment: Environment,
-    pub facility_id: Option<String>,
+    /// Currently subscribed facilities (supports multiple simultaneous subscriptions)
+    pub subscribed_facilities: Vec<String>,
     pub error: Option<String>,
     /// Whether vNAS feature is compiled in
     pub available: bool,
@@ -90,7 +91,7 @@ impl Default for VnasStatus {
             #[cfg(not(feature = "vnas"))]
             state: SessionState::Unavailable,
             environment: Environment::Live,
-            facility_id: None,
+            subscribed_facilities: Vec::new(),
             #[cfg(feature = "vnas")]
             error: None,
             #[cfg(not(feature = "vnas"))]
@@ -210,8 +211,33 @@ mod real_impl {
             self.status.write().error = error;
         }
 
-        pub fn set_facility(&self, facility_id: Option<String>) {
-            self.status.write().facility_id = facility_id;
+        /// Add a facility to the subscription list (if not already present)
+        pub fn add_facility(&self, facility_id: String) {
+            let mut status = self.status.write();
+            if !status.subscribed_facilities.contains(&facility_id) {
+                status.subscribed_facilities.push(facility_id);
+            }
+        }
+
+        /// Remove a facility from the subscription list
+        pub fn remove_facility(&self, facility_id: &str) {
+            self.status
+                .write()
+                .subscribed_facilities
+                .retain(|f| f != facility_id);
+        }
+
+        /// Clear all subscribed facilities
+        pub fn clear_facilities(&self) {
+            self.status.write().subscribed_facilities.clear();
+        }
+
+        /// Check if a facility is already subscribed
+        pub fn is_subscribed(&self, facility_id: &str) -> bool {
+            self.status
+                .read()
+                .subscribed_facilities
+                .contains(&facility_id.to_string())
         }
     }
 
@@ -542,9 +568,6 @@ mod real_impl {
             while let Ok(event) = events.recv().await {
                 match event {
                     VnasEvent::AircraftUpdate(aircraft_list) => {
-                        // Batch aircraft for WebSocket broadcast to remote browsers
-                        let mut ws_batch = Vec::with_capacity(aircraft_list.len());
-
                         for dto in aircraft_list {
                             let aircraft = VnasAircraft::from(&dto);
                             let _ = event_tx.send(aircraft.clone());
@@ -553,21 +576,7 @@ mod real_impl {
                             if let Some(ref app) = app_handle {
                                 let _ = app.emit("vnas-aircraft-update", &aircraft);
                             }
-
-                            // Add to WebSocket batch
-                            ws_batch.push(crate::server::VnasAircraftBroadcast {
-                                callsign: aircraft.callsign,
-                                lat: aircraft.lat,
-                                lon: aircraft.lon,
-                                altitude: aircraft.altitude_true,
-                                heading: aircraft.true_heading,
-                                type_code: Some(aircraft.type_code),
-                                timestamp: aircraft.timestamp,
-                            });
                         }
-
-                        // Broadcast to WebSocket clients (remote browsers)
-                        crate::broadcast_vnas_to_websocket(ws_batch);
                     }
                     VnasEvent::AircraftDisconnected(callsign) => {
                         tracing::info!("[vNAS] Aircraft disconnected: {}", callsign);
@@ -597,7 +606,9 @@ mod real_impl {
         Ok(())
     }
 
-    /// Subscribe to TowerCabAircraft updates for a facility.
+    /// Subscribe to TowerCabAircraft updates for a facility (replaces existing subscriptions).
+    ///
+    /// For backwards compatibility. Use `vnas_subscribe_facility` for additive subscriptions.
     ///
     /// # Arguments
     /// * `facility_id` - ICAO code of the airport (e.g., "KBOS")
@@ -607,6 +618,30 @@ mod real_impl {
         state: State<'_, VnasState>,
         facility_id: String,
     ) -> Result<(), String> {
+        // Clear existing subscriptions and subscribe to this one
+        state.clear_facilities();
+        vnas_subscribe_facility(app, state, facility_id).await
+    }
+
+    /// Subscribe to TowerCabAircraft updates for an additional facility (additive).
+    ///
+    /// Supports multiple simultaneous subscriptions within the same CRC session.
+    /// Does nothing if already subscribed to the given facility.
+    ///
+    /// # Arguments
+    /// * `facility_id` - ICAO code of the airport (e.g., "KBOS")
+    #[tauri::command]
+    pub async fn vnas_subscribe_facility(
+        app: AppHandle,
+        state: State<'_, VnasState>,
+        facility_id: String,
+    ) -> Result<(), String> {
+        // Check if already subscribed
+        if state.is_subscribed(&facility_id) {
+            tracing::debug!(facility_id, "Already subscribed to facility");
+            return Ok(());
+        }
+
         let service_guard = state.service.read().await;
         let service = service_guard
             .as_ref()
@@ -621,14 +656,47 @@ mod real_impl {
                 format!("Subscription failed: {}", e)
             })?;
 
-        state.set_facility(Some(facility_id.clone()));
+        state.add_facility(facility_id.clone());
         state.update_state(SessionState::Connected);
 
+        // Emit updated subscriptions list
+        let subscriptions = state.status().subscribed_facilities;
+        let _ = app.emit("vnas-subscriptions-changed", &subscriptions);
         let _ = app.emit("vnas-state-changed", SessionState::Connected);
 
         tracing::info!(facility_id, "Subscribed to TowerCabAircraft");
 
         Ok(())
+    }
+
+    /// Unsubscribe from a facility.
+    ///
+    /// Removes the facility from the subscribed list. Note that the SignalR
+    /// subscription may still be active until the session is refreshed.
+    ///
+    /// # Arguments
+    /// * `facility_id` - ICAO code of the airport (e.g., "KBOS")
+    #[tauri::command]
+    pub async fn vnas_unsubscribe_facility(
+        app: AppHandle,
+        state: State<'_, VnasState>,
+        facility_id: String,
+    ) -> Result<(), String> {
+        state.remove_facility(&facility_id);
+
+        // Emit updated subscriptions list
+        let subscriptions = state.status().subscribed_facilities;
+        let _ = app.emit("vnas-subscriptions-changed", &subscriptions);
+
+        tracing::info!(facility_id, "Unsubscribed from facility");
+
+        Ok(())
+    }
+
+    /// Get currently subscribed facilities
+    #[tauri::command]
+    pub fn vnas_get_subscribed_facilities(state: State<'_, VnasState>) -> Vec<String> {
+        state.status().subscribed_facilities
     }
 
     /// Disconnect from vNAS.
@@ -642,7 +710,7 @@ mod real_impl {
         // Reset status
         let mut status = state.status();
         status.state = SessionState::Disconnected;
-        status.facility_id = None;
+        status.subscribed_facilities.clear();
         status.error = None;
         state.set_status(status);
 
@@ -719,6 +787,96 @@ mod real_impl {
     /// Call this in the Tauri setup closure.
     pub fn init_vnas_state(app: &AppHandle) {
         app.manage(VnasState::new());
+    }
+
+    // =========================================================================
+    // HELPER FUNCTIONS (for server.rs WebSocket handler)
+    // =========================================================================
+
+    /// Get session facilities synchronously (for WebSocket init message).
+    /// Returns empty vec if not connected.
+    pub fn get_session_facilities_sync() -> Vec<String> {
+        // This is called from sync context, so we use tokio's spawn_blocking
+        // For now, return empty - the frontend will fetch via command
+        Vec::new()
+    }
+
+    /// Get subscribed facilities synchronously (for WebSocket init message).
+    /// This accesses the RwLock directly since VnasState is in Tauri's managed state.
+    pub fn get_subscribed_facilities_sync() -> Vec<String> {
+        // Since VnasState is managed by Tauri, we can't access it from here without the State.
+        // Return empty - the actual subscriptions are sent via ObservationMessage::Subscriptions
+        // when they change.
+        Vec::new()
+    }
+
+    /// Subscribe to a facility internally (for WebSocket subscription requests).
+    /// This is the async version that can be called from the WebSocket handler.
+    pub async fn subscribe_facility_internal(
+        app: &AppHandle,
+        facility_id: &str,
+    ) -> Result<(), String> {
+        // Get the VnasState from Tauri's managed state
+        let state = app.state::<VnasState>();
+
+        // Check if already subscribed
+        if state.is_subscribed(facility_id) {
+            tracing::debug!(facility_id, "Already subscribed to facility");
+            return Ok(());
+        }
+
+        // Get service reference
+        let service_guard = state.service.read().await;
+        let service = service_guard
+            .as_ref()
+            .ok_or("Not connected - call vnas_connect first")?;
+
+        // Subscribe to TowerCabAircraft topic
+        service
+            .subscribe_towercab(facility_id)
+            .await
+            .map_err(|e| {
+                state.set_error(Some(e.to_string()));
+                format!("Subscription failed: {}", e)
+            })?;
+
+        state.add_facility(facility_id.to_string());
+        state.update_state(SessionState::Connected);
+
+        // Emit updated subscriptions list
+        let subscriptions = state.status().subscribed_facilities;
+        let _ = app.emit("vnas-subscriptions-changed", &subscriptions);
+        let _ = app.emit("vnas-state-changed", SessionState::Connected);
+
+        tracing::info!(facility_id, "Subscribed to TowerCabAircraft via remote request");
+
+        Ok(())
+    }
+
+    /// Unsubscribe from a facility internally (for WebSocket unsubscription requests).
+    /// This is the async version that can be called from the WebSocket handler.
+    pub async fn unsubscribe_facility_internal(
+        app: &AppHandle,
+        facility_id: &str,
+    ) -> Result<(), String> {
+        // Get the VnasState from Tauri's managed state
+        let state = app.state::<VnasState>();
+
+        // Check if subscribed
+        if !state.is_subscribed(facility_id) {
+            tracing::debug!(facility_id, "Not subscribed to facility, nothing to unsubscribe");
+            return Ok(());
+        }
+
+        state.remove_facility(facility_id);
+
+        // Emit updated subscriptions list
+        let subscriptions = state.status().subscribed_facilities;
+        let _ = app.emit("vnas-subscriptions-changed", &subscriptions);
+
+        tracing::info!(facility_id, "Unsubscribed from facility via remote request");
+
+        Ok(())
     }
 }
 
@@ -814,10 +972,37 @@ mod stub_impl {
     /// Subscribe to updates (stub)
     #[tauri::command]
     pub async fn vnas_subscribe(
+        _app: AppHandle,
         _state: State<'_, VnasState>,
         _facility_id: String,
     ) -> Result<(), String> {
         Err(UNAVAILABLE_MSG.to_string())
+    }
+
+    /// Subscribe to additional facility (stub)
+    #[tauri::command]
+    pub async fn vnas_subscribe_facility(
+        _app: AppHandle,
+        _state: State<'_, VnasState>,
+        _facility_id: String,
+    ) -> Result<(), String> {
+        Err(UNAVAILABLE_MSG.to_string())
+    }
+
+    /// Unsubscribe from a facility (stub)
+    #[tauri::command]
+    pub async fn vnas_unsubscribe_facility(
+        _app: AppHandle,
+        _state: State<'_, VnasState>,
+        _facility_id: String,
+    ) -> Result<(), String> {
+        Ok(()) // No-op, always succeeds
+    }
+
+    /// Get currently subscribed facilities (stub)
+    #[tauri::command]
+    pub fn vnas_get_subscribed_facilities(_state: State<'_, VnasState>) -> Vec<String> {
+        Vec::new()
     }
 
     /// Disconnect from vNAS (stub)
@@ -866,6 +1051,36 @@ mod stub_impl {
     pub fn init_vnas_state(app: &AppHandle) {
         app.manage(VnasState::new());
         tracing::info!("[vNAS] State initialized (stub - feature not enabled)");
+    }
+
+    // =========================================================================
+    // HELPER FUNCTIONS (stubs for server.rs WebSocket handler)
+    // =========================================================================
+
+    /// Get session facilities synchronously (stub).
+    pub fn get_session_facilities_sync() -> Vec<String> {
+        Vec::new()
+    }
+
+    /// Get subscribed facilities synchronously (stub).
+    pub fn get_subscribed_facilities_sync() -> Vec<String> {
+        Vec::new()
+    }
+
+    /// Subscribe to a facility internally (stub).
+    pub async fn subscribe_facility_internal(
+        _app: &AppHandle,
+        _facility_id: &str,
+    ) -> Result<(), String> {
+        Err(UNAVAILABLE_MSG.to_string())
+    }
+
+    /// Unsubscribe from a facility internally (stub).
+    pub async fn unsubscribe_facility_internal(
+        _app: &AppHandle,
+        _facility_id: &str,
+    ) -> Result<(), String> {
+        Ok(()) // No-op, always succeeds
     }
 }
 

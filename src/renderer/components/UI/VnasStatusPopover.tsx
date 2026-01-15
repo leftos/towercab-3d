@@ -166,8 +166,8 @@ export function VnasStatusPopover({ onClose, toggleRef }: VnasStatusPopoverProps
           <span className="vnas-popover-status-text" style={{ color: getStateColor() }}>
             {getStateLabel()}
           </span>
-          {vnasStatus.facilityId && vnasStatus.state === 'connected' && (
-            <span className="vnas-popover-facility">{vnasStatus.facilityId}</span>
+          {vnasStatus.subscribedFacilities.length > 0 && vnasStatus.state === 'connected' && (
+            <span className="vnas-popover-facility">{vnasStatus.subscribedFacilities.join(', ')}</span>
           )}
         </div>
 

@@ -634,8 +634,8 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
               fontWeight: 600
             }}>
               {getVnasStateLabel()}
-              {vnasStatus.facilityId && vnasStatus.state === 'connected' && (
-                <span style={{ color: '#4fc3f7', marginLeft: '8px' }}>({vnasStatus.facilityId})</span>
+              {vnasStatus.subscribedFacilities.length > 0 && vnasStatus.state === 'connected' && (
+                <span style={{ color: '#4fc3f7', marginLeft: '8px' }}>({vnasStatus.subscribedFacilities.join(', ')})</span>
               )}
             </span>
           </div>

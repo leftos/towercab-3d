@@ -43,7 +43,8 @@ export interface VnasAircraft {
 export interface VnasStatus {
   state: VnasSessionState
   environment: VnasEnvironment
-  facilityId: string | null
+  /** Currently subscribed facilities (supports multiple simultaneous subscriptions) */
+  subscribedFacilities: string[]
   error: string | null
   /** Whether vNAS feature is compiled into the backend */
   available: boolean

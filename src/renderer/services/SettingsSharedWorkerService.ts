@@ -21,6 +21,7 @@ import { useWeatherStore } from '../stores/weatherStore'
 import { useAirportStore } from '../stores/airportStore'
 import { useViewportStore } from '../stores/viewportStore'
 import { registerBroadcastCallbacks } from '../stores/aircraftTimelineStore'
+import { isRemoteMode } from '../utils/remoteMode'
 import type {
   SharedWorkerInboundMessage,
   SerializedSettings,
@@ -347,6 +348,8 @@ class SettingsSharedWorkerService {
   /**
    * Broadcast a batch of observations to all insets.
    * Called by the timeline store when new observations arrive.
+   *
+   * Also relays to remote browsers via Tauri commands (in host mode).
    */
   broadcastObservations(
     observations: Array<{
@@ -355,27 +358,101 @@ class SettingsSharedWorkerService {
       metadata: AircraftMetadata
     }>
   ): void {
-    if (!this.hasInsets() || observations.length === 0) return
+    if (observations.length === 0) return
 
-    this.postMessage({
-      type: 'observations-update',
-      payload: observations,
-      source: 'main'
-    })
+    // Broadcast to insets via SharedWorker
+    if (this.hasInsets()) {
+      this.postMessage({
+        type: 'observations-update',
+        payload: observations,
+        source: 'main'
+      })
+    }
+
+    // Relay to remote browsers via Tauri commands (only in host mode)
+    if (!isRemoteMode()) {
+      this.relayObservationsToRemote(observations)
+    }
   }
 
   /**
    * Broadcast aircraft removals to all insets.
    * Called by the timeline store when aircraft are removed.
+   *
+   * Also relays to remote browsers via Tauri commands (in host mode).
    */
   broadcastRemovals(callsigns: string[]): void {
-    if (!this.hasInsets() || callsigns.length === 0) return
+    if (callsigns.length === 0) return
 
-    this.postMessage({
-      type: 'aircraft-removals',
-      payload: callsigns,
-      source: 'main'
-    })
+    // Broadcast to insets via SharedWorker
+    if (this.hasInsets()) {
+      this.postMessage({
+        type: 'aircraft-removals',
+        payload: callsigns,
+        source: 'main'
+      })
+    }
+
+    // Relay to remote browsers via Tauri commands (only in host mode)
+    if (!isRemoteMode()) {
+      this.relayRemovalsToRemote(callsigns)
+    }
+  }
+
+  /**
+   * Relay observations to remote browsers via Tauri command.
+   * Converts to the ObservationData format expected by the backend.
+   */
+  private async relayObservationsToRemote(
+    observations: Array<{
+      callsign: string
+      observation: AircraftObservation
+      metadata: AircraftMetadata
+    }>
+  ): Promise<void> {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+
+      // Convert to ObservationData format
+      const data = observations.map(({ callsign, observation, metadata }) => ({
+        callsign,
+        latitude: observation.latitude,
+        longitude: observation.longitude,
+        altitude: observation.altitude,
+        heading: observation.heading,
+        groundspeed: observation.groundspeed,
+        groundTrack: observation.groundTrack ?? observation.heading,
+        verticalRate: observation.verticalRate ?? 0,
+        onGround: observation.onGround ?? false,
+        pitch: observation.pitch,
+        roll: observation.roll,
+        source: observation.source,
+        observedAt: observation.observedAt,
+        receivedAt: observation.receivedAt,
+        typeCode: metadata.aircraftType,
+        origin: metadata.departure,
+        destination: metadata.arrival,
+        flightRules: null
+      }))
+
+      await invoke('broadcast_observations', { observations: data })
+    } catch (error) {
+      // Silently ignore - Tauri may not be available or command may fail
+      console.debug('[SettingsSharedWorkerService] Failed to relay observations:', error)
+    }
+  }
+
+  /**
+   * Relay aircraft removals to remote browsers via Tauri command.
+   */
+  private async relayRemovalsToRemote(callsigns: string[]): Promise<void> {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+      await invoke('broadcast_aircraft_removals', { callsigns })
+    } catch (error) {
+      // Silently ignore
+      console.debug('[SettingsSharedWorkerService] Failed to relay removals:', error)
+    }
   }
 
   /**

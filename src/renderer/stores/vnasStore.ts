@@ -107,7 +107,16 @@ interface VnasStore {
   completeAuth: () => Promise<void>
   handleOAuthCallback: (callbackUrl: string) => Promise<void>
   connect: () => Promise<void>
+  /** Subscribe to a facility (replaces existing subscriptions) */
   subscribe: (facilityId: string) => Promise<void>
+  /** Subscribe to an additional facility (additive, supports multiple) */
+  subscribeToFacility: (facilityId: string) => Promise<void>
+  /** Unsubscribe from a facility */
+  unsubscribeFromFacility: (facilityId: string) => Promise<void>
+  /** Get currently subscribed facilities */
+  getSubscribedFacilities: () => string[]
+  /** Check if subscribed to a specific facility */
+  isSubscribedTo: (facilityId: string) => boolean
   disconnect: () => Promise<void>
   handleAircraftUpdate: (aircraft: VnasAircraft) => void
   handleBatchUpdate: (aircraft: VnasAircraft[]) => void
@@ -126,13 +135,15 @@ interface VnasStore {
   setStatus: (status: VnasStatus) => void
   setStateOnly: (state: VnasStatus['state']) => void
   setError: (error: string | null) => void
+  setSubscribedFacilities: (facilities: string[]) => void
+  setSessionFacilities: (facilities: string[]) => void
   removeAircraft: (callsign: string) => void
 }
 
 const DEFAULT_STATUS: VnasStatus = {
   state: 'disconnected',
   environment: 'live',
-  facilityId: null,
+  subscribedFacilities: [],
   error: null,
   available: true  // Assume available until we check
 }
@@ -223,9 +234,9 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
    */
   startAuth: async (environment: VnasEnvironment): Promise<string> => {
     if (isRemoteMode()) {
-      // In remote mode, call host API
-      // TODO: Implement remote mode vNAS proxy
-      throw new Error('vNAS not yet available in remote browser mode')
+      // Remote clients don't authenticate - host handles vNAS connection
+      console.log('[vNAS] Remote mode - authentication handled by host')
+      return ''
     }
 
     // Reset frontend deduplication for new auth flow
@@ -261,7 +272,8 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
    */
   completeAuth: async () => {
     if (isRemoteMode()) {
-      throw new Error('vNAS not yet available in remote browser mode')
+      // Remote clients don't authenticate - host handles vNAS connection
+      return
     }
 
     try {
@@ -286,7 +298,8 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
    */
   handleOAuthCallback: async (callbackUrl: string) => {
     if (isRemoteMode()) {
-      throw new Error('vNAS not yet available in remote browser mode')
+      // Remote clients don't authenticate - host handles vNAS connection
+      return
     }
 
     // Frontend-side deduplication (complements backend deduplication)
@@ -342,7 +355,8 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
    */
   connect: async () => {
     if (isRemoteMode()) {
-      throw new Error('vNAS not yet available in remote browser mode')
+      // Remote clients don't connect - host handles vNAS connection
+      return
     }
 
     try {
@@ -367,7 +381,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
   },
 
   /**
-   * Subscribe to TowerCabAircraft updates for a facility.
+   * Subscribe to TowerCabAircraft updates for a facility (replaces existing subscriptions).
    * @param icaoCode - ICAO code of the airport (e.g., "KSFO" or "SFO")
    *
    * Note: vNAS facility IDs don't include the K prefix for US airports.
@@ -375,7 +389,8 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
    */
   subscribe: async (icaoCode: string) => {
     if (isRemoteMode()) {
-      throw new Error('vNAS not yet available in remote browser mode')
+      // In remote mode, vNAS subscriptions are handled by the host
+      return
     }
 
     // vNAS facility IDs don't have K prefix for US airports (KSFO -> SFO)
@@ -392,8 +407,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       // Explicitly fetch and update status after subscription.
       // This ensures UI updates even if event listeners have issues.
       const status = await invoke<VnasStatus>('vnas_get_status')
-      // Override facilityId with original ICAO for UI display (backend uses stripped version)
-      set({ status: { ...status, facilityId: icaoCode } })
+      set({ status })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       set(state => ({
@@ -407,11 +421,97 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
   },
 
   /**
+   * Subscribe to TowerCabAircraft updates for an additional facility (additive).
+   * Supports multiple simultaneous subscriptions within the same CRC session.
+   * @param icaoCode - ICAO code of the airport (e.g., "KSFO" or "SFO")
+   */
+  subscribeToFacility: async (icaoCode: string) => {
+    if (isRemoteMode()) {
+      // In remote mode, vNAS subscriptions are handled by the host
+      return
+    }
+
+    // vNAS facility IDs don't have K prefix for US airports (KSFO -> SFO)
+    let facilityId = icaoCode
+    if (icaoCode.startsWith('K') && icaoCode.length === 4) {
+      facilityId = icaoCode.slice(1)
+      console.log(`[vNAS] Stripped K prefix: ${icaoCode} -> ${facilityId}`)
+    }
+
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+      await invoke('vnas_subscribe_facility', { facilityId })
+
+      // Explicitly fetch and update status after subscription.
+      const status = await invoke<VnasStatus>('vnas_get_status')
+      set({ status })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      set(state => ({
+        status: {
+          ...state.status,
+          error: `Subscription failed: ${message}`
+        }
+      }))
+      throw error
+    }
+  },
+
+  /**
+   * Unsubscribe from a facility.
+   * Called when switching away from an airport.
+   */
+  unsubscribeFromFacility: async (icaoCode: string) => {
+    if (isRemoteMode()) {
+      // In remote mode, vNAS subscriptions are handled by the host
+      return
+    }
+
+    // vNAS facility IDs don't have K prefix for US airports (KSFO -> SFO)
+    let facilityId = icaoCode
+    if (icaoCode.startsWith('K') && icaoCode.length === 4) {
+      facilityId = icaoCode.slice(1)
+    }
+
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+      await invoke('vnas_unsubscribe_facility', { facilityId })
+
+      // Explicitly fetch and update status after unsubscription
+      const status = await invoke<VnasStatus>('vnas_get_status')
+      set({ status })
+    } catch (error) {
+      console.warn('[vNAS] Unsubscribe failed:', error)
+      // Don't throw - unsubscribe failure is not critical
+    }
+  },
+
+  /**
+   * Get currently subscribed facilities.
+   */
+  getSubscribedFacilities: () => {
+    return get().status.subscribedFacilities
+  },
+
+  /**
+   * Check if subscribed to a specific facility.
+   */
+  isSubscribedTo: (facilityId: string) => {
+    const { subscribedFacilities } = get().status
+    // Also check without K prefix
+    const strippedId = facilityId.startsWith('K') && facilityId.length === 4
+      ? facilityId.slice(1)
+      : facilityId
+    return subscribedFacilities.includes(facilityId) || subscribedFacilities.includes(strippedId)
+  },
+
+  /**
    * Disconnect from vNAS.
    */
   disconnect: async () => {
     if (isRemoteMode()) {
-      throw new Error('vNAS not yet available in remote browser mode')
+      // Remote clients don't disconnect - host handles vNAS connection
+      return
     }
 
     try {
@@ -783,8 +883,8 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
    */
   getSessionFacilities: async (): Promise<string[]> => {
     if (isRemoteMode()) {
-      // TODO: Implement remote mode API
-      return []
+      // In remote mode, session facilities are synced from host via WebSocket init message
+      return get().sessionFacilities
     }
 
     try {
@@ -884,6 +984,26 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
         error
       }
     }))
+  },
+
+  /**
+   * Set subscribed facilities (used by remote mode to sync from host).
+   */
+  setSubscribedFacilities: (facilities: string[]) => {
+    set(state => ({
+      status: {
+        ...state.status,
+        subscribedFacilities: facilities
+      }
+    }))
+  },
+
+  /**
+   * Set session facilities (available facilities from host's CRC session).
+   * Used by remote mode to know which facilities can be subscribed to.
+   */
+  setSessionFacilities: (facilities: string[]) => {
+    set({ sessionFacilities: facilities })
   },
 
   /**

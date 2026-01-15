@@ -201,8 +201,8 @@ fn log_from_frontend(level: String, message: String) {
 // Global storage for the running server port
 static HTTP_SERVER_PORT: Mutex<Option<u16>> = Mutex::new(None);
 
-// Global storage for vNAS WebSocket broadcast channel (to relay updates to remote browsers)
-static VNAS_WEBSOCKET_TX: Mutex<Option<broadcast::Sender<Vec<server::VnasAircraftBroadcast>>>> =
+// Global storage for unified observations WebSocket broadcast channel
+static OBSERVATIONS_TX: Mutex<Option<broadcast::Sender<server::ObservationMessage>>> =
     Mutex::new(None);
 
 // =============================================================================
@@ -288,14 +288,14 @@ async fn start_http_server(app: tauri::AppHandle, port: u16) -> Result<ServerSta
     // Start the server
     let handles = server::start_server(app, port).await?;
 
-    // Store the shutdown channel, vNAS sender, and port
+    // Store the shutdown channel, observations sender, and port
     {
         let mut guard = HTTP_SERVER_SHUTDOWN.lock().map_err(|e| e.to_string())?;
         *guard = Some(handles.shutdown_tx);
     }
     {
-        let mut vnas_guard = VNAS_WEBSOCKET_TX.lock().map_err(|e| e.to_string())?;
-        *vnas_guard = Some(handles.vnas_tx);
+        let mut obs_guard = OBSERVATIONS_TX.lock().map_err(|e| e.to_string())?;
+        *obs_guard = Some(handles.observations_tx);
     }
     {
         let mut port_guard = HTTP_SERVER_PORT.lock().map_err(|e| e.to_string())?;
@@ -311,14 +311,41 @@ async fn start_http_server(app: tauri::AppHandle, port: u16) -> Result<ServerSta
     })
 }
 
-/// Broadcast vNAS aircraft updates to WebSocket clients (for remote browser access)
-/// This is called from the vNAS event loop when aircraft updates are received
-pub fn broadcast_vnas_to_websocket(updates: Vec<server::VnasAircraftBroadcast>) {
-    if let Ok(guard) = VNAS_WEBSOCKET_TX.lock() {
+/// Broadcast observations to WebSocket clients (for remote browser access)
+/// This is called from the frontend (host app) to relay observations to remote browsers
+fn broadcast_observation_message(message: server::ObservationMessage) {
+    if let Ok(guard) = OBSERVATIONS_TX.lock() {
         if let Some(ref tx) = *guard {
-            let _ = tx.send(updates);
+            let _ = tx.send(message);
         }
     }
+}
+
+/// Tauri command to broadcast a batch of observations to remote clients
+#[tauri::command]
+fn broadcast_observations(observations: Vec<server::ObservationData>) {
+    if observations.is_empty() {
+        return;
+    }
+    let message = server::ObservationMessage::Observations { data: observations };
+    broadcast_observation_message(message);
+}
+
+/// Tauri command to broadcast aircraft removals to remote clients
+#[tauri::command]
+fn broadcast_aircraft_removals(callsigns: Vec<String>) {
+    if callsigns.is_empty() {
+        return;
+    }
+    let message = server::ObservationMessage::Removals { callsigns };
+    broadcast_observation_message(message);
+}
+
+/// Tauri command to broadcast subscription changes to remote clients
+#[tauri::command]
+fn broadcast_subscriptions(facilities: Vec<String>) {
+    let message = server::ObservationMessage::Subscriptions { facilities };
+    broadcast_observation_message(message);
 }
 
 /// Stop the HTTP server
@@ -771,8 +798,8 @@ pub fn run() {
                             if let Ok(mut guard) = HTTP_SERVER_SHUTDOWN.lock() {
                                 *guard = Some(handles.shutdown_tx);
                             }
-                            if let Ok(mut vnas_guard) = VNAS_WEBSOCKET_TX.lock() {
-                                *vnas_guard = Some(handles.vnas_tx);
+                            if let Ok(mut obs_guard) = OBSERVATIONS_TX.lock() {
+                                *obs_guard = Some(handles.observations_tx);
                             }
                             tracing::info!("HTTP server auto-started successfully");
                         }
@@ -817,6 +844,10 @@ pub fn run() {
             stop_http_server,
             get_http_server_status,
             get_log_file_path,
+            // Observation broadcast commands (for remote browser relay)
+            broadcast_observations,
+            broadcast_aircraft_removals,
+            broadcast_subscriptions,
             // File commands
             create_text_file,
             append_to_text_file,
@@ -865,6 +896,9 @@ pub fn run() {
             vnas::vnas_handle_oauth_callback,
             vnas::vnas_connect,
             vnas::vnas_subscribe,
+            vnas::vnas_subscribe_facility,
+            vnas::vnas_unsubscribe_facility,
+            vnas::vnas_get_subscribed_facilities,
             vnas::vnas_disconnect,
             vnas::vnas_is_connected,
             vnas::vnas_is_authenticated,

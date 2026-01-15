@@ -39,17 +39,69 @@ use crate::{
     settings::{get_global_settings_file, GlobalSettings},
 };
 
-/// vNAS aircraft update for WebSocket broadcast
+// =============================================================================
+// Unified Observation Types (for remote browser broadcast)
+// =============================================================================
+
+/// Observation data broadcast to remote clients
+/// Contains position data from any source (VATSIM, vNAS, RealTraffic)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct VnasAircraftBroadcast {
+pub struct ObservationData {
     pub callsign: String,
-    pub lat: f64,
-    pub lon: f64,
+    pub latitude: f64,
+    pub longitude: f64,
     pub altitude: f64,
     pub heading: f64,
+    pub groundspeed: f64,
+    pub ground_track: f64,
+    pub vertical_rate: f64,
+    pub on_ground: bool,
+    pub pitch: Option<f64>,
+    pub roll: Option<f64>,
+    /// Data source: "vatsim", "vnas", or "realtraffic"
+    pub source: String,
+    /// When the observation was made (Unix timestamp in ms)
+    pub observed_at: u64,
+    /// When the observation was received locally (Unix timestamp in ms)
+    pub received_at: u64,
+    // Metadata
     pub type_code: Option<String>,
-    pub timestamp: u64,
+    pub origin: Option<String>,
+    pub destination: Option<String>,
+    pub flight_rules: Option<String>,
+}
+
+/// Messages sent over the observations WebSocket
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase", tag = "type")]
+pub enum ObservationMessage {
+    /// Batch of aircraft observations
+    #[serde(rename = "observations")]
+    Observations { data: Vec<ObservationData> },
+
+    /// Aircraft removals (disconnected from network)
+    #[serde(rename = "removals")]
+    Removals { callsigns: Vec<String> },
+
+    /// Current vNAS subscriptions (sent on connect and when changed)
+    #[serde(rename = "subscriptions")]
+    Subscriptions { facilities: Vec<String> },
+
+    /// Initial state sent on WebSocket connect
+    #[serde(rename = "init")]
+    Init {
+        session_facilities: Vec<String>,
+        subscribed_facilities: Vec<String>,
+    },
+}
+
+/// Request from remote client to subscribe to a facility
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubscriptionRequest {
+    pub action: String, // "subscribe" | "unsubscribe"
+    pub facility_id: String,
 }
 
 /// Shared state for the HTTP server
@@ -62,8 +114,8 @@ pub struct ServerState {
     pub auth_token: Option<String>,
     /// Whether to require connections from local network only
     pub require_local_network: bool,
-    /// Broadcast channel for vNAS aircraft updates (to relay to WebSocket clients)
-    pub vnas_tx: broadcast::Sender<Vec<VnasAircraftBroadcast>>,
+    /// Broadcast channel for unified observations (all data sources)
+    pub observations_tx: broadcast::Sender<ObservationMessage>,
     /// Count of currently connected remote clients (WebSocket connections)
     pub connected_clients: AtomicUsize,
 }
@@ -150,8 +202,8 @@ async fn auth_middleware(
 pub struct ServerHandles {
     /// Send to this channel to shut down the server
     pub shutdown_tx: broadcast::Sender<()>,
-    /// Send vNAS aircraft updates to this channel for WebSocket relay
-    pub vnas_tx: broadcast::Sender<Vec<VnasAircraftBroadcast>>,
+    /// Send unified observations to this channel for WebSocket relay
+    pub observations_tx: broadcast::Sender<ObservationMessage>,
 }
 
 /// Start the HTTP server on a background thread
@@ -192,16 +244,16 @@ pub async fn start_server(
         tracing::info!("[Server] Restricted to local network only");
     }
 
-    // Create vNAS broadcast channel for relaying aircraft updates to WebSocket clients
-    let (vnas_tx, _) = broadcast::channel::<Vec<VnasAircraftBroadcast>>(256);
-    let vnas_tx_return = vnas_tx.clone();
+    // Create unified observations broadcast channel for all data sources
+    let (observations_tx, _) = broadcast::channel::<ObservationMessage>(256);
+    let observations_tx_return = observations_tx.clone();
 
     let state = Arc::new(ServerState {
         app_handle,
         dist_path,
         auth_token,
         require_local_network,
-        vnas_tx,
+        observations_tx,
         connected_clients: AtomicUsize::new(0),
     });
 
@@ -235,7 +287,7 @@ pub async fn start_server(
 
     Ok(ServerHandles {
         shutdown_tx,
-        vnas_tx: vnas_tx_return,
+        observations_tx: observations_tx_return,
     })
 }
 
@@ -368,8 +420,8 @@ fn create_router(state: Arc<ServerState>) -> Router {
             post(realtraffic_parked_traffic),
         )
         .route("/api/realtraffic/deauth", post(realtraffic_deauth))
-        // vNAS WebSocket endpoint for real-time aircraft updates
-        .route("/api/vnas/ws", get(vnas_websocket_handler))
+        // Unified observations WebSocket for all data sources (VATSIM, vNAS, RealTraffic)
+        .route("/api/observations/ws", get(observations_websocket_handler))
         // Presence WebSocket for tracking connected remote clients
         .route("/api/presence", get(presence_websocket_handler))
         // Static file serving (must be last - catches all other routes)
@@ -1206,79 +1258,91 @@ async fn proxy_request(
 }
 
 // =============================================================================
-// vNAS WebSocket Handler
+// Unified Observations WebSocket Handler
 // =============================================================================
 
-/// WebSocket handler for vNAS aircraft updates
+/// WebSocket handler for unified observations from all data sources
 ///
 /// Remote browsers connect to this WebSocket to receive real-time aircraft
-/// position updates from vNAS. The Tauri backend broadcasts updates to this
-/// endpoint, which then relays them to all connected WebSocket clients.
+/// position updates from all sources (VATSIM, vNAS, RealTraffic). The host
+/// app relays observations to this endpoint via Tauri commands.
 ///
-/// ## Message Format
-/// Server sends JSON arrays of VnasAircraftBroadcast objects at 1Hz:
+/// ## Message Types
+/// - `init`: Sent on connect with session/subscription state
+/// - `observations`: Batch of aircraft position updates
+/// - `removals`: Aircraft that have disconnected
+/// - `subscriptions`: Current vNAS subscriptions (when changed)
+///
+/// ## Client Messages
+/// Clients can send subscription requests:
 /// ```json
-/// [{"callsign":"DAL123","lat":42.0,"lon":-71.0,"altitude":10000,"heading":90,"typeCode":"B738","timestamp":1234567890}]
+/// {"action": "subscribe", "facilityId": "SFO"}
 /// ```
-///
-/// ## Data Flow
-/// 1. vnas.rs connects to vNAS SignalR hub (requires OAuth credentials)
-/// 2. vNAS sends TowerCabAircraft updates via SignalR
-/// 3. vnas.rs converts updates to VnasAircraftBroadcast and calls broadcast_vnas_to_websocket()
-/// 4. This WebSocket handler receives updates and forwards to connected browsers
-///
-/// ## Note
-/// Actual vNAS connection requires OAuth credentials from the VATSIM tech team.
-/// Until those are available, this WebSocket will not receive any updates.
-async fn vnas_websocket_handler(
+async fn observations_websocket_handler(
     ws: WebSocketUpgrade,
     State(state): State<Arc<ServerState>>,
 ) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_vnas_websocket(socket, state))
+    ws.on_upgrade(move |socket| handle_observations_websocket(socket, state))
 }
 
-/// Handle a vNAS WebSocket connection
-async fn handle_vnas_websocket(socket: WebSocket, state: Arc<ServerState>) {
+/// Handle a unified observations WebSocket connection
+async fn handle_observations_websocket(socket: WebSocket, state: Arc<ServerState>) {
     let (mut sender, mut receiver) = socket.split();
 
-    // Subscribe to vNAS broadcast channel
-    let mut vnas_rx = state.vnas_tx.subscribe();
+    // Subscribe to observations broadcast channel
+    let mut obs_rx = state.observations_tx.subscribe();
 
-    tracing::info!("[vNAS WS] Client connected");
+    tracing::info!("[Observations WS] Client connected");
 
-    // Spawn a task to forward vNAS updates to the WebSocket
+    // Send initial state (vNAS session and subscription info)
+    let init_msg = ObservationMessage::Init {
+        session_facilities: crate::vnas::get_session_facilities_sync(),
+        subscribed_facilities: crate::vnas::get_subscribed_facilities_sync(),
+    };
+    if let Ok(json) = serde_json::to_string(&init_msg) {
+        if sender.send(Message::Text(json)).await.is_err() {
+            tracing::warn!("[Observations WS] Failed to send init message");
+            return;
+        }
+    }
+
+    // Clone app_handle for subscription handling
+    let app_handle = state.app_handle.clone();
+
+    // Spawn a task to forward observations to the WebSocket
     let send_task = tokio::spawn(async move {
-        while let Ok(aircraft) = vnas_rx.recv().await {
-            // Serialize and send to WebSocket
-            match serde_json::to_string(&aircraft) {
+        while let Ok(message) = obs_rx.recv().await {
+            match serde_json::to_string(&message) {
                 Ok(json) => {
                     if sender.send(Message::Text(json)).await.is_err() {
                         break; // Client disconnected
                     }
                 }
                 Err(e) => {
-                    tracing::error!("[vNAS WS] Serialization error: {}", e);
+                    tracing::error!("[Observations WS] Serialization error: {}", e);
                 }
             }
         }
     });
 
-    // Handle incoming messages (mostly for keepalive/ping-pong)
+    // Handle incoming messages (subscription requests from remote clients)
     while let Some(msg) = receiver.next().await {
         match msg {
-            Ok(Message::Ping(data)) => {
-                // Ping/pong handled automatically by axum
-                tracing::info!("[vNAS WS] Received ping: {:?}", data);
+            Ok(Message::Text(text)) => {
+                // Try to parse as subscription request
+                if let Ok(request) = serde_json::from_str::<SubscriptionRequest>(&text) {
+                    handle_subscription_request(&app_handle, request).await;
+                }
             }
             Ok(Message::Close(_)) => {
-                tracing::info!("[vNAS WS] Client requested close");
+                tracing::info!("[Observations WS] Client requested close");
                 break;
             }
             Ok(_) => {
-                // Ignore other message types (we don't expect client messages)
+                // Ignore other message types
             }
             Err(e) => {
-                tracing::error!("[vNAS WS] Error: {}", e);
+                tracing::error!("[Observations WS] Error: {}", e);
                 break;
             }
         }
@@ -1286,7 +1350,59 @@ async fn handle_vnas_websocket(socket: WebSocket, state: Arc<ServerState>) {
 
     // Clean up
     send_task.abort();
-    tracing::info!("[vNAS WS] Client disconnected");
+    tracing::info!("[Observations WS] Client disconnected");
+}
+
+/// Handle a subscription request from a remote client
+async fn handle_subscription_request(app_handle: &tauri::AppHandle, request: SubscriptionRequest) {
+    match request.action.as_str() {
+        "subscribe" => {
+            // Check if facility is within allowed session facilities
+            let allowed = crate::vnas::get_session_facilities_sync();
+            if allowed.contains(&request.facility_id) {
+                // Subscribe to the facility
+                tracing::info!(
+                    "[Observations WS] Remote client requesting subscription to {}",
+                    request.facility_id
+                );
+                if let Err(e) =
+                    crate::vnas::subscribe_facility_internal(app_handle, &request.facility_id).await
+                {
+                    tracing::warn!(
+                        "[Observations WS] Failed to subscribe to {}: {}",
+                        request.facility_id,
+                        e
+                    );
+                }
+            } else {
+                tracing::warn!(
+                    "[Observations WS] Subscription denied for {} - not in session facilities",
+                    request.facility_id
+                );
+            }
+        }
+        "unsubscribe" => {
+            tracing::info!(
+                "[Observations WS] Remote client requesting unsubscription from {}",
+                request.facility_id
+            );
+            if let Err(e) =
+                crate::vnas::unsubscribe_facility_internal(app_handle, &request.facility_id).await
+            {
+                tracing::warn!(
+                    "[Observations WS] Failed to unsubscribe from {}: {}",
+                    request.facility_id,
+                    e
+                );
+            }
+        }
+        _ => {
+            tracing::warn!(
+                "[Observations WS] Unknown action: {}",
+                request.action
+            );
+        }
+    }
 }
 
 // =============================================================================

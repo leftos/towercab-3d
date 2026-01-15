@@ -48,6 +48,9 @@ import { isRemoteMode } from './utils/remoteMode'
 import { usePresenceWebSocket } from './hooks/usePresenceWebSocket'
 import { useVnasEvents } from './hooks/useVnasEvents'
 import { useAircraftInterpolation } from './hooks/useAircraftInterpolation'
+import { useRemoteObservations } from './hooks/useRemoteObservations'
+import { useRemoteVnasSubscription } from './hooks/useRemoteVnasSubscription'
+import { useVnasSubscription } from './hooks/useVnasSubscription'
 import { settingsSharedWorkerService } from './services/SettingsSharedWorkerService'
 
 function App() {
@@ -139,6 +142,16 @@ function App() {
   // Both main app and insets run this - observations are shared via SharedWorker
   useAircraftInterpolation()
 
+  // Receive observations from host via WebSocket (remote mode only)
+  // In remote mode, the host relays observations from data sources, so we don't poll directly
+  useRemoteObservations()
+
+  // Auto-request vNAS subscription when viewing an airport in remote mode
+  useRemoteVnasSubscription()
+
+  // Auto-request vNAS subscription when viewing an airport in host mode
+  useVnasSubscription()
+
   // Initialize SettingsSharedWorkerService for inset iframes
   // Broadcasts settings, weather, airport, token, and aircraft observations via SharedWorker
   useEffect(() => {
@@ -208,31 +221,39 @@ function App() {
         updateProgress(5, 100, 'VMR rules loaded')
 
         // Step 6: Start data source polling based on settings
-        const dataSource = useGlobalSettingsStore.getState().realtraffic.dataSource
-        if (dataSource === 'realtraffic') {
-          const licenseKey = useGlobalSettingsStore.getState().realtraffic.licenseKey
-          if (licenseKey) {
-            updateProgress(6, 0, 'Connecting to RealTraffic...')
-            const rtStore = useRealTrafficStore.getState()
-            await rtStore.authenticate(licenseKey)
-            // If authentication succeeded and we're connected, start polling
-            if (useRealTrafficStore.getState().status === 'connected') {
-              rtStore.startPolling()
-              // Start the timeline store prune timer for RealTraffic
-              useAircraftTimelineStore.getState().startPruneTimer()
-            }
-            updateProgress(6, 100, 'Connected to RealTraffic')
-          } else {
-            updateProgress(6, 100, 'RealTraffic license required')
-            // No license key - user will need to enter one in settings
-          }
-        } else {
-          // VATSIM data source
-          updateProgress(6, 0, 'Connecting to VATSIM...')
-          startPolling()
-          // Start the timeline store prune timer for VATSIM
+        // In remote mode, the host relays observations via WebSocket, so we don't poll directly
+        if (isRemoteMode()) {
+          updateProgress(6, 0, 'Connecting to host...')
+          // Start the timeline store prune timer (still needed for local timeline management)
           useAircraftTimelineStore.getState().startPruneTimer()
-          updateProgress(6, 100, 'Connected to VATSIM')
+          updateProgress(6, 100, 'Receiving from host')
+        } else {
+          const dataSource = useGlobalSettingsStore.getState().realtraffic.dataSource
+          if (dataSource === 'realtraffic') {
+            const licenseKey = useGlobalSettingsStore.getState().realtraffic.licenseKey
+            if (licenseKey) {
+              updateProgress(6, 0, 'Connecting to RealTraffic...')
+              const rtStore = useRealTrafficStore.getState()
+              await rtStore.authenticate(licenseKey)
+              // If authentication succeeded and we're connected, start polling
+              if (useRealTrafficStore.getState().status === 'connected') {
+                rtStore.startPolling()
+                // Start the timeline store prune timer for RealTraffic
+                useAircraftTimelineStore.getState().startPruneTimer()
+              }
+              updateProgress(6, 100, 'Connected to RealTraffic')
+            } else {
+              updateProgress(6, 100, 'RealTraffic license required')
+              // No license key - user will need to enter one in settings
+            }
+          } else {
+            // VATSIM data source
+            updateProgress(6, 0, 'Connecting to VATSIM...')
+            startPolling()
+            // Start the timeline store prune timer for VATSIM
+            useAircraftTimelineStore.getState().startPruneTimer()
+            updateProgress(6, 100, 'Connected to VATSIM')
+          }
         }
 
         // Step 7: Finalize

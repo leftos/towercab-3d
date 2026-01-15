@@ -24,6 +24,7 @@ export function VnasPanel() {
   const startAuth = useVnasStore((state) => state.startAuth)
   const handleOAuthCallback = useVnasStore((state) => state.handleOAuthCallback)
   const subscribe = useVnasStore((state) => state.subscribe)
+  const isSubscribedTo = useVnasStore((state) => state.isSubscribedTo)
   const disconnect = useVnasStore((state) => state.disconnect)
   const getStatus = useVnasStore((state) => state.getStatus)
   const checkAvailability = useVnasStore((state) => state.checkAvailability)
@@ -159,11 +160,11 @@ export function VnasPanel() {
           </span>
         </div>
 
-        {/* Show subscribed facility if connected */}
-        {status.facilityId && (
+        {/* Show subscribed facilities if connected */}
+        {status.subscribedFacilities.length > 0 && (
           <div className="vnas-panel-row">
             <label>Subscribed</label>
-            <span className="vnas-facility">{status.facilityId}</span>
+            <span className="vnas-facility">{status.subscribedFacilities.join(', ')}</span>
           </div>
         )}
 
@@ -235,7 +236,7 @@ export function VnasPanel() {
             {status.state === 'connected' && (
               <>
                 {/* Subscribe button if not subscribed to current airport */}
-                {currentAirport?.icao && status.facilityId !== currentAirport.icao && (
+                {currentAirport?.icao && !isSubscribedTo(currentAirport.icao) && (
                   <button
                     className="vnas-panel-button"
                     onClick={handleSubscribe}
