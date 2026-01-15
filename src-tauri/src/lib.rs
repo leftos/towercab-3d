@@ -231,29 +231,33 @@ pub struct ServerStatus {
     pub running: bool,
     pub port: u16,
     pub local_url: Option<String>,
-    pub lan_url: Option<String>,
+    pub lan_urls: Vec<String>,
 }
 
-/// Get the LAN IP address for display
-fn get_lan_ip() -> Option<String> {
-    // Try to get the local IP address
+/// Get all LAN IP addresses for display (filters out loopback and link-local)
+fn get_lan_ips() -> Vec<String> {
+    let mut ips = Vec::new();
+
     #[cfg(windows)]
     {
         use std::process::Command;
-        // Use hostname command to get IP
+        // Use hostname command to get all IPs associated with the hostname
         if let Ok(output) = Command::new("hostname")
             .creation_flags(0x08000000) // CREATE_NO_WINDOW
             .output()
         {
             let hostname = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            // Try to resolve hostname to IP
+            // Try to resolve hostname to IPs
             use std::net::ToSocketAddrs;
             if let Ok(addrs) = format!("{}:0", hostname).to_socket_addrs() {
                 for addr in addrs {
                     if let std::net::SocketAddr::V4(v4) = addr {
                         let ip = v4.ip().to_string();
-                        if !ip.starts_with("127.") {
-                            return Some(ip);
+                        // Skip loopback and link-local addresses
+                        if !ip.starts_with("127.") && !ip.starts_with("169.254.") {
+                            if !ips.contains(&ip) {
+                                ips.push(ip);
+                            }
                         }
                     }
                 }
@@ -262,16 +266,22 @@ fn get_lan_ip() -> Option<String> {
     }
 
     // Fallback: try to connect to a public DNS and get the local address
-    use std::net::UdpSocket;
-    if let Ok(socket) = UdpSocket::bind("0.0.0.0:0") {
-        if socket.connect("8.8.8.8:80").is_ok() {
-            if let Ok(addr) = socket.local_addr() {
-                return Some(addr.ip().to_string());
+    // This gets the "primary" outbound interface IP
+    if ips.is_empty() {
+        use std::net::UdpSocket;
+        if let Ok(socket) = UdpSocket::bind("0.0.0.0:0") {
+            if socket.connect("8.8.8.8:80").is_ok() {
+                if let Ok(addr) = socket.local_addr() {
+                    let ip = addr.ip().to_string();
+                    if !ips.contains(&ip) {
+                        ips.push(ip);
+                    }
+                }
             }
         }
     }
 
-    None
+    ips
 }
 
 /// Start the HTTP server for remote browser access
@@ -302,12 +312,16 @@ async fn start_http_server(app: tauri::AppHandle, port: u16) -> Result<ServerSta
         *port_guard = Some(port);
     }
 
-    let lan_ip = get_lan_ip();
+    let lan_ips = get_lan_ips();
+    let lan_urls = lan_ips
+        .into_iter()
+        .map(|ip| format!("http://{}:{}", ip, port))
+        .collect();
     Ok(ServerStatus {
         running: true,
         port,
         local_url: Some(format!("http://localhost:{}", port)),
-        lan_url: lan_ip.map(|ip| format!("http://{}:{}", ip, port)),
+        lan_urls,
     })
 }
 
@@ -382,19 +396,23 @@ fn get_http_server_status() -> ServerStatus {
         .unwrap_or(8765);
 
     if is_running {
-        let lan_ip = get_lan_ip();
+        let lan_ips = get_lan_ips();
+        let lan_urls = lan_ips
+            .into_iter()
+            .map(|ip| format!("http://{}:{}", ip, port))
+            .collect();
         ServerStatus {
             running: true,
             port,
             local_url: Some(format!("http://localhost:{}", port)),
-            lan_url: lan_ip.map(|ip| format!("http://{}:{}", ip, port)),
+            lan_urls,
         }
     } else {
         ServerStatus {
             running: false,
             port,
             local_url: None,
-            lan_url: None,
+            lan_urls: Vec::new(),
         }
     }
 }

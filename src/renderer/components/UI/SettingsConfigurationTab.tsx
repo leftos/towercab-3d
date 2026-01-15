@@ -276,7 +276,7 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
     try {
       if (serverStatus?.running) {
         await httpServerApi.stop()
-        setServerStatus({ running: false, port: serverSettings.port, localUrl: null, lanUrl: null })
+        setServerStatus({ running: false, port: serverSettings.port, localUrl: null, lanUrls: [] })
         await updateServer({ enabled: false })
       } else {
         const status = await httpServerApi.start(serverSettings.port)
@@ -799,21 +799,21 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
                     </button>
                   </div>
                 )}
-                {serverStatus.lanUrl && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {serverStatus.lanUrls && serverStatus.lanUrls.map((url, index) => (
+                  <div key={url} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <code style={{ background: 'rgba(255,255,255,0.1)', padding: '4px 8px', borderRadius: '4px' }}>
-                      {serverStatus.lanUrl}
+                      {url}
                     </code>
                     <button
                       className="control-button"
-                      onClick={() => handleCopyUrl(serverStatus.lanUrl!)}
+                      onClick={() => handleCopyUrl(url)}
                       style={{ padding: '4px 8px' }}
                     >
                       Copy
                     </button>
-                    <span className="setting-hint" style={{ marginLeft: '4px' }}>(Use this for other devices)</span>
+                    {index === 0 && <span className="setting-hint" style={{ marginLeft: '4px' }}>(Use for other devices)</span>}
                   </div>
-                )}
+                ))}
               </div>
               <p className="setting-hint" style={{ marginTop: '8px' }}>
                 Open one of these URLs in Safari on your iPad to access TowerCab 3D remotely.

@@ -267,7 +267,7 @@ export interface ServerStatus {
   running: boolean
   port: number
   localUrl: string | null
-  lanUrl: string | null
+  lanUrls: string[]
 }
 
 /**
