@@ -59,21 +59,6 @@ pub struct MSFSConversionResult {
     pub duration_ms: u64,
 }
 
-/// Scanned model info from converted output directory
-/// (renamed from ScannedFSLTLModel since it scans any converted models)
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ScannedConvertedModel {
-    pub model_name: String,
-    pub model_path: String,
-    /// Relative path usable with /api/fsltl/* endpoint (e.g., "B738/AAL/model.glb")
-    pub relative_path: String,
-    pub aircraft_type: String,
-    pub airline_code: Option<String>,
-    pub has_animations: bool,
-    pub file_size: u64,
-}
-
 /// Info about a cached GLB model file
 #[derive(Debug, Serialize)]
 pub struct CachedGlbInfo {
@@ -1195,125 +1180,6 @@ pub async fn convert_msfs_model(
 // TAURI COMMANDS - SCANNING
 // =============================================================================
 
-/// Scan a converted models output directory for existing models
-/// Returns info about all model.glb files found
-/// Directory structure: outputPath/TYPE/AIRLINE/model.glb or outputPath/TYPE/base/model.glb
-///
-/// Note: This function was renamed from scan_fsltl_models since it scans any
-/// converted models, regardless of source (FSLTL, AIG, or future sources).
-#[tauri::command]
-pub fn scan_converted_models(output_path: String) -> Result<Vec<ScannedConvertedModel>, String> {
-    let base_path = PathBuf::from(&output_path);
-
-    if !base_path.exists() {
-        return Ok(Vec::new());
-    }
-
-    let mut models = Vec::new();
-
-    // Iterate through aircraft type directories (e.g., B738, A320)
-    let type_dirs =
-        fs::read_dir(&base_path).map_err(|e| format!("Failed to read output directory: {}", e))?;
-
-    for type_entry in type_dirs.filter_map(|e| e.ok()) {
-        let type_path = type_entry.path();
-        if !type_path.is_dir() {
-            continue;
-        }
-
-        let aircraft_type = match type_entry.file_name().into_string() {
-            Ok(name) => name,
-            Err(_) => continue,
-        };
-
-        // Skip hidden/system directories
-        if aircraft_type.starts_with('.') || aircraft_type.starts_with('_') {
-            continue;
-        }
-
-        // Iterate through airline directories (e.g., UAL, SWA, base)
-        let airline_dirs = match fs::read_dir(&type_path) {
-            Ok(dirs) => dirs,
-            Err(_) => continue,
-        };
-
-        for airline_entry in airline_dirs.filter_map(|e| e.ok()) {
-            let airline_path = airline_entry.path();
-            if !airline_path.is_dir() {
-                continue;
-            }
-
-            let airline_folder = match airline_entry.file_name().into_string() {
-                Ok(name) => name,
-                Err(_) => continue,
-            };
-
-            // Check for model.glb
-            let model_file = airline_path.join("model.glb");
-            if !model_file.exists() {
-                continue;
-            }
-
-            // Get file size
-            let file_size = fs::metadata(&model_file).map(|m| m.len()).unwrap_or(0);
-
-            // Determine airline code (None if "base" folder)
-            let airline_code = if airline_folder.to_lowercase() == "base" {
-                None
-            } else {
-                Some(airline_folder.clone())
-            };
-
-            // Build model name like FSLTL_B738_AAL or FSLTL_B738_ZZZZ
-            let model_name = if let Some(ref code) = airline_code {
-                format!("FSLTL_{}_{}", aircraft_type, code)
-            } else {
-                format!("FSLTL_{}_ZZZZ", aircraft_type)
-            };
-
-            // Check for animations by reading manifest.json if it exists
-            let has_animations = {
-                let manifest_path = airline_path.join("manifest.json");
-                if manifest_path.exists() {
-                    if let Ok(content) = fs::read_to_string(&manifest_path) {
-                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-                            json.get("hasAnimations")
-                                .and_then(|v| v.as_bool())
-                                .unwrap_or(false)
-                        } else {
-                            false
-                        }
-                    } else {
-                        false
-                    }
-                } else {
-                    false
-                }
-            };
-
-            // Relative path for HTTP API access (e.g., "B738/AAL/model.glb")
-            let relative_path = format!("{}/{}/model.glb", aircraft_type, airline_folder);
-
-            models.push(ScannedConvertedModel {
-                model_name,
-                model_path: normalize_path_string(&model_file),
-                relative_path,
-                aircraft_type: aircraft_type.clone(),
-                airline_code,
-                has_animations,
-                file_size,
-            });
-        }
-    }
-
-    tracing::info!(
-        "[MSFS] Scanned {} existing models from {}",
-        models.len(),
-        output_path
-    );
-    Ok(models)
-}
-
 /// Extract converter version from a GLB file's metadata
 fn get_glb_converter_version(glb_path: &std::path::Path) -> Option<u32> {
     use std::io::Read;
@@ -1410,6 +1276,167 @@ pub async fn scan_cache_directory(cache_dir: String) -> Result<Vec<CachedGlbInfo
     })
     .await
     .map_err(|e| format!("Task join error: {}", e))?
+}
+
+// =============================================================================
+// SERVER API HELPERS - For remote browser access
+// =============================================================================
+
+/// Get the combined model index for remote clients
+/// Returns a JSON object with fsltl and aig model arrays
+pub fn get_model_index(app: &tauri::AppHandle) -> Result<serde_json::Value, String> {
+    let cache_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
+
+    // Read the cached model indexes
+    let fsltl_cache_path = cache_dir.join("fsltl_model_cache.json");
+    let aig_cache_path = cache_dir.join("aig_model_cache.json");
+
+    let fsltl_models: Vec<SourceModelInfo> = if fsltl_cache_path.exists() {
+        let content = fs::read_to_string(&fsltl_cache_path)
+            .map_err(|e| format!("Failed to read FSLTL cache: {}", e))?;
+        let cache: ModelIndexCache = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse FSLTL cache: {}", e))?;
+        cache.models
+    } else {
+        Vec::new()
+    };
+
+    let aig_models: Vec<SourceModelInfo> = if aig_cache_path.exists() {
+        let content = fs::read_to_string(&aig_cache_path)
+            .map_err(|e| format!("Failed to read AIG cache: {}", e))?;
+        let cache: ModelIndexCache = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse AIG cache: {}", e))?;
+        cache.models
+    } else {
+        Vec::new()
+    };
+
+    Ok(serde_json::json!({
+        "fsltl": fsltl_models,
+        "aig": aig_models,
+        "totalCount": fsltl_models.len() + aig_models.len()
+    }))
+}
+
+/// Convert a model by name - looks up the model in the index and triggers conversion
+/// Returns the relative path to the converted GLB file
+pub fn convert_model_by_name(
+    app: &tauri::AppHandle,
+    model_name: &str,
+    texture_scale: &str,
+) -> Result<String, String> {
+    // First, find the model in the index
+    let cache_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
+
+    // Search in both FSLTL and AIG caches
+    let mut found_model: Option<SourceModelInfo> = None;
+
+    for source in ["fsltl", "aig"] {
+        let cache_path = cache_dir.join(format!("{}_model_cache.json", source));
+        if cache_path.exists() {
+            if let Ok(content) = fs::read_to_string(&cache_path) {
+                if let Ok(cache) = serde_json::from_str::<ModelIndexCache>(&content) {
+                    // Search by model_name (display name from aircraft.cfg title)
+                    if let Some(model) = cache.models.iter().find(|m| m.model_name == model_name) {
+                        found_model = Some(model.clone());
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    let model = found_model.ok_or_else(|| format!("Model not found: {}", model_name))?;
+
+    // Get the cache directory from settings
+    let settings_file = crate::settings::get_global_settings_file(app)
+        .map_err(|e| format!("Failed to get settings file: {}", e))?;
+
+    let output_dir = if settings_file.exists() {
+        let content = fs::read_to_string(&settings_file)
+            .map_err(|e| format!("Failed to read settings: {}", e))?;
+        let settings: crate::settings::GlobalSettings = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse settings: {}", e))?;
+        settings.msfs_models.cache_directory.clone()
+    } else {
+        None
+    };
+
+    let output_dir = output_dir.ok_or("MSFS model cache directory not configured")?;
+
+    // Find the converter executable
+    let resource_path = app
+        .path()
+        .resource_dir()
+        .map_err(|e| format!("Failed to get resource directory: {}", e))?;
+
+    let dev_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/fsltl_converter.exe");
+
+    let possible_paths = [
+        resource_path.join("resources").join("fsltl_converter.exe"),
+        dev_path,
+        PathBuf::from("src-tauri/resources/fsltl_converter.exe"),
+        PathBuf::from("fsltl_converter.exe"),
+    ];
+
+    let converter_path = possible_paths
+        .iter()
+        .find(|p| p.exists())
+        .ok_or_else(|| "Converter executable not found".to_string())?
+        .clone();
+
+    // Create output directory if needed
+    fs::create_dir_all(&output_dir)
+        .map_err(|e| format!("Failed to create output directory: {}", e))?;
+
+    // Build command arguments
+    let mut cmd = Command::new(&converter_path);
+    cmd.args([
+        "--source",
+        &model.aircraft_folder_path,
+        "--output",
+        &output_dir,
+        "--texture-scale",
+        texture_scale,
+        "--liveries",
+        &model.model_name,
+    ]);
+
+    // Pass explicit GLTF path if available
+    if !model.gltf_path.is_empty() {
+        cmd.args(["--gltf-path", &model.gltf_path]);
+    }
+
+    // Pass texture directories if available
+    if !model.texture_dirs.is_empty() {
+        let tex_dirs_str = model.texture_dirs.join(",");
+        cmd.args(["--texture-dirs", &tex_dirs_str]);
+    }
+
+    // Hide console window on Windows
+    #[cfg(windows)]
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+
+    // Execute and wait for completion
+    let output = cmd
+        .output()
+        .map_err(|e| format!("Failed to execute converter: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Conversion failed: {}", stderr));
+    }
+
+    // Return the relative path to the GLB file
+    // The converter outputs files as {source}_{model_name}.glb (e.g., fsltl_FSLTL_FAIB_B738_American.glb)
+    let glb_filename = format!("{}_{}.glb", model.source, model.model_name);
+    Ok(glb_filename)
 }
 
 #[cfg(test)]

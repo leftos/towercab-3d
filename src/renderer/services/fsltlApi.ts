@@ -266,33 +266,3 @@ export async function listVmrFiles(directory: string): Promise<string[]> {
   }
 }
 
-/**
- * Scanned model info returned from scan_fsltl_models
- */
-export interface ScannedFSLTLModel {
-  modelName: string
-  modelPath: string
-  aircraftType: string
-  airlineCode: string | null
-  hasAnimations: boolean
-  fileSize: number
-}
-
-/**
- * Scan an FSLTL output directory for existing converted models
- * @param outputPath - Path to scan for model.glb files
- * @returns Array of scanned model info
- * In browser mode, fetches from HTTP API
- */
-export async function scanFsltlModels(outputPath: string): Promise<ScannedFSLTLModel[]> {
-  if (!isTauri()) {
-    // In browser mode, fetch from server API
-    const response = await fetch('/api/fsltl/models')
-    if (!response.ok) {
-      console.warn('[fsltlApi] Failed to fetch FSLTL models:', response.status)
-      return []
-    }
-    return response.json()
-  }
-  return invoke<ScannedFSLTLModel[]>('scan_fsltl_models', { outputPath })
-}

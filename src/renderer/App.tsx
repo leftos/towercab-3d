@@ -50,6 +50,7 @@ import { useVnasEvents } from './hooks/useVnasEvents'
 import { useAircraftInterpolation } from './hooks/useAircraftInterpolation'
 import { useRemoteObservations } from './hooks/useRemoteObservations'
 import { useRemoteVnasSubscription } from './hooks/useRemoteVnasSubscription'
+import { useAirportSyncListener } from './hooks/useAirportSyncListener'
 import { useVnasSubscription } from './hooks/useVnasSubscription'
 import { settingsSharedWorkerService } from './services/SettingsSharedWorkerService'
 
@@ -148,6 +149,9 @@ function App() {
 
   // Auto-request vNAS subscription when viewing an airport in remote mode
   useRemoteVnasSubscription()
+
+  // Listen for airport sync changes in remote mode (RealTraffic requires all clients at same airport)
+  useAirportSyncListener()
 
   // Auto-request vNAS subscription when viewing an airport in host mode
   useVnasSubscription()

@@ -7,6 +7,7 @@ import { useAirportStore } from '../../stores/airportStore'
 import { useViewportStore } from '../../stores/viewportStore'
 import { useAircraftTimelineStore } from '../../stores/aircraftTimelineStore'
 import { shellApi, httpServerApi, type ServerStatus, isTauri } from '../../utils/tauriApi'
+import { isRemoteMode } from '../../utils/remoteMode'
 import MSFSModelSettingsPanel from './MSFSModelSettingsPanel'
 import CollapsibleSection from './settings/CollapsibleSection'
 import type { DataSourceType } from '../../types/realtraffic'
@@ -129,7 +130,8 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
         updateRealTrafficSettings({ licenseKey: rtLicenseInput.trim() })
       }
       const success = await rtAuthenticate(keyToUse)
-      if (success) {
+      // In remote mode, don't start polling - data comes from host via WebSocket
+      if (success && !isRemoteMode()) {
         const airport = useAirportStore.getState().currentAirport
         const rtStore = useRealTrafficStore.getState()
         if (airport) {
@@ -238,32 +240,37 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
     useAircraftTimelineStore.getState().clear()
 
     // Stop the old data source and start the new one
+    // Note: In remote mode, we don't start polling - data comes from host via WebSocket
     if (newSource === 'realtraffic') {
       useVatsimStore.getState().stopPolling()
-      const rtStore = useRealTrafficStore.getState()
-      if (airport) {
-        rtStore.setReferencePosition(airport.lat, airport.lon)
-      }
-      if (rtStore.status === 'connected') {
-        rtStore.startPolling()
-      } else {
-        const storedLicenseKey = useGlobalSettingsStore.getState().realtraffic.licenseKey
-        if (storedLicenseKey) {
-          rtStore.authenticate(storedLicenseKey).then((success) => {
-            if (success) {
-              rtStore.startPolling()
-            }
-          })
+      if (!isRemoteMode()) {
+        const rtStore = useRealTrafficStore.getState()
+        if (airport) {
+          rtStore.setReferencePosition(airport.lat, airport.lon)
+        }
+        if (rtStore.status === 'connected') {
+          rtStore.startPolling()
+        } else {
+          const storedLicenseKey = useGlobalSettingsStore.getState().realtraffic.licenseKey
+          if (storedLicenseKey) {
+            rtStore.authenticate(storedLicenseKey).then((success) => {
+              if (success) {
+                rtStore.startPolling()
+              }
+            })
+          }
         }
       }
     } else {
       useRealTrafficStore.getState().stopPolling()
-      const vatsimStore = useVatsimStore.getState()
-      vatsimStore.resetTimestamp()
-      if (airport) {
-        vatsimStore.setReferencePosition(airport.lat, airport.lon)
+      if (!isRemoteMode()) {
+        const vatsimStore = useVatsimStore.getState()
+        vatsimStore.resetTimestamp()
+        if (airport) {
+          vatsimStore.setReferencePosition(airport.lat, airport.lon)
+        }
+        vatsimStore.startPolling()
       }
-      vatsimStore.startPolling()
     }
   }, [updateRealTrafficSettings])
 
@@ -293,6 +300,44 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
   const handleCopyUrl = useCallback((url: string) => {
     navigator.clipboard.writeText(url).catch(console.error)
   }, [])
+
+  // In remote mode, show a notice instead of global settings
+  // All configuration settings are managed by the host application
+  if (isRemoteMode()) {
+    return (
+      <div className="settings-remote-notice">
+        <div style={{
+          textAlign: 'center',
+          padding: '40px 20px',
+          color: 'rgba(255, 255, 255, 0.7)'
+        }}>
+          <svg
+            width="48"
+            height="48"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            style={{ marginBottom: '16px', opacity: 0.6 }}
+          >
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+            <line x1="8" y1="21" x2="16" y2="21" />
+            <line x1="12" y1="17" x2="12" y2="21" />
+          </svg>
+          <h3 style={{ marginBottom: '12px', color: 'rgba(255, 255, 255, 0.9)' }}>
+            Remote Client Mode
+          </h3>
+          <p style={{ marginBottom: '8px' }}>
+            Configuration settings are managed by the host application.
+          </p>
+          <p style={{ fontSize: '0.9em', opacity: 0.8 }}>
+            Changes to Cesium tokens, data sources, MSFS models, and other global settings
+            must be made on the host PC running TowerCab 3D.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <>

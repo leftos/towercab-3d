@@ -91,9 +91,14 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
 
   // Filter and sort timelines
   const filteredTimelines = useMemo(() => {
+    // No airport selected = no timelines to show
+    if (!currentAirport) {
+      return []
+    }
+
     const timelinesArray = Array.from(timelines.values())
 
-    if (config.filterMode === 'all' || !currentAirport) {
+    if (config.filterMode === 'all') {
       return timelinesArray.sort((a, b) => a.callsign.localeCompare(b.callsign))
     }
 

@@ -17,7 +17,7 @@ function AirportSelector() {
   // Subscribe directly to globalSettingsStore for reactive updates
   const recentAirports = useGlobalSettingsStore((state) => state.airports.recentAirports)
   const vnasState = useVnasStore((state) => state.status.state)
-  const sessionFacilities = useVnasStore((state) => state.sessionFacilities)
+  const sessionFacilities = useVnasStore((state) => state.sessionFacilities) ?? []
 
   // Data source and favorites
   const dataSource = useGlobalSettingsStore((state) => state.realtraffic.dataSource)

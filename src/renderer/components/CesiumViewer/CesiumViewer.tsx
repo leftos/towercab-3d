@@ -747,22 +747,20 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
 
     // If in orbit mode following an aircraft without airport, use aircraft position as root
     if (isOrbitFollowing(followMode, followingCallsign) && followingCallsign) {
-      // Try interpolated data first, fall back to raw store data (read directly to avoid reactive dependency)
       const interpolated = interpolatedAircraft.get(followingCallsign)
-      const rawAircraft = useVatsimStore.getState().aircraftStates.get(followingCallsign)
 
-      // Use interpolated if available, otherwise use raw store data
-      const lat = interpolated?.interpolatedLatitude ?? rawAircraft?.latitude
-      const lon = interpolated?.interpolatedLongitude ?? rawAircraft?.longitude
-      const alt = interpolated?.interpolatedAltitude ?? rawAircraft?.altitude
-
-      if (lat !== undefined && lon !== undefined && alt !== undefined) {
-        const altitudeMeters = alt  // Already in METERS
-        babylonOverlay.setupRootNode(lat, lon, altitudeMeters)
+      // Only set up root node if we have interpolated data (at least 2 observations)
+      // If not ready yet, the "waiting for data updates" overlay will show
+      if (interpolated) {
+        babylonOverlay.setupRootNode(
+          interpolated.interpolatedLatitude,
+          interpolated.interpolatedLongitude,
+          interpolated.interpolatedAltitude
+        )
         rootNodeSetupRef.current = true
 
-        // Set reference position to followed aircraft for VATSIM filtering
-        setRefPosIfChanged(lat, lon)
+        // Set reference position to followed aircraft for filtering
+        setRefPosIfChanged(interpolated.interpolatedLatitude, interpolated.interpolatedLongitude)
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally using specific babylonOverlay properties

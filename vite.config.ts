@@ -1,5 +1,5 @@
 import { resolve, join } from 'node:path'
-import { createReadStream, existsSync, readFileSync } from 'node:fs'
+import { createReadStream, existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { defineConfig } from 'vite'
 
 // Read version from package.json
@@ -12,6 +12,24 @@ import type { Plugin } from 'vite'
 const cesiumBaseUrl = 'cesium-package'
 // Use forward slashes for glob patterns (fast-glob requirement)
 const cesiumSource = resolve('node_modules/cesium/Build/Cesium').replace(/\\/g, '/')
+
+// Check if Cesium assets already exist in dist (skip copying for faster rebuilds)
+const cesiumAssetsExist = existsSync(resolve('dist/cesium-package/Workers'))
+
+// Fast dev build mode - skip minification for faster iteration
+const fastDevBuild = process.env.VITE_FAST_BUILD === '1'
+
+// Plugin to write build mode marker after build completes
+// This allows dev-wrapper.js to detect if last build was dev (unminified) or prod (minified)
+function writeBuildModeMarker(): Plugin {
+  return {
+    name: 'write-build-mode-marker',
+    closeBundle() {
+      const mode = fastDevBuild ? 'dev' : 'prod'
+      writeFileSync(resolve('dist/.build-mode'), mode)
+    }
+  }
+}
 
 // Middleware plugin to serve Cesium assets in dev mode
 function serveCesiumDev(): Plugin {
@@ -57,10 +75,23 @@ export default defineConfig({
     }
   },
 
+  // Worker configuration - compile TypeScript workers to JS
+  worker: {
+    format: 'es',
+    rollupOptions: {
+      output: {
+        entryFileNames: 'assets/[name]-[hash].js'
+      }
+    }
+  },
+
   build: {
     outDir: resolve('dist'),
-    emptyOutDir: true,
-    minify: 'esbuild',
+    // Skip emptying dist if Cesium assets exist (faster rebuilds)
+    // Full rebuild still happens on clean builds or after npm update cesium
+    emptyOutDir: !cesiumAssetsExist,
+    // Skip minification in fast dev mode (VITE_FAST_BUILD=1)
+    minify: fastDevBuild ? false : 'esbuild',
     target: 'esnext',
     sourcemap: false,
     rollupOptions: {
@@ -94,13 +125,15 @@ export default defineConfig({
   plugins: [
     react(),
     serveCesiumDev(),
-    viteStaticCopy({
+    writeBuildModeMarker(),
+    // Only copy Cesium assets if they don't exist (speeds up rebuilds significantly)
+    ...(!cesiumAssetsExist ? [viteStaticCopy({
       targets: [
         { src: `${cesiumSource}/ThirdParty/**/*`, dest: `${cesiumBaseUrl}/ThirdParty` },
         { src: `${cesiumSource}/Workers/**/*`, dest: `${cesiumBaseUrl}/Workers` },
         { src: `${cesiumSource}/Assets/**/*`, dest: `${cesiumBaseUrl}/Assets` },
         { src: `${cesiumSource}/Widgets/**/*`, dest: `${cesiumBaseUrl}/Widgets` }
       ]
-    })
+    })] : [])
   ]
 })

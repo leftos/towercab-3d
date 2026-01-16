@@ -175,8 +175,18 @@ class MSFSModelConversionServiceClass {
     const settings = useGlobalSettingsStore.getState().msfsModels
     console.log('[MSFSConversion] Initialize settings:', {
       cacheDirectory: settings.cacheDirectory,
-      communityPath: settings.communityPath
+      communityPath: settings.communityPath,
+      isTauri: isTauri()
     })
+
+    // In remote browser mode, fetch model index from host
+    if (!isTauri()) {
+      onProgress?.('Fetching model index from host...', 0)
+      await this.fetchRemoteModelIndex()
+      onProgress?.('Model index loaded', 100)
+      console.log('[MSFSConversion] Service initialized (remote mode)')
+      return
+    }
 
     // First, load any pre-cached models from disk (makes them immediately available)
     // This phase is ~30% of MSFS init
@@ -207,6 +217,127 @@ class MSFSModelConversionServiceClass {
     }
 
     console.log('[MSFSConversion] Service initialized')
+  }
+
+  /**
+   * Fetch model index and already-converted models from remote host (for browser mode)
+   */
+  private async fetchRemoteModelIndex(): Promise<void> {
+    // Fetch source model index (for on-demand conversion)
+    try {
+      const response = await fetch('/api/msfs/index')
+      if (!response.ok) {
+        console.warn('[MSFSConversion] Failed to fetch model index:', response.status)
+      } else {
+        // Rust serializes with camelCase (serde rename_all = "camelCase")
+        const data = await response.json() as {
+          fsltl: Array<{
+            source: string
+            modelName: string
+            folderName: string
+            aircraftFolderPath: string
+            gltfPath: string
+            textureDirs: string[]
+            aircraftType: string
+            airlineCode: string | null
+            atcId: string | null
+          }>
+          aig: Array<{
+            source: string
+            modelName: string
+            folderName: string
+            aircraftFolderPath: string
+            gltfPath: string
+            textureDirs: string[]
+            aircraftType: string
+            airlineCode: string | null
+            atcId: string | null
+          }>
+          totalCount: number
+        }
+
+        // Populate model maps from remote index
+        for (const model of data.fsltl) {
+          this.fsltlModels.set(model.modelName, {
+            source: 'fsltl',
+            modelName: model.modelName,
+            folderName: model.folderName,
+            aircraftFolderPath: model.aircraftFolderPath,
+            gltfPath: model.gltfPath,
+            textureDirs: model.textureDirs,
+            aircraftType: model.aircraftType,
+            airlineCode: model.airlineCode,
+            atcId: model.atcId
+          })
+        }
+
+        for (const model of data.aig) {
+          this.aigModels.set(model.modelName, {
+            source: 'aig',
+            modelName: model.modelName,
+            folderName: model.folderName,
+            aircraftFolderPath: model.aircraftFolderPath,
+            gltfPath: model.gltfPath,
+            textureDirs: model.textureDirs,
+            aircraftType: model.aircraftType,
+            airlineCode: model.airlineCode,
+            atcId: model.atcId
+          })
+        }
+
+        console.log(`[MSFSConversion] Loaded ${data.totalCount} models from remote (${data.fsltl.length} FSLTL, ${data.aig.length} AIG)`)
+      }
+    } catch (error) {
+      console.warn('[MSFSConversion] Failed to fetch model index:', error)
+    }
+
+    // Fetch already-converted models (to populate memory cache)
+    // Response format from scan_cache_directory: { model_key, path, file_size, converter_version }
+    try {
+      const modelsResponse = await fetch('/api/msfs/models')
+      if (!modelsResponse.ok) {
+        console.warn('[MSFSConversion] Failed to fetch converted models list:', modelsResponse.status)
+        return
+      }
+
+      const convertedModels = await modelsResponse.json() as Array<{
+        model_key: string    // Cache key like "fsltl_FSLTL_FAIB_B738_American"
+        path: string         // Full path on host (not used for URL)
+        file_size: number
+        converter_version: number | null
+      }>
+
+      // Filter out outdated models (same as host does during loadCachedModels)
+      let loadedCount = 0
+      let skippedCount = 0
+      for (const model of convertedModels) {
+        if (model.converter_version !== CONVERTER_VERSION) {
+          skippedCount++
+          continue
+        }
+
+        // Build URL to serve the model from the cache
+        // Files are flat in cache dir, named {model_key}.glb
+        // URL-encode the model key to handle spaces and special characters in filenames
+        const modelUrl = `/api/msfs/${encodeURIComponent(model.model_key)}.glb`
+
+        // model_key is already in the correct format (e.g., "fsltl_FSLTL_FAIB_B738_American")
+        this.memoryCache.set(model.model_key, {
+          path: modelUrl,
+          fileSize: model.file_size,
+          lastAccessed: Date.now(),
+          isDiskCache: true
+        })
+        loadedCount++
+      }
+
+      // Count FSLTL vs AIG models for debugging
+      const fsltlCount = Array.from(this.memoryCache.keys()).filter(k => k.startsWith('fsltl_')).length
+      const aigCount = Array.from(this.memoryCache.keys()).filter(k => k.startsWith('aig_')).length
+      console.log(`[MSFSConversion] Loaded ${loadedCount} pre-converted models from host cache (${fsltlCount} FSLTL, ${aigCount} AIG)${skippedCount > 0 ? `, skipped ${skippedCount} outdated` : ''}`)
+    } catch (error) {
+      console.warn('[MSFSConversion] Failed to fetch converted models:', error)
+    }
   }
 
   /**
@@ -897,8 +1028,10 @@ class MSFSModelConversionServiceClass {
     const modelKey = this.getModelKey(sourceInfo)
 
     try {
+      // In remote browser mode, use HTTP API
       if (!isTauri()) {
-        throw new Error('Model conversion requires Tauri desktop mode')
+        await this.executeRemoteConversion(sourceInfo, resolve, modelKey)
+        return
       }
 
       const { invoke } = await import('@tauri-apps/api/core')
@@ -982,6 +1115,74 @@ class MSFSModelConversionServiceClass {
       this.conversionStatus.set(modelKey, { converting: false })
 
       // Process next queued conversion
+      this.processQueue()
+    }
+  }
+
+  /**
+   * Execute model conversion via remote HTTP API (for browser mode)
+   */
+  private async executeRemoteConversion(
+    sourceInfo: SourceModelInfo,
+    resolve: (result: ConversionResult) => void,
+    modelKey: string
+  ): Promise<void> {
+    try {
+      const settings = this.getSettings()
+
+      const response = await fetch('/api/msfs/convert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model_name: sourceInfo.modelName,
+          texture_scale: settings.textureScale
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+
+      const result = await response.json() as {
+        success: boolean
+        output_path?: string
+        error?: string
+      }
+
+      if (result.success && result.output_path) {
+        console.log(`[MSFSConversion] Remote conversion succeeded for ${modelKey}`)
+
+        // Build URL to the converted model (URL-encode to handle spaces and special characters)
+        const modelUrl = `/api/msfs/${encodeURIComponent(result.output_path)}`
+
+        // Add to cache (remote files don't have local size info)
+        this.memoryCache.set(modelKey, {
+          path: modelUrl,
+          fileSize: 0,
+          lastAccessed: Date.now(),
+          isDiskCache: true
+        })
+
+        resolve({
+          success: true,
+          glbPath: modelUrl
+        })
+      } else {
+        this.failedConversions.add(modelKey)
+        console.warn(`[MSFSConversion] Remote conversion failed for ${modelKey}: ${result.error}`)
+        resolve({
+          success: false,
+          error: result.error || 'Unknown conversion error'
+        })
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      console.error(`[MSFSConversion] Remote conversion failed for ${modelKey}:`, message)
+      this.failedConversions.add(modelKey)
+      resolve({ success: false, error: message })
+    } finally {
+      this.activeConversions--
+      this.conversionStatus.set(modelKey, { converting: false })
       this.processQueue()
     }
   }
@@ -1224,6 +1425,23 @@ class MSFSModelConversionServiceClass {
     return {
       fsltl: this.fsltlModels.size,
       aig: this.aigModels.size
+    }
+  }
+
+  /**
+   * Get combined service statistics
+   */
+  getStats(): {
+    fsltlCount: number
+    aigCount: number
+    cacheCount: number
+    isInitialized: boolean
+  } {
+    return {
+      fsltlCount: this.fsltlModels.size,
+      aigCount: this.aigModels.size,
+      cacheCount: this.memoryCache.size,
+      isInitialized: this.initialized
     }
   }
 }

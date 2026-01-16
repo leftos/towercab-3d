@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useReplayStore } from '../stores/replayStore'
 import { useAircraftTimelineStore } from '../stores/aircraftTimelineStore'
+import { useVatsimStore } from '../stores/vatsimStore'
 import { getAircraftDataSource } from './useAircraftDataSource'
-import { calculateFlarePitch, angleDifference } from '../utils/interpolation'
+import { calculateFlarePitch, angleDifference, calculateDistanceNM } from '../utils/interpolation'
 import { performanceMonitor } from '../utils/performanceMonitor'
 import { geoidService } from '../services/GeoidService'
-import type { InterpolatedAircraftState, AircraftState } from '../types/vatsim'
+import type { InterpolatedAircraftState } from '../types/vatsim'
 import type { TimelineInterpolationResult } from '../types/aircraft-timeline'
 import type { TerrainData } from './useGroundAircraftTerrain'
 import {
@@ -39,8 +40,6 @@ let animationFrameId: number | null = null
 let hookInstanceCount = 0
 
 // Shared state for animation loop (accessed by singleton loop)
-const sharedAircraftStatesRef = { current: new Map<string, AircraftState>() }
-const sharedPreviousStatesRef = { current: new Map<string, AircraftState>() }
 const sharedOrientationEnabledRef = { current: true }
 const sharedOrientationIntensityRef = { current: 1.0 }
 const sharedLastInterpolationTimeRef = { current: 0 }
@@ -51,6 +50,12 @@ const sharedGroundAircraftTerrainRef = { current: new Map<string, TerrainData>()
 // Note: groundElevationMeters is in MSL for fallback when no terrain sample available
 // It will be converted to ellipsoidal using the aircraft's position
 const sharedGroundElevationMetersRef = { current: 0 }
+
+// Shared state for distance filtering (only interpolate aircraft in range)
+// Reference position comes from vatsimStore (set when airport is selected)
+// Distance radius comes from settingsStore.memory.aircraftDataRadiusNM
+const sharedReferencePositionRef = { current: null as { latitude: number; longitude: number } | null }
+const sharedAircraftDataRadiusNMRef = { current: 250 } // Default, updated from settings
 
 // ============================================================================
 // CONSOLIDATED STATE OBJECTS
@@ -343,12 +348,8 @@ function timelineToInterpolatedState(
 function updateInterpolation() {
   performanceMonitor.startTimer('interpolation')
 
-  // Get aircraft data from unified source (handles live vs replay mode)
+  // Get timing and mode info from unified source (handles live vs replay mode)
   const source = getAircraftDataSource()
-
-  // Update shared refs from source (for any external code that reads them)
-  sharedAircraftStatesRef.current = source.aircraftStates
-  sharedPreviousStatesRef.current = source.previousStates
 
   // Use source timestamp as "now" - for live mode this is Date.now(),
   // for replay mode this is calculated based on segment progress
@@ -413,12 +414,34 @@ function updateInterpolation() {
   const timelineStore = useAircraftTimelineStore.getState()
   const timelineStates = timelineStore.getInterpolatedStates(now)
 
+  // Get reference position and filter radius for distance filtering
+  const referencePosition = sharedReferencePositionRef.current
+  const aircraftDataRadiusNM = sharedAircraftDataRadiusNMRef.current
+
   {
 
     for (const [callsign, timeline] of timelineStates) {
       // Skip aircraft with fewer than 2 observations - we need at least 2 data points
       // to interpolate smoothly. Aircraft will "spawn in" once they have enough data.
       if (timeline.observationCount < 2) {
+        continue
+      }
+
+      // Skip aircraft if no reference position is set (no airport selected yet)
+      // This prevents model matching and rendering work before airport selection
+      if (!referencePosition) {
+        continue
+      }
+
+      // Skip aircraft outside the user-configured range
+      // This ensures we only interpolate and model-match aircraft that will be rendered
+      const distance = calculateDistanceNM(
+        referencePosition.latitude,
+        referencePosition.longitude,
+        timeline.latitude,
+        timeline.longitude
+      )
+      if (distance > aircraftDataRadiusNM) {
         continue
       }
 
@@ -902,21 +925,27 @@ export function useAircraftInterpolation(): Map<string, InterpolatedAircraftStat
   useEffect(() => {
     hookInstanceCount++
 
-    // Subscribe to settings for orientation emulation
+    // Subscribe to settings for orientation emulation and distance filtering
     const unsubscribeSettings = useSettingsStore.subscribe((state) => {
       sharedOrientationEnabledRef.current = state.aircraft.orientationEmulation
       sharedOrientationIntensityRef.current = state.aircraft.orientationIntensity
+      sharedAircraftDataRadiusNMRef.current = state.memory.aircraftDataRadiusNM
+    })
+
+    // Subscribe to vatsimStore for reference position (airport location)
+    // This gates interpolation to only run after an airport is selected
+    const unsubscribeVatsim = useVatsimStore.subscribe((state) => {
+      sharedReferencePositionRef.current = state.referencePosition
     })
 
     // Initialize settings refs
     const settingsState = useSettingsStore.getState()
     sharedOrientationEnabledRef.current = settingsState.aircraft.orientationEmulation
     sharedOrientationIntensityRef.current = settingsState.aircraft.orientationIntensity
+    sharedAircraftDataRadiusNMRef.current = settingsState.memory.aircraftDataRadiusNM
 
-    // Note: We no longer subscribe to vatsimStore here because the animation loop
-    // now calls getAircraftDataSource() each frame, which reads directly from
-    // the appropriate store (vatsimStore for live, replayStore for replay).
-    // This eliminates the 60Hz store subscription issue during replay.
+    // Initialize reference position from vatsimStore
+    sharedReferencePositionRef.current = useVatsimStore.getState().referencePosition
 
     // Subscribe this component to updates (for React re-renders when aircraft count changes)
     const updateCallback = () => setVersion(v => v + 1)
@@ -925,6 +954,7 @@ export function useAircraftInterpolation(): Map<string, InterpolatedAircraftStat
     return () => {
       hookInstanceCount--
       unsubscribeSettings()
+      unsubscribeVatsim()
       subscribers.delete(updateCallback)
 
       // Stop animation loop when last component unmounts

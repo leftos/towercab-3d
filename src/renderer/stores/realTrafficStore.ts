@@ -18,6 +18,7 @@ import {
   REALTRAFFIC_DEFAULT_POLL_INTERVAL
 } from '../constants/realtraffic'
 import { SOURCE_DISPLAY_DELAYS } from '../constants/aircraft-timeline'
+import { isRemoteMode } from '../utils/remoteMode'
 
 interface ReferencePosition {
   latitude: number
@@ -201,7 +202,7 @@ export const useRealTrafficStore = create<RealTrafficStore>((set, get) => ({
           get().stopPolling()
 
           const authSuccess = await get().authenticate(licenseKey)
-          if (authSuccess) {
+          if (authSuccess && !isRemoteMode()) {
             console.log('[RealTraffic] Automatic reconnection successful, resuming polling')
             get().startPolling()
             return

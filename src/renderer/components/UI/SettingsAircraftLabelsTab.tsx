@@ -1,5 +1,6 @@
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
+import { isRemoteMode } from '../../utils/remoteMode'
 import CollapsibleSection from './settings/CollapsibleSection'
 import type { GroundLabelMode, InsetDatablockMode, InsetGroundLabelMode } from '../../types'
 import type { AircraftTintColor } from '../../types/settings'
@@ -36,86 +37,95 @@ function SettingsAircraftLabelsTab() {
   const insetGraphics = useSettingsStore((state) => state.graphics.insetGraphics)
   const updateGraphicsSettings = useSettingsStore((state) => state.updateGraphicsSettings)
 
+  const isRemote = isRemoteMode()
+
   return (
     <>
-      <CollapsibleSection title="Aircraft Visibility">
-        <div className="setting-item">
-          <label>Visibility Range</label>
-          <div className="slider-with-value">
-            <input
-              type="range"
-              min="5"
-              max="100"
-              value={labelVisibilityDistance}
-              onChange={(e) => updateDisplay({ labelVisibilityDistance: Number(e.target.value) })}
-            />
-            <span>{labelVisibilityDistance} nm</span>
+      {/* Aircraft Visibility - Global settings, hidden in remote mode */}
+      {!isRemote && (
+        <CollapsibleSection title="Aircraft Visibility">
+          <div className="setting-item">
+            <label>Visibility Range</label>
+            <div className="slider-with-value">
+              <input
+                type="range"
+                min="5"
+                max="100"
+                value={labelVisibilityDistance}
+                onChange={(e) => updateDisplay({ labelVisibilityDistance: Number(e.target.value) })}
+              />
+              <span>{labelVisibilityDistance} nm</span>
+            </div>
+            <p className="setting-hint">
+              Maximum range for displaying aircraft and labels around the tower.
+            </p>
           </div>
-          <p className="setting-hint">
-            Maximum range for displaying aircraft and labels around the tower.
-          </p>
-        </div>
 
-        <div className="setting-item">
-          <label>
-            <input
-              type="checkbox"
-              checked={showGroundTraffic}
-              onChange={(e) => updateDisplay({ showGroundTraffic: e.target.checked })}
-            />
-            Show Ground Traffic
-          </label>
-        </div>
+          <div className="setting-item">
+            <label>
+              <input
+                type="checkbox"
+                checked={showGroundTraffic}
+                onChange={(e) => updateDisplay({ showGroundTraffic: e.target.checked })}
+              />
+              Show Ground Traffic
+            </label>
+          </div>
 
-        <div className="setting-item">
-          <label>
-            <input
-              type="checkbox"
-              checked={showAirborneTraffic}
-              onChange={(e) => updateDisplay({ showAirborneTraffic: e.target.checked })}
-            />
-            Show Airborne Traffic
-          </label>
-        </div>
-      </CollapsibleSection>
+          <div className="setting-item">
+            <label>
+              <input
+                type="checkbox"
+                checked={showAirborneTraffic}
+                onChange={(e) => updateDisplay({ showAirborneTraffic: e.target.checked })}
+              />
+              Show Airborne Traffic
+            </label>
+          </div>
+        </CollapsibleSection>
+      )}
 
       <CollapsibleSection title="Datablocks & Labels">
-        <div className="setting-item">
-          <label>Datablock Mode</label>
-          <div className="radio-group-vertical">
-            <label>
-              <input
-                type="radio"
-                name="datablockMode"
-                value="full"
-                checked={datablockMode === 'full'}
-                onChange={() => updateDisplay({ datablockMode: 'full' })}
-              />
-              Full (callsign + type + altitude + speed)
-            </label>
-            <label>
-              <input
-                type="radio"
-                name="datablockMode"
-                value="airline"
-                checked={datablockMode === 'airline'}
-                onChange={() => updateDisplay({ datablockMode: 'airline' })}
-              />
-              Airline Codes Only (ICAO code for airline flights)
-            </label>
-            <label>
-              <input
-                type="radio"
-                name="datablockMode"
-                value="none"
-                checked={datablockMode === 'none'}
-                onChange={() => updateDisplay({ datablockMode: 'none' })}
-              />
-              None (hide labels, show aircraft only)
-            </label>
+        {/* Datablock Mode - Global setting, hidden in remote mode */}
+        {!isRemote && (
+          <div className="setting-item">
+            <label>Datablock Mode</label>
+            <div className="radio-group-vertical">
+              <label>
+                <input
+                  type="radio"
+                  name="datablockMode"
+                  value="full"
+                  checked={datablockMode === 'full'}
+                  onChange={() => updateDisplay({ datablockMode: 'full' })}
+                />
+                Full (callsign + type + altitude + speed)
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="datablockMode"
+                  value="airline"
+                  checked={datablockMode === 'airline'}
+                  onChange={() => updateDisplay({ datablockMode: 'airline' })}
+                />
+                Airline Codes Only (ICAO code for airline flights)
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="datablockMode"
+                  value="none"
+                  checked={datablockMode === 'none'}
+                  onChange={() => updateDisplay({ datablockMode: 'none' })}
+                />
+                None (hide labels, show aircraft only)
+              </label>
+            </div>
           </div>
-        </div>
+        )}
 
+        {/* Datablock Font Size - Local setting, always visible */}
         <div className="setting-item">
           <label>Datablock Font Size</label>
           <div className="slider-with-value">
@@ -133,153 +143,161 @@ function SettingsAircraftLabelsTab() {
           </p>
         </div>
 
-        <div className="setting-item">
-          <label>Leader Line Length</label>
-          <div className="slider-with-value">
-            <input
-              type="range"
-              min="0.5"
-              max="5"
-              step="0.5"
-              value={leaderDistance}
-              onChange={(e) => updateDisplay({ leaderDistance: Number(e.target.value) })}
-            />
-            <span>{leaderDistance}</span>
-          </div>
-          <p className="setting-hint">
-            Length of leader lines connecting datablocks to aircraft. 1=short, 5=long.
-          </p>
-        </div>
-
-        <div className="setting-item">
-          <label>Default Datablock Direction</label>
-          <select
-            value={defaultDatablockDirection}
-            onChange={(e) => updateDisplay({ defaultDatablockDirection: Number(e.target.value) as 1 | 2 | 3 | 4 | 6 | 7 | 8 | 9 })}
-          >
-            <option value={7}>7 - Top-Left</option>
-            <option value={8}>8 - Top</option>
-            <option value={9}>9 - Top-Right</option>
-            <option value={4}>4 - Left</option>
-            <option value={6}>6 - Right</option>
-            <option value={1}>1 - Bottom-Left</option>
-            <option value={2}>2 - Bottom</option>
-            <option value={3}>3 - Bottom-Right</option>
-          </select>
-          <p className="setting-hint">
-            Default position for datablocks on new airports. Press 5+Enter to reset all datablocks to this default.
-          </p>
-        </div>
-
-        <div className="setting-item">
-          <label>
-            <input
-              type="checkbox"
-              checked={autoAvoidOverlaps}
-              onChange={(e) => updateDisplay({ autoAvoidOverlaps: e.target.checked })}
-            />
-            Auto-rearrange to Avoid Overlaps
-          </label>
-          <p className="setting-hint">
-            Automatically shift datablocks to prevent them from overlapping each other.
-          </p>
-        </div>
-
-        {showGroundTraffic && (
+        {/* Leader Line, Direction, Overlaps, Ground Labels - Global settings, hidden in remote mode */}
+        {!isRemote && (
           <>
             <div className="setting-item">
-              <label>Ground Traffic Labels</label>
-              <select
-                value={groundLabelMode ?? 'all'}
-                onChange={(e) => updateDisplay({ groundLabelMode: e.target.value as GroundLabelMode })}
-              >
-                <option value="all">All Ground Aircraft</option>
-                <option value="moving">Moving Only (custom speed)</option>
-                <option value="activeOnly">Active Only (&gt; 5 kts)</option>
-                <option value="none">Hide All Ground Labels</option>
-              </select>
+              <label>Leader Line Length</label>
+              <div className="slider-with-value">
+                <input
+                  type="range"
+                  min="0.5"
+                  max="5"
+                  step="0.5"
+                  value={leaderDistance}
+                  onChange={(e) => updateDisplay({ leaderDistance: Number(e.target.value) })}
+                />
+                <span>{leaderDistance}</span>
+              </div>
               <p className="setting-hint">
-                Reduce gate clutter by hiding labels for parked/stationary aircraft.
+                Length of leader lines connecting datablocks to aircraft. 1=short, 5=long.
               </p>
             </div>
 
-            {groundLabelMode === 'moving' && (
-              <div className="setting-item">
-                <label>Minimum Speed for Labels</label>
-                <div className="slider-with-value">
-                  <input
-                    type="range"
-                    min="1"
-                    max="10"
-                    value={groundLabelMinSpeed ?? 2}
-                    onChange={(e) => updateDisplay({ groundLabelMinSpeed: Number(e.target.value) })}
-                  />
-                  <span>{groundLabelMinSpeed ?? 2} kts</span>
+            <div className="setting-item">
+              <label>Default Datablock Direction</label>
+              <select
+                value={defaultDatablockDirection}
+                onChange={(e) => updateDisplay({ defaultDatablockDirection: Number(e.target.value) as 1 | 2 | 3 | 4 | 6 | 7 | 8 | 9 })}
+              >
+                <option value={7}>7 - Top-Left</option>
+                <option value={8}>8 - Top</option>
+                <option value={9}>9 - Top-Right</option>
+                <option value={4}>4 - Left</option>
+                <option value={6}>6 - Right</option>
+                <option value={1}>1 - Bottom-Left</option>
+                <option value={2}>2 - Bottom</option>
+                <option value={3}>3 - Bottom-Right</option>
+              </select>
+              <p className="setting-hint">
+                Default position for datablocks on new airports. Press 5+Enter to reset all datablocks to this default.
+              </p>
+            </div>
+
+            <div className="setting-item">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={autoAvoidOverlaps}
+                  onChange={(e) => updateDisplay({ autoAvoidOverlaps: e.target.checked })}
+                />
+                Auto-rearrange to Avoid Overlaps
+              </label>
+              <p className="setting-hint">
+                Automatically shift datablocks to prevent them from overlapping each other.
+              </p>
+            </div>
+
+            {showGroundTraffic && (
+              <>
+                <div className="setting-item">
+                  <label>Ground Traffic Labels</label>
+                  <select
+                    value={groundLabelMode ?? 'all'}
+                    onChange={(e) => updateDisplay({ groundLabelMode: e.target.value as GroundLabelMode })}
+                  >
+                    <option value="all">All Ground Aircraft</option>
+                    <option value="moving">Moving Only (custom speed)</option>
+                    <option value="activeOnly">Active Only (&gt; 5 kts)</option>
+                    <option value="none">Hide All Ground Labels</option>
+                  </select>
+                  <p className="setting-hint">
+                    Reduce gate clutter by hiding labels for parked/stationary aircraft.
+                  </p>
                 </div>
-                <p className="setting-hint">
-                  Aircraft below this speed won&apos;t show labels (considered parked).
-                </p>
-              </div>
+
+                {groundLabelMode === 'moving' && (
+                  <div className="setting-item">
+                    <label>Minimum Speed for Labels</label>
+                    <div className="slider-with-value">
+                      <input
+                        type="range"
+                        min="1"
+                        max="10"
+                        value={groundLabelMinSpeed ?? 2}
+                        onChange={(e) => updateDisplay({ groundLabelMinSpeed: Number(e.target.value) })}
+                      />
+                      <span>{groundLabelMinSpeed ?? 2} kts</span>
+                    </div>
+                    <p className="setting-hint">
+                      Aircraft below this speed won&apos;t show labels (considered parked).
+                    </p>
+                  </div>
+                )}
+              </>
             )}
           </>
         )}
       </CollapsibleSection>
 
-      <CollapsibleSection title="Inset Viewport Datablocks">
-        <p className="setting-hint" style={{ marginBottom: '12px' }}>
-          Inset viewports (picture-in-picture) use separate label settings to reduce clutter.
-        </p>
-
-        <div className="setting-item">
-          <label>Inset Datablock Mode</label>
-          <select
-            value={insetSettings?.datablockMode ?? 'callsign'}
-            onChange={(e) => updateDisplay({ inset: { datablockMode: e.target.value as InsetDatablockMode } })}
-          >
-            <option value="callsign">Callsign Only (single line)</option>
-            <option value="full">Full (callsign + type + altitude + speed)</option>
-            <option value="match">Match Main Viewport</option>
-          </select>
-          <p className="setting-hint">
-            Controls what information is shown in aircraft labels for inset viewports.
+      {/* Inset Viewport Datablocks - Global settings, hidden in remote mode */}
+      {!isRemote && (
+        <CollapsibleSection title="Inset Viewport Datablocks">
+          <p className="setting-hint" style={{ marginBottom: '12px' }}>
+            Inset viewports (picture-in-picture) use separate label settings to reduce clutter.
           </p>
-        </div>
 
-        <div className="setting-item">
-          <label>Inset Ground Labels</label>
-          <select
-            value={insetSettings?.groundLabelMode ?? 'crucialPhases'}
-            onChange={(e) => updateDisplay({ inset: { groundLabelMode: e.target.value as InsetGroundLabelMode } })}
-          >
-            <option value="crucialPhases">Crucial Phases Only (hold short, lined up, etc.)</option>
-            <option value="moving">Moving Aircraft Only</option>
-            <option value="activeOnly">Active Only (&gt; 5 kts)</option>
-            <option value="all">All Ground Aircraft</option>
-            <option value="none">Hide All Ground Labels</option>
-            <option value="match">Match Main Viewport</option>
-          </select>
-          <p className="setting-hint">
-            &quot;Crucial Phases&quot; shows labels for aircraft holding short, lined up, taking off, landing, or on go-around.
-          </p>
-        </div>
-
-        <div className="setting-item">
-          <label>Edge Visibility Margin</label>
-          <div className="slider-with-value">
-            <input
-              type="range"
-              min="0"
-              max="30"
-              value={Math.round((insetSettings?.visibilityMargin ?? 0.15) * 100)}
-              onChange={(e) => updateDisplay({ inset: { visibilityMargin: Number(e.target.value) / 100 } })}
-            />
-            <span>{Math.round((insetSettings?.visibilityMargin ?? 0.15) * 100)}%</span>
+          <div className="setting-item">
+            <label>Inset Datablock Mode</label>
+            <select
+              value={insetSettings?.datablockMode ?? 'callsign'}
+              onChange={(e) => updateDisplay({ inset: { datablockMode: e.target.value as InsetDatablockMode } })}
+            >
+              <option value="callsign">Callsign Only (single line)</option>
+              <option value="full">Full (callsign + type + altitude + speed)</option>
+              <option value="match">Match Main Viewport</option>
+            </select>
+            <p className="setting-hint">
+              Controls what information is shown in aircraft labels for inset viewports.
+            </p>
           </div>
-          <p className="setting-hint">
-            Hide datablocks for aircraft near viewport edges. 0% = show all, 30% = very restrictive.
-          </p>
-        </div>
-      </CollapsibleSection>
+
+          <div className="setting-item">
+            <label>Inset Ground Labels</label>
+            <select
+              value={insetSettings?.groundLabelMode ?? 'crucialPhases'}
+              onChange={(e) => updateDisplay({ inset: { groundLabelMode: e.target.value as InsetGroundLabelMode } })}
+            >
+              <option value="crucialPhases">Crucial Phases Only (hold short, lined up, etc.)</option>
+              <option value="moving">Moving Aircraft Only</option>
+              <option value="activeOnly">Active Only (&gt; 5 kts)</option>
+              <option value="all">All Ground Aircraft</option>
+              <option value="none">Hide All Ground Labels</option>
+              <option value="match">Match Main Viewport</option>
+            </select>
+            <p className="setting-hint">
+              &quot;Crucial Phases&quot; shows labels for aircraft holding short, lined up, taking off, landing, or on go-around.
+            </p>
+          </div>
+
+          <div className="setting-item">
+            <label>Edge Visibility Margin</label>
+            <div className="slider-with-value">
+              <input
+                type="range"
+                min="0"
+                max="30"
+                value={Math.round((insetSettings?.visibilityMargin ?? 0.15) * 100)}
+                onChange={(e) => updateDisplay({ inset: { visibilityMargin: Number(e.target.value) / 100 } })}
+              />
+              <span>{Math.round((insetSettings?.visibilityMargin ?? 0.15) * 100)}%</span>
+            </div>
+            <p className="setting-hint">
+              Hide datablocks for aircraft near viewport edges. 0% = show all, 30% = very restrictive.
+            </p>
+          </div>
+        </CollapsibleSection>
+      )}
 
       <CollapsibleSection title="Aircraft Rendering">
         <div className="setting-item">

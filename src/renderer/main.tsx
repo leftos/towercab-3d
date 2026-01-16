@@ -38,7 +38,12 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, Error
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('[ErrorBoundary] Caught error:', error)
+    // Serialize error properly for remote logging (Error objects don't serialize to JSON well)
+    const errorName = error?.name ?? 'Unknown'
+    const errorMessage = error?.message ?? String(error)
+    const errorStack = error?.stack ?? 'No stack trace'
+    console.error('[ErrorBoundary] Caught error:', errorName, '-', errorMessage)
+    console.error('[ErrorBoundary] Stack:', errorStack)
     console.error('[ErrorBoundary] Component stack:', errorInfo.componentStack)
   }
 

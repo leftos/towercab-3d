@@ -13,17 +13,20 @@
  * - `observations`: Batch of aircraft position updates
  * - `removals`: Aircraft that have disconnected
  * - `subscriptions`: Current vNAS subscriptions (when changed)
+ * - `airport_sync`: Airport synchronization for RealTraffic mode
  *
  * ## Sending Messages
- * Remote clients can request vNAS subscriptions:
- * - `subscribe`: Subscribe to a facility
- * - `unsubscribe`: Unsubscribe from a facility
+ * Remote clients can request:
+ * - `subscribe`: Subscribe to a vNAS facility
+ * - `unsubscribe`: Unsubscribe from a vNAS facility
+ * - `set_airport`: Change the synced airport (RealTraffic mode only)
  */
 
 import { useEffect, useRef, useCallback } from 'react'
 import { isRemoteMode, getApiBaseUrl } from '../utils/remoteMode'
 import { useAircraftTimelineStore } from '../stores/aircraftTimelineStore'
 import { useVnasStore } from '../stores/vnasStore'
+import { useRemoteStatusStore } from '../stores/remoteStatusStore'
 import type { AircraftObservation, AircraftMetadata } from '../types/aircraft-timeline'
 import { SOURCE_DISPLAY_DELAYS } from '../constants/aircraft-timeline'
 
@@ -51,8 +54,8 @@ interface ObservationData {
 
 interface InitMessage {
   type: 'init'
-  sessionFacilities: string[]
-  subscribedFacilities: string[]
+  session_facilities: string[]
+  subscribed_facilities: string[]
 }
 
 interface ObservationsMessage {
@@ -70,7 +73,13 @@ interface SubscriptionsMessage {
   facilities: string[]
 }
 
-type WebSocketMessage = InitMessage | ObservationsMessage | RemovalsMessage | SubscriptionsMessage
+interface AirportSyncMessage {
+  type: 'airport_sync'
+  icao: string | null
+  realtraffic_active: boolean
+}
+
+type WebSocketMessage = InitMessage | ObservationsMessage | RemovalsMessage | SubscriptionsMessage | AirportSyncMessage
 
 // Module-level WebSocket reference for requestRemoteSubscription()
 let moduleWsRef: WebSocket | null = null
@@ -86,6 +95,9 @@ export function useRemoteObservations(): void {
   const removeAircraft = useAircraftTimelineStore(state => state.removeAircraft)
   const setSubscribedFacilities = useVnasStore(state => state.setSubscribedFacilities)
   const setSessionFacilities = useVnasStore(state => state.setSessionFacilities)
+  const setWsConnected = useRemoteStatusStore(state => state.setWsConnected)
+  const recordObservation = useRemoteStatusStore(state => state.recordObservation)
+  const setAirportSync = useRemoteStatusStore(state => state.setAirportSync)
 
   const connect = useCallback(() => {
     if (!isRemoteMode()) return
@@ -102,6 +114,7 @@ export function useRemoteObservations(): void {
 
     ws.onopen = () => {
       console.log('[RemoteObservations] WebSocket connected')
+      setWsConnected(true)
     }
 
     ws.onmessage = (event) => {
@@ -111,8 +124,8 @@ export function useRemoteObservations(): void {
         switch (message.type) {
           case 'init': {
             console.log('[RemoteObservations] Received init:', message)
-            setSessionFacilities(message.sessionFacilities)
-            setSubscribedFacilities(message.subscribedFacilities)
+            setSessionFacilities(message.session_facilities)
+            setSubscribedFacilities(message.subscribed_facilities)
             break
           }
 
@@ -151,6 +164,13 @@ export function useRemoteObservations(): void {
 
             if (batch.length > 0) {
               addObservationBatch(batch)
+              // Determine the primary source for stale threshold calculation
+              // Priority: vnas > realtraffic > vatsim (fastest update rate wins)
+              const sources = message.data.map(obs => obs.source)
+              const primarySource = sources.includes('vnas') ? 'vnas'
+                : sources.includes('realtraffic') ? 'realtraffic'
+                : 'vatsim'
+              recordObservation(batch.length, primarySource as 'vatsim' | 'vnas' | 'realtraffic')
             }
             break
           }
@@ -167,6 +187,12 @@ export function useRemoteObservations(): void {
             setSubscribedFacilities(message.facilities)
             break
           }
+
+          case 'airport_sync': {
+            console.log('[RemoteObservations] Airport sync:', message.icao, 'RT active:', message.realtraffic_active)
+            setAirportSync(message.icao, message.realtraffic_active)
+            break
+          }
         }
       } catch (error) {
         console.error('[RemoteObservations] Failed to parse message:', error)
@@ -177,6 +203,7 @@ export function useRemoteObservations(): void {
       console.log('[RemoteObservations] WebSocket closed:', event.code, event.reason)
       wsRef.current = null
       moduleWsRef = null
+      setWsConnected(false)
 
       // Reconnect after a delay
       if (!reconnectTimeoutRef.current) {
@@ -190,7 +217,7 @@ export function useRemoteObservations(): void {
     ws.onerror = (error) => {
       console.error('[RemoteObservations] WebSocket error:', error)
     }
-  }, [addObservationBatch, removeAircraft, setSubscribedFacilities, setSessionFacilities])
+  }, [addObservationBatch, removeAircraft, setSubscribedFacilities, setSessionFacilities, setWsConnected, recordObservation, setAirportSync])
 
   useEffect(() => {
     if (!isRemoteMode()) return
@@ -259,5 +286,34 @@ export function requestRemoteUnsubscription(facilityId: string): void {
   })
 
   console.log('[RemoteObservations] Requesting unsubscription for:', facilityId)
+  moduleWsRef.send(message)
+}
+
+/**
+ * Request airport change for RealTraffic mode.
+ * When RealTraffic is active, all clients must be synced to the same airport
+ * because RealTraffic uses a bounding box query.
+ *
+ * This sends the request to the host, which broadcasts the change to all clients.
+ *
+ * @param icao - The airport ICAO code (e.g., "KJFK") or null to clear
+ */
+export function requestRemoteAirportChange(icao: string | null): void {
+  if (!isRemoteMode()) {
+    console.log('[RemoteObservations] Not in remote mode, ignoring airport change request')
+    return
+  }
+
+  if (!moduleWsRef || moduleWsRef.readyState !== WebSocket.OPEN) {
+    console.log('[RemoteObservations] WebSocket not connected, cannot request airport change')
+    return
+  }
+
+  const message = JSON.stringify({
+    action: 'set_airport',
+    icao
+  })
+
+  console.log('[RemoteObservations] Requesting airport change to:', icao)
   moduleWsRef.send(message)
 }

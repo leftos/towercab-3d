@@ -208,7 +208,7 @@ class UserVMRServiceClass {
    */
   private async loadFromAPI(): Promise<void> {
     try {
-      const response = await fetch('/api/user-vmr-rules')
+      const response = await fetch('/api/vmr-rules')
       if (!response.ok) {
         if (response.status !== 404) {
           console.warn('[UserVMRService] Failed to fetch from API:', response.status)

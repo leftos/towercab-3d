@@ -362,6 +362,17 @@ fn broadcast_subscriptions(facilities: Vec<String>) {
     broadcast_observation_message(message);
 }
 
+/// Tauri command to broadcast airport sync to remote clients
+/// Called by the host when the airport changes in RealTraffic mode
+#[tauri::command]
+fn broadcast_airport_sync(icao: Option<String>, realtraffic_active: bool) {
+    let message = server::ObservationMessage::AirportSync {
+        icao,
+        realtraffic_active,
+    };
+    broadcast_observation_message(message);
+}
+
 /// Stop the HTTP server
 #[tauri::command]
 fn stop_http_server() -> Result<(), String> {
@@ -662,12 +673,6 @@ fn cancel_fsltl_conversion() -> Result<(), String> {
 // These aliases maintain backward compatibility with existing frontend code
 // that uses the old command names. They simply delegate to the new names.
 
-/// Alias for scan_converted_models (backward compatibility)
-#[tauri::command]
-fn scan_fsltl_models(output_path: String) -> Result<Vec<msfs::ScannedConvertedModel>, String> {
-    msfs::scan_converted_models(output_path)
-}
-
 /// Alias for get_converted_models_path (backward compatibility)
 #[tauri::command]
 fn get_fsltl_output_path(app: tauri::AppHandle) -> Result<String, String> {
@@ -866,6 +871,7 @@ pub fn run() {
             broadcast_observations,
             broadcast_aircraft_removals,
             broadcast_subscriptions,
+            broadcast_airport_sync,
             // File commands
             create_text_file,
             append_to_text_file,
@@ -898,10 +904,8 @@ pub fn run() {
             msfs::list_fsltl_models,
             msfs::list_aig_models,
             msfs::convert_msfs_model,
-            msfs::scan_converted_models,
             msfs::scan_cache_directory,
             // Backward-compatible aliases (old names -> new implementations)
-            scan_fsltl_models,
             get_fsltl_output_path,
             get_fsltl_default_output_path,
             check_fsltl_model_exists,

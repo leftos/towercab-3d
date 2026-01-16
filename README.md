@@ -28,6 +28,8 @@ A 3D tower cab view application for VATSIM air traffic controllers. View real-ti
 ### Remote Browser Access
 - Access TowerCab from any device on your local network (iPad, tablets, other PCs)
 - Desktop app runs an HTTP server on port 8765 when launched
+- Unified data streaming: all aircraft data (VATSIM, vNAS, RealTraffic) streamed via WebSocket
+- Automatic vNAS 1Hz updates when host has active CRC session (no configuration needed)
 - All mods, models, and settings served from host PC
 - Touch controls optimized for iPad Safari and mobile browsers:
   - Single-finger drag to rotate camera or pan map
@@ -36,6 +38,7 @@ A 3D tower cab view application for VATSIM air traffic controllers. View real-ti
   - Virtual joystick for camera movement
 - Responsive mobile-friendly UI adapts to screen size with flyout menus
 - Remote client presence indicator shows device count on desktop
+- Connection status indicator shows Live/Stale/Disconnected state on remote clients
 - Camera bookmarks and datablock positions shared across all connected devices
 - Device optimization presets automatically offered on first remote connection
 

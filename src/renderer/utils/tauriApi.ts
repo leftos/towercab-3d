@@ -326,12 +326,12 @@ export const appApi = {
  * In browser mode: converts to HTTP API URL
  *
  * @param filePath - Absolute file path (e.g., "C:\\path\\to\\model.glb")
- * @param type - Type of asset: 'fsltl' | 'aircraft' | 'towers'
+ * @param type - Type of asset: 'msfs' | 'aircraft' | 'towers'
  * @param relativePath - Optional relative path within the asset type folder
  */
 export async function convertToAssetUrl(
   filePath: string,
-  type: 'fsltl' | 'aircraft' | 'towers' = 'fsltl',
+  type: 'msfs' | 'aircraft' | 'towers' = 'msfs',
   relativePath?: string
 ): Promise<string> {
   // If path is already an HTTP URL, return as-is
@@ -348,28 +348,22 @@ export async function convertToAssetUrl(
   // In browser mode, convert to HTTP API URL
   // Extract the relative path from the file path or use the provided one
   if (relativePath) {
-    const apiPath = type === 'fsltl'
-      ? `/api/fsltl/${relativePath}`
+    const apiPath = type === 'msfs'
+      ? `/api/msfs/${relativePath}`
       : `/api/mods/${type}/${relativePath}`
     return apiPath
   }
 
   // Try to extract relative path from absolute path
-  // Paths look like: C:\...\fsltl-output\B738\AAL\model.glb
+  // Paths look like: C:\...\msfs-cache\FSLTL_B738_AAL.glb
   // or: C:\...\mods\aircraft\B738\model.glb
   const normalized = filePath.replace(/\\/g, '/')
 
-  // For FSLTL: look for pattern after common FSLTL output folder patterns
-  if (type === 'fsltl') {
-    // Try to find the type/airline/model.glb structure
-    const fsltlMatch = normalized.match(/[/\\]([A-Z0-9]{3,5})[/\\]([A-Z0-9_]+)[/\\](model\.glb)$/i)
-    if (fsltlMatch) {
-      return `/api/fsltl/${fsltlMatch[1]}/${fsltlMatch[2]}/${fsltlMatch[3]}`
-    }
-    // Fallback: use just the filename
+  // For MSFS models: extract just the filename (models are flat in cache dir)
+  if (type === 'msfs') {
+    // GLB files are stored as {model_name}.glb directly in cache directory
     const filename = normalized.split('/').pop() || 'model.glb'
-    console.warn('[convertToAssetUrl] Could not parse FSLTL path, using filename:', filename)
-    return `/api/fsltl/${filename}`
+    return `/api/msfs/${filename}`
   }
 
   // For mods: extract path after mods/aircraft or mods/towers
@@ -407,10 +401,11 @@ export function convertToAssetUrlSync(filePath: string): string {
   const normalized = filePath.replace(/\\/g, '/')
   const baseUrl = getApiBaseUrl()
 
-  // For FSLTL
-  const fsltlMatch = normalized.match(/[/\\]([A-Z0-9]{3,5})[/\\]([A-Z0-9_]+)[/\\](model\.glb)$/i)
-  if (fsltlMatch) {
-    return `${baseUrl}/api/fsltl/${fsltlMatch[1]}/${fsltlMatch[2]}/${fsltlMatch[3]}`
+  // For MSFS models: extract just the filename (models are flat in cache dir)
+  // GLB files are stored as {model_name}.glb directly in cache directory
+  const filename = normalized.split('/').pop() || 'model.glb'
+  if (filename.endsWith('.glb')) {
+    return `${baseUrl}/api/msfs/${filename}`
   }
 
   // For mods

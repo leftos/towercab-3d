@@ -3,6 +3,7 @@ import { useSettingsStore } from '../../stores/settingsStore'
 import { useUpdateStore } from '../../stores/updateStore'
 import { checkForUpdates } from '../../services/UpdateService'
 import { repairSettingsMigration } from '../../stores/globalSettingsStore'
+import { isRemoteMode } from '../../utils/remoteMode'
 import CollapsibleSection from './settings/CollapsibleSection'
 import './ControlsBar.css'
 
@@ -104,57 +105,62 @@ function SettingsAdvancedTab() {
         </div>
       </CollapsibleSection>
 
-      <CollapsibleSection title="Updates">
-        <div className="setting-row">
-          <button
-            className="control-button"
-            onClick={() => checkForUpdates()}
-            disabled={updateStatus === 'checking' || updateStatus === 'downloading'}
-          >
-            {updateStatus === 'checking' ? 'Checking...' : 'Check for Updates'}
-          </button>
-        </div>
-        <p className="setting-hint" style={{ marginTop: '8px' }}>
-          Current version: v{APP_VERSION}
-        </p>
-      </CollapsibleSection>
+      {/* Updates and Troubleshooting - Only visible on desktop app */}
+      {!isRemoteMode() && (
+        <>
+          <CollapsibleSection title="Updates">
+            <div className="setting-row">
+              <button
+                className="control-button"
+                onClick={() => checkForUpdates()}
+                disabled={updateStatus === 'checking' || updateStatus === 'downloading'}
+              >
+                {updateStatus === 'checking' ? 'Checking...' : 'Check for Updates'}
+              </button>
+            </div>
+            <p className="setting-hint" style={{ marginTop: '8px' }}>
+              Current version: v{APP_VERSION}
+            </p>
+          </CollapsibleSection>
 
-      <CollapsibleSection title="Troubleshooting">
-        <div className="setting-row">
-          <span className="setting-label">Repair Settings Migration</span>
-          <button
-            className="control-button"
-            onClick={handleRepairSettings}
-            disabled={repairStatus === 'running'}
-          >
-            {repairStatus === 'running' ? 'Repairing...' : 'Repair Settings'}
-          </button>
-        </div>
-        <p className="setting-hint">
-          Settings recovery runs automatically on startup. Use this button to manually
-          re-check if settings are still missing after an upgrade.
-        </p>
-        {repairResult && (
-          <div style={{ marginTop: '8px' }}>
-            {repairResult.recovered.length > 0 && (
-              <>
-                <p style={{ color: 'var(--success-color, #4caf50)', margin: '4px 0' }}>
-                  Recovered: {repairResult.recovered.join(', ')}
-                </p>
-                <p className="setting-hint">Reloading to apply changes...</p>
-              </>
+          <CollapsibleSection title="Troubleshooting">
+            <div className="setting-row">
+              <span className="setting-label">Repair Settings Migration</span>
+              <button
+                className="control-button"
+                onClick={handleRepairSettings}
+                disabled={repairStatus === 'running'}
+              >
+                {repairStatus === 'running' ? 'Repairing...' : 'Repair Settings'}
+              </button>
+            </div>
+            <p className="setting-hint">
+              Settings recovery runs automatically on startup. Use this button to manually
+              re-check if settings are still missing after an upgrade.
+            </p>
+            {repairResult && (
+              <div style={{ marginTop: '8px' }}>
+                {repairResult.recovered.length > 0 && (
+                  <>
+                    <p style={{ color: 'var(--success-color, #4caf50)', margin: '4px 0' }}>
+                      Recovered: {repairResult.recovered.join(', ')}
+                    </p>
+                    <p className="setting-hint">Reloading to apply changes...</p>
+                  </>
+                )}
+                {repairResult.recovered.length === 0 && repairResult.errors.length === 0 && (
+                  <p className="setting-hint">No recoverable settings found in browser storage.</p>
+                )}
+                {repairResult.errors.length > 0 && (
+                  <p style={{ color: 'var(--error-color, #f44336)', margin: '4px 0' }}>
+                    Errors: {repairResult.errors.join(', ')}
+                  </p>
+                )}
+              </div>
             )}
-            {repairResult.recovered.length === 0 && repairResult.errors.length === 0 && (
-              <p className="setting-hint">No recoverable settings found in browser storage.</p>
-            )}
-            {repairResult.errors.length > 0 && (
-              <p style={{ color: 'var(--error-color, #f44336)', margin: '4px 0' }}>
-                Errors: {repairResult.errors.join(', ')}
-              </p>
-            )}
-          </div>
-        )}
-      </CollapsibleSection>
+          </CollapsibleSection>
+        </>
+      )}
     </>
   )
 }

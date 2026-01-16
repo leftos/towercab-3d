@@ -8,6 +8,8 @@ import { useVnasStore } from './vnasStore'
 import { useRealTrafficStore } from './realTrafficStore'
 import { useGlobalSettingsStore } from './globalSettingsStore'
 import { modService } from '../services/ModService'
+import { isRemoteMode, isTauriMode } from '../utils/remoteMode'
+import { requestRemoteAirportChange } from '../hooks/useRemoteObservations'
 
 interface AirportStore {
   // Data
@@ -134,12 +136,13 @@ export const useAirportStore = create<AirportStore>()(
 
           // Immediately update data source reference position to trigger re-filter
           // This ensures aircraft near the new airport are visible right away
+          // Note: In remote mode, don't start polling - data comes from host via WebSocket
           const dataSource = useGlobalSettingsStore.getState().realtraffic.dataSource
           if (dataSource === 'realtraffic') {
             const rtStore = useRealTrafficStore.getState()
             rtStore.setReferencePosition(airport.lat, airport.lon)
             // Ensure polling is running if connected (may not have started on main menu)
-            if (rtStore.status === 'connected' && !rtStore.isPolling) {
+            if (rtStore.status === 'connected' && !rtStore.isPolling && !isRemoteMode()) {
               rtStore.startPolling()
             }
           } else {
@@ -153,6 +156,25 @@ export const useAirportStore = create<AirportStore>()(
             vnasState.subscribe(icao).catch((err) => {
               console.warn('vNAS auto-subscribe failed:', err)
             })
+          }
+
+          // Broadcast airport change to remote clients in RealTraffic mode (host only)
+          if (isTauriMode() && dataSource === 'realtraffic') {
+            import('@tauri-apps/api/core').then(({ invoke }) => {
+              invoke('broadcast_airport_sync', {
+                icao: icao.toUpperCase(),
+                realtrafficActive: true
+              }).catch((err) => {
+                console.debug('[airportStore] Failed to broadcast airport sync:', err)
+              })
+            }).catch(() => {
+              // Tauri not available
+            })
+          }
+
+          // In remote mode with RealTraffic, notify host of airport change
+          if (isRemoteMode() && dataSource === 'realtraffic') {
+            requestRemoteAirportChange(icao.toUpperCase())
           }
         }
       },

@@ -35,7 +35,7 @@ function normalizeForVnas(icao: string): string {
  */
 export function useRemoteVnasSubscription(): void {
   const currentAirport = useAirportStore(state => state.currentAirport)
-  const sessionFacilities = useVnasStore(state => state.sessionFacilities)
+  const sessionFacilities = useVnasStore(state => state.sessionFacilities) ?? []
   const subscribedFacilities = useVnasStore(state => state.status.subscribedFacilities)
 
   // Track the previous airport to handle unsubscription

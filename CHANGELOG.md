@@ -4,6 +4,16 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Draggable Settings modal** - The Settings dialog can now be dragged by its title bar to any position on screen. Position is remembered across sessions.
+- **Remote status indicator** - Remote browser clients now show a live connection status indicator in the top bar with "Live", "No data", or "Disconnected" states based on data freshness.
+- **All LAN IP addresses shown** - Remote Browser Access settings now display all available local network IP addresses, making it easier to find the right address for connecting from other devices.
+
+### Changed
+- **Unified remote data streaming** - Remote browsers now receive all aircraft data (VATSIM, vNAS, RealTraffic) via a single WebSocket connection from the host. This replaces the previous approach where remote clients polled data sources directly, reducing bandwidth and ensuring consistent data across all connected devices.
+- **Automatic vNAS for remote clients** - When the host has an active CRC session, remote browsers automatically receive 1Hz vNAS updates without any configuration. The host manages all subscriptions.
+- **Remote configuration simplified** - Configuration settings tab in remote browsers shows a notice that settings are managed by the host application, reducing confusion about which device controls global settings.
+
 ## [0.0.33-alpha] - 2026-01-14
 
 ### Added

@@ -7,8 +7,10 @@ import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
 import { useViewportStore } from '../../stores/viewportStore'
 import { useIsMobileLayout } from '../../hooks/useIsMobileLayout'
 import { isTauri } from '../../utils/tauriApi'
+import { isRemoteMode } from '../../utils/remoteMode'
 import RemoteIndicator from './RemoteIndicator'
 import RemoteClientsIndicator from './RemoteClientsIndicator'
+import RemoteStatusIndicator from './RemoteStatusIndicator'
 import MobileToolsFlyout from './MobileToolsFlyout'
 import { VnasStatusPopover } from './VnasStatusPopover'
 import './TopBar.css'
@@ -116,8 +118,8 @@ function TopBar({ onCommandClick }: TopBarProps) {
       <div className="top-bar-right">
         {/* Remote clients indicator - always shown on desktop when clients connected */}
         <RemoteClientsIndicator />
-        {/* Status info and remote indicator - hidden on mobile (shown in flyout) */}
-        {!isMobileLayout && (
+        {/* Status info and remote indicator - hidden on mobile (shown in flyout) and remote mode */}
+        {!isMobileLayout && !isRemoteMode() && (
           <>
             <div className="status-info">
               <span className="aircraft-count">{trafficCount} {countLabel}</span>
@@ -143,6 +145,10 @@ function TopBar({ onCommandClick }: TopBarProps) {
             </div>
             <RemoteIndicator />
           </>
+        )}
+        {/* Remote status indicator - shown for remote clients */}
+        {!isMobileLayout && isRemoteMode() && (
+          <RemoteStatusIndicator />
         )}
         {/* Mobile tools flyout - includes connectivity status on mobile */}
         {isMobileLayout && onCommandClick && (

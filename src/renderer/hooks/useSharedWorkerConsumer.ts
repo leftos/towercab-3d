@@ -17,6 +17,10 @@
  */
 
 import { useEffect, useState, useRef } from 'react'
+
+// Import worker URL using Vite's worker query - this ensures proper bundling
+import SharedDataWorkerUrl from '../workers/shared-data.worker.ts?sharedworker&url'
+
 import type {
   SharedWorkerInboundMessage,
   SharedWorkerOutboundMessage,
@@ -134,12 +138,11 @@ modelInfoCallbacks.add(handleModelInfoForCache)
 function getSharedWorkerConnection(): { worker: SharedWorker; port: MessagePort } | null {
   if (!sharedWorker) {
     try {
-      const workerUrl = new URL('../workers/shared-data.worker.ts', import.meta.url)
-      console.log('[SharedWorkerConsumer] Creating SharedWorker:', workerUrl.href)
+      console.log('[SharedWorkerConsumer] Creating SharedWorker:', SharedDataWorkerUrl)
 
-      // Connect to existing SharedWorker
+      // Connect to existing SharedWorker using Vite-bundled worker URL
       sharedWorker = new SharedWorker(
-        workerUrl,
+        SharedDataWorkerUrl,
         { type: 'module', name: 'towercab-shared' }
       )
 

@@ -451,17 +451,18 @@ class AircraftModelServiceClass {
   private loggedCallsigns = new Set<string>()
 
   /**
-   * Log model matching details for a callsign (only once per callsign per app run)
+   * Log model matching details for a callsign (disabled - enable for debugging)
    */
   private logModelMatch(
-    callsign: string | null | undefined,
+    _callsign: string | null | undefined,
     _aircraftType: string,
     _airlineCode: string | null,
     _step: string,
     _result: string
   ): void {
-    if (!callsign || this.loggedCallsigns.has(callsign)) return
-    //console.log(`[ModelMatch] ${callsign} (${aircraftType}/${airlineCode ?? 'no-airline'}): ${step} -> ${result}`)
+    // Disabled - uncomment for debugging model matching issues
+    // if (!callsign || this.loggedCallsigns.has(callsign)) return
+    // console.log(`[ModelMatch] ${callsign} (${aircraftType}/${airlineCode ?? 'no-airline'}): ${step} -> ${result}`)
   }
 
   /**
@@ -537,6 +538,7 @@ class AircraftModelServiceClass {
     const log = (step: string, result: string) => {
       this.logModelMatch(callsign, aircraftType, airlineCode, step, result)
     }
+
     const targetDims = aircraftDimensionsService.getDimensions(aircraftType)
     const defaultDims = { wingspan: 35.78, length: 39.47 }
     const uniformScale = { x: 1, y: 1, z: 1 }

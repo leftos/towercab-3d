@@ -22,6 +22,9 @@ import { useAirportStore } from '../stores/airportStore'
 import { useViewportStore } from '../stores/viewportStore'
 import { registerBroadcastCallbacks } from '../stores/aircraftTimelineStore'
 import { isRemoteMode } from '../utils/remoteMode'
+
+// Import worker URL using Vite's worker query - this ensures proper bundling
+import SharedDataWorkerUrl from '../workers/shared-data.worker.ts?sharedworker&url'
 import type {
   SharedWorkerInboundMessage,
   SerializedSettings,
@@ -54,12 +57,11 @@ class SettingsSharedWorkerService {
     console.log('[SettingsSharedWorkerService] Initializing...')
 
     try {
-      // Create SharedWorker
-      const workerUrl = new URL('../workers/shared-data.worker.ts', import.meta.url)
-      console.log('[SettingsSharedWorkerService] Creating SharedWorker:', workerUrl.href)
+      // Create SharedWorker using Vite-bundled worker URL
+      console.log('[SettingsSharedWorkerService] Creating SharedWorker:', SharedDataWorkerUrl)
 
       this.worker = new SharedWorker(
-        workerUrl,
+        SharedDataWorkerUrl,
         { type: 'module', name: 'towercab-shared' }
       )
 

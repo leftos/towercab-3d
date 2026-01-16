@@ -108,10 +108,10 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
       // Get distance filter radius from settings
       const aircraftDataRadiusNM = useSettingsStore.getState().memory.aircraftDataRadiusNM
 
-      // Filter pilots by distance if we have a reference position
-      // This prevents storing data for aircraft that are far away
-      // If no reference position is set (no airport selected, not following aircraft),
-      // don't store any aircraft data - there's no point interpolating/rendering them
+      // Filter pilots by distance for LOCAL legacy interpolation (aircraftStates/previousStates)
+      // This is only for the host's main viewport rendering performance.
+      // Note: ALL pilots are still added to the timeline store for broadcasting
+      // to remote clients and insets, which do their own filtering.
       const totalPilotsFromApi = data.pilots.length
       let filteredPilots: PilotData[] = []
 
@@ -129,7 +129,7 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
 
       const pilotsFilteredByDistance = filteredPilots.length
 
-      // First, create the new aircraft states from filtered VATSIM data
+      // Create aircraft states from filtered VATSIM data (for local legacy interpolation)
       // These are the TARGET positions we want to reach over the next interval
       // Timestamp is set to now + interval (when we expect to arrive)
       const newAircraftStates = new Map<string, AircraftState>()
@@ -209,7 +209,10 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
         metadata: AircraftMetadata
       }> = []
 
-      for (const pilot of filteredPilots) {
+      // Add ALL pilots to timeline store (not just filtered)
+      // This ensures remote clients and insets receive all observations
+      // and can do their own filtering based on their reference position
+      for (const pilot of data.pilots) {
         const observation: AircraftObservation = {
           latitude: pilot.latitude,
           longitude: pilot.longitude,
@@ -240,7 +243,7 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
         observationBatch.push({ callsign: pilot.callsign, observation, metadata })
       }
 
-      // Add all observations in batch for efficiency
+      // Add all observations in batch (broadcasts to insets and remote clients)
       if (observationBatch.length > 0) {
         timelineStore.addObservationBatch(observationBatch)
       }

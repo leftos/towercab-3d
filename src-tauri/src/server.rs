@@ -34,7 +34,7 @@ use tauri::{Emitter, Manager};
 
 use crate::{
     mods::{find_mods_root, read_tower_positions, TowerPositionEntry},
-    msfs::ScannedConvertedModel,
+    msfs::CachedGlbInfo,
     normalize_path_string,
     settings::{get_global_settings_file, GlobalSettings},
 };
@@ -94,14 +94,30 @@ pub enum ObservationMessage {
         session_facilities: Vec<String>,
         subscribed_facilities: Vec<String>,
     },
+
+    /// Airport synchronization for RealTraffic mode
+    /// When using RealTraffic, all clients must be synced to the same airport
+    #[serde(rename = "airport_sync")]
+    AirportSync {
+        /// The ICAO code of the synced airport (null if no airport selected)
+        icao: Option<String>,
+        /// Whether RealTraffic mode is active (airport sync only applies in RT mode)
+        realtraffic_active: bool,
+    },
 }
 
-/// Request from remote client to subscribe to a facility
+/// Request from remote client (vNAS subscription or airport change)
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SubscriptionRequest {
-    pub action: String, // "subscribe" | "unsubscribe"
-    pub facility_id: String,
+pub struct ClientRequest {
+    /// Action type: "subscribe" | "unsubscribe" | "set_airport"
+    pub action: String,
+    /// Facility ID for subscribe/unsubscribe actions
+    #[serde(default)]
+    pub facility_id: Option<String>,
+    /// Airport ICAO for set_airport action
+    #[serde(default)]
+    pub icao: Option<String>,
 }
 
 /// Shared state for the HTTP server
@@ -118,6 +134,10 @@ pub struct ServerState {
     pub observations_tx: broadcast::Sender<ObservationMessage>,
     /// Count of currently connected remote clients (WebSocket connections)
     pub connected_clients: AtomicUsize,
+    /// Current synced airport ICAO for RealTraffic mode (None = not set)
+    pub synced_airport: std::sync::RwLock<Option<String>>,
+    /// Whether RealTraffic data source is currently active
+    pub realtraffic_active: std::sync::RwLock<bool>,
 }
 
 /// Check if an IP address is from a local/private network
@@ -255,6 +275,8 @@ pub async fn start_server(
         require_local_network,
         observations_tx,
         connected_clients: AtomicUsize::new(0),
+        synced_airport: std::sync::RwLock::new(None),
+        realtraffic_active: std::sync::RwLock::new(false),
     });
 
     // Build the router
@@ -406,8 +428,11 @@ fn create_router(state: Arc<ServerState>) -> Router {
         .route("/api/mods/towers", get(list_tower_mods))
         .route("/api/mods/aircraft/*path", get(serve_aircraft_mod))
         .route("/api/mods/towers/*path", get(serve_tower_mod))
-        .route("/api/fsltl/models", get(list_fsltl_models))
-        .route("/api/fsltl/*path", get(serve_fsltl_model))
+        // MSFS model endpoints (for remote browser access to converted models)
+        .route("/api/msfs/models", get(list_msfs_converted_models))
+        .route("/api/msfs/index", get(get_msfs_model_index))
+        .route("/api/msfs/convert", post(request_msfs_conversion))
+        .route("/api/msfs/*path", get(serve_msfs_model))
         .route("/api/tower-positions", get(get_tower_positions))
         .route("/api/tower-positions/{icao}", put(update_tower_position))
         .route("/api/vmr-rules", get(get_vmr_rules))
@@ -424,6 +449,8 @@ fn create_router(state: Arc<ServerState>) -> Router {
         .route("/api/observations/ws", get(observations_websocket_handler))
         // Presence WebSocket for tracking connected remote clients
         .route("/api/presence", get(presence_websocket_handler))
+        // Remote client logging endpoint
+        .route("/api/log", post(remote_log))
         // Static file serving (must be last - catches all other routes)
         .fallback(get(serve_static))
         // Apply auth middleware (checks auth token and local network requirement)
@@ -445,24 +472,33 @@ async fn get_airport_surfaces(
     State(state): State<Arc<ServerState>>,
 ) -> Result<Response<Body>, (StatusCode, String)> {
     // Find the airport-surfaces.json.gz file in bundled resources
-    let resource_path = state
-        .app_handle
-        .path()
-        .resource_dir()
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to get resource dir: {}", e),
-            )
-        })?
-        .join("airport-surfaces.json.gz");
+    // Check dev path first (CARGO_MANIFEST_DIR/resources/), then production path
+    let dev_path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/airport-surfaces.json.gz");
 
-    if !resource_path.exists() {
-        return Err((
-            StatusCode::NOT_FOUND,
-            "Airport surfaces data not found. The airport-surfaces.json.gz file is missing from resources.".to_string(),
-        ));
-    }
+    let resource_path = if dev_path.exists() {
+        dev_path
+    } else {
+        let prod_path = state
+            .app_handle
+            .path()
+            .resource_dir()
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to get resource dir: {}", e),
+                )
+            })?
+            .join("airport-surfaces.json.gz");
+
+        if !prod_path.exists() {
+            return Err((
+                StatusCode::NOT_FOUND,
+                "Airport surfaces data not found. The airport-surfaces.json.gz file is missing from resources.".to_string(),
+            ));
+        }
+        prod_path
+    };
 
     // Read and decompress the gzip file
     let compressed_data = fs::read(&resource_path).map_err(|e| {
@@ -690,15 +726,16 @@ async fn serve_mod_file(
     serve_file(&canonical).await
 }
 
-/// GET /api/fsltl/models - List converted FSLTL models
-async fn list_fsltl_models(
+/// GET /api/msfs/models - List converted MSFS models (FSLTL/AIG)
+/// Returns flat list of cached GLB files with their model keys for remote browser clients
+async fn list_msfs_converted_models(
     State(state): State<Arc<ServerState>>,
-) -> Result<Json<Vec<ScannedConvertedModel>>, (StatusCode, String)> {
-    // Get FSLTL output path from global settings
+) -> Result<Json<Vec<CachedGlbInfo>>, (StatusCode, String)> {
+    // Get MSFS model cache directory from global settings
     let settings_file = get_global_settings_file(&state.app_handle)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
-    let output_path = if settings_file.exists() {
+    let cache_dir = if settings_file.exists() {
         let content = fs::read_to_string(&settings_file).map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -713,34 +750,35 @@ async fn list_fsltl_models(
             )
         })?;
 
-        settings.fsltl.output_path
+        settings.msfs_models.cache_directory.clone()
     } else {
         None
     };
 
-    let Some(output_path) = output_path else {
+    let Some(cache_dir) = cache_dir else {
         return Ok(Json(Vec::new()));
     };
 
-    // Use the existing scan_fsltl_models logic
-    let models = crate::scan_fsltl_models(output_path)
+    // Use scan_cache_directory which correctly scans flat GLB files (same as host initialization)
+    let models = crate::msfs::scan_cache_directory(cache_dir)
+        .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
     Ok(Json(models))
 }
 
-/// GET /api/fsltl/*path - Serve FSLTL model file
-async fn serve_fsltl_model(
+/// GET /api/msfs/*path - Serve converted MSFS model file (FSLTL/AIG)
+async fn serve_msfs_model(
     State(state): State<Arc<ServerState>>,
     Path(path): Path<String>,
 ) -> impl IntoResponse {
-    // Get FSLTL output path from global settings
+    // Get MSFS model cache directory from global settings
     let settings_file = match get_global_settings_file(&state.app_handle) {
         Ok(f) => f,
         Err(e) => return Err((StatusCode::INTERNAL_SERVER_ERROR, e)),
     };
 
-    let output_path = if settings_file.exists() {
+    let cache_dir = if settings_file.exists() {
         let content = fs::read_to_string(&settings_file).map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -755,33 +793,91 @@ async fn serve_fsltl_model(
             )
         })?;
 
-        settings.fsltl.output_path
+        settings.msfs_models.cache_directory.clone()
     } else {
         None
     };
 
-    let Some(output_path) = output_path else {
+    let Some(cache_dir) = cache_dir else {
         return Err((
             StatusCode::NOT_FOUND,
-            "FSLTL output path not configured".to_string(),
+            "MSFS model cache directory not configured".to_string(),
         ));
     };
 
-    let file_path = PathBuf::from(&output_path).join(&path);
+    let file_path = PathBuf::from(&cache_dir).join(&path);
 
-    // Security: ensure the path is within output directory
+    // Security: ensure the path is within cache directory
     let canonical = file_path
         .canonicalize()
         .map_err(|_| (StatusCode::NOT_FOUND, "File not found".to_string()))?;
 
-    let output_canonical = PathBuf::from(&output_path)
+    let cache_canonical = PathBuf::from(&cache_dir)
         .canonicalize()
-        .unwrap_or(PathBuf::from(&output_path));
-    if !canonical.starts_with(&output_canonical) {
+        .unwrap_or(PathBuf::from(&cache_dir));
+    if !canonical.starts_with(&cache_canonical) {
         return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
     }
 
     serve_file(&canonical).await
+}
+
+/// GET /api/msfs/index - Get the MSFS model index for remote clients
+async fn get_msfs_model_index(
+    State(state): State<Arc<ServerState>>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    // Get the model index from the MSFS module
+    let index = crate::msfs::get_model_index(&state.app_handle)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to get model index: {}", e)))?;
+
+    Ok(Json(index))
+}
+
+/// Request body for model conversion
+#[derive(Debug, serde::Deserialize)]
+struct ConversionRequest {
+    /// Model name to convert (e.g., "FSLTL_B738_Southwest")
+    model_name: String,
+    /// Texture scale: "full", "2k", "1k", or "512"
+    #[serde(default = "default_texture_scale")]
+    texture_scale: String,
+}
+
+fn default_texture_scale() -> String {
+    "1k".to_string()
+}
+
+/// Conversion response
+#[derive(Debug, serde::Serialize)]
+struct ConversionResponse {
+    success: bool,
+    /// Path to the converted GLB file (relative to cache directory)
+    output_path: Option<String>,
+    error: Option<String>,
+}
+
+/// POST /api/msfs/convert - Request conversion of an MSFS model
+async fn request_msfs_conversion(
+    State(state): State<Arc<ServerState>>,
+    Json(request): Json<ConversionRequest>,
+) -> Result<Json<ConversionResponse>, (StatusCode, String)> {
+    // Call the MSFS conversion function
+    match crate::msfs::convert_model_by_name(
+        &state.app_handle,
+        &request.model_name,
+        &request.texture_scale,
+    ) {
+        Ok(output_path) => Ok(Json(ConversionResponse {
+            success: true,
+            output_path: Some(output_path),
+            error: None,
+        })),
+        Err(e) => Ok(Json(ConversionResponse {
+            success: false,
+            output_path: None,
+            error: Some(e),
+        })),
+    }
 }
 
 /// GET /api/tower-positions - Custom tower positions JSON
@@ -945,6 +1041,49 @@ fn extract_attr(line: &str, attr: &str) -> Option<String> {
 #[derive(Deserialize)]
 struct ProxyQuery {
     url: String,
+}
+
+// =============================================================================
+// Remote Client Logging
+// =============================================================================
+
+/// Log entry sent from remote clients
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RemoteLogEntry {
+    level: String,
+    message: String,
+    #[serde(default)]
+    client_id: Option<String>,
+}
+
+/// Batch of log entries from remote client
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RemoteLogBatch {
+    entries: Vec<RemoteLogEntry>,
+}
+
+/// POST /api/log - Receive log entries from remote clients
+async fn remote_log(Json(batch): Json<RemoteLogBatch>) -> StatusCode {
+    let client_prefix = batch
+        .entries
+        .first()
+        .and_then(|e| e.client_id.as_ref())
+        .map(|id| format!("Remote:{}", id))
+        .unwrap_or_else(|| "Remote".to_string());
+
+    for entry in batch.entries {
+        match entry.level.as_str() {
+            "ERROR" => tracing::error!(target: "frontend", "[{}] {}", client_prefix, entry.message),
+            "WARN" => tracing::warn!(target: "frontend", "[{}] {}", client_prefix, entry.message),
+            "INFO" => tracing::info!(target: "frontend", "[{}] {}", client_prefix, entry.message),
+            "DEBUG" => tracing::debug!(target: "frontend", "[{}] {}", client_prefix, entry.message),
+            _ => tracing::info!(target: "frontend", "[{}] [{}] {}", client_prefix, entry.level, entry.message),
+        }
+    }
+
+    StatusCode::OK
 }
 
 // =============================================================================
@@ -1282,6 +1421,7 @@ async fn observations_websocket_handler(
     ws: WebSocketUpgrade,
     State(state): State<Arc<ServerState>>,
 ) -> impl IntoResponse {
+    tracing::info!("[Observations WS] Upgrade request received");
     ws.on_upgrade(move |socket| handle_observations_websocket(socket, state))
 }
 
@@ -1306,8 +1446,25 @@ async fn handle_observations_websocket(socket: WebSocket, state: Arc<ServerState
         }
     }
 
-    // Clone app_handle for subscription handling
-    let app_handle = state.app_handle.clone();
+    // Send current airport sync state (for RealTraffic mode)
+    let (synced_airport, rt_active) = {
+        let airport = state.synced_airport.read().ok().and_then(|g| g.clone());
+        let active = state.realtraffic_active.read().ok().map(|g| *g).unwrap_or(false);
+        (airport, active)
+    };
+    let airport_sync_msg = ObservationMessage::AirportSync {
+        icao: synced_airport,
+        realtraffic_active: rt_active,
+    };
+    if let Ok(json) = serde_json::to_string(&airport_sync_msg) {
+        if sender.send(Message::Text(json)).await.is_err() {
+            tracing::warn!("[Observations WS] Failed to send airport sync message");
+            return;
+        }
+    }
+
+    // Clone state for request handling
+    let state_for_requests = state.clone();
 
     // Spawn a task to forward observations to the WebSocket
     let send_task = tokio::spawn(async move {
@@ -1325,13 +1482,13 @@ async fn handle_observations_websocket(socket: WebSocket, state: Arc<ServerState
         }
     });
 
-    // Handle incoming messages (subscription requests from remote clients)
+    // Handle incoming messages (subscription/airport requests from remote clients)
     while let Some(msg) = receiver.next().await {
         match msg {
             Ok(Message::Text(text)) => {
-                // Try to parse as subscription request
-                if let Ok(request) = serde_json::from_str::<SubscriptionRequest>(&text) {
-                    handle_subscription_request(&app_handle, request).await;
+                // Try to parse as client request
+                if let Ok(request) = serde_json::from_str::<ClientRequest>(&text) {
+                    handle_client_request(&state_for_requests, request).await;
                 }
             }
             Ok(Message::Close(_)) => {
@@ -1353,48 +1510,100 @@ async fn handle_observations_websocket(socket: WebSocket, state: Arc<ServerState
     tracing::info!("[Observations WS] Client disconnected");
 }
 
-/// Handle a subscription request from a remote client
-async fn handle_subscription_request(app_handle: &tauri::AppHandle, request: SubscriptionRequest) {
+/// Handle a client request (vNAS subscription or airport change)
+async fn handle_client_request(state: &Arc<ServerState>, request: ClientRequest) {
+    let app_handle = &state.app_handle;
+
     match request.action.as_str() {
         "subscribe" => {
+            let facility_id = match request.facility_id {
+                Some(id) => id,
+                None => {
+                    tracing::warn!("[Observations WS] subscribe action missing facility_id");
+                    return;
+                }
+            };
             // Check if facility is within allowed session facilities
             let allowed = crate::vnas::get_session_facilities_sync();
-            if allowed.contains(&request.facility_id) {
+            if allowed.contains(&facility_id) {
                 // Subscribe to the facility
                 tracing::info!(
                     "[Observations WS] Remote client requesting subscription to {}",
-                    request.facility_id
+                    facility_id
                 );
                 if let Err(e) =
-                    crate::vnas::subscribe_facility_internal(app_handle, &request.facility_id).await
+                    crate::vnas::subscribe_facility_internal(app_handle, &facility_id).await
                 {
                     tracing::warn!(
                         "[Observations WS] Failed to subscribe to {}: {}",
-                        request.facility_id,
+                        facility_id,
                         e
                     );
                 }
             } else {
                 tracing::warn!(
                     "[Observations WS] Subscription denied for {} - not in session facilities",
-                    request.facility_id
+                    facility_id
                 );
             }
         }
         "unsubscribe" => {
+            let facility_id = match request.facility_id {
+                Some(id) => id,
+                None => {
+                    tracing::warn!("[Observations WS] unsubscribe action missing facility_id");
+                    return;
+                }
+            };
             tracing::info!(
                 "[Observations WS] Remote client requesting unsubscription from {}",
-                request.facility_id
+                facility_id
             );
             if let Err(e) =
-                crate::vnas::unsubscribe_facility_internal(app_handle, &request.facility_id).await
+                crate::vnas::unsubscribe_facility_internal(app_handle, &facility_id).await
             {
                 tracing::warn!(
                     "[Observations WS] Failed to unsubscribe from {}: {}",
-                    request.facility_id,
+                    facility_id,
                     e
                 );
             }
+        }
+        "set_airport" => {
+            // Remote client is requesting to change the synced airport
+            // This only applies in RealTraffic mode
+            let rt_active = state
+                .realtraffic_active
+                .read()
+                .ok()
+                .map(|g| *g)
+                .unwrap_or(false);
+
+            if !rt_active {
+                tracing::debug!("[Observations WS] set_airport ignored - RealTraffic not active");
+                return;
+            }
+
+            let icao = request.icao;
+            tracing::info!(
+                "[Observations WS] Remote client requesting airport change to {:?}",
+                icao
+            );
+
+            // Update the synced airport
+            if let Ok(mut guard) = state.synced_airport.write() {
+                *guard = icao.clone();
+            }
+
+            // Broadcast the airport change to all clients (including the host)
+            let msg = ObservationMessage::AirportSync {
+                icao,
+                realtraffic_active: true,
+            };
+            let _ = state.observations_tx.send(msg);
+
+            // Emit event to notify the host app
+            let _ = app_handle.emit("remote-airport-changed", ());
         }
         _ => {
             tracing::warn!(

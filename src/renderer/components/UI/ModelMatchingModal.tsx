@@ -1,10 +1,11 @@
 import { useMemo, useEffect, useState, useCallback } from 'react'
-import { useVatsimStore } from '../../stores/vatsimStore'
-import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAircraftTimelineStore } from '../../stores/aircraftTimelineStore'
+import { useAirportStore } from '../../stores/airportStore'
 import { aircraftModelService, type ModelInfo } from '../../services/AircraftModelService'
 import { userVMRService } from '../../services/UserVMRService'
+import { calculateDistanceNM } from '../../utils/interpolation'
+import { getTowerPosition } from '../../utils/towerHeight'
 import { ModelPreviewModal } from './ModelPreviewModal'
 import './ModelMatchingModal.css'
 
@@ -27,10 +28,12 @@ interface TestResult {
 }
 
 function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
-  const dataSource = useGlobalSettingsStore((state) => state.realtraffic.dataSource)
-  const pilots = useVatsimStore((state) => state.pilots)
+  // Use timeline store - unified data source that works on both host and remote clients
   const timelines = useAircraftTimelineStore((state) => state.timelines)
   const aircraftDataRadiusNM = useSettingsStore((state) => state.memory.aircraftDataRadiusNM)
+  const currentAirport = useAirportStore((state) => state.currentAirport)
+  const towerHeight = useAirportStore((state) => state.towerHeight)
+  const customTowerPosition = useAirportStore((state) => state.customTowerPosition)
 
   // Counter to force re-render when model conversions complete
   const [conversionVersion, setConversionVersion] = useState(0)
@@ -112,38 +115,45 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
     }
   }, [testAirline, testType, isTestLoading])
 
-  // Build model matching data for all aircraft in range
+  // Build model matching data for aircraft within range of current airport
+  // Uses timeline store - unified data source that works on both host and remote clients
   const aircraftData = useMemo<AircraftModelData[]>(() => {
-    if (dataSource === 'realtraffic') {
-      // RealTraffic mode: use timelines from timeline store
-      return Array.from(timelines.values())
-        .map((timeline) => {
-          const aircraftType = timeline.metadata.aircraftType
-          const modelInfo = aircraftModelService.getModelInfo(aircraftType, timeline.callsign)
-          return {
-            callsign: timeline.callsign,
-            aircraftType: aircraftType || 'N/A',
-            modelInfo
-          }
-        })
-        .sort((a, b) => a.callsign.localeCompare(b.callsign))
+    // No airport selected = no aircraft to show
+    if (!currentAirport) {
+      return []
     }
 
-    // VATSIM mode: use pilots from vatsimStore
-    return pilots
-      .map((pilot) => {
-        const aircraftType = pilot.flight_plan?.aircraft_faa || null
-        // Pass callsign to enable FSLTL airline-specific livery matching
-        const modelInfo = aircraftModelService.getModelInfo(aircraftType, pilot.callsign)
+    const towerPos = getTowerPosition(currentAirport, towerHeight, customTowerPosition ?? undefined)
+    const towerAltFeet = (currentAirport.elevation || 0) + (towerHeight / 0.3048)
+
+    return Array.from(timelines.values())
+      .filter((timeline) => {
+        // Use latest observation for distance calculation
+        const lastObs = timeline.observations[timeline.observations.length - 1]
+        if (!lastObs) return false
+
+        const distance = calculateDistanceNM(
+          towerPos.latitude,
+          towerPos.longitude,
+          lastObs.latitude,
+          lastObs.longitude,
+          towerAltFeet,
+          lastObs.altitude * 3.28084  // Convert meters to feet
+        )
+        return distance <= aircraftDataRadiusNM
+      })
+      .map((timeline) => {
+        const aircraftType = timeline.metadata.aircraftType
+        const modelInfo = aircraftModelService.getModelInfo(aircraftType, timeline.callsign)
         return {
-          callsign: pilot.callsign,
+          callsign: timeline.callsign,
           aircraftType: aircraftType || 'N/A',
           modelInfo
         }
       })
       .sort((a, b) => a.callsign.localeCompare(b.callsign))
   // eslint-disable-next-line react-hooks/exhaustive-deps -- conversionVersion triggers refresh when models finish converting
-  }, [dataSource, pilots, timelines, conversionVersion])
+  }, [timelines, currentAirport, towerHeight, customTowerPosition, aircraftDataRadiusNM, conversionVersion])
 
   // Format scale for display
   const formatScale = (scale: { x: number; y: number; z: number }): { text: string; isScaled: boolean } => {

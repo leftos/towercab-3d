@@ -1073,7 +1073,7 @@ export function createFlatteningTerrainProvider(
       }
 
       // Modify heights
-      const { newMinHeight, newMaxHeight, modified, modifiedCount } = modifyTerrain(
+      const { newMinHeight, newMaxHeight, modified, modifiedCount: _modifiedCount } = modifyTerrain(
         uBuffer,
         vBuffer,
         heightBuffer,
@@ -1089,12 +1089,12 @@ export function createFlatteningTerrainProvider(
         return terrainData
       }
 
-      // Only log each tile once to avoid spam
-      if (!loggedTiles.has(tileKey)) {
-        loggedTiles.add(tileKey)
-        const pct = ((modifiedCount / vertexCount) * 100).toFixed(0)
-        console.log(`[FlatteningTerrainProvider] Modified tile ${tileKey}: ${modifiedCount}/${vertexCount} (${pct}%) flattened, height ${mesh._minimumHeight.toFixed(1)}-${mesh._maximumHeight.toFixed(1)} -> ${newMinHeight.toFixed(1)}-${newMaxHeight.toFixed(1)}`)
-      }
+      // Debug logging - uncomment to debug terrain flattening issues (also rename _modifiedCount back to modifiedCount above)
+      // if (!loggedTiles.has(tileKey)) {
+      //   loggedTiles.add(tileKey)
+      //   const pct = ((_modifiedCount / vertexCount) * 100).toFixed(0)
+      //   console.log(`[FlatteningTerrainProvider] Modified tile ${tileKey}: ${_modifiedCount}/${vertexCount} (${pct}%) flattened, height ${mesh._minimumHeight.toFixed(1)}-${mesh._maximumHeight.toFixed(1)} -> ${newMinHeight.toFixed(1)}-${newMaxHeight.toFixed(1)}`)
+      // }
 
       // Reconstruct quantized vertices
       const newQuantizedVertices = new Uint16Array(vertexCount * 3)

@@ -60,18 +60,27 @@ TowerCab 3D can be accessed from any device on your local network through a web 
 
 ### How Remote Access Works
 
-When you launch the desktop app, it automatically starts an HTTP server on port 8765. This server:
+When you launch the desktop app, it runs an HTTP server on port 8765. This server:
 - Serves the complete TowerCab interface to web browsers
-- Streams all aircraft models and mods from your PC
+- Streams all aircraft data via WebSocket (VATSIM, vNAS, and RealTraffic)
+- Provides all aircraft models and mods from your PC
 - Shares global settings (Cesium token, camera bookmarks, datablock positions)
 - Provides touch-optimized controls for mobile devices
+
+Remote browsers receive all data from the host PC rather than polling sources directly. This means:
+- Lower bandwidth usage on remote devices
+- Consistent data across all connected devices
+- Automatic vNAS 1Hz updates when the host has an active CRC session
+- No configuration needed on remote devices
 
 ### Setting Up Remote Access
 
 1. **Start the Desktop App** on your main PC
    - The HTTP server starts automatically on port 8765
+   - Go to Settings > Configuration to see all available LAN IP addresses
 
 2. **Find Your PC's IP Address**
+   - **Easiest:** Check Settings > Configuration > Remote Browser Access for all available addresses
    - **Windows:** Open Command Prompt and run `ipconfig`. Look for "IPv4 Address" under your network adapter (e.g., `192.168.1.100`)
    - **macOS/Linux:** Open Terminal and run `ifconfig` or `ip addr`. Look for your network interface's IP address
 
@@ -126,15 +135,21 @@ The following settings remain local to each device (stored in browser):
 - Performance settings (tile cache, data radius)
 - UI preferences (panel visibility, etc.)
 
-### Connection Indicator
+### Connection Status Indicator
 
-When using remote mode, you'll see a "Connected to [hostname]" indicator in the top bar. This shows:
-- The hostname or IP of the host PC
-- Green badge indicates active connection
-- Reconnect button appears if connection is lost
+When using remote mode, you'll see a status indicator in the top bar showing connection health:
+
+| Status | Meaning |
+|--------|---------|
+| **Live** (green) | Connected and receiving fresh data |
+| **No data** (yellow) | Connected but data is stale (no updates received recently) |
+| **Disconnected** (red) | WebSocket connection lost - will auto-reconnect |
+
+The indicator uses source-aware thresholds: vNAS data is considered stale after 5 seconds, RealTraffic after 8 seconds, and VATSIM after 25 seconds.
 
 ### Limitations in Remote Mode
 
+- **Configuration Settings:** Global settings (Cesium token, MSFS paths, etc.) are managed by the host. The Configuration tab shows a notice explaining this.
 - **FSLTL Conversion:** Model conversion can only be performed on the desktop app (requires file system access)
 - **Updates:** Update checks and downloads happen on the host PC only
 - **Mods:** All mods must be installed on the host PC (remote clients access them via HTTP)
@@ -774,6 +789,8 @@ Interpupillary distance (IPD) can be adjusted in settings for proper stereo sepa
 ## Settings
 
 Access settings by clicking the gear icon in the bottom-right corner. Settings are organized into six tabs.
+
+**Tip:** The Settings modal can be dragged by its title bar to any position on screen. Your position preference is remembered across sessions.
 
 ### Configuration Tab
 

@@ -1,0 +1,56 @@
+.remote-status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.remote-status-indicator__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.remote-status-indicator__label {
+  color: #ccc;
+}
+
+.remote-status-indicator__time {
+  color: #888;
+  font-size: 11px;
+}
+
+/* Connected state */
+.remote-status-indicator--connected .remote-status-indicator__dot {
+  background: #4ade80;
+  box-shadow: 0 0 6px rgba(74, 222, 128, 0.5);
+}
+
+.remote-status-indicator--connected .remote-status-indicator__label {
+  color: #4ade80;
+}
+
+/* Stale state - connected but no recent data */
+.remote-status-indicator--stale .remote-status-indicator__dot {
+  background: #fbbf24;
+  box-shadow: 0 0 6px rgba(251, 191, 36, 0.5);
+}
+
+.remote-status-indicator--stale .remote-status-indicator__label {
+  color: #fbbf24;
+}
+
+/* Disconnected state */
+.remote-status-indicator--disconnected .remote-status-indicator__dot {
+  background: #ef4444;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.5);
+}
+
+.remote-status-indicator--disconnected .remote-status-indicator__label {
+  color: #ef4444;
+}
