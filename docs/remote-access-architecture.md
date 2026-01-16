@@ -459,22 +459,40 @@ A compact status indicator shows connection health in the TopBar:
 function RemoteStatusIndicator() {
   const wsConnected = useRemoteStatusStore(state => state.wsConnected)
   const lastObservationTime = useRemoteStatusStore(state => state.lastObservationTime)
+  const lastSource = useRemoteStatusStore(state => state.lastSource)
 
   // Don't render in Tauri mode
   if (!isRemoteMode()) return null
+
+  // Use source-specific stale threshold
+  const threshold = lastSource
+    ? SOURCE_STALE_THRESHOLDS[lastSource]
+    : SOURCE_STALE_THRESHOLDS.vatsim
 
   // Determine status
   let status: 'connected' | 'stale' | 'disconnected'
 
   if (!wsConnected) {
     status = 'disconnected'  // Red dot, "Disconnected"
-  } else if (Date.now() - lastObservationTime > 5000) {
-    status = 'stale'         // Yellow dot, "No data", "5s ago"
+  } else if (Date.now() - lastObservationTime > threshold) {
+    status = 'stale'         // Yellow dot, "No data", "Xs ago"
   } else {
     status = 'connected'     // Green dot, "Live"
   }
 }
 ```
+
+### Source-Aware Stale Thresholds
+
+Different data sources have different expected update intervals:
+
+| Source | Update Interval | Stale Threshold |
+|--------|-----------------|-----------------|
+| vNAS | 1 second | 5 seconds |
+| RealTraffic | ~3 seconds | 8 seconds |
+| VATSIM | 15 seconds | 25 seconds |
+
+The indicator tracks the most recent data source and applies the appropriate threshold.
 
 ### Status Store
 
@@ -486,6 +504,7 @@ interface RemoteStatusState {
   lastObservationTime: number
   observationCount: number        // For rate calculation
   countStartTime: number          // Reset every 10s
+  lastSource: 'vatsim' | 'vnas' | 'realtraffic' | null
   realtrafficActive: boolean      // RealTraffic mode on host
   syncedAirport: string | null    // Current synced airport
 }

@@ -4,6 +4,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+## [0.0.34-alpha] - 2026-01-15
+
 ### Added
 - **Draggable Settings modal** - The Settings dialog can now be dragged by its title bar to any position on screen. Position is remembered across sessions.
 - **Remote status indicator** - Remote browser clients now show a live connection status indicator in the top bar with "Live", "No data", or "Disconnected" states based on data freshness.

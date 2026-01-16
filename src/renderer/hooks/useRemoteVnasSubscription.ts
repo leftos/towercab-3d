@@ -10,7 +10,7 @@
  * Also handles unsubscription when switching away from an airport.
  */
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useMemo } from 'react'
 import { isRemoteMode } from '../utils/remoteMode'
 import { useAirportStore } from '../stores/airportStore'
 import { useVnasStore } from '../stores/vnasStore'
@@ -35,7 +35,8 @@ function normalizeForVnas(icao: string): string {
  */
 export function useRemoteVnasSubscription(): void {
   const currentAirport = useAirportStore(state => state.currentAirport)
-  const sessionFacilities = useVnasStore(state => state.sessionFacilities) ?? []
+  const sessionFacilitiesRaw = useVnasStore(state => state.sessionFacilities)
+  const sessionFacilities = useMemo(() => sessionFacilitiesRaw ?? [], [sessionFacilitiesRaw])
   const subscribedFacilities = useVnasStore(state => state.status.subscribedFacilities)
 
   // Track the previous airport to handle unsubscription
