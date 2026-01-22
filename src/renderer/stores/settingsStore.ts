@@ -745,7 +745,8 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
       deviceOptimizationPromptDismissed: oldSettings.deviceOptimizationPromptDismissed ?? DEFAULT_SETTINGS.ui.deviceOptimizationPromptDismissed,
       aircraftPanelWidth: oldSettings.aircraftPanelWidth ?? DEFAULT_SETTINGS.ui.aircraftPanelWidth,
       aircraftPanelHeight: oldSettings.aircraftPanelHeight ?? DEFAULT_SETTINGS.ui.aircraftPanelHeight,
-      settingsModalPosition: oldSettings.settingsModalPosition ?? DEFAULT_SETTINGS.ui.settingsModalPosition
+      settingsModalPosition: oldSettings.settingsModalPosition ?? DEFAULT_SETTINGS.ui.settingsModalPosition,
+      dockRunwayPanel: oldSettings.dockRunwayPanel ?? DEFAULT_SETTINGS.ui.dockRunwayPanel
     },
     fsltl: {
       sourcePath: oldSettings.fsltl?.sourcePath ?? DEFAULT_SETTINGS.fsltl.sourcePath,

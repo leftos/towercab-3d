@@ -49,6 +49,8 @@ function ControlsBar() {
 
   // Settings store
   const askToContributePositions = useSettingsStore((state) => state.ui.askToContributePositions)
+  const dockRunwayPanel = useSettingsStore((state) => state.ui.dockRunwayPanel)
+  const updateUISettings = useSettingsStore((state) => state.updateUISettings)
 
   // Active viewport camera state (from viewportStore)
   const {
@@ -136,20 +138,26 @@ function ControlsBar() {
         // Pass geographic coordinates - lookAtPosition calculates heading/pitch
         // from the active viewport's camera position (works correctly for insets)
         lookAtPosition(t.end.lat, t.end.lon, t.end.elevationFt)
-        setShowRunwayDropdown(false)
+        // Only close dropdown if not docked
+        if (!dockRunwayPanel) {
+          setShowRunwayDropdown(false)
+        }
       }
     }))
-  }, [currentAirport, getRunwaysWithCoordinates, lookAtPosition])
+  }, [currentAirport, getRunwaysWithCoordinates, lookAtPosition, dockRunwayPanel])
 
   // Refs for dropdowns to handle click outside
   const runwayDropdownRef = useRef<HTMLDivElement>(null)
   const defaultsDropdownRef = useRef<HTMLDivElement>(null)
 
-  // Close runway dropdown when clicking outside
+  // Close runway dropdown when clicking outside (unless docked)
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (runwayDropdownRef.current && !runwayDropdownRef.current.contains(e.target as Node)) {
-        setShowRunwayDropdown(false)
+        // Don't close if docked
+        if (!dockRunwayPanel) {
+          setShowRunwayDropdown(false)
+        }
       }
     }
 
@@ -157,7 +165,7 @@ function ControlsBar() {
       document.addEventListener('mousedown', handleClickOutside)
       return () => document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [showRunwayDropdown])
+  }, [showRunwayDropdown, dockRunwayPanel])
 
   // Close defaults dropdown when clicking outside
   useEffect(() => {
@@ -498,7 +506,7 @@ function ControlsBar() {
               </div>
 
               {/* Look at Runway - dropdown button */}
-              <div className="runway-dropdown" ref={runwayDropdownRef}>
+              <div className={`runway-dropdown ${dockRunwayPanel ? 'docked' : ''}`} ref={runwayDropdownRef}>
                 <button
                   className={`control-button ${showRunwayDropdown ? 'active' : ''}`}
                   onClick={() => setShowRunwayDropdown(!showRunwayDropdown)}
@@ -512,16 +520,31 @@ function ControlsBar() {
                   <span className="button-label">Look at Rwy</span>
                 </button>
                 {showRunwayDropdown && runwayThresholds.length > 0 && (
-                  <div className="runway-dropdown-menu">
-                    {runwayThresholds.map((item) => (
+                  <div className={`runway-dropdown-menu ${dockRunwayPanel ? 'docked' : ''}`}>
+                    <div className="runway-dropdown-header">
+                      <span className="runway-dropdown-title">Runways</span>
                       <button
-                        key={item.id}
-                        className="runway-dropdown-item"
-                        onClick={item.onClick}
+                        className={`runway-pin-btn ${dockRunwayPanel ? 'pinned' : ''}`}
+                        onClick={() => updateUISettings({ dockRunwayPanel: !dockRunwayPanel })}
+                        title={dockRunwayPanel ? 'Unpin panel (close on selection)' : 'Pin panel (keep open on selection)'}
                       >
-                        {item.label}
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill={dockRunwayPanel ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
+                          <path d="M12 2L12 12" />
+                          <circle cx="12" cy="17" r="5" />
+                        </svg>
                       </button>
-                    ))}
+                    </div>
+                    <div className="runway-dropdown-list">
+                      {runwayThresholds.map((item) => (
+                        <button
+                          key={item.id}
+                          className="runway-dropdown-item"
+                          onClick={item.onClick}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>

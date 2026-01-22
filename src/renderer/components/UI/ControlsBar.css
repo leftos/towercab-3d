@@ -1137,6 +1137,68 @@
   background: rgba(79, 195, 247, 0.25);
 }
 
+/* Runway dropdown header with pin button */
+.runway-dropdown-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 4px;
+}
+
+.runway-dropdown-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.runway-pin-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.runway-pin-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.runway-pin-btn.pinned {
+  color: #4fc3f7;
+}
+
+.runway-pin-btn.pinned:hover {
+  background: rgba(79, 195, 247, 0.15);
+  color: #4fc3f7;
+}
+
+/* Docked state styling */
+.runway-dropdown.docked .control-button {
+  border-color: rgba(79, 195, 247, 0.3);
+}
+
+.runway-dropdown-menu.docked {
+  border-color: rgba(79, 195, 247, 0.3);
+  box-shadow: 0 -4px 20px rgba(79, 195, 247, 0.15);
+}
+
+.runway-dropdown-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
 /* ============================================================================
    RESPONSIVE STYLES FOR SMALLER SCREENS
    ============================================================================ */

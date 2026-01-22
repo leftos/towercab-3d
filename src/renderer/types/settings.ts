@@ -897,6 +897,15 @@ export interface UISettings {
    * Values are pixel offsets from the centered position.
    */
   settingsModalPosition: { x: number; y: number }
+
+  /**
+   * Keep the runway selection panel docked/expanded (default: false)
+   *
+   * When enabled, the "Look at Rwy" dropdown stays open after selecting a runway,
+   * allowing quick switching between runway thresholds without re-opening the menu.
+   * Click the pin icon to toggle.
+   */
+  dockRunwayPanel: boolean
 }
 
 /**
@@ -1817,7 +1826,8 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     deviceOptimizationPromptDismissed: false,
     aircraftPanelWidth: 280,
     aircraftPanelHeight: 0,
-    settingsModalPosition: { x: 0, y: 0 }
+    settingsModalPosition: { x: 0, y: 0 },
+    dockRunwayPanel: false
   },
   fsltl: {
     sourcePath: null,
