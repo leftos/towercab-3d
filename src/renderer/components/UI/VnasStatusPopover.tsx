@@ -72,6 +72,15 @@ export function VnasStatusPopover({ onClose, toggleRef }: VnasStatusPopoverProps
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [onClose])
 
+  // Auto-close when OAuth completes and vNAS no longer needs user interaction
+  // (deep link callback received and connection reaches subscribing/waitingForSession/connected)
+  useEffect(() => {
+    if (isAuthenticating && ['subscribing', 'waitingForSession', 'connected'].includes(vnasStatus.state)) {
+      setIsAuthenticating(false)
+      onClose()
+    }
+  }, [vnasStatus.state, isAuthenticating, onClose])
+
   const getStateLabel = useCallback(() => {
     switch (vnasStatus.state) {
       case 'disconnected': return 'Disconnected'
