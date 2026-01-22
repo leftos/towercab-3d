@@ -4,6 +4,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+## [0.0.35-alpha] - 2026-01-22
+
 ### Added
 - **Dockable runway panel** - The "Look at Rwy" dropdown now has a pin button that keeps it open after selecting a runway. When pinned, you can quickly switch between runway thresholds without reopening the menu each time.
 
