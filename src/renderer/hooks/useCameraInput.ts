@@ -14,8 +14,7 @@ import {
   MOVEMENT_KEYS,
   accelerateVelocity,
   calculateEffectiveMoveSpeed,
-  calculateTargetVelocities,
-  applyWheelImpulse
+  calculateTargetVelocities
 } from '../utils/inputVelocity'
 import {
   PITCH_MIN,
@@ -260,9 +259,6 @@ export function useCameraInput(
   const animationFrameRef = useRef<number | null>(null)
   const lastFrameTimeRef = useRef<number>(0)
 
-  // Mouse wheel impulse for smooth scrolling
-  const wheelImpulseRef = useRef(0)
-
   // Refs for values needed during drag (avoids effect re-running during drag)
   const viewModeRef = useRef(viewMode)
   const topdownAltitudeRef = useRef(topdownAltitude)
@@ -476,7 +472,7 @@ export function useCameraInput(
     }
   }, [viewer, adjustHeading, adjustPitch, adjustOrbitHeading, adjustOrbitPitch, moveForward, moveRight, onBreakTowerFollow, setActiveViewport, clearLookAtTarget, isInputEnabled])
 
-  // Mouse wheel for zoom - adds impulse for smooth scrolling
+  // Mouse wheel for zoom - direct adjustment per scroll notch
   useEffect(() => {
     // Skip wheel handling when input is disabled (e.g., inactive iframe inset)
     if (!isInputEnabled) return
@@ -485,7 +481,7 @@ export function useCameraInput(
     const handleWheel = (event: WheelEvent) => {
       event.preventDefault()
 
-      // Normalize wheel delta and add to impulse (accumulates for fast scrolling)
+      // Normalize wheel delta: one notch = ~1 unit
       // Cap at 150 to handle high-DPI mice, divide by 100 for unit scale
       let normalizedDelta = Math.sign(event.deltaY) * Math.min(Math.abs(event.deltaY), 150) / 100
 
@@ -496,9 +492,28 @@ export function useCameraInput(
       const sizeScale = Math.min(1, Math.max(0.2, viewportSize / 800))
       normalizedDelta *= sizeScale
 
-      wheelImpulseRef.current += normalizedDelta
-      // Clamp total impulse to prevent excessive buildup from rapid scrolling
-      wheelImpulseRef.current = Math.max(-4, Math.min(4, wheelImpulseRef.current))
+      // Apply zoom directly based on current mode
+      const currentViewMode = viewModeRef.current
+      const currentFollowingCallsign = followingCallsignRef.current
+      const currentFollowMode = followModeRef.current
+
+      if (currentViewMode === 'topdown') {
+        // Top-down: adjust altitude (scale with current altitude for natural feel)
+        const altitudeStep = topdownAltitudeRef.current * 0.15 * normalizedDelta
+        adjustTopdownAltitude(altitudeStep)
+      } else if (currentFollowingCallsign && currentFollowMode === 'orbit') {
+        // Orbit mode: adjust distance (scale with current distance)
+        const distanceStep = orbitDistanceRef.current * 0.15 * normalizedDelta
+        adjustOrbitDistance(distanceStep)
+      } else if (currentFollowingCallsign && currentFollowMode === 'tower') {
+        // Tower follow mode: adjust follow zoom (inverted so scroll down = zoom in)
+        const zoomStep = -normalizedDelta * 0.3
+        adjustFollowZoom(zoomStep)
+      } else {
+        // Normal 3D mode: adjust FOV directly (~5° per notch)
+        const fovStep = normalizedDelta * 5
+        adjustFov(fovStep)
+      }
     }
 
     const canvas = viewer.canvas
@@ -507,7 +522,7 @@ export function useCameraInput(
     return () => {
       canvas.removeEventListener('wheel', handleWheel)
     }
-  }, [viewer, isInputEnabled])
+  }, [viewer, isInputEnabled, adjustFov, adjustTopdownAltitude, adjustFollowZoom, adjustOrbitDistance])
 
   // Smooth keyboard controls with animation loop
   useEffect(() => {
@@ -691,9 +706,6 @@ export function useCameraInput(
       const shiftHeld = keys.has('shift')
       const sprintMultiplier = shiftHeld ? 3.0 : 1.0
 
-      // Process mouse wheel impulse (adds to velocity directly)
-      wheelImpulseRef.current = applyWheelImpulse(vel, wheelImpulseRef.current, viewModeRef.current, followingCallsignRef.current, followModeRef.current, dt)
-
       // Scale movement speed with altitude in topdown view, and apply sprint multiplier
       const effectiveMoveSpeed = calculateEffectiveMoveSpeed(
         MOVEMENT_CONFIG.MAX_MOVE_SPEED,
@@ -738,14 +750,12 @@ export function useCameraInput(
         if ((currentFollowZoom <= FOLLOW_ZOOM_MIN + 0.01 && vel.zoom < 0) ||
             (currentFollowZoom >= FOLLOW_ZOOM_MAX - 0.01 && vel.zoom > 0)) {
           vel.zoom = 0
-          wheelImpulseRef.current = 0  // Also clear wheel impulse to stop momentum
         }
       } else if (!inOrbitMode && !followingCallsignRef.current) {
         // FOV boundaries (normal 3D mode, not following)
         if ((currentFov <= FOV_MIN + 0.5 && vel.zoom < 0) ||
             (currentFov >= FOV_MAX - 0.5 && vel.zoom > 0)) {
           vel.zoom = 0
-          wheelImpulseRef.current = 0  // Also clear wheel impulse to stop momentum
         }
       }
       // Note: orbit mode uses orbitDistance for zoom, which is already checked above
@@ -760,14 +770,12 @@ export function useCameraInput(
       if ((currentOrbitDistance <= ORBIT_DISTANCE_MIN + 1 && vel.orbitDistance < 0) ||
           (currentOrbitDistance >= ORBIT_DISTANCE_MAX - 1 && vel.orbitDistance > 0)) {
         vel.orbitDistance = 0
-        wheelImpulseRef.current = 0  // Also clear wheel impulse to stop momentum
       }
 
       // Top-down altitude boundaries
       if ((currentAltitude <= TOPDOWN_ALTITUDE_MIN + 1 && vel.altitude < 0) ||
           (currentAltitude >= TOPDOWN_ALTITUDE_MAX - 1 && vel.altitude > 0)) {
         vel.altitude = 0
-        wheelImpulseRef.current = 0  // Also clear wheel impulse to stop momentum
       }
 
       // Velocity threshold for applying movements

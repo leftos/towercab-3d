@@ -7,6 +7,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 ### Added
 - **Dockable runway panel** - The "Look at Rwy" dropdown now has a pin button that keeps it open after selecting a runway. When pinned, you can quickly switch between runway thresholds without reopening the menu each time.
 
+### Fixed
+- **Scroll wheel zoom no longer overshoots** - A single scroll notch now changes FOV by ~5° instead of potentially zooming from minimum to maximum. The old velocity-based system caused runaway zoom; it's now a direct 1:1 mapping.
+
 ## [0.0.34-alpha] - 2026-01-15
 
 ### Added
