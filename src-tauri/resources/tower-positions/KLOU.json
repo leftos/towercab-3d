@@ -4,5 +4,11 @@
     "lon": -85.66055555555556,
     "aglHeight": 22.9,
     "heading": 255.3
+  },
+  "view2d": {
+    "lat": 38.22733,
+    "lon": -85.66055,
+    "vNasRange": 150,
+    "heading": 0
   }
 }

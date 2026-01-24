@@ -4,6 +4,7 @@ Generate tower positions by combining:
 - FAA DOF (tower locations + AGL heights)
 - OurAirports (runway data for heading estimation)
 - mwgg/Airports (ICAO code mapping)
+- vNAS Data API (2D view defaults: center position and zoom range)
 
 Usage:
     python scripts/shipping/data-generation/scrape-tower-positions.py [--dof-path PATH]
@@ -29,6 +30,8 @@ except ImportError:
 DEFAULT_DOF_PATH = Path("X:/Downloads/DOF_251026/DOF.DAT")
 AIRPORTS_URL = "https://raw.githubusercontent.com/mwgg/Airports/master/airports.json"
 RUNWAYS_URL = "https://davidmegginson.github.io/ourairports-data/runways.csv"
+VNAS_ARTCCS_URL = "https://data-api.vnas.vatsim.net/api/artccs"
+VNAS_ARTCC_URL = "https://data-api.vnas.vatsim.net/api/artccs/{artcc_id}"
 AIRPORT_MATCH_RADIUS = 3000  # meters - for matching DOF to airport ICAO
 
 # Caching
@@ -143,6 +146,77 @@ def load_runways() -> dict[str, list]:
     return runways_by_icao
 
 
+def load_vnas_tower_data() -> dict[str, dict]:
+    """
+    Load 2D view defaults from vNAS Data API.
+
+    Extracts towerCabConfiguration from ATCT facilities which contains:
+    - towerLocation: {lat, lon} - center position for 2D view
+    - defaultZoomRange: zoom range in hundreds of feet
+    - defaultRotation: heading in degrees (0 = north)
+
+    Returns dict keyed by airport ID (without K prefix) containing:
+    - lat: tower location latitude
+    - lon: tower location longitude
+    - vNasRange: zoom range in hundreds of feet
+    - heading: rotation in degrees
+    """
+    print("  Fetching vNAS ARTCC list...")
+    try:
+        resp = requests.get(VNAS_ARTCCS_URL, timeout=30)
+        resp.raise_for_status()
+        artccs = resp.json()
+    except Exception as e:
+        print(f"  Warning: Could not fetch vNAS ARTCCs: {e}")
+        return {}
+
+    tower_data: dict[str, dict] = {}
+
+    def extract_towers(facility: dict) -> None:
+        """Recursively extract towerCabConfiguration from ATCT facilities."""
+        facility_id = facility.get('id', '')
+        facility_type = facility.get('type', '')
+        tcc = facility.get('towerCabConfiguration')
+
+        # ATCT, AtctTracon, AtctRapcon facilities have tower cab configs
+        if tcc and facility_type in ('Atct', 'AtctTracon', 'AtctRapcon'):
+            tower_loc = tcc.get('towerLocation', {})
+            lat = tower_loc.get('lat')
+            lon = tower_loc.get('lon')
+            zoom_range = tcc.get('defaultZoomRange')
+            rotation = tcc.get('defaultRotation', 0)
+
+            if facility_id and lat is not None and lon is not None:
+                tower_data[facility_id] = {
+                    'lat': lat,
+                    'lon': lon,
+                    'vNasRange': zoom_range,
+                    'heading': rotation
+                }
+
+        # Recurse into child facilities
+        for child in facility.get('childFacilities', []):
+            extract_towers(child)
+
+    print(f"  Fetching {len(artccs)} ARTCCs...")
+    for artcc in artccs:
+        artcc_id = artcc.get('id', '')
+        if not artcc_id:
+            continue
+
+        try:
+            url = VNAS_ARTCC_URL.format(artcc_id=artcc_id)
+            resp = requests.get(url, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+            extract_towers(data.get('facility', {}))
+        except Exception as e:
+            print(f"    Warning: Could not fetch {artcc_id}: {e}")
+            continue
+
+    return tower_data
+
+
 def find_nearest(
     lat: float,
     lon: float,
@@ -241,6 +315,10 @@ def main():
     runways = load_runways()
     print(f"  Runways: {len(runways)} airports with runway data")
 
+    # Load vNAS tower data for 2D view defaults
+    vnas_towers = load_vnas_tower_data()
+    print(f"  vNAS: {len(vnas_towers)} tower configurations")
+
     # First pass: Group all DOF towers by their nearest airport
     print("\nGrouping towers by airport...")
     towers_by_airport: dict[str, list[tuple[dict, float]]] = {}
@@ -278,6 +356,7 @@ def main():
         'written': 0,
         'skipped': 0,
         'runway_heading': 0,
+        'vnas_view2d': 0,
     }
 
     for icao, candidates in sorted(towers_by_airport.items()):
@@ -315,13 +394,27 @@ def main():
             }
         }
 
+        # Add view2d from vNAS data if available
+        # vNAS uses airport IDs without K prefix (e.g., "OAK" not "KOAK")
+        vnas_id = icao[1:] if icao.startswith('K') and len(icao) == 4 else icao
+        if vnas_id in vnas_towers:
+            vnas = vnas_towers[vnas_id]
+            position["view2d"] = {
+                "lat": vnas['lat'],
+                "lon": vnas['lon'],
+                "vNasRange": vnas['vNasRange'],
+                "heading": vnas.get('heading', 0)
+            }
+            stats['vnas_view2d'] += 1
+
         path.write_text(json.dumps(position, indent=2))
         stats['written'] += 1
 
     print("\nResults:")
     print(f"  Written: {stats['written']}")
     print(f"  Skipped (existing): {stats['skipped']}")
-    print(f"  Runway-based heading: {stats['runway_heading']}")
+    print(f"  Runway-based heading (3D): {stats['runway_heading']}")
+    print(f"  vNAS view2d data: {stats['vnas_view2d']}")
 
 
 if __name__ == "__main__":
