@@ -234,6 +234,35 @@ pub fn read_tower_positions(app: tauri::AppHandle) -> Result<serde_json::Value, 
     Ok(serde_json::Value::Object(positions))
 }
 
+/// Get list of user-custom tower position ICAOs (from mods/tower-positions/)
+/// These are positions the user has added/modified, not bundled ones
+#[tauri::command]
+pub fn get_custom_tower_position_icaos(app: tauri::AppHandle) -> Result<Vec<String>, String> {
+    let mods_root = find_mods_root(&app);
+    let user_dir = mods_root.join("tower-positions");
+
+    let mut icaos = Vec::new();
+
+    if user_dir.exists() && user_dir.is_dir() {
+        if let Ok(entries) = fs::read_dir(&user_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("json"))
+                {
+                    if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                        icaos.push(stem.to_uppercase());
+                    }
+                }
+            }
+        }
+    }
+
+    icaos.sort();
+    Ok(icaos)
+}
+
 /// Update a single tower position in mods/tower-positions/{ICAO}.json
 /// Creates the directory and file if they don't exist
 #[tauri::command]

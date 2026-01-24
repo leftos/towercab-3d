@@ -4,6 +4,10 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Mods management screen** - New "Mods" tab in Settings shows all installed tower models, aircraft models, VMR files, and tower positions with enable/disable controls. Displays mod details (name, author, version) and any loading errors.
+- **Tower 3D model rendering** - Custom tower models placed in `mods/towers/{ICAO}/` are now rendered in the 3D view. Models are positioned using coordinates from tower-positions data or the mod's manifest.
+
 ### Changed
 - **Outdated cached models are now automatically deleted** - When the model converter is updated, old cached models are now deleted from disk instead of being ignored. This frees up disk space and ensures models are re-converted with the latest converter on next use.
 

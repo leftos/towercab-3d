@@ -1,0 +1,375 @@
+import { useState, useEffect, useCallback } from 'react'
+import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
+import { modService, type ModLoadingResult, type TowerModInfo, type ModError } from '../../services/ModService'
+import { customVMRService } from '../../services/CustomVMRService'
+import CollapsibleSection from './settings/CollapsibleSection'
+import './ControlsBar.css'
+
+function SettingsModsTab() {
+  const [modResult, setModResult] = useState<ModLoadingResult | null>(null)
+  const [pendingChanges, setPendingChanges] = useState<Set<string>>(new Set())
+
+  const disabledMods = useGlobalSettingsStore((state) => state.disabledMods)
+  const updateDisabledMods = useGlobalSettingsStore((state) => state.updateDisabledMods)
+
+  // Load mod info on mount
+  useEffect(() => {
+    if (modService.isLoaded()) {
+      setModResult(modService.getModLoadingResult())
+    }
+  }, [])
+
+  // Check if a mod is disabled (in either saved state or pending changes)
+  const isModDisabled = useCallback((path: string): boolean => {
+    const normalizedPath = path.toLowerCase().replace(/\\/g, '/')
+    if (pendingChanges.has(normalizedPath)) {
+      // Pending change - inverts the saved state
+      return !disabledMods.includes(normalizedPath)
+    }
+    return disabledMods.includes(normalizedPath)
+  }, [disabledMods, pendingChanges])
+
+  // Toggle mod enabled state (marks as pending change)
+  const toggleMod = useCallback((path: string) => {
+    const normalizedPath = path.toLowerCase().replace(/\\/g, '/')
+    setPendingChanges(prev => {
+      const next = new Set(prev)
+      if (next.has(normalizedPath)) {
+        next.delete(normalizedPath)
+      } else {
+        next.add(normalizedPath)
+      }
+      return next
+    })
+  }, [])
+
+  // Apply pending changes
+  const applyChanges = useCallback(async () => {
+    const newDisabledMods = new Set(disabledMods.map(p => p.toLowerCase().replace(/\\/g, '/')))
+
+    for (const path of pendingChanges) {
+      if (newDisabledMods.has(path)) {
+        newDisabledMods.delete(path)
+      } else {
+        newDisabledMods.add(path)
+      }
+    }
+
+    await updateDisabledMods([...newDisabledMods])
+    setPendingChanges(new Set())
+  }, [disabledMods, pendingChanges, updateDisabledMods])
+
+  // Get VMR stats
+  const vmrStats = customVMRService.getStats()
+  const vmrFiles = customVMRService.getLoadedFiles()
+
+  const hasPendingChanges = pendingChanges.size > 0
+
+  return (
+    <>
+      {/* Tower Models Section */}
+      <CollapsibleSection title={`Tower Models (${modResult?.towers.length ?? 0})`} defaultExpanded>
+        {modResult?.towers.length === 0 ? (
+          <p className="setting-hint">No tower mods installed</p>
+        ) : (
+          <div className="mods-list">
+            {modResult?.towers.map((tower) => (
+              <TowerModItem
+                key={tower.path}
+                tower={tower}
+                isDisabled={isModDisabled(tower.path)}
+                onToggle={() => toggleMod(tower.path)}
+                hasPendingChange={pendingChanges.has(tower.path.toLowerCase().replace(/\\/g, '/'))}
+              />
+            ))}
+          </div>
+        )}
+      </CollapsibleSection>
+
+      {/* Aircraft Models Section */}
+      <CollapsibleSection title={`Aircraft Models (${modResult?.aircraft.length ?? 0})`}>
+        {modResult?.aircraft.length === 0 ? (
+          <p className="setting-hint">No aircraft mods installed</p>
+        ) : (
+          <div className="mods-list">
+            {modResult?.aircraft.map((aircraft) => (
+              <div key={aircraft.path} className="mod-item">
+                <label className="mod-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={!isModDisabled(aircraft.path)}
+                    onChange={() => toggleMod(aircraft.path)}
+                  />
+                  <span className="mod-name">{aircraft.manifest.name || 'Unnamed'}</span>
+                  {pendingChanges.has(aircraft.path.toLowerCase().replace(/\\/g, '/')) && (
+                    <span className="pending-badge">*</span>
+                  )}
+                </label>
+                <div className="mod-details">
+                  {aircraft.manifest.author && (
+                    <span className="mod-author">by {aircraft.manifest.author}</span>
+                  )}
+                  {aircraft.manifest.version && (
+                    <span className="mod-version">v{aircraft.manifest.version}</span>
+                  )}
+                </div>
+                <div className="mod-details">
+                  <span className="mod-types">Types: {aircraft.aircraftTypes.join(', ')}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CollapsibleSection>
+
+      {/* VMR Files Section */}
+      <CollapsibleSection title={`VMR Files (${vmrStats.vmrFiles})`}>
+        {vmrStats.vmrFiles === 0 ? (
+          <p className="setting-hint">No VMR files installed</p>
+        ) : (
+          <div className="mods-list">
+            <div className="mod-item">
+              <div className="mod-details">
+                <span className="mod-stats">
+                  {vmrStats.defaultRules} default rules, {vmrStats.airlineRules} airline rules
+                </span>
+              </div>
+              <div className="mod-details">
+                {vmrFiles.map((file, i) => (
+                  <span key={i} className="vmr-file">{file}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </CollapsibleSection>
+
+      {/* Tower Positions Section */}
+      <CollapsibleSection title={`Tower Positions (${modResult?.towerPositions.builtin ?? 0})`}>
+        <div className="mod-item">
+          <div className="mod-details">
+            <span className="mod-stats">
+              Built-in: {modResult?.towerPositions.builtin ?? 0} airports
+            </span>
+          </div>
+          {modResult?.towerPositions.custom && modResult.towerPositions.custom.length > 0 && (
+            <div className="mod-details">
+              <span className="mod-stats">
+                Custom: {modResult.towerPositions.custom.length} airports ({modResult.towerPositions.custom.slice(0, 10).join(', ')}{modResult.towerPositions.custom.length > 10 ? '...' : ''})
+              </span>
+            </div>
+          )}
+        </div>
+      </CollapsibleSection>
+
+      {/* Errors Section */}
+      {modResult?.errors && modResult.errors.length > 0 && (
+        <CollapsibleSection title={`Errors (${modResult.errors.length})`} defaultExpanded>
+          <div className="mods-list errors-list">
+            {modResult.errors.map((error, i) => (
+              <ErrorItem key={i} error={error} />
+            ))}
+          </div>
+        </CollapsibleSection>
+      )}
+
+      {/* Pending Changes Notice */}
+      {hasPendingChanges && (
+        <div className="pending-changes-bar">
+          <span className="pending-notice">
+            Changes require app restart to take effect
+          </span>
+          <button className="control-button primary" onClick={applyChanges}>
+            Save Changes
+          </button>
+        </div>
+      )}
+
+      <style>{`
+        .mods-list {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .mod-item {
+          background: var(--bg-secondary, #1a1a2e);
+          border: 1px solid var(--border-color, #333);
+          border-radius: 4px;
+          padding: 10px 12px;
+        }
+        .mod-checkbox {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          cursor: pointer;
+        }
+        .mod-checkbox input {
+          margin: 0;
+        }
+        .mod-name {
+          font-weight: 500;
+          color: var(--text-primary, #fff);
+        }
+        .pending-badge {
+          color: var(--warning-color, #ffc107);
+          font-weight: bold;
+          margin-left: 4px;
+        }
+        .mod-details {
+          margin-top: 4px;
+          margin-left: 24px;
+          font-size: 0.85em;
+          color: var(--text-secondary, #888);
+        }
+        .mod-author {
+          margin-right: 8px;
+        }
+        .mod-version {
+          opacity: 0.7;
+        }
+        .mod-path-row {
+          margin-top: 6px;
+          margin-left: 24px;
+        }
+        .mod-path {
+          font-family: monospace;
+          font-size: 0.8em;
+          color: var(--text-tertiary, #a0a0a0);
+          word-break: break-all;
+        }
+        .mod-icao {
+          font-weight: 600;
+          margin-right: 8px;
+          color: var(--accent-color, #4a90d9);
+        }
+        .mod-types, .mod-stats {
+          display: block;
+        }
+        .mod-position {
+          font-family: monospace;
+          font-size: 0.9em;
+        }
+        .position-source {
+          opacity: 0.7;
+          font-style: italic;
+        }
+        .vmr-file {
+          display: block;
+          font-family: monospace;
+          font-size: 0.85em;
+          word-break: break-all;
+        }
+        .errors-list .mod-item {
+          border-color: var(--error-color, #dc3545);
+          background: rgba(220, 53, 69, 0.1);
+        }
+        .error-icon {
+          color: var(--error-color, #dc3545);
+          margin-right: 8px;
+        }
+        .error-path {
+          font-family: monospace;
+          font-size: 0.9em;
+          word-break: break-all;
+        }
+        .error-message {
+          margin-top: 4px;
+          color: var(--error-color, #dc3545);
+        }
+        .pending-changes-bar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 12px 16px;
+          background: var(--bg-secondary, #1a1a2e);
+          border: 1px solid var(--warning-color, #ffc107);
+          border-radius: 4px;
+          margin-top: 16px;
+        }
+        .pending-notice {
+          color: var(--warning-color, #ffc107);
+          font-size: 0.9em;
+        }
+        .control-button.primary {
+          background: var(--accent-color, #4a90d9);
+          border-color: var(--accent-color, #4a90d9);
+        }
+        .control-button.primary:hover {
+          background: var(--accent-hover, #5a9fe9);
+        }
+      `}</style>
+    </>
+  )
+}
+
+/**
+ * Tower mod item component
+ */
+function TowerModItem({
+  tower,
+  isDisabled,
+  onToggle,
+  hasPendingChange
+}: {
+  tower: TowerModInfo
+  isDisabled: boolean
+  onToggle: () => void
+  hasPendingChange: boolean
+}) {
+  const placementText = tower.placement
+    ? `${tower.placement.lat.toFixed(4)}, ${tower.placement.lon.toFixed(4)}`
+    : 'no position'
+
+  // Display name: use manifest name, fall back to ICAO if no name
+  const displayName = tower.manifest.name || tower.icao || 'Unnamed'
+
+  return (
+    <div className="mod-item">
+      <label className="mod-checkbox">
+        <input
+          type="checkbox"
+          checked={!isDisabled}
+          onChange={onToggle}
+        />
+        <span className="mod-name">{displayName}</span>
+        {hasPendingChange && <span className="pending-badge">*</span>}
+      </label>
+      <div className="mod-details">
+        {tower.manifest.author && (
+          <span className="mod-author">by {tower.manifest.author}</span>
+        )}
+        {tower.manifest.version && (
+          <span className="mod-version">v{tower.manifest.version}</span>
+        )}
+      </div>
+      <div className="mod-path-row">
+        <span className="mod-path">{tower.path}</span>
+      </div>
+      <div className="mod-details">
+        <span className="mod-position">
+          Position: {placementText}
+          {tower.placement && (
+            <span className="position-source"> ({tower.placement.source})</span>
+          )}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Error item component
+ */
+function ErrorItem({ error }: { error: ModError }) {
+  return (
+    <div className="mod-item">
+      <div>
+        <span className="error-icon">⚠</span>
+        <span className="error-path">{error.path}</span>
+      </div>
+      <div className="error-message">{error.error}</div>
+    </div>
+  )
+}
+
+export default SettingsModsTab

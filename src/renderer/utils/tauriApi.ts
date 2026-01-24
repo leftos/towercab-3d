@@ -30,6 +30,30 @@ export function isInsetContext(): boolean {
 }
 
 /**
+ * Join path segments using the appropriate separator for the base path
+ * Detects whether the base path uses Windows (backslash) or Unix (forward slash) separators
+ * and joins segments accordingly
+ *
+ * @param basePath - The base path that determines the separator style
+ * @param segments - Additional path segments to join
+ * @returns Joined path with consistent separators
+ */
+export function joinPath(basePath: string, ...segments: string[]): string {
+  const separator = basePath.includes('\\') ? '\\' : '/'
+  let result = basePath
+  for (const segment of segments) {
+    // Remove leading/trailing separators from segment
+    const cleanSegment = segment.replace(/^[/\\]+|[/\\]+$/g, '')
+    if (cleanSegment) {
+      // Ensure base has no trailing separator
+      result = result.replace(/[/\\]+$/, '')
+      result = `${result}${separator}${cleanSegment}`
+    }
+  }
+  return result
+}
+
+/**
  * Mod info returned from API
  */
 interface ModInfo {
@@ -162,6 +186,18 @@ export const modApi = {
     const response = await fetch('/api/tower-positions')
     if (!response.ok) return {}
     return response.json()
+  },
+
+  /**
+   * Get list of user-custom tower position ICAOs (from mods/tower-positions/)
+   * These are positions the user has added/modified, not bundled ones
+   */
+  getCustomTowerPositionIcaos: async (): Promise<string[]> => {
+    if (isTauri()) {
+      return invoke<string[]>('get_custom_tower_position_icaos')
+    }
+    // In browser mode, we don't have access to this - return empty
+    return []
   },
 
   /**

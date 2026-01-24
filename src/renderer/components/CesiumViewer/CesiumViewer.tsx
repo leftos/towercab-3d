@@ -28,6 +28,7 @@ import { useCesiumLabels } from '../../hooks/useCesiumLabels'
 import { useGroundAircraftTerrain } from '../../hooks/useGroundAircraftTerrain'
 import { useAutoAirportSwitch } from '../../hooks/useAutoAirportSwitch'
 import { useTerrainFlattening } from '../../hooks/useTerrainFlattening'
+import { useTowerModel } from '../../hooks/useTowerModel'
 import { getTowerPosition } from '../../utils/towerHeight'
 import { performanceMonitor } from '../../utils/performanceMonitor'
 import { hasViewingContext, isOrbitFollowing, isOrbitWithoutAirport } from '../../utils/viewingContext'
@@ -407,6 +408,13 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
     silhouetteRefs,
     sunElevation
   )
+
+  // =========================================================================
+  // 6a. Tower Model Rendering
+  // =========================================================================
+  // Loads 3D tower models from mods/towers/{ICAO}/ when available
+  // Only one tower model is rendered at a time (for the current airport)
+  useTowerModel(viewer)
 
   // =========================================================================
   // 7. Datablock Label Rendering

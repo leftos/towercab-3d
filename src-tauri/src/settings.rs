@@ -519,6 +519,10 @@ pub struct GlobalSettings {
     pub viewports: GlobalViewportSettings,
     #[serde(default)]
     pub display: GlobalDisplaySettings,
+    /// List of disabled mod paths (relative to mods folder)
+    /// Mods in this list will not be loaded on startup
+    #[serde(default)]
+    pub disabled_mods: Vec<String>,
     /// vNAS authentication tokens (stored as JSON string for feature-flag compatibility)
     /// Contains serialized StoredTokens from towercab-3d-vnas crate
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -552,6 +556,7 @@ impl Default for GlobalSettings {
             realtraffic: GlobalRealTrafficSettings::default(),
             viewports: GlobalViewportSettings::default(),
             display: GlobalDisplaySettings::default(),
+            disabled_mods: Vec::new(),
             vnas_tokens: None,
         }
     }

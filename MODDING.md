@@ -116,11 +116,7 @@ Create a `manifest.json` file in your tower mod folder:
   "modelFile": "model.glb",
   "airports": ["KJFK"],
   "scale": 1.0,
-  "heightOffset": 0,
-  "positionOffset": {
-    "lat": 0,
-    "lon": 0
-  }
+  "heightOffset": 0
 }
 ```
 
@@ -140,19 +136,34 @@ Create a `manifest.json` file in your tower mod folder:
 | `cabPosition` | object | No | Camera/tower cab position (lat, lon, aglHeight) - sets default viewing position |
 | `cabHeading` | number | No | Default camera heading in degrees (0=north, 90=east) |
 
+### 3D Tower Model Rendering
+
+When a tower mod is installed for an airport, TowerCab 3D will render the 3D model in the scene. The tower model is placed using this fallback chain:
+
+1. **manifest.position** - If `position.lat` and `position.lon` are specified in the manifest
+2. **tower-positions** - Falls back to the bundled tower position data (from `mods/tower-positions/` or bundled FAA data)
+3. **Not rendered** - If no position is available
+
+The model is placed at terrain height plus the `heightOffset` value from the manifest.
+
 ### Position Configuration
 
-Tower mods specify custom positions using absolute lat/lon coordinates:
+Tower mods can specify an explicit position using absolute lat/lon coordinates:
 
 ```json
 {
   "position": {
     "lat": 40.6413111,
     "lon": -73.7781234
-  }
+  },
+  "heightOffset": 0
 }
 ```
-JSON supports double-precision floats (~15 significant digits), providing sub-millimeter accuracy.
+
+- `position.lat` / `position.lon`: Where the 3D model is placed (double precision for sub-millimeter accuracy)
+- `heightOffset`: Additional height offset in meters, added to terrain height (useful for fine-tuning vertical placement)
+
+**Note:** The `position` field controls where the 3D tower model renders. The `cabPosition` field (separate) controls where the camera viewpoint is located. These can be different positions.
 
 ### Camera/Cab Position Configuration
 
@@ -415,12 +426,36 @@ For best results, convert SketchUp models to GLB:
 3. **Materials**: Use PBR materials for best results
 4. **LOD**: Consider creating multiple detail levels for complex models
 
+## Managing Mods
+
+### Mods Tab in Settings
+
+Open **Settings > Mods** to view all installed mods and their status:
+
+- **Tower Models**: Lists all tower mods with their ICAO code, name, author, and position source
+- **Aircraft Models**: Lists all aircraft mods with their aircraft types
+- **VMR Files**: Shows loaded VMR files and rule counts
+- **Tower Positions**: Shows counts of bundled and custom tower positions
+- **Errors**: Lists any mods that failed to load (missing manifest, invalid model file, etc.)
+
+### Enabling/Disabling Mods
+
+You can disable individual mods from the Mods tab:
+
+1. Open **Settings > Mods**
+2. Uncheck the checkbox next to any mod you want to disable
+3. Click **Save Changes**
+4. Restart the application for changes to take effect
+
+Disabled mods will be skipped during loading. This is useful for troubleshooting conflicts or temporarily disabling mods without deleting them.
+
 ## Testing Mods
 
 1. Place your mod folder in the appropriate `mods/aircraft` or `mods/towers` directory
 2. Restart TowerCab 3D
 3. The application will load your mod automatically
-4. Check the console for any loading errors
+4. Open **Settings > Mods** to verify your mod was loaded correctly
+5. Check the Errors section for any loading issues
 
 ## Troubleshooting
 

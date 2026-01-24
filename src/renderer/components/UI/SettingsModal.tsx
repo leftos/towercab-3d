@@ -7,9 +7,10 @@ import SettingsGraphicsWeatherTab from './SettingsGraphicsWeatherTab'
 import SettingsControlsCameraTab from './SettingsControlsCameraTab'
 import SettingsPerformanceTab from './SettingsPerformanceTab'
 import SettingsAdvancedTab from './SettingsAdvancedTab'
+import SettingsModsTab from './SettingsModsTab'
 import './ControlsBar.css'
 
-type SettingsTab = 'configuration' | 'aircraft' | 'graphics' | 'controls' | 'performance' | 'advanced'
+type SettingsTab = 'configuration' | 'aircraft' | 'graphics' | 'controls' | 'performance' | 'mods' | 'advanced'
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -231,6 +232,12 @@ function SettingsModal({ isOpen, onClose, onShowImportModal, onShowExportModal, 
             Performance
           </button>
           <button
+            className={`tab-button ${activeTab === 'mods' ? 'active' : ''}`}
+            onClick={() => setActiveTab('mods')}
+          >
+            Mods
+          </button>
+          <button
             className={`tab-button ${activeTab === 'advanced' ? 'active' : ''}`}
             onClick={() => setActiveTab('advanced')}
           >
@@ -250,6 +257,7 @@ function SettingsModal({ isOpen, onClose, onShowImportModal, onShowExportModal, 
           {activeTab === 'graphics' && <SettingsGraphicsWeatherTab />}
           {activeTab === 'controls' && <SettingsControlsCameraTab />}
           {activeTab === 'performance' && <SettingsPerformanceTab />}
+          {activeTab === 'mods' && <SettingsModsTab />}
           {activeTab === 'advanced' && <SettingsAdvancedTab />}
         </div>
       </div>

@@ -12,9 +12,63 @@ import type {
   ResolvedView2dPosition
 } from '../types/mod'
 import { isSupportedModelFormat, getModelFormat, SUPPORTED_MODEL_FORMATS, isLegacyTowerPosition, convertLegacyToNewFormat } from '../types/mod'
-import { modApi } from '../utils/tauriApi'
+import { modApi, joinPath } from '../utils/tauriApi'
 import { customVMRService } from './CustomVMRService'
 import { VNAS_RANGE_TO_ALTITUDE_MULTIPLIER, TOPDOWN_ALTITUDE_DEFAULT } from '../constants/camera'
+
+/**
+ * Tower placement result with position source information
+ */
+export interface TowerPlacement {
+  lat: number
+  lon: number
+  agl: number
+  source: 'manifest' | 'tower-positions' | 'airport-center'
+}
+
+/**
+ * Mod loading error information
+ */
+export interface ModError {
+  path: string
+  error: string
+  type: 'tower' | 'aircraft'
+}
+
+/**
+ * Tower mod information for the Mods UI
+ */
+export interface TowerModInfo {
+  path: string
+  icao: string
+  manifest: TowerModManifest
+  enabled: boolean
+  placement: TowerPlacement | null
+}
+
+/**
+ * Aircraft mod information for the Mods UI
+ */
+export interface AircraftModInfo {
+  path: string
+  aircraftTypes: string[]
+  manifest: AircraftModManifest
+  enabled: boolean
+}
+
+/**
+ * Complete mod loading result for the Mods UI
+ */
+export interface ModLoadingResult {
+  towers: TowerModInfo[]
+  aircraft: AircraftModInfo[]
+  vmrFiles: string[]
+  towerPositions: {
+    builtin: number
+    custom: string[]  // ICAO codes with custom positions
+  }
+  errors: ModError[]
+}
 
 class ModService {
   private registry: ModRegistry = {
@@ -23,31 +77,96 @@ class ModService {
   }
   private customTowerPositions: Map<string, CustomTowerPosition> = new Map()
   private loaded = false
+  private loading = false  // Guard against React StrictMode double-mount
+
+  // Track loading results for Mods UI
+  private loadingResult: ModLoadingResult = {
+    towers: [],
+    aircraft: [],
+    vmrFiles: [],
+    towerPositions: { builtin: 0, custom: [] },
+    errors: []
+  }
+
+  // Track disabled mods (paths)
+  private disabledMods: Set<string> = new Set()
 
   /**
    * Initialize mod loading
    * Scans the mods directory and loads all valid mods
+   * @param disabledModPaths - Array of mod paths that should be skipped
    */
-  async loadMods(): Promise<void> {
-    if (this.loaded) return
+  async loadMods(disabledModPaths: string[] = []): Promise<void> {
+    if (this.loaded || this.loading) return
+    this.loading = true  // Set immediately to prevent React StrictMode double-mount
+
+    // Store disabled mods for checking
+    this.disabledMods = new Set(disabledModPaths.map(p => p.toLowerCase()))
+
+    // Reset loading result
+    this.loadingResult = {
+      towers: [],
+      aircraft: [],
+      vmrFiles: [],
+      towerPositions: { builtin: 0, custom: [] },
+      errors: []
+    }
 
     try {
       // Load custom VMR files first (highest priority for model matching)
       await customVMRService.loadVMRFiles()
+      const vmrStats = customVMRService.getStats()
+      this.loadingResult.vmrFiles = customVMRService.getLoadedFiles()
+      if (vmrStats.vmrFiles > 0) {
+        console.log(`[ModService] Loaded ${vmrStats.vmrFiles} VMR file(s)`)
+      }
+
+      // Load custom tower positions FIRST (needed for tower mod placement fallback)
+      await this.loadCustomTowerPositions()
+      const view3dCount = [...this.customTowerPositions.values()].filter(p => p.view3d).length
+      const view2dCount = [...this.customTowerPositions.values()].filter(p => p.view2d).length
+
+      // Get list of user-custom tower positions (not bundled)
+      const customIcaos = await modApi.getCustomTowerPositionIcaos()
+
+      this.loadingResult.towerPositions = {
+        builtin: this.customTowerPositions.size,
+        custom: customIcaos
+      }
+      console.log(`[ModService] Loaded ${this.customTowerPositions.size} tower position(s) (view3d: ${view3dCount}, view2d: ${view2dCount})`)
 
       // Load aircraft mods (manifest.json based)
       await this.loadModsOfType('aircraft')
+      if (this.loadingResult.aircraft.length > 0) {
+        console.log(`[ModService] Loaded ${this.loadingResult.aircraft.length} aircraft mod(s)`)
+      }
 
-      // Load tower mods
+      // Load tower mods (after tower-positions so placement fallback works)
       await this.loadModsOfType('towers')
+      if (this.loadingResult.towers.length > 0) {
+        const towerDetails = this.loadingResult.towers.map(t => {
+          const placementInfo = t.placement
+            ? `position: ${t.placement.lat.toFixed(4)}, ${t.placement.lon.toFixed(4)}, agl: ${t.placement.agl}m from ${t.placement.source}`
+            : 'no position'
+          return `  - ${t.icao}: ${t.manifest.name} (${placementInfo})`
+        }).join('\n')
+        console.log(`[ModService] Loaded ${this.loadingResult.towers.length} tower mod(s):\n${towerDetails}`)
+      }
 
-      // Load custom tower positions from tower-positions.json
-      await this.loadCustomTowerPositions()
+      // Log any errors
+      if (this.loadingResult.errors.length > 0) {
+        console.warn(`[ModService] ${this.loadingResult.errors.length} mod loading error(s):`)
+        for (const err of this.loadingResult.errors) {
+          console.warn(`  - ${err.path}: ${err.error}`)
+        }
+      }
 
       this.loaded = true
+      this.loading = false
     } catch (error) {
-      console.error('Failed to load mods:', error)
+      console.error('[ModService] Failed to load mods:', error)
       this.loaded = true // Mark as loaded even on error to prevent retry loops
+      this.loading = false
     }
   }
 
@@ -60,7 +179,15 @@ class ModService {
       const modDirs = await modApi.listModDirectories(modType)
 
       for (const modDir of modDirs) {
-        const modPath = `${modsPath}/${modDir}`
+        // Use joinPath to handle OS-specific separators
+        const modPath = joinPath(modsPath, modDir)
+        const normalizedPath = modPath.toLowerCase().replace(/\\/g, '/')
+
+        // Check if this mod is disabled
+        if (this.disabledMods.has(normalizedPath)) {
+          continue
+        }
+
         try {
           const manifest = await modApi.readModManifest(modPath)
 
@@ -70,7 +197,12 @@ class ModService {
             await this.loadTowerMod(manifest as TowerModManifest, modPath)
           }
         } catch (error) {
-          console.warn(`Failed to load mod at ${modPath}:`, error)
+          const errorMsg = error instanceof Error ? error.message : String(error)
+          this.loadingResult.errors.push({
+            path: modPath,
+            error: errorMsg.includes('manifest') ? 'Missing or invalid manifest.json' : errorMsg,
+            type: modType === 'aircraft' ? 'aircraft' : 'tower'
+          })
         }
       }
     } catch (error) {
@@ -83,12 +215,25 @@ class ModService {
    */
   private async loadAircraftMod(manifest: AircraftModManifest, basePath: string): Promise<void> {
     if (!manifest.modelFile || !this.validateModelFile(manifest.modelFile)) {
-      console.warn(`Invalid model file in aircraft mod: ${basePath}`)
+      this.loadingResult.errors.push({
+        path: basePath,
+        error: 'Invalid or missing model file',
+        type: 'aircraft'
+      })
       return
     }
 
-    const modelUrl = `${basePath}/${manifest.modelFile}`
+    // Use joinPath to handle OS-specific separators for Tauri asset protocol
+    const modelUrl = joinPath(basePath, manifest.modelFile)
     this.registerAircraftMod(manifest, modelUrl, basePath)
+
+    // Track for Mods UI
+    this.loadingResult.aircraft.push({
+      path: basePath,
+      aircraftTypes: manifest.aircraftTypes || [],
+      manifest,
+      enabled: true
+    })
   }
 
   /**
@@ -96,12 +241,65 @@ class ModService {
    */
   private async loadTowerMod(manifest: TowerModManifest, basePath: string): Promise<void> {
     if (!manifest.modelFile || !this.validateModelFile(manifest.modelFile)) {
-      console.warn(`Invalid model file in tower mod: ${basePath}`)
+      this.loadingResult.errors.push({
+        path: basePath,
+        error: 'Invalid or missing model file',
+        type: 'tower'
+      })
       return
     }
 
-    const modelUrl = `${basePath}/${manifest.modelFile}`
+    // Use joinPath to handle OS-specific separators for Tauri asset protocol
+    const modelUrl = joinPath(basePath, manifest.modelFile)
     this.registerTowerMod(manifest, modelUrl, basePath)
+
+    // Get the ICAO from the directory name (normalize path separators first)
+    const normalizedPath = basePath.replace(/\\/g, '/')
+    const icao = normalizedPath.split('/').pop()?.toUpperCase() || 'UNKNOWN'
+
+    // Compute placement for logging
+    const placement = this.computeTowerPlacement(manifest, icao)
+
+    // Track for Mods UI
+    this.loadingResult.towers.push({
+      path: basePath,
+      icao,
+      manifest,
+      enabled: true,
+      placement
+    })
+  }
+
+  /**
+   * Compute the final tower placement from manifest position or tower-positions fallback
+   * Note: This method can be called before tower positions are loaded,
+   * so it checks both the manifest and falls back to tower-positions
+   */
+  private computeTowerPlacement(manifest: TowerModManifest, icao: string): TowerPlacement | null {
+    // First priority: manifest.position (lat/lon) with heightOffset
+    if (manifest.position?.lat !== undefined &&
+        manifest.position?.lon !== undefined) {
+      return {
+        lat: manifest.position.lat,
+        lon: manifest.position.lon,
+        agl: manifest.heightOffset ?? 0,
+        source: 'manifest'
+      }
+    }
+
+    // Second priority: tower-positions data (if loaded)
+    const customPos = this.customTowerPositions.get(icao.toUpperCase())
+    if (customPos?.view3d) {
+      return {
+        lat: customPos.view3d.lat,
+        lon: customPos.view3d.lon,
+        agl: customPos.view3d.aglHeight,
+        source: 'tower-positions'
+      }
+    }
+
+    // No position available
+    return null
   }
 
   /**
@@ -335,6 +533,61 @@ class ModService {
    */
   getSupportedFormats(): readonly string[] {
     return SUPPORTED_MODEL_FORMATS
+  }
+
+  /**
+   * Get the final tower placement for rendering a tower model
+   * Uses the fallback chain: manifest.position -> tower-positions -> null
+   *
+   * @param icao Airport ICAO code
+   * @returns TowerPlacement with lat/lon/agl and source, or null if no position available
+   */
+  getTowerPlacement(icao: string): TowerPlacement | null {
+    const towerMod = this.registry.towers.get(icao.toUpperCase())
+    if (!towerMod) return null
+
+    const manifest = towerMod.manifest
+
+    // First priority: manifest.position (lat/lon) with heightOffset
+    if (manifest.position?.lat !== undefined &&
+        manifest.position?.lon !== undefined) {
+      return {
+        lat: manifest.position.lat,
+        lon: manifest.position.lon,
+        agl: manifest.heightOffset ?? 0,
+        source: 'manifest'
+      }
+    }
+
+    // Second priority: tower-positions data
+    const customPos = this.customTowerPositions.get(icao.toUpperCase())
+    if (customPos?.view3d) {
+      return {
+        lat: customPos.view3d.lat,
+        lon: customPos.view3d.lon,
+        agl: customPos.view3d.aglHeight,
+        source: 'tower-positions'
+      }
+    }
+
+    // No position available
+    return null
+  }
+
+  /**
+   * Get the mod loading result for the Mods management UI
+   * Contains information about all loaded mods, VMR files, tower positions, and errors
+   */
+  getModLoadingResult(): ModLoadingResult {
+    return this.loadingResult
+  }
+
+  /**
+   * Set the list of disabled mod paths
+   * This should be called before loadMods() or will require a reload
+   */
+  setDisabledMods(paths: string[]): void {
+    this.disabledMods = new Set(paths.map(p => p.toLowerCase().replace(/\\/g, '/')))
   }
 }
 

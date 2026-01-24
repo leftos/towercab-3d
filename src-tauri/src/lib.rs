@@ -855,6 +855,7 @@ pub fn run() {
             mods::list_vmr_files,
             mods::list_vmr_files_in_dir,
             mods::read_tower_positions,
+            mods::get_custom_tower_position_icaos,
             mods::update_tower_position,
             // VMR parsing commands
             vmr::parse_vmr_files,

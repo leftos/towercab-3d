@@ -273,6 +273,9 @@ interface GlobalSettingsState extends GlobalSettings {
   /** Update display settings (datablocks, labels, filtering - synced across devices) */
   updateDisplay: (updates: GlobalDisplaySettingsUpdate) => Promise<void>
 
+  /** Update disabled mods list */
+  updateDisabledMods: (disabledMods: string[]) => Promise<void>
+
   /** Reset to default settings */
   resetToDefaults: () => Promise<void>
 
@@ -679,6 +682,11 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
     await saveSettings(get().getSettings())
   },
 
+  updateDisabledMods: async (disabledMods: string[]) => {
+    set({ disabledMods })
+    await saveSettings(get().getSettings())
+  },
+
   resetToDefaults: async () => {
     set({ ...DEFAULT_GLOBAL_SETTINGS })
     await saveSettings(DEFAULT_GLOBAL_SETTINGS)
@@ -696,6 +704,7 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
       realtraffic: state.realtraffic,
       viewports: state.viewports,
       display: state.display,
+      disabledMods: state.disabledMods,
       vnasTokens: state.vnasTokens
     }
   },

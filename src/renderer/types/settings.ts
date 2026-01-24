@@ -1482,6 +1482,13 @@ export interface GlobalSettings {
   display: GlobalDisplaySettings
 
   /**
+   * List of disabled mod paths (relative to mods folder)
+   * Mods in this list will not be loaded on startup
+   * Changes require app restart to take effect
+   */
+  disabledMods: string[]
+
+  /**
    * vNAS authentication tokens (opaque to frontend, managed by Rust)
    * Stored as JSON string for feature-flag compatibility with the vnas crate
    */
@@ -1526,7 +1533,8 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
     maxParkedAircraft: 50
   },
   viewports: DEFAULT_GLOBAL_VIEWPORT_SETTINGS,
-  display: DEFAULT_GLOBAL_DISPLAY_SETTINGS
+  display: DEFAULT_GLOBAL_DISPLAY_SETTINGS,
+  disabledMods: []
 }
 
 /**
