@@ -216,6 +216,11 @@ def main():
         action='store_true',
         help="Overwrite existing tower position files"
     )
+    parser.add_argument(
+        '--verbose',
+        action='store_true',
+        help="Show candidate towers considered for each airport"
+    )
     args = parser.parse_args()
 
     print("Loading data sources...")
@@ -236,16 +241,10 @@ def main():
     runways = load_runways()
     print(f"  Runways: {len(runways)} airports with runway data")
 
-    # Process each DOF tower
-    print("\nProcessing towers...")
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-
-    stats = {
-        'written': 0,
-        'skipped': 0,
-        'runway_heading': 0,
-        'no_airport': 0
-    }
+    # First pass: Group all DOF towers by their nearest airport
+    print("\nGrouping towers by airport...")
+    towers_by_airport: dict[str, list[tuple[dict, float]]] = {}
+    no_airport_count = 0
 
     for dof in dof_towers:
         # Find nearest airport to get ICAO code
@@ -255,17 +254,50 @@ def main():
             AIRPORT_MATCH_RADIUS
         )
         if not airport:
-            stats['no_airport'] += 1
+            no_airport_count += 1
             continue
 
         icao = airport['icao']
+        apt_lat, apt_lon = airport['lat'], airport['lon']
+        # Calculate distance from tower to airport reference point
+        dist_to_apt = haversine(dof['lat'], dof['lon'], apt_lat, apt_lon)
+        towers_by_airport.setdefault(icao, []).append((dof, dist_to_apt))
+
+    print(f"  Matched {len(towers_by_airport)} airports")
+    print(f"  {no_airport_count} towers had no airport within {AIRPORT_MATCH_RADIUS}m")
+
+    # Count airports with multiple candidates
+    multi_candidate = sum(1 for towers in towers_by_airport.values() if len(towers) > 1)
+    print(f"  {multi_candidate} airports have multiple CTRL TWR candidates")
+
+    # Second pass: For each airport, pick the closest tower and write it
+    print("\nWriting tower positions...")
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+
+    stats = {
+        'written': 0,
+        'skipped': 0,
+        'runway_heading': 0,
+    }
+
+    for icao, candidates in sorted(towers_by_airport.items()):
         path = args.output_dir / f"{icao}.json"
 
         if path.exists() and not args.force:
             stats['skipped'] += 1
             continue
 
-        lat, lon = dof['lat'], dof['lon']
+        # Pick the tower closest to the airport reference point
+        candidates.sort(key=lambda x: x[1])  # Sort by distance
+        best_tower, best_dist = candidates[0]
+
+        if args.verbose and len(candidates) > 1:
+            print(f"\n  {icao}: {len(candidates)} candidates")
+            for tower, dist in candidates:
+                marker = " <-- selected" if tower is best_tower else ""
+                print(f"    {int(tower['agl_m']/0.3048):3d}ft at {dist:.0f}m{marker}")
+
+        lat, lon = best_tower['lat'], best_tower['lon']
 
         # Calculate heading by pointing at approach end of longest runway
         heading = estimate_heading_from_runways(lat, lon, runways.get(icao, []))
@@ -278,7 +310,7 @@ def main():
             "view3d": {
                 "lat": lat,
                 "lon": lon,
-                "aglHeight": round(dof['agl_m'], 1),
+                "aglHeight": round(best_tower['agl_m'], 1),
                 "heading": round(heading, 1)
             }
         }
@@ -290,7 +322,6 @@ def main():
     print(f"  Written: {stats['written']}")
     print(f"  Skipped (existing): {stats['skipped']}")
     print(f"  Runway-based heading: {stats['runway_heading']}")
-    print(f"  No airport match: {stats['no_airport']}")
 
 
 if __name__ == "__main__":

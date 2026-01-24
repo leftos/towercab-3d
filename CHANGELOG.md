@@ -4,6 +4,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- **Default tower positions corrected for 40 airports** - The tower position algorithm now picks the control tower closest to the airport center when multiple candidates exist, instead of an arbitrary one. Fixes airports like KOAK, KJFK, KLAX, KORD, and others where the wrong building was selected.
+
 ## [0.0.35-alpha] - 2026-01-22
 
 ### Added
