@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist, subscribeWithSelector } from 'zustand/middleware'
-import type { ViewMode, FollowMode, ViewportLayout, ViewportCameraState, Viewport, CameraBookmark } from '../types'
+import type { ViewMode, FollowMode, ViewportLayout, ViewportCameraState, Viewport, CameraBookmark, ModeSpecificState } from '../types'
 import { useVatsimStore } from './vatsimStore'
 import { useAirportStore } from './airportStore'
 import { useGlobalSettingsStore } from './globalSettingsStore'
@@ -369,28 +369,165 @@ export const useViewportStore = create<ViewportStore>()(
 
           // Camera actions - all operate on active viewport
           setViewMode: (mode) => {
-            const { activeViewportId, viewports } = get()
+            const { activeViewportId, viewports, currentAirportIcao } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, (state) => {
-                // Tower follow is incompatible with topdown - auto-switch to orbit follow
-                if (mode === 'topdown' && state.followingCallsign && state.followMode === 'tower') {
-                  return { viewMode: mode, followMode: 'orbit' as FollowMode }
+                // If already in the target mode, do nothing
+                if (state.viewMode === mode) {
+                  return {}
                 }
-                return { viewMode: mode }
+
+                const currentViewMode = state.viewMode
+                const updates: Partial<ViewportCameraState> = { viewMode: mode }
+
+                // Save current state for the mode we're leaving
+                const currentModeState: ModeSpecificState = {
+                  heading: state.heading,
+                  pitch: state.pitch,
+                  fov: state.fov,
+                  positionOffsetX: state.positionOffsetX,
+                  positionOffsetY: state.positionOffsetY,
+                  positionOffsetZ: state.positionOffsetZ,
+                  topdownAltitude: state.topdownAltitude
+                }
+
+                if (currentViewMode === '3d') {
+                  updates.savedMode3dState = currentModeState
+                } else {
+                  updates.savedMode2dState = currentModeState
+                }
+
+                // Restore state for the mode we're entering, or use defaults
+                if (mode === '3d') {
+                  // Entering 3D mode
+                  if (state.savedMode3dState) {
+                    updates.heading = state.savedMode3dState.heading
+                    updates.pitch = state.savedMode3dState.pitch
+                    updates.fov = state.savedMode3dState.fov
+                    updates.positionOffsetX = state.savedMode3dState.positionOffsetX
+                    updates.positionOffsetY = state.savedMode3dState.positionOffsetY
+                    updates.positionOffsetZ = state.savedMode3dState.positionOffsetZ
+                    updates.topdownAltitude = state.savedMode3dState.topdownAltitude
+                  } else {
+                    // No saved 3D state - use defaults from tower-positions or app defaults
+                    const position3d = currentAirportIcao ? modService.get3dPosition(currentAirportIcao) : null
+                    updates.heading = position3d?.heading ?? HEADING_DEFAULT
+                    updates.pitch = PITCH_DEFAULT
+                    updates.fov = FOV_DEFAULT
+                    updates.positionOffsetX = 0
+                    updates.positionOffsetY = 0
+                    updates.positionOffsetZ = 0
+                  }
+                } else {
+                  // Entering 2D (topdown) mode
+                  if (state.savedMode2dState) {
+                    updates.heading = state.savedMode2dState.heading
+                    updates.pitch = state.savedMode2dState.pitch
+                    updates.fov = state.savedMode2dState.fov
+                    updates.positionOffsetX = state.savedMode2dState.positionOffsetX
+                    updates.positionOffsetY = state.savedMode2dState.positionOffsetY
+                    updates.positionOffsetZ = state.savedMode2dState.positionOffsetZ
+                    updates.topdownAltitude = state.savedMode2dState.topdownAltitude
+                  } else {
+                    // No saved 2D state - use defaults from tower-positions or app defaults
+                    const position2d = currentAirportIcao ? modService.get2dPosition(currentAirportIcao) : null
+                    const position3d = currentAirportIcao ? modService.get3dPosition(currentAirportIcao) : null
+                    updates.heading = position2d?.heading ?? position3d?.heading ?? HEADING_DEFAULT
+                    updates.pitch = -90 // 2D looks straight down
+                    updates.fov = FOV_DEFAULT
+                    updates.positionOffsetX = 0
+                    updates.positionOffsetY = 0
+                    updates.positionOffsetZ = 0
+                    updates.topdownAltitude = position2d?.altitude ?? TOPDOWN_ALTITUDE_DEFAULT
+                  }
+
+                  // Tower follow is incompatible with topdown - auto-switch to orbit follow
+                  if (state.followingCallsign && state.followMode === 'tower') {
+                    updates.followMode = 'orbit' as FollowMode
+                  }
+                }
+
+                return updates
               })
             })
           },
 
           toggleViewMode: () => {
-            const { activeViewportId, viewports } = get()
+            const { activeViewportId, viewports, currentAirportIcao } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, (state) => {
                 const newMode = state.viewMode === '3d' ? 'topdown' : '3d'
-                // Tower follow is incompatible with topdown - auto-switch to orbit follow
-                if (newMode === 'topdown' && state.followingCallsign && state.followMode === 'tower') {
-                  return { viewMode: newMode, followMode: 'orbit' as FollowMode }
+                const currentViewMode = state.viewMode
+                const updates: Partial<ViewportCameraState> = { viewMode: newMode }
+
+                // Save current state for the mode we're leaving
+                const currentModeState: ModeSpecificState = {
+                  heading: state.heading,
+                  pitch: state.pitch,
+                  fov: state.fov,
+                  positionOffsetX: state.positionOffsetX,
+                  positionOffsetY: state.positionOffsetY,
+                  positionOffsetZ: state.positionOffsetZ,
+                  topdownAltitude: state.topdownAltitude
                 }
-                return { viewMode: newMode }
+
+                if (currentViewMode === '3d') {
+                  updates.savedMode3dState = currentModeState
+                } else {
+                  updates.savedMode2dState = currentModeState
+                }
+
+                // Restore state for the mode we're entering, or use defaults
+                if (newMode === '3d') {
+                  // Entering 3D mode
+                  if (state.savedMode3dState) {
+                    updates.heading = state.savedMode3dState.heading
+                    updates.pitch = state.savedMode3dState.pitch
+                    updates.fov = state.savedMode3dState.fov
+                    updates.positionOffsetX = state.savedMode3dState.positionOffsetX
+                    updates.positionOffsetY = state.savedMode3dState.positionOffsetY
+                    updates.positionOffsetZ = state.savedMode3dState.positionOffsetZ
+                    updates.topdownAltitude = state.savedMode3dState.topdownAltitude
+                  } else {
+                    // No saved 3D state - use defaults from tower-positions or app defaults
+                    const position3d = currentAirportIcao ? modService.get3dPosition(currentAirportIcao) : null
+                    updates.heading = position3d?.heading ?? HEADING_DEFAULT
+                    updates.pitch = PITCH_DEFAULT
+                    updates.fov = FOV_DEFAULT
+                    updates.positionOffsetX = 0
+                    updates.positionOffsetY = 0
+                    updates.positionOffsetZ = 0
+                  }
+                } else {
+                  // Entering 2D (topdown) mode
+                  if (state.savedMode2dState) {
+                    updates.heading = state.savedMode2dState.heading
+                    updates.pitch = state.savedMode2dState.pitch
+                    updates.fov = state.savedMode2dState.fov
+                    updates.positionOffsetX = state.savedMode2dState.positionOffsetX
+                    updates.positionOffsetY = state.savedMode2dState.positionOffsetY
+                    updates.positionOffsetZ = state.savedMode2dState.positionOffsetZ
+                    updates.topdownAltitude = state.savedMode2dState.topdownAltitude
+                  } else {
+                    // No saved 2D state - use defaults from tower-positions or app defaults
+                    const position2d = currentAirportIcao ? modService.get2dPosition(currentAirportIcao) : null
+                    const position3d = currentAirportIcao ? modService.get3dPosition(currentAirportIcao) : null
+                    updates.heading = position2d?.heading ?? position3d?.heading ?? HEADING_DEFAULT
+                    updates.pitch = -90 // 2D looks straight down
+                    updates.fov = FOV_DEFAULT
+                    updates.positionOffsetX = 0
+                    updates.positionOffsetY = 0
+                    updates.positionOffsetZ = 0
+                    updates.topdownAltitude = position2d?.altitude ?? TOPDOWN_ALTITUDE_DEFAULT
+                  }
+
+                  // Tower follow is incompatible with topdown - auto-switch to orbit follow
+                  if (state.followingCallsign && state.followMode === 'tower') {
+                    updates.followMode = 'orbit' as FollowMode
+                  }
+                }
+
+                return updates
               })
             })
           },

@@ -45,6 +45,33 @@ export interface PreFollowState {
 }
 
 /**
+ * Camera state saved when switching between 3D and 2D view modes
+ *
+ * When switching from one mode to another, the current camera parameters
+ * are saved so they can be restored when returning to that mode.
+ * This prevents 3D camera adjustments from affecting 2D view and vice versa.
+ *
+ * @see ViewportCameraState.savedMode3dState
+ * @see ViewportCameraState.savedMode2dState
+ */
+export interface ModeSpecificState {
+  /** Camera heading in degrees (0-360, 0 = North) */
+  heading: number
+  /** Camera pitch in degrees (-90 to 90, negative = looking down) */
+  pitch: number
+  /** Field of view in degrees (10-120) */
+  fov: number
+  /** Offset east (+) or west (-) from tower center in meters */
+  positionOffsetX: number
+  /** Offset north (+) or south (-) from tower center in meters */
+  positionOffsetY: number
+  /** Offset up (+) or down (-) from tower center in meters */
+  positionOffsetZ: number
+  /** Top-down view altitude in meters above airport */
+  topdownAltitude: number
+}
+
+/**
  * Complete camera state for a single viewport
  *
  * This interface defines all camera parameters for a viewport, including:
@@ -184,6 +211,20 @@ export interface ViewportCameraState {
    * the camera position effect to re-run with updated terrain heights.
    */
   cameraVersion: number
+
+  /**
+   * Saved camera state from the last time the user was in 3D view mode.
+   * When switching from 2D back to 3D, these values are restored.
+   * Null until the user first switches away from 3D mode.
+   */
+  savedMode3dState: ModeSpecificState | null
+
+  /**
+   * Saved camera state from the last time the user was in 2D (topdown) view mode.
+   * When switching from 3D back to 2D, these values are restored.
+   * Null until the user first switches away from 2D mode.
+   */
+  savedMode2dState: ModeSpecificState | null
 }
 
 /**

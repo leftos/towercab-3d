@@ -24,6 +24,7 @@ export type {
   // Camera state
   ViewportCameraState,
   PreFollowState,
+  ModeSpecificState,
   CameraBookmark
 } from './camera'
 

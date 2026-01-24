@@ -132,7 +132,9 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
               orbitPitch: -20,
               lookAtTarget: null,
               pendingLookAtPosition: null,
-              cameraVersion: 0
+              cameraVersion: 0,
+              savedMode3dState: null,
+              savedMode2dState: null
             },
             label: `Inset ${viewportId.slice(0, 8)}`
           }

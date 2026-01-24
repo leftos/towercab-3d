@@ -284,7 +284,9 @@ export const fromGlobalInsetViewport = (global: GlobalInsetViewport): Viewport =
     orbitPitch: global.cameraState.orbitPitch,
     lookAtTarget: null,
     pendingLookAtPosition: null,
-    cameraVersion: 0
+    cameraVersion: 0,
+    savedMode3dState: null,
+    savedMode2dState: null
   }
 })
 
@@ -311,7 +313,9 @@ const fromGlobalCameraState = (global: GlobalAirportViewportConfig['mainCamera']
     orbitPitch: global.orbitPitch,
     lookAtTarget: null,
     pendingLookAtPosition: null,
-    cameraVersion: 0
+    cameraVersion: 0,
+    savedMode3dState: null,
+    savedMode2dState: null
   }
 }
 
