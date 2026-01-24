@@ -40,8 +40,6 @@ interface AircraftListItem {
   tier: PriorityTier | null
   runway: string | null
   score: number
-  // Data source indicator
-  isLive: boolean // True if receiving 1Hz vNAS updates
   // Display delay in milliseconds
   displayDelay: number
 }
@@ -75,9 +73,8 @@ function AircraftPanel() {
   const getRunwaysWithCoordinates = useRunwayStore((state) => state.getRunwaysWithCoordinates)
   const runwaysLoaded = useRunwayStore((state) => state.isLoaded)
 
-  // vNAS state for live update indicator
+  // vNAS state for header badge
   const vnasConnected = useVnasStore((state) => state.status.state === 'connected')
-  const vnasAircraftStates = useVnasStore((state) => state.aircraftStates)
 
   // Local state for sorting and collapse (UI-only, doesn't affect filtering)
   const [sortOption, setSortOption] = useState<SortOption>('smart')
@@ -250,7 +247,6 @@ function AircraftPanel() {
         tier: smartData?.tier || null,
         runway: smartData?.runway || null,
         score: smartData?.score || 0,
-        isLive: vnasAircraftStates.has(aircraft.callsign),
         displayDelay: aircraft.displayDelay
       }
     })
@@ -283,7 +279,7 @@ function AircraftPanel() {
 
     return sorted.slice(0, 50)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refreshTick intentionally forces periodic recalculation of distances/bearings
-  }, [filtered, referencePoint, followingCallsign, sortOption, refreshTick, smartSortContext, pinFollowedAircraftToTop, currentAirport, towerHeight, customTowerPosition, positionOffsetX, positionOffsetY, positionOffsetZ, vnasAircraftStates])
+  }, [filtered, referencePoint, followingCallsign, sortOption, refreshTick, smartSortContext, pinFollowedAircraftToTop, currentAirport, towerHeight, customTowerPosition, positionOffsetX, positionOffsetY, positionOffsetZ])
 
 
   const handleFollowClick = (callsign: string) => {
@@ -482,17 +478,16 @@ function AircraftPanel() {
               >
                 <div className="aircraft-header">
                   <div className="callsign-group">
-                    {aircraft.isLive && (
-                      <span className="live-indicator" title="1Hz live updates">
-                        <svg width="6" height="6" viewBox="0 0 6 6">
-                          <circle cx="3" cy="3" r="3" fill="#0c7" />
-                        </svg>
-                      </span>
-                    )}
-                    <span className="callsign">{aircraft.callsign}</span>
-                    <span className="delay-indicator" title={`Display delay: ${(aircraft.displayDelay / 1000).toFixed(1)}s ago`}>
-                      -{(aircraft.displayDelay / 1000).toFixed(1)}s
+                    <span
+                      className="live-indicator"
+                      title={`Display delay: ${(aircraft.displayDelay / 1000).toFixed(1)}s`}
+                    >
+                      <svg width="6" height="6" viewBox="0 0 6 6">
+                        <circle cx="3" cy="3" r="3" fill={aircraft.displayDelay < 3000 ? '#0c7' : '#fc0'} />
+                      </svg>
                     </span>
+                    <span className="callsign">{aircraft.callsign}</span>
+                    <span className="aircraft-type">{aircraft.aircraftType || '???'}</span>
                     {phaseLabel && (
                       <span className={`phase-badge ${tierClass}`}>
                         {phaseLabel}
@@ -501,7 +496,6 @@ function AircraftPanel() {
                     )}
                   </div>
                   <div className="aircraft-header-right">
-                    <span className="aircraft-type">{aircraft.aircraftType || '???'}</span>
                     <button
                       className={`follow-btn ${isFollowing ? 'active' : ''}`}
                       onClick={(e) => {

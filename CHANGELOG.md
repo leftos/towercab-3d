@@ -4,6 +4,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **Simplified aircraft panel delay indicator** - The delay indicator is now a colored dot (green for <3s, yellow for ≥3s) with the exact delay shown on hover. Aircraft type moved next to callsign for a cleaner layout.
+
 ## [0.0.37-alpha] - 2026-01-23
 
 ### Added
