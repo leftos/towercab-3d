@@ -136,10 +136,10 @@ export const normalizeLoadedViewports = (
  */
 export const getNextInsetPosition = (existingViewports: Viewport[]): ViewportLayout => {
   const defaultPositions = [
+    { x: 0.02, y: 0.02, width: 0.24, height: 0.30 }, // Top-left (first, avoids Nearby Aircraft panel)
     { x: 0.74, y: 0.02, width: 0.24, height: 0.30 }, // Top-right
-    { x: 0.02, y: 0.02, width: 0.24, height: 0.30 }, // Top-left
-    { x: 0.74, y: 0.68, width: 0.24, height: 0.30 }, // Bottom-right
     { x: 0.02, y: 0.68, width: 0.24, height: 0.30 }, // Bottom-left
+    { x: 0.74, y: 0.68, width: 0.24, height: 0.30 }, // Bottom-right
   ]
 
   const insets = existingViewports.filter(v => v.layout.width < 0.5)
