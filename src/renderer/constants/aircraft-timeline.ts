@@ -64,6 +64,18 @@ export const MAX_EXTRAPOLATION_TIME = 30000  // 30 seconds
 export const AIRCRAFT_TIMEOUT = 30000  // 30 seconds
 
 /**
+ * How long to prefer vNAS observations over VATSIM for interpolation (ms).
+ *
+ * When vNAS data exists within this threshold, interpolation uses only vNAS
+ * observations. After this period without vNAS updates (e.g., for idle/parked
+ * aircraft), we fall back to VATSIM observations.
+ *
+ * VATSIM observations are always added to keep the timeline alive, but they're
+ * only used for interpolation when vNAS data is stale.
+ */
+export const VNAS_PREFERENCE_THRESHOLD_MS = 30000  // 30 seconds
+
+/**
  * Minimum time between observations to consider them distinct (ms).
  *
  * If two observations arrive within this window, we might skip one

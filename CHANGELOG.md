@@ -4,6 +4,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- **Idle aircraft no longer disappear when vNAS goes quiet** - Aircraft that stop moving (parked, holding) now remain visible when vNAS stops sending updates. Previously, aircraft would vanish for ~17 seconds before reappearing from VATSIM data. Now VATSIM observations are kept as a fallback and used seamlessly when vNAS data becomes stale (after 30 seconds of no updates).
+
 ## [0.0.36-alpha] - 2026-01-23
 
 ### Added

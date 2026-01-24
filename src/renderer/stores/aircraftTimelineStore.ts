@@ -39,11 +39,11 @@ import {
   MAX_EXTRAPOLATION_TIME,
   AIRCRAFT_TIMEOUT,
   MIN_OBSERVATION_INTERVAL,
-  PRUNE_INTERVAL
+  PRUNE_INTERVAL,
+  VNAS_PREFERENCE_THRESHOLD_MS
 } from '../constants/aircraft-timeline'
 import { useViewportStore } from './viewportStore'
 import { useSettingsStore } from './settingsStore'
-import { useVnasStore } from './vnasStore'
 import { calculateBearing } from '../utils/aircraft/geoMath'
 
 // ============================================================================
@@ -440,13 +440,31 @@ function interpolateTimeline(
   newLastKnownHeading: number
   newReconciliation: ReconciliationState | null
 } | null {
-  const { observations, metadata, lastSource, callsign } = timeline
+  const { observations: allObservations, metadata, lastSource, callsign } = timeline
 
-  if (observations.length === 0) {
+  if (allObservations.length === 0) {
     return null
   }
 
-  // Get display delay from the most recent observation
+  // Filter observations to prefer vNAS when recent.
+  // vNAS stops sending updates for idle/parked aircraft to save bandwidth, but we keep
+  // VATSIM observations in the timeline as a fallback. When vNAS data is fresh (within
+  // VNAS_PREFERENCE_THRESHOLD_MS), we use only vNAS observations for interpolation.
+  // This provides smooth 1Hz interpolation when vNAS is active, and seamless fallback
+  // to VATSIM's 15s updates when vNAS goes quiet.
+  let observations = allObservations
+  const newestVnasObs = allObservations.filter(o => o.source === 'vnas').pop()
+  const hasRecentVnas = newestVnasObs && (now - newestVnasObs.receivedAt) < VNAS_PREFERENCE_THRESHOLD_MS
+
+  if (hasRecentVnas) {
+    // Use only vNAS observations for interpolation
+    const vnasOnly = allObservations.filter(o => o.source === 'vnas')
+    if (vnasOnly.length > 0) {
+      observations = vnasOnly
+    }
+  }
+
+  // Get display delay from the most recent observation in our filtered set
   // This prevents position jumps when source changes (e.g., vNAS → VATSIM after landing)
   // because each observation remembers its own display delay from when it was created.
   // Fallback to SOURCE_DISPLAY_DELAYS[lastSource] for migration (old observations without displayDelay)
@@ -1042,68 +1060,26 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
     for (const { callsign, observation, metadata } of batch) {
       const existing = updated.get(callsign)
 
-      // Skip VATSIM data when vNAS is actively tracking this aircraft.
-      // VATSIM's last_updated has unknown per-aircraft latency from aggregating
-      // network-wide data, so we use a time-based buffer instead of comparing
-      // observation timestamps. If we've received vNAS data within the threshold,
-      // we trust vNAS and ignore VATSIM positions for this aircraft.
+      // Always add VATSIM observations to keep the timeline alive, even when vNAS
+      // is active. This ensures we have fallback data when vNAS goes quiet for
+      // idle/parked aircraft. The interpolation logic will prefer vNAS observations
+      // when they're recent (within VNAS_PREFERENCE_THRESHOLD_MS).
       //
-      // Additionally, even after the threshold passes, we must ensure the VATSIM
-      // observation is actually newer than our existing data - otherwise we'd be
-      // inserting stale data into the middle of the timeline.
-      //
-      // IMPORTANT: vNAS intentionally stops sending updates for idle/parked aircraft
-      // to save bandwidth. As long as the aircraft is still in the vNAS store (meaning
-      // it hasn't been explicitly disconnected via SignalR), we should continue to
-      // use the vNAS position and suppress VATSIM data for that aircraft.
-      const VNAS_ACTIVE_THRESHOLD_MS = 5000  // 5 seconds
-      if (observation.source === 'vatsim' && existing && existing.lastSource === 'vnas') {
-        const timeSinceVnasUpdate = observation.receivedAt - existing.lastReceivedAt
+      // However, don't insert VATSIM observations that are older than our newest
+      // observation - that would insert stale data into the middle of the timeline.
+      if (observation.source === 'vatsim' && existing) {
         const newestExisting = existing.observations[existing.observations.length - 1]
-
-        // Check 1: vNAS data is recent (within threshold)
-        if (timeSinceVnasUpdate < VNAS_ACTIVE_THRESHOLD_MS) {
-          // vNAS data is recent - skip VATSIM position data
-          // but preserve any metadata updates (flight plan info, etc.)
-          updated.set(callsign, {
-            ...existing,
-            metadata: {
-              ...existing.metadata,
-              // Only update metadata fields that VATSIM might have fresher info for
-              departure: metadata.departure ?? existing.metadata.departure,
-              arrival: metadata.arrival ?? existing.metadata.arrival,
-            }
-          })
-          continue
-        }
-
-        // Check 2: Even if threshold passed, check if vNAS is still tracking this aircraft.
-        // vNAS stops sending updates for idle aircraft to save bandwidth, but keeps them
-        // in the store until explicitly disconnected. If still in store, suppress VATSIM.
-        const vnasState = useVnasStore.getState()
-        if (vnasState.status.state === 'connected' && vnasState.aircraftStates.has(callsign)) {
-          // Aircraft is still being tracked by vNAS (just idle), skip VATSIM data
-          updated.set(callsign, {
-            ...existing,
-            metadata: {
-              ...existing.metadata,
-              departure: metadata.departure ?? existing.metadata.departure,
-              arrival: metadata.arrival ?? existing.metadata.arrival,
-            }
-          })
-          continue
-        }
-
-        // Check 3: Even if vNAS is not tracking, don't insert if VATSIM observedAt
-        // is older than our newest observation (would insert stale data mid-timeline)
         if (newestExisting && observation.observedAt <= newestExisting.observedAt) {
+          // VATSIM observation is older than what we have - skip position but update metadata
           updated.set(callsign, {
             ...existing,
             metadata: {
               ...existing.metadata,
               departure: metadata.departure ?? existing.metadata.departure,
               arrival: metadata.arrival ?? existing.metadata.arrival,
-            }
+            },
+            // Update lastReceivedAt to keep the timeline alive
+            lastReceivedAt: observation.receivedAt
           })
           continue
         }
