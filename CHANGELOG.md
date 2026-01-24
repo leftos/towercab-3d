@@ -4,6 +4,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+## [0.0.36-alpha] - 2026-01-23
+
 ### Added
 - **2D view defaults from vNAS** - Tower position files now include `view2d` settings (center, zoom range, rotation) sourced from vNAS tower cab configurations. 399 airports now have proper 2D view defaults.
 - **Separate 3D and 2D camera state** - Camera settings (heading, pitch, zoom, position) are now saved separately for 3D and 2D view modes. Adjusting the camera in one mode no longer affects the other. Press T to toggle modes and your previous camera state for each mode is restored.
