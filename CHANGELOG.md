@@ -4,6 +4,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+## [0.0.37-alpha] - 2026-01-23
+
 ### Added
 - **Mods management screen** - New "Mods" tab in Settings shows all installed tower models, aircraft models, VMR files, and tower positions with enable/disable controls. Displays mod details (name, author, version) and any loading errors.
 - **Tower 3D model rendering** - Custom tower models placed in `mods/towers/{ICAO}/` are now rendered in the 3D view. Models are positioned using coordinates from tower-positions data or the mod's manifest.
