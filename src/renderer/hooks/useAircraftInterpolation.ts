@@ -31,6 +31,7 @@ import {
   DEPARTURE_BLEND_START_AGL,
   DEPARTURE_BLEND_END_AGL
 } from '../constants/rendering'
+import { STOPPED_SPEED_KTS } from '../constants/flightPhase'
 
 // SINGLETON: Shared interpolated states map and animation loop
 // This ensures only ONE interpolation loop runs, even if hook is called multiple times
@@ -426,7 +427,16 @@ function updateInterpolation() {
     for (const [callsign, timeline] of timelineStates) {
       // Skip aircraft with fewer than 2 observations - we need at least 2 data points
       // to interpolate smoothly. Aircraft will "spawn in" once they have enough data.
-      if (timeline.observationCount < 2) {
+      // Exception: Allow stopped aircraft (groundspeed < STOPPED_SPEED_KTS) with only
+      // 1 observation. vNAS doesn't send updates for stationary aircraft, so they would
+      // otherwise never appear. Since they're not moving, interpolation isn't needed -
+      // their VATSIM position is valid as-is.
+      if (timeline.observationCount < 2 && timeline.groundspeed >= STOPPED_SPEED_KTS) {
+        continue
+      }
+
+      // Still require at least 1 observation
+      if (timeline.observationCount < 1) {
         continue
       }
 

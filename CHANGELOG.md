@@ -7,6 +7,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 ### Changed
 - **Simplified aircraft panel delay indicator** - The delay indicator is now a colored dot (green for <3s, yellow for ≥3s) with the exact delay shown on hover. Aircraft type moved next to callsign for a cleaner layout.
 
+### Fixed
+- **Stopped aircraft now appear immediately with vNAS** - When loading into an airport, parked and stationary aircraft now appear instantly instead of waiting for a second position update. Since vNAS doesn't send updates for stopped aircraft, they previously had to wait for VATSIM's 15-second polling cycle. Now any aircraft with groundspeed below 2 knots renders immediately from a single observation.
+
 ## [0.0.37-alpha] - 2026-01-23
 
 ### Added
