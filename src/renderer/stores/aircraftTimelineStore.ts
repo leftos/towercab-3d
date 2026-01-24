@@ -658,17 +658,7 @@ function interpolateTimeline(
   // VNAS_PREFERENCE_THRESHOLD_MS), we use only vNAS observations for interpolation.
   // This provides smooth 1Hz interpolation when vNAS is active, and seamless fallback
   // to VATSIM's 15s updates when vNAS goes quiet.
-  let observations = allObservations
-  const newestVnasObs = allObservations.filter(o => o.source === 'vnas').pop()
-  const hasRecentVnas = newestVnasObs && (now - newestVnasObs.receivedAt) < VNAS_PREFERENCE_THRESHOLD_MS
-
-  if (hasRecentVnas) {
-    // Use only vNAS observations for interpolation
-    const vnasOnly = allObservations.filter(o => o.source === 'vnas')
-    if (vnasOnly.length > 0) {
-      observations = vnasOnly
-    }
-  }
+  const observations = filterObservationsForSource(allObservations, now)
 
   // Get display delay from the most recent observation in our filtered set
   // This prevents position jumps when source changes (e.g., vNAS → VATSIM after landing)
@@ -1541,7 +1531,8 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
     const updatedHeadings = new Map(lastKnownHeadings)
     const updatedPositions = new Map(lastRenderedPositions)
     const updatedReconciliations = new Map(reconciliationStates)
-    const updatedTimelines = new Map(timelines)
+    // Defer timeline Map creation until we actually need it (avoids allocation on every frame)
+    let updatedTimelines: Map<string, AircraftTimeline> | null = null
     let headingsChanged = false
     let positionsChanged = false
     let reconciliationsChanged = false
@@ -1583,14 +1574,27 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
           reconciliationsChanged = true
         }
 
-        // Update dynamic delay state on the timeline
-        // This persists extrapolation bumps and delay transitions between frames
-        if (interpolation.newDynamicDelay && interpolation.newDynamicDelay !== timeline.dynamicDelay) {
-          updatedTimelines.set(callsign, {
-            ...timeline,
-            dynamicDelay: interpolation.newDynamicDelay
-          })
-          timelinesChanged = true
+        // Update dynamic delay state on the timeline only if meaningful values changed.
+        // Compare by value since applyDelayTransition always returns a new object.
+        // Only currentDelayMs matters for rendering; extrapolationBumpMs affects future transitions.
+        if (interpolation.newDynamicDelay) {
+          const oldDelay = timeline.dynamicDelay
+          const newDelay = interpolation.newDynamicDelay
+          const delayChanged = !oldDelay ||
+            oldDelay.currentDelayMs !== newDelay.currentDelayMs ||
+            oldDelay.extrapolationBumpMs !== newDelay.extrapolationBumpMs
+
+          if (delayChanged) {
+            // Lazily create the Map copy only when we have changes
+            if (!updatedTimelines) {
+              updatedTimelines = new Map(timelines)
+            }
+            updatedTimelines.set(callsign, {
+              ...timeline,
+              dynamicDelay: newDelay
+            })
+            timelinesChanged = true
+          }
         }
       }
     }
@@ -1601,7 +1605,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
         lastKnownHeadings: headingsChanged ? updatedHeadings : lastKnownHeadings,
         lastRenderedPositions: positionsChanged ? updatedPositions : lastRenderedPositions,
         reconciliationStates: reconciliationsChanged ? updatedReconciliations : reconciliationStates,
-        timelines: timelinesChanged ? updatedTimelines : timelines
+        timelines: timelinesChanged ? updatedTimelines! : timelines
       })
     }
 

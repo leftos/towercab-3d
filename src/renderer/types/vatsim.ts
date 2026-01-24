@@ -267,6 +267,9 @@ export interface InterpolatedAircraftState extends AircraftState {
    * Display delay in milliseconds.
    * The time offset behind real-time at which this aircraft is displayed.
    * With dynamic delays enabled, this varies per aircraft based on observation timing.
+   *
+   * A value of 0 indicates legacy interpolation that doesn't use timeline delays
+   * (e.g., RealTraffic-only aircraft before timeline integration).
    */
   displayDelay: number
 }
