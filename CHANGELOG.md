@@ -4,6 +4,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **Outdated cached models are now automatically deleted** - When the model converter is updated, old cached models are now deleted from disk instead of being ignored. This frees up disk space and ensures models are re-converted with the latest converter on next use.
+
 ### Fixed
 - **Idle aircraft no longer disappear when vNAS goes quiet** - Aircraft that stop moving (parked, holding) now remain visible when vNAS stops sending updates. Previously, aircraft would vanish for ~17 seconds before reappearing from VATSIM data. Now VATSIM observations are kept as a fallback and used seamlessly when vNAS data becomes stale (after 30 seconds of no updates).
 

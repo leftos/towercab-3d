@@ -158,8 +158,6 @@ class MSFSModelConversionServiceClass {
   /** AIG model index: modelName -> SourceModelInfo */
   private aigModels = new Map<string, SourceModelInfo>()
 
-  /** Outdated model keys that exist on disk but have wrong converter version */
-  private outdatedDiskModels = new Set<string>()
 
   /** Whether the service has been initialized */
   private initialized = false
@@ -371,15 +369,19 @@ class MSFSModelConversionServiceClass {
 
       onProgress?.(`Loading ${cachedModels.length} cached models...`)
 
-      // Add each cached model to memory cache (skip outdated versions)
+      // Add each cached model to memory cache (delete outdated versions)
       let loadedCount = 0
-      let skippedCount = 0
+      let deletedCount = 0
       for (const cached of cachedModels) {
-        // Skip models with old/missing converter versions
+        // Delete models with old/missing converter versions
         if (cached.converter_version !== CONVERTER_VERSION) {
-          console.log(`[MSFSConversion] Skipping outdated model ${cached.model_key} (version ${cached.converter_version ?? 'unknown'}, need ${CONVERTER_VERSION})`)
-          this.outdatedDiskModels.add(cached.model_key)
-          skippedCount++
+          console.log(`[MSFSConversion] Deleting outdated model ${cached.model_key} (version ${cached.converter_version ?? 'unknown'}, need ${CONVERTER_VERSION})`)
+          try {
+            await invoke<void>('delete_cache_file', { path: cached.path })
+          } catch (e) {
+            console.warn(`[MSFSConversion] Failed to delete outdated model ${cached.model_key}:`, e)
+          }
+          deletedCount++
           continue
         }
 
@@ -393,7 +395,7 @@ class MSFSModelConversionServiceClass {
         loadedCount++
       }
 
-      console.log(`[MSFSConversion] Loaded ${loadedCount} cached models (${Math.round(this.totalCacheSize / 1024 / 1024)}MB)${skippedCount > 0 ? `, skipped ${skippedCount} outdated` : ''}`)
+      console.log(`[MSFSConversion] Loaded ${loadedCount} cached models (${Math.round(this.totalCacheSize / 1024 / 1024)}MB)${deletedCount > 0 ? `, deleted ${deletedCount} outdated` : ''}`)
     } catch (error) {
       console.warn('[MSFSConversion] Failed to load cached models:', error)
     }
@@ -1338,11 +1340,6 @@ class MSFSModelConversionServiceClass {
     cacheDir: string
   ): Promise<string | null> {
     if (!isTauri()) return null
-
-    // Skip if we know this model has outdated converter version
-    if (this.outdatedDiskModels.has(modelKey)) {
-      return null
-    }
 
     try {
       const { invoke } = await import('@tauri-apps/api/core')
