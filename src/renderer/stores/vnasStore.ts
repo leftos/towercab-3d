@@ -89,8 +89,8 @@ interface VnasStore {
   status: VnasStatus
 
   // Aircraft data from vNAS (keyed by callsign)
+  // Note: Only used for .has() checks to detect 1Hz vNAS coverage - timeline store handles interpolation
   aircraftStates: Map<string, AircraftState>
-  previousStates: Map<string, AircraftState>
 
   // Session info (available facilities from CRC session)
   sessionFacilities: string[]  // Facility IDs the user can subscribe to
@@ -152,7 +152,6 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
   // Initial state
   status: DEFAULT_STATUS,
   aircraftStates: new Map(),
-  previousStates: new Map(),
   sessionFacilities: [],
   sessionArtccId: null,
   lastUpdateTime: 0,
@@ -521,7 +520,6 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       set({
         status: DEFAULT_STATUS,
         aircraftStates: new Map(),
-        previousStates: new Map(),
         lastUpdateTime: 0
       })
     } catch (error) {
@@ -531,7 +529,6 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       set({
         status: DEFAULT_STATUS,
         aircraftStates: new Map(),
-        previousStates: new Map(),
         lastUpdateTime: 0
       })
     }
@@ -543,7 +540,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
    */
   handleAircraftUpdate: (aircraft: VnasAircraft) => {
     const now = Date.now()
-    const { aircraftStates, previousStates } = get()
+    const { aircraftStates } = get()
 
     // Get existing state to calculate groundspeed from position change
     const oldState = aircraftStates.get(aircraft.callsign)
@@ -605,29 +602,12 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       vnasTimestamp: observationTime // Actual observation time for groundspeed calculation
     }
 
-    // Update state maps
+    // Update state map (used for .has() checks to detect vNAS coverage)
     const newAircraftStates = new Map(aircraftStates)
-    const newPreviousStates = new Map(previousStates)
-
     newAircraftStates.set(aircraft.callsign, newState)
-
-    if (oldState) {
-      // Preserve previous state for interpolation
-      newPreviousStates.set(aircraft.callsign, {
-        ...oldState,
-        timestamp: now
-      })
-    } else {
-      // New aircraft - start from current position
-      newPreviousStates.set(aircraft.callsign, {
-        ...newState,
-        timestamp: now
-      })
-    }
 
     set({
       aircraftStates: newAircraftStates,
-      previousStates: newPreviousStates,
       lastUpdateTime: now
     })
 
@@ -669,10 +649,9 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
    */
   handleBatchUpdate: (batchAircraft: VnasAircraft[]) => {
     const now = Date.now()
-    const { aircraftStates, previousStates } = get()
+    const { aircraftStates } = get()
 
     const newAircraftStates = new Map(aircraftStates)
-    const newPreviousStates = new Map(previousStates)
 
     // Track calculated values for the observation batch
     const calculatedSpeeds = new Map<string, number>()
@@ -735,23 +714,10 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       }
 
       newAircraftStates.set(ac.callsign, newState)
-
-      if (oldState) {
-        newPreviousStates.set(ac.callsign, {
-          ...oldState,
-          timestamp: now
-        })
-      } else {
-        newPreviousStates.set(ac.callsign, {
-          ...newState,
-          timestamp: now
-        })
-      }
     }
 
     set({
       aircraftStates: newAircraftStates,
-      previousStates: newPreviousStates,
       lastUpdateTime: now
     })
 
@@ -1012,7 +978,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
    * This allows the aircraft to fall back to VATSIM data if available.
    */
   removeAircraft: (callsign: string) => {
-    const { aircraftStates, previousStates } = get()
+    const { aircraftStates } = get()
 
     // Only remove if the aircraft exists
     if (!aircraftStates.has(callsign)) {
@@ -1020,17 +986,13 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
     }
 
     const newAircraftStates = new Map(aircraftStates)
-    const newPreviousStates = new Map(previousStates)
-
     newAircraftStates.delete(callsign)
-    newPreviousStates.delete(callsign)
     speedHistory.delete(callsign)
 
     console.log(`[vNAS] Removed aircraft: ${callsign}`)
 
     set({
-      aircraftStates: newAircraftStates,
-      previousStates: newPreviousStates
+      aircraftStates: newAircraftStates
     })
   }
 }))

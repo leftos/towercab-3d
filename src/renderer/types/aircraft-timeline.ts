@@ -99,6 +99,70 @@ export interface AircraftMetadata {
 }
 
 /**
+ * Merge aircraft metadata, preserving valuable data from VATSIM when vNAS provides positions.
+ *
+ * vNAS provides frequent position updates but lacks flight plan data (cid, transponder,
+ * departure, arrival). VATSIM provides this data but only every 15 seconds.
+ * This function ensures we keep VATSIM's flight plan data while using vNAS for positions.
+ *
+ * Priority rules:
+ * - cid: Prefer non-zero (VATSIM provides real CID, vNAS always sends 0)
+ * - transponder: Prefer non-empty (VATSIM provides squawk, vNAS sends '')
+ * - departure/arrival: Prefer non-null (from VATSIM flight plan)
+ * - aircraftType: Prefer non-null, incoming takes precedence if both exist
+ * - isParked: Preserve existing value if incoming doesn't specify
+ */
+export function mergeAircraftMetadata(
+  existing: AircraftMetadata | undefined,
+  incoming: AircraftMetadata
+): AircraftMetadata {
+  if (!existing) {
+    return incoming
+  }
+
+  return {
+    // Prefer non-zero CID (VATSIM provides real CID, vNAS sends 0)
+    cid: incoming.cid !== 0 ? incoming.cid : existing.cid,
+
+    // Prefer non-empty transponder (VATSIM provides squawk, vNAS sends '')
+    transponder: incoming.transponder !== '' ? incoming.transponder : existing.transponder,
+
+    // Prefer non-null departure/arrival (from VATSIM flight plan)
+    departure: incoming.departure ?? existing.departure,
+    arrival: incoming.arrival ?? existing.arrival,
+
+    // Prefer non-null aircraftType, incoming takes precedence if both exist
+    aircraftType: incoming.aircraftType ?? existing.aircraftType,
+
+    // Preserve isParked if incoming doesn't specify
+    isParked: incoming.isParked ?? existing.isParked
+  }
+}
+
+/**
+ * State for dynamic display delay calculation per aircraft.
+ * Tracks observation intervals to adaptively minimize delay while
+ * ensuring enough buffer for interpolation.
+ */
+export interface DynamicDelayState {
+  /** Currently applied delay (ms), smoothed toward target */
+  currentDelayMs: number
+  /** Target delay calculated from observation intervals (ms) */
+  targetDelayMs: number
+  /** Timestamp when last delay transition started (for rate limiting decreases) */
+  lastUpdateTime: number
+  /** Recent observation intervals (ms), used to calculate target delay */
+  intervalHistory: number[]
+  /**
+   * Extra delay added when extrapolation was detected (ms).
+   * This bumps the delay immediately when we had to extrapolate,
+   * ensuring we don't extrapolate again on the next frame.
+   * Decays over time as observations arrive reliably.
+   */
+  extrapolationBumpMs: number
+}
+
+/**
  * Complete timeline for a single aircraft.
  * Contains a ring buffer of observations and current metadata.
  */
@@ -116,6 +180,12 @@ export interface AircraftTimeline {
 
   /** When we last received any data for this aircraft */
   lastReceivedAt: number
+
+  /**
+   * Dynamic delay state for adaptive latency minimization.
+   * Optional for backwards compatibility - will be initialized on first use.
+   */
+  dynamicDelay?: DynamicDelayState
 }
 
 /**

@@ -340,7 +340,10 @@ function timelineToInterpolatedState(
     acceleration,
     track,
 
-    isInterpolated: true
+    isInterpolated: true,
+
+    // Display delay
+    displayDelay: timeline.displayDelay
   }
 }
 
@@ -460,6 +463,8 @@ function updateInterpolation() {
       if (existing) {
         // Update in place to avoid object allocation
         existing.callsign = interpolated.callsign
+        existing.cid = interpolated.cid
+        existing.transponder = interpolated.transponder
         existing.interpolatedLatitude = interpolated.interpolatedLatitude
         existing.interpolatedLongitude = interpolated.interpolatedLongitude
         existing.interpolatedAltitude = interpolated.interpolatedAltitude
@@ -476,6 +481,7 @@ function updateInterpolation() {
         existing.acceleration = interpolated.acceleration
         existing.track = interpolated.track
         existing.timestamp = interpolated.timestamp
+        existing.displayDelay = interpolated.displayDelay
       } else {
         statesMap.set(callsign, interpolated)
       }

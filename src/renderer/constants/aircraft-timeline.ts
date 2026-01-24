@@ -87,3 +87,66 @@ export const MIN_OBSERVATION_INTERVAL = 100  // 100ms
  * How often to prune stale aircraft from the timeline store (ms).
  */
 export const PRUNE_INTERVAL = 10000  // 10 seconds
+
+// ============================================================================
+// Dynamic Display Delay Constants
+// ============================================================================
+// These control the adaptive delay system that minimizes latency while
+// ensuring we always have enough observations to interpolate (not extrapolate).
+
+/**
+ * Number of recent observation intervals to track when calculating
+ * the dynamic display delay. We use the maximum interval in this window
+ * to ensure we always have buffer for the worst recent case.
+ */
+export const DYNAMIC_DELAY_INTERVAL_WINDOW = 5
+
+/**
+ * Safety margin added on top of the maximum observed interval (ms).
+ * This provides buffer for network jitter and timing variations.
+ */
+export const DYNAMIC_DELAY_JITTER_BUFFER_MS = 150
+
+/**
+ * Minimum dynamic display delay (ms).
+ * Even with very fast updates, we need some buffer for smooth rendering.
+ */
+export const DYNAMIC_DELAY_MIN_MS = 150
+
+/**
+ * Maximum dynamic display delay (ms).
+ * Cap for sporadic updates - beyond this, we accept extrapolation.
+ */
+export const DYNAMIC_DELAY_MAX_MS = 20000
+
+/**
+ * Default delay used when there aren't enough observations to calculate
+ * a dynamic delay (ms). Conservative value for new aircraft.
+ */
+export const DYNAMIC_DELAY_BOOTSTRAP_MS = 2000
+
+/**
+ * Minimum observations needed before switching from bootstrap delay
+ * to calculated dynamic delay. Need at least 3 to have 2 intervals.
+ */
+export const DYNAMIC_DELAY_MIN_OBSERVATIONS = 3
+
+/**
+ * Maximum rate at which delay can decrease (ms per second).
+ * Prevents position jumps when delay shrinks too fast.
+ * Increases are applied immediately (safe - adds buffer).
+ */
+export const DYNAMIC_DELAY_MAX_DECREASE_RATE = 500
+
+/**
+ * Amount to increase delay when extrapolation is detected (ms).
+ * This immediate bump ensures we don't extrapolate again on the next frame.
+ */
+export const DYNAMIC_DELAY_EXTRAPOLATION_BUMP_MS = 200
+
+/**
+ * Rate at which the extrapolation bump decays (ms per second).
+ * After an extrapolation event, the bump gradually decreases
+ * as observations arrive reliably.
+ */
+export const DYNAMIC_DELAY_EXTRAPOLATION_DECAY_RATE = 100

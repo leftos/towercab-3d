@@ -384,7 +384,8 @@ export function interpolateAircraftState(
       turnRate: 0,
       acceleration: 0,
       track: current.heading,  // Default to heading when no movement data
-      isInterpolated: false
+      isInterpolated: false,
+      displayDelay: 0  // Legacy interpolation doesn't use timeline delays
     }
   }
 
@@ -656,7 +657,8 @@ export function interpolateAircraftState(
     turnRate: turnRate,
     acceleration: acceleration,
     track: track,
-    isInterpolated: true
+    isInterpolated: true,
+    displayDelay: 0  // Legacy interpolation doesn't use timeline delays
   }
 }
 

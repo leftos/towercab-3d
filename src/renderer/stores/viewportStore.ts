@@ -1526,7 +1526,8 @@ export const useViewportStore = create<ViewportStore>()(
           }
 
           if (globalState.initialized) {
-            runMigrations()
+            // Defer to next microtask to ensure useViewportStore is fully initialized
+            queueMicrotask(() => runMigrations())
           } else {
             const unsubscribe = useGlobalSettingsStore.subscribe((newState) => {
               if (newState.initialized) {

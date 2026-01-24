@@ -757,3 +757,12 @@
   align-items: center;
   flex-shrink: 0;
 }
+
+/* Display delay indicator shown next to callsign */
+.delay-indicator {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  margin-left: 4px;
+  flex-shrink: 0;
+}

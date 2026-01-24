@@ -7,6 +7,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 ### Added
 - **Mods management screen** - New "Mods" tab in Settings shows all installed tower models, aircraft models, VMR files, and tower positions with enable/disable controls. Displays mod details (name, author, version) and any loading errors.
 - **Tower 3D model rendering** - Custom tower models placed in `mods/towers/{ICAO}/` are now rendered in the 3D view. Models are positioned using coordinates from tower-positions data or the mod's manifest.
+- **Dynamic display delay** - Aircraft display delay is now calculated per-aircraft based on observation timing. vNAS aircraft (1Hz updates) now display with ~1.2s delay instead of the fixed 1.5s, while aircraft with irregular updates get appropriate delays automatically. Reduces perceived latency while ensuring smooth interpolation.
+- **Per-aircraft delay indicators in timeline modal** - The Aircraft Timeline debug modal now shows each aircraft's current display delay as a white marker, with delay values displayed next to callsigns. Hover over observations to see detailed delay debug info including interval history.
 
 ### Changed
 - **Outdated cached models are now automatically deleted** - When the model converter is updated, old cached models are now deleted from disk instead of being ignored. This frees up disk space and ensures models are re-converted with the latest converter on next use.

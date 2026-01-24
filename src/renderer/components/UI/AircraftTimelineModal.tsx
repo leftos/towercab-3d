@@ -28,6 +28,13 @@ interface HoveredObservation {
   observation: AircraftObservation
   callsign: string
   isParked?: boolean
+  // Dynamic delay info
+  dynamicDelay?: {
+    currentDelayMs: number
+    targetDelayMs: number
+    intervalHistory: number[]
+    extrapolationBumpMs: number
+  }
 }
 
 // Source colors
@@ -39,7 +46,7 @@ const SOURCE_COLORS: Record<AircraftDataSource, string> = {
   broadcast: '#f06292'    // Pink (for inset broadcasts)
 }
 
-const LABEL_WIDTH = 80
+const LABEL_WIDTH = 150  // Increased to show delay info
 const RULER_HEIGHT = 30
 const TRACK_GAP = 2
 const MARKER_RADIUS = 5
@@ -52,6 +59,14 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
   const tracksCanvasRef = useRef<HTMLCanvasElement>(null)
   const tracksContainerRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+
+  // Refs to hold latest draw functions (avoids stale closure in animation loop)
+  const drawRulerRef = useRef<((now: number, startTime: number, endTime: number, replayTime: number | null) => void) | null>(null)
+  const drawTracksRef = useRef<((now: number, startTime: number, endTime: number, replayTime: number | null) => void) | null>(null)
+  const visibleDurationMsRef = useRef<number>(72000)
+
+  // Animation frame ID ref for cleanup
+  const animationIdRef = useRef<number>(0)
 
   const [config, setConfig] = useState<TimelineConfig>({
     timeScale: DEFAULT_TIME_SCALE,
@@ -76,18 +91,6 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
     const timelineWidth = containerWidth - LABEL_WIDTH
     return (timelineWidth / config.timeScale) * 1000
   }, [containerWidth, config.timeScale])
-
-  // Determine which sources are actively providing data
-  // This is used to draw source-specific "In TC3D" delay lines
-  const activeSources = useMemo(() => {
-    const sources = new Set<AircraftDataSource>()
-    for (const timeline of timelines.values()) {
-      if (timeline.observations.length > 0) {
-        sources.add(timeline.lastSource)
-      }
-    }
-    return sources
-  }, [timelines])
 
   // Filter and sort timelines
   const filteredTimelines = useMemo(() => {
@@ -209,20 +212,6 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
       }
     }
 
-    // Draw "In TC3D" indicators for each active source (where interpolated positions are rendered from)
-    // Each source has a different display delay, so we show a labeled line for each
-    for (const source of activeSources) {
-      const sourceDelay = SOURCE_DISPLAY_DELAYS[source]
-      const displayTime = replayTime !== null ? replayTime : now - sourceDelay
-      const displayX = LABEL_WIDTH + ((displayTime - startTime) / 1000) * config.timeScale
-      if (displayX >= LABEL_WIDTH && displayX <= width) {
-        ctx.fillStyle = SOURCE_COLORS[source]
-        ctx.font = 'bold 10px sans-serif'
-        ctx.textAlign = 'center'
-        ctx.fillText(`In TC3D (${source})`, displayX, 12)
-      }
-    }
-
     // Draw "REPLAY" indicator when in replay mode
     if (replayTime !== null) {
       const replayX = LABEL_WIDTH + ((replayTime - startTime) / 1000) * config.timeScale
@@ -234,7 +223,7 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
     }
 
     ctx.setTransform(1, 0, 0, 1, 0, 0)
-  }, [containerWidth, config.timeScale, activeSources])
+  }, [containerWidth, config.timeScale])
 
   // Draw tracks
   const drawTracks = useCallback((now: number, startTime: number, endTime: number, replayTime: number | null) => {
@@ -267,13 +256,26 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
       ctx.fillStyle = index % 2 === 0 ? 'rgba(255, 255, 255, 0.02)' : 'rgba(255, 255, 255, 0.04)'
       ctx.fillRect(0, y, width, config.trackHeight)
 
-      // Callsign label
+      // Callsign label with delay info
       ctx.fillStyle = '#4fc3f7'
       ctx.font = '12px monospace'
       ctx.textAlign = 'left'
       ctx.textBaseline = 'middle'
-      const callsignLabel = timeline.metadata.isParked ? `${timeline.callsign} (P)` : timeline.callsign
-      ctx.fillText(callsignLabel, 8, centerY)
+      const parkedSuffix = timeline.metadata.isParked ? ' (P)' : ''
+      // Show current delay in ms, with target in parentheses if different
+      const currentDelay = timeline.dynamicDelay?.currentDelayMs
+      const targetDelay = timeline.dynamicDelay?.targetDelayMs
+      let delayInfo = ''
+      if (currentDelay !== undefined) {
+        const currentSec = (currentDelay / 1000).toFixed(1)
+        if (targetDelay !== undefined && Math.abs(currentDelay - targetDelay) > 50) {
+          const targetSec = (targetDelay / 1000).toFixed(1)
+          delayInfo = ` [${currentSec}s→${targetSec}s]`
+        } else {
+          delayInfo = ` [${currentSec}s]`
+        }
+      }
+      ctx.fillText(`${timeline.callsign}${parkedSuffix}${delayInfo}`, 8, centerY)
 
       // Draw observations
       for (const obs of timeline.observations) {
@@ -304,26 +306,37 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
         ctx.fillStyle = SOURCE_COLORS[obs.source]
         ctx.fill()
       }
-    })
 
-    // Draw "In TC3D" lines for each active source (where interpolated positions are rendered from)
-    // Each source has a different display delay, so we show a colored line for each
-    for (const source of activeSources) {
-      const sourceDelay = SOURCE_DISPLAY_DELAYS[source]
-      const displayTime = replayTime !== null ? replayTime : now - sourceDelay
-      const displayX = LABEL_WIDTH + ((displayTime - startTime) / 1000) * config.timeScale
-      if (displayX >= LABEL_WIDTH && displayX <= width) {
-        ctx.strokeStyle = SOURCE_COLORS[source]
-        ctx.globalAlpha = 0.7
-        ctx.lineWidth = 1.5
+      // Draw per-aircraft display delay indicator (where this aircraft is currently rendered)
+      // Get dynamic delay if available, otherwise use source default
+      const aircraftDelay = timeline.dynamicDelay?.currentDelayMs ?? SOURCE_DISPLAY_DELAYS[timeline.lastSource]
+      const displayTime = replayTime !== null ? replayTime : now - aircraftDelay
+      const delayX = LABEL_WIDTH + ((displayTime - startTime) / 1000) * config.timeScale
+
+      if (delayX >= LABEL_WIDTH && delayX <= width) {
+        // Draw a small triangle marker pointing down
+        ctx.fillStyle = '#ffffff'
+        ctx.globalAlpha = 0.8
         ctx.beginPath()
-        ctx.moveTo(displayX, 0)
-        ctx.lineTo(displayX, height)
-        ctx.stroke()
-        ctx.globalAlpha = 1
+        ctx.moveTo(delayX, y + 2)           // Top point
+        ctx.lineTo(delayX - 4, y + 8)       // Bottom left
+        ctx.lineTo(delayX + 4, y + 8)       // Bottom right
+        ctx.closePath()
+        ctx.fill()
+
+        // Draw vertical line through this track
+        ctx.strokeStyle = '#ffffff'
+        ctx.globalAlpha = 0.4
         ctx.lineWidth = 1
+        ctx.setLineDash([2, 2])
+        ctx.beginPath()
+        ctx.moveTo(delayX, y + 8)
+        ctx.lineTo(delayX, y + config.trackHeight)
+        ctx.stroke()
+        ctx.setLineDash([])
+        ctx.globalAlpha = 1
       }
-    }
+    })
 
     // Draw playhead (NOW line) only in replay mode
     // In live mode it's always at the right edge, hidden by scrollbar
@@ -356,16 +369,26 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
     }
 
     ctx.setTransform(1, 0, 0, 1, 0, 0)
-  }, [containerWidth, config.trackHeight, filteredTimelines, config.timeScale, activeSources])
+  }, [containerWidth, config.trackHeight, filteredTimelines, config.timeScale])
 
-  // Animation loop
+  // Keep refs updated when callbacks change
   useEffect(() => {
-    let animationId: number
-    let lastDataSnapshot = 0
-    const DATA_SNAPSHOT_INTERVAL = 200  // Take data snapshot every 200ms
+    drawRulerRef.current = drawRuler
+  }, [drawRuler])
 
+  useEffect(() => {
+    drawTracksRef.current = drawTracks
+  }, [drawTracks])
+
+  useEffect(() => {
+    visibleDurationMsRef.current = visibleDurationMs
+  }, [visibleDurationMs])
+
+  // Animation loop - runs once on mount, uses refs to avoid stale closures
+  useEffect(() => {
     const render = () => {
       const now = Date.now()
+      const currentVisibleDuration = visibleDurationMsRef.current
 
       // Get fresh replay state from the store (not from stale React state)
       const replayState = useReplayStore.getState()
@@ -384,28 +407,24 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
       let endTime: number
       if (replayTime !== null) {
         // Replay mode: center on replay time
-        endTime = replayTime + visibleDurationMs / 2
-        startTime = replayTime - visibleDurationMs / 2
+        endTime = replayTime + currentVisibleDuration / 2
+        startTime = replayTime - currentVisibleDuration / 2
       } else {
         // Live mode: NOW at right edge
         endTime = now
-        startTime = now - visibleDurationMs
+        startTime = now - currentVisibleDuration
       }
 
-      // Only update data-dependent drawing every 200ms
-      if (now - lastDataSnapshot > DATA_SNAPSHOT_INTERVAL) {
-        lastDataSnapshot = now
-      }
+      // Call draw functions via refs (always have latest version)
+      drawRulerRef.current?.(now, startTime, endTime, replayTime)
+      drawTracksRef.current?.(now, startTime, endTime, replayTime)
 
-      drawRuler(now, startTime, endTime, replayTime)
-      drawTracks(now, startTime, endTime, replayTime)
-
-      animationId = requestAnimationFrame(render)
+      animationIdRef.current = requestAnimationFrame(render)
     }
 
-    animationId = requestAnimationFrame(render)
-    return () => cancelAnimationFrame(animationId)
-  }, [visibleDurationMs, drawRuler, drawTracks])
+    animationIdRef.current = requestAnimationFrame(render)
+    return () => cancelAnimationFrame(animationIdRef.current)
+  }, [])  // Empty deps - runs once, uses refs for latest values
 
   // Handle mouse move for hover detection
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -444,7 +463,13 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
           y: e.clientY,
           observation: obs,
           callsign: timeline.callsign,
-          isParked: timeline.metadata.isParked
+          isParked: timeline.metadata.isParked,
+          dynamicDelay: timeline.dynamicDelay ? {
+            currentDelayMs: timeline.dynamicDelay.currentDelayMs,
+            targetDelayMs: timeline.dynamicDelay.targetDelayMs,
+            intervalHistory: timeline.dynamicDelay.intervalHistory,
+            extrapolationBumpMs: timeline.dynamicDelay.extrapolationBumpMs
+          } : undefined
         })
         return
       }
@@ -614,6 +639,29 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
                     <span className="tooltip-value">{hoveredObs.observation.roll.toFixed(1)}°</span>
                   </div>
                 )}
+              </div>
+            )}
+            {/* Dynamic delay debug info */}
+            {hoveredObs.dynamicDelay && (
+              <div className="tooltip-section delay-debug">
+                <div className="tooltip-row">
+                  <span className="tooltip-label">Current Delay:</span>
+                  <span className="tooltip-value">{(hoveredObs.dynamicDelay.currentDelayMs / 1000).toFixed(2)}s</span>
+                </div>
+                <div className="tooltip-row">
+                  <span className="tooltip-label">Target Delay:</span>
+                  <span className="tooltip-value">{(hoveredObs.dynamicDelay.targetDelayMs / 1000).toFixed(2)}s</span>
+                </div>
+                <div className="tooltip-row">
+                  <span className="tooltip-label">Extrap Bump:</span>
+                  <span className="tooltip-value">{hoveredObs.dynamicDelay.extrapolationBumpMs}ms</span>
+                </div>
+                <div className="tooltip-row">
+                  <span className="tooltip-label">Intervals:</span>
+                  <span className="tooltip-value" style={{ fontSize: '9px' }}>
+                    [{hoveredObs.dynamicDelay.intervalHistory.map(i => Math.round(i)).join(', ')}]
+                  </span>
+                </div>
               </div>
             )}
           </div>

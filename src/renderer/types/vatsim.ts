@@ -262,4 +262,11 @@ export interface InterpolatedAircraftState extends AircraftState {
    * and may not be available for all aircraft.
    */
   flightPhase?: import('../utils/aircraft/types').FlightPhase
+
+  /**
+   * Display delay in milliseconds.
+   * The time offset behind real-time at which this aircraft is displayed.
+   * With dynamic delays enabled, this varies per aircraft based on observation timing.
+   */
+  displayDelay: number
 }

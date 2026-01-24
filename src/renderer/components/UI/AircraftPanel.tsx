@@ -42,6 +42,8 @@ interface AircraftListItem {
   score: number
   // Data source indicator
   isLive: boolean // True if receiving 1Hz vNAS updates
+  // Display delay in milliseconds
+  displayDelay: number
 }
 
 // Minimum and maximum panel dimensions
@@ -248,7 +250,8 @@ function AircraftPanel() {
         tier: smartData?.tier || null,
         runway: smartData?.runway || null,
         score: smartData?.score || 0,
-        isLive: vnasAircraftStates.has(aircraft.callsign)
+        isLive: vnasAircraftStates.has(aircraft.callsign),
+        displayDelay: aircraft.displayDelay
       }
     })
 
@@ -487,6 +490,9 @@ function AircraftPanel() {
                       </span>
                     )}
                     <span className="callsign">{aircraft.callsign}</span>
+                    <span className="delay-indicator" title={`Display delay: ${(aircraft.displayDelay / 1000).toFixed(1)}s ago`}>
+                      -{(aircraft.displayDelay / 1000).toFixed(1)}s
+                    </span>
                     {phaseLabel && (
                       <span className={`phase-badge ${tierClass}`}>
                         {phaseLabel}
