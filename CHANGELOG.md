@@ -10,6 +10,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ### Fixed
 - **Default tower positions corrected for 40 airports** - The tower position algorithm now picks the control tower closest to the airport center when multiple candidates exist, instead of an arbitrary one. Fixes airports like KOAK, KJFK, KLAX, KORD, and others where the wrong building was selected.
+- **FSLTL freighter variants now use correct liveries** - Freighter aircraft like B77LF and B744F now display their airline liveries instead of a generic white texture. The model converter now properly follows FSLTL's `base_container` configuration to find the correct model and textures.
+- **Generic aircraft models now labeled as "fallback"** - When no airline-specific livery exists for an aircraft type (e.g., FedEx B77W), the model matching now correctly labels the generic white model as "fallback" instead of "exact". The system also tries harder to find a livery from a similar aircraft type before falling back to generic.
 
 ## [0.0.35-alpha] - 2026-01-22
 

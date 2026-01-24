@@ -116,8 +116,9 @@ export interface MSFSDetectionResult {
  *   2: Added animation baking for MSFS models (fixes misaligned flaps, slats, gear, etc.)
  *   3: Fixed steering animations by using identity quaternion frame instead of frame 0
  *   4: Fixed model.cfg parsing to read GLTF filename from XML (fixes wrong engine variant textures)
+ *   5: Fixed base_container resolution for FSLTL freighter variants (e.g., B77LF, B744F)
  */
-const CONVERTER_VERSION = 4
+const CONVERTER_VERSION = 5
 
 // =============================================================================
 // Service Class
@@ -156,6 +157,9 @@ class MSFSModelConversionServiceClass {
 
   /** AIG model index: modelName -> SourceModelInfo */
   private aigModels = new Map<string, SourceModelInfo>()
+
+  /** Outdated model keys that exist on disk but have wrong converter version */
+  private outdatedDiskModels = new Set<string>()
 
   /** Whether the service has been initialized */
   private initialized = false
@@ -374,6 +378,7 @@ class MSFSModelConversionServiceClass {
         // Skip models with old/missing converter versions
         if (cached.converter_version !== CONVERTER_VERSION) {
           console.log(`[MSFSConversion] Skipping outdated model ${cached.model_key} (version ${cached.converter_version ?? 'unknown'}, need ${CONVERTER_VERSION})`)
+          this.outdatedDiskModels.add(cached.model_key)
           skippedCount++
           continue
         }
@@ -734,7 +739,8 @@ class MSFSModelConversionServiceClass {
 
       if (!enabled) continue
 
-      // First try exact match (type + airline)
+      // Only try exact match (type + airline) - no ZZZZ fallback here
+      // ZZZZ fallback is handled separately in findGenericModel()
       if (airlineCode) {
         for (const model of models.values()) {
           if (model.aircraftType === aircraftType && model.airlineCode === airlineCode) {
@@ -742,9 +748,27 @@ class MSFSModelConversionServiceClass {
           }
         }
       }
+    }
 
-      // Fall back to generic ZZZZ model (guaranteed white livery)
-      // Do NOT use models with null airlineCode - those are private aircraft
+    return null
+  }
+
+  /**
+   * Find generic (ZZZZ) model for an aircraft type
+   * Used as last-resort fallback when no airline-specific match exists
+   *
+   * @param aircraftType - ICAO aircraft type code
+   * @returns Generic model info, or null if no ZZZZ model exists
+   */
+  findGenericModel(aircraftType: string): SourceModelInfo | null {
+    const settings = this.getSettings()
+
+    for (const source of settings.priority) {
+      const models = source === 'fsltl' ? this.fsltlModels : this.aigModels
+      const enabled = source === 'fsltl' ? settings.enableFsltl : settings.enableAig
+
+      if (!enabled) continue
+
       for (const model of models.values()) {
         if (model.aircraftType === aircraftType && model.airlineCode === 'ZZZZ') {
           return model
@@ -1314,6 +1338,11 @@ class MSFSModelConversionServiceClass {
     cacheDir: string
   ): Promise<string | null> {
     if (!isTauri()) return null
+
+    // Skip if we know this model has outdated converter version
+    if (this.outdatedDiskModels.has(modelKey)) {
+      return null
+    }
 
     try {
       const { invoke } = await import('@tauri-apps/api/core')

@@ -89,6 +89,9 @@ struct ParsedAircraftCfg {
     icao_type: Option<String>,
     /// Model folder name from first [fltsim] section (e.g., "200")
     model_folder: Option<String>,
+    /// Base container from [VARIATION] section (e.g., "..\FSLTL_B77LF")
+    /// This is used by FSLTL to specify a different base model folder
+    base_container: Option<String>,
     /// All liveries from [fltsim] sections
     liveries: Vec<AircraftCfgLivery>,
 }
@@ -107,6 +110,7 @@ fn parse_aircraft_cfg_unified(aircraft_dir: &std::path::Path) -> ParsedAircraftC
 
     let mut result = ParsedAircraftCfg::default();
     let mut in_general_section = false;
+    let mut in_variation_section = false;
     let mut in_fltsim_section = false;
     let mut first_fltsim_seen = false;
     let mut current_title: Option<String> = None;
@@ -133,6 +137,7 @@ fn parse_aircraft_cfg_unified(aircraft_dir: &std::path::Path) -> ParsedAircraftC
 
             let section_lower = trimmed.to_lowercase();
             in_general_section = section_lower == "[general]";
+            in_variation_section = section_lower == "[variation]";
             in_fltsim_section = section_lower.starts_with("[fltsim");
 
             if in_fltsim_section {
@@ -151,6 +156,16 @@ fn parse_aircraft_cfg_unified(aircraft_dir: &std::path::Path) -> ParsedAircraftC
             if lower.starts_with("icao_type_designator") {
                 if let Some(val) = extract_cfg_value_inline(trimmed) {
                     result.icao_type = Some(val.to_uppercase());
+                }
+            }
+        }
+
+        // Parse [VARIATION] section - base_container specifies the base model folder
+        if in_variation_section {
+            if lower.starts_with("base_container") {
+                if let Some(val) = extract_cfg_value_inline(trimmed) {
+                    // Store the raw value (e.g., "..\FSLTL_B77LF")
+                    result.base_container = Some(val);
                 }
             }
         }
@@ -227,7 +242,7 @@ struct ModelIndexCache {
     models: Vec<SourceModelInfo>,
 }
 
-const MODEL_CACHE_VERSION: u32 = 5; // Bump when cache format changes (v5: fixed UTF-8 parsing for AIG)
+const MODEL_CACHE_VERSION: u32 = 6; // Bump when cache format changes (v6: added base_container support for FSLTL freighter variants)
 
 /// Get the modification time of a folder (recursive max mtime would be too slow)
 fn get_folder_mtime(path: &std::path::Path) -> Option<u64> {
@@ -663,11 +678,30 @@ fn list_models_unified(
         let aircraft_type = cfg.icao_type.clone()
             .unwrap_or_else(|| parse_aircraft_type(&folder_name, config.folder_prefix));
 
+        // Resolve base_container if present (e.g., "..\FSLTL_B77LF" -> full path)
+        let base_container_path: Option<PathBuf> = cfg.base_container.as_ref().and_then(|bc| {
+            // base_container is a relative path like "..\FSLTL_B77LF"
+            let resolved = aircraft_dir.join(bc);
+            if resolved.exists() && resolved.is_dir() {
+                Some(resolved.canonicalize().unwrap_or(resolved))
+            } else {
+                None
+            }
+        });
+
         // Find GLTF - check multiple sources in priority order:
         // 1. Direct GLTF in this folder
-        // 2. For AIG: Pre-built shared model index (by icao_type + model_folder)
-        // 3. Base models registry by ICAO type (FSLTL pattern)
+        // 2. FSLTL base_container (e.g., B77LF_FDX -> FSLTL_B77LF for freighter model)
+        // 3. For AIG: Pre-built shared model index (by icao_type + model_folder)
+        // 4. Base models registry by ICAO type (FSLTL pattern)
         let gltf_path = find_gltf_in_dir(aircraft_dir)
+            .or_else(|| {
+                // Check base_container's model folder (FSLTL variation pattern)
+                if let Some(ref bc_path) = base_container_path {
+                    return find_gltf_in_dir(bc_path);
+                }
+                None
+            })
             .or_else(|| {
                 if config.folder_prefix == "AIGAIM_" {
                     let model_folder = cfg.model_folder.as_ref()?;
@@ -684,7 +718,7 @@ fn list_models_unified(
             None => continue, // Skip if no GLTF found
         };
 
-        // Collect shared texture directories (oci.* folders, base model textures)
+        // Collect shared texture directories (oci.* folders, base_container textures, base model textures)
         let shared_texture_dirs: Vec<String> = {
             let mut dirs: Vec<String> = fs::read_dir(aircraft_dir)
                 .ok()
@@ -697,6 +731,17 @@ fn list_models_unified(
                 })
                 .map(|e| normalize_path_string(&e.path()))
                 .collect();
+
+            // Add base_container texture directories as higher priority fallback
+            // (e.g., FSLTL_B77LF/TEXTURE for freighter models)
+            if let Some(ref bc_path) = base_container_path {
+                let bc_texture_dirs = collect_texture_dirs(bc_path);
+                for bc_dir in bc_texture_dirs {
+                    if !dirs.contains(&bc_dir) {
+                        dirs.push(bc_dir);
+                    }
+                }
+            }
 
             // Add base model texture directories as fallback (for shared textures like portholes)
             if let Some((_, base_tex_dirs)) = base_models.get(&aircraft_type) {

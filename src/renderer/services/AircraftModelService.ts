@@ -729,16 +729,18 @@ class AircraftModelServiceClass {
       }
     }
 
-    // 5. Try type-only match (ZZZZ generic livery)
-    const typeOnlySource = MSFSModelConversionService.findModelByTypeAndAirline(aircraftType, null)
-    if (typeOnlySource) {
-      const result = trySourceModel(typeOnlySource)
+    // 5. Try generic model (ZZZZ livery) - last resort for exact type match
+    const genericSource = MSFSModelConversionService.findGenericModel(aircraftType)
+    if (genericSource) {
+      const result = trySourceModel(genericSource)
       if (result) {
-        log('5. type-only ZZZZ', `MATCH ${result.matchType} ${typeOnlySource.modelName}`)
+        // Override match type to 'fallback' since this is a generic model
+        result.matchType = 'fallback'
+        log('5. generic ZZZZ', `MATCH fallback ${genericSource.modelName}`)
         return result
       }
     } else {
-      log('5. type-only ZZZZ', `no ZZZZ generic livery for ${aircraftType}`)
+      log('5. generic ZZZZ', `no ZZZZ generic livery for ${aircraftType}`)
     }
 
     // 6. Try closest any model (scaled) - any MSFS model close in size

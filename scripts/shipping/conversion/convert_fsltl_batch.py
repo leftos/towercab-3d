@@ -98,7 +98,8 @@ except Exception as e:
 #   2: Added animation baking for MSFS models (fixes misaligned flaps, slats, gear, etc.)
 #   3: Fixed steering animations by using identity quaternion frame instead of frame 0
 #   4: Fixed model.cfg parsing to read GLTF filename from XML (fixes wrong engine variant textures)
-CONVERTER_VERSION = 4
+#   5: Fixed base_container resolution for FSLTL freighter variants (e.g., B77LF, B744F)
+CONVERTER_VERSION = 5
 
 # Global texconv.exe path (downloaded on first use)
 _texconv_path: Path | None = None
