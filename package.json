@@ -60,7 +60,7 @@
     "vitest": "^3.2.4"
   },
   "dependencies": {
-    "@babylonjs/core": "^8.45.3",
+    "@babylonjs/core": "^8.47.0",
     "@babylonjs/gui": "^8.47.0",
     "@babylonjs/loaders": "^8.44.0",
     "@msgpack/msgpack": "^3.1.3",
