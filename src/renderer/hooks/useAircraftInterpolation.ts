@@ -768,6 +768,17 @@ function updateInterpolation() {
       // Negative slope (downhill) should pitch nose down, positive (uphill) pitches nose up
       entry.interpolatedPitch += terrainSlopeDegrees
     }
+
+    // ========================================================================
+    // GROUND ROLL SUPPRESSION
+    // ========================================================================
+    // Aircraft clamped to terrain should never show roll, regardless of speed.
+    // Ground aircraft steer with rudder (yaw only), they don't bank/roll.
+    // This handles cases where groundspeed > 40 kts but aircraft is still on ground
+    // (e.g., high-speed taxi, takeoff roll, landing rollout).
+    if (shouldClampToTerrain) {
+      entry.interpolatedRoll = 0
+    }
   }
 
   // Remove stale entries (aircraft that are no longer in the data)
