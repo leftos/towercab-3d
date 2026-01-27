@@ -527,13 +527,15 @@ class AircraftModelServiceClass {
    *
    * @param cacheKey Cache key for tracking pending conversions
    * @param callsign Optional callsign for logging
+   * @param aircraftPosition Optional position for conversion queue prioritization
    * @returns Model info with converted GLB, or null if no MSFS model available
    */
   private checkMsfsModel(
     aircraftType: string,
     airlineCode: string | null,
     cacheKey: string,
-    callsign?: string | null
+    callsign?: string | null,
+    aircraftPosition?: { lat: number; lon: number }
   ): ModelInfo | null {
     const log = (step: string, result: string) => {
       this.logModelMatch(callsign, aircraftType, airlineCode, step, result)
@@ -596,7 +598,7 @@ class AircraftModelServiceClass {
     ): ModelInfo => {
       this.pendingConversions.add(cacheKey)
       //console.log(`[ModelMatch] Starting conversion for ${sourceInfo.modelName}, cacheKey=${cacheKey}`)
-      MSFSModelConversionService.convertModel(sourceInfo)
+      MSFSModelConversionService.convertModel(sourceInfo, aircraftPosition)
         .then((_result) => {
           //console.log(`[ModelMatch] Conversion completed for ${sourceInfo.modelName}:`, result.success ? 'success' : 'failed', result.glbPath || result.error)
           this.invalidateCacheForModel(sourceInfo.modelName)
@@ -764,9 +766,14 @@ class AircraftModelServiceClass {
    * Get the model URL and scale for an aircraft type
    * @param aircraftType ICAO aircraft type code (e.g., "B738", "A320")
    * @param callsign Optional callsign for airline-specific model matching
+   * @param aircraftPosition Optional position for conversion queue prioritization
    * @returns Model URL, scale factor, and match type
    */
-  getModelInfo(aircraftType: string | null | undefined, callsign?: string | null): ModelInfo {
+  getModelInfo(
+    aircraftType: string | null | undefined,
+    callsign?: string | null,
+    aircraftPosition?: { lat: number; lon: number }
+  ): ModelInfo {
     const uniformScale = { x: 1, y: 1, z: 1 }
     const b738Dims = { wingspan: 35.78, length: 39.47 }
     const isGA = this.isGACallsign(callsign)
@@ -806,7 +813,7 @@ class AircraftModelServiceClass {
           // Not cached - start conversion if not already converting
           if (!MSFSModelConversionService.isConverting(airlineFallback.modelName, airlineFallback.source) &&
               !MSFSModelConversionService.hasConversionFailed(airlineFallback.modelName, airlineFallback.source)) {
-            MSFSModelConversionService.convertModel(airlineFallback)
+            MSFSModelConversionService.convertModel(airlineFallback, aircraftPosition)
               .then(() => {
                 this.modelInfoCache.delete(cacheKey)
                 window.dispatchEvent(new CustomEvent('model-conversion-complete', { detail: { modelName: airlineFallback.modelName } }))
@@ -863,7 +870,7 @@ class AircraftModelServiceClass {
     }
 
     // 1. Check MSFS models (highest priority - handles VMR rules + on-demand conversion)
-    const msfsModel = this.checkMsfsModel(normalized, airlineCode, cacheKey, callsign)
+    const msfsModel = this.checkMsfsModel(normalized, airlineCode, cacheKey, callsign, aircraftPosition)
     if (msfsModel) {
       this.modelInfoCache.set(cacheKey, msfsModel)
       logFinal('FINAL', msfsModel)

@@ -4,6 +4,7 @@ import type { ModelPoolRefs, SilhouetteRefs } from './useCesiumViewer'
 import type { InterpolatedAircraftState } from '../types/vatsim'
 import type { ViewMode } from '../types'
 import { aircraftModelService } from '../services/AircraftModelService'
+import { MSFSModelConversionService } from '../services/MSFSModelConversionService'
 import { performanceMonitor } from '../utils/performanceMonitor'
 import { isInsetContext } from './useInsetStoreSync'
 import { insetLog, getModelInfoForCallsign } from './useSharedWorkerConsumer'
@@ -171,8 +172,12 @@ export function useAircraftModels(
 
     if (!isInset) {
       for (const aircraft of interpolatedAircraft.values()) {
-        // Resolve model via service
-        const resolvedModelInfo = aircraftModelService.getModelInfo(aircraft.aircraftType, aircraft.callsign)
+        // Resolve model via service (pass position for conversion queue prioritization)
+        const resolvedModelInfo = aircraftModelService.getModelInfo(
+          aircraft.aircraftType,
+          aircraft.callsign,
+          { lat: aircraft.interpolatedLatitude, lon: aircraft.interpolatedLongitude }
+        )
 
         // Track model info for broadcast to insets
         // Only broadcast when model info changes (new aircraft, conversion complete, etc.)
@@ -219,6 +224,18 @@ export function useAircraftModels(
       interpolatedAircraft,
       alwaysInclude: followingCallsign
     })
+
+    // Update camera position for model conversion queue prioritization
+    // This ensures models for nearby aircraft are converted first
+    if (viewer?.camera && !isInset) {
+      const cartographic = viewer.camera.positionCartographic
+      if (cartographic) {
+        MSFSModelConversionService.setCameraPosition(
+          Cesium.Math.toDegrees(cartographic.latitude),
+          Cesium.Math.toDegrees(cartographic.longitude)
+        )
+      }
+    }
 
     // Track which callsigns we've seen this frame (for cleanup)
     const seenCallsigns = new Set<string>()
@@ -278,7 +295,11 @@ export function useAircraftModels(
         // Main app context: resolve model via service
         // Note: Model info broadcast to insets is handled in the separate pass above
         // which runs on ALL aircraft, not just those passing render culling
-        modelInfo = aircraftModelService.getModelInfo(aircraft.aircraftType, aircraft.callsign)
+        modelInfo = aircraftModelService.getModelInfo(
+          aircraft.aircraftType,
+          aircraft.callsign,
+          { lat: aircraft.interpolatedLatitude, lon: aircraft.interpolatedLongitude }
+        )
       }
 
       // Model height: interpolatedAltitude is already terrain-corrected by interpolation system

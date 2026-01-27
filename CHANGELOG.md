@@ -10,6 +10,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ### Changed
 - **Reorganized tower mod manifest structure** - Tower mods now use `modelPosition` (with `lat`, `lon`, `height`, `rotation`) and `cameraPosition` (with `lat`, `lon`, `height`, `heading`) for cleaner configuration. The old fields (`position`, `heightOffset`, `cabPosition`, `cabHeading`) still work for backward compatibility.
+- **MSFS model conversions now prioritize nearby aircraft** - When multiple aircraft need model conversion, aircraft closer to the camera are converted first. Previously conversions happened in request order, which could mean waiting for distant aircraft before nearby ones got their models.
 
 ### Fixed
 - **Tower mod position and height now work correctly** - Fixed a bug where `heightOffset` was applied twice when using custom `position` in tower mod manifests, causing models to appear too high.

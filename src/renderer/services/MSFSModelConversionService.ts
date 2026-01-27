@@ -149,7 +149,11 @@ class MSFSModelConversionServiceClass {
   private conversionQueue: Array<{
     sourceInfo: SourceModelInfo
     resolve: (result: ConversionResult) => void
+    aircraftPosition?: { lat: number; lon: number }
   }> = []
+
+  /** Current camera position for distance-based queue prioritization */
+  private cameraPosition: { lat: number; lon: number } | null = null
 
   /** Last detection result */
   private lastDetection: MSFSDetectionResult | null = null
@@ -1002,14 +1006,53 @@ class MSFSModelConversionServiceClass {
   }
 
   // ===========================================================================
+  // CAMERA POSITION (for distance-based queue prioritization)
+  // ===========================================================================
+
+  /**
+   * Set the current camera position for distance-based queue prioritization.
+   * Call this from a hook when the camera moves to ensure conversions are
+   * prioritized for aircraft closest to the camera.
+   */
+  setCameraPosition(lat: number, lon: number): void {
+    this.cameraPosition = { lat, lon }
+  }
+
+  /**
+   * Calculate great-circle distance between two points in nautical miles.
+   * Uses Haversine formula for accuracy.
+   */
+  private calculateDistanceNM(
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number
+  ): number {
+    const R = 3440.065 // Earth's radius in nautical miles
+    const dLat = (lat2 - lat1) * Math.PI / 180
+    const dLon = (lon2 - lon1) * Math.PI / 180
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2)
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    return R * c
+  }
+
+  // ===========================================================================
   // CONVERSION
   // ===========================================================================
 
   /**
    * Convert a model on-demand
    * Returns immediately if model is already cached
+   * @param sourceInfo Source model information
+   * @param aircraftPosition Optional position of the aircraft needing this model (for queue prioritization)
    */
-  async convertModel(sourceInfo: SourceModelInfo): Promise<ConversionResult> {
+  async convertModel(
+    sourceInfo: SourceModelInfo,
+    aircraftPosition?: { lat: number; lon: number }
+  ): Promise<ConversionResult> {
     const modelKey = this.getModelKey(sourceInfo)
 
     // Check memory cache first
@@ -1035,21 +1078,24 @@ class MSFSModelConversionServiceClass {
     }
 
     // Start new conversion (or queue if at max concurrent)
-    return this.queueConversion(sourceInfo)
+    return this.queueConversion(sourceInfo, aircraftPosition)
   }
 
   /**
    * Queue a conversion request
+   * @param sourceInfo Source model information
+   * @param aircraftPosition Optional position of the aircraft needing this model
    */
-  private queueConversion(sourceInfo: SourceModelInfo): Promise<ConversionResult> {
+  private queueConversion(
+    sourceInfo: SourceModelInfo,
+    aircraftPosition?: { lat: number; lon: number }
+  ): Promise<ConversionResult> {
     const modelKey = this.getModelKey(sourceInfo)
 
     const promise = new Promise<ConversionResult>((resolve) => {
-      if (this.activeConversions < this.MAX_CONCURRENT) {
-        this.executeConversion(sourceInfo, resolve)
-      } else {
-        this.conversionQueue.push({ sourceInfo, resolve })
-      }
+      // Always queue first, then let processQueue() sort by distance and start
+      // This ensures closer aircraft are prioritized even when there's capacity
+      this.conversionQueue.push({ sourceInfo, resolve, aircraftPosition })
     })
 
     // Track conversion status
@@ -1058,6 +1104,9 @@ class MSFSModelConversionServiceClass {
       promise,
       startedAt: Date.now()
     })
+
+    // Trigger queue processing (will sort by distance and start if capacity available)
+    this.processQueue()
 
     return promise
   }
@@ -1233,15 +1282,41 @@ class MSFSModelConversionServiceClass {
   }
 
   /**
-   * Process the next item in the conversion queue
+   * Process items in the conversion queue.
+   * Prioritizes aircraft closest to the camera when position data is available.
+   * Continues processing while there's capacity and items in queue.
    */
   private processQueue(): void {
-    if (this.activeConversions >= this.MAX_CONCURRENT) return
-    if (this.conversionQueue.length === 0) return
+    // Sort queue by distance before processing (closest first)
+    if (this.cameraPosition && this.conversionQueue.length > 1) {
+      this.conversionQueue.sort((a, b) => {
+        // Items without position go to the end
+        if (!a.aircraftPosition && !b.aircraftPosition) return 0
+        if (!a.aircraftPosition) return 1
+        if (!b.aircraftPosition) return -1
 
-    const next = this.conversionQueue.shift()
-    if (next) {
-      this.executeConversion(next.sourceInfo, next.resolve)
+        const distA = this.calculateDistanceNM(
+          this.cameraPosition!.lat,
+          this.cameraPosition!.lon,
+          a.aircraftPosition.lat,
+          a.aircraftPosition.lon
+        )
+        const distB = this.calculateDistanceNM(
+          this.cameraPosition!.lat,
+          this.cameraPosition!.lon,
+          b.aircraftPosition.lat,
+          b.aircraftPosition.lon
+        )
+        return distA - distB
+      })
+    }
+
+    // Start conversions while we have capacity
+    while (this.activeConversions < this.MAX_CONCURRENT && this.conversionQueue.length > 0) {
+      const next = this.conversionQueue.shift()
+      if (next) {
+        this.executeConversion(next.sourceInfo, next.resolve)
+      }
     }
   }
 
