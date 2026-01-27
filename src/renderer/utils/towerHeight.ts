@@ -46,17 +46,17 @@ export function getTowerPosition(
   view3dPosition?: {
     lat: number
     lon: number
-    aglHeight: number
+    height: number
   }
 ): { latitude: number; longitude: number; height: number } {
   // Use custom position if provided, otherwise use airport center
   const latitude = view3dPosition?.lat ?? airport.lat
   const longitude = view3dPosition?.lon ?? airport.lon
 
-  // Determine AGL height: custom position's aglHeight, custom height param, or estimated
+  // Determine AGL height: custom position's height, custom height param, or estimated
   let aglHeight: number
-  if (view3dPosition?.aglHeight !== undefined) {
-    aglHeight = view3dPosition.aglHeight
+  if (view3dPosition?.height !== undefined) {
+    aglHeight = view3dPosition.height
   } else if (customHeight !== undefined) {
     aglHeight = customHeight
   } else {

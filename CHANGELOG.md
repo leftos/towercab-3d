@@ -4,7 +4,11 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **Reorganized tower mod manifest structure** - Tower mods now use `modelPosition` (with `lat`, `lon`, `height`, `rotation`) and `cameraPosition` (with `lat`, `lon`, `height`, `heading`) for cleaner configuration. The old fields (`position`, `heightOffset`, `cabPosition`, `cabHeading`) still work for backward compatibility.
+
 ### Fixed
+- **Tower mod position and height now work correctly** - Fixed a bug where `heightOffset` was applied twice when using custom `position` in tower mod manifests, causing models to appear too high.
 - **Ground aircraft no longer bank during turns** - Aircraft clamped to the ground now steer with yaw only (like real nosewheel/rudder steering) instead of banking when turning at speeds above 40 knots.
 - **Installer now cleans up old bundled tower positions** - Upgrading from versions before 0.0.32-alpha no longer leaves stale tower position files in the mods folder that shadow updated bundled defaults.
 

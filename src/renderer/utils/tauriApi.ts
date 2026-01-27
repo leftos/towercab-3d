@@ -211,7 +211,7 @@ export const modApi = {
     view3d?: {
       lat: number
       lon: number
-      aglHeight: number
+      height: number
       heading?: number
     }
     view2d?: {

@@ -33,6 +33,26 @@ export interface AircraftModManifest {
   }
 }
 
+/**
+ * Model position configuration for tower mods
+ */
+export interface TowerModelPosition {
+  lat: number       // absolute latitude for 3D model position
+  lon: number       // absolute longitude for 3D model position
+  height?: number   // height offset in meters above terrain (default 0)
+  rotation?: number // model rotation in degrees (0=north, 90=east)
+}
+
+/**
+ * Camera position configuration for tower mods
+ */
+export interface TowerCameraPosition {
+  lat: number       // latitude of camera position
+  lon: number       // longitude of camera position
+  height: number    // height above ground level in meters
+  heading?: number  // default camera heading in degrees (0=north, 90=east)
+}
+
 export interface TowerModManifest {
   name: string
   author: string
@@ -41,18 +61,27 @@ export interface TowerModManifest {
   modelFile: string  // relative path to model file (.glb, .gltf, .obj, .dae, .stl)
   airports: string[]  // ICAO codes this tower applies to, e.g., ["KJFK", "KLAX"]
   scale: number  // scale factor for the model
-  heightOffset?: number  // additional height offset in meters (for 3D model)
+
+  // New consolidated structures
+  modelPosition?: TowerModelPosition   // 3D model placement (lat, lon, height, rotation)
+  cameraPosition?: TowerCameraPosition // camera/cab viewpoint (lat, lon, height, heading)
+
+  // Deprecated: kept for backward compatibility - use modelPosition/cameraPosition instead
+  /** @deprecated Use modelPosition.height instead */
+  heightOffset?: number
+  /** @deprecated Use modelPosition instead */
   position?: {
-    lat: number  // absolute latitude for 3D model position
-    lon: number  // absolute longitude for 3D model position
+    lat: number
+    lon: number
   }
-  // Camera/cab position override (optional) - allows specifying where the tower cab viewpoint should be
+  /** @deprecated Use cameraPosition instead */
   cabPosition?: {
-    lat: number  // latitude of camera position
-    lon: number  // longitude of camera position
-    aglHeight: number  // height above ground level in meters
+    lat: number
+    lon: number
+    aglHeight: number
   }
-  cabHeading?: number  // default camera heading in degrees (0=north, 90=east)
+  /** @deprecated Use cameraPosition.heading instead */
+  cabHeading?: number
 }
 
 /**
@@ -63,10 +92,21 @@ export interface TowerModManifest {
  * sub-millimeter precision at any latitude.
  */
 export interface View3dPosition {
-  lat: number  // latitude of camera position (double precision)
-  lon: number  // longitude of camera position (double precision)
-  aglHeight: number  // height above ground level in meters
+  lat: number     // latitude of camera position (double precision)
+  lon: number     // longitude of camera position (double precision)
+  height: number  // height above ground level in meters
   heading?: number  // default camera heading in degrees (0=north, 90=east), defaults to 0
+}
+
+/**
+ * Raw 3D view position as read from JSON files (supports both old and new field names)
+ */
+export interface RawView3dPosition {
+  lat: number
+  lon: number
+  height?: number     // new field name
+  aglHeight?: number  // deprecated, for backward compatibility
+  heading?: number
 }
 
 /**
@@ -120,7 +160,8 @@ export interface CustomTowerPosition {
 export interface LegacyTowerPosition {
   lat: number
   lon: number
-  aglHeight: number
+  height?: number     // new field name
+  aglHeight?: number  // deprecated, for backward compatibility
   heading?: number
 }
 
@@ -131,21 +172,23 @@ export interface LegacyTowerPosition {
 export type CustomTowerPositions = Record<string, CustomTowerPosition | LegacyTowerPosition>
 
 /**
- * Check if a tower position is in legacy format
+ * Check if a tower position is in legacy format (has lat/lon at top level, not in view3d)
  */
 export function isLegacyTowerPosition(pos: CustomTowerPosition | LegacyTowerPosition): pos is LegacyTowerPosition {
-  return 'lat' in pos && 'lon' in pos && 'aglHeight' in pos
+  return 'lat' in pos && 'lon' in pos && ('height' in pos || 'aglHeight' in pos)
 }
 
 /**
  * Convert legacy tower position to new format (as 3D view only)
  */
 export function convertLegacyToNewFormat(legacy: LegacyTowerPosition): CustomTowerPosition {
+  // Support both 'height' (new) and 'aglHeight' (deprecated) field names
+  const height = legacy.height ?? legacy.aglHeight ?? 0
   return {
     view3d: {
       lat: legacy.lat,
       lon: legacy.lon,
-      aglHeight: legacy.aglHeight,
+      height: height,
       heading: legacy.heading
     }
   }
@@ -209,7 +252,5 @@ export const DEFAULT_AIRCRAFT_MOD: Partial<AircraftModManifest> = {
 }
 
 export const DEFAULT_TOWER_MOD: Partial<TowerModManifest> = {
-  scale: 1.0,
-  heightOffset: 0,
-  cabHeading: 0  // default to north
+  scale: 1.0
 }

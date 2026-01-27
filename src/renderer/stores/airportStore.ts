@@ -7,7 +7,7 @@ import { useVatsimStore } from './vatsimStore'
 import { useVnasStore } from './vnasStore'
 import { useRealTrafficStore } from './realTrafficStore'
 import { useGlobalSettingsStore } from './globalSettingsStore'
-import { modService } from '../services/ModService'
+import { modService, getCameraPositionFromManifest } from '../services/ModService'
 import { isRemoteMode, isTauriMode } from '../utils/remoteMode'
 import { requestRemoteAirportChange } from '../hooks/useRemoteObservations'
 
@@ -89,20 +89,24 @@ export const useAirportStore = create<AirportStore>()(
 
         if (airport) {
           // Check for custom tower position from tower mod or tower-positions.json
-          // Priority: tower mod cabPosition > tower-positions.json
+          // Priority: tower mod cameraPosition > tower-positions.json
           let customTowerPosition: View3dPosition | null = null
           let customHeading: number | null = null
 
           // Check tower mod first (higher priority)
+          // Uses getCameraPositionFromManifest for backward compatibility with cabPosition/cabHeading
           const towerMod = modService.getTowerModel(icao)
-          if (towerMod?.manifest.cabPosition) {
-            customTowerPosition = {
-              lat: towerMod.manifest.cabPosition.lat,
-              lon: towerMod.manifest.cabPosition.lon,
-              aglHeight: towerMod.manifest.cabPosition.aglHeight,
-              heading: towerMod.manifest.cabHeading ?? 0
+          if (towerMod) {
+            const cameraPos = getCameraPositionFromManifest(towerMod.manifest)
+            if (cameraPos) {
+              customTowerPosition = {
+                lat: cameraPos.lat,
+                lon: cameraPos.lon,
+                height: cameraPos.height,
+                heading: cameraPos.heading
+              }
+              customHeading = cameraPos.heading
             }
-            customHeading = towerMod.manifest.cabHeading ?? 0
           }
 
           // Fall back to tower-positions if no tower mod position
@@ -118,8 +122,8 @@ export const useAirportStore = create<AirportStore>()(
           // Get 2D view position from tower-positions (separate from 3D)
           const custom2dPosition = modService.get2dPosition(icao) ?? null
 
-          // Use custom 3D aglHeight if available, otherwise estimate from airport type
-          const towerHeight = customTowerPosition?.aglHeight ?? getEstimatedTowerHeight(airport)
+          // Use custom 3D height if available, otherwise estimate from airport type
+          const towerHeight = customTowerPosition?.height ?? getEstimatedTowerHeight(airport)
 
           set({
             currentAirport: airport,

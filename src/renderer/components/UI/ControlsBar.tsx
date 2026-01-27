@@ -276,7 +276,7 @@ function ControlsBar() {
 
         // Build the complete file content (preserving the other view if it exists)
         const fileContent: {
-          view3d?: { lat: number; lon: number; aglHeight: number; heading?: number }
+          view3d?: { lat: number; lon: number; height: number; heading?: number }
           view2d?: { lat: number; lon: number; altitude: number; heading?: number }
         } = {}
 
@@ -297,7 +297,7 @@ function ControlsBar() {
             fileContent.view3d = {
               lat: existing3d.lat,
               lon: existing3d.lon,
-              aglHeight: existing3d.aglHeight,
+              height: existing3d.height,
               heading: existing3d.heading
             }
           }
@@ -327,7 +327,7 @@ function ControlsBar() {
           fileContent.view3d = {
             lat: shareablePos.lat,
             lon: shareablePos.lon,
-            aglHeight: shareablePos.aglHeight,
+            height: shareablePos.height,
             heading: shareablePos.heading
           }
 

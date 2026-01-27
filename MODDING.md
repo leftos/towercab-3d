@@ -115,8 +115,7 @@ Create a `manifest.json` file in your tower mod folder:
   "description": "Realistic JFK control tower",
   "modelFile": "model.glb",
   "airports": ["KJFK"],
-  "scale": 1.0,
-  "heightOffset": 0
+  "scale": 1.0
 }
 ```
 
@@ -131,58 +130,64 @@ Create a `manifest.json` file in your tower mod folder:
 | `modelFile` | string | Yes | Path to the 3D model file |
 | `airports` | string[] | Yes | ICAO airport codes this tower applies to |
 | `scale` | number | Yes | Scale factor |
-| `heightOffset` | number | No | Additional height offset in meters (for 3D model) |
-| `position` | object | No | Absolute lat/lon for 3D model placement |
-| `cabPosition` | object | No | Camera/tower cab position (lat, lon, aglHeight) - sets default viewing position |
-| `cabHeading` | number | No | Default camera heading in degrees (0=north, 90=east) |
+| `modelPosition` | object | No | 3D model placement (lat, lon, height, rotation) |
+| `cameraPosition` | object | No | Camera/tower cab viewpoint (lat, lon, height, heading) |
 
 ### 3D Tower Model Rendering
 
 When a tower mod is installed for an airport, TowerCab 3D will render the 3D model in the scene. The tower model is placed using this fallback chain:
 
-1. **manifest.position** - If `position.lat` and `position.lon` are specified in the manifest
+1. **manifest.modelPosition** - If `modelPosition.lat` and `modelPosition.lon` are specified in the manifest
 2. **tower-positions** - Falls back to the bundled tower position data (from `mods/tower-positions/` or bundled FAA data)
 3. **Not rendered** - If no position is available
 
-The model is placed at terrain height plus the `heightOffset` value from the manifest.
+The model is placed at terrain height plus the `modelPosition.height` value from the manifest.
 
-### Position Configuration
+### Model Position Configuration
 
-Tower mods can specify an explicit position using absolute lat/lon coordinates:
+Tower mods can specify an explicit model position using absolute lat/lon coordinates:
 
 ```json
 {
-  "position": {
+  "modelPosition": {
     "lat": 40.6413111,
-    "lon": -73.7781234
-  },
-  "heightOffset": 0
+    "lon": -73.7781234,
+    "height": 0,
+    "rotation": 45
+  }
 }
 ```
 
-- `position.lat` / `position.lon`: Where the 3D model is placed (double precision for sub-millimeter accuracy)
-- `heightOffset`: Additional height offset in meters, added to terrain height (useful for fine-tuning vertical placement)
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `lat` | number | Yes | Latitude of 3D model position (double precision) |
+| `lon` | number | Yes | Longitude of 3D model position (double precision) |
+| `height` | number | No | Height offset in meters above terrain (default 0) |
+| `rotation` | number | No | Model rotation in degrees (0=north, 90=east, default 0) |
 
-**Note:** The `position` field controls where the 3D tower model renders. The `cabPosition` field (separate) controls where the camera viewpoint is located. These can be different positions.
+**Note:** The `modelPosition` field controls where the 3D tower model renders. The `cameraPosition` field (separate) controls where the camera viewpoint is located. These can be different positions.
 
-### Camera/Cab Position Configuration
+### Camera Position Configuration
 
-You can now specify where the tower cab (camera viewpoint) should be positioned independently of the 3D model:
+You can specify where the tower cab (camera viewpoint) should be positioned independently of the 3D model:
 
 ```json
 {
-  "cabPosition": {
+  "cameraPosition": {
     "lat": 40.6413,
     "lon": -73.7781,
-    "aglHeight": 97
-  },
-  "cabHeading": 45
+    "height": 97,
+    "heading": 45
+  }
 }
 ```
 
-- `cabPosition.lat/lon`: Camera position (separate from 3D model position)
-- `cabPosition.aglHeight`: Height above ground level in meters
-- `cabHeading`: Default camera heading (0=north, 90=east, etc.)
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `lat` | number | Yes | Latitude of camera position |
+| `lon` | number | Yes | Longitude of camera position |
+| `height` | number | Yes | Height above ground level in meters |
+| `heading` | number | No | Default camera heading in degrees (0=north, default 0) |
 
 When these are set, they become the default camera position for that airport (used on first visit or when pressing Shift+Home).
 
@@ -227,7 +232,7 @@ Each airport file supports separate 3D and 2D view settings:
   "view3d": {
     "lat": 40.6413111,
     "lon": -73.7781234,
-    "aglHeight": 97,
+    "height": 97,
     "heading": 45
   },
   "view2d": {
@@ -247,7 +252,7 @@ Both `view3d` and `view2d` are optional. If only one is provided, the other uses
 |-------|------|----------|-------------|
 | `lat` | number | Yes | Latitude of the tower cab position (double precision) |
 | `lon` | number | Yes | Longitude of the tower cab position (double precision) |
-| `aglHeight` | number | Yes | Height above ground level in meters |
+| `height` | number | Yes | Height above ground level in meters |
 | `heading` | number | No | Default camera heading in degrees (0=north). Defaults to 0 |
 
 ### 2D View Fields (`view2d`)
@@ -302,7 +307,7 @@ For camera position, the system uses this priority (highest to lowest):
   "view3d": {
     "lat": 40.6413,
     "lon": -73.7781,
-    "aglHeight": 97,
+    "height": 97,
     "heading": 45
   },
   "view2d": {
@@ -319,7 +324,7 @@ For camera position, the system uses this priority (highest to lowest):
   "view3d": {
     "lat": 33.9416234,
     "lon": -118.4085567,
-    "aglHeight": 84,
+    "height": 84,
     "heading": 270
   }
 }
@@ -528,21 +533,22 @@ manifest.json:
   "modelFile": "model.glb",
   "airports": ["KLAX"],
   "scale": 1.0,
-  "heightOffset": 5,
-  "position": {
-    "lat": 33.9416234,
-    "lon": -118.4085567
-  },
-  "cabPosition": {
+  "modelPosition": {
     "lat": 33.9416234,
     "lon": -118.4085567,
-    "aglHeight": 84
+    "height": 5,
+    "rotation": 0
   },
-  "cabHeading": 270
+  "cameraPosition": {
+    "lat": 33.9416234,
+    "lon": -118.4085567,
+    "height": 84,
+    "heading": 270
+  }
 }
 ```
 
-The `position` field specifies where the 3D model renders (with double-precision lat/lon), and `cabPosition` specifies where the camera views from. The `cabHeading` sets the initial viewing direction.
+The `modelPosition` field specifies where the 3D model renders, and `cameraPosition` specifies where the camera views from.
 
 ### SketchUp Tower Mod (Collada)
 

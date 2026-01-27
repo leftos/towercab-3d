@@ -1158,7 +1158,7 @@ export const useViewportStore = create<ViewportStore>()(
               useAirportStore.setState({
                 customTowerPosition: position3d,
                 customHeading: position3d.heading ?? 0,
-                towerHeight: position3d.aglHeight
+                towerHeight: position3d.height
               })
             }
 

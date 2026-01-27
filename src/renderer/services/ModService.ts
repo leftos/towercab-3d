@@ -8,6 +8,7 @@ import type {
   CustomTowerPosition,
   LegacyTowerPosition,
   View3dPosition,
+  RawView3dPosition,
   View2dPosition,
   ResolvedView2dPosition
 } from '../types/mod'
@@ -22,8 +23,79 @@ import { VNAS_RANGE_TO_ALTITUDE_MULTIPLIER, TOPDOWN_ALTITUDE_DEFAULT } from '../
 export interface TowerPlacement {
   lat: number
   lon: number
-  agl: number
+  height: number      // height offset above terrain in meters
+  rotation: number    // model rotation in degrees (0=north)
   source: 'manifest' | 'tower-positions' | 'airport-center'
+}
+
+/**
+ * Get model position from manifest with backward compatibility
+ * Handles both new modelPosition format and deprecated position/heightOffset fields
+ */
+function getModelPositionFromManifest(manifest: TowerModManifest): {
+  lat: number
+  lon: number
+  height: number
+  rotation: number
+} | null {
+  // New format: modelPosition
+  if (manifest.modelPosition?.lat !== undefined && manifest.modelPosition?.lon !== undefined) {
+    return {
+      lat: manifest.modelPosition.lat,
+      lon: manifest.modelPosition.lon,
+      height: manifest.modelPosition.height ?? 0,
+      rotation: manifest.modelPosition.rotation ?? 0
+    }
+  }
+
+  // Deprecated format: position + heightOffset
+  if (manifest.position?.lat !== undefined && manifest.position?.lon !== undefined) {
+    return {
+      lat: manifest.position.lat,
+      lon: manifest.position.lon,
+      height: manifest.heightOffset ?? 0,
+      rotation: 0
+    }
+  }
+
+  return null
+}
+
+/**
+ * Get camera position from manifest with backward compatibility
+ * Handles both new cameraPosition format and deprecated cabPosition/cabHeading fields
+ */
+export function getCameraPositionFromManifest(manifest: TowerModManifest): {
+  lat: number
+  lon: number
+  height: number
+  heading: number
+} | null {
+  // New format: cameraPosition with height
+  if (manifest.cameraPosition?.lat !== undefined &&
+      manifest.cameraPosition?.lon !== undefined &&
+      manifest.cameraPosition?.height !== undefined) {
+    return {
+      lat: manifest.cameraPosition.lat,
+      lon: manifest.cameraPosition.lon,
+      height: manifest.cameraPosition.height,
+      heading: manifest.cameraPosition.heading ?? 0
+    }
+  }
+
+  // Deprecated format: cabPosition (with aglHeight) + cabHeading
+  if (manifest.cabPosition?.lat !== undefined &&
+      manifest.cabPosition?.lon !== undefined &&
+      manifest.cabPosition?.aglHeight !== undefined) {
+    return {
+      lat: manifest.cabPosition.lat,
+      lon: manifest.cabPosition.lon,
+      height: manifest.cabPosition.aglHeight,
+      heading: manifest.cabHeading ?? 0
+    }
+  }
+
+  return null
 }
 
 /**
@@ -146,7 +218,7 @@ class ModService {
       if (this.loadingResult.towers.length > 0) {
         const towerDetails = this.loadingResult.towers.map(t => {
           const placementInfo = t.placement
-            ? `position: ${t.placement.lat.toFixed(4)}, ${t.placement.lon.toFixed(4)}, agl: ${t.placement.agl}m from ${t.placement.source}`
+            ? `position: ${t.placement.lat.toFixed(4)}, ${t.placement.lon.toFixed(4)}, height: ${t.placement.height}m, rotation: ${t.placement.rotation}° from ${t.placement.source}`
             : 'no position'
           return `  - ${t.icao}: ${t.manifest.name} (${placementInfo})`
         }).join('\n')
@@ -276,24 +348,28 @@ class ModService {
    * so it checks both the manifest and falls back to tower-positions
    */
   private computeTowerPlacement(manifest: TowerModManifest, icao: string): TowerPlacement | null {
-    // First priority: manifest.position (lat/lon) with heightOffset
-    if (manifest.position?.lat !== undefined &&
-        manifest.position?.lon !== undefined) {
+    // First priority: manifest modelPosition (or deprecated position/heightOffset)
+    const modelPos = getModelPositionFromManifest(manifest)
+    if (modelPos) {
       return {
-        lat: manifest.position.lat,
-        lon: manifest.position.lon,
-        agl: manifest.heightOffset ?? 0,
+        lat: modelPos.lat,
+        lon: modelPos.lon,
+        height: modelPos.height,
+        rotation: modelPos.rotation,
         source: 'manifest'
       }
     }
 
     // Second priority: tower-positions data (if loaded)
+    // Note: tower-positions provides camera position, we use lat/lon for model placement
+    // but height should be 0 (model at ground level) since aglHeight is for camera
     const customPos = this.customTowerPositions.get(icao.toUpperCase())
     if (customPos?.view3d) {
       return {
         lat: customPos.view3d.lat,
         lon: customPos.view3d.lon,
-        agl: customPos.view3d.aglHeight,
+        height: 0,  // Model at ground level, not at camera height
+        rotation: 0,
         source: 'tower-positions'
       }
     }
@@ -325,18 +401,20 @@ class ModService {
 
           // Validate and store view3d if present
           if (parsed.view3d) {
-            const v3d = parsed.view3d as View3dPosition
+            const v3d = parsed.view3d as RawView3dPosition
+            // Support both 'height' (new) and 'aglHeight' (deprecated) field names
+            const height = v3d.height ?? v3d.aglHeight
             if (typeof v3d.lat === 'number' &&
                 typeof v3d.lon === 'number' &&
-                typeof v3d.aglHeight === 'number') {
+                typeof height === 'number') {
               position.view3d = {
                 lat: v3d.lat,
                 lon: v3d.lon,
-                aglHeight: v3d.aglHeight,
+                height: height,
                 heading: v3d.heading
               }
             } else {
-              console.warn(`Invalid view3d for ${icao}: missing required fields (lat, lon, aglHeight)`)
+              console.warn(`Invalid view3d for ${icao}: missing required fields (lat, lon, height)`)
             }
           }
 
@@ -537,10 +615,10 @@ class ModService {
 
   /**
    * Get the final tower placement for rendering a tower model
-   * Uses the fallback chain: manifest.position -> tower-positions -> null
+   * Uses the fallback chain: manifest.modelPosition -> tower-positions -> null
    *
    * @param icao Airport ICAO code
-   * @returns TowerPlacement with lat/lon/agl and source, or null if no position available
+   * @returns TowerPlacement with lat/lon/height/rotation and source, or null if no position available
    */
   getTowerPlacement(icao: string): TowerPlacement | null {
     const towerMod = this.registry.towers.get(icao.toUpperCase())
@@ -548,24 +626,28 @@ class ModService {
 
     const manifest = towerMod.manifest
 
-    // First priority: manifest.position (lat/lon) with heightOffset
-    if (manifest.position?.lat !== undefined &&
-        manifest.position?.lon !== undefined) {
+    // First priority: manifest modelPosition (or deprecated position/heightOffset)
+    const modelPos = getModelPositionFromManifest(manifest)
+    if (modelPos) {
       return {
-        lat: manifest.position.lat,
-        lon: manifest.position.lon,
-        agl: manifest.heightOffset ?? 0,
+        lat: modelPos.lat,
+        lon: modelPos.lon,
+        height: modelPos.height,
+        rotation: modelPos.rotation,
         source: 'manifest'
       }
     }
 
     // Second priority: tower-positions data
+    // Note: tower-positions provides camera position, we use lat/lon for model placement
+    // but height should be 0 (model at ground level) since aglHeight is for camera
     const customPos = this.customTowerPositions.get(icao.toUpperCase())
     if (customPos?.view3d) {
       return {
         lat: customPos.view3d.lat,
         lon: customPos.view3d.lon,
-        agl: customPos.view3d.aglHeight,
+        height: 0,  // Model at ground level, not at camera height
+        rotation: 0,
         source: 'tower-positions'
       }
     }

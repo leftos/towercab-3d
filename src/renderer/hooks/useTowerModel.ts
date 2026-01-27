@@ -11,13 +11,13 @@
  * - Changed infrequently
  *
  * Position Fallback Chain:
- * 1. manifest.position (explicit lat/lon in tower mod)
+ * 1. manifest.modelPosition (explicit lat/lon/height/rotation in tower mod)
  * 2. tower-positions data (view3d lat/lon from bundled FAA data or user overrides)
  * 3. Skip rendering if no position data available
  *
  * Height Calculation:
  * - Base: terrain height at position (sampled from terrain provider)
- * - Add: manifest.heightOffset (default 0) for fine-tuning
+ * - Add: placement.height from manifest (default 0) for fine-tuning
  * - The model base should be at ground level
  */
 
@@ -100,15 +100,13 @@ export function useTowerModel(
     // Get model scale (default 1.0)
     const scale = manifest.scale ?? 1.0
 
-    // Get height offset from manifest (default 0)
-    const heightOffset = manifest.heightOffset ?? 0
-
     console.log(`[useTowerModel] Loading tower model for ${icao}:`, {
       modelUrl,
-      position: { lat: placement.lat, lon: placement.lon, agl: placement.agl },
+      position: { lat: placement.lat, lon: placement.lon },
+      height: placement.height,
+      rotation: placement.rotation,
       source: placement.source,
-      scale,
-      heightOffset
+      scale
     })
 
     // Sample terrain height at tower position
@@ -126,13 +124,12 @@ export function useTowerModel(
 
         const terrainHeight = sampledPositions[0].height ?? 0
 
-        // Final height = terrain height + AGL height from manifest + height offset
-        const finalHeight = terrainHeight + placement.agl + heightOffset
+        // Final height = terrain height + height offset from placement
+        const finalHeight = terrainHeight + placement.height
 
         console.log(`[useTowerModel] Terrain sampled for ${icao}:`, {
           terrainHeight,
-          placementAgl: placement.agl,
-          heightOffset,
+          placementHeight: placement.height,
           finalHeight
         })
 
@@ -143,8 +140,8 @@ export function useTowerModel(
           finalHeight
         )
 
-        // Create heading/pitch/roll (towers don't rotate, but we may support heading in future)
-        const heading = Cesium.Math.toRadians(0)
+        // Create heading/pitch/roll with rotation from placement
+        const heading = Cesium.Math.toRadians(placement.rotation)
         const pitch = 0
         const roll = 0
         const hpr = new Cesium.HeadingPitchRoll(heading, pitch, roll)
@@ -197,10 +194,11 @@ export function useTowerModel(
         const position = Cesium.Cartesian3.fromDegrees(
           placement.lon,
           placement.lat,
-          placement.agl + heightOffset
+          placement.height
         )
 
-        const hpr = new Cesium.HeadingPitchRoll(0, 0, 0)
+        const heading = Cesium.Math.toRadians(placement.rotation)
+        const hpr = new Cesium.HeadingPitchRoll(heading, 0, 0)
         const modelMatrix = Cesium.Transforms.headingPitchRollToFixedFrame(position, hpr)
 
         if (scale !== 1.0) {

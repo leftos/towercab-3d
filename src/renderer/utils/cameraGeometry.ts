@@ -251,7 +251,7 @@ export interface Shareable3dPosition {
   /** Absolute longitude (double precision) */
   lon: number
   /** Height above ground level in meters */
-  aglHeight: number
+  height: number
   /** Camera heading in degrees */
   heading: number
 }
@@ -293,7 +293,7 @@ export function calculateShareable3dPosition(
   existingPosition: {
     lat: number
     lon: number
-    aglHeight: number
+    height: number
   } | null,
   positionOffsetX: number,
   positionOffsetY: number,
@@ -303,7 +303,7 @@ export function calculateShareable3dPosition(
   // Use existing position as base if available, otherwise airport center
   const baseLat = existingPosition?.lat ?? airportLat
   const baseLon = existingPosition?.lon ?? airportLon
-  const baseAglHeight = existingPosition?.aglHeight ?? towerHeight
+  const baseHeight = existingPosition?.height ?? towerHeight
 
   // Convert meter offsets to degrees and add to base position
   // positionOffsetY is north/south (positive = north)
@@ -314,7 +314,7 @@ export function calculateShareable3dPosition(
   return {
     lat: baseLat + latOffsetDegrees,
     lon: baseLon + lonOffsetDegrees,
-    aglHeight: baseAglHeight + positionOffsetZ,
+    height: baseHeight + positionOffsetZ,
     heading: ((heading % 360) + 360) % 360 // Normalize to 0-360
   }
 }
