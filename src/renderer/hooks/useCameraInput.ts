@@ -84,6 +84,7 @@ interface UseCameraInputOptions {
  * ### Keyboard Controls
  * - **WASD / Arrow Keys**: Movement (forward/back/left/right)
  * - **Shift + WASD**: Sprint mode (3x speed)
+ * - **Ctrl + WASD**: Fine control mode (0.2x speed)
  * - **Q/E**: Rotate heading (left/right)
  * - **Z/C**: Adjust pitch (up/down)
  * - **R/F**: Zoom (decrease/increase FOV)
@@ -788,29 +789,31 @@ export function useCameraInput(
       // Calculate target velocities based on pressed keys
       const targets = calculateTargetVelocities(keys, viewModeRef.current, followingCallsignRef.current, followModeRef.current)
 
-      // WASD movement (shift = sprint)
+      // WASD movement (shift = sprint, ctrl = fine control)
       const shiftHeld = keys.has('shift')
-      const sprintMultiplier = shiftHeld ? 3.0 : 1.0
+      const ctrlHeld = keys.has('control')
+      // Shift = 3x speed, Ctrl = 0.2x speed (fine control), both = normal speed
+      const speedMultiplier = shiftHeld && ctrlHeld ? 1.0 : shiftHeld ? 3.0 : ctrlHeld ? 0.2 : 1.0
 
-      // Scale movement speed with altitude in topdown view, and apply sprint multiplier
+      // Scale movement speed with altitude in topdown view, and apply speed multiplier
       const effectiveMoveSpeed = calculateEffectiveMoveSpeed(
         MOVEMENT_CONFIG.MAX_MOVE_SPEED,
         viewModeRef.current === 'topdown',
         topdownAltitudeRef.current,
-        sprintMultiplier
+        speedMultiplier
       )
 
-      // Smoothly interpolate velocities toward targets
+      // Smoothly interpolate velocities toward targets (apply speed multiplier to all)
       vel.forward = accelerateVelocity(vel.forward, targets.forward, effectiveMoveSpeed, dt)
       vel.right = accelerateVelocity(vel.right, targets.right, effectiveMoveSpeed, dt)
       vel.up = accelerateVelocity(vel.up, targets.up, effectiveMoveSpeed, dt)
-      vel.heading = accelerateVelocity(vel.heading, targets.heading, MOVEMENT_CONFIG.MAX_ROTATE_SPEED, dt)
-      vel.pitch = accelerateVelocity(vel.pitch, targets.pitch, MOVEMENT_CONFIG.MAX_ROTATE_SPEED, dt)
-      vel.zoom = accelerateVelocity(vel.zoom, targets.zoom, MOVEMENT_CONFIG.MAX_ZOOM_SPEED, dt)
-      vel.orbitHeading = accelerateVelocity(vel.orbitHeading, targets.orbitHeading, MOVEMENT_CONFIG.MAX_ROTATE_SPEED, dt)
-      vel.orbitPitch = accelerateVelocity(vel.orbitPitch, targets.orbitPitch, MOVEMENT_CONFIG.MAX_ROTATE_SPEED, dt)
-      vel.orbitDistance = accelerateVelocity(vel.orbitDistance, targets.orbitDistance, MOVEMENT_CONFIG.MAX_ORBIT_DIST_SPEED, dt)
-      vel.altitude = accelerateVelocity(vel.altitude, targets.altitude, MOVEMENT_CONFIG.MAX_ALTITUDE_SPEED, dt)
+      vel.heading = accelerateVelocity(vel.heading, targets.heading, MOVEMENT_CONFIG.MAX_ROTATE_SPEED * speedMultiplier, dt)
+      vel.pitch = accelerateVelocity(vel.pitch, targets.pitch, MOVEMENT_CONFIG.MAX_ROTATE_SPEED * speedMultiplier, dt)
+      vel.zoom = accelerateVelocity(vel.zoom, targets.zoom, MOVEMENT_CONFIG.MAX_ZOOM_SPEED * speedMultiplier, dt)
+      vel.orbitHeading = accelerateVelocity(vel.orbitHeading, targets.orbitHeading, MOVEMENT_CONFIG.MAX_ROTATE_SPEED * speedMultiplier, dt)
+      vel.orbitPitch = accelerateVelocity(vel.orbitPitch, targets.orbitPitch, MOVEMENT_CONFIG.MAX_ROTATE_SPEED * speedMultiplier, dt)
+      vel.orbitDistance = accelerateVelocity(vel.orbitDistance, targets.orbitDistance, MOVEMENT_CONFIG.MAX_ORBIT_DIST_SPEED * speedMultiplier, dt)
+      vel.altitude = accelerateVelocity(vel.altitude, targets.altitude, MOVEMENT_CONFIG.MAX_ALTITUDE_SPEED * speedMultiplier, dt)
 
       // Reset velocity to zero when at a boundary to prevent momentum buildup
       // This stops the "rubberbanding" effect when hitting limits

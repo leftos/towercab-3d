@@ -111,7 +111,8 @@ export const MOVEMENT_KEYS = new Set([
   'q', 'Q', 'e', 'E',  // Up/down movement
   'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown',
   '+', '=', '-', '_',
-  'Shift'  // Sprint modifier
+  'Shift',   // Sprint modifier (3x speed)
+  'Control'  // Fine control modifier (0.2x speed)
 ])
 
 export interface TargetVelocities {

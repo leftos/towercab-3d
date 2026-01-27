@@ -1016,6 +1016,7 @@ See [MODDING.md](MODDING.md) for complete modding instructions including:
 | Q | Move down |
 | E | Move up |
 | Shift + WASD | Sprint (3x speed) |
+| Ctrl + WASD | Fine control (0.2x speed) |
 
 ### Camera Rotation
 
