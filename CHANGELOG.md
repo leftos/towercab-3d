@@ -4,6 +4,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+## [0.0.39-alpha] - 2026-01-27
+
 ### Added
 - **In-app tower mod repositioning** - Reposition tower 3D models and set camera viewpoints directly in the app. Open Settings > Mods, click "Reposition" on a tower mod to start a two-step wizard: Step 1 adjusts the model position (WASD/QE to move, Z/X to rotate), Step 2 sets the default camera viewpoint. Press Tab during Step 1 to switch between model and camera controls for easier positioning. Changes are saved to the mod's manifest.json.
 - **Fine camera control with Ctrl key** - Hold Ctrl while using WASD/QE/arrows/+- for precise 0.2x speed movement. Useful for fine-tuning camera positions. Works with Shift (Shift+Ctrl = normal speed).
