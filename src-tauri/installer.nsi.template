@@ -15,6 +15,7 @@ ManifestDPIAwareness PerMonitorV2
 
 !include MUI2.nsh
 !include FileFunc.nsh
+!insertmacro GetTime
 !include x64.nsh
 !include WordFunc.nsh
 !include "utils.nsh"
@@ -649,6 +650,33 @@ Section Install
   {{#each binaries}}
     File /a "/oname={{this}}" "{{no-escape @key}}"
   {{/each}}
+
+  ; Clean up old bundled tower-positions from mods folder (migration from pre-0.0.32)
+  ; Tower positions were moved from mods/tower-positions/ to resources/tower-positions/ on 2026-01-11.
+  ; Delete any .json files in mods/tower-positions/ created before that date, as they are
+  ; old bundled files that now shadow the updated versions in resources/.
+  ${If} ${FileExists} "$INSTDIR\mods\tower-positions\*.*"
+    FindFirst $0 $1 "$INSTDIR\mods\tower-positions\*.json"
+    tower_positions_cleanup_loop:
+      StrCmp $1 "" tower_positions_cleanup_done
+      ; Get file creation time: $2=day, $3=month, $4=year, $5=dayname, $6=hour, $7=min, $8=sec
+      ${GetTime} "$INSTDIR\mods\tower-positions\$1" "C" $2 $3 $4 $5 $6 $7 $8
+      ; Build comparable date as YYYYMMDD integer in $R0
+      ; File date: $4 (year) + $3 (month) + $2 (day)
+      IntOp $R0 $4 * 10000
+      IntOp $R1 $3 * 100
+      IntOp $R0 $R0 + $R1
+      IntOp $R0 $R0 + $2
+      ; Delete if created before 2026-01-11 (20260111)
+      ${If} $R0 < 20260111
+        Delete "$INSTDIR\mods\tower-positions\$1"
+        DetailPrint "Cleaned up old tower position: $1"
+      ${EndIf}
+      FindNext $0 $1
+      Goto tower_positions_cleanup_loop
+    tower_positions_cleanup_done:
+    FindClose $0
+  ${EndIf}
 
   ; Create file associations
   {{#each file_associations as |association| ~}}

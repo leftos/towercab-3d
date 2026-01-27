@@ -6,6 +6,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ### Fixed
 - **Ground aircraft no longer bank during turns** - Aircraft clamped to the ground now steer with yaw only (like real nosewheel/rudder steering) instead of banking when turning at speeds above 40 knots.
+- **Installer now cleans up old bundled tower positions** - Upgrading from versions before 0.0.32-alpha no longer leaves stale tower position files in the mods folder that shadow updated bundled defaults.
 
 ## [0.0.38-alpha] - 2026-01-24
 
