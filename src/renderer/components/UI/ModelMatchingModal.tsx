@@ -41,6 +41,7 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
   // Test panel state
   const [testAirline, setTestAirline] = useState('')
   const [testType, setTestType] = useState('')
+  const [testCallsign, setTestCallsign] = useState('')
   const [testResult, setTestResult] = useState<TestResult | null>(null)
   const [isTestLoading, setIsTestLoading] = useState(false)
 
@@ -66,13 +67,14 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
 
     const airlineCode = testAirline.trim().toUpperCase() || null
     const aircraftType = testType.trim().toUpperCase()
-    // Create a fake callsign for model matching (airline + flight number)
-    const fakeCallsign = airlineCode ? `${airlineCode}999` : 'N12345'
+    // Use explicit callsign if provided, otherwise generate from airline or default to GA registration
+    const callsign = testCallsign.trim().toUpperCase() ||
+      (airlineCode ? `${airlineCode}999` : 'N12345')
 
     // Clear the cache for this lookup to get fresh results
     aircraftModelService.clearCache()
 
-    let modelInfo = aircraftModelService.getModelInfo(aircraftType, fakeCallsign)
+    let modelInfo = aircraftModelService.getModelInfo(aircraftType, callsign)
     const vmrAlternatives = userVMRService.getAlternatives(aircraftType, airlineCode)
 
     // If model is pending conversion, show loading state and wait
@@ -80,7 +82,7 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
       setIsTestLoading(true)
       // Show initial result with pending status
       setTestResult({
-        callsign: fakeCallsign,
+        callsign: callsign,
         aircraftType,
         modelInfo,
         vmrAlternatives
@@ -89,11 +91,11 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
       try {
         const result = await aircraftModelService.waitForConversion(
           aircraftType,
-          fakeCallsign
+          callsign
         )
         if (result.success && result.glbPath) {
           // Get the updated model info after conversion
-          modelInfo = aircraftModelService.getModelInfo(aircraftType, fakeCallsign)
+          modelInfo = aircraftModelService.getModelInfo(aircraftType, callsign)
         }
       } catch (error) {
         console.warn('[ModelMatch] Conversion wait failed:', error)
@@ -104,7 +106,7 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
     }
 
     setTestResult({
-      callsign: fakeCallsign,
+      callsign: callsign,
       aircraftType,
       modelInfo,
       vmrAlternatives
@@ -113,7 +115,7 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
     if (modelInfo.matchType !== 'pending') {
       setPreviewModel(modelInfo)
     }
-  }, [testAirline, testType, isTestLoading])
+  }, [testAirline, testType, testCallsign, isTestLoading])
 
   // Build model matching data for aircraft within range of current airport
   // Uses timeline store - unified data source that works on both host and remote clients
@@ -265,6 +267,16 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
               onChange={(e) => setTestType(e.target.value)}
               className="model-test-input"
               maxLength={4}
+              onKeyDown={(e) => e.key === 'Enter' && runTest()}
+              disabled={isTestLoading}
+            />
+            <input
+              type="text"
+              placeholder="Callsign (e.g., N12345)"
+              value={testCallsign}
+              onChange={(e) => setTestCallsign(e.target.value)}
+              className="model-test-input callsign-input"
+              maxLength={10}
               onKeyDown={(e) => e.key === 'Enter' && runTest()}
               disabled={isTestLoading}
             />

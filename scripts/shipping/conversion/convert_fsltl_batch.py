@@ -99,7 +99,8 @@ except Exception as e:
 #   3: Fixed steering animations by using identity quaternion frame instead of frame 0
 #   4: Fixed model.cfg parsing to read GLTF filename from XML (fixes wrong engine variant textures)
 #   5: Fixed base_container resolution for FSLTL freighter variants (e.g., B77LF, B744F)
-CONVERTER_VERSION = 5
+#   6: Added --no-discovery mode; Rust now handles model.cfg parsing (fixes wrong engine variant for liveries)
+CONVERTER_VERSION = 7  # Bump when converter output changes (v7: FROST materials made transparent)
 
 # Global texconv.exe path (downloaded on first use)
 _texconv_path: Path | None = None
@@ -243,6 +244,60 @@ def find_texture_file(texture_name: str, model_dir: Path, texture_dirs: list[Pat
                 return candidate
 
     return None
+
+
+def sample_dominant_light_color(png_data: bytes) -> tuple[float, float, float] | None:
+    """Sample the dominant light/white color from PNG image data.
+
+    Analyzes the brightest pixels in the image to find the most common
+    light color, which can be used for FROST material replacement.
+
+    Returns RGB values as floats in [0, 1] range, or None if sampling fails.
+    """
+    try:
+        img = Image.open(io.BytesIO(png_data))
+        img = img.convert('RGB')
+
+        # Resize for faster sampling (we don't need full resolution)
+        sample_size = 128
+        if max(img.size) > sample_size:
+            ratio = sample_size / max(img.size)
+            new_size = (max(1, int(img.width * ratio)), max(1, int(img.height * ratio)))
+            img = img.resize(new_size, Image.NEAREST)
+
+        # Get all pixels
+        pixels = list(img.getdata())
+
+        # Filter to light pixels (brightness > 200 out of 255)
+        # This captures whites and near-whites
+        light_pixels = []
+        for r, g, b in pixels:
+            brightness = (r + g + b) / 3
+            if brightness > 200:
+                light_pixels.append((r, g, b))
+
+        if not light_pixels:
+            # No very light pixels found, lower the threshold
+            for r, g, b in pixels:
+                brightness = (r + g + b) / 3
+                if brightness > 150:
+                    light_pixels.append((r, g, b))
+
+        if not light_pixels:
+            # Still nothing, return a default off-white
+            return (0.95, 0.95, 0.95)
+
+        # Find the most common light color (simple mode)
+        # Group similar colors (within 10 units)
+        from collections import Counter
+        quantized = [(r // 10 * 10, g // 10 * 10, b // 10 * 10) for r, g, b in light_pixels]
+        most_common = Counter(quantized).most_common(1)[0][0]
+
+        # Return normalized RGB
+        return (most_common[0] / 255.0, most_common[1] / 255.0, most_common[2] / 255.0)
+
+    except Exception:
+        return None
 
 
 def detect_animations(gltf: dict) -> bool:
@@ -592,8 +647,38 @@ def convert_single_gltf(gltf_path: Path, output_path: Path, texture_dirs: list[P
             del gltf['asset']['extensions']
 
     # Clean up materials
+    # First, find the dominant light color from the LIVERY texture for FROST material replacement
+    frost_replacement_color = None
     if 'materials' in gltf:
+        textures = gltf.get('textures', [])
         for mat in gltf['materials']:
+            mat_name = mat.get('name', '').upper()
+            if mat_name == 'LIVERY':
+                # Get the base color texture from LIVERY material
+                pbr = mat.get('pbrMetallicRoughness', {})
+                base_tex = pbr.get('baseColorTexture', {})
+                tex_idx = base_tex.get('index')
+                if tex_idx is not None and tex_idx < len(textures):
+                    tex = textures[tex_idx]
+                    # Get image index (check both standard and DDS extension)
+                    img_idx = tex.get('source')
+                    if img_idx is None and 'extensions' in tex:
+                        dds_ext = tex['extensions'].get('MSFT_texture_dds', {})
+                        img_idx = dds_ext.get('source')
+                    if img_idx is not None and img_idx < len(image_buffers):
+                        frost_replacement_color = sample_dominant_light_color(image_buffers[img_idx])
+                break
+
+    if 'materials' in gltf:
+        for mat_idx, mat in enumerate(gltf['materials']):
+            mat_name = mat.get('name', '').upper()
+
+            # Detect FROST materials by name - these are MSFS 2024 ice/frost effects that
+            # don't render correctly without MSFS-specific extensions (show as magenta).
+            # Note: ASOBO_material_blend_gbuffer is used by many materials (decals, liveries,
+            # registration numbers) so we can't just check for that extension.
+            is_frost_material = mat_name == 'FROST'
+
             if 'extensions' in mat:
                 keys_to_remove = [k for k in mat['extensions']
                                   if k in extensions_to_remove or k.startswith(asobo_prefix)]
@@ -601,6 +686,23 @@ def convert_single_gltf(gltf_path: Path, output_path: Path, texture_dirs: list[P
                     mat['extensions'].pop(ext, None)
                 if not mat['extensions']:
                     del mat['extensions']
+
+            # FROST materials: use dominant light color from LIVERY texture (or default off-white)
+            # This makes the frost blend with the aircraft's paint scheme
+            if is_frost_material:
+                mat['alphaMode'] = 'OPAQUE'
+                mat['doubleSided'] = True
+                # Use sampled color or default off-white
+                r, g, b = frost_replacement_color or (0.95, 0.95, 0.95)
+                pbr = mat.get('pbrMetallicRoughness', {})
+                pbr['baseColorFactor'] = [r, g, b, 1.0]
+                # Remove any texture - use solid color
+                if 'baseColorTexture' in pbr:
+                    del pbr['baseColorTexture']
+                pbr['metallicFactor'] = 0.0
+                pbr['roughnessFactor'] = 1.0
+                mat['pbrMetallicRoughness'] = pbr
+                continue  # Skip normal material processing for FROST materials
 
             mat['alphaMode'] = 'OPAQUE'
             mat['doubleSided'] = True
@@ -1360,6 +1462,9 @@ Examples:
     parser.add_argument('--workers', type=int, default=0, help='Number of parallel workers (0=auto)')
     parser.add_argument('--log-file', help='Write output to log file instead of console')
     parser.add_argument('--self-test', action='store_true', help='Test that all dependencies are bundled correctly')
+    parser.add_argument('--no-discovery', action='store_true',
+                        help='Skip livery discovery. Requires --gltf-path, --texture-dirs, and --liveries. '
+                             'Use this when the caller (Rust) has already resolved all paths.')
     args = parser.parse_args()
 
     # Set up logging to file if requested
@@ -1389,56 +1494,104 @@ Examples:
     else:
         requested_titles = None
 
-    # Parse explicit overrides for AIG shared models (where GLTF is in a different folder)
+    # Parse explicit overrides
     explicit_gltf_path = Path(args.gltf_path) if args.gltf_path else None
     explicit_texture_dirs = [Path(d.strip()) for d in args.texture_dirs.split(',') if d.strip()] if args.texture_dirs else None
 
-    # Discover liveries (auto-detects batch vs on-demand based on source path)
-    # Pass requested_titles for early stopping optimization if specified
-    # Pass explicit_gltf_path to allow discovery even when source folder has no GLTF
-    print(f"Discovering liveries in {source_path}...")
-    all_liveries = discover_liveries_in_source(source_path, requested_titles, explicit_gltf_path)
-
-    if not all_liveries:
-        print("ERROR: No liveries found in source directory")
-        return 1
-
-    # Apply explicit overrides if provided (for AIG shared models)
-    if explicit_gltf_path or explicit_texture_dirs:
-        for livery in all_liveries:
-            if explicit_gltf_path:
-                livery['gltf_path'] = explicit_gltf_path
-                # Also update base_model_dir to the folder containing the GLTF
-                livery['base_model_dir'] = explicit_gltf_path.parent.parent
-            if explicit_texture_dirs:
-                # Prepend explicit texture dirs (they take priority)
-                livery['texture_dirs'] = explicit_texture_dirs + livery.get('texture_dirs', [])
-
-    folder_name = source_path.name
-    if folder_name.startswith("FSLTL_") or folder_name.startswith("AIGAIM_"):
-        print(f"Found {len(all_liveries)} liveries in {folder_name}")
-    else:
-        print(f"Found {len(all_liveries)} total liveries")
-
-    # Filter by requested liveries if specified
-    if requested_titles:
-        liveries_to_convert = [liv for liv in all_liveries if liv['livery_title'] in requested_titles]
-        print(f"Filtering to {len(liveries_to_convert)} requested liveries")
-
-        # If specific liveries were requested but none found, that's an error
-        if not liveries_to_convert:
-            not_found = requested_titles - {liv['livery_title'] for liv in all_liveries}
-            print("ERROR: None of the requested liveries were found in source", file=sys.stderr)
-            print(f"Requested: {requested_titles}", file=sys.stderr)
-            if not_found:
-                print(f"Not found: {not_found}", file=sys.stderr)
-            # Show some available liveries for debugging
-            available = [liv['livery_title'] for liv in all_liveries[:10]]
-            print(f"Available (first 10): {available}", file=sys.stderr)
+    # No-discovery mode: Rust has already resolved all paths, skip discovery entirely
+    if args.no_discovery:
+        # Validate required arguments
+        if not args.gltf_path:
+            print("ERROR: --no-discovery requires --gltf-path", file=sys.stderr)
             return 1
-    else:
+        if not args.texture_dirs:
+            print("ERROR: --no-discovery requires --texture-dirs", file=sys.stderr)
+            return 1
+        if not args.liveries:
+            print("ERROR: --no-discovery requires --liveries", file=sys.stderr)
+            return 1
+
+        # Determine source type from folder name
+        folder_name = source_path.name
+        source_type = 'fsltl' if folder_name.lower().startswith('fsltl') else 'aig'
+
+        # Extract aircraft type from folder name
+        parts = folder_name.split('_')
+        if folder_name.startswith('FSLTL_'):
+            aircraft_type = parts[1] if len(parts) > 1 else ''
+        elif folder_name.startswith('AIGAIM_'):
+            aircraft_type = parts[2].split('-')[0] if len(parts) > 2 else ''
+        else:
+            aircraft_type = parts[1] if len(parts) > 1 else folder_name
+
+        # Create livery entries directly from arguments
+        all_liveries = []
+        for title in requested_titles:
+            all_liveries.append({
+                'source': source_type,
+                'folder_name': folder_name,
+                'livery_title': title,
+                'texture_folder': '',
+                'icao_airline': None,
+                'gltf_path': str(explicit_gltf_path),
+                'texture_dirs': [str(d) for d in explicit_texture_dirs],
+                'aircraft_type': aircraft_type,
+            })
+
+        print(f"No-discovery mode: {len(all_liveries)} liveries from arguments")
         liveries_to_convert = all_liveries
-        print(f"Converting all {len(liveries_to_convert)} liveries")
+
+    else:
+        # Discovery mode: auto-detect liveries from source path
+
+        # Discover liveries (auto-detects batch vs on-demand based on source path)
+        # Pass requested_titles for early stopping optimization if specified
+        # Pass explicit_gltf_path to allow discovery even when source folder has no GLTF
+        print(f"Discovering liveries in {source_path}...")
+        all_liveries = discover_liveries_in_source(source_path, requested_titles, explicit_gltf_path)
+
+        if not all_liveries:
+            print("ERROR: No liveries found in source directory")
+            return 1
+
+        # Apply explicit overrides if provided (for AIG shared models)
+        if explicit_gltf_path or explicit_texture_dirs:
+            for livery in all_liveries:
+                if explicit_gltf_path:
+                    livery['gltf_path'] = explicit_gltf_path
+                    # Also update base_model_dir to the folder containing the GLTF
+                    livery['base_model_dir'] = explicit_gltf_path.parent.parent
+                if explicit_texture_dirs:
+                    # Prepend explicit texture dirs (they take priority)
+                    livery['texture_dirs'] = explicit_texture_dirs + livery.get('texture_dirs', [])
+
+    # Only do filtering if we're not in no-discovery mode (where liveries_to_convert is already set)
+    if not args.no_discovery:
+        folder_name = source_path.name
+        if folder_name.startswith("FSLTL_") or folder_name.startswith("AIGAIM_"):
+            print(f"Found {len(all_liveries)} liveries in {folder_name}")
+        else:
+            print(f"Found {len(all_liveries)} total liveries")
+
+        # Filter by requested liveries if specified
+        if requested_titles:
+            liveries_to_convert = [liv for liv in all_liveries if liv['livery_title'] in requested_titles]
+            print(f"Filtering to {len(liveries_to_convert)} requested liveries")
+
+            # If specific liveries were requested but none found, that's an error
+            if not liveries_to_convert:
+                not_found = requested_titles - {liv['livery_title'] for liv in all_liveries}
+                print("ERROR: None of the requested liveries were found in source", file=sys.stderr)
+                print(f"Requested: {requested_titles}", file=sys.stderr)
+                if not_found:
+                    print(f"Not found: {not_found}", file=sys.stderr)
+                # Show some available liveries for debugging
+                available = [liv['livery_title'] for liv in all_liveries[:10]]
+                print(f"Available (first 10): {available}", file=sys.stderr)
+                return 1
+        else:
+            liveries_to_convert = all_liveries
+            print(f"Converting all {len(liveries_to_convert)} liveries")
 
     # Determine worker count
     if args.workers <= 0:

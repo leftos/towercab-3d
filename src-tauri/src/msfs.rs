@@ -16,7 +16,7 @@ use tauri::{Emitter, Manager};
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 
-use crate::normalize_path_string;
+use crate::{normalize_path_string, to_extended_length_path};
 
 // =============================================================================
 // TYPES
@@ -242,7 +242,7 @@ struct ModelIndexCache {
     models: Vec<SourceModelInfo>,
 }
 
-const MODEL_CACHE_VERSION: u32 = 6; // Bump when cache format changes (v6: added base_container support for FSLTL freighter variants)
+const MODEL_CACHE_VERSION: u32 = 8; // Bump when cache format changes (v8: livery-specific texture_dirs prioritization)
 
 /// Get the modification time of a folder (recursive max mtime would be too slow)
 fn get_folder_mtime(path: &std::path::Path) -> Option<u64> {
@@ -530,6 +530,200 @@ fn find_gltf_in_model_dir(model_dir: &std::path::Path) -> Option<String> {
     exterior_gltf.map(|e| normalize_path_string(&e.path()))
 }
 
+/// Parse an MSFS model XML file to find the GLTF filename.
+///
+/// MSFS model XMLs have a LODS section listing the model files:
+/// ```xml
+/// <LODS>
+///   <LOD minSize="8" ModelFile="B772_PW_LOD0.gltf"/>
+///   <LOD minSize="1" ModelFile="B772_PW_LOD1.gltf"/>
+/// </LODS>
+/// ```
+///
+/// Returns the path to the highest-quality LOD (highest minSize), or None.
+fn parse_model_xml(xml_path: &std::path::Path) -> Option<String> {
+    use quick_xml::events::Event;
+    use quick_xml::Reader;
+
+    let content = fs::read_to_string(xml_path).ok()?;
+    let mut reader = Reader::from_str(&content);
+
+    let mut best_lod: Option<(i32, String)> = None;
+
+    loop {
+        match reader.read_event() {
+            Ok(Event::Empty(ref e)) | Ok(Event::Start(ref e)) if e.name().as_ref() == b"LOD" => {
+                let mut min_size = 0i32;
+                let mut model_file = String::new();
+
+                for attr in e.attributes().filter_map(|a| a.ok()) {
+                    match attr.key.as_ref() {
+                        b"minSize" => {
+                            if let Ok(s) = std::str::from_utf8(&attr.value) {
+                                min_size = s.parse().unwrap_or(0);
+                            }
+                        }
+                        b"ModelFile" => {
+                            if let Ok(s) = std::str::from_utf8(&attr.value) {
+                                model_file = s.to_string();
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+
+                if !model_file.is_empty() {
+                    if best_lod.is_none() || min_size > best_lod.as_ref().unwrap().0 {
+                        best_lod = Some((min_size, model_file));
+                    }
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(_) => break,
+            _ => {}
+        }
+    }
+
+    if let Some((_, model_file)) = best_lod {
+        let gltf_path = xml_path.parent()?.join(&model_file);
+        if gltf_path.exists() {
+            return Some(normalize_path_string(&gltf_path));
+        }
+    }
+
+    None
+}
+
+/// Parse a model.cfg file to find the referenced base GLTF.
+///
+/// MSFS livery folders have a model.XXX/model.cfg that points to the base model:
+/// ```ini
+/// [models]
+/// normal=..\..\FSLTL_A320\model.iae\FAIB_A320_IAE.xml
+/// ```
+///
+/// This function:
+/// 1. Parses model.cfg to find the `normal=` line
+/// 2. Resolves the relative path to find the XML file
+/// 3. Parses the XML to get the actual GLTF filename
+///
+/// Returns the resolved GLTF path, or None.
+fn parse_model_cfg(model_cfg_path: &std::path::Path) -> Option<String> {
+    let content = fs::read_to_string(model_cfg_path).ok()?;
+    let parent_dir = model_cfg_path.parent()?;
+
+    for line in content.lines() {
+        let line = line.trim();
+        let lower = line.to_lowercase();
+
+        if lower.starts_with("normal=") {
+            // Extract the path after "normal="
+            let rel_path = line.split_once('=')?.1.trim();
+            if rel_path.is_empty() {
+                continue;
+            }
+
+            // Convert backslashes to forward slashes for path joining
+            let rel_path = rel_path.replace('\\', "/");
+
+            // The path should point to an .xml file
+            if rel_path.to_lowercase().ends_with(".xml") {
+                // Resolve relative to model.cfg's parent directory
+                let xml_path = parent_dir.join(&rel_path);
+                let xml_path = match xml_path.canonicalize() {
+                    Ok(p) => p,
+                    Err(_) => xml_path, // Try non-canonicalized if it fails
+                };
+
+                if xml_path.exists() {
+                    // Parse the XML to get the actual GLTF filename
+                    if let Some(gltf_path) = parse_model_xml(&xml_path) {
+                        return Some(gltf_path);
+                    }
+                }
+
+                // Fallback: derive GLTF name from XML name
+                // e.g., model.iae/FAIB_A320_IAE.xml -> model.iae/FAIB_A320_IAE_LOD0.gltf
+                let gltf_base = rel_path.trim_end_matches(".xml").trim_end_matches(".XML");
+                let abs_path = parent_dir.join(gltf_base);
+                if let Some(gltf_dir) = abs_path.parent() {
+                    if let Some(gltf_stem) = abs_path.file_name() {
+                        let gltf_stem = gltf_stem.to_string_lossy();
+                        // Look for LOD0 first (highest quality), then any LOD
+                        for suffix in ["_LOD0.gltf", "_LOD0.GLTF", "_LOD1.gltf", "_LOD1.GLTF"] {
+                            let candidate = gltf_dir.join(format!("{}{}", gltf_stem, suffix));
+                            if candidate.exists() {
+                                return Some(normalize_path_string(&candidate));
+                            }
+                        }
+                        // Fall back to any GLTF with matching prefix
+                        if let Ok(entries) = fs::read_dir(gltf_dir) {
+                            for entry in entries.filter_map(|e| e.ok()) {
+                                let name = entry.file_name().to_string_lossy().to_string();
+                                if name.starts_with(&*gltf_stem)
+                                    && (name.to_lowercase().ends_with(".gltf"))
+                                {
+                                    return Some(normalize_path_string(&entry.path()));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// Resolve GLTF path by checking model.cfg files in an aircraft directory.
+///
+/// This is used for livery-only folders that don't contain GLTF files directly,
+/// but have a model.XXX/model.cfg that references a base model's XML file.
+///
+/// Returns (gltf_path, base_model_dir) where base_model_dir is the parent folder
+/// of the resolved GLTF (useful for texture fallback).
+fn resolve_gltf_via_model_cfg(aircraft_dir: &std::path::Path) -> Option<(String, PathBuf)> {
+    // Find all model.* directories
+    let model_dirs: Vec<_> = fs::read_dir(aircraft_dir)
+        .ok()?
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            e.path().is_dir()
+                && e.file_name()
+                    .to_string_lossy()
+                    .to_lowercase()
+                    .starts_with("model")
+        })
+        .collect();
+
+    for model_dir_entry in model_dirs {
+        let model_dir = model_dir_entry.path();
+
+        // Look for model.cfg (case-insensitive)
+        let model_cfg = if model_dir.join("model.cfg").exists() {
+            model_dir.join("model.cfg")
+        } else if model_dir.join("model.CFG").exists() {
+            model_dir.join("model.CFG")
+        } else {
+            continue;
+        };
+
+        if let Some(gltf_path) = parse_model_cfg(&model_cfg) {
+            // The base model directory is two levels up from the GLTF file:
+            // model.xxx/file.gltf -> aircraft folder
+            let gltf_path_buf = PathBuf::from(&gltf_path);
+            if let Some(model_subdir) = gltf_path_buf.parent() {
+                if let Some(base_dir) = model_subdir.parent() {
+                    return Some((gltf_path, base_dir.to_path_buf()));
+                }
+            }
+        }
+    }
+
+    None
+}
+
 /// Parse aircraft type from folder name
 /// Handles both FSLTL (FSLTL_B738_AAL) and AIG (AIGAIM_TFS_B777-200ER_GE) patterns
 fn parse_aircraft_type(folder_name: &str, prefix: &str) -> String {
@@ -690,11 +884,26 @@ fn list_models_unified(
         });
 
         // Find GLTF - check multiple sources in priority order:
-        // 1. Direct GLTF in this folder
-        // 2. FSLTL base_container (e.g., B77LF_FDX -> FSLTL_B77LF for freighter model)
-        // 3. For AIG: Pre-built shared model index (by icao_type + model_folder)
-        // 4. Base models registry by ICAO type (FSLTL pattern)
+        // 1. Direct GLTF in this folder (base models have GLTF directly)
+        // 2. model.cfg reference (livery folders reference base model via model.cfg)
+        // 3. FSLTL base_container (e.g., B77LF_FDX -> FSLTL_B77LF for freighter model)
+        // 4. For AIG: Pre-built shared model index (by icao_type + model_folder)
+        // 5. Base models registry by ICAO type (FSLTL pattern, last resort)
+        //
+        // Also track if we resolved via model.cfg, as this gives us the base model
+        // directory for texture fallback.
+        let mut model_cfg_base_dir: Option<PathBuf> = None;
+
         let gltf_path = find_gltf_in_dir(aircraft_dir)
+            .or_else(|| {
+                // Check model.cfg files in model.* directories
+                // This handles livery-only folders that reference a base model
+                if let Some((gltf, base_dir)) = resolve_gltf_via_model_cfg(aircraft_dir) {
+                    model_cfg_base_dir = Some(base_dir);
+                    return Some(gltf);
+                }
+                None
+            })
             .or_else(|| {
                 // Check base_container's model folder (FSLTL variation pattern)
                 if let Some(ref bc_path) = base_container_path {
@@ -743,6 +952,17 @@ fn list_models_unified(
                 }
             }
 
+            // Add model.cfg base directory texture directories
+            // (e.g., FSLTL_A321/TEXTURE when A321_DAL references it via model.cfg)
+            if let Some(ref cfg_base) = model_cfg_base_dir {
+                let cfg_texture_dirs = collect_texture_dirs(cfg_base);
+                for cfg_dir in cfg_texture_dirs {
+                    if !dirs.contains(&cfg_dir) {
+                        dirs.push(cfg_dir);
+                    }
+                }
+            }
+
             // Add base model texture directories as fallback (for shared textures like portholes)
             if let Some((_, base_tex_dirs)) = base_models.get(&aircraft_type) {
                 for base_dir in base_tex_dirs {
@@ -787,13 +1007,39 @@ fn list_models_unified(
                         .filter(|s| s.len() == 3 || s.len() == 4)
                 });
 
+                // Build livery-specific texture_dirs:
+                // 1. The livery's specific texture folder (e.g., "texture.ASA") - FIRST/PRIMARY
+                // 2. Shared texture directories as fallback
+                // This ensures the correct livery textures are used, not just alphabetically first
+                let mut livery_texture_dirs: Vec<String> = Vec::new();
+
+                // Add the livery-specific texture folder first (highest priority)
+                if !livery.texture_folder.is_empty() {
+                    // Try both "texture.{name}" and "Texture.{name}" patterns
+                    let specific_texture_dir = aircraft_dir.join(format!("texture.{}", livery.texture_folder));
+                    let specific_texture_dir_cap = aircraft_dir.join(format!("Texture.{}", livery.texture_folder));
+
+                    if specific_texture_dir.exists() {
+                        livery_texture_dirs.push(normalize_path_string(&specific_texture_dir));
+                    } else if specific_texture_dir_cap.exists() {
+                        livery_texture_dirs.push(normalize_path_string(&specific_texture_dir_cap));
+                    }
+                }
+
+                // Add other texture directories as fallback (for shared textures like portholes)
+                for dir in &folder_texture_dirs {
+                    if !livery_texture_dirs.contains(dir) {
+                        livery_texture_dirs.push(dir.clone());
+                    }
+                }
+
                 models.push(SourceModelInfo {
                     source: config.source.to_string(),
                     model_name: livery.title.clone(),
                     folder_name: folder_name.clone(),
                     aircraft_folder_path: normalize_path_string(&aircraft_dir),
                     gltf_path: gltf_path.clone(),
-                    texture_dirs: folder_texture_dirs.clone(),
+                    texture_dirs: livery_texture_dirs,
                     aircraft_type: aircraft_type.clone(),
                     airline_code,
                     atc_id: livery.atc_id.clone(),
@@ -1117,13 +1363,16 @@ pub async fn convert_msfs_model(
     fs::create_dir_all(&output_dir)
         .map_err(|e| format!("Failed to create output directory: {}", e))?;
 
-    // Build command arguments
+    // Build command arguments with extended-length paths to support paths > 260 chars on Windows
+    let ext_source = to_extended_length_path(&source_path);
+    let ext_output = to_extended_length_path(&output_dir);
+
     let mut cmd = Command::new(&converter_path);
     cmd.args([
         "--source",
-        &source_path,
+        &ext_source,
         "--output",
-        &output_dir,
+        &ext_output,
         "--texture-scale",
         &texture_scale,
     ]);
@@ -1133,18 +1382,34 @@ pub async fn convert_msfs_model(
         cmd.args(["--liveries", &livery_title]);
     }
 
-    // Pass explicit GLTF path for AIG shared models where GLTF is in a different folder
+    // Use --no-discovery mode: Rust has already resolved all paths via model.cfg parsing,
+    // so we skip Python's discovery and pass all required data directly.
+    // This ensures consistent behavior - Rust is the single source of truth for path resolution.
+    let use_no_discovery = gltf_path.as_ref().map_or(false, |p| !p.is_empty())
+        && texture_dirs.as_ref().map_or(false, |t| !t.is_empty())
+        && !livery_title.is_empty();
+
+    if use_no_discovery {
+        cmd.arg("--no-discovery");
+    }
+
+    // Pass GLTF path (required for --no-discovery, optional otherwise)
     if let Some(gltf) = &gltf_path {
         if !gltf.is_empty() {
-            cmd.args(["--gltf-path", gltf]);
+            let ext_gltf = to_extended_length_path(gltf);
+            cmd.args(["--gltf-path", &ext_gltf]);
         }
     }
 
-    // Pass pre-computed texture directories from indexing
-    // Critical for AIG shared models where textures are in a different folder than the GLTF
+    // Pass texture directories (required for --no-discovery, optional otherwise)
     if let Some(tex_dirs) = &texture_dirs {
         if !tex_dirs.is_empty() {
-            let tex_dirs_str = tex_dirs.join(",");
+            // Convert each texture directory to extended-length path
+            let ext_tex_dirs: Vec<String> = tex_dirs
+                .iter()
+                .map(|d| to_extended_length_path(d))
+                .collect();
+            let tex_dirs_str = ext_tex_dirs.join(",");
             cmd.args(["--texture-dirs", &tex_dirs_str]);
         }
     }
@@ -1440,13 +1705,16 @@ pub fn convert_model_by_name(
     fs::create_dir_all(&output_dir)
         .map_err(|e| format!("Failed to create output directory: {}", e))?;
 
-    // Build command arguments
+    // Build command arguments with extended-length paths to support paths > 260 chars on Windows
+    let ext_source = to_extended_length_path(&model.aircraft_folder_path);
+    let ext_output = to_extended_length_path(&output_dir);
+
     let mut cmd = Command::new(&converter_path);
     cmd.args([
         "--source",
-        &model.aircraft_folder_path,
+        &ext_source,
         "--output",
-        &output_dir,
+        &ext_output,
         "--texture-scale",
         texture_scale,
         "--liveries",
@@ -1455,12 +1723,19 @@ pub fn convert_model_by_name(
 
     // Pass explicit GLTF path if available
     if !model.gltf_path.is_empty() {
-        cmd.args(["--gltf-path", &model.gltf_path]);
+        let ext_gltf = to_extended_length_path(&model.gltf_path);
+        cmd.args(["--gltf-path", &ext_gltf]);
     }
 
     // Pass texture directories if available
     if !model.texture_dirs.is_empty() {
-        let tex_dirs_str = model.texture_dirs.join(",");
+        // Convert each texture directory to extended-length path
+        let ext_tex_dirs: Vec<String> = model
+            .texture_dirs
+            .iter()
+            .map(|d| to_extended_length_path(d))
+            .collect();
+        let tex_dirs_str = ext_tex_dirs.join(",");
         cmd.args(["--texture-dirs", &tex_dirs_str]);
     }
 

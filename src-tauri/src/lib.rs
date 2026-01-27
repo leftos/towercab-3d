@@ -220,6 +220,33 @@ pub fn normalize_path_string(path: &PathBuf) -> String {
     }
 }
 
+/// Convert a path to Windows extended-length format (\\?\) to support paths > 260 chars.
+/// Returns the original string if not on Windows or if already prefixed.
+#[cfg(windows)]
+pub fn to_extended_length_path(path: &str) -> String {
+    // Already has prefix
+    if path.starts_with(r"\\?\") {
+        return path.to_string();
+    }
+    // UNC paths need different handling (\\server\share -> \\?\UNC\server\share)
+    if path.starts_with(r"\\") {
+        return format!(r"\\?\UNC\{}", &path[2..]);
+    }
+    // Regular absolute paths (C:\... -> \\?\C:\...)
+    if path.len() >= 2 && path.chars().nth(1) == Some(':') {
+        // Ensure backslashes for extended-length paths
+        let normalized = path.replace('/', r"\");
+        return format!(r"\\?\{}", normalized);
+    }
+    // Relative paths can't use extended-length format
+    path.to_string()
+}
+
+#[cfg(not(windows))]
+pub fn to_extended_length_path(path: &str) -> String {
+    path.to_string()
+}
+
 // =============================================================================
 // HTTP SERVER
 // =============================================================================

@@ -117,8 +117,10 @@ export interface MSFSDetectionResult {
  *   3: Fixed steering animations by using identity quaternion frame instead of frame 0
  *   4: Fixed model.cfg parsing to read GLTF filename from XML (fixes wrong engine variant textures)
  *   5: Fixed base_container resolution for FSLTL freighter variants (e.g., B77LF, B744F)
+ *   6: Added --no-discovery mode; Rust now handles model.cfg parsing (fixes wrong engine variant for liveries)
+ *   7: FROST materials (MSFS 2024 GeoDecalFrosted) made fully transparent instead of magenta
  */
-const CONVERTER_VERSION = 5
+const CONVERTER_VERSION = 7
 
 // =============================================================================
 // Service Class
@@ -159,8 +161,11 @@ class MSFSModelConversionServiceClass {
   private aigModels = new Map<string, SourceModelInfo>()
 
 
-  /** Whether the service has been initialized */
-  private initialized = false
+  /** Initialization promise - allows multiple callers to await the same initialization */
+  private initPromise: Promise<void> | null = null
+
+  /** Whether initialization has completed (for stats/diagnostics) */
+  private initCompleted = false
 
   // ===========================================================================
   // INITIALIZATION
@@ -171,8 +176,21 @@ class MSFSModelConversionServiceClass {
    * @param onProgress Optional callback to report progress during initialization (status, percentage 0-100)
    */
   async initialize(onProgress?: (status: string, progress?: number) => void): Promise<void> {
-    if (this.initialized) return
-    this.initialized = true // Set immediately to prevent concurrent initialization (StrictMode)
+    // If initialization already started, return the existing promise
+    // This ensures React StrictMode double-invocations await the same initialization
+    if (this.initPromise) {
+      return this.initPromise
+    }
+
+    // Create and store the initialization promise
+    this.initPromise = this.doInitialize(onProgress)
+    return this.initPromise
+  }
+
+  /**
+   * Internal initialization logic
+   */
+  private async doInitialize(onProgress?: (status: string, progress?: number) => void): Promise<void> {
 
     const settings = useGlobalSettingsStore.getState().msfsModels
     console.log('[MSFSConversion] Initialize settings:', {
@@ -218,6 +236,7 @@ class MSFSModelConversionServiceClass {
       )
     }
 
+    this.initCompleted = true
     console.log('[MSFSConversion] Service initialized')
   }
 
@@ -1467,7 +1486,7 @@ class MSFSModelConversionServiceClass {
       fsltlCount: this.fsltlModels.size,
       aigCount: this.aigModels.size,
       cacheCount: this.memoryCache.size,
-      isInitialized: this.initialized
+      isInitialized: this.initCompleted
     }
   }
 }

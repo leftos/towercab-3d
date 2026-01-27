@@ -14,6 +14,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 ### Fixed
 - **Tower mod position and height now work correctly** - Fixed a bug where `heightOffset` was applied twice when using custom `position` in tower mod manifests, causing models to appear too high.
 - **Ground aircraft no longer bank during turns** - Aircraft clamped to the ground now steer with yaw only (like real nosewheel/rudder steering) instead of banking when turning at speeds above 40 knots.
+- **MSFS 2024 FROST materials no longer render as magenta** - Aircraft models with MSFS 2024's "FROST" effect material (ice/frost on surfaces) now render with a solid color sampled from the livery texture instead of showing magenta placeholder areas.
+- **AIG livery matching now uses correct textures** - Fixed AIG aircraft showing wrong airline liveries (e.g., Alaska Airlines displaying American Airlines colors). The converter now prioritizes each livery's specific texture folder instead of picking alphabetically.
+- **FSLTL livery folders now resolve correct model and textures** - Fixed FSLTL livery-only folders (those referencing a base model via model.cfg) showing white aircraft or wrong engine variant textures. Path resolution now correctly parses model.cfg to find the exact GLTF file and includes base model textures.
 - **Installer now cleans up old bundled tower positions** - Upgrading from versions before 0.0.32-alpha no longer leaves stale tower position files in the mods folder that shadow updated bundled defaults.
 
 ## [0.0.38-alpha] - 2026-01-24

@@ -511,6 +511,187 @@ if target_path == 'rotation' and keyframe_count > 1:
 - Animations with identity keyframes use the neutral position
 - Animations without identity keyframes use frame 0 (existing behavior)
 
+### FSLTL Model.cfg Path Resolution (Fixed)
+
+**Problem**: FSLTL livery folders that reference a base model via `model.cfg` showed white/untextured aircraft or used wrong engine variant textures.
+
+**Root Cause**: The Python converter's discovery logic for finding GLTF files was inconsistent:
+1. Some livery folders don't contain GLTF directly - they have a `model.XXX/model.cfg` that points to a base model's XML
+2. The XML file contains the actual GLTF filename (which varies by engine variant)
+3. Python was sometimes deriving the GLTF name incorrectly or using the wrong variant
+
+**MSFS Model Reference Structure**:
+```
+FSLTL_A321_DAL/              (livery folder)
+├── aircraft.cfg             (defines liveries)
+└── model.iae/               (model variant folder)
+    └── model.cfg            (references base model)
+        [models]
+        normal=..\..\FSLTL_A321\model.iae\FAIB_A321_IAE.xml
+
+FSLTL_A321/                  (base model folder)
+├── model.iae/
+│   ├── FAIB_A321_IAE.xml    (model XML - contains GLTF filename)
+│   └── FAIB_A321_IAE_LOD0.gltf
+└── TEXTURE/
+    └── (shared textures)
+```
+
+**Fix**: Moved model.cfg parsing to Rust backend with two new functions:
+
+```rust
+/// Parse model XML to find GLTF filename from LODS section
+fn parse_model_xml(xml_path: &Path) -> Option<String> {
+    // Parse XML, find LOD with highest minSize
+    // Return path to that GLTF file
+}
+
+/// Parse model.cfg to find referenced base GLTF
+fn parse_model_cfg(model_cfg_path: &Path) -> Option<String> {
+    // Find "normal=..." line
+    // Resolve relative path to XML
+    // Call parse_model_xml() to get actual GLTF filename
+}
+
+/// Resolve GLTF by checking model.cfg files in aircraft directory
+fn resolve_gltf_via_model_cfg(aircraft_dir: &Path) -> Option<(String, PathBuf)> {
+    // Find all model.* directories
+    // Check each for model.cfg
+    // Return (gltf_path, base_model_dir)
+}
+```
+
+**--no-discovery Mode**: The converter now uses `--no-discovery` mode where Rust provides all resolved paths directly:
+- `--gltf-path`: The exact GLTF file to convert (resolved via model.cfg)
+- `--texture-dirs`: Pre-computed texture directories including base model's textures
+- Python converter trusts these paths instead of doing its own discovery
+
+This ensures consistent behavior - Rust is the single source of truth for path resolution.
+
+**Texture Directory Resolution**: When resolving via model.cfg, the base model's texture directories are added as fallback:
+```rust
+// Add model.cfg base directory texture directories
+if let Some(ref cfg_base) = model_cfg_base_dir {
+    let cfg_texture_dirs = collect_texture_dirs(cfg_base);
+    for cfg_dir in cfg_texture_dirs {
+        if !dirs.contains(&cfg_dir) {
+            dirs.push(cfg_dir);
+        }
+    }
+}
+```
+
+**Result**: FSLTL liveries now correctly use:
+- The exact GLTF file specified in the XML (correct engine variant)
+- Textures from both the livery folder and the base model folder
+
+### MSFS 2024 FROST Material (Fixed)
+
+**Problem**: MSFS 2024 aircraft models have a "FROST" material that creates ice/frost effects on surfaces. After conversion, these areas render as magenta (missing texture placeholder).
+
+**Root Cause**: The FROST material uses `ASOBO_material_blend_gbuffer` extension for blending frost effects onto underlying surfaces. When ASOBO extensions are stripped during conversion, the material becomes invalid.
+
+**Investigation**:
+```
+Analysis of C208B GLTF materials:
+  Material 11 "FROST":
+    - ASOBO_material_blend_gbuffer (blend factors for frost effect)
+    - ASOBO_material_detail_map (frost texture detail)
+    - ASOBO_material_draw_order
+
+Other materials also use blend_gbuffer but for different purposes:
+  - DECALS: registration decals
+  - LIVERY: airline paint scheme
+  - FUELCAP: fuel cap details
+  - $RegistrationNumber: tail number
+
+Cannot simply make all blend_gbuffer materials transparent!
+```
+
+**Fix**: Detect materials named "FROST" specifically and replace with a solid color sampled from the livery texture:
+
+```python
+# Sample dominant light color from LIVERY texture for FROST replacement
+frost_replacement_color = None
+for mat in gltf['materials']:
+    if mat.get('name', '').upper() == 'LIVERY':
+        # Get base color texture, sample dominant white/light color
+        frost_replacement_color = sample_dominant_light_color(livery_texture)
+        break
+
+# Apply to FROST materials
+for mat in gltf['materials']:
+    if mat.get('name', '').upper() == 'FROST':
+        r, g, b = frost_replacement_color or (0.95, 0.95, 0.95)
+        mat['alphaMode'] = 'OPAQUE'
+        mat['pbrMetallicRoughness'] = {
+            'baseColorFactor': [r, g, b, 1.0],
+            'metallicFactor': 0.0,
+            'roughnessFactor': 1.0
+        }
+```
+
+The `sample_dominant_light_color()` function:
+1. Resizes texture to 128px for fast sampling
+2. Filters pixels to those with brightness > 200 (light colors)
+3. Quantizes to 10-unit buckets and finds most common
+4. Returns normalized RGB or default off-white (0.95, 0.95, 0.95)
+
+**Result**: FROST areas now render with a solid color matching the aircraft's paint scheme instead of magenta placeholders.
+
+### AIG Livery Texture Priority (Fixed)
+
+**Problem**: AIG aircraft displayed wrong airline liveries. For example, Alaska Airlines EMB-175 showed American Airlines colors.
+
+**Root Cause**: When building the `texture_dirs` list for each livery, ALL texture directories from the aircraft folder were included for EVERY livery. The converter would pick textures alphabetically, so "AAL" (American) came before "ASA" (Alaska).
+
+**Investigation**:
+```
+aircraft.cfg for AIG EMB-175:
+  [FLTSIM.0] - Alaska Airlines
+    texture=ASA-Alaska Airlines
+  [FLTSIM.1] - American Airlines
+    texture=AAL-American Airlines
+
+Texture folders in aircraft directory:
+  texture.AAL-American Airlines/
+  texture.ASA-Alaska Airlines/
+
+Old behavior: Both liveries got texture_dirs = [AAL folder, ASA folder]
+Converter picked first match = AAL textures for both liveries!
+```
+
+**Fix**: Build livery-specific texture_dirs that prioritizes each livery's specific texture folder:
+
+```rust
+// In msfs.rs, when creating SourceModelInfo for each livery:
+let mut livery_texture_dirs: Vec<String> = Vec::new();
+
+// 1. Add livery-specific texture folder FIRST (highest priority)
+if !livery.texture_folder.is_empty() {
+    let specific = aircraft_dir.join(format!("texture.{}", livery.texture_folder));
+    if specific.exists() {
+        livery_texture_dirs.push(normalize_path_string(&specific));
+    }
+}
+
+// 2. Add shared texture directories as fallback
+for dir in &folder_texture_dirs {
+    if !livery_texture_dirs.contains(dir) {
+        livery_texture_dirs.push(dir.clone());
+    }
+}
+
+models.push(SourceModelInfo {
+    texture_dirs: livery_texture_dirs,  // Livery-specific, not folder_texture_dirs.clone()
+    // ...
+});
+```
+
+**Result**: Each AIG livery now uses its own texture folder first, with shared textures as fallback. Alaska Airlines aircraft correctly display Alaska livery.
+
+**Cache Invalidation**: Bumped `MODEL_CACHE_VERSION` to 8 to force re-indexing of AIG models with corrected texture directory priority.
+
 ## Embedded Source Metadata
 
 Converted GLB files contain embedded source metadata in `asset.extras.towercab3d`:
@@ -547,6 +728,9 @@ The `converterVersion` field tracks which version of the conversion logic was us
 - **Version 2**: Added animation baking for MSFS models (fixes misaligned flaps, slats, gear, spoilers, etc.)
 - **Version 3**: Fixed steering animations by using identity quaternion frame instead of frame 0
 - **Version 4**: Fixed model.cfg parsing to read GLTF filename from XML (fixes wrong engine variant textures causing white models)
+- **Version 5**: Fixed base_container resolution for FSLTL freighter variants (e.g., B77LF, B744F)
+- **Version 6**: Added --no-discovery mode; Rust now handles model.cfg parsing (fixes wrong engine variant for liveries)
+- **Version 7**: FROST materials (MSFS 2024 GeoDecalFrosted) replaced with solid color sampled from livery texture
 
 **Implementation:**
 - Python converter: `CONVERTER_VERSION` constant in `convert_fsltl_batch.py`
