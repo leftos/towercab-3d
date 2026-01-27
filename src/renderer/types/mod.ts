@@ -51,6 +51,7 @@ export interface TowerCameraPosition {
   lon: number       // longitude of camera position
   height: number    // height above ground level in meters
   heading?: number  // default camera heading in degrees (0=north, 90=east)
+  pitch?: number    // camera pitch in degrees (0=horizon, negative=look down)
 }
 
 export interface TowerModManifest {

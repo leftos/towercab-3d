@@ -157,6 +157,12 @@ pub fn is_path_writable(path: &PathBuf) -> bool {
     }
 }
 
+/// Check if a path is writable (Tauri command wrapper)
+#[tauri::command]
+pub fn check_path_writable(path: String) -> bool {
+    is_path_writable(&PathBuf::from(&path))
+}
+
 // =============================================================================
 // FSLTL LEGACY COMMANDS (kept for backward compatibility)
 // =============================================================================

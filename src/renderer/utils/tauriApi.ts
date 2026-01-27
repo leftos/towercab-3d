@@ -157,6 +157,28 @@ export const modApi = {
   },
 
   /**
+   * Write a text file to disk (creates parent directories if needed)
+   */
+  writeTextFile: async (path: string, content: string): Promise<void> => {
+    if (isTauri()) {
+      return invoke<void>('write_text_file', { path, content })
+    }
+    // In browser mode, this is not supported
+    throw new Error('writeTextFile is not supported in browser mode')
+  },
+
+  /**
+   * Check if a directory path is writable
+   */
+  checkPathWritable: async (path: string): Promise<boolean> => {
+    if (isTauri()) {
+      return invoke<boolean>('check_path_writable', { path })
+    }
+    // In browser mode, assume not writable
+    return false
+  },
+
+  /**
    * Load and parse a model manifest.json file
    * Returns manifest data or null if file doesn't exist or is invalid
    */

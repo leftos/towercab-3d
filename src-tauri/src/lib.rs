@@ -893,6 +893,7 @@ pub fn run() {
             files::delete_file,
             files::delete_cache_file,
             files::clear_cache_directory,
+            files::check_path_writable,
             files::validate_fsltl_source,
             files::list_fsltl_aircraft,
             files::get_converter_path,

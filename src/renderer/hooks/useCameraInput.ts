@@ -7,6 +7,7 @@ import { useGlobalSettingsStore } from '../stores/globalSettingsStore'
 import { useUIFeedbackStore } from '../stores/uiFeedbackStore'
 import { useAirportStore } from '../stores/airportStore'
 import { useDatablockPositionStore, type PendingDirection } from '../stores/datablockPositionStore'
+import { useTowerPositioningStore } from '../stores/towerPositioningStore'
 import { hasViewingContext } from '../utils/viewingContext'
 import {
   createVelocityState,
@@ -552,6 +553,91 @@ export function useCameraInput(
       }
 
       const key = event.key
+
+      // Handle tower positioning mode
+      const positioningState = useTowerPositioningStore.getState()
+      if (positioningState.isActive) {
+        if (positioningState.step === 'model') {
+          // Step 1: Model Positioning
+          // Tab toggles between model and camera control modes
+          if (key === 'Tab') {
+            event.preventDefault()
+            positioningState.toggleStep1ControlMode()
+            return
+          }
+
+          // Handle Enter/Escape regardless of control mode
+          if (key === 'Enter') {
+            positioningState.proceedToStep2()
+            return
+          }
+          if (key === 'Escape') {
+            positioningState.stopPositioning()
+            return
+          }
+
+          // If in camera control mode, allow normal camera movement
+          if (positioningState.step1ControlMode === 'camera') {
+            // Continue to normal key handling below
+          } else {
+            // Model control mode - control the model with WASD/QE/ZX
+            // Movement speed: 1m base, 10m with Shift, 0.1m with Ctrl
+            const speed = event.shiftKey ? 10 : event.ctrlKey ? 0.1 : 1
+            // Rotation speed: 5 deg base, 45 deg with Shift, 1 deg with Ctrl
+            const rotSpeed = event.shiftKey ? 45 : event.ctrlKey ? 1 : 5
+
+            switch (key.toLowerCase()) {
+              case 'w':
+              case 'arrowup':
+                positioningState.adjustModelOffset('north', speed)
+                return
+              case 's':
+              case 'arrowdown':
+                positioningState.adjustModelOffset('north', -speed)
+                return
+              case 'a':
+              case 'arrowleft':
+                positioningState.adjustModelOffset('east', -speed)
+                return
+              case 'd':
+              case 'arrowright':
+                positioningState.adjustModelOffset('east', speed)
+                return
+              case 'q':
+                positioningState.adjustModelOffset('up', -speed)
+                return
+              case 'e':
+                positioningState.adjustModelOffset('up', speed)
+                return
+              case 'z':
+                positioningState.adjustModelRotation(-rotSpeed)  // CCW
+                return
+              case 'x':
+                positioningState.adjustModelRotation(rotSpeed)   // CW
+                return
+              case 'r':
+                positioningState.resetModelOffset()
+                return
+            }
+            // Block other keys in model control mode
+            return
+          }
+        } else if (positioningState.step === 'camera') {
+          // Step 2: Camera Positioning - allow normal camera movement, intercept Enter/Esc
+          if (key === 'Enter') {
+            // Save will be handled by the save logic in SettingsModsTab
+            // For now, emit an event or call a save function
+            // The actual save logic will be added when we implement the save functionality
+            window.dispatchEvent(new CustomEvent('tower-positioning-save'))
+            return
+          }
+          if (key === 'Escape') {
+            positioningState.goBackToStep1()
+            return
+          }
+          // Allow normal camera movement - continue to normal key handling
+        }
+      }
 
       // Handle one-shot keys (not continuous movement)
       switch (key) {

@@ -257,7 +257,7 @@ function SettingsModal({ isOpen, onClose, onShowImportModal, onShowExportModal, 
           {activeTab === 'graphics' && <SettingsGraphicsWeatherTab />}
           {activeTab === 'controls' && <SettingsControlsCameraTab />}
           {activeTab === 'performance' && <SettingsPerformanceTab />}
-          {activeTab === 'mods' && <SettingsModsTab />}
+          {activeTab === 'mods' && <SettingsModsTab onRequestClose={onClose} />}
           {activeTab === 'advanced' && <SettingsAdvancedTab />}
         </div>
       </div>

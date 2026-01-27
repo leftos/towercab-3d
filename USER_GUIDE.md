@@ -1072,6 +1072,40 @@ See [MODDING.md](MODDING.md) for complete modding instructions including:
 | Left Arrow | Step backward 15 seconds |
 | Right Arrow | Step forward 15 seconds |
 
+### Tower Positioning Mode (when repositioning tower mods)
+
+**Step 1 - Model Positioning (Model mode):**
+
+| Key | Action |
+|-----|--------|
+| W/S | Move model north/south |
+| A/D | Move model west/east |
+| Q/E | Move model down/up |
+| Z/X | Rotate model (CCW/CW) |
+| Tab | Switch to Camera mode |
+| Shift | Fast movement (10m, 45°) |
+| Ctrl | Fine movement (0.1m, 1°) |
+| R | Reset model to original position |
+| Enter | Proceed to Step 2 (Camera) |
+| Escape | Cancel and exit wizard |
+
+**Step 1 - Model Positioning (Camera mode):**
+
+| Key | Action |
+|-----|--------|
+| Tab | Switch back to Model mode |
+| WASD/QE | Normal camera controls |
+| Enter | Proceed to Step 2 (Camera) |
+| Escape | Cancel and exit wizard |
+
+**Step 2 - Camera Positioning:**
+
+| Key | Action |
+|-----|--------|
+| WASD/QE | Normal camera controls to position viewpoint |
+| Enter | Save model + camera positions and exit |
+| Escape | Go back to Step 1 |
+
 ### Global
 
 | Key | Action |

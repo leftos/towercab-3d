@@ -198,6 +198,33 @@ When these are set, they become the default camera position for that airport (us
 3. **Scale**: Model should be in meters
 4. **Detail**: Include cab windows and basic structure
 
+### Repositioning Tower Models (In-App)
+
+TowerCab 3D includes a built-in tool to reposition tower models without manually editing the manifest. This is useful for fine-tuning placement after installation.
+
+**To reposition a tower mod:**
+
+1. Open **Settings > Mods** tab
+2. Find your tower mod and click **Reposition**
+3. The app enters a two-step positioning wizard:
+
+**Step 1 - Model Positioning:**
+- Use **WASD** to move the tower model north/south/east/west
+- Use **Q/E** to adjust height
+- Use **Z/X** to rotate the model
+- Hold **Shift** for faster movement (10m), **Ctrl** for fine movement (0.1m)
+- Press **Tab** to toggle between model controls and camera controls (so you can adjust your viewing angle)
+- Press **R** to reset to original position
+- Press **Enter** to proceed to Step 2, or **Escape** to cancel
+
+**Step 2 - Camera Positioning:**
+- Use normal camera controls to fly to where you want the default cab viewpoint
+- The overlay shows current lat/lon/height/heading/pitch
+- Press **Enter** to save both positions to the manifest
+- Press **Escape** to go back to Step 1
+
+The updated `modelPosition` and `cameraPosition` are saved directly to your manifest.json file.
+
 ## Custom Tower Positions
 
 TowerCab 3D includes bundled tower positions for **536 US airports** based on FAA obstruction data. These provide accurate tower cab locations and heights, with default headings pointing toward the primary runway approach.

@@ -1,16 +1,29 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
-import { modService, type ModLoadingResult, type TowerModInfo, type ModError } from '../../services/ModService'
+import { useAirportStore } from '../../stores/airportStore'
+import { useUIFeedbackStore } from '../../stores/uiFeedbackStore'
+import { useTowerPositioningStore } from '../../stores/towerPositioningStore'
+import { useViewportStore } from '../../stores/viewportStore'
+import { modService, type ModLoadingResult, type TowerModInfo, type ModError, getCameraPositionFromManifest } from '../../services/ModService'
 import { customVMRService } from '../../services/CustomVMRService'
+import { joinPath } from '../../utils/tauriApi'
 import CollapsibleSection from './settings/CollapsibleSection'
 import './ControlsBar.css'
 
-function SettingsModsTab() {
+interface SettingsModsTabProps {
+  onRequestClose?: () => void
+}
+
+function SettingsModsTab({ onRequestClose }: SettingsModsTabProps) {
   const [modResult, setModResult] = useState<ModLoadingResult | null>(null)
   const [pendingChanges, setPendingChanges] = useState<Set<string>>(new Set())
 
   const disabledMods = useGlobalSettingsStore((state) => state.disabledMods)
   const updateDisabledMods = useGlobalSettingsStore((state) => state.updateDisabledMods)
+  const airports = useAirportStore((state) => state.airports)
+  const selectAirport = useAirportStore((state) => state.selectAirport)
+  const showFeedback = useUIFeedbackStore((state) => state.showFeedback)
+  const startPositioning = useTowerPositioningStore((state) => state.startPositioning)
 
   // Load mod info on mount
   useEffect(() => {
@@ -59,6 +72,60 @@ function SettingsModsTab() {
     setPendingChanges(new Set())
   }, [disabledMods, pendingChanges, updateDisabledMods])
 
+  // Handle starting tower positioning mode
+  const handleStartPositioning = useCallback(async (tower: TowerModInfo) => {
+    if (!tower.placement) {
+      showFeedback('No position data available for this tower', 'error')
+      return
+    }
+
+    const icao = tower.icao.toUpperCase()
+    const manifestPath = await joinPath(tower.path, 'manifest.json')
+
+    // Get model position from placement
+    const modelPosition = {
+      lat: tower.placement.lat,
+      lon: tower.placement.lon,
+      height: tower.placement.height,
+      rotation: tower.placement.rotation
+    }
+
+    // Get camera position from manifest (if available)
+    const cameraPos = getCameraPositionFromManifest(tower.manifest)
+    const cameraPosition = cameraPos ? {
+      lat: cameraPos.lat,
+      lon: cameraPos.lon,
+      height: cameraPos.height,
+      heading: cameraPos.heading,
+      pitch: 0  // Default pitch
+    } : null
+
+    // Switch to the tower's airport (only if not already there)
+    const airport = airports.get(icao)
+    if (!airport) {
+      showFeedback(`Airport ${icao} not found`, 'error')
+      return
+    }
+
+    // Check if we need to switch airports (don't reset camera if already there)
+    const currentIcao = useViewportStore.getState().currentAirportIcao
+    if (currentIcao?.toUpperCase() !== icao) {
+      selectAirport(icao)
+      // Note: We don't reset camera position - user wants to keep their current view
+    }
+
+    // Close the settings modal
+    onRequestClose?.()
+
+    // Sample terrain height at tower position (for accurate model placement)
+    // The positioning store will use 0 initially, and useTowerModel will update it
+    const terrainHeight = 0  // Will be updated by useTowerModel
+
+    // Start the positioning wizard
+    startPositioning(icao, manifestPath, modelPosition, cameraPosition, terrainHeight)
+    showFeedback(`Positioning mode started for ${icao}`, 'success')
+  }, [airports, selectAirport, showFeedback, startPositioning, onRequestClose])
+
   // Get VMR stats
   const vmrStats = customVMRService.getStats()
   const vmrFiles = customVMRService.getLoadedFiles()
@@ -79,6 +146,7 @@ function SettingsModsTab() {
                 tower={tower}
                 isDisabled={isModDisabled(tower.path)}
                 onToggle={() => toggleMod(tower.path)}
+                onPosition={() => handleStartPositioning(tower)}
                 hasPendingChange={pendingChanges.has(tower.path.toLowerCase().replace(/\\/g, '/'))}
               />
             ))}
@@ -197,14 +265,30 @@ function SettingsModsTab() {
           border-radius: 4px;
           padding: 10px 12px;
         }
+        .mod-header-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+        }
         .mod-checkbox {
           display: flex;
           align-items: center;
           gap: 8px;
           cursor: pointer;
+          flex: 1;
         }
         .mod-checkbox input {
           margin: 0;
+        }
+        .position-button {
+          font-size: 12px;
+          padding: 4px 10px;
+          flex-shrink: 0;
+        }
+        .position-button:disabled {
+          opacity: 0.4;
+          cursor: not-allowed;
         }
         .mod-name {
           font-weight: 500;
@@ -309,11 +393,13 @@ function TowerModItem({
   tower,
   isDisabled,
   onToggle,
+  onPosition,
   hasPendingChange
 }: {
   tower: TowerModInfo
   isDisabled: boolean
   onToggle: () => void
+  onPosition: () => void
   hasPendingChange: boolean
 }) {
   const placementText = tower.placement
@@ -325,15 +411,25 @@ function TowerModItem({
 
   return (
     <div className="mod-item">
-      <label className="mod-checkbox">
-        <input
-          type="checkbox"
-          checked={!isDisabled}
-          onChange={onToggle}
-        />
-        <span className="mod-name">{displayName}</span>
-        {hasPendingChange && <span className="pending-badge">*</span>}
-      </label>
+      <div className="mod-header-row">
+        <label className="mod-checkbox">
+          <input
+            type="checkbox"
+            checked={!isDisabled}
+            onChange={onToggle}
+          />
+          <span className="mod-name">{displayName}</span>
+          {hasPendingChange && <span className="pending-badge">*</span>}
+        </label>
+        <button
+          className="control-button position-button"
+          onClick={onPosition}
+          disabled={!tower.placement}
+          title={tower.placement ? 'Reposition this tower model' : 'No position data available'}
+        >
+          Reposition
+        </button>
+      </div>
       <div className="mod-details">
         {tower.manifest.author && (
           <span className="mod-author">by {tower.manifest.author}</span>

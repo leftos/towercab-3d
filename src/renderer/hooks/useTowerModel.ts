@@ -24,6 +24,7 @@
 import { useEffect, useRef } from 'react'
 import * as Cesium from 'cesium'
 import { useAirportStore } from '../stores/airportStore'
+import { useTowerPositioningStore } from '../stores/towerPositioningStore'
 import { modService } from '../services/ModService'
 import { convertToAssetUrlSync } from '../utils/tauriApi'
 
@@ -51,6 +52,10 @@ export function useTowerModel(
   const modelRef = useRef<Cesium.Model | null>(null)
   const currentIcaoRef = useRef<string | null>(null)
   const loadingIcaoRef = useRef<string | null>(null)
+
+  // Track terrain height and scale for positioning mode updates
+  const terrainHeightRef = useRef<number>(0)
+  const scaleRef = useRef<number>(1.0)
 
   useEffect(() => {
     if (!viewer || viewer.isDestroyed() || !enabled) {
@@ -99,6 +104,7 @@ export function useTowerModel(
 
     // Get model scale (default 1.0)
     const scale = manifest.scale ?? 1.0
+    scaleRef.current = scale
 
     console.log(`[useTowerModel] Loading tower model for ${icao}:`, {
       modelUrl,
@@ -123,6 +129,7 @@ export function useTowerModel(
         }
 
         const terrainHeight = sampledPositions[0].height ?? 0
+        terrainHeightRef.current = terrainHeight
 
         // Final height = terrain height + height offset from placement
         const finalHeight = terrainHeight + placement.height
@@ -252,6 +259,70 @@ export function useTowerModel(
       loadingIcaoRef.current = null
     }
   }, [])
+
+  // Subscribe to positioning store for real-time model updates during Step 1
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return
+
+    // Track previous values for comparison
+    let prevOffset = { north: 0, east: 0, up: 0 }
+    let prevRotation = 0
+
+    const unsubscribe = useTowerPositioningStore.subscribe((state) => {
+      // Only update if in model positioning step and we have the model loaded
+      if (!state.isActive || state.step !== 'model' || !modelRef.current) return
+
+      // Only update if targeting the current airport
+      if (state.targetIcao?.toUpperCase() !== currentIcaoRef.current) return
+
+      // Check if offset or rotation actually changed
+      if (
+        state.modelOffset.north === prevOffset.north &&
+        state.modelOffset.east === prevOffset.east &&
+        state.modelOffset.up === prevOffset.up &&
+        state.modelRotation === prevRotation
+      ) {
+        return
+      }
+
+      // Update previous values
+      prevOffset = { ...state.modelOffset }
+      prevRotation = state.modelRotation
+
+      // Get absolute position from the store
+      const newPos = state.getAbsoluteModelPosition()
+      if (!newPos) return
+
+      // Calculate final height (terrain + model height offset)
+      const finalHeight = terrainHeightRef.current + newPos.height
+
+      // Create new position
+      const position = Cesium.Cartesian3.fromDegrees(
+        newPos.lon,
+        newPos.lat,
+        finalHeight
+      )
+
+      // Create heading/pitch/roll
+      const heading = Cesium.Math.toRadians(newPos.rotation)
+      const hpr = new Cesium.HeadingPitchRoll(heading, 0, 0)
+
+      // Create new model matrix
+      const modelMatrix = Cesium.Transforms.headingPitchRollToFixedFrame(position, hpr)
+
+      // Apply scale if needed
+      const scale = scaleRef.current
+      if (scale !== 1.0) {
+        const scaleMatrix = Cesium.Matrix4.fromUniformScale(scale)
+        Cesium.Matrix4.multiply(modelMatrix, scaleMatrix, modelMatrix)
+      }
+
+      // Update the model's matrix
+      modelRef.current.modelMatrix = modelMatrix
+    })
+
+    return unsubscribe
+  }, [viewer])
 }
 
 export default useTowerModel

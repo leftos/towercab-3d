@@ -11,6 +11,7 @@ import TouchControls, { TouchCommandInput } from './components/UI/TouchControls'
 import DeviceOptimizationPrompt from './components/UI/DeviceOptimizationPrompt'
 import MeasuringTool from './components/UI/MeasuringTool'
 import MetarOverlay from './components/UI/MetarOverlay'
+import TowerPositioningOverlay from './components/UI/TowerPositioningOverlay'
 import DataLoadingOverlay from './components/UI/DataLoadingOverlay'
 import UpdateNotification from './components/UI/UpdateNotification'
 import ViewportManager from './components/Viewport/ViewportManager'
@@ -484,6 +485,7 @@ function App() {
       {!isVRActive && <UpdateNotification />}
       {!isVRActive && <MetarOverlay />}
       {!isVRActive && <DataLoadingOverlay />}
+      {!isVRActive && <TowerPositioningOverlay />}
       <div className="main-content">
         <ViewportManager mainViewportContent={<CesiumViewer onViewerReady={handleViewerReady} />}>
           {!isVRActive && <CommandInput />}
