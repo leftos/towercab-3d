@@ -1,6 +1,6 @@
 // Camera geometry utilities for orbit and tower mode calculations
 
-import { calculateBearing } from './interpolation'
+import { calculateBearing } from './geoMath'
 
 // Constants for coordinate conversion
 const METERS_PER_DEGREE_LAT = 111111

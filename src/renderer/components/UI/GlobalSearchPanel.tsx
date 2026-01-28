@@ -5,7 +5,7 @@ import { useVnasStore } from '../../stores/vnasStore'
 import { useAirportStore } from '../../stores/airportStore'
 import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
 import { useActiveViewportCamera } from '../../hooks/useActiveViewportCamera'
-import { calculateDistanceNM } from '../../utils/interpolation'
+import { calculateDistanceNM } from '../../utils/geoMath'
 import { getTowerPosition } from '../../utils/towerHeight'
 import './GlobalSearchPanel.css'
 

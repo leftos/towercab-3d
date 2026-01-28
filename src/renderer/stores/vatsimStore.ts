@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { PilotData, VatsimData, AircraftState } from '../types/vatsim'
 import type { AircraftObservation, AircraftMetadata } from '../types/aircraft-timeline'
-import { interpolateAircraftState, calculateDistanceNM } from '../utils/interpolation'
+import { calculateDistanceNM } from '../utils/geoMath'
 import { useSettingsStore } from './settingsStore'
 import { geoidService } from '../services/GeoidService'
 // Note: Intentional coupling - vatsimStore triggers replay snapshots on each VATSIM update.
@@ -20,8 +20,6 @@ interface VatsimStore {
   // Data
   allPilots: PilotData[] // All pilots from API (for global search, stats)
   pilots: PilotData[] // Filtered pilots (near reference position)
-  aircraftStates: Map<string, AircraftState>
-  previousStates: Map<string, AircraftState>
 
   // Reference position for distance filtering (camera/tower location)
   referencePosition: ReferencePosition | null
@@ -56,8 +54,6 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
   // Initial state
   allPilots: [],
   pilots: [],
-  aircraftStates: new Map(),
-  previousStates: new Map(),
   referencePosition: null,
   totalPilotsFromApi: 0,
   pilotsFilteredByDistance: 0,
@@ -91,24 +87,18 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
         return
       }
 
-      // Calculate actual interval between VATSIM updates (for accurate interpolation timing)
-      // This tells us how long interpolation should take to reach the target
+      // Calculate actual interval between VATSIM updates (used for replay)
       const actualInterval = lastVatsimTimestamp > 0
         ? vatsimTimestamp - lastVatsimTimestamp
         : VATSIM_ACTUAL_UPDATE_INTERVAL
 
-      // Use local time for interpolation (avoids clock skew issues with VATSIM server)
+      // Use local time for timestamps
       const now = Date.now()
-
-      // Get current state maps for calculating interpolated positions
-      const oldCurrentStates = get().aircraftStates
-      const oldPreviousStates = get().previousStates
 
       // Get distance filter radius from settings
       const aircraftDataRadiusNM = useSettingsStore.getState().memory.aircraftDataRadiusNM
 
-      // Filter pilots by distance for LOCAL legacy interpolation (aircraftStates/previousStates)
-      // This is only for the host's main viewport rendering performance.
+      // Filter pilots by distance from reference position
       // Note: ALL pilots are still added to the timeline store for broadcasting
       // to remote clients and insets, which do their own filtering.
       const totalPilotsFromApi = data.pilots.length
@@ -128,66 +118,9 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
 
       const pilotsFilteredByDistance = filteredPilots.length
 
-      // Create aircraft states from filtered VATSIM data (for local legacy interpolation)
-      // These are the TARGET positions we want to reach over the next interval
-      // Timestamp is set to now + interval (when we expect to arrive)
-      const newAircraftStates = new Map<string, AircraftState>()
-      for (const pilot of filteredPilots) {
-        const state: AircraftState = {
-          callsign: pilot.callsign,
-          cid: pilot.cid,
-          latitude: pilot.latitude,
-          longitude: pilot.longitude,
-          altitude: geoidService.mslToEllipsoidal(pilot.latitude, pilot.longitude, pilot.altitude * 0.3048),  // Convert VATSIM feet MSL → meters ellipsoidal
-          groundspeed: pilot.groundspeed,
-          heading: pilot.heading,
-          transponder: pilot.transponder,
-          aircraftType: pilot.flight_plan?.aircraft_short || null,
-          departure: pilot.flight_plan?.departure || null,
-          arrival: pilot.flight_plan?.arrival || null,
-          timestamp: now + actualInterval  // When we expect to arrive at this position
-        }
-        newAircraftStates.set(pilot.callsign, state)
-      }
-
-      // Now build previous states for ALL aircraft in the NEW data
-      // These are the START positions (current visual position)
-      // Timestamp is set to now (when we captured this position)
-      const newPreviousStates = new Map<string, AircraftState>()
-
-      for (const [callsign, newState] of newAircraftStates) {
-        const oldCurrentState = oldCurrentStates.get(callsign)
-        const oldPrevState = oldPreviousStates.get(callsign)
-
-        if (oldCurrentState) {
-          // Aircraft existed before - calculate its current visual position
-          const interpolated = interpolateAircraftState(oldPrevState, oldCurrentState, now)
-
-          // Use the current interpolated/extrapolated position as the starting point
-          // ALL interpolated values must be captured for proper Hermite spline continuity
-          newPreviousStates.set(callsign, {
-            ...newState, // Use new state for metadata (transponder, flight plan, etc.)
-            latitude: interpolated.interpolatedLatitude,
-            longitude: interpolated.interpolatedLongitude,
-            altitude: interpolated.interpolatedAltitude,
-            heading: interpolated.interpolatedHeading,
-            groundspeed: interpolated.interpolatedGroundspeed,
-            timestamp: now  // When we captured this visual position
-          })
-        } else {
-          // New aircraft - start from its VATSIM position (no interpolation needed)
-          newPreviousStates.set(callsign, {
-            ...newState,
-            timestamp: now  // When we captured this position
-          })
-        }
-      }
-
       set({
         allPilots: data.pilots,
         pilots: filteredPilots,
-        aircraftStates: newAircraftStates,
-        previousStates: newPreviousStates,
         totalPilotsFromApi,
         pilotsFilteredByDistance,
         lastVatsimTimestamp: vatsimTimestamp,
@@ -329,7 +262,7 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
   // Refilter pilots based on current reference position
   // Called when reference position changes or settings change
   refilterPilots: () => {
-    const { allPilots, referencePosition, aircraftStates, previousStates, lastVatsimTimestamp } = get()
+    const { allPilots, referencePosition, lastVatsimTimestamp } = get()
     const aircraftDataRadiusNM = useSettingsStore.getState().memory.aircraftDataRadiusNM
 
     if (!referencePosition || allPilots.length === 0) {
@@ -349,11 +282,8 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
       return distance <= aircraftDataRadiusNM
     })
 
-    // Build new state maps containing only filtered aircraft
-    const newAircraftStates = new Map<string, AircraftState>()
-    const newPreviousStates = new Map<string, AircraftState>()
-
-    // Also add observations to timeline store for newly visible aircraft
+    // Add observations to timeline store for aircraft not already in timeline
+    // This ensures the timeline gets populated immediately when switching airports
     const timelineStore = useAircraftTimelineStore.getState()
     const observationBatch: Array<{
       callsign: string
@@ -362,43 +292,12 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
     }> = []
 
     for (const pilot of filteredPilots) {
-      const callsign = pilot.callsign
-
-      // Preserve existing interpolation state if available
-      if (aircraftStates.has(callsign)) {
-        newAircraftStates.set(callsign, aircraftStates.get(callsign)!)
-        if (previousStates.has(callsign)) {
-          newPreviousStates.set(callsign, previousStates.get(callsign)!)
-        }
-      } else {
-        // Create new state for aircraft that just became visible
-        // This ensures they appear immediately without waiting for the next VATSIM fetch
-        const state: AircraftState = {
-          callsign: pilot.callsign,
-          cid: pilot.cid,
-          latitude: pilot.latitude,
-          longitude: pilot.longitude,
-          altitude: geoidService.mslToEllipsoidal(pilot.latitude, pilot.longitude, pilot.altitude * 0.3048),  // Convert VATSIM feet MSL → meters ellipsoidal
-          groundspeed: pilot.groundspeed,
-          heading: pilot.heading,
-          transponder: pilot.transponder,
-          aircraftType: pilot.flight_plan?.aircraft_short || null,
-          departure: pilot.flight_plan?.departure || null,
-          arrival: pilot.flight_plan?.arrival || null,
-          timestamp: now
-        }
-        newAircraftStates.set(callsign, state)
-        newPreviousStates.set(callsign, { ...state })  // Same position for immediate display
-      }
-
-      // Add observation to timeline if this aircraft isn't already in timeline
-      // This ensures the timeline gets populated immediately when switching airports
-      const existingTimeline = timelineStore.getTimeline(callsign)
+      const existingTimeline = timelineStore.getTimeline(pilot.callsign)
       if (!existingTimeline) {
         const observation: AircraftObservation = {
           latitude: pilot.latitude,
           longitude: pilot.longitude,
-          altitude: geoidService.mslToEllipsoidal(pilot.latitude, pilot.longitude, pilot.altitude * 0.3048),  // Convert feet MSL → meters ellipsoidal
+          altitude: geoidService.mslToEllipsoidal(pilot.latitude, pilot.longitude, pilot.altitude * 0.3048),
           heading: pilot.heading,
           groundspeed: pilot.groundspeed,
           groundTrack: null,
@@ -421,7 +320,7 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
           arrival: pilot.flight_plan?.arrival || null
         }
 
-        observationBatch.push({ callsign, observation, metadata })
+        observationBatch.push({ callsign: pilot.callsign, observation, metadata })
       }
     }
 
@@ -432,9 +331,7 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
 
     set({
       pilots: filteredPilots,
-      pilotsFilteredByDistance: filteredPilots.length,
-      aircraftStates: newAircraftStates,
-      previousStates: newPreviousStates
+      pilotsFilteredByDistance: filteredPilots.length
     })
   }
 }))

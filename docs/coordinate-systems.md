@@ -251,7 +251,7 @@ See `useBabylonCameraSync.ts:21` for detailed implementation.
 Always use great-circle distance for geographic coords:
 
 ```typescript
-import { calculateDistanceNM } from '@/utils/interpolation'
+import { calculateDistanceNM } from '@/utils/geoMath'
 
 const distance = calculateDistanceNM(
   lat1, lon1, alt1,
