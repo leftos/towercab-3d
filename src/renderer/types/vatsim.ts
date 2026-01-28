@@ -217,6 +217,14 @@ export interface InterpolatedAircraftState extends AircraftState {
   verticalRate: number          // Vertical rate in METERS/MINUTE
   turnRate: number              // degrees/sec
   /**
+   * On-ground flag from authoritative source data (vNAS AGL < 50ft, ADS-B ground bit).
+   * - true = source confirms aircraft is on ground
+   * - false = source confirms aircraft is airborne
+   * - null = unknown, must infer from groundspeed/altitude
+   * More reliable than altitude-based detection when available.
+   */
+  isOnGround: boolean | null
+  /**
    * Ground acceleration in knots per second.
    * Positive = accelerating, negative = decelerating.
    * Useful for distinguishing takeoff roll (accelerating) from landing roll (decelerating).

@@ -621,8 +621,9 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       groundspeed: calculatedGroundspeed,  // Calculated from position changes
       groundTrack: aircraft.trueGroundTrack ?? null,
       headingIsTrue: true,  // vNAS heading is always reliable (from simulator)
-      // Extended ADS-B data (not available from vNAS)
-      onGround: null,
+      // vNAS provides AGL directly from simulator - use it for ground detection
+      // This is more reliable than computing AGL from MSL altitude and terrain
+      onGround: aircraft.altitudeAgl < 50,  // Below 50ft AGL = on ground
       pitch: null,
       roll: null,
       verticalRate: null,
@@ -739,8 +740,8 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
         groundspeed: calculatedSpeeds.get(ac.callsign) ?? 0,
         groundTrack: ac.trueGroundTrack ?? null,
         headingIsTrue: true,  // vNAS heading is always reliable (from simulator)
-        // Extended ADS-B data (not available from vNAS)
-        onGround: null,
+        // vNAS provides AGL directly from simulator - use it for ground detection
+        onGround: ac.altitudeAgl < 50,  // Below 50ft AGL = on ground
         pitch: null,
         roll: null,
         verticalRate: null,

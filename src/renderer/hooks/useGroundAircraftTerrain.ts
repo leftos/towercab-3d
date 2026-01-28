@@ -7,6 +7,7 @@ import {
 } from '../constants/rendering'
 import { isTerrainCacheClearing } from './useTerrainFlattening'
 import { getHeightAndSlopeFromPolygons } from '../terrain/FlatteningTerrainProvider'
+import { geoidService } from '../services/GeoidService'
 
 /** Terrain data for a single aircraft including height and slope */
 export interface TerrainData {
@@ -121,7 +122,14 @@ export function useGroundAircraftTerrain(
         if (samplingInProgressRef.current.has(aircraft.callsign)) continue
 
         const isOnGround = aircraft.interpolatedGroundspeed < GROUNDSPEED_THRESHOLD_KNOTS
-        const altitudeAgl = aircraft.interpolatedAltitude - groundElevationMeters
+        // Convert MSL ground elevation to ellipsoidal for accurate AGL calculation
+        // (aircraft.interpolatedAltitude is in ellipsoidal coordinates)
+        const groundElevationEllipsoidal = geoidService.mslToEllipsoidal(
+          aircraft.interpolatedLatitude,
+          aircraft.interpolatedLongitude,
+          groundElevationMeters
+        )
+        const altitudeAgl = aircraft.interpolatedAltitude - groundElevationEllipsoidal
         const isLowAltitude = altitudeAgl < LOW_ALTITUDE_AGL_THRESHOLD_M
 
         if (isOnGround || isLowAltitude) {
@@ -318,7 +326,13 @@ export function useGroundAircraftTerrain(
         }
 
         const isOnGround = aircraft.interpolatedGroundspeed < GROUNDSPEED_THRESHOLD_KNOTS
-        const altitudeAgl = aircraft.interpolatedAltitude - groundElevationMeters
+        // Convert MSL ground elevation to ellipsoidal for accurate AGL calculation
+        const groundElevationEllipsoidal = geoidService.mslToEllipsoidal(
+          aircraft.interpolatedLatitude,
+          aircraft.interpolatedLongitude,
+          groundElevationMeters
+        )
+        const altitudeAgl = aircraft.interpolatedAltitude - groundElevationEllipsoidal
         const isLowAltitude = altitudeAgl < LOW_ALTITUDE_AGL_THRESHOLD_M
 
         // Only remove terrain data if aircraft is both fast AND high altitude

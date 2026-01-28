@@ -341,6 +341,9 @@ function timelineToInterpolatedState(
     acceleration,
     track,
 
+    // Ground detection from authoritative source (vNAS AGL, ADS-B ground bit)
+    isOnGround: timeline.onGround,
+
     isInterpolated: true,
 
     // Display delay
@@ -582,6 +585,10 @@ function updateInterpolation() {
     if (isLowSpeed) {
       // Very low speed = definitely on ground, full terrain clamping
       groundBlendWeight = 1.0
+    } else if (entry.isOnGround === true && sampledTerrainHeight !== undefined) {
+      // Source data (vNAS AGL, ADS-B) confirms aircraft is on ground - trust it over computed AGL
+      // This is more reliable than altitude-based detection when MSL/ellipsoidal conversion has errors
+      groundBlendWeight = 1.0
     } else if (sampledTerrainHeight !== undefined && terrainClampedHeight > reportedHeightWithOffset) {
       // Terrain higher than reported = prevent going underground
       groundBlendWeight = 1.0
@@ -591,9 +598,12 @@ function updateInterpolation() {
       // At LANDING_BLEND_END_AGL (10m): full ground (weight = 1)
       const blendRange = LANDING_BLEND_START_AGL - LANDING_BLEND_END_AGL
       groundBlendWeight = Math.min(1.0, Math.max(0, (LANDING_BLEND_START_AGL - altitudeAGL) / blendRange))
-    } else if (altitudeAGL > 0 && altitudeAGL < DEPARTURE_BLEND_END_AGL) {
-      // DEPARTURE: Low altitude, possibly lifting off - blend toward reported
-      // At DEPARTURE_BLEND_START_AGL (5m): full ground (weight = 1)
+    } else if (altitudeAGL < DEPARTURE_BLEND_END_AGL) {
+      // GROUND/DEPARTURE: Low altitude aircraft - clamp to terrain or blend toward reported
+      // This catches:
+      // - Taxiing aircraft (AGL ≈ 0 or slightly negative due to GPS error)
+      // - Departing aircraft (AGL 0-35m)
+      // At DEPARTURE_BLEND_START_AGL (5m) or below: full ground (weight = 1)
       // At DEPARTURE_BLEND_END_AGL (35m): full airborne (weight = 0)
       const blendRange = DEPARTURE_BLEND_END_AGL - DEPARTURE_BLEND_START_AGL
       if (altitudeAGL <= DEPARTURE_BLEND_START_AGL) {

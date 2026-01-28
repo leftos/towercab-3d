@@ -384,6 +384,7 @@ export function interpolateAircraftState(
       turnRate: 0,
       acceleration: 0,
       track: current.heading,  // Default to heading when no movement data
+      isOnGround: null,  // Unknown - legacy interpolation doesn't have source ground data
       isInterpolated: false,
       displayDelay: 0  // Legacy interpolation doesn't use timeline delays
     }
@@ -657,6 +658,7 @@ export function interpolateAircraftState(
     turnRate: turnRate,
     acceleration: acceleration,
     track: track,
+    isOnGround: null,  // Unknown - legacy interpolation doesn't have source ground data
     isInterpolated: true,
     displayDelay: 0  // Legacy interpolation doesn't use timeline delays
   }
