@@ -667,6 +667,20 @@ export interface CameraSettings {
    * Uses hysteresis to prevent rapid switching when near airport boundaries.
    */
   enableAutoAirportSwitch: boolean
+
+  /**
+   * Orbit camera lag for cinematic effect (0-100, default: 50)
+   *
+   * Controls how quickly the orbit camera catches up to aircraft
+   * heading and altitude changes:
+   * - 0 = Instant response (no lag, camera locked to aircraft)
+   * - 50 = Moderate cinematic lag
+   * - 100 = Maximum cinematic lag (camera takes ~2s to catch up)
+   *
+   * Creates a video game-like "chase camera" feel where the camera
+   * reacts to aircraft movement rather than being rigidly locked.
+   */
+  orbitCameraLag: number
 }
 
 /**
@@ -1806,7 +1820,8 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     cameraSpeed: 5,
     mouseSensitivity: 1.0,
     joystickSensitivity: 5,
-    enableAutoAirportSwitch: false
+    enableAutoAirportSwitch: false,
+    orbitCameraLag: 50
   },
   weather: {
     showWeatherEffects: true,

@@ -153,6 +153,28 @@ export const ORBIT_PITCH_DEFAULT = 15
 export const ORBIT_HEADING_DEFAULT = 315
 
 // ============================================================================
+// ORBIT CAMERA LAG (CINEMATIC EFFECT)
+// ============================================================================
+
+/**
+ * Minimum orbit camera lag (0 = instant response, no lag)
+ */
+export const ORBIT_CAMERA_LAG_MIN = 0
+
+/**
+ * Maximum orbit camera lag (100 = maximum cinematic delay)
+ */
+export const ORBIT_CAMERA_LAG_MAX = 100
+
+/**
+ * Default orbit camera lag (50 = moderate cinematic effect)
+ *
+ * Controls how quickly the camera catches up to aircraft heading/altitude changes.
+ * Lower values = faster response, higher values = more cinematic lag.
+ */
+export const ORBIT_CAMERA_LAG_DEFAULT = 50
+
+// ============================================================================
 // FOLLOW MODE
 // ============================================================================
 

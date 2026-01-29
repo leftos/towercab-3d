@@ -4,6 +4,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Cinematic orbit camera lag** - New "Camera Lag" setting in Settings > Camera > Orbit Camera adds a video game-style chase camera effect when following aircraft in orbit mode. The camera smoothly catches up to aircraft heading and altitude changes instead of being rigidly locked. Adjust from 0% (instant response) to 100% (maximum cinematic lag).
+
 ### Fixed
 - **vNAS: Aircraft no longer float above terrain at certain airports** - Fixed aircraft appearing to hover above the ground at airports with significant geoid offsets (like KRNO). vNAS users now benefit from reliable ground detection using the simulator's AGL data, which isn't available in the public VATSIM data feed.
 

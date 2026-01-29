@@ -685,7 +685,8 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
       cameraSpeed: oldSettings.cameraSpeed ?? DEFAULT_SETTINGS.camera.cameraSpeed,
       mouseSensitivity: oldSettings.mouseSensitivity ?? DEFAULT_SETTINGS.camera.mouseSensitivity,
       joystickSensitivity: oldSettings.joystickSensitivity ?? DEFAULT_SETTINGS.camera.joystickSensitivity,
-      enableAutoAirportSwitch: oldSettings.enableAutoAirportSwitch ?? DEFAULT_SETTINGS.camera.enableAutoAirportSwitch
+      enableAutoAirportSwitch: oldSettings.enableAutoAirportSwitch ?? DEFAULT_SETTINGS.camera.enableAutoAirportSwitch,
+      orbitCameraLag: oldSettings.orbitCameraLag ?? DEFAULT_SETTINGS.camera.orbitCameraLag
     },
     weather: {
       showWeatherEffects:

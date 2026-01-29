@@ -11,6 +11,8 @@ import {
   feetToMeters,
   calculateHorizontalDistance
 } from '../utils/cameraGeometry'
+import { lerpAngle, lerp } from '../utils/geoMath'
+import { useSettingsStore } from '../stores/settingsStore'
 import { CAMERA_MIN_AGL, AIRPORT_FLYTO_DURATION, GLOBE_VIEW_HEIGHT, GLOBE_FLYTO_DURATION } from '../constants/camera'
 import { useCameraInput } from './useCameraInput'
 import type { InterpolatedAircraftState } from '../types/vatsim'
@@ -179,6 +181,13 @@ export function useCesiumCamera(
     startTime: number
     duration: number
   } | null>(null)
+
+  // Orbit camera lag state for cinematic effect
+  // Tracks smoothed absolute orbit angle (camera's position around the aircraft)
+  // and smoothed altitude for vertical lag
+  const smoothedOrbitAngleRef = useRef<number | null>(null)
+  const smoothedAltitudeRef = useRef<number | null>(null)
+  const lastFollowedCallsignRef = useRef<string | null>(null)
 
   // Wrapper functions to mark heading/pitch updates as internal (from calculations)
   // This prevents infinite loops when the main effect depends on heading/pitch
@@ -399,11 +408,75 @@ export function useCesiumCamera(
             // Skip normal 3D orbit positioning - we're in top-down mode
           } else {
             // ORBIT MODE (3D): Camera orbits around aircraft
+            // Apply cinematic camera lag if enabled
+            const orbitCameraLag = useSettingsStore.getState().camera.orbitCameraLag ?? 50
+
+            // Ensure we have a valid heading value
+            const validHeading = typeof aircraftHeading === 'number' && !isNaN(aircraftHeading)
+              ? aircraftHeading
+              : 0
+
+            // Calculate the TARGET absolute orbit angle (where camera should be)
+            // This is the angle around the aircraft where the camera orbits
+            const targetOrbitAngle = validHeading + 180 + state.orbitHeading
+
+            // Reset smoothed values when the followed aircraft changes
+            if (lastFollowedCallsignRef.current !== state.followingCallsign) {
+              smoothedOrbitAngleRef.current = null
+              smoothedAltitudeRef.current = null
+              lastFollowedCallsignRef.current = state.followingCallsign
+            }
+
+            // Initialize smoothed values on first frame
+            if (smoothedOrbitAngleRef.current === null || isNaN(smoothedOrbitAngleRef.current)) {
+              smoothedOrbitAngleRef.current = targetOrbitAngle
+            }
+            if (smoothedAltitudeRef.current === null || isNaN(smoothedAltitudeRef.current)) {
+              smoothedAltitudeRef.current = altitudeMeters
+            }
+
+            // Calculate smoothing factor from lag setting
+            // lag=0 → 1.0 (instant response)
+            // lag=100 → 0.01 (very slow catch-up, dramatic cinematic effect)
+            const lagNormalized = orbitCameraLag / 100
+            const smoothingFactor = 1.0 - lagNormalized * 0.99
+
+            // Interpolate smoothed orbit angle toward target
+            const smoothedOrbitAngle = lerpAngle(
+              smoothedOrbitAngleRef.current,
+              targetOrbitAngle,
+              smoothingFactor
+            )
+
+            // Interpolate smoothed altitude toward actual altitude
+            const smoothedAltitude = lerp(
+              smoothedAltitudeRef.current,
+              altitudeMeters,
+              smoothingFactor
+            )
+
+            // Update refs for next frame (only if valid)
+            if (!isNaN(smoothedOrbitAngle)) {
+              smoothedOrbitAngleRef.current = smoothedOrbitAngle
+            }
+            if (!isNaN(smoothedAltitude)) {
+              smoothedAltitudeRef.current = smoothedAltitude
+            }
+
+            // Calculate effective orbit heading from smoothed absolute angle
+            // smoothedOrbitAngle = heading + 180 + orbitHeading
+            // So: effectiveOrbitHeading = smoothedOrbitAngle - heading - 180
+            // But we want to use the smoothed angle directly in the calculation
+            // Instead of passing it through calculateOrbitCameraPosition, we'll compute manually
+
+            // Use smoothed orbit angle and altitude for camera position calculation
+            // Camera orbits around the CURRENT aircraft position but uses smoothed angle/altitude
+            // This creates the cinematic lag effect
             const orbitResult = calculateOrbitCameraPosition(
               aircraftLat,
               aircraftLon,
-              altitudeMeters,
-              aircraftHeading,
+              smoothedAltitude,  // Smoothed altitude for vertical lag
+              smoothedOrbitAngle - 180 - state.orbitHeading,  // Back-calculate the "effective heading"
               state.orbitHeading,
               state.orbitPitch,
               state.orbitDistance
@@ -440,7 +513,7 @@ export function useCesiumCamera(
               effectiveOrbitPitch = Math.asin(clampedRatio) * 180 / Math.PI
             }
 
-            // Set camera position directly (no smoothing)
+            // Set camera position
             const targetFov = calculateFollowFov(60, state.followZoom)
 
             const cameraPosition = Cesium.Cartesian3.fromDegrees(

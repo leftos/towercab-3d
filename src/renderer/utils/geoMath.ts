@@ -50,6 +50,20 @@ export function angleDifference(from: number, to: number): number {
 }
 
 /**
+ * Linear interpolation between two angles, handling 0↔360° wrapping
+ * Takes the shortest path around the circle
+ *
+ * @param from - Start angle in degrees
+ * @param to - Target angle in degrees
+ * @param t - Interpolation factor (0 = from, 1 = to)
+ * @returns Interpolated angle normalized to 0-360
+ */
+export function lerpAngle(from: number, to: number, t: number): number {
+  const diff = angleDifference(from, to)
+  return normalizeAngle(from + diff * t)
+}
+
+/**
  * Calculate flare pitch adjustment for landing aircraft
  *
  * When an aircraft is descending and close to the ground, pilots perform a

@@ -9,6 +9,7 @@ function SettingsControlsCameraTab() {
   const mouseSensitivity = useSettingsStore((state) => state.camera.mouseSensitivity)
   const joystickSensitivity = useSettingsStore((state) => state.camera.joystickSensitivity)
   const enableAutoAirportSwitch = useSettingsStore((state) => state.camera.enableAutoAirportSwitch ?? false)
+  const orbitCameraLag = useSettingsStore((state) => state.camera.orbitCameraLag ?? 50)
   const updateCameraSettings = useSettingsStore((state) => state.updateCameraSettings)
 
   return (
@@ -89,6 +90,35 @@ function SettingsControlsCameraTab() {
             <span>{joystickSensitivity}</span>
           </div>
           <p className="setting-hint">Virtual joystick movement speed on touch devices.</p>
+        </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection title="Orbit Camera">
+        <div className="setting-item">
+          <label>Camera Lag (Cinematic)</label>
+          <div className="slider-with-value">
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={orbitCameraLag}
+              onChange={(e) => updateCameraSettings({ orbitCameraLag: Number(e.target.value) })}
+            />
+            <span>{orbitCameraLag}%</span>
+          </div>
+          <p className="setting-hint">
+            {orbitCameraLag === 0
+              ? 'Instant response (no lag)'
+              : orbitCameraLag < 30
+                ? 'Quick response with slight smoothing'
+                : orbitCameraLag < 70
+                  ? 'Balanced cinematic effect'
+                  : 'Maximum cinematic lag (video game style)'}
+          </p>
+          <p className="setting-hint">
+            Controls how quickly the orbit camera reacts to aircraft heading and altitude changes.
+            Higher values create a more cinematic &ldquo;chase camera&rdquo; feel.
+          </p>
         </div>
       </CollapsibleSection>
 
