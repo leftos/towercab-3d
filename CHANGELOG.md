@@ -4,6 +4,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- **vNAS: Aircraft no longer float above terrain at certain airports** - Fixed aircraft appearing to hover above the ground at airports with significant geoid offsets (like KRNO). vNAS users now benefit from reliable ground detection using the simulator's AGL data, which isn't available in the public VATSIM data feed.
+
 ## [0.0.39-alpha] - 2026-01-27
 
 ### Added
