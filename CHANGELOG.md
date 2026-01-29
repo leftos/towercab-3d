@@ -4,6 +4,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+## [0.0.40-alpha] - 2026-01-28
+
 ### Added
 - **Cinematic orbit camera lag** - New "Camera Lag" setting in Settings > Camera > Orbit Camera adds a video game-style chase camera effect when following aircraft in orbit mode. The camera smoothly catches up to aircraft heading and altitude changes instead of being rigidly locked. Adjust from 0% (instant response) to 100% (maximum cinematic lag).
 
