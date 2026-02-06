@@ -114,9 +114,10 @@ Share the repository URL with others so they can clone it!
 
 - The folder name doesn't matter - TowerCab 3D reads the `manifest.json` to determine mod type
 - Git repos can contain multiple mods at any folder depth
-- The `manifest.json` file determines the mod type:
-  - `aircraftTypes` field → aircraft mod
-  - `airports` field → tower mod
+- The `manifest.json` file determines the mod type (in priority order):
+  1. Explicit `"type": "aircraft"` or `"type": "tower"` field (recommended)
+  2. Presence of `aircraftTypes` field → aircraft mod
+  3. Presence of `airports` field → tower mod
 - Restart TowerCab 3D after cloning new repos or updating mods
 
 ## Aircraft Mods
@@ -131,6 +132,7 @@ Create a `manifest.json` file in your aircraft mod folder:
   "author": "Your Name",
   "version": "1.0.0",
   "description": "Detailed Boeing 737-800 model",
+  "type": "aircraft",
   "modelFile": "model.glb",
   "aircraftTypes": ["B738", "B737", "B73H"],
   "scale": 1.0,
@@ -150,6 +152,7 @@ Create a `manifest.json` file in your aircraft mod folder:
 | `author` | string | Yes | Creator's name |
 | `version` | string | Yes | Semantic version (e.g., "1.0.0") |
 | `description` | string | No | Brief description |
+| `type` | string | No | Explicit mod type: `"aircraft"` (recommended for clarity) |
 | `modelFile` | string | Yes | Path to the 3D model file (relative to manifest) |
 | `aircraftTypes` | string[] | Yes | ICAO aircraft type codes this model applies to |
 | `scale` | number | Yes | Scale factor (1.0 = original size) |
@@ -186,6 +189,7 @@ Create a `manifest.json` file in your tower mod folder:
   "author": "Your Name",
   "version": "1.0.0",
   "description": "Realistic JFK control tower",
+  "type": "tower",
   "modelFile": "model.glb",
   "airports": ["KJFK"],
   "scale": 1.0
@@ -200,6 +204,7 @@ Create a `manifest.json` file in your tower mod folder:
 | `author` | string | Yes | Creator's name |
 | `version` | string | Yes | Semantic version |
 | `description` | string | No | Brief description |
+| `type` | string | No | Explicit mod type: `"tower"` (recommended for clarity) |
 | `modelFile` | string | Yes | Path to the 3D model file |
 | `airports` | string[] | Yes | ICAO airport codes this tower applies to |
 | `scale` | number | Yes | Scale factor |

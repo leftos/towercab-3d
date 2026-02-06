@@ -438,13 +438,21 @@ fn parse_manifest_for_discovery(
     let manifest: serde_json::Value =
         serde_json::from_str(&content).map_err(|e| format!("Failed to parse manifest: {}", e))?;
 
-    // Determine mod type based on manifest fields
-    let mod_type = if manifest.get("aircraftTypes").is_some() {
+    // Determine mod type:
+    // 1. Check explicit "type" field first (preferred)
+    // 2. Fall back to heuristics based on aircraftTypes/airports fields
+    let mod_type = if let Some(type_field) = manifest.get("type").and_then(|v| v.as_str()) {
+        match type_field {
+            "aircraft" => "aircraft",
+            "tower" => "tower",
+            _ => return Err(format!("Invalid mod type: '{}'. Must be 'aircraft' or 'tower'", type_field)),
+        }
+    } else if manifest.get("aircraftTypes").is_some() {
         "aircraft"
     } else if manifest.get("airports").is_some() {
         "tower"
     } else {
-        return Err("Unknown mod type: missing aircraftTypes or airports field".to_string());
+        return Err("Unknown mod type: missing 'type' field and no aircraftTypes or airports field found".to_string());
     };
 
     // Check if this is inside a git repo by looking for .git in parent directories

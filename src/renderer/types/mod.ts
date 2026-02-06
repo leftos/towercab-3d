@@ -23,6 +23,7 @@ export interface AircraftModManifest {
   author: string
   version: string
   description?: string
+  type?: 'aircraft'  // explicit type declaration (optional, inferred from aircraftTypes if omitted)
   modelFile: string  // relative path to model file (.glb, .gltf, .obj, .dae, .stl)
   aircraftTypes: string[]  // ICAO type codes this model applies to, e.g., ["B738", "B737"]
   scale: number  // scale factor for the model
@@ -59,6 +60,7 @@ export interface TowerModManifest {
   author: string
   version: string
   description?: string
+  type?: 'tower'  // explicit type declaration (optional, inferred from airports if omitted)
   modelFile: string  // relative path to model file (.glb, .gltf, .obj, .dae, .stl)
   airports: string[]  // ICAO codes this tower applies to, e.g., ["KJFK", "KLAX"]
   scale: number  // scale factor for the model
