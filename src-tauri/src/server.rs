@@ -33,7 +33,7 @@ use url::Url;
 use tauri::{Emitter, Manager};
 
 use crate::{
-    mods::{find_mods_root, read_tower_positions, TowerPositionEntry},
+    mods::{discover_all_mods, find_mods_root, read_tower_positions, DiscoveredMod, TowerPositionEntry},
     msfs::CachedGlbInfo,
     normalize_path_string,
     settings::{get_global_settings_file, GlobalSettings},
@@ -424,10 +424,12 @@ fn create_router(state: Arc<ServerState>) -> Router {
             "/api/global-settings",
             get(get_global_settings).post(update_global_settings),
         )
+        .route("/api/mods/discover", get(discover_mods))
         .route("/api/mods/aircraft", get(list_aircraft_mods))
         .route("/api/mods/towers", get(list_tower_mods))
         .route("/api/mods/aircraft/*path", get(serve_aircraft_mod))
         .route("/api/mods/towers/*path", get(serve_tower_mod))
+        .route("/api/mods/file/*path", get(serve_any_mod_file))
         // MSFS model endpoints (for remote browser access to converted models)
         .route("/api/msfs/models", get(list_msfs_converted_models))
         .route("/api/msfs/index", get(get_msfs_model_index))
@@ -621,6 +623,41 @@ struct ModInfo {
     name: String,
     path: String,
     manifest: Option<serde_json::Value>,
+}
+
+/// GET /api/mods/discover - Recursively discover all mods (supports git repos)
+async fn discover_mods(
+    State(state): State<Arc<ServerState>>,
+) -> Result<Json<Vec<DiscoveredMod>>, (StatusCode, String)> {
+    let mods = discover_all_mods(state.app_handle.clone()).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to discover mods: {}", e),
+        )
+    })?;
+    Ok(Json(mods))
+}
+
+/// GET /api/mods/file/*path - Serve any file within the mods directory
+/// Supports serving files from git repo subfolders
+async fn serve_any_mod_file(
+    State(state): State<Arc<ServerState>>,
+    Path(path): Path<String>,
+) -> Result<Response<Body>, (StatusCode, String)> {
+    let mods_root = find_mods_root(&state.app_handle);
+    let file_path = mods_root.join(&path);
+
+    // Security: ensure the path is within mods directory
+    let canonical = file_path
+        .canonicalize()
+        .map_err(|_| (StatusCode::NOT_FOUND, "File not found".to_string()))?;
+
+    let mods_canonical = mods_root.canonicalize().unwrap_or(mods_root.clone());
+    if !canonical.starts_with(&mods_canonical) {
+        return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
+    }
+
+    serve_file(&canonical).await
 }
 
 /// GET /api/mods/aircraft - List aircraft mods with manifests

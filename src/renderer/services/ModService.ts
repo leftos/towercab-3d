@@ -207,14 +207,13 @@ class ModService {
       }
       console.log(`[ModService] Loaded ${this.customTowerPositions.size} tower position(s) (view3d: ${view3dCount}, view2d: ${view2dCount})`)
 
-      // Load aircraft mods (manifest.json based)
-      await this.loadModsOfType('aircraft')
+      // Discover and load all mods recursively (supports git repos at any depth)
+      await this.loadAllDiscoveredMods()
+
+      // Log results
       if (this.loadingResult.aircraft.length > 0) {
         console.log(`[ModService] Loaded ${this.loadingResult.aircraft.length} aircraft mod(s)`)
       }
-
-      // Load tower mods (after tower-positions so placement fallback works)
-      await this.loadModsOfType('towers')
       if (this.loadingResult.towers.length > 0) {
         const towerDetails = this.loadingResult.towers.map(t => {
           const placementInfo = t.placement
@@ -243,17 +242,16 @@ class ModService {
   }
 
   /**
-   * Load all mods of a specific type
+   * Discover and load all mods recursively
+   * Supports git repos at any folder depth within the mods directory
    */
-  private async loadModsOfType(modType: 'aircraft' | 'towers'): Promise<void> {
+  private async loadAllDiscoveredMods(): Promise<void> {
     try {
-      const modsPath = await modApi.getModsPath(modType)
-      const modDirs = await modApi.listModDirectories(modType)
+      // Use recursive discovery to find all mods
+      const discovered = await modApi.discoverAllMods()
 
-      for (const modDir of modDirs) {
-        // Use joinPath to handle OS-specific separators
-        const modPath = joinPath(modsPath, modDir)
-        const normalizedPath = modPath.toLowerCase().replace(/\\/g, '/')
+      for (const modInfo of discovered) {
+        const normalizedPath = modInfo.path.toLowerCase().replace(/\\/g, '/')
 
         // Check if this mod is disabled
         if (this.disabledMods.has(normalizedPath)) {
@@ -261,24 +259,24 @@ class ModService {
         }
 
         try {
-          const manifest = await modApi.readModManifest(modPath)
+          const manifest = await modApi.readModManifest(modInfo.path)
 
-          if (modType === 'aircraft') {
-            await this.loadAircraftMod(manifest as AircraftModManifest, modPath)
-          } else {
-            await this.loadTowerMod(manifest as TowerModManifest, modPath)
+          if (modInfo.modType === 'aircraft') {
+            await this.loadAircraftMod(manifest as AircraftModManifest, modInfo.path)
+          } else if (modInfo.modType === 'tower') {
+            await this.loadTowerMod(manifest as TowerModManifest, modInfo.path)
           }
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : String(error)
           this.loadingResult.errors.push({
-            path: modPath,
+            path: modInfo.path,
             error: errorMsg.includes('manifest') ? 'Missing or invalid manifest.json' : errorMsg,
-            type: modType === 'aircraft' ? 'aircraft' : 'tower'
+            type: modInfo.modType === 'aircraft' ? 'aircraft' : 'tower'
           })
         }
       }
     } catch (error) {
-      console.warn(`Failed to list ${modType} mods:`, error)
+      console.warn('Failed to discover mods:', error)
     }
   }
 
@@ -325,9 +323,11 @@ class ModService {
     const modelUrl = joinPath(basePath, manifest.modelFile)
     this.registerTowerMod(manifest, modelUrl, basePath)
 
-    // Get the ICAO from the directory name (normalize path separators first)
-    const normalizedPath = basePath.replace(/\\/g, '/')
-    const icao = normalizedPath.split('/').pop()?.toUpperCase() || 'UNKNOWN'
+    // Get the ICAO from the manifest's airports array (first one for display)
+    // Fall back to folder name if airports array is empty
+    const icao = manifest.airports?.[0]?.toUpperCase() ||
+      basePath.replace(/\\/g, '/').split('/').pop()?.toUpperCase() ||
+      'UNKNOWN'
 
     // Compute placement for logging
     const placement = this.computeTowerPlacement(manifest, icao)

@@ -1,7 +1,7 @@
 //! Mod system for loading custom aircraft and tower models.
 //!
 //! This module handles:
-//! - Finding and listing mod directories
+//! - Finding and listing mod directories (supports recursive discovery for git repos)
 //! - Reading mod manifests (manifest.json)
 //! - Reading tower position files (mods/tower-positions/*.json)
 //! - Listing VMR files in the mods directory
@@ -11,6 +11,20 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::normalize_path_string;
+
+/// A discovered mod with its path and detected type
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscoveredMod {
+    /// Absolute path to the directory containing manifest.json
+    pub path: String,
+    /// Detected mod type: "aircraft" or "tower"
+    pub mod_type: String,
+    /// Whether this is inside a git repository
+    pub is_git_repo: bool,
+    /// Name of the git repo folder (if applicable)
+    pub repo_name: Option<String>,
+}
 
 /// Find the mods root directory (user-modifiable content)
 /// Returns the first path that exists, or the first candidate if none exist
@@ -340,4 +354,129 @@ pub fn list_vmr_files_in_dir(directory: String) -> Result<Vec<String>, String> {
     // Sort for consistent ordering
     vmr_files.sort();
     Ok(vmr_files)
+}
+
+// =============================================================================
+// RECURSIVE MOD DISCOVERY (for git repo support)
+// =============================================================================
+
+/// Recursively discover all mods in the mods directory
+/// Finds manifest.json files at any depth and determines mod type from content
+/// Supports git repos cloned directly into the mods folder
+#[tauri::command]
+pub fn discover_all_mods(app: tauri::AppHandle) -> Result<Vec<DiscoveredMod>, String> {
+    let mods_root = find_mods_root(&app);
+
+    if !mods_root.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut discovered = Vec::new();
+    discover_mods_recursive(&mods_root, &mods_root, &mut discovered)?;
+
+    // Sort by path for consistent ordering
+    discovered.sort_by(|a, b| a.path.cmp(&b.path));
+
+    Ok(discovered)
+}
+
+/// Recursively search for manifest.json files
+fn discover_mods_recursive(
+    dir: &PathBuf,
+    mods_root: &PathBuf,
+    discovered: &mut Vec<DiscoveredMod>,
+) -> Result<(), String> {
+    let entries = match fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return Ok(()), // Skip directories we can't read
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+
+        // Skip hidden directories (like .git)
+        if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+            if name.starts_with('.') {
+                continue;
+            }
+        }
+
+        // Skip tower-positions directory (not a mod, contains position JSON files)
+        if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+            if name == "tower-positions" {
+                continue;
+            }
+        }
+
+        if path.is_dir() {
+            // Check if this directory contains a manifest.json
+            let manifest_path = path.join("manifest.json");
+            if manifest_path.exists() {
+                // Try to determine mod type from manifest content
+                if let Ok(mod_info) = parse_manifest_for_discovery(&path, mods_root) {
+                    discovered.push(mod_info);
+                }
+            }
+
+            // Continue searching subdirectories
+            discover_mods_recursive(&path, mods_root, discovered)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Parse a manifest.json to determine mod type and extract discovery info
+fn parse_manifest_for_discovery(
+    mod_dir: &PathBuf,
+    mods_root: &PathBuf,
+) -> Result<DiscoveredMod, String> {
+    let manifest_path = mod_dir.join("manifest.json");
+    let content = fs::read_to_string(&manifest_path)
+        .map_err(|e| format!("Failed to read manifest: {}", e))?;
+
+    let manifest: serde_json::Value =
+        serde_json::from_str(&content).map_err(|e| format!("Failed to parse manifest: {}", e))?;
+
+    // Determine mod type based on manifest fields
+    let mod_type = if manifest.get("aircraftTypes").is_some() {
+        "aircraft"
+    } else if manifest.get("airports").is_some() {
+        "tower"
+    } else {
+        return Err("Unknown mod type: missing aircraftTypes or airports field".to_string());
+    };
+
+    // Check if this is inside a git repo by looking for .git in parent directories
+    let (is_git_repo, repo_name) = find_git_repo_info(mod_dir, mods_root);
+
+    Ok(DiscoveredMod {
+        path: normalize_path_string(mod_dir),
+        mod_type: mod_type.to_string(),
+        is_git_repo,
+        repo_name,
+    })
+}
+
+/// Check if a directory is inside a git repo and get the repo folder name
+fn find_git_repo_info(dir: &PathBuf, mods_root: &PathBuf) -> (bool, Option<String>) {
+    let mut current = dir.clone();
+
+    while current.starts_with(mods_root) && current != *mods_root {
+        let git_dir = current.join(".git");
+        if git_dir.exists() {
+            let repo_name = current
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(|s| s.to_string());
+            return (true, repo_name);
+        }
+        if let Some(parent) = current.parent() {
+            current = parent.to_path_buf();
+        } else {
+            break;
+        }
+    }
+
+    (false, None)
 }

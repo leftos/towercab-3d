@@ -63,10 +63,39 @@ interface ModInfo {
 }
 
 /**
+ * Discovered mod info from recursive search
+ */
+export interface DiscoveredMod {
+  /** Absolute path to the directory containing manifest.json */
+  path: string
+  /** Detected mod type: "aircraft" or "tower" */
+  modType: 'aircraft' | 'tower'
+  /** Whether this is inside a git repository */
+  isGitRepo: boolean
+  /** Name of the git repo folder (if applicable) */
+  repoName: string | null
+}
+
+/**
  * Mod system API
  * In Tauri mode, uses native commands. In browser mode, uses HTTP API.
  */
 export const modApi = {
+  /**
+   * Recursively discover all mods in the mods directory
+   * Finds manifest.json files at any depth, supporting git repos
+   * Returns discovered mods with their paths and detected types
+   */
+  discoverAllMods: async (): Promise<DiscoveredMod[]> => {
+    if (isTauri()) {
+      return invoke<DiscoveredMod[]>('discover_all_mods')
+    }
+    // Fetch from HTTP API
+    const response = await fetch('/api/mods/discover')
+    if (!response.ok) return []
+    return response.json()
+  },
+
   /**
    * Get the path to a mod type directory (aircraft or towers)
    * In browser mode, returns a virtual path that maps to API endpoints
@@ -95,14 +124,30 @@ export const modApi = {
 
   /**
    * Read a mod manifest JSON file
+   * In browser mode, converts absolute paths to API URLs
    */
   readModManifest: async <T = unknown>(path: string): Promise<T> => {
     if (isTauri()) {
       return invoke<T>('read_mod_manifest', { path })
     }
     // In browser mode, fetch from API
-    // Path is like /api/mods/aircraft/B738, we need to get the manifest
-    const response = await fetch(`${path}/manifest.json`)
+    // Path could be:
+    // 1. Already an API path like /api/mods/aircraft/B738
+    // 2. An absolute path from discoverAllMods that needs conversion
+    let apiUrl: string
+    if (path.startsWith('/api/')) {
+      apiUrl = `${path}/manifest.json`
+    } else {
+      // Extract relative path from absolute path (after "mods/")
+      const normalized = path.replace(/\\/g, '/')
+      const modsMatch = normalized.match(/mods[/](.+)$/i)
+      if (modsMatch) {
+        apiUrl = `/api/mods/file/${modsMatch[1]}/manifest.json`
+      } else {
+        throw new Error(`Invalid mod path: ${path}`)
+      }
+    }
+    const response = await fetch(apiUrl)
     if (!response.ok) throw new Error(`Failed to load manifest: ${response.status}`)
     return response.json()
   },
@@ -424,10 +469,11 @@ export async function convertToAssetUrl(
     return `/api/msfs/${filename}`
   }
 
-  // For mods: extract path after mods/aircraft or mods/towers
-  const modsMatch = normalized.match(/mods[/\\](aircraft|towers)[/\\](.+)$/i)
+  // For mods: extract path after "mods/"
+  // Supports both old structure (mods/aircraft/B738) and git repos (mods/my-repo/tower/KJFK)
+  const modsMatch = normalized.match(/mods[/](.+)$/i)
   if (modsMatch) {
-    return `/api/mods/${modsMatch[1]}/${modsMatch[2]}`
+    return `/api/mods/file/${modsMatch[1]}`
   }
 
   // Last resort fallback
@@ -466,10 +512,11 @@ export function convertToAssetUrlSync(filePath: string): string {
     return `${baseUrl}/api/msfs/${filename}`
   }
 
-  // For mods
-  const modsMatch = normalized.match(/mods[/\\](aircraft|towers)[/\\](.+)$/i)
+  // For mods: extract path after "mods/"
+  // Supports both old structure (mods/aircraft/B738) and git repos (mods/my-repo/tower/KJFK)
+  const modsMatch = normalized.match(/mods[/](.+)$/i)
   if (modsMatch) {
-    return `${baseUrl}/api/mods/${modsMatch[1]}/${modsMatch[2]}`
+    return `${baseUrl}/api/mods/file/${modsMatch[1]}`
   }
 
   // Fallback: return path as-is

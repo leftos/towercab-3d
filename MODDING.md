@@ -26,7 +26,9 @@ FSLTL and AIG models are converted on-demand when aircraft appear. See the **Set
 
 ## File Structure
 
-Mods are placed in the `mods` folder in the application directory:
+Mods are placed in the `mods` folder in the application directory. TowerCab 3D recursively scans for `manifest.json` files, so you can organize mods however you prefer:
+
+### Traditional Structure
 
 ```
 mods/
@@ -45,6 +47,77 @@ mods/
         ├── model.glb
         └── manifest.json
 ```
+
+### Git Repository Structure
+
+You can clone GitHub repositories directly into the mods folder:
+
+```
+mods/
+├── community-towers/           # Git repo
+│   ├── .git/
+│   ├── KJFK/
+│   │   ├── manifest.json
+│   │   └── model.glb
+│   └── KLAX/
+│       ├── manifest.json
+│       └── model.glb
+├── my-aircraft-pack/           # Git repo
+│   ├── .git/
+│   ├── boeing/
+│   │   └── 737-800/
+│   │       ├── manifest.json
+│   │       └── model.glb
+│   └── airbus/
+│       └── a320/
+│           ├── manifest.json
+│           └── model.glb
+└── single-tower-mod/           # Git repo (single mod)
+    ├── .git/
+    ├── manifest.json
+    └── model.glb
+```
+
+## Using Git Repositories for Mods
+
+TowerCab 3D makes it easy to use mods shared on GitHub:
+
+### Cloning a Mod Repository
+
+```bash
+cd path/to/mods
+git clone https://github.com/username/tower-mod.git
+```
+
+The mod will be loaded automatically on next app restart.
+
+### Updating All Mods
+
+Use the included PowerShell script to update all git repositories in your mods folder:
+
+```powershell
+.\scripts\update-mods.ps1
+```
+
+This finds all git repos in the mods folder and runs `git pull` on each.
+
+### Creating Your Own Mod Repository
+
+1. Create a new folder in `mods/` with your mod content
+2. Initialize git: `git init`
+3. Add your manifest.json and model files
+4. Push to GitHub: `git remote add origin https://github.com/you/my-mod.git && git push -u origin main`
+
+Share the repository URL with others so they can clone it!
+
+### Important Notes
+
+- The folder name doesn't matter - TowerCab 3D reads the `manifest.json` to determine mod type
+- Git repos can contain multiple mods at any folder depth
+- The `manifest.json` file determines the mod type:
+  - `aircraftTypes` field → aircraft mod
+  - `airports` field → tower mod
+- Restart TowerCab 3D after cloning new repos or updating mods
 
 ## Aircraft Mods
 
