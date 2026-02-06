@@ -44,6 +44,7 @@
     "resources": [
       "resources/fsltl_converter.exe",
       "resources/texconv.exe",
+      "resources/update-mods.ps1",
       "resources/airports.json",
       "resources/runways.csv",
       "resources/airport-surfaces.json.gz",
