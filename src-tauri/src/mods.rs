@@ -488,3 +488,180 @@ fn find_git_repo_info(dir: &PathBuf, mods_root: &PathBuf) -> (bool, Option<Strin
 
     (false, None)
 }
+
+// =============================================================================
+// GIT REPO UPDATE
+// =============================================================================
+
+/// Result of updating a single git repository
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitUpdateResult {
+    pub repo_name: String,
+    pub path: String,
+    pub success: bool,
+    pub message: String,
+    pub updated: bool,
+}
+
+/// Result of updating all git repositories
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitUpdateAllResult {
+    pub results: Vec<GitUpdateResult>,
+    pub total: usize,
+    pub updated: usize,
+    pub failed: usize,
+}
+
+/// Update all git repositories in the mods folder by running git pull
+#[tauri::command]
+pub fn update_mod_repos(app: tauri::AppHandle) -> Result<GitUpdateAllResult, String> {
+    let mods_root = find_mods_root(&app);
+
+    if !mods_root.exists() {
+        return Ok(GitUpdateAllResult {
+            results: vec![],
+            total: 0,
+            updated: 0,
+            failed: 0,
+        });
+    }
+
+    // Find all .git directories (indicating git repos)
+    let mut git_repos: Vec<PathBuf> = Vec::new();
+    find_git_repos_recursive(&mods_root, &mut git_repos);
+
+    let mut results = Vec::new();
+    let mut updated = 0;
+    let mut failed = 0;
+
+    for repo_path in &git_repos {
+        let repo_name = repo_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown")
+            .to_string();
+
+        let result = update_single_repo(repo_path, &repo_name);
+
+        if result.success && result.updated {
+            updated += 1;
+        } else if !result.success {
+            failed += 1;
+        }
+
+        results.push(result);
+    }
+
+    Ok(GitUpdateAllResult {
+        total: git_repos.len(),
+        results,
+        updated,
+        failed,
+    })
+}
+
+/// Recursively find all git repositories in a directory
+fn find_git_repos_recursive(dir: &PathBuf, repos: &mut Vec<PathBuf>) {
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                // Check if this is a git repo
+                if path.join(".git").exists() {
+                    repos.push(path.clone());
+                    // Don't recurse into git repos (submodules would be separate)
+                } else if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                    // Skip hidden directories and tower-positions
+                    if !name.starts_with('.') && name != "tower-positions" {
+                        find_git_repos_recursive(&path, repos);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Update a single git repository
+fn update_single_repo(repo_path: &PathBuf, repo_name: &str) -> GitUpdateResult {
+    use std::process::Command;
+
+    let path_str = normalize_path_string(repo_path);
+
+    // First, fetch to get remote state
+    let fetch_result = Command::new("git")
+        .args(["fetch"])
+        .current_dir(repo_path)
+        .output();
+
+    if let Err(e) = fetch_result {
+        return GitUpdateResult {
+            repo_name: repo_name.to_string(),
+            path: path_str,
+            success: false,
+            message: format!("Failed to run git fetch: {}", e),
+            updated: false,
+        };
+    }
+
+    // Check if there are updates (compare local HEAD with remote tracking branch)
+    let status_result = Command::new("git")
+        .args(["status", "-uno"])
+        .current_dir(repo_path)
+        .output();
+
+    let needs_update = match &status_result {
+        Ok(output) => {
+            let status = String::from_utf8_lossy(&output.stdout);
+            status.contains("behind")
+        }
+        Err(_) => true, // Assume update needed if we can't check
+    };
+
+    if !needs_update {
+        return GitUpdateResult {
+            repo_name: repo_name.to_string(),
+            path: path_str,
+            success: true,
+            message: "Already up to date".to_string(),
+            updated: false,
+        };
+    }
+
+    // Run git pull
+    let pull_result = Command::new("git")
+        .args(["pull"])
+        .current_dir(repo_path)
+        .output();
+
+    match pull_result {
+        Ok(output) => {
+            if output.status.success() {
+                GitUpdateResult {
+                    repo_name: repo_name.to_string(),
+                    path: path_str,
+                    success: true,
+                    message: "Updated successfully".to_string(),
+                    updated: true,
+                }
+            } else {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                GitUpdateResult {
+                    repo_name: repo_name.to_string(),
+                    path: path_str,
+                    success: false,
+                    message: format!("git pull failed: {}", stderr.trim()),
+                    updated: false,
+                }
+            }
+        }
+        Err(e) => GitUpdateResult {
+            repo_name: repo_name.to_string(),
+            path: path_str,
+            success: false,
+            message: format!("Failed to run git pull: {}", e),
+            updated: false,
+        },
+    }
+}

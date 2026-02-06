@@ -885,6 +885,7 @@ pub fn run() {
             mods::get_custom_tower_position_icaos,
             mods::update_tower_position,
             mods::discover_all_mods,
+            mods::update_mod_repos,
             // VMR parsing commands
             vmr::parse_vmr_files,
             // Global settings commands

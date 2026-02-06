@@ -6,7 +6,7 @@ import { useTowerPositioningStore } from '../../stores/towerPositioningStore'
 import { useViewportStore } from '../../stores/viewportStore'
 import { modService, type ModLoadingResult, type TowerModInfo, type AircraftModInfo, type ModError, getCameraPositionFromManifest } from '../../services/ModService'
 import { customVMRService } from '../../services/CustomVMRService'
-import { joinPath } from '../../utils/tauriApi'
+import { joinPath, modApi, isTauri, type GitUpdateAllResult } from '../../utils/tauriApi'
 import CollapsibleSection from './settings/CollapsibleSection'
 import './ControlsBar.css'
 
@@ -17,6 +17,8 @@ interface SettingsModsTabProps {
 function SettingsModsTab({ onRequestClose }: SettingsModsTabProps) {
   const [modResult, setModResult] = useState<ModLoadingResult | null>(null)
   const [pendingChanges, setPendingChanges] = useState<Set<string>>(new Set())
+  const [isUpdatingRepos, setIsUpdatingRepos] = useState(false)
+  const [updateResult, setUpdateResult] = useState<GitUpdateAllResult | null>(null)
 
   const disabledMods = useGlobalSettingsStore((state) => state.disabledMods)
   const updateDisabledMods = useGlobalSettingsStore((state) => state.updateDisabledMods)
@@ -126,11 +128,42 @@ function SettingsModsTab({ onRequestClose }: SettingsModsTabProps) {
     showFeedback(`Positioning mode started for ${icao}`, 'success')
   }, [airports, selectAirport, showFeedback, startPositioning, onRequestClose])
 
+  // Handle updating all git repos
+  const handleUpdateRepos = useCallback(async () => {
+    setIsUpdatingRepos(true)
+    setUpdateResult(null)
+
+    try {
+      const result = await modApi.updateModRepos()
+      setUpdateResult(result)
+
+      if (result.total === 0) {
+        showFeedback('No git repositories found in mods folder', 'success')
+      } else if (result.updated > 0) {
+        showFeedback(`Updated ${result.updated} of ${result.total} repositories. Restart to apply changes.`, 'success')
+      } else if (result.failed > 0) {
+        showFeedback(`${result.failed} repositories failed to update`, 'error')
+      } else {
+        showFeedback('All repositories are up to date', 'success')
+      }
+    } catch (error) {
+      showFeedback(`Failed to update repositories: ${error instanceof Error ? error.message : String(error)}`, 'error')
+    } finally {
+      setIsUpdatingRepos(false)
+    }
+  }, [showFeedback])
+
   // Get VMR stats
   const vmrStats = customVMRService.getStats()
   const vmrFiles = customVMRService.getLoadedFiles()
 
   const hasPendingChanges = pendingChanges.size > 0
+
+  // Count git repos (unique repo names)
+  const gitRepoNames = new Set<string>()
+  modResult?.towers.forEach(t => { if (t.gitInfo?.repoName) gitRepoNames.add(t.gitInfo.repoName) })
+  modResult?.aircraft.forEach(a => { if (a.gitInfo?.repoName) gitRepoNames.add(a.gitInfo.repoName) })
+  const gitRepoCount = gitRepoNames.size
 
   return (
     <>
@@ -194,6 +227,35 @@ function SettingsModsTab({ onRequestClose }: SettingsModsTabProps) {
           </div>
         )}
       </CollapsibleSection>
+
+      {/* Git Repositories Section - Desktop app only */}
+      {isTauri() && gitRepoCount > 0 && (
+        <CollapsibleSection title={`Git Repositories (${gitRepoCount})`}>
+          <div className="git-repos-section">
+            <p className="setting-hint">
+              Found {gitRepoCount} git {gitRepoCount === 1 ? 'repository' : 'repositories'} in mods folder.
+              Update to pull latest changes from remote.
+            </p>
+            <button
+              className="control-button update-repos-button"
+              onClick={handleUpdateRepos}
+              disabled={isUpdatingRepos}
+            >
+              {isUpdatingRepos ? 'Updating...' : 'Update All Repositories'}
+            </button>
+            {updateResult && (
+              <div className="update-result">
+                {updateResult.results.map((r, i) => (
+                  <div key={i} className={`update-result-item ${r.success ? (r.updated ? 'updated' : 'up-to-date') : 'failed'}`}>
+                    <span className="update-repo-name">{r.repoName}</span>
+                    <span className="update-status">{r.message}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </CollapsibleSection>
+      )}
 
       {/* Tower Positions Section */}
       <CollapsibleSection title={`Tower Positions (${modResult?.towerPositions.builtin ?? 0})`}>
@@ -372,6 +434,58 @@ function SettingsModsTab({ onRequestClose }: SettingsModsTabProps) {
         }
         .control-button.primary:hover {
           background: var(--accent-hover, #5a9fe9);
+        }
+        .git-repos-section {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        .update-repos-button {
+          align-self: flex-start;
+        }
+        .update-repos-button:disabled {
+          opacity: 0.6;
+          cursor: wait;
+        }
+        .update-result {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          margin-top: 8px;
+        }
+        .update-result-item {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 6px 10px;
+          border-radius: 4px;
+          font-size: 0.9em;
+        }
+        .update-result-item.updated {
+          background: rgba(40, 167, 69, 0.15);
+          border: 1px solid var(--success-color, #28a745);
+        }
+        .update-result-item.up-to-date {
+          background: var(--bg-secondary, #1a1a2e);
+          border: 1px solid var(--border-color, #333);
+        }
+        .update-result-item.failed {
+          background: rgba(220, 53, 69, 0.15);
+          border: 1px solid var(--error-color, #dc3545);
+        }
+        .update-repo-name {
+          font-weight: 500;
+          font-family: monospace;
+        }
+        .update-status {
+          color: var(--text-secondary, #888);
+          font-size: 0.9em;
+        }
+        .update-result-item.updated .update-status {
+          color: var(--success-color, #28a745);
+        }
+        .update-result-item.failed .update-status {
+          color: var(--error-color, #dc3545);
         }
       `}</style>
     </>

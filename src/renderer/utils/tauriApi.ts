@@ -77,6 +77,27 @@ export interface DiscoveredMod {
 }
 
 /**
+ * Result of updating a single git repository
+ */
+export interface GitUpdateResult {
+  repoName: string
+  path: string
+  success: boolean
+  message: string
+  updated: boolean
+}
+
+/**
+ * Result of updating all git repositories
+ */
+export interface GitUpdateAllResult {
+  results: GitUpdateResult[]
+  total: number
+  updated: number
+  failed: number
+}
+
+/**
  * Mod system API
  * In Tauri mode, uses native commands. In browser mode, uses HTTP API.
  */
@@ -94,6 +115,19 @@ export const modApi = {
     const response = await fetch('/api/mods/discover')
     if (!response.ok) return []
     return response.json()
+  },
+
+  /**
+   * Update all git repositories in the mods folder
+   * Runs git pull on each discovered git repo
+   * Only available in Tauri mode (not remote browser)
+   */
+  updateModRepos: async (): Promise<GitUpdateAllResult> => {
+    if (isTauri()) {
+      return invoke<GitUpdateAllResult>('update_mod_repos')
+    }
+    // Not available in browser mode
+    throw new Error('Git updates are only available in the desktop app')
   },
 
   /**
