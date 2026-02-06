@@ -4,6 +4,15 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+## [0.0.41-alpha] - 2026-02-06
+
+### Added
+- **Git repository support for mods** - Mods can now be organized as git repositories in the `mods/` folder. When a folder contains a `.git` directory, TowerCab 3D will recursively scan for mods regardless of folder structure. This allows downloading entire mod repositories (e.g., a collection of airline livery aircraft) that don't follow the strict `mods/aircraft/{TYPE}/` or `mods/towers/{ICAO}/` structure.
+- **Explicit mod type field** - Mod manifests can now include an optional `"type": "aircraft"` or `"type": "tower"` field. This is useful for mods in git repositories where the folder structure doesn't clearly indicate the mod type.
+- **Git repository badges in Mods UI** - The Mods management screen now displays a git branch badge next to mods from repositories, showing the current branch name.
+- **"Update All Repositories" button** - Added a button in Settings > Mods to git pull all mod repositories at once, making it easy to update all downloaded mod collections.
+- **update-mods.ps1 script included in installer** - The installer now bundles an `update-mods.ps1` PowerShell script that updates all git repositories in the `mods/` folder. Users can run this script to update mods without opening the app.
+
 ## [0.0.40-alpha] - 2026-01-28
 
 ### Added
