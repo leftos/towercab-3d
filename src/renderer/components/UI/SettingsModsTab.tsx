@@ -4,7 +4,7 @@ import { useAirportStore } from '../../stores/airportStore'
 import { useUIFeedbackStore } from '../../stores/uiFeedbackStore'
 import { useTowerPositioningStore } from '../../stores/towerPositioningStore'
 import { useViewportStore } from '../../stores/viewportStore'
-import { modService, type ModLoadingResult, type TowerModInfo, type ModError, getCameraPositionFromManifest } from '../../services/ModService'
+import { modService, type ModLoadingResult, type TowerModInfo, type AircraftModInfo, type ModError, getCameraPositionFromManifest } from '../../services/ModService'
 import { customVMRService } from '../../services/CustomVMRService'
 import { joinPath } from '../../utils/tauriApi'
 import CollapsibleSection from './settings/CollapsibleSection'
@@ -161,30 +161,13 @@ function SettingsModsTab({ onRequestClose }: SettingsModsTabProps) {
         ) : (
           <div className="mods-list">
             {modResult?.aircraft.map((aircraft) => (
-              <div key={aircraft.path} className="mod-item">
-                <label className="mod-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={!isModDisabled(aircraft.path)}
-                    onChange={() => toggleMod(aircraft.path)}
-                  />
-                  <span className="mod-name">{aircraft.manifest.name || 'Unnamed'}</span>
-                  {pendingChanges.has(aircraft.path.toLowerCase().replace(/\\/g, '/')) && (
-                    <span className="pending-badge">*</span>
-                  )}
-                </label>
-                <div className="mod-details">
-                  {aircraft.manifest.author && (
-                    <span className="mod-author">by {aircraft.manifest.author}</span>
-                  )}
-                  {aircraft.manifest.version && (
-                    <span className="mod-version">v{aircraft.manifest.version}</span>
-                  )}
-                </div>
-                <div className="mod-details">
-                  <span className="mod-types">Types: {aircraft.aircraftTypes.join(', ')}</span>
-                </div>
-              </div>
+              <AircraftModItem
+                key={aircraft.path}
+                aircraft={aircraft}
+                isDisabled={isModDisabled(aircraft.path)}
+                onToggle={() => toggleMod(aircraft.path)}
+                hasPendingChange={pendingChanges.has(aircraft.path.toLowerCase().replace(/\\/g, '/'))}
+              />
             ))}
           </div>
         )}
@@ -311,6 +294,15 @@ function SettingsModsTab({ onRequestClose }: SettingsModsTabProps) {
         .mod-version {
           opacity: 0.7;
         }
+        .mod-repo-badge {
+          background: var(--accent-color, #4a90d9);
+          color: white;
+          font-size: 0.75em;
+          padding: 2px 6px;
+          border-radius: 3px;
+          margin-left: 8px;
+          font-weight: 500;
+        }
         .mod-path-row {
           margin-top: 6px;
           margin-left: 24px;
@@ -419,6 +411,11 @@ function TowerModItem({
             onChange={onToggle}
           />
           <span className="mod-name">{displayName}</span>
+          {tower.gitInfo?.isGitRepo && tower.gitInfo.repoName && (
+            <span className="mod-repo-badge" title="From git repository">
+              {tower.gitInfo.repoName}
+            </span>
+          )}
           {hasPendingChange && <span className="pending-badge">*</span>}
         </label>
         <button
@@ -448,6 +445,51 @@ function TowerModItem({
             <span className="position-source"> ({tower.placement.source})</span>
           )}
         </span>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Aircraft mod item component
+ */
+function AircraftModItem({
+  aircraft,
+  isDisabled,
+  onToggle,
+  hasPendingChange
+}: {
+  aircraft: AircraftModInfo
+  isDisabled: boolean
+  onToggle: () => void
+  hasPendingChange: boolean
+}) {
+  return (
+    <div className="mod-item">
+      <label className="mod-checkbox">
+        <input
+          type="checkbox"
+          checked={!isDisabled}
+          onChange={onToggle}
+        />
+        <span className="mod-name">{aircraft.manifest.name || 'Unnamed'}</span>
+        {aircraft.gitInfo?.isGitRepo && aircraft.gitInfo.repoName && (
+          <span className="mod-repo-badge" title="From git repository">
+            {aircraft.gitInfo.repoName}
+          </span>
+        )}
+        {hasPendingChange && <span className="pending-badge">*</span>}
+      </label>
+      <div className="mod-details">
+        {aircraft.manifest.author && (
+          <span className="mod-author">by {aircraft.manifest.author}</span>
+        )}
+        {aircraft.manifest.version && (
+          <span className="mod-version">v{aircraft.manifest.version}</span>
+        )}
+      </div>
+      <div className="mod-details">
+        <span className="mod-types">Types: {aircraft.aircraftTypes.join(', ')}</span>
       </div>
     </div>
   )

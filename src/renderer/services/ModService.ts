@@ -108,6 +108,14 @@ export interface ModError {
 }
 
 /**
+ * Git repository info for mods loaded from git repos
+ */
+export interface ModGitInfo {
+  isGitRepo: boolean
+  repoName: string | null
+}
+
+/**
  * Tower mod information for the Mods UI
  */
 export interface TowerModInfo {
@@ -116,6 +124,7 @@ export interface TowerModInfo {
   manifest: TowerModManifest
   enabled: boolean
   placement: TowerPlacement | null
+  gitInfo?: ModGitInfo
 }
 
 /**
@@ -126,6 +135,7 @@ export interface AircraftModInfo {
   aircraftTypes: string[]
   manifest: AircraftModManifest
   enabled: boolean
+  gitInfo?: ModGitInfo
 }
 
 /**
@@ -258,13 +268,19 @@ class ModService {
           continue
         }
 
+        // Extract git info
+        const gitInfo: ModGitInfo = {
+          isGitRepo: modInfo.isGitRepo,
+          repoName: modInfo.repoName
+        }
+
         try {
           const manifest = await modApi.readModManifest(modInfo.path)
 
           if (modInfo.modType === 'aircraft') {
-            await this.loadAircraftMod(manifest as AircraftModManifest, modInfo.path)
+            await this.loadAircraftMod(manifest as AircraftModManifest, modInfo.path, gitInfo)
           } else if (modInfo.modType === 'tower') {
-            await this.loadTowerMod(manifest as TowerModManifest, modInfo.path)
+            await this.loadTowerMod(manifest as TowerModManifest, modInfo.path, gitInfo)
           }
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : String(error)
@@ -283,7 +299,7 @@ class ModService {
   /**
    * Load and register an aircraft mod
    */
-  private async loadAircraftMod(manifest: AircraftModManifest, basePath: string): Promise<void> {
+  private async loadAircraftMod(manifest: AircraftModManifest, basePath: string, gitInfo?: ModGitInfo): Promise<void> {
     if (!manifest.modelFile || !this.validateModelFile(manifest.modelFile)) {
       this.loadingResult.errors.push({
         path: basePath,
@@ -302,14 +318,15 @@ class ModService {
       path: basePath,
       aircraftTypes: manifest.aircraftTypes || [],
       manifest,
-      enabled: true
+      enabled: true,
+      gitInfo
     })
   }
 
   /**
    * Load and register a tower mod
    */
-  private async loadTowerMod(manifest: TowerModManifest, basePath: string): Promise<void> {
+  private async loadTowerMod(manifest: TowerModManifest, basePath: string, gitInfo?: ModGitInfo): Promise<void> {
     if (!manifest.modelFile || !this.validateModelFile(manifest.modelFile)) {
       this.loadingResult.errors.push({
         path: basePath,
@@ -338,7 +355,8 @@ class ModService {
       icao,
       manifest,
       enabled: true,
-      placement
+      placement,
+      gitInfo
     })
   }
 
