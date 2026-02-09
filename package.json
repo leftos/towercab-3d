@@ -38,7 +38,7 @@
   "author": "",
   "license": "GPL-2.0",
   "devDependencies": {
-    "@eslint/js": "^9.39.2",
+    "@eslint/js": "^10.0.1",
     "@tauri-apps/cli": "^2.9.6",
     "@types/node": "^25.0.9",
     "@types/rbush": "^4.0.0",
