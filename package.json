@@ -13,6 +13,8 @@
     "extract:surfaces": "python scripts/shipping/data-generation/extract-airport-surfaces.py",
     "dev": "node scripts/shipping/build/dev-wrapper.js",
     "dev:vnas": "node scripts/shipping/build/dev-wrapper.js --vnas",
+    "release": "node scripts/shipping/build/dev-wrapper.js --release",
+    "release:vnas": "node scripts/shipping/build/dev-wrapper.js --release --vnas",
     "dev:server": "npm run vite:build && set TOWERCAB_AUTO_SERVER=1 && tauri dev --config src-tauri/tauri.dev.conf.json",
     "build": "npm run typecheck && npm run build:converter && tauri build",
     "build:vnas": "npm run typecheck && npm run build:converter && npm run update:vnas && tauri build --features vnas",

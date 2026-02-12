@@ -13,13 +13,15 @@
  * 3. Optionally updates vNAS if --vnas flag is passed
  * 4. Starts tauri dev with the appropriate configuration
  *
- * Usage: node scripts/shipping/build/dev-wrapper.js [LOG_PATH] [--vnas] [--force]
+ * Usage: node scripts/shipping/build/dev-wrapper.js [LOG_PATH] [--vnas] [--release] [--force]
  * Examples:
  *   npm run dev
  *   npm run dev -- temp/console.log
  *   npm run dev:vnas
  *   npm run dev:vnas -- temp/console.log
  *   npm run dev -- --force              # Force rebuild even if no changes
+ *   npm run release                     # Optimized Rust + minified frontend
+ *   npm run release:vnas                # Same with vNAS
  *
  * Or use environment variable:
  *   set TOWERCAB_LOG_FILE=temp/console.log && npm run dev
@@ -41,10 +43,12 @@ function needsRebuild() {
     return true
   }
 
-  // Check if last build was dev mode - if not, we need to rebuild unminified
+  // Check if last build mode matches current mode - rebuild if switching
+  const expectedMode = useRelease ? 'prod' : 'dev'
   const markerPath = path.resolve(BUILD_MODE_MARKER)
-  if (!fs.existsSync(markerPath) || fs.readFileSync(markerPath, 'utf8').trim() !== 'dev') {
-    console.log('[dev-wrapper] Last build was production (minified), rebuilding for dev...')
+  if (!fs.existsSync(markerPath) || fs.readFileSync(markerPath, 'utf8').trim() !== expectedMode) {
+    const label = useRelease ? 'release (minified)' : 'dev (unminified)'
+    console.log(`[dev-wrapper] Switching to ${label} build...`)
     return true
   }
 
@@ -93,12 +97,15 @@ function hasNewerFiles(dirPath, compareTime) {
 const args = process.argv.slice(2)
 let logFile = process.env.TOWERCAB_LOG_FILE || null
 let useVnas = false
+let useRelease = false
 let forceRebuild = false
 
 // Parse all arguments (order-independent)
 for (const arg of args) {
   if (arg === '--vnas') {
     useVnas = true
+  } else if (arg === '--release') {
+    useRelease = true
   } else if (arg === '--force') {
     forceRebuild = true
   } else if (!arg.startsWith('--')) {
@@ -131,12 +138,15 @@ if (forceRebuild || needsRebuild()) {
     console.log('[dev-wrapper] Building frontend (full build, copying Cesium)...')
   }
   try {
+    const buildEnv = useRelease
+      ? process.env
+      : { ...process.env, VITE_FAST_BUILD: '1' }
     execSync('npm run vite:build', {
       stdio: 'inherit',
-      env: { ...process.env, VITE_FAST_BUILD: '1' }
+      env: buildEnv
     })
-    // Mark this as a dev build (unminified) so we don't rebuild unnecessarily
-    fs.writeFileSync(path.resolve(BUILD_MODE_MARKER), 'dev')
+    // Mark build mode so we detect switches and rebuild when needed
+    fs.writeFileSync(path.resolve(BUILD_MODE_MARKER), useRelease ? 'prod' : 'dev')
   } catch (error) {
     console.error('Failed to build frontend')
     process.exit(error.status || 1)
@@ -147,6 +157,9 @@ if (forceRebuild || needsRebuild()) {
 
 // Build the command
 let command = 'tauri dev --config src-tauri/tauri.dev.conf.json'
+if (useRelease) {
+  command += ' --release'
+}
 if (useVnas) {
   // First update vNAS, then run with vnas features
   try {
