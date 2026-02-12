@@ -7,6 +7,10 @@ All notable changes to TowerCab 3D will be documented in this file.
 ### Added
 - **Binoculars zoom** - Camera can now zoom up to 20x magnification (previously limited to 6x), simulating adjustable handheld binoculars. A magnification indicator (e.g., "10x") appears on screen when zoomed past normal vision. Zoom controls now use proportional scaling so fine adjustments are possible at extreme zoom levels.
 
+### Fixed
+- **More realistic aircraft pitch attitude** - Aircraft on approach now show a slight nose-up pitch instead of nose-down, matching real-world behavior where angle of attack keeps the nose above the flight path. The offset varies by speed: higher at approach speeds (~5°) and lower at cruise (~2°).
+- **Landing flare no longer causes nose bouncing** - Fixed an issue where aircraft would oscillate their nose up and down several times after touchdown due to noisy altitude data re-triggering the flare logic.
+
 ## [0.0.41-alpha] - 2026-02-06
 
 ### Added

@@ -545,6 +545,52 @@ export const MAX_HEADING_RATE_DEG_PER_SEC_AIR = 6
 export const MAX_HEADING_RATE_DEG_PER_SEC_GROUND = 20
 
 // ============================================================================
+// ANGLE-OF-ATTACK OFFSET
+// ============================================================================
+
+/**
+ * AoA offset at low (approach) speeds in degrees
+ *
+ * Real aircraft fly with positive body pitch even when descending.
+ * On approach at ~130 kts, angle of attack is typically 5-8 degrees,
+ * meaning a -3 degree glideslope results in ~2-5 degrees nose-up body pitch.
+ *
+ * Default: 5 degrees (conservative for transport aircraft on approach)
+ */
+export const AOA_OFFSET_LOW_SPEED_DEGREES = 5
+
+/**
+ * AoA offset at high (cruise) speeds in degrees
+ *
+ * At cruise speeds, angle of attack is lower (1-3 degrees).
+ * Level cruise flight will show a slight nose-up attitude.
+ *
+ * Default: 2 degrees
+ */
+export const AOA_OFFSET_HIGH_SPEED_DEGREES = 2
+
+/**
+ * Groundspeed threshold (knots) below which full low-speed AoA applies
+ *
+ * Below this speed, AoA offset is at its maximum (approach configuration).
+ * Using groundspeed rather than airspeed is intentional: headwinds reduce
+ * groundspeed which directionally increases body pitch, matching reality.
+ *
+ * Default: 120 knots
+ */
+export const AOA_LOW_SPEED_THRESHOLD_KNOTS = 120
+
+/**
+ * Groundspeed threshold (knots) above which full high-speed AoA applies
+ *
+ * Above this speed, AoA offset is at its minimum (cruise configuration).
+ * Between the low and high thresholds, AoA is linearly interpolated.
+ *
+ * Default: 350 knots
+ */
+export const AOA_HIGH_SPEED_THRESHOLD_KNOTS = 350
+
+// ============================================================================
 // PROGRESSIVE LANDING/DEPARTURE BLENDING
 // ============================================================================
 

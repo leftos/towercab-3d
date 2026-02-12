@@ -29,7 +29,12 @@ import {
   LANDING_BLEND_END_AGL,
   LANDING_BLEND_DESCENT_RATE,
   DEPARTURE_BLEND_START_AGL,
-  DEPARTURE_BLEND_END_AGL
+  DEPARTURE_BLEND_END_AGL,
+  AOA_OFFSET_LOW_SPEED_DEGREES,
+  AOA_OFFSET_HIGH_SPEED_DEGREES,
+  AOA_LOW_SPEED_THRESHOLD_KNOTS,
+  AOA_HIGH_SPEED_THRESHOLD_KNOTS,
+  FLARE_START_ALTITUDE_METERS
 } from '../constants/rendering'
 import { STOPPED_SPEED_KTS } from '../constants/flightPhase'
 
@@ -77,6 +82,7 @@ interface NosewheelState {
   transition: { sourcePitch: number; progress: number } | null
   wasInFlare: boolean
   lastFlarePitch: number | null
+  groundCommitted: boolean  // Prevents flare re-engagement after touchdown
 }
 
 /** Consolidated timeline rate tracking state per aircraft */
@@ -210,16 +216,30 @@ function timelineToInterpolatedState(
     rateState.prevPitch = pitch
     rateState.prevRoll = roll
   } else if (orientationEnabled) {
-    // Pitch from vertical rate
+    // Determine ground/air state (used for both pitch and roll)
+    const isOnGround = timeline.onGround === true || timeline.groundspeed < 40
+
+    // Pitch from vertical rate (flight path angle)
     // ~1000 fpm climb = ~5 degrees pitch (standard approximation)
     // verticalRate is in m/min, convert to fpm for calculation
     const fpm = verticalRate * 3.28084
     let targetPitch = (fpm / 1000) * PITCH_RATE_MULTIPLIER * orientationIntensity
-    targetPitch = Math.max(-MAX_PITCH_DEGREES, Math.min(MAX_PITCH_DEGREES, targetPitch))
 
-    // Roll: Only calculate for airborne aircraft
-    // Ground aircraft steer with rudder (yaw only), they don't bank/roll
-    const isOnGround = timeline.onGround === true || timeline.groundspeed < 40
+    // Add angle-of-attack offset for airborne aircraft
+    // Real aircraft fly with positive body pitch even when descending:
+    // body pitch = flight path angle + angle of attack
+    // On approach at -700 fpm with AoA ~5°, body pitch is ~+1° nose-up (realistic)
+    if (!isOnGround) {
+      const speedFraction = Math.min(1, Math.max(0,
+        (timeline.groundspeed - AOA_LOW_SPEED_THRESHOLD_KNOTS) /
+        (AOA_HIGH_SPEED_THRESHOLD_KNOTS - AOA_LOW_SPEED_THRESHOLD_KNOTS)
+      ))
+      const aoaOffset = AOA_OFFSET_LOW_SPEED_DEGREES +
+        (AOA_OFFSET_HIGH_SPEED_DEGREES - AOA_OFFSET_LOW_SPEED_DEGREES) * speedFraction
+      targetPitch += aoaOffset * orientationIntensity
+    }
+
+    targetPitch = Math.max(-MAX_PITCH_DEGREES, Math.min(MAX_PITCH_DEGREES, targetPitch))
     let targetRoll: number
     if (isOnGround) {
       // Ground aircraft: no roll, only yaw steering
@@ -693,7 +713,8 @@ function updateInterpolation() {
         nosewheelState = {
           transition: null,
           wasInFlare: false,
-          lastFlarePitch: null
+          lastFlarePitch: null,
+          groundCommitted: false
         }
         sharedNosewheelStateRef.current.set(callsign, nosewheelState)
       }
@@ -702,55 +723,66 @@ function updateInterpolation() {
       // Use reported altitude (not corrected) since terrain height is in ellipsoid coords
       const altitudeAGLFlare = reportedEllipsoidHeight - sampledTerrainHeight
 
-      // Determine if aircraft is currently in flare conditions BEFORE applying flare
-      // This allows us to capture the actual flare pitch when aircraft is in flare
-      const isDescending = entry.verticalRate < -50  // m/min
-      const inFlareZone = altitudeAGLFlare > 0 && altitudeAGLFlare < 15  // meters
-      // Note: inFlareZone already requires altitudeAGL > 0 (airborne), no speed check needed
-      const isInFlare = isDescending && inFlareZone
-
-      // Get the base pitch (without flare) for reference
-      const basePitch = entry.interpolatedPitch
-
-      // Apply flare pitch calculation
-      entry.interpolatedPitch = calculateFlarePitch(
-        entry.interpolatedPitch,
-        altitudeAGLFlare,
-        entry.verticalRate,  // Already in m/min
-        entry.interpolatedGroundspeed,
-        orientationIntensity
-      )
-
-      // If currently in flare, store the actual flare pitch for nosewheel transition
-      if (isInFlare) {
-        nosewheelState.lastFlarePitch = entry.interpolatedPitch
-      }
-
-      // Track flare state for nosewheel lowering transition
-      if (nosewheelState.wasInFlare && !isInFlare && !nosewheelState.transition) {
-        // Just exited flare! Start nosewheel lowering transition
-        // Use the stored flare pitch from when we were actually in flare
-        const lastFlarePitch = nosewheelState.lastFlarePitch ?? (basePitch + FALLBACK_FLARE_PITCH_DEGREES)
-        nosewheelState.transition = {
-          sourcePitch: lastFlarePitch,
-          progress: 0
+      // Clear groundCommitted when clearly airborne again (handles go-around / touch-and-go)
+      // Both conditions required to prevent false clears from a single noisy datum
+      if (nosewheelState.groundCommitted) {
+        if (!shouldClampToTerrain && altitudeAGLFlare > FLARE_START_ALTITUDE_METERS) {
+          nosewheelState.groundCommitted = false
+          nosewheelState.wasInFlare = false
+          nosewheelState.lastFlarePitch = null
+          nosewheelState.transition = null
         }
-        // Clean up stored flare pitch
-        nosewheelState.lastFlarePitch = null
       }
 
-      // Apply ongoing nosewheel lowering transition
+      // Only run flare detection when NOT committed to ground
+      // Once committed (after first touchdown), flare logic is locked out to prevent
+      // nose oscillation from noisy AGL data flickering the isInFlare flag
+      if (!nosewheelState.groundCommitted) {
+        const isDescending = entry.verticalRate < -50  // m/min
+        const inFlareZone = altitudeAGLFlare > 0 && altitudeAGLFlare < 15  // meters
+        const isInFlare = isDescending && inFlareZone
+
+        const basePitch = entry.interpolatedPitch
+
+        // Apply flare pitch calculation
+        entry.interpolatedPitch = calculateFlarePitch(
+          entry.interpolatedPitch,
+          altitudeAGLFlare,
+          entry.verticalRate,  // Already in m/min
+          entry.interpolatedGroundspeed,
+          orientationIntensity
+        )
+
+        // If currently in flare, store the actual flare pitch for nosewheel transition
+        if (isInFlare) {
+          nosewheelState.lastFlarePitch = entry.interpolatedPitch
+        }
+
+        // Track flare state for nosewheel lowering transition
+        if (nosewheelState.wasInFlare && !isInFlare && !nosewheelState.transition) {
+          // Just exited flare! Start nosewheel lowering transition
+          const lastFlarePitch = nosewheelState.lastFlarePitch ?? (basePitch + FALLBACK_FLARE_PITCH_DEGREES)
+          nosewheelState.transition = {
+            sourcePitch: lastFlarePitch,
+            progress: 0
+          }
+          nosewheelState.lastFlarePitch = null
+          // Lock: prevent flare re-engagement until clearly airborne again
+          nosewheelState.groundCommitted = true
+        }
+
+        nosewheelState.wasInFlare = isInFlare
+      }
+
+      // Nosewheel transition runs even when groundCommitted
       if (nosewheelState.transition && nosewheelState.transition.progress < 1.0) {
         // Gradually lower nose over ~1 second at 60fps (~60 frames)
-        // smoothstep easing for natural deceleration
         nosewheelState.transition.progress = Math.min(1.0, nosewheelState.transition.progress + NOSEWHEEL_LOWERING_LERP_FACTOR)
 
         // smoothstep: x^2 * (3 - 2x) for smooth acceleration/deceleration
         const easedProgress = nosewheelState.transition.progress * nosewheelState.transition.progress * (3 - 2 * nosewheelState.transition.progress)
 
         // Blend from flare pitch to level (0 degrees)
-        // Using 0 as target instead of basePitch prevents oscillation from noisy
-        // vertical rate data during rollout (terrain samples at 3Hz cause spikes)
         entry.interpolatedPitch = nosewheelState.transition.sourcePitch * (1 - easedProgress)
 
         // Clean up completed transitions
@@ -759,8 +791,12 @@ function updateInterpolation() {
         }
       }
 
-      // Update flare state for next frame
-      nosewheelState.wasInFlare = isInFlare
+      // While ground-committed and no active transition, suppress AoA-induced pitch
+      // Aircraft may still be >40 kts (isOnGround=false) during rollout, but it's on the ground
+      // Terrain slope is added in the next section
+      if (nosewheelState.groundCommitted && !nosewheelState.transition) {
+        entry.interpolatedPitch = 0
+      }
     }
 
     // ========================================================================
