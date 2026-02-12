@@ -40,7 +40,7 @@
   "author": "",
   "license": "GPL-2.0",
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
+    "@eslint/js": "^9.39.2",
     "@tauri-apps/cli": "^2.9.6",
     "@types/node": "^25.0.9",
     "@types/rbush": "^4.0.0",
@@ -48,7 +48,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.2",
     "@vitest/ui": "^4.0.18",
-    "eslint": "^10.0.0",
+    "eslint": "^9.39.2",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.0.1",
     "fast-xml-parser": "^5.3.3",

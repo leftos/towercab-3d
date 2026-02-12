@@ -28,6 +28,12 @@ updates:
         patterns:
           - "vitest"
           - "@vitest/*"
+    ignore:
+      # eslint-plugin-react and eslint-plugin-react-hooks don't support ESLint 10 yet
+      - dependency-name: "eslint"
+        versions: [">=10"]
+      - dependency-name: "@eslint/js"
+        versions: [">=10"]
 
   - package-ecosystem: "cargo"
     directory: "/src-tauri"
