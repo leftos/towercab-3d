@@ -287,8 +287,10 @@ export function useTouchInput(
             adjustOrbitDistance(-pinchDelta * pinchSensitivity * 2)
           }
         } else {
-          // 3D view: adjust FOV (pinch out = lower FOV = zoom in)
-          adjustFov(-pinchDelta * pinchSensitivity * 0.3)
+          // 3D view: proportional FOV zoom (pinch out = lower FOV = zoom in)
+          const vp = useViewportStore.getState().viewports.find(v => v.id === viewportIdRef.current)
+          const fovScale = (vp?.cameraState?.fov ?? 60) / 60
+          adjustFov(-pinchDelta * pinchSensitivity * 0.3 * fovScale)
         }
       }
     }, Cesium.ScreenSpaceEventType.PINCH_MOVE)

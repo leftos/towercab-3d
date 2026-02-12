@@ -136,7 +136,7 @@ export interface ViewportCameraState {
   heading: number
   /** Camera pitch in degrees (-90 to 90, negative = looking down, 0 = horizon, positive = looking up) */
   pitch: number
-  /** Field of view in degrees (10-120, smaller = more zoomed in) */
+  /** Field of view in degrees (3-120, smaller = more zoomed in) */
   fov: number
 
   // Position offset from tower (meters, in local ENU coordinates)
@@ -164,8 +164,8 @@ export interface ViewportCameraState {
   /** Following mode: tower tracking or orbit */
   followMode: FollowMode
   /**
-   * Zoom factor for tower follow mode (0.5-10.0, 1.0 = default)
-   * Lower values = more zoomed in, higher = more zoomed out
+   * Zoom factor for tower follow mode (0.5-20.0, 1.0 = default)
+   * Higher values = more zoomed in (narrower FOV), lower = more zoomed out
    */
   followZoom: number
   /**

@@ -1,6 +1,7 @@
 // Camera geometry utilities for orbit and tower mode calculations
 
 import { calculateBearing } from './geoMath'
+import { FOV_MIN, FOV_MAX } from '../constants/camera'
 
 // Constants for coordinate conversion
 const METERS_PER_DEGREE_LAT = 111111
@@ -197,8 +198,8 @@ export function calculateTowerLookAt(
 export function calculateFollowFov(
   baseFov: number,
   followZoom: number,
-  minFov: number = 10,
-  maxFov: number = 120
+  minFov: number = FOV_MIN,
+  maxFov: number = FOV_MAX
 ): number {
   return Math.max(minFov, Math.min(maxFov, baseFov / followZoom))
 }

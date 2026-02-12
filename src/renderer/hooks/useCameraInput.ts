@@ -508,12 +508,14 @@ export function useCameraInput(
         const distanceStep = orbitDistanceRef.current * 0.15 * normalizedDelta
         adjustOrbitDistance(distanceStep)
       } else if (currentFollowingCallsign && currentFollowMode === 'tower') {
-        // Tower follow mode: adjust follow zoom (inverted so scroll down = zoom in)
-        const zoomStep = -normalizedDelta * 0.3
+        // Tower follow mode: proportional follow zoom (inverted so scroll down = zoom in)
+        const zoomStep = -normalizedDelta * followZoomRef.current * 0.05
         adjustFollowZoom(zoomStep)
       } else {
-        // Normal 3D mode: adjust FOV directly (~5° per notch)
-        const fovStep = normalizedDelta * 5
+        // Normal 3D mode: proportional FOV zoom
+        // Each scroll notch changes FOV by ~8%, giving ~5° at 60° and ~0.24° at 3°
+        const currentFov = fovRef.current
+        const fovStep = currentFov * (Math.pow(1.08, normalizedDelta) - 1)
         adjustFov(fovStep)
       }
     }
@@ -935,7 +937,10 @@ export function useCameraInput(
         if (followingCallsignRef.current && followModeRef.current !== 'orbit') {
           adjustFollowZoom(vel.zoom * dt)  // Tower follow mode zoom
         } else {
-          adjustFov(vel.zoom * dt)
+          // Proportional FOV change: scale by current FOV / 60
+          // At 60° behavior is unchanged, at 3° zoom rate is 1/20th
+          const fovScale = fovRef.current / 60
+          adjustFov(vel.zoom * dt * fovScale)
         }
       }
       if (Math.abs(vel.orbitHeading) > threshold) {

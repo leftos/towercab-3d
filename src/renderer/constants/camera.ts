@@ -17,7 +17,7 @@
  * Lower bound for camera zoom.
  * Smaller FOV = more zoomed in (telephoto effect)
  */
-export const FOV_MIN = 10
+export const FOV_MIN = 3
 
 /**
  * Maximum field of view in degrees
@@ -195,7 +195,7 @@ export const FOLLOW_ZOOM_MIN = 0.5
 /**
  * Maximum follow zoom factor
  */
-export const FOLLOW_ZOOM_MAX = 10.0
+export const FOLLOW_ZOOM_MAX = 20.0
 
 // ============================================================================
 // TOP-DOWN VIEW

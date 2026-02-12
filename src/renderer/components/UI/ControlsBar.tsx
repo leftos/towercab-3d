@@ -610,7 +610,7 @@ function ControlsBar() {
                   {followMode === 'tower' && (
                     <span className="follow-zoom-info">
                       Zoom: {followZoom.toFixed(1)}x
-                      <span className="follow-range">(0.5–5.0)</span>
+                      <span className="follow-range">(0.5–20)</span>
                     </span>
                   )}
                   {followMode === 'orbit' && (
