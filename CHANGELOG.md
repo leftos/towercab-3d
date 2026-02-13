@@ -10,6 +10,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 ### Fixed
 - **More realistic aircraft pitch attitude** - Aircraft on approach now show a slight nose-up pitch instead of nose-down, matching real-world behavior where angle of attack keeps the nose above the flight path. The offset varies by speed: higher at approach speeds (~5°) and lower at cruise (~2°).
 - **Landing flare no longer causes nose bouncing** - Fixed an issue where aircraft would oscillate their nose up and down several times after touchdown due to noisy altitude data re-triggering the flare logic.
+- **Aircraft no longer pulled toward ground on approach** - When authoritative ground state data is available (vNAS, ADS-B), aircraft now follow their reported altitude on approach instead of being progressively blended toward the terrain surface. The progressive blending is still used for VATSIM HTTP data where altitude accuracy is lower.
 
 ## [0.0.41-alpha] - 2026-02-06
 

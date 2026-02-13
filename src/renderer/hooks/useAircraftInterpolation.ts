@@ -612,8 +612,13 @@ function updateInterpolation() {
     } else if (sampledTerrainHeight !== undefined && terrainClampedHeight > reportedHeightWithOffset) {
       // Terrain higher than reported = prevent going underground
       groundBlendWeight = 1.0
+    } else if (entry.isOnGround === false) {
+      // Source data (vNAS, ADS-B) confirms aircraft is airborne - trust reported altitude
+      // Skip progressive blending which would pull the aircraft toward terrain prematurely
+      groundBlendWeight = 0
     } else if (verticalRate < LANDING_BLEND_DESCENT_RATE && altitudeAGL < LANDING_BLEND_START_AGL) {
       // LANDING: Aircraft is descending and low - blend toward terrain
+      // Only applies for sources without authoritative ground state (VATSIM HTTP polling)
       // At LANDING_BLEND_START_AGL (50m): start blending (weight = 0)
       // At LANDING_BLEND_END_AGL (10m): full ground (weight = 1)
       const blendRange = LANDING_BLEND_START_AGL - LANDING_BLEND_END_AGL
