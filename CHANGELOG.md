@@ -4,6 +4,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **"Airline Codes Only" mode hides GA tail numbers** - The airline datablock mode now hides registration/tail numbers for general aviation aircraft, showing only the aircraft type and flight data. This simulates what a controller can actually discern from the tower window: airline liveries and aircraft type, but not small tail numbers.
+
 ## [0.0.42-alpha] - 2026-02-12
 
 ### Added

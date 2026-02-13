@@ -109,7 +109,7 @@ function SettingsAircraftLabelsTab() {
                   checked={datablockMode === 'airline'}
                   onChange={() => updateDisplay({ datablockMode: 'airline' })}
                 />
-                Airline Codes Only (ICAO code for airline flights)
+                Airline Codes Only (ICAO code for airline flights, hides GA tail numbers)
               </label>
               <label>
                 <input

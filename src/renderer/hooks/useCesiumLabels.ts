@@ -387,11 +387,16 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
             if (match) {
               // Show only the airline ICAO code (first 3 letters)
               displayCallsign = match[1]
+            } else {
+              // GA aircraft: hide tail number (can't read it from the tower)
+              // Show only type + data line
+              displayCallsign = ''
             }
-            // If doesn't match pattern, show full callsign (e.g., N12345)
           }
 
-          labelText = `${displayCallsign}\n${type} ${dataLine}`
+          labelText = displayCallsign
+            ? `${displayCallsign}\n${type} ${dataLine}`
+            : `${type} ${dataLine}`
         }
       }
 
