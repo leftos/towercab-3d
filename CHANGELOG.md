@@ -4,6 +4,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+## [0.0.42-alpha] - 2026-02-12
+
 ### Added
 - **Binoculars zoom** - Camera can now zoom up to 20x magnification (previously limited to 6x), simulating adjustable handheld binoculars. A magnification indicator (e.g., "10x") appears on screen when zoomed past normal vision. Zoom controls now use proportional scaling so fine adjustments are possible at extreme zoom levels.
 
