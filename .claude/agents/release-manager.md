@@ -73,7 +73,7 @@ git push --tags
 
 ### Step 8: Monitor Release Build
 Monitor the GitHub Actions `release.yml` workflow with a 25-minute timeout:
-1. Check workflow status periodically (every 2-3 minutes)
+1. Check workflow status every 30 seconds (use `sleep 30` between checks)
 2. Use `gh run list --workflow=release.yml --limit=1` to check status
 3. If the workflow fails, report the failure and provide the run URL for investigation
 4. If the workflow succeeds, proceed to Step 9
