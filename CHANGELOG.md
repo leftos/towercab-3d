@@ -4,6 +4,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+## [0.0.43-alpha] - 2026-02-14
+
 ### Added
 - **URL bookmarks for remote browser access** - When accessing TowerCab 3D from a remote browser, you can now use URL parameters to auto-select an airport and camera bookmark (e.g., `/?airport=KJFK&bookmark=3`). The URL updates automatically when you switch airports or load bookmarks, so you can use your browser's bookmarks to save direct links to specific views.
 - **Minimize to system tray** - When the remote browser server is running, closing the window now minimizes the app to the system tray instead of quitting, keeping remote clients connected. The tray icon lets you restore the window or quit. This behavior can be toggled in Settings > Remote Browser Access.
