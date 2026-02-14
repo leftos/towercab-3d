@@ -113,9 +113,46 @@ mod real_impl {
     use super::*;
     use crate::settings::{read_global_settings, write_global_settings};
     use std::sync::Arc;
+    use std::sync::Mutex as StdMutex;
     use std::time::{SystemTime, UNIX_EPOCH};
     use tauri::Emitter;
     use tokio::sync::{broadcast, RwLock as TokioRwLock};
+
+    // =========================================================================
+    // MODULE-LEVEL CACHES (for sync access from server.rs WebSocket handler)
+    // =========================================================================
+    // These mirror the Tauri-managed VnasState so that the sync helper functions
+    // (get_state_sync, get_session_facilities_sync, get_subscribed_facilities_sync)
+    // can return real data without needing async access to Tauri managed state.
+
+    static CACHED_VNAS_STATE: StdMutex<Option<String>> = StdMutex::new(None);
+    static CACHED_SESSION_FACILITIES: StdMutex<Vec<String>> = StdMutex::new(Vec::new());
+    static CACHED_SUBSCRIBED_FACILITIES: StdMutex<Vec<String>> = StdMutex::new(Vec::new());
+
+    /// Update the cached vNAS state string (for sync access from server.rs)
+    fn cache_state(state: SessionState) {
+        let state_str = serde_json::to_string(&state)
+            .unwrap_or_default()
+            .trim_matches('"')
+            .to_string();
+        if let Ok(mut guard) = CACHED_VNAS_STATE.lock() {
+            *guard = Some(state_str);
+        }
+    }
+
+    /// Update the cached session facilities (for sync access from server.rs)
+    fn cache_session_facilities(facilities: &[String]) {
+        if let Ok(mut guard) = CACHED_SESSION_FACILITIES.lock() {
+            *guard = facilities.to_vec();
+        }
+    }
+
+    /// Update the cached subscribed facilities (for sync access from server.rs)
+    fn cache_subscribed_facilities(facilities: &[String]) {
+        if let Ok(mut guard) = CACHED_SUBSCRIBED_FACILITIES.lock() {
+            *guard = facilities.to_vec();
+        }
+    }
 
     // Import types from the vNAS crate
     use towercab_3d_vnas::{
@@ -295,7 +332,11 @@ mod real_impl {
     /// Get the current vNAS connection status
     #[tauri::command]
     pub fn vnas_get_status(state: State<'_, VnasState>) -> VnasStatus {
-        state.status()
+        let status = state.status();
+        // Update caches so sync functions return current data
+        cache_state(status.state);
+        cache_subscribed_facilities(&status.subscribed_facilities);
+        status
     }
 
     /// Check if vNAS feature is available
@@ -539,12 +580,14 @@ mod real_impl {
         }
 
         state.update_state(SessionState::Connecting);
+        cache_state(SessionState::Connecting);
         let _ = app.emit("vnas-state-changed", SessionState::Connecting);
 
         // Connect to SignalR hub
         service.connect().await.map_err(|e| {
             state.set_error(Some(e.to_string()));
             state.update_state(SessionState::Disconnected);
+            cache_state(SessionState::Disconnected);
             let _ = app.emit("vnas-state-changed", SessionState::Disconnected);
             format!("Connection failed: {}", e)
         })?;
@@ -556,6 +599,7 @@ mod real_impl {
         let service_state = service.state().await;
         let frontend_state: SessionState = service_state.into();
         state.update_state(frontend_state);
+        cache_state(frontend_state);
         let _ = app.emit("vnas-state-changed", frontend_state);
 
         // Start listening for events
@@ -587,6 +631,7 @@ mod real_impl {
                     VnasEvent::SessionStateChanged(new_state) => {
                         let frontend_state: SessionState = new_state.into();
                         status_lock.write().state = frontend_state;
+                        cache_state(frontend_state);
                         tracing::info!("[vNAS] Session state changed: {:?}", frontend_state);
                         if let Some(ref app) = app_handle {
                             let _ = app.emit("vnas-state-changed", &frontend_state);
@@ -658,9 +703,11 @@ mod real_impl {
 
         state.add_facility(facility_id.clone());
         state.update_state(SessionState::Connected);
+        cache_state(SessionState::Connected);
 
         // Emit updated subscriptions list
         let subscriptions = state.status().subscribed_facilities;
+        cache_subscribed_facilities(&subscriptions);
         let _ = app.emit("vnas-subscriptions-changed", &subscriptions);
         let _ = app.emit("vnas-state-changed", SessionState::Connected);
 
@@ -686,6 +733,7 @@ mod real_impl {
 
         // Emit updated subscriptions list
         let subscriptions = state.status().subscribed_facilities;
+        cache_subscribed_facilities(&subscriptions);
         let _ = app.emit("vnas-subscriptions-changed", &subscriptions);
 
         tracing::info!(facility_id, "Unsubscribed from facility");
@@ -713,6 +761,11 @@ mod real_impl {
         status.subscribed_facilities.clear();
         status.error = None;
         state.set_status(status);
+
+        // Clear caches
+        cache_state(SessionState::Disconnected);
+        cache_subscribed_facilities(&[]);
+        cache_session_facilities(&[]);
 
         tracing::debug!("vNAS disconnected");
         Ok(())
@@ -750,7 +803,9 @@ mod real_impl {
             .as_ref()
             .ok_or_else(|| "vNAS service not initialized".to_string())?;
 
-        Ok(service.available_facilities().await)
+        let facilities = service.available_facilities().await;
+        cache_session_facilities(&facilities);
+        Ok(facilities)
     }
 
     /// Get the ARTCC ID for the current session.
@@ -780,7 +835,11 @@ mod real_impl {
             .as_ref()
             .ok_or_else(|| "vNAS service not initialized".to_string())?;
 
-        service.session_airports().await.map_err(|e| e.to_string())
+        let airports = service.session_airports().await.map_err(|e| e.to_string())?;
+        // Cache the resolved airports as session facilities (these are the ICAOs
+        // that remote clients can see in the airport selector)
+        cache_session_facilities(&airports);
+        Ok(airports)
     }
 
     /// Initialize vNAS state for Tauri app.
@@ -793,21 +852,34 @@ mod real_impl {
     // HELPER FUNCTIONS (for server.rs WebSocket handler)
     // =========================================================================
 
+    /// Get the current vNAS state string synchronously (for WebSocket init message).
+    /// Returns "disconnected" if not set.
+    pub fn get_state_sync() -> String {
+        CACHED_VNAS_STATE
+            .lock()
+            .ok()
+            .and_then(|guard| guard.clone())
+            .unwrap_or_else(|| "disconnected".to_string())
+    }
+
     /// Get session facilities synchronously (for WebSocket init message).
-    /// Returns empty vec if not connected.
+    /// Returns the cached session facilities from the most recent fetch.
     pub fn get_session_facilities_sync() -> Vec<String> {
-        // This is called from sync context, so we use tokio's spawn_blocking
-        // For now, return empty - the frontend will fetch via command
-        Vec::new()
+        CACHED_SESSION_FACILITIES
+            .lock()
+            .ok()
+            .map(|guard| guard.clone())
+            .unwrap_or_default()
     }
 
     /// Get subscribed facilities synchronously (for WebSocket init message).
-    /// This accesses the RwLock directly since VnasState is in Tauri's managed state.
+    /// Returns the cached subscribed facilities from the most recent state update.
     pub fn get_subscribed_facilities_sync() -> Vec<String> {
-        // Since VnasState is managed by Tauri, we can't access it from here without the State.
-        // Return empty - the actual subscriptions are sent via ObservationMessage::Subscriptions
-        // when they change.
-        Vec::new()
+        CACHED_SUBSCRIBED_FACILITIES
+            .lock()
+            .ok()
+            .map(|guard| guard.clone())
+            .unwrap_or_default()
     }
 
     /// Subscribe to a facility internally (for WebSocket subscription requests).
@@ -842,9 +914,11 @@ mod real_impl {
 
         state.add_facility(facility_id.to_string());
         state.update_state(SessionState::Connected);
+        cache_state(SessionState::Connected);
 
         // Emit updated subscriptions list
         let subscriptions = state.status().subscribed_facilities;
+        cache_subscribed_facilities(&subscriptions);
         let _ = app.emit("vnas-subscriptions-changed", &subscriptions);
         let _ = app.emit("vnas-state-changed", SessionState::Connected);
 
@@ -872,6 +946,7 @@ mod real_impl {
 
         // Emit updated subscriptions list
         let subscriptions = state.status().subscribed_facilities;
+        cache_subscribed_facilities(&subscriptions);
         let _ = app.emit("vnas-subscriptions-changed", &subscriptions);
 
         tracing::info!(facility_id, "Unsubscribed from facility via remote request");
@@ -1056,6 +1131,11 @@ mod stub_impl {
     // =========================================================================
     // HELPER FUNCTIONS (stubs for server.rs WebSocket handler)
     // =========================================================================
+
+    /// Get the current vNAS state string synchronously (stub).
+    pub fn get_state_sync() -> String {
+        "disconnected".to_string()
+    }
 
     /// Get session facilities synchronously (stub).
     pub fn get_session_facilities_sync() -> Vec<String> {

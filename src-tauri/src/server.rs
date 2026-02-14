@@ -93,7 +93,12 @@ pub enum ObservationMessage {
     Init {
         session_facilities: Vec<String>,
         subscribed_facilities: Vec<String>,
+        vnas_state: String,
     },
+
+    /// vNAS connection state change (broadcast to remote clients)
+    #[serde(rename = "vnas_state")]
+    VnasState { state: String },
 
     /// Airport synchronization for RealTraffic mode
     /// When using RealTraffic, all clients must be synced to the same airport
@@ -1475,6 +1480,7 @@ async fn handle_observations_websocket(socket: WebSocket, state: Arc<ServerState
     let init_msg = ObservationMessage::Init {
         session_facilities: crate::vnas::get_session_facilities_sync(),
         subscribed_facilities: crate::vnas::get_subscribed_facilities_sync(),
+        vnas_state: crate::vnas::get_state_sync(),
     };
     if let Ok(json) = serde_json::to_string(&init_msg) {
         if sender.send(Message::Text(json)).await.is_err() {

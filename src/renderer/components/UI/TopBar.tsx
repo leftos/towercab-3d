@@ -8,6 +8,7 @@ import { useViewportStore } from '../../stores/viewportStore'
 import { useIsMobileLayout } from '../../hooks/useIsMobileLayout'
 import { isTauri } from '../../utils/tauriApi'
 import { isRemoteMode } from '../../utils/remoteMode'
+import { useRemoteStatusStore } from '../../stores/remoteStatusStore'
 import RemoteIndicator from './RemoteIndicator'
 import RemoteClientsIndicator from './RemoteClientsIndicator'
 import RemoteStatusIndicator from './RemoteStatusIndicator'
@@ -57,10 +58,18 @@ function TopBar({ onCommandClick }: TopBarProps) {
   const vnasConnected = vnasState === 'connected'
   const vnasConnecting = ['authenticating', 'connecting', 'joiningSession', 'waitingForSession', 'subscribing'].includes(vnasState)
 
+  // Remote status (WebSocket connection health) - used for mobile layout in remote mode
+  const remoteWsConnected = useRemoteStatusStore((state) => state.wsConnected)
+  const remoteLastObservationTime = useRemoteStatusStore((state) => state.lastObservationTime)
+
   // Determine connection status and count based on data source
-  const isConnected = dataSource === 'realtraffic'
-    ? rtStatus === 'connected'
-    : vatsimIsConnected
+  // In remote mode, use WebSocket connection status instead of direct VATSIM/RT status
+  // (remote browsers don't poll VATSIM directly - they receive data via WebSocket relay)
+  const isConnected = isRemoteMode()
+    ? remoteWsConnected && remoteLastObservationTime > 0
+    : dataSource === 'realtraffic'
+      ? rtStatus === 'connected'
+      : vatsimIsConnected
   const trafficCount = dataSource === 'realtraffic'
     ? rtTotalAircraft
     : vatsimTotalPilots
@@ -146,9 +155,19 @@ function TopBar({ onCommandClick }: TopBarProps) {
             <RemoteIndicator />
           </>
         )}
-        {/* Remote status indicator - shown for remote clients */}
+        {/* Remote status indicator and vNAS badge - shown for remote clients */}
         {!isMobileLayout && isRemoteMode() && (
-          <RemoteStatusIndicator />
+          <>
+            {dataSource === 'vatsim' && (vnasConnected || vnasConnecting) && (
+              <span
+                className={`vnas-indicator ${vnasConnected ? 'connected' : 'connecting'}`}
+                title={vnasConnected ? 'vNAS 1Hz updates active' : 'vNAS connecting...'}
+              >
+                vNAS
+              </span>
+            )}
+            <RemoteStatusIndicator />
+          </>
         )}
         {/* Mobile tools flyout - includes connectivity status on mobile */}
         {isMobileLayout && onCommandClick && (

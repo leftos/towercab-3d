@@ -56,6 +56,7 @@ interface InitMessage {
   type: 'init'
   session_facilities: string[]
   subscribed_facilities: string[]
+  vnas_state: string
 }
 
 interface ObservationsMessage {
@@ -79,7 +80,12 @@ interface AirportSyncMessage {
   realtraffic_active: boolean
 }
 
-type WebSocketMessage = InitMessage | ObservationsMessage | RemovalsMessage | SubscriptionsMessage | AirportSyncMessage
+interface VnasStateMessage {
+  type: 'vnas_state'
+  state: string
+}
+
+type WebSocketMessage = InitMessage | ObservationsMessage | RemovalsMessage | SubscriptionsMessage | AirportSyncMessage | VnasStateMessage
 
 // Module-level WebSocket reference for requestRemoteSubscription()
 let moduleWsRef: WebSocket | null = null
@@ -95,6 +101,7 @@ export function useRemoteObservations(): void {
   const removeAircraft = useAircraftTimelineStore(state => state.removeAircraft)
   const setSubscribedFacilities = useVnasStore(state => state.setSubscribedFacilities)
   const setSessionFacilities = useVnasStore(state => state.setSessionFacilities)
+  const setStateOnly = useVnasStore(state => state.setStateOnly)
   const setWsConnected = useRemoteStatusStore(state => state.setWsConnected)
   const recordObservation = useRemoteStatusStore(state => state.recordObservation)
   const setAirportSync = useRemoteStatusStore(state => state.setAirportSync)
@@ -126,6 +133,10 @@ export function useRemoteObservations(): void {
             console.log('[RemoteObservations] Received init:', message)
             setSessionFacilities(message.session_facilities)
             setSubscribedFacilities(message.subscribed_facilities)
+            // Set vNAS state from init message so remote clients show correct indicators
+            if (message.vnas_state && message.vnas_state !== 'disconnected') {
+              setStateOnly(message.vnas_state as ReturnType<typeof useVnasStore.getState>['status']['state'])
+            }
             break
           }
 
@@ -193,6 +204,12 @@ export function useRemoteObservations(): void {
             setAirportSync(message.icao, message.realtraffic_active)
             break
           }
+
+          case 'vnas_state': {
+            console.log('[RemoteObservations] vNAS state changed:', message.state)
+            setStateOnly(message.state as ReturnType<typeof useVnasStore.getState>['status']['state'])
+            break
+          }
         }
       } catch (error) {
         console.error('[RemoteObservations] Failed to parse message:', error)
@@ -217,7 +234,7 @@ export function useRemoteObservations(): void {
     ws.onerror = (error) => {
       console.error('[RemoteObservations] WebSocket error:', error)
     }
-  }, [addObservationBatch, removeAircraft, setSubscribedFacilities, setSessionFacilities, setWsConnected, recordObservation, setAirportSync])
+  }, [addObservationBatch, removeAircraft, setSubscribedFacilities, setSessionFacilities, setStateOnly, setWsConnected, recordObservation, setAirportSync])
 
   useEffect(() => {
     if (!isRemoteMode()) return

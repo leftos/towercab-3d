@@ -389,6 +389,14 @@ fn broadcast_subscriptions(facilities: Vec<String>) {
     broadcast_observation_message(message);
 }
 
+/// Tauri command to broadcast vNAS connection state to remote clients
+/// Called by the host when vNAS state changes (e.g., connected, disconnected)
+#[tauri::command]
+fn broadcast_vnas_state(state: String) {
+    let message = server::ObservationMessage::VnasState { state };
+    broadcast_observation_message(message);
+}
+
 /// Tauri command to broadcast airport sync to remote clients
 /// Called by the host when the airport changes in RealTraffic mode
 #[tauri::command]
@@ -901,6 +909,7 @@ pub fn run() {
             broadcast_observations,
             broadcast_aircraft_removals,
             broadcast_subscriptions,
+            broadcast_vnas_state,
             broadcast_airport_sync,
             // File commands
             create_text_file,

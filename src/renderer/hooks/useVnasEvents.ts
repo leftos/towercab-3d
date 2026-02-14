@@ -80,6 +80,10 @@ export function useVnasEvents(): void {
           // Update just the state field using functional update to avoid race conditions
           setStateOnly(event.payload)
 
+          // Broadcast vNAS state to remote browsers
+          const { invoke } = await import('@tauri-apps/api/core')
+          invoke('broadcast_vnas_state', { state: event.payload }).catch(() => {})
+
           // Fetch session info when we've joined a session (subscribing or connected state)
           if (event.payload === 'subscribing' || event.payload === 'connected') {
             try {

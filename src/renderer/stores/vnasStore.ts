@@ -434,6 +434,9 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       // This ensures UI updates even if event listeners have issues.
       const status = await invoke<VnasStatus>('vnas_get_status')
       set({ status })
+
+      // Broadcast updated subscriptions to remote browsers
+      invoke('broadcast_subscriptions', { facilities: status.subscribedFacilities }).catch(() => {})
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       set(state => ({
@@ -471,6 +474,9 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       // Explicitly fetch and update status after subscription.
       const status = await invoke<VnasStatus>('vnas_get_status')
       set({ status })
+
+      // Broadcast updated subscriptions to remote browsers
+      invoke('broadcast_subscriptions', { facilities: status.subscribedFacilities }).catch(() => {})
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       set(state => ({
@@ -506,6 +512,9 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       // Explicitly fetch and update status after unsubscription
       const status = await invoke<VnasStatus>('vnas_get_status')
       set({ status })
+
+      // Broadcast updated subscriptions to remote browsers
+      invoke('broadcast_subscriptions', { facilities: status.subscribedFacilities }).catch(() => {})
     } catch (error) {
       console.warn('[vNAS] Unsubscribe failed:', error)
       // Don't throw - unsubscribe failure is not critical
@@ -820,7 +829,9 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
    */
   checkAvailability: async (): Promise<boolean> => {
     if (isRemoteMode()) {
-      return false // vNAS not available in remote mode yet
+      // In remote mode, vNAS availability is determined by the host's state
+      const state = get().status.state
+      return state !== 'disconnected' && state !== 'unavailable'
     }
 
     try {
@@ -897,6 +908,8 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
 
   /**
    * Get the ARTCC ID for the current CRC session.
+   * Note: Session facilities are broadcast to remote browsers via the init message
+   * and through getSessionAirports() which resolves facilities to ICAOs.
    */
   getSessionArtcc: async (): Promise<string | null> => {
     if (isRemoteMode()) {
