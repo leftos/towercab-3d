@@ -10,6 +10,7 @@ import { useGlobalSettingsStore } from './globalSettingsStore'
 import { modService, getCameraPositionFromManifest } from '../services/ModService'
 import { isRemoteMode, isTauriMode } from '../utils/remoteMode'
 import { requestRemoteAirportChange } from '../hooks/useRemoteObservations'
+import { updateUrlParams } from '../utils/urlParams'
 
 interface AirportStore {
   // Data
@@ -80,6 +81,8 @@ export const useAirportStore = create<AirportStore>()(
         })
         // Clear current airport in viewport store too
         useViewportStore.getState().setCurrentAirport(null)
+        // Clear URL params in remote browser mode
+        updateUrlParams(null)
       },
 
       // Select an airport
@@ -180,6 +183,9 @@ export const useAirportStore = create<AirportStore>()(
           if (isRemoteMode() && dataSource === 'realtraffic') {
             requestRemoteAirportChange(icao.toUpperCase())
           }
+
+          // Update URL params in remote browser mode (clears any bookmark param)
+          updateUrlParams(icao)
         }
       },
 

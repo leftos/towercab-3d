@@ -119,6 +119,23 @@ On first connection from a touch device, you'll be prompted to apply optimized g
 
 You can always manually adjust these settings later in the Graphics tab.
 
+### URL Bookmarks (Direct Links)
+
+You can create direct links to specific airports and camera bookmarks by adding query parameters to the URL:
+
+| URL | Result |
+|-----|--------|
+| `/?airport=KJFK` | Opens JFK airport automatically |
+| `/?airport=KJFK&bookmark=3` | Opens JFK and loads camera bookmark 3 |
+
+The URL in your browser's address bar updates automatically as you switch airports or load bookmarks. This means you can:
+
+- **Save browser bookmarks** to jump directly to your favorite airports
+- **Share links** with other remote users on your network
+- **Set up multiple browser tabs** with different airports pre-loaded
+
+Airport codes are case-insensitive (`kjfk` and `KJFK` both work). Invalid airport codes are silently ignored and the normal airport selector is shown.
+
 ### Shared Settings
 
 The following settings are synchronized across all connected devices (stored on the host PC):
@@ -548,6 +565,7 @@ Bookmarks store the complete camera state:
 - Bookmarks are saved per-airport
 - Bookmarks persist between sessions
 - Press **Escape** to cancel bookmark input
+- **Remote browsers:** The URL updates when you load a bookmark (e.g., `/?airport=KJFK&bookmark=3`), so you can use your browser's bookmark feature to save direct links to specific views. See [URL Bookmarks](#url-bookmarks-direct-links) for details.
 
 ---
 

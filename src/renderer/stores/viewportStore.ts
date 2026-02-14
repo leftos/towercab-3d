@@ -59,6 +59,7 @@ import {
 } from './viewport/viewportMigrations'
 
 import { DEFAULT_GLOBAL_VIEWPORT_SETTINGS } from '../types'
+import { updateUrlParams } from '../utils/urlParams'
 
 // Re-export types for consumers
 export type { GlobalOrbitSettings, ViewModeDefaults, AirportViewportConfig }
@@ -1307,6 +1308,9 @@ export const useViewportStore = create<ViewportStore>()(
                 preFollowState: null
               }))
             })
+
+            // Update URL params with bookmark in remote browser mode
+            updateUrlParams(icao, slot)
 
             return true
           },

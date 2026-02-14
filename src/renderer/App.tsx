@@ -47,6 +47,8 @@ import { MSFSModelConversionService } from './services/MSFSModelConversionServic
 import { realTrafficService } from './services/RealTrafficService'
 import { isOrbitWithoutAirport } from './utils/viewingContext'
 import { isRemoteMode } from './utils/remoteMode'
+import { getUrlAirportParams, loadUrlCameraState, scheduleSaveUrlCameraState, flushUrlCameraSave } from './utils/urlParams'
+import type { UrlCameraState } from './utils/urlParams'
 import { usePresenceWebSocket } from './hooks/usePresenceWebSocket'
 import { useVnasEvents } from './hooks/useVnasEvents'
 import { useAircraftInterpolation } from './hooks/useAircraftInterpolation'
@@ -296,6 +298,88 @@ function App() {
     }
   }, [startPolling, loadAirports, checkVRSupport, updateProgress])
 
+  // Auto-select airport from URL params in remote browser mode (e.g., /?airport=KJFK&bookmark=3)
+  const selectAirport = useAirportStore((state) => state.selectAirport)
+  const airports = useAirportStore((state) => state.airports)
+
+  useEffect(() => {
+    if (isLoading) return
+
+    const { airport, bookmark } = getUrlAirportParams()
+    if (!airport) return
+
+    // Validate the airport exists in the database
+    if (!airports.has(airport)) return
+
+    selectAirport(airport)
+
+    // Apply view after a frame delay so the airport camera is set up first
+    requestAnimationFrame(() => {
+      // Each URL (airport+bookmark combo) has its own saved camera in localStorage.
+      // Restore it so reopening the same tab/bookmark picks up where the user left off.
+      const savedCamera = loadUrlCameraState(airport, bookmark)
+      if (savedCamera) {
+        const store = useViewportStore.getState()
+        useViewportStore.setState({
+          viewports: store.viewports.map(v =>
+            v.id === store.activeViewportId
+              ? {
+                  ...v,
+                  cameraState: {
+                    ...v.cameraState,
+                    viewMode: savedCamera.viewMode === 'topdown' ? 'topdown' : '3d',
+                    heading: savedCamera.heading,
+                    pitch: savedCamera.pitch,
+                    fov: savedCamera.fov,
+                    positionOffsetX: savedCamera.positionOffsetX,
+                    positionOffsetY: savedCamera.positionOffsetY,
+                    positionOffsetZ: savedCamera.positionOffsetZ,
+                    topdownAltitude: savedCamera.topdownAltitude,
+                    followingCallsign: null,
+                    preFollowState: null
+                  }
+                }
+              : v
+          )
+        })
+      } else if (bookmark !== null) {
+        useViewportStore.getState().loadBookmark(bookmark)
+      } else {
+        // Apply user's saved default view for this airport (synced from host via global settings).
+        // Without this, remote browsers that have no local camera history would show a bare default.
+        useViewportStore.getState().resetToDefault()
+      }
+    })
+
+    // Persist camera state changes for this URL (debounced, 2s hysteresis)
+    const unsubscribe = useViewportStore.subscribe(
+      (state) => {
+        const active = state.viewports.find(v => v.id === state.activeViewportId)
+        if (!active) return null
+        const cam = active.cameraState
+        return {
+          viewMode: cam.viewMode,
+          heading: cam.heading,
+          pitch: cam.pitch,
+          fov: cam.fov,
+          positionOffsetX: cam.positionOffsetX,
+          positionOffsetY: cam.positionOffsetY,
+          positionOffsetZ: cam.positionOffsetZ,
+          topdownAltitude: cam.topdownAltitude
+        } as UrlCameraState
+      },
+      (cameraState) => {
+        if (cameraState) scheduleSaveUrlCameraState(cameraState)
+      },
+      { equalityFn: (a, b) => JSON.stringify(a) === JSON.stringify(b) }
+    )
+
+    return () => {
+      unsubscribe()
+      flushUrlCameraSave()
+    }
+  }, [isLoading]) // eslint-disable-line react-hooks/exhaustive-deps -- one-time init after load
+
   // Deep link handler for OAuth callbacks (tc3d://oauth/callback)
   useEffect(() => {
     // Only handle deep links in desktop mode (not remote browser)
@@ -352,6 +436,7 @@ function App() {
       // This ensures camera positions, insets, etc. are saved even if the
       // debounced sync timer (2s) hasn't fired yet
       flushPendingGlobalSync()
+      flushUrlCameraSave()
 
       // Fire-and-forget deauth - we don't await since the window is closing
       realTrafficService.deauthenticate().catch(() => {
@@ -365,6 +450,7 @@ function App() {
       window.removeEventListener('beforeunload', handleBeforeUnload)
       // Also flush and deauth when the component unmounts (e.g., hot reload in dev)
       flushPendingGlobalSync()
+      flushUrlCameraSave()
       realTrafficService.deauthenticate().catch(() => {})
     }
   }, [])
