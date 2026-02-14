@@ -1280,6 +1280,11 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       dynamicDelay
     })
     set({ timelines: updated })
+
+    // Broadcast observation to insets and remote browsers
+    if (observationBroadcastCallback) {
+      observationBroadcastCallback([{ callsign, observation, metadata: mergedMetadata }])
+    }
   },
 
   /**
