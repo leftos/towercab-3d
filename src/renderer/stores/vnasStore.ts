@@ -19,6 +19,33 @@ let lastProcessedOAuthCallback: string | null = null
  */
 const speedHistory = new Map<string, number[]>()
 
+/**
+ * Ground state hysteresis tracking per aircraft.
+ * Prevents rapid toggling of the onGround flag when AGL oscillates near the threshold,
+ * which causes visible oscillation between terrain-clamped and floating positions
+ * (especially at high-elevation airports like KRNO where terrain models disagree).
+ *
+ * Enter ground: AGL < 50ft, Exit ground: AGL > 80ft
+ */
+const groundStateHistory = new Map<string, boolean>()
+const GROUND_ENTER_AGL_FT = 50
+const GROUND_EXIT_AGL_FT = 80
+
+/** Determine on-ground state with hysteresis to prevent oscillation */
+function getOnGroundWithHysteresis(callsign: string, altitudeAglFt: number): boolean {
+  const prevState = groundStateHistory.get(callsign)
+  let onGround: boolean
+  if (prevState === undefined || prevState === false) {
+    // Currently airborne or unknown: enter ground state at lower threshold
+    onGround = altitudeAglFt < GROUND_ENTER_AGL_FT
+  } else {
+    // Currently on ground: stay on ground until well above threshold
+    onGround = altitudeAglFt < GROUND_EXIT_AGL_FT
+  }
+  groundStateHistory.set(callsign, onGround)
+  return onGround
+}
+
 /** Number of samples to keep in the speed history window */
 const SPEED_WINDOW_SIZE = 5
 
@@ -517,6 +544,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       const { invoke } = await import('@tauri-apps/api/core')
       await invoke('vnas_disconnect')
       speedHistory.clear()
+      groundStateHistory.clear()
       set({
         status: DEFAULT_STATUS,
         aircraftStates: new Map(),
@@ -526,6 +554,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       console.error('vNAS disconnect failed:', error)
       // Still reset local state even if disconnect fails
       speedHistory.clear()
+      groundStateHistory.clear()
       set({
         status: DEFAULT_STATUS,
         aircraftStates: new Map(),
@@ -622,8 +651,8 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       groundTrack: aircraft.trueGroundTrack ?? null,
       headingIsTrue: true,  // vNAS heading is always reliable (from simulator)
       // vNAS provides AGL directly from simulator - use it for ground detection
-      // This is more reliable than computing AGL from MSL altitude and terrain
-      onGround: aircraft.altitudeAgl < 50,  // Below 50ft AGL = on ground
+      // Uses hysteresis to prevent oscillation at high-elevation airports
+      onGround: getOnGroundWithHysteresis(aircraft.callsign, aircraft.altitudeAgl),
       pitch: null,
       roll: null,
       verticalRate: null,
@@ -740,8 +769,8 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
         groundspeed: calculatedSpeeds.get(ac.callsign) ?? 0,
         groundTrack: ac.trueGroundTrack ?? null,
         headingIsTrue: true,  // vNAS heading is always reliable (from simulator)
-        // vNAS provides AGL directly from simulator - use it for ground detection
-        onGround: ac.altitudeAgl < 50,  // Below 50ft AGL = on ground
+        // vNAS provides AGL directly from simulator - uses hysteresis to prevent oscillation
+        onGround: getOnGroundWithHysteresis(ac.callsign, ac.altitudeAgl),
         pitch: null,
         roll: null,
         verticalRate: null,
@@ -989,6 +1018,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
     const newAircraftStates = new Map(aircraftStates)
     newAircraftStates.delete(callsign)
     speedHistory.delete(callsign)
+    groundStateHistory.delete(callsign)
 
     console.log(`[vNAS] Removed aircraft: ${callsign}`)
 
