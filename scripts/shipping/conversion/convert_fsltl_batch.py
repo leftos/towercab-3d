@@ -100,7 +100,7 @@ except Exception as e:
 #   4: Fixed model.cfg parsing to read GLTF filename from XML (fixes wrong engine variant textures)
 #   5: Fixed base_container resolution for FSLTL freighter variants (e.g., B77LF, B744F)
 #   6: Added --no-discovery mode; Rust now handles model.cfg parsing (fixes wrong engine variant for liveries)
-CONVERTER_VERSION = 7  # Bump when converter output changes (v7: FROST materials made transparent)
+CONVERTER_VERSION = 8  # Bump when converter output changes (v8: exclude cargo/attachment GTLFs from model selection)
 
 # Global texconv.exe path (downloaded on first use)
 _texconv_path: Path | None = None
@@ -990,8 +990,8 @@ def find_gltf_in_model_dir(model_dir: Path) -> Path | None:
     if not all_gltf:
         return None
 
-    # Filter out interior/cockpit models (we want exterior only)
-    exterior_gltf = [f for f in all_gltf if 'INTERIOR' not in f.stem.upper() and 'COCKPIT' not in f.stem.upper()]
+    # Filter out interior/cockpit/cargo attachment models (we want main exterior only)
+    exterior_gltf = [f for f in all_gltf if 'INTERIOR' not in f.stem.upper() and 'COCKPIT' not in f.stem.upper() and 'CARGO' not in f.stem.upper()]
     if not exterior_gltf:
         exterior_gltf = all_gltf  # Fall back to all if no exterior found
 

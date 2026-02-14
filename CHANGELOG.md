@@ -4,6 +4,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- **Freighter models appearing invisible** - Some AIG freighter aircraft (e.g., UPS 757-200F) rendered with only cargo doors visible and no fuselage, wings, or engines. The converter was selecting the cargo door attachment model instead of the main aircraft model.
+
 ## [0.0.43-alpha] - 2026-02-14
 
 ### Added

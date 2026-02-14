@@ -692,6 +692,63 @@ models.push(SourceModelInfo {
 
 **Cache Invalidation**: Bumped `MODEL_CACHE_VERSION` to 8 to force re-indexing of AIG models with corrected texture directory priority.
 
+### AIG Attachment GLTF Selected Instead of Main Model (Fixed)
+
+**Problem**: Some AIG freighter models (e.g., B757-200F) appeared with invisible/missing hulls — only cargo doors were visible.
+
+**Root Cause**: Two bugs in `find_gltf_in_dir` and `find_gltf_in_model_dir` (Rust):
+
+1. **LOD matching only checked double-digit patterns** (`lod00`, `lod01`, etc.) but AIG models use single-digit LOD suffixes (`LOD0`, `LOD1`). Files like `AIG_B757-200_PW_LOD0.gltf` didn't match `"lod00"` and got the same fallback priority (5) as non-LOD files.
+
+2. **Attachment GTLFs weren't excluded**. MSFS uses separate GLTF files for cargo doors (`cargoF.gltf`), cockpit, etc. that are composited at runtime via `<ModelAttachments>` in the XML. When both `cargoF.gltf` and `LOD0.gltf` had the same priority, `min_by_key` picked whichever came first alphabetically — `cargoF.gltf` (cargo doors only, no hull).
+
+**Investigation**:
+```
+GLB contained only 6 meshes — all cargo doors:
+  x0_cargo_door_aft, x0_cargo_door_forward, x0_cargo_door_main (+ _fake variants)
+
+No fuselage, wings, engines, or tail geometry present.
+
+Model directory structure:
+  model.PW/AIG_B757-200_PW.xml          → Main XML (10 LODs + AttachModel for CargoDoors)
+  model.PW/AIG_B757-200_PW_cargoF.xml   → Cargo door attachment XML
+  model.PW/AIG_B757-200_PW_LOD0.gltf    → Main aircraft (correct)
+  model.PW/AIG_B757-200_PW_cargoF.gltf  → Cargo doors only (selected by bug)
+
+Priority assignment (old code):
+  "lod00" check → LOD0.gltf has "lod0" not "lod00" → priority 5
+  cargoF.gltf → no LOD pattern → priority 5
+  Both priority 5 → alphabetical: "cargo" < "LOD0" → cargoF selected!
+```
+
+**Fix**: Two changes to both `find_gltf_in_dir` and `find_gltf_in_model_dir`:
+
+1. **Regex-style LOD matching**: Extract LOD number from any `LOD\d+` pattern (handles both `LOD0` and `LOD00`)
+2. **Attachment filtering**: Exclude files containing `cargo`, `cockpit`, or `interior` in the filename
+
+```rust
+fn gltf_lod_priority(filename: &str) -> i32 {
+    let lower = filename.to_lowercase();
+    if let Some(lod_pos) = lower.find("lod") {
+        let after_lod = &lower[lod_pos + 3..];
+        let digit_str: String = after_lod.chars().take_while(|c| c.is_ascii_digit()).collect();
+        if let Ok(n) = digit_str.parse::<i32>() {
+            return n;  // LOD0 → 0, LOD1 → 1, etc.
+        }
+    }
+    100  // Non-LOD files get lowest priority
+}
+
+fn is_attachment_gltf(filename: &str) -> bool {
+    let lower = filename.to_lowercase();
+    lower.contains("cockpit") || lower.contains("interior") || lower.contains("cargo")
+}
+```
+
+**Result**: Freighter models now correctly select the main aircraft GLTF (LOD0) instead of cargo door attachments. The UPS 757-200F renders with full fuselage, wings, and engines.
+
+**Cache Invalidation**: Bumped `MODEL_CACHE_VERSION` to 9 and `CONVERTER_VERSION` to 8 to force re-indexing and re-conversion of affected models.
+
 ## Embedded Source Metadata
 
 Converted GLB files contain embedded source metadata in `asset.extras.towercab3d`:
@@ -731,6 +788,7 @@ The `converterVersion` field tracks which version of the conversion logic was us
 - **Version 5**: Fixed base_container resolution for FSLTL freighter variants (e.g., B77LF, B744F)
 - **Version 6**: Added --no-discovery mode; Rust now handles model.cfg parsing (fixes wrong engine variant for liveries)
 - **Version 7**: FROST materials (MSFS 2024 GeoDecalFrosted) replaced with solid color sampled from livery texture
+- **Version 8**: Exclude cargo/attachment GTLFs from model selection; fix single-digit LOD matching (fixes invisible hulls on freighter models)
 
 **Implementation:**
 - Python converter: `CONVERTER_VERSION` constant in `convert_fsltl_batch.py`

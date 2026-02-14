@@ -119,8 +119,9 @@ export interface MSFSDetectionResult {
  *   5: Fixed base_container resolution for FSLTL freighter variants (e.g., B77LF, B744F)
  *   6: Added --no-discovery mode; Rust now handles model.cfg parsing (fixes wrong engine variant for liveries)
  *   7: FROST materials (MSFS 2024 GeoDecalFrosted) made fully transparent instead of magenta
+ *   8: Exclude cargo/attachment GTLFs from model selection; fix single-digit LOD matching
  */
-const CONVERTER_VERSION = 7
+const CONVERTER_VERSION = 8
 
 // =============================================================================
 // Service Class

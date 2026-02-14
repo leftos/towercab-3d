@@ -242,7 +242,7 @@ struct ModelIndexCache {
     models: Vec<SourceModelInfo>,
 }
 
-const MODEL_CACHE_VERSION: u32 = 8; // Bump when cache format changes (v8: livery-specific texture_dirs prioritization)
+const MODEL_CACHE_VERSION: u32 = 9; // Bump when cache format changes (v9: exclude cargo/attachment GTLFs, fix single-digit LOD matching)
 
 /// Get the modification time of a folder (recursive max mtime would be too slow)
 fn get_folder_mtime(path: &std::path::Path) -> Option<u64> {
@@ -407,6 +407,31 @@ struct SourceConfig {
 
 /// Find GLTF file in an aircraft directory
 /// Returns the path to the best exterior GLTF file, or None if not found
+/// Extract LOD number from a filename for priority sorting.
+/// Handles both single-digit (LOD0) and double-digit (LOD00) patterns.
+/// Returns the LOD number, or 100 for non-LOD files (lowest priority).
+fn gltf_lod_priority(filename: &str) -> i32 {
+    let lower = filename.to_lowercase();
+    // Find "lod" followed by digits - extract the number
+    if let Some(lod_pos) = lower.find("lod") {
+        let after_lod = &lower[lod_pos + 3..];
+        let digit_str: String = after_lod.chars().take_while(|c| c.is_ascii_digit()).collect();
+        if let Ok(n) = digit_str.parse::<i32>() {
+            return n;
+        }
+    }
+    100 // No LOD number found - lowest priority
+}
+
+/// Check if a GLTF filename is an attachment/sub-model (not the main aircraft).
+/// MSFS uses separate GLTF files for cargo doors, cockpit, interior, etc.
+fn is_attachment_gltf(filename: &str) -> bool {
+    let lower = filename.to_lowercase();
+    lower.contains("cockpit")
+        || lower.contains("interior")
+        || lower.contains("cargo")
+}
+
 fn find_gltf_in_dir(aircraft_dir: &std::path::Path) -> Option<String> {
     let model_dirs: Vec<_> = fs::read_dir(aircraft_dir)
         .ok()
@@ -439,28 +464,18 @@ fn find_gltf_in_dir(aircraft_dir: &std::path::Path) -> Option<String> {
             })
             .collect();
 
-        // Prefer exterior model: exclude cockpit/interior files, prefer lower LOD numbers
+        // Prefer exterior model: exclude attachments, prefer lower LOD numbers
         let exterior_gltf = gltf_files
             .iter()
             .filter(|e| {
-                let name = e.file_name().to_string_lossy().to_lowercase();
-                !name.contains("cockpit") && !name.contains("interior")
+                let fname = e.file_name();
+                let name = fname.to_string_lossy();
+                !is_attachment_gltf(&name)
             })
             .min_by_key(|e| {
-                let name = e.file_name().to_string_lossy().to_lowercase();
-                if name.contains("lod00") {
-                    0
-                } else if name.contains("lod01") {
-                    1
-                } else if name.contains("lod02") {
-                    2
-                } else if name.contains("lod03") {
-                    3
-                } else if name.contains("lod04") {
-                    4
-                } else {
-                    5
-                }
+                let fname = e.file_name();
+                let name = fname.to_string_lossy();
+                gltf_lod_priority(&name)
             });
 
         if let Some(gltf_file) = exterior_gltf {
@@ -503,28 +518,18 @@ fn find_gltf_in_model_dir(model_dir: &std::path::Path) -> Option<String> {
         })
         .collect();
 
-    // Prefer exterior model: exclude cockpit/interior files, prefer lower LOD numbers
+    // Prefer exterior model: exclude attachments, prefer lower LOD numbers
     let exterior_gltf = gltf_files
         .iter()
         .filter(|e| {
-            let name = e.file_name().to_string_lossy().to_lowercase();
-            !name.contains("cockpit") && !name.contains("interior")
+            let fname = e.file_name();
+            let name = fname.to_string_lossy();
+            !is_attachment_gltf(&name)
         })
         .min_by_key(|e| {
-            let name = e.file_name().to_string_lossy().to_lowercase();
-            if name.contains("lod00") {
-                0
-            } else if name.contains("lod01") {
-                1
-            } else if name.contains("lod02") {
-                2
-            } else if name.contains("lod03") {
-                3
-            } else if name.contains("lod04") {
-                4
-            } else {
-                5
-            }
+            let fname = e.file_name();
+            let name = fname.to_string_lossy();
+            gltf_lod_priority(&name)
         });
 
     exterior_gltf.map(|e| normalize_path_string(&e.path()))
