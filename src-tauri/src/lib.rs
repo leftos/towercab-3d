@@ -24,6 +24,8 @@ use std::os::windows::io::AsRawHandle;
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 use tauri::Manager;
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tokio::sync::broadcast;
 
 // Module declarations
@@ -99,6 +101,9 @@ static HTTP_SERVER_SHUTDOWN: Mutex<Option<broadcast::Sender<()>>> = Mutex::new(N
 
 // Global log file path (set from TOWERCAB_LOG_FILE env var)
 static LOG_FILE_PATH: Mutex<Option<String>> = Mutex::new(None);
+
+// Whether to minimize to system tray instead of quitting (when HTTP server is running)
+static MINIMIZE_TO_TRAY: Mutex<bool> = Mutex::new(false);
 
 // =============================================================================
 // UNIFIED LOGGING (tracing-based)
@@ -469,6 +474,20 @@ fn get_log_file_path() -> Option<String> {
     std::env::var("TOWERCAB_LOG_FILE").ok()
 }
 
+/// Set whether the app should minimize to tray instead of quitting.
+/// Called by the frontend when the HTTP server starts/stops.
+/// Also shows/hides the tray icon accordingly.
+#[tauri::command]
+fn set_minimize_to_tray(app: tauri::AppHandle, enabled: bool) {
+    if let Ok(mut guard) = MINIMIZE_TO_TRAY.lock() {
+        *guard = enabled;
+    }
+    // Show/hide tray icon
+    if let Some(tray) = app.tray_by_id("main-tray") {
+        let _ = tray.set_visible(enabled);
+    }
+}
+
 /// Create a fresh text file (overwrites if exists)
 #[tauri::command]
 fn create_text_file(path: String, content: String) -> Result<(), String> {
@@ -813,6 +832,51 @@ pub fn run() {
             // Initialize vNAS state
             vnas::init_vnas_state(app.handle());
 
+            // Create system tray icon (hidden initially, shown when server starts with minimize-to-tray)
+            let show_item = MenuItem::with_id(app, "show", "Show TowerCab 3D", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+
+            let tray = TrayIconBuilder::with_id("main-tray")
+                .icon(app.default_window_icon().cloned().unwrap())
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .tooltip("TowerCab 3D")
+                .on_menu_event(move |app, event| {
+                    match event.id().as_ref() {
+                        "show" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.unminimize();
+                                let _ = window.set_focus();
+                            }
+                        }
+                        "quit" => {
+                            app.exit(0);
+                        }
+                        _ => {}
+                    }
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                        }
+                    }
+                })
+                .build(app)?;
+
+            // Hide tray icon initially - it will be shown when minimize-to-tray is enabled
+            let _ = tray.set_visible(false);
+
             // Auto-start HTTP server if enabled in global settings or via env var
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -870,15 +934,27 @@ pub fn run() {
 
             Ok(())
         })
-        .on_window_event(|_window, event| {
-            // Kill FSLTL converter process when app window is closed
-            if let tauri::WindowEvent::Destroyed = event {
-                if let Ok(mut guard) = FSLTL_CONVERTER_PROCESS.lock() {
-                    // Taking and dropping the ProcessWithJob terminates all child processes:
-                    // - Windows: closes job handle (JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE)
-                    // - Other: Drop impl calls child.kill()
-                    let _ = guard.take();
+        .on_window_event(|window, event| {
+            match event {
+                tauri::WindowEvent::CloseRequested { api, .. } => {
+                    // Check if minimize-to-tray is active
+                    if let Ok(guard) = MINIMIZE_TO_TRAY.lock() {
+                        if *guard {
+                            api.prevent_close();
+                            let _ = window.hide();
+                        }
+                    }
                 }
+                tauri::WindowEvent::Destroyed => {
+                    // Kill FSLTL converter process when app window is closed
+                    if let Ok(mut guard) = FSLTL_CONVERTER_PROCESS.lock() {
+                        // Taking and dropping the ProcessWithJob terminates all child processes:
+                        // - Windows: closes job handle (JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE)
+                        // - Other: Drop impl calls child.kill()
+                        let _ = guard.take();
+                    }
+                }
+                _ => {}
             }
         })
         .plugin(tauri_plugin_dialog::init())
@@ -905,6 +981,7 @@ pub fn run() {
             stop_http_server,
             get_http_server_status,
             get_log_file_path,
+            set_minimize_to_tray,
             // Observation broadcast commands (for remote browser relay)
             broadcast_observations,
             broadcast_aircraft_removals,

@@ -60,6 +60,10 @@ pub struct GlobalServerSettings {
     /// If true, only allow connections from local network (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
     #[serde(default)]
     pub require_local_network: bool,
+    /// If true, minimize to system tray instead of quitting when the window is closed
+    /// while the HTTP server is running (default: true)
+    #[serde(default = "default_true")]
+    pub minimize_to_tray: bool,
 }
 
 // =============================================================================
@@ -552,6 +556,7 @@ impl Default for GlobalSettings {
                 enabled: false,
                 auth_token: None,
                 require_local_network: false,
+                minimize_to_tray: true,
             },
             realtraffic: GlobalRealTrafficSettings::default(),
             viewports: GlobalViewportSettings::default(),

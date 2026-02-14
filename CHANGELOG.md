@@ -6,6 +6,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ### Added
 - **URL bookmarks for remote browser access** - When accessing TowerCab 3D from a remote browser, you can now use URL parameters to auto-select an airport and camera bookmark (e.g., `/?airport=KJFK&bookmark=3`). The URL updates automatically when you switch airports or load bookmarks, so you can use your browser's bookmarks to save direct links to specific views.
+- **Minimize to system tray** - When the remote browser server is running, closing the window now minimizes the app to the system tray instead of quitting, keeping remote clients connected. The tray icon lets you restore the window or quit. This behavior can be toggled in Settings > Remote Browser Access.
 
 ### Changed
 - **"Airline Codes Only" mode hides GA tail numbers** - The airline datablock mode now hides registration/tail numbers for general aviation aircraft, showing only the aircraft type and flight data. This simulates what a controller can actually discern from the tower window: airline liveries and aircraft type, but not small tail numbers.

@@ -1467,6 +1467,12 @@ export interface GlobalSettings {
      * If true, only allow connections from local network (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
      */
     requireLocalNetwork: boolean
+
+    /**
+     * If true, minimize to system tray instead of quitting when the window is closed
+     * while the HTTP server is running (default: true)
+     */
+    minimizeToTray: boolean
   }
 
   /**
@@ -1553,7 +1559,8 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
     port: 8765,
     enabled: false,
     authToken: undefined,
-    requireLocalNetwork: false
+    requireLocalNetwork: false,
+    minimizeToTray: true
   },
   realtraffic: {
     dataSource: 'vatsim',

@@ -95,10 +95,17 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
     setGoogleApiKeySaved(false)
   }, [imagerySettings.googleMapsApiKey])
 
-  // Get server status on mount (only in Tauri)
+  // Get server status on mount (only in Tauri) and sync tray state
   useEffect(() => {
     if (!isTauri()) return
-    httpServerApi.getStatus().then(setServerStatus).catch(console.error)
+    httpServerApi.getStatus().then((status) => {
+      setServerStatus(status)
+      // If server is already running (e.g., auto-start), sync tray state
+      if (status.running && serverSettings.minimizeToTray !== false) {
+        httpServerApi.setMinimizeToTray(true).catch(console.error)
+      }
+    }).catch(console.error)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Check vNAS availability on mount (only in Tauri)
@@ -282,6 +289,8 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
 
     try {
       if (serverStatus?.running) {
+        // Disable minimize-to-tray when stopping server
+        await httpServerApi.setMinimizeToTray(false)
         await httpServerApi.stop()
         setServerStatus({ running: false, port: serverSettings.port, localUrl: null, lanUrls: [] })
         await updateServer({ enabled: false })
@@ -289,13 +298,17 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
         const status = await httpServerApi.start(serverSettings.port)
         setServerStatus(status)
         await updateServer({ enabled: true })
+        // Enable minimize-to-tray if the setting is on
+        if (serverSettings.minimizeToTray !== false) {
+          await httpServerApi.setMinimizeToTray(true)
+        }
       }
     } catch (err) {
       setServerError(err instanceof Error ? err.message : String(err))
     } finally {
       setServerLoading(false)
     }
-  }, [serverStatus, serverSettings.port, updateServer])
+  }, [serverStatus, serverSettings.port, serverSettings.minimizeToTray, updateServer])
 
   const handleCopyUrl = useCallback((url: string) => {
     navigator.clipboard.writeText(url).catch(console.error)
@@ -793,6 +806,25 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
             </label>
             <p className="setting-hint">
               When enabled, the HTTP server will start automatically when TowerCab 3D opens.
+            </p>
+          </div>
+          <div className="setting-item">
+            <label>
+              <input
+                type="checkbox"
+                checked={serverSettings.minimizeToTray ?? true}
+                onChange={(e) => {
+                  updateServer({ minimizeToTray: e.target.checked })
+                  // If server is running, sync the tray state immediately
+                  if (serverStatus?.running) {
+                    httpServerApi.setMinimizeToTray(e.target.checked).catch(console.error)
+                  }
+                }}
+              />
+              Minimize to tray when closing (while server is running)
+            </label>
+            <p className="setting-hint">
+              When enabled, closing the window minimizes to the system tray instead of quitting, so remote clients stay connected.
             </p>
           </div>
           <div className="setting-item">

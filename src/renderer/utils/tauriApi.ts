@@ -427,7 +427,14 @@ export const httpServerApi = {
    * Get the current server status
    */
   getStatus: (): Promise<ServerStatus> =>
-    invoke<ServerStatus>('get_http_server_status')
+    invoke<ServerStatus>('get_http_server_status'),
+
+  /**
+   * Set whether the app should minimize to tray instead of quitting.
+   * When enabled, also shows the system tray icon.
+   */
+  setMinimizeToTray: (enabled: boolean): Promise<void> =>
+    invoke<void>('set_minimize_to_tray', { enabled })
 }
 
 /**
