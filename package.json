@@ -46,7 +46,7 @@
     "@types/rbush": "^4.0.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^5.1.2",
+    "@vitejs/plugin-react": "^5.1.4",
     "@vitest/ui": "^4.0.18",
     "eslint": "^9.39.2",
     "eslint-plugin-react": "^7.37.5",
