@@ -6,32 +6,32 @@ Quick reference for AI coding agents working in TowerCab 3D.
 
 ```bash
 # Development
-npm run dev              # Start Tauri app (GUI - ask user to run)
-npm run serve            # Frontend-only in browser (no Tauri)
+pnpm run dev             # Start Tauri app (GUI - ask user to run)
+pnpm run serve           # Frontend-only in browser (no Tauri)
 
 # Type checking & linting (CRITICAL before commits)
-npm run typecheck        # TypeScript type checking (MUST pass)
-npm run lint             # Check for ESLint errors
-npm run lint:fix         # Auto-fix ESLint issues
+pnpm run typecheck       # TypeScript type checking (MUST pass)
+pnpm run lint            # Check for Biome errors
+pnpm run lint:fix        # Auto-fix Biome issues
 
 # Validation (run ALL checks before committing)
-npm run check            # Run all: lint, types, Rust checks
-npm run check:lint       # ESLint only
-npm run check:types      # TypeScript only
-npm run check:rust       # Rust/Cargo only
+pnpm run check           # Run all: lint, types, Rust checks
+pnpm run check:lint      # Biome only
+pnpm run check:types     # TypeScript only
+pnpm run check:rust      # Rust/Cargo only
 
 # Testing
-npm test                 # Run all tests with Vitest
-npm run test:ui          # Run tests with UI
-npm run test:matching    # Run specific test file (model-matching.test.ts)
+pnpm test                # Run all tests with Vitest
+pnpm run test:ui         # Run tests with UI
+pnpm run test:matching   # Run specific test file (model-matching.test.ts)
 vitest run <path>        # Run a single test file
 
 # Build
-npm run build            # Production build (includes typecheck + converter)
-npm run build:vnas       # Build with vNAS (private repo access required)
+pnpm run build           # Production build (includes typecheck + converter)
+pnpm run build:vnas      # Build with vNAS (private repo access required)
 ```
 
-**CRITICAL:** Always run `npm run typecheck` before committing. Vite does NOT type-check during builds - it only transpiles. Type errors can slip through without explicit `tsc` checks.
+**CRITICAL:** Always run `pnpm run typecheck` before committing. Vite does NOT type-check during builds - it only transpiles. Type errors can slip through without explicit `tsc` checks.
 
 ## File Paths on Windows
 
@@ -233,7 +233,7 @@ Move to version header on release. Don't list fixes for unreleased features (par
 
 ## Common Pitfalls
 
-1. **Type checking:** `npm run build` DOES NOT type-check. Run `npm run typecheck` explicitly.
+1. **Type checking:** `pnpm run build` DOES NOT type-check. Run `pnpm run typecheck` explicitly.
 2. **Camera state:** Use `viewportStore`, not deprecated `cameraStore`
 3. **File paths:** Windows requires absolute paths with backslashes in Edit/Write tools
 4. **Imports:** Use `@/` alias, `import type` for types
@@ -244,7 +244,7 @@ Move to version header on release. Don't list fixes for unreleased features (par
 
 1. Update versions in `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`
 2. Move `[Unreleased]` in CHANGELOG.md to version header
-3. `npm run check` (all validations)
+3. `pnpm run check` (all validations)
 4. `git commit -m "Release vX.X.X-alpha"`
 5. `git tag vX.X.X-alpha && git push --tags`
 

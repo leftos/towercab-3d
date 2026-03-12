@@ -442,7 +442,7 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
       name: 'settings-store',
       version: 32,
       migrate: (persistedState: unknown, version: number) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        // biome-ignore lint/suspicious/noExplicitAny: migration handles arbitrary persisted state
         let state: any = persistedState
 
         // ========================================================================
@@ -607,7 +607,7 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
  * @param oldSettings - Old flat settings object from localStorage
  * @returns New grouped settings object
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// biome-ignore lint/suspicious/noExplicitAny: migration handles arbitrary old settings format
 function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
   return {
     cesium: {

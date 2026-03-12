@@ -31,7 +31,7 @@ Welcome to TowerCab 3D, a real-time 3D tower visualization tool for VATSIM air t
 
 ### First-Time Setup
 
-1. **Launch the application** - Run `npm run dev` for development or use the installed application.
+1. **Launch the application** - Run `pnpm run dev` for development or use the installed application.
 
 2. **Auto-Update Check** - The app automatically checks for updates on startup and every 4 hours. When an update is available, a notification bar appears with download progress and a restart prompt. You can also manually check for updates in Settings > Help > Updates.
 

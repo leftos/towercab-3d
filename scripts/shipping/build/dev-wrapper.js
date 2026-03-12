@@ -15,16 +15,16 @@
  *
  * Usage: node scripts/shipping/build/dev-wrapper.js [LOG_PATH] [--vnas] [--release] [--force]
  * Examples:
- *   npm run dev
- *   npm run dev -- temp/console.log
- *   npm run dev:vnas
- *   npm run dev:vnas -- temp/console.log
- *   npm run dev -- --force              # Force rebuild even if no changes
- *   npm run release                     # Optimized Rust + minified frontend
- *   npm run release:vnas                # Same with vNAS
+ *   pnpm run dev
+ *   pnpm run dev -- temp/console.log
+ *   pnpm run dev:vnas
+ *   pnpm run dev:vnas -- temp/console.log
+ *   pnpm run dev -- --force              # Force rebuild even if no changes
+ *   pnpm run release                     # Optimized Rust + minified frontend
+ *   pnpm run release:vnas                # Same with vNAS
  *
  * Or use environment variable:
- *   set TOWERCAB_LOG_FILE=temp/console.log && npm run dev
+ *   set TOWERCAB_LOG_FILE=temp/console.log && pnpm run dev
  */
 
 import { execSync } from 'child_process'
@@ -141,7 +141,7 @@ if (forceRebuild || needsRebuild()) {
     const buildEnv = useRelease
       ? process.env
       : { ...process.env, VITE_FAST_BUILD: '1' }
-    execSync('npm run vite:build', {
+    execSync('pnpm run vite:build', {
       stdio: 'inherit',
       env: buildEnv
     })
@@ -163,7 +163,7 @@ if (useRelease) {
 if (useVnas) {
   // First update vNAS, then run with vnas features
   try {
-    execSync('npm run update:vnas', {
+    execSync('pnpm run update:vnas', {
       stdio: 'inherit',
       env: process.env
     })

@@ -152,7 +152,7 @@ export function useCesiumLighting(
 
         // Configure internal shadow bias settings (undocumented but stable API)
         // These help reduce shadow banding artifacts
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        // biome-ignore lint/suspicious/noExplicitAny: undocumented Cesium shadow API
         const shadowMap = viewer.shadowMap as any
 
         // Update terrain bias (affects terrain self-shadowing)

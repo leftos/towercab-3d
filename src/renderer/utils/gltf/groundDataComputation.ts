@@ -18,7 +18,7 @@ import {
 /**
  * Parse extended node data including hierarchy and mesh bounds
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// biome-ignore lint/suspicious/noExplicitAny: glTF JSON parsing
 export function parseExtendedNodes(gltfJson: any): Map<number, ExtendedNodeData> {
   const nodes = new Map<number, ExtendedNodeData>()
 
@@ -74,7 +74,7 @@ export function parseExtendedNodes(gltfJson: any): Map<number, ExtendedNodeData>
 /**
  * Get combined mesh bounds from all primitives of a mesh
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// biome-ignore lint/suspicious/noExplicitAny: glTF JSON parsing
 export function getMeshBounds(gltfJson: any, meshIndex: number): MeshBounds | null {
   const mesh = gltfJson.meshes[meshIndex]
   if (!mesh || !mesh.primitives) return null
@@ -112,7 +112,7 @@ export function computeMinYAtGearState(
   nodes: Map<number, ExtendedNodeData>,
   gearAnimations: Animation[],
   gearProgress: number,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // biome-ignore lint/suspicious/noExplicitAny: glTF JSON parsing
   gltfJson: any
 ): number {
   // Get gear animation transforms at the specified progress
@@ -144,7 +144,7 @@ export function computeMinYAtGearState(
 export function computeGearAnimationTransforms(
   gearAnimations: Animation[],
   progress: number,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // biome-ignore lint/suspicious/noExplicitAny: glTF JSON parsing
   gltfJson: any
 ): Map<string, number[]> {
   const transforms = new Map<string, number[]>()
@@ -222,7 +222,7 @@ export function getWorldMatrix(
  * We detect the vertical axis by counting which axis has the most primitives
  * with "reasonable" vertical bounds (min between -10 and 0, range < 20m).
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// biome-ignore lint/suspicious/noExplicitAny: glTF JSON parsing
 export function parseGroundDataGltf1(gltfJson: any): ModelGroundData | null {
   const meshes = gltfJson.meshes || {}
   const accessors = gltfJson.accessors || {}
@@ -416,7 +416,7 @@ export function computeWingData(
  * Similar to parseGroundDataGltf1, handles the object-based format.
  * Uses two-pass approach: first find extreme X positions, then find max Y at those positions.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// biome-ignore lint/suspicious/noExplicitAny: glTF JSON parsing
 export function parseWingDataGltf1(gltfJson: any): ModelWingData | null {
   const meshes = gltfJson.meshes || {}
   const accessors = gltfJson.accessors || {}

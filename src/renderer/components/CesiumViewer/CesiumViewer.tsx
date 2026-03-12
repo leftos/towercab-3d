@@ -573,7 +573,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
     // Cesium's targetFrameRate: undefined means unlimited (uses requestAnimationFrame)
     // A number limits the frame rate to that value
     const effectiveFramerate = maxFramerate > 0 ? maxFramerate : undefined
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // biome-ignore lint/suspicious/noExplicitAny: Cesium internal API
     ;(viewer as any).targetFrameRate = effectiveFramerate
   }, [viewer, maxFramerate, isInset])
 
@@ -771,7 +771,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
         setRefPosIfChanged(interpolated.interpolatedLatitude, interpolated.interpolatedLongitude)
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally using specific babylonOverlay properties
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally using specific babylonOverlay properties
   }, [currentAirport, towerHeight, babylonOverlay.sceneReady, babylonOverlay.setupRootNode, followMode, followingCallsign, interpolatedAircraft, setReferencePosition])
 
   // Sync Babylon overlay and update aircraft on each render frame

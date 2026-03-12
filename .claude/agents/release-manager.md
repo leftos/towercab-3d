@@ -38,14 +38,14 @@ Review and update user-facing markdown files for accuracy:
 Ensure no outdated information, broken links, or references to removed features.
 
 ### Step 4: Pre-Release Checks
-Run `npm run check` which executes:
-- ESLint validation (`npx eslint src/`)
-- TypeScript type checking (`npm run typecheck`)
+Run `pnpm run check` which executes:
+- Biome validation (`pnpm biome check src/`)
+- TypeScript type checking (`pnpm run typecheck`)
 - Rust checks (`cargo check`, `cargo clippy`, `cargo fmt --check`)
 
 If issues are found:
-1. First, attempt auto-fixes: `npx eslint src/ --fix` and `cargo fmt`
-2. If auto-fixes resolve all issues, re-run `npm run check` to verify
+1. First, attempt auto-fixes: `pnpm biome check src/ --fix` and `cargo fmt`
+2. If auto-fixes resolve all issues, re-run `pnpm run check` to verify
 3. If issues remain that cannot be auto-fixed, STOP and report the specific errors to the user
 
 ### Step 5: Signed Build Verification

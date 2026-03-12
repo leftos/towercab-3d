@@ -23,15 +23,15 @@ When told to "check the logs", read temp/console.log. It's likely it's quite big
 ## Development Commands
 
 ```bash
-npm install           # Install dependencies
-npm run dev           # Start desktop app (without vNAS)
-npm run dev:vnas      # Start desktop app with vNAS 1Hz updates (requires private repo access)
-npm run serve         # Development: frontend only in browser (no Tauri, no mods)
-npm run build         # Build for production without vNAS
-npm run build:vnas    # Build for production with vNAS (requires private repo access)
-npm run build:converter  # Build FSLTL converter executable (requires Python + PyInstaller)
-npm run vite:dev      # Frontend only (internal, used by Tauri)
-npm run vite:build    # Build frontend only (internal, used by Tauri)
+pnpm install          # Install dependencies
+pnpm run dev          # Start desktop app (without vNAS)
+pnpm run dev:vnas     # Start desktop app with vNAS 1Hz updates (requires private repo access)
+pnpm run serve        # Development: frontend only in browser (no Tauri, no mods)
+pnpm run build        # Build for production without vNAS
+pnpm run build:vnas   # Build for production with vNAS (requires private repo access)
+pnpm run build:converter  # Build FSLTL converter executable (requires Python + PyInstaller)
+pnpm run vite:dev     # Frontend only (internal, used by Tauri)
+pnpm run vite:build   # Build frontend only (internal, used by Tauri)
 ```
 
 ### Rust Documentation
@@ -46,11 +46,11 @@ Generated docs are output to `src-tauri/target/doc/`. These provide detailed doc
 
 The optional `vnas` feature enables 1Hz real-time aircraft updates via the private `towercab-3d-vnas` crate. Without it, the app uses 15-second VATSIM HTTP polling.
 
-- **Public contributors:** Use `npm run dev` and `npm run build` - no private repo access needed
-- **With vNAS access:** Use `npm run dev:vnas` and `npm run build:vnas`
+- **Public contributors:** Use `pnpm run dev` and `pnpm run build` - no private repo access needed
+- **With vNAS access:** Use `pnpm run dev:vnas` and `pnpm run build:vnas`
 - **Signed builds:** `.\build-signed.ps1` (with vNAS) or `.\build-signed.ps1 -NoVnas`
 
-**Dependency updates:** The `npm run dev:vnas` and `npm run build:vnas` commands automatically run `cargo update -p towercab-3d-vnas` before building to fetch the latest commits from the private repo's master branch. This is also configured in the private repo's CI workflow, so builds always use the latest implementation.
+**Dependency updates:** The `pnpm run dev:vnas` and `pnpm run build:vnas` commands automatically run `cargo update -p towercab-3d-vnas` before building to fetch the latest commits from the private repo's master branch. This is also configured in the private repo's CI workflow, so builds always use the latest implementation.
 
 **Private vNAS Crate Repository:**
 - **GitHub:** https://github.com/leftos/towercab-3d-vnas
@@ -66,9 +66,9 @@ The optional `vnas` feature enables 1Hz real-time aircraft updates via the priva
 - Ground track field for accurate aircraft extrapolation
 - WaitingForSession state when TC3D connects before CRC
 
-**Note:** The `npm run build` command automatically runs `build:converter` to create the FSLTL model converter executable. This requires Python 3 with Pillow installed. PyInstaller is auto-installed if missing.
+**Note:** The `pnpm run build` command automatically runs `build:converter` to create the FSLTL model converter executable. This requires Python 3 with Pillow installed. PyInstaller is auto-installed if missing.
 
-**Note for Claude:** Only the user can run `npm run dev` as it launches the Tauri app with a GUI. Ask the user to run this command and report back any errors.
+**Note for Claude:** Only the user can run `pnpm run dev` as it launches the Tauri app with a GUI. Ask the user to run this command and report back any errors.
 
 **Windows Warning:** Never use `2>nul` to suppress stderr in terminal commands. On Windows, this creates a file literally named `nul` which is extremely difficult to delete (requires special tools or booting from Linux). Use `2>$null` in PowerShell or simply omit stderr redirection.
 
@@ -84,15 +84,15 @@ The optional `vnas` feature enables 1Hz real-time aircraft updates via the priva
 
 Using relative paths or forward slashes causes "File has been unexpectedly modified" errors and other failures. Always construct the full absolute path with backslashes before calling Edit or Write.
 
-**Important:** Always run ESLint and TypeScript checks before committing changes:
+**Important:** Always run Biome and TypeScript checks before committing changes:
 
 ```bash
-npx eslint src/         # Check for linting errors
-npx eslint src/ --fix   # Auto-fix fixable issues
-npm run typecheck       # Run TypeScript type checking (CRITICAL)
+pnpm biome check src/        # Check for linting errors
+pnpm biome check src/ --fix  # Auto-fix fixable issues
+pnpm run typecheck           # Run TypeScript type checking (CRITICAL)
 ```
 
-Fix all ESLint and TypeScript errors before committing. Do not disable rules without a justified reason.
+Fix all Biome and TypeScript errors before committing. Do not disable rules without a justified reason.
 
 ### Why Type Checking Matters
 
@@ -100,16 +100,16 @@ Fix all ESLint and TypeScript errors before committing. Do not disable rules wit
 
 **TypeScript errors were previously missed because:**
 1. `vite build` uses esbuild for transpilation, which skips type checking for performance
-2. ESLint checks code style/patterns, not type correctness
+2. Biome checks code style/patterns, not type correctness
 3. `skipLibCheck: true` in tsconfig.json skips checking node_modules types (for performance)
 4. There was no explicit `tsc --noEmit` check in the build workflow
 
-**The `npm run typecheck` script is now part of the build process to prevent this in the future.**
+**The `pnpm run typecheck` script is now part of the build process to prevent this in the future.**
 
-Always run `npm run typecheck` before:
+Always run `pnpm run typecheck` before:
 - Creating a commit
 - Opening a pull request
-- Before `npm run build`
+- Before `pnpm run build`
 
 The build script now automatically runs typecheck first, so production builds will fail if there are type errors.
 
@@ -270,7 +270,7 @@ fsltl_converter.exe (Python sidecar)
 ├─ Converts GLTF + DDS textures to GLB
 ├─ Texture scaling options (full/2k/1k/512)
 ├─ Handles multiple liveries per aircraft folder
-└─ Built via PyInstaller (npm run build:converter)
+└─ Built via PyInstaller (pnpm run build:converter)
 ```
 
 ### Key Files
@@ -416,7 +416,7 @@ All three files must have matching version numbers. The Tauri build uses these t
 
 1. Update version in all three files above
 2. Move `[Unreleased]` entries in CHANGELOG.md to new version header
-3. Run `npm run check` to run all validation checks (ESLint, TypeScript, Rust)
+3. Run `pnpm run check` to run all validation checks (Biome, TypeScript, Rust)
 4. Commit: `git commit -m "Release vX.X.X-alpha"`
 5. Tag: `git tag vX.X.X-alpha`
 6. Push: `git push && git push --tags`

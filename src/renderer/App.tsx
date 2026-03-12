@@ -378,7 +378,8 @@ function App() {
       unsubscribe()
       flushUrlCameraSave()
     }
-  }, [isLoading]) // eslint-disable-line react-hooks/exhaustive-deps -- one-time init after load
+  // biome-ignore lint/correctness/useExhaustiveDependencies: one-time init after load
+  }, [isLoading])
 
   // Deep link handler for OAuth callbacks (tc3d://oauth/callback)
   useEffect(() => {

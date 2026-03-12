@@ -143,13 +143,13 @@ A 3D tower cab view application for VATSIM air traffic controllers. View real-ti
 #### 1. Install Dependencies
 
 ```bash
-npm install
+pnpm install
 ```
 
 #### 2. Run in Development Mode
 
 ```bash
-npm run dev  # Starts desktop app with HTTP server on port 8765
+pnpm run dev  # Starts desktop app with HTTP server on port 8765
 ```
 
 The desktop app will start an HTTP server accessible at `http://[your-pc-ip]:8765` from other devices on your network.
@@ -242,12 +242,12 @@ Save and restore camera positions quickly:
 
 ### Development Build (Frontend Only)
 ```bash
-npm run vite:build
+pnpm run vite:build
 ```
 
 ### Full Application Build (Windows Installer)
 ```bash
-npm run build
+pnpm run build
 ```
 
 The installer will be created in the `src-tauri/target/release/bundle/` folder. This is the same installer distributed via [GitHub Releases](https://github.com/leftos/towercab-3d/releases).

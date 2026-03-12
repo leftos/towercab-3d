@@ -7,19 +7,19 @@
  *   node scripts/shipping/build/check.js [options]
  *
  * Options:
- *   --lint, -l       Run ESLint on src/ directory
+ *   --lint, -l       Run Biome on src/ directory
  *   --types, -t      Run TypeScript type checking
  *   --rust, -r       Run Cargo check on Rust backend
  *   --vnas, -v       Run Cargo checks on private vNAS crate (requires access)
  *   --all, -a        Run all checks (default if no options)
- *   --fix, -f        Auto-fix ESLint issues (use with --lint)
+ *   --fix, -f        Auto-fix Biome issues (use with --lint)
  *   --quiet, -q      Only show errors, not warnings
  *   --help, -h       Show this help message
  *
  * Examples:
  *   node scripts/shipping/build/check.js              # Run all checks
- *   node scripts/shipping/build/check.js --lint       # ESLint only
- *   node scripts/shipping/build/check.js --lint --fix # ESLint with auto-fix
+ *   node scripts/shipping/build/check.js --lint       # Biome only
+ *   node scripts/shipping/build/check.js --lint --fix # Biome with auto-fix
  *   node scripts/shipping/build/check.js -t -r        # TypeScript and Rust only
  *   node scripts/shipping/build/check.js --vnas       # Private vNAS crate only
  */
@@ -89,21 +89,20 @@ function runCommand(command, args, options = {}) {
 }
 
 /**
- * Run ESLint
+ * Run Biome
  */
 async function runLint(fix = false, quiet = false) {
-  logHeader('ESLint');
+  logHeader('Biome');
 
-  const args = ['eslint', 'src/', '--max-warnings', '0'];
+  const args = ['biome', 'check', 'src/'];
   if (fix) args.push('--fix');
-  if (quiet) args.push('--quiet');
 
   const result = await runCommand('npx', args);
 
   if (result.success) {
-    logSuccess('ESLint passed (no errors or warnings)');
+    logSuccess('Biome passed (no errors or warnings)');
   } else {
-    logError('ESLint found errors or warnings');
+    logError('Biome found errors or warnings');
   }
 
   return result;
@@ -361,26 +360,26 @@ ${colors.yellow}All checks treat warnings as failures (strict mode).${colors.res
 
 ${colors.cyan}Usage:${colors.reset}
   node scripts/shipping/build/check.js [options]
-  npm run check [-- options]
+  pnpm run check [-- options]
 
 ${colors.cyan}Options:${colors.reset}
-  --lint, -l       Run ESLint on src/ directory
+  --lint, -l       Run Biome on src/ directory
   --types, -t      Run TypeScript type checking
   --rust, -r       Run Cargo check on Rust backend
   --vnas, -v       Run Cargo checks on private vNAS crate (requires access)
   --all, -a        Run all checks (default if no options)
-  --fix, -f        Auto-fix ESLint issues (use with --lint)
+  --fix, -f        Auto-fix Biome issues (use with --lint)
   --quiet, -q      Only show errors, not warnings
   --help, -h       Show this help message
 
 ${colors.cyan}Examples:${colors.reset}
   node scripts/shipping/build/check.js              ${colors.yellow}# Run all checks${colors.reset}
-  node scripts/shipping/build/check.js --lint       ${colors.yellow}# ESLint only${colors.reset}
-  node scripts/shipping/build/check.js --lint --fix ${colors.yellow}# ESLint with auto-fix${colors.reset}
+  node scripts/shipping/build/check.js --lint       ${colors.yellow}# Biome only${colors.reset}
+  node scripts/shipping/build/check.js --lint --fix ${colors.yellow}# Biome with auto-fix${colors.reset}
   node scripts/shipping/build/check.js -t -r        ${colors.yellow}# TypeScript and Rust only${colors.reset}
   node scripts/shipping/build/check.js --vnas       ${colors.yellow}# Private vNAS crate only${colors.reset}
-  npm run check                      ${colors.yellow}# Run all checks via npm${colors.reset}
-  npm run check -- --lint --fix      ${colors.yellow}# ESLint with auto-fix via npm${colors.reset}
+  pnpm run check                     ${colors.yellow}# Run all checks via pnpm${colors.reset}
+  pnpm run check -- --lint --fix     ${colors.yellow}# Biome with auto-fix via pnpm${colors.reset}
 `);
 }
 
@@ -398,7 +397,7 @@ async function main() {
   const startTime = Date.now();
 
   if (options.lint) {
-    results.push({ name: 'ESLint', ...(await runLint(options.fix, options.quiet)) });
+    results.push({ name: 'Biome', ...(await runLint(options.fix, options.quiet)) });
   }
 
   if (options.types) {

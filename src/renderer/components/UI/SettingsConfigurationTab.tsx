@@ -105,7 +105,7 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
         httpServerApi.setMinimizeToTray(true).catch(console.error)
       }
     }).catch(console.error)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // biome-ignore lint/correctness/useExhaustiveDependencies: one-time init
   }, [])
 
   // Check vNAS availability on mount (only in Tauri)

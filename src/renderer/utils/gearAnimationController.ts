@@ -282,8 +282,7 @@ export function applyGearAnimation(
   gearProgress: number,
   callsign: string,
   modelUrl: string,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  knownAnimationCount?: number
+  _knownAnimationCount?: number
 ): void {
   if (!model.ready) {
     return

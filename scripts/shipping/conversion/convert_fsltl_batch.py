@@ -81,7 +81,7 @@ except ImportError as e:
     _write_startup_error(
         _progress_file_path,
         f"Failed to import required module: {e.name}",
-        f"Full error: {e}\n\nThis usually means the converter was not built correctly.\nPlease run 'npm run build:converter' to rebuild."
+        f"Full error: {e}\n\nThis usually means the converter was not built correctly.\nPlease run 'pnpm run build:converter' to rebuild."
     )
     sys.exit(1)
 except Exception as e:

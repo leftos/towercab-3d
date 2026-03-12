@@ -199,7 +199,7 @@ function parseAnimationSetFromArrayBuffer(arrayBuffer: ArrayBuffer): AnimationSe
 /**
  * Parse node data from glTF JSON
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// biome-ignore lint/suspicious/noExplicitAny: glTF JSON parsing
 function parseNodes(gltfJson: any): Map<string, NodeData> {
   const nodes = new Map<string, NodeData>()
 
@@ -235,7 +235,7 @@ function parseNodes(gltfJson: any): Map<string, NodeData> {
 /**
  * Parse animations from glTF JSON and binary data
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// biome-ignore lint/suspicious/noExplicitAny: glTF JSON parsing
 function parseAnimations(gltfJson: any, binData: ArrayBuffer): Animation[] {
   const animations: Animation[] = []
 
@@ -353,7 +353,7 @@ export function applyAnimationPercent(
     if (!node) continue
 
     // Store original matrix if not already stored
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // biome-ignore lint/suspicious/noExplicitAny: glTF JSON parsing
     const nodeWithOriginal = node as any
     if (!nodeWithOriginal._originalMatrix) {
       nodeWithOriginal._originalMatrix = node.matrix.clone()
@@ -539,7 +539,7 @@ function applyCachedGearTransforms(
     if (!node) continue
 
     // Store original matrix if not already stored
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // biome-ignore lint/suspicious/noExplicitAny: glTF JSON parsing
     const nodeWithOriginal = node as any
     if (!nodeWithOriginal._originalMatrix) {
       nodeWithOriginal._originalMatrix = node.matrix.clone()
@@ -593,7 +593,7 @@ function applyAnimationPercentWithCache(
     const node = model.getNode(nodeName)
     if (!node) continue
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // biome-ignore lint/suspicious/noExplicitAny: glTF JSON parsing
     const nodeWithOriginal = node as any
     if (!nodeWithOriginal._originalMatrix) {
       nodeWithOriginal._originalMatrix = node.matrix.clone()

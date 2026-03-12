@@ -467,7 +467,7 @@ export function useCesiumViewer(
       edgeDetectionRef.current = null
       silhouetteStageRef.current = null
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- graphics settings used at init only; msaaSamples captured in ref (requires restart)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: graphics settings used at init only; msaaSamples captured in ref (requires restart)
   }, [cesiumIonToken, isInset, viewportId])
 
   // Update model colors and blend amount when brightness setting changes

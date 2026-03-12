@@ -240,7 +240,7 @@ export function useTouchInput(
     // Format: { distance: { startPosition, endPosition }, angleAndHeight: { startPosition, endPosition } }
     // distance.y values are finger distance (scaled ×0.25)
     // angleAndHeight.x values are angle in radians
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // biome-ignore lint/suspicious/noExplicitAny: Cesium event type
     handler.setInputAction((event: any) => {
       const pinchEvent = event as CesiumPinchMoveEvent
       if (!pinchStateRef.current.isPinching) return

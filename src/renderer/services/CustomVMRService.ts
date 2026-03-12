@@ -234,17 +234,17 @@ class CustomVMRServiceClass {
 
       // Validate manifest structure
       // Using 'as any' is necessary here because manifest is untyped JSON
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // biome-ignore lint/suspicious/noExplicitAny: dynamic VMR parsing
       const scale = typeof (manifest as any)?.scale === 'number' ? (manifest as any).scale : undefined
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // biome-ignore lint/suspicious/noExplicitAny: dynamic VMR parsing
       const rawRotation = (manifest as any)?.rotationOffset
       const rotationOffset = rawRotation && typeof rawRotation === 'object'
         ? {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            // biome-ignore lint/suspicious/noExplicitAny: dynamic VMR parsing
             x: typeof (rawRotation as any).x === 'number' ? (rawRotation as any).x : 0,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            // biome-ignore lint/suspicious/noExplicitAny: dynamic VMR parsing
             y: typeof (rawRotation as any).y === 'number' ? (rawRotation as any).y : 0,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            // biome-ignore lint/suspicious/noExplicitAny: dynamic VMR parsing
             z: typeof (rawRotation as any).z === 'number' ? (rawRotation as any).z : 0
           }
         : undefined

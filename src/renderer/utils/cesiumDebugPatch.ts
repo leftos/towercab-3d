@@ -241,7 +241,7 @@ function logCrashDiagnostics(error: unknown, snapshot: DebugSnapshot | null): vo
     console.error('[CesiumDebugPatch] Issues:', snapshot.issues)
 
     // Also store in window for debugging
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // biome-ignore lint/suspicious/noExplicitAny: debug window property
     ;(window as any).__cesiumCrashSnapshot = snapshot
     console.error('[CesiumDebugPatch] Snapshot saved to window.__cesiumCrashSnapshot')
   } else {

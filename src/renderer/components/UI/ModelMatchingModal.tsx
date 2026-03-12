@@ -154,7 +154,7 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
         }
       })
       .sort((a, b) => a.callsign.localeCompare(b.callsign))
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- conversionVersion triggers refresh when models finish converting
+  // biome-ignore lint/correctness/useExhaustiveDependencies: conversionVersion triggers refresh when models finish converting
   }, [timelines, currentAirport, towerHeight, customTowerPosition, aircraftDataRadiusNM, conversionVersion])
 
   // Format scale for display

@@ -278,7 +278,7 @@ function AircraftPanel() {
     })
 
     return sorted.slice(0, 50)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- refreshTick intentionally forces periodic recalculation of distances/bearings
+    // biome-ignore lint/correctness/useExhaustiveDependencies: refreshTick intentionally forces periodic recalculation of distances/bearings
   }, [filtered, referencePoint, followingCallsign, sortOption, refreshTick, smartSortContext, pinFollowedAircraftToTop, currentAirport, towerHeight, customTowerPosition, positionOffsetX, positionOffsetY, positionOffsetZ])
 
 
