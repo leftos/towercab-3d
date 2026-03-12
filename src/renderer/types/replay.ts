@@ -4,11 +4,12 @@
  * Types for the VATSIM data replay system that allows users to:
  * - Record live traffic data as snapshots
  * - Scrub back through time
- * - Export/import replay data
+ * - Export/import replay data (v2: full-fidelity observation timelines)
  * - Return to live mode seamlessly
  */
 
 import type { AircraftState } from './vatsim'
+import type { SerializedTimeline, DiagnosticAppState } from './diagnostic'
 
 /**
  * Serializable version of AircraftState for JSON export
@@ -50,26 +51,40 @@ export interface VatsimSnapshot {
 }
 
 /**
- * Export file format for replay data
+ * V1 export file format (legacy, snapshot-based).
+ * Kept for backward-compatible import only.
  */
-export interface ReplayExportData {
-  /** Format version for future compatibility */
+export interface ReplayExportDataV1 {
   version: 1
-  /** ISO timestamp when export was created */
   exportDate: string
-  /** App version that created this export */
   appVersion: string
-  /** ICAO code of airport if known */
   airport?: string
-  /** Array of snapshots in chronological order */
   snapshots: VatsimSnapshot[]
 }
 
 /**
+ * V2 export file format (observation-based, full fidelity).
+ * Uses SerializedTimeline[] — same format as diagnostic packages.
+ */
+export interface ReplayExportDataV2 {
+  version: 2
+  exportDate: string
+  appVersion: string
+  airport?: string
+  timelines: SerializedTimeline[]
+  appState?: DiagnosticAppState
+}
+
+/**
+ * Union of all replay export formats (for import detection)
+ */
+export type ReplayExportData = ReplayExportDataV1 | ReplayExportDataV2
+
+/**
  * Current playback mode
  * - 'live': Showing real-time VATSIM data
- * - 'replay': Scrubbing through recorded live snapshots
- * - 'imported': Viewing imported replay file
+ * - 'replay': Scrubbing through recorded live snapshots (buffer replay)
+ * - 'imported': Viewing imported replay or diagnostic file
  */
 export type PlaybackMode = 'live' | 'replay' | 'imported'
 

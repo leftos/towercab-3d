@@ -5,7 +5,8 @@
  * The actual aircraft data comes from the timeline store.
  *
  * In LIVE mode: Returns current timestamp
- * In REPLAY/IMPORTED mode: Returns effective timestamp based on segment progress
+ * In REPLAY mode: Returns effective timestamp based on segment progress (snapshot-based)
+ * In IMPORTED mode: Returns effective timestamp mapped across imported time range
  */
 
 import { useReplayStore } from '../stores/replayStore'
@@ -37,7 +38,18 @@ export function getAircraftDataSource(): AircraftDataSource {
     }
   }
 
-  // REPLAY or IMPORTED MODE: Calculate effective timestamp based on segment progress
+  // IMPORTED MODE: Map segmentProgress (0-1) across the full time range
+  if (playbackMode === 'imported') {
+    const { importedTimeRange } = replayState
+    if (!importedTimeRange) {
+      return { timestamp: Date.now(), playbackMode }
+    }
+    const duration = importedTimeRange.end - importedTimeRange.start
+    const effectiveNow = importedTimeRange.start + segmentProgress * duration
+    return { timestamp: effectiveNow, playbackMode }
+  }
+
+  // REPLAY MODE: Calculate effective timestamp based on segment progress (buffer replay)
   const snapshots = getActiveSnapshots()
   const currentSnapshot = snapshots[currentIndex]
   const nextSnapshot = snapshots[currentIndex + 1]
@@ -58,7 +70,6 @@ export function getAircraftDataSource(): AircraftDataSource {
   }
 
   // Calculate effective "now" between current and next snapshot
-  // effectiveNow = currentSnapshot.timestamp + segmentProgress * interval
   const interval = nextSnapshot.timestamp - currentSnapshot.timestamp
   const effectiveNow = currentSnapshot.timestamp + (segmentProgress * interval)
 

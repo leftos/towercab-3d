@@ -34,6 +34,7 @@ import type {
 } from '../types/aircraft-timeline'
 import { mergeAircraftMetadata } from '../types/aircraft-timeline'
 import type { VatsimSnapshot } from '../types/replay'
+import type { SerializedTimeline } from '../types/diagnostic'
 import {
   SOURCE_DISPLAY_DELAYS,
   MAX_OBSERVATION_AGE_MS,
@@ -54,6 +55,7 @@ import {
   DYNAMIC_DELAY_EXTRAPOLATION_DECAY_RATE
 } from '../constants/aircraft-timeline'
 import { useViewportStore } from './viewportStore'
+import { useReplayStore } from './replayStore'
 import { useSettingsStore } from './settingsStore'
 import { calculateBearing } from '../utils/aircraft/geoMath'
 
@@ -156,11 +158,25 @@ interface AircraftTimelineStore {
     hasReadyAircraft: boolean
   }
 
+  /**
+   * Clear interpolation state (lastRenderedPositions and reconciliationStates).
+   * Called when seeking/scrubbing to force aircraft to jump to the correct position
+   * instead of smoothly transitioning from the old position.
+   */
+  clearInterpolationState: () => void
+
   // Replay support
   /**
-   * Load all replay snapshots into the timeline store.
-   * Clears existing data and populates timelines with all observations from snapshots.
-   * After loading, use getInterpolatedStates(virtualNow) to scrub through the replay.
+   * Load serialized timelines into the store for imported replay playback.
+   * Clears existing data and populates timelines from SerializedTimeline[].
+   * Used for both v2 replay imports and diagnostic imports.
+   */
+  loadImportedTimelines: (serialized: SerializedTimeline[]) => void
+
+  /**
+   * Load legacy v1 replay snapshots into the timeline store.
+   * Converts lossy VatsimSnapshot[] into observation timelines.
+   * Used only for backward compatibility with v1 export files.
    */
   loadReplaySnapshots: (snapshots: VatsimSnapshot[]) => void
 
@@ -1203,6 +1219,9 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
    * Add a single observation for an aircraft
    */
   addObservation: (callsign, observation, metadata) => {
+    // Don't accept live data while viewing replay/imported
+    if (useReplayStore.getState().playbackMode !== 'live') return
+
     const { timelines } = get()
     const existing = timelines.get(callsign)
 
@@ -1291,6 +1310,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
    * Add a batch of observations (more efficient for snapshots)
    */
   addObservationBatch: (batch) => {
+    if (useReplayStore.getState().playbackMode !== 'live') return
     const { timelines } = get()
     const updated = new Map(timelines)
 
@@ -1433,6 +1453,10 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
    * Remove aircraft that haven't received updates recently
    */
   pruneStaleAircraft: () => {
+    // Skip pruning in replay/imported modes — all data is historical
+    const playbackMode = useReplayStore.getState().playbackMode
+    if (playbackMode !== 'live') return
+
     const { timelines, lastKnownHeadings, lastRenderedPositions, reconciliationStates } = get()
     const now = Date.now()
     const removedCallsigns: string[] = []
@@ -1499,6 +1523,13 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
     set({
       timelines: new Map(),
       lastKnownHeadings: new Map(),
+      lastRenderedPositions: new Map(),
+      reconciliationStates: new Map()
+    })
+  },
+
+  clearInterpolationState: () => {
+    set({
       lastRenderedPositions: new Map(),
       reconciliationStates: new Map()
     })
@@ -1718,6 +1749,39 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
     for (const timeline of timelines.values()) {
       const { pruned } = pruneObservations(timeline.observations, latestSnapshotTime)
       timeline.observations = pruned
+    }
+
+    set({ timelines, lastKnownHeadings: new Map() })
+  },
+
+  loadImportedTimelines: (serialized) => {
+    get().clear()
+
+    if (serialized.length === 0) return
+
+    const timelines = new Map<string, AircraftTimeline>()
+
+    for (const entry of serialized) {
+      // Normalize observations for imported playback:
+      // - Set receivedAt = observedAt so the interpolation anchor math works
+      //   (interpolateTimeline computes: displayTime = oldest.observedAt + (now - oldest.receivedAt) - delay)
+      //   With receivedAt = observedAt and delay = 0, displayTime = now, which is what we want.
+      // - Set displayDelay = 0 (no delay for scrubbing historical data)
+      const normalizedObs: AircraftObservation[] = entry.observations.map(obs => ({
+        ...obs,
+        receivedAt: obs.observedAt,
+        displayDelay: 0
+      }))
+
+      timelines.set(entry.callsign, {
+        callsign: entry.callsign,
+        observations: normalizedObs,
+        metadata: { ...entry.metadata },
+        lastSource: entry.lastSource,
+        lastReceivedAt: entry.lastReceivedAt,
+        // Clear dynamic delay — not meaningful for imported playback
+        dynamicDelay: undefined
+      })
     }
 
     set({ timelines, lastKnownHeadings: new Map() })

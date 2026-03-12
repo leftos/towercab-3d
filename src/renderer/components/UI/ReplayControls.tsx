@@ -1,5 +1,6 @@
 import { useRef, useCallback, useEffect } from 'react'
 import { useReplayStore } from '../../stores/replayStore'
+import { useAircraftTimelineStore } from '../../stores/aircraftTimelineStore'
 import { useReplayPlayback } from '../../hooks/useReplayPlayback'
 import { PLAYBACK_SPEEDS } from '../../constants/replay'
 import { formatRelativeTime, formatUTCTime, formatDuration } from '../../utils/formatting'
@@ -18,7 +19,6 @@ function ReplayControls({ onSettingsClick }: ReplayControlsProps) {
 
   // Replay store - settings panel
   const replaySnapshots = useReplayStore((state) => state.snapshots)
-  const importedSnapshots = useReplayStore((state) => state.importedSnapshots)
 
   // Replay store - playback controls
   const playbackMode = useReplayStore((state) => state.playbackMode)
@@ -27,6 +27,7 @@ function ReplayControls({ onSettingsClick }: ReplayControlsProps) {
   const currentIndex = useReplayStore((state) => state.currentIndex)
   const segmentProgress = useReplayStore((state) => state.segmentProgress)
   const getTotalDuration = useReplayStore((state) => state.getTotalDuration)
+  const importedTimeRange = useReplayStore((state) => state.importedTimeRange)
   const play = useReplayStore((state) => state.play)
   const pause = useReplayStore((state) => state.pause)
   const goLive = useReplayStore((state) => state.goLive)
@@ -35,32 +36,48 @@ function ReplayControls({ onSettingsClick }: ReplayControlsProps) {
   const stepForward = useReplayStore((state) => state.stepForward)
   const setPlaybackSpeed = useReplayStore((state) => state.setPlaybackSpeed)
 
-  // Derive active snapshots for replay
-  const activeSnapshots = playbackMode === 'imported' && importedSnapshots
-    ? importedSnapshots
-    : replaySnapshots
+  const isImported = playbackMode === 'imported'
+
+  // Derive active snapshots for buffer replay
+  const activeSnapshots = replaySnapshots
 
   // Computed values
   const isLive = playbackMode === 'live'
-  const hasSnapshots = activeSnapshots.length >= 2
-  const totalDuration = getTotalDuration()
+  const hasSnapshots = isImported
+    ? importedTimeRange !== null
+    : activeSnapshots.length >= 2
+  const totalDuration = isImported && importedTimeRange
+    ? (importedTimeRange.end - importedTimeRange.start) / 1000
+    : getTotalDuration()
 
   // Calculate current timestamp for display
-  const currentSnapshot = activeSnapshots[currentIndex]
-  const currentTimestamp = currentSnapshot?.timestamp || Date.now()
-  const newestSnapshot = activeSnapshots[activeSnapshots.length - 1]
-  const newestTimestamp = newestSnapshot?.timestamp || Date.now()
+  const currentTimestamp = isImported && importedTimeRange
+    ? importedTimeRange.start + segmentProgress * (importedTimeRange.end - importedTimeRange.start)
+    : (activeSnapshots[currentIndex]?.timestamp || Date.now())
+  const newestTimestamp = isImported && importedTimeRange
+    ? importedTimeRange.end
+    : (activeSnapshots[activeSnapshots.length - 1]?.timestamp || Date.now())
   const timeAgo = isLive ? 0 : (newestTimestamp - currentTimestamp) / 1000
 
-  // Scrubber position
-  const scrubberValue = currentIndex + segmentProgress
-  const scrubberMax = Math.max(1, activeSnapshots.length - 1)
+  // Scrubber position: imported uses 0-1000 range, buffer replay uses snapshot indices
+  const scrubberValue = isImported ? segmentProgress * 1000 : currentIndex + segmentProgress
+  const scrubberMax = isImported ? 1000 : Math.max(1, activeSnapshots.length - 1)
 
   const handleScrubberChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const value = parseFloat(e.target.value)
-    const index = Math.floor(value)
-    seekTo(index)
-  }, [seekTo])
+    if (isImported) {
+      // Map 0-1000 to segmentProgress 0-1 and clear interpolation state
+      useAircraftTimelineStore.getState().clearInterpolationState()
+      useReplayStore.setState({
+        segmentProgress: value / 1000,
+        isPlaying: false,
+        playbackMode: 'imported'
+      })
+    } else {
+      const index = Math.floor(value)
+      seekTo(index)
+    }
+  }, [seekTo, isImported])
 
   const handlePlayPause = useCallback(() => {
     if (isPlaying) {
@@ -111,7 +128,7 @@ function ReplayControls({ onSettingsClick }: ReplayControlsProps) {
         <button
           className="timeline-btn step-btn"
           onClick={stepBackward}
-          disabled={!hasSnapshots || (!isLive && currentIndex === 0)}
+          disabled={!hasSnapshots || isImported || (!isLive && currentIndex === 0)}
           title="Step backward (15s)"
         >
           <svg viewBox="0 0 24 24" width="16" height="16">
@@ -139,7 +156,7 @@ function ReplayControls({ onSettingsClick }: ReplayControlsProps) {
         <button
           className="timeline-btn step-btn"
           onClick={stepForward}
-          disabled={!hasSnapshots || isLive || currentIndex >= activeSnapshots.length - 1}
+          disabled={!hasSnapshots || isImported || isLive || currentIndex >= activeSnapshots.length - 1}
           title="Step forward (15s)"
         >
           <svg viewBox="0 0 24 24" width="16" height="16">

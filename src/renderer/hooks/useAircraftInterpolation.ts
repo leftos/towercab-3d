@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { useSettingsStore } from '../stores/settingsStore'
-import { useReplayStore } from '../stores/replayStore'
 import { useAircraftTimelineStore } from '../stores/aircraftTimelineStore'
 import { useVatsimStore } from '../stores/vatsimStore'
 import { getAircraftDataSource } from './useAircraftDataSource'
@@ -404,13 +403,8 @@ function updateInterpolation() {
     const timelineStore = useAircraftTimelineStore.getState()
 
     if (currentMode === 'imported') {
-      // Entering imported replay mode - load external snapshots into timeline store
-      // This replaces the timeline with data from an imported file
-      const replayState = useReplayStore.getState()
-      const snapshots = replayState.getActiveSnapshots()
-      timelineStore.loadReplaySnapshots(snapshots)
-
-      // Clear consolidated rate tracking state for fresh start
+      // Entering imported replay mode - timelines are already loaded by
+      // replayStore.importReplay() which calls loadImportedTimelines() or loadReplaySnapshots()
       sharedTimelineRateStateRef.current.clear()
     } else if (currentMode === 'replay') {
       // Entering buffer replay mode - scrub through existing timeline
@@ -418,7 +412,7 @@ function updateInterpolation() {
       // Just clear rate tracking for fresh orientation calculations
       sharedTimelineRateStateRef.current.clear()
     } else if (currentMode === 'live' && previousMode === 'imported') {
-      // Returning to live mode from imported replay - clear the imported data
+      // Returning to live mode from imported replay - clear the data
       // Live observations will start populating the timeline again
       timelineStore.clear()
     }

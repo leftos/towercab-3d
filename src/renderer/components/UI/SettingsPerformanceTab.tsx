@@ -3,12 +3,11 @@ import { useSettingsStore } from '../../stores/settingsStore'
 import { useReplayStore } from '../../stores/replayStore'
 import { useUIFeedbackStore } from '../../stores/uiFeedbackStore'
 import { estimateReplayMemoryMB } from '../../constants/replay'
-import type { ReplayExportData } from '../../types/replay'
 import CollapsibleSection from './settings/CollapsibleSection'
 import './ControlsBar.css'
 
 function SettingsPerformanceTab() {
-  const replayFileInputRef = useRef<HTMLInputElement>(null)
+  const importFileInputRef = useRef<HTMLInputElement>(null)
   const [isClearingCache, setIsClearingCache] = useState(false)
 
   // UI feedback store for cache clear
@@ -27,12 +26,13 @@ function SettingsPerformanceTab() {
 
   // Replay store
   const replaySnapshots = useReplayStore((state) => state.snapshots)
-  const importedSnapshots = useReplayStore((state) => state.importedSnapshots)
+  const importedTimeRange = useReplayStore((state) => state.importedTimeRange)
+  const importedAppState = useReplayStore((state) => state.importedAppState)
   const exportReplay = useReplayStore((state) => state.exportReplay)
   const importReplay = useReplayStore((state) => state.importReplay)
   const clearImportedReplay = useReplayStore((state) => state.clearImportedReplay)
 
-  const handleReplayFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
 
@@ -40,28 +40,29 @@ function SettingsPerformanceTab() {
       const text = await file.text()
       const data = JSON.parse(text)
 
-      // Validate basic structure before passing to importReplay
       if (!data || typeof data !== 'object') {
-        console.error('[Replay Import] Invalid file: not a JSON object')
-        alert('Invalid replay file: not a valid JSON object')
+        console.error('[Import] Invalid file: not a JSON object')
+        alert('Invalid file: not a valid JSON object')
         return
       }
 
-      const success = importReplay(data as ReplayExportData)
+      const success = importReplay(data)
       if (!success) {
-        alert('Invalid replay file format. Check console for details.')
+        alert('Invalid file format. Supported: .tc3d-replay.json and .tc3d-diag.json files.\nCheck console for details.')
       }
     } catch (error) {
       const message = error instanceof SyntaxError
         ? 'Invalid JSON format'
         : error instanceof Error ? error.message : 'Unknown error'
-      console.error('[Replay Import] Failed to read file:', error)
-      alert(`Failed to read replay file: ${message}`)
+      console.error('[Import] Failed to read file:', error)
+      alert(`Failed to read file: ${message}`)
     }
 
     // Reset input so same file can be selected again
     e.target.value = ''
   }
+
+  const hasImportedData = importedTimeRange !== null
 
   return (
     <>
@@ -207,7 +208,7 @@ function SettingsPerformanceTab() {
             </button>
             <button
               className="control-button"
-              onClick={() => replayFileInputRef.current?.click()}
+              onClick={() => importFileInputRef.current?.click()}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -217,26 +218,31 @@ function SettingsPerformanceTab() {
               Import Replay
             </button>
             <input
-              ref={replayFileInputRef}
+              ref={importFileInputRef}
               type="file"
               accept=".json"
-              onChange={handleReplayFileChange}
+              onChange={handleImportFileChange}
               style={{ display: 'none' }}
             />
           </div>
+          <p className="setting-hint">
+            Import accepts replay (.tc3d-replay.json) and diagnostic (.tc3d-diag.json) files.
+            Export with Ctrl+Shift+D for diagnostic packages.
+          </p>
         </div>
 
-        {importedSnapshots && (
+        {hasImportedData && (
           <div className="setting-item">
             <p className="setting-hint" style={{ color: '#ff9800' }}>
-              Viewing imported replay ({importedSnapshots.length} snapshots)
+              Viewing imported data
+              {importedAppState?.airport ? ` (${importedAppState.airport.icao})` : ''}
             </p>
             <button
               className="control-button"
               onClick={clearImportedReplay}
               style={{ marginTop: '8px' }}
             >
-              Clear Imported Replay
+              Clear Imported Data
             </button>
           </div>
         )}

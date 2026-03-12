@@ -80,7 +80,7 @@ export function estimateReplayMemoryMB(durationMinutes: number, averageAircraftC
 /**
  * Current replay export format version
  */
-export const REPLAY_EXPORT_VERSION = 1
+export const REPLAY_EXPORT_VERSION = 2
 
 /**
  * File extension for replay exports (without dot)

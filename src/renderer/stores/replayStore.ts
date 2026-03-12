@@ -1,9 +1,12 @@
 import { create } from 'zustand'
-import type { VatsimSnapshot, PlaybackMode, PlaybackSpeed, ReplayExportData } from '../types/replay'
-import { serializeAircraftStates, deserializeAircraftStates } from '../types/replay'
+import type { VatsimSnapshot, PlaybackMode, PlaybackSpeed, ReplayExportData, ReplayExportDataV2 } from '../types/replay'
+import type { DiagnosticPackage, DiagnosticAppState, SerializedTimeline } from '../types/diagnostic'
+import { DIAGNOSTIC_VERSION } from '../constants/diagnostic'
+import { serializeAircraftStates } from '../types/replay'
 import type { AircraftState } from '../types/vatsim'
 import { useSettingsStore } from './settingsStore'
 import { useAirportStore } from './airportStore'
+import { useAircraftTimelineStore } from './aircraftTimelineStore'
 import {
   SNAPSHOT_INTERVAL_MS,
   DEFAULT_PLAYBACK_SPEED,
@@ -22,24 +25,28 @@ interface ReplayState {
   isRecording: boolean
 
   // Playback
-  /** Current playback mode: live, replay (recorded), or imported */
+  /** Current playback mode: live, replay (buffer), or imported */
   playbackMode: PlaybackMode
   /** Whether playback is running (false = paused) */
   isPlaying: boolean
   /** Current playback speed multiplier */
   playbackSpeed: PlaybackSpeed
-  /** Current position in snapshots array */
+  /** Current position in snapshots array (buffer replay only) */
   currentIndex: number
-  /** Interpolation progress within current segment (0-1) */
+  /** Interpolation progress: 0-1 within segment (buffer) or across time range (imported) */
   segmentProgress: number
   /** Timestamp when current playback segment started (for timing) */
   playbackStartTime: number
   /** Index when current playback segment started */
   playbackStartIndex: number
 
-  // Imported replay
-  /** Imported replay data (separate from live recording) */
+  // Imported replay (unified: v1 snapshots, v2 timelines, and diagnostic packages)
+  /** Imported replay snapshots for v1 legacy imports (converted to timelines on load) */
   importedSnapshots: VatsimSnapshot[] | null
+  /** Time range of loaded imported timelines (min/max observedAt) */
+  importedTimeRange: { start: number; end: number } | null
+  /** App state from imported file (diagnostic or v2 replay) */
+  importedAppState: DiagnosticAppState | null
 }
 
 /**
@@ -65,7 +72,7 @@ interface ReplayActions {
   pause: () => void
   /** Return to live mode */
   goLive: () => void
-  /** Seek to specific snapshot index */
+  /** Seek to specific snapshot index (buffer replay) */
   seekTo: (index: number) => void
   /** Step backward one snapshot */
   stepBackward: () => void
@@ -77,10 +84,10 @@ interface ReplayActions {
   updatePlayback: (deltaMs: number) => void
 
   // Import/Export
-  /** Export current replay data to downloadable file */
+  /** Export current replay data to downloadable file (v2 format) */
   exportReplay: () => void
-  /** Import replay data from file */
-  importReplay: (data: ReplayExportData) => boolean
+  /** Import replay data from file (handles v1, v2, and diagnostic formats) */
+  importReplay: (data: ReplayExportData | DiagnosticPackage) => boolean
   /** Clear imported replay data */
   clearImportedReplay: () => void
 
@@ -107,7 +114,7 @@ type ReplayStore = ReplayState & ReplayActions
  * Manages VATSIM data snapshots for replay functionality:
  * - Records live snapshots in a circular buffer
  * - Supports playback at various speeds
- * - Handles import/export of replay data
+ * - Handles import/export of replay data (v2: full-fidelity timelines)
  * - Maintains live recording even when viewing imported replays
  */
 export const useReplayStore = create<ReplayStore>((set, get) => ({
@@ -122,6 +129,8 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
   playbackStartTime: 0,
   playbackStartIndex: 0,
   importedSnapshots: null,
+  importedTimeRange: null,
+  importedAppState: null,
 
   // ========================================================================
   // RECORDING
@@ -163,9 +172,21 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
   // ========================================================================
 
   play: () => {
-    const { playbackMode, getActiveSnapshots, currentIndex } = get()
-    const snapshots = getActiveSnapshots()
+    const { playbackMode, getActiveSnapshots, currentIndex, importedTimeRange, segmentProgress } = get()
 
+    // Imported mode uses continuous time-based playback
+    if (playbackMode === 'imported') {
+      if (!importedTimeRange) return
+      const startProgress = segmentProgress >= 1 ? 0 : segmentProgress
+      set({
+        isPlaying: true,
+        playbackStartTime: Date.now(),
+        segmentProgress: startProgress
+      })
+      return
+    }
+
+    const snapshots = getActiveSnapshots()
     if (snapshots.length < 2) return
 
     // If we're at the end, restart from beginning
@@ -190,13 +211,18 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
       playbackMode: 'live',
       isPlaying: false,
       currentIndex: 0,
-      segmentProgress: 0
+      segmentProgress: 0,
+      importedAppState: null,
+      importedTimeRange: null
     })
   },
 
   seekTo: (index) => {
     const snapshots = get().getActiveSnapshots()
     const clampedIndex = Math.max(0, Math.min(snapshots.length - 1, index))
+
+    // Clear interpolation state so aircraft jump to the correct position
+    useAircraftTimelineStore.getState().clearInterpolationState()
 
     set({
       currentIndex: clampedIndex,
@@ -212,14 +238,12 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
     const { currentIndex, playbackMode, getActiveSnapshots } = get()
     const snapshots = getActiveSnapshots()
 
-    // In live mode, user is conceptually at the end of the buffer (index = length - 1)
-    // Step backward goes to length - 2, which with segmentProgress = 0 shows:
-    //   - previousStates from snapshot[length-2] (15s ago)
-    //   - aircraftStates from snapshot[length-1] (most recent)
-    //   - t = 0, so aircraft appears at previousStates position (15s ago)
     const newIndex = playbackMode === 'live'
       ? Math.max(0, snapshots.length - 2)
       : Math.max(0, currentIndex - 1)
+
+    // Clear interpolation state so aircraft jump to the correct position
+    useAircraftTimelineStore.getState().clearInterpolationState()
 
     set({
       currentIndex: newIndex,
@@ -233,6 +257,9 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
     const { currentIndex, getActiveSnapshots, playbackMode } = get()
     const snapshots = getActiveSnapshots()
     const newIndex = Math.min(snapshots.length - 1, currentIndex + 1)
+
+    // Clear interpolation state so aircraft jump to the correct position
+    useAircraftTimelineStore.getState().clearInterpolationState()
 
     set({
       currentIndex: newIndex,
@@ -253,9 +280,24 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
   },
 
   updatePlayback: (deltaMs) => {
-    const { isPlaying, playbackSpeed, currentIndex, segmentProgress, getActiveSnapshots } = get()
+    const { isPlaying, playbackSpeed, playbackMode, currentIndex, segmentProgress, getActiveSnapshots, importedTimeRange } = get()
 
     if (!isPlaying) return
+
+    // Imported mode: segmentProgress is 0-1 across the full time range
+    if (playbackMode === 'imported') {
+      if (!importedTimeRange) return
+      const durationMs = importedTimeRange.end - importedTimeRange.start
+      if (durationMs <= 0) return
+      const progressDelta = (deltaMs * playbackSpeed) / durationMs
+      const newProgress = segmentProgress + progressDelta
+      if (newProgress >= 1) {
+        set({ isPlaying: false, segmentProgress: 1 })
+      } else {
+        set({ segmentProgress: newProgress })
+      }
+      return
+    }
 
     const snapshots = getActiveSnapshots()
     if (snapshots.length < 2) return
@@ -293,21 +335,37 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
   // ========================================================================
 
   exportReplay: () => {
-    const snapshots = get().getActiveSnapshots()
+    // Serialize the timeline store's observation data (v2 format)
+    const timelineStore = useAircraftTimelineStore.getState()
+    const timelines = timelineStore.timelines
 
-    if (snapshots.length === 0) {
-      console.warn('[Replay] No snapshots to export')
+    if (timelines.size === 0) {
+      console.warn('[Replay] No timeline data to export')
       return
+    }
+
+    const serialized: SerializedTimeline[] = []
+    for (const [callsign, timeline] of timelines) {
+      serialized.push({
+        callsign,
+        observations: [...timeline.observations],
+        metadata: { ...timeline.metadata },
+        lastSource: timeline.lastSource,
+        lastReceivedAt: timeline.lastReceivedAt,
+        dynamicDelay: timeline.dynamicDelay
+          ? { ...timeline.dynamicDelay, intervalHistory: [...timeline.dynamicDelay.intervalHistory] }
+          : undefined
+      })
     }
 
     const currentAirport = useAirportStore.getState().currentAirport
 
-    const exportData: ReplayExportData = {
-      version: REPLAY_EXPORT_VERSION,
+    const exportData: ReplayExportDataV2 = {
+      version: REPLAY_EXPORT_VERSION as 2,
       exportDate: new Date().toISOString(),
-      appVersion: '0.0.5-alpha', // TODO: Get from package.json
+      appVersion: APP_VERSION,
       airport: currentAirport?.icao,
-      snapshots
+      timelines: serialized
     }
 
     // Create and download file
@@ -329,46 +387,34 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
 
-    console.log(`[Replay] Exported ${snapshots.length} snapshots to ${filename}`)
+    console.log(`[Replay] Exported ${serialized.length} timelines to ${filename}`)
   },
 
   importReplay: (data) => {
-    // Validate format
     if (!data || typeof data !== 'object') {
       console.error('[Replay] Invalid import data: not an object')
       return false
     }
 
-    if (data.version !== REPLAY_EXPORT_VERSION) {
-      console.error(`[Replay] Unsupported version: ${data.version}`)
-      return false
+    const version = (data as { version?: number }).version
+
+    // Detect diagnostic package format
+    if (isDiagnosticPackage(data)) {
+      return importDiagnosticPackage(data as DiagnosticPackage, set, get)
     }
 
-    if (!Array.isArray(data.snapshots) || data.snapshots.length === 0) {
-      console.error('[Replay] Invalid import data: no snapshots')
-      return false
+    // V2 replay format (observation-based)
+    if (version === 2) {
+      return importV2Replay(data as ReplayExportDataV2, set, get)
     }
 
-    // Validate snapshot structure (spot check first one)
-    const first = data.snapshots[0]
-    if (
-      typeof first.timestamp !== 'number' ||
-      !Array.isArray(first.aircraftStates)
-    ) {
-      console.error('[Replay] Invalid snapshot structure')
-      return false
+    // V1 legacy format (snapshot-based)
+    if (version === 1) {
+      return importV1Replay(data as ReplayExportData, set, get)
     }
 
-    set({
-      importedSnapshots: data.snapshots,
-      playbackMode: 'imported',
-      currentIndex: 0,
-      segmentProgress: 0,
-      isPlaying: false
-    })
-
-    console.log(`[Replay] Imported ${data.snapshots.length} snapshots from ${data.airport || 'unknown airport'}`)
-    return true
+    console.error(`[Replay] Unsupported version: ${version}`)
+    return false
   },
 
   clearImportedReplay: () => {
@@ -376,6 +422,8 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
 
     set({
       importedSnapshots: null,
+      importedTimeRange: null,
+      importedAppState: null,
       playbackMode: playbackMode === 'imported' ? 'live' : playbackMode,
       currentIndex: 0,
       segmentProgress: 0,
@@ -413,25 +461,149 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
   },
 
   getTotalDuration: () => {
+    const { playbackMode, importedTimeRange } = get()
+    if (playbackMode === 'imported' && importedTimeRange) {
+      return (importedTimeRange.end - importedTimeRange.start) / 1000
+    }
     const snapshots = get().getActiveSnapshots()
     if (snapshots.length < 2) return 0
     return (snapshots.length - 1) * SNAPSHOT_INTERVAL_MS / 1000
   },
 
   getCurrentTime: () => {
-    const { currentIndex, segmentProgress } = get()
+    const { playbackMode, importedTimeRange, currentIndex, segmentProgress } = get()
+    if (playbackMode === 'imported' && importedTimeRange) {
+      return segmentProgress * (importedTimeRange.end - importedTimeRange.start) / 1000
+    }
     return (currentIndex + segmentProgress) * SNAPSHOT_INTERVAL_MS / 1000
   }
 }))
 
-/**
- * Helper to convert snapshot to injectable state
- * Returns Map that can be used for aircraft state
- */
-export function snapshotToState(snapshot: VatsimSnapshot): {
-  aircraftStates: Map<string, AircraftState>
-} {
-  return {
-    aircraftStates: deserializeAircraftStates(snapshot.aircraftStates)
-  }
+// ========================================================================
+// IMPORT HELPERS (module-private)
+// ========================================================================
+
+function isDiagnosticPackage(data: unknown): data is DiagnosticPackage {
+  const obj = data as Record<string, unknown>
+  return (
+    obj.version === DIAGNOSTIC_VERSION &&
+    Array.isArray(obj.timelines) &&
+    obj.appState !== undefined &&
+    obj.exportedAt !== undefined
+  )
 }
+
+function calculateTimeRange(
+  timelines: SerializedTimeline[]
+): { start: number; end: number } | null {
+  let minTime = Infinity
+  let maxTime = -Infinity
+  for (const timeline of timelines) {
+    for (const obs of timeline.observations) {
+      if (obs.observedAt < minTime) minTime = obs.observedAt
+      if (obs.observedAt > maxTime) maxTime = obs.observedAt
+    }
+  }
+  return minTime < Infinity && maxTime > -Infinity
+    ? { start: minTime, end: maxTime }
+    : null
+}
+
+function importDiagnosticPackage(
+  data: DiagnosticPackage,
+  set: (state: Partial<ReplayState>) => void,
+  _get: () => ReplayStore
+): boolean {
+  if (!Array.isArray(data.timelines) || data.timelines.length === 0) {
+    console.error('[Replay] Invalid diagnostic data: no timelines')
+    return false
+  }
+
+  const timeRange = calculateTimeRange(data.timelines)
+
+  // Load timelines into the timeline store
+  useAircraftTimelineStore.getState().loadImportedTimelines(data.timelines)
+
+  set({
+    playbackMode: 'imported',
+    importedAppState: data.appState,
+    importedTimeRange: timeRange,
+    importedSnapshots: null,
+    currentIndex: 0,
+    segmentProgress: 0,
+    isPlaying: false
+  })
+
+  console.log(
+    `[Replay] Imported diagnostic: ${data.timelines.length} timelines` +
+    (data.appState.airport ? ` from ${data.appState.airport.icao}` : '')
+  )
+  return true
+}
+
+function importV2Replay(
+  data: ReplayExportDataV2,
+  set: (state: Partial<ReplayState>) => void,
+  _get: () => ReplayStore
+): boolean {
+  if (!Array.isArray(data.timelines) || data.timelines.length === 0) {
+    console.error('[Replay] Invalid v2 import data: no timelines')
+    return false
+  }
+
+  const timeRange = calculateTimeRange(data.timelines)
+
+  // Load timelines into the timeline store
+  useAircraftTimelineStore.getState().loadImportedTimelines(data.timelines)
+
+  set({
+    playbackMode: 'imported',
+    importedAppState: data.appState ?? null,
+    importedTimeRange: timeRange,
+    importedSnapshots: null,
+    currentIndex: 0,
+    segmentProgress: 0,
+    isPlaying: false
+  })
+
+  console.log(`[Replay] Imported v2 replay: ${data.timelines.length} timelines from ${data.airport || 'unknown airport'}`)
+  return true
+}
+
+function importV1Replay(
+  data: ReplayExportData,
+  set: (state: Partial<ReplayState>) => void,
+  _get: () => ReplayStore
+): boolean {
+  if (data.version !== 1) {
+    console.error(`[Replay] Expected v1, got version ${data.version}`)
+    return false
+  }
+
+  const v1Data = data as { snapshots?: VatsimSnapshot[] }
+  if (!Array.isArray(v1Data.snapshots) || v1Data.snapshots.length === 0) {
+    console.error('[Replay] Invalid v1 import data: no snapshots')
+    return false
+  }
+
+  // Convert v1 snapshots to timelines via loadReplaySnapshots, then
+  // use the timeline store's time range for continuous scrubbing
+  const timelineStore = useAircraftTimelineStore.getState()
+  timelineStore.loadReplaySnapshots(v1Data.snapshots)
+
+  const timeRange = timelineStore.getReplayTimeRange()
+
+  set({
+    importedSnapshots: null,
+    importedTimeRange: timeRange,
+    importedAppState: null,
+    playbackMode: 'imported',
+    currentIndex: 0,
+    segmentProgress: 0,
+    isPlaying: false
+  })
+
+  console.log(`[Replay] Imported v1 replay: ${v1Data.snapshots.length} snapshots from ${data.airport || 'unknown airport'} (converted to timelines)`)
+  return true
+}
+
