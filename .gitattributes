@@ -1,0 +1,2 @@
+# Force LF line endings for all text files to prevent CRLF issues in CI
+* text=auto eol=lf
