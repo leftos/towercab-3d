@@ -17,13 +17,13 @@
  * - Saving the manifest when Enter is pressed in Step 2
  */
 
-import { useEffect, useCallback } from 'react'
-import { useTowerPositioningStore } from '../../stores/towerPositioningStore'
-import { useViewportStore } from '../../stores/viewportStore'
+import { useCallback, useEffect } from 'react'
 import { useAirportStore } from '../../stores/airportStore'
+import { useTowerPositioningStore } from '../../stores/towerPositioningStore'
 import { useUIFeedbackStore } from '../../stores/uiFeedbackStore'
-import { modApi, shellApi } from '../../utils/tauriApi'
+import { useViewportStore } from '../../stores/viewportStore'
 import type { TowerModManifest } from '../../types/mod'
+import { modApi, shellApi } from '../../utils/tauriApi'
 
 function TowerPositioningOverlay() {
   const isActive = useTowerPositioningStore((state) => state.isActive)

@@ -4,20 +4,20 @@
  * and bidirectional sync with globalSettingsStore
  */
 
+import { TOPDOWN_ALTITUDE_DEFAULT } from '../../constants'
 import type {
-  ViewMode,
   CameraBookmark,
-  GlobalViewportSettings,
   GlobalAirportViewportConfig,
   GlobalCameraBookmark,
-  GlobalViewModeDefaults,
   GlobalInsetViewport,
+  GlobalViewModeDefaults,
+  GlobalViewportSettings,
+  ViewMode,
   Viewport,
 } from '../../types'
 import { DEFAULT_GLOBAL_VIEWPORT_SETTINGS } from '../../types'
-import { TOPDOWN_ALTITUDE_DEFAULT } from '../../constants'
 import type { DatablockPosition } from '../datablockPositionStore'
-import type { ViewModeDefaults, AirportViewportConfig, GlobalOrbitSettings } from './viewportHelpers'
+import type { AirportViewportConfig, GlobalOrbitSettings, ViewModeDefaults } from './viewportHelpers'
 import { createMainViewport } from './viewportHelpers'
 
 // =============================================================================

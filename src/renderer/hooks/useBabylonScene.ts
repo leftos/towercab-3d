@@ -1,14 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
 import * as BABYLON from '@babylonjs/core'
 import * as GUI from '@babylonjs/gui'
-import type { UseBabylonSceneResult, BabylonSceneOptions } from '@/types'
+import { useEffect, useRef, useState } from 'react'
 import {
-  CAMERA_MIN_Z,
   CAMERA_MAX_Z,
-  HEMISPHERIC_LIGHT_INTENSITY,
-  HEMISPHERIC_LIGHT_GROUND_COLOR,
+  CAMERA_MIN_Z,
   DIRECTIONAL_LIGHT_INTENSITY,
+  HEMISPHERIC_LIGHT_GROUND_COLOR,
+  HEMISPHERIC_LIGHT_INTENSITY,
 } from '@/constants'
+import type { BabylonSceneOptions, UseBabylonSceneResult } from '@/types'
 
 /**
  * Initializes Babylon.js engine, scene, camera, and lighting for transparent overlay rendering.

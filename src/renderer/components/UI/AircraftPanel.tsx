@@ -1,25 +1,25 @@
-import { useMemo, useState, useEffect, useRef, useCallback } from 'react'
-import { useAirportStore } from '../../stores/airportStore'
-import { useSettingsStore } from '../../stores/settingsStore'
-import { useAircraftFilterStore } from '../../stores/aircraftFilterStore'
-import { useRunwayStore } from '../../stores/runwayStore'
-import { useVnasStore } from '../../stores/vnasStore'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useActiveViewportCamera } from '../../hooks/useActiveViewportCamera'
-import { useAircraftInterpolation } from '../../hooks/useAircraftInterpolation'
 import { useAircraftFiltering } from '../../hooks/useAircraftFiltering'
-import { calculateBearing, calculateDistanceNM } from '../../utils/geoMath'
-import { formatAltitude, formatGroundspeed, formatHeading, getTowerPosition } from '../../utils/towerHeight'
+import { useAircraftInterpolation } from '../../hooks/useAircraftInterpolation'
 import { geoidService } from '../../services/GeoidService'
+import { useAircraftFilterStore } from '../../stores/aircraftFilterStore'
+import { useAirportStore } from '../../stores/airportStore'
+import { useRunwayStore } from '../../stores/runwayStore'
+import { useSettingsStore } from '../../stores/settingsStore'
+import { useVnasStore } from '../../stores/vnasStore'
 import { applyPositionOffsets } from '../../utils/cameraGeometry'
+import { calculateBearing, calculateDistanceNM } from '../../utils/geoMath'
 import {
   calculateSmartSort,
   clearPhaseHistory,
+  type FlightPhase,
   getPhaseLabel,
   getTierClass,
-  type FlightPhase,
   type PriorityTier,
   type SmartSortContext,
 } from '../../utils/smartSort'
+import { formatAltitude, formatGroundspeed, formatHeading, getTowerPosition } from '../../utils/towerHeight'
 import './AircraftPanel.css'
 
 type SortOption = 'smart' | 'distance' | 'cameraDistance' | 'callsign' | 'altitude' | 'speed'

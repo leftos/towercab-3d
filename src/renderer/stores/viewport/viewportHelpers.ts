@@ -3,23 +3,23 @@
  * Extracted from viewportStore.ts for better modularity
  */
 
-import type {
-  ViewportLayout,
-  ViewportCameraState,
-  Viewport,
-  AirportViewportConfig,
-  ViewModeDefaults,
-} from '../../types'
 import {
-  HEADING_DEFAULT,
-  PITCH_DEFAULT,
-  FOV_DEFAULT,
   FOLLOW_ZOOM_DEFAULT,
-  TOPDOWN_ALTITUDE_DEFAULT,
+  FOV_DEFAULT,
+  HEADING_DEFAULT,
   ORBIT_DISTANCE_DEFAULT,
   ORBIT_HEADING_DEFAULT,
   ORBIT_PITCH_DEFAULT,
+  PITCH_DEFAULT,
+  TOPDOWN_ALTITUDE_DEFAULT,
 } from '../../constants'
+import type {
+  AirportViewportConfig,
+  ViewModeDefaults,
+  Viewport,
+  ViewportCameraState,
+  ViewportLayout,
+} from '../../types'
 
 // Re-export types that were previously defined here
 export type { AirportViewportConfig, ViewModeDefaults }

@@ -4,9 +4,9 @@
  */
 
 import type { CameraBookmark } from '../../types'
+import { scheduleGlobalSync } from './globalSettingsSync'
 import type { AirportViewportConfig, GlobalOrbitSettings } from './viewportHelpers'
 import { createMainViewport } from './viewportHelpers'
-import { scheduleGlobalSync } from './globalSettingsSync'
 
 // =============================================================================
 // Migration: cameraStore bookmarks → viewportStore

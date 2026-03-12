@@ -1,8 +1,8 @@
 import { useRef, useState } from 'react'
-import { useSettingsStore } from '../../stores/settingsStore'
-import { useReplayStore } from '../../stores/replayStore'
-import { useUIFeedbackStore } from '../../stores/uiFeedbackStore'
 import { estimateReplayMemoryMB } from '../../constants/replay'
+import { useReplayStore } from '../../stores/replayStore'
+import { useSettingsStore } from '../../stores/settingsStore'
+import { useUIFeedbackStore } from '../../stores/uiFeedbackStore'
 import CollapsibleSection from './settings/CollapsibleSection'
 import './ControlsBar.css'
 

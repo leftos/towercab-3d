@@ -15,20 +15,20 @@
  * - Thunderstorm state (with onset/cessation hysteresis)
  */
 
-import { useEffect, useRef, useCallback } from 'react'
-import { useWeatherStore } from '../stores/weatherStore'
-import type { PrecipitationState, WindState } from '@/types'
+import { useCallback, useEffect, useRef } from 'react'
 import {
-  VISIBILITY_TRANSITION_TIME,
   FOG_DENSITY_TRANSITION_TIME,
-  WIND_DIRECTION_TRANSITION_TIME,
-  WIND_SPEED_TRANSITION_TIME,
+  PRECIPITATION_CESSATION_DELAY,
   PRECIPITATION_FADE_TIME,
   PRECIPITATION_ONSET_DELAY,
-  PRECIPITATION_CESSATION_DELAY,
-  THUNDERSTORM_ONSET_DELAY,
   THUNDERSTORM_CESSATION_DELAY,
+  THUNDERSTORM_ONSET_DELAY,
+  VISIBILITY_TRANSITION_TIME,
+  WIND_DIRECTION_TRANSITION_TIME,
+  WIND_SPEED_TRANSITION_TIME,
 } from '@/constants'
+import type { PrecipitationState, WindState } from '@/types'
+import { useWeatherStore } from '../stores/weatherStore'
 
 export interface SmoothedWeatherState {
   /** Smoothed visibility in statute miles */

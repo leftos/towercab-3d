@@ -1,6 +1,6 @@
-import { useWeatherStore } from '../../stores/weatherStore'
 import { useSettingsStore } from '../../stores/settingsStore'
-import type { InterpolatedWeather, CloudLayer, FlightCategory } from '../../types'
+import { useWeatherStore } from '../../stores/weatherStore'
+import type { CloudLayer, FlightCategory, InterpolatedWeather } from '../../types'
 import './MetarOverlay.css'
 
 /**

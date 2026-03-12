@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { useViewportStore } from '../../stores/viewportStore'
-import ViewportContainer from './ViewportContainer'
 import InsetCesiumViewer from './InsetCesiumViewer'
+import ViewportContainer from './ViewportContainer'
 import './ViewportManager.css'
 
 interface ViewportManagerProps {

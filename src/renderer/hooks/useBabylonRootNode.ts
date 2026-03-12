@@ -1,8 +1,8 @@
-import { useCallback, useRef } from 'react'
 import * as BABYLON from '@babylonjs/core'
-import * as Cesium from 'cesium'
-import { setupEnuTransforms, type EnuTransformData } from '../utils/enuTransforms'
+import type * as Cesium from 'cesium'
+import { useCallback, useRef } from 'react'
 import type { UseBabylonRootNodeResult } from '@/types'
+import { type EnuTransformData, setupEnuTransforms } from '../utils/enuTransforms'
 
 interface UseBabylonRootNodeOptions {
   /** Babylon scene to create root node in */

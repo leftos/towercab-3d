@@ -12,7 +12,7 @@
 
 import * as turf from '@turf/turf'
 import type { Runway } from '../types/airport'
-import type { FlatteningPolygon, AirportFlatteningConfig } from '../types/terrain'
+import type { AirportFlatteningConfig, FlatteningPolygon } from '../types/terrain'
 import { airportSurfacesService } from './AirportSurfacesService'
 import { geoidService } from './GeoidService'
 

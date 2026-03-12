@@ -1,15 +1,15 @@
 import {
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
-  type ReactNode,
-  type MouseEvent,
-  type KeyboardEvent,
-  useEffect,
 } from 'react'
+import { type ResizeDirection, useDragResize } from '../../hooks/useDragResize'
 import { useViewportStore } from '../../stores/viewportStore'
-import { useDragResize, type ResizeDirection } from '../../hooks/useDragResize'
 import './ViewportContainer.css'
 
 interface ViewportContainerProps {

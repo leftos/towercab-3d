@@ -13,12 +13,12 @@
  * - No UI chrome (no settings panels, command input, etc.)
  */
 
-import { useEffect, useCallback, useState, useRef } from 'react'
-import { useSharedWorkerConsumer, enableObservationAutoFeed } from '../hooks/useSharedWorkerConsumer'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useInsetStoreSync } from '../hooks/useInsetStoreSync'
+import { enableObservationAutoFeed, useSharedWorkerConsumer } from '../hooks/useSharedWorkerConsumer'
 import { useViewportStore } from '../stores/viewportStore'
-import CesiumViewer from './CesiumViewer/CesiumViewer'
 import type { CameraStateUpdate } from '../types/shared-worker'
+import CesiumViewer from './CesiumViewer/CesiumViewer'
 
 // Enable automatic feeding of observations to the timeline store
 // This allows the inset to interpolate aircraft positions locally

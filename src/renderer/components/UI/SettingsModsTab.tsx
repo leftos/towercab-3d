@@ -1,19 +1,19 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
-import { useAirportStore } from '../../stores/airportStore'
-import { useUIFeedbackStore } from '../../stores/uiFeedbackStore'
-import { useTowerPositioningStore } from '../../stores/towerPositioningStore'
-import { useViewportStore } from '../../stores/viewportStore'
-import {
-  modService,
-  type ModLoadingResult,
-  type TowerModInfo,
-  type AircraftModInfo,
-  type ModError,
-  getCameraPositionFromManifest,
-} from '../../services/ModService'
+import { useCallback, useEffect, useState } from 'react'
 import { customVMRService } from '../../services/CustomVMRService'
-import { joinPath, modApi, isTauri, type GitUpdateAllResult } from '../../utils/tauriApi'
+import {
+  type AircraftModInfo,
+  getCameraPositionFromManifest,
+  type ModError,
+  type ModLoadingResult,
+  modService,
+  type TowerModInfo,
+} from '../../services/ModService'
+import { useAirportStore } from '../../stores/airportStore'
+import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
+import { useTowerPositioningStore } from '../../stores/towerPositioningStore'
+import { useUIFeedbackStore } from '../../stores/uiFeedbackStore'
+import { useViewportStore } from '../../stores/viewportStore'
+import { type GitUpdateAllResult, isTauri, joinPath, modApi } from '../../utils/tauriApi'
 import CollapsibleSection from './settings/CollapsibleSection'
 import './ControlsBar.css'
 

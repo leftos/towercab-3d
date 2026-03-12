@@ -9,14 +9,14 @@
  */
 
 import { create } from 'zustand'
-import type { RTConnectionStatus } from '../types/realtraffic'
-import type { AircraftObservation, AircraftMetadata } from '../types/aircraft-timeline'
-import { realTrafficService } from '../services/RealTrafficService'
-import { useGlobalSettingsStore } from './globalSettingsStore'
-import { useAircraftTimelineStore } from './aircraftTimelineStore'
-import { REALTRAFFIC_DEFAULT_POLL_INTERVAL } from '../constants/realtraffic'
 import { SOURCE_DISPLAY_DELAYS } from '../constants/aircraft-timeline'
+import { REALTRAFFIC_DEFAULT_POLL_INTERVAL } from '../constants/realtraffic'
+import { realTrafficService } from '../services/RealTrafficService'
+import type { AircraftMetadata, AircraftObservation } from '../types/aircraft-timeline'
+import type { RTConnectionStatus } from '../types/realtraffic'
 import { isRemoteMode } from '../utils/remoteMode'
+import { useAircraftTimelineStore } from './aircraftTimelineStore'
+import { useGlobalSettingsStore } from './globalSettingsStore'
 
 interface ReferencePosition {
   latitude: number

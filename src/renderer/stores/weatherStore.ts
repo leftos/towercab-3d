@@ -1,17 +1,17 @@
 import { create } from 'zustand'
-import { metarService, type MetarData } from '../services/MetarService'
-import type { CloudLayer, PrecipitationState, WindState, DistancedMetar, InterpolatedWeather } from '../types'
-import { interpolateWeather } from '../utils/weatherInterpolation'
 import {
-  WEATHER_REFRESH_INTERVAL,
+  INTERPOLATION_POSITION_THRESHOLD_DEG,
   NEAREST_METAR_THROTTLE,
   POSITION_CHANGE_THRESHOLD,
+  PRECIP_VIS_FACTOR_MAX,
+  PRECIP_VIS_FACTOR_MIN,
   PRECIP_VIS_THRESHOLD_HIGH,
   PRECIP_VIS_THRESHOLD_LOW,
-  PRECIP_VIS_FACTOR_MIN,
-  PRECIP_VIS_FACTOR_MAX,
-  INTERPOLATION_POSITION_THRESHOLD_DEG,
+  WEATHER_REFRESH_INTERVAL,
 } from '../constants'
+import { type MetarData, metarService } from '../services/MetarService'
+import type { CloudLayer, DistancedMetar, InterpolatedWeather, PrecipitationState, WindState } from '../types'
+import { interpolateWeather } from '../utils/weatherInterpolation'
 
 interface WeatherState {
   // Current weather data

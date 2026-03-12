@@ -1,14 +1,14 @@
+import { GROUNDSPEED_THRESHOLD_KNOTS } from '@/constants/rendering'
 import { useAircraftFilterStore } from '@/stores/aircraftFilterStore'
-import { useSettingsStore } from '@/stores/settingsStore'
-import { useGlobalSettingsStore } from '@/stores/globalSettingsStore'
-import { useViewportStore } from '@/stores/viewportStore'
 import { useAirportStore } from '@/stores/airportStore'
+import { useGlobalSettingsStore } from '@/stores/globalSettingsStore'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { useViewportStore } from '@/stores/viewportStore'
 import { useWeatherStore } from '@/stores/weatherStore'
+import type { InterpolatedAircraftState } from '@/types/vatsim'
 import { calculateDistanceNM } from '@/utils/geoMath'
 import { getTowerPosition } from '@/utils/towerHeight'
-import { GROUNDSPEED_THRESHOLD_KNOTS } from '@/constants/rendering'
 import { isOrbitWithoutAirport } from '@/utils/viewingContext'
-import type { InterpolatedAircraftState } from '@/types/vatsim'
 
 interface FilteredAircraftWithDistance extends InterpolatedAircraftState {
   distance: number

@@ -14,25 +14,25 @@ import * as Cesium from 'cesium'
 
 // Re-export types for external consumers
 export type {
-  AnimationKey,
-  AnimationTrack,
   Animation,
-  NodeData,
+  AnimationKey,
   AnimationSet,
-  MeshBounds,
+  AnimationTrack,
   ExtendedNodeData,
+  MeshBounds,
   ModelGroundData,
   ModelWingData,
+  NodeData,
 } from './gltf'
 
-import type { Animation, AnimationTrack, AnimationSet, NodeData, ModelGroundData, ModelWingData } from './gltf'
+import type { Animation, AnimationSet, AnimationTrack, ModelGroundData, ModelWingData, NodeData } from './gltf'
 
 import {
+  computeMinYAtGearState,
+  computeWingData,
   getKeysAtTime,
   parseExtendedNodes,
-  computeMinYAtGearState,
   parseGroundDataGltf1,
-  computeWingData,
   parseWingDataGltf1,
 } from './gltf'
 

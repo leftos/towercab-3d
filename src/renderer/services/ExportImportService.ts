@@ -10,13 +10,13 @@
  * Security: Cesium Ion token is NEVER exported (it's a personal API key)
  */
 
+import type { AirportViewportConfig, DatablockDirection, Viewport } from '@/types'
+import type { SelectiveExportData } from '@/types/exportImport'
+import type { ViewModeDefaults } from '@/types/viewport'
+import { useGlobalSettingsStore } from '../stores/globalSettingsStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useViewportStore } from '../stores/viewportStore'
-import { useGlobalSettingsStore } from '../stores/globalSettingsStore'
-import type { AirportViewportConfig, Viewport, DatablockDirection } from '@/types'
-import type { ViewModeDefaults } from '@/types/viewport'
-import type { SelectiveExportData } from '@/types/exportImport'
-import { SUBCATEGORY_MAPPINGS, GLOBAL_SUBCATEGORY_MAPPINGS } from './SettingsTreeBuilder'
+import { GLOBAL_SUBCATEGORY_MAPPINGS, SUBCATEGORY_MAPPINGS } from './SettingsTreeBuilder'
 
 /** Settings that should never be exported for security reasons */
 const EXCLUDED_FROM_EXPORT = ['cesiumIonToken']

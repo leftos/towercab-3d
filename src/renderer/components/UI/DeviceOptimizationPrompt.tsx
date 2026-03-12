@@ -5,9 +5,9 @@
  * want to apply device-optimized settings for better performance.
  */
 
-import { useState, useEffect } from 'react'
-import { useSettingsStore, type SettingsPreset } from '../../stores/settingsStore'
-import { isTouchDevice, isIPad, isMobileDevice, getDevicePerformanceTier } from '../../utils/deviceDetection'
+import { useEffect, useState } from 'react'
+import { type SettingsPreset, useSettingsStore } from '../../stores/settingsStore'
+import { getDevicePerformanceTier, isIPad, isMobileDevice, isTouchDevice } from '../../utils/deviceDetection'
 import './DeviceOptimizationPrompt.css'
 
 function DeviceOptimizationPrompt() {

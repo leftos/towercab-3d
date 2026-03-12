@@ -1,18 +1,18 @@
 import { create } from 'zustand'
-import type { VatsimSnapshot, PlaybackMode, PlaybackSpeed, ReplayExportData, ReplayExportDataV2 } from '../types/replay'
-import type { DiagnosticPackage, DiagnosticAppState, SerializedTimeline } from '../types/diagnostic'
 import { DIAGNOSTIC_VERSION } from '../constants/diagnostic'
-import { serializeAircraftStates } from '../types/replay'
-import type { AircraftState } from '../types/vatsim'
-import { useSettingsStore } from './settingsStore'
-import { useAirportStore } from './airportStore'
-import { useAircraftTimelineStore } from './aircraftTimelineStore'
 import {
-  SNAPSHOT_INTERVAL_MS,
   DEFAULT_PLAYBACK_SPEED,
   REPLAY_EXPORT_VERSION,
   REPLAY_FILE_PREFIX,
+  SNAPSHOT_INTERVAL_MS,
 } from '../constants/replay'
+import type { DiagnosticAppState, DiagnosticPackage, SerializedTimeline } from '../types/diagnostic'
+import type { PlaybackMode, PlaybackSpeed, ReplayExportData, ReplayExportDataV2, VatsimSnapshot } from '../types/replay'
+import { serializeAircraftStates } from '../types/replay'
+import type { AircraftState } from '../types/vatsim'
+import { useAircraftTimelineStore } from './aircraftTimelineStore'
+import { useAirportStore } from './airportStore'
+import { useSettingsStore } from './settingsStore'
 
 /**
  * Replay store state interface

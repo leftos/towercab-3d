@@ -10,9 +10,9 @@
  * - VATSIM: 25 seconds (15s updates)
  */
 
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { SOURCE_STALE_THRESHOLDS, useRemoteStatusStore } from '../../stores/remoteStatusStore'
 import { isRemoteMode } from '../../utils/remoteMode'
-import { useRemoteStatusStore, SOURCE_STALE_THRESHOLDS } from '../../stores/remoteStatusStore'
 import './RemoteStatusIndicator.css'
 
 function RemoteStatusIndicator() {

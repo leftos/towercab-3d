@@ -16,16 +16,17 @@
  */
 
 import { useEffect, useRef } from 'react'
+import { useAirportStore } from '../stores/airportStore'
 import { useGlobalSettingsStore } from '../stores/globalSettingsStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useWeatherStore } from '../stores/weatherStore'
-import { useAirportStore } from '../stores/airportStore'
 import type {
-  SerializedSettings,
-  SerializedWeather,
   SerializedAirport,
   SerializedImagery,
+  SerializedSettings,
+  SerializedWeather,
 } from '../types/shared-worker'
+
 // Re-export isInsetContext from tauriApi for backward compatibility
 export { isInsetContext } from '../utils/tauriApi'
 

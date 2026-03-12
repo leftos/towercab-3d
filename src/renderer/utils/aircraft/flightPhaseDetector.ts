@@ -5,13 +5,13 @@
  * Identifies 14 distinct phases from short final to stopped taxi.
  */
 
+import { geoidService } from '../../services/GeoidService'
+import type { AircraftTimeline } from '../../types/aircraft-timeline'
 import type { Runway } from '../../types/airport'
 import type { InterpolatedAircraftState } from '../../types/vatsim'
-import type { AircraftTimeline } from '../../types/aircraft-timeline'
-import type { FlightPhase, SmartSortContext, PhaseDetectionResult, RunwayProximity } from './types'
-import { haversineDistanceNm, haversineDistanceFt, calculateBearing, headingDifference } from './geoMath'
-import { geoidService } from '../../services/GeoidService'
-import { stabilizePhase, cleanupStabilizationStates, clearStabilizationStates } from './phaseStabilization'
+import { calculateBearing, haversineDistanceFt, haversineDistanceNm, headingDifference } from './geoMath'
+import { cleanupStabilizationStates, clearStabilizationStates, stabilizePhase } from './phaseStabilization'
+import type { FlightPhase, PhaseDetectionResult, RunwayProximity, SmartSortContext } from './types'
 
 /** Meters to feet conversion factor */
 const METERS_TO_FEET = 3.28084

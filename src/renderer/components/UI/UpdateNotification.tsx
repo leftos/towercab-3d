@@ -1,11 +1,11 @@
-import { useEffect, useCallback } from 'react'
-import { useUpdateStore } from '../../stores/updateStore'
+import { useCallback, useEffect } from 'react'
 import {
   downloadAndInstallUpdate,
   restartApp,
   startAutoUpdateCheck,
   stopAutoUpdateCheck,
 } from '../../services/UpdateService'
+import { useUpdateStore } from '../../stores/updateStore'
 import { isRemoteMode } from '../../utils/remoteMode'
 import './UpdateNotification.css'
 

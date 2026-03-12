@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useViewportStore } from '../../stores/viewportStore'
-import { useUIFeedbackStore } from '../../stores/uiFeedbackStore'
+import { useCallback, useEffect, useState } from 'react'
 import { useDatablockPositionStore } from '../../stores/datablockPositionStore'
+import { useUIFeedbackStore } from '../../stores/uiFeedbackStore'
+import { useViewportStore } from '../../stores/viewportStore'
 import './CommandInput.css'
 
 /** Map numpad position to direction label (5 = reset to default) */

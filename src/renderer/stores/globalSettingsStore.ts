@@ -17,28 +17,28 @@
  */
 
 import { create } from 'zustand'
+import { listVmrFiles } from '@/services/fsltlApi'
 import type {
-  GlobalSettings,
-  GlobalViewportSettings,
+  DatablockDirection,
+  DatablockMode,
+  DataSourceType,
+  FSLTLTextureScale,
   GlobalDisplaySettings,
   GlobalDisplaySettingsUpdate,
-  MSFSModelSettings,
-  FSLTLTextureScale,
-  DataSourceType,
-  DatablockMode,
-  DatablockDirection,
-  MSFSModelSource,
+  GlobalSettings,
+  GlobalViewportSettings,
   InsetDisplaySettings,
+  MSFSModelSettings,
+  MSFSModelSource,
 } from '@/types'
 import {
-  DEFAULT_GLOBAL_SETTINGS,
   DEFAULT_GLOBAL_DISPLAY_SETTINGS,
+  DEFAULT_GLOBAL_SETTINGS,
+  DEFAULT_INSET_DISPLAY_SETTINGS,
   DEFAULT_MSFS_MODEL_SETTINGS,
   MSFS_CACHE_LIMIT,
-  DEFAULT_INSET_DISPLAY_SETTINGS,
 } from '@/types'
 import { globalSettingsApi, isTauri } from '@/utils/tauriApi'
-import { listVmrFiles } from '@/services/fsltlApi'
 
 // Key used to track if migration from localStorage has been done
 const MIGRATION_KEY = 'globalSettingsMigrationDone'

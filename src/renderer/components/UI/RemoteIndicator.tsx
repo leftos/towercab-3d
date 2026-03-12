@@ -5,7 +5,7 @@
  * Displays the host server URL and connection status.
  */
 
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { isRemoteMode } from '../../utils/remoteMode'
 import './RemoteIndicator.css'
 

@@ -21,11 +21,11 @@
  * - The model base should be at ground level
  */
 
-import { useEffect, useRef } from 'react'
 import * as Cesium from 'cesium'
+import { useEffect, useRef } from 'react'
+import { modService } from '../services/ModService'
 import { useAirportStore } from '../stores/airportStore'
 import { useTowerPositioningStore } from '../stores/towerPositioningStore'
-import { modService } from '../services/ModService'
 import { convertToAssetUrlSync } from '../utils/tauriApi'
 
 interface UseTowerModelOptions {

@@ -7,8 +7,8 @@
  * Based on approach from: https://github.com/alexgoni/Stans-Map
  */
 
-import * as Cesium from 'cesium'
 import * as turf from '@turf/turf'
+import * as Cesium from 'cesium'
 import type { Feature, Polygon } from 'geojson'
 import RBush from 'rbush'
 import type { FlatteningPolygon } from '../types/terrain'
@@ -1019,12 +1019,12 @@ export function createFlatteningTerrainProvider(
   const originalRequestTileGeometry = baseProvider.requestTileGeometry.bind(baseProvider)
 
   // Override requestTileGeometry to intercept and modify terrain data
-  baseProvider.requestTileGeometry = function (
+  baseProvider.requestTileGeometry = (
     x: number,
     y: number,
     level: number,
     request?: Cesium.Request,
-  ): Promise<Cesium.TerrainData> | undefined {
+  ): Promise<Cesium.TerrainData> | undefined => {
     const tileKey = `${x}/${y}/${level}`
     const tileRect = baseProvider.tilingScheme.tileXYToRectangle(x, y, level)
     const floors = tileIntersectsFloors(tileRect)

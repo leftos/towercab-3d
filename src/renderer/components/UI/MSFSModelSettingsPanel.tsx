@@ -12,16 +12,16 @@
  * @see globalSettingsStore - Stores MSFS model settings
  */
 
-import { useState, useEffect, useCallback } from 'react'
-import { useGlobalSettingsStore, useMsfsModelSettings } from '../../stores/globalSettingsStore'
-import { MSFSModelConversionService, type MSFSDetectionResult } from '../../services/MSFSModelConversionService'
+import { useCallback, useEffect, useState } from 'react'
 import { aircraftModelService } from '../../services/AircraftModelService'
-import { isTauri } from '../../utils/tauriApi'
-import { isRemoteMode } from '../../utils/remoteMode'
 import * as fsltlApi from '../../services/fsltlApi'
-import CollapsibleSection from './settings/CollapsibleSection'
-import type { MSFSModelSource, FSLTLTextureScale } from '../../types'
+import { type MSFSDetectionResult, MSFSModelConversionService } from '../../services/MSFSModelConversionService'
+import { useGlobalSettingsStore, useMsfsModelSettings } from '../../stores/globalSettingsStore'
+import type { FSLTLTextureScale, MSFSModelSource } from '../../types'
 import { MSFS_CACHE_LIMIT } from '../../types'
+import { isRemoteMode } from '../../utils/remoteMode'
+import { isTauri } from '../../utils/tauriApi'
+import CollapsibleSection from './settings/CollapsibleSection'
 import './FSLTLImportPanel.css'
 
 /**

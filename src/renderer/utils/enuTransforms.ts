@@ -7,8 +7,8 @@
  * @see {@link ../docs/coordinate-systems.md} for detailed explanation of coordinate systems
  */
 
-import * as Cesium from 'cesium'
 import * as BABYLON from '@babylonjs/core'
+import * as Cesium from 'cesium'
 
 /**
  * Result of setting up ENU transforms for a base position

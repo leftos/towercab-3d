@@ -1,9 +1,9 @@
-import { useSettingsStore } from '../../stores/settingsStore'
 import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
-import { isRemoteMode } from '../../utils/remoteMode'
-import CollapsibleSection from './settings/CollapsibleSection'
+import { useSettingsStore } from '../../stores/settingsStore'
 import type { GroundLabelMode, InsetDatablockMode, InsetGroundLabelMode } from '../../types'
 import type { AircraftTintColor } from '../../types/settings'
+import { isRemoteMode } from '../../utils/remoteMode'
+import CollapsibleSection from './settings/CollapsibleSection'
 import './ControlsBar.css'
 
 function SettingsAircraftLabelsTab() {

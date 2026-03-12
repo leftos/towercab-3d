@@ -9,7 +9,7 @@
  * - See errors if any
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useVnasStore } from '../../stores/vnasStore'
 import type { VnasEnvironment } from '../../types/vnas'
 import './VnasStatusPopover.css'

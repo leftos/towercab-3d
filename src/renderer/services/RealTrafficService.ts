@@ -10,23 +10,23 @@
 
 import { invoke } from '@tauri-apps/api/core'
 import { isTauri } from '@/utils/tauriApi'
-import type {
-  RTAuthResponse,
-  RTTrafficResponse,
-  RTRawRecord,
-  RTParkedTrafficResponse,
-  RTParkedRecord,
-} from '../types/realtraffic'
-import type { AircraftState } from '../types/vatsim'
 import {
-  REALTRAFFIC_DEFAULT_POLL_INTERVAL,
-  REALTRAFFIC_MIN_POLL_INTERVAL,
-  REALTRAFFIC_MAX_RETRIES,
-  REALTRAFFIC_RETRY_DELAY,
   FEET_TO_METERS,
   NM_TO_DEGREES,
+  REALTRAFFIC_DEFAULT_POLL_INTERVAL,
+  REALTRAFFIC_MAX_RETRIES,
+  REALTRAFFIC_MIN_POLL_INTERVAL,
+  REALTRAFFIC_RETRY_DELAY,
 } from '../constants/realtraffic'
 import { useAirportStore } from '../stores/airportStore'
+import type {
+  RTAuthResponse,
+  RTParkedRecord,
+  RTParkedTrafficResponse,
+  RTRawRecord,
+  RTTrafficResponse,
+} from '../types/realtraffic'
+import type { AircraftState } from '../types/vatsim'
 import { geoidService } from './GeoidService'
 
 // Cache IATA→ICAO lookup map (built lazily from airport database)
@@ -633,7 +633,7 @@ class RealTrafficService {
         // Retry on server errors (5xx) or rate limiting
         if (response.status >= 500 || response.status === 429) {
           if (attempt < retries) {
-            await this.delay(REALTRAFFIC_RETRY_DELAY * Math.pow(2, attempt))
+            await this.delay(REALTRAFFIC_RETRY_DELAY * 2 ** attempt)
             continue
           }
         }
@@ -642,7 +642,7 @@ class RealTrafficService {
       } catch (error) {
         lastError = error instanceof Error ? error : new Error('Unknown error')
         if (attempt < retries) {
-          await this.delay(REALTRAFFIC_RETRY_DELAY * Math.pow(2, attempt))
+          await this.delay(REALTRAFFIC_RETRY_DELAY * 2 ** attempt)
         }
       }
     }

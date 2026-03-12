@@ -9,10 +9,10 @@
  * Should be called once at app initialization (e.g., in App.tsx).
  */
 import { useEffect } from 'react'
-import { isRemoteMode } from '../utils/remoteMode'
-import { useVnasStore } from '../stores/vnasStore'
 import { useAirportStore } from '../stores/airportStore'
+import { useVnasStore } from '../stores/vnasStore'
 import type { VnasAircraft, VnasStatus } from '../types/vnas'
+import { isRemoteMode } from '../utils/remoteMode'
 
 type SessionState = VnasStatus['state']
 

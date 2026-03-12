@@ -1,5 +1,5 @@
-import { shellApi } from '../../utils/tauriApi'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { shellApi } from '../../utils/tauriApi'
 import './ControlsBar.css'
 
 export interface ContributeDialogData {

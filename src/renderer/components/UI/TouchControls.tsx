@@ -7,10 +7,10 @@
  * - Debug overlay buttons (Performance HUD, Model Matching) (via MobileToolsFlyout)
  */
 
-import { useState, useRef, useCallback, useEffect } from 'react'
-import { useViewportStore } from '../../stores/viewportStore'
-import { useUIFeedbackStore } from '../../stores/uiFeedbackStore'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { useUIFeedbackStore } from '../../stores/uiFeedbackStore'
+import { useViewportStore } from '../../stores/viewportStore'
 import { isTouchDevice } from '../../utils/deviceDetection'
 import './TouchControls.css'
 

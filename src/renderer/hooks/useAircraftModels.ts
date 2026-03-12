@@ -1,33 +1,33 @@
-import { useEffect, useRef, useCallback } from 'react'
 import * as Cesium from 'cesium'
-import type { ModelPoolRefs, SilhouetteRefs } from './useCesiumViewer'
-import type { InterpolatedAircraftState } from '../types/vatsim'
-import type { ViewMode } from '../types'
+import { useCallback, useEffect, useRef } from 'react'
+import { SUN_ELEVATION_DAY, SUN_ELEVATION_NIGHT } from '../constants/lighting'
+import {
+  FSLTL_MODEL_HEIGHT_OFFSET,
+  GROUNDSPEED_THRESHOLD_KNOTS,
+  getFsltlModelColorBlendAmount,
+  getModelColorBlendAmount,
+  getModelColorRgb,
+} from '../constants/rendering'
 import { aircraftModelService } from '../services/AircraftModelService'
 import { MSFSModelConversionService } from '../services/MSFSModelConversionService'
-import { performanceMonitor } from '../utils/performanceMonitor'
-import { isInsetContext } from './useInsetStoreSync'
-import { insetLog, getModelInfoForCallsign } from './useSharedWorkerConsumer'
 import { settingsSharedWorkerService } from '../services/SettingsSharedWorkerService'
-import type { SerializedModelInfo } from '../types/shared-worker'
-import {
-  getModelColorRgb,
-  getModelColorBlendAmount,
-  getFsltlModelColorBlendAmount,
-  GROUNDSPEED_THRESHOLD_KNOTS,
-  FSLTL_MODEL_HEIGHT_OFFSET,
-} from '../constants/rendering'
-import { SUN_ELEVATION_DAY, SUN_ELEVATION_NIGHT } from '../constants/lighting'
 import { useSettingsStore } from '../stores/settingsStore'
+import type { ViewMode } from '../types'
+import type { SerializedModelInfo } from '../types/shared-worker'
+import type { InterpolatedAircraftState } from '../types/vatsim'
 import {
-  updateGearAnimation,
   applyGearAnimation,
   clearGearState,
-  initializeGearState,
   getCurrentGearProgress,
+  initializeGearState,
+  updateGearAnimation,
 } from '../utils/gearAnimationController'
 import { getModelGroundData, parseGroundDataFromUrl } from '../utils/gltfAnimationParser'
+import { performanceMonitor } from '../utils/performanceMonitor'
+import type { ModelPoolRefs, SilhouetteRefs } from './useCesiumViewer'
+import { isInsetContext } from './useInsetStoreSync'
 import { filterAircraftForRendering } from './useRenderCulling'
+import { getModelInfoForCallsign, insetLog } from './useSharedWorkerConsumer'
 
 /**
  * Manages aircraft 3D model rendering using Cesium.Model pool

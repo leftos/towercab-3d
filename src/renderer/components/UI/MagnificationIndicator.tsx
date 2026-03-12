@@ -1,5 +1,5 @@
-import { useViewportStore } from '../../stores/viewportStore'
 import { FOV_DEFAULT } from '../../constants'
+import { useViewportStore } from '../../stores/viewportStore'
 import { calculateFollowFov } from '../../utils/cameraGeometry'
 import './MagnificationIndicator.css'
 

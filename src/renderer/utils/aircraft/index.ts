@@ -4,28 +4,27 @@
  * Barrel export for aircraft-related utility functions.
  */
 
-// Types
-export type {
-  FlightPhase,
-  PriorityTier,
-  SmartSortResult,
-  SmartSortContext,
-  PhaseDetectionResult,
-  RunwayProximity,
-} from './types'
+// Flight phase detection
+export {
+  cleanupPhaseHistory,
+  clearPhaseHistory,
+  detectFlightPhase,
+  recordPhase,
+} from './flightPhaseDetector'
 
 // Geographic math
 export {
-  haversineDistanceNm,
-  haversineDistanceFt,
   calculateBearing,
+  haversineDistanceFt,
+  haversineDistanceNm,
   headingDifference,
 } from './geoMath'
-
-// Flight phase detection
-export {
-  detectFlightPhase,
-  recordPhase,
-  cleanupPhaseHistory,
-  clearPhaseHistory,
-} from './flightPhaseDetector'
+// Types
+export type {
+  FlightPhase,
+  PhaseDetectionResult,
+  PriorityTier,
+  RunwayProximity,
+  SmartSortContext,
+  SmartSortResult,
+} from './types'

@@ -8,8 +8,8 @@
  * Format: CSV with ~45,000 runways worldwide
  */
 
-import type { Runway, RunwayEnd, RawRunwayCSV } from '../types/airport'
 import { RUNWAYS_DB_URL } from '../constants/api'
+import type { RawRunwayCSV, Runway, RunwayEnd } from '../types/airport'
 import { loadDataWithFallback } from '../utils/dataLoader'
 
 class RunwayService {

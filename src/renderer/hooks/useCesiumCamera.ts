@@ -1,21 +1,21 @@
-import { useCallback, useEffect, useRef, useMemo } from 'react'
 import * as Cesium from 'cesium'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { AIRPORT_FLYTO_DURATION, CAMERA_MIN_AGL, GLOBE_FLYTO_DURATION, GLOBE_VIEW_HEIGHT } from '../constants/camera'
 import { useAirportStore } from '../stores/airportStore'
+import { useSettingsStore } from '../stores/settingsStore'
 import { useViewportStore } from '../stores/viewportStore'
-import { getTowerPosition } from '../utils/towerHeight'
+import type { InterpolatedAircraftState } from '../types/vatsim'
 import {
+  applyPositionOffsets,
+  calculateFollowFov,
+  calculateHorizontalDistance,
   calculateOrbitCameraPosition,
   calculateTowerLookAt,
-  calculateFollowFov,
-  applyPositionOffsets,
   feetToMeters,
-  calculateHorizontalDistance,
 } from '../utils/cameraGeometry'
-import { lerpAngle, lerp } from '../utils/geoMath'
-import { useSettingsStore } from '../stores/settingsStore'
-import { CAMERA_MIN_AGL, AIRPORT_FLYTO_DURATION, GLOBE_VIEW_HEIGHT, GLOBE_FLYTO_DURATION } from '../constants/camera'
+import { lerp, lerpAngle } from '../utils/geoMath'
+import { getTowerPosition } from '../utils/towerHeight'
 import { useCameraInput } from './useCameraInput'
-import type { InterpolatedAircraftState } from '../types/vatsim'
 
 interface CameraControls {
   resetView: () => void
@@ -371,7 +371,7 @@ export function useCesiumCamera(
         if (fovAnim && viewer.camera.frustum instanceof Cesium.PerspectiveFrustum) {
           const elapsed = (Date.now() - fovAnim.startTime) / 1000
           const t = Math.min(1, elapsed / fovAnim.duration)
-          const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
+          const eased = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2
           const currentFov = fovAnim.startFov + (fovAnim.targetFov - fovAnim.startFov) * eased
           viewer.camera.frustum.fov = Cesium.Math.toRadians(currentFov)
           if (t >= 1) {

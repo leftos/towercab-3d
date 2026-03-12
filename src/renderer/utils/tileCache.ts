@@ -201,12 +201,12 @@ export function createCachingImageryProvider(baseProvider: Cesium.ImageryProvide
   // Create a proxy that intercepts requestImage
   const originalRequestImage = baseProvider.requestImage.bind(baseProvider)
 
-  baseProvider.requestImage = function (
+  baseProvider.requestImage = (
     x: number,
     y: number,
     level: number,
     request?: Cesium.Request,
-  ): Promise<Cesium.ImageryTypes> | undefined {
+  ): Promise<Cesium.ImageryTypes> | undefined => {
     const cacheKey = `imagery_${level}_${x}_${y}`
 
     // Try to get from cache first
@@ -247,12 +247,12 @@ export function createCachingImageryProvider(baseProvider: Cesium.ImageryProvide
 export function createCachingTerrainProvider(baseProvider: Cesium.TerrainProvider): Cesium.TerrainProvider {
   const originalRequestTileGeometry = baseProvider.requestTileGeometry.bind(baseProvider)
 
-  baseProvider.requestTileGeometry = function (
+  baseProvider.requestTileGeometry = (
     x: number,
     y: number,
     level: number,
     request?: Cesium.Request,
-  ): Promise<Cesium.TerrainData> | undefined {
+  ): Promise<Cesium.TerrainData> | undefined => {
     const cacheKey = `terrain_${level}_${x}_${y}`
 
     // Try to get from cache first

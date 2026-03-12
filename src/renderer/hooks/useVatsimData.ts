@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
-import { useVatsimStore } from '../stores/vatsimStore'
 import { useGlobalSettingsStore } from '../stores/globalSettingsStore'
+import { useVatsimStore } from '../stores/vatsimStore'
 import type { PilotData } from '../types/vatsim'
 
 /**

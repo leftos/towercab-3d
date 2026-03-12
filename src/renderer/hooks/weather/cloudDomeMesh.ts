@@ -4,7 +4,7 @@
  */
 
 import * as BABYLON from '@babylonjs/core'
-import { CLOUD_DOME_SEGMENTS, CLOUD_DOME_RADIUS, CLOUD_DOME_CURVATURE } from '@/constants'
+import { CLOUD_DOME_CURVATURE, CLOUD_DOME_RADIUS, CLOUD_DOME_SEGMENTS } from '@/constants'
 
 /**
  * Creates a dome/hemisphere mesh for overcast cloud layers.

@@ -5,7 +5,7 @@
  * Only visible on the desktop app when the server is running and clients are connected.
  */
 
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { isRemoteMode } from '../../utils/remoteMode'
 import { isTauri } from '../../utils/tauriApi'
 import './RemoteClientsIndicator.css'

@@ -1,41 +1,41 @@
-import { useState, useEffect } from 'react'
-import { useSettingsStore } from '../stores/settingsStore'
-import { useAircraftTimelineStore } from '../stores/aircraftTimelineStore'
-import { useVatsimStore } from '../stores/vatsimStore'
-import { getAircraftDataSource } from './useAircraftDataSource'
-import { calculateFlarePitch, angleDifference, calculateDistanceNM } from '../utils/geoMath'
-import { performanceMonitor } from '../utils/performanceMonitor'
-import { geoidService } from '../services/GeoidService'
-import type { InterpolatedAircraftState } from '../types/vatsim'
-import type { TimelineInterpolationResult } from '../types/aircraft-timeline'
-import type { TerrainData } from './useGroundAircraftTerrain'
+import { useEffect, useState } from 'react'
+import { STOPPED_SPEED_KTS } from '../constants/flightPhase'
 import {
-  GROUND_AIRCRAFT_TERRAIN_OFFSET,
-  FLYING_AIRCRAFT_TERRAIN_OFFSET,
-  TERRAIN_SMOOTHING_LERP_FACTOR,
-  HEIGHT_TRANSITION_LERP_FACTOR,
-  NOSEWHEEL_LOWERING_LERP_FACTOR,
+  AOA_HIGH_SPEED_THRESHOLD_KNOTS,
+  AOA_LOW_SPEED_THRESHOLD_KNOTS,
+  AOA_OFFSET_HIGH_SPEED_DEGREES,
+  AOA_OFFSET_LOW_SPEED_DEGREES,
+  DEPARTURE_BLEND_END_AGL,
+  DEPARTURE_BLEND_START_AGL,
   FALLBACK_FLARE_PITCH_DEGREES,
-  PITCH_RATE_MULTIPLIER,
-  ROLL_RATE_MULTIPLIER,
-  MAX_PITCH_DEGREES,
-  MAX_ROLL_DEGREES,
-  MAX_PITCH_RATE_DEG_PER_SEC,
-  MAX_ROLL_RATE_DEG_PER_SEC,
+  FLARE_START_ALTITUDE_METERS,
+  FLYING_AIRCRAFT_TERRAIN_OFFSET,
+  GROUND_AIRCRAFT_TERRAIN_OFFSET,
+  HEIGHT_TRANSITION_LERP_FACTOR,
+  LANDING_BLEND_DESCENT_RATE,
+  LANDING_BLEND_END_AGL,
+  LANDING_BLEND_START_AGL,
   MAX_HEADING_RATE_DEG_PER_SEC_AIR,
   MAX_HEADING_RATE_DEG_PER_SEC_GROUND,
-  LANDING_BLEND_START_AGL,
-  LANDING_BLEND_END_AGL,
-  LANDING_BLEND_DESCENT_RATE,
-  DEPARTURE_BLEND_START_AGL,
-  DEPARTURE_BLEND_END_AGL,
-  AOA_OFFSET_LOW_SPEED_DEGREES,
-  AOA_OFFSET_HIGH_SPEED_DEGREES,
-  AOA_LOW_SPEED_THRESHOLD_KNOTS,
-  AOA_HIGH_SPEED_THRESHOLD_KNOTS,
-  FLARE_START_ALTITUDE_METERS,
+  MAX_PITCH_DEGREES,
+  MAX_PITCH_RATE_DEG_PER_SEC,
+  MAX_ROLL_DEGREES,
+  MAX_ROLL_RATE_DEG_PER_SEC,
+  NOSEWHEEL_LOWERING_LERP_FACTOR,
+  PITCH_RATE_MULTIPLIER,
+  ROLL_RATE_MULTIPLIER,
+  TERRAIN_SMOOTHING_LERP_FACTOR,
 } from '../constants/rendering'
-import { STOPPED_SPEED_KTS } from '../constants/flightPhase'
+import { geoidService } from '../services/GeoidService'
+import { useAircraftTimelineStore } from '../stores/aircraftTimelineStore'
+import { useSettingsStore } from '../stores/settingsStore'
+import { useVatsimStore } from '../stores/vatsimStore'
+import type { TimelineInterpolationResult } from '../types/aircraft-timeline'
+import type { InterpolatedAircraftState } from '../types/vatsim'
+import { angleDifference, calculateDistanceNM, calculateFlarePitch } from '../utils/geoMath'
+import { performanceMonitor } from '../utils/performanceMonitor'
+import { getAircraftDataSource } from './useAircraftDataSource'
+import type { TerrainData } from './useGroundAircraftTerrain'
 
 // SINGLETON: Shared interpolated states map and animation loop
 // This ensures only ONE interpolation loop runs, even if hook is called multiple times
@@ -443,74 +443,71 @@ function updateInterpolation() {
   // Get reference position and filter radius for distance filtering
   const referencePosition = sharedReferencePositionRef.current
   const aircraftDataRadiusNM = sharedAircraftDataRadiusNMRef.current
+  for (const [callsign, timeline] of timelineStates) {
+    // Skip aircraft with fewer than 2 observations - we need at least 2 data points
+    // to interpolate smoothly. Aircraft will "spawn in" once they have enough data.
+    // Exception: Allow stopped aircraft (groundspeed < STOPPED_SPEED_KTS) with only
+    // 1 observation. vNAS doesn't send updates for stationary aircraft, so they would
+    // otherwise never appear. Since they're not moving, interpolation isn't needed -
+    // their VATSIM position is valid as-is.
+    if (timeline.observationCount < 2 && timeline.groundspeed >= STOPPED_SPEED_KTS) {
+      continue
+    }
 
-  {
-    for (const [callsign, timeline] of timelineStates) {
-      // Skip aircraft with fewer than 2 observations - we need at least 2 data points
-      // to interpolate smoothly. Aircraft will "spawn in" once they have enough data.
-      // Exception: Allow stopped aircraft (groundspeed < STOPPED_SPEED_KTS) with only
-      // 1 observation. vNAS doesn't send updates for stationary aircraft, so they would
-      // otherwise never appear. Since they're not moving, interpolation isn't needed -
-      // their VATSIM position is valid as-is.
-      if (timeline.observationCount < 2 && timeline.groundspeed >= STOPPED_SPEED_KTS) {
-        continue
-      }
+    // Still require at least 1 observation
+    if (timeline.observationCount < 1) {
+      continue
+    }
 
-      // Still require at least 1 observation
-      if (timeline.observationCount < 1) {
-        continue
-      }
+    // Skip aircraft if no reference position is set (no airport selected yet)
+    // This prevents model matching and rendering work before airport selection
+    if (!referencePosition) {
+      continue
+    }
 
-      // Skip aircraft if no reference position is set (no airport selected yet)
-      // This prevents model matching and rendering work before airport selection
-      if (!referencePosition) {
-        continue
-      }
+    // Skip aircraft outside the user-configured range
+    // This ensures we only interpolate and model-match aircraft that will be rendered
+    const distance = calculateDistanceNM(
+      referencePosition.latitude,
+      referencePosition.longitude,
+      timeline.latitude,
+      timeline.longitude,
+    )
+    if (distance > aircraftDataRadiusNM) {
+      continue
+    }
 
-      // Skip aircraft outside the user-configured range
-      // This ensures we only interpolate and model-match aircraft that will be rendered
-      const distance = calculateDistanceNM(
-        referencePosition.latitude,
-        referencePosition.longitude,
-        timeline.latitude,
-        timeline.longitude,
-      )
-      if (distance > aircraftDataRadiusNM) {
-        continue
-      }
+    activeCallsigns.add(callsign)
 
-      activeCallsigns.add(callsign)
+    // Convert timeline result to InterpolatedAircraftState
+    const interpolated = timelineToInterpolatedState(timeline, now, orientationEnabled, orientationIntensity)
 
-      // Convert timeline result to InterpolatedAircraftState
-      const interpolated = timelineToInterpolatedState(timeline, now, orientationEnabled, orientationIntensity)
-
-      // Reuse existing entry or create new one
-      const existing = statesMap.get(callsign)
-      if (existing) {
-        // Update in place to avoid object allocation
-        existing.callsign = interpolated.callsign
-        existing.cid = interpolated.cid
-        existing.transponder = interpolated.transponder
-        existing.interpolatedLatitude = interpolated.interpolatedLatitude
-        existing.interpolatedLongitude = interpolated.interpolatedLongitude
-        existing.interpolatedAltitude = interpolated.interpolatedAltitude
-        existing.interpolatedGroundspeed = interpolated.interpolatedGroundspeed
-        existing.interpolatedHeading = interpolated.interpolatedHeading
-        existing.interpolatedPitch = interpolated.interpolatedPitch
-        existing.interpolatedRoll = interpolated.interpolatedRoll
-        existing.aircraftType = interpolated.aircraftType
-        existing.departure = interpolated.departure
-        existing.arrival = interpolated.arrival
-        existing.isInterpolated = interpolated.isInterpolated
-        existing.verticalRate = interpolated.verticalRate
-        existing.turnRate = interpolated.turnRate
-        existing.acceleration = interpolated.acceleration
-        existing.track = interpolated.track
-        existing.timestamp = interpolated.timestamp
-        existing.displayDelay = interpolated.displayDelay
-      } else {
-        statesMap.set(callsign, interpolated)
-      }
+    // Reuse existing entry or create new one
+    const existing = statesMap.get(callsign)
+    if (existing) {
+      // Update in place to avoid object allocation
+      existing.callsign = interpolated.callsign
+      existing.cid = interpolated.cid
+      existing.transponder = interpolated.transponder
+      existing.interpolatedLatitude = interpolated.interpolatedLatitude
+      existing.interpolatedLongitude = interpolated.interpolatedLongitude
+      existing.interpolatedAltitude = interpolated.interpolatedAltitude
+      existing.interpolatedGroundspeed = interpolated.interpolatedGroundspeed
+      existing.interpolatedHeading = interpolated.interpolatedHeading
+      existing.interpolatedPitch = interpolated.interpolatedPitch
+      existing.interpolatedRoll = interpolated.interpolatedRoll
+      existing.aircraftType = interpolated.aircraftType
+      existing.departure = interpolated.departure
+      existing.arrival = interpolated.arrival
+      existing.isInterpolated = interpolated.isInterpolated
+      existing.verticalRate = interpolated.verticalRate
+      existing.turnRate = interpolated.turnRate
+      existing.acceleration = interpolated.acceleration
+      existing.track = interpolated.track
+      existing.timestamp = interpolated.timestamp
+      existing.displayDelay = interpolated.displayDelay
+    } else {
+      statesMap.set(callsign, interpolated)
     }
   }
 

@@ -10,10 +10,10 @@
  * Also handles unsubscription when switching away from an airport.
  */
 
-import { useEffect, useRef, useMemo } from 'react'
-import { isRemoteMode } from '../utils/remoteMode'
+import { useEffect, useMemo, useRef } from 'react'
 import { useAirportStore } from '../stores/airportStore'
 import { useVnasStore } from '../stores/vnasStore'
+import { isRemoteMode } from '../utils/remoteMode'
 import { requestRemoteSubscription, requestRemoteUnsubscription } from './useRemoteObservations'
 
 /**

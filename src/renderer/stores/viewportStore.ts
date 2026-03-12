@@ -1,70 +1,66 @@
 import { create } from 'zustand'
 import { persist, subscribeWithSelector } from 'zustand/middleware'
-import type {
-  ViewMode,
-  FollowMode,
-  ViewportLayout,
-  ViewportCameraState,
-  Viewport,
-  CameraBookmark,
-  ModeSpecificState,
-} from '../types'
-import { useVatsimStore } from './vatsimStore'
-import { useAirportStore } from './airportStore'
-import { useGlobalSettingsStore } from './globalSettingsStore'
-import { useDatablockPositionStore, type DatablockPosition } from './datablockPositionStore'
-import { modService } from '../services/ModService'
-import { getTowerPosition } from '../utils/towerHeight'
-import { calculateBearing, haversineDistanceNm } from '../utils/aircraft/geoMath'
-import { applyPositionOffsets } from '../utils/cameraGeometry'
 import {
-  HEADING_DEFAULT,
-  PITCH_DEFAULT,
-  PITCH_MIN,
-  PITCH_MAX,
-  FOV_DEFAULT,
-  FOV_MIN,
-  FOV_MAX,
   FOLLOW_ZOOM_DEFAULT,
-  FOLLOW_ZOOM_MIN,
   FOLLOW_ZOOM_MAX,
-  TOPDOWN_ALTITUDE_DEFAULT,
-  TOPDOWN_ALTITUDE_MIN,
-  TOPDOWN_ALTITUDE_MAX,
-  ORBIT_DISTANCE_MIN,
-  ORBIT_DISTANCE_MAX,
+  FOLLOW_ZOOM_MIN,
+  FOV_DEFAULT,
+  FOV_MAX,
+  FOV_MIN,
+  HEADING_DEFAULT,
   ORBIT_DISTANCE_DEFAULT,
+  ORBIT_DISTANCE_MAX,
+  ORBIT_DISTANCE_MIN,
   ORBIT_HEADING_DEFAULT,
   ORBIT_PITCH_DEFAULT,
-  ORBIT_PITCH_MIN,
   ORBIT_PITCH_MAX,
+  ORBIT_PITCH_MIN,
+  PITCH_DEFAULT,
+  PITCH_MAX,
+  PITCH_MIN,
+  TOPDOWN_ALTITUDE_DEFAULT,
+  TOPDOWN_ALTITUDE_MAX,
+  TOPDOWN_ALTITUDE_MIN,
 } from '../constants'
-
-// Import extracted modules
+import { modService } from '../services/ModService'
+import type {
+  CameraBookmark,
+  FollowMode,
+  ModeSpecificState,
+  ViewMode,
+  Viewport,
+  ViewportCameraState,
+  ViewportLayout,
+} from '../types'
+import { DEFAULT_GLOBAL_VIEWPORT_SETTINGS } from '../types'
+import { calculateBearing, haversineDistanceNm } from '../utils/aircraft/geoMath'
+import { applyPositionOffsets } from '../utils/cameraGeometry'
+import { getTowerPosition } from '../utils/towerHeight'
+import { updateUrlParams } from '../utils/urlParams'
+import { useAirportStore } from './airportStore'
+import { type DatablockPosition, useDatablockPositionStore } from './datablockPositionStore'
+import { useGlobalSettingsStore } from './globalSettingsStore'
+import { useVatsimStore } from './vatsimStore'
 import {
-  type GlobalOrbitSettings,
-  type ViewModeDefaults,
-  type AirportViewportConfig,
-  generateId,
-  createDefaultCameraState,
-  createMainViewport,
-  normalizeLoadedViewports,
-  getNextInsetPosition,
-  updateViewportCameraState,
-  scheduleAutoSave,
-} from './viewport/viewportHelpers'
-
-import {
-  toGlobalViewportSettings,
+  mergeGlobalAirportConfig,
   scheduleGlobalSync,
   setIsLoadingFromGlobal,
-  mergeGlobalAirportConfig,
+  toGlobalViewportSettings,
 } from './viewport/globalSettingsSync'
-
+// Import extracted modules
+import {
+  type AirportViewportConfig,
+  createDefaultCameraState,
+  createMainViewport,
+  type GlobalOrbitSettings,
+  generateId,
+  getNextInsetPosition,
+  normalizeLoadedViewports,
+  scheduleAutoSave,
+  updateViewportCameraState,
+  type ViewModeDefaults,
+} from './viewport/viewportHelpers'
 import { migrateCameraStoreBookmarks, migrateToGlobalSettings } from './viewport/viewportMigrations'
-
-import { DEFAULT_GLOBAL_VIEWPORT_SETTINGS } from '../types'
-import { updateUrlParams } from '../utils/urlParams'
 
 // Re-export types for consumers
 export type { GlobalOrbitSettings, ViewModeDefaults, AirportViewportConfig }

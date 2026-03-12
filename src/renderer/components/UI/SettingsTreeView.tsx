@@ -5,8 +5,8 @@
  * Supports hierarchical selection with parent-child state propagation.
  */
 
-import { useState, useCallback, useMemo, memo } from 'react'
-import type { TreeNodeData, CheckState } from '@/types'
+import { memo, useCallback, useMemo, useState } from 'react'
+import type { CheckState, TreeNodeData } from '@/types'
 import { getAllLeafIds } from '../../services/SettingsTreeBuilder'
 import './SettingsTreeView.css'
 

@@ -10,19 +10,19 @@
  */
 
 import { invoke } from '@tauri-apps/api/core'
-import type { DiagnosticPackage, DiagnosticAppState, SerializedTimeline } from '../types/diagnostic'
-import type { AircraftTimeline } from '../types/aircraft-timeline'
-import { DIAGNOSTIC_VERSION, DIAGNOSTIC_FILE_PREFIX, DIAGNOSTIC_FILE_EXTENSION } from '../constants/diagnostic'
 import { SOURCE_DISPLAY_DELAYS } from '../constants/aircraft-timeline'
+import { DIAGNOSTIC_FILE_EXTENSION, DIAGNOSTIC_FILE_PREFIX, DIAGNOSTIC_VERSION } from '../constants/diagnostic'
 import { GROUNDSPEED_THRESHOLD_KNOTS } from '../constants/rendering'
 import { useAircraftTimelineStore } from '../stores/aircraftTimelineStore'
 import { useAirportStore } from '../stores/airportStore'
+import { useRealTrafficStore } from '../stores/realTrafficStore'
+import { useSettingsStore } from '../stores/settingsStore'
+import { useVatsimStore } from '../stores/vatsimStore'
 import { useViewportStore } from '../stores/viewportStore'
 import { useVnasStore } from '../stores/vnasStore'
-import { useVatsimStore } from '../stores/vatsimStore'
-import { useRealTrafficStore } from '../stores/realTrafficStore'
 import { useWeatherStore } from '../stores/weatherStore'
-import { useSettingsStore } from '../stores/settingsStore'
+import type { AircraftTimeline } from '../types/aircraft-timeline'
+import type { DiagnosticAppState, DiagnosticPackage, SerializedTimeline } from '../types/diagnostic'
 import { isTauri } from '../utils/tauriApi'
 
 function serializeTimeline(callsign: string, timeline: AircraftTimeline): SerializedTimeline {

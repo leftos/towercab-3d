@@ -1,19 +1,19 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type {
-  CesiumSettings,
-  GraphicsSettings,
-  CameraSettings,
-  WeatherSettings,
-  MemorySettings,
-  AircraftSettings,
-  UISettings,
-  FSLTLSettings,
-  RealTrafficSettings,
   AdvancedSettings,
+  AircraftSettings,
+  CameraSettings,
+  CesiumSettings,
+  FSLTLSettings,
+  GraphicsSettings,
   InsetGraphicsSettings,
+  MemorySettings,
+  RealTrafficSettings,
+  UISettings,
+  WeatherSettings,
 } from '../types/settings'
-import { DEFAULT_SETTINGS, DEFAULT_INSET_GRAPHICS_SETTINGS } from '../types/settings'
+import { DEFAULT_INSET_GRAPHICS_SETTINGS, DEFAULT_SETTINGS } from '../types/settings'
 
 // ============================================================================
 // Preset System Types and Constants

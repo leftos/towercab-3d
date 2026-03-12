@@ -5,7 +5,7 @@
  * and shows connectivity status on compact/mobile layouts.
  */
 
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useUIFeedbackStore } from '../../stores/uiFeedbackStore'
 import { isRemoteMode } from '../../utils/remoteMode'
 import './MobileToolsFlyout.css'

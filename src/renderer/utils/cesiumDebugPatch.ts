@@ -278,7 +278,7 @@ export function applyCesiumDebugPatch(viewer: Cesium.Viewer): void {
   scene.renderError.addEventListener(errorHandler)
   console.log('[CesiumDebugPatch] Added renderError listener, numberOfListeners:', scene.renderError.numberOfListeners)
 
-  scene.render = function (time?: Cesium.JulianDate) {
+  scene.render = (time?: Cesium.JulianDate) => {
     frameCount++
 
     // Capture state before render

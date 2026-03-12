@@ -1,15 +1,15 @@
 import { useState } from 'react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useWeatherStore } from '../../stores/weatherStore'
-import { formatTimeHour } from '../../utils/formatting'
-import CollapsibleSection from './settings/CollapsibleSection'
 import type {
   BuildingQuality,
-  InsetMsaaPreset,
-  InsetTerrainPreset,
   InsetCachePreset,
   InsetFrameratePreset,
+  InsetMsaaPreset,
+  InsetTerrainPreset,
 } from '../../types'
+import { formatTimeHour } from '../../utils/formatting'
+import CollapsibleSection from './settings/CollapsibleSection'
 import './ControlsBar.css'
 
 function SettingsGraphicsWeatherTab() {

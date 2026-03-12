@@ -27,8 +27,8 @@
  * @see https://github.com/ProminentEdge/Cesium-ModelAnimationPlayer
  */
 
-import * as Cesium from 'cesium'
-import { parseAnimationSetFromUrl, applyGearAnimationsPercent, type AnimationSet } from './gltfAnimationParser'
+import type * as Cesium from 'cesium'
+import { type AnimationSet, applyGearAnimationsPercent, parseAnimationSetFromUrl } from './gltfAnimationParser'
 
 /** Gear animation state */
 export type GearState = 'up' | 'extending' | 'down' | 'retracting'
@@ -316,7 +316,7 @@ export function applyGearAnimation(
  * Cubic ease in-out function for smooth transitions
  */
 function easeInOutCubic(t: number): number {
-  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
+  return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2
 }
 
 /**

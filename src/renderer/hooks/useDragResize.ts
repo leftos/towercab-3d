@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, useEffect } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 /**
  * Provides drag-to-move and resize functionality for inset viewports with normalized coordinates.

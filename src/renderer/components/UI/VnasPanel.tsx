@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useVnasStore } from '@/stores/vnasStore'
+import { useCallback, useEffect, useState } from 'react'
 import { useAirportStore } from '@/stores/airportStore'
+import { useVnasStore } from '@/stores/vnasStore'
 import type { VnasEnvironment } from '@/types/vnas'
 import './VnasPanel.css'
 

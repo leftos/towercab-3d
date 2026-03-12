@@ -12,15 +12,15 @@
  * 4. Clears tile cache when polygons change to force re-fetch
  */
 
-import { useEffect, useRef, useCallback, useState } from 'react'
 import * as Cesium from 'cesium'
-import type { Runway } from '../types/airport'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { airportPolygonService } from '../services/AirportPolygonService'
 import { airportSurfacesService } from '../services/AirportSurfacesService'
-import { getFlatteningTerrainProvider, setFlatteningTileCacheSize } from '../terrain/FlatteningTerrainProvider'
-import { clearAllTerrainCaches } from '../utils/terrainCache'
-import { useViewportStore } from '../stores/viewportStore'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useViewportStore } from '../stores/viewportStore'
+import { getFlatteningTerrainProvider, setFlatteningTileCacheSize } from '../terrain/FlatteningTerrainProvider'
+import type { Runway } from '../types/airport'
+import { clearAllTerrainCaches } from '../utils/terrainCache'
 
 // Global flag to signal terrain cache is being cleared
 // Other systems (terrain sampling, aircraft rendering) should pause during this

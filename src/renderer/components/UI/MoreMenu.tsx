@@ -5,7 +5,7 @@
  * Used in the ControlsBar to hide less-frequently-used buttons behind a single "More" button.
  */
 
-import { useState, useRef, useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './MoreMenu.css'
 
 export interface MoreMenuSubmenuItem {

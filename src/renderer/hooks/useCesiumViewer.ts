@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
 import * as Cesium from 'cesium'
-import { AIRCRAFT_POOL_SIZE, getModelColorRgb, getModelColorBlendAmount } from '../constants/rendering'
-import { applyCesiumDebugPatch } from '../utils/cesiumDebugPatch'
+import { useEffect, useRef, useState } from 'react'
+import { AIRCRAFT_POOL_SIZE, getModelColorBlendAmount, getModelColorRgb } from '../constants/rendering'
 import type { InsetGraphicsSettings } from '../types/settings'
+import { applyCesiumDebugPatch } from '../utils/cesiumDebugPatch'
 
 export interface CesiumViewerSettings {
   /** Cesium Ion access token for terrain/imagery */
@@ -377,7 +377,7 @@ export function useCesiumViewer(
       if (surface?._tileReplacementQueue) {
         const queue = surface._tileReplacementQueue
         const originalTrimTiles = queue.trimTiles.bind(queue)
-        queue.trimTiles = function (maximumTiles: number) {
+        queue.trimTiles = (maximumTiles: number) => {
           // Use 10x the limit to dramatically reduce eviction
           originalTrimTiles(maximumTiles * 10)
         }

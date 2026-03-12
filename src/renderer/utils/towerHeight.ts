@@ -1,8 +1,8 @@
 // Tower height estimation utilities
 
-import type { Airport } from '../types/airport'
-import { KNOWN_TOWER_HEIGHTS, classifyAirport } from '../types/airport'
 import { geoidService } from '../services/GeoidService'
+import type { Airport } from '../types/airport'
+import { classifyAirport, KNOWN_TOWER_HEIGHTS } from '../types/airport'
 
 // Height estimates by airport type (in meters)
 const HEIGHT_BY_TYPE = {

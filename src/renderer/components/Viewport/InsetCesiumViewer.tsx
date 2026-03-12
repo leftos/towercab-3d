@@ -13,7 +13,7 @@
  * @see docs/plans/iframe-inset-isolation.md for full architecture
  */
 
-import { useEffect, useState, useRef, useMemo, useCallback } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useViewportStore } from '../../stores/viewportStore'
 import type { CameraStateUpdate } from '../../types/shared-worker'
 

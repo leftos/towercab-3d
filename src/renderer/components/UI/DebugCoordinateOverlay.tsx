@@ -5,8 +5,8 @@
  * Enable via Settings > Advanced > Debugging
  */
 
-import { useState, useEffect } from 'react'
 import * as Cesium from 'cesium'
+import { useEffect, useState } from 'react'
 import './DebugCoordinateOverlay.css'
 
 interface DebugCoordinateOverlayProps {

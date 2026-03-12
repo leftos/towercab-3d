@@ -1,27 +1,27 @@
 // Mod loading service for custom aircraft and tower models
 
+import { TOPDOWN_ALTITUDE_DEFAULT, VNAS_RANGE_TO_ALTITUDE_MULTIPLIER } from '../constants/camera'
 import type {
   AircraftModManifest,
-  TowerModManifest,
-  LoadedMod,
-  ModRegistry,
   CustomTowerPosition,
   LegacyTowerPosition,
-  View3dPosition,
+  LoadedMod,
+  ModRegistry,
   RawView3dPosition,
-  View2dPosition,
   ResolvedView2dPosition,
+  TowerModManifest,
+  View2dPosition,
+  View3dPosition,
 } from '../types/mod'
 import {
-  isSupportedModelFormat,
-  getModelFormat,
-  SUPPORTED_MODEL_FORMATS,
-  isLegacyTowerPosition,
   convertLegacyToNewFormat,
+  getModelFormat,
+  isLegacyTowerPosition,
+  isSupportedModelFormat,
+  SUPPORTED_MODEL_FORMATS,
 } from '../types/mod'
-import { modApi, joinPath } from '../utils/tauriApi'
+import { joinPath, modApi } from '../utils/tauriApi'
 import { customVMRService } from './CustomVMRService'
-import { VNAS_RANGE_TO_ALTITUDE_MULTIPLIER, TOPDOWN_ALTITUDE_DEFAULT } from '../constants/camera'
 
 /**
  * Tower placement result with position source information

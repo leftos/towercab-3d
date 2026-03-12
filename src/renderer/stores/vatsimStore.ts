@@ -1,15 +1,15 @@
 import { create } from 'zustand'
-import type { PilotData, VatsimData, AircraftState } from '../types/vatsim'
-import type { AircraftObservation, AircraftMetadata } from '../types/aircraft-timeline'
-import { calculateDistanceNM } from '../utils/geoMath'
-import { useSettingsStore } from './settingsStore'
+import { VATSIM_ACTUAL_UPDATE_INTERVAL, VATSIM_DATA_URL, VATSIM_POLL_INTERVAL } from '../constants'
+import { SOURCE_DISPLAY_DELAYS } from '../constants/aircraft-timeline'
 import { geoidService } from '../services/GeoidService'
+import type { AircraftMetadata, AircraftObservation } from '../types/aircraft-timeline'
+import type { AircraftState, PilotData, VatsimData } from '../types/vatsim'
+import { calculateDistanceNM } from '../utils/geoMath'
+import { useAircraftTimelineStore } from './aircraftTimelineStore'
 // Note: Intentional coupling - vatsimStore triggers replay snapshots on each VATSIM update.
 // This is simpler than an event system and acceptable since replay depends on vatsim data.
 import { useReplayStore } from './replayStore'
-import { useAircraftTimelineStore } from './aircraftTimelineStore'
-import { VATSIM_DATA_URL, VATSIM_POLL_INTERVAL, VATSIM_ACTUAL_UPDATE_INTERVAL } from '../constants'
-import { SOURCE_DISPLAY_DELAYS } from '../constants/aircraft-timeline'
+import { useSettingsStore } from './settingsStore'
 
 interface ReferencePosition {
   latitude: number

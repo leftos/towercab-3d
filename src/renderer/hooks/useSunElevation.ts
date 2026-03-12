@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
 import * as Cesium from 'cesium'
-import { SUN_POSITION_UPDATE_INTERVAL, PARTICLE_PREWARM_JUMP_THRESHOLD } from '@/constants'
+import { useEffect, useRef, useState } from 'react'
+import { PARTICLE_PREWARM_JUMP_THRESHOLD, SUN_POSITION_UPDATE_INTERVAL } from '@/constants'
 import type { TimeMode } from '@/types/settings'
 
 export interface SunElevationOptions {

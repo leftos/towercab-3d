@@ -14,16 +14,16 @@
  * - Low (0-299): Parked, distant, departing climb
  */
 
+import { useAircraftTimelineStore } from '../stores/aircraftTimelineStore'
 import type { InterpolatedAircraftState } from '../types/vatsim'
-import type { FlightPhase, PriorityTier, SmartSortResult, SmartSortContext } from './aircraft/types'
 import {
-  detectFlightPhase,
   cleanupPhaseHistory,
   cleanupStabilizationStates,
   clearStabilizationStates,
+  detectFlightPhase,
 } from './aircraft/flightPhaseDetector'
-import { useAircraftTimelineStore } from '../stores/aircraftTimelineStore'
 import { haversineDistanceNm } from './aircraft/geoMath'
+import type { FlightPhase, PriorityTier, SmartSortContext, SmartSortResult } from './aircraft/types'
 
 // Re-export types for backwards compatibility
 export type { FlightPhase, PriorityTier, SmartSortResult, SmartSortContext }

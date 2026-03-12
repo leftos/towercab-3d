@@ -16,23 +16,21 @@
  * @see useBroadcastAircraft - Hook for receiving aircraft broadcasts
  */
 
-import { useEffect, useState, useRef } from 'react'
-
-// Import worker URL using Vite's worker query - this ensures proper bundling
-import SharedDataWorkerUrl from '../workers/shared-data.worker.ts?sharedworker&url'
-
+import { useEffect, useRef, useState } from 'react'
+import { useAircraftTimelineStore } from '../stores/aircraftTimelineStore'
+import type { AircraftMetadata, AircraftObservation } from '../types/aircraft-timeline'
 import type {
-  SharedWorkerInboundMessage,
-  SharedWorkerOutboundMessage,
-  SerializedSettings,
-  SerializedWeather,
+  ModelInfoUpdatePayload,
   SerializedAirport,
   SerializedImagery,
   SerializedModelInfo,
-  ModelInfoUpdatePayload,
+  SerializedSettings,
+  SerializedWeather,
+  SharedWorkerInboundMessage,
+  SharedWorkerOutboundMessage,
 } from '../types/shared-worker'
-import type { AircraftObservation, AircraftMetadata } from '../types/aircraft-timeline'
-import { useAircraftTimelineStore } from '../stores/aircraftTimelineStore'
+// Import worker URL using Vite's worker query - this ensures proper bundling
+import SharedDataWorkerUrl from '../workers/shared-data.worker.ts?sharedworker&url'
 
 /**
  * Batch of observations received from the main app

@@ -15,25 +15,24 @@
  * @see useSharedWorkerConsumer - Inset consumer hook
  */
 
-import { useSettingsStore } from '../stores/settingsStore'
-import { useGlobalSettingsStore } from '../stores/globalSettingsStore'
-import { useWeatherStore } from '../stores/weatherStore'
-import { useAirportStore } from '../stores/airportStore'
-import { useViewportStore } from '../stores/viewportStore'
 import { registerBroadcastCallbacks } from '../stores/aircraftTimelineStore'
-import { isRemoteMode } from '../utils/remoteMode'
-
-// Import worker URL using Vite's worker query - this ensures proper bundling
-import SharedDataWorkerUrl from '../workers/shared-data.worker.ts?sharedworker&url'
+import { useAirportStore } from '../stores/airportStore'
+import { useGlobalSettingsStore } from '../stores/globalSettingsStore'
+import { useSettingsStore } from '../stores/settingsStore'
+import { useViewportStore } from '../stores/viewportStore'
+import { useWeatherStore } from '../stores/weatherStore'
+import type { AircraftMetadata, AircraftObservation } from '../types/aircraft-timeline'
 import type {
-  SharedWorkerInboundMessage,
-  SerializedSettings,
-  SerializedWeather,
   SerializedAirport,
   SerializedImagery,
   SerializedModelInfo,
+  SerializedSettings,
+  SerializedWeather,
+  SharedWorkerInboundMessage,
 } from '../types/shared-worker'
-import type { AircraftObservation, AircraftMetadata } from '../types/aircraft-timeline'
+import { isRemoteMode } from '../utils/remoteMode'
+// Import worker URL using Vite's worker query - this ensures proper bundling
+import SharedDataWorkerUrl from '../workers/shared-data.worker.ts?sharedworker&url'
 
 const SETTINGS_DEBOUNCE_MS = 100
 

@@ -5,7 +5,7 @@
  * Maps setting categories and sub-categories to tree nodes with human-readable labels.
  */
 
-import type { TreeNodeData, SettingMapping } from '@/types/exportImport'
+import type { SettingMapping, TreeNodeData } from '@/types/exportImport'
 import type { AirportViewportConfig } from '@/types/viewport'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useViewportStore } from '../stores/viewportStore'

@@ -2,7 +2,7 @@
 // Handles fetching and parsing VATSIM network data
 
 import { isTauri } from '@/utils/tauriApi'
-import type { VatsimData, PilotData } from '../types/vatsim'
+import type { PilotData, VatsimData } from '../types/vatsim'
 
 const VATSIM_DATA_URL = 'https://data.vatsim.net/v3/vatsim-data.json'
 

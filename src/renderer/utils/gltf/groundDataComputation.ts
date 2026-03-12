@@ -5,9 +5,9 @@
  * Handles both glTF 1.0 (FR24/FlightGear) and glTF 2.0 (FSLTL) formats.
  */
 
+import { interpolateQuat, interpolateVec3 } from './animationInterpolation'
+import { getBoundingBoxCorners, identityMatrix, matrixFromTRS, multiplyMatrices, transformPoint } from './matrixMath'
 import type { Animation, ExtendedNodeData, MeshBounds, ModelGroundData, ModelWingData } from './types'
-import { interpolateVec3, interpolateQuat } from './animationInterpolation'
-import { matrixFromTRS, multiplyMatrices, identityMatrix, transformPoint, getBoundingBoxCorners } from './matrixMath'
 
 /**
  * Parse extended node data including hierarchy and mesh bounds

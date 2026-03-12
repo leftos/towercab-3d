@@ -6,8 +6,8 @@
  */
 
 import { create } from 'zustand'
-import type { Runway } from '../types/airport'
 import { runwayService } from '../services/RunwayService'
+import type { Runway } from '../types/airport'
 
 interface RunwayStore {
   /** Whether runway data is currently being loaded */

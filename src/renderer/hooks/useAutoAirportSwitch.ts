@@ -6,9 +6,9 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { AUTO_SWITCH_CHECK_INTERVAL_MS, AUTO_SWITCH_HYSTERESIS_NM, AUTO_SWITCH_MIN_DISTANCE_NM } from '@/constants'
 import { useAirportStore } from '@/stores/airportStore'
 import type { Airport } from '@/types'
-import { AUTO_SWITCH_CHECK_INTERVAL_MS, AUTO_SWITCH_HYSTERESIS_NM, AUTO_SWITCH_MIN_DISTANCE_NM } from '@/constants'
 
 // Earth radius in nautical miles for haversine calculation
 const EARTH_RADIUS_NM = 3440.065

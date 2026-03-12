@@ -1,6 +1,6 @@
-import { useEffect } from 'react'
 import * as Cesium from 'cesium'
-import type { ViewMode, InsetGraphicsSettings } from '@/types'
+import { useEffect } from 'react'
+import type { InsetGraphicsSettings, ViewMode } from '@/types'
 
 export interface CesiumLightingSettings {
   /** Whether this is an inset viewport (disables shadows for performance) */

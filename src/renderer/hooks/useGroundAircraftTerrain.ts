@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
 import * as Cesium from 'cesium'
-import type { InterpolatedAircraftState } from '../types/vatsim'
+import { useEffect, useRef, useState } from 'react'
 import { GROUNDSPEED_THRESHOLD_KNOTS, LOW_ALTITUDE_AGL_THRESHOLD_M } from '../constants/rendering'
-import { isTerrainCacheClearing } from './useTerrainFlattening'
-import { getHeightAndSlopeFromPolygons } from '../terrain/FlatteningTerrainProvider'
 import { geoidService } from '../services/GeoidService'
+import { getHeightAndSlopeFromPolygons } from '../terrain/FlatteningTerrainProvider'
+import type { InterpolatedAircraftState } from '../types/vatsim'
+import { isTerrainCacheClearing } from './useTerrainFlattening'
 
 /** Terrain data for a single aircraft including height and slope */
 export interface TerrainData {

@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react'
 import type { Viewer } from 'cesium'
+import { useEffect, useRef } from 'react'
 
 /**
  * Maps terrain quality (1-5) to Cesium's maximumScreenSpaceError

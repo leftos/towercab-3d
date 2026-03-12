@@ -8,16 +8,16 @@
  */
 
 import type {
-  CesiumSettings,
-  GraphicsSettings,
-  CameraSettings,
-  WeatherSettings,
-  MemorySettings,
   AircraftSettings,
-  UISettings,
-  ImageryProviderType,
-  ImageryAdjustments,
+  CameraSettings,
+  CesiumSettings,
   GlobalDisplaySettings,
+  GraphicsSettings,
+  ImageryAdjustments,
+  ImageryProviderType,
+  MemorySettings,
+  UISettings,
+  WeatherSettings,
 } from './settings'
 import type { AircraftState } from './vatsim'
 

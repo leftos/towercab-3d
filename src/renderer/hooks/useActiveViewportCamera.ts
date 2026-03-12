@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
+import type { FollowMode, ViewMode, ViewportCameraState } from '@/types'
 import { useViewportStore } from '../stores/viewportStore'
-import type { ViewportCameraState, ViewMode, FollowMode } from '@/types'
 
 /**
  * Provides reactive access to the active viewport's camera state and control actions.

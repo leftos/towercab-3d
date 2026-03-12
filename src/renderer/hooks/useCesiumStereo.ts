@@ -1,7 +1,7 @@
-import { useRef, useCallback, useEffect } from 'react'
 import * as Cesium from 'cesium'
+import { useCallback, useEffect, useRef } from 'react'
 import { useVRStore } from '../stores/vrStore'
-import { saveCameraState, restoreCameraState, configureEyeCamera } from '../utils/cesiumFrustumPatch'
+import { configureEyeCamera, restoreCameraState, saveCameraState } from '../utils/cesiumFrustumPatch'
 
 /**
  * Manages Cesium stereo rendering for WebXR VR mode by rendering separate left/right eye views.

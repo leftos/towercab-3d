@@ -10,9 +10,9 @@
  */
 
 import { useEffect, useRef } from 'react'
-import { isRemoteMode } from '../utils/remoteMode'
-import { useRemoteStatusStore } from '../stores/remoteStatusStore'
 import { useAirportStore } from '../stores/airportStore'
+import { useRemoteStatusStore } from '../stores/remoteStatusStore'
+import { isRemoteMode } from '../utils/remoteMode'
 
 /**
  * Hook to handle airport synchronization in remote mode.

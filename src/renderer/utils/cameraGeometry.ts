@@ -1,7 +1,7 @@
 // Camera geometry utilities for orbit and tower mode calculations
 
+import { FOV_MAX, FOV_MIN } from '../constants/camera'
 import { calculateBearing } from './geoMath'
-import { FOV_MIN, FOV_MAX } from '../constants/camera'
 
 // Constants for coordinate conversion
 const METERS_PER_DEGREE_LAT = 111111
@@ -187,7 +187,7 @@ export function calculateFollowFov(
  * @param t - Progress from 0 to 1
  */
 export function easeInOutQuad(t: number): number {
-  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
+  return t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2
 }
 
 /**

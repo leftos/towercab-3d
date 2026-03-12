@@ -9,23 +9,23 @@
  * 5. Trajectory-based go-around detection - verifies actual approach trajectory
  */
 
-import type { FlightPhase, PhaseDetectionResult, RunwayProximity, SmartSortContext } from './types'
-import type { InterpolatedAircraftState } from '../../types/vatsim'
-import type { AircraftTimeline, AircraftObservation } from '../../types/aircraft-timeline'
 import {
-  PHASE_DWELL_TIMES,
-  STICKY_PHASE_EXIT_TIMES,
   ACCEL_WINDOW_MS,
-  GO_AROUND_APPROACH_WINDOW_MS,
-  MIN_OBSERVATIONS_FOR_ANALYSIS,
   ACCELERATION_HYSTERESIS,
   DISTANCE_HYSTERESIS,
-  ROLL_PHASE_SCORES,
-  METERS_TO_FEET,
+  GO_AROUND_APPROACH_WINDOW_MS,
   GO_AROUND_CLIMB_FPM,
   GO_AROUND_DISTANCE_NM,
+  METERS_TO_FEET,
+  MIN_OBSERVATIONS_FOR_ANALYSIS,
+  PHASE_DWELL_TIMES,
+  ROLL_PHASE_SCORES,
+  STICKY_PHASE_EXIT_TIMES,
 } from '../../constants/flightPhase'
+import type { AircraftObservation, AircraftTimeline } from '../../types/aircraft-timeline'
+import type { InterpolatedAircraftState } from '../../types/vatsim'
 import { haversineDistanceNm } from './geoMath'
+import type { FlightPhase, PhaseDetectionResult, RunwayProximity, SmartSortContext } from './types'
 
 // Minimum speed (kts) before transitioning from landing_roll to taxi
 // Aircraft below this speed can transition; above must stay in landing_roll

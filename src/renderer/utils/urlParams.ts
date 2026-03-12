@@ -13,6 +13,7 @@
  */
 
 import { isRemoteMode } from './remoteMode'
+
 // Inline inset check to avoid circular dependency with tauriApi
 function isInsetContext(): boolean {
   try {

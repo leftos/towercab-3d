@@ -3,9 +3,9 @@
  * Provides a unified interface for Tauri commands and plugins
  */
 
+import { getVersion } from '@tauri-apps/api/app'
 import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-shell'
-import { getVersion } from '@tauri-apps/api/app'
 import type { GlobalSettings } from '@/types'
 import { getApiBaseUrl } from './remoteMode'
 

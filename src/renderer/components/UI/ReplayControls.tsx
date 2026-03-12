@@ -1,10 +1,10 @@
-import { useRef, useCallback, useEffect } from 'react'
-import { useReplayStore } from '../../stores/replayStore'
-import { useAircraftTimelineStore } from '../../stores/aircraftTimelineStore'
-import { useReplayPlayback } from '../../hooks/useReplayPlayback'
+import { useCallback, useEffect, useRef } from 'react'
 import { PLAYBACK_SPEEDS } from '../../constants/replay'
-import { formatRelativeTime, formatUTCTime, formatDuration } from '../../utils/formatting'
+import { useReplayPlayback } from '../../hooks/useReplayPlayback'
+import { useAircraftTimelineStore } from '../../stores/aircraftTimelineStore'
+import { useReplayStore } from '../../stores/replayStore'
 import type { PlaybackSpeed } from '../../types/replay'
+import { formatDuration, formatRelativeTime, formatUTCTime } from '../../utils/formatting'
 import './ControlsBar.css'
 
 interface ReplayControlsProps {

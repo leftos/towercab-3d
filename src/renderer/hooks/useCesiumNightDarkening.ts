@@ -1,14 +1,14 @@
+import type * as Cesium from 'cesium'
 import { useEffect, useRef } from 'react'
-import * as Cesium from 'cesium'
 import {
-  SUN_ELEVATION_DAY,
-  SUN_ELEVATION_CIVIL_TWILIGHT,
-  SUN_ELEVATION_NAUTICAL_TWILIGHT,
-  SUN_ELEVATION_NIGHT,
+  NIGHT_BRIGHTNESS_CIVIL,
   NIGHT_BRIGHTNESS_MIN,
   NIGHT_BRIGHTNESS_TWILIGHT,
-  NIGHT_BRIGHTNESS_CIVIL,
   NIGHT_GAMMA_BOOST,
+  SUN_ELEVATION_CIVIL_TWILIGHT,
+  SUN_ELEVATION_DAY,
+  SUN_ELEVATION_NAUTICAL_TWILIGHT,
+  SUN_ELEVATION_NIGHT,
 } from '@/constants'
 
 export interface NightDarkeningSettings {

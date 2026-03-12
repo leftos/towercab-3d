@@ -23,10 +23,10 @@
  * @see useCameraInput - Main input hook that integrates this
  */
 
-import { useEffect, useRef } from 'react'
 import * as Cesium from 'cesium'
-import { useViewportStore } from '../stores/viewportStore'
+import { useEffect, useRef } from 'react'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useViewportStore } from '../stores/viewportStore'
 import { isTouchDevice } from '../utils/deviceDetection'
 
 interface UseTouchInputOptions {

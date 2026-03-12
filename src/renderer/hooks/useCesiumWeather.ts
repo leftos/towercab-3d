@@ -1,5 +1,5 @@
-import { useEffect } from 'react'
 import type { Viewer } from 'cesium'
+import { useEffect } from 'react'
 
 /**
  * Manages METAR-based weather effects for Cesium rendering

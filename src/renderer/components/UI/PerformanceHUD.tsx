@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { performanceMonitor, type PerformanceMetrics } from '../../utils/performanceMonitor'
+import { type PerformanceMetrics, performanceMonitor } from '../../utils/performanceMonitor'
 import './PerformanceHUD.css'
 
 interface PerformanceHUDProps {

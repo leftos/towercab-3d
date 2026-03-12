@@ -22,13 +22,13 @@
  * - `set_airport`: Change the synced airport (RealTraffic mode only)
  */
 
-import { useEffect, useRef, useCallback } from 'react'
-import { isRemoteMode, getApiBaseUrl } from '../utils/remoteMode'
-import { useAircraftTimelineStore } from '../stores/aircraftTimelineStore'
-import { useVnasStore } from '../stores/vnasStore'
-import { useRemoteStatusStore } from '../stores/remoteStatusStore'
-import type { AircraftObservation, AircraftMetadata } from '../types/aircraft-timeline'
+import { useCallback, useEffect, useRef } from 'react'
 import { SOURCE_DISPLAY_DELAYS } from '../constants/aircraft-timeline'
+import { useAircraftTimelineStore } from '../stores/aircraftTimelineStore'
+import { useRemoteStatusStore } from '../stores/remoteStatusStore'
+import { useVnasStore } from '../stores/vnasStore'
+import type { AircraftMetadata, AircraftObservation } from '../types/aircraft-timeline'
+import { getApiBaseUrl, isRemoteMode } from '../utils/remoteMode'
 
 // Types for WebSocket messages (match Rust types in server.rs)
 interface ObservationData {

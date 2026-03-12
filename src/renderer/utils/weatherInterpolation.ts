@@ -5,15 +5,15 @@
  * from multiple METAR stations based on distance from camera position.
  */
 
+import { CLOUD_ALTITUDE_BAND_FEET, INTERPOLATION_DISTANCE_POWER, INTERPOLATION_MIN_WEIGHT } from '@/constants'
 import type {
+  CloudLayer,
   DistancedMetar,
   InterpolatedWeather,
   InterpolationSource,
-  CloudLayer,
   PrecipitationState,
   WindState,
 } from '@/types'
-import { INTERPOLATION_DISTANCE_POWER, INTERPOLATION_MIN_WEIGHT, CLOUD_ALTITUDE_BAND_FEET } from '@/constants'
 
 const DEG_TO_RAD = Math.PI / 180
 const RAD_TO_DEG = 180 / Math.PI
@@ -39,7 +39,7 @@ export function calculateIDWWeights(distances: number[], power: number = INTERPO
   }
 
   // Calculate raw weights: 1/d^p
-  const rawWeights = distances.map((d) => 1 / Math.pow(d, power))
+  const rawWeights = distances.map((d) => 1 / d ** power)
   const totalWeight = rawWeights.reduce((sum, w) => sum + w, 0)
 
   // Normalize to sum to 1

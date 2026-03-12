@@ -4,16 +4,16 @@
  */
 
 import * as BABYLON from '@babylonjs/core'
-import { fbmNoise } from './cloudNoiseGenerator'
 import {
-  CLOUD_NOISE_SCALE,
+  CLOUD_DOME_HORIZON_DARKENING,
+  CLOUD_EDGE_SOFTNESS,
   CLOUD_NOISE_OCTAVES,
   CLOUD_NOISE_PERSISTENCE,
-  CLOUD_EDGE_SOFTNESS,
-  CLOUD_RADIAL_FADE_START,
+  CLOUD_NOISE_SCALE,
   CLOUD_RADIAL_FADE_END,
-  CLOUD_DOME_HORIZON_DARKENING,
+  CLOUD_RADIAL_FADE_START,
 } from '@/constants'
+import { fbmNoise } from './cloudNoiseGenerator'
 
 /**
  * Generate a patchy cloud opacity texture using fBm noise.

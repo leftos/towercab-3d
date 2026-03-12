@@ -20,8 +20,8 @@
  * @see FSLTLService - Legacy service (being replaced)
  */
 
-import type { MSFSModelSettings, MSFSModelSource } from '@/types'
 import { useGlobalSettingsStore } from '@/stores/globalSettingsStore'
+import type { MSFSModelSettings, MSFSModelSource } from '@/types'
 import { isTauri } from '@/utils/tauriApi'
 import { aircraftDimensionsService } from './AircraftDimensionsService'
 

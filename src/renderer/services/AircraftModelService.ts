@@ -31,10 +31,10 @@
  */
 
 import { convertToAssetUrlSync } from '../utils/tauriApi'
-import { aircraftDimensionsService, type AircraftDimensions } from './AircraftDimensionsService'
+import { type AircraftDimensions, aircraftDimensionsService } from './AircraftDimensionsService'
 import { customVMRService } from './CustomVMRService'
-import { userVMRService } from './UserVMRService'
 import { MSFSModelConversionService, type SourceModelInfo } from './MSFSModelConversionService'
+import { userVMRService } from './UserVMRService'
 
 // Available model files (lowercase, without extension)
 // These correspond to .glb files in src/renderer/public/

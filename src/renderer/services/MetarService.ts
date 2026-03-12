@@ -2,17 +2,17 @@
 // Handles fetching and parsing METAR data from Aviation Weather API
 
 import { invoke } from '@tauri-apps/api/core'
-import { isTauri } from '@/utils/tauriApi'
+import { INTERPOLATION_RADIUS_NM, INTERPOLATION_STATION_COUNT, METAR_PRECIP_CODES } from '@/constants'
 import type {
-  Precipitation,
-  PrecipitationType,
-  PrecipitationIntensity,
-  WindState,
   CloudLayer,
-  PrecipitationState,
   DistancedMetar,
+  Precipitation,
+  PrecipitationIntensity,
+  PrecipitationState,
+  PrecipitationType,
+  WindState,
 } from '@/types'
-import { METAR_PRECIP_CODES, INTERPOLATION_STATION_COUNT, INTERPOLATION_RADIUS_NM } from '@/constants'
+import { isTauri } from '@/utils/tauriApi'
 
 const METAR_API_URL = 'https://aviationweather.gov/api/data/metar'
 

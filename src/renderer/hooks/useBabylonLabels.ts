@@ -1,8 +1,8 @@
-import { useRef, useCallback } from 'react'
 import * as GUI from '@babylonjs/gui'
-import type { AircraftLabel, UseBabylonLabelsResult } from '@/types'
-import { LEADER_LINE_END_GAP_3D_PX, LEADER_LINE_END_GAP_2D_PX } from '@/constants/rendering'
+import { useCallback, useRef } from 'react'
+import { LEADER_LINE_END_GAP_2D_PX, LEADER_LINE_END_GAP_3D_PX } from '@/constants/rendering'
 import { useDatablockPositionStore } from '@/stores/datablockPositionStore'
+import type { AircraftLabel, UseBabylonLabelsResult } from '@/types'
 
 interface UseBabylonLabelsOptions {
   guiTexture: GUI.AdvancedDynamicTexture | null

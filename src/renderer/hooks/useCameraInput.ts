@@ -1,36 +1,36 @@
-import { useEffect, useRef, useMemo } from 'react'
 import * as Cesium from 'cesium'
-import { useViewportStore } from '../stores/viewportStore'
-import { startManipulation, endManipulation } from '../stores/viewport/viewportHelpers'
-import { useSettingsStore } from '../stores/settingsStore'
-import { useGlobalSettingsStore } from '../stores/globalSettingsStore'
-import { useUIFeedbackStore } from '../stores/uiFeedbackStore'
-import { useAirportStore } from '../stores/airportStore'
-import { useDatablockPositionStore, type PendingDirection } from '../stores/datablockPositionStore'
-import { useTowerPositioningStore } from '../stores/towerPositioningStore'
-import { hasViewingContext } from '../utils/viewingContext'
+import { useEffect, useMemo, useRef } from 'react'
 import {
-  createVelocityState,
-  MOVEMENT_CONFIG,
-  MOVEMENT_KEYS,
+  FOLLOW_ZOOM_MAX,
+  FOLLOW_ZOOM_MIN,
+  FOV_MAX,
+  FOV_MIN,
+  ORBIT_DISTANCE_MAX,
+  ORBIT_DISTANCE_MIN,
+  ORBIT_PITCH_MAX,
+  ORBIT_PITCH_MIN,
+  PITCH_MAX,
+  PITCH_MIN,
+  TOPDOWN_ALTITUDE_MAX,
+  TOPDOWN_ALTITUDE_MIN,
+} from '../constants'
+import { useAirportStore } from '../stores/airportStore'
+import { type PendingDirection, useDatablockPositionStore } from '../stores/datablockPositionStore'
+import { useGlobalSettingsStore } from '../stores/globalSettingsStore'
+import { useSettingsStore } from '../stores/settingsStore'
+import { useTowerPositioningStore } from '../stores/towerPositioningStore'
+import { useUIFeedbackStore } from '../stores/uiFeedbackStore'
+import { endManipulation, startManipulation } from '../stores/viewport/viewportHelpers'
+import { useViewportStore } from '../stores/viewportStore'
+import {
   accelerateVelocity,
   calculateEffectiveMoveSpeed,
   calculateTargetVelocities,
+  createVelocityState,
+  MOVEMENT_CONFIG,
+  MOVEMENT_KEYS,
 } from '../utils/inputVelocity'
-import {
-  PITCH_MIN,
-  PITCH_MAX,
-  FOV_MIN,
-  FOV_MAX,
-  ORBIT_PITCH_MIN,
-  ORBIT_PITCH_MAX,
-  ORBIT_DISTANCE_MIN,
-  ORBIT_DISTANCE_MAX,
-  TOPDOWN_ALTITUDE_MIN,
-  TOPDOWN_ALTITUDE_MAX,
-  FOLLOW_ZOOM_MIN,
-  FOLLOW_ZOOM_MAX,
-} from '../constants'
+import { hasViewingContext } from '../utils/viewingContext'
 import { useTouchInput } from './useTouchInput'
 
 interface UseCameraInputOptions {
@@ -524,7 +524,7 @@ export function useCameraInput(
         // Normal 3D mode: proportional FOV zoom
         // Each scroll notch changes FOV by ~8%, giving ~5° at 60° and ~0.24° at 3°
         const currentFov = fovRef.current
-        const fovStep = currentFov * (Math.pow(1.08, normalizedDelta) - 1)
+        const fovStep = currentFov * (1.08 ** normalizedDelta - 1)
         adjustFov(fovStep)
       }
     }

@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
 import * as Cesium from 'cesium'
-import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
+import { useEffect, useRef, useState } from 'react'
 import type { ModelInfo } from '../../services/AircraftModelService'
+import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
 import './ModelPreviewModal.css'
 
 interface ModelPreviewModalProps {

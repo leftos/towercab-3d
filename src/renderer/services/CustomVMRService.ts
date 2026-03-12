@@ -19,9 +19,9 @@
  * ```
  */
 
-import { convertToAssetUrlSync, modApi, isTauri } from '../utils/tauriApi'
-import type { CustomVMRRule, CustomVMRMatch } from '../types/mod'
-import { type ParsedApiRule, type VMRRule, processApiRules, getUniqueSourceFiles, findRuleMatch } from './vmrUtils'
+import type { CustomVMRMatch, CustomVMRRule } from '../types/mod'
+import { convertToAssetUrlSync, isTauri, modApi } from '../utils/tauriApi'
+import { findRuleMatch, getUniqueSourceFiles, type ParsedApiRule, processApiRules, type VMRRule } from './vmrUtils'
 
 /** Rule entry with base path for model resolution */
 interface CustomRuleEntry {

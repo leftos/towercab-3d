@@ -24,24 +24,24 @@
  */
 
 import type {
+  ConversionProgress,
+  FSLTLAirlineInfo,
   FSLTLModel,
   FSLTLRegistry,
   FSLTLRegistryJSON,
-  VMRRule,
-  ConversionProgress,
-  FSLTLAirlineInfo,
   FSLTLTypeInfo,
+  VMRRule,
 } from '../types/fsltl'
-import { aircraftDimensionsService } from './AircraftDimensionsService'
 import {
   createEmptyRegistry,
+  DEFAULT_CONVERSION_PROGRESS,
+  parseModelName,
   registryFromJSON,
   registryToJSON,
-  parseModelName,
-  DEFAULT_CONVERSION_PROGRESS,
 } from '../types/fsltl'
 // Note: useSettingsStore was used for enableFsltlModels setting, now disabled
 import { isTauri } from '../utils/tauriApi'
+import { aircraftDimensionsService } from './AircraftDimensionsService'
 
 /** Model info returned from /api/fsltl/models endpoint */
 interface ApiFsltlModel {

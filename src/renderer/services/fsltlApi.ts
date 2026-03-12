@@ -13,8 +13,8 @@
  */
 
 import { invoke } from '@tauri-apps/api/core'
-import { isTauri } from '../utils/tauriApi'
 import type { ConversionProgress } from '../types/fsltl'
+import { isTauri } from '../utils/tauriApi'
 
 /**
  * Open a native folder picker dialog

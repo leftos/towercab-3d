@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useWeatherStore } from '@/stores/weatherStore'
-import type { PrecipitationType, CloudLayer } from '@/types'
+import type { CloudLayer, PrecipitationType } from '@/types'
 import './WeatherDebugPanel.css'
 
 type PrecipIntensity = 'none' | 'light' | 'moderate' | 'heavy'

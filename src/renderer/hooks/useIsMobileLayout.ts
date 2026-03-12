@@ -9,7 +9,7 @@
  * will update dynamically when the window is resized.
  */
 
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { isTouchDevice } from '../utils/deviceDetection'
 
 const COMPACT_BREAKPOINT = 1200

@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAirportStore } from '../../stores/airportStore'
 import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
-import { useVnasStore } from '../../stores/vnasStore'
 import { useVatsimStore } from '../../stores/vatsimStore'
+import { useVnasStore } from '../../stores/vnasStore'
 import type { Airport } from '../../types/airport'
 import './AirportSelector.css'
 

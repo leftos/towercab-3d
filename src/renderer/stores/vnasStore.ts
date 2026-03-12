@@ -1,11 +1,11 @@
 import { create } from 'zustand'
-import type { VnasAircraft, VnasStatus, VnasEnvironment } from '../types/vnas'
-import type { AircraftState } from '../types/vatsim'
-import type { AircraftObservation, AircraftMetadata } from '../types/aircraft-timeline'
-import { isRemoteMode } from '../utils/remoteMode'
-import { useAircraftTimelineStore } from './aircraftTimelineStore'
 import { SOURCE_DISPLAY_DELAYS } from '../constants/aircraft-timeline'
 import { geoidService } from '../services/GeoidService'
+import type { AircraftMetadata, AircraftObservation } from '../types/aircraft-timeline'
+import type { AircraftState } from '../types/vatsim'
+import type { VnasAircraft, VnasEnvironment, VnasStatus } from '../types/vnas'
+import { isRemoteMode } from '../utils/remoteMode'
+import { useAircraftTimelineStore } from './aircraftTimelineStore'
 
 /** Feet to meters conversion factor */
 const FEET_TO_METERS = 0.3048

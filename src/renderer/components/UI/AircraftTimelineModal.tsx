@@ -1,14 +1,14 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { SOURCE_DISPLAY_DELAYS } from '@/constants/aircraft-timeline'
+import { saveDiagnostic } from '@/services/DiagnosticService'
 import { useAircraftTimelineStore } from '@/stores/aircraftTimelineStore'
 import { useAirportStore } from '@/stores/airportStore'
 import { useGlobalSettingsStore } from '@/stores/globalSettingsStore'
 import { useReplayStore } from '@/stores/replayStore'
 import { useUIFeedbackStore } from '@/stores/uiFeedbackStore'
+import type { AircraftDataSource, AircraftObservation } from '@/types/aircraft-timeline'
 import { calculateDistanceNM } from '@/utils/geoMath'
 import { getTowerPosition } from '@/utils/towerHeight'
-import { SOURCE_DISPLAY_DELAYS } from '@/constants/aircraft-timeline'
-import { saveDiagnostic } from '@/services/DiagnosticService'
-import type { AircraftObservation, AircraftDataSource } from '@/types/aircraft-timeline'
 import './AircraftTimelineModal.css'
 
 interface AircraftTimelineModalProps {

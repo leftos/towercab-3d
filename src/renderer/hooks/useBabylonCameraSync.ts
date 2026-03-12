@@ -1,7 +1,7 @@
-import { useCallback, useRef } from 'react'
-import * as BABYLON from '@babylonjs/core'
+import type * as BABYLON from '@babylonjs/core'
 import * as Cesium from 'cesium'
-import { calculateBabylonCameraSync, setupEnuTransforms, type EnuTransformData } from '../utils/enuTransforms'
+import { useCallback, useRef } from 'react'
+import { calculateBabylonCameraSync, type EnuTransformData, setupEnuTransforms } from '../utils/enuTransforms'
 
 interface Camera2DState {
   lat: number

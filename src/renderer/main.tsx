@@ -2,8 +2,8 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
 import './assets/styles/global.css'
-import { registerTileCacheServiceWorker } from './utils/serviceWorkerRegistration'
 import { initFileLogging } from './utils/fileLogger'
+import { registerTileCacheServiceWorker } from './utils/serviceWorkerRegistration'
 
 // Initialize file logging FIRST, before anything else
 // This must happen synchronously to catch all early logs

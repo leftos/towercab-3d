@@ -25,39 +25,39 @@
  */
 
 import { create } from 'zustand'
-import type {
-  AircraftObservation,
-  AircraftMetadata,
-  AircraftTimeline,
-  TimelineInterpolationResult,
-  DynamicDelayState,
-} from '../types/aircraft-timeline'
-import { mergeAircraftMetadata } from '../types/aircraft-timeline'
-import type { VatsimSnapshot } from '../types/replay'
-import type { SerializedTimeline } from '../types/diagnostic'
 import {
-  SOURCE_DISPLAY_DELAYS,
-  MAX_OBSERVATION_AGE_MS,
-  MAX_OBSERVATIONS_PER_AIRCRAFT,
-  MAX_EXTRAPOLATION_TIME,
   AIRCRAFT_TIMEOUT,
-  MIN_OBSERVATION_INTERVAL,
-  PRUNE_INTERVAL,
-  VNAS_PREFERENCE_THRESHOLD_MS,
-  DYNAMIC_DELAY_INTERVAL_WINDOW,
-  DYNAMIC_DELAY_JITTER_BUFFER_MS,
-  DYNAMIC_DELAY_MIN_MS,
-  DYNAMIC_DELAY_MAX_MS,
   DYNAMIC_DELAY_BOOTSTRAP_MS,
-  DYNAMIC_DELAY_MIN_OBSERVATIONS,
-  DYNAMIC_DELAY_MAX_DECREASE_RATE,
   DYNAMIC_DELAY_EXTRAPOLATION_BUMP_MS,
   DYNAMIC_DELAY_EXTRAPOLATION_DECAY_RATE,
+  DYNAMIC_DELAY_INTERVAL_WINDOW,
+  DYNAMIC_DELAY_JITTER_BUFFER_MS,
+  DYNAMIC_DELAY_MAX_DECREASE_RATE,
+  DYNAMIC_DELAY_MAX_MS,
+  DYNAMIC_DELAY_MIN_MS,
+  DYNAMIC_DELAY_MIN_OBSERVATIONS,
+  MAX_EXTRAPOLATION_TIME,
+  MAX_OBSERVATION_AGE_MS,
+  MAX_OBSERVATIONS_PER_AIRCRAFT,
+  MIN_OBSERVATION_INTERVAL,
+  PRUNE_INTERVAL,
+  SOURCE_DISPLAY_DELAYS,
+  VNAS_PREFERENCE_THRESHOLD_MS,
 } from '../constants/aircraft-timeline'
-import { useViewportStore } from './viewportStore'
+import type {
+  AircraftMetadata,
+  AircraftObservation,
+  AircraftTimeline,
+  DynamicDelayState,
+  TimelineInterpolationResult,
+} from '../types/aircraft-timeline'
+import { mergeAircraftMetadata } from '../types/aircraft-timeline'
+import type { SerializedTimeline } from '../types/diagnostic'
+import type { VatsimSnapshot } from '../types/replay'
+import { calculateBearing } from '../utils/aircraft/geoMath'
 import { useReplayStore } from './replayStore'
 import { useSettingsStore } from './settingsStore'
-import { calculateBearing } from '../utils/aircraft/geoMath'
+import { useViewportStore } from './viewportStore'
 
 // ============================================================================
 // BROADCAST CALLBACK FOR INSET SYNCHRONIZATION

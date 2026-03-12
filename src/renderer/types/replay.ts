@@ -8,8 +8,8 @@
  * - Return to live mode seamlessly
  */
 
+import type { DiagnosticAppState, SerializedTimeline } from './diagnostic'
 import type { AircraftState } from './vatsim'
-import type { SerializedTimeline, DiagnosticAppState } from './diagnostic'
 
 /**
  * Serializable version of AircraftState for JSON export

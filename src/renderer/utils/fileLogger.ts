@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { isRemoteMode, getApiBaseUrl } from './remoteMode'
+import { getApiBaseUrl, isRemoteMode } from './remoteMode'
 
 let logBuffer: Array<{ level: string; message: string }> = []
 let isLoggingEnabled = false

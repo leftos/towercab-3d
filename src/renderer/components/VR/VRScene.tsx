@@ -1,8 +1,8 @@
-import { useRef, useEffect, useCallback } from 'react'
 import * as BABYLON from '@babylonjs/core'
-import { useVRStore } from '../../stores/vrStore'
+import type * as Cesium from 'cesium'
+import { useCallback, useEffect, useRef } from 'react'
 import { useCesiumStereo } from '../../hooks/useCesiumStereo'
-import * as Cesium from 'cesium'
+import { useVRStore } from '../../stores/vrStore'
 import './VRScene.css'
 
 interface VRSceneProps {

@@ -3,8 +3,8 @@
 // Note: Updates are only available in Tauri (desktop) mode, not in browser mode
 
 import type { Update } from '@tauri-apps/plugin-updater'
-import { isTauri } from '@/utils/tauriApi'
 import { useUpdateStore } from '@/stores/updateStore'
+import { isTauri } from '@/utils/tauriApi'
 
 // Auto-check interval: 4 hours in milliseconds
 const AUTO_CHECK_INTERVAL = 4 * 60 * 60 * 1000

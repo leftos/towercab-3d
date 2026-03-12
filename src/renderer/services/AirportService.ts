@@ -1,8 +1,8 @@
 // Airport database service
 // Loads and manages airport data
 
-import type { Airport, AirportDatabase } from '../types/airport'
 import { AIRPORTS_DB_URL } from '../constants/api'
+import type { Airport, AirportDatabase } from '../types/airport'
 import { loadJsonWithFallback } from '../utils/dataLoader'
 
 class AirportService {

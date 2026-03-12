@@ -21,14 +21,14 @@
 import { useGlobalSettingsStore } from '@/stores/globalSettingsStore'
 import { isTauri, modApi } from '@/utils/tauriApi'
 import {
-  type VMRRule,
-  type RuleEntry,
+  createAirlineRuleKey,
+  findRuleMatch,
+  getUniqueSourceFiles,
+  normalizeTypeCode,
   type ParsedApiRule,
   processApiRules,
-  getUniqueSourceFiles,
-  findRuleMatch,
-  createAirlineRuleKey,
-  normalizeTypeCode,
+  type RuleEntry,
+  type VMRRule,
 } from './vmrUtils'
 
 // =============================================================================

@@ -10,9 +10,9 @@
  */
 
 import { useEffect, useRef } from 'react'
-import { isRemoteMode } from '../utils/remoteMode'
 import { useAirportStore } from '../stores/airportStore'
 import { useVnasStore } from '../stores/vnasStore'
+import { isRemoteMode } from '../utils/remoteMode'
 
 /**
  * Normalize facility ID for vNAS lookup.

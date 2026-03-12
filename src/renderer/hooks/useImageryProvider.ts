@@ -1,6 +1,6 @@
-import { useEffect, useRef } from 'react'
 import * as Cesium from 'cesium'
-import type { ImageryProviderType, ImageryAdjustments } from '@/types'
+import { useEffect, useRef } from 'react'
+import type { ImageryAdjustments, ImageryProviderType } from '@/types'
 import { DEFAULT_IMAGERY_ADJUSTMENTS } from '@/types'
 
 export interface ImagerySettings {
