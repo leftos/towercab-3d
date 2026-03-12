@@ -43,6 +43,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.4.6",
     "@tauri-apps/cli": "^2.10.0",
+    "@types/geojson": "^7946.0.16",
     "@types/node": "^25.3.3",
     "@types/rbush": "^4.0.0",
     "@types/react": "^19.2.14",
@@ -57,7 +58,10 @@
     "vitest": "^4.0.18"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild", "sharp"]
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp"
+    ]
   },
   "dependencies": {
     "@babylonjs/core": "^8.53.0",
