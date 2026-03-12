@@ -499,7 +499,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
 
   // Create Babylon canvas after Cesium viewer is ready
   useEffect(() => {
-    if (!viewer || !containerRef.current || babylonCanvasCreatedRef.current) return
+    if (!viewer || viewer.isDestroyed() || !containerRef.current || babylonCanvasCreatedRef.current) return
 
     // Create canvas element programmatically
     const canvas = document.createElement('canvas')
@@ -540,7 +540,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
 
   // Update in-memory tile cache size when setting changes
   useEffect(() => {
-    if (!viewer) return
+    if (!viewer || viewer.isDestroyed()) return
     viewer.scene.globe.tileCacheSize = inMemoryTileCacheSize
   }, [viewer, inMemoryTileCacheSize])
 
@@ -572,7 +572,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
   // Apply target frame rate limit for main viewport (0 = unlimited)
   // Insets use their own RAF loop with separate frame rate control
   useEffect(() => {
-    if (!viewer || isInset) return
+    if (!viewer || viewer.isDestroyed() || isInset) return
     // Cesium's targetFrameRate: undefined means unlimited (uses requestAnimationFrame)
     // A number limits the frame rate to that value
     const effectiveFramerate = maxFramerate > 0 ? maxFramerate : undefined
@@ -586,7 +586,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
   // reading from sharedInterpolatedStates which is updated by broadcast reception.
   // This decouples data arrival timing from render timing for smooth animation.
   useEffect(() => {
-    if (!viewer || !isInset) return
+    if (!viewer || viewer.isDestroyed() || !isInset) return
 
     // Calculate effective frame rate for insets
     // 'match' uses main viewport's maxFramerate setting, otherwise use the explicit value
@@ -641,7 +641,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
 
   // Time of day control (real time vs fixed time)
   useEffect(() => {
-    if (!viewer) return
+    if (!viewer || viewer.isDestroyed()) return
 
     if (timeMode === 'fixed' && currentAirport) {
       // Calculate the specified local time at the tower location
@@ -670,7 +670,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
   // Skip loading buildings for inset viewports to reduce memory usage and prevent WebGL context issues
   // Unless inset buildings setting is enabled
   useEffect(() => {
-    if (!viewer) return
+    if (!viewer || viewer.isDestroyed()) return
     // Skip buildings for insets unless buildings enabled
     const insetBuildingsEnabled = isInset && insetGraphics.buildings
     if (isInset && !insetBuildingsEnabled) return
@@ -784,7 +784,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
 
   // Sync Babylon overlay and update aircraft on each render frame
   useEffect(() => {
-    if (!viewer) return
+    if (!viewer || viewer.isDestroyed()) return
 
     // Track Cesium update phase (scene graph updates, culling, animations)
     const removePreUpdate = viewer.scene.preUpdate.addEventListener(() => {
@@ -927,7 +927,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
 
   // Measuring mode event handlers
   useEffect(() => {
-    if (!viewer || !isMeasuring) {
+    if (!viewer || viewer.isDestroyed() || !isMeasuring) {
       // Clear preview when not measuring
       setPreviewPoint(null)
       return
@@ -1038,7 +1038,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
   const pendingDirection = useDatablockPositionStore((state) => state.pendingDirection)
 
   useEffect(() => {
-    if (!viewer || !pendingDirection) return
+    if (!viewer || viewer.isDestroyed() || !pendingDirection) return
 
     const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas)
 

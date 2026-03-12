@@ -100,7 +100,7 @@ export function useCesiumLighting(viewer: Cesium.Viewer | null, settings: Cesium
 
   // Update lighting and shadows when settings change
   useEffect(() => {
-    if (!viewer) return
+    if (!viewer || viewer.isDestroyed()) return
 
     // Update ground atmosphere
     viewer.scene.globe.showGroundAtmosphere = enableGroundAtmosphere

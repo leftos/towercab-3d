@@ -192,7 +192,7 @@ export function useCesiumStereo(
 
   // Disable Cesium's default render loop when VR is active
   useEffect(() => {
-    if (!viewer) return
+    if (!viewer || viewer.isDestroyed()) return
 
     if (isVRActive) {
       // Save original state and disable auto-render

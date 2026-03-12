@@ -623,7 +623,7 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
 
   // Set up render loop to update labels every frame
   useEffect(() => {
-    if (!viewer) return
+    if (!viewer || viewer.isDestroyed()) return
 
     // Use a wrapper that calls the ref, so the same listener stays attached
     // even when the underlying callback changes

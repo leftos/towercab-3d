@@ -53,7 +53,7 @@ export function useTerrainQuality(viewer: Viewer | null, terrainQuality: number,
 
   // Update terrain quality when setting changes - only flush cache on actual user changes
   useEffect(() => {
-    if (!viewer || qualityChangeInProgressRef.current) return
+    if (!viewer || viewer.isDestroyed() || qualityChangeInProgressRef.current) return
 
     const newError = getScreenSpaceError(terrainQuality)
 
@@ -113,7 +113,7 @@ export function useTerrainQuality(viewer: Viewer | null, terrainQuality: number,
 
   // Update in-memory tile cache size when setting changes
   useEffect(() => {
-    if (!viewer) return
+    if (!viewer || viewer.isDestroyed()) return
     viewer.scene.globe.tileCacheSize = inMemoryTileCacheSize
   }, [viewer, inMemoryTileCacheSize])
 }
