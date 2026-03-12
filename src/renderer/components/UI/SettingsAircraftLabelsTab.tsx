@@ -45,7 +45,7 @@ function SettingsAircraftLabelsTab() {
       {!isRemote && (
         <CollapsibleSection title="Aircraft Visibility">
           <div className="setting-item">
-            <label>Visibility Range</label>
+            <span>Visibility Range</span>
             <div className="slider-with-value">
               <input
                 type="range"
@@ -87,7 +87,7 @@ function SettingsAircraftLabelsTab() {
         {/* Datablock Mode - Global setting, hidden in remote mode */}
         {!isRemote && (
           <div className="setting-item">
-            <label>Datablock Mode</label>
+            <span>Datablock Mode</span>
             <div className="radio-group-vertical">
               <label>
                 <input
@@ -125,7 +125,7 @@ function SettingsAircraftLabelsTab() {
 
         {/* Datablock Font Size - Local setting, always visible */}
         <div className="setting-item">
-          <label>Datablock Font Size</label>
+          <span>Datablock Font Size</span>
           <div className="slider-with-value">
             <input
               type="range"
@@ -143,7 +143,7 @@ function SettingsAircraftLabelsTab() {
         {!isRemote && (
           <>
             <div className="setting-item">
-              <label>Leader Line Length</label>
+              <span>Leader Line Length</span>
               <div className="slider-with-value">
                 <input
                   type="range"
@@ -159,7 +159,7 @@ function SettingsAircraftLabelsTab() {
             </div>
 
             <div className="setting-item">
-              <label>Default Datablock Direction</label>
+              <span>Default Datablock Direction</span>
               <select
                 value={defaultDatablockDirection}
                 onChange={(e) =>
@@ -197,7 +197,7 @@ function SettingsAircraftLabelsTab() {
             {showGroundTraffic && (
               <>
                 <div className="setting-item">
-                  <label>Ground Traffic Labels</label>
+                  <span>Ground Traffic Labels</span>
                   <select
                     value={groundLabelMode ?? 'all'}
                     onChange={(e) => updateDisplay({ groundLabelMode: e.target.value as GroundLabelMode })}
@@ -212,7 +212,7 @@ function SettingsAircraftLabelsTab() {
 
                 {groundLabelMode === 'moving' && (
                   <div className="setting-item">
-                    <label>Minimum Speed for Labels</label>
+                    <span>Minimum Speed for Labels</span>
                     <div className="slider-with-value">
                       <input
                         type="range"
@@ -242,7 +242,7 @@ function SettingsAircraftLabelsTab() {
           </p>
 
           <div className="setting-item">
-            <label>Inset Datablock Mode</label>
+            <span>Inset Datablock Mode</span>
             <select
               value={insetSettings?.datablockMode ?? 'callsign'}
               onChange={(e) => updateDisplay({ inset: { datablockMode: e.target.value as InsetDatablockMode } })}
@@ -255,7 +255,7 @@ function SettingsAircraftLabelsTab() {
           </div>
 
           <div className="setting-item">
-            <label>Inset Ground Labels</label>
+            <span>Inset Ground Labels</span>
             <select
               value={insetSettings?.groundLabelMode ?? 'crucialPhases'}
               onChange={(e) => updateDisplay({ inset: { groundLabelMode: e.target.value as InsetGroundLabelMode } })}
@@ -274,7 +274,7 @@ function SettingsAircraftLabelsTab() {
           </div>
 
           <div className="setting-item">
-            <label>Edge Visibility Margin</label>
+            <span>Edge Visibility Margin</span>
             <div className="slider-with-value">
               <input
                 type="range"
@@ -307,7 +307,7 @@ function SettingsAircraftLabelsTab() {
 
         {orientationEmulation && (
           <div className="setting-item">
-            <label>Orientation Intensity</label>
+            <span>Orientation Intensity</span>
             <div className="slider-with-value">
               <input
                 type="range"
@@ -324,7 +324,7 @@ function SettingsAircraftLabelsTab() {
         )}
 
         <div className="setting-item">
-          <label>Built-in Model Brightness</label>
+          <span>Built-in Model Brightness</span>
           <div className="slider-with-value">
             <input
               type="range"
@@ -340,7 +340,7 @@ function SettingsAircraftLabelsTab() {
         </div>
 
         <div className="setting-item">
-          <label>Built-in Model Tint</label>
+          <span>Built-in Model Tint</span>
           <select
             value={builtinModelTintColor}
             onChange={(e) => updateGraphicsSettings({ builtinModelTintColor: e.target.value as AircraftTintColor })}
@@ -358,7 +358,7 @@ function SettingsAircraftLabelsTab() {
         </div>
 
         <div className="setting-item">
-          <label>FSLTL Model Brightness</label>
+          <span>FSLTL Model Brightness</span>
           <div className="slider-with-value">
             <input
               type="range"
@@ -374,9 +374,10 @@ function SettingsAircraftLabelsTab() {
         </div>
 
         <div className="setting-item">
-          <label>Aircraft Outlines</label>
+          <span>Aircraft Outlines</span>
           <div className="three-way-toggle">
             <button
+              type="button"
               className={enableAircraftSilhouettes && insetGraphics.silhouettes ? 'active' : ''}
               onClick={() => {
                 updateGraphicsSettings({
@@ -388,6 +389,7 @@ function SettingsAircraftLabelsTab() {
               On
             </button>
             <button
+              type="button"
               className={enableAircraftSilhouettes && !insetGraphics.silhouettes ? 'active' : ''}
               onClick={() => {
                 updateGraphicsSettings({
@@ -399,6 +401,7 @@ function SettingsAircraftLabelsTab() {
               Main Only
             </button>
             <button
+              type="button"
               className={!enableAircraftSilhouettes ? 'active-off' : ''}
               onClick={() => {
                 updateGraphicsSettings({

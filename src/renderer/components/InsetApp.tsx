@@ -545,7 +545,9 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
   // The viewer uses local stores that are populated from SharedWorker data
   // Aircraft observations are received via SharedWorker and interpolated locally
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: focus handler for viewport activation
     <div
+      role="presentation"
       style={{
         width: '100%',
         height: '100%',

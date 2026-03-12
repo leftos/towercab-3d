@@ -53,6 +53,7 @@ function RemoteClientsIndicator() {
       title={`${clientCount} remote ${clientCount === 1 ? 'client' : 'clients'} connected`}
     >
       <svg
+        aria-hidden="true"
         className="remote-clients-icon"
         width="14"
         height="14"

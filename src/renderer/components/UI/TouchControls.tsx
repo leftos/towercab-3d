@@ -123,11 +123,13 @@ function TouchCommandInput({ isOpen, onClose }: { isOpen: boolean; onClose: () =
   if (!isOpen) return null
 
   return (
-    <div className="touch-command-overlay" onClick={onClose}>
-      <div className="touch-command-modal" onClick={(e) => e.stopPropagation()}>
+    // biome-ignore lint/a11y/noStaticElementInteractions: modal overlay backdrop
+    <div className="touch-command-overlay" role="presentation" onClick={onClose}>
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: stops click propagation to overlay */}
+      <div className="touch-command-modal" role="dialog" onClick={(e) => e.stopPropagation()}>
         <div className="touch-command-header">
           <span>Command Input</span>
-          <button className="touch-command-close" onClick={onClose}>
+          <button type="button" className="touch-command-close" onClick={onClose}>
             ×
           </button>
         </div>
@@ -156,7 +158,12 @@ function TouchCommandInput({ isOpen, onClose }: { isOpen: boolean; onClose: () =
           <div className="touch-command-quickslots-label">Quick Load:</div>
           <div className="touch-command-quickslots-grid">
             {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((slot) => (
-              <button key={slot} className="touch-command-quickslot" onClick={() => handleQuickBookmark(slot)}>
+              <button
+                type="button"
+                key={slot}
+                className="touch-command-quickslot"
+                onClick={() => handleQuickBookmark(slot)}
+              >
                 .{slot.toString().padStart(2, '0')}
               </button>
             ))}
@@ -344,6 +351,7 @@ function ZoomButtons() {
   return (
     <div className="touch-zoom-buttons">
       <button
+        type="button"
         className="touch-zoom-btn zoom-in"
         onTouchStart={(e) => {
           e.preventDefault()
@@ -351,12 +359,21 @@ function ZoomButtons() {
         }}
         onClick={() => handleZoom('in')}
       >
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+        <svg
+          aria-hidden="true"
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3"
+        >
           <line x1="12" y1="5" x2="12" y2="19" />
           <line x1="5" y1="12" x2="19" y2="12" />
         </svg>
       </button>
       <button
+        type="button"
         className="touch-zoom-btn zoom-out"
         onTouchStart={(e) => {
           e.preventDefault()
@@ -364,7 +381,15 @@ function ZoomButtons() {
         }}
         onClick={() => handleZoom('out')}
       >
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+        <svg
+          aria-hidden="true"
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3"
+        >
           <line x1="5" y1="12" x2="19" y2="12" />
         </svg>
       </button>
@@ -411,11 +436,20 @@ function TouchControls() {
     <>
       {/* Toggle button to show/hide joystick */}
       <button
+        type="button"
         className={`touch-controls-toggle ${isJoystickVisible ? 'active' : ''}`}
         onClick={() => setIsJoystickVisible(!isJoystickVisible)}
         title={isJoystickVisible ? 'Hide joystick' : 'Show joystick'}
       >
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg
+          aria-hidden="true"
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
           <circle cx="12" cy="12" r="3" />
           <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
         </svg>

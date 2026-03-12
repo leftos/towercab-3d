@@ -238,8 +238,8 @@ function SettingsModsTab({ onRequestClose }: SettingsModsTabProps) {
                 </span>
               </div>
               <div className="mod-details">
-                {vmrFiles.map((file, i) => (
-                  <span key={i} className="vmr-file">
+                {vmrFiles.map((file) => (
+                  <span key={file} className="vmr-file">
                     {file}
                   </span>
                 ))}
@@ -258,6 +258,7 @@ function SettingsModsTab({ onRequestClose }: SettingsModsTabProps) {
               pull latest changes from remote.
             </p>
             <button
+              type="button"
               className="control-button update-repos-button"
               onClick={handleUpdateRepos}
               disabled={isUpdatingRepos}
@@ -266,9 +267,9 @@ function SettingsModsTab({ onRequestClose }: SettingsModsTabProps) {
             </button>
             {updateResult && (
               <div className="update-result">
-                {updateResult.results.map((r, i) => (
+                {updateResult.results.map((r) => (
                   <div
-                    key={i}
+                    key={r.repoName}
                     className={`update-result-item ${r.success ? (r.updated ? 'updated' : 'up-to-date') : 'failed'}`}
                   >
                     <span className="update-repo-name">{r.repoName}</span>
@@ -303,8 +304,8 @@ function SettingsModsTab({ onRequestClose }: SettingsModsTabProps) {
       {modResult?.errors && modResult.errors.length > 0 && (
         <CollapsibleSection title={`Errors (${modResult.errors.length})`} defaultExpanded>
           <div className="mods-list errors-list">
-            {modResult.errors.map((error, i) => (
-              <ErrorItem key={i} error={error} />
+            {modResult.errors.map((error) => (
+              <ErrorItem key={error.path} error={error} />
             ))}
           </div>
         </CollapsibleSection>
@@ -314,7 +315,7 @@ function SettingsModsTab({ onRequestClose }: SettingsModsTabProps) {
       {hasPendingChanges && (
         <div className="pending-changes-bar">
           <span className="pending-notice">Changes require app restart to take effect</span>
-          <button className="control-button primary" onClick={applyChanges}>
+          <button type="button" className="control-button primary" onClick={applyChanges}>
             Save Changes
           </button>
         </div>
@@ -551,6 +552,7 @@ function TowerModItem({
           {hasPendingChange && <span className="pending-badge">*</span>}
         </label>
         <button
+          type="button"
           className="control-button position-button"
           onClick={onPosition}
           disabled={!tower.placement}

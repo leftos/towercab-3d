@@ -125,18 +125,51 @@ const TreeNode = memo(function TreeNode({
 
   return (
     <div className="tree-node" data-depth={depth}>
-      <div className="tree-node-header" onClick={handleRowClick} style={{ paddingLeft: `${12 + depth * 20}px` }}>
+      {/* biome-ignore lint/a11y/useSemanticElements: tree node header contains multiple interactive children */}
+      <div
+        className="tree-node-header"
+        role="button"
+        tabIndex={0}
+        onClick={handleRowClick}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            handleRowClick()
+          }
+        }}
+        style={{ paddingLeft: `${12 + depth * 20}px` }}
+      >
         {/* Expand/collapse chevron */}
+        {/* biome-ignore lint/a11y/useSemanticElements: chevron toggle inside tree node */}
         <span
+          role="button"
+          tabIndex={0}
           className={`tree-chevron ${hasChildren ? (isExpanded ? 'expanded' : '') : 'hidden'}`}
           onClick={handleChevronClick}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              e.stopPropagation()
+              if (hasChildren) {
+                onToggleExpand(node.id)
+              }
+            }
+          }}
         >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg
+            aria-hidden="true"
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
             <polyline points="9 18 15 12 9 6" />
           </svg>
         </span>
 
-        {/* Tri-state checkbox with accessibility */}
+        {/* biome-ignore lint/a11y/useSemanticElements: tri-state checkbox with custom SVG rendering */}
         <span
           role="checkbox"
           aria-checked={ariaChecked}
@@ -147,12 +180,28 @@ const TreeNode = memo(function TreeNode({
           onKeyDown={handleCheckboxKeyDown}
         >
           {checkState === 'checked' && (
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+            <svg
+              aria-hidden="true"
+              width="10"
+              height="10"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="3"
+            >
               <polyline points="20 6 9 17 4 12" />
             </svg>
           )}
           {checkState === 'indeterminate' && (
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+            <svg
+              aria-hidden="true"
+              width="10"
+              height="10"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="3"
+            >
               <line x1="5" y1="12" x2="19" y2="12" />
             </svg>
           )}
@@ -195,7 +244,9 @@ function SettingsTreeView({ nodes, selectedIds, onSelectionChange, mode, maxHeig
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => {
     // Default: expand top-level nodes
     const initial = new Set<string>()
-    nodes.forEach((node) => initial.add(node.id))
+    for (const node of nodes) {
+      initial.add(node.id)
+    }
     return initial
   })
 
@@ -271,12 +322,28 @@ function SettingsTreeView({ nodes, selectedIds, onSelectionChange, mode, maxHeig
           </button>
           <span className="tree-toolbar-separator" />
           <button type="button" className="tree-toolbar-btn icon" onClick={handleExpandAll} title="Expand All">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              aria-hidden="true"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <polyline points="6 9 12 15 18 9" />
             </svg>
           </button>
           <button type="button" className="tree-toolbar-btn icon" onClick={handleCollapseAll} title="Collapse All">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              aria-hidden="true"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <polyline points="18 15 12 9 6 15" />
             </svg>
           </button>

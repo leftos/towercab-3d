@@ -60,9 +60,9 @@ function extractSettingsFromLevelDB(data: Uint8Array): string | null {
   }
 
   // Try a more aggressive search - find any JSON object with cesiumIonToken
-  const jsonPattern = /\{"cesiumIonToken":[^]*?"terrainQuality":\d+[^]*?\}/g
-  let jsonMatch
-  while ((jsonMatch = jsonPattern.exec(text)) !== null) {
+  const jsonPattern = /\{"cesiumIonToken":[\s\S]*?"terrainQuality":\d+[\s\S]*?\}/g
+  let jsonMatch: RegExpExecArray | null = jsonPattern.exec(text)
+  while (jsonMatch !== null) {
     try {
       const parsed = JSON.parse(jsonMatch[0])
       if (parsed.cesiumIonToken !== undefined) {
@@ -72,6 +72,7 @@ function extractSettingsFromLevelDB(data: Uint8Array): string | null {
     } catch {
       // Not valid JSON, continue
     }
+    jsonMatch = jsonPattern.exec(text)
   }
 
   return null

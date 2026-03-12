@@ -427,17 +427,34 @@ function ControlsBar() {
       <div className={`controls-bar ${barMode === 'replay' ? 'replay-mode' : ''} ${isLive ? '' : 'in-replay'}`}>
         {/* Mode toggle button - always visible on the left */}
         <button
+          type="button"
           className={`mode-toggle-btn ${barMode === 'replay' ? 'active' : ''}`}
           onClick={() => setBarMode(barMode === 'controls' ? 'replay' : 'controls')}
           title={barMode === 'controls' ? 'Show replay controls' : 'Show main controls'}
         >
           {barMode === 'controls' ? (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              aria-hidden="true"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <circle cx="12" cy="12" r="10" />
               <polygon points="10 8 16 12 10 16 10 8" />
             </svg>
           ) : (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              aria-hidden="true"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <circle cx="12" cy="12" r="3" />
               <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
             </svg>
@@ -449,19 +466,36 @@ function ControlsBar() {
             {/* MAIN CONTROLS MODE */}
             <div className="controls-left">
               <button
+                type="button"
                 className="control-button"
                 onClick={toggleViewMode}
                 title="Toggle View Mode (T)"
                 disabled={!hasReference}
               >
                 {viewMode === '3d' ? (
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg
+                    aria-hidden="true"
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
                     <path d="M12 2L2 7l10 5 10-5-10-5z" />
                     <path d="M2 17l10 5 10-5" />
                     <path d="M2 12l10 5 10-5" />
                   </svg>
                 ) : (
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg
+                    aria-hidden="true"
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
                     <rect x="3" y="3" width="18" height="18" rx="2" />
                     <line x1="12" y1="3" x2="12" y2="21" />
                     <line x1="3" y1="12" x2="21" y2="12" />
@@ -473,12 +507,21 @@ function ControlsBar() {
               {/* Defaults dropdown - Set Default / To Default */}
               <div className="defaults-dropdown" ref={defaultsDropdownRef}>
                 <button
+                  type="button"
                   className={`control-button ${showDefaultsDropdown ? 'active' : ''} ${defaultSaved || defaultLoaded ? 'success' : ''}`}
                   onClick={() => setShowDefaultsDropdown(!showDefaultsDropdown)}
                   title="Default View Options"
                   disabled={!currentAirport}
                 >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg
+                    aria-hidden="true"
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
                     <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
                     <polyline points="9 22 9 12 15 12 15 22" />
                   </svg>
@@ -489,6 +532,7 @@ function ControlsBar() {
                 {showDefaultsDropdown && (
                   <div className="defaults-dropdown-menu">
                     <button
+                      type="button"
                       className="defaults-dropdown-item"
                       onClick={(e) => {
                         handleSaveAsDefault(e)
@@ -498,6 +542,7 @@ function ControlsBar() {
                       {shiftPressed ? 'Save Tower Pos' : 'Set Default'}
                     </button>
                     <button
+                      type="button"
                       className={`defaults-dropdown-item ${!hasCustomDefault() && !shiftPressed ? 'disabled' : ''}`}
                       onClick={(e) => {
                         if (hasCustomDefault() || shiftPressed) {
@@ -516,12 +561,21 @@ function ControlsBar() {
               {/* Look at Runway - dropdown button */}
               <div className={`runway-dropdown ${dockRunwayPanel ? 'docked' : ''}`} ref={runwayDropdownRef}>
                 <button
+                  type="button"
                   className={`control-button ${showRunwayDropdown ? 'active' : ''}`}
                   onClick={() => setShowRunwayDropdown(!showRunwayDropdown)}
                   title="Look at Runway"
                   disabled={!currentAirport || runwayThresholds.length === 0}
                 >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg
+                    aria-hidden="true"
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
                     <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" />
                     <circle cx="12" cy="12" r="3" />
                   </svg>
@@ -532,6 +586,7 @@ function ControlsBar() {
                     <div className="runway-dropdown-header">
                       <span className="runway-dropdown-title">Runways</span>
                       <button
+                        type="button"
                         className={`runway-pin-btn ${dockRunwayPanel ? 'pinned' : ''}`}
                         onClick={() => updateUISettings({ dockRunwayPanel: !dockRunwayPanel })}
                         title={
@@ -539,6 +594,7 @@ function ControlsBar() {
                         }
                       >
                         <svg
+                          aria-hidden="true"
                           width="14"
                           height="14"
                           viewBox="0 0 24 24"
@@ -553,7 +609,7 @@ function ControlsBar() {
                     </div>
                     <div className="runway-dropdown-list">
                       {runwayThresholds.map((item) => (
-                        <button key={item.id} className="runway-dropdown-item" onClick={item.onClick}>
+                        <button type="button" key={item.id} className="runway-dropdown-item" onClick={item.onClick}>
                           {item.label}
                         </button>
                       ))}
@@ -574,7 +630,15 @@ function ControlsBar() {
                     id: 'search',
                     label: 'Search Flights',
                     icon: (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <svg
+                        aria-hidden="true"
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
                         <circle cx="11" cy="11" r="8" />
                         <path d="m21 21-4.35-4.35" />
                       </svg>
@@ -644,34 +708,61 @@ function ControlsBar() {
             <div className="controls-right">
               {/* Buttons hidden on mobile - appear in MoreMenu instead */}
               <button
+                type="button"
                 className={`control-button hide-on-mobile ${isMeasuring ? 'active' : ''}`}
                 onClick={toggleMeasuring}
                 title="Measuring Tool (M)"
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  aria-hidden="true"
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   <path d="M2 12h20M12 2v20M6 6l12 12M18 6L6 18" />
                 </svg>
               </button>
 
               <button
+                type="button"
                 className="control-button hide-on-mobile"
                 onClick={() => setShowBookmarkModal(!showBookmarkModal)}
                 title="Bookmark Manager (Ctrl+B)"
                 disabled={!currentAirport}
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  aria-hidden="true"
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   <path d="M4 6h16M4 12h16M4 18h16" />
                   <path d="M19 4l-5 5M19 10l-5 5M19 16l-5 5" />
                 </svg>
               </button>
 
               <button
+                type="button"
                 className="control-button hide-on-mobile"
                 onClick={() => addViewport()}
                 title={`Add Inset Viewport (${insetCount} active)`}
                 disabled={!currentAirport}
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  aria-hidden="true"
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
                   <rect x="12" y="3" width="9" height="9" rx="1" ry="1" />
                 </svg>
@@ -689,7 +780,15 @@ function ControlsBar() {
                     id: 'measure',
                     label: 'Measuring Tool',
                     icon: (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <svg
+                        aria-hidden="true"
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
                         <path d="M2 12h20M12 2v20M6 6l12 12M18 6L6 18" />
                       </svg>
                     ),
@@ -700,7 +799,15 @@ function ControlsBar() {
                     id: 'bookmarks',
                     label: 'Bookmarks',
                     icon: (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <svg
+                        aria-hidden="true"
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
                         <path d="M4 6h16M4 12h16M4 18h16" />
                         <path d="M19 4l-5 5M19 10l-5 5M19 16l-5 5" />
                       </svg>
@@ -712,7 +819,15 @@ function ControlsBar() {
                     id: 'inset',
                     label: 'Add Inset',
                     icon: (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <svg
+                        aria-hidden="true"
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
                         <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
                         <rect x="12" y="3" width="9" height="9" rx="1" ry="1" />
                       </svg>
@@ -726,15 +841,41 @@ function ControlsBar() {
               />
 
               {currentAirport && (
-                <button className="control-button" onClick={() => setShowExitConfirm(true)} title="Back to Main Menu">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <button
+                  type="button"
+                  className="control-button"
+                  onClick={() => setShowExitConfirm(true)}
+                  title="Back to Main Menu"
+                >
+                  <svg
+                    aria-hidden="true"
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
                     <path d="M19 12H5M12 19l-7-7 7-7" />
                   </svg>
                 </button>
               )}
 
-              <button className="control-button" onClick={() => setShowSettings(!showSettings)} title="Settings">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <button
+                type="button"
+                className="control-button"
+                onClick={() => setShowSettings(!showSettings)}
+                title="Settings"
+              >
+                <svg
+                  aria-hidden="true"
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   <circle cx="12" cy="12" r="3" />
                   <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
                 </svg>
@@ -777,15 +918,18 @@ function ControlsBar() {
 
       {/* Exit Airport Confirmation Modal */}
       {showExitConfirm && (
-        <div className="modal-overlay" onClick={() => setShowExitConfirm(false)}>
-          <div className="modal exit-confirm-modal" onClick={(e) => e.stopPropagation()}>
+        // biome-ignore lint/a11y/noStaticElementInteractions: modal overlay backdrop
+        <div className="modal-overlay" role="presentation" onClick={() => setShowExitConfirm(false)}>
+          {/* biome-ignore lint/a11y/useKeyWithClickEvents: stops click propagation to overlay */}
+          <div className="modal exit-confirm-modal" role="dialog" onClick={(e) => e.stopPropagation()}>
             <h3>Leave {currentAirport?.icao}?</h3>
             <p>Return to the airport selection screen?</p>
             <div className="modal-buttons">
-              <button className="modal-button cancel" onClick={() => setShowExitConfirm(false)}>
+              <button type="button" className="modal-button cancel" onClick={() => setShowExitConfirm(false)}>
                 Cancel
               </button>
               <button
+                type="button"
                 className="modal-button confirm"
                 onClick={() => {
                   setShowExitConfirm(false)

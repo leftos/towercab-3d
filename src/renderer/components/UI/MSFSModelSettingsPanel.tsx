@@ -41,7 +41,7 @@ function MSFSModelSettingsPanelRemote() {
         </div>
 
         <div className="fsltl-section">
-          <label>Status</label>
+          <span>Status</span>
           <div className="fsltl-status-row">
             <span className="fsltl-status-value">
               {settings.enableFsltl ? 'FSLTL Enabled' : 'FSLTL Disabled'}
@@ -291,12 +291,12 @@ function MSFSModelSettingsPanel() {
       <div className="fsltl-import-panel">
         {/* Community Folder Path */}
         <div className="fsltl-section">
-          <label>MSFS Community Folder</label>
+          <span>MSFS Community Folder</span>
           <div className="fsltl-path-row">
             <span className="fsltl-path" title={settings.communityPath || ''}>
               {settings.communityPath || 'Not selected'}
             </span>
-            <button className="control-button" onClick={handleBrowseCommunity} disabled={isDetecting}>
+            <button type="button" className="control-button" onClick={handleBrowseCommunity} disabled={isDetecting}>
               {isDetecting ? 'Detecting...' : 'Browse...'}
             </button>
           </div>
@@ -316,7 +316,7 @@ function MSFSModelSettingsPanel() {
         {/* Source Priority & Enable/Disable */}
         {settings.communityPath && (
           <div className="fsltl-section">
-            <label>Model Sources (use arrows to reorder priority)</label>
+            <span>Model Sources (use arrows to reorder priority)</span>
             <div className="msfs-source-list">
               {settings.priority.map((source, index) => {
                 const isEnabled = source === 'fsltl' ? settings.enableFsltl : settings.enableAig
@@ -328,6 +328,7 @@ function MSFSModelSettingsPanel() {
                   <div key={source} className="msfs-source-item">
                     <div className="msfs-source-arrows">
                       <button
+                        type="button"
                         className="msfs-arrow-btn"
                         onClick={() => handleMoveSource(index, 'up')}
                         disabled={index === 0 || isIndexing}
@@ -336,6 +337,7 @@ function MSFSModelSettingsPanel() {
                         ▲
                       </button>
                       <button
+                        type="button"
                         className="msfs-arrow-btn"
                         onClick={() => handleMoveSource(index, 'down')}
                         disabled={index === settings.priority.length - 1 || isIndexing}
@@ -367,13 +369,14 @@ function MSFSModelSettingsPanel() {
 
         {/* VMR File Management */}
         <div className="fsltl-section">
-          <label>VMR Files (use arrows to reorder priority)</label>
+          <span>VMR Files (use arrows to reorder priority)</span>
           {vmrFiles.length > 0 ? (
             <div className="msfs-vmr-list">
               {vmrFiles.map((file, index) => (
                 <div key={file} className="msfs-vmr-item">
                   <div className="msfs-vmr-arrows">
                     <button
+                      type="button"
                       className="msfs-arrow-btn"
                       onClick={() => handleMoveVmr(index, 'up')}
                       disabled={index === 0}
@@ -382,6 +385,7 @@ function MSFSModelSettingsPanel() {
                       ▲
                     </button>
                     <button
+                      type="button"
                       className="msfs-arrow-btn"
                       onClick={() => handleMoveVmr(index, 'down')}
                       disabled={index === vmrFiles.length - 1}
@@ -393,7 +397,12 @@ function MSFSModelSettingsPanel() {
                   <span className="msfs-vmr-name" title={file}>
                     #{index + 1} {getFilename(file)}
                   </span>
-                  <button className="msfs-vmr-remove" onClick={() => handleRemoveVmr(index)} title="Remove VMR file">
+                  <button
+                    type="button"
+                    className="msfs-vmr-remove"
+                    onClick={() => handleRemoveVmr(index)}
+                    title="Remove VMR file"
+                  >
                     ×
                   </button>
                 </div>
@@ -402,7 +411,7 @@ function MSFSModelSettingsPanel() {
           ) : (
             <p className="msfs-vmr-empty">No VMR files imported</p>
           )}
-          <button className="control-button" onClick={handleImportVmr}>
+          <button type="button" className="control-button" onClick={handleImportVmr}>
             Import VMR Files...
           </button>
           <p className="setting-hint">
@@ -434,7 +443,7 @@ function MSFSModelSettingsPanel() {
 
         {/* Texture Quality */}
         <div className="fsltl-section">
-          <label>Texture Quality</label>
+          <span>Texture Quality</span>
           <select
             value={settings.textureScale}
             onChange={(e) => handleTextureScaleChange(e.target.value as FSLTLTextureScale)}
@@ -451,16 +460,17 @@ function MSFSModelSettingsPanel() {
 
         {/* Cache Settings */}
         <div className="fsltl-section">
-          <label>Model Cache Directory</label>
+          <span>Model Cache Directory</span>
           <div className="fsltl-path-row">
             <span className="fsltl-path" title={settings.cacheDirectory || ''}>
               {settings.cacheDirectory || 'Using default app data folder'}
             </span>
-            <button className="control-button" onClick={handleBrowseCache}>
+            <button type="button" className="control-button" onClick={handleBrowseCache}>
               Browse...
             </button>
             {settings.cacheDirectory && (
               <button
+                type="button"
                 className="control-button"
                 onClick={() => updateMsfsModels({ cacheDirectory: null })}
                 title="Reset to default"
@@ -474,7 +484,7 @@ function MSFSModelSettingsPanel() {
 
         {/* Cache Limit */}
         <div className="fsltl-section">
-          <label>Cache Size Limit</label>
+          <span>Cache Size Limit</span>
           <div className="msfs-cache-limit-row">
             <select
               value={settings.cacheLimitMB === null ? 'unlimited' : settings.cacheLimitMB}
@@ -497,13 +507,13 @@ function MSFSModelSettingsPanel() {
 
         {/* Cache Stats */}
         <div className="fsltl-section">
-          <label>Cache Status</label>
+          <span>Cache Status</span>
           <div className="msfs-cache-stats">
             <span>{cacheStats.entryCount} models cached</span>
             <span>{cacheStats.totalSizeMB} MB used</span>
             {cacheStats.limitMB !== null && <span>/ {cacheStats.limitMB} MB limit</span>}
           </div>
-          <button className="control-button" onClick={handleClearCache}>
+          <button type="button" className="control-button" onClick={handleClearCache}>
             Clear Cache
           </button>
         </div>

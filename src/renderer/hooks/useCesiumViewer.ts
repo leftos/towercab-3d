@@ -486,7 +486,6 @@ export function useCesiumViewer(
       edgeDetectionRef.current = null
       silhouetteStageRef.current = null
     }
-    // biome-ignore lint/correctness/useExhaustiveDependencies: graphics settings used at init only; msaaSamples captured in ref (requires restart)
   }, [
     cesiumIonToken,
     isInset,

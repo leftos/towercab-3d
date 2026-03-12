@@ -68,10 +68,10 @@ function UpdateNotification() {
         {status === 'available' && updateInfo && (
           <>
             <span className="update-message">Update available: v{updateInfo.version}</span>
-            <button className="update-button primary" onClick={handleDownload}>
+            <button type="button" className="update-button primary" onClick={handleDownload}>
               Download & Install
             </button>
-            <button className="update-button secondary" onClick={handleDismiss}>
+            <button type="button" className="update-button secondary" onClick={handleDismiss}>
               Later
             </button>
           </>
@@ -101,10 +101,10 @@ function UpdateNotification() {
         {status === 'ready' && (
           <>
             <span className="update-message">Update ready! Restart to apply.</span>
-            <button className="update-button primary" onClick={handleRestart}>
+            <button type="button" className="update-button primary" onClick={handleRestart}>
               Restart Now
             </button>
-            <button className="update-button secondary" onClick={handleDismiss}>
+            <button type="button" className="update-button secondary" onClick={handleDismiss}>
               Later
             </button>
           </>
@@ -113,7 +113,7 @@ function UpdateNotification() {
         {status === 'error' && (
           <>
             <span className="update-message error">Update failed: {error}</span>
-            <button className="update-button secondary" onClick={handleDismiss}>
+            <button type="button" className="update-button secondary" onClick={handleDismiss}>
               Dismiss
             </button>
           </>

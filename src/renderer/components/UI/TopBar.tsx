@@ -108,7 +108,7 @@ function TopBar({ onCommandClick }: TopBarProps) {
     <div className="top-bar">
       <div className="top-bar-left">
         <span className="compass-direction">{getCardinalDirection(heading)}</span>
-        <button className="airport-button" onClick={handleAirportClick}>
+        <button type="button" className="airport-button" onClick={handleAirportClick}>
           {currentAirport ? (
             <>
               <span className="airport-icao">{currentAirport.icao}</span>
@@ -139,6 +139,7 @@ function TopBar({ onCommandClick }: TopBarProps) {
               {dataSource === 'vatsim' && vnasAvailable && isTauri() && (
                 <div className="vnas-indicator-wrapper">
                   <button
+                    type="button"
                     ref={vnasToggleRef}
                     className={`vnas-indicator ${vnasConnected ? 'connected' : vnasConnecting ? 'connecting' : 'disconnected'}`}
                     onClick={() => setShowVnasPopover(!showVnasPopover)}

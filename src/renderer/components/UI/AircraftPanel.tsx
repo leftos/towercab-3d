@@ -288,7 +288,6 @@ function AircraftPanel() {
     })
 
     return sorted.slice(0, 50)
-    // biome-ignore lint/correctness/useExhaustiveDependencies: refreshTick intentionally forces periodic recalculation of distances/bearings
   }, [
     filtered,
     referencePoint,
@@ -385,7 +384,7 @@ function AircraftPanel() {
           <h3>Nearby Aircraft</h3>
           {vnasConnected && (
             <span className="data-source-badge live" title="Receiving 1Hz live updates via vNAS">
-              <svg width="6" height="6" viewBox="0 0 6 6">
+              <svg aria-hidden="true" width="6" height="6" viewBox="0 0 6 6">
                 <circle cx="3" cy="3" r="3" fill="currentColor" />
               </svg>
               1s
@@ -400,11 +399,20 @@ function AircraftPanel() {
         <div className="header-right">
           <span className="aircraft-count">{nearbyAircraft.length}</span>
           <button
+            type="button"
             className="collapse-btn"
             onClick={() => setIsCollapsed(!isCollapsed)}
             title={isCollapsed ? 'Expand panel' : 'Collapse panel'}
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              aria-hidden="true"
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               {isCollapsed ? <polyline points="6 9 12 15 18 9" /> : <polyline points="18 15 12 9 6 15" />}
             </svg>
           </button>
@@ -423,6 +431,7 @@ function AircraftPanel() {
             />
             <div className="filter-controls">
               <button
+                type="button"
                 className={`filter-btn ${filterWeatherVisibility ? 'active' : ''}`}
                 onClick={() => setFilterWeatherVisibility(!filterWeatherVisibility)}
                 title="Only show aircraft visible through weather (affects both list and map)"
@@ -431,6 +440,7 @@ function AircraftPanel() {
                 Visible
               </button>
               <button
+                type="button"
                 className={`filter-btn ${filterAirportTraffic ? 'active' : ''}`}
                 onClick={() => setFilterAirportTraffic(!filterAirportTraffic)}
                 title="Only show aircraft departing from or arriving at this airport (affects both list and map)"
@@ -463,13 +473,14 @@ function AircraftPanel() {
                 <span className="following-callsign">{followingCallsign}</span>
               </div>
               <button
+                type="button"
                 className={`follow-mode-btn ${followMode}`}
                 onClick={toggleFollowMode}
                 title="Toggle follow mode (O)"
               >
                 {followMode === 'tower' ? 'Tower' : 'Orbit'}
               </button>
-              <button className="stop-following-btn" onClick={() => stopFollowing()}>
+              <button type="button" className="stop-following-btn" onClick={() => stopFollowing()}>
                 Stop (Esc)
               </button>
             </div>
@@ -486,7 +497,8 @@ function AircraftPanel() {
                 const phaseLabel = aircraft.phase ? getPhaseLabel(aircraft.phase) : null
                 const tierClass = aircraft.tier ? getTierClass(aircraft.tier) : ''
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={aircraft.callsign}
                     className={`aircraft-item ${isFollowing ? 'following' : ''} ${tierClass} clickable`}
                     onClick={() => handleLookAt(aircraft)}
@@ -498,7 +510,7 @@ function AircraftPanel() {
                           className="live-indicator"
                           title={`Display delay: ${(aircraft.displayDelay / 1000).toFixed(1)}s`}
                         >
-                          <svg width="6" height="6" viewBox="0 0 6 6">
+                          <svg aria-hidden="true" width="6" height="6" viewBox="0 0 6 6">
                             <circle cx="3" cy="3" r="3" fill={aircraft.displayDelay < 3000 ? '#0c7' : '#fc0'} />
                           </svg>
                         </span>
@@ -513,6 +525,7 @@ function AircraftPanel() {
                       </div>
                       <div className="aircraft-header-right">
                         <button
+                          type="button"
                           className={`follow-btn ${isFollowing ? 'active' : ''}`}
                           onClick={(e) => {
                             e.stopPropagation() // Don't trigger look-at
@@ -521,11 +534,12 @@ function AircraftPanel() {
                           title={isFollowing ? 'Stop following' : 'Follow aircraft'}
                         >
                           {isFollowing ? (
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                               <circle cx="12" cy="12" r="10" />
                             </svg>
                           ) : (
                             <svg
+                              aria-hidden="true"
                               width="14"
                               height="14"
                               viewBox="0 0 24 24"
@@ -573,7 +587,7 @@ function AircraftPanel() {
                         </span>
                       </div>
                     ) : null}
-                  </div>
+                  </button>
                 )
               })
             )}

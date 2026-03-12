@@ -95,11 +95,20 @@ function MobileToolsFlyout({
 
       {/* Toggle button - always visible */}
       <button
+        type="button"
         className={`mobile-tools-toggle ${isOpen ? 'active' : ''}`}
         onClick={() => setIsOpen(!isOpen)}
         title={isOpen ? 'Hide tools' : 'Show tools'}
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg
+          aria-hidden="true"
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
           <circle cx="12" cy="12" r="1" />
           <circle cx="12" cy="5" r="1" />
           <circle cx="12" cy="19" r="1" />
@@ -131,7 +140,7 @@ function MobileToolsFlyout({
                   <span className="mobile-status-detail">{remoteHost}</span>
                 </div>
                 {remoteStatus === 'disconnected' && (
-                  <button className="mobile-reconnect-btn" onClick={handleReconnect}>
+                  <button type="button" className="mobile-reconnect-btn" onClick={handleReconnect}>
                     Retry
                   </button>
                 )}
@@ -145,6 +154,7 @@ function MobileToolsFlyout({
           {/* Tool buttons */}
           <div className="mobile-tools-buttons">
             <button
+              type="button"
               className="mobile-tool-btn"
               onClick={() => {
                 togglePerformanceHUD()
@@ -152,13 +162,22 @@ function MobileToolsFlyout({
               }}
               title="Performance monitor (F1)"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg
+                aria-hidden="true"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
                 <path d="M12 20V10M18 20V4M6 20v-4" />
               </svg>
               <span>Perf</span>
             </button>
 
             <button
+              type="button"
               className="mobile-tool-btn"
               onClick={() => {
                 toggleModelMatchingModal()
@@ -166,13 +185,22 @@ function MobileToolsFlyout({
               }}
               title="Model matching (F3)"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg
+                aria-hidden="true"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
                 <path d="M4 6h16M4 12h16M4 18h10" />
               </svg>
               <span>Models</span>
             </button>
 
             <button
+              type="button"
               className="mobile-tool-btn"
               onClick={() => {
                 onCommandClick()

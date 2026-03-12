@@ -159,12 +159,16 @@ class CustomVMRServiceClass {
     const allRules = new Set<string>()
 
     // Collect all unique model names from both default and airline rules
-    this.defaultRules.forEach((entry) => {
-      entry.rule.modelNames.forEach((name) => allRules.add(name))
-    })
-    this.airlineRules.forEach((entry) => {
-      entry.rule.modelNames.forEach((name) => allRules.add(name))
-    })
+    for (const entry of this.defaultRules) {
+      for (const name of entry.rule.modelNames) {
+        allRules.add(name)
+      }
+    }
+    for (const entry of this.airlineRules) {
+      for (const name of entry.rule.modelNames) {
+        allRules.add(name)
+      }
+    }
 
     // Pre-load manifest for each model
     for (const modelName of allRules) {

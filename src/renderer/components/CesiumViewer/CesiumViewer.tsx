@@ -770,7 +770,6 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
         setRefPosIfChanged(interpolated.interpolatedLatitude, interpolated.interpolatedLongitude)
       }
     }
-    // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally using specific babylonOverlay properties
   }, [
     currentAirport,
     towerHeight,

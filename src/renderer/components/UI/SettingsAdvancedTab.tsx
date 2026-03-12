@@ -89,7 +89,7 @@ function SettingsAdvancedTab() {
     <>
       <CollapsibleSection title="Appearance">
         <div className="setting-item">
-          <label>Theme</label>
+          <span>Theme</span>
           <div className="radio-group">
             <label>
               <input
@@ -165,8 +165,16 @@ function SettingsAdvancedTab() {
 
         <div className="setting-item">
           <div className="import-export-buttons">
-            <button className="control-button" onClick={() => diagnosticFileInputRef.current?.click()}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <button type="button" className="control-button" onClick={() => diagnosticFileInputRef.current?.click()}>
+              <svg
+                aria-hidden="true"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                 <polyline points="17 8 12 3 7 8" />
                 <line x1="12" y1="3" x2="12" y2="15" />
@@ -193,7 +201,7 @@ function SettingsAdvancedTab() {
               Viewing diagnostic data
               {importedAppState.airport ? ` (${importedAppState.airport.icao})` : ''}
             </p>
-            <button className="control-button" onClick={clearImportedReplay} style={{ marginTop: '8px' }}>
+            <button type="button" className="control-button" onClick={clearImportedReplay} style={{ marginTop: '8px' }}>
               Clear Diagnostic Data
             </button>
           </div>
@@ -206,6 +214,7 @@ function SettingsAdvancedTab() {
           <CollapsibleSection title="Updates">
             <div className="setting-row">
               <button
+                type="button"
                 className="control-button"
                 onClick={() => checkForUpdates()}
                 disabled={updateStatus === 'checking' || updateStatus === 'downloading'}
@@ -221,7 +230,12 @@ function SettingsAdvancedTab() {
           <CollapsibleSection title="Troubleshooting">
             <div className="setting-row">
               <span className="setting-label">Repair Settings Migration</span>
-              <button className="control-button" onClick={handleRepairSettings} disabled={repairStatus === 'running'}>
+              <button
+                type="button"
+                className="control-button"
+                onClick={handleRepairSettings}
+                disabled={repairStatus === 'running'}
+              >
                 {repairStatus === 'running' ? 'Repairing...' : 'Repair Settings'}
               </button>
             </div>

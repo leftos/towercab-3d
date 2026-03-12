@@ -870,7 +870,9 @@ function updateInterpolation() {
   const currentCount = statesMap.size
   if (currentCount !== sharedLastAircraftCountRef.current) {
     sharedLastAircraftCountRef.current = currentCount
-    subscribers.forEach((callback) => callback())
+    for (const callback of subscribers) {
+      callback()
+    }
   }
 
   performanceMonitor.endTimer('interpolation')

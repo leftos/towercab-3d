@@ -870,7 +870,9 @@ export async function repairSettingsMigration(): Promise<{
       'viewport-store-bookmark-migration-v1',
       'viewport-store-global-migration-v1',
     ]
-    migrationKeys.forEach((key) => localStorage.removeItem(key))
+    for (const key of migrationKeys) {
+      localStorage.removeItem(key)
+    }
     console.log('[RepairSettings] Cleared migration keys')
 
     // Read settings from localStorage

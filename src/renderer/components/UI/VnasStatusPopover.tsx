@@ -179,7 +179,7 @@ export function VnasStatusPopover({ onClose, toggleRef }: VnasStatusPopoverProps
     <div className="vnas-popover" ref={popoverRef}>
       <div className="vnas-popover-header">
         <span>vNAS Real-Time Updates</span>
-        <button className="vnas-popover-close" onClick={onClose}>
+        <button type="button" className="vnas-popover-close" onClick={onClose}>
           ×
         </button>
       </div>
@@ -202,7 +202,7 @@ export function VnasStatusPopover({ onClose, toggleRef }: VnasStatusPopoverProps
         {/* Environment selector - only when disconnected */}
         {vnasStatus.state === 'disconnected' && !isAuthenticating && (
           <div className="vnas-popover-env">
-            <label>Environment</label>
+            <span>Environment</span>
             <select value={selectedEnv} onChange={(e) => setSelectedEnv(e.target.value as VnasEnvironment)}>
               <option value="live">Live</option>
               <option value="sweatbox1">Sweatbox 1</option>
@@ -228,7 +228,7 @@ export function VnasStatusPopover({ onClose, toggleRef }: VnasStatusPopoverProps
         {/* Action buttons */}
         <div className="vnas-popover-actions">
           {vnasStatus.state === 'disconnected' && !isAuthenticating && (
-            <button className="vnas-popover-btn primary" onClick={handleStartAuth}>
+            <button type="button" className="vnas-popover-btn primary" onClick={handleStartAuth}>
               Connect
             </button>
           )}
@@ -236,20 +236,21 @@ export function VnasStatusPopover({ onClose, toggleRef }: VnasStatusPopoverProps
           {isAuthenticating && (
             <>
               <button
+                type="button"
                 className="vnas-popover-btn primary"
                 onClick={handleManualCallback}
                 disabled={!callbackUrl.trim()}
               >
                 Submit
               </button>
-              <button className="vnas-popover-btn" onClick={handleCancelAuth}>
+              <button type="button" className="vnas-popover-btn" onClick={handleCancelAuth}>
                 Cancel
               </button>
             </>
           )}
 
           {(isConnecting || vnasStatus.state === 'connected') && !isAuthenticating && (
-            <button className="vnas-popover-btn danger" onClick={handleDisconnect}>
+            <button type="button" className="vnas-popover-btn danger" onClick={handleDisconnect}>
               Disconnect
             </button>
           )}

@@ -164,7 +164,15 @@ function GlobalSearchPanel() {
         onClick={handleOpenSearch}
         title="Global Aircraft Search (Ctrl+K)"
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg
+          aria-hidden="true"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
           <circle cx="11" cy="11" r="8" />
           <path d="M21 21l-4.35-4.35" />
         </svg>
@@ -174,10 +182,20 @@ function GlobalSearchPanel() {
 
       {isOpen &&
         createPortal(
-          <div className="global-search-overlay" onClick={() => setIsOpen(false)}>
-            <div className="global-search-modal" onClick={(e) => e.stopPropagation()}>
+          // biome-ignore lint/a11y/noStaticElementInteractions: modal overlay backdrop
+          <div className="global-search-overlay" role="presentation" onClick={() => setIsOpen(false)}>
+            {/* biome-ignore lint/a11y/useKeyWithClickEvents: stops click propagation to overlay */}
+            <div className="global-search-modal" role="dialog" onClick={(e) => e.stopPropagation()}>
               <div className="search-header">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  aria-hidden="true"
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   <circle cx="11" cy="11" r="8" />
                   <path d="M21 21l-4.35-4.35" />
                 </svg>
@@ -191,7 +209,15 @@ function GlobalSearchPanel() {
                   onKeyDown={handleKeyDown}
                 />
                 <button type="button" className="close-search-btn" onClick={() => setIsOpen(false)}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg
+                    aria-hidden="true"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
                     <path d="M18 6L6 18M6 6l12 12" />
                   </svg>
                 </button>
@@ -213,7 +239,7 @@ function GlobalSearchPanel() {
                       <div className="result-main">
                         {result.isLive && (
                           <span className="live-indicator" title="1Hz live updates">
-                            <svg width="6" height="6" viewBox="0 0 6 6">
+                            <svg aria-hidden="true" width="6" height="6" viewBox="0 0 6 6">
                               <circle cx="3" cy="3" r="3" fill="#0c7" />
                             </svg>
                           </span>
@@ -247,7 +273,7 @@ function GlobalSearchPanel() {
                 <div className="footer-left">
                   {vnasConnected ? (
                     <span className="data-source-badge live" title="Receiving 1Hz live updates via vNAS">
-                      <svg width="6" height="6" viewBox="0 0 6 6">
+                      <svg aria-hidden="true" width="6" height="6" viewBox="0 0 6 6">
                         <circle cx="3" cy="3" r="3" fill="currentColor" />
                       </svg>
                       1s updates

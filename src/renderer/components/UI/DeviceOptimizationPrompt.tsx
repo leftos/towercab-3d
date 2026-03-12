@@ -64,7 +64,15 @@ function DeviceOptimizationPrompt() {
     <div className="device-opt-overlay">
       <div className="device-opt-modal">
         <div className="device-opt-icon">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <svg
+            aria-hidden="true"
+            width="48"
+            height="48"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+          >
             <rect x="4" y="2" width="16" height="20" rx="2" />
             <line x1="12" y1="18" x2="12" y2="18.01" strokeWidth="2" strokeLinecap="round" />
           </svg>
@@ -100,10 +108,10 @@ function DeviceOptimizationPrompt() {
         </div>
 
         <div className="device-opt-actions">
-          <button className="device-opt-btn device-opt-btn-primary" onClick={handleApplyOptimizations}>
+          <button type="button" className="device-opt-btn device-opt-btn-primary" onClick={handleApplyOptimizations}>
             Apply Optimizations
           </button>
-          <button className="device-opt-btn device-opt-btn-secondary" onClick={handleDismiss}>
+          <button type="button" className="device-opt-btn device-opt-btn-secondary" onClick={handleDismiss}>
             Keep Desktop Settings
           </button>
         </div>

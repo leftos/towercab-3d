@@ -137,6 +137,7 @@ export function VnasPanel() {
   if (!isOpen) {
     return (
       <button
+        type="button"
         className="vnas-panel-toggle"
         onClick={() => setIsOpen(true)}
         title="vNAS Panel (Dev Only)"
@@ -151,13 +152,15 @@ export function VnasPanel() {
     <div className="vnas-panel">
       <div className="vnas-panel-header">
         <span>vNAS (Dev)</span>
-        <button onClick={() => setIsOpen(false)}>X</button>
+        <button type="button" onClick={() => setIsOpen(false)}>
+          X
+        </button>
       </div>
 
       <div className="vnas-panel-content">
         {/* Availability Status */}
         <div className="vnas-panel-row">
-          <label>Feature Status</label>
+          <span>Feature Status</span>
           <span className={`vnas-status-badge ${status.available ? 'available' : 'unavailable'}`}>
             {status.available ? 'Compiled In' : 'Not Compiled'}
           </span>
@@ -165,7 +168,7 @@ export function VnasPanel() {
 
         {/* Connection State */}
         <div className="vnas-panel-row">
-          <label>Connection</label>
+          <span>Connection</span>
           <span className="vnas-status-indicator" style={{ color: getStateColor() }}>
             {getStateLabel()}
           </span>
@@ -174,7 +177,7 @@ export function VnasPanel() {
         {/* Show subscribed facilities if connected */}
         {status.subscribedFacilities.length > 0 && (
           <div className="vnas-panel-row">
-            <label>Subscribed</label>
+            <span>Subscribed</span>
             <span className="vnas-facility">{status.subscribedFacilities.join(', ')}</span>
           </div>
         )}
@@ -188,7 +191,7 @@ export function VnasPanel() {
             {status.state === 'disconnected' && !isAuthenticating && (
               <>
                 <div className="vnas-panel-row">
-                  <label>Environment</label>
+                  <span>Environment</span>
                   <select value={selectedEnv} onChange={(e) => setSelectedEnv(e.target.value as VnasEnvironment)}>
                     <option value="live">Live</option>
                     <option value="sweatbox1">Sweatbox 1</option>
@@ -196,7 +199,7 @@ export function VnasPanel() {
                   </select>
                 </div>
 
-                <button className="vnas-panel-button primary" onClick={handleStartAuth}>
+                <button type="button" className="vnas-panel-button primary" onClick={handleStartAuth}>
                   Connect to vNAS
                 </button>
               </>
@@ -218,13 +221,14 @@ export function VnasPanel() {
                 />
                 <div className="vnas-panel-buttons">
                   <button
+                    type="button"
                     className="vnas-panel-button primary"
                     onClick={handleManualCallback}
                     disabled={!callbackUrl.trim()}
                   >
                     Submit
                   </button>
-                  <button className="vnas-panel-button" onClick={handleCancelAuth}>
+                  <button type="button" className="vnas-panel-button" onClick={handleCancelAuth}>
                     Cancel
                   </button>
                 </div>
@@ -235,12 +239,12 @@ export function VnasPanel() {
               <>
                 {/* Subscribe button if not subscribed to current airport */}
                 {currentAirport?.icao && !isSubscribedTo(currentAirport.icao) && (
-                  <button className="vnas-panel-button" onClick={handleSubscribe}>
+                  <button type="button" className="vnas-panel-button" onClick={handleSubscribe}>
                     Subscribe to {currentAirport.icao}
                   </button>
                 )}
 
-                <button className="vnas-panel-button danger" onClick={handleDisconnect}>
+                <button type="button" className="vnas-panel-button danger" onClick={handleDisconnect}>
                   Disconnect
                 </button>
               </>

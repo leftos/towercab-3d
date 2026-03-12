@@ -205,16 +205,19 @@ class FSLTLServiceClass {
    */
   private parseVMRContentFallback(vmrContent: string): void {
     const ruleRegex = /<ModelMatchRule\s+([^>]+)\s*\/>/g
-    let match: RegExpExecArray | null
+    let match: RegExpExecArray | null = ruleRegex.exec(vmrContent)
 
-    while ((match = ruleRegex.exec(vmrContent)) !== null) {
+    while (match !== null) {
       const attrs = match[1]
 
       const typeCodeMatch = attrs.match(/TypeCode\s*=\s*"([^"]+)"/)
       const modelNameMatch = attrs.match(/ModelName\s*=\s*"([^"]+)"/)
       const callsignMatch = attrs.match(/CallsignPrefix\s*=\s*"([^"]+)"/)
 
-      if (!typeCodeMatch || !modelNameMatch) continue
+      if (!typeCodeMatch || !modelNameMatch) {
+        match = ruleRegex.exec(vmrContent)
+        continue
+      }
 
       const typeCode = typeCodeMatch[1].toUpperCase()
       const modelNames = modelNameMatch[1].split('//')
@@ -242,6 +245,7 @@ class FSLTLServiceClass {
           this.typeAliases.set(typeCode, modelType)
         }
       }
+      match = ruleRegex.exec(vmrContent)
     }
 
     this.vmrLoaded = true

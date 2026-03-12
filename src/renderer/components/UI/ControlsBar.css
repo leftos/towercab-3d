@@ -142,10 +142,6 @@
   pointer-events: none;
 }
 
-.settings-modal-overlay.no-blur .settings-modal {
-  pointer-events: auto;
-}
-
 .settings-modal {
   background: rgba(30, 30, 40, 0.98);
   border: 1px solid rgba(255, 255, 255, 0.15);
@@ -156,6 +152,10 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+.settings-modal-overlay.no-blur .settings-modal {
+  pointer-events: auto;
 }
 
 .settings-header {
@@ -244,15 +244,24 @@
 
 /* Collapsible section styles */
 .settings-section.collapsible .collapsible-header {
+  display: flex;
+  align-items: center;
+}
+
+.settings-section.collapsible .collapsible-header .collapsible-toggle {
+  all: unset;
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 6px;
   user-select: none;
   transition: color 0.15s ease;
+  width: 100%;
+  font: inherit;
+  color: inherit;
 }
 
-.settings-section.collapsible .collapsible-header:hover {
+.settings-section.collapsible .collapsible-header .collapsible-toggle:hover {
   color: rgba(255, 255, 255, 0.7);
 }
 

@@ -504,10 +504,11 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
 
   return (
     <div className="settings-modal-overlay">
-      <div className="settings-modal timeline-debug-modal" onClick={(e) => e.stopPropagation()}>
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: stops click propagation to overlay */}
+      <div className="settings-modal timeline-debug-modal" role="dialog" onClick={(e) => e.stopPropagation()}>
         <div className="settings-header">
           <h2>Aircraft Timeline Debug</h2>
-          <button className="close-button" onClick={onClose}>
+          <button type="button" className="close-button" onClick={onClose}>
             &times;
           </button>
         </div>
@@ -543,6 +544,7 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
           </div>
 
           <button
+            type="button"
             className={`timeline-autoscroll ${config.autoscroll ? 'active' : ''}`}
             onClick={() => setConfig((c) => ({ ...c, autoscroll: !c.autoscroll }))}
           >
@@ -550,6 +552,7 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
           </button>
 
           <button
+            type="button"
             className="timeline-autoscroll"
             disabled={isSavingDiagnostic}
             onClick={async () => {
@@ -707,15 +710,23 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
       </div>
 
       {savedDiagnosticPath && (
-        <div className="settings-modal-overlay" style={{ zIndex: 10001 }} onClick={() => setSavedDiagnosticPath(null)}>
+        // biome-ignore lint/a11y/noStaticElementInteractions: modal overlay backdrop
+        <div
+          className="settings-modal-overlay"
+          role="presentation"
+          style={{ zIndex: 10001 }}
+          onClick={() => setSavedDiagnosticPath(null)}
+        >
+          {/* biome-ignore lint/a11y/useKeyWithClickEvents: stops click propagation to overlay */}
           <div
             className="settings-modal"
+            role="dialog"
             style={{ maxWidth: '500px', width: 'auto' }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="settings-header">
               <h2>Diagnostic Exported</h2>
-              <button className="close-button" onClick={() => setSavedDiagnosticPath(null)}>
+              <button type="button" className="close-button" onClick={() => setSavedDiagnosticPath(null)}>
                 &times;
               </button>
             </div>
@@ -735,6 +746,7 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
                 {savedDiagnosticPath}
               </code>
               <button
+                type="button"
                 className="control-button"
                 style={{ marginTop: '16px' }}
                 onClick={() => setSavedDiagnosticPath(null)}

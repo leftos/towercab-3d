@@ -16,7 +16,7 @@ function SettingsControlsCameraTab() {
     <>
       <CollapsibleSection title="Camera Behavior">
         <div className="setting-item">
-          <label>Default FOV</label>
+          <span>Default FOV</span>
           <div className="slider-with-value">
             <input
               type="range"
@@ -45,7 +45,7 @@ function SettingsControlsCameraTab() {
 
       <CollapsibleSection title="Input Sensitivity">
         <div className="setting-item">
-          <label>Camera Speed</label>
+          <span>Camera Speed</span>
           <div className="slider-with-value">
             <input
               type="range"
@@ -60,7 +60,7 @@ function SettingsControlsCameraTab() {
         </div>
 
         <div className="setting-item">
-          <label>Mouse Sensitivity</label>
+          <span>Mouse Sensitivity</span>
           <div className="slider-with-value">
             <input
               type="range"
@@ -76,7 +76,7 @@ function SettingsControlsCameraTab() {
         </div>
 
         <div className="setting-item">
-          <label>Joystick Sensitivity</label>
+          <span>Joystick Sensitivity</span>
           <div className="slider-with-value">
             <input
               type="range"
@@ -93,7 +93,7 @@ function SettingsControlsCameraTab() {
 
       <CollapsibleSection title="Orbit Camera">
         <div className="setting-item">
-          <label>Camera Lag (Cinematic)</label>
+          <span>Camera Lag (Cinematic)</span>
           <div className="slider-with-value">
             <input
               type="range"

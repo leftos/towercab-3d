@@ -112,7 +112,6 @@ function SettingsConfigurationTab({
         }
       })
       .catch(console.error)
-    // biome-ignore lint/correctness/useExhaustiveDependencies: one-time init
   }, [serverSettings.minimizeToTray])
 
   // Check vNAS availability on mount (only in Tauri)
@@ -346,6 +345,7 @@ function SettingsConfigurationTab({
           }}
         >
           <svg
+            aria-hidden="true"
             width="48"
             height="48"
             viewBox="0 0 24 24"
@@ -373,7 +373,7 @@ function SettingsConfigurationTab({
     <>
       <CollapsibleSection title="Cesium Ion">
         <div className="setting-item">
-          <label>API Token</label>
+          <span>API Token</span>
           <div className="token-input-row">
             <input
               type="text"
@@ -383,6 +383,7 @@ function SettingsConfigurationTab({
               className="text-input token-input"
             />
             <button
+              type="button"
               className={`token-save-button ${tokenSaved ? 'saved' : ''}`}
               onClick={handleSaveToken}
               disabled={!tokenInput.trim() || tokenInput === cesiumIonToken}
@@ -392,16 +393,15 @@ function SettingsConfigurationTab({
           </div>
           <p className="setting-hint">
             Get a free token at{' '}
-            <a
-              href="#"
-              onClick={(e) => {
-                e.preventDefault()
+            <button
+              type="button"
+              onClick={() => {
                 shellApi.openExternal('https://ion.cesium.com/tokens')
               }}
               className="external-link"
             >
               ion.cesium.com
-            </a>
+            </button>
             . Changes require saving to take effect.
           </p>
         </div>
@@ -409,7 +409,7 @@ function SettingsConfigurationTab({
 
       <CollapsibleSection title="Imagery Provider">
         <div className="setting-item">
-          <label>Satellite Imagery Source</label>
+          <span>Satellite Imagery Source</span>
           <div className="radio-group">
             <label>
               <input
@@ -439,7 +439,7 @@ function SettingsConfigurationTab({
 
         {imagerySettings.provider === 'google' && (
           <div className="setting-item">
-            <label>Google Maps API Key</label>
+            <span>Google Maps API Key</span>
             <div className="token-input-row">
               <input
                 type="text"
@@ -449,6 +449,7 @@ function SettingsConfigurationTab({
                 className="text-input token-input"
               />
               <button
+                type="button"
                 className={`token-save-button ${googleApiKeySaved ? 'saved' : ''}`}
                 onClick={handleSaveGoogleApiKey}
                 disabled={googleApiKeyInput.trim() === imagerySettings.googleMapsApiKey}
@@ -458,16 +459,15 @@ function SettingsConfigurationTab({
             </div>
             <p className="setting-hint">
               Get a key at{' '}
-              <a
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault()
+              <button
+                type="button"
+                onClick={() => {
                   shellApi.openExternal('https://console.cloud.google.com/apis/credentials')
                 }}
                 className="external-link"
               >
                 Google Cloud Console
-              </a>
+              </button>
               . Enable the Map Tiles API for your project.
             </p>
           </div>
@@ -475,7 +475,7 @@ function SettingsConfigurationTab({
 
         {/* Color Adjustments for current provider */}
         <div className="setting-item">
-          <label>Color Adjustments ({imagerySettings.provider === 'google' ? 'Google Maps' : 'Cesium Ion'})</label>
+          <span>Color Adjustments ({imagerySettings.provider === 'google' ? 'Google Maps' : 'Cesium Ion'})</span>
           <p className="setting-hint">
             Adjust colors for the current imagery provider. Each provider saves its own settings.
           </p>
@@ -506,7 +506,7 @@ function SettingsConfigurationTab({
           return (
             <>
               <div className="setting-item slider-item">
-                <label>Hue Shift: {currentAdjustments?.hueShift ?? 0}°</label>
+                <span>Hue Shift: {currentAdjustments?.hueShift ?? 0}°</span>
                 <input
                   type="range"
                   min="-180"
@@ -520,7 +520,7 @@ function SettingsConfigurationTab({
               </div>
 
               <div className="setting-item slider-item">
-                <label>Saturation: {((currentAdjustments?.saturation ?? 1) * 100).toFixed(0)}%</label>
+                <span>Saturation: {((currentAdjustments?.saturation ?? 1) * 100).toFixed(0)}%</span>
                 <input
                   type="range"
                   min="0"
@@ -534,7 +534,7 @@ function SettingsConfigurationTab({
               </div>
 
               <div className="setting-item slider-item">
-                <label>Brightness: {((currentAdjustments?.brightness ?? 1) * 100).toFixed(0)}%</label>
+                <span>Brightness: {((currentAdjustments?.brightness ?? 1) * 100).toFixed(0)}%</span>
                 <input
                   type="range"
                   min="50"
@@ -548,7 +548,7 @@ function SettingsConfigurationTab({
               </div>
 
               <div className="setting-item slider-item">
-                <label>Contrast: {((currentAdjustments?.contrast ?? 1) * 100).toFixed(0)}%</label>
+                <span>Contrast: {((currentAdjustments?.contrast ?? 1) * 100).toFixed(0)}%</span>
                 <input
                   type="range"
                   min="50"
@@ -562,7 +562,7 @@ function SettingsConfigurationTab({
               </div>
 
               <div className="setting-item">
-                <button className="secondary-button" onClick={resetAdjustments}>
+                <button type="button" className="secondary-button" onClick={resetAdjustments}>
                   Reset to Default
                 </button>
               </div>
@@ -573,7 +573,7 @@ function SettingsConfigurationTab({
 
       <CollapsibleSection title="Traffic Source">
         <div className="setting-item">
-          <label>Aircraft Data Source</label>
+          <span>Aircraft Data Source</span>
           <div className="radio-group">
             <label>
               <input
@@ -604,7 +604,7 @@ function SettingsConfigurationTab({
         {dataSource === 'realtraffic' && (
           <>
             <div className="setting-item">
-              <label>License Key</label>
+              <span>License Key</span>
               <div className="token-input-row">
                 <input
                   type="text"
@@ -616,6 +616,7 @@ function SettingsConfigurationTab({
                 />
                 {rtStatus !== 'connected' ? (
                   <button
+                    type="button"
                     className={`token-save-button ${rtLicenseSaved ? 'saved' : ''}`}
                     onClick={handleConnectRt}
                     disabled={!rtLicenseInput.trim() && !licenseKey}
@@ -623,7 +624,7 @@ function SettingsConfigurationTab({
                     {rtStatus === 'connecting' ? 'Connecting...' : 'Connect'}
                   </button>
                 ) : (
-                  <button className="token-save-button" onClick={handleDisconnectRt}>
+                  <button type="button" className="token-save-button" onClick={handleDisconnectRt}>
                     Disconnect
                   </button>
                 )}
@@ -641,22 +642,21 @@ function SettingsConfigurationTab({
               {rtStatus === 'disconnected' && (
                 <p className="setting-hint">
                   Get a license at{' '}
-                  <a
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault()
+                  <button
+                    type="button"
+                    onClick={() => {
                       shellApi.openExternal('https://www.flyrealtraffic.com')
                     }}
                     className="external-link"
                   >
                     flyrealtraffic.com
-                  </a>
+                  </button>
                 </p>
               )}
             </div>
 
             <div className="setting-item">
-              <label>Query Radius</label>
+              <span>Query Radius</span>
               <div className="slider-with-value">
                 <input
                   type="range"
@@ -671,7 +671,7 @@ function SettingsConfigurationTab({
             </div>
 
             <div className="setting-item">
-              <label>Max Parked Aircraft</label>
+              <span>Max Parked Aircraft</span>
               <div className="slider-with-value">
                 <input
                   type="range"
@@ -701,7 +701,7 @@ function SettingsConfigurationTab({
 
           {/* Connection Status */}
           <div className="setting-item">
-            <label>Status</label>
+            <span>Status</span>
             <span
               style={{
                 color:
@@ -737,7 +737,7 @@ function SettingsConfigurationTab({
           {vnasStatus.state === 'disconnected' && !vnasIsAuthenticating && (
             <>
               <div className="setting-item">
-                <label>Environment</label>
+                <span>Environment</span>
                 <select
                   value={vnasSelectedEnv}
                   onChange={(e) => setVnasSelectedEnv(e.target.value as VnasEnvironment)}
@@ -751,7 +751,7 @@ function SettingsConfigurationTab({
               </div>
 
               <div className="setting-item">
-                <button className="control-button" onClick={handleVnasStartAuth}>
+                <button type="button" className="control-button" onClick={handleVnasStartAuth}>
                   Connect to vNAS
                 </button>
                 <p className="setting-hint" style={{ marginTop: '8px' }}>
@@ -780,13 +780,14 @@ function SettingsConfigurationTab({
                 />
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button
+                    type="button"
                     className="control-button"
                     onClick={handleVnasManualCallback}
                     disabled={!vnasCallbackUrl.trim()}
                   >
                     Submit
                   </button>
-                  <button className="control-button" onClick={handleVnasCancelAuth}>
+                  <button type="button" className="control-button" onClick={handleVnasCancelAuth}>
                     Cancel
                   </button>
                 </div>
@@ -800,6 +801,7 @@ function SettingsConfigurationTab({
           ) && (
             <div className="setting-item">
               <button
+                type="button"
                 className="control-button"
                 onClick={handleVnasDisconnect}
                 style={{ background: 'rgba(244, 67, 54, 0.2)', borderColor: 'rgba(244, 67, 54, 0.4)' }}
@@ -852,7 +854,7 @@ function SettingsConfigurationTab({
             </p>
           </div>
           <div className="setting-item">
-            <label>Server Port</label>
+            <span>Server Port</span>
             <div className="slider-with-value">
               <input
                 type="number"
@@ -869,6 +871,7 @@ function SettingsConfigurationTab({
           </div>
           <div className="setting-item">
             <button
+              type="button"
               className={`control-button ${serverStatus?.running ? 'active' : ''}`}
               onClick={handleToggleServer}
               disabled={serverLoading}
@@ -884,7 +887,7 @@ function SettingsConfigurationTab({
           </div>
           {serverStatus?.running && (
             <div className="setting-item" style={{ marginTop: '12px' }}>
-              <label>Server URLs</label>
+              <span>Server URLs</span>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
                 {serverStatus.localUrl && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -892,6 +895,7 @@ function SettingsConfigurationTab({
                       {serverStatus.localUrl}
                     </code>
                     <button
+                      type="button"
                       className="control-button"
                       onClick={() => handleCopyUrl(serverStatus.localUrl!)}
                       style={{ padding: '4px 8px' }}
@@ -906,6 +910,7 @@ function SettingsConfigurationTab({
                       {url}
                     </code>
                     <button
+                      type="button"
                       className="control-button"
                       onClick={() => handleCopyUrl(url)}
                       style={{ padding: '4px 8px' }}
@@ -934,16 +939,32 @@ function SettingsConfigurationTab({
         </p>
         <div className="setting-item">
           <div className="import-export-buttons">
-            <button className="control-button" onClick={onShowExportModal}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <button type="button" className="control-button" onClick={onShowExportModal}>
+              <svg
+                aria-hidden="true"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                 <polyline points="7 10 12 15 17 10" />
                 <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
               Export Settings
             </button>
-            <button className="control-button" onClick={onShowImportModal}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <button type="button" className="control-button" onClick={onShowImportModal}>
+              <svg
+                aria-hidden="true"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                 <polyline points="17 8 12 3 7 8" />
                 <line x1="12" y1="3" x2="12" y2="15" />

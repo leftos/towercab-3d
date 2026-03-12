@@ -150,7 +150,6 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
         }
       })
       .sort((a, b) => a.callsign.localeCompare(b.callsign))
-    // biome-ignore lint/correctness/useExhaustiveDependencies: conversionVersion triggers refresh when models finish converting
   }, [timelines, currentAirport, towerHeight, customTowerPosition, aircraftDataRadiusNM])
 
   // Format scale for display
@@ -229,10 +228,11 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
 
   return (
     <div className="settings-modal-overlay">
-      <div className="settings-modal model-matching-modal" onClick={(e) => e.stopPropagation()}>
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: stops click propagation to overlay */}
+      <div className="settings-modal model-matching-modal" role="dialog" onClick={(e) => e.stopPropagation()}>
         <div className="settings-header">
           <h2>Model Matching</h2>
-          <button className="close-button" onClick={onClose}>
+          <button type="button" className="close-button" onClick={onClose}>
             &times;
           </button>
         </div>
@@ -274,6 +274,7 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
               disabled={isTestLoading}
             />
             <button
+              type="button"
               onClick={runTest}
               disabled={!testType.trim() || isTestLoading}
               className={`model-test-button ${isTestLoading ? 'loading' : ''}`}

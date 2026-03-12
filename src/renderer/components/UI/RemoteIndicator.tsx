@@ -86,7 +86,7 @@ function RemoteIndicator() {
       </div>
       <div className="remote-indicator__host">{hostname}</div>
       {status === 'disconnected' && (
-        <button className="remote-indicator__reconnect" onClick={handleReconnect}>
+        <button type="button" className="remote-indicator__reconnect" onClick={handleReconnect}>
           Reconnect
         </button>
       )}

@@ -386,7 +386,6 @@ function App() {
       unsubscribe()
       flushUrlCameraSave()
     }
-    // biome-ignore lint/correctness/useExhaustiveDependencies: one-time init after load
   }, [isLoading, airports.has, selectAirport])
 
   // Deep link handler for OAuth callbacks (tc3d://oauth/callback)
@@ -635,28 +634,26 @@ function App() {
             </p>
             <ol>
               <li>
-                <a
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault()
+                <button
+                  type="button"
+                  onClick={() => {
                     shellApi.openExternal('https://ion.cesium.com/signup/')
                   }}
                   className="external-link"
                 >
                   Create a free Cesium Ion account
-                </a>
+                </button>
               </li>
               <li>
-                <a
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault()
+                <button
+                  type="button"
+                  onClick={() => {
                     shellApi.openExternal('https://ion.cesium.com/tokens')
                   }}
                   className="external-link"
                 >
                   Go to Access Tokens
-                </a>{' '}
+                </button>{' '}
                 and copy your default token
               </li>
               <li>Paste it below:</li>
@@ -669,10 +666,11 @@ function App() {
               className="token-input"
             />
             <div className="token-prompt-buttons">
-              <button className="token-button secondary" onClick={() => setShowTokenPrompt(false)}>
+              <button type="button" className="token-button secondary" onClick={() => setShowTokenPrompt(false)}>
                 Skip for now
               </button>
               <button
+                type="button"
                 className="token-button primary"
                 onClick={async () => {
                   if (tokenInput.trim()) {

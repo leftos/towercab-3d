@@ -187,6 +187,7 @@ function AirportSelector() {
   // Star icon SVG component
   const StarIcon = ({ filled, size = 16 }: { filled: boolean; size?: number }) => (
     <svg
+      aria-hidden="true"
       width={size}
       height={size}
       viewBox="0 0 24 24"
@@ -202,17 +203,16 @@ function AirportSelector() {
   const AirportItem = ({ airport, showFavoriteToggle = true }: { airport: Airport; showFavoriteToggle?: boolean }) => {
     const isFavorite = favorites.includes(airport.icao)
     return (
-      <div
+      <button
+        type="button"
         className="airport-result"
         onClick={() => handleSelect(airport.icao)}
-        role="button"
-        tabIndex={0}
         onKeyDown={(e) => e.key === 'Enter' && handleSelect(airport.icao)}
       >
         <div className="result-main">
           {hasVnas1Hz(airport.icao) && (
             <span className="vnas-indicator" title="1Hz real-time updates available (vNAS session)">
-              <svg width="8" height="8" viewBox="0 0 8 8">
+              <svg aria-hidden="true" width="8" height="8" viewBox="0 0 8 8">
                 <circle cx="4" cy="4" r="4" fill="#0c7" />
               </svg>
             </span>
@@ -226,6 +226,7 @@ function AirportSelector() {
         </div>
         {showFavoriteToggle && (
           <button
+            type="button"
             className={`favorite-toggle ${isFavorite ? 'is-favorite' : ''}`}
             onClick={(e) => toggleFavorite(airport.icao, e)}
             title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
@@ -233,17 +234,20 @@ function AirportSelector() {
             <StarIcon filled={isFavorite} />
           </button>
         )}
-      </div>
+      </button>
     )
   }
 
   if (!isOpen) return null
 
   return (
-    <div className="airport-selector-overlay" onClick={() => setOpen(false)}>
-      <div className="airport-selector" onClick={(e) => e.stopPropagation()}>
+    // biome-ignore lint/a11y/noStaticElementInteractions: modal overlay backdrop
+    <div className="airport-selector-overlay" role="presentation" onClick={() => setOpen(false)}>
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: stops click propagation to overlay */}
+      <div className="airport-selector" role="dialog" onClick={(e) => e.stopPropagation()}>
         <div className="search-container">
           <svg
+            aria-hidden="true"
             className="search-icon"
             width="18"
             height="18"
@@ -285,6 +289,7 @@ function AirportSelector() {
               {/* Tab Bar */}
               <div className="tab-bar">
                 <button
+                  type="button"
                   className={`tab ${activeTab === 'favorites' ? 'active' : ''}`}
                   onClick={() => setActiveTab('favorites')}
                 >
@@ -294,6 +299,7 @@ function AirportSelector() {
                   )}
                 </button>
                 <button
+                  type="button"
                   className={`tab ${activeTab === 'recent' ? 'active' : ''}`}
                   onClick={() => setActiveTab('recent')}
                 >
@@ -302,6 +308,7 @@ function AirportSelector() {
                 </button>
                 {dataSource === 'vatsim' && popularAirports.length > 0 && (
                   <button
+                    type="button"
                     className={`tab ${activeTab === 'popular' ? 'active' : ''}`}
                     onClick={() => setActiveTab('popular')}
                   >
@@ -311,10 +318,11 @@ function AirportSelector() {
                 )}
                 {hasVnasSession && vnasAirports.length > 0 && (
                   <button
+                    type="button"
                     className={`tab tab-vnas ${activeTab === 'vnas' ? 'active' : ''}`}
                     onClick={() => setActiveTab('vnas')}
                   >
-                    <svg width="8" height="8" viewBox="0 0 8 8" className="tab-vnas-dot">
+                    <svg aria-hidden="true" width="8" height="8" viewBox="0 0 8 8" className="tab-vnas-dot">
                       <circle cx="4" cy="4" r="4" fill="#0c7" />
                     </svg>
                     vNAS

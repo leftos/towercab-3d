@@ -69,7 +69,7 @@ function SettingsPerformanceTab() {
     <>
       <CollapsibleSection title="Display Limits">
         <div className="setting-item">
-          <label>Max Aircraft Count</label>
+          <span>Max Aircraft Count</span>
           <div className="slider-with-value">
             <input
               type="range"
@@ -88,7 +88,7 @@ function SettingsPerformanceTab() {
         </div>
 
         <div className="setting-item">
-          <label>Aircraft Data Radius</label>
+          <span>Aircraft Data Radius</span>
           <div className="slider-with-value">
             <input
               type="range"
@@ -109,7 +109,7 @@ function SettingsPerformanceTab() {
 
       <CollapsibleSection title="Tile Cache">
         <div className="setting-item">
-          <label>In-Memory Tile Cache</label>
+          <span>In-Memory Tile Cache</span>
           <div className="slider-with-value">
             <input
               type="range"
@@ -125,7 +125,7 @@ function SettingsPerformanceTab() {
         </div>
 
         <div className="setting-item">
-          <label>Disk Cache Size</label>
+          <span>Disk Cache Size</span>
           <div className="slider-with-value">
             <input
               type="range"
@@ -141,8 +141,9 @@ function SettingsPerformanceTab() {
         </div>
 
         <div className="setting-item">
-          <label>Clear Terrain Cache</label>
+          <span>Clear Terrain Cache</span>
           <button
+            type="button"
             className="control-button"
             onClick={() => {
               setIsClearingCache(true)
@@ -157,7 +158,15 @@ function SettingsPerformanceTab() {
               <>Clearing...</>
             ) : (
               <>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  aria-hidden="true"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   <polyline points="3 6 5 6 21 6" />
                   <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                 </svg>
@@ -174,7 +183,7 @@ function SettingsPerformanceTab() {
 
       <CollapsibleSection title="Replay">
         <div className="setting-item">
-          <label>Replay Buffer Duration</label>
+          <span>Replay Buffer Duration</span>
           <div className="slider-with-value">
             <input
               type="range"
@@ -194,16 +203,37 @@ function SettingsPerformanceTab() {
 
         <div className="setting-item">
           <div className="import-export-buttons">
-            <button className="control-button" onClick={exportReplay} disabled={replaySnapshots.length === 0}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <button
+              type="button"
+              className="control-button"
+              onClick={exportReplay}
+              disabled={replaySnapshots.length === 0}
+            >
+              <svg
+                aria-hidden="true"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                 <polyline points="7 10 12 15 17 10" />
                 <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
               Export Replay
             </button>
-            <button className="control-button" onClick={() => importFileInputRef.current?.click()}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <button type="button" className="control-button" onClick={() => importFileInputRef.current?.click()}>
+              <svg
+                aria-hidden="true"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                 <polyline points="17 8 12 3 7 8" />
                 <line x1="12" y1="3" x2="12" y2="15" />
@@ -229,7 +259,7 @@ function SettingsPerformanceTab() {
               Viewing imported data
               {importedAppState?.airport ? ` (${importedAppState.airport.icao})` : ''}
             </p>
-            <button className="control-button" onClick={clearImportedReplay} style={{ marginTop: '8px' }}>
+            <button type="button" className="control-button" onClick={clearImportedReplay} style={{ marginTop: '8px' }}>
               Clear Imported Data
             </button>
           </div>

@@ -1,5 +1,5 @@
 import * as Cesium from 'cesium'
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useMeasureStore } from '../../stores/measureStore'
 import './MeasuringTool.css'
 
@@ -33,6 +33,21 @@ function MeasuringTool({ cesiumViewer }: MeasuringToolProps) {
   const pendingPointEntityRef = useRef<Cesium.Entity | null>(null)
   const previewLineEntityRef = useRef<Cesium.Entity | null>(null)
   const previewLabelEntityRef = useRef<Cesium.Entity | null>(null)
+
+  // Format distance for display
+  const formatDistance = useCallback((meters: number): string => {
+    const nm = meters / 1852
+    const feet = meters * 3.28084
+    const km = meters / 1000
+
+    if (meters < 1000) {
+      return `${Math.round(meters)} m (${Math.round(feet)} ft)`
+    } else if (nm < 1) {
+      return `${km.toFixed(2)} km (${Math.round(feet).toLocaleString()} ft)`
+    } else {
+      return `${nm.toFixed(2)} nm (${km.toFixed(2)} km)`
+    }
+  }, [])
 
   // Create/update Cesium entities for completed measurements
   useEffect(() => {
@@ -254,21 +269,6 @@ function MeasuringTool({ cesiumViewer }: MeasuringToolProps) {
     return cleanup
   }, [cesiumViewer, pendingPoint, previewPoint, previewDistance, formatDistance])
 
-  // Format distance for display
-  function formatDistance(meters: number): string {
-    const nm = meters / 1852
-    const feet = meters * 3.28084
-    const km = meters / 1000
-
-    if (meters < 1000) {
-      return `${Math.round(meters)} m (${Math.round(feet)} ft)`
-    } else if (nm < 1) {
-      return `${km.toFixed(2)} km (${Math.round(feet).toLocaleString()} ft)`
-    } else {
-      return `${nm.toFixed(2)} nm (${km.toFixed(2)} km)`
-    }
-  }
-
   // Don't render UI if not active and no measurements
   if (!isActive && measurements.length === 0) return null
 
@@ -276,7 +276,7 @@ function MeasuringTool({ cesiumViewer }: MeasuringToolProps) {
     <div className="measuring-tool">
       <div className="measuring-header">
         <span className="measuring-title">Measure Distance</span>
-        <button className="measuring-close" onClick={stopMeasuring} title="Close measuring tool">
+        <button type="button" className="measuring-close" onClick={stopMeasuring} title="Close measuring tool">
           &times;
         </button>
       </div>
@@ -299,7 +299,12 @@ function MeasuringTool({ cesiumViewer }: MeasuringToolProps) {
           <div className="measuring-list">
             <div className="measuring-list-header">
               <span>Measurements ({measurements.length})</span>
-              <button className="measuring-clear-all" onClick={clearAllMeasurements} title="Clear all measurements">
+              <button
+                type="button"
+                className="measuring-clear-all"
+                onClick={clearAllMeasurements}
+                title="Clear all measurements"
+              >
                 Clear All
               </button>
             </div>

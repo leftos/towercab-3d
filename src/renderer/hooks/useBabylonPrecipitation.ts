@@ -965,7 +965,9 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
       }
 
       // Clear all lightning timeouts
-      timeouts.forEach((timeout) => clearTimeout(timeout))
+      for (const timeout of timeouts) {
+        clearTimeout(timeout)
+      }
       timeouts.clear()
 
       // Dispose lightning plane and its material

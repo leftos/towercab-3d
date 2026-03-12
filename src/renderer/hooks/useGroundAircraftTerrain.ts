@@ -196,7 +196,9 @@ export function useGroundAircraftTerrain(
       if (needsTerrainSampling.length === 0) return
 
       // Mark as sampling in progress (only for terrain-sampled aircraft)
-      needsTerrainSampling.forEach((a) => samplingInProgressRef.current.add(a.callsign))
+      for (const a of needsTerrainSampling) {
+        samplingInProgressRef.current.add(a.callsign)
+      }
 
       // Sample terrain for aircraft outside flattening polygons in one batch
       // For each aircraft, sample 3 points: position, ahead, and behind (for slope)
@@ -301,7 +303,9 @@ export function useGroundAircraftTerrain(
         .catch((error) => {
           console.warn('[Terrain Sampling] Failed to sample terrain:', error)
           // Clear sampling flags on error
-          needsTerrainSampling.forEach((a) => samplingInProgressRef.current.delete(a.callsign))
+          for (const a of needsTerrainSampling) {
+            samplingInProgressRef.current.delete(a.callsign)
+          }
         })
     }, 333) // 3x per second - balanced for responsiveness vs terrain provider load
 

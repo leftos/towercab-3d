@@ -141,6 +141,8 @@ function ViewportContainer({ viewportId, isInset = false, children }: ViewportCo
       : undefined
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: viewport container handles click for activation
+    // biome-ignore lint/a11y/useKeyWithClickEvents: viewport activation is mouse-only
     <div
       ref={containerRef}
       className={`viewport-container ${isActive ? 'active' : 'inactive'} ${isInset ? 'inset' : 'main'} ${isDragging ? 'dragging' : ''} ${isResizing ? 'resizing' : ''}`}
@@ -163,11 +165,13 @@ function ViewportContainer({ viewportId, isInset = false, children }: ViewportCo
               onMouseDown={(e) => e.stopPropagation()}
             />
           ) : (
+            // biome-ignore lint/a11y/noStaticElementInteractions: double-click to rename viewport label
             <span className="viewport-label" onDoubleClick={handleLabelDoubleClick} title="Double-click to rename">
               {viewport?.label || 'Inset'}
             </span>
           )}
           <button
+            type="button"
             className="viewport-close-button"
             onClick={(e) => {
               e.stopPropagation()

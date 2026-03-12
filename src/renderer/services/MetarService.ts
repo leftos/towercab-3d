@@ -469,19 +469,21 @@ class MetarService {
     // Weather appears after visibility, before clouds
     // Pattern: space + optional intensity (-/+) + weather codes + space or end
     const weatherPattern = /\s([+-]?)([A-Z]{2,8})(?=\s|$)/g
-    let match
+    let match: RegExpExecArray | null = weatherPattern.exec(rawOb)
 
-    while ((match = weatherPattern.exec(rawOb)) !== null) {
+    while (match !== null) {
       const intensityPrefix = match[1]
       const codeGroup = match[2]
 
       // Skip if this is a cloud group (FEW, SCT, BKN, OVC followed by digits)
       if (/^(FEW|SCT|BKN|OVC|SKC|CLR|NSC|NCD|VV)\d*$/.test(codeGroup)) {
+        match = weatherPattern.exec(rawOb)
         continue
       }
 
       // Skip runway visual range and other non-weather codes
       if (/^R\d/.test(codeGroup) || /^\d/.test(codeGroup)) {
+        match = weatherPattern.exec(rawOb)
         continue
       }
 
@@ -505,6 +507,7 @@ class MetarService {
           })
         }
       }
+      match = weatherPattern.exec(rawOb)
     }
 
     return { precipitation: precipitations, hasThunderstorm }

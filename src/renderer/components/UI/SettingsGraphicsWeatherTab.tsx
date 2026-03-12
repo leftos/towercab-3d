@@ -86,7 +86,7 @@ function SettingsGraphicsWeatherTab() {
     <>
       <CollapsibleSection title="Rendering Quality">
         <div className="setting-item">
-          <label>Max Framerate</label>
+          <span>Max Framerate</span>
           <div className="setting-pair">
             <div className="setting-column">
               <div className="setting-column-label">Main</div>
@@ -129,7 +129,7 @@ function SettingsGraphicsWeatherTab() {
         </div>
 
         <div className="setting-item">
-          <label>MSAA Samples</label>
+          <span>MSAA Samples</span>
           <div className="setting-pair">
             <div className="setting-column">
               <div className="setting-column-label">Main</div>
@@ -208,7 +208,7 @@ function SettingsGraphicsWeatherTab() {
 
       <CollapsibleSection title="Terrain & Buildings">
         <div className="setting-item">
-          <label>Terrain Quality</label>
+          <span>Terrain Quality</span>
           <div className="setting-pair">
             <div className="setting-column">
               <div className="setting-column-label">Main</div>
@@ -247,9 +247,10 @@ function SettingsGraphicsWeatherTab() {
         </div>
 
         <div className="setting-item">
-          <label>Show 3D Buildings (OSM)</label>
+          <span>Show 3D Buildings (OSM)</span>
           <div className="three-way-toggle">
             <button
+              type="button"
               className={show3DBuildings && insetGraphics.buildings ? 'active' : ''}
               onClick={() => {
                 updateCesiumSettings({ show3DBuildings: true })
@@ -259,6 +260,7 @@ function SettingsGraphicsWeatherTab() {
               On
             </button>
             <button
+              type="button"
               className={show3DBuildings && !insetGraphics.buildings ? 'active' : ''}
               onClick={() => {
                 updateCesiumSettings({ show3DBuildings: true })
@@ -268,6 +270,7 @@ function SettingsGraphicsWeatherTab() {
               Main Only
             </button>
             <button
+              type="button"
               className={!show3DBuildings ? 'active-off' : ''}
               onClick={() => {
                 updateCesiumSettings({ show3DBuildings: false })
@@ -282,7 +285,7 @@ function SettingsGraphicsWeatherTab() {
 
         {show3DBuildings && (
           <div className="setting-item">
-            <label>Building Quality</label>
+            <span>Building Quality</span>
             <select
               value={buildingQuality ?? 'low'}
               onChange={(e) => updateCesiumSettings({ buildingQuality: e.target.value as BuildingQuality })}
@@ -298,7 +301,7 @@ function SettingsGraphicsWeatherTab() {
         )}
 
         <div className="setting-item">
-          <label>Tile Caching</label>
+          <span>Tile Caching</span>
           <div className="setting-pair">
             <div className="setting-column">
               <div className="setting-column-label">Main</div>
@@ -365,7 +368,7 @@ function SettingsGraphicsWeatherTab() {
 
         {enableTerrainFlattening && (
           <div className="setting-item">
-            <label>Runway Edge Blend Distance</label>
+            <span>Runway Edge Blend Distance</span>
             <div className="slider-with-value">
               <input
                 type="range"
@@ -386,7 +389,7 @@ function SettingsGraphicsWeatherTab() {
 
       <CollapsibleSection title="Lighting & Atmosphere">
         <div className="setting-item">
-          <label>Time of Day</label>
+          <span>Time of Day</span>
           <div className="radio-group">
             <label>
               <input
@@ -413,7 +416,7 @@ function SettingsGraphicsWeatherTab() {
 
         {timeMode === 'fixed' && (
           <div className="setting-item">
-            <label>Local Time</label>
+            <span>Local Time</span>
             <div className="slider-with-value">
               <input
                 type="range"
@@ -471,7 +474,7 @@ function SettingsGraphicsWeatherTab() {
         {enableNightDarkening && enableLighting && (
           <>
             <div className="setting-item">
-              <label>Darkening Intensity</label>
+              <span>Darkening Intensity</span>
               <div className="slider-with-value">
                 <input
                   type="range"
@@ -487,7 +490,7 @@ function SettingsGraphicsWeatherTab() {
             </div>
 
             <div className="setting-item">
-              <label>Aircraft Night Visibility</label>
+              <span>Aircraft Night Visibility</span>
               <div className="slider-with-value">
                 <input
                   type="range"
@@ -509,9 +512,10 @@ function SettingsGraphicsWeatherTab() {
 
       <CollapsibleSection title="Shadows">
         <div className="setting-item">
-          <label>Enable Shadows</label>
+          <span>Enable Shadows</span>
           <div className="three-way-toggle">
             <button
+              type="button"
               className={enableShadows && insetGraphics.shadows ? 'active' : ''}
               onClick={() => {
                 updateGraphicsSettings({
@@ -523,6 +527,7 @@ function SettingsGraphicsWeatherTab() {
               On
             </button>
             <button
+              type="button"
               className={enableShadows && !insetGraphics.shadows ? 'active' : ''}
               onClick={() => {
                 updateGraphicsSettings({
@@ -534,6 +539,7 @@ function SettingsGraphicsWeatherTab() {
               Main Only
             </button>
             <button
+              type="button"
               className={!enableShadows ? 'active-off' : ''}
               onClick={() => {
                 updateGraphicsSettings({
@@ -566,7 +572,7 @@ function SettingsGraphicsWeatherTab() {
           </div>
 
           <div className="setting-item">
-            <label>Shadow Map Size</label>
+            <span>Shadow Map Size</span>
             <select
               value={shadowMapSize}
               onChange={(e) =>
@@ -585,7 +591,7 @@ function SettingsGraphicsWeatherTab() {
           </div>
 
           <div className="setting-item">
-            <label>Shadow Max Distance</label>
+            <span>Shadow Max Distance</span>
             <div className="slider-with-value">
               <input
                 type="range"
@@ -604,7 +610,7 @@ function SettingsGraphicsWeatherTab() {
           </div>
 
           <div className="setting-item">
-            <label>Shadow Darkness</label>
+            <span>Shadow Darkness</span>
             <div className="slider-with-value">
               <input
                 type="range"
@@ -656,7 +662,7 @@ function SettingsGraphicsWeatherTab() {
           </div>
 
           <div className="setting-item">
-            <label>Shadow Depth Bias</label>
+            <span>Shadow Depth Bias</span>
             <div className="slider-with-value">
               <input
                 type="range"
@@ -672,7 +678,7 @@ function SettingsGraphicsWeatherTab() {
           </div>
 
           <div className="setting-item">
-            <label>Polygon Offset Factor</label>
+            <span>Polygon Offset Factor</span>
             <div className="slider-with-value">
               <input
                 type="range"
@@ -688,7 +694,7 @@ function SettingsGraphicsWeatherTab() {
           </div>
 
           <div className="setting-item">
-            <label>Polygon Offset Units</label>
+            <span>Polygon Offset Units</span>
             <div className="slider-with-value">
               <input
                 type="range"
@@ -704,7 +710,7 @@ function SettingsGraphicsWeatherTab() {
           </div>
 
           <div className="setting-item">
-            <label>Camera Near Plane</label>
+            <span>Camera Near Plane</span>
             <div className="slider-with-value">
               <input
                 type="range"
@@ -796,7 +802,7 @@ function SettingsGraphicsWeatherTab() {
             </div>
 
             <div className="setting-item">
-              <label>Cloud Opacity</label>
+              <span>Cloud Opacity</span>
               <div className="slider-with-value">
                 <input
                   type="range"
@@ -811,7 +817,7 @@ function SettingsGraphicsWeatherTab() {
             </div>
 
             <div className="setting-item">
-              <label>Fog Intensity</label>
+              <span>Fog Intensity</span>
               <div className="slider-with-value">
                 <input
                   type="range"
@@ -828,7 +834,7 @@ function SettingsGraphicsWeatherTab() {
             </div>
 
             <div className="setting-item">
-              <label>Visibility Scale</label>
+              <span>Visibility Scale</span>
               <div className="slider-with-value">
                 <input
                   type="range"
@@ -856,7 +862,7 @@ function SettingsGraphicsWeatherTab() {
             </div>
 
             <div className="setting-item">
-              <label>Precipitation Intensity</label>
+              <span>Precipitation Intensity</span>
               <div className="slider-with-value">
                 <input
                   type="range"
@@ -931,12 +937,15 @@ function SettingsGraphicsWeatherTab() {
 
       {/* Restart required dialog for MSAA changes */}
       {showRestartDialog && (
-        <div className="modal-overlay" onClick={() => setShowRestartDialog(false)}>
-          <div className="restart-dialog" onClick={(e) => e.stopPropagation()}>
+        // biome-ignore lint/a11y/noStaticElementInteractions: modal overlay backdrop
+        <div className="modal-overlay" role="presentation" onClick={() => setShowRestartDialog(false)}>
+          {/* biome-ignore lint/a11y/useKeyWithClickEvents: stops click propagation to overlay */}
+          <div className="restart-dialog" role="dialog" onClick={(e) => e.stopPropagation()}>
             <h3>Restart Required</h3>
             <p>MSAA changes will take effect the next time you start the app.</p>
             <div className="modal-buttons">
               <button
+                type="button"
                 className="modal-button confirm"
                 onClick={() => setShowRestartDialog(false)}
                 style={{

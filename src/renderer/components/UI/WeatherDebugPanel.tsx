@@ -127,7 +127,12 @@ export function WeatherDebugPanel() {
 
   if (!isOpen) {
     return (
-      <button className="weather-debug-toggle" onClick={() => setIsOpen(true)} title="Weather Debug Panel">
+      <button
+        type="button"
+        className="weather-debug-toggle"
+        onClick={() => setIsOpen(true)}
+        title="Weather Debug Panel"
+      >
         WX
       </button>
     )
@@ -137,12 +142,14 @@ export function WeatherDebugPanel() {
     <div className="weather-debug-panel">
       <div className="weather-debug-header">
         <span>Weather Debug</span>
-        <button onClick={() => setIsOpen(false)}>X</button>
+        <button type="button" onClick={() => setIsOpen(false)}>
+          X
+        </button>
       </div>
 
       <div className="weather-debug-content">
         <div className="weather-debug-row">
-          <label>Precipitation</label>
+          <span>Precipitation</span>
           <select value={precipType} onChange={(e) => setPrecipType(e.target.value as PrecipType)}>
             <option value="rain">Rain</option>
             <option value="snow">Snow</option>
@@ -150,7 +157,7 @@ export function WeatherDebugPanel() {
         </div>
 
         <div className="weather-debug-row">
-          <label>Intensity</label>
+          <span>Intensity</span>
           <select value={precipIntensity} onChange={(e) => setPrecipIntensity(e.target.value as PrecipIntensity)}>
             <option value="none">None</option>
             <option value="light">Light (-)</option>
@@ -160,7 +167,7 @@ export function WeatherDebugPanel() {
         </div>
 
         <div className="weather-debug-row">
-          <label>Wind Dir: {windDirection}°</label>
+          <span>Wind Dir: {windDirection}°</span>
           <input
             type="range"
             min="0"
@@ -172,7 +179,7 @@ export function WeatherDebugPanel() {
         </div>
 
         <div className="weather-debug-row">
-          <label>Wind: {windSpeed} kt</label>
+          <span>Wind: {windSpeed} kt</span>
           <input
             type="range"
             min="0"
@@ -184,7 +191,7 @@ export function WeatherDebugPanel() {
         </div>
 
         <div className="weather-debug-row">
-          <label>Gust: {windGust > 0 ? `${windGust} kt` : 'None'}</label>
+          <span>Gust: {windGust > 0 ? `${windGust} kt` : 'None'}</span>
           <input
             type="range"
             min="0"
@@ -206,7 +213,12 @@ export function WeatherDebugPanel() {
         <div className="weather-debug-section">
           <div className="weather-debug-section-header">
             <span>Cloud Layers</span>
-            <button onClick={addCloudLayer} disabled={cloudLayersOverride.length >= 4} title="Add cloud layer">
+            <button
+              type="button"
+              onClick={addCloudLayer}
+              disabled={cloudLayersOverride.length >= 4}
+              title="Add cloud layer"
+            >
               +
             </button>
           </div>
@@ -215,8 +227,8 @@ export function WeatherDebugPanel() {
           {!isDebugOverriding && currentCloudLayers.length > 0 && (
             <div className="weather-debug-metar-clouds">
               <span className="weather-debug-label">From METAR:</span>
-              {currentCloudLayers.map((layer, i) => (
-                <span key={i} className="weather-debug-cloud-tag">
+              {currentCloudLayers.map((layer) => (
+                <span key={`${layer.type}-${layer.altitude}`} className="weather-debug-cloud-tag">
                   {layer.type}
                   {String(Math.round(layer.altitude / 0.3048 / 100)).padStart(3, '0')}
                 </span>
@@ -226,6 +238,7 @@ export function WeatherDebugPanel() {
 
           {/* Override cloud layers */}
           {cloudLayersOverride.map((layer, index) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: cloud layer order is the identity; layers are added/removed by index
             <div key={index} className="weather-debug-cloud-layer">
               <select
                 value={layer.coverage}
@@ -246,7 +259,12 @@ export function WeatherDebugPanel() {
                 title="Altitude in hundreds of feet AGL"
               />
               <span className="weather-debug-altitude-label">00 ft</span>
-              <button onClick={() => removeCloudLayer(index)} className="weather-debug-remove" title="Remove layer">
+              <button
+                type="button"
+                onClick={() => removeCloudLayer(index)}
+                className="weather-debug-remove"
+                title="Remove layer"
+              >
                 ×
               </button>
             </div>
@@ -255,10 +273,12 @@ export function WeatherDebugPanel() {
 
         {/* Unified Apply/Clear buttons at the bottom */}
         <div className="weather-debug-buttons">
-          <button className={isDebugOverriding ? 'active' : ''} onClick={applyOverride}>
+          <button type="button" className={isDebugOverriding ? 'active' : ''} onClick={applyOverride}>
             Apply
           </button>
-          <button onClick={clearOverride}>Clear</button>
+          <button type="button" onClick={clearOverride}>
+            Clear
+          </button>
         </div>
 
         {isDebugOverriding && <div className="weather-debug-status">Override active (METAR will not overwrite)</div>}

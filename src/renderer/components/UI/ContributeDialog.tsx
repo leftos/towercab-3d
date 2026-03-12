@@ -34,11 +34,13 @@ function ContributeDialog({ data, onClose }: ContributeDialogProps) {
   }
 
   return (
-    <div className="settings-modal-overlay" onClick={onClose}>
-      <div className="settings-modal contribute-dialog" onClick={(e) => e.stopPropagation()}>
+    // biome-ignore lint/a11y/noStaticElementInteractions: modal overlay backdrop
+    <div className="settings-modal-overlay" role="presentation" onClick={onClose}>
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: stops click propagation to overlay */}
+      <div className="settings-modal contribute-dialog" role="dialog" onClick={(e) => e.stopPropagation()}>
         <div className="settings-header">
           <h2>Share Tower Position</h2>
-          <button className="close-button" onClick={onClose}>
+          <button type="button" className="close-button" onClick={onClose}>
             &times;
           </button>
         </div>
@@ -55,13 +57,13 @@ function ContributeDialog({ data, onClose }: ContributeDialogProps) {
               tower positions for {data.icao}.
             </p>
             <div className="contribute-dialog-buttons">
-              <button className="control-button primary" onClick={handleContribute}>
+              <button type="button" className="control-button primary" onClick={handleContribute}>
                 Contribute to GitHub
               </button>
-              <button className="control-button" onClick={onClose}>
+              <button type="button" className="control-button" onClick={onClose}>
                 Skip
               </button>
-              <button className="control-button secondary" onClick={handleDontAskAgain}>
+              <button type="button" className="control-button secondary" onClick={handleDontAskAgain}>
                 Don&apos;t Ask Again
               </button>
             </div>

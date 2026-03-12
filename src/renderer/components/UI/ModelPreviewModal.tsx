@@ -229,12 +229,14 @@ export function ModelPreviewModal({ modelInfo, onClose }: ModelPreviewModalProps
   }
 
   return (
-    <div className="model-preview-overlay" onClick={onClose}>
-      <div className="model-preview-modal" onClick={(e) => e.stopPropagation()}>
+    // biome-ignore lint/a11y/noStaticElementInteractions: modal overlay backdrop
+    <div className="model-preview-overlay" role="presentation" onClick={onClose}>
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: stops click propagation to overlay */}
+      <div className="model-preview-modal" role="dialog" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="model-preview-header">
           <h3>{getModelDisplayName()}</h3>
-          <button className="close-button" onClick={onClose}>
+          <button type="button" className="close-button" onClick={onClose}>
             ×
           </button>
         </div>
@@ -255,7 +257,7 @@ export function ModelPreviewModal({ modelInfo, onClose }: ModelPreviewModalProps
           <div className="model-preview-overlay-content model-preview-error">
             <p className="error-message">{error}</p>
             <p className="error-url">{modelInfo.modelUrl}</p>
-            <button className="error-close-button" onClick={onClose}>
+            <button type="button" className="error-close-button" onClick={onClose}>
               Close
             </button>
           </div>

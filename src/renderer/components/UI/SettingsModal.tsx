@@ -186,61 +186,74 @@ function SettingsModal({ isOpen, onClose, onShowImportModal, onShowExportModal, 
 
   return (
     <div className={`settings-modal-overlay ${activeTab === 'graphics' ? 'no-blur' : ''}`}>
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: stops click propagation to overlay */}
       <div
         ref={modalRef}
         className="settings-modal"
+        role="dialog"
         onClick={(e) => e.stopPropagation()}
         style={{
           transform: `translate(${position.x}px, ${position.y}px)`,
           cursor: isDragging ? 'grabbing' : undefined,
         }}
       >
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: drag handle for modal positioning */}
         <div
           className="settings-header"
           onMouseDown={handleHeaderMouseDown}
           style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
         >
           <h2>Settings</h2>
-          <button className="close-button" onClick={onClose}>
+          <button type="button" className="close-button" onClick={onClose}>
             &times;
           </button>
         </div>
 
         <div className="settings-tabs">
           <button
+            type="button"
             className={`tab-button ${activeTab === 'configuration' ? 'active' : ''}`}
             onClick={() => setActiveTab('configuration')}
           >
             Configuration
           </button>
           <button
+            type="button"
             className={`tab-button ${activeTab === 'aircraft' ? 'active' : ''}`}
             onClick={() => setActiveTab('aircraft')}
           >
             Aircraft & Labels
           </button>
           <button
+            type="button"
             className={`tab-button ${activeTab === 'graphics' ? 'active' : ''}`}
             onClick={() => setActiveTab('graphics')}
           >
             Graphics & Weather
           </button>
           <button
+            type="button"
             className={`tab-button ${activeTab === 'controls' ? 'active' : ''}`}
             onClick={() => setActiveTab('controls')}
           >
             Controls & Camera
           </button>
           <button
+            type="button"
             className={`tab-button ${activeTab === 'performance' ? 'active' : ''}`}
             onClick={() => setActiveTab('performance')}
           >
             Performance
           </button>
-          <button className={`tab-button ${activeTab === 'mods' ? 'active' : ''}`} onClick={() => setActiveTab('mods')}>
+          <button
+            type="button"
+            className={`tab-button ${activeTab === 'mods' ? 'active' : ''}`}
+            onClick={() => setActiveTab('mods')}
+          >
             Mods
           </button>
           <button
+            type="button"
             className={`tab-button ${activeTab === 'advanced' ? 'active' : ''}`}
             onClick={() => setActiveTab('advanced')}
           >

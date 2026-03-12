@@ -107,12 +107,14 @@ function ExportWizardModal({ onClose }: ExportWizardModalProps) {
   }, [selectedIds, onClose])
 
   return (
-    <div className="settings-modal-overlay" onClick={onClose}>
-      <div className="settings-modal export-wizard-modal" onClick={(e) => e.stopPropagation()}>
+    // biome-ignore lint/a11y/noStaticElementInteractions: modal overlay backdrop
+    <div className="settings-modal-overlay" role="presentation" onClick={onClose}>
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: stops click propagation to overlay */}
+      <div className="settings-modal export-wizard-modal" role="dialog" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="settings-header">
           <h2>Export Settings</h2>
-          <button className="close-button" onClick={onClose}>
+          <button type="button" className="close-button" onClick={onClose}>
             &times;
           </button>
         </div>
@@ -154,6 +156,7 @@ function ExportWizardModal({ onClose }: ExportWizardModalProps) {
                     <div className="summary-item">
                       <span className="summary-icon">
                         <svg
+                          aria-hidden="true"
                           width="16"
                           height="16"
                           viewBox="0 0 24 24"
@@ -174,6 +177,7 @@ function ExportWizardModal({ onClose }: ExportWizardModalProps) {
                     <div className="summary-item">
                       <span className="summary-icon">
                         <svg
+                          aria-hidden="true"
                           width="16"
                           height="16"
                           viewBox="0 0 24 24"
@@ -194,6 +198,7 @@ function ExportWizardModal({ onClose }: ExportWizardModalProps) {
                     <div className="summary-item">
                       <span className="summary-icon">
                         <svg
+                          aria-hidden="true"
                           width="16"
                           height="16"
                           viewBox="0 0 24 24"
@@ -214,6 +219,7 @@ function ExportWizardModal({ onClose }: ExportWizardModalProps) {
                     <div className="summary-item">
                       <span className="summary-icon">
                         <svg
+                          aria-hidden="true"
                           width="16"
                           height="16"
                           viewBox="0 0 24 24"
@@ -247,10 +253,11 @@ function ExportWizardModal({ onClose }: ExportWizardModalProps) {
         <div className="wizard-actions">
           {step === 'select' && (
             <>
-              <button className="control-button" onClick={onClose}>
+              <button type="button" className="control-button" onClick={onClose}>
                 Cancel
               </button>
               <button
+                type="button"
                 className="control-button primary"
                 onClick={() => setStep('summary')}
                 disabled={selectedIds.size === 0}
@@ -262,13 +269,14 @@ function ExportWizardModal({ onClose }: ExportWizardModalProps) {
 
           {step === 'summary' && (
             <>
-              <button className="control-button" onClick={() => setStep('select')}>
+              <button type="button" className="control-button" onClick={() => setStep('select')}>
                 Back
               </button>
-              <button className="control-button primary" onClick={handleExport} disabled={isExporting}>
+              <button type="button" className="control-button primary" onClick={handleExport} disabled={isExporting}>
                 {isExporting ? (
                   <>
                     <svg
+                      aria-hidden="true"
                       className="spinner"
                       width="14"
                       height="14"
@@ -284,7 +292,15 @@ function ExportWizardModal({ onClose }: ExportWizardModalProps) {
                   </>
                 ) : (
                   <>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg
+                      aria-hidden="true"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                       <polyline points="7 10 12 15 17 10" />
                       <line x1="12" y1="15" x2="12" y2="3" />
