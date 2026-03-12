@@ -13,7 +13,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-family: "Consolas", "Monaco", "Courier New", monospace;
   font-size: 16px;
   border-bottom: 1px solid rgba(0, 255, 0, 0.3);
 }
@@ -34,7 +34,8 @@
 }
 
 @keyframes blink {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
   }
   50% {
@@ -45,7 +46,7 @@
 .command-feedback {
   background: rgba(0, 0, 0, 0.85);
   padding: 6px 16px;
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-family: "Consolas", "Monaco", "Courier New", monospace;
   font-size: 14px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }

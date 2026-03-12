@@ -52,7 +52,7 @@ import {
   CLOUD_ABOVE_DIFFUSE_COLOR,
   CLOUD_ABOVE_EMISSIVE_COLOR,
   CLOUD_ABOVE_BASE_ALPHA,
-  VISIBILITY_TRANSITION_TIME
+  VISIBILITY_TRANSITION_TIME,
 } from '@/constants'
 
 // Import extracted weather utilities
@@ -60,7 +60,7 @@ import {
   createPatchyCloudTexture,
   createOvercastDomeTexture,
   createAboveCloudTexture,
-  createCloudDomeMesh
+  createCloudDomeMesh,
 } from './weather'
 
 interface UseBabylonWeatherOptions {
@@ -331,9 +331,7 @@ interface CloudLayerState {
  * @see weatherStore - For METAR data and cloud layers
  * @see settingsStore - For weather effect toggles and intensities
  */
-export function useBabylonWeather(
-  options: UseBabylonWeatherOptions
-): UseBabylonWeatherResult {
+export function useBabylonWeather(options: UseBabylonWeatherOptions): UseBabylonWeatherResult {
   const { scene, isTopDownView = false } = options
 
   const fogDomeRef = useRef<BABYLON.Mesh | null>(null)
@@ -358,7 +356,7 @@ export function useBabylonWeather(
     targetFresnelBias: 0.1,
     targetScale: 10000,
     // Whether smoothing is initialized
-    initialized: false
+    initialized: false,
   })
 
   // Cloud layer smoothing - smooth the cloud layer data before matching
@@ -413,7 +411,7 @@ export function useBabylonWeather(
 
       // Reset cloud smoothing - snap to target values
       const cloudState = cloudSmoothingRef.current
-      cloudState.initialized = false  // Force re-initialization for new airport
+      cloudState.initialized = false // Force re-initialization for new airport
       for (const layer of cloudState.layers) {
         layer.currentAltitude = layer.targetAltitude
         layer.currentCoverage = layer.targetCoverage
@@ -477,9 +475,13 @@ export function useBabylonWeather(
     // Create cloud plane mesh pool (opacity textures are set dynamically based on coverage)
     for (let i = 0; i < CLOUD_POOL_SIZE; i++) {
       // Create flat plane for FEW/SCT/BKN coverage
-      const plane = BABYLON.MeshBuilder.CreatePlane(`cloud_layer_${i}`, {
-        size: CLOUD_PLANE_DIAMETER
-      }, scene)
+      const plane = BABYLON.MeshBuilder.CreatePlane(
+        `cloud_layer_${i}`,
+        {
+          size: CLOUD_PLANE_DIAMETER,
+        },
+        scene,
+      )
 
       // Rotate to horizontal (XZ plane)
       plane.rotation.x = CLOUD_PLANE_ROTATION_X
@@ -492,7 +494,7 @@ export function useBabylonWeather(
       material.alpha = CLOUD_BASE_ALPHA
       material.backFaceCulling = false
       material.disableLighting = false
-      material.useAlphaFromDiffuseTexture = true  // Use alpha channel from diffuseTexture
+      material.useAlphaFromDiffuseTexture = true // Use alpha channel from diffuseTexture
       plane.material = material
 
       // Create dome mesh for OVC (overcast) coverage
@@ -513,15 +515,19 @@ export function useBabylonWeather(
       domeMaterial.opacityFresnelParameters = new BABYLON.FresnelParameters()
       domeMaterial.opacityFresnelParameters.bias = CLOUD_DOME_FRESNEL_BIAS
       domeMaterial.opacityFresnelParameters.power = CLOUD_DOME_FRESNEL_POWER
-      domeMaterial.opacityFresnelParameters.leftColor = new BABYLON.Color3(1, 1, 1)  // Opaque at edges
+      domeMaterial.opacityFresnelParameters.leftColor = new BABYLON.Color3(1, 1, 1) // Opaque at edges
       domeMaterial.opacityFresnelParameters.rightColor = new BABYLON.Color3(0.7, 0.7, 0.7) // Slightly transparent center
 
       dome.material = domeMaterial
 
       // Create above-cloud plane (for viewing clouds from above)
-      const abovePlane = BABYLON.MeshBuilder.CreatePlane(`cloud_above_${i}`, {
-        size: CLOUD_PLANE_DIAMETER
-      }, scene)
+      const abovePlane = BABYLON.MeshBuilder.CreatePlane(
+        `cloud_above_${i}`,
+        {
+          size: CLOUD_PLANE_DIAMETER,
+        },
+        scene,
+      )
       abovePlane.rotation.x = CLOUD_PLANE_ROTATION_X
       abovePlane.isVisible = false
 
@@ -536,15 +542,27 @@ export function useBabylonWeather(
       aboveMaterial.useAlphaFromDiffuseTexture = true
       abovePlane.material = aboveMaterial
 
-      cloudMeshPoolRef.current.push({ plane, dome, abovePlane, material, domeMaterial, aboveMaterial, usingDome: false })
+      cloudMeshPoolRef.current.push({
+        plane,
+        dome,
+        abovePlane,
+        material,
+        domeMaterial,
+        aboveMaterial,
+        usingDome: false,
+      })
     }
 
     // Create fog dome
-    const fogDome = BABYLON.MeshBuilder.CreateSphere('fog_dome', {
-      diameter: FOG_DOME_BASE_DIAMETER,
-      segments: FOG_DOME_SEGMENTS,
-      sideOrientation: BABYLON.Mesh.BACKSIDE
-    }, scene)
+    const fogDome = BABYLON.MeshBuilder.CreateSphere(
+      'fog_dome',
+      {
+        diameter: FOG_DOME_BASE_DIAMETER,
+        segments: FOG_DOME_SEGMENTS,
+        sideOrientation: BABYLON.Mesh.BACKSIDE,
+      },
+      scene,
+    )
     fogDome.isVisible = false
 
     const fogDomeMaterial = new BABYLON.StandardMaterial('fog_dome_mat', scene)
@@ -609,11 +627,11 @@ export function useBabylonWeather(
           active: false,
           rotation: {
             currentSpeed: initialSpeed,
-            targetSpeed: initialSpeed
+            targetSpeed: initialSpeed,
           },
           useDome: false,
           domeTextureGenerated: false,
-          aboveTextureGenerated: false
+          aboveTextureGenerated: false,
         })
       }
     }
@@ -634,7 +652,7 @@ export function useBabylonWeather(
         currentCoverage: 0,
         targetAltitude: 0,
         targetCoverage: 0,
-        type: ''
+        type: '',
       })
     }
 
@@ -695,11 +713,11 @@ export function useBabylonWeather(
 
     // Get smoothed cloud layers (only those with non-zero coverage)
     const smoothedLayers: CloudLayer[] = smoothing.layers
-      .filter(l => l.targetCoverage > 0)
-      .map(l => ({
-        altitude: l.currentAltitude,  // Use smoothed current value for matching
+      .filter((l) => l.targetCoverage > 0)
+      .map((l) => ({
+        altitude: l.currentAltitude, // Use smoothed current value for matching
         coverage: l.currentCoverage,
-        type: l.type
+        type: l.type,
       }))
 
     if (!shouldShowClouds || smoothedLayers.length === 0) {
@@ -788,7 +806,7 @@ export function useBabylonWeather(
           state.targetAlpha = 1
           state.lastRenderedCoverage = -1 // Force texture regeneration
           state.active = true
-          hadActiveCloudsRef.current = true  // Mark that we've had active clouds
+          hadActiveCloudsRef.current = true // Mark that we've had active clouds
           matchedNewLayers.add(newIdx)
           break
         }
@@ -857,16 +875,18 @@ export function useBabylonWeather(
         baseAlpha = FOG_ALPHA_EXTREMELY_LOW
         fresnelBias = FOG_FRESNEL_BIAS_EXTREMELY_LOW
       } else if (visib <= VISIBILITY_THRESHOLD_LOW) {
-        const t = (visib - VISIBILITY_THRESHOLD_EXTREMELY_LOW) / (VISIBILITY_THRESHOLD_LOW - VISIBILITY_THRESHOLD_EXTREMELY_LOW)
-        baseAlpha = FOG_ALPHA_EXTREMELY_LOW - (t * (FOG_ALPHA_EXTREMELY_LOW - FOG_ALPHA_LOW_MIN))
-        fresnelBias = FOG_FRESNEL_BIAS_EXTREMELY_LOW - (t * (FOG_FRESNEL_BIAS_EXTREMELY_LOW - FOG_FRESNEL_BIAS_LOW_MIN))
+        const t =
+          (visib - VISIBILITY_THRESHOLD_EXTREMELY_LOW) / (VISIBILITY_THRESHOLD_LOW - VISIBILITY_THRESHOLD_EXTREMELY_LOW)
+        baseAlpha = FOG_ALPHA_EXTREMELY_LOW - t * (FOG_ALPHA_EXTREMELY_LOW - FOG_ALPHA_LOW_MIN)
+        fresnelBias = FOG_FRESNEL_BIAS_EXTREMELY_LOW - t * (FOG_FRESNEL_BIAS_EXTREMELY_LOW - FOG_FRESNEL_BIAS_LOW_MIN)
       } else if (visib <= VISIBILITY_THRESHOLD_MODERATE) {
         const t = (visib - VISIBILITY_THRESHOLD_LOW) / (VISIBILITY_THRESHOLD_MODERATE - VISIBILITY_THRESHOLD_LOW)
-        baseAlpha = FOG_ALPHA_LOW_MIN - (t * (FOG_ALPHA_LOW_MIN - FOG_ALPHA_MODERATE_MIN))
-        fresnelBias = FOG_FRESNEL_BIAS_LOW_MIN - (t * (FOG_FRESNEL_BIAS_LOW_MIN - FOG_FRESNEL_BIAS_MODERATE))
+        baseAlpha = FOG_ALPHA_LOW_MIN - t * (FOG_ALPHA_LOW_MIN - FOG_ALPHA_MODERATE_MIN)
+        fresnelBias = FOG_FRESNEL_BIAS_LOW_MIN - t * (FOG_FRESNEL_BIAS_LOW_MIN - FOG_FRESNEL_BIAS_MODERATE)
       } else if (visib <= VISIBILITY_THRESHOLD_DECENT) {
-        const t = (visib - VISIBILITY_THRESHOLD_MODERATE) / (VISIBILITY_THRESHOLD_DECENT - VISIBILITY_THRESHOLD_MODERATE)
-        baseAlpha = FOG_ALPHA_MODERATE_MIN - (t * (FOG_ALPHA_MODERATE_MIN - FOG_ALPHA_DECENT_MIN))
+        const t =
+          (visib - VISIBILITY_THRESHOLD_MODERATE) / (VISIBILITY_THRESHOLD_DECENT - VISIBILITY_THRESHOLD_MODERATE)
+        baseAlpha = FOG_ALPHA_MODERATE_MIN - t * (FOG_ALPHA_MODERATE_MIN - FOG_ALPHA_DECENT_MIN)
         fresnelBias = FOG_FRESNEL_BIAS_MODERATE
       } else {
         baseAlpha = FOG_ALPHA_GOOD
@@ -977,8 +997,7 @@ export function useBabylonWeather(
         const independentSpeed = CLOUD_ROTATION_SPEED * (1 + independentVariance)
 
         const prevSpeed = states[prevState.index].rotation.targetSpeed
-        states[currState.index].rotation.targetSpeed =
-          prevSpeed * correlation + independentSpeed * (1 - correlation)
+        states[currState.index].rotation.targetSpeed = prevSpeed * correlation + independentSpeed * (1 - correlation)
       }
     }
 
@@ -1172,7 +1191,7 @@ export function useBabylonWeather(
               scene,
               CLOUD_NOISE_TEXTURE_SIZE,
               state.currentCoverage,
-              state.noiseSeed
+              state.noiseSeed,
             )
             meshData.aboveMaterial.diffuseTexture = aboveTexture
             state.aboveTextureGenerated = true
@@ -1184,17 +1203,16 @@ export function useBabylonWeather(
           const isOVC = state.currentCoverage >= 0.95
           if (isOVC) {
             meshData.aboveMaterial.useAlphaFromDiffuseTexture = false
-            meshData.aboveMaterial.alpha = 0.75  // Semi-transparent so aircraft show through
+            meshData.aboveMaterial.alpha = 0.75 // Semi-transparent so aircraft show through
           } else {
             meshData.aboveMaterial.useAlphaFromDiffuseTexture = true
-            meshData.aboveMaterial.alpha = state.currentAlpha * opacity * 0.8  // Slightly more transparent
+            meshData.aboveMaterial.alpha = state.currentAlpha * opacity * 0.8 // Slightly more transparent
           }
 
           // Animate rotation
           const rotLerpFactor = Math.min(1, deltaSeconds / CLOUD_ROTATION_TRANSITION_TIME)
           state.rotation.currentSpeed += (state.rotation.targetSpeed - state.rotation.currentSpeed) * rotLerpFactor
           meshData.abovePlane.rotation.y += state.rotation.currentSpeed * deltaSeconds
-
         } else if (viewMode === 'below') {
           // Camera is below cloud layer - show dome or plane based on coverage
           meshData.abovePlane.isVisible = false
@@ -1209,11 +1227,7 @@ export function useBabylonWeather(
               if (meshData.domeMaterial.diffuseTexture) {
                 meshData.domeMaterial.diffuseTexture.dispose()
               }
-              const domeTexture = createOvercastDomeTexture(
-                scene,
-                CLOUD_NOISE_TEXTURE_SIZE,
-                state.noiseSeed
-              )
+              const domeTexture = createOvercastDomeTexture(scene, CLOUD_NOISE_TEXTURE_SIZE, state.noiseSeed)
               meshData.domeMaterial.diffuseTexture = domeTexture
               state.domeTextureGenerated = true
             }
@@ -1226,7 +1240,6 @@ export function useBabylonWeather(
             const rotLerpFactor = Math.min(1, deltaSeconds / CLOUD_ROTATION_TRANSITION_TIME)
             state.rotation.currentSpeed += (state.rotation.targetSpeed - state.rotation.currentSpeed) * rotLerpFactor
             meshData.dome.rotation.y += state.rotation.currentSpeed * deltaSeconds * 0.5
-
           } else {
             // Use plane for FEW/SCT/BKN
             meshData.dome.isVisible = false
@@ -1242,7 +1255,7 @@ export function useBabylonWeather(
                 scene,
                 CLOUD_NOISE_TEXTURE_SIZE,
                 state.currentCoverage,
-                state.noiseSeed
+                state.noiseSeed,
               )
               meshData.material.diffuseTexture = patchyTexture
               state.lastRenderedCoverage = state.currentCoverage
@@ -1255,7 +1268,6 @@ export function useBabylonWeather(
             state.rotation.currentSpeed += (state.rotation.targetSpeed - state.rotation.currentSpeed) * rotLerpFactor
             meshData.plane.rotation.y += state.rotation.currentSpeed * deltaSeconds
           }
-
         } else {
           // Transition zone - interpolate between above and below views
           // Show both geometries with blended opacity
@@ -1272,7 +1284,7 @@ export function useBabylonWeather(
               scene,
               CLOUD_NOISE_TEXTURE_SIZE,
               state.currentCoverage,
-              state.noiseSeed
+              state.noiseSeed,
             )
             meshData.aboveMaterial.diffuseTexture = aboveTexture
             state.aboveTextureGenerated = true
@@ -1284,7 +1296,7 @@ export function useBabylonWeather(
           const isOVCTransition = state.currentCoverage >= 0.95
           if (isOVCTransition) {
             meshData.aboveMaterial.useAlphaFromDiffuseTexture = false
-            meshData.aboveMaterial.alpha = 0.75 * aboveAlpha  // Semi-transparent with transition
+            meshData.aboveMaterial.alpha = 0.75 * aboveAlpha // Semi-transparent with transition
           } else {
             meshData.aboveMaterial.useAlphaFromDiffuseTexture = true
             meshData.aboveMaterial.alpha = state.currentAlpha * opacity * aboveAlpha * 0.8
@@ -1298,11 +1310,7 @@ export function useBabylonWeather(
               if (meshData.domeMaterial.diffuseTexture) {
                 meshData.domeMaterial.diffuseTexture.dispose()
               }
-              const domeTexture = createOvercastDomeTexture(
-                scene,
-                CLOUD_NOISE_TEXTURE_SIZE,
-                state.noiseSeed
-              )
+              const domeTexture = createOvercastDomeTexture(scene, CLOUD_NOISE_TEXTURE_SIZE, state.noiseSeed)
               meshData.domeMaterial.diffuseTexture = domeTexture
               state.domeTextureGenerated = true
             }
@@ -1315,7 +1323,6 @@ export function useBabylonWeather(
             const rotLerpFactor = Math.min(1, deltaSeconds / CLOUD_ROTATION_TRANSITION_TIME)
             state.rotation.currentSpeed += (state.rotation.targetSpeed - state.rotation.currentSpeed) * rotLerpFactor
             meshData.dome.rotation.y += state.rotation.currentSpeed * deltaSeconds * 0.5
-
           } else {
             meshData.dome.isVisible = false
             meshData.plane.isVisible = true
@@ -1329,7 +1336,7 @@ export function useBabylonWeather(
                 scene,
                 CLOUD_NOISE_TEXTURE_SIZE,
                 state.currentCoverage,
-                state.noiseSeed
+                state.noiseSeed,
               )
               meshData.material.diffuseTexture = patchyTexture
               state.lastRenderedCoverage = state.currentCoverage
@@ -1354,35 +1361,38 @@ export function useBabylonWeather(
   }, [scene]) // cloudOpacity accessed via ref to avoid effect recreation
 
   // Weather-based visibility culling function
-  const isVisibleByWeather = useCallback((params: WeatherVisibilityParams): boolean => {
-    const { cameraAltitudeMeters, aircraftAltitudeMeters, horizontalDistanceMeters } = params
+  const isVisibleByWeather = useCallback(
+    (params: WeatherVisibilityParams): boolean => {
+      const { cameraAltitudeMeters, aircraftAltitudeMeters, horizontalDistanceMeters } = params
 
-    if (!showWeatherEffects) return true
+      if (!showWeatherEffects) return true
 
-    // Surface visibility culling
-    if (currentMetar && showCesiumFog) {
-      const visibilityMeters = currentMetar.visib * STATUTE_MILES_TO_METERS * visibilityScale
-      if (horizontalDistanceMeters > visibilityMeters) {
-        return false
+      // Surface visibility culling
+      if (currentMetar && showCesiumFog) {
+        const visibilityMeters = currentMetar.visib * STATUTE_MILES_TO_METERS * visibilityScale
+        if (horizontalDistanceMeters > visibilityMeters) {
+          return false
+        }
       }
-    }
 
-    // Cloud ceiling culling (skip in top-down view)
-    if (showClouds && cloudLayers.length > 0 && !isTopDownView) {
-      const lowerAlt = Math.min(cameraAltitudeMeters, aircraftAltitudeMeters)
-      const higherAlt = Math.max(cameraAltitudeMeters, aircraftAltitudeMeters)
+      // Cloud ceiling culling (skip in top-down view)
+      if (showClouds && cloudLayers.length > 0 && !isTopDownView) {
+        const lowerAlt = Math.min(cameraAltitudeMeters, aircraftAltitudeMeters)
+        const higherAlt = Math.max(cameraAltitudeMeters, aircraftAltitudeMeters)
 
-      for (const layer of cloudLayers) {
-        if (layer.coverage >= CLOUD_CEILING_COVERAGE_THRESHOLD) {
-          if (layer.altitude > lowerAlt && layer.altitude < higherAlt) {
-            return false
+        for (const layer of cloudLayers) {
+          if (layer.coverage >= CLOUD_CEILING_COVERAGE_THRESHOLD) {
+            if (layer.altitude > lowerAlt && layer.altitude < higherAlt) {
+              return false
+            }
           }
         }
       }
-    }
 
-    return true
-  }, [showWeatherEffects, showCesiumFog, showClouds, currentMetar, cloudLayers, visibilityScale, isTopDownView])
+      return true
+    },
+    [showWeatherEffects, showCesiumFog, showClouds, currentMetar, cloudLayers, visibilityScale, isTopDownView],
+  )
 
   // Return getter function for cloud meshes to avoid stale closure issue
   // The mesh creation effect runs after initial render, so returning the ref
@@ -1392,7 +1402,7 @@ export function useBabylonWeather(
   return {
     fogDome: fogDomeRef.current,
     getCloudMeshes,
-    isVisibleByWeather
+    isVisibleByWeather,
   }
 }
 

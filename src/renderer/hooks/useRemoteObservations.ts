@@ -85,7 +85,13 @@ interface VnasStateMessage {
   state: string
 }
 
-type WebSocketMessage = InitMessage | ObservationsMessage | RemovalsMessage | SubscriptionsMessage | AirportSyncMessage | VnasStateMessage
+type WebSocketMessage =
+  | InitMessage
+  | ObservationsMessage
+  | RemovalsMessage
+  | SubscriptionsMessage
+  | AirportSyncMessage
+  | VnasStateMessage
 
 // Module-level WebSocket reference for requestRemoteSubscription()
 let moduleWsRef: WebSocket | null = null
@@ -97,14 +103,14 @@ let moduleWsRef: WebSocket | null = null
 export function useRemoteObservations(): void {
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const addObservationBatch = useAircraftTimelineStore(state => state.addObservationBatch)
-  const removeAircraft = useAircraftTimelineStore(state => state.removeAircraft)
-  const setSubscribedFacilities = useVnasStore(state => state.setSubscribedFacilities)
-  const setSessionFacilities = useVnasStore(state => state.setSessionFacilities)
-  const setStateOnly = useVnasStore(state => state.setStateOnly)
-  const setWsConnected = useRemoteStatusStore(state => state.setWsConnected)
-  const recordObservation = useRemoteStatusStore(state => state.recordObservation)
-  const setAirportSync = useRemoteStatusStore(state => state.setAirportSync)
+  const addObservationBatch = useAircraftTimelineStore((state) => state.addObservationBatch)
+  const removeAircraft = useAircraftTimelineStore((state) => state.removeAircraft)
+  const setSubscribedFacilities = useVnasStore((state) => state.setSubscribedFacilities)
+  const setSessionFacilities = useVnasStore((state) => state.setSessionFacilities)
+  const setStateOnly = useVnasStore((state) => state.setStateOnly)
+  const setWsConnected = useRemoteStatusStore((state) => state.setWsConnected)
+  const recordObservation = useRemoteStatusStore((state) => state.recordObservation)
+  const setAirportSync = useRemoteStatusStore((state) => state.setAirportSync)
 
   const connect = useCallback(() => {
     if (!isRemoteMode()) return
@@ -143,7 +149,7 @@ export function useRemoteObservations(): void {
           case 'observations': {
             // Convert to timeline store format
             const now = Date.now()
-            const batch = message.data.map(obs => {
+            const batch = message.data.map((obs) => {
               const observation: AircraftObservation = {
                 latitude: obs.latitude,
                 longitude: obs.longitude,
@@ -159,7 +165,9 @@ export function useRemoteObservations(): void {
                 source: obs.source as 'vatsim' | 'vnas' | 'realtraffic',
                 observedAt: obs.observedAt,
                 receivedAt: now, // Use local time for reconciliation
-                displayDelay: SOURCE_DISPLAY_DELAYS[obs.source as keyof typeof SOURCE_DISPLAY_DELAYS] ?? SOURCE_DISPLAY_DELAYS.vatsim
+                displayDelay:
+                  SOURCE_DISPLAY_DELAYS[obs.source as keyof typeof SOURCE_DISPLAY_DELAYS] ??
+                  SOURCE_DISPLAY_DELAYS.vatsim,
               }
 
               const metadata: AircraftMetadata = {
@@ -167,7 +175,7 @@ export function useRemoteObservations(): void {
                 aircraftType: obs.typeCode ?? 'UNKN',
                 transponder: '', // Unknown transponder for remote observations
                 departure: obs.origin,
-                arrival: obs.destination
+                arrival: obs.destination,
               }
 
               return { callsign: obs.callsign, observation, metadata }
@@ -177,10 +185,12 @@ export function useRemoteObservations(): void {
               addObservationBatch(batch)
               // Determine the primary source for stale threshold calculation
               // Priority: vnas > realtraffic > vatsim (fastest update rate wins)
-              const sources = message.data.map(obs => obs.source)
-              const primarySource = sources.includes('vnas') ? 'vnas'
-                : sources.includes('realtraffic') ? 'realtraffic'
-                : 'vatsim'
+              const sources = message.data.map((obs) => obs.source)
+              const primarySource = sources.includes('vnas')
+                ? 'vnas'
+                : sources.includes('realtraffic')
+                  ? 'realtraffic'
+                  : 'vatsim'
               recordObservation(batch.length, primarySource as 'vatsim' | 'vnas' | 'realtraffic')
             }
             break
@@ -234,7 +244,16 @@ export function useRemoteObservations(): void {
     ws.onerror = (error) => {
       console.error('[RemoteObservations] WebSocket error:', error)
     }
-  }, [addObservationBatch, removeAircraft, setSubscribedFacilities, setSessionFacilities, setStateOnly, setWsConnected, recordObservation, setAirportSync])
+  }, [
+    addObservationBatch,
+    removeAircraft,
+    setSubscribedFacilities,
+    setSessionFacilities,
+    setStateOnly,
+    setWsConnected,
+    recordObservation,
+    setAirportSync,
+  ])
 
   useEffect(() => {
     if (!isRemoteMode()) return
@@ -275,7 +294,7 @@ export function requestRemoteSubscription(facilityId: string): void {
 
   const message = JSON.stringify({
     action: 'subscribe',
-    facilityId
+    facilityId,
   })
 
   console.log('[RemoteObservations] Requesting subscription for:', facilityId)
@@ -299,7 +318,7 @@ export function requestRemoteUnsubscription(facilityId: string): void {
 
   const message = JSON.stringify({
     action: 'unsubscribe',
-    facilityId
+    facilityId,
   })
 
   console.log('[RemoteObservations] Requesting unsubscription for:', facilityId)
@@ -328,7 +347,7 @@ export function requestRemoteAirportChange(icao: string | null): void {
 
   const message = JSON.stringify({
     action: 'set_airport',
-    icao
+    icao,
   })
 
   console.log('[RemoteObservations] Requesting airport change to:', icao)

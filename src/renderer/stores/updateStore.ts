@@ -1,19 +1,12 @@
 import { create } from 'zustand'
 
-export type UpdateStatus =
-  | 'idle'
-  | 'checking'
-  | 'available'
-  | 'downloading'
-  | 'ready'
-  | 'error'
-  | 'up-to-date'
+export type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'error' | 'up-to-date'
 
 export interface UpdateInfo {
   version: string
   currentVersion: string
   date: string | null
-  body: string | null  // Release notes
+  body: string | null // Release notes
 }
 
 export interface UpdateProgress {
@@ -44,5 +37,5 @@ export const useUpdateStore = create<UpdateStore>((set) => ({
   setUpdateInfo: (updateInfo) => set({ updateInfo }),
   setProgress: (progress) => set({ progress }),
   setError: (error) => set({ error, status: error ? 'error' : 'idle' }),
-  reset: () => set({ status: 'idle', updateInfo: null, progress: null, error: null })
+  reset: () => set({ status: 'idle', updateInfo: null, progress: null, error: null }),
 }))

@@ -15,7 +15,7 @@ export {
   normalizeLoadedViewports,
   getNextInsetPosition,
   updateViewportCameraState,
-  scheduleAutoSave
+  scheduleAutoSave,
 } from './viewportHelpers'
 
 // Global settings sync
@@ -33,11 +33,11 @@ export {
   scheduleGlobalSync,
   flushPendingGlobalSync,
   createSyncToGlobalSettings,
-  createLoadFromGlobalSettings
+  createLoadFromGlobalSettings,
 } from './globalSettingsSync'
 
 // Migrations
 export {
   migrateCameraStoreBookmarks,
-  migrateToGlobalSettings
+  migrateToGlobalSettings,
 } from './viewportMigrations'

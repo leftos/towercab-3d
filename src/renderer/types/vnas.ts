@@ -14,10 +14,10 @@ export type VnasSessionState =
   | 'authenticating'
   | 'connecting'
   | 'joiningSession'
-  | 'waitingForSession'  // TC3D connected before CRC - waiting for CRC to create session
+  | 'waitingForSession' // TC3D connected before CRC - waiting for CRC to create session
   | 'subscribing'
   | 'connected'
-  | 'unavailable'  // vNAS feature not compiled in
+  | 'unavailable' // vNAS feature not compiled in
 
 /**
  * Aircraft position update from vNAS (1Hz updates)
@@ -31,10 +31,10 @@ export interface VnasAircraft {
   lon: number
   trueHeading: number
   trueGroundTrack: number | null
-  altitudeTrue: number      // True altitude in feet (MSL)
-  altitudeAgl: number       // Altitude above ground in feet
-  voiceType: number         // 0=Unknown, 1=Full, 2=ReceiveOnly, 3=TextOnly
-  timestamp: number         // Unix timestamp in ms
+  altitudeTrue: number // True altitude in feet (MSL)
+  altitudeAgl: number // Altitude above ground in feet
+  voiceType: number // 0=Unknown, 1=Full, 2=ReceiveOnly, 3=TextOnly
+  timestamp: number // Unix timestamp in ms
 }
 
 /**
@@ -49,4 +49,3 @@ export interface VnasStatus {
   /** Whether vNAS feature is compiled into the backend */
   available: boolean
 }
-

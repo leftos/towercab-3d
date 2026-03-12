@@ -2,7 +2,9 @@
   position: relative;
   box-sizing: border-box;
   border: 2px solid transparent;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
   overflow: hidden;
 }
 
@@ -25,8 +27,9 @@
 /* Active state - cyan border and glow */
 .viewport-container.active {
   border-color: #00ffff;
-  box-shadow: 0 0 15px rgba(0, 255, 255, 0.4),
-              inset 0 0 8px rgba(0, 255, 255, 0.1);
+  box-shadow:
+    0 0 15px rgba(0, 255, 255, 0.4),
+    inset 0 0 8px rgba(0, 255, 255, 0.1);
 }
 
 /* Inactive state - subtle border */

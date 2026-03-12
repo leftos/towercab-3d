@@ -48,12 +48,13 @@ function SettingsPerformanceTab() {
 
       const success = importReplay(data)
       if (!success) {
-        alert('Invalid file format. Supported: .tc3d-replay.json and .tc3d-diag.json files.\nCheck console for details.')
+        alert(
+          'Invalid file format. Supported: .tc3d-replay.json and .tc3d-diag.json files.\nCheck console for details.',
+        )
       }
     } catch (error) {
-      const message = error instanceof SyntaxError
-        ? 'Invalid JSON format'
-        : error instanceof Error ? error.message : 'Unknown error'
+      const message =
+        error instanceof SyntaxError ? 'Invalid JSON format' : error instanceof Error ? error.message : 'Unknown error'
       console.error('[Import] Failed to read file:', error)
       alert(`Failed to read file: ${message}`)
     }
@@ -81,7 +82,8 @@ function SettingsPerformanceTab() {
             <span>{maxAircraftDisplay}</span>
           </div>
           <p className="setting-hint">
-            Maximum number of aircraft to render simultaneously. Lower values improve performance on slower devices. (Per-device setting)
+            Maximum number of aircraft to render simultaneously. Lower values improve performance on slower devices.
+            (Per-device setting)
           </p>
         </div>
 
@@ -99,7 +101,8 @@ function SettingsPerformanceTab() {
             <span>{aircraftDataRadiusNM} nm</span>
           </div>
           <p className="setting-hint">
-            Discard aircraft data beyond this radius to save memory. Should be larger than Visibility Range in Aircraft & Labels tab.
+            Discard aircraft data beyond this radius to save memory. Should be larger than Visibility Range in Aircraft
+            & Labels tab.
           </p>
         </div>
       </CollapsibleSection>
@@ -118,9 +121,7 @@ function SettingsPerformanceTab() {
             />
             <span>{inMemoryTileCacheSize} tiles</span>
           </div>
-          <p className="setting-hint">
-            Higher values = smoother panning, more RAM usage.
-          </p>
+          <p className="setting-hint">Higher values = smoother panning, more RAM usage.</p>
         </div>
 
         <div className="setting-item">
@@ -136,9 +137,7 @@ function SettingsPerformanceTab() {
             />
             <span>{diskCacheSizeGB.toFixed(1)} GB</span>
           </div>
-          <p className="setting-hint">
-            IndexedDB cache for satellite/terrain tiles.
-          </p>
+          <p className="setting-hint">IndexedDB cache for satellite/terrain tiles.</p>
         </div>
 
         <div className="setting-item">
@@ -167,7 +166,8 @@ function SettingsPerformanceTab() {
             )}
           </button>
           <p className="setting-hint">
-            Clears in-memory and disk terrain tile caches. Use this after toggling terrain flattening or if terrain appears corrupted.
+            Clears in-memory and disk terrain tile caches. Use this after toggling terrain flattening or if terrain
+            appears corrupted.
           </p>
         </div>
       </CollapsibleSection>
@@ -194,11 +194,7 @@ function SettingsPerformanceTab() {
 
         <div className="setting-item">
           <div className="import-export-buttons">
-            <button
-              className="control-button"
-              onClick={exportReplay}
-              disabled={replaySnapshots.length === 0}
-            >
+            <button className="control-button" onClick={exportReplay} disabled={replaySnapshots.length === 0}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                 <polyline points="7 10 12 15 17 10" />
@@ -206,10 +202,7 @@ function SettingsPerformanceTab() {
               </svg>
               Export Replay
             </button>
-            <button
-              className="control-button"
-              onClick={() => importFileInputRef.current?.click()}
-            >
+            <button className="control-button" onClick={() => importFileInputRef.current?.click()}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                 <polyline points="17 8 12 3 7 8" />
@@ -226,8 +219,7 @@ function SettingsPerformanceTab() {
             />
           </div>
           <p className="setting-hint">
-            Import a previously exported replay file.
-            To import diagnostic packages, use Advanced &gt; Debugging.
+            Import a previously exported replay file. To import diagnostic packages, use Advanced &gt; Debugging.
           </p>
         </div>
 
@@ -237,11 +229,7 @@ function SettingsPerformanceTab() {
               Viewing imported data
               {importedAppState?.airport ? ` (${importedAppState.airport.icao})` : ''}
             </p>
-            <button
-              className="control-button"
-              onClick={clearImportedReplay}
-              style={{ marginTop: '8px' }}
-            >
+            <button className="control-button" onClick={clearImportedReplay} style={{ marginTop: '8px' }}>
               Clear Imported Data
             </button>
           </div>

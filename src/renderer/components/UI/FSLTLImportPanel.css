@@ -363,7 +363,9 @@
   background: var(--surface-bg);
   border: 1px solid var(--border-color);
   border-radius: 4px;
-  transition: background 0.15s, border-color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
 }
 
 .msfs-source-item:hover {
@@ -387,7 +389,9 @@
   font-size: 8px;
   line-height: 1;
   border-radius: 2px;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .msfs-arrow-btn:hover:not(:disabled) {
@@ -433,8 +437,13 @@
 }
 
 @keyframes msfs-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
 .msfs-source-priority {
@@ -462,7 +471,9 @@
   background: var(--surface-bg);
   border: 1px solid var(--border-color);
   border-radius: 4px;
-  transition: background 0.15s, border-color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
 }
 
 .msfs-vmr-item:hover {
@@ -487,7 +498,9 @@
   font-size: 14px;
   line-height: 1;
   border-radius: 3px;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .msfs-vmr-remove:hover {

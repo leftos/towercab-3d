@@ -14,7 +14,7 @@ export type {
   MeshBounds,
   ExtendedNodeData,
   ModelGroundData,
-  ModelWingData
+  ModelWingData,
 } from './types'
 
 // Matrix math utilities
@@ -23,7 +23,7 @@ export {
   matrixFromTRS,
   multiplyMatrices,
   transformPoint,
-  getBoundingBoxCorners
+  getBoundingBoxCorners,
 } from './matrixMath'
 
 // Animation interpolation
@@ -31,7 +31,7 @@ export {
   getKeysAtTime,
   interpolateVec3,
   interpolateQuat,
-  slerpQuat
+  slerpQuat,
 } from './animationInterpolation'
 
 // Ground and wing data computation
@@ -43,5 +43,5 @@ export {
   getWorldMatrix,
   parseGroundDataGltf1,
   computeWingData,
-  parseWingDataGltf1
+  parseWingDataGltf1,
 } from './groundDataComputation'

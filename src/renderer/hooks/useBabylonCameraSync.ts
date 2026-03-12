@@ -1,11 +1,7 @@
 import { useCallback, useRef } from 'react'
 import * as BABYLON from '@babylonjs/core'
 import * as Cesium from 'cesium'
-import {
-  calculateBabylonCameraSync,
-  setupEnuTransforms,
-  type EnuTransformData
-} from '../utils/enuTransforms'
+import { calculateBabylonCameraSync, setupEnuTransforms, type EnuTransformData } from '../utils/enuTransforms'
 
 interface Camera2DState {
   lat: number
@@ -243,7 +239,7 @@ export function useBabylonCameraSync({
   camera,
   fogDome,
   getCloudMeshes,
-  getFixedToEnu
+  getFixedToEnu,
 }: UseBabylonCameraSyncOptions): UseBabylonCameraSyncResult {
   // ENU transformation data
   const enuDataRef = useRef<EnuTransformData | null>(null)
@@ -259,21 +255,26 @@ export function useBabylonCameraSync({
   const cloudCenterRef = useRef<{ x: number; z: number }>({ x: 0, z: 0 })
 
   // Setup ENU transforms for a given base position
-  const setupBasePosition = useCallback((lat: number, lon: number, height: number) => {
-    enuDataRef.current = setupEnuTransforms(lat, lon, height)
+  const setupBasePosition = useCallback(
+    (lat: number, lon: number, height: number) => {
+      enuDataRef.current = setupEnuTransforms(lat, lon, height)
 
-    // Sample terrain to calculate offset
-    if (cesiumViewer?.terrainProvider) {
-      const positions = [Cesium.Cartographic.fromDegrees(lon, lat)]
-      Cesium.sampleTerrainMostDetailed(cesiumViewer.terrainProvider, positions).then((updatedPositions) => {
-        const terrainHeight = updatedPositions[0].height
-        terrainOffsetRef.current = terrainHeight - height
-      }).catch((err) => {
-        console.warn('Failed to sample terrain, using default offset:', err)
-        terrainOffsetRef.current = 0
-      })
-    }
-  }, [cesiumViewer])
+      // Sample terrain to calculate offset
+      if (cesiumViewer?.terrainProvider) {
+        const positions = [Cesium.Cartographic.fromDegrees(lon, lat)]
+        Cesium.sampleTerrainMostDetailed(cesiumViewer.terrainProvider, positions)
+          .then((updatedPositions) => {
+            const terrainHeight = updatedPositions[0].height
+            terrainOffsetRef.current = terrainHeight - height
+          })
+          .catch((err) => {
+            console.warn('Failed to sample terrain, using default offset:', err)
+            terrainOffsetRef.current = 0
+          })
+      }
+    },
+    [cesiumViewer],
+  )
 
   // Sync Babylon camera for 2D topdown view
   const syncCamera2D = useCallback(() => {
@@ -292,7 +293,7 @@ export function useBabylonCameraSync({
     camera2DStateRef.current = {
       lat: camLat,
       lon: camLon,
-      heading: cesiumViewer.camera.heading
+      heading: cesiumViewer.camera.heading,
     }
 
     // Position Babylon camera at origin, at the same height as Cesium camera
@@ -334,11 +335,7 @@ export function useBabylonCameraSync({
 
     // Apply position, rotation, and FOV
     camera.position.copyFrom(syncData.position)
-    camera.rotation.set(
-      syncData.rotation.rotationX,
-      syncData.rotation.rotationY,
-      syncData.rotation.rotationZ
-    )
+    camera.rotation.set(syncData.rotation.rotationX, syncData.rotation.rotationY, syncData.rotation.rotationZ)
     camera.fov = syncData.fov
 
     // Position fog dome at camera position
@@ -389,7 +386,7 @@ export function useBabylonCameraSync({
 
     // Check if we're in topdown view by looking at the camera pitch
     // Cesium pitch: -PI/2 = looking straight down
-    const isTopDown = cesiumViewer.camera.pitch < -1.4  // roughly -80 degrees or more
+    const isTopDown = cesiumViewer.camera.pitch < -1.4 // roughly -80 degrees or more
 
     if (isTopDown) {
       syncCamera2D()
@@ -414,7 +411,7 @@ export function useBabylonCameraSync({
     get2DState,
     getFixedToEnuMatrix,
     getTerrainOffset,
-    setTerrainOffset
+    setTerrainOffset,
   }
 }
 

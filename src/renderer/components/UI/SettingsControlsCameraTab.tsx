@@ -39,9 +39,7 @@ function SettingsControlsCameraTab() {
             />
             Auto-Switch to Nearest Airport
           </label>
-          <p className="setting-hint">
-            Automatically switch to the nearest airport as you move the camera.
-          </p>
+          <p className="setting-hint">Automatically switch to the nearest airport as you move the camera.</p>
         </div>
       </CollapsibleSection>
 
@@ -116,8 +114,8 @@ function SettingsControlsCameraTab() {
                   : 'Maximum cinematic lag (video game style)'}
           </p>
           <p className="setting-hint">
-            Controls how quickly the orbit camera reacts to aircraft heading and altitude changes.
-            Higher values create a more cinematic &ldquo;chase camera&rdquo; feel.
+            Controls how quickly the orbit camera reacts to aircraft heading and altitude changes. Higher values create
+            a more cinematic &ldquo;chase camera&rdquo; feel.
           </p>
         </div>
       </CollapsibleSection>
@@ -229,7 +227,8 @@ function SettingsControlsCameraTab() {
           </div>
         </div>
         <p className="setting-hint" style={{ marginTop: '8px' }}>
-          Position layout: 7=top-left, 8=top, 9=top-right, 4=left, 5=center, 6=right, 1=bottom-left, 2=bottom, 3=bottom-right
+          Position layout: 7=top-left, 8=top, 9=top-right, 4=left, 5=center, 6=right, 1=bottom-left, 2=bottom,
+          3=bottom-right
         </p>
       </CollapsibleSection>
     </>

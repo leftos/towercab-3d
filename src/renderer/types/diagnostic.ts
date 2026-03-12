@@ -8,12 +8,7 @@
  * terrain clamping, and source-transition issues.
  */
 
-import type {
-  AircraftObservation,
-  AircraftMetadata,
-  AircraftDataSource,
-  DynamicDelayState
-} from './aircraft-timeline'
+import type { AircraftObservation, AircraftMetadata, AircraftDataSource, DynamicDelayState } from './aircraft-timeline'
 
 /**
  * Serialized version of an AircraftTimeline for JSON export.

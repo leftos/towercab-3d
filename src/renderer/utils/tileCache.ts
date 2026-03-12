@@ -13,7 +13,7 @@ const cacheStats = {
   hits: 0,
   misses: 0,
   writes: 0,
-  lastLogTime: 0
+  lastLogTime: 0,
 }
 
 /**
@@ -113,7 +113,7 @@ async function setCachedTile(key: string, data: ArrayBuffer): Promise<void> {
       key,
       data,
       timestamp: Date.now(),
-      size: data.byteLength
+      size: data.byteLength,
     }
 
     return new Promise((resolve) => {
@@ -197,9 +197,7 @@ async function cleanupCacheIfNeeded(): Promise<void> {
  * Creates a caching wrapper around a Cesium ImageryProvider.
  * Tiles are cached to IndexedDB for persistence across sessions.
  */
-export function createCachingImageryProvider(
-  baseProvider: Cesium.ImageryProvider
-): Cesium.ImageryProvider {
+export function createCachingImageryProvider(baseProvider: Cesium.ImageryProvider): Cesium.ImageryProvider {
   // Create a proxy that intercepts requestImage
   const originalRequestImage = baseProvider.requestImage.bind(baseProvider)
 
@@ -207,7 +205,7 @@ export function createCachingImageryProvider(
     x: number,
     y: number,
     level: number,
-    request?: Cesium.Request
+    request?: Cesium.Request,
   ): Promise<Cesium.ImageryTypes> | undefined {
     const cacheKey = `imagery_${level}_${x}_${y}`
 
@@ -246,16 +244,14 @@ export function createCachingImageryProvider(
  * Creates a caching wrapper around a Cesium TerrainProvider.
  * Terrain tiles are cached to IndexedDB for persistence across sessions.
  */
-export function createCachingTerrainProvider(
-  baseProvider: Cesium.TerrainProvider
-): Cesium.TerrainProvider {
+export function createCachingTerrainProvider(baseProvider: Cesium.TerrainProvider): Cesium.TerrainProvider {
   const originalRequestTileGeometry = baseProvider.requestTileGeometry.bind(baseProvider)
 
   baseProvider.requestTileGeometry = function (
     x: number,
     y: number,
     level: number,
-    request?: Cesium.Request
+    request?: Cesium.Request,
   ): Promise<Cesium.TerrainData> | undefined {
     const cacheKey = `terrain_${level}_${x}_${y}`
 
@@ -332,7 +328,7 @@ function reconstructTerrainData(buffer: ArrayBuffer, level: number): Cesium.Terr
       buffer: heightBuffer,
       width: width,
       height: width,
-      childTileMask: level < 14 ? 15 : 0 // Assume children exist up to level 14
+      childTileMask: level < 14 ? 15 : 0, // Assume children exist up to level 14
     })
   } catch {
     return null
@@ -344,9 +340,7 @@ async function createImageFromBuffer(buffer: ArrayBuffer): Promise<ImageBitmap> 
   return createImageBitmap(blob)
 }
 
-async function imageToArrayBuffer(
-  image: Cesium.ImageryTypes
-): Promise<ArrayBuffer | null> {
+async function imageToArrayBuffer(image: Cesium.ImageryTypes): Promise<ArrayBuffer | null> {
   try {
     // Handle ImageBitmap
     if (image instanceof ImageBitmap) {
@@ -412,7 +406,7 @@ export async function getCacheStats(): Promise<{ count: number; sizeBytes: numbe
         const tiles = request.result as CachedTile[]
         resolve({
           count: tiles.length,
-          sizeBytes: tiles.reduce((sum, tile) => sum + tile.size, 0)
+          sizeBytes: tiles.reduce((sum, tile) => sum + tile.size, 0),
         })
       }
 

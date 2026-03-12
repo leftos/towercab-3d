@@ -14,9 +14,7 @@ import type { AircraftObservation, AircraftMetadata } from '../types/aircraft-ti
 import { realTrafficService } from '../services/RealTrafficService'
 import { useGlobalSettingsStore } from './globalSettingsStore'
 import { useAircraftTimelineStore } from './aircraftTimelineStore'
-import {
-  REALTRAFFIC_DEFAULT_POLL_INTERVAL
-} from '../constants/realtraffic'
+import { REALTRAFFIC_DEFAULT_POLL_INTERVAL } from '../constants/realtraffic'
 import { SOURCE_DISPLAY_DELAYS } from '../constants/aircraft-timeline'
 import { isRemoteMode } from '../utils/remoteMode'
 
@@ -45,8 +43,8 @@ interface RealTrafficStore {
   updateInterval: number
 
   // Polling
-  isPolling: boolean  // Flag indicating polling is active
-  pollingTimeout: NodeJS.Timeout | null  // Timer for next fetch
+  isPolling: boolean // Flag indicating polling is active
+  pollingTimeout: NodeJS.Timeout | null // Timer for next fetch
   isLoading: boolean
 
   // Stats
@@ -106,14 +104,14 @@ export const useRealTrafficStore = create<RealTrafficStore>((set, get) => ({
         isPro: result.isPro ?? false,
         trafficRateLimit: result.trafficRateLimit ?? REALTRAFFIC_DEFAULT_POLL_INTERVAL,
         updateInterval: result.trafficRateLimit ?? REALTRAFFIC_DEFAULT_POLL_INTERVAL,
-        error: null
+        error: null,
       })
       return true
     } else {
       console.warn('[RealTraffic] Authentication failed:', result.error)
       set({
         status: 'error',
-        error: result.error ?? 'Authentication failed'
+        error: result.error ?? 'Authentication failed',
       })
       return false
     }
@@ -132,7 +130,7 @@ export const useRealTrafficStore = create<RealTrafficStore>((set, get) => ({
     }
 
     // Deauthenticate from the server (fire-and-forget)
-    realTrafficService.deauthenticate().catch(err => {
+    realTrafficService.deauthenticate().catch((err) => {
       console.warn('[RealTraffic] Deauth during disconnect failed:', err)
     })
 
@@ -143,7 +141,7 @@ export const useRealTrafficStore = create<RealTrafficStore>((set, get) => ({
       error: null,
       isPolling: false,
       pollingTimeout: null,
-      totalAircraftFromApi: 0
+      totalAircraftFromApi: 0,
     })
   },
 
@@ -186,7 +184,7 @@ export const useRealTrafficStore = create<RealTrafficStore>((set, get) => ({
       referencePosition.latitude,
       referencePosition.longitude,
       radiusNm,
-      timeOffset
+      timeOffset,
     )
 
     if (!result.success) {
@@ -213,7 +211,7 @@ export const useRealTrafficStore = create<RealTrafficStore>((set, get) => ({
         console.warn('[RealTraffic] Automatic reconnection failed')
         set({
           status: 'error',
-          error: 'Session expired and reconnection failed. Please reconnect manually.'
+          error: 'Session expired and reconnection failed. Please reconnect manually.',
         })
         return
       }
@@ -221,7 +219,7 @@ export const useRealTrafficStore = create<RealTrafficStore>((set, get) => ({
       // For other errors (rate limit, network), keep trying
       set({
         error: result.error ?? 'Failed to fetch traffic data',
-        isLoading: false
+        isLoading: false,
       })
       // Still schedule next fetch - don't stop polling on transient errors
       get().scheduleNextFetch()
@@ -233,11 +231,12 @@ export const useRealTrafficStore = create<RealTrafficStore>((set, get) => ({
     // Filter out:
     // - Invalid callsigns (null, empty, or literal "null" string)
     // - Ground operations vehicles (callsigns containing "OPS")
-    let aircraft = (result.aircraft ?? []).filter(state =>
-      state.callsign &&
-      state.callsign !== 'null' &&
-      state.callsign.trim() !== '' &&
-      !state.callsign.toUpperCase().startsWith('OPS')
+    let aircraft = (result.aircraft ?? []).filter(
+      (state) =>
+        state.callsign &&
+        state.callsign !== 'null' &&
+        state.callsign.trim() !== '' &&
+        !state.callsign.toUpperCase().startsWith('OPS'),
     )
 
     // Fetch parked aircraft if enabled (maxParkedAircraft > 0)
@@ -245,24 +244,25 @@ export const useRealTrafficStore = create<RealTrafficStore>((set, get) => ({
       const parkedResult = await realTrafficService.fetchParkedTraffic(
         referencePosition.latitude,
         referencePosition.longitude,
-        radiusNm
+        radiusNm,
       )
 
       if (parkedResult.success && parkedResult.aircraft) {
         // Filter parked aircraft same as regular traffic, then limit to max
         const parkedAircraft = parkedResult.aircraft
-          .filter(state =>
-            state.callsign &&
-            state.callsign !== 'null' &&
-            state.callsign.trim() !== '' &&
-            !state.callsign.toUpperCase().startsWith('OPS')
+          .filter(
+            (state) =>
+              state.callsign &&
+              state.callsign !== 'null' &&
+              state.callsign.trim() !== '' &&
+              !state.callsign.toUpperCase().startsWith('OPS'),
           )
           .slice(0, maxParkedAircraft)
 
         // Merge parked with active aircraft
         // Use a Set to avoid duplicates (active aircraft already on ground might overlap)
-        const activeCallsigns = new Set(aircraft.map(a => a.callsign))
-        const uniqueParked = parkedAircraft.filter(p => !activeCallsigns.has(p.callsign))
+        const activeCallsigns = new Set(aircraft.map((a) => a.callsign))
+        const uniqueParked = parkedAircraft.filter((p) => !activeCallsigns.has(p.callsign))
         aircraft = [...aircraft, ...uniqueParked]
       }
     }
@@ -296,10 +296,10 @@ export const useRealTrafficStore = create<RealTrafficStore>((set, get) => ({
           pitch: null, // Not provided by RealTraffic ADS-B
           roll: state.roll ?? null,
           verticalRate: state.baroRate ?? null, // Actual ADS-B vertical rate in fpm
-          observedAt: state.apiTimestamp * 1000,  // Convert seconds to ms
+          observedAt: state.apiTimestamp * 1000, // Convert seconds to ms
           receivedAt: now,
           source: 'realtraffic',
-          displayDelay: SOURCE_DISPLAY_DELAYS.realtraffic
+          displayDelay: SOURCE_DISPLAY_DELAYS.realtraffic,
         }
 
         const metadata: AircraftMetadata = {
@@ -308,7 +308,7 @@ export const useRealTrafficStore = create<RealTrafficStore>((set, get) => ({
           transponder: state.transponder,
           departure: state.departure,
           arrival: state.arrival,
-          isParked: state.isParked
+          isParked: state.isParked,
         }
 
         observationBatch.push({ callsign: state.callsign, observation, metadata })
@@ -321,9 +321,10 @@ export const useRealTrafficStore = create<RealTrafficStore>((set, get) => ({
     }
 
     // Guard against NaN/undefined - keep existing rate limit if new one is invalid
-    const newRateLimit = (typeof result.trafficRateLimit === 'number' && !isNaN(result.trafficRateLimit))
-      ? result.trafficRateLimit
-      : get().trafficRateLimit
+    const newRateLimit =
+      typeof result.trafficRateLimit === 'number' && !isNaN(result.trafficRateLimit)
+        ? result.trafficRateLimit
+        : get().trafficRateLimit
 
     // Calculate actual interval for timing reference
     const lastUpdate = get().lastUpdate
@@ -335,7 +336,7 @@ export const useRealTrafficStore = create<RealTrafficStore>((set, get) => ({
       trafficRateLimit: newRateLimit,
       totalAircraftFromApi: aircraft.length,
       isLoading: false,
-      error: null
+      error: null,
     })
 
     // Schedule next fetch if polling is active
@@ -438,7 +439,7 @@ export const useRealTrafficStore = create<RealTrafficStore>((set, get) => ({
     if (get().status === 'connected') {
       get().fetchData()
     }
-  }
+  },
 }))
 
 /**

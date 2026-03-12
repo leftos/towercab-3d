@@ -64,5 +64,5 @@ export const useUIFeedbackStore = create<UIFeedbackStore>((set, get) => ({
   // Terrain cache clear
   clearTerrainCacheRequested: false,
   requestClearTerrainCache: () => set({ clearTerrainCacheRequested: true }),
-  acknowledgeClearTerrainCache: () => set({ clearTerrainCacheRequested: false })
+  acknowledgeClearTerrainCache: () => set({ clearTerrainCacheRequested: false }),
 }))

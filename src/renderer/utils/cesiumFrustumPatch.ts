@@ -46,11 +46,7 @@ const originalCameraStates = new WeakMap<Cesium.Camera, CameraState>()
  * @param focalLength - Focal/convergence distance in meters (typically screen distance)
  * @returns The x-offset to apply to the frustum
  */
-export function calculateStereoOffset(
-  ipd: number,
-  near: number,
-  focalLength: number
-): number {
+export function calculateStereoOffset(ipd: number, near: number, focalLength: number): number {
   // Asymmetric projection formula: offset = (eye_separation / 2) * (near / focal_length)
   return (ipd / 2) * (near / focalLength)
 }
@@ -63,7 +59,7 @@ export function saveFrustumState(camera: Cesium.Camera): void {
   if (frustum && 'xOffset' in frustum) {
     originalFrustumStates.set(camera, {
       xOffset: frustum.xOffset,
-      yOffset: frustum.yOffset
+      yOffset: frustum.yOffset,
     })
   }
 }
@@ -79,7 +75,7 @@ export function saveCameraState(camera: Cesium.Camera): void {
     up: Cesium.Cartesian3.clone(camera.up),
     right: Cesium.Cartesian3.clone(camera.right),
     frustumXOffset: frustum?.xOffset ?? 0,
-    frustumYOffset: frustum?.yOffset ?? 0
+    frustumYOffset: frustum?.yOffset ?? 0,
   })
 }
 
@@ -122,7 +118,7 @@ export function configureEyeCamera(
   camera: Cesium.Camera,
   eye: 'left' | 'right',
   ipd: number = 0.063,
-  focalLength: number = 1.0
+  focalLength: number = 1.0,
 ): void {
   const frustum = camera.frustum as Cesium.PerspectiveFrustum
   if (!frustum || !('xOffset' in frustum)) {
@@ -135,11 +131,7 @@ export function configureEyeCamera(
 
   // Move camera position horizontally (perpendicular to look direction)
   const right = camera.right
-  const offset = Cesium.Cartesian3.multiplyByScalar(
-    right,
-    eyeSign * halfIPD,
-    new Cesium.Cartesian3()
-  )
+  const offset = Cesium.Cartesian3.multiplyByScalar(right, eyeSign * halfIPD, new Cesium.Cartesian3())
   camera.position = Cesium.Cartesian3.add(camera.position, offset, camera.position)
 
   // Apply frustum offset for proper convergence
@@ -162,7 +154,7 @@ export function applyEyeOffset(
   camera: Cesium.Camera,
   eye: 'left' | 'right',
   ipd: number = 0.063,
-  focalLength: number = 1.0
+  focalLength: number = 1.0,
 ): void {
   const frustum = camera.frustum as Cesium.PerspectiveFrustum
   if (!frustum || !('xOffset' in frustum)) {
@@ -188,10 +180,7 @@ export function applyEyeOffset(
 /**
  * Apply a direct x-offset to the frustum (for manual control)
  */
-export function applyFrustumXOffset(
-  camera: Cesium.Camera,
-  xOffset: number
-): void {
+export function applyFrustumXOffset(camera: Cesium.Camera, xOffset: number): void {
   const frustum = camera.frustum as Cesium.PerspectiveFrustum
   if (!frustum || !('xOffset' in frustum)) {
     console.warn('Camera frustum does not support xOffset')
@@ -243,7 +232,7 @@ export function clearFrustumState(camera: Cesium.Camera): void {
 export function applyCameraPositionOffset(
   camera: Cesium.Camera,
   eye: 'left' | 'right',
-  ipd: number = 0.063
+  ipd: number = 0.063,
 ): Cesium.Cartesian3 {
   // Calculate the offset direction (perpendicular to look direction and up)
   const direction = camera.direction
@@ -256,7 +245,7 @@ export function applyCameraPositionOffset(
   const offset = Cesium.Cartesian3.multiplyByScalar(
     right,
     eye === 'left' ? -offsetAmount : offsetAmount,
-    new Cesium.Cartesian3()
+    new Cesium.Cartesian3(),
   )
 
   // Apply offset to camera position
@@ -278,7 +267,7 @@ export function renderStereoFrame(
   scene: Cesium.Scene,
   camera: Cesium.Camera,
   ipd: number,
-  renderCallback: (eye: 'left' | 'right') => void
+  renderCallback: (eye: 'left' | 'right') => void,
 ): void {
   // Save original camera state
   saveCameraState(camera)
@@ -306,7 +295,7 @@ export function renderStereoFrame(
 export async function renderStereo(
   viewer: Cesium.Viewer,
   ipd: number,
-  renderCallback: (eye: 'left' | 'right') => void | Promise<void>
+  renderCallback: (eye: 'left' | 'right') => void | Promise<void>,
 ): Promise<void> {
   const camera = viewer.camera
   const scene = viewer.scene

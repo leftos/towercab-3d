@@ -34,7 +34,7 @@ export function applyExponentialSmoothing(
   rawY: number,
   previousState: SmoothedScreenPosition | undefined,
   smoothingFactor: number = 0.4,
-  jumpThreshold: number = 100
+  jumpThreshold: number = 100,
 ): SmoothedScreenPosition {
   if (!previousState) {
     // First time - initialize with raw position
@@ -53,7 +53,7 @@ export function applyExponentialSmoothing(
   // Apply exponential smoothing: new = old + factor * (raw - old)
   return {
     smoothedX: previousState.smoothedX + smoothingFactor * (rawX - previousState.smoothedX),
-    smoothedY: previousState.smoothedY + smoothingFactor * (rawY - previousState.smoothedY)
+    smoothedY: previousState.smoothedY + smoothingFactor * (rawY - previousState.smoothedY),
   }
 }
 
@@ -76,10 +76,7 @@ export interface Rectangle {
  */
 export function rectanglesOverlap(a: Rectangle, b: Rectangle, margin: number = 0): boolean {
   return (
-    a.left < b.right + margin &&
-    a.right > b.left - margin &&
-    a.top < b.bottom + margin &&
-    a.bottom > b.top - margin
+    a.left < b.right + margin && a.right > b.left - margin && a.top < b.bottom + margin && a.bottom > b.top - margin
   )
 }
 
@@ -91,7 +88,7 @@ export function createRectangle(x: number, y: number, width: number, height: num
     left: x,
     top: y,
     right: x + width,
-    bottom: y + height
+    bottom: y + height,
   }
 }
 
@@ -112,14 +109,14 @@ export interface LabelPosition {
  * Alternative label offset positions to try when avoiding overlaps
  */
 export const LABEL_OFFSET_ALTERNATIVES = [
-  { x: 0, y: 0 },      // Default: top-left of aircraft (will be adjusted below)
-  { x: 30, y: -40 },   // Top-right
-  { x: -90, y: 0 },    // Left
-  { x: 30, y: 0 },     // Right
-  { x: 0, y: 40 },     // Below
-  { x: -90, y: 40 },   // Bottom-left
-  { x: 30, y: 40 },    // Bottom-right
-  { x: -90, y: -40 }   // Top-left (far)
+  { x: 0, y: 0 }, // Default: top-left of aircraft (will be adjusted below)
+  { x: 30, y: -40 }, // Top-right
+  { x: -90, y: 0 }, // Left
+  { x: 30, y: 0 }, // Right
+  { x: 0, y: 40 }, // Below
+  { x: -90, y: 40 }, // Bottom-left
+  { x: 30, y: 40 }, // Bottom-right
+  { x: -90, y: -40 }, // Top-left (far)
 ] as const
 
 /**
@@ -138,7 +135,7 @@ export function calculateLabelOffset(
   labelHeight: number,
   modelRadius: number,
   labelGap: number,
-  existingLabels: LabelPosition[]
+  existingLabels: LabelPosition[],
 ): { offsetX: number; offsetY: number } {
   // Default offset: top-left of aircraft
   let offsetX = -labelWidth - labelGap
@@ -174,7 +171,7 @@ export function calculateLabelOffset(
       // Try alternative positions
       const alternatives = LABEL_OFFSET_ALTERNATIVES.map((alt) => ({
         x: alt.x - labelWidth - labelGap,
-        y: alt.y - labelHeight - labelGap
+        y: alt.y - labelHeight - labelGap,
       }))
 
       for (const alt of alternatives) {
@@ -224,7 +221,7 @@ export function calculateLeaderLineEndpoints(
   labelHeight: number,
   aircraftX: number,
   aircraftY: number,
-  modelRadius: number
+  modelRadius: number,
 ): { startX: number; startY: number; endX: number; endY: number } {
   const labelCenterX = labelX + labelWidth / 2
   const labelCenterY = labelY + labelHeight / 2
@@ -277,7 +274,7 @@ export function calculateDatablockOffset(
   position: DatablockPosition,
   labelWidth: number,
   labelHeight: number,
-  gap: number
+  gap: number,
 ): { offsetX: number; offsetY: number } {
   // Map position to row/column
   // row: 0=bottom (1,2,3), 1=middle (4,5,6), 2=top (7,8,9)

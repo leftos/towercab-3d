@@ -1,10 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import * as Cesium from 'cesium'
 import type { InterpolatedAircraftState } from '../types/vatsim'
-import {
-  GROUNDSPEED_THRESHOLD_KNOTS,
-  LOW_ALTITUDE_AGL_THRESHOLD_M
-} from '../constants/rendering'
+import { GROUNDSPEED_THRESHOLD_KNOTS, LOW_ALTITUDE_AGL_THRESHOLD_M } from '../constants/rendering'
 import { isTerrainCacheClearing } from './useTerrainFlattening'
 import { getHeightAndSlopeFromPolygons } from '../terrain/FlatteningTerrainProvider'
 import { geoidService } from '../services/GeoidService'
@@ -32,9 +29,9 @@ const lastSampledPositions = new Map<string, { lat: number; lon: number; heading
  */
 function approxDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000 // Earth radius in meters
-  const dLat = (lat2 - lat1) * Math.PI / 180
-  const dLon = (lon2 - lon1) * Math.PI / 180
-  const avgLat = (lat1 + lat2) / 2 * Math.PI / 180
+  const dLat = ((lat2 - lat1) * Math.PI) / 180
+  const dLon = ((lon2 - lon1) * Math.PI) / 180
+  const avgLat = (((lat1 + lat2) / 2) * Math.PI) / 180
   const x = dLon * Math.cos(avgLat)
   return R * Math.sqrt(dLat * dLat + x * x)
 }
@@ -79,7 +76,7 @@ function needsResample(callsign: string, lat: number, lon: number, heading: numb
 export function useGroundAircraftTerrain(
   viewer: Cesium.Viewer | null,
   interpolatedAircraft: Map<string, InterpolatedAircraftState>,
-  groundElevationMeters: number = 0
+  groundElevationMeters: number = 0,
 ): Map<string, TerrainData> {
   const [terrainData, setTerrainData] = useState<Map<string, TerrainData>>(new Map())
   const samplingInProgressRef = useRef<Set<string>>(new Set())
@@ -127,19 +124,21 @@ export function useGroundAircraftTerrain(
         const groundElevationEllipsoidal = geoidService.mslToEllipsoidal(
           aircraft.interpolatedLatitude,
           aircraft.interpolatedLongitude,
-          groundElevationMeters
+          groundElevationMeters,
         )
         const altitudeAgl = aircraft.interpolatedAltitude - groundElevationEllipsoidal
         const isLowAltitude = altitudeAgl < LOW_ALTITUDE_AGL_THRESHOLD_M
 
         if (isOnGround || isLowAltitude) {
           // Skip if aircraft hasn't moved enough since last sample
-          if (!needsResample(
-            aircraft.callsign,
-            aircraft.interpolatedLatitude,
-            aircraft.interpolatedLongitude,
-            aircraft.interpolatedHeading
-          )) {
+          if (
+            !needsResample(
+              aircraft.callsign,
+              aircraft.interpolatedLatitude,
+              aircraft.interpolatedLongitude,
+              aircraft.interpolatedHeading,
+            )
+          ) {
             continue
           }
 
@@ -148,7 +147,7 @@ export function useGroundAircraftTerrain(
           const cachedData = getHeightAndSlopeFromPolygons(
             aircraft.interpolatedLongitude,
             aircraft.interpolatedLatitude,
-            aircraft.interpolatedHeading
+            aircraft.interpolatedHeading,
           )
 
           if (cachedData) {
@@ -159,7 +158,7 @@ export function useGroundAircraftTerrain(
               lon: aircraft.interpolatedLongitude,
               heading: aircraft.interpolatedHeading,
               height: cachedData.height,
-              slopeDegrees: cachedData.slopeDegrees
+              slopeDegrees: cachedData.slopeDegrees,
             })
           } else {
             // Cache miss - needs actual terrain sampling (aircraft in non-flattened area)
@@ -167,7 +166,7 @@ export function useGroundAircraftTerrain(
               callsign: aircraft.callsign,
               lat: aircraft.interpolatedLatitude,
               lon: aircraft.interpolatedLongitude,
-              heading: aircraft.interpolatedHeading
+              heading: aircraft.interpolatedHeading,
             })
           }
         }
@@ -175,18 +174,18 @@ export function useGroundAircraftTerrain(
 
       // Apply polygon cache hits immediately (no async terrain sampling needed)
       if (polygonCacheHits.length > 0) {
-        setTerrainData(prev => {
+        setTerrainData((prev) => {
           const updated = new Map(prev)
           for (const hit of polygonCacheHits) {
             updated.set(hit.callsign, {
               height: hit.height,
-              slopeDegrees: hit.slopeDegrees
+              slopeDegrees: hit.slopeDegrees,
             })
             // Update last sampled position
             lastSampledPositions.set(hit.callsign, {
               lat: hit.lat,
               lon: hit.lon,
-              heading: hit.heading
+              heading: hit.heading,
             })
           }
           return updated
@@ -197,7 +196,7 @@ export function useGroundAircraftTerrain(
       if (needsTerrainSampling.length === 0) return
 
       // Mark as sampling in progress (only for terrain-sampled aircraft)
-      needsTerrainSampling.forEach(a => samplingInProgressRef.current.add(a.callsign))
+      needsTerrainSampling.forEach((a) => samplingInProgressRef.current.add(a.callsign))
 
       // Sample terrain for aircraft outside flattening polygons in one batch
       // For each aircraft, sample 3 points: position, ahead, and behind (for slope)
@@ -221,9 +220,9 @@ export function useGroundAircraftTerrain(
         // Ahead point: move forward in heading direction
         // In ENU: heading 0 = north (+Y), heading 90 = east (+X)
         const aheadOffsetENU = new Cesium.Cartesian3(
-          Math.sin(headingRad) * SLOPE_SAMPLE_DISTANCE_M,  // East component
-          Math.cos(headingRad) * SLOPE_SAMPLE_DISTANCE_M,  // North component
-          0  // Up component
+          Math.sin(headingRad) * SLOPE_SAMPLE_DISTANCE_M, // East component
+          Math.cos(headingRad) * SLOPE_SAMPLE_DISTANCE_M, // North component
+          0, // Up component
         )
         const aheadCartesian = Cesium.Matrix4.multiplyByPoint(transform, aheadOffsetENU, new Cesium.Cartesian3())
         const aheadCarto = Cesium.Cartographic.fromCartesian(aheadCartesian)
@@ -234,7 +233,7 @@ export function useGroundAircraftTerrain(
         const behindOffsetENU = new Cesium.Cartesian3(
           -Math.sin(headingRad) * SLOPE_SAMPLE_DISTANCE_M,
           -Math.cos(headingRad) * SLOPE_SAMPLE_DISTANCE_M,
-          0
+          0,
         )
         const behindCartesian = Cesium.Matrix4.multiplyByPoint(transform, behindOffsetENU, new Cesium.Cartesian3())
         const behindCarto = Cesium.Cartographic.fromCartesian(behindCartesian)
@@ -245,13 +244,13 @@ export function useGroundAircraftTerrain(
           callsign: aircraft.callsign,
           centerIdx,
           aheadIdx,
-          behindIdx
+          behindIdx,
         })
       }
 
       Cesium.sampleTerrainMostDetailed(terrainProvider, positions)
         .then((sampledPositions) => {
-          setTerrainData(prev => {
+          setTerrainData((prev) => {
             const updated = new Map(prev)
 
             for (const mapping of positionIndexMap) {
@@ -265,7 +264,7 @@ export function useGroundAircraftTerrain(
                 const centerPos = positions[mapping.centerIdx]
                 console.warn(`[Terrain Sampling] Throttled for ${mapping.callsign} - keeping previous data`, {
                   centerLon: Cesium.Math.toDegrees(centerPos.longitude),
-                  centerLat: Cesium.Math.toDegrees(centerPos.latitude)
+                  centerLat: Cesium.Math.toDegrees(centerPos.latitude),
                 })
                 samplingInProgressRef.current.delete(mapping.callsign)
                 continue // Don't update terrain data or last position
@@ -280,16 +279,16 @@ export function useGroundAircraftTerrain(
 
               updated.set(mapping.callsign, {
                 height: centerHeight,
-                slopeDegrees
+                slopeDegrees,
               })
 
               // Update last sampled position on successful sample
-              const aircraft = needsTerrainSampling.find(a => a.callsign === mapping.callsign)
+              const aircraft = needsTerrainSampling.find((a) => a.callsign === mapping.callsign)
               if (aircraft) {
                 lastSampledPositions.set(mapping.callsign, {
                   lat: aircraft.lat,
                   lon: aircraft.lon,
-                  heading: aircraft.heading
+                  heading: aircraft.heading,
                 })
               }
 
@@ -302,7 +301,7 @@ export function useGroundAircraftTerrain(
         .catch((error) => {
           console.warn('[Terrain Sampling] Failed to sample terrain:', error)
           // Clear sampling flags on error
-          needsTerrainSampling.forEach(a => samplingInProgressRef.current.delete(a.callsign))
+          needsTerrainSampling.forEach((a) => samplingInProgressRef.current.delete(a.callsign))
         })
     }, 333) // 3x per second - balanced for responsiveness vs terrain provider load
 
@@ -311,7 +310,7 @@ export function useGroundAircraftTerrain(
 
   // Clean up terrain data for aircraft that are no longer present or have climbed away
   useEffect(() => {
-    setTerrainData(prev => {
+    setTerrainData((prev) => {
       const updated = new Map(prev)
       let changed = false
 
@@ -330,7 +329,7 @@ export function useGroundAircraftTerrain(
         const groundElevationEllipsoidal = geoidService.mslToEllipsoidal(
           aircraft.interpolatedLatitude,
           aircraft.interpolatedLongitude,
-          groundElevationMeters
+          groundElevationMeters,
         )
         const altitudeAgl = aircraft.interpolatedAltitude - groundElevationEllipsoidal
         const isLowAltitude = altitudeAgl < LOW_ALTITUDE_AGL_THRESHOLD_M

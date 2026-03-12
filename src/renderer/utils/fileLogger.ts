@@ -137,7 +137,7 @@ function setupConsoleInterception() {
  */
 function formatMessage(args: unknown[]): string {
   return args
-    .map(arg => {
+    .map((arg) => {
       if (arg instanceof Error) {
         // Error objects don't serialize with JSON.stringify (properties aren't enumerable)
         return `${arg.name}: ${arg.message}${arg.stack ? `\n${arg.stack}` : ''}`
@@ -168,16 +168,16 @@ async function flushLogs() {
   if (isRemote) {
     // Remote mode: send to HTTP endpoint in a single batch
     try {
-      const entries = toFlush.map(entry => ({
+      const entries = toFlush.map((entry) => ({
         level: entry.level,
         message: entry.message,
-        clientId
+        clientId,
       }))
 
       await fetch(`${getApiBaseUrl()}/api/log`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entries })
+        body: JSON.stringify({ entries }),
       })
     } catch {
       // Silently fail to avoid recursion
@@ -190,7 +190,7 @@ async function flushLogs() {
     try {
       await invoke('log_from_frontend', {
         level: entry.level,
-        message: entry.message
+        message: entry.message,
       })
     } catch {
       // Silently fail to avoid recursion

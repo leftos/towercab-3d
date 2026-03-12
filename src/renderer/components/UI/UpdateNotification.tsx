@@ -4,7 +4,7 @@ import {
   downloadAndInstallUpdate,
   restartApp,
   startAutoUpdateCheck,
-  stopAutoUpdateCheck
+  stopAutoUpdateCheck,
 } from '../../services/UpdateService'
 import { isRemoteMode } from '../../utils/remoteMode'
 import './UpdateNotification.css'
@@ -67,9 +67,7 @@ function UpdateNotification() {
       <div className="update-content">
         {status === 'available' && updateInfo && (
           <>
-            <span className="update-message">
-              Update available: v{updateInfo.version}
-            </span>
+            <span className="update-message">Update available: v{updateInfo.version}</span>
             <button className="update-button primary" onClick={handleDownload}>
               Download & Install
             </button>
@@ -93,9 +91,7 @@ function UpdateNotification() {
               <div
                 className="progress-fill"
                 style={{
-                  width: progress.total
-                    ? `${(progress.downloaded / progress.total) * 100}%`
-                    : '50%'
+                  width: progress.total ? `${(progress.downloaded / progress.total) * 100}%` : '50%',
                 }}
               />
             </div>
@@ -104,9 +100,7 @@ function UpdateNotification() {
 
         {status === 'ready' && (
           <>
-            <span className="update-message">
-              Update ready! Restart to apply.
-            </span>
+            <span className="update-message">Update ready! Restart to apply.</span>
             <button className="update-button primary" onClick={handleRestart}>
               Restart Now
             </button>
@@ -118,9 +112,7 @@ function UpdateNotification() {
 
         {status === 'error' && (
           <>
-            <span className="update-message error">
-              Update failed: {error}
-            </span>
+            <span className="update-message error">Update failed: {error}</span>
             <button className="update-button secondary" onClick={handleDismiss}>
               Dismiss
             </button>

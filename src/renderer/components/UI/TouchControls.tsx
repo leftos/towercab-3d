@@ -25,13 +25,7 @@ interface JoystickState {
 /**
  * Virtual command input modal for touch devices
  */
-function TouchCommandInput({
-  isOpen,
-  onClose
-}: {
-  isOpen: boolean
-  onClose: () => void
-}) {
+function TouchCommandInput({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const [inputValue, setInputValue] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -50,55 +44,58 @@ function TouchCommandInput({
     }
   }, [isOpen])
 
-  const processCommand = useCallback((command: string) => {
-    // Ensure command starts with a period
-    const normalizedCommand = command.startsWith('.') ? command : '.' + command
+  const processCommand = useCallback(
+    (command: string) => {
+      // Ensure command starts with a period
+      const normalizedCommand = command.startsWith('.') ? command : '.' + command
 
-    // Match save bookmark pattern: .XX. or .XX.NAME.
-    if (normalizedCommand.endsWith('.')) {
-      const saveMatch = normalizedCommand.match(/^\.(\d{1,2})\.(.*)$/)
-      if (saveMatch) {
-        const slot = parseInt(saveMatch[1], 10)
-        const namePart = saveMatch[2]
-        const name = namePart.slice(0, -1).trim() || undefined
+      // Match save bookmark pattern: .XX. or .XX.NAME.
+      if (normalizedCommand.endsWith('.')) {
+        const saveMatch = normalizedCommand.match(/^\.(\d{1,2})\.(.*)$/)
+        if (saveMatch) {
+          const slot = parseInt(saveMatch[1], 10)
+          const namePart = saveMatch[2]
+          const name = namePart.slice(0, -1).trim() || undefined
 
+          if (slot >= 0 && slot <= 99) {
+            if (!currentAirportIcao) {
+              showFeedback('No airport selected', 'error')
+              return
+            }
+            saveBookmark(slot, name)
+            const slotStr = slot.toString().padStart(2, '0')
+            const displayName = name ? ` "${name}"` : ''
+            showFeedback(`Saved bookmark .${slotStr}${displayName}`, 'success')
+            return
+          }
+        }
+      }
+
+      // Match load bookmark pattern: .XX
+      const loadMatch = normalizedCommand.match(/^\.(\d{1,2})$/)
+      if (loadMatch) {
+        const slot = parseInt(loadMatch[1], 10)
         if (slot >= 0 && slot <= 99) {
           if (!currentAirportIcao) {
             showFeedback('No airport selected', 'error')
             return
           }
-          saveBookmark(slot, name)
-          const slotStr = slot.toString().padStart(2, '0')
-          const displayName = name ? ` "${name}"` : ''
-          showFeedback(`Saved bookmark .${slotStr}${displayName}`, 'success')
+          const success = loadBookmark(slot)
+          if (success) {
+            showFeedback(`Loaded bookmark .${slot.toString().padStart(2, '0')}`, 'success')
+          } else {
+            showFeedback(`No bookmark at .${slot.toString().padStart(2, '0')}`, 'error')
+          }
           return
         }
       }
-    }
 
-    // Match load bookmark pattern: .XX
-    const loadMatch = normalizedCommand.match(/^\.(\d{1,2})$/)
-    if (loadMatch) {
-      const slot = parseInt(loadMatch[1], 10)
-      if (slot >= 0 && slot <= 99) {
-        if (!currentAirportIcao) {
-          showFeedback('No airport selected', 'error')
-          return
-        }
-        const success = loadBookmark(slot)
-        if (success) {
-          showFeedback(`Loaded bookmark .${slot.toString().padStart(2, '0')}`, 'success')
-        } else {
-          showFeedback(`No bookmark at .${slot.toString().padStart(2, '0')}`, 'error')
-        }
-        return
+      if (command.length > 0) {
+        showFeedback(`Unknown command: ${normalizedCommand}`, 'error')
       }
-    }
-
-    if (command.length > 0) {
-      showFeedback(`Unknown command: ${normalizedCommand}`, 'error')
-    }
-  }, [saveBookmark, loadBookmark, currentAirportIcao, showFeedback])
+    },
+    [saveBookmark, loadBookmark, currentAirportIcao, showFeedback],
+  )
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -130,7 +127,9 @@ function TouchCommandInput({
       <div className="touch-command-modal" onClick={(e) => e.stopPropagation()}>
         <div className="touch-command-header">
           <span>Command Input</span>
-          <button className="touch-command-close" onClick={onClose}>×</button>
+          <button className="touch-command-close" onClick={onClose}>
+            ×
+          </button>
         </div>
 
         <form onSubmit={handleSubmit} className="touch-command-form">
@@ -157,11 +156,7 @@ function TouchCommandInput({
           <div className="touch-command-quickslots-label">Quick Load:</div>
           <div className="touch-command-quickslots-grid">
             {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((slot) => (
-              <button
-                key={slot}
-                className="touch-command-quickslot"
-                onClick={() => handleQuickBookmark(slot)}
-              >
+              <button key={slot} className="touch-command-quickslot" onClick={() => handleQuickBookmark(slot)}>
                 .{slot.toString().padStart(2, '0')}
               </button>
             ))}
@@ -169,9 +164,15 @@ function TouchCommandInput({
         </div>
 
         <div className="touch-command-help">
-          <p><strong>.XX</strong> - Load bookmark (e.g., .01)</p>
-          <p><strong>.XX.</strong> - Save bookmark (e.g., .01.)</p>
-          <p><strong>.XX.Name.</strong> - Save named bookmark</p>
+          <p>
+            <strong>.XX</strong> - Load bookmark (e.g., .01)
+          </p>
+          <p>
+            <strong>.XX.</strong> - Save bookmark (e.g., .01.)
+          </p>
+          <p>
+            <strong>.XX.Name.</strong> - Save named bookmark
+          </p>
         </div>
       </div>
     </div>
@@ -181,11 +182,7 @@ function TouchCommandInput({
 /**
  * Virtual joystick component for WASD movement
  */
-function VirtualJoystick({
-  onMove
-}: {
-  onMove: (deltaX: number, deltaY: number) => void
-}) {
+function VirtualJoystick({ onMove }: { onMove: (deltaX: number, deltaY: number) => void }) {
   const joystickRef = useRef<HTMLDivElement>(null)
   const knobRef = useRef<HTMLDivElement>(null)
   const stateRef = useRef<JoystickState>({
@@ -193,7 +190,7 @@ function VirtualJoystick({
     deltaX: 0,
     deltaY: 0,
     startX: 0,
-    startY: 0
+    startY: 0,
   })
   const animationRef = useRef<number | null>(null)
 
@@ -233,7 +230,7 @@ function VirtualJoystick({
       deltaX: 0,
       deltaY: 0,
       startX: centerX,
-      startY: centerY
+      startY: centerY,
     }
 
     updateKnobPosition(touch.clientX - centerX, touch.clientY - centerY)
@@ -325,27 +322,33 @@ function ZoomButtons() {
   const adjustFov = useViewportStore((state) => state.adjustFov)
 
   // Determine which zoom function to use based on camera mode
-  const handleZoom = useCallback((direction: 'in' | 'out') => {
-    const delta = direction === 'in' ? 0.2 : -0.2
+  const handleZoom = useCallback(
+    (direction: 'in' | 'out') => {
+      const delta = direction === 'in' ? 0.2 : -0.2
 
-    if (followingCallsign && followMode !== 'orbit') {
-      // Tower follow mode: adjust zoom level (higher = more zoomed in)
-      adjustFollowZoom(delta)
-    } else if (followMode === 'orbit') {
-      // Orbit mode: adjust distance (negative = closer, positive = farther)
-      // Flip the sign since distance is inverse of zoom
-      adjustOrbitDistance(-delta * 50) // Scale for orbit distance units
-    } else {
-      // Free camera: adjust FOV (negative = zoom in, positive = zoom out)
-      adjustFov(-delta * 10) // Scale for FOV degrees
-    }
-  }, [followingCallsign, followMode, adjustFollowZoom, adjustOrbitDistance, adjustFov])
+      if (followingCallsign && followMode !== 'orbit') {
+        // Tower follow mode: adjust zoom level (higher = more zoomed in)
+        adjustFollowZoom(delta)
+      } else if (followMode === 'orbit') {
+        // Orbit mode: adjust distance (negative = closer, positive = farther)
+        // Flip the sign since distance is inverse of zoom
+        adjustOrbitDistance(-delta * 50) // Scale for orbit distance units
+      } else {
+        // Free camera: adjust FOV (negative = zoom in, positive = zoom out)
+        adjustFov(-delta * 10) // Scale for FOV degrees
+      }
+    },
+    [followingCallsign, followMode, adjustFollowZoom, adjustOrbitDistance, adjustFov],
+  )
 
   return (
     <div className="touch-zoom-buttons">
       <button
         className="touch-zoom-btn zoom-in"
-        onTouchStart={(e) => { e.preventDefault(); handleZoom('in') }}
+        onTouchStart={(e) => {
+          e.preventDefault()
+          handleZoom('in')
+        }}
         onClick={() => handleZoom('in')}
       >
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
@@ -355,7 +358,10 @@ function ZoomButtons() {
       </button>
       <button
         className="touch-zoom-btn zoom-out"
-        onTouchStart={(e) => { e.preventDefault(); handleZoom('out') }}
+        onTouchStart={(e) => {
+          e.preventDefault()
+          handleZoom('out')
+        }}
         onClick={() => handleZoom('out')}
       >
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
@@ -384,14 +390,17 @@ function TouchControls() {
   const joystickSensitivity = useSettingsStore((state) => state.camera.joystickSensitivity)
 
   // Handle joystick movement
-  const handleJoystickMove = useCallback((deltaX: number, deltaY: number) => {
-    // Scale movement speed based on sensitivity setting (1-10 maps to 1-10 speed)
-    const speed = joystickSensitivity
+  const handleJoystickMove = useCallback(
+    (deltaX: number, deltaY: number) => {
+      // Scale movement speed based on sensitivity setting (1-10 maps to 1-10 speed)
+      const speed = joystickSensitivity
 
-    // Note: deltaY is inverted (up on joystick = forward = negative Y in screen coords)
-    moveForward(-deltaY * speed)
-    moveRight(deltaX * speed)
-  }, [moveForward, moveRight, joystickSensitivity])
+      // Note: deltaY is inverted (up on joystick = forward = negative Y in screen coords)
+      moveForward(-deltaY * speed)
+      moveRight(deltaX * speed)
+    },
+    [moveForward, moveRight, joystickSensitivity],
+  )
 
   // Don't render on non-touch devices (joystick only makes sense with touch)
   if (!isTouchDevice()) {

@@ -48,7 +48,7 @@ export function getUrlAirportParams(): { airport: string | null; bookmark: numbe
 
     return {
       airport,
-      bookmark: bookmark !== null && !isNaN(bookmark) ? bookmark : null
+      bookmark: bookmark !== null && !isNaN(bookmark) ? bookmark : null,
     }
   } catch {
     return { airport: null, bookmark: null }

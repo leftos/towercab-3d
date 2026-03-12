@@ -23,9 +23,7 @@ class VatsimService {
     }
 
     // In browser mode, use CORS proxy; in Tauri mode, fetch directly
-    const url = isTauri()
-      ? VATSIM_DATA_URL
-      : `/api/proxy?url=${encodeURIComponent(VATSIM_DATA_URL)}`
+    const url = isTauri() ? VATSIM_DATA_URL : `/api/proxy?url=${encodeURIComponent(VATSIM_DATA_URL)}`
 
     const response = await fetch(url)
     if (!response.ok) {
@@ -50,19 +48,10 @@ class VatsimService {
   /**
    * Get pilots near a location
    */
-  async getPilotsNear(
-    latitude: number,
-    longitude: number,
-    radiusNm: number
-  ): Promise<PilotData[]> {
+  async getPilotsNear(latitude: number, longitude: number, radiusNm: number): Promise<PilotData[]> {
     const pilots = await this.getPilots()
     return pilots.filter((pilot) => {
-      const distance = this.calculateDistanceNm(
-        latitude,
-        longitude,
-        pilot.latitude,
-        pilot.longitude
-      )
+      const distance = this.calculateDistanceNm(latitude, longitude, pilot.latitude, pilot.longitude)
       return distance <= radiusNm
     })
   }
@@ -78,24 +67,15 @@ class VatsimService {
     const normalizedIcao = icao.toUpperCase()
 
     return {
-      departing: pilots.filter(
-        (p) => p.flight_plan?.departure?.toUpperCase() === normalizedIcao
-      ),
-      arriving: pilots.filter(
-        (p) => p.flight_plan?.arrival?.toUpperCase() === normalizedIcao
-      )
+      departing: pilots.filter((p) => p.flight_plan?.departure?.toUpperCase() === normalizedIcao),
+      arriving: pilots.filter((p) => p.flight_plan?.arrival?.toUpperCase() === normalizedIcao),
     }
   }
 
   /**
    * Calculate distance between two coordinates in nautical miles
    */
-  private calculateDistanceNm(
-    lat1: number,
-    lon1: number,
-    lat2: number,
-    lon2: number
-  ): number {
+  private calculateDistanceNm(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 3440.065 // Earth radius in nautical miles
 
     const dLat = ((lat2 - lat1) * Math.PI) / 180
@@ -103,10 +83,7 @@ class VatsimService {
 
     const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos((lat1 * Math.PI) / 180) *
-        Math.cos((lat2 * Math.PI) / 180) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2)
+      Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2)
 
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 

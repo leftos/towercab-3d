@@ -11,13 +11,9 @@ import type {
   InterpolationSource,
   CloudLayer,
   PrecipitationState,
-  WindState
+  WindState,
 } from '@/types'
-import {
-  INTERPOLATION_DISTANCE_POWER,
-  INTERPOLATION_MIN_WEIGHT,
-  CLOUD_ALTITUDE_BAND_FEET
-} from '@/constants'
+import { INTERPOLATION_DISTANCE_POWER, INTERPOLATION_MIN_WEIGHT, CLOUD_ALTITUDE_BAND_FEET } from '@/constants'
 
 const DEG_TO_RAD = Math.PI / 180
 const RAD_TO_DEG = 180 / Math.PI
@@ -32,25 +28,22 @@ const RAD_TO_DEG = 180 / Math.PI
  * @param power Exponent for distance (default: 2 = inverse square)
  * @returns Normalized weights that sum to 1
  */
-export function calculateIDWWeights(
-  distances: number[],
-  power: number = INTERPOLATION_DISTANCE_POWER
-): number[] {
+export function calculateIDWWeights(distances: number[], power: number = INTERPOLATION_DISTANCE_POWER): number[] {
   if (distances.length === 0) return []
   if (distances.length === 1) return [1]
 
   // Handle zero distance (camera exactly at station)
-  const zeroIndex = distances.findIndex(d => d === 0)
+  const zeroIndex = distances.findIndex((d) => d === 0)
   if (zeroIndex !== -1) {
-    return distances.map((_, i) => i === zeroIndex ? 1 : 0)
+    return distances.map((_, i) => (i === zeroIndex ? 1 : 0))
   }
 
   // Calculate raw weights: 1/d^p
-  const rawWeights = distances.map(d => 1 / Math.pow(d, power))
+  const rawWeights = distances.map((d) => 1 / Math.pow(d, power))
   const totalWeight = rawWeights.reduce((sum, w) => sum + w, 0)
 
   // Normalize to sum to 1
-  return rawWeights.map(w => w / totalWeight)
+  return rawWeights.map((w) => w / totalWeight)
 }
 
 /**
@@ -72,7 +65,7 @@ export function interpolateWeather(
   options?: {
     power?: number
     minWeight?: number
-  }
+  },
 ): InterpolatedWeather | null {
   if (metars.length === 0) return null
 
@@ -80,35 +73,29 @@ export function interpolateWeather(
   const minWeight = options?.minWeight ?? INTERPOLATION_MIN_WEIGHT
 
   // Calculate weights
-  const distances = metars.map(m => m.distanceNM)
+  const distances = metars.map((m) => m.distanceNM)
   const weights = calculateIDWWeights(distances, power)
 
   // Filter out stations with negligible weight
   const significantStations = metars.filter((_, i) => weights[i] >= minWeight)
-  const significantWeights = weights.filter(w => w >= minWeight)
+  const significantWeights = weights.filter((w) => w >= minWeight)
 
   // Re-normalize filtered weights
   const weightSum = significantWeights.reduce((sum, w) => sum + w, 0)
-  const normalizedWeights = significantWeights.map(w => w / weightSum)
+  const normalizedWeights = significantWeights.map((w) => w / weightSum)
 
   // Build source station info
   const sourceStations: InterpolationSource[] = significantStations.map((m, i) => ({
     icao: m.icao,
     distanceNM: m.distanceNM,
-    weight: normalizedWeights[i]
+    weight: normalizedWeights[i],
   }))
 
   // Interpolate visibility (weighted average)
-  const visibility = significantStations.reduce(
-    (sum, m, i) => sum + m.visibility * normalizedWeights[i],
-    0
-  )
+  const visibility = significantStations.reduce((sum, m, i) => sum + m.visibility * normalizedWeights[i], 0)
 
   // Interpolate fog density (weighted average)
-  const fogDensity = significantStations.reduce(
-    (sum, m, i) => sum + m.fogDensity * normalizedWeights[i],
-    0
-  )
+  const fogDensity = significantStations.reduce((sum, m, i) => sum + m.fogDensity * normalizedWeights[i], 0)
 
   // Interpolate cloud layers
   const cloudLayers = interpolateCloudLayers(significantStations, normalizedWeights)
@@ -126,7 +113,7 @@ export function interpolateWeather(
     precipitation,
     wind,
     sourceStations,
-    calculatedAt: Date.now()
+    calculatedAt: Date.now(),
   }
 }
 
@@ -136,15 +123,12 @@ export function interpolateWeather(
  * Groups cloud layers by altitude bands, then averages coverage within each band.
  * This handles the case where different stations report clouds at slightly different altitudes.
  */
-function interpolateCloudLayers(
-  metars: DistancedMetar[],
-  weights: number[]
-): CloudLayer[] {
+function interpolateCloudLayers(metars: DistancedMetar[], weights: number[]): CloudLayer[] {
   // Collect all cloud layers with their weights
   const allLayers: Array<{ layer: CloudLayer; weight: number }> = []
 
   metars.forEach((m, i) => {
-    m.cloudLayers.forEach(layer => {
+    m.cloudLayers.forEach((layer) => {
       allLayers.push({ layer, weight: weights[i] })
     })
   })
@@ -171,16 +155,10 @@ function interpolateCloudLayers(
     const bandWeightSum = layersInBand.reduce((sum, l) => sum + l.weight, 0)
 
     // Weighted average altitude
-    const avgAltitude = layersInBand.reduce(
-      (sum, l) => sum + l.layer.altitude * l.weight,
-      0
-    ) / bandWeightSum
+    const avgAltitude = layersInBand.reduce((sum, l) => sum + l.layer.altitude * l.weight, 0) / bandWeightSum
 
     // Weighted average coverage
-    const avgCoverage = layersInBand.reduce(
-      (sum, l) => sum + l.layer.coverage * l.weight,
-      0
-    ) / bandWeightSum
+    const avgCoverage = layersInBand.reduce((sum, l) => sum + l.layer.coverage * l.weight, 0) / bandWeightSum
 
     // Determine type based on coverage (rounded to standard METAR codes)
     let type: string
@@ -192,7 +170,7 @@ function interpolateCloudLayers(
     interpolatedLayers.push({
       altitude: avgAltitude,
       coverage: Math.min(1, Math.max(0, avgCoverage)),
-      type
+      type,
     })
   })
 
@@ -210,7 +188,7 @@ function interpolateCloudLayers(
  */
 function selectPrecipitation(metars: DistancedMetar[]): PrecipitationState {
   // Find nearest station with active precipitation
-  const withPrecip = metars.filter(m => m.precipitation.active)
+  const withPrecip = metars.filter((m) => m.precipitation.active)
 
   if (withPrecip.length > 0) {
     // Already sorted by distance
@@ -218,7 +196,7 @@ function selectPrecipitation(metars: DistancedMetar[]): PrecipitationState {
   }
 
   // Check for thunderstorm even without precipitation
-  const withThunderstorm = metars.find(m => m.precipitation.hasThunderstorm)
+  const withThunderstorm = metars.find((m) => m.precipitation.hasThunderstorm)
   if (withThunderstorm) {
     return withThunderstorm.precipitation
   }
@@ -228,7 +206,7 @@ function selectPrecipitation(metars: DistancedMetar[]): PrecipitationState {
     active: false,
     types: [],
     visibilityFactor: 1,
-    hasThunderstorm: false
+    hasThunderstorm: false,
   }
 }
 
@@ -240,17 +218,14 @@ function selectPrecipitation(metars: DistancedMetar[]): PrecipitationState {
  *
  * Speed and gust are simple weighted averages.
  */
-function interpolateWind(
-  metars: DistancedMetar[],
-  weights: number[]
-): WindState {
+function interpolateWind(metars: DistancedMetar[], weights: number[]): WindState {
   if (metars.length === 0) {
     return { direction: 0, speed: 0, gustSpeed: null, isVariable: false }
   }
 
   // Check if any/all stations report variable wind
-  const anyVariable = metars.some(m => m.wind.isVariable)
-  const allVariable = metars.every(m => m.wind.isVariable)
+  const anyVariable = metars.some((m) => m.wind.isVariable)
+  const allVariable = metars.every((m) => m.wind.isVariable)
 
   // Vector average for direction
   // Convert to unit vectors, weight, sum, convert back
@@ -278,30 +253,24 @@ function interpolateWind(
   }
 
   // Weighted average for speed
-  const speed = metars.reduce(
-    (sum, m, i) => sum + m.wind.speed * weights[i],
-    0
-  )
+  const speed = metars.reduce((sum, m, i) => sum + m.wind.speed * weights[i], 0)
 
   // Weighted average for gust (only from stations with gusts)
   // Preserve original indices while filtering for cleaner weight lookup
   const gustData = metars
     .map((m, i) => ({ station: m, weight: weights[i] }))
-    .filter(d => d.station.wind.gustSpeed !== null)
+    .filter((d) => d.station.wind.gustSpeed !== null)
 
   let gustSpeed: number | null = null
   if (gustData.length > 0) {
     const gustWeightSum = gustData.reduce((sum, d) => sum + d.weight, 0)
-    gustSpeed = gustData.reduce(
-      (sum, d) => sum + (d.station.wind.gustSpeed ?? 0) * d.weight,
-      0
-    ) / gustWeightSum
+    gustSpeed = gustData.reduce((sum, d) => sum + (d.station.wind.gustSpeed ?? 0) * d.weight, 0) / gustWeightSum
   }
 
   return {
     direction: Math.round(direction),
     speed: Math.round(speed),
     gustSpeed: gustSpeed !== null ? Math.round(gustSpeed) : null,
-    isVariable: anyVariable
+    isVariable: anyVariable,
   }
 }

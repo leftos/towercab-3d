@@ -36,9 +36,7 @@ function LoadingScreen({ progress, steps }: LoadingScreenProps) {
   const currentStepWeight = steps[progress.currentStep]?.weight || 0
   const currentStepContribution = (currentStepWeight * progress.stepProgress) / 100
 
-  const overallProgress = Math.min(100, Math.round(
-    ((completedWeight + currentStepContribution) / totalWeight) * 100
-  ))
+  const overallProgress = Math.min(100, Math.round(((completedWeight + currentStepContribution) / totalWeight) * 100))
 
   return (
     <div className="loading-screen">
@@ -47,10 +45,7 @@ function LoadingScreen({ progress, steps }: LoadingScreenProps) {
 
         {/* Progress bar */}
         <div className="loading-progress-container">
-          <div
-            className="loading-progress-bar"
-            style={{ width: `${overallProgress}%` }}
-          />
+          <div className="loading-progress-bar" style={{ width: `${overallProgress}%` }} />
         </div>
 
         {/* Percentage and step count */}

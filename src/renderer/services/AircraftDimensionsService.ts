@@ -101,7 +101,7 @@ class AircraftDimensionsServiceClass {
 
     return {
       scaleX: dims.wingspan / REF_WINGSPAN,
-      scaleZ: dims.length / REF_LENGTH
+      scaleZ: dims.length / REF_LENGTH,
     }
   }
 

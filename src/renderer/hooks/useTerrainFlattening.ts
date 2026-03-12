@@ -58,7 +58,7 @@ export function useTerrainFlattening({
   currentAirportIcao,
   runways,
   enabled,
-  blendDistance
+  blendDistance,
 }: UseTerrainFlatteningOptions): void {
   // Get refreshCamera action to trigger camera recalculation after terrain changes
   const refreshCamera = useViewportStore((state) => state.refreshCamera)
@@ -80,7 +80,8 @@ export function useTerrainFlattening({
   // Load airport surfaces data on mount
   useEffect(() => {
     if (!surfacesLoaded) {
-      airportSurfacesService.load()
+      airportSurfacesService
+        .load()
         .then(() => {
           setSurfacesLoaded(true)
           console.log('[TerrainFlattening] Airport surfaces data loaded')
@@ -189,11 +190,7 @@ export function useTerrainFlattening({
     }
 
     // Generate polygons (includes pavements if loaded)
-    const config = airportPolygonService.generateRunwayPolygons(
-      currentAirportIcao,
-      runways,
-      blendDistance
-    )
+    const config = airportPolygonService.generateRunwayPolygons(currentAirportIcao, runways, blendDistance)
 
     // Track whether pavements were included
     const pavementsIncluded = pavementsNowAvailable && airportSurfacesService.hasAirportData(currentAirportIcao)
@@ -211,9 +208,11 @@ export function useTerrainFlattening({
     provider.setFlatteningPolygons(config.polygons)
     lastAirportRef.current = currentAirportIcao
 
-    const runwayCount = config.polygons.filter(p => p.source === 'runway').length
+    const runwayCount = config.polygons.filter((p) => p.source === 'runway').length
     const pavementCount = config.polygons.length - runwayCount
-    console.log(`[TerrainFlattening] Set ${config.polygons.length} polygons for ${currentAirportIcao} (${runwayCount} runways, ${pavementCount} pavements)`)
+    console.log(
+      `[TerrainFlattening] Set ${config.polygons.length} polygons for ${currentAirportIcao} (${runwayCount} runways, ${pavementCount} pavements)`,
+    )
 
     // Note: We don't clear the terrain cache here. The FlatteningTerrainProvider
     // already clears its internal processedTileCache when setFlatteningPolygons is called.

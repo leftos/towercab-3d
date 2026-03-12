@@ -28,7 +28,7 @@ import {
   getUniqueSourceFiles,
   findRuleMatch,
   createAirlineRuleKey,
-  normalizeTypeCode
+  normalizeTypeCode,
 } from './vmrUtils'
 
 // =============================================================================
@@ -170,12 +170,10 @@ class UserVMRServiceClass {
       const rules = await modApi.parseVMRFiles(vmrPaths)
 
       // Process parsed rules using shared utility
-      processApiRules(
-        rules as ParsedApiRule[],
-        this.defaultRules,
-        this.airlineRules,
-        (rule, sourceVmr) => ({ rule, sourceVmr })
-      )
+      processApiRules(rules as ParsedApiRule[], this.defaultRules, this.airlineRules, (rule, sourceVmr) => ({
+        rule,
+        sourceVmr,
+      }))
 
       // Track which files were processed
       this.loadedFiles = getUniqueSourceFiles(rules as ParsedApiRule[])
@@ -195,11 +193,13 @@ class UserVMRServiceClass {
       const sampleAirlineKeys = Array.from(this.airlineRules.keys()).slice(0, 10)
       console.log(
         `[UserVMRService] Loaded ${this.loadedFiles.length} VMR file(s), ` +
-        `${this.defaultRules.size} default rules, ${this.airlineRules.size} airline rules`
+          `${this.defaultRules.size} default rules, ${this.airlineRules.size} airline rules`,
       )
       console.log(`[UserVMRService] Sample airline rule keys: ${sampleAirlineKeys.join(', ')}`)
     } else {
-      console.log(`[UserVMRService] No VMR rules loaded (vmrFiles: ${useGlobalSettingsStore.getState().msfsModels.vmrFiles?.length ?? 0})`)
+      console.log(
+        `[UserVMRService] No VMR rules loaded (vmrFiles: ${useGlobalSettingsStore.getState().msfsModels.vmrFiles?.length ?? 0})`,
+      )
     }
   }
 
@@ -219,12 +219,7 @@ class UserVMRServiceClass {
       const rules: ParsedApiRule[] = await response.json()
 
       // Process parsed rules using shared utility
-      processApiRules(
-        rules,
-        this.defaultRules,
-        this.airlineRules,
-        (rule, sourceVmr) => ({ rule, sourceVmr })
-      )
+      processApiRules(rules, this.defaultRules, this.airlineRules, (rule, sourceVmr) => ({ rule, sourceVmr }))
 
       this.loadedFiles.push('(HTTP API)')
 
@@ -251,12 +246,7 @@ class UserVMRServiceClass {
   findMatch(aircraftType: string | null, airlineCode: string | null): VMRMatch | null {
     if (!aircraftType || !this.initialized) return null
 
-    const result = findRuleMatch(
-      aircraftType,
-      airlineCode,
-      this.defaultRules,
-      this.airlineRules
-    )
+    const result = findRuleMatch(aircraftType, airlineCode, this.defaultRules, this.airlineRules)
 
     if (!result) return null
 
@@ -267,7 +257,7 @@ class UserVMRServiceClass {
       modelName,
       typeCode: entry.rule.typeCode,
       airlineCode: isAirlineSpecific ? airlineCode?.toUpperCase() : undefined,
-      sourceVmr: entry.sourceVmr
+      sourceVmr: entry.sourceVmr,
     }
   }
 
@@ -316,7 +306,7 @@ class UserVMRServiceClass {
     return {
       vmrFiles: this.loadedFiles.length,
       defaultRules: this.defaultRules.size,
-      airlineRules: this.airlineRules.size
+      airlineRules: this.airlineRules.size,
     }
   }
 

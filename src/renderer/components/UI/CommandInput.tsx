@@ -14,7 +14,7 @@ const POSITION_LABELS: Record<number, string> = {
   6: 'Right',
   1: 'Bottom-Left',
   2: 'Bottom',
-  3: 'Bottom-Right'
+  3: 'Bottom-Right',
 }
 
 /**
@@ -48,64 +48,69 @@ function CommandInput() {
   }, [isActive, setCommandInputActive])
 
   // Process the command when Enter is pressed
-  const processCommand = useCallback((command: string) => {
-    // Match save bookmark pattern with optional name: .XX. or .XX.NAME.
-    // Pattern: .{1-2 digits}.{optional name ending with period}
-    if (command.endsWith('.')) {
-      const saveMatch = command.match(/^\.(\d{1,2})\.(.*)$/)
-      if (saveMatch) {
-        const slot = parseInt(saveMatch[1], 10)
-        const namePart = saveMatch[2]
+  const processCommand = useCallback(
+    (command: string) => {
+      // Match save bookmark pattern with optional name: .XX. or .XX.NAME.
+      // Pattern: .{1-2 digits}.{optional name ending with period}
+      if (command.endsWith('.')) {
+        const saveMatch = command.match(/^\.(\d{1,2})\.(.*)$/)
+        if (saveMatch) {
+          const slot = parseInt(saveMatch[1], 10)
+          const namePart = saveMatch[2]
 
-        // Name is everything before the final period (which we know exists)
-        const name = namePart.slice(0, -1).trim() || undefined
+          // Name is everything before the final period (which we know exists)
+          const name = namePart.slice(0, -1).trim() || undefined
 
+          if (slot >= 0 && slot <= 99) {
+            if (!currentAirportIcao) {
+              showFeedback('No airport selected', 'error')
+              return
+            }
+            saveBookmark(slot, name)
+            const slotStr = slot.toString().padStart(2, '0')
+            const displayName = name ? ` "${name}"` : ''
+            showFeedback(`Saved bookmark .${slotStr}${displayName}`, 'success')
+            return
+          }
+        }
+      }
+
+      // Match load bookmark pattern: .XX (e.g., .00, .42, .99) - no trailing dot
+      const loadMatch = command.match(/^\.(\d{1,2})$/)
+      if (loadMatch) {
+        const slot = parseInt(loadMatch[1], 10)
         if (slot >= 0 && slot <= 99) {
           if (!currentAirportIcao) {
             showFeedback('No airport selected', 'error')
             return
           }
-          saveBookmark(slot, name)
-          const slotStr = slot.toString().padStart(2, '0')
-          const displayName = name ? ` "${name}"` : ''
-          showFeedback(`Saved bookmark .${slotStr}${displayName}`, 'success')
+          const success = loadBookmark(slot)
+          if (success) {
+            showFeedback(`Loaded bookmark .${slot.toString().padStart(2, '0')}`, 'success')
+          } else {
+            showFeedback(`No bookmark at .${slot.toString().padStart(2, '0')}`, 'error')
+          }
           return
         }
       }
-    }
 
-    // Match load bookmark pattern: .XX (e.g., .00, .42, .99) - no trailing dot
-    const loadMatch = command.match(/^\.(\d{1,2})$/)
-    if (loadMatch) {
-      const slot = parseInt(loadMatch[1], 10)
-      if (slot >= 0 && slot <= 99) {
-        if (!currentAirportIcao) {
-          showFeedback('No airport selected', 'error')
-          return
-        }
-        const success = loadBookmark(slot)
-        if (success) {
-          showFeedback(`Loaded bookmark .${slot.toString().padStart(2, '0')}`, 'success')
-        } else {
-          showFeedback(`No bookmark at .${slot.toString().padStart(2, '0')}`, 'error')
-        }
-        return
+      // Unknown command
+      if (command.length > 0) {
+        showFeedback(`Unknown command: ${command}`, 'error')
       }
-    }
-
-    // Unknown command
-    if (command.length > 0) {
-      showFeedback(`Unknown command: ${command}`, 'error')
-    }
-  }, [saveBookmark, loadBookmark, currentAirportIcao, showFeedback])
+    },
+    [saveBookmark, loadBookmark, currentAirportIcao, showFeedback],
+  )
 
   // Handle keyboard input
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       // Ignore if typing in an input field
-      if (event.target instanceof HTMLInputElement ||
-          event.target instanceof HTMLTextAreaElement ||
-          event.target instanceof HTMLSelectElement) {
+      if (
+        event.target instanceof HTMLInputElement ||
+        event.target instanceof HTMLTextAreaElement ||
+        event.target instanceof HTMLSelectElement
+      ) {
         return
       }
 
@@ -142,7 +147,7 @@ function CommandInput() {
         if (key === 'Backspace') {
           // Delete last character
           if (inputBuffer.length > 1) {
-            setInputBuffer(prev => prev.slice(0, -1))
+            setInputBuffer((prev) => prev.slice(0, -1))
           } else {
             // If only the initial character, cancel
             setIsActive(false)
@@ -159,7 +164,7 @@ function CommandInput() {
           // In name typing mode, allow most printable characters
           // Only disallow control keys (handled above) and limit length
           if (key.length === 1 && inputBuffer.length < 50) {
-            setInputBuffer(prev => prev + key)
+            setInputBuffer((prev) => prev + key)
             event.preventDefault()
             return
           }
@@ -168,7 +173,7 @@ function CommandInput() {
           if (/^[\d.]$/.test(key)) {
             // Limit buffer length to prevent abuse
             if (inputBuffer.length < 10) {
-              setInputBuffer(prev => prev + key)
+              setInputBuffer((prev) => prev + key)
             }
             event.preventDefault()
             return
@@ -209,16 +214,10 @@ function CommandInput() {
           <span className="command-text datablock-position">
             {pendingDirection} ({POSITION_LABELS[pendingDirection]})
           </span>
-          <span className="datablock-hint">
-            Enter=All | Click=Aircraft | Esc=Cancel
-          </span>
+          <span className="datablock-hint">Enter=All | Click=Aircraft | Esc=Cancel</span>
         </div>
       )}
-      {feedback && (
-        <div className={`command-feedback ${feedback.type}`}>
-          {feedback.message}
-        </div>
-      )}
+      {feedback && <div className={`command-feedback ${feedback.type}`}>{feedback.message}</div>}
     </div>
   )
 }

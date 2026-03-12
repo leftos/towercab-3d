@@ -30,9 +30,9 @@ export interface SerializedAircraftState {
   timestamp: number
   // Extended fields from timeline/ADS-B data (optional for backward compat)
   groundTrack?: number | null
-  onGround?: number | null  // 1 = on ground, 0 = airborne
+  onGround?: number | null // 1 = on ground, 0 = airborne
   roll?: number | null
-  baroRate?: number | null  // Vertical rate in fpm
+  baroRate?: number | null // Vertical rate in fpm
 }
 
 /**
@@ -98,7 +98,7 @@ export type PlaybackSpeed = 0.5 | 1 | 2 | 4
  */
 
 export function serializeAircraftStates(states: Map<string, AircraftState>): SerializedAircraftState[] {
-  return Array.from(states.values()).map(state => ({
+  return Array.from(states.values()).map((state) => ({
     callsign: state.callsign,
     cid: state.cid,
     latitude: state.latitude,
@@ -115,7 +115,7 @@ export function serializeAircraftStates(states: Map<string, AircraftState>): Ser
     groundTrack: state.groundTrack ?? null,
     onGround: state.onGround ?? null,
     roll: state.roll ?? null,
-    baroRate: state.baroRate ?? null
+    baroRate: state.baroRate ?? null,
   }))
 }
 
@@ -139,7 +139,7 @@ export function deserializeAircraftStates(states: SerializedAircraftState[]): Ma
       groundTrack: state.groundTrack ?? null,
       onGround: state.onGround ?? null,
       roll: state.roll ?? null,
-      baroRate: state.baroRate ?? null
+      baroRate: state.baroRate ?? null,
     })
   }
   return map

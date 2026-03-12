@@ -35,15 +35,9 @@ function MagnificationIndicator() {
   if (magnification < 1.1) return null
 
   // Format: one decimal for < 10x, integer for >= 10x
-  const formatted = magnification >= 10
-    ? `${Math.round(magnification)}x`
-    : `${magnification.toFixed(1)}x`
+  const formatted = magnification >= 10 ? `${Math.round(magnification)}x` : `${magnification.toFixed(1)}x`
 
-  return (
-    <div className="magnification-indicator">
-      {formatted}
-    </div>
-  )
+  return <div className="magnification-indicator">{formatted}</div>
 }
 
 export default MagnificationIndicator

@@ -1,10 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import * as Cesium from 'cesium'
-import {
-  AIRCRAFT_POOL_SIZE,
-  getModelColorRgb,
-  getModelColorBlendAmount
-} from '../constants/rendering'
+import { AIRCRAFT_POOL_SIZE, getModelColorRgb, getModelColorBlendAmount } from '../constants/rendering'
 import { applyCesiumDebugPatch } from '../utils/cesiumDebugPatch'
 import type { InsetGraphicsSettings } from '../types/settings'
 
@@ -127,7 +123,7 @@ export interface SilhouetteRefs {
 export function useCesiumViewer(
   containerRef: React.RefObject<HTMLDivElement>,
   viewportId: string,
-  settings: CesiumViewerSettings
+  settings: CesiumViewerSettings,
 ): {
   viewer: Cesium.Viewer | null
   modelPoolRefs: ModelPoolRefs
@@ -153,7 +149,7 @@ export function useCesiumViewer(
     shadowFadingEnabled,
     shadowNormalOffset,
     inMemoryTileCacheSize,
-    modelBrightness
+    modelBrightness,
   } = settings
 
   const viewerRef = useRef<Cesium.Viewer | null>(null)
@@ -203,9 +199,15 @@ export function useCesiumViewer(
     let effectiveMsaa = initialMsaa
     if (isInset) {
       switch (insetGraphics.msaa) {
-        case 'low': effectiveMsaa = 2; break
-        case 'medium': effectiveMsaa = 4; break
-        case 'match': effectiveMsaa = initialMsaa; break
+        case 'low':
+          effectiveMsaa = 2
+          break
+        case 'medium':
+          effectiveMsaa = 4
+          break
+        case 'match':
+          effectiveMsaa = initialMsaa
+          break
       }
     }
 
@@ -241,21 +243,21 @@ export function useCesiumViewer(
       contextOptions: {
         webgl: {
           desynchronized: true,
-          powerPreference: 'high-performance'
-        } as WebGLContextAttributes
-      }
+          powerPreference: 'high-performance',
+        } as WebGLContextAttributes,
+      },
     })
 
     // Configure scene - use settings from store
     newViewer.scene.globe.enableLighting = enableLighting
     newViewer.scene.fog.enabled = true
     newViewer.scene.globe.depthTestAgainstTerrain = true
-    
-    newViewer.scene.screenSpaceCameraController.enableRotate = false;
-    newViewer.scene.screenSpaceCameraController.enableTranslate = false;
-    newViewer.scene.screenSpaceCameraController.enableZoom = false;
-    newViewer.scene.screenSpaceCameraController.enableTilt = false;
-    newViewer.scene.screenSpaceCameraController.enableLook = false;
+
+    newViewer.scene.screenSpaceCameraController.enableRotate = false
+    newViewer.scene.screenSpaceCameraController.enableTranslate = false
+    newViewer.scene.screenSpaceCameraController.enableZoom = false
+    newViewer.scene.screenSpaceCameraController.enableTilt = false
+    newViewer.scene.screenSpaceCameraController.enableLook = false
 
     // Remove Cesium's default LEFT_CLICK and LEFT_DOUBLE_CLICK handlers from the viewer's
     // built-in screenSpaceEventHandler. These handlers perform entity picking which causes
@@ -263,8 +265,8 @@ export function useCesiumViewer(
     // produces different results during the pick operation.
     // Note: selectionIndicator: false and infoBox: false disable the visual feedback but
     // NOT the underlying click handlers that trigger entity picking.
-    newViewer.screenSpaceEventHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_CLICK);
-    newViewer.screenSpaceEventHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
+    newViewer.screenSpaceEventHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_CLICK)
+    newViewer.screenSpaceEventHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK)
 
     // Rendering quality improvements - from settings
     newViewer.scene.logarithmicDepthBuffer = enableLogDepth
@@ -298,11 +300,11 @@ export function useCesiumViewer(
         try {
           const edgeDetection = Cesium.PostProcessStageLibrary.createEdgeDetectionStage()
           edgeDetection.uniforms.color = Cesium.Color.BLACK
-          edgeDetection.uniforms.length = 0.5  // Outline width in pixels
-          edgeDetection.selected = []  // Will be populated by useAircraftModels
+          edgeDetection.uniforms.length = 0.5 // Outline width in pixels
+          edgeDetection.selected = [] // Will be populated by useAircraftModels
 
           const silhouetteStage = newViewer.scene.postProcessStages.add(
-            Cesium.PostProcessStageLibrary.createSilhouetteStage([edgeDetection])
+            Cesium.PostProcessStageLibrary.createSilhouetteStage([edgeDetection]),
           ) as Cesium.PostProcessStageComposite
           silhouetteStage.enabled = true
 
@@ -348,9 +350,15 @@ export function useCesiumViewer(
     let effectiveTileCache = inMemoryTileCacheSize
     if (isInset) {
       switch (insetGraphics.cache) {
-        case 'minimal': effectiveTileCache = 50; break
-        case 'standard': effectiveTileCache = 200; break
-        case 'match': effectiveTileCache = inMemoryTileCacheSize; break
+        case 'minimal':
+          effectiveTileCache = 50
+          break
+        case 'standard':
+          effectiveTileCache = 200
+          break
+        case 'match':
+          effectiveTileCache = inMemoryTileCacheSize
+          break
       }
     }
     newViewer.scene.globe.tileCacheSize = effectiveTileCache
@@ -361,11 +369,15 @@ export function useCesiumViewer(
     // we dramatically reduce eviction frequency and keep more tiles in memory.
     const useAggressiveCaching = !isInset || insetGraphics.cache !== 'minimal'
     if (useAggressiveCaching) {
-      const surface = (newViewer.scene.globe as unknown as { _surface?: { _tileReplacementQueue?: { trimTiles: (max: number) => void } } })._surface
+      const surface = (
+        newViewer.scene.globe as unknown as {
+          _surface?: { _tileReplacementQueue?: { trimTiles: (max: number) => void } }
+        }
+      )._surface
       if (surface?._tileReplacementQueue) {
         const queue = surface._tileReplacementQueue
         const originalTrimTiles = queue.trimTiles.bind(queue)
-        queue.trimTiles = function(maximumTiles: number) {
+        queue.trimTiles = function (maximumTiles: number) {
           // Use 10x the limit to dramatically reduce eviction
           originalTrimTiles(maximumTiles * 10)
         }
@@ -376,9 +388,14 @@ export function useCesiumViewer(
     // 'low': SSE 16 (lower quality), 'medium': SSE 12, 'match': default (typically 2)
     if (isInset) {
       switch (insetGraphics.terrain) {
-        case 'low': newViewer.scene.globe.maximumScreenSpaceError = 16; break
-        case 'medium': newViewer.scene.globe.maximumScreenSpaceError = 12; break
-        case 'match': /* leave default */ break
+        case 'low':
+          newViewer.scene.globe.maximumScreenSpaceError = 16
+          break
+        case 'medium':
+          newViewer.scene.globe.maximumScreenSpaceError = 12
+          break
+        case 'match':
+          /* leave default */ break
       }
     }
 
@@ -430,18 +447,20 @@ export function useCesiumViewer(
         shadows: Cesium.ShadowMode.ENABLED,
         color: modelColor,
         colorBlendMode: Cesium.ColorBlendMode.MIX,
-        colorBlendAmount: blendAmount
-      }).then(model => {
-        if (newViewer.isDestroyed()) return
-        newViewer.scene.primitives.add(model)
-        modelPoolRef.current.set(i, model)
-        modelsLoaded++
-        if (modelsLoaded === AIRCRAFT_POOL_SIZE) {
-          modelPoolReadyRef.current = true
-        }
-      }).catch(err => {
-        console.error(`Failed to load model for pool slot ${i}:`, err)
+        colorBlendAmount: blendAmount,
       })
+        .then((model) => {
+          if (newViewer.isDestroyed()) return
+          newViewer.scene.primitives.add(model)
+          modelPoolRef.current.set(i, model)
+          modelsLoaded++
+          if (modelsLoaded === AIRCRAFT_POOL_SIZE) {
+            modelPoolReadyRef.current = true
+          }
+        })
+        .catch((err) => {
+          console.error(`Failed to load model for pool slot ${i}:`, err)
+        })
     }
 
     // Cleanup on unmount or when MSAA changes
@@ -467,7 +486,7 @@ export function useCesiumViewer(
       edgeDetectionRef.current = null
       silhouetteStageRef.current = null
     }
-  // biome-ignore lint/correctness/useExhaustiveDependencies: graphics settings used at init only; msaaSamples captured in ref (requires restart)
+    // biome-ignore lint/correctness/useExhaustiveDependencies: graphics settings used at init only; msaaSamples captured in ref (requires restart)
   }, [cesiumIonToken, isInset, viewportId])
 
   // Update model colors and blend amount when brightness setting changes
@@ -500,11 +519,11 @@ export function useCesiumViewer(
       modelPoolAssignments: modelPoolAssignmentsRef,
       modelPoolUrls: modelPoolUrlsRef,
       modelPoolLoading: modelPoolLoadingRef,
-      modelPoolReady: modelPoolReadyRef
+      modelPoolReady: modelPoolReadyRef,
     },
     silhouetteRefs: {
       edgeDetection: edgeDetectionRef,
-      silhouetteStage: silhouetteStageRef
-    }
+      silhouetteStage: silhouetteStageRef,
+    },
   }
 }

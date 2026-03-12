@@ -12,7 +12,7 @@ import {
   CLOUD_EDGE_SOFTNESS,
   CLOUD_RADIAL_FADE_START,
   CLOUD_RADIAL_FADE_END,
-  CLOUD_DOME_HORIZON_DARKENING
+  CLOUD_DOME_HORIZON_DARKENING,
 } from '@/constants'
 
 /**
@@ -29,13 +29,13 @@ export function createPatchyCloudTexture(
   scene: BABYLON.Scene,
   textureSize: number,
   coverage: number,
-  seed: number = 0
+  seed: number = 0,
 ): BABYLON.DynamicTexture {
   const texture = new BABYLON.DynamicTexture(
     `cloud_patchy_${seed}_${coverage.toFixed(3)}`,
     textureSize,
     scene,
-    true // generateMipMaps - prevents jagged edges when stretched over large plane
+    true, // generateMipMaps - prevents jagged edges when stretched over large plane
   )
   const ctx = texture.getContext() as CanvasRenderingContext2D
 
@@ -69,7 +69,7 @@ export function createPatchyCloudTexture(
         // BKN: mostly solid with visible breaks where noise is low
         // Use higher gap threshold to ensure visible sky breaks
         // For BKN (0.6875): gap threshold ≈ 0.45, so ~40% of texture is gaps
-        const gapThreshold = (1.0 - coverage) + 0.15
+        const gapThreshold = 1.0 - coverage + 0.15
         if (noiseValue < gapThreshold) {
           // Clear gap - fully transparent for visible sky
           cloudAlpha = 0.0
@@ -103,11 +103,11 @@ export function createPatchyCloudTexture(
       // - FEW/SCT: default fade start
       let fadeStart: number
       if (coverage >= 0.95) {
-        fadeStart = 0.5  // OVC: soft gradual edge
+        fadeStart = 0.5 // OVC: soft gradual edge
       } else if (coverage >= 0.6) {
-        fadeStart = 0.7  // BKN: later start, mostly solid
+        fadeStart = 0.7 // BKN: later start, mostly solid
       } else {
-        fadeStart = CLOUD_RADIAL_FADE_START  // FEW/SCT: default
+        fadeStart = CLOUD_RADIAL_FADE_START // FEW/SCT: default
       }
       let radialFade = 1.0
       if (distance > fadeStart) {
@@ -119,7 +119,7 @@ export function createPatchyCloudTexture(
       const finalAlpha = cloudAlpha * radialFade
 
       // Write RGBA - white color with alpha for transparency
-      data[idx] = 255     // R
+      data[idx] = 255 // R
       data[idx + 1] = 255 // G
       data[idx + 2] = 255 // B
       data[idx + 3] = Math.round(finalAlpha * 255) // A
@@ -145,14 +145,9 @@ export function createPatchyCloudTexture(
 export function createOvercastDomeTexture(
   scene: BABYLON.Scene,
   textureSize: number,
-  seed: number = 0
+  seed: number = 0,
 ): BABYLON.DynamicTexture {
-  const texture = new BABYLON.DynamicTexture(
-    `cloud_overcast_dome_${seed}`,
-    textureSize,
-    scene,
-    true
-  )
+  const texture = new BABYLON.DynamicTexture(`cloud_overcast_dome_${seed}`, textureSize, scene, true)
   const ctx = texture.getContext() as CanvasRenderingContext2D
 
   const imageData = ctx.createImageData(textureSize, textureSize)
@@ -207,10 +202,10 @@ export function createOvercastDomeTexture(
 
       // Write RGB with gray value, full alpha
       const colorValue = Math.round(gray * 255)
-      data[idx] = colorValue     // R
+      data[idx] = colorValue // R
       data[idx + 1] = colorValue // G
       data[idx + 2] = Math.round(gray * 1.02 * 255) // B slightly higher for cool tint
-      data[idx + 3] = Math.round(alpha * 255)       // A
+      data[idx + 3] = Math.round(alpha * 255) // A
     }
   }
 
@@ -235,14 +230,9 @@ export function createAboveCloudTexture(
   scene: BABYLON.Scene,
   textureSize: number,
   coverage: number,
-  seed: number = 0
+  seed: number = 0,
 ): BABYLON.DynamicTexture {
-  const texture = new BABYLON.DynamicTexture(
-    `cloud_above_${seed}_${coverage.toFixed(3)}`,
-    textureSize,
-    scene,
-    true
-  )
+  const texture = new BABYLON.DynamicTexture(`cloud_above_${seed}_${coverage.toFixed(3)}`, textureSize, scene, true)
   const ctx = texture.getContext() as CanvasRenderingContext2D
 
   const imageData = ctx.createImageData(textureSize, textureSize)
@@ -272,7 +262,7 @@ export function createAboveCloudTexture(
         cloudAlpha = 1.0
       } else if (coverage >= 0.6) {
         // BKN: mostly solid with some gaps showing through
-        const gapThreshold = (1.0 - coverage) + 0.15
+        const gapThreshold = 1.0 - coverage + 0.15
         if (noiseValue < gapThreshold) {
           cloudAlpha = 0.0
         } else if (noiseValue < gapThreshold + 0.1) {
@@ -318,7 +308,7 @@ export function createAboveCloudTexture(
 
       // Write RGBA - bright white color
       const colorValue = Math.round(brightness * 255)
-      data[idx] = colorValue     // R
+      data[idx] = colorValue // R
       data[idx + 1] = colorValue // G
       data[idx + 2] = Math.min(255, Math.round(colorValue * 1.02)) // B slightly cooler
       data[idx + 3] = Math.round(finalAlpha * 255) // A

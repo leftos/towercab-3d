@@ -52,7 +52,7 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
   useEffect(() => {
     const handleConversionComplete = () => {
       // Increment version to trigger useMemo recalculation
-      setConversionVersion(v => v + 1)
+      setConversionVersion((v) => v + 1)
     }
 
     window.addEventListener('model-conversion-complete', handleConversionComplete)
@@ -68,8 +68,7 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
     const airlineCode = testAirline.trim().toUpperCase() || null
     const aircraftType = testType.trim().toUpperCase()
     // Use explicit callsign if provided, otherwise generate from airline or default to GA registration
-    const callsign = testCallsign.trim().toUpperCase() ||
-      (airlineCode ? `${airlineCode}999` : 'N12345')
+    const callsign = testCallsign.trim().toUpperCase() || (airlineCode ? `${airlineCode}999` : 'N12345')
 
     // Clear the cache for this lookup to get fresh results
     aircraftModelService.clearCache()
@@ -85,14 +84,11 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
         callsign: callsign,
         aircraftType,
         modelInfo,
-        vmrAlternatives
+        vmrAlternatives,
       })
 
       try {
-        const result = await aircraftModelService.waitForConversion(
-          aircraftType,
-          callsign
-        )
+        const result = await aircraftModelService.waitForConversion(aircraftType, callsign)
         if (result.success && result.glbPath) {
           // Get the updated model info after conversion
           modelInfo = aircraftModelService.getModelInfo(aircraftType, callsign)
@@ -109,7 +105,7 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
       callsign: callsign,
       aircraftType,
       modelInfo,
-      vmrAlternatives
+      vmrAlternatives,
     })
     // Open preview modal only if model is ready or converted
     if (modelInfo.matchType !== 'pending') {
@@ -126,7 +122,7 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
     }
 
     const towerPos = getTowerPosition(currentAirport, towerHeight, customTowerPosition ?? undefined)
-    const towerAltFeet = (currentAirport.elevation || 0) + (towerHeight / 0.3048)
+    const towerAltFeet = (currentAirport.elevation || 0) + towerHeight / 0.3048
 
     return Array.from(timelines.values())
       .filter((timeline) => {
@@ -140,7 +136,7 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
           lastObs.latitude,
           lastObs.longitude,
           towerAltFeet,
-          lastObs.altitude * 3.28084  // Convert meters to feet
+          lastObs.altitude * 3.28084, // Convert meters to feet
         )
         return distance <= aircraftDataRadiusNM
       })
@@ -150,18 +146,16 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
         return {
           callsign: timeline.callsign,
           aircraftType: aircraftType || 'N/A',
-          modelInfo
+          modelInfo,
         }
       })
       .sort((a, b) => a.callsign.localeCompare(b.callsign))
-  // biome-ignore lint/correctness/useExhaustiveDependencies: conversionVersion triggers refresh when models finish converting
+    // biome-ignore lint/correctness/useExhaustiveDependencies: conversionVersion triggers refresh when models finish converting
   }, [timelines, currentAirport, towerHeight, customTowerPosition, aircraftDataRadiusNM, conversionVersion])
 
   // Format scale for display
   const formatScale = (scale: { x: number; y: number; z: number }): { text: string; isScaled: boolean } => {
-    const isUniform = Math.abs(scale.x - 1) < 0.001 &&
-                      Math.abs(scale.y - 1) < 0.001 &&
-                      Math.abs(scale.z - 1) < 0.001
+    const isUniform = Math.abs(scale.x - 1) < 0.001 && Math.abs(scale.y - 1) < 0.001 && Math.abs(scale.z - 1) < 0.001
 
     if (isUniform) {
       return { text: '1.00', isScaled: false }
@@ -170,7 +164,7 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
     // Show non-uniform scale
     return {
       text: `${scale.x.toFixed(2)}×${scale.y.toFixed(2)}×${scale.z.toFixed(2)}`,
-      isScaled: true
+      isScaled: true,
     }
   }
 
@@ -300,9 +294,7 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
               </div>
               <div className="model-test-result-row">
                 <span className="model-test-label">Model:</span>
-                <span className="model-test-value model-name">
-                  {getModelName(testResult.modelInfo).name}
-                </span>
+                <span className="model-test-value model-name">{getModelName(testResult.modelInfo).name}</span>
               </div>
               <div className="model-test-result-row">
                 <span className="model-test-label">Match:</span>
@@ -321,9 +313,7 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
               {testResult.vmrAlternatives.length > 0 && (
                 <div className="model-test-result-row">
                   <span className="model-test-label">VMR Options:</span>
-                  <span className="model-test-value vmr-alternatives">
-                    {testResult.vmrAlternatives.join(', ')}
-                  </span>
+                  <span className="model-test-value vmr-alternatives">{testResult.vmrAlternatives.join(', ')}</span>
                 </div>
               )}
               <div className="model-test-result-row">
@@ -338,9 +328,7 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
 
         <div className="model-matching-table-container">
           {aircraftData.length === 0 ? (
-            <div className="model-matching-empty">
-              No aircraft in range
-            </div>
+            <div className="model-matching-empty">No aircraft in range</div>
           ) : (
             <table className="model-matching-table">
               <thead>
@@ -372,17 +360,15 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
                       >
                         {modelDisplay.name}
                         {modelDisplay.variationName && (
-                          <span className="variation-indicator" title={modelDisplay.variationName}>*</span>
+                          <span className="variation-indicator" title={modelDisplay.variationName}>
+                            *
+                          </span>
                         )}
                       </td>
                       <td>
-                        <span className={`match-badge ${matchDisplay.className}`}>
-                          {matchDisplay.label}
-                        </span>
+                        <span className={`match-badge ${matchDisplay.className}`}>{matchDisplay.label}</span>
                       </td>
-                      <td className={`scale-value ${scale?.isScaled ? 'scaled' : ''}`}>
-                        {scale ? scale.text : ''}
-                      </td>
+                      <td className={`scale-value ${scale?.isScaled ? 'scaled' : ''}`}>{scale ? scale.text : ''}</td>
                     </tr>
                   )
                 })}
@@ -392,12 +378,7 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
         </div>
 
         {/* Model Preview Modal */}
-        {previewModel && (
-          <ModelPreviewModal
-            modelInfo={previewModel}
-            onClose={() => setPreviewModel(null)}
-          />
-        )}
+        {previewModel && <ModelPreviewModal modelInfo={previewModel} onClose={() => setPreviewModel(null)} />}
       </div>
     </div>
   )

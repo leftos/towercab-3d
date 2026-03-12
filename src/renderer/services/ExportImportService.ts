@@ -25,7 +25,7 @@ export interface ExportedAirportData {
   // Legacy camera format (for backward compatibility with old exports)
   camera?: {
     '3d'?: unknown
-    'topdown'?: unknown
+    topdown?: unknown
     lastViewMode?: string
     default3d?: unknown
     defaultTopdown?: unknown
@@ -69,7 +69,7 @@ export function exportAllData(selectedAirports?: string[]): ExportData {
 
   // Filter to selected airports if specified
   const airportsToExport = selectedAirports
-    ? allAirports.filter(icao => selectedAirports.includes(icao))
+    ? allAirports.filter((icao) => selectedAirports.includes(icao))
     : allAirports
 
   // Build airport data
@@ -86,7 +86,7 @@ export function exportAllData(selectedAirports?: string[]): ExportData {
     exportDate: new Date().toISOString(),
     appVersion: '0.0.15', // Current version
     globalSettings,
-    airports
+    airports,
   }
 }
 
@@ -102,7 +102,7 @@ export function exportSelectiveData(selectedIds: Set<string>): SelectiveExportDa
     exportDate: new Date().toISOString(),
     appVersion: '0.0.15',
     airports: {},
-    exportedPaths: [...selectedIds]
+    exportedPaths: [...selectedIds],
   }
 
   // Process local settings
@@ -211,7 +211,10 @@ export function getAirportsInExport(data: ExportData): string[] {
 /**
  * Get summary of what's included for an airport in the export
  */
-export function getAirportExportSummary(data: ExportData, icao: string): {
+export function getAirportExportSummary(
+  data: ExportData,
+  icao: string,
+): {
   hasBookmarks: boolean
   bookmarkCount: number
   hasDefaultView: boolean
@@ -225,7 +228,7 @@ export function getAirportExportSummary(data: ExportData, icao: string): {
       bookmarkCount: 0,
       hasDefaultView: false,
       hasViewports: false,
-      viewportCount: 0
+      viewportCount: 0,
     }
   }
 
@@ -242,7 +245,7 @@ export function getAirportExportSummary(data: ExportData, icao: string): {
     bookmarkCount,
     hasDefaultView,
     hasViewports: viewportCount > 0,
-    viewportCount
+    viewportCount,
   }
 }
 
@@ -271,7 +274,10 @@ export function isSelectiveExportData(data: ExportData | SelectiveExportData): d
  * Import data with options
  * Supports v1 (legacy camera), v2 (viewports), and v3 (selective) formats
  */
-export function importData(data: ExportData | SelectiveExportData, options: ImportOptions): {
+export function importData(
+  data: ExportData | SelectiveExportData,
+  options: ImportOptions,
+): {
   success: boolean
   message: string
   importedAirports: string[]
@@ -342,7 +348,7 @@ export function importData(data: ExportData | SelectiveExportData, options: Impo
           if (v3Airport.defaultConfig) {
             importedConfig.defaultConfig = {
               viewports: v3Airport.defaultConfig.viewports as Viewport[],
-              activeViewportId: v3Airport.defaultConfig.activeViewportId
+              activeViewportId: v3Airport.defaultConfig.activeViewportId,
             }
           }
           if (v3Airport.default3d) {
@@ -369,15 +375,15 @@ export function importData(data: ExportData | SelectiveExportData, options: Impo
               default2d: importedConfig.default2d || existing.default2d,
               bookmarks: {
                 ...(existing.bookmarks || {}),
-                ...(importedConfig.bookmarks || {})
-              }
+                ...(importedConfig.bookmarks || {}),
+              },
             }
           } else {
             // Replace mode or new airport
             newViewportConfigs[icao] = {
               viewports: importedConfig.viewports || [],
               activeViewportId: importedConfig.activeViewportId || 'main',
-              ...importedConfig
+              ...importedConfig,
             } as AirportViewportConfig
           }
         } else {
@@ -396,8 +402,8 @@ export function importData(data: ExportData | SelectiveExportData, options: Impo
                 default2d: imported.default2d || existing.default2d,
                 bookmarks: {
                   ...(existing.bookmarks || {}),
-                  ...(imported.bookmarks || {})
-                }
+                  ...(imported.bookmarks || {}),
+                },
               }
             } else {
               // Replace: overwrite completely
@@ -411,7 +417,7 @@ export function importData(data: ExportData | SelectiveExportData, options: Impo
             const legacyConfig: AirportViewportConfig = {
               viewports: [],
               activeViewportId: 'main',
-              bookmarks: legacyCamera.bookmarks as AirportViewportConfig['bookmarks']
+              bookmarks: legacyCamera.bookmarks as AirportViewportConfig['bookmarks'],
             }
 
             // Map legacy defaults to new format
@@ -428,10 +434,10 @@ export function importData(data: ExportData | SelectiveExportData, options: Impo
                 ...existing,
                 bookmarks: {
                   ...(existing.bookmarks || {}),
-                  ...(legacyConfig.bookmarks || {})
+                  ...(legacyConfig.bookmarks || {}),
                 },
                 default3d: legacyConfig.default3d || existing.default3d,
-                default2d: legacyConfig.default2d || existing.default2d
+                default2d: legacyConfig.default2d || existing.default2d,
               }
             } else {
               newViewportConfigs[icao] = legacyConfig
@@ -451,13 +457,13 @@ export function importData(data: ExportData | SelectiveExportData, options: Impo
     return {
       success: true,
       message: `Successfully imported ${parts.join(' and ')}`,
-      importedAirports
+      importedAirports,
     }
   } catch (error) {
     return {
       success: false,
       message: `Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      importedAirports: []
+      importedAirports: [],
     }
   }
 }

@@ -30,7 +30,7 @@ export function createVelocityState(): VelocityState {
     orbitHeading: 0,
     orbitPitch: 0,
     orbitDistance: 0,
-    altitude: 0
+    altitude: 0,
   }
 }
 
@@ -38,16 +38,16 @@ export function createVelocityState(): VelocityState {
  * Default movement configuration constants
  */
 export const MOVEMENT_CONFIG = {
-  ACCELERATION: 8.0,       // How fast velocity builds up (per second)
-  DECELERATION: 6.0,       // How fast velocity decays (per second)
-  MAX_MOVE_SPEED: 60,      // Max movement speed (meters per second)
-  MAX_ROTATE_SPEED: 90,    // Max rotation speed (degrees per second)
-  MAX_ZOOM_SPEED: 30,      // Max FOV change speed (degrees per second)
+  ACCELERATION: 8.0, // How fast velocity builds up (per second)
+  DECELERATION: 6.0, // How fast velocity decays (per second)
+  MAX_MOVE_SPEED: 60, // Max movement speed (meters per second)
+  MAX_ROTATE_SPEED: 90, // Max rotation speed (degrees per second)
+  MAX_ZOOM_SPEED: 30, // Max FOV change speed (degrees per second)
   MAX_ALTITUDE_SPEED: 1500, // Max altitude change speed (meters per second)
   MAX_ORBIT_DIST_SPEED: 500, // Max orbit distance change speed (meters per second)
   WHEEL_IMPULSE_STRENGTH: 120, // How much velocity each unit of wheel adds
-  WHEEL_IMPULSE_DECAY: 12,  // Impulse decay rate (higher = faster decay)
-  VELOCITY_THRESHOLD: 0.01  // Minimum velocity to apply
+  WHEEL_IMPULSE_DECAY: 12, // Impulse decay rate (higher = faster decay)
+  VELOCITY_THRESHOLD: 0.01, // Minimum velocity to apply
 } as const
 
 /**
@@ -67,7 +67,7 @@ export function accelerateVelocity(
   maxSpeed: number,
   dt: number,
   acceleration: number = MOVEMENT_CONFIG.ACCELERATION,
-  deceleration: number = MOVEMENT_CONFIG.DECELERATION
+  deceleration: number = MOVEMENT_CONFIG.DECELERATION,
 ): number {
   const targetVel = target * maxSpeed
 
@@ -97,7 +97,7 @@ export function calculateEffectiveMoveSpeed(
   isTopDown: boolean,
   topdownAltitude: number,
   sprintMultiplier: number = 1,
-  referenceAltitude: number = 2000
+  referenceAltitude: number = 2000,
 ): number {
   const altitudeScale = isTopDown ? topdownAltitude / referenceAltitude : 1
   return baseSpeed * altitudeScale * sprintMultiplier
@@ -107,12 +107,28 @@ export function calculateEffectiveMoveSpeed(
  * Keys that trigger continuous movement (mapped to velocity channels)
  */
 export const MOVEMENT_KEYS = new Set([
-  'w', 'W', 's', 'S', 'a', 'A', 'd', 'D',
-  'q', 'Q', 'e', 'E',  // Up/down movement
-  'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown',
-  '+', '=', '-', '_',
-  'Shift',   // Sprint modifier (3x speed)
-  'Control'  // Fine control modifier (0.2x speed)
+  'w',
+  'W',
+  's',
+  'S',
+  'a',
+  'A',
+  'd',
+  'D',
+  'q',
+  'Q',
+  'e',
+  'E', // Up/down movement
+  'ArrowLeft',
+  'ArrowRight',
+  'ArrowUp',
+  'ArrowDown',
+  '+',
+  '=',
+  '-',
+  '_',
+  'Shift', // Sprint modifier (3x speed)
+  'Control', // Fine control modifier (0.2x speed)
 ])
 
 export interface TargetVelocities {
@@ -135,7 +151,7 @@ export function calculateTargetVelocities(
   pressedKeys: Set<string>,
   viewMode: '3d' | 'topdown',
   followingCallsign: string | null,
-  followMode: 'tower' | 'orbit'
+  followMode: 'tower' | 'orbit',
 ): TargetVelocities {
   let targetForward = 0
   let targetRight = 0
@@ -190,8 +206,9 @@ export function calculateTargetVelocities(
   if (zoomIn) {
     if (viewMode === 'topdown') targetAltitude = -1
     else if (inOrbitMode) targetOrbitDistance = -1
-    else if (followingCallsign) targetZoom = 1  // Positive = zoom in (increase followZoom)
-    else targetZoom = -1  // Negative = decrease FOV = zoom in
+    else if (followingCallsign)
+      targetZoom = 1 // Positive = zoom in (increase followZoom)
+    else targetZoom = -1 // Negative = decrease FOV = zoom in
   }
   if (zoomOut) {
     if (viewMode === 'topdown') targetAltitude = 1
@@ -210,7 +227,7 @@ export function calculateTargetVelocities(
     orbitHeading: targetOrbitHeading,
     orbitPitch: targetOrbitPitch,
     orbitDistance: targetOrbitDistance,
-    altitude: targetAltitude
+    altitude: targetAltitude,
   }
 }
 
@@ -229,7 +246,7 @@ export function applyWheelImpulse(
   viewMode: '3d' | 'topdown',
   followingCallsign: string | null,
   followMode: 'tower' | 'orbit',
-  dt: number
+  dt: number,
 ): number {
   if (Math.abs(wheelImpulse) <= 0.001) {
     return 0
@@ -243,7 +260,7 @@ export function applyWheelImpulse(
     if (Math.sign(impulseAmount) !== Math.sign(velocity.altitude) && velocity.altitude !== 0) {
       velocity.altitude = 0
     }
-    velocity.altitude += impulseAmount * 3  // Scale up for altitude
+    velocity.altitude += impulseAmount * 3 // Scale up for altitude
   } else if (inOrbitMode) {
     // Cancel existing velocity if scrolling in opposite direction
     if (Math.sign(impulseAmount) !== Math.sign(velocity.orbitDistance) && velocity.orbitDistance !== 0) {
@@ -263,7 +280,7 @@ export function applyWheelImpulse(
     if (Math.sign(impulseAmount) !== Math.sign(velocity.zoom) && velocity.zoom !== 0) {
       velocity.zoom = 0
     }
-    velocity.zoom += impulseAmount * 0.15  // Increased from 0.08 for more responsive wheel zoom
+    velocity.zoom += impulseAmount * 0.15 // Increased from 0.08 for more responsive wheel zoom
   }
 
   // Decay the impulse using time-based exponential decay
@@ -283,7 +300,7 @@ export function updateVelocities(
   velocity: VelocityState,
   targets: TargetVelocities,
   dt: number,
-  effectiveMoveSpeed: number
+  effectiveMoveSpeed: number,
 ): void {
   velocity.forward = accelerateVelocity(velocity.forward, targets.forward, effectiveMoveSpeed, dt)
   velocity.right = accelerateVelocity(velocity.right, targets.right, effectiveMoveSpeed, dt)
@@ -291,8 +308,23 @@ export function updateVelocities(
   velocity.heading = accelerateVelocity(velocity.heading, targets.heading, MOVEMENT_CONFIG.MAX_ROTATE_SPEED, dt)
   velocity.pitch = accelerateVelocity(velocity.pitch, targets.pitch, MOVEMENT_CONFIG.MAX_ROTATE_SPEED, dt)
   velocity.zoom = accelerateVelocity(velocity.zoom, targets.zoom, MOVEMENT_CONFIG.MAX_ZOOM_SPEED, dt)
-  velocity.orbitHeading = accelerateVelocity(velocity.orbitHeading, targets.orbitHeading, MOVEMENT_CONFIG.MAX_ROTATE_SPEED, dt)
-  velocity.orbitPitch = accelerateVelocity(velocity.orbitPitch, targets.orbitPitch, MOVEMENT_CONFIG.MAX_ROTATE_SPEED, dt)
-  velocity.orbitDistance = accelerateVelocity(velocity.orbitDistance, targets.orbitDistance, MOVEMENT_CONFIG.MAX_ORBIT_DIST_SPEED, dt)
+  velocity.orbitHeading = accelerateVelocity(
+    velocity.orbitHeading,
+    targets.orbitHeading,
+    MOVEMENT_CONFIG.MAX_ROTATE_SPEED,
+    dt,
+  )
+  velocity.orbitPitch = accelerateVelocity(
+    velocity.orbitPitch,
+    targets.orbitPitch,
+    MOVEMENT_CONFIG.MAX_ROTATE_SPEED,
+    dt,
+  )
+  velocity.orbitDistance = accelerateVelocity(
+    velocity.orbitDistance,
+    targets.orbitDistance,
+    MOVEMENT_CONFIG.MAX_ORBIT_DIST_SPEED,
+    dt,
+  )
   velocity.altitude = accelerateVelocity(velocity.altitude, targets.altitude, MOVEMENT_CONFIG.MAX_ALTITUDE_SPEED, dt)
 }

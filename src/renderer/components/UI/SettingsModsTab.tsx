@@ -4,7 +4,14 @@ import { useAirportStore } from '../../stores/airportStore'
 import { useUIFeedbackStore } from '../../stores/uiFeedbackStore'
 import { useTowerPositioningStore } from '../../stores/towerPositioningStore'
 import { useViewportStore } from '../../stores/viewportStore'
-import { modService, type ModLoadingResult, type TowerModInfo, type AircraftModInfo, type ModError, getCameraPositionFromManifest } from '../../services/ModService'
+import {
+  modService,
+  type ModLoadingResult,
+  type TowerModInfo,
+  type AircraftModInfo,
+  type ModError,
+  getCameraPositionFromManifest,
+} from '../../services/ModService'
 import { customVMRService } from '../../services/CustomVMRService'
 import { joinPath, modApi, isTauri, type GitUpdateAllResult } from '../../utils/tauriApi'
 import CollapsibleSection from './settings/CollapsibleSection'
@@ -35,19 +42,22 @@ function SettingsModsTab({ onRequestClose }: SettingsModsTabProps) {
   }, [])
 
   // Check if a mod is disabled (in either saved state or pending changes)
-  const isModDisabled = useCallback((path: string): boolean => {
-    const normalizedPath = path.toLowerCase().replace(/\\/g, '/')
-    if (pendingChanges.has(normalizedPath)) {
-      // Pending change - inverts the saved state
-      return !disabledMods.includes(normalizedPath)
-    }
-    return disabledMods.includes(normalizedPath)
-  }, [disabledMods, pendingChanges])
+  const isModDisabled = useCallback(
+    (path: string): boolean => {
+      const normalizedPath = path.toLowerCase().replace(/\\/g, '/')
+      if (pendingChanges.has(normalizedPath)) {
+        // Pending change - inverts the saved state
+        return !disabledMods.includes(normalizedPath)
+      }
+      return disabledMods.includes(normalizedPath)
+    },
+    [disabledMods, pendingChanges],
+  )
 
   // Toggle mod enabled state (marks as pending change)
   const toggleMod = useCallback((path: string) => {
     const normalizedPath = path.toLowerCase().replace(/\\/g, '/')
-    setPendingChanges(prev => {
+    setPendingChanges((prev) => {
       const next = new Set(prev)
       if (next.has(normalizedPath)) {
         next.delete(normalizedPath)
@@ -60,7 +70,7 @@ function SettingsModsTab({ onRequestClose }: SettingsModsTabProps) {
 
   // Apply pending changes
   const applyChanges = useCallback(async () => {
-    const newDisabledMods = new Set(disabledMods.map(p => p.toLowerCase().replace(/\\/g, '/')))
+    const newDisabledMods = new Set(disabledMods.map((p) => p.toLowerCase().replace(/\\/g, '/')))
 
     for (const path of pendingChanges) {
       if (newDisabledMods.has(path)) {
@@ -75,58 +85,63 @@ function SettingsModsTab({ onRequestClose }: SettingsModsTabProps) {
   }, [disabledMods, pendingChanges, updateDisabledMods])
 
   // Handle starting tower positioning mode
-  const handleStartPositioning = useCallback(async (tower: TowerModInfo) => {
-    if (!tower.placement) {
-      showFeedback('No position data available for this tower', 'error')
-      return
-    }
+  const handleStartPositioning = useCallback(
+    async (tower: TowerModInfo) => {
+      if (!tower.placement) {
+        showFeedback('No position data available for this tower', 'error')
+        return
+      }
 
-    const icao = tower.icao.toUpperCase()
-    const manifestPath = await joinPath(tower.path, 'manifest.json')
+      const icao = tower.icao.toUpperCase()
+      const manifestPath = await joinPath(tower.path, 'manifest.json')
 
-    // Get model position from placement
-    const modelPosition = {
-      lat: tower.placement.lat,
-      lon: tower.placement.lon,
-      height: tower.placement.height,
-      rotation: tower.placement.rotation
-    }
+      // Get model position from placement
+      const modelPosition = {
+        lat: tower.placement.lat,
+        lon: tower.placement.lon,
+        height: tower.placement.height,
+        rotation: tower.placement.rotation,
+      }
 
-    // Get camera position from manifest (if available)
-    const cameraPos = getCameraPositionFromManifest(tower.manifest)
-    const cameraPosition = cameraPos ? {
-      lat: cameraPos.lat,
-      lon: cameraPos.lon,
-      height: cameraPos.height,
-      heading: cameraPos.heading,
-      pitch: 0  // Default pitch
-    } : null
+      // Get camera position from manifest (if available)
+      const cameraPos = getCameraPositionFromManifest(tower.manifest)
+      const cameraPosition = cameraPos
+        ? {
+            lat: cameraPos.lat,
+            lon: cameraPos.lon,
+            height: cameraPos.height,
+            heading: cameraPos.heading,
+            pitch: 0, // Default pitch
+          }
+        : null
 
-    // Switch to the tower's airport (only if not already there)
-    const airport = airports.get(icao)
-    if (!airport) {
-      showFeedback(`Airport ${icao} not found`, 'error')
-      return
-    }
+      // Switch to the tower's airport (only if not already there)
+      const airport = airports.get(icao)
+      if (!airport) {
+        showFeedback(`Airport ${icao} not found`, 'error')
+        return
+      }
 
-    // Check if we need to switch airports (don't reset camera if already there)
-    const currentIcao = useViewportStore.getState().currentAirportIcao
-    if (currentIcao?.toUpperCase() !== icao) {
-      selectAirport(icao)
-      // Note: We don't reset camera position - user wants to keep their current view
-    }
+      // Check if we need to switch airports (don't reset camera if already there)
+      const currentIcao = useViewportStore.getState().currentAirportIcao
+      if (currentIcao?.toUpperCase() !== icao) {
+        selectAirport(icao)
+        // Note: We don't reset camera position - user wants to keep their current view
+      }
 
-    // Close the settings modal
-    onRequestClose?.()
+      // Close the settings modal
+      onRequestClose?.()
 
-    // Sample terrain height at tower position (for accurate model placement)
-    // The positioning store will use 0 initially, and useTowerModel will update it
-    const terrainHeight = 0  // Will be updated by useTowerModel
+      // Sample terrain height at tower position (for accurate model placement)
+      // The positioning store will use 0 initially, and useTowerModel will update it
+      const terrainHeight = 0 // Will be updated by useTowerModel
 
-    // Start the positioning wizard
-    startPositioning(icao, manifestPath, modelPosition, cameraPosition, terrainHeight)
-    showFeedback(`Positioning mode started for ${icao}`, 'success')
-  }, [airports, selectAirport, showFeedback, startPositioning, onRequestClose])
+      // Start the positioning wizard
+      startPositioning(icao, manifestPath, modelPosition, cameraPosition, terrainHeight)
+      showFeedback(`Positioning mode started for ${icao}`, 'success')
+    },
+    [airports, selectAirport, showFeedback, startPositioning, onRequestClose],
+  )
 
   // Handle updating all git repos
   const handleUpdateRepos = useCallback(async () => {
@@ -161,8 +176,12 @@ function SettingsModsTab({ onRequestClose }: SettingsModsTabProps) {
 
   // Count git repos (unique repo names)
   const gitRepoNames = new Set<string>()
-  modResult?.towers.forEach(t => { if (t.gitInfo?.repoName) gitRepoNames.add(t.gitInfo.repoName) })
-  modResult?.aircraft.forEach(a => { if (a.gitInfo?.repoName) gitRepoNames.add(a.gitInfo.repoName) })
+  modResult?.towers.forEach((t) => {
+    if (t.gitInfo?.repoName) gitRepoNames.add(t.gitInfo.repoName)
+  })
+  modResult?.aircraft.forEach((a) => {
+    if (a.gitInfo?.repoName) gitRepoNames.add(a.gitInfo.repoName)
+  })
   const gitRepoCount = gitRepoNames.size
 
   return (
@@ -220,7 +239,9 @@ function SettingsModsTab({ onRequestClose }: SettingsModsTabProps) {
               </div>
               <div className="mod-details">
                 {vmrFiles.map((file, i) => (
-                  <span key={i} className="vmr-file">{file}</span>
+                  <span key={i} className="vmr-file">
+                    {file}
+                  </span>
                 ))}
               </div>
             </div>
@@ -233,8 +254,8 @@ function SettingsModsTab({ onRequestClose }: SettingsModsTabProps) {
         <CollapsibleSection title={`Git Repositories (${gitRepoCount})`}>
           <div className="git-repos-section">
             <p className="setting-hint">
-              Found {gitRepoCount} git {gitRepoCount === 1 ? 'repository' : 'repositories'} in mods folder.
-              Update to pull latest changes from remote.
+              Found {gitRepoCount} git {gitRepoCount === 1 ? 'repository' : 'repositories'} in mods folder. Update to
+              pull latest changes from remote.
             </p>
             <button
               className="control-button update-repos-button"
@@ -246,7 +267,10 @@ function SettingsModsTab({ onRequestClose }: SettingsModsTabProps) {
             {updateResult && (
               <div className="update-result">
                 {updateResult.results.map((r, i) => (
-                  <div key={i} className={`update-result-item ${r.success ? (r.updated ? 'updated' : 'up-to-date') : 'failed'}`}>
+                  <div
+                    key={i}
+                    className={`update-result-item ${r.success ? (r.updated ? 'updated' : 'up-to-date') : 'failed'}`}
+                  >
                     <span className="update-repo-name">{r.repoName}</span>
                     <span className="update-status">{r.message}</span>
                   </div>
@@ -261,14 +285,14 @@ function SettingsModsTab({ onRequestClose }: SettingsModsTabProps) {
       <CollapsibleSection title={`Tower Positions (${modResult?.towerPositions.builtin ?? 0})`}>
         <div className="mod-item">
           <div className="mod-details">
-            <span className="mod-stats">
-              Built-in: {modResult?.towerPositions.builtin ?? 0} airports
-            </span>
+            <span className="mod-stats">Built-in: {modResult?.towerPositions.builtin ?? 0} airports</span>
           </div>
           {modResult?.towerPositions.custom && modResult.towerPositions.custom.length > 0 && (
             <div className="mod-details">
               <span className="mod-stats">
-                Custom: {modResult.towerPositions.custom.length} airports ({modResult.towerPositions.custom.slice(0, 10).join(', ')}{modResult.towerPositions.custom.length > 10 ? '...' : ''})
+                Custom: {modResult.towerPositions.custom.length} airports (
+                {modResult.towerPositions.custom.slice(0, 10).join(', ')}
+                {modResult.towerPositions.custom.length > 10 ? '...' : ''})
               </span>
             </div>
           )}
@@ -289,9 +313,7 @@ function SettingsModsTab({ onRequestClose }: SettingsModsTabProps) {
       {/* Pending Changes Notice */}
       {hasPendingChanges && (
         <div className="pending-changes-bar">
-          <span className="pending-notice">
-            Changes require app restart to take effect
-          </span>
+          <span className="pending-notice">Changes require app restart to take effect</span>
           <button className="control-button primary" onClick={applyChanges}>
             Save Changes
           </button>
@@ -500,7 +522,7 @@ function TowerModItem({
   isDisabled,
   onToggle,
   onPosition,
-  hasPendingChange
+  hasPendingChange,
 }: {
   tower: TowerModInfo
   isDisabled: boolean
@@ -519,11 +541,7 @@ function TowerModItem({
     <div className="mod-item">
       <div className="mod-header-row">
         <label className="mod-checkbox">
-          <input
-            type="checkbox"
-            checked={!isDisabled}
-            onChange={onToggle}
-          />
+          <input type="checkbox" checked={!isDisabled} onChange={onToggle} />
           <span className="mod-name">{displayName}</span>
           {tower.gitInfo?.isGitRepo && tower.gitInfo.repoName && (
             <span className="mod-repo-badge" title="From git repository">
@@ -542,12 +560,8 @@ function TowerModItem({
         </button>
       </div>
       <div className="mod-details">
-        {tower.manifest.author && (
-          <span className="mod-author">by {tower.manifest.author}</span>
-        )}
-        {tower.manifest.version && (
-          <span className="mod-version">v{tower.manifest.version}</span>
-        )}
+        {tower.manifest.author && <span className="mod-author">by {tower.manifest.author}</span>}
+        {tower.manifest.version && <span className="mod-version">v{tower.manifest.version}</span>}
       </div>
       <div className="mod-path-row">
         <span className="mod-path">{tower.path}</span>
@@ -555,9 +569,7 @@ function TowerModItem({
       <div className="mod-details">
         <span className="mod-position">
           Position: {placementText}
-          {tower.placement && (
-            <span className="position-source"> ({tower.placement.source})</span>
-          )}
+          {tower.placement && <span className="position-source"> ({tower.placement.source})</span>}
         </span>
       </div>
     </div>
@@ -571,7 +583,7 @@ function AircraftModItem({
   aircraft,
   isDisabled,
   onToggle,
-  hasPendingChange
+  hasPendingChange,
 }: {
   aircraft: AircraftModInfo
   isDisabled: boolean
@@ -581,11 +593,7 @@ function AircraftModItem({
   return (
     <div className="mod-item">
       <label className="mod-checkbox">
-        <input
-          type="checkbox"
-          checked={!isDisabled}
-          onChange={onToggle}
-        />
+        <input type="checkbox" checked={!isDisabled} onChange={onToggle} />
         <span className="mod-name">{aircraft.manifest.name || 'Unnamed'}</span>
         {aircraft.gitInfo?.isGitRepo && aircraft.gitInfo.repoName && (
           <span className="mod-repo-badge" title="From git repository">
@@ -595,12 +603,8 @@ function AircraftModItem({
         {hasPendingChange && <span className="pending-badge">*</span>}
       </label>
       <div className="mod-details">
-        {aircraft.manifest.author && (
-          <span className="mod-author">by {aircraft.manifest.author}</span>
-        )}
-        {aircraft.manifest.version && (
-          <span className="mod-version">v{aircraft.manifest.version}</span>
-        )}
+        {aircraft.manifest.author && <span className="mod-author">by {aircraft.manifest.author}</span>}
+        {aircraft.manifest.version && <span className="mod-version">v{aircraft.manifest.version}</span>}
       </div>
       <div className="mod-details">
         <span className="mod-types">Types: {aircraft.aircraftTypes.join(', ')}</span>

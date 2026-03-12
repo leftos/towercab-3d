@@ -7,7 +7,7 @@ import {
   CAMERA_MAX_Z,
   HEMISPHERIC_LIGHT_INTENSITY,
   HEMISPHERIC_LIGHT_GROUND_COLOR,
-  DIRECTIONAL_LIGHT_INTENSITY
+  DIRECTIONAL_LIGHT_INTENSITY,
 } from '@/constants'
 
 /**
@@ -193,15 +193,8 @@ import {
  * @see useBabylonWeather - For fog and cloud effects
  * @see useBabylonLabels - For aircraft datablock labels
  */
-export function useBabylonScene(
-  options: BabylonSceneOptions
-): UseBabylonSceneResult {
-  const {
-    canvas,
-    antialias = true,
-    transparent = true,
-    devicePixelRatio = window.devicePixelRatio
-  } = options
+export function useBabylonScene(options: BabylonSceneOptions): UseBabylonSceneResult {
+  const { canvas, antialias = true, transparent = true, devicePixelRatio = window.devicePixelRatio } = options
 
   const engineRef = useRef<BABYLON.Engine | null>(null)
   const sceneRef = useRef<BABYLON.Scene | null>(null)
@@ -261,7 +254,7 @@ export function useBabylonScene(
     const engine = new BABYLON.Engine(canvas, antialias, {
       preserveDrawingBuffer: true,
       stencil: true,
-      alpha: transparent
+      alpha: transparent,
     })
     engineRef.current = engine
 
@@ -294,7 +287,7 @@ export function useBabylonScene(
     light.groundColor = new BABYLON.Color3(
       HEMISPHERIC_LIGHT_GROUND_COLOR[0],
       HEMISPHERIC_LIGHT_GROUND_COLOR[1],
-      HEMISPHERIC_LIGHT_GROUND_COLOR[2]
+      HEMISPHERIC_LIGHT_GROUND_COLOR[2],
     )
 
     // Add directional light
@@ -351,7 +344,7 @@ export function useBabylonScene(
     scene: sceneRef.current,
     camera: cameraRef.current,
     guiTexture: guiTextureRef.current,
-    sceneReady
+    sceneReady,
   }
 }
 

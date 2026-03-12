@@ -8,25 +8,23 @@ import * as Cesium from 'cesium'
  * @param longitude - Longitude in degrees
  * @param altitude - Altitude in meters above sea level
  */
-export function toCartesian3(
-  latitude: number,
-  longitude: number,
-  altitude: number
-): Cesium.Cartesian3 {
+export function toCartesian3(latitude: number, longitude: number, altitude: number): Cesium.Cartesian3 {
   return Cesium.Cartesian3.fromDegrees(longitude, latitude, altitude)
 }
 
 /**
  * Convert Cesium Cartesian3 to latitude/longitude/altitude
  */
-export function fromCartesian3(
-  cartesian: Cesium.Cartesian3
-): { latitude: number; longitude: number; altitude: number } {
+export function fromCartesian3(cartesian: Cesium.Cartesian3): {
+  latitude: number
+  longitude: number
+  altitude: number
+} {
   const cartographic = Cesium.Cartographic.fromCartesian(cartesian)
   return {
     latitude: Cesium.Math.toDegrees(cartographic.latitude),
     longitude: Cesium.Math.toDegrees(cartographic.longitude),
-    altitude: cartographic.height
+    altitude: cartographic.height,
   }
 }
 
@@ -41,12 +39,12 @@ export function createOrientation(
   heading: number,
   pitch: number,
   roll: number,
-  position: Cesium.Cartesian3
+  position: Cesium.Cartesian3,
 ): Cesium.Quaternion {
   const hpr = new Cesium.HeadingPitchRoll(
     Cesium.Math.toRadians(heading),
     Cesium.Math.toRadians(pitch),
-    Cesium.Math.toRadians(roll)
+    Cesium.Math.toRadians(roll),
   )
   return Cesium.Transforms.headingPitchRollQuaternion(position, hpr)
 }
@@ -57,17 +55,10 @@ export function createOrientation(
  * @param heading - Heading in degrees
  * @param position - Cartesian3 position
  */
-export function createAircraftOrientation(
-  heading: number,
-  position: Cesium.Cartesian3
-): Cesium.Quaternion {
+export function createAircraftOrientation(heading: number, position: Cesium.Cartesian3): Cesium.Quaternion {
   // Cesium heading is from north, clockwise
   // Most aircraft models point along +Y (north) by default
-  const hpr = new Cesium.HeadingPitchRoll(
-    Cesium.Math.toRadians(heading),
-    0,
-    0
-  )
+  const hpr = new Cesium.HeadingPitchRoll(Cesium.Math.toRadians(heading), 0, 0)
   return Cesium.Transforms.headingPitchRollQuaternion(position, hpr)
 }
 
@@ -77,11 +68,10 @@ export function createAircraftOrientation(
 export function getGroundPosition(
   latitude: number,
   longitude: number,
-  terrainProvider: Cesium.TerrainProvider
+  terrainProvider: Cesium.TerrainProvider,
 ): Promise<Cesium.Cartographic | undefined> {
   const positions = [Cesium.Cartographic.fromDegrees(longitude, latitude)]
-  return Cesium.sampleTerrainMostDetailed(terrainProvider, positions)
-    .then((updatedPositions) => updatedPositions[0])
+  return Cesium.sampleTerrainMostDetailed(terrainProvider, positions).then((updatedPositions) => updatedPositions[0])
 }
 
 /**

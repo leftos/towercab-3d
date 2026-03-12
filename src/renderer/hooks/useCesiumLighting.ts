@@ -78,10 +78,7 @@ export interface CesiumLightingSettings {
  * })
  * ```
  */
-export function useCesiumLighting(
-  viewer: Cesium.Viewer | null,
-  settings: CesiumLightingSettings
-) {
+export function useCesiumLighting(viewer: Cesium.Viewer | null, settings: CesiumLightingSettings) {
   const {
     isInset,
     insetGraphics,
@@ -98,7 +95,7 @@ export function useCesiumLighting(
     aircraftShadowsOnly,
     shadowDepthBias,
     shadowPolygonOffsetFactor,
-    shadowPolygonOffsetUnits
+    shadowPolygonOffsetUnits,
   } = settings
 
   // Update lighting and shadows when settings change
@@ -146,9 +143,7 @@ export function useCesiumLighting(
         viewer.shadowMap.fadingEnabled = shadowFadingEnabled
         viewer.shadowMap.normalOffset = shadowNormalOffset
         // RECEIVE_ONLY: terrain receives shadows from aircraft but doesn't cast shadows on itself
-        viewer.terrainShadows = aircraftShadowsOnly
-          ? Cesium.ShadowMode.RECEIVE_ONLY
-          : Cesium.ShadowMode.ENABLED
+        viewer.terrainShadows = aircraftShadowsOnly ? Cesium.ShadowMode.RECEIVE_ONLY : Cesium.ShadowMode.ENABLED
 
         // Configure internal shadow bias settings (undocumented but stable API)
         // These help reduce shadow banding artifacts
@@ -196,6 +191,6 @@ export function useCesiumLighting(
     aircraftShadowsOnly,
     shadowDepthBias,
     shadowPolygonOffsetFactor,
-    shadowPolygonOffsetUnits
+    shadowPolygonOffsetUnits,
   ])
 }

@@ -30,7 +30,7 @@ import type {
   VMRRule,
   ConversionProgress,
   FSLTLAirlineInfo,
-  FSLTLTypeInfo
+  FSLTLTypeInfo,
 } from '../types/fsltl'
 import { aircraftDimensionsService } from './AircraftDimensionsService'
 import {
@@ -38,7 +38,7 @@ import {
   registryFromJSON,
   registryToJSON,
   parseModelName,
-  DEFAULT_CONVERSION_PROGRESS
+  DEFAULT_CONVERSION_PROGRESS,
 } from '../types/fsltl'
 // Note: useSettingsStore was used for enableFsltlModels setting, now disabled
 import { isTauri } from '../utils/tauriApi'
@@ -170,7 +170,7 @@ class FSLTLServiceClass {
       const rule: VMRRule = {
         typeCode,
         modelNames,
-        callsignPrefix: callsignPrefix || undefined
+        callsignPrefix: callsignPrefix || undefined,
       }
 
       this.allTypes.add(typeCode)
@@ -195,7 +195,9 @@ class FSLTLServiceClass {
     }
 
     this.vmrLoaded = true
-    console.log(`[FSLTLService] Parsed VMR: ${this.defaultRules.size} default rules, ${this.airlineRules.size} airline rules, ${this.allAirlines.size} airlines, ${this.allTypes.size} types, ${this.typeAliases.size} type aliases`)
+    console.log(
+      `[FSLTLService] Parsed VMR: ${this.defaultRules.size} default rules, ${this.airlineRules.size} airline rules, ${this.allAirlines.size} airlines, ${this.allTypes.size} types, ${this.typeAliases.size} type aliases`,
+    )
   }
 
   /**
@@ -221,7 +223,7 @@ class FSLTLServiceClass {
       const rule: VMRRule = {
         typeCode,
         modelNames,
-        callsignPrefix
+        callsignPrefix,
       }
 
       this.allTypes.add(typeCode)
@@ -243,7 +245,9 @@ class FSLTLServiceClass {
     }
 
     this.vmrLoaded = true
-    console.log(`[FSLTLService] Parsed VMR (fallback): ${this.defaultRules.size} default rules, ${this.airlineRules.size} airline rules, ${this.typeAliases.size} type aliases`)
+    console.log(
+      `[FSLTLService] Parsed VMR (fallback): ${this.defaultRules.size} default rules, ${this.airlineRules.size} airline rules, ${this.typeAliases.size} type aliases`,
+    )
   }
 
   /**
@@ -278,7 +282,7 @@ class FSLTLServiceClass {
         airlinesMap.set(prefix, {
           code: prefix,
           availableTypes: [],
-          variantCount: 0
+          variantCount: 0,
         })
       }
       const info = airlinesMap.get(prefix)!
@@ -302,7 +306,7 @@ class FSLTLServiceClass {
       typesMap.set(typeCode, {
         typeCode,
         airlines: [],
-        hasBaseLivery: true
+        hasBaseLivery: true,
       })
     }
 
@@ -312,7 +316,7 @@ class FSLTLServiceClass {
         typesMap.set(rule.typeCode, {
           typeCode: rule.typeCode,
           airlines: [],
-          hasBaseLivery: false
+          hasBaseLivery: false,
         })
       }
       const info = typesMap.get(rule.typeCode)!
@@ -407,7 +411,7 @@ class FSLTLServiceClass {
         // VMR says this airline has a livery for this type
         // Look up by type + airline in registry
         if (modelsForType) {
-          const airlineMatch = modelsForType.find(m => m.airlineCode === normalizedAirline)
+          const airlineMatch = modelsForType.find((m) => m.airlineCode === normalizedAirline)
           if (airlineMatch) {
             // Store the VMR variation name for display
             this.lastMatchVariationName = airlineRule.modelNames[0]
@@ -421,7 +425,7 @@ class FSLTLServiceClass {
     // This handles cases where models exist but VMR wasn't loaded or doesn't have
     // rules for this exact combination
     if (normalizedAirline && modelsForType) {
-      const airlineMatch = modelsForType.find(m => m.airlineCode === normalizedAirline)
+      const airlineMatch = modelsForType.find((m) => m.airlineCode === normalizedAirline)
       if (airlineMatch) {
         return airlineMatch
       }
@@ -436,7 +440,7 @@ class FSLTLServiceClass {
       if (defaultRule) {
         // Look up base livery in registry
         if (modelsForType) {
-          const baseMatch = modelsForType.find(m => !m.airlineCode)
+          const baseMatch = modelsForType.find((m) => !m.airlineCode)
           if (baseMatch) {
             this.lastMatchVariationName = defaultRule.modelNames[0]
             return baseMatch
@@ -450,7 +454,7 @@ class FSLTLServiceClass {
     // or VMR doesn't have rules for this exact combination
     if (!normalizedAirline && modelsForType) {
       // Try base livery
-      const baseMatch = modelsForType.find(m => !m.airlineCode)
+      const baseMatch = modelsForType.find((m) => !m.airlineCode)
       if (baseMatch) {
         return baseMatch
       }
@@ -498,7 +502,7 @@ class FSLTLServiceClass {
     // Look for B738 base livery (no airline code)
     const b738Models = this.registry.byAircraftType.get('B738')
     if (b738Models) {
-      const baseModel = b738Models.find(m => !m.airlineCode)
+      const baseModel = b738Models.find((m) => !m.airlineCode)
       if (baseModel) return baseModel
     }
     return null
@@ -524,7 +528,7 @@ class FSLTLServiceClass {
       const gaModels = this.registry.byAircraftType.get(gaType)
       if (gaModels) {
         // Prefer base livery (no airline code)
-        const baseModel = gaModels.find(m => !m.airlineCode)
+        const baseModel = gaModels.find((m) => !m.airlineCode)
         if (baseModel) return baseModel
         // Fall back to any model of this type
         if (gaModels.length > 0) return gaModels[0]
@@ -548,14 +552,24 @@ class FSLTLServiceClass {
 
     // Common narrowbody types to search for airline liveries (in preference order)
     const FALLBACK_TYPES = [
-      'B738', 'A320', 'B739', 'A321', 'A319', 'B737',
-      'A20N', 'A21N', 'A19N', 'B38M', 'B39M', 'B73X'
+      'B738',
+      'A320',
+      'B739',
+      'A321',
+      'A319',
+      'B737',
+      'A20N',
+      'A21N',
+      'A19N',
+      'B38M',
+      'B39M',
+      'B73X',
     ]
 
     for (const type of FALLBACK_TYPES) {
       const modelsForType = this.registry.byAircraftType.get(type)
       if (modelsForType) {
-        const airlineMatch = modelsForType.find(m => m.airlineCode === normalizedAirline)
+        const airlineMatch = modelsForType.find((m) => m.airlineCode === normalizedAirline)
         if (airlineMatch) {
           return airlineMatch
         }
@@ -578,7 +592,7 @@ class FSLTLServiceClass {
   findClosestModelForAirline(
     targetType: string,
     airlineCode: string,
-    maxSizeDifference = 0.5
+    maxSizeDifference = 0.5,
   ): { model: FSLTLModel; scale: { x: number; y: number; z: number }; distance: number } | null {
     if (!this.isEnabled()) return null
 
@@ -615,7 +629,7 @@ class FSLTLServiceClass {
         bestScale = {
           x: wingspanScale,
           y: (wingspanScale + lengthScale) / 2,
-          z: lengthScale
+          z: lengthScale,
         }
       }
     }
@@ -638,7 +652,7 @@ class FSLTLServiceClass {
    */
   findClosestModel(
     targetType: string,
-    maxSizeDifference = 0.5
+    maxSizeDifference = 0.5,
   ): { model: FSLTLModel; scale: { x: number; y: number; z: number }; distance: number } | null {
     if (!this.isEnabled()) return null
 
@@ -672,7 +686,7 @@ class FSLTLServiceClass {
         bestScale = {
           x: wingspanScale,
           y: (wingspanScale + lengthScale) / 2,
-          z: lengthScale
+          z: lengthScale,
         }
       }
     }
@@ -718,7 +732,7 @@ class FSLTLServiceClass {
 
     // Update type index
     const typeList = this.registry.byAircraftType.get(model.aircraftType) ?? []
-    if (!typeList.find(m => m.modelName === model.modelName)) {
+    if (!typeList.find((m) => m.modelName === model.modelName)) {
       typeList.push(model)
       this.registry.byAircraftType.set(model.aircraftType, typeList)
     }
@@ -726,7 +740,7 @@ class FSLTLServiceClass {
     // Update airline index
     if (model.airlineCode) {
       const airlineList = this.registry.byAirline.get(model.airlineCode) ?? []
-      if (!airlineList.find(m => m.modelName === model.modelName)) {
+      if (!airlineList.find((m) => m.modelName === model.modelName)) {
         airlineList.push(model)
         this.registry.byAirline.set(model.airlineCode, airlineList)
       }
@@ -873,7 +887,7 @@ class FSLTLServiceClass {
           textureSize: '1k', // Default, not tracked in API
           hasAnimations: apiModel.hasAnimations,
           fileSize: apiModel.fileSize,
-          convertedAt: Date.now()
+          convertedAt: Date.now(),
         }
 
         this.registerModel(model)
@@ -906,7 +920,7 @@ class FSLTLServiceClass {
 
         request.onsuccess = () => {
           db.close()
-          this._lastStorageError = null  // Clear error on success
+          this._lastStorageError = null // Clear error on success
           console.log(`[FSLTLService] Saved ${this.registry.models.size} models to IndexedDB`)
           resolve()
         }
@@ -949,7 +963,7 @@ class FSLTLServiceClass {
   updateProgress(progress: Partial<ConversionProgress>): void {
     this._conversionProgress = {
       ...this._conversionProgress,
-      ...progress
+      ...progress,
     }
   }
 
@@ -970,7 +984,7 @@ class FSLTLServiceClass {
   onModelsUpdated(callback: () => void): () => void {
     this.updateListeners.push(callback)
     return () => {
-      this.updateListeners = this.updateListeners.filter(cb => cb !== callback)
+      this.updateListeners = this.updateListeners.filter((cb) => cb !== callback)
     }
   }
 

@@ -29,17 +29,12 @@ export function MSFSIndexingModal() {
 
         <div className={styles.progressContainer}>
           <div className={styles.progressBar}>
-            <div
-              className={styles.progressFill}
-              style={{ width: `${progress}%` }}
-            />
+            <div className={styles.progressFill} style={{ width: `${progress}%` }} />
           </div>
           <span className={styles.progressText}>{Math.round(progress)}%</span>
         </div>
 
-        <p className={styles.hint}>
-          This may take a few seconds. The app will resume once indexing is complete.
-        </p>
+        <p className={styles.hint}>This may take a few seconds. The app will resume once indexing is complete.</p>
       </div>
     </div>
   )

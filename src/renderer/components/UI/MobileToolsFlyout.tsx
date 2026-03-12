@@ -29,7 +29,7 @@ function MobileToolsFlyout({
   dataSourceLabel,
   isDataConnected,
   trafficCount,
-  trafficLabel
+  trafficLabel,
 }: MobileToolsFlyoutProps) {
   const [isOpen, setIsOpen] = useState(false)
 
@@ -51,7 +51,7 @@ function MobileToolsFlyout({
       try {
         const response = await fetch('/api/global-settings', {
           method: 'GET',
-          cache: 'no-store'
+          cache: 'no-store',
         })
         setRemoteStatus(response.ok ? 'connected' : 'disconnected')
       } catch {
@@ -69,7 +69,7 @@ function MobileToolsFlyout({
     try {
       const response = await fetch('/api/global-settings', {
         method: 'GET',
-        cache: 'no-store'
+        cache: 'no-store',
       })
       setRemoteStatus(response.ok ? 'connected' : 'disconnected')
     } catch {

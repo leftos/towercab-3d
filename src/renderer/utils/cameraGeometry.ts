@@ -19,21 +19,16 @@ export function metersToDegreesLat(meters: number): number {
  * @param latitude - Latitude in degrees (for cosine correction)
  */
 export function metersToDegreesLon(meters: number, latitude: number): number {
-  return meters / (METERS_PER_DEGREE_LAT * Math.cos(latitude * Math.PI / 180))
+  return meters / (METERS_PER_DEGREE_LAT * Math.cos((latitude * Math.PI) / 180))
 }
 
 /**
  * Calculate horizontal distance in meters between two lat/lon points
  * Uses simple Euclidean approximation (accurate for short distances)
  */
-export function calculateHorizontalDistance(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number
-): number {
+export function calculateHorizontalDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const latDiff = (lat2 - lat1) * METERS_PER_DEGREE_LAT
-  const lonDiff = (lon2 - lon1) * METERS_PER_DEGREE_LAT * Math.cos(lat1 * Math.PI / 180)
+  const lonDiff = (lon2 - lon1) * METERS_PER_DEGREE_LAT * Math.cos((lat1 * Math.PI) / 180)
   return Math.sqrt(latDiff * latDiff + lonDiff * lonDiff)
 }
 
@@ -46,36 +41,33 @@ export function calculatePitchToTarget(
   observerAlt: number,
   targetLat: number,
   targetLon: number,
-  targetAlt: number
+  targetAlt: number,
 ): number {
   const horizontalDistance = calculateHorizontalDistance(observerLat, observerLon, targetLat, targetLon)
   const altitudeDiff = targetAlt - observerAlt
-  return Math.atan2(altitudeDiff, horizontalDistance) * 180 / Math.PI
+  return (Math.atan2(altitudeDiff, horizontalDistance) * 180) / Math.PI
 }
 
 export interface PositionOffset {
-  x: number  // East-West offset in meters (positive = east)
-  y: number  // North-South offset in meters (positive = north)
-  z: number  // Vertical offset in meters (positive = up)
+  x: number // East-West offset in meters (positive = east)
+  y: number // North-South offset in meters (positive = north)
+  z: number // Vertical offset in meters (positive = up)
 }
 
 export interface GeoPosition {
-  latitude: number   // Degrees
-  longitude: number  // Degrees
-  height: number     // Meters
+  latitude: number // Degrees
+  longitude: number // Degrees
+  height: number // Meters
 }
 
 /**
  * Apply position offsets to a base geographic position
  */
-export function applyPositionOffsets(
-  base: GeoPosition,
-  offset: PositionOffset
-): GeoPosition {
+export function applyPositionOffsets(base: GeoPosition, offset: PositionOffset): GeoPosition {
   return {
     latitude: base.latitude + metersToDegreesLat(offset.y),
     longitude: base.longitude + metersToDegreesLon(offset.x, base.latitude),
-    height: base.height + offset.z
+    height: base.height + offset.z,
   }
 }
 
@@ -83,8 +75,8 @@ export interface OrbitCameraResult {
   cameraLat: number
   cameraLon: number
   cameraHeight: number
-  heading: number  // Heading to look at aircraft
-  pitch: number    // Pitch to look at aircraft
+  heading: number // Heading to look at aircraft
+  pitch: number // Pitch to look at aircraft
 }
 
 /**
@@ -108,12 +100,12 @@ export function calculateOrbitCameraPosition(
   orbitHeading: number,
   orbitPitch: number,
   orbitDistance: number,
-  minCameraHeight: number = 10
+  minCameraHeight: number = 10,
 ): OrbitCameraResult {
   // Calculate absolute orbit angle (behind aircraft + relative offset)
   const absoluteOrbitAngle = aircraftHeading + 180 + orbitHeading
-  const orbitAngleRad = absoluteOrbitAngle * Math.PI / 180
-  const orbitPitchRad = orbitPitch * Math.PI / 180
+  const orbitAngleRad = (absoluteOrbitAngle * Math.PI) / 180
+  const orbitPitchRad = (orbitPitch * Math.PI) / 180
 
   // Calculate camera position using spherical coordinates relative to aircraft
   const horizontalDistance = orbitDistance * Math.cos(orbitPitchRad)
@@ -131,27 +123,20 @@ export function calculateOrbitCameraPosition(
   const heading = calculateBearing(cameraLat, cameraLon, aircraftLat, aircraftLon)
 
   // Calculate pitch to look at aircraft
-  const pitch = calculatePitchToTarget(
-    cameraLat,
-    cameraLon,
-    cameraHeight,
-    aircraftLat,
-    aircraftLon,
-    aircraftAltMeters
-  )
+  const pitch = calculatePitchToTarget(cameraLat, cameraLon, cameraHeight, aircraftLat, aircraftLon, aircraftAltMeters)
 
   return {
     cameraLat,
     cameraLon,
     cameraHeight,
     heading,
-    pitch
+    pitch,
   }
 }
 
 export interface TowerLookAtResult {
-  heading: number  // Bearing to aircraft in degrees
-  pitch: number    // Pitch angle to aircraft in degrees
+  heading: number // Bearing to aircraft in degrees
+  pitch: number // Pitch angle to aircraft in degrees
 }
 
 /**
@@ -171,17 +156,10 @@ export function calculateTowerLookAt(
   towerAltMeters: number,
   aircraftLat: number,
   aircraftLon: number,
-  aircraftAltMeters: number
+  aircraftAltMeters: number,
 ): TowerLookAtResult {
   const heading = calculateBearing(towerLat, towerLon, aircraftLat, aircraftLon)
-  const pitch = calculatePitchToTarget(
-    towerLat,
-    towerLon,
-    towerAltMeters,
-    aircraftLat,
-    aircraftLon,
-    aircraftAltMeters
-  )
+  const pitch = calculatePitchToTarget(towerLat, towerLon, towerAltMeters, aircraftLat, aircraftLon, aircraftAltMeters)
 
   return { heading, pitch }
 }
@@ -199,7 +177,7 @@ export function calculateFollowFov(
   baseFov: number,
   followZoom: number,
   minFov: number = FOV_MIN,
-  maxFov: number = FOV_MAX
+  maxFov: number = FOV_MAX,
 ): number {
   return Math.max(minFov, Math.min(maxFov, baseFov / followZoom))
 }
@@ -239,7 +217,7 @@ export function degreesLatToMeters(degrees: number): number {
  * @param latitude - Latitude in degrees (for cosine correction)
  */
 export function degreesLonToMeters(degrees: number, latitude: number): number {
-  return degrees * METERS_PER_DEGREE_LAT * Math.cos(latitude * Math.PI / 180)
+  return degrees * METERS_PER_DEGREE_LAT * Math.cos((latitude * Math.PI) / 180)
 }
 
 /**
@@ -299,7 +277,7 @@ export function calculateShareable3dPosition(
   positionOffsetX: number,
   positionOffsetY: number,
   positionOffsetZ: number,
-  heading: number
+  heading: number,
 ): Shareable3dPosition {
   // Use existing position as base if available, otherwise airport center
   const baseLat = existingPosition?.lat ?? airportLat
@@ -310,13 +288,13 @@ export function calculateShareable3dPosition(
   // positionOffsetY is north/south (positive = north)
   // positionOffsetX is east/west (positive = east)
   const latOffsetDegrees = positionOffsetY / METERS_PER_DEGREE_LAT
-  const lonOffsetDegrees = positionOffsetX / (METERS_PER_DEGREE_LAT * Math.cos(baseLat * Math.PI / 180))
+  const lonOffsetDegrees = positionOffsetX / (METERS_PER_DEGREE_LAT * Math.cos((baseLat * Math.PI) / 180))
 
   return {
     lat: baseLat + latOffsetDegrees,
     lon: baseLon + lonOffsetDegrees,
     height: baseHeight + positionOffsetZ,
-    heading: ((heading % 360) + 360) % 360 // Normalize to 0-360
+    heading: ((heading % 360) + 360) % 360, // Normalize to 0-360
   }
 }
 
@@ -345,7 +323,7 @@ export function calculateShareable2dPosition(
   } | null,
   positionOffsetX: number,
   positionOffsetY: number,
-  heading: number
+  heading: number,
 ): Shareable2dPosition {
   // Use existing position as base if available, otherwise airport center
   const baseLat = existingPosition?.lat ?? airportLat
@@ -353,13 +331,13 @@ export function calculateShareable2dPosition(
 
   // Convert meter offsets to degrees and add to base position
   const latOffsetDegrees = positionOffsetY / METERS_PER_DEGREE_LAT
-  const lonOffsetDegrees = positionOffsetX / (METERS_PER_DEGREE_LAT * Math.cos(baseLat * Math.PI / 180))
+  const lonOffsetDegrees = positionOffsetX / (METERS_PER_DEGREE_LAT * Math.cos((baseLat * Math.PI) / 180))
 
   return {
     lat: baseLat + latOffsetDegrees,
     lon: baseLon + lonOffsetDegrees,
     altitude: topdownAltitude,
-    heading: ((heading % 360) + 360) % 360 // Normalize to 0-360
+    heading: ((heading % 360) + 360) % 360, // Normalize to 0-360
   }
 }
 

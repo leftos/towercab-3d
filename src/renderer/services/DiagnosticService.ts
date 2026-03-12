@@ -34,7 +34,7 @@ function serializeTimeline(callsign: string, timeline: AircraftTimeline): Serial
     lastReceivedAt: timeline.lastReceivedAt,
     dynamicDelay: timeline.dynamicDelay
       ? { ...timeline.dynamicDelay, intervalHistory: [...timeline.dynamicDelay.intervalHistory] }
-      : undefined
+      : undefined,
   }
 }
 
@@ -59,26 +59,26 @@ function captureAppState(): DiagnosticAppState {
       longitude: airportState.currentAirport?.lon ?? 0,
       altitude: airportState.towerHeight,
       heading: cam.heading,
-      pitch: cam.pitch
+      pitch: cam.pitch,
     },
     vnas: {
       connected: vnasState.isConnected(),
-      sessionActive: vnasState.status.state === 'connected'
+      sessionActive: vnasState.status.state === 'connected',
     },
     vatsim: {
-      lastTimestamp: vatsimState.lastVatsimTimestamp || null
+      lastTimestamp: vatsimState.lastVatsimTimestamp || null,
     },
     realTraffic: {
-      connected: rtState.status === 'connected'
+      connected: rtState.status === 'connected',
     },
     weather: {
-      metar: weatherState.currentMetar?.rawOb ?? null
+      metar: weatherState.currentMetar?.rawOb ?? null,
     },
     settings: {
       sourceDisplayDelays: { ...SOURCE_DISPLAY_DELAYS },
       enableDynamicDisplayDelay: settingsState.advanced?.enableDynamicDisplayDelay ?? true,
-      groundspeedThresholdKnots: GROUNDSPEED_THRESHOLD_KNOTS
-    }
+      groundspeedThresholdKnots: GROUNDSPEED_THRESHOLD_KNOTS,
+    },
   }
 }
 
@@ -106,7 +106,7 @@ export function exportDiagnostic(): DiagnosticPackage {
     exportedAt: Date.now(),
     appVersion: APP_VERSION,
     timelines: serialized,
-    appState: captureAppState()
+    appState: captureAppState(),
   }
 }
 
@@ -132,7 +132,7 @@ export async function saveDiagnostic(): Promise<string> {
   const response = await fetch('/api/diagnostic', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ filename, content: json })
+    body: JSON.stringify({ filename, content: json }),
   })
 
   if (!response.ok) {
@@ -140,7 +140,7 @@ export async function saveDiagnostic(): Promise<string> {
     throw new Error(`Failed to save diagnostic: ${text}`)
   }
 
-  const result = await response.json() as { path: string }
+  const result = (await response.json()) as { path: string }
   console.log(`[Diagnostic] Saved ${pkg.timelines.length} timelines to ${result.path}`)
   return result.path
 }

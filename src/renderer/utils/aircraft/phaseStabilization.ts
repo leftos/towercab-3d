@@ -48,11 +48,11 @@ interface PhaseStabilizationState {
 
   // Hysteresis tracking
   accelState: 'accelerating' | 'decelerating' | 'neutral'
-  distanceState: 'short' | 'long' | 'beyond'  // For final approach hysteresis
+  distanceState: 'short' | 'long' | 'beyond' // For final approach hysteresis
 
   // Roll phase tracking
   rollPhaseEntrySpeed: number
-  rollPhaseEntryTime: number  // Track when we entered roll phase
+  rollPhaseEntryTime: number // Track when we entered roll phase
   lastPhaseBeforeRoll: FlightPhase | null
 
   // Approach tracking for go-around
@@ -116,9 +116,10 @@ export function clearStabilizationStates(): void {
  *
  * @returns Acceleration in knots/second and a confidence value (0-1)
  */
-export function computeWindowedAcceleration(
-  timeline: AircraftTimeline | undefined
-): { acceleration: number; confidence: number } {
+export function computeWindowedAcceleration(timeline: AircraftTimeline | undefined): {
+  acceleration: number
+  confidence: number
+} {
   if (!timeline || timeline.observations.length < 2) {
     return { acceleration: 0, confidence: 0 }
   }
@@ -128,7 +129,7 @@ export function computeWindowedAcceleration(
 
   // Find observations within window
   const windowStart = now - ACCEL_WINDOW_MS
-  const inWindow = observations.filter(obs => obs.observedAt >= windowStart)
+  const inWindow = observations.filter((obs) => obs.observedAt >= windowStart)
 
   if (inWindow.length < 2) {
     return { acceleration: 0, confidence: 0 }
@@ -145,7 +146,7 @@ export function computeWindowedAcceleration(
   }
 
   const speedDelta = newest.groundspeed - oldest.groundspeed
-  const acceleration = (speedDelta / timeDeltaMs) * 1000  // knots/sec
+  const acceleration = (speedDelta / timeDeltaMs) * 1000 // knots/sec
 
   // Confidence based on number of observations and time coverage
   const coverage = Math.min(1, timeDeltaMs / ACCEL_WINDOW_MS)
@@ -158,15 +159,12 @@ export function computeWindowedAcceleration(
 /**
  * Get recent observations from timeline within a time window.
  */
-function getRecentObservations(
-  timeline: AircraftTimeline | undefined,
-  windowMs: number
-): AircraftObservation[] {
+function getRecentObservations(timeline: AircraftTimeline | undefined, windowMs: number): AircraftObservation[] {
   if (!timeline) return []
 
   const now = Date.now()
   const windowStart = now - windowMs
-  return timeline.observations.filter(obs => obs.observedAt >= windowStart)
+  return timeline.observations.filter((obs) => obs.observedAt >= windowStart)
 }
 
 // ============================================================================
@@ -176,9 +174,7 @@ function getRecentObservations(
 /**
  * Analyze vertical trajectory from observations.
  */
-function analyzeVerticalTrajectory(
-  observations: AircraftObservation[]
-): 'climbing' | 'descending' | 'level' {
+function analyzeVerticalTrajectory(observations: AircraftObservation[]): 'climbing' | 'descending' | 'level' {
   if (observations.length < 2) return 'level'
 
   const first = observations[0]
@@ -203,7 +199,7 @@ function analyzeDistanceTrajectory(
   observations: AircraftObservation[],
   runway: RunwayProximity | null,
   airportLat: number,
-  airportLon: number
+  airportLon: number,
 ): 'closing' | 'opening' | 'stable' {
   if (observations.length < 2) return 'stable'
 
@@ -238,7 +234,7 @@ function isValidGoAround(
   timeline: AircraftTimeline | undefined,
   nearestRunway: RunwayProximity | null,
   state: PhaseStabilizationState,
-  context: SmartSortContext
+  context: SmartSortContext,
 ): boolean {
   // 1. Must have been on sustained approach
   if (!state.wasOnSustainedApproach) return false
@@ -257,9 +253,8 @@ function isValidGoAround(
 
       // Verify approach trajectory: was descending AND closing to runway
       const wasDescending = analyzeVerticalTrajectory(approachObs) === 'descending'
-      const wasClosing = analyzeDistanceTrajectory(
-        approachObs, nearestRunway, context.airportLat, context.airportLon
-      ) === 'closing'
+      const wasClosing =
+        analyzeDistanceTrajectory(approachObs, nearestRunway, context.airportLat, context.airportLon) === 'closing'
 
       if (!wasDescending && !wasClosing) return false
 
@@ -270,8 +265,8 @@ function isValidGoAround(
   }
 
   // 4. Current vertical rate check (fallback if timeline is sparse)
-  const verticalRateFpm = aircraft.verticalRate * METERS_TO_FEET * 60  // m/s to fpm
-  if (verticalRateFpm < GO_AROUND_CLIMB_FPM * 0.6) return false  // Allow some margin
+  const verticalRateFpm = aircraft.verticalRate * METERS_TO_FEET * 60 // m/s to fpm
+  if (verticalRateFpm < GO_AROUND_CLIMB_FPM * 0.6) return false // Allow some margin
 
   return true
 }
@@ -288,7 +283,7 @@ function classifyRollPhase(
   aircraft: InterpolatedAircraftState,
   timeline: AircraftTimeline | undefined,
   state: PhaseStabilizationState,
-  context: SmartSortContext
+  context: SmartSortContext,
 ): 'departure_roll' | 'landing_roll' | 'ambiguous' {
   let departureScore = 0
   let landingScore = 0
@@ -343,7 +338,7 @@ function classifyRollPhase(
  */
 function updateAccelState(
   currentState: 'accelerating' | 'decelerating' | 'neutral',
-  acceleration: number
+  acceleration: number,
 ): 'accelerating' | 'decelerating' | 'neutral' {
   const { accelerating, decelerating } = ACCELERATION_HYSTERESIS
 
@@ -371,7 +366,7 @@ function updateAccelState(
  */
 function updateDistanceState(
   currentState: 'short' | 'long' | 'beyond',
-  distanceNm: number | null
+  distanceNm: number | null,
 ): 'short' | 'long' | 'beyond' {
   if (distanceNm === null) return 'beyond'
 
@@ -417,7 +412,8 @@ function updateApproachTracking(state: PhaseStabilizationState, rawPhase: Flight
       state.approachStartTime = now
     }
     const approachDuration = now - state.approachStartTime
-    if (approachDuration >= 8000) {  // 8 seconds sustained
+    if (approachDuration >= 8000) {
+      // 8 seconds sustained
       state.wasOnSustainedApproach = true
     }
   } else {
@@ -426,7 +422,8 @@ function updateApproachTracking(state: PhaseStabilizationState, rawPhase: Flight
     // to catch go-arounds that happen just after touch-and-go
     if (state.approachStartTime !== null) {
       const timeSinceApproach = now - (state.approachStartTime + 8000)
-      if (timeSinceApproach > 15000) {  // 15 seconds after sustained approach ended
+      if (timeSinceApproach > 15000) {
+        // 15 seconds after sustained approach ended
         state.wasOnSustainedApproach = false
         state.approachStartTime = null
       }
@@ -441,10 +438,12 @@ function updateRollTracking(
   state: PhaseStabilizationState,
   currentPhase: FlightPhase,
   newPhase: FlightPhase,
-  speed: number
+  speed: number,
 ): void {
-  const isEnteringRoll = (newPhase === 'departure_roll' || newPhase === 'landing_roll') &&
-                         (currentPhase !== 'departure_roll' && currentPhase !== 'landing_roll')
+  const isEnteringRoll =
+    (newPhase === 'departure_roll' || newPhase === 'landing_roll') &&
+    currentPhase !== 'departure_roll' &&
+    currentPhase !== 'landing_roll'
 
   if (isEnteringRoll) {
     state.rollPhaseEntrySpeed = speed
@@ -479,7 +478,7 @@ export function stabilizePhase(
   aircraft: InterpolatedAircraftState,
   context: SmartSortContext,
   timeline: AircraftTimeline | undefined,
-  nearestRunway: RunwayProximity | null
+  nearestRunway: RunwayProximity | null,
 ): FlightPhase {
   const now = Date.now()
   const rawPhase = rawResult.phase
@@ -537,9 +536,10 @@ export function stabilizePhase(
   // Protect landing_roll from transitioning to taxi phases if still moving fast
   // This prevents premature exit due to GPS position noise at runway edge
   if (state.confirmedPhase === 'landing_roll') {
-    const isTaxiPhase = effectiveRawPhase === 'active_taxi' ||
-                        effectiveRawPhase === 'stopped_taxi' ||
-                        effectiveRawPhase === 'holding_short'
+    const isTaxiPhase =
+      effectiveRawPhase === 'active_taxi' ||
+      effectiveRawPhase === 'stopped_taxi' ||
+      effectiveRawPhase === 'holding_short'
     if (isTaxiPhase && aircraft.interpolatedGroundspeed > LANDING_ROLL_MIN_EXIT_SPEED_KTS) {
       // Still too fast to be taxiing - stay in landing_roll
       effectiveRawPhase = 'landing_roll'

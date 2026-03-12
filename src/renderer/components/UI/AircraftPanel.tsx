@@ -18,7 +18,7 @@ import {
   getTierClass,
   type FlightPhase,
   type PriorityTier,
-  type SmartSortContext
+  type SmartSortContext,
 } from '../../utils/smartSort'
 import './AircraftPanel.css'
 
@@ -82,56 +82,64 @@ function AircraftPanel() {
 
   // Resize state
   const [isResizing, setIsResizing] = useState<'width' | 'height' | 'corner' | null>(null)
-  const resizeStartRef = useRef<{ startX: number; startY: number; startWidth: number; startHeight: number } | null>(null)
+  const resizeStartRef = useRef<{ startX: number; startY: number; startWidth: number; startHeight: number } | null>(
+    null,
+  )
 
   // Resize handlers using pointer events (works for both mouse and touch)
-  const handleResizeStart = useCallback((
-    e: React.PointerEvent,
-    direction: 'width' | 'height' | 'corner'
-  ) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setIsResizing(direction)
-    resizeStartRef.current = {
-      startX: e.clientX,
-      startY: e.clientY,
-      startWidth: panelWidth,
-      startHeight: panelHeight || 400 // Use 400 as default if height is 0 (auto)
-    }
-    // Capture pointer to continue receiving events even if pointer leaves element
-    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
-  }, [panelWidth, panelHeight])
+  const handleResizeStart = useCallback(
+    (e: React.PointerEvent, direction: 'width' | 'height' | 'corner') => {
+      e.preventDefault()
+      e.stopPropagation()
+      setIsResizing(direction)
+      resizeStartRef.current = {
+        startX: e.clientX,
+        startY: e.clientY,
+        startWidth: panelWidth,
+        startHeight: panelHeight || 400, // Use 400 as default if height is 0 (auto)
+      }
+      // Capture pointer to continue receiving events even if pointer leaves element
+      ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+    },
+    [panelWidth, panelHeight],
+  )
 
-  const handleResizeMove = useCallback((e: React.PointerEvent) => {
-    if (!isResizing || !resizeStartRef.current) return
+  const handleResizeMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!isResizing || !resizeStartRef.current) return
 
-    const { startX, startY, startWidth, startHeight } = resizeStartRef.current
-    const deltaX = startX - e.clientX // Inverted because dragging left should increase width
-    const deltaY = e.clientY - startY
+      const { startX, startY, startWidth, startHeight } = resizeStartRef.current
+      const deltaX = startX - e.clientX // Inverted because dragging left should increase width
+      const deltaY = e.clientY - startY
 
-    if (isResizing === 'width' || isResizing === 'corner') {
-      const newWidth = Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, startWidth + deltaX))
-      updateUISettings({ aircraftPanelWidth: newWidth })
-    }
+      if (isResizing === 'width' || isResizing === 'corner') {
+        const newWidth = Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, startWidth + deltaX))
+        updateUISettings({ aircraftPanelWidth: newWidth })
+      }
 
-    if (isResizing === 'height' || isResizing === 'corner') {
-      const newHeight = Math.max(MIN_PANEL_HEIGHT, Math.min(MAX_PANEL_HEIGHT, startHeight + deltaY))
-      updateUISettings({ aircraftPanelHeight: newHeight })
-    }
-  }, [isResizing, updateUISettings])
+      if (isResizing === 'height' || isResizing === 'corner') {
+        const newHeight = Math.max(MIN_PANEL_HEIGHT, Math.min(MAX_PANEL_HEIGHT, startHeight + deltaY))
+        updateUISettings({ aircraftPanelHeight: newHeight })
+      }
+    },
+    [isResizing, updateUISettings],
+  )
 
-  const handleResizeEnd = useCallback((e: React.PointerEvent) => {
-    if (isResizing) {
-      ;(e.target as HTMLElement).releasePointerCapture(e.pointerId)
-      setIsResizing(null)
-      resizeStartRef.current = null
-    }
-  }, [isResizing])
+  const handleResizeEnd = useCallback(
+    (e: React.PointerEvent) => {
+      if (isResizing) {
+        ;(e.target as HTMLElement).releasePointerCapture(e.pointerId)
+        setIsResizing(null)
+        resizeStartRef.current = null
+      }
+    },
+    [isResizing],
+  )
 
   // Periodic refresh to update distances/bearings (UI updates automatically via hook reactivity)
   const [refreshTick, setRefreshTick] = useState(0)
   useEffect(() => {
-    const interval = setInterval(() => setRefreshTick(t => t + 1), 1000)
+    const interval = setInterval(() => setRefreshTick((t) => t + 1), 1000)
     return () => clearInterval(interval)
   }, [])
 
@@ -153,7 +161,7 @@ function AircraftPanel() {
     lookAtPosition,
     positionOffsetX,
     positionOffsetY,
-    positionOffsetZ
+    positionOffsetZ,
   } = useActiveViewportCamera()
 
   // Custom tower position for bearing calculation
@@ -174,7 +182,7 @@ function AircraftPanel() {
       airportLon: currentAirport.lon,
       airportElevationFt: currentAirport.elevation,
       runways,
-      icao: currentAirport.icao
+      icao: currentAirport.icao,
     }
   }, [currentAirport, runwaysLoaded, getRunwaysWithCoordinates])
 
@@ -190,7 +198,7 @@ function AircraftPanel() {
       const towerPos = getTowerPosition(currentAirport, towerHeight, customTowerPosition ?? undefined)
       const cameraPos = applyPositionOffsets(
         { latitude: towerPos.latitude, longitude: towerPos.longitude, height: towerPos.height },
-        { x: positionOffsetX, y: positionOffsetY, z: positionOffsetZ }
+        { x: positionOffsetX, y: positionOffsetY, z: positionOffsetZ },
       )
       cameraLat = cameraPos.latitude
       cameraLon = cameraPos.longitude
@@ -199,7 +207,10 @@ function AircraftPanel() {
 
     // Always calculate flight phase data when airport context available
     // (phase info is useful regardless of sort mode)
-    const smartSortMap = new Map<string, { phase: FlightPhase; tier: PriorityTier; runway: string | null; score: number }>()
+    const smartSortMap = new Map<
+      string,
+      { phase: FlightPhase; tier: PriorityTier; runway: string | null; score: number }
+    >()
     if (smartSortContext) {
       const smartResults = calculateSmartSort(filtered, smartSortContext)
       for (const result of smartResults) {
@@ -207,7 +218,7 @@ function AircraftPanel() {
           phase: result.phase,
           tier: result.tier,
           runway: result.runway,
-          score: result.score
+          score: result.score,
         })
       }
     }
@@ -218,12 +229,12 @@ function AircraftPanel() {
       const altitudeMsl = geoidService.ellipsoidalToMsl(
         aircraft.interpolatedLatitude,
         aircraft.interpolatedLongitude,
-        aircraft.interpolatedAltitude
+        aircraft.interpolatedAltitude,
       )
       return {
         callsign: aircraft.callsign,
         aircraftType: aircraft.aircraftType,
-        altitude: altitudeMsl,  // MSL in METERS (formatAltitude handles conversion to feet)
+        altitude: altitudeMsl, // MSL in METERS (formatAltitude handles conversion to feet)
         groundspeed: aircraft.interpolatedGroundspeed,
         heading: aircraft.interpolatedHeading,
         distance: aircraft.distance,
@@ -233,13 +244,13 @@ function AircraftPanel() {
           aircraft.interpolatedLatitude,
           aircraft.interpolatedLongitude,
           cameraAltMeters,
-          aircraft.interpolatedAltitude
+          aircraft.interpolatedAltitude,
         ),
         bearing: calculateBearing(
           referencePoint.lat,
           referencePoint.lon,
           aircraft.interpolatedLatitude,
-          aircraft.interpolatedLongitude
+          aircraft.interpolatedLongitude,
         ),
         departure: aircraft.departure,
         arrival: aircraft.arrival,
@@ -247,7 +258,7 @@ function AircraftPanel() {
         tier: smartData?.tier || null,
         runway: smartData?.runway || null,
         score: smartData?.score || 0,
-        displayDelay: aircraft.displayDelay
+        displayDelay: aircraft.displayDelay,
       }
     })
 
@@ -279,8 +290,21 @@ function AircraftPanel() {
 
     return sorted.slice(0, 50)
     // biome-ignore lint/correctness/useExhaustiveDependencies: refreshTick intentionally forces periodic recalculation of distances/bearings
-  }, [filtered, referencePoint, followingCallsign, sortOption, refreshTick, smartSortContext, pinFollowedAircraftToTop, currentAirport, towerHeight, customTowerPosition, positionOffsetX, positionOffsetY, positionOffsetZ])
-
+  }, [
+    filtered,
+    referencePoint,
+    followingCallsign,
+    sortOption,
+    refreshTick,
+    smartSortContext,
+    pinFollowedAircraftToTop,
+    currentAirport,
+    towerHeight,
+    customTowerPosition,
+    positionOffsetX,
+    positionOffsetY,
+    positionOffsetZ,
+  ])
 
   const handleFollowClick = (callsign: string) => {
     if (followingCallsign === callsign) {
@@ -307,7 +331,7 @@ function AircraftPanel() {
     lookAtPosition(
       currentAircraft.interpolatedLatitude,
       currentAircraft.interpolatedLongitude,
-      currentAircraft.interpolatedAltitude * 3.28084 // Convert meters to feet
+      currentAircraft.interpolatedAltitude * 3.28084, // Convert meters to feet
     )
   }
 
@@ -316,7 +340,7 @@ function AircraftPanel() {
   // Calculate panel style with dynamic dimensions
   const panelStyle: React.CSSProperties = {
     width: panelWidth,
-    ...(panelHeight > 0 && !isCollapsed ? { height: panelHeight, maxHeight: 'none' } : {})
+    ...(panelHeight > 0 && !isCollapsed ? { height: panelHeight, maxHeight: 'none' } : {}),
   }
 
   return (
@@ -383,11 +407,7 @@ function AircraftPanel() {
             title={isCollapsed ? 'Expand panel' : 'Collapse panel'}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              {isCollapsed ? (
-                <polyline points="6 9 12 15 18 9" />
-              ) : (
-                <polyline points="18 15 12 9 6 15" />
-              )}
+              {isCollapsed ? <polyline points="6 9 12 15 18 9" /> : <polyline points="18 15 12 9 6 15" />}
             </svg>
           </button>
         </div>
@@ -439,117 +459,127 @@ function AircraftPanel() {
           </div>
 
           {followingCallsign && (
-        <div className="following-indicator">
-          <div className="following-info">
-            <span className="following-label">Following</span>
-            <span className="following-callsign">{followingCallsign}</span>
-          </div>
-          <button
-            className={`follow-mode-btn ${followMode}`}
-            onClick={toggleFollowMode}
-            title="Toggle follow mode (O)"
-          >
-            {followMode === 'tower' ? 'Tower' : 'Orbit'}
-          </button>
-          <button className="stop-following-btn" onClick={() => stopFollowing()}>
-            Stop (Esc)
-          </button>
-        </div>
-      )}
-
-      <div className="aircraft-list">
-        {nearbyAircraft.length === 0 ? (
-          <div className="no-aircraft">
-            {currentAirport
-              ? 'No aircraft nearby'
-              : 'Select an airport or search globally (Ctrl+K)'}
-          </div>
-        ) : (
-          nearbyAircraft.map((aircraft) => {
-            const isFollowing = followingCallsign === aircraft.callsign
-            const phaseLabel = aircraft.phase ? getPhaseLabel(aircraft.phase) : null
-            const tierClass = aircraft.tier ? getTierClass(aircraft.tier) : ''
-            return (
-              <div
-                key={aircraft.callsign}
-                className={`aircraft-item ${isFollowing ? 'following' : ''} ${tierClass} clickable`}
-                onClick={() => handleLookAt(aircraft)}
-                title="Click to look at aircraft"
-              >
-                <div className="aircraft-header">
-                  <div className="callsign-group">
-                    <span
-                      className="live-indicator"
-                      title={`Display delay: ${(aircraft.displayDelay / 1000).toFixed(1)}s`}
-                    >
-                      <svg width="6" height="6" viewBox="0 0 6 6">
-                        <circle cx="3" cy="3" r="3" fill={aircraft.displayDelay < 3000 ? '#0c7' : '#fc0'} />
-                      </svg>
-                    </span>
-                    <span className="callsign">{aircraft.callsign}</span>
-                    <span className="aircraft-type">{aircraft.aircraftType || '???'}</span>
-                    {phaseLabel && (
-                      <span className={`phase-badge ${tierClass}`}>
-                        {phaseLabel}
-                        {aircraft.runway && <span className="runway-ident"> {aircraft.runway}</span>}
-                      </span>
-                    )}
-                  </div>
-                  <div className="aircraft-header-right">
-                    <button
-                      className={`follow-btn ${isFollowing ? 'active' : ''}`}
-                      onClick={(e) => {
-                        e.stopPropagation() // Don't trigger look-at
-                        handleFollowClick(aircraft.callsign)
-                      }}
-                      title={isFollowing ? 'Stop following' : 'Follow aircraft'}
-                    >
-                      {isFollowing ? (
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                          <circle cx="12" cy="12" r="10" />
-                        </svg>
-                      ) : (
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <circle cx="12" cy="12" r="10" />
-                          <circle cx="12" cy="12" r="3" />
-                        </svg>
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="aircraft-details">
-                  <div className="detail-row">
-                    <span className="label">ALT</span>
-                    <span className="value">{formatAltitude(aircraft.altitude)}</span>
-                  </div>
-                  <div className="detail-row">
-                    <span className="label">GS</span>
-                    <span className="value">{formatGroundspeed(aircraft.groundspeed)}</span>
-                  </div>
-                  <div className="detail-row">
-                    <span className="label">HDG</span>
-                    <span className="value">{formatHeading(aircraft.heading)}</span>
-                  </div>
-                </div>
-
-                <div className="aircraft-position">
-                  <span className="distance">{aircraft.distance.toFixed(1)} nm</span>
-                  <span className="bearing">{Math.round(aircraft.bearing).toString().padStart(3, '0')}°</span>
-                </div>
-
-                {(aircraft.departure && aircraft.departure !== 'null') || (aircraft.arrival && aircraft.arrival !== 'null') ? (
-                  <div className="aircraft-route">
-                    <span className="route-from">{aircraft.departure && aircraft.departure !== 'null' ? aircraft.departure : '????'}</span>
-                    <span className="route-arrow">→</span>
-                    <span className="route-to">{aircraft.arrival && aircraft.arrival !== 'null' ? aircraft.arrival : '????'}</span>
-                  </div>
-                ) : null}
+            <div className="following-indicator">
+              <div className="following-info">
+                <span className="following-label">Following</span>
+                <span className="following-callsign">{followingCallsign}</span>
               </div>
-            )
-          })
-        )}
-      </div>
+              <button
+                className={`follow-mode-btn ${followMode}`}
+                onClick={toggleFollowMode}
+                title="Toggle follow mode (O)"
+              >
+                {followMode === 'tower' ? 'Tower' : 'Orbit'}
+              </button>
+              <button className="stop-following-btn" onClick={() => stopFollowing()}>
+                Stop (Esc)
+              </button>
+            </div>
+          )}
+
+          <div className="aircraft-list">
+            {nearbyAircraft.length === 0 ? (
+              <div className="no-aircraft">
+                {currentAirport ? 'No aircraft nearby' : 'Select an airport or search globally (Ctrl+K)'}
+              </div>
+            ) : (
+              nearbyAircraft.map((aircraft) => {
+                const isFollowing = followingCallsign === aircraft.callsign
+                const phaseLabel = aircraft.phase ? getPhaseLabel(aircraft.phase) : null
+                const tierClass = aircraft.tier ? getTierClass(aircraft.tier) : ''
+                return (
+                  <div
+                    key={aircraft.callsign}
+                    className={`aircraft-item ${isFollowing ? 'following' : ''} ${tierClass} clickable`}
+                    onClick={() => handleLookAt(aircraft)}
+                    title="Click to look at aircraft"
+                  >
+                    <div className="aircraft-header">
+                      <div className="callsign-group">
+                        <span
+                          className="live-indicator"
+                          title={`Display delay: ${(aircraft.displayDelay / 1000).toFixed(1)}s`}
+                        >
+                          <svg width="6" height="6" viewBox="0 0 6 6">
+                            <circle cx="3" cy="3" r="3" fill={aircraft.displayDelay < 3000 ? '#0c7' : '#fc0'} />
+                          </svg>
+                        </span>
+                        <span className="callsign">{aircraft.callsign}</span>
+                        <span className="aircraft-type">{aircraft.aircraftType || '???'}</span>
+                        {phaseLabel && (
+                          <span className={`phase-badge ${tierClass}`}>
+                            {phaseLabel}
+                            {aircraft.runway && <span className="runway-ident"> {aircraft.runway}</span>}
+                          </span>
+                        )}
+                      </div>
+                      <div className="aircraft-header-right">
+                        <button
+                          className={`follow-btn ${isFollowing ? 'active' : ''}`}
+                          onClick={(e) => {
+                            e.stopPropagation() // Don't trigger look-at
+                            handleFollowClick(aircraft.callsign)
+                          }}
+                          title={isFollowing ? 'Stop following' : 'Follow aircraft'}
+                        >
+                          {isFollowing ? (
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                              <circle cx="12" cy="12" r="10" />
+                            </svg>
+                          ) : (
+                            <svg
+                              width="14"
+                              height="14"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                            >
+                              <circle cx="12" cy="12" r="10" />
+                              <circle cx="12" cy="12" r="3" />
+                            </svg>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="aircraft-details">
+                      <div className="detail-row">
+                        <span className="label">ALT</span>
+                        <span className="value">{formatAltitude(aircraft.altitude)}</span>
+                      </div>
+                      <div className="detail-row">
+                        <span className="label">GS</span>
+                        <span className="value">{formatGroundspeed(aircraft.groundspeed)}</span>
+                      </div>
+                      <div className="detail-row">
+                        <span className="label">HDG</span>
+                        <span className="value">{formatHeading(aircraft.heading)}</span>
+                      </div>
+                    </div>
+
+                    <div className="aircraft-position">
+                      <span className="distance">{aircraft.distance.toFixed(1)} nm</span>
+                      <span className="bearing">{Math.round(aircraft.bearing).toString().padStart(3, '0')}°</span>
+                    </div>
+
+                    {(aircraft.departure && aircraft.departure !== 'null') ||
+                    (aircraft.arrival && aircraft.arrival !== 'null') ? (
+                      <div className="aircraft-route">
+                        <span className="route-from">
+                          {aircraft.departure && aircraft.departure !== 'null' ? aircraft.departure : '????'}
+                        </span>
+                        <span className="route-arrow">→</span>
+                        <span className="route-to">
+                          {aircraft.arrival && aircraft.arrival !== 'null' ? aircraft.arrival : '????'}
+                        </span>
+                      </div>
+                    ) : null}
+                  </div>
+                )
+              })
+            )}
+          </div>
         </>
       )}
     </div>

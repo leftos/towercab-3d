@@ -21,7 +21,7 @@ export function isRemoteMode(): boolean {
  * Inverse of isRemoteMode().
  */
 export function isTauriMode(): boolean {
-  return ('__TAURI__' in window) || ('__TAURI_INTERNALS__' in window)
+  return '__TAURI__' in window || '__TAURI_INTERNALS__' in window
 }
 
 /**
@@ -53,5 +53,5 @@ export function getHostname(): string | null {
 export function getPort(): number | null {
   if (!isRemoteMode()) return null
   const port = window.location.port
-  return port ? parseInt(port, 10) : (window.location.protocol === 'https:' ? 443 : 80)
+  return port ? parseInt(port, 10) : window.location.protocol === 'https:' ? 443 : 80
 }

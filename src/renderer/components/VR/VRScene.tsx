@@ -35,10 +35,14 @@ function VRScene({ cesiumViewer }: VRSceneProps) {
   const rightTextureRef = useRef<BABYLON.DynamicTexture | null>(null)
 
   // Cesium stereo rendering
-  const { stereoTextures, renderStereoFrame, isActive: isStereoActive } = useCesiumStereo(
+  const {
+    stereoTextures,
+    renderStereoFrame,
+    isActive: isStereoActive,
+  } = useCesiumStereo(
     cesiumViewer,
     1536, // Render resolution per eye
-    1536
+    1536,
   )
 
   // Store stereoTextures in a ref for access inside render loop
@@ -77,7 +81,7 @@ function VRScene({ cesiumViewer }: VRSceneProps) {
       const engine = new BABYLON.Engine(canvasRef.current, true, {
         preserveDrawingBuffer: true,
         stencil: true,
-        antialias: true
+        antialias: true,
       })
       engineRef.current = engine
 
@@ -90,18 +94,14 @@ function VRScene({ cesiumViewer }: VRSceneProps) {
       const camera = new BABYLON.FreeCamera(
         'vrCamera',
         new BABYLON.Vector3(0, 1.6, 0), // Approximate eye height
-        scene
+        scene,
       )
       camera.attachControl(canvasRef.current, true)
       camera.minZ = 0.1
       camera.maxZ = 100000
 
       // Lighting
-      const light = new BABYLON.HemisphericLight(
-        'light',
-        new BABYLON.Vector3(0, 1, 0),
-        scene
-      )
+      const light = new BABYLON.HemisphericLight('light', new BABYLON.Vector3(0, 1, 0), scene)
       light.intensity = 1.0
 
       // Create background planes for stereo Cesium renders
@@ -110,9 +110,9 @@ function VRScene({ cesiumViewer }: VRSceneProps) {
       // Initialize WebXR
       const xrHelper = await scene.createDefaultXRExperienceAsync({
         uiOptions: {
-          sessionMode: 'immersive-vr'
+          sessionMode: 'immersive-vr',
         },
-        optionalFeatures: true
+        optionalFeatures: true,
       })
       xrHelperRef.current = xrHelper
 
@@ -150,7 +150,6 @@ function VRScene({ cesiumViewer }: VRSceneProps) {
 
       // Enter VR immediately
       await xrHelper.baseExperience.enterXRAsync('immersive-vr', 'local-floor')
-
     } catch (error) {
       console.error('Failed to initialize VR scene:', error)
       setVRError(error instanceof Error ? error.message : 'Failed to initialize VR')
@@ -160,20 +159,10 @@ function VRScene({ cesiumViewer }: VRSceneProps) {
     // Helper function to create background planes (inline to avoid dependency issues)
     function createBackgroundPlanesInline(scene: BABYLON.Scene) {
       // Create dynamic textures for each eye
-      const leftTexture = new BABYLON.DynamicTexture(
-        'leftEyeTexture',
-        { width: 1536, height: 1536 },
-        scene,
-        false
-      )
+      const leftTexture = new BABYLON.DynamicTexture('leftEyeTexture', { width: 1536, height: 1536 }, scene, false)
       leftTextureRef.current = leftTexture
 
-      const rightTexture = new BABYLON.DynamicTexture(
-        'rightEyeTexture',
-        { width: 1536, height: 1536 },
-        scene,
-        false
-      )
+      const rightTexture = new BABYLON.DynamicTexture('rightEyeTexture', { width: 1536, height: 1536 }, scene, false)
       rightTextureRef.current = rightTexture
 
       // Create materials
@@ -192,11 +181,7 @@ function VRScene({ cesiumViewer }: VRSceneProps) {
       const planeSize = 1000 // Large enough to fill peripheral vision
       const planeDistance = 500 // Distance from camera
 
-      const leftPlane = BABYLON.MeshBuilder.CreatePlane(
-        'leftEyePlane',
-        { size: planeSize },
-        scene
-      )
+      const leftPlane = BABYLON.MeshBuilder.CreatePlane('leftEyePlane', { size: planeSize }, scene)
       leftPlane.position = new BABYLON.Vector3(0, 0, planeDistance)
       leftPlane.material = leftMaterial
       leftPlane.isPickable = false
@@ -204,11 +189,7 @@ function VRScene({ cesiumViewer }: VRSceneProps) {
       leftPlane.layerMask = 0x10000000
       leftEyePlaneRef.current = leftPlane
 
-      const rightPlane = BABYLON.MeshBuilder.CreatePlane(
-        'rightEyePlane',
-        { size: planeSize },
-        scene
-      )
+      const rightPlane = BABYLON.MeshBuilder.CreatePlane('rightEyePlane', { size: planeSize }, scene)
       rightPlane.position = new BABYLON.Vector3(0, 0, planeDistance)
       rightPlane.material = rightMaterial
       rightPlane.isPickable = false
@@ -258,12 +239,7 @@ function VRScene({ cesiumViewer }: VRSceneProps) {
     return null
   }
 
-  return (
-    <canvas
-      ref={canvasRef}
-      className="vr-scene-canvas"
-    />
-  )
+  return <canvas ref={canvasRef} className="vr-scene-canvas" />
 }
 
 export default VRScene

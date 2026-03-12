@@ -10,7 +10,7 @@ import {
   PRECIP_VIS_THRESHOLD_LOW,
   PRECIP_VIS_FACTOR_MIN,
   PRECIP_VIS_FACTOR_MAX,
-  INTERPOLATION_POSITION_THRESHOLD_DEG
+  INTERPOLATION_POSITION_THRESHOLD_DEG,
 } from '../constants'
 
 interface WeatherState {
@@ -21,7 +21,7 @@ interface WeatherState {
   error: string | null
 
   // Derived weather effects
-  fogDensity: number        // 0 to ~0.0003, computed from visibility
+  fogDensity: number // 0 to ~0.0003, computed from visibility
   cloudLayers: CloudLayer[] // Processed cloud data
 
   // Precipitation and wind state (for particle effects)
@@ -30,14 +30,14 @@ interface WeatherState {
 
   // Camera position for nearest METAR mode
   cameraPosition: { lat: number; lon: number } | null
-  useNearestMetar: boolean  // true when using position-based weather instead of airport METAR
+  useNearestMetar: boolean // true when using position-based weather instead of airport METAR
 
   // Weather interpolation state
-  nearbyMetars: DistancedMetar[]              // Nearby METAR stations with distance
-  interpolatedWeather: InterpolatedWeather | null  // Interpolated weather from nearby stations
-  lastInterpolationPosition: { lat: number; lon: number } | null  // Position used for last interpolation
-  lastInterpolationTime: number               // Timestamp of last interpolation fetch
-  useInterpolation: boolean                   // true when using interpolated weather
+  nearbyMetars: DistancedMetar[] // Nearby METAR stations with distance
+  interpolatedWeather: InterpolatedWeather | null // Interpolated weather from nearby stations
+  lastInterpolationPosition: { lat: number; lon: number } | null // Position used for last interpolation
+  lastInterpolationTime: number // Timestamp of last interpolation fetch
+  useInterpolation: boolean // true when using interpolated weather
 
   // Auto-refresh state
   refreshIntervalId: ReturnType<typeof setInterval> | null
@@ -117,14 +117,14 @@ function coverageToOpacity(cover: string): number {
   // Use midpoint of each okta range for stable/deterministic values
   // This ensures texture caching works (coverage doesn't change between METAR refetches)
   const coverageMap: Record<string, number> = {
-    'FEW': 0.1875,  // 1-2 oktas, midpoint of 1.5/8
-    'SCT': 0.4375,  // 3-4 oktas, midpoint of 3.5/8
-    'BKN': 0.6875,  // 5-6 oktas, midpoint of 5.5/8
-    'OVC': 1.0,     // 8 oktas (full coverage)
-    'SKC': 0,       // Sky clear
-    'CLR': 0,       // Clear below 12,000ft
-    'NSC': 0,       // No significant cloud
-    'NCD': 0,       // No cloud detected
+    FEW: 0.1875, // 1-2 oktas, midpoint of 1.5/8
+    SCT: 0.4375, // 3-4 oktas, midpoint of 3.5/8
+    BKN: 0.6875, // 5-6 oktas, midpoint of 5.5/8
+    OVC: 1.0, // 8 oktas (full coverage)
+    SKC: 0, // Sky clear
+    CLR: 0, // Clear below 12,000ft
+    NSC: 0, // No significant cloud
+    NCD: 0, // No cloud detected
   }
   return coverageMap[cover.toUpperCase()] ?? 0
 }
@@ -136,11 +136,11 @@ function parseCloudLayers(metar: MetarData): CloudLayer[] {
   if (!metar.clouds || metar.clouds.length === 0) return []
 
   return metar.clouds
-    .filter(c => coverageToOpacity(c.cover) > 0)
-    .map(c => ({
+    .filter((c) => coverageToOpacity(c.cover) > 0)
+    .map((c) => ({
       altitude: c.base * 0.3048, // Convert feet to meters
       coverage: coverageToOpacity(c.cover),
-      type: c.cover.toUpperCase()
+      type: c.cover.toUpperCase(),
     }))
     .slice(0, 4) // Max 4 cloud layers
 }
@@ -167,7 +167,7 @@ function parsePrecipitationState(metar: MetarData): PrecipitationState {
     active: metar.precipitation.length > 0,
     types: metar.precipitation,
     visibilityFactor: calculateVisibilityFactor(metar.visib),
-    hasThunderstorm: metar.hasThunderstorm
+    hasThunderstorm: metar.hasThunderstorm,
   }
 }
 
@@ -176,7 +176,7 @@ const DEFAULT_PRECIPITATION: PrecipitationState = {
   active: false,
   types: [],
   visibilityFactor: 1.0,
-  hasThunderstorm: false
+  hasThunderstorm: false,
 }
 
 /** Default wind state (calm) */
@@ -184,7 +184,7 @@ const DEFAULT_WIND: WindState = {
   direction: 0,
   speed: 0,
   gustSpeed: null,
-  isVariable: false
+  isVariable: false,
 }
 
 /**
@@ -193,10 +193,11 @@ const DEFAULT_WIND: WindState = {
  */
 function cloudLayersEqual(a: CloudLayer[], b: CloudLayer[]): boolean {
   if (a.length !== b.length) return false
-  return a.every((layer, i) =>
-    Math.abs(layer.altitude - b[i].altitude) < 10 &&
-    Math.abs(layer.coverage - b[i].coverage) < 0.05 &&
-    layer.type === b[i].type
+  return a.every(
+    (layer, i) =>
+      Math.abs(layer.altitude - b[i].altitude) < 10 &&
+      Math.abs(layer.coverage - b[i].coverage) < 0.05 &&
+      layer.type === b[i].type,
   )
 }
 
@@ -204,10 +205,9 @@ function cloudLayersEqual(a: CloudLayer[], b: CloudLayer[]): boolean {
  * Compare two wind states for equality
  */
 function windEqual(a: WindState, b: WindState): boolean {
-  return a.direction === b.direction &&
-    a.speed === b.speed &&
-    a.gustSpeed === b.gustSpeed &&
-    a.isVariable === b.isVariable
+  return (
+    a.direction === b.direction && a.speed === b.speed && a.gustSpeed === b.gustSpeed && a.isVariable === b.isVariable
+  )
 }
 
 /**
@@ -225,11 +225,13 @@ function precipitationEqual(a: PrecipitationState, b: PrecipitationState): boole
  * Used to skip state updates when values haven't meaningfully changed
  */
 function interpolatedWeatherEqual(a: InterpolatedWeather, b: InterpolatedWeather): boolean {
-  return Math.abs(a.visibility - b.visibility) < 0.1 &&
+  return (
+    Math.abs(a.visibility - b.visibility) < 0.1 &&
     Math.abs(a.fogDensity - b.fogDensity) < 0.0001 &&
     cloudLayersEqual(a.cloudLayers, b.cloudLayers) &&
     windEqual(a.wind, b.wind) &&
     precipitationEqual(a.precipitation, b.precipitation)
+  )
 }
 
 export const useWeatherStore = create<WeatherState>((set, get) => ({
@@ -269,7 +271,7 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
             lastFetchTime: Date.now(),
             isLoading: false,
             error: null,
-            fogDensity: visibilityToFogDensity(metar.visib)
+            fogDensity: visibilityToFogDensity(metar.visib),
           })
         } else {
           const newPrecip = parsePrecipitationState(metar)
@@ -281,19 +283,19 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
             fogDensity: visibilityToFogDensity(metar.visib),
             cloudLayers: parseCloudLayers(metar),
             precipitation: newPrecip,
-            wind: metar.wind
+            wind: metar.wind,
           })
         }
       } else {
         set({
           isLoading: false,
-          error: 'No METAR data available'
+          error: 'No METAR data available',
         })
       }
     } catch (error) {
       set({
         isLoading: false,
-        error: error instanceof Error ? error.message : 'Failed to fetch weather'
+        error: error instanceof Error ? error.message : 'Failed to fetch weather',
       })
     }
   },
@@ -315,7 +317,7 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
             isLoading: false,
             error: null,
             fogDensity: visibilityToFogDensity(metar.visib),
-            cameraPosition: { lat, lon }
+            cameraPosition: { lat, lon },
           })
         } else {
           set({
@@ -327,19 +329,19 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
             cloudLayers: parseCloudLayers(metar),
             precipitation: parsePrecipitationState(metar),
             wind: metar.wind,
-            cameraPosition: { lat, lon }
+            cameraPosition: { lat, lon },
           })
         }
       } else {
         set({
           isLoading: false,
-          error: 'No nearby METAR stations'
+          error: 'No nearby METAR stations',
         })
       }
     } catch (error) {
       set({
         isLoading: false,
-        error: error instanceof Error ? error.message : 'Failed to fetch nearest weather'
+        error: error instanceof Error ? error.message : 'Failed to fetch nearest weather',
       })
     }
   },
@@ -357,8 +359,7 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
 
       // Skip if position hasn't changed much - no need for time check here
       // Auto-refresh handles periodic updates, this is for position-based updates only
-      if (latDiff < INTERPOLATION_POSITION_THRESHOLD_DEG &&
-          lonDiff < INTERPOLATION_POSITION_THRESHOLD_DEG) {
+      if (latDiff < INTERPOLATION_POSITION_THRESHOLD_DEG && lonDiff < INTERPOLATION_POSITION_THRESHOLD_DEG) {
         return
       }
     }
@@ -381,7 +382,7 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
               lastInterpolationTime: now,
               cameraPosition: { lat, lon },
               lastFetchTime: now,
-              isLoading: false
+              isLoading: false,
             })
             return
           }
@@ -399,7 +400,7 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
             fogDensity: interpolated.fogDensity,
             cloudLayers: interpolated.cloudLayers,
             precipitation: interpolated.precipitation,
-            wind: interpolated.wind
+            wind: interpolated.wind,
           })
         } else if (interpolated) {
           // Debug override mode - don't overwrite weather effects
@@ -412,7 +413,7 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
             lastFetchTime: now,
             isLoading: false,
             error: null,
-            fogDensity: interpolated.fogDensity
+            fogDensity: interpolated.fogDensity,
           })
         }
       } else {
@@ -420,13 +421,13 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
           nearbyMetars: [],
           interpolatedWeather: null,
           isLoading: false,
-          error: 'No nearby METAR stations for interpolation'
+          error: 'No nearby METAR stations for interpolation',
         })
       }
     } catch (error) {
       set({
         isLoading: false,
-        error: error instanceof Error ? error.message : 'Failed to fetch interpolated weather'
+        error: error instanceof Error ? error.message : 'Failed to fetch interpolated weather',
       })
     }
   },
@@ -496,10 +497,7 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
     const intervalId = setInterval(() => {
       const currentState = get()
       if (currentState.cameraPosition && currentState.useNearestMetar) {
-        currentState.fetchNearestWeather(
-          currentState.cameraPosition.lat,
-          currentState.cameraPosition.lon
-        )
+        currentState.fetchNearestWeather(currentState.cameraPosition.lat, currentState.cameraPosition.lon)
       }
     }, WEATHER_REFRESH_INTERVAL)
 
@@ -520,10 +518,7 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
       if (currentState.cameraPosition && currentState.useInterpolation) {
         // Force refetch by clearing last interpolation time
         set({ lastInterpolationTime: 0 })
-        currentState.fetchInterpolatedWeather(
-          currentState.cameraPosition.lat,
-          currentState.cameraPosition.lon
-        )
+        currentState.fetchInterpolatedWeather(currentState.cameraPosition.lat, currentState.cameraPosition.lon)
       }
     }, WEATHER_REFRESH_INTERVAL)
 
@@ -559,7 +554,7 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
       lastInterpolationPosition: null,
       lastInterpolationTime: 0,
       useInterpolation: false,
-      refreshIntervalId: null
+      refreshIntervalId: null,
     })
   },
 
@@ -577,7 +572,7 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
         set({
           cloudLayers: parseCloudLayers(state.currentMetar),
           precipitation: parsePrecipitationState(state.currentMetar),
-          wind: state.currentMetar.wind
+          wind: state.currentMetar.wind,
         })
       }
     }
@@ -606,5 +601,5 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
       return true
     }
     return false
-  }
+  },
 }))

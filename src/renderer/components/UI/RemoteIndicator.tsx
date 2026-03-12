@@ -29,7 +29,7 @@ function RemoteIndicator() {
       try {
         const response = await fetch('/api/global-settings', {
           method: 'GET',
-          cache: 'no-store'
+          cache: 'no-store',
         })
         if (response.ok) {
           setStatus('connected')
@@ -57,7 +57,7 @@ function RemoteIndicator() {
   const statusLabel = {
     connected: 'Connected',
     checking: 'Connecting...',
-    disconnected: 'Disconnected'
+    disconnected: 'Disconnected',
   }[status]
 
   const handleReconnect = async () => {
@@ -65,7 +65,7 @@ function RemoteIndicator() {
     try {
       const response = await fetch('/api/global-settings', {
         method: 'GET',
-        cache: 'no-store'
+        cache: 'no-store',
       })
       if (response.ok) {
         setStatus('connected')
@@ -91,9 +91,7 @@ function RemoteIndicator() {
         </button>
       )}
       {status === 'connected' && lastCheckTime && (
-        <div className="remote-indicator__time">
-          Last: {lastCheckTime.toLocaleTimeString()}
-        </div>
+        <div className="remote-indicator__time">Last: {lastCheckTime.toLocaleTimeString()}</div>
       )}
     </div>
   )

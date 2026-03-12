@@ -55,11 +55,7 @@ export function interpolateVec3(keys: AnimationKey[], time: number): number[] | 
       const t = (time - keys[i].time) / (keys[i + 1].time - keys[i].time)
       const a = keys[i].value
       const b = keys[i + 1].value
-      return [
-        a[0] + (b[0] - a[0]) * t,
-        a[1] + (b[1] - a[1]) * t,
-        a[2] + (b[2] - a[2]) * t
-      ]
+      return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]
     }
   }
 
@@ -110,7 +106,7 @@ export function slerpQuat(a: number[], b: number[], t: number): number[] {
       a[0] + t * (bSign * b[0] - a[0]),
       a[1] + t * (bSign * b[1] - a[1]),
       a[2] + t * (bSign * b[2] - a[2]),
-      a[3] + t * (bSign * b[3] - a[3])
+      a[3] + t * (bSign * b[3] - a[3]),
     ]
   }
 
@@ -118,12 +114,7 @@ export function slerpQuat(a: number[], b: number[], t: number): number[] {
   const theta = Math.acos(dot)
   const sinTheta = Math.sin(theta)
   const wa = Math.sin((1 - t) * theta) / sinTheta
-  const wb = Math.sin(t * theta) / sinTheta * bSign
+  const wb = (Math.sin(t * theta) / sinTheta) * bSign
 
-  return [
-    wa * a[0] + wb * b[0],
-    wa * a[1] + wb * b[1],
-    wa * a[2] + wb * b[2],
-    wa * a[3] + wb * b[3]
-  ]
+  return [wa * a[0] + wb * b[0], wa * a[1] + wb * b[1], wa * a[2] + wb * b[2], wa * a[3] + wb * b[3]]
 }

@@ -46,14 +46,14 @@ export const useIndexingStore = create<IndexingState>()((set) => ({
       isIndexing: true,
       progress: 0,
       status: `Indexing ${source.toUpperCase()} models...`,
-      source
+      source,
     })
   },
 
   updateProgress: (progress: number, status: string) => {
     set({
       progress: Math.min(100, Math.max(0, progress)),
-      status
+      status,
     })
   },
 
@@ -62,13 +62,13 @@ export const useIndexingStore = create<IndexingState>()((set) => ({
       isIndexing: false,
       progress: 100,
       status: 'Complete',
-      source: null
+      source: null,
     })
     // Clear the modal after a short delay so user sees completion
     setTimeout(() => {
       set({
         progress: 0,
-        status: ''
+        status: '',
       })
     }, 500)
   },
@@ -78,7 +78,7 @@ export const useIndexingStore = create<IndexingState>()((set) => ({
       isIndexing: false,
       progress: 0,
       status: '',
-      source: null
+      source: null,
     })
-  }
+  },
 }))

@@ -234,7 +234,7 @@ export interface UseBabylonLabelsResult {
     callsign: string,
     color: { r: number; g: number; b: number },
     isFollowed: boolean,
-    labelText?: string
+    labelText?: string,
   ) => void
   /** Update label position and leader line using screen coordinates */
   updateLabelPosition: (
@@ -242,7 +242,7 @@ export interface UseBabylonLabelsResult {
     screenX: number,
     screenY: number,
     labelOffsetX: number,
-    labelOffsetY: number
+    labelOffsetY: number,
   ) => void
   /** Remove an aircraft label and dispose resources */
   removeLabel: (callsign: string) => void

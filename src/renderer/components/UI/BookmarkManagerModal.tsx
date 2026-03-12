@@ -31,7 +31,7 @@ function BookmarkManagerModal({ onClose }: BookmarkManagerModalProps) {
   // Generate all 100 slots with bookmark data
   const slots = Array.from({ length: 100 }, (_, i) => ({
     slot: i,
-    bookmark: bookmarks?.[i]
+    bookmark: bookmarks?.[i],
   }))
 
   const handleSaveRename = useCallback(() => {
@@ -62,19 +62,19 @@ function BookmarkManagerModal({ onClose }: BookmarkManagerModalProps) {
       switch (e.key) {
         case 'ArrowUp':
           e.preventDefault()
-          setSelectedSlot(s => Math.max(0, s - 1))
+          setSelectedSlot((s) => Math.max(0, s - 1))
           break
         case 'ArrowDown':
           e.preventDefault()
-          setSelectedSlot(s => Math.min(99, s + 1))
+          setSelectedSlot((s) => Math.min(99, s + 1))
           break
         case 'PageUp':
           e.preventDefault()
-          setSelectedSlot(s => Math.max(0, s - 10))
+          setSelectedSlot((s) => Math.max(0, s - 10))
           break
         case 'PageDown':
           e.preventDefault()
-          setSelectedSlot(s => Math.min(99, s + 10))
+          setSelectedSlot((s) => Math.min(99, s + 10))
           break
         case 'Home':
           e.preventDefault()
@@ -162,7 +162,11 @@ function BookmarkManagerModal({ onClose }: BookmarkManagerModalProps) {
   }
 
   const formatHeading = (heading: number) => {
-    return Math.round(((heading % 360) + 360) % 360).toString().padStart(3, '0') + '\u00B0'
+    return (
+      Math.round(((heading % 360) + 360) % 360)
+        .toString()
+        .padStart(3, '0') + '\u00B0'
+    )
   }
 
   const formatPitch = (pitch: number) => {
@@ -170,7 +174,7 @@ function BookmarkManagerModal({ onClose }: BookmarkManagerModalProps) {
   }
 
   // Count saved bookmarks
-  const savedCount = slots.filter(s => s.bookmark).length
+  const savedCount = slots.filter((s) => s.bookmark).length
 
   return (
     <div className="settings-modal-overlay" onClick={onClose}>
@@ -184,11 +188,22 @@ function BookmarkManagerModal({ onClose }: BookmarkManagerModalProps) {
         </div>
 
         <div className="bookmark-keyboard-hints">
-          <span><kbd>&uarr;</kbd><kbd>&darr;</kbd> Navigate</span>
-          <span><kbd>Enter</kbd> Load</span>
-          <span><kbd>R</kbd> Rename</span>
-          <span><kbd>Del</kbd> Delete</span>
-          <span><kbd>Esc</kbd> Close</span>
+          <span>
+            <kbd>&uarr;</kbd>
+            <kbd>&darr;</kbd> Navigate
+          </span>
+          <span>
+            <kbd>Enter</kbd> Load
+          </span>
+          <span>
+            <kbd>R</kbd> Rename
+          </span>
+          <span>
+            <kbd>Del</kbd> Delete
+          </span>
+          <span>
+            <kbd>Esc</kbd> Close
+          </span>
         </div>
 
         <div className="settings-content bookmark-list" ref={listRef}>
@@ -224,32 +239,30 @@ function BookmarkManagerModal({ onClose }: BookmarkManagerModalProps) {
                   placeholder="Enter name..."
                 />
               ) : (
-                <span className="bookmark-name">
-                  {bookmark?.name || (bookmark ? 'Unnamed' : '(empty)')}
-                </span>
+                <span className="bookmark-name">{bookmark?.name || (bookmark ? 'Unnamed' : '(empty)')}</span>
               )}
 
               {bookmark && (
                 <>
                   <span className="bookmark-preview">
-                    {formatViewMode(bookmark)} | HDG {formatHeading(bookmark.heading)} | PIT {formatPitch(bookmark.pitch)} | FOV {Math.round(bookmark.fov)}&deg;
+                    {formatViewMode(bookmark)} | HDG {formatHeading(bookmark.heading)} | PIT{' '}
+                    {formatPitch(bookmark.pitch)} | FOV {Math.round(bookmark.fov)}&deg;
                   </span>
 
                   <div className="bookmark-actions">
                     <button
                       className="bookmark-action-btn"
-                      onClick={(e) => { e.stopPropagation(); handleLoad(slot) }}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleLoad(slot)
+                      }}
                       title="Load (Enter)"
                     >
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <polygon points="5 3 19 12 5 21 5 3" />
                       </svg>
                     </button>
-                    <button
-                      className="bookmark-action-btn"
-                      onClick={(e) => handleRename(slot, e)}
-                      title="Rename (R)"
-                    >
+                    <button className="bookmark-action-btn" onClick={(e) => handleRename(slot, e)} title="Rename (R)">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />

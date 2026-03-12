@@ -8,11 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAirportStore } from '@/stores/airportStore'
 import type { Airport } from '@/types'
-import {
-  AUTO_SWITCH_CHECK_INTERVAL_MS,
-  AUTO_SWITCH_HYSTERESIS_NM,
-  AUTO_SWITCH_MIN_DISTANCE_NM
-} from '@/constants'
+import { AUTO_SWITCH_CHECK_INTERVAL_MS, AUTO_SWITCH_HYSTERESIS_NM, AUTO_SWITCH_MIN_DISTANCE_NM } from '@/constants'
 
 // Earth radius in nautical miles for haversine calculation
 const EARTH_RADIUS_NM = 3440.065
@@ -21,20 +17,12 @@ const EARTH_RADIUS_NM = 3440.065
  * Calculate distance between two coordinates using haversine formula
  * @returns Distance in nautical miles
  */
-function haversineDistanceNM(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number
-): number {
-  const dLat = (lat2 - lat1) * Math.PI / 180
-  const dLon = (lon2 - lon1) * Math.PI / 180
+function haversineDistanceNM(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const dLat = ((lat2 - lat1) * Math.PI) / 180
+  const dLon = ((lon2 - lon1) * Math.PI) / 180
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) *
-      Math.cos(lat2 * Math.PI / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2)
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2)
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
   return EARTH_RADIUS_NM * c
 }
@@ -70,9 +58,7 @@ interface UseAutoAirportSwitchResult {
  * @param options Configuration options
  * @returns Auto-switch state and controls
  */
-export function useAutoAirportSwitch(
-  options: UseAutoAirportSwitchOptions
-): UseAutoAirportSwitchResult {
+export function useAutoAirportSwitch(options: UseAutoAirportSwitchOptions): UseAutoAirportSwitchResult {
   const { cameraPosition, enabled } = options
 
   // Store state
@@ -110,7 +96,7 @@ export function useAutoAirportSwitch(
 
       return nearest ? { airport: nearest, distance: nearestDistance } : null
     },
-    [airports]
+    [airports],
   )
 
   /**
@@ -161,7 +147,7 @@ export function useAutoAirportSwitch(
         cameraPosition.lat,
         cameraPosition.lon,
         currentAirport.lat,
-        currentAirport.lon
+        currentAirport.lon,
       )
       setDistanceToCurrentNM(currentDistance)
     } else {
@@ -194,13 +180,9 @@ export function useAutoAirportSwitch(
 
     // Apply hysteresis: only switch if we're significantly closer to the new airport
     // and far enough from the current airport
-    const distanceDiff = currentDistance !== null
-      ? currentDistance - nearestResult.distance
-      : 0
+    const distanceDiff = currentDistance !== null ? currentDistance - nearestResult.distance : 0
 
-    const shouldSwitchNow =
-      !recentlySwitch &&
-      distanceDiff > AUTO_SWITCH_HYSTERESIS_NM
+    const shouldSwitchNow = !recentlySwitch && distanceDiff > AUTO_SWITCH_HYSTERESIS_NM
 
     setShouldSwitch(shouldSwitchNow)
 
@@ -209,13 +191,7 @@ export function useAutoAirportSwitch(
       lastSwitchRef.current = nearestResult.airport.icao
       selectAirport(nearestResult.airport.icao)
     }
-  }, [
-    enabled,
-    cameraPosition,
-    currentAirport,
-    findNearestAirport,
-    selectAirport
-  ])
+  }, [enabled, cameraPosition, currentAirport, findNearestAirport, selectAirport])
 
   // Reset recent switch tracking when current airport changes externally
   useEffect(() => {
@@ -229,6 +205,6 @@ export function useAutoAirportSwitch(
     distanceToCurrentNM,
     distanceToNearestNM,
     shouldSwitch,
-    performSwitch
+    performSwitch,
   }
 }

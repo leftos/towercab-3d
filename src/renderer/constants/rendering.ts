@@ -187,12 +187,12 @@ export const MODEL_BRIGHTNESS_MAX = 3.0
  * These are the base colors before brightness adjustment.
  */
 export const AIRCRAFT_TINT_COLORS: Record<string, readonly [number, number, number]> = {
-  white: [0.95, 0.95, 0.95],      // Pure white (original)
-  lightBlue: [0.7, 0.85, 1.0],    // Light blue - contrasts with terrain
-  tan: [0.95, 0.9, 0.8],          // Tan/beige - contrasts with sky
-  yellow: [1.0, 0.95, 0.7],       // Yellow - high visibility
-  orange: [1.0, 0.8, 0.5],        // Orange - very high visibility
-  lightGray: [0.85, 0.85, 0.85]   // Light gray - subtle, neutral
+  white: [0.95, 0.95, 0.95], // Pure white (original)
+  lightBlue: [0.7, 0.85, 1.0], // Light blue - contrasts with terrain
+  tan: [0.95, 0.9, 0.8], // Tan/beige - contrasts with sky
+  yellow: [1.0, 0.95, 0.7], // Yellow - high visibility
+  orange: [1.0, 0.8, 0.5], // Orange - very high visibility
+  lightGray: [0.85, 0.85, 0.85], // Light gray - subtle, neutral
 } as const
 
 /**
@@ -210,10 +210,7 @@ export const AIRCRAFT_TINT_COLORS: Record<string, readonly [number, number, numb
  * @param tintColor - Tint color preset name (default: 'white')
  * @returns RGB array suitable for Cesium.Color constructor
  */
-export function getModelColorRgb(
-  brightness: number,
-  tintColor: string = 'white'
-): readonly [number, number, number] {
+export function getModelColorRgb(brightness: number, tintColor: string = 'white'): readonly [number, number, number] {
   const baseColors = AIRCRAFT_TINT_COLORS[tintColor] ?? AIRCRAFT_TINT_COLORS.white
 
   // For non-white tints, return color directly without brightness multiplication
@@ -226,7 +223,7 @@ export function getModelColorRgb(
   return [
     Math.min(baseColors[0] * brightness, 1.0),
     Math.min(baseColors[1] * brightness, 1.0),
-    Math.min(baseColors[2] * brightness, 1.0)
+    Math.min(baseColors[2] * brightness, 1.0),
   ] as const
 }
 

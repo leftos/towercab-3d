@@ -62,7 +62,7 @@ function TowerPositioningOverlay() {
     // Compute camera lat/lon from airport position + offsets
     // positionOffsetX = east, positionOffsetY = north, positionOffsetZ = up
     const METERS_PER_DEGREE_LAT = 111320
-    const getMetersPerDegreeLon = (lat: number) => 111320 * Math.cos(lat * Math.PI / 180)
+    const getMetersPerDegreeLon = (lat: number) => 111320 * Math.cos((lat * Math.PI) / 180)
 
     const baseLat = currentAirport.lat
     const baseLon = currentAirport.lon
@@ -76,9 +76,20 @@ function TowerPositioningOverlay() {
       lon: cameraLon,
       height: cameraAglHeight,
       heading,
-      pitch
+      pitch,
     })
-  }, [isActive, step, currentAirport, towerHeight, positionOffsetX, positionOffsetY, positionOffsetZ, heading, pitch, captureCameraPosition])
+  }, [
+    isActive,
+    step,
+    currentAirport,
+    towerHeight,
+    positionOffsetX,
+    positionOffsetY,
+    positionOffsetZ,
+    heading,
+    pitch,
+    captureCameraPosition,
+  ])
 
   // Handle save event (triggered when Enter is pressed in Step 2)
   const handleSave = useCallback(async () => {
@@ -117,7 +128,7 @@ function TowerPositioningOverlay() {
         lat: modelPos.lat,
         lon: modelPos.lon,
         height: modelPos.height,
-        rotation: modelPos.rotation
+        rotation: modelPos.rotation,
       }
 
       manifest.cameraPosition = {
@@ -125,7 +136,7 @@ function TowerPositioningOverlay() {
         lon: cameraPos.lon,
         height: cameraPos.height,
         heading: cameraPos.heading,
-        pitch: cameraPos.pitch
+        pitch: cameraPos.pitch,
       }
 
       // Remove deprecated fields if they exist
@@ -154,10 +165,7 @@ function TowerPositioningOverlay() {
 
         try {
           await modApi.writeTextFile(tempPath, manifestContent)
-          showFeedback(
-            `Saved to temp folder (no write permission)`,
-            'success'
-          )
+          showFeedback(`Saved to temp folder (no write permission)`, 'success')
           // Open the temp folder
           shellApi.openExternal(tempDir)
         } catch (e) {
@@ -195,45 +203,42 @@ function TowerPositioningOverlay() {
   return (
     <div className="tower-positioning-overlay">
       <div className="positioning-header">
-        <span className="step-indicator">
-          Step {step === 'model' ? '1' : '2'}/2
-        </span>
-        <span className="step-title">
-          {step === 'model' ? 'Position Model' : 'Set Camera Position'}
-        </span>
+        <span className="step-indicator">Step {step === 'model' ? '1' : '2'}/2</span>
+        <span className="step-title">{step === 'model' ? 'Position Model' : 'Set Camera Position'}</span>
         <span className="icao-badge">{targetIcao}</span>
       </div>
 
       {step === 'model' ? (
         <div className="positioning-content">
           <div className="control-mode-toggle">
-            <span className={`mode-option ${step1ControlMode === 'model' ? 'active' : ''}`}>
-              Model
-            </span>
+            <span className={`mode-option ${step1ControlMode === 'model' ? 'active' : ''}`}>Model</span>
             <span className="mode-separator">|</span>
-            <span className={`mode-option ${step1ControlMode === 'camera' ? 'active' : ''}`}>
-              Camera
+            <span className={`mode-option ${step1ControlMode === 'camera' ? 'active' : ''}`}>Camera</span>
+            <span className="tab-hint">
+              (<kbd>Tab</kbd>)
             </span>
-            <span className="tab-hint">(<kbd>Tab</kbd>)</span>
           </div>
 
           <div className="values-grid">
             <div className="value-row">
               <span className="value-label">N/S:</span>
               <span className="value-number">
-                {modelOffset.north >= 0 ? '+' : ''}{modelOffset.north.toFixed(1)}m
+                {modelOffset.north >= 0 ? '+' : ''}
+                {modelOffset.north.toFixed(1)}m
               </span>
             </div>
             <div className="value-row">
               <span className="value-label">E/W:</span>
               <span className="value-number">
-                {modelOffset.east >= 0 ? '+' : ''}{modelOffset.east.toFixed(1)}m
+                {modelOffset.east >= 0 ? '+' : ''}
+                {modelOffset.east.toFixed(1)}m
               </span>
             </div>
             <div className="value-row">
               <span className="value-label">Height:</span>
               <span className="value-number">
-                {modelOffset.up >= 0 ? '+' : ''}{modelOffset.up.toFixed(1)}m
+                {modelOffset.up >= 0 ? '+' : ''}
+                {modelOffset.up.toFixed(1)}m
               </span>
             </div>
             <div className="value-row">
@@ -245,13 +250,18 @@ function TowerPositioningOverlay() {
           {step1ControlMode === 'model' ? (
             <div className="controls-hint">
               <div className="hint-row">
-                <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move
+                <kbd>W</kbd>
+                <kbd>A</kbd>
+                <kbd>S</kbd>
+                <kbd>D</kbd> Move
               </div>
               <div className="hint-row">
-                <kbd>Q</kbd><kbd>E</kbd> Height
+                <kbd>Q</kbd>
+                <kbd>E</kbd> Height
               </div>
               <div className="hint-row">
-                <kbd>Z</kbd><kbd>X</kbd> Rotate
+                <kbd>Z</kbd>
+                <kbd>X</kbd> Rotate
               </div>
               <div className="hint-row">
                 <kbd>Shift</kbd> Fast | <kbd>Ctrl</kbd> Fine
@@ -265,9 +275,17 @@ function TowerPositioningOverlay() {
           )}
 
           <div className="actions-hint">
-            <span className="action"><kbd>Enter</kbd> Next Step</span>
-            {step1ControlMode === 'model' && <span className="action"><kbd>R</kbd> Reset</span>}
-            <span className="action"><kbd>Esc</kbd> Cancel</span>
+            <span className="action">
+              <kbd>Enter</kbd> Next Step
+            </span>
+            {step1ControlMode === 'model' && (
+              <span className="action">
+                <kbd>R</kbd> Reset
+              </span>
+            )}
+            <span className="action">
+              <kbd>Esc</kbd> Cancel
+            </span>
           </div>
         </div>
       ) : (
@@ -275,21 +293,15 @@ function TowerPositioningOverlay() {
           <div className="values-grid">
             <div className="value-row">
               <span className="value-label">Lat:</span>
-              <span className="value-number">
-                {displayCameraPosition?.lat.toFixed(6) ?? '-'}
-              </span>
+              <span className="value-number">{displayCameraPosition?.lat.toFixed(6) ?? '-'}</span>
             </div>
             <div className="value-row">
               <span className="value-label">Lon:</span>
-              <span className="value-number">
-                {displayCameraPosition?.lon.toFixed(6) ?? '-'}
-              </span>
+              <span className="value-number">{displayCameraPosition?.lon.toFixed(6) ?? '-'}</span>
             </div>
             <div className="value-row">
               <span className="value-label">AGL:</span>
-              <span className="value-number">
-                {displayCameraPosition?.height.toFixed(1) ?? '-'}m
-              </span>
+              <span className="value-number">{displayCameraPosition?.height.toFixed(1) ?? '-'}m</span>
             </div>
             <div className="value-row">
               <span className="value-label">Heading:</span>
@@ -307,8 +319,12 @@ function TowerPositioningOverlay() {
           </div>
 
           <div className="actions-hint">
-            <span className="action"><kbd>Enter</kbd> Save All</span>
-            <span className="action"><kbd>Esc</kbd> Back</span>
+            <span className="action">
+              <kbd>Enter</kbd> Save All
+            </span>
+            <span className="action">
+              <kbd>Esc</kbd> Back
+            </span>
           </div>
         </div>
       )}

@@ -17,8 +17,26 @@
  */
 
 import { create } from 'zustand'
-import type { GlobalSettings, GlobalViewportSettings, GlobalDisplaySettings, GlobalDisplaySettingsUpdate, MSFSModelSettings, FSLTLTextureScale, DataSourceType, DatablockMode, DatablockDirection, MSFSModelSource, InsetDisplaySettings } from '@/types'
-import { DEFAULT_GLOBAL_SETTINGS, DEFAULT_GLOBAL_DISPLAY_SETTINGS, DEFAULT_MSFS_MODEL_SETTINGS, MSFS_CACHE_LIMIT, DEFAULT_INSET_DISPLAY_SETTINGS } from '@/types'
+import type {
+  GlobalSettings,
+  GlobalViewportSettings,
+  GlobalDisplaySettings,
+  GlobalDisplaySettingsUpdate,
+  MSFSModelSettings,
+  FSLTLTextureScale,
+  DataSourceType,
+  DatablockMode,
+  DatablockDirection,
+  MSFSModelSource,
+  InsetDisplaySettings,
+} from '@/types'
+import {
+  DEFAULT_GLOBAL_SETTINGS,
+  DEFAULT_GLOBAL_DISPLAY_SETTINGS,
+  DEFAULT_MSFS_MODEL_SETTINGS,
+  MSFS_CACHE_LIMIT,
+  DEFAULT_INSET_DISPLAY_SETTINGS,
+} from '@/types'
 import { globalSettingsApi, isTauri } from '@/utils/tauriApi'
 import { listVmrFiles } from '@/services/fsltlApi'
 
@@ -69,7 +87,7 @@ function migrateFromLocalStorage(): Partial<GlobalSettings> | null {
         sourcePath: state.fsltl.sourcePath || null,
         outputPath: state.fsltl.outputPath || null,
         textureScale: state.fsltl.textureScale || '1k',
-        enableFsltlModels: state.fsltl.enableFsltlModels ?? true
+        enableFsltlModels: state.fsltl.enableFsltlModels ?? true,
       }
       if (state.fsltl.sourcePath || state.fsltl.outputPath) {
         hasMigration = true
@@ -201,7 +219,7 @@ async function migrateFsltlToMsfs(settings: GlobalSettings): Promise<Partial<MSF
       if (vmrFiles.length > 0) {
         // Merge with existing vmrFiles (avoid duplicates)
         const existingVmrFiles = new Set(settings.msfsModels.vmrFiles || [])
-        const newVmrFiles = vmrFiles.filter(f => !existingVmrFiles.has(f))
+        const newVmrFiles = vmrFiles.filter((f) => !existingVmrFiles.has(f))
 
         if (newVmrFiles.length > 0) {
           updates.vmrFiles = [...(settings.msfsModels.vmrFiles || []), ...newVmrFiles]
@@ -331,8 +349,14 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
           ...DEFAULT_GLOBAL_SETTINGS.imagery,
           ...settings.imagery,
           // Deep merge per-provider adjustments
-          cesiumAdjustments: { ...DEFAULT_GLOBAL_SETTINGS.imagery.cesiumAdjustments, ...settings.imagery?.cesiumAdjustments },
-          googleAdjustments: { ...DEFAULT_GLOBAL_SETTINGS.imagery.googleAdjustments, ...settings.imagery?.googleAdjustments }
+          cesiumAdjustments: {
+            ...DEFAULT_GLOBAL_SETTINGS.imagery.cesiumAdjustments,
+            ...settings.imagery?.cesiumAdjustments,
+          },
+          googleAdjustments: {
+            ...DEFAULT_GLOBAL_SETTINGS.imagery.googleAdjustments,
+            ...settings.imagery?.googleAdjustments,
+          },
         },
         msfsModels: { ...DEFAULT_MSFS_MODEL_SETTINGS, ...settings.msfsModels },
         fsltl: { ...DEFAULT_GLOBAL_SETTINGS.fsltl, ...settings.fsltl },
@@ -344,9 +368,9 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
           ...settings.viewports,
           // Preserve nested viewport objects
           airportConfigs: settings.viewports?.airportConfigs ?? DEFAULT_GLOBAL_SETTINGS.viewports.airportConfigs,
-          orbitSettings: settings.viewports?.orbitSettings ?? DEFAULT_GLOBAL_SETTINGS.viewports.orbitSettings
+          orbitSettings: settings.viewports?.orbitSettings ?? DEFAULT_GLOBAL_SETTINGS.viewports.orbitSettings,
         },
-        display: { ...DEFAULT_GLOBAL_DISPLAY_SETTINGS, ...settings.display }
+        display: { ...DEFAULT_GLOBAL_DISPLAY_SETTINGS, ...settings.display },
       }
 
       // Check if we need to migrate from localStorage (one-time migration)
@@ -360,7 +384,7 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
             settings = {
               ...settings,
               cesiumIonToken: migrated.cesiumIonToken || settings.cesiumIonToken,
-              fsltl: migrated.fsltl || settings.fsltl
+              fsltl: migrated.fsltl || settings.fsltl,
             }
             // Save the migrated settings to disk
             await globalSettingsApi.write(settings)
@@ -375,7 +399,7 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
       if (displayMigrated) {
         settings = {
           ...settings,
-          display: { ...settings.display, ...displayMigrated }
+          display: { ...settings.display, ...displayMigrated },
         }
         // Save the migrated display settings
         await globalSettingsApi.write(settings)
@@ -389,7 +413,7 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
       if (msfsMigrated) {
         settings = {
           ...settings,
-          msfsModels: { ...settings.msfsModels, ...msfsMigrated }
+          msfsModels: { ...settings.msfsModels, ...msfsMigrated },
         }
         // Save the migrated MSFS settings
         await globalSettingsApi.write(settings)
@@ -401,7 +425,7 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
         initialized: true,
         loading: false,
         error: null,
-        settingsFilePath
+        settingsFilePath,
       })
 
       console.log('[GlobalSettings] Loaded from:', settingsFilePath)
@@ -414,7 +438,7 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
         ...DEFAULT_GLOBAL_SETTINGS,
         initialized: true,
         loading: false,
-        error: message
+        error: message,
       })
     }
   },
@@ -433,7 +457,7 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
       // Validate texture scale
       textureScale: (updates.textureScale && ['full', '2k', '1k', '512'].includes(updates.textureScale)
         ? updates.textureScale
-        : state.fsltl.textureScale) as FSLTLTextureScale
+        : state.fsltl.textureScale) as FSLTLTextureScale,
     }
     set({ fsltl: newFsltl })
     await saveSettings(get().getSettings())
@@ -453,13 +477,14 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
         ? updates.priority.filter((s): s is MSFSModelSource => s === 'fsltl' || s === 'aig')
         : state.msfsModels.priority,
       // Validate cache limit (null for unlimited, or 500-20480 MB)
-      cacheLimitMB: updates.cacheLimitMB === null
-        ? null
-        : updates.cacheLimitMB !== undefined
-          ? Math.max(MSFS_CACHE_LIMIT.MIN_MB, Math.min(MSFS_CACHE_LIMIT.MAX_MB, updates.cacheLimitMB))
-          : state.msfsModels.cacheLimitMB,
+      cacheLimitMB:
+        updates.cacheLimitMB === null
+          ? null
+          : updates.cacheLimitMB !== undefined
+            ? Math.max(MSFS_CACHE_LIMIT.MIN_MB, Math.min(MSFS_CACHE_LIMIT.MAX_MB, updates.cacheLimitMB))
+            : state.msfsModels.cacheLimitMB,
       // Ensure vmrFiles is always an array
-      vmrFiles: updates.vmrFiles ?? state.msfsModels.vmrFiles
+      vmrFiles: updates.vmrFiles ?? state.msfsModels.vmrFiles,
     }
     set({ msfsModels: newMsfsModels })
     await saveSettings(get().getSettings())
@@ -482,16 +507,18 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
       MSFSModelConversionService.indexSourceOnDemand('fsltl', (progress, status) => {
         useIndexingStore.getState().updateProgress(progress, status)
         console.log('[GlobalSettings] FSLTL indexing:', `${Math.round(progress)}%`, status)
-      }).then(success => {
-        if (success) {
-          useIndexingStore.getState().finishIndexing()
-        } else {
-          useIndexingStore.getState().cancel()
-        }
-      }).catch(err => {
-        console.error('[GlobalSettings] Failed to index FSLTL on-demand:', err)
-        useIndexingStore.getState().cancel()
       })
+        .then((success) => {
+          if (success) {
+            useIndexingStore.getState().finishIndexing()
+          } else {
+            useIndexingStore.getState().cancel()
+          }
+        })
+        .catch((err) => {
+          console.error('[GlobalSettings] Failed to index FSLTL on-demand:', err)
+          useIndexingStore.getState().cancel()
+        })
     }
 
     if (updates.enableAig === true && state.msfsModels.enableAig === false) {
@@ -503,22 +530,26 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
       MSFSModelConversionService.indexSourceOnDemand('aig', (progress, status) => {
         useIndexingStore.getState().updateProgress(progress, status)
         console.log('[GlobalSettings] AIG indexing:', `${Math.round(progress)}%`, status)
-      }).then(success => {
-        if (success) {
-          useIndexingStore.getState().finishIndexing()
-        } else {
-          useIndexingStore.getState().cancel()
-        }
-      }).catch(err => {
-        console.error('[GlobalSettings] Failed to index AIG on-demand:', err)
-        useIndexingStore.getState().cancel()
       })
+        .then((success) => {
+          if (success) {
+            useIndexingStore.getState().finishIndexing()
+          } else {
+            useIndexingStore.getState().cancel()
+          }
+        })
+        .catch((err) => {
+          console.error('[GlobalSettings] Failed to index AIG on-demand:', err)
+          useIndexingStore.getState().cancel()
+        })
     }
 
     // Dispatch event so useAircraftModels hook can clear model pool URLs
-    window.dispatchEvent(new CustomEvent('msfs-settings-changed', {
-      detail: { newMsfsModels, previousMsfsModels: state.msfsModels }
-    }))
+    window.dispatchEvent(
+      new CustomEvent('msfs-settings-changed', {
+        detail: { newMsfsModels, previousMsfsModels: state.msfsModels },
+      }),
+    )
   },
 
   updateAirports: async (updates: Partial<GlobalSettings['airports']>) => {
@@ -530,31 +561,31 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
 
   addFavorite: async (icao: string, source: DataSourceType) => {
     const state = get()
-    const currentFavorites = source === 'vatsim'
-      ? (state.airports.vatsimFavorites ?? [])
-      : (state.airports.realtrafficFavorites ?? [])
+    const currentFavorites =
+      source === 'vatsim' ? (state.airports.vatsimFavorites ?? []) : (state.airports.realtrafficFavorites ?? [])
 
     // Avoid duplicates
     if (currentFavorites.includes(icao)) return
 
     const newFavorites = [...currentFavorites, icao]
-    const newAirports = source === 'vatsim'
-      ? { ...state.airports, vatsimFavorites: newFavorites }
-      : { ...state.airports, realtrafficFavorites: newFavorites }
+    const newAirports =
+      source === 'vatsim'
+        ? { ...state.airports, vatsimFavorites: newFavorites }
+        : { ...state.airports, realtrafficFavorites: newFavorites }
     set({ airports: newAirports })
     await saveSettings(get().getSettings())
   },
 
   removeFavorite: async (icao: string, source: DataSourceType) => {
     const state = get()
-    const currentFavorites = source === 'vatsim'
-      ? (state.airports.vatsimFavorites ?? [])
-      : (state.airports.realtrafficFavorites ?? [])
+    const currentFavorites =
+      source === 'vatsim' ? (state.airports.vatsimFavorites ?? []) : (state.airports.realtrafficFavorites ?? [])
 
-    const newFavorites = currentFavorites.filter(f => f !== icao)
-    const newAirports = source === 'vatsim'
-      ? { ...state.airports, vatsimFavorites: newFavorites }
-      : { ...state.airports, realtrafficFavorites: newFavorites }
+    const newFavorites = currentFavorites.filter((f) => f !== icao)
+    const newAirports =
+      source === 'vatsim'
+        ? { ...state.airports, vatsimFavorites: newFavorites }
+        : { ...state.airports, realtrafficFavorites: newFavorites }
     set({ airports: newAirports })
     await saveSettings(get().getSettings())
   },
@@ -565,9 +596,7 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
       ...state.server,
       ...updates,
       // Validate port range
-      port: updates.port !== undefined
-        ? Math.max(1024, Math.min(65535, updates.port))
-        : state.server.port
+      port: updates.port !== undefined ? Math.max(1024, Math.min(65535, updates.port)) : state.server.port,
     }
     set({ server: newServer })
     await saveSettings(get().getSettings())
@@ -585,7 +614,7 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
       // Deep merge orbitSettings if provided
       orbitSettings: updates.orbitSettings
         ? { ...state.viewports.orbitSettings, ...updates.orbitSettings }
-        : state.viewports.orbitSettings
+        : state.viewports.orbitSettings,
     }
     set({ viewports: newViewports })
     await saveSettings(get().getSettings())
@@ -606,13 +635,13 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
         ? updates.dataSource
         : state.realtraffic.dataSource) as DataSourceType,
       // Validate radiusNm (10-200)
-      radiusNm: updates.radiusNm !== undefined
-        ? Math.max(10, Math.min(200, updates.radiusNm))
-        : state.realtraffic.radiusNm,
+      radiusNm:
+        updates.radiusNm !== undefined ? Math.max(10, Math.min(200, updates.radiusNm)) : state.realtraffic.radiusNm,
       // Validate maxParkedAircraft (0-200)
-      maxParkedAircraft: updates.maxParkedAircraft !== undefined
-        ? Math.max(0, Math.min(200, updates.maxParkedAircraft))
-        : state.realtraffic.maxParkedAircraft
+      maxParkedAircraft:
+        updates.maxParkedAircraft !== undefined
+          ? Math.max(0, Math.min(200, updates.maxParkedAircraft))
+          : state.realtraffic.maxParkedAircraft,
     }
     set({ realtraffic: newRealTraffic })
     await saveSettings(get().getSettings())
@@ -633,7 +662,7 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
         : state.imagery.cesiumAdjustments,
       googleAdjustments: updates.googleAdjustments
         ? { ...state.imagery.googleAdjustments, ...updates.googleAdjustments }
-        : state.imagery.googleAdjustments
+        : state.imagery.googleAdjustments,
     }
     set({ imagery: newImagery })
     await saveSettings(get().getSettings())
@@ -648,9 +677,10 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
           ...currentInset,
           ...updates.inset,
           // Validate visibilityMargin (0.0-0.3)
-          visibilityMargin: updates.inset.visibilityMargin !== undefined
-            ? Math.max(0, Math.min(0.3, updates.inset.visibilityMargin))
-            : currentInset.visibilityMargin
+          visibilityMargin:
+            updates.inset.visibilityMargin !== undefined
+              ? Math.max(0, Math.min(0.3, updates.inset.visibilityMargin))
+              : currentInset.visibilityMargin,
         }
       : currentInset
 
@@ -658,25 +688,29 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
       ...state.display,
       ...updates,
       // Validate leaderDistance (0.5-5)
-      leaderDistance: (updates.leaderDistance !== undefined
-        ? Math.max(0.5, Math.min(5, updates.leaderDistance))
-        : state.display.leaderDistance),
+      leaderDistance:
+        updates.leaderDistance !== undefined
+          ? Math.max(0.5, Math.min(5, updates.leaderDistance))
+          : state.display.leaderDistance,
       // Validate defaultDatablockDirection (1-9, excluding 5)
-      defaultDatablockDirection: (updates.defaultDatablockDirection !== undefined
-        ? (updates.defaultDatablockDirection >= 1 && updates.defaultDatablockDirection <= 9
-            ? updates.defaultDatablockDirection as DatablockDirection
-            : state.display.defaultDatablockDirection)
-        : state.display.defaultDatablockDirection),
+      defaultDatablockDirection:
+        updates.defaultDatablockDirection !== undefined
+          ? updates.defaultDatablockDirection >= 1 && updates.defaultDatablockDirection <= 9
+            ? (updates.defaultDatablockDirection as DatablockDirection)
+            : state.display.defaultDatablockDirection
+          : state.display.defaultDatablockDirection,
       // Validate datablockMode
-      datablockMode: (updates.datablockMode && ['full', 'airline', 'none'].includes(updates.datablockMode)
-        ? updates.datablockMode as DatablockMode
-        : state.display.datablockMode),
+      datablockMode:
+        updates.datablockMode && ['full', 'airline', 'none'].includes(updates.datablockMode)
+          ? (updates.datablockMode as DatablockMode)
+          : state.display.datablockMode,
       // Validate labelVisibilityDistance (1-100)
-      labelVisibilityDistance: updates.labelVisibilityDistance !== undefined
-        ? Math.max(1, Math.min(100, updates.labelVisibilityDistance))
-        : state.display.labelVisibilityDistance,
+      labelVisibilityDistance:
+        updates.labelVisibilityDistance !== undefined
+          ? Math.max(1, Math.min(100, updates.labelVisibilityDistance))
+          : state.display.labelVisibilityDistance,
       // Use properly merged inset settings
-      inset: updatedInset
+      inset: updatedInset,
     }
     set({ display: newDisplay })
     await saveSettings(get().getSettings())
@@ -705,7 +739,7 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
       viewports: state.viewports,
       display: state.display,
       disabledMods: state.disabledMods,
-      vnasTokens: state.vnasTokens
+      vnasTokens: state.vnasTokens,
     }
   },
 
@@ -720,8 +754,14 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
         imagery: {
           ...DEFAULT_GLOBAL_SETTINGS.imagery,
           ...settings.imagery,
-          cesiumAdjustments: { ...DEFAULT_GLOBAL_SETTINGS.imagery.cesiumAdjustments, ...settings.imagery?.cesiumAdjustments },
-          googleAdjustments: { ...DEFAULT_GLOBAL_SETTINGS.imagery.googleAdjustments, ...settings.imagery?.googleAdjustments }
+          cesiumAdjustments: {
+            ...DEFAULT_GLOBAL_SETTINGS.imagery.cesiumAdjustments,
+            ...settings.imagery?.cesiumAdjustments,
+          },
+          googleAdjustments: {
+            ...DEFAULT_GLOBAL_SETTINGS.imagery.googleAdjustments,
+            ...settings.imagery?.googleAdjustments,
+          },
         },
         msfsModels: { ...DEFAULT_MSFS_MODEL_SETTINGS, ...settings.msfsModels },
         fsltl: { ...DEFAULT_GLOBAL_SETTINGS.fsltl, ...settings.fsltl },
@@ -732,16 +772,16 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
           ...DEFAULT_GLOBAL_SETTINGS.viewports,
           ...settings.viewports,
           airportConfigs: settings.viewports?.airportConfigs ?? DEFAULT_GLOBAL_SETTINGS.viewports.airportConfigs,
-          orbitSettings: settings.viewports?.orbitSettings ?? DEFAULT_GLOBAL_SETTINGS.viewports.orbitSettings
+          orbitSettings: settings.viewports?.orbitSettings ?? DEFAULT_GLOBAL_SETTINGS.viewports.orbitSettings,
         },
-        display: { ...DEFAULT_GLOBAL_DISPLAY_SETTINGS, ...settings.display }
+        display: { ...DEFAULT_GLOBAL_DISPLAY_SETTINGS, ...settings.display },
       }
       set(mergedSettings)
       console.log('[GlobalSettings] Refreshed from server')
     } catch (error) {
       console.error('[GlobalSettings] Failed to refresh:', error)
     }
-  }
+  },
 }))
 
 /**
@@ -828,9 +868,9 @@ export async function repairSettingsMigration(): Promise<{
       'globalSettingsDisplayMigrationDone',
       'globalSettingsMsfsMigrationDone',
       'viewport-store-bookmark-migration-v1',
-      'viewport-store-global-migration-v1'
+      'viewport-store-global-migration-v1',
     ]
-    migrationKeys.forEach(key => localStorage.removeItem(key))
+    migrationKeys.forEach((key) => localStorage.removeItem(key))
     console.log('[RepairSettings] Cleared migration keys')
 
     // Read settings from localStorage
@@ -858,7 +898,7 @@ export async function repairSettingsMigration(): Promise<{
                 sourcePath: state.fsltl.sourcePath || null,
                 outputPath: state.fsltl.outputPath || null,
                 textureScale: state.fsltl.textureScale || '1k',
-                enableFsltlModels: state.fsltl.enableFsltlModels ?? true
+                enableFsltlModels: state.fsltl.enableFsltlModels ?? true,
               })
               recovered.push('FSLTL paths')
             }
@@ -893,7 +933,9 @@ export async function repairSettingsMigration(): Promise<{
         const state = parsed?.state
 
         if (state?.airportViewportConfigs && Object.keys(state.airportViewportConfigs).length > 0) {
-          recovered.push(`Viewport configs for ${Object.keys(state.airportViewportConfigs).length} airports (pending sync)`)
+          recovered.push(
+            `Viewport configs for ${Object.keys(state.airportViewportConfigs).length} airports (pending sync)`,
+          )
         }
       } catch (e) {
         errors.push(`Failed to parse viewport-store: ${e}`)
@@ -909,7 +951,6 @@ export async function repairSettingsMigration(): Promise<{
     if (errors.length > 0) {
       console.error('[RepairSettings] Errors:', errors)
     }
-
   } catch (e) {
     errors.push(`Repair failed: ${e}`)
     console.error('[RepairSettings] Failed:', e)

@@ -34,14 +34,14 @@ interface Rect {
 /** Aircraft data needed for label placement */
 export interface LabelAircraftData {
   callsign: string
-  aircraftScreenX: number  // Screen X of aircraft model center
-  aircraftScreenY: number  // Screen Y for leader line attachment
-  modelRadius: number      // Radius of aircraft model on screen
-  preferredPosition: DatablockPosition  // User's numpad choice
-  hasCustomPosition: boolean  // True if user explicitly set position for this aircraft
-  isFollowed: boolean      // True if camera is following this aircraft
-  isAirborne: boolean      // True if aircraft is in the air
-  distanceMeters: number   // Distance from camera
+  aircraftScreenX: number // Screen X of aircraft model center
+  aircraftScreenY: number // Screen Y for leader line attachment
+  modelRadius: number // Radius of aircraft model on screen
+  preferredPosition: DatablockPosition // User's numpad choice
+  hasCustomPosition: boolean // True if user explicitly set position for this aircraft
+  isFollowed: boolean // True if camera is following this aircraft
+  isAirborne: boolean // True if aircraft is in the air
+  distanceMeters: number // Distance from camera
 }
 
 /** Result of label placement */
@@ -59,8 +59,8 @@ export interface LabelPlacement {
 export interface LayoutConfig {
   labelWidth: number
   labelHeight: number
-  labelGap: number       // Preferred gap (from leader line setting)
-  labelMargin: number    // Margin between labels
+  labelGap: number // Preferred gap (from leader line setting)
+  labelMargin: number // Margin between labels
   screenWidth: number
   screenHeight: number
 }
@@ -78,27 +78,23 @@ export interface LayoutConfig {
  */
 function numpadToAngle(position: DatablockPosition): number {
   const angles: Record<DatablockPosition, number> = {
-    9: -Math.PI / 4,      // Up-right: -45° (-π/4)
-    6: 0,                  // Right: 0°
-    3: Math.PI / 4,       // Down-right: 45° (π/4)
-    8: -Math.PI / 2,      // Up: -90° (-π/2)
-    2: Math.PI / 2,       // Down: 90° (π/2)
-    7: -3 * Math.PI / 4,  // Up-left: -135° (-3π/4)
-    4: Math.PI,           // Left: 180° (π)
-    1: 3 * Math.PI / 4,   // Down-left: 135° (3π/4)
+    9: -Math.PI / 4, // Up-right: -45° (-π/4)
+    6: 0, // Right: 0°
+    3: Math.PI / 4, // Down-right: 45° (π/4)
+    8: -Math.PI / 2, // Up: -90° (-π/2)
+    2: Math.PI / 2, // Down: 90° (π/2)
+    7: (-3 * Math.PI) / 4, // Up-left: -135° (-3π/4)
+    4: Math.PI, // Left: 180° (π)
+    1: (3 * Math.PI) / 4, // Down-left: 135° (3π/4)
   }
-  return angles[position] ?? -3 * Math.PI / 4  // Default to top-left
+  return angles[position] ?? (-3 * Math.PI) / 4 // Default to top-left
 }
 
 /**
  * Calculate the distance from label center to label edge in a given direction
  * Used to compute proper edge-to-edge spacing between aircraft and label
  */
-function labelEdgeDistance(
-  angle: number,
-  labelWidth: number,
-  labelHeight: number
-): number {
+function labelEdgeDistance(angle: number, labelWidth: number, labelHeight: number): number {
   const halfW = labelWidth / 2
   const halfH = labelHeight / 2
 
@@ -109,10 +105,10 @@ function labelEdgeDistance(
   // Find where ray hits the label rectangle
   // For a ray from center, it hits vertical edge at t = halfW/cos or horizontal edge at t = halfH/sin
   if (cosA < 0.001) {
-    return halfH  // Vertical direction, hits top/bottom edge
+    return halfH // Vertical direction, hits top/bottom edge
   }
   if (sinA < 0.001) {
-    return halfW  // Horizontal direction, hits left/right edge
+    return halfW // Horizontal direction, hits left/right edge
   }
 
   const tVertical = halfW / cosA
@@ -131,7 +127,7 @@ function calculateLabelPosition(
   angle: number,
   distance: number,
   labelWidth: number,
-  labelHeight: number
+  labelHeight: number,
 ): { x: number; y: number; offsetX: number; offsetY: number } {
   // Calculate center point of label at given angle/distance
   const centerX = aircraftX + Math.cos(angle) * distance
@@ -145,7 +141,7 @@ function calculateLabelPosition(
     x,
     y,
     offsetX: x - aircraftX,
-    offsetY: y - aircraftY
+    offsetY: y - aircraftY,
   }
 }
 
@@ -171,7 +167,7 @@ function labelOverlapsAircraft(
   labelHeight: number,
   aircraftX: number,
   aircraftY: number,
-  modelRadius: number
+  modelRadius: number,
 ): boolean {
   // Find closest point on rectangle to circle center
   const closestX = Math.max(labelX, Math.min(aircraftX, labelX + labelWidth))
@@ -180,7 +176,7 @@ function labelOverlapsAircraft(
   const distX = aircraftX - closestX
   const distY = aircraftY - closestY
 
-  return (distX * distX + distY * distY) < (modelRadius * modelRadius)
+  return distX * distX + distY * distY < modelRadius * modelRadius
 }
 
 /**
@@ -215,13 +211,13 @@ function isValidPosition(
   config: LayoutConfig,
   placedLabels: LabelPlacement[],
   allAircraft: LabelAircraftData[],
-  currentCallsign: string
+  currentCallsign: string,
 ): boolean {
   const labelRect: Rect = {
     x: labelX,
     y: labelY,
     width: config.labelWidth,
-    height: config.labelHeight
+    height: config.labelHeight,
   }
 
   // Check overlap with already placed labels
@@ -230,7 +226,7 @@ function isValidPosition(
       x: placed.labelX,
       y: placed.labelY,
       width: config.labelWidth,
-      height: config.labelHeight
+      height: config.labelHeight,
     }
 
     if (rectsOverlap(labelRect, placedRect, config.labelMargin)) {
@@ -243,15 +239,17 @@ function isValidPosition(
     // Skip own aircraft - we handle that separately with modelRadius in distance calculation
     if (aircraft.callsign === currentCallsign) continue
 
-    if (labelOverlapsAircraft(
-      labelX,
-      labelY,
-      config.labelWidth,
-      config.labelHeight,
-      aircraft.aircraftScreenX,
-      aircraft.aircraftScreenY,
-      aircraft.modelRadius
-    )) {
+    if (
+      labelOverlapsAircraft(
+        labelX,
+        labelY,
+        config.labelWidth,
+        config.labelHeight,
+        aircraft.aircraftScreenX,
+        aircraft.aircraftScreenY,
+        aircraft.modelRadius,
+      )
+    ) {
       return false
     }
   }
@@ -269,28 +267,27 @@ function findBestPosition(
   data: LabelAircraftData,
   config: LayoutConfig,
   placedLabels: LabelPlacement[],
-  allAircraft: LabelAircraftData[]
+  allAircraft: LabelAircraftData[],
 ): LabelPlacement {
   const preferredAngle = numpadToAngle(data.preferredPosition)
 
   // Angle search parameters
-  const angleStep = Math.PI / 12  // 15° increments
-  const maxAngleOffset = Math.PI  // Search up to 180° from preferred
+  const angleStep = Math.PI / 12 // 15° increments
+  const maxAngleOffset = Math.PI // Search up to 180° from preferred
 
   // Distance tiers: start at preferred gap, extend if needed
   // Base distance accounts for label edge (varies by angle) + model radius + user's gap
   const baseGap = config.labelGap
-  const maxGap = baseGap * 6  // Allow extending up to 6x the preferred gap
-  const gapStep = Math.max(3, baseGap * 0.5)  // Step by half the gap or minimum 3px
+  const maxGap = baseGap * 6 // Allow extending up to 6x the preferred gap
+  const gapStep = Math.max(3, baseGap * 0.5) // Step by half the gap or minimum 3px
 
   // Try distance tiers
   for (let gap = baseGap; gap <= maxGap; gap += gapStep) {
     // At each gap level, search angles starting from preferred
     // Alternate between positive and negative offsets from preferred angle
     for (let angleOffset = 0; angleOffset <= maxAngleOffset; angleOffset += angleStep) {
-      const anglesToTry = angleOffset === 0
-        ? [preferredAngle]
-        : [preferredAngle + angleOffset, preferredAngle - angleOffset]
+      const anglesToTry =
+        angleOffset === 0 ? [preferredAngle] : [preferredAngle + angleOffset, preferredAngle - angleOffset]
 
       for (const angle of anglesToTry) {
         // Calculate distance from aircraft center to label center
@@ -304,15 +301,17 @@ function findBestPosition(
           angle,
           distance,
           config.labelWidth,
-          config.labelHeight
+          config.labelHeight,
         )
 
         // Check screen bounds (allow partial off-screen but not completely)
         const margin = 10
-        if (pos.x + config.labelWidth < margin ||
-            pos.x > config.screenWidth - margin ||
-            pos.y + config.labelHeight < margin ||
-            pos.y > config.screenHeight - margin) {
+        if (
+          pos.x + config.labelWidth < margin ||
+          pos.x > config.screenWidth - margin ||
+          pos.y + config.labelHeight < margin ||
+          pos.y > config.screenHeight - margin
+        ) {
           continue
         }
 
@@ -325,7 +324,7 @@ function findBestPosition(
             labelX: pos.x,
             labelY: pos.y,
             offsetX: pos.offsetX,
-            offsetY: pos.offsetY
+            offsetY: pos.offsetY,
           }
         }
       }
@@ -341,7 +340,7 @@ function findBestPosition(
     preferredAngle,
     fallbackDistance,
     config.labelWidth,
-    config.labelHeight
+    config.labelHeight,
   )
 
   return {
@@ -351,7 +350,7 @@ function findBestPosition(
     labelX: fallbackPos.x,
     labelY: fallbackPos.y,
     offsetX: fallbackPos.offsetX,
-    offsetY: fallbackPos.offsetY
+    offsetY: fallbackPos.offsetY,
   }
 }
 
@@ -363,15 +362,12 @@ function findBestPosition(
  * @param config - Layout configuration
  * @returns Array of label placements
  */
-export function layoutLabels(
-  aircraftData: LabelAircraftData[],
-  config: LayoutConfig
-): LabelPlacement[] {
+export function layoutLabels(aircraftData: LabelAircraftData[], config: LayoutConfig): LabelPlacement[] {
   if (aircraftData.length === 0) return []
 
   // Sort by priority (highest first - they get placed first and get best positions)
   const sortedAircraft = [...aircraftData]
-    .map(data => ({ data, priority: calculatePriority(data) }))
+    .map((data) => ({ data, priority: calculatePriority(data) }))
     .sort((a, b) => b.priority - a.priority)
 
   const placements: LabelPlacement[] = []
@@ -388,11 +384,8 @@ export function layoutLabels(
 /**
  * Simple layout without overlap avoidance - just use preferred positions
  */
-export function layoutLabelsSimple(
-  aircraftData: LabelAircraftData[],
-  config: LayoutConfig
-): LabelPlacement[] {
-  return aircraftData.map(data => {
+export function layoutLabelsSimple(aircraftData: LabelAircraftData[], config: LayoutConfig): LabelPlacement[] {
+  return aircraftData.map((data) => {
     const preferredAngle = numpadToAngle(data.preferredPosition)
     // Distance = model radius + user's gap + label edge distance (varies by angle)
     const edgeDist = labelEdgeDistance(preferredAngle, config.labelWidth, config.labelHeight)
@@ -404,7 +397,7 @@ export function layoutLabelsSimple(
       preferredAngle,
       distance,
       config.labelWidth,
-      config.labelHeight
+      config.labelHeight,
     )
 
     return {
@@ -414,7 +407,7 @@ export function layoutLabelsSimple(
       labelX: pos.x,
       labelY: pos.y,
       offsetX: pos.offsetX,
-      offsetY: pos.offsetY
+      offsetY: pos.offsetY,
     }
   })
 }

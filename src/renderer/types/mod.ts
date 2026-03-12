@@ -23,14 +23,14 @@ export interface AircraftModManifest {
   author: string
   version: string
   description?: string
-  type?: 'aircraft'  // explicit type declaration (optional, inferred from aircraftTypes if omitted)
-  modelFile: string  // relative path to model file (.glb, .gltf, .obj, .dae, .stl)
-  aircraftTypes: string[]  // ICAO type codes this model applies to, e.g., ["B738", "B737"]
-  scale: number  // scale factor for the model
+  type?: 'aircraft' // explicit type declaration (optional, inferred from aircraftTypes if omitted)
+  modelFile: string // relative path to model file (.glb, .gltf, .obj, .dae, .stl)
+  aircraftTypes: string[] // ICAO type codes this model applies to, e.g., ["B738", "B737"]
+  scale: number // scale factor for the model
   rotationOffset?: {
-    x: number  // pitch offset in degrees
-    y: number  // yaw offset in degrees
-    z: number  // roll offset in degrees
+    x: number // pitch offset in degrees
+    y: number // yaw offset in degrees
+    z: number // roll offset in degrees
   }
 }
 
@@ -38,9 +38,9 @@ export interface AircraftModManifest {
  * Model position configuration for tower mods
  */
 export interface TowerModelPosition {
-  lat: number       // absolute latitude for 3D model position
-  lon: number       // absolute longitude for 3D model position
-  height?: number   // height offset in meters above terrain (default 0)
+  lat: number // absolute latitude for 3D model position
+  lon: number // absolute longitude for 3D model position
+  height?: number // height offset in meters above terrain (default 0)
   rotation?: number // model rotation in degrees (0=north, 90=east)
 }
 
@@ -48,11 +48,11 @@ export interface TowerModelPosition {
  * Camera position configuration for tower mods
  */
 export interface TowerCameraPosition {
-  lat: number       // latitude of camera position
-  lon: number       // longitude of camera position
-  height: number    // height above ground level in meters
-  heading?: number  // default camera heading in degrees (0=north, 90=east)
-  pitch?: number    // camera pitch in degrees (0=horizon, negative=look down)
+  lat: number // latitude of camera position
+  lon: number // longitude of camera position
+  height: number // height above ground level in meters
+  heading?: number // default camera heading in degrees (0=north, 90=east)
+  pitch?: number // camera pitch in degrees (0=horizon, negative=look down)
 }
 
 export interface TowerModManifest {
@@ -60,13 +60,13 @@ export interface TowerModManifest {
   author: string
   version: string
   description?: string
-  type?: 'tower'  // explicit type declaration (optional, inferred from airports if omitted)
-  modelFile: string  // relative path to model file (.glb, .gltf, .obj, .dae, .stl)
-  airports: string[]  // ICAO codes this tower applies to, e.g., ["KJFK", "KLAX"]
-  scale: number  // scale factor for the model
+  type?: 'tower' // explicit type declaration (optional, inferred from airports if omitted)
+  modelFile: string // relative path to model file (.glb, .gltf, .obj, .dae, .stl)
+  airports: string[] // ICAO codes this tower applies to, e.g., ["KJFK", "KLAX"]
+  scale: number // scale factor for the model
 
   // New consolidated structures
-  modelPosition?: TowerModelPosition   // 3D model placement (lat, lon, height, rotation)
+  modelPosition?: TowerModelPosition // 3D model placement (lat, lon, height, rotation)
   cameraPosition?: TowerCameraPosition // camera/cab viewpoint (lat, lon, height, heading)
 
   // Deprecated: kept for backward compatibility - use modelPosition/cameraPosition instead
@@ -95,10 +95,10 @@ export interface TowerModManifest {
  * sub-millimeter precision at any latitude.
  */
 export interface View3dPosition {
-  lat: number     // latitude of camera position (double precision)
-  lon: number     // longitude of camera position (double precision)
-  height: number  // height above ground level in meters
-  heading?: number  // default camera heading in degrees (0=north, 90=east), defaults to 0
+  lat: number // latitude of camera position (double precision)
+  lon: number // longitude of camera position (double precision)
+  height: number // height above ground level in meters
+  heading?: number // default camera heading in degrees (0=north, 90=east), defaults to 0
 }
 
 /**
@@ -107,8 +107,8 @@ export interface View3dPosition {
 export interface RawView3dPosition {
   lat: number
   lon: number
-  height?: number     // new field name
-  aglHeight?: number  // deprecated, for backward compatibility
+  height?: number // new field name
+  aglHeight?: number // deprecated, for backward compatibility
   heading?: number
 }
 
@@ -121,11 +121,11 @@ export interface RawView3dPosition {
  * - `vNasRange`: Raw vNAS defaultZoomRange value (converted to altitude at runtime)
  */
 export interface View2dPosition {
-  lat?: number  // latitude of view center (double precision)
-  lon?: number  // longitude of view center (double precision)
-  altitude?: number  // altitude above ground in meters (controls zoom level, 500-50000m)
-  vNasRange?: number  // raw vNAS defaultZoomRange value (converted to altitude at runtime)
-  heading?: number  // view rotation in degrees (0=north-up), defaults to 0
+  lat?: number // latitude of view center (double precision)
+  lon?: number // longitude of view center (double precision)
+  altitude?: number // altitude above ground in meters (controls zoom level, 500-50000m)
+  vNasRange?: number // raw vNAS defaultZoomRange value (converted to altitude at runtime)
+  heading?: number // view rotation in degrees (0=north-up), defaults to 0
 }
 
 /**
@@ -135,11 +135,11 @@ export interface View2dPosition {
  * where altitude is always computed (from vNasRange or direct value).
  */
 export interface ResolvedView2dPosition {
-  lat?: number  // latitude of view center (double precision)
-  lon?: number  // longitude of view center (double precision)
-  altitude: number  // altitude above ground in meters (always computed)
-  vNasRange?: number  // raw vNAS value if sourced from vNAS data
-  heading?: number  // view rotation in degrees (0=north-up), defaults to 0
+  lat?: number // latitude of view center (double precision)
+  lon?: number // longitude of view center (double precision)
+  altitude: number // altitude above ground in meters (always computed)
+  vNasRange?: number // raw vNAS value if sourced from vNAS data
+  heading?: number // view rotation in degrees (0=north-up), defaults to 0
 }
 
 /**
@@ -151,8 +151,8 @@ export interface ResolvedView2dPosition {
  * computed at load time (either from direct value or vNasRange conversion).
  */
 export interface CustomTowerPosition {
-  view3d?: View3dPosition  // 3D view camera position
-  view2d?: ResolvedView2dPosition  // 2D topdown view settings (altitude always resolved)
+  view3d?: View3dPosition // 3D view camera position
+  view2d?: ResolvedView2dPosition // 2D topdown view settings (altitude always resolved)
 }
 
 /**
@@ -163,8 +163,8 @@ export interface CustomTowerPosition {
 export interface LegacyTowerPosition {
   lat: number
   lon: number
-  height?: number     // new field name
-  aglHeight?: number  // deprecated, for backward compatibility
+  height?: number // new field name
+  aglHeight?: number // deprecated, for backward compatibility
   heading?: number
 }
 
@@ -192,20 +192,20 @@ export function convertLegacyToNewFormat(legacy: LegacyTowerPosition): CustomTow
       lat: legacy.lat,
       lon: legacy.lon,
       height: height,
-      heading: legacy.heading
-    }
+      heading: legacy.heading,
+    },
   }
 }
 
 export interface LoadedMod<T extends AircraftModManifest | TowerModManifest> {
   manifest: T
-  modelUrl: string  // URL to the loaded model
-  basePath: string  // base path of the mod folder
+  modelUrl: string // URL to the loaded model
+  basePath: string // base path of the mod folder
 }
 
 export interface ModRegistry {
-  aircraft: Map<string, LoadedMod<AircraftModManifest>>  // keyed by aircraft type code
-  towers: Map<string, LoadedMod<TowerModManifest>>  // keyed by airport ICAO
+  aircraft: Map<string, LoadedMod<AircraftModManifest>> // keyed by aircraft type code
+  towers: Map<string, LoadedMod<TowerModManifest>> // keyed by airport ICAO
 }
 
 // =============================================================================
@@ -251,9 +251,9 @@ export interface CustomVMRMatch {
 // Default mod manifest templates
 export const DEFAULT_AIRCRAFT_MOD: Partial<AircraftModManifest> = {
   scale: 1.0,
-  rotationOffset: { x: 0, y: 0, z: 0 }
+  rotationOffset: { x: 0, y: 0, z: 0 },
 }
 
 export const DEFAULT_TOWER_MOD: Partial<TowerModManifest> = {
-  scale: 1.0
+  scale: 1.0,
 }

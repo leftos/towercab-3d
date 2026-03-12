@@ -27,7 +27,7 @@ const CRUCIAL_FLIGHT_PHASES = new Set([
   'departure_roll',
   'landing_roll',
   'go_around',
-  'short_final'
+  'short_final',
 ])
 
 /**
@@ -66,7 +66,11 @@ interface BabylonOverlay {
   updateLeaderLine: (callsign: string, aircraftX: number, aircraftY: number, offsetX: number, offsetY: number) => void
   getAircraftCallsigns: () => string[]
   removeAircraftLabel: (callsign: string) => void
-  isDatablockVisibleByWeather: (cameraAltitudeAGL: number, aircraftAltitudeAGL: number, distanceMeters: number) => boolean
+  isDatablockVisibleByWeather: (
+    cameraAltitudeAGL: number,
+    aircraftAltitudeAGL: number,
+    distanceMeters: number,
+  ) => boolean
 }
 
 interface UseCesiumLabelsParams {
@@ -187,7 +191,7 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
     filterAirportTraffic,
     isOrbitModeWithoutAirport,
     groundAircraftTerrain: _groundAircraftTerrain,
-    isInset = false
+    isInset = false,
   } = params
 
   // Update labels
@@ -199,7 +203,7 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
     const { filteredAircraft } = filterAircraftForRendering({
       viewer,
       interpolatedAircraft,
-      alwaysInclude: followingCallsign
+      alwaysInclude: followingCallsign,
     })
 
     const query = searchQuery.toLowerCase()
@@ -235,11 +239,11 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
         aircraft.interpolatedLatitude,
         aircraft.interpolatedLongitude,
         refAltitudeFeet,
-        aircraft.interpolatedAltitude
+        aircraft.interpolatedAltitude,
       )
 
       const isFollowed = aircraft.callsign === followingCallsign
-      const altitudeMeters = aircraft.interpolatedAltitude  // Altitude is in METERS
+      const altitudeMeters = aircraft.interpolatedAltitude // Altitude is in METERS
       // Aircraft is on ground if groundspeed < threshold (40 knots)
       const isAirborne = aircraft.interpolatedGroundspeed >= GROUNDSPEED_THRESHOLD_KNOTS
 
@@ -283,9 +287,7 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
           // Determine effective ground label mode
           let effectiveGroundLabelMode: string
           if (isInset) {
-            effectiveGroundLabelMode = insetGroundLabelMode === 'match'
-              ? mainGroundLabelMode
-              : insetGroundLabelMode
+            effectiveGroundLabelMode = insetGroundLabelMode === 'match' ? mainGroundLabelMode : insetGroundLabelMode
           } else {
             effectiveGroundLabelMode = mainGroundLabelMode
           }
@@ -319,18 +321,19 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
 
         // Search filter (from panel)
         if (showDatablock && query) {
-          if (!aircraft.callsign.toLowerCase().includes(query) &&
-              !aircraft.aircraftType?.toLowerCase().includes(query) &&
-              !aircraft.departure?.toLowerCase().includes(query) &&
-              !aircraft.arrival?.toLowerCase().includes(query)) {
+          if (
+            !aircraft.callsign.toLowerCase().includes(query) &&
+            !aircraft.aircraftType?.toLowerCase().includes(query) &&
+            !aircraft.departure?.toLowerCase().includes(query) &&
+            !aircraft.arrival?.toLowerCase().includes(query)
+          ) {
             showDatablock = false
           }
         }
 
         // Airport traffic filter (from panel)
         if (showDatablock && filterAirportTraffic && airportIcao) {
-          if (aircraft.departure?.toUpperCase() !== airportIcao &&
-              aircraft.arrival?.toUpperCase() !== airportIcao) {
+          if (aircraft.departure?.toUpperCase() !== airportIcao && aircraft.arrival?.toUpperCase() !== airportIcao) {
             showDatablock = false
           }
         }
@@ -366,16 +369,20 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
         } else {
           // 'full' or 'airline' mode: show callsign + type + altitude/speed
           const type = aircraft.aircraftType || '????'
-          const speedTens = Math.round(aircraft.interpolatedGroundspeed / 10).toString().padStart(2, '0')
+          const speedTens = Math.round(aircraft.interpolatedGroundspeed / 10)
+            .toString()
+            .padStart(2, '0')
           // Convert ellipsoidal altitude to MSL (pilots report MSL), then to feet for FL display
           const altitudeMsl = geoidService.ellipsoidalToMsl(
             aircraft.interpolatedLatitude,
             aircraft.interpolatedLongitude,
-            aircraft.interpolatedAltitude
+            aircraft.interpolatedAltitude,
           )
           const altitudeFeet = Math.max(0, altitudeMsl / 0.3048)
           const dataLine = isAirborne
-            ? `${Math.round(altitudeFeet / 100).toString().padStart(3, '0')} ${speedTens}`
+            ? `${Math.round(altitudeFeet / 100)
+                .toString()
+                .padStart(3, '0')} ${speedTens}`
             : speedTens
 
           // Format callsign based on mode
@@ -394,9 +401,7 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
             }
           }
 
-          labelText = displayCallsign
-            ? `${displayCallsign}\n${type} ${dataLine}`
-            : `${type} ${dataLine}`
+          labelText = displayCallsign ? `${displayCallsign}\n${type} ${dataLine}` : `${type} ${dataLine}`
         }
       }
 
@@ -419,7 +424,7 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
       const cesiumPosition = Cesium.Cartesian3.fromDegrees(
         aircraft.interpolatedLongitude,
         aircraft.interpolatedLatitude,
-        heightAboveEllipsoid
+        heightAboveEllipsoid,
       )
 
       // Labels are positioned in screen-space relative to the model position
@@ -445,18 +450,12 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
         distanceMeters,
         isFollowed,
         isAirborne,
-        showDatablock
+        showDatablock,
       })
 
       // Update or create label in Babylon
       if (showDatablock && labelText) {
-        babylonOverlay.updateAircraftLabel(
-          aircraft.callsign,
-          labelText,
-          babylonColor.r,
-          babylonColor.g,
-          babylonColor.b
-        )
+        babylonOverlay.updateAircraftLabel(aircraft.callsign, labelText, babylonColor.r, babylonColor.g, babylonColor.b)
       }
     }
 
@@ -465,9 +464,7 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
 
     // Get camera altitude for weather visibility checks
     const cameraCartographic = viewer.camera.positionCartographic
-    const cameraAltitudeAGL = cameraCartographic
-      ? cameraCartographic.height - groundElevationMeters
-      : towerHeight
+    const cameraAltitudeAGL = cameraCartographic ? cameraCartographic.height - groundElevationMeters : towerHeight
 
     // Second pass: Project aircraft to screen and prepare for layout algorithm
     const labelWidth = 90
@@ -478,7 +475,7 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
     const leaderDistance = useGlobalSettingsStore.getState().display.leaderDistance ?? 2
     const screenWidth = typeof window !== 'undefined' ? window.innerWidth : 1920
     const screenHeight = typeof window !== 'undefined' ? window.innerHeight : 1080
-    const mobileScale = screenWidth < 1200 ? 0.6 : 1.0  // 60% on mobile for proportional appearance
+    const mobileScale = screenWidth < 1200 ? 0.6 : 1.0 // 60% on mobile for proportional appearance
     const labelGap = Math.round(leaderDistance * 10 * mobileScale)
 
     const autoAvoidOverlaps = useGlobalSettingsStore.getState().display.autoAvoidOverlaps ?? true
@@ -494,11 +491,10 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
       if (!data.cesiumPosition) continue
 
       // Check weather visibility - hide datablocks obscured by clouds or beyond visibility range
-      if (!data.isFollowed && !babylonOverlay.isDatablockVisibleByWeather(
-        cameraAltitudeAGL,
-        data.altitudeMetersAGL,
-        data.distanceMeters
-      )) {
+      if (
+        !data.isFollowed &&
+        !babylonOverlay.isDatablockVisibleByWeather(cameraAltitudeAGL, data.altitudeMetersAGL, data.distanceMeters)
+      ) {
         continue // Skip this aircraft - datablock hidden by weather
       }
 
@@ -518,12 +514,11 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
         const marginY = screenHeight * visibilityMargin
 
         // Check if aircraft is within the margin zone (too close to edge)
-        const isInMargin = (
+        const isInMargin =
           aircraftWindowPos.x < marginX ||
           aircraftWindowPos.x > screenWidth - marginX ||
           aircraftWindowPos.y < marginY ||
           aircraftWindowPos.y > screenHeight - marginY
-        )
 
         if (isInMargin) {
           continue // Skip this aircraft - too close to viewport edge in inset
@@ -536,7 +531,7 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
       const aircraftTopPosition = Cesium.Cartesian3.fromDegrees(
         data.longitude,
         data.latitude,
-        data.heightAboveEllipsoid + leaderAttachHeightMeters
+        data.heightAboveEllipsoid + leaderAttachHeightMeters,
       )
       const aircraftTopWindowPos = Cesium.SceneTransforms.worldToWindowCoordinates(viewer.scene, aircraftTopPosition)
       if (!aircraftTopWindowPos) continue
@@ -568,7 +563,7 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
         hasCustomPosition: perAircraftPos !== undefined,
         isFollowed: data.isFollowed,
         isAirborne: data.isAirborne,
-        distanceMeters: data.distanceMeters
+        distanceMeters: data.distanceMeters,
       })
     }
 
@@ -579,7 +574,7 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
       labelGap,
       labelMargin: 3, // Small margin between labels
       screenWidth,
-      screenHeight
+      screenHeight,
     }
 
     // Run layout algorithm
@@ -618,7 +613,7 @@ export function useCesiumLabels(params: UseCesiumLabelsParams) {
     searchQuery,
     filterAirportTraffic,
     isOrbitModeWithoutAirport,
-    isInset
+    isInset,
   ])
 
   // Keep callback in a ref so the listener doesn't need to be re-attached when dependencies change

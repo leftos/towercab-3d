@@ -17,7 +17,7 @@ import type {
   UISettings,
   ImageryProviderType,
   ImageryAdjustments,
-  GlobalDisplaySettings
+  GlobalDisplaySettings,
 } from './settings'
 import type { AircraftState } from './vatsim'
 
@@ -26,9 +26,9 @@ import type { AircraftState } from './vatsim'
  */
 export type SharedWorkerMessageType =
   | 'aircraft-update'
-  | 'observations-update'  // Raw observations for timeline-based interpolation
-  | 'aircraft-removals'    // Aircraft that have been removed
-  | 'model-info-update'    // Model assignments for callsigns
+  | 'observations-update' // Raw observations for timeline-based interpolation
+  | 'aircraft-removals' // Aircraft that have been removed
+  | 'model-info-update' // Model assignments for callsigns
   | 'settings-update'
   | 'weather-update'
   | 'cesium-token'
@@ -37,7 +37,7 @@ export type SharedWorkerMessageType =
   | 'viewport-camera'
   | 'register-inset'
   | 'unregister-inset'
-  | 'inset-log'            // Log forwarding from inset to main
+  | 'inset-log' // Log forwarding from inset to main
 
 /**
  * Inbound message from main app or inset
@@ -45,7 +45,7 @@ export type SharedWorkerMessageType =
 export interface SharedWorkerInboundMessage {
   type: SharedWorkerMessageType
   payload?: unknown
-  viewportId?: string  // For viewport-specific messages
+  viewportId?: string // For viewport-specific messages
   source?: 'main' | 'inset'
 }
 
@@ -194,8 +194,8 @@ export interface SerializedAirport {
   name: string
   latitude: number
   longitude: number
-  elevation: number  // meters
-  towerHeight: number  // meters above ground
+  elevation: number // meters
+  towerHeight: number // meters above ground
 }
 
 /**
@@ -265,6 +265,6 @@ export function serializeBasicAircraftState(state: AircraftState): SerializedAir
     acceleration: 0,
     track: state.heading,
 
-    isInterpolated: false
+    isInterpolated: false,
   }
 }

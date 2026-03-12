@@ -35,8 +35,8 @@ function MSFSModelSettingsPanelRemote() {
       <div className="fsltl-import-panel">
         <div className="fsltl-remote-notice">
           <p>
-            MSFS model settings must be configured on the host PC.
-            Connect from the desktop app to configure model sources.
+            MSFS model settings must be configured on the host PC. Connect from the desktop app to configure model
+            sources.
           </p>
         </div>
 
@@ -184,11 +184,14 @@ function MSFSModelSettingsPanel() {
   }, [vmrFiles, updateMsfsModels])
 
   // Handle VMR file removal
-  const handleRemoveVmr = useCallback(async (index: number) => {
-    const updated = vmrFiles.filter((_, i) => i !== index)
-    setVmrFiles(updated)
-    await updateMsfsModels({ vmrFiles: updated })
-  }, [vmrFiles, updateMsfsModels])
+  const handleRemoveVmr = useCallback(
+    async (index: number) => {
+      const updated = vmrFiles.filter((_, i) => i !== index)
+      setVmrFiles(updated)
+      await updateMsfsModels({ vmrFiles: updated })
+    },
+    [vmrFiles, updateMsfsModels],
+  )
 
   // Handle VMR reordering with up/down buttons
   const handleMoveVmr = async (index: number, direction: 'up' | 'down') => {
@@ -293,30 +296,21 @@ function MSFSModelSettingsPanel() {
             <span className="fsltl-path" title={settings.communityPath || ''}>
               {settings.communityPath || 'Not selected'}
             </span>
-            <button
-              className="control-button"
-              onClick={handleBrowseCommunity}
-              disabled={isDetecting}
-            >
+            <button className="control-button" onClick={handleBrowseCommunity} disabled={isDetecting}>
               {isDetecting ? 'Detecting...' : 'Browse...'}
             </button>
           </div>
           {isDetecting && indexingProgress.status && (
             <div className="msfs-indexing-progress">
               <div className="msfs-progress-bar">
-                <div
-                  className="msfs-progress-fill"
-                  style={{ width: `${indexingProgress.progress}%` }}
-                />
+                <div className="msfs-progress-fill" style={{ width: `${indexingProgress.progress}%` }} />
               </div>
               <span className="msfs-progress-text">
                 {indexingProgress.status} ({indexingProgress.progress}%)
               </span>
             </div>
           )}
-          <p className="setting-hint">
-            Select your MSFS Community folder to auto-detect FSLTL and AIG installations.
-          </p>
+          <p className="setting-hint">Select your MSFS Community folder to auto-detect FSLTL and AIG installations.</p>
         </div>
 
         {/* Source Priority & Enable/Disable */}
@@ -327,9 +321,7 @@ function MSFSModelSettingsPanel() {
               {settings.priority.map((source, index) => {
                 const isEnabled = source === 'fsltl' ? settings.enableFsltl : settings.enableAig
                 const count = source === 'fsltl' ? modelCounts.fsltl : modelCounts.aig
-                const isFound = source === 'fsltl'
-                  ? (detection?.fsltlFound ?? false)
-                  : (detection?.aigFound ?? false)
+                const isFound = source === 'fsltl' ? (detection?.fsltlFound ?? false) : (detection?.aigFound ?? false)
                 const isIndexing = indexingSource === source
 
                 return (
@@ -340,13 +332,17 @@ function MSFSModelSettingsPanel() {
                         onClick={() => handleMoveSource(index, 'up')}
                         disabled={index === 0 || isIndexing}
                         title="Move up"
-                      >▲</button>
+                      >
+                        ▲
+                      </button>
                       <button
                         className="msfs-arrow-btn"
                         onClick={() => handleMoveSource(index, 'down')}
                         disabled={index === settings.priority.length - 1 || isIndexing}
                         title="Move down"
-                      >▼</button>
+                      >
+                        ▼
+                      </button>
                     </div>
                     <label className="msfs-source-checkbox">
                       <input
@@ -365,9 +361,7 @@ function MSFSModelSettingsPanel() {
                 )
               })}
             </div>
-            <p className="setting-hint">
-              Higher priority sources are checked first for model matching.
-            </p>
+            <p className="setting-hint">Higher priority sources are checked first for model matching.</p>
           </div>
         )}
 
@@ -384,22 +378,22 @@ function MSFSModelSettingsPanel() {
                       onClick={() => handleMoveVmr(index, 'up')}
                       disabled={index === 0}
                       title="Move up"
-                    >▲</button>
+                    >
+                      ▲
+                    </button>
                     <button
                       className="msfs-arrow-btn"
                       onClick={() => handleMoveVmr(index, 'down')}
                       disabled={index === vmrFiles.length - 1}
                       title="Move down"
-                    >▼</button>
+                    >
+                      ▼
+                    </button>
                   </div>
                   <span className="msfs-vmr-name" title={file}>
                     #{index + 1} {getFilename(file)}
                   </span>
-                  <button
-                    className="msfs-vmr-remove"
-                    onClick={() => handleRemoveVmr(index)}
-                    title="Remove VMR file"
-                  >
+                  <button className="msfs-vmr-remove" onClick={() => handleRemoveVmr(index)} title="Remove VMR file">
                     ×
                   </button>
                 </div>
@@ -432,9 +426,9 @@ function MSFSModelSettingsPanel() {
             <span>Skip generic VMR matches</span>
           </label>
           <p className="setting-hint">
-            When enabled, VMR rules that map to generic models (e.g., FSLTL_B738_ZZZZ) are ignored.
-            This allows the system to find an airline-liveried model and scale it instead of using
-            a perfectly-sized generic white aircraft.
+            When enabled, VMR rules that map to generic models (e.g., FSLTL_B738_ZZZZ) are ignored. This allows the
+            system to find an airline-liveried model and scale it instead of using a perfectly-sized generic white
+            aircraft.
           </p>
         </div>
 
@@ -475,9 +469,7 @@ function MSFSModelSettingsPanel() {
               </button>
             )}
           </div>
-          <p className="setting-hint">
-            Converted models are cached to disk to avoid re-conversion.
-          </p>
+          <p className="setting-hint">Converted models are cached to disk to avoid re-conversion.</p>
         </div>
 
         {/* Cache Limit */}
@@ -500,9 +492,7 @@ function MSFSModelSettingsPanel() {
               <option value="unlimited">Unlimited</option>
             </select>
           </div>
-          <p className="setting-hint">
-            Oldest models are automatically removed when the cache exceeds this limit.
-          </p>
+          <p className="setting-hint">Oldest models are automatically removed when the cache exceeds this limit.</p>
         </div>
 
         {/* Cache Stats */}
@@ -511,9 +501,7 @@ function MSFSModelSettingsPanel() {
           <div className="msfs-cache-stats">
             <span>{cacheStats.entryCount} models cached</span>
             <span>{cacheStats.totalSizeMB} MB used</span>
-            {cacheStats.limitMB !== null && (
-              <span>/ {cacheStats.limitMB} MB limit</span>
-            )}
+            {cacheStats.limitMB !== null && <span>/ {cacheStats.limitMB} MB limit</span>}
           </div>
           <button className="control-button" onClick={handleClearCache}>
             Clear Cache
@@ -521,11 +509,7 @@ function MSFSModelSettingsPanel() {
         </div>
 
         {/* Error Display */}
-        {error && (
-          <div className="fsltl-error">
-            {error}
-          </div>
-        )}
+        {error && <div className="fsltl-error">{error}</div>}
       </div>
     </CollapsibleSection>
   )

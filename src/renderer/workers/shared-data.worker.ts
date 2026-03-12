@@ -24,7 +24,7 @@ interface SharedWorkerGlobalScopeType {
   onconnect: ((this: SharedWorkerGlobalScopeType, ev: MessageEvent) => void) | null
   addEventListener<K extends keyof SharedWorkerGlobalScopeEventMap>(
     type: K,
-    listener: (this: SharedWorkerGlobalScopeType, ev: SharedWorkerGlobalScopeEventMap[K]) => void
+    listener: (this: SharedWorkerGlobalScopeType, ev: SharedWorkerGlobalScopeEventMap[K]) => void,
   ): void
   close(): void
 }
@@ -39,9 +39,9 @@ const workerSelf = self as unknown as SharedWorkerGlobalScopeType
 
 type SharedWorkerMessageType =
   | 'aircraft-update'
-  | 'observations-update'  // Raw observations for timeline-based interpolation
-  | 'aircraft-removals'    // Aircraft that have been removed
-  | 'model-info-update'    // Model assignments for callsigns
+  | 'observations-update' // Raw observations for timeline-based interpolation
+  | 'aircraft-removals' // Aircraft that have been removed
+  | 'model-info-update' // Model assignments for callsigns
   | 'settings-update'
   | 'weather-update'
   | 'cesium-token'
@@ -68,16 +68,16 @@ interface SharedWorkerOutboundMessage {
 
 interface SerializedAircraftState {
   callsign: string
-  [key: string]: unknown  // Allow other fields
+  [key: string]: unknown // Allow other fields
 }
 
 interface SerializedSettings {
-  [key: string]: unknown  // Settings structure
+  [key: string]: unknown // Settings structure
 }
 
 interface SerializedWeather {
   metar: string | null
-  [key: string]: unknown  // Other weather fields
+  [key: string]: unknown // Other weather fields
 }
 
 interface SerializedAirport {
@@ -127,7 +127,7 @@ const dataCache = {
   airport: null as SerializedAirport | null,
   /** Model info per callsign - merged incrementally as updates arrive */
   modelInfo: new Map<string, SerializedModelInfo>(),
-  timestamp: 0
+  timestamp: 0,
 }
 
 // ============================================================================
@@ -150,7 +150,12 @@ function handleMessage(port: MessagePort, event: MessageEvent<SharedWorkerInboun
     case 'register-inset':
       // Register an inset viewport
       if (viewportId) {
-        console.log('[SharedWorker] Registering inset:', viewportId, 'cached token:', dataCache.cesiumToken ? 'exists' : 'missing')
+        console.log(
+          '[SharedWorker] Registering inset:',
+          viewportId,
+          'cached token:',
+          dataCache.cesiumToken ? 'exists' : 'missing',
+        )
         insetPorts.set(viewportId, port)
         // Send cached data to newly connected inset
         sendCachedDataToPort(port)
@@ -246,7 +251,7 @@ function handleMessage(port: MessagePort, event: MessageEvent<SharedWorkerInboun
     case 'model-info-update':
       // Model assignments for aircraft (main → insets)
       if (source === 'main' || port === mainAppPort) {
-        const modelPayload = payload as { models: SerializedModelInfo[], timestamp: number }
+        const modelPayload = payload as { models: SerializedModelInfo[]; timestamp: number }
         // Update cache with new model info
         for (const model of modelPayload.models) {
           dataCache.modelInfo.set(model.callsign, model)
@@ -262,7 +267,7 @@ function handleMessage(port: MessagePort, event: MessageEvent<SharedWorkerInboun
           type: 'inset-log',
           payload,
           viewportId,
-          timestamp: Date.now()
+          timestamp: Date.now(),
         })
       }
       break
@@ -279,7 +284,7 @@ function sendCachedDataToPort(port: MessagePort) {
     port.postMessage({
       type: 'cesium-token',
       payload: dataCache.cesiumToken,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     })
   }
 
@@ -287,7 +292,7 @@ function sendCachedDataToPort(port: MessagePort) {
     port.postMessage({
       type: 'settings-update',
       payload: dataCache.settings,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     })
   }
 
@@ -295,7 +300,7 @@ function sendCachedDataToPort(port: MessagePort) {
     port.postMessage({
       type: 'weather-update',
       payload: dataCache.weather,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     })
   }
 
@@ -303,7 +308,7 @@ function sendCachedDataToPort(port: MessagePort) {
     port.postMessage({
       type: 'imagery-update',
       payload: dataCache.imagery,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     })
   }
 
@@ -311,7 +316,7 @@ function sendCachedDataToPort(port: MessagePort) {
     port.postMessage({
       type: 'airport-update',
       payload: dataCache.airport,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     })
   }
 
@@ -319,7 +324,7 @@ function sendCachedDataToPort(port: MessagePort) {
     port.postMessage({
       type: 'aircraft-update',
       payload: dataCache.aircraft,
-      timestamp: dataCache.timestamp
+      timestamp: dataCache.timestamp,
     })
   }
 
@@ -329,9 +334,9 @@ function sendCachedDataToPort(port: MessagePort) {
       type: 'model-info-update',
       payload: {
         models: Array.from(dataCache.modelInfo.values()),
-        timestamp: Date.now()
+        timestamp: Date.now(),
       },
-      timestamp: Date.now()
+      timestamp: Date.now(),
     })
   }
 }
@@ -364,7 +369,12 @@ function broadcastToInsets(message: SharedWorkerOutboundMessage) {
 workerSelf.onconnect = (event: MessageEvent) => {
   const port = event.ports[0]
   connectedPorts.add(port)
-  console.log('[SharedWorker] New connection, total ports:', connectedPorts.size, 'mainAppPort:', mainAppPort ? 'set' : 'unset')
+  console.log(
+    '[SharedWorker] New connection, total ports:',
+    connectedPorts.size,
+    'mainAppPort:',
+    mainAppPort ? 'set' : 'unset',
+  )
 
   // First connection is assumed to be main app
   if (!mainAppPort) {

@@ -75,10 +75,14 @@ class RunwayService {
     // Validate required columns exist
     const requiredCols = [
       'airport_ident',
-      'le_ident', 'le_latitude_deg', 'le_longitude_deg',
-      'he_ident', 'he_latitude_deg', 'he_longitude_deg'
+      'le_ident',
+      'le_latitude_deg',
+      'le_longitude_deg',
+      'he_ident',
+      'he_latitude_deg',
+      'he_longitude_deg',
     ]
-    const missingCols = requiredCols.filter(col => colIndex[col] === undefined)
+    const missingCols = requiredCols.filter((col) => colIndex[col] === undefined)
     if (missingCols.length > 0) {
       console.error(`[RunwayService] CSV missing required columns: ${missingCols.join(', ')}`)
       console.error('[RunwayService] Available columns:', header.join(', '))
@@ -114,7 +118,7 @@ class RunwayService {
         he_longitude_deg: values[colIndex['he_longitude_deg']] || '',
         he_elevation_ft: values[colIndex['he_elevation_ft']] || '',
         he_heading_degT: values[colIndex['he_heading_degT']] || '',
-        he_displaced_threshold_ft: values[colIndex['he_displaced_threshold_ft']] || ''
+        he_displaced_threshold_ft: values[colIndex['he_displaced_threshold_ft']] || '',
       }
 
       // Skip runways without threshold coordinates (many smaller airports lack this)
@@ -177,7 +181,7 @@ class RunwayService {
       raw.le_longitude_deg,
       raw.le_heading_degT,
       raw.le_elevation_ft,
-      raw.le_displaced_threshold_ft
+      raw.le_displaced_threshold_ft,
     )
 
     const highEnd = this.parseRunwayEnd(
@@ -186,7 +190,7 @@ class RunwayService {
       raw.he_longitude_deg,
       raw.he_heading_degT,
       raw.he_elevation_ft,
-      raw.he_displaced_threshold_ft
+      raw.he_displaced_threshold_ft,
     )
 
     // Need at least identifiers for both ends
@@ -200,7 +204,7 @@ class RunwayService {
       widthFt: parseFloat(raw.width_ft) || 0,
       surface: raw.surface || 'UNKNOWN',
       lighted: raw.lighted === '1',
-      closed: raw.closed === '1'
+      closed: raw.closed === '1',
     }
   }
 
@@ -213,7 +217,7 @@ class RunwayService {
     lon: string,
     heading: string,
     elevation: string,
-    displacedThreshold: string
+    displacedThreshold: string,
   ): RunwayEnd | null {
     if (!ident) return null
 
@@ -239,7 +243,7 @@ class RunwayService {
       lon: parsedLon,
       headingTrue: parsedHeading,
       elevationFt: parseFloat(elevation) || 0,
-      displacedThresholdFt: parseFloat(displacedThreshold) || 0
+      displacedThresholdFt: parseFloat(displacedThreshold) || 0,
     }
   }
 
@@ -258,9 +262,7 @@ class RunwayService {
   getRunwaysWithCoordinates(icao: string): Runway[] {
     const runways = this.getRunwaysForAirport(icao)
     return runways.filter(
-      (r) =>
-        (r.lowEnd.lat !== 0 || r.lowEnd.lon !== 0) &&
-        (r.highEnd.lat !== 0 || r.highEnd.lon !== 0)
+      (r) => (r.lowEnd.lat !== 0 || r.lowEnd.lon !== 0) && (r.highEnd.lat !== 0 || r.highEnd.lon !== 0),
     )
   }
 

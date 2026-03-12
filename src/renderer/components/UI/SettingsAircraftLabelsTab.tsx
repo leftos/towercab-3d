@@ -56,9 +56,7 @@ function SettingsAircraftLabelsTab() {
               />
               <span>{labelVisibilityDistance} nm</span>
             </div>
-            <p className="setting-hint">
-              Maximum range for displaying aircraft and labels around the tower.
-            </p>
+            <p className="setting-hint">Maximum range for displaying aircraft and labels around the tower.</p>
           </div>
 
           <div className="setting-item">
@@ -138,9 +136,7 @@ function SettingsAircraftLabelsTab() {
             />
             <span>{datablockFontSize}px</span>
           </div>
-          <p className="setting-hint">
-            Font size for aircraft datablock labels. (Per-device setting)
-          </p>
+          <p className="setting-hint">Font size for aircraft datablock labels. (Per-device setting)</p>
         </div>
 
         {/* Leader Line, Direction, Overlaps, Ground Labels - Global settings, hidden in remote mode */}
@@ -159,16 +155,16 @@ function SettingsAircraftLabelsTab() {
                 />
                 <span>{leaderDistance}</span>
               </div>
-              <p className="setting-hint">
-                Length of leader lines connecting datablocks to aircraft. 1=short, 5=long.
-              </p>
+              <p className="setting-hint">Length of leader lines connecting datablocks to aircraft. 1=short, 5=long.</p>
             </div>
 
             <div className="setting-item">
               <label>Default Datablock Direction</label>
               <select
                 value={defaultDatablockDirection}
-                onChange={(e) => updateDisplay({ defaultDatablockDirection: Number(e.target.value) as 1 | 2 | 3 | 4 | 6 | 7 | 8 | 9 })}
+                onChange={(e) =>
+                  updateDisplay({ defaultDatablockDirection: Number(e.target.value) as 1 | 2 | 3 | 4 | 6 | 7 | 8 | 9 })
+                }
               >
                 <option value={7}>7 - Top-Left</option>
                 <option value={8}>8 - Top</option>
@@ -211,9 +207,7 @@ function SettingsAircraftLabelsTab() {
                     <option value="activeOnly">Active Only (&gt; 5 kts)</option>
                     <option value="none">Hide All Ground Labels</option>
                   </select>
-                  <p className="setting-hint">
-                    Reduce gate clutter by hiding labels for parked/stationary aircraft.
-                  </p>
+                  <p className="setting-hint">Reduce gate clutter by hiding labels for parked/stationary aircraft.</p>
                 </div>
 
                 {groundLabelMode === 'moving' && (
@@ -257,9 +251,7 @@ function SettingsAircraftLabelsTab() {
               <option value="full">Full (callsign + type + altitude + speed)</option>
               <option value="match">Match Main Viewport</option>
             </select>
-            <p className="setting-hint">
-              Controls what information is shown in aircraft labels for inset viewports.
-            </p>
+            <p className="setting-hint">Controls what information is shown in aircraft labels for inset viewports.</p>
           </div>
 
           <div className="setting-item">
@@ -276,7 +268,8 @@ function SettingsAircraftLabelsTab() {
               <option value="match">Match Main Viewport</option>
             </select>
             <p className="setting-hint">
-              &quot;Crucial Phases&quot; shows labels for aircraft holding short, lined up, taking off, landing, or on go-around.
+              &quot;Crucial Phases&quot; shows labels for aircraft holding short, lined up, taking off, landing, or on
+              go-around.
             </p>
           </div>
 
@@ -309,9 +302,7 @@ function SettingsAircraftLabelsTab() {
             />
             Emulate Aircraft Pitch/Roll
           </label>
-          <p className="setting-hint">
-            Tilts aircraft based on climb/descent and turn rates. (Per-device setting)
-          </p>
+          <p className="setting-hint">Tilts aircraft based on climb/descent and turn rates. (Per-device setting)</p>
         </div>
 
         {orientationEmulation && (
@@ -328,9 +319,7 @@ function SettingsAircraftLabelsTab() {
               />
               <span>{Math.round(orientationIntensity * 100)}%</span>
             </div>
-            <p className="setting-hint">
-              100% = realistic. Lower for subtle, higher for exaggerated motion.
-            </p>
+            <p className="setting-hint">100% = realistic. Lower for subtle, higher for exaggerated motion.</p>
           </div>
         )}
 
@@ -347,9 +336,7 @@ function SettingsAircraftLabelsTab() {
             />
             <span>{(builtinModelBrightness * 100).toFixed(0)}%</span>
           </div>
-          <p className="setting-hint">
-            Brightness for built-in (FR24) models. Default: 170%.
-          </p>
+          <p className="setting-hint">Brightness for built-in (FR24) models. Default: 170%.</p>
         </div>
 
         <div className="setting-item">
@@ -383,9 +370,7 @@ function SettingsAircraftLabelsTab() {
             />
             <span>{(fsltlModelBrightness * 100).toFixed(0)}%</span>
           </div>
-          <p className="setting-hint">
-            Brightness for imported FSLTL models. Default: 100% (preserves livery colors).
-          </p>
+          <p className="setting-hint">Brightness for imported FSLTL models. Default: 100% (preserves livery colors).</p>
         </div>
 
         <div className="setting-item">
@@ -396,7 +381,7 @@ function SettingsAircraftLabelsTab() {
               onClick={() => {
                 updateGraphicsSettings({
                   enableAircraftSilhouettes: true,
-                  insetGraphics: { ...insetGraphics, silhouettes: true }
+                  insetGraphics: { ...insetGraphics, silhouettes: true },
                 })
               }}
             >
@@ -407,7 +392,7 @@ function SettingsAircraftLabelsTab() {
               onClick={() => {
                 updateGraphicsSettings({
                   enableAircraftSilhouettes: true,
-                  insetGraphics: { ...insetGraphics, silhouettes: false }
+                  insetGraphics: { ...insetGraphics, silhouettes: false },
                 })
               }}
             >
@@ -418,7 +403,7 @@ function SettingsAircraftLabelsTab() {
               onClick={() => {
                 updateGraphicsSettings({
                   enableAircraftSilhouettes: false,
-                  insetGraphics: { ...insetGraphics, silhouettes: false }
+                  insetGraphics: { ...insetGraphics, silhouettes: false },
                 })
               }}
             >
@@ -426,7 +411,8 @@ function SettingsAircraftLabelsTab() {
             </button>
           </div>
           <p className="setting-hint">
-            Adds black edge outlines to built-in (FR24) aircraft models. High GPU cost (~20%) - use Aircraft Tint instead for better performance.
+            Adds black edge outlines to built-in (FR24) aircraft models. High GPU cost (~20%) - use Aircraft Tint
+            instead for better performance.
           </p>
         </div>
       </CollapsibleSection>

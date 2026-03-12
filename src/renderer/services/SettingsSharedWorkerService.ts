@@ -31,7 +31,7 @@ import type {
   SerializedWeather,
   SerializedAirport,
   SerializedImagery,
-  SerializedModelInfo
+  SerializedModelInfo,
 } from '../types/shared-worker'
 import type { AircraftObservation, AircraftMetadata } from '../types/aircraft-timeline'
 
@@ -60,10 +60,7 @@ class SettingsSharedWorkerService {
       // Create SharedWorker using Vite-bundled worker URL
       console.log('[SettingsSharedWorkerService] Creating SharedWorker:', SharedDataWorkerUrl)
 
-      this.worker = new SharedWorker(
-        SharedDataWorkerUrl,
-        { type: 'module', name: 'towercab-shared' }
-      )
+      this.worker = new SharedWorker(SharedDataWorkerUrl, { type: 'module', name: 'towercab-shared' })
 
       this.worker.onerror = (error) => {
         console.error('[SettingsSharedWorkerService] SharedWorker error:', error)
@@ -101,7 +98,7 @@ class SettingsSharedWorkerService {
         this.postMessage({
           type: 'cesium-token',
           payload: cesiumToken,
-          source: 'main'
+          source: 'main',
         })
       }
 
@@ -109,7 +106,7 @@ class SettingsSharedWorkerService {
       this.postMessage({
         type: 'imagery-update',
         payload: this.serializeImagery(),
-        source: 'main'
+        source: 'main',
       })
 
       // Subscribe to viewport changes to push data when insets are added
@@ -122,12 +119,11 @@ class SettingsSharedWorkerService {
       // This enables automatic broadcasting of observations/removals to insets
       registerBroadcastCallbacks(
         (observations) => this.broadcastObservations(observations),
-        (callsigns) => this.broadcastRemovals(callsigns)
+        (callsigns) => this.broadcastRemovals(callsigns),
       )
 
       this.isInitialized = true
       console.log('[SettingsSharedWorkerService] Initialization complete')
-
     } catch (error) {
       console.error('[SettingsSharedWorkerService] Failed to initialize:', error)
     }
@@ -169,7 +165,7 @@ class SettingsSharedWorkerService {
         this.postMessage({
           type: 'settings-update',
           payload: this.serializeSettings(),
-          source: 'main'
+          source: 'main',
         })
       }, SETTINGS_DEBOUNCE_MS)
     })
@@ -182,7 +178,7 @@ class SettingsSharedWorkerService {
         this.postMessage({
           type: 'cesium-token',
           payload: state.cesiumIonToken,
-          source: 'main'
+          source: 'main',
         })
       }
 
@@ -191,7 +187,7 @@ class SettingsSharedWorkerService {
         this.postMessage({
           type: 'imagery-update',
           payload: this.serializeImagery(),
-          source: 'main'
+          source: 'main',
         })
       }
 
@@ -204,7 +200,7 @@ class SettingsSharedWorkerService {
           this.postMessage({
             type: 'settings-update',
             payload: this.serializeSettings(),
-            source: 'main'
+            source: 'main',
           })
         }, SETTINGS_DEBOUNCE_MS)
       }
@@ -218,7 +214,7 @@ class SettingsSharedWorkerService {
       this.postMessage({
         type: 'weather-update',
         payload: this.serializeWeather(),
-        source: 'main'
+        source: 'main',
       })
     })
     this.unsubscribers.push(unsubWeather)
@@ -227,12 +223,11 @@ class SettingsSharedWorkerService {
     const unsubAirport = useAirportStore.subscribe((state, prevState) => {
       if (!this.hasInsets()) return
 
-      if (state.currentAirport !== prevState.currentAirport ||
-          state.towerHeight !== prevState.towerHeight) {
+      if (state.currentAirport !== prevState.currentAirport || state.towerHeight !== prevState.towerHeight) {
         this.postMessage({
           type: 'airport-update',
           payload: this.serializeAirport(),
-          source: 'main'
+          source: 'main',
         })
       }
     })
@@ -246,13 +241,13 @@ class SettingsSharedWorkerService {
     this.postMessage({
       type: 'settings-update',
       payload: this.serializeSettings(),
-      source: 'main'
+      source: 'main',
     })
 
     this.postMessage({
       type: 'weather-update',
       payload: this.serializeWeather(),
-      source: 'main'
+      source: 'main',
     })
 
     const airport = this.serializeAirport()
@@ -260,7 +255,7 @@ class SettingsSharedWorkerService {
       this.postMessage({
         type: 'airport-update',
         payload: airport,
-        source: 'main'
+        source: 'main',
       })
     }
   }
@@ -298,7 +293,7 @@ class SettingsSharedWorkerService {
       memory: settings.memory,
       aircraft: settings.aircraft,
       ui: settings.ui,
-      display: globalSettings.display
+      display: globalSettings.display,
     }
   }
 
@@ -307,11 +302,12 @@ class SettingsSharedWorkerService {
     return {
       fogDensity: weather.fogDensity,
       visibility: weather.currentMetar?.visib ?? 10,
-      cloudLayers: weather.cloudLayers?.map(c => ({
-        altitude: c.altitude,
-        coverage: c.coverage,
-        type: c.type
-      })) ?? []
+      cloudLayers:
+        weather.cloudLayers?.map((c) => ({
+          altitude: c.altitude,
+          coverage: c.coverage,
+          type: c.type,
+        })) ?? [],
     }
   }
 
@@ -326,7 +322,7 @@ class SettingsSharedWorkerService {
       latitude: airport.lat,
       longitude: airport.lon,
       elevation: airport.elevation ?? 0,
-      towerHeight: airportState.towerHeight
+      towerHeight: airportState.towerHeight,
     }
   }
 
@@ -337,7 +333,7 @@ class SettingsSharedWorkerService {
       provider: imagery.provider,
       googleMapsApiKey: imagery.googleMapsApiKey,
       cesiumAdjustments: imagery.cesiumAdjustments,
-      googleAdjustments: imagery.googleAdjustments
+      googleAdjustments: imagery.googleAdjustments,
     }
   }
 
@@ -358,7 +354,7 @@ class SettingsSharedWorkerService {
       callsign: string
       observation: AircraftObservation
       metadata: AircraftMetadata
-    }>
+    }>,
   ): void {
     if (observations.length === 0) return
 
@@ -367,7 +363,7 @@ class SettingsSharedWorkerService {
       this.postMessage({
         type: 'observations-update',
         payload: observations,
-        source: 'main'
+        source: 'main',
       })
     }
 
@@ -391,7 +387,7 @@ class SettingsSharedWorkerService {
       this.postMessage({
         type: 'aircraft-removals',
         payload: callsigns,
-        source: 'main'
+        source: 'main',
       })
     }
 
@@ -410,7 +406,7 @@ class SettingsSharedWorkerService {
       callsign: string
       observation: AircraftObservation
       metadata: AircraftMetadata
-    }>
+    }>,
   ): Promise<void> {
     try {
       const { invoke } = await import('@tauri-apps/api/core')
@@ -434,7 +430,7 @@ class SettingsSharedWorkerService {
         typeCode: metadata.aircraftType,
         origin: metadata.departure,
         destination: metadata.arrival,
-        flightRules: null
+        flightRules: null,
       }))
 
       await invoke('broadcast_observations', { observations: data })
@@ -468,9 +464,9 @@ class SettingsSharedWorkerService {
       type: 'model-info-update',
       payload: {
         models,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       },
-      source: 'main'
+      source: 'main',
     })
   }
 

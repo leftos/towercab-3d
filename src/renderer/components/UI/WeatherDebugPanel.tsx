@@ -15,11 +15,11 @@ interface DebugCloudLayer {
 /** Convert coverage code to numeric value */
 function coverageToValue(coverage: CloudCoverage): number {
   const map: Record<CloudCoverage, number> = {
-    'CLR': 0,
-    'FEW': 0.1875,
-    'SCT': 0.4375,
-    'BKN': 0.6875,
-    'OVC': 1.0
+    CLR: 0,
+    FEW: 0.1875,
+    SCT: 0.4375,
+    BKN: 0.6875,
+    OVC: 1.0,
   }
   return map[coverage]
 }
@@ -60,7 +60,7 @@ export function WeatherDebugPanel() {
       types.push({
         type: precipType,
         intensity: precipIntensity as 'light' | 'moderate' | 'heavy',
-        code: `${intensityPrefix}${typeCode}`
+        code: `${intensityPrefix}${typeCode}`,
       })
     }
 
@@ -68,7 +68,7 @@ export function WeatherDebugPanel() {
       active: precipIntensity !== 'none',
       types,
       hasThunderstorm,
-      visibilityFactor: precipIntensity === 'heavy' ? 2.0 : precipIntensity === 'moderate' ? 1.0 : 0.5
+      visibilityFactor: precipIntensity === 'heavy' ? 2.0 : precipIntensity === 'moderate' ? 1.0 : 0.5,
     }
     setPrecipitation(precipState)
 
@@ -76,16 +76,16 @@ export function WeatherDebugPanel() {
       speed: windSpeed,
       direction: windDirection,
       gustSpeed: windGust > 0 ? windGust : null,
-      isVariable: false
+      isVariable: false,
     })
 
     // Apply cloud layers
     const layers: CloudLayer[] = cloudLayersOverride
-      .filter(l => l.coverage !== 'CLR')
-      .map(l => ({
+      .filter((l) => l.coverage !== 'CLR')
+      .map((l) => ({
         type: l.coverage,
         coverage: coverageToValue(l.coverage),
-        altitude: l.altitudeHundreds * 100 * 0.3048 // Convert hundreds of feet to meters
+        altitude: l.altitudeHundreds * 100 * 0.3048, // Convert hundreds of feet to meters
       }))
       .sort((a, b) => a.altitude - b.altitude)
 
@@ -114,10 +114,7 @@ export function WeatherDebugPanel() {
   // Cloud layer management
   const addCloudLayer = () => {
     if (cloudLayersOverride.length >= 4) return // Max 4 layers
-    setCloudLayersOverride([
-      ...cloudLayersOverride,
-      { coverage: 'SCT', altitudeHundreds: 30 }
-    ])
+    setCloudLayersOverride([...cloudLayersOverride, { coverage: 'SCT', altitudeHundreds: 30 }])
   }
 
   const removeCloudLayer = (index: number) => {
@@ -125,18 +122,12 @@ export function WeatherDebugPanel() {
   }
 
   const updateCloudLayer = (index: number, updates: Partial<DebugCloudLayer>) => {
-    setCloudLayersOverride(cloudLayersOverride.map((layer, i) =>
-      i === index ? { ...layer, ...updates } : layer
-    ))
+    setCloudLayersOverride(cloudLayersOverride.map((layer, i) => (i === index ? { ...layer, ...updates } : layer)))
   }
 
   if (!isOpen) {
     return (
-      <button
-        className="weather-debug-toggle"
-        onClick={() => setIsOpen(true)}
-        title="Weather Debug Panel"
-      >
+      <button className="weather-debug-toggle" onClick={() => setIsOpen(true)} title="Weather Debug Panel">
         WX
       </button>
     )
@@ -152,10 +143,7 @@ export function WeatherDebugPanel() {
       <div className="weather-debug-content">
         <div className="weather-debug-row">
           <label>Precipitation</label>
-          <select
-            value={precipType}
-            onChange={(e) => setPrecipType(e.target.value as PrecipType)}
-          >
+          <select value={precipType} onChange={(e) => setPrecipType(e.target.value as PrecipType)}>
             <option value="rain">Rain</option>
             <option value="snow">Snow</option>
           </select>
@@ -163,10 +151,7 @@ export function WeatherDebugPanel() {
 
         <div className="weather-debug-row">
           <label>Intensity</label>
-          <select
-            value={precipIntensity}
-            onChange={(e) => setPrecipIntensity(e.target.value as PrecipIntensity)}
-          >
+          <select value={precipIntensity} onChange={(e) => setPrecipIntensity(e.target.value as PrecipIntensity)}>
             <option value="none">None</option>
             <option value="light">Light (-)</option>
             <option value="moderate">Moderate</option>
@@ -212,11 +197,7 @@ export function WeatherDebugPanel() {
 
         <div className="weather-debug-row">
           <label>
-            <input
-              type="checkbox"
-              checked={hasThunderstorm}
-              onChange={(e) => setHasThunderstorm(e.target.checked)}
-            />
+            <input type="checkbox" checked={hasThunderstorm} onChange={(e) => setHasThunderstorm(e.target.checked)} />
             Thunderstorm (TS)
           </label>
         </div>
@@ -225,11 +206,7 @@ export function WeatherDebugPanel() {
         <div className="weather-debug-section">
           <div className="weather-debug-section-header">
             <span>Cloud Layers</span>
-            <button
-              onClick={addCloudLayer}
-              disabled={cloudLayersOverride.length >= 4}
-              title="Add cloud layer"
-            >
+            <button onClick={addCloudLayer} disabled={cloudLayersOverride.length >= 4} title="Add cloud layer">
               +
             </button>
           </div>
@@ -240,7 +217,8 @@ export function WeatherDebugPanel() {
               <span className="weather-debug-label">From METAR:</span>
               {currentCloudLayers.map((layer, i) => (
                 <span key={i} className="weather-debug-cloud-tag">
-                  {layer.type}{String(Math.round(layer.altitude / 0.3048 / 100)).padStart(3, '0')}
+                  {layer.type}
+                  {String(Math.round(layer.altitude / 0.3048 / 100)).padStart(3, '0')}
                 </span>
               ))}
             </div>
@@ -268,11 +246,7 @@ export function WeatherDebugPanel() {
                 title="Altitude in hundreds of feet AGL"
               />
               <span className="weather-debug-altitude-label">00 ft</span>
-              <button
-                onClick={() => removeCloudLayer(index)}
-                className="weather-debug-remove"
-                title="Remove layer"
-              >
+              <button onClick={() => removeCloudLayer(index)} className="weather-debug-remove" title="Remove layer">
                 ×
               </button>
             </div>
@@ -281,22 +255,13 @@ export function WeatherDebugPanel() {
 
         {/* Unified Apply/Clear buttons at the bottom */}
         <div className="weather-debug-buttons">
-          <button
-            className={isDebugOverriding ? 'active' : ''}
-            onClick={applyOverride}
-          >
+          <button className={isDebugOverriding ? 'active' : ''} onClick={applyOverride}>
             Apply
           </button>
-          <button onClick={clearOverride}>
-            Clear
-          </button>
+          <button onClick={clearOverride}>Clear</button>
         </div>
 
-        {isDebugOverriding && (
-          <div className="weather-debug-status">
-            Override active (METAR will not overwrite)
-          </div>
-        )}
+        {isDebugOverriding && <div className="weather-debug-status">Override active (METAR will not overwrite)</div>}
       </div>
     </div>
   )

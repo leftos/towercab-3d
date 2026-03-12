@@ -15,7 +15,7 @@ import { create } from 'zustand'
 const METERS_PER_DEGREE_LAT = 111320
 
 function getMetersPerDegreeLon(lat: number): number {
-  return 111320 * Math.cos(lat * Math.PI / 180)
+  return 111320 * Math.cos((lat * Math.PI) / 180)
 }
 
 export type WizardStep = 'model' | 'camera'
@@ -47,8 +47,8 @@ interface TowerPositioningState {
 
   // Step 1: Model positioning
   originalModelPosition: ModelPosition | null
-  modelOffset: { north: number; east: number; up: number }  // Meters
-  modelRotation: number  // Degrees (0-360, clockwise from north)
+  modelOffset: { north: number; east: number; up: number } // Meters
+  modelRotation: number // Degrees (0-360, clockwise from north)
 
   // Step 1: Control mode toggle (model vs camera controls)
   step1ControlMode: Step1ControlMode
@@ -66,7 +66,7 @@ interface TowerPositioningState {
     manifestPath: string,
     originalModelPos: ModelPosition,
     originalCameraPos: CameraPosition | null,
-    terrainHeight: number
+    terrainHeight: number,
   ) => void
   proceedToStep2: () => void
   goBackToStep1: () => void
@@ -113,7 +113,7 @@ export const useTowerPositioningStore = create<TowerPositioningState>((set, get)
       step1ControlMode: 'model',
       terrainHeight,
       originalCameraPosition: originalCameraPos,
-      cameraPosition: originalCameraPos
+      cameraPosition: originalCameraPos,
     })
   },
 
@@ -146,7 +146,7 @@ export const useTowerPositioningStore = create<TowerPositioningState>((set, get)
       step1ControlMode: 'model',
       terrainHeight: 0,
       originalCameraPosition: null,
-      cameraPosition: null
+      cameraPosition: null,
     })
   },
 
@@ -158,8 +158,8 @@ export const useTowerPositioningStore = create<TowerPositioningState>((set, get)
     set({
       modelOffset: {
         ...state.modelOffset,
-        [axis]: state.modelOffset[axis] + delta
-      }
+        [axis]: state.modelOffset[axis] + delta,
+      },
     })
   },
 
@@ -182,7 +182,7 @@ export const useTowerPositioningStore = create<TowerPositioningState>((set, get)
     const state = get()
     set({
       modelOffset: { north: 0, east: 0, up: 0 },
-      modelRotation: state.originalModelPosition?.rotation ?? 0
+      modelRotation: state.originalModelPosition?.rotation ?? 0,
     })
   },
 
@@ -193,7 +193,7 @@ export const useTowerPositioningStore = create<TowerPositioningState>((set, get)
     const state = get()
     if (state.step !== 'model') return
     set({
-      step1ControlMode: state.step1ControlMode === 'model' ? 'camera' : 'model'
+      step1ControlMode: state.step1ControlMode === 'model' ? 'camera' : 'model',
     })
   },
 
@@ -224,7 +224,7 @@ export const useTowerPositioningStore = create<TowerPositioningState>((set, get)
       lat: newLat,
       lon: newLon,
       height: newHeight,
-      rotation: state.modelRotation
+      rotation: state.modelRotation,
     }
   },
 
@@ -233,7 +233,7 @@ export const useTowerPositioningStore = create<TowerPositioningState>((set, get)
    */
   setTerrainHeight: (height) => {
     set({ terrainHeight: height })
-  }
+  },
 }))
 
 export default useTowerPositioningStore

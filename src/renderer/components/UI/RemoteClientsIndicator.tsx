@@ -48,7 +48,10 @@ function RemoteClientsIndicator() {
   if (isRemoteMode() || clientCount === 0) return null
 
   return (
-    <div className="remote-clients-indicator" title={`${clientCount} remote ${clientCount === 1 ? 'client' : 'clients'} connected`}>
+    <div
+      className="remote-clients-indicator"
+      title={`${clientCount} remote ${clientCount === 1 ? 'client' : 'clients'} connected`}
+    >
       <svg
         className="remote-clients-icon"
         width="14"

@@ -44,10 +44,7 @@ export interface SunElevationOptions {
  * }
  * ```
  */
-export function useSunElevation(
-  viewer: Cesium.Viewer | null,
-  options?: SunElevationOptions
-): number | null {
+export function useSunElevation(viewer: Cesium.Viewer | null, options?: SunElevationOptions): number | null {
   const { timeMode, fixedTimeHour } = options ?? {}
   const [sunElevation, setSunElevation] = useState<number | null>(null)
   const lastUpdateRef = useRef<number>(0)
@@ -161,7 +158,7 @@ export function useSunElevation(
     return () => {
       removeListener()
     }
-  // Re-run effect when time settings change to trigger immediate recalculation
+    // Re-run effect when time settings change to trigger immediate recalculation
   }, [viewer, timeMode, fixedTimeHour])
 
   return sunElevation

@@ -55,7 +55,7 @@ export function setupEnuTransforms(lat: number, lon: number, height: number): En
     enuToFixed,
     fixedToEnu,
     basePoint,
-    basePointUp
+    basePointUp,
   }
 }
 
@@ -119,7 +119,7 @@ export function latLonToEnuOffset(
   baseLon: number,
   targetLat: number,
   targetLon: number,
-  heading: number = 0
+  heading: number = 0,
 ): { x: number; z: number } {
   const METERS_PER_DEGREE_LAT = 111111
 
@@ -128,16 +128,16 @@ export function latLonToEnuOffset(
 
   // Convert to meters
   const northOffset = latDiff * METERS_PER_DEGREE_LAT
-  const eastOffset = lonDiff * METERS_PER_DEGREE_LAT * Math.cos(baseLat * Math.PI / 180)
+  const eastOffset = lonDiff * METERS_PER_DEGREE_LAT * Math.cos((baseLat * Math.PI) / 180)
 
   // Apply heading rotation if specified
   if (heading !== 0) {
-    const headingRad = heading * Math.PI / 180
+    const headingRad = (heading * Math.PI) / 180
     const cosH = Math.cos(headingRad)
     const sinH = Math.sin(headingRad)
     return {
       x: eastOffset * cosH - northOffset * sinH,
-      z: eastOffset * sinH + northOffset * cosH
+      z: eastOffset * sinH + northOffset * cosH,
     }
   }
 
@@ -153,7 +153,7 @@ export function latLonToEnuOffset(
  */
 export function calculateBabylonCameraRotation(
   direction: BABYLON.Vector3,
-  up: BABYLON.Vector3
+  up: BABYLON.Vector3,
 ): { rotationX: number; rotationY: number; rotationZ: number } {
   const forward = direction.normalize()
 
@@ -172,11 +172,7 @@ export function calculateBabylonCameraRotation(
   // Expected right vector after yaw
   const rightAfterYaw = new BABYLON.Vector3(cosY, 0, -sinY)
   // Expected up after yaw and pitch
-  const upAfterYawPitch = new BABYLON.Vector3(
-    sinY * sinX,
-    cosX,
-    cosY * sinX
-  )
+  const upAfterYawPitch = new BABYLON.Vector3(sinY * sinX, cosX, cosY * sinX)
 
   // Project actual up onto the plane perpendicular to forward
   const upNormalized = up.normalize()
@@ -213,7 +209,7 @@ export interface BabylonCameraSyncData {
  */
 export function calculateBabylonCameraSync(
   cesiumViewer: Cesium.Viewer,
-  fixedToEnu: Cesium.Matrix4
+  fixedToEnu: Cesium.Matrix4,
 ): BabylonCameraSyncData | null {
   const frustum = cesiumViewer.camera.frustum
   let fov = Math.PI / 4 // Default 45 degrees

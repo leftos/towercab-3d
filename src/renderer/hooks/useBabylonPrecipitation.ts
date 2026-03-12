@@ -68,7 +68,7 @@ import {
   PRECIPITATION_ONSET_DELAY,
   PRECIPITATION_CESSATION_DELAY,
   THUNDERSTORM_ONSET_DELAY,
-  THUNDERSTORM_CESSATION_DELAY
+  THUNDERSTORM_CESSATION_DELAY,
 } from '@/constants'
 
 interface UseBabylonPrecipitationOptions {
@@ -104,15 +104,15 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
 
   // Wind state for gust simulation
   const windStateRef = useRef({
-    currentSpeed: 0,        // Current wind speed being applied
-    baseSpeed: 0,           // Base wind speed from METAR
-    gustSpeed: 0,           // Gust speed from METAR
-    direction: 0,           // Wind direction in radians
-    isGusting: false,       // Whether currently in a gust
-    gustStartTime: 0,       // When current gust started
-    gustDuration: 0,        // Duration of current gust
-    nextGustTime: 0,        // When next gust should start
-    isVariable: false       // Whether wind is variable direction
+    currentSpeed: 0, // Current wind speed being applied
+    baseSpeed: 0, // Base wind speed from METAR
+    gustSpeed: 0, // Gust speed from METAR
+    direction: 0, // Wind direction in radians
+    isGusting: false, // Whether currently in a gust
+    gustStartTime: 0, // When current gust started
+    gustDuration: 0, // Duration of current gust
+    nextGustTime: 0, // When next gust should start
+    isVariable: false, // Whether wind is variable direction
   })
 
   // Lightning state
@@ -120,7 +120,7 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
     nextFlashTime: 0,
     isFlashing: false,
     flashCount: 0,
-    originalIntensity: 1.0
+    originalIntensity: 1.0,
   })
 
   // Lightning timeout refs for cleanup
@@ -156,7 +156,7 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
     thunderstormActive: false,
     thunderstormFactor: 0,
     // Initialization flag
-    initialized: false
+    initialized: false,
   })
 
   // Track current airport to detect airport switches (reset smoothing on switch)
@@ -238,7 +238,7 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
     const radians = ((dirDegrees + 180) * Math.PI) / 180
     return {
       x: Math.sin(radians),
-      z: Math.cos(radians)
+      z: Math.cos(radians),
     }
   }, [])
 
@@ -259,7 +259,11 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
       // Configure emitter - box above camera
       ps.emitter = new BABYLON.Vector3(0, EMITTER_HEIGHT_ABOVE_CAMERA, 0)
       ps.minEmitBox = new BABYLON.Vector3(-RAIN_EMITTER_BOX_HALF_SIZE, 0, -RAIN_EMITTER_BOX_HALF_SIZE)
-      ps.maxEmitBox = new BABYLON.Vector3(RAIN_EMITTER_BOX_HALF_SIZE, RAIN_EMITTER_BOX_HEIGHT, RAIN_EMITTER_BOX_HALF_SIZE)
+      ps.maxEmitBox = new BABYLON.Vector3(
+        RAIN_EMITTER_BOX_HALF_SIZE,
+        RAIN_EMITTER_BOX_HEIGHT,
+        RAIN_EMITTER_BOX_HALF_SIZE,
+      )
 
       // Particle sizes - height of the rain streak
       ps.minSize = RAIN_PARTICLE_SIZE_MIN
@@ -425,119 +429,125 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
   /**
    * Update wind state and simulate gusts
    */
-  const updateWindState = useCallback((_deltaTime: number) => {
-    const ws = windStateRef.current
-    const now = performance.now()
+  const updateWindState = useCallback(
+    (_deltaTime: number) => {
+      const ws = windStateRef.current
+      const now = performance.now()
 
-    // Update base wind from METAR (convert knots to m/s)
-    ws.baseSpeed = wind.speed * KNOTS_TO_MS
-    ws.gustSpeed = (wind.gustSpeed ?? wind.speed) * KNOTS_TO_MS
-    ws.direction = (wind.direction * Math.PI) / 180
-    ws.isVariable = wind.isVariable
+      // Update base wind from METAR (convert knots to m/s)
+      ws.baseSpeed = wind.speed * KNOTS_TO_MS
+      ws.gustSpeed = (wind.gustSpeed ?? wind.speed) * KNOTS_TO_MS
+      ws.direction = (wind.direction * Math.PI) / 180
+      ws.isVariable = wind.isVariable
 
-    // Handle gust simulation
-    if (wind.gustSpeed && wind.gustSpeed > wind.speed) {
-      if (!ws.isGusting && now >= ws.nextGustTime) {
-        // Start a new gust
-        ws.isGusting = true
-        ws.gustStartTime = now
-        ws.gustDuration = (GUST_DURATION_MIN + Math.random() * (GUST_DURATION_MAX - GUST_DURATION_MIN)) * 1000
-      }
+      // Handle gust simulation
+      if (wind.gustSpeed && wind.gustSpeed > wind.speed) {
+        if (!ws.isGusting && now >= ws.nextGustTime) {
+          // Start a new gust
+          ws.isGusting = true
+          ws.gustStartTime = now
+          ws.gustDuration = (GUST_DURATION_MIN + Math.random() * (GUST_DURATION_MAX - GUST_DURATION_MIN)) * 1000
+        }
 
-      if (ws.isGusting) {
-        const elapsed = now - ws.gustStartTime
-        const progress = elapsed / ws.gustDuration
+        if (ws.isGusting) {
+          const elapsed = now - ws.gustStartTime
+          const progress = elapsed / ws.gustDuration
 
-        if (progress >= 1) {
-          // Gust ended
-          ws.isGusting = false
-          ws.nextGustTime = now + (GUST_INTERVAL_MIN + Math.random() * (GUST_INTERVAL_MAX - GUST_INTERVAL_MIN)) * 1000
-          ws.currentSpeed = ws.baseSpeed
-        } else {
-          // During gust - ramp up, sustain, ramp down
-          const rampUp = GUST_RAMP_FRACTION
-          const rampDown = 1 - GUST_RAMP_FRACTION
-
-          let gustFactor: number
-          if (progress < rampUp) {
-            // Ramping up
-            gustFactor = progress / rampUp
-          } else if (progress > rampDown) {
-            // Ramping down
-            gustFactor = (1 - progress) / GUST_RAMP_FRACTION
+          if (progress >= 1) {
+            // Gust ended
+            ws.isGusting = false
+            ws.nextGustTime = now + (GUST_INTERVAL_MIN + Math.random() * (GUST_INTERVAL_MAX - GUST_INTERVAL_MIN)) * 1000
+            ws.currentSpeed = ws.baseSpeed
           } else {
-            // Sustained
-            gustFactor = 1
-          }
+            // During gust - ramp up, sustain, ramp down
+            const rampUp = GUST_RAMP_FRACTION
+            const rampDown = 1 - GUST_RAMP_FRACTION
 
-          ws.currentSpeed = ws.baseSpeed + (ws.gustSpeed - ws.baseSpeed) * gustFactor
+            let gustFactor: number
+            if (progress < rampUp) {
+              // Ramping up
+              gustFactor = progress / rampUp
+            } else if (progress > rampDown) {
+              // Ramping down
+              gustFactor = (1 - progress) / GUST_RAMP_FRACTION
+            } else {
+              // Sustained
+              gustFactor = 1
+            }
+
+            ws.currentSpeed = ws.baseSpeed + (ws.gustSpeed - ws.baseSpeed) * gustFactor
+          }
+        } else {
+          ws.currentSpeed = ws.baseSpeed
         }
       } else {
         ws.currentSpeed = ws.baseSpeed
+        ws.isGusting = false
       }
-    } else {
-      ws.currentSpeed = ws.baseSpeed
-      ws.isGusting = false
-    }
-  }, [wind])
+    },
+    [wind],
+  )
 
   /**
    * Apply wind to particle system directions
    */
-  const applyWindToSystem = useCallback((ps: BABYLON.ParticleSystem, type: PrecipitationType) => {
-    const ws = windStateRef.current
+  const applyWindToSystem = useCallback(
+    (ps: BABYLON.ParticleSystem, type: PrecipitationType) => {
+      const ws = windStateRef.current
 
-    // Calculate wind direction with optional variable variance
-    let windDir = ws.direction
-    if (ws.isVariable) {
-      windDir += (Math.random() - 0.5) * (VARIABLE_WIND_VARIANCE * Math.PI / 180)
-    }
+      // Calculate wind direction with optional variable variance
+      let windDir = ws.direction
+      if (ws.isVariable) {
+        windDir += (Math.random() - 0.5) * ((VARIABLE_WIND_VARIANCE * Math.PI) / 180)
+      }
 
-    const windVec = windDirToVelocity(windDir * 180 / Math.PI)
+      const windVec = windDirToVelocity((windDir * 180) / Math.PI)
 
-    // Get type-specific values
-    const isSnowType = type === 'snow' || type === 'ice'
-    const baseVelocity = isSnowType ? SNOW_VELOCITY : RAIN_VELOCITY
-    const drift = isSnowType ? SNOW_DRIFT_RANGE : RAIN_DRIFT_RANGE
-    const gravityStrength = isSnowType ? SNOW_WIND_GRAVITY : RAIN_WIND_GRAVITY
+      // Get type-specific values
+      const isSnowType = type === 'snow' || type === 'ice'
+      const baseVelocity = isSnowType ? SNOW_VELOCITY : RAIN_VELOCITY
+      const drift = isSnowType ? SNOW_DRIFT_RANGE : RAIN_DRIFT_RANGE
+      const gravityStrength = isSnowType ? SNOW_WIND_GRAVITY : RAIN_WIND_GRAVITY
 
-    // Wind effect scale: rain needs high scale (falls fast at -450 m/s)
-    // Snow needs low scale (falls slow at -3 m/s) - just use raw wind speed
-    const windScale = isSnowType ? 1.0 : WIND_EFFECT_SCALE
-    const horizontalSpeed = ws.currentSpeed * windScale
+      // Wind effect scale: rain needs high scale (falls fast at -450 m/s)
+      // Snow needs low scale (falls slow at -3 m/s) - just use raw wind speed
+      const windScale = isSnowType ? 1.0 : WIND_EFFECT_SCALE
+      const horizontalSpeed = ws.currentSpeed * windScale
 
-    // Update particle initial directions with wind
-    ps.direction1 = new BABYLON.Vector3(
-      windVec.x * horizontalSpeed - drift,
-      baseVelocity,
-      windVec.z * horizontalSpeed - drift
-    )
-    ps.direction2 = new BABYLON.Vector3(
-      windVec.x * horizontalSpeed + drift,
-      baseVelocity * 0.9,
-      windVec.z * horizontalSpeed + drift
-    )
+      // Update particle initial directions with wind
+      ps.direction1 = new BABYLON.Vector3(
+        windVec.x * horizontalSpeed - drift,
+        baseVelocity,
+        windVec.z * horizontalSpeed - drift,
+      )
+      ps.direction2 = new BABYLON.Vector3(
+        windVec.x * horizontalSpeed + drift,
+        baseVelocity * 0.9,
+        windVec.z * horizontalSpeed + drift,
+      )
 
-    // Apply wind to gravity so particles curve in the wind direction
-    // Snow: minimal gravity wind effect, Rain: stronger
-    const gravityWindScale = isSnowType ? 0.3 : 0.5
-    ps.gravity = new BABYLON.Vector3(
-      windVec.x * horizontalSpeed * gravityWindScale,
-      gravityStrength,
-      windVec.z * horizontalSpeed * gravityWindScale
-    )
+      // Apply wind to gravity so particles curve in the wind direction
+      // Snow: minimal gravity wind effect, Rain: stronger
+      const gravityWindScale = isSnowType ? 0.3 : 0.5
+      ps.gravity = new BABYLON.Vector3(
+        windVec.x * horizontalSpeed * gravityWindScale,
+        gravityStrength,
+        windVec.z * horizontalSpeed * gravityWindScale,
+      )
 
-    // For rain: no rotation - stretched billboard handles orientation automatically
-    // For snow: gentle tumbling is realistic
-    if (type === 'snow' || type === 'ice') {
-      ps.minAngularSpeed = -Math.PI * 0.5
-      ps.maxAngularSpeed = Math.PI * 0.5
-    } else {
-      // Rain doesn't spin - it stretches along velocity via billboard mode
-      ps.minAngularSpeed = 0
-      ps.maxAngularSpeed = 0
-    }
-  }, [windDirToVelocity])
+      // For rain: no rotation - stretched billboard handles orientation automatically
+      // For snow: gentle tumbling is realistic
+      if (type === 'snow' || type === 'ice') {
+        ps.minAngularSpeed = -Math.PI * 0.5
+        ps.maxAngularSpeed = Math.PI * 0.5
+      } else {
+        // Rain doesn't spin - it stretches along velocity via billboard mode
+        ps.minAngularSpeed = 0
+        ps.maxAngularSpeed = 0
+      }
+    },
+    [windDirToVelocity],
+  )
 
   /**
    * Create lightning flash plane if it doesn't exist
@@ -552,15 +562,15 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
     const material = new BABYLON.StandardMaterial('lightningMat', scene)
     material.emissiveColor = new BABYLON.Color3(1, 1, 1)
     material.disableLighting = true
-    material.alpha = 0  // Start invisible
+    material.alpha = 0 // Start invisible
 
     plane.material = material
     plane.isPickable = false
-    plane.renderingGroupId = 2  // Render on top of everything
+    plane.renderingGroupId = 2 // Render on top of everything
 
     // Parent to camera so it always faces the viewer
     plane.parent = camera
-    plane.position = new BABYLON.Vector3(0, 0, 50)  // 50 units in front of camera
+    plane.position = new BABYLON.Vector3(0, 0, 50) // 50 units in front of camera
 
     lightningPlaneRef.current = plane
   }, [scene, camera])
@@ -617,10 +627,7 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
           ls.flashCount++
 
           // Check for multi-flash
-          if (
-            Math.random() < LIGHTNING_MULTI_FLASH_PROBABILITY &&
-            ls.flashCount < LIGHTNING_MULTI_FLASH_MAX
-          ) {
+          if (Math.random() < LIGHTNING_MULTI_FLASH_PROBABILITY && ls.flashCount < LIGHTNING_MULTI_FLASH_MAX) {
             const timeout2 = setTimeout(() => {
               timeouts.delete(timeout2)
               doFlash()
@@ -629,7 +636,8 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
           } else {
             ls.isFlashing = false
             // Schedule next flash
-            ls.nextFlashTime = now + (LIGHTNING_INTERVAL_MIN + Math.random() * (LIGHTNING_INTERVAL_MAX - LIGHTNING_INTERVAL_MIN)) * 1000
+            ls.nextFlashTime =
+              now + (LIGHTNING_INTERVAL_MIN + Math.random() * (LIGHTNING_INTERVAL_MAX - LIGHTNING_INTERVAL_MIN)) * 1000
           }
         }, LIGHTNING_FLASH_DURATION_MS)
         timeouts.add(timeout1)
@@ -653,7 +661,7 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
       if (distance > PARTICLE_PREWARM_JUMP_THRESHOLD) {
         // Large position jump detected - increment counter to trigger effect re-run
         // This disposes and recreates particle systems with pre-warming
-        setRecreateCounter(c => c + 1)
+        setRecreateCounter((c) => c + 1)
       }
     }
     // Update last camera position
@@ -757,11 +765,7 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
       const isSnowType = data.type === 'snow' || data.type === 'ice'
       const emitterHeight = isSnowType ? 30 : 50
 
-      const newPos = new BABYLON.Vector3(
-        camera.position.x,
-        camera.position.y + emitterHeight,
-        camera.position.z
-      )
+      const newPos = new BABYLON.Vector3(camera.position.x, camera.position.y + emitterHeight, camera.position.z)
       data.system.emitter = newPos
 
       // Apply wind effects
@@ -774,7 +778,15 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
 
     // Update lightning
     updateLightning()
-  }, [scene, camera, precipitation.active, precipitation.hasThunderstorm, updateWindState, applyWindToSystem, updateLightning])
+  }, [
+    scene,
+    camera,
+    precipitation.active,
+    precipitation.hasThunderstorm,
+    updateWindState,
+    applyWindToSystem,
+    updateLightning,
+  ])
 
   /**
    * Main effect: create/update/dispose particle systems based on weather
@@ -857,7 +869,7 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
 
     // Track which types we need
     const neededTypes = new Set<string>()
-    precipitation.types.forEach(p => {
+    precipitation.types.forEach((p) => {
       // Map similar types to same particle system
       if (p.type === 'rain' || p.type === 'drizzle' || p.type === 'hail' || p.type === 'unknown') {
         neededTypes.add('rain')
@@ -881,15 +893,13 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
         if (aborted) return
 
         // Determine system key (rain vs snow)
-        const systemKey = (precip.type === 'snow' || precip.type === 'ice') ? 'snow' : 'rain'
+        const systemKey = precip.type === 'snow' || precip.type === 'ice' ? 'snow' : 'rain'
 
         let data = particleSystemsRef.current.get(systemKey)
 
         if (!data) {
           // Create new system asynchronously
-          const system = systemKey === 'snow'
-            ? await createSnowSystemAsync()
-            : await createRainSystemAsync()
+          const system = systemKey === 'snow' ? await createSnowSystemAsync() : await createRainSystemAsync()
 
           // Check abort flag after async operation completes
           if (aborted) {
@@ -908,7 +918,8 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
             // This is what the render loop will use with smoothing
             const rawBaseEmitRate = getBaseEmitRate(precip.type)
             const intensityMult = getIntensityMultiplier(precip.intensity)
-            const effectiveBaseEmitRate = rawBaseEmitRate * intensityMult * precipitation.visibilityFactor * precipitationIntensity
+            const effectiveBaseEmitRate =
+              rawBaseEmitRate * intensityMult * precipitation.visibilityFactor * precipitationIntensity
 
             data = { system, type: precip.type, baseEmitRate: effectiveBaseEmitRate }
             particleSystemsRef.current.set(systemKey, data)
@@ -920,7 +931,8 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
         if (data) {
           // Update emit rate if intensity/visibility changed (already stored in baseEmitRate for new systems)
           const intensityMult = getIntensityMultiplier(precip.intensity)
-          const newEmitRate = getBaseEmitRate(precip.type) * intensityMult * precipitation.visibilityFactor * precipitationIntensity
+          const newEmitRate =
+            getBaseEmitRate(precip.type) * intensityMult * precipitation.visibilityFactor * precipitationIntensity
           // Update stored base rate so render loop uses correct value
           data.baseEmitRate = newEmitRate
           data.system.emitRate = newEmitRate
@@ -984,18 +996,19 @@ export function useBabylonPrecipitation(options: UseBabylonPrecipitationOptions)
     createSnowSystemAsync,
     getBaseEmitRate,
     getIntensityMultiplier,
-    updatePrecipitation
+    updatePrecipitation,
   ])
 
   // Initialize lightning timing
   useEffect(() => {
-    lightningStateRef.current.nextFlashTime = performance.now() +
+    lightningStateRef.current.nextFlashTime =
+      performance.now() +
       (LIGHTNING_INTERVAL_MIN + Math.random() * (LIGHTNING_INTERVAL_MAX - LIGHTNING_INTERVAL_MIN)) * 1000
   }, [])
 
   return {
     particleSystems: particleSystemsRef.current,
-    isActive: particleSystemsRef.current.size > 0
+    isActive: particleSystemsRef.current.size > 0,
   }
 }
 

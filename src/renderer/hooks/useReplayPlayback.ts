@@ -45,9 +45,7 @@ export function useReplayPlayback(): void {
     }
 
     function playbackLoop(timestamp: number) {
-      const deltaMs = lastFrameTimeRef.current > 0
-        ? timestamp - lastFrameTimeRef.current
-        : 16.67 // Assume 60fps for first frame
+      const deltaMs = lastFrameTimeRef.current > 0 ? timestamp - lastFrameTimeRef.current : 16.67 // Assume 60fps for first frame
 
       lastFrameTimeRef.current = timestamp
 

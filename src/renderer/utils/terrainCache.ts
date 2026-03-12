@@ -116,10 +116,11 @@ export async function clearDiskTerrainCache(): Promise<void> {
   const cacheNames = await caches.keys()
 
   // Find terrain-related caches (typically named with 'cesium' or 'terrain')
-  const terrainCaches = cacheNames.filter(name =>
-    name.toLowerCase().includes('cesium') ||
-    name.toLowerCase().includes('terrain') ||
-    name.toLowerCase().includes('tile')
+  const terrainCaches = cacheNames.filter(
+    (name) =>
+      name.toLowerCase().includes('cesium') ||
+      name.toLowerCase().includes('terrain') ||
+      name.toLowerCase().includes('tile'),
   )
 
   for (const cacheName of terrainCaches) {
@@ -133,10 +134,12 @@ export async function clearDiskTerrainCache(): Promise<void> {
 
   let deleted = 0
   for (const request of requests) {
-    if (request.url.includes('terrain') ||
-        request.url.includes('quantized-mesh') ||
-        request.url.includes('cesiumjs.org') ||
-        request.url.includes('cesium.com')) {
+    if (
+      request.url.includes('terrain') ||
+      request.url.includes('quantized-mesh') ||
+      request.url.includes('cesiumjs.org') ||
+      request.url.includes('cesium.com')
+    ) {
       await runtimeCache.delete(request)
       deleted++
     }
@@ -156,10 +159,7 @@ export async function clearDiskTerrainCache(): Promise<void> {
 export async function clearAllTerrainCaches(viewer: Cesium.Viewer): Promise<void> {
   console.log('[TerrainCache] Clearing all terrain caches...')
 
-  await Promise.all([
-    clearTerrainCache(viewer),
-    clearDiskTerrainCache()
-  ])
+  await Promise.all([clearTerrainCache(viewer), clearDiskTerrainCache()])
 
   console.log('[TerrainCache] All terrain caches cleared')
 }

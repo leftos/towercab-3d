@@ -94,27 +94,38 @@ export function VnasPanel() {
 
   const getStateColor = useCallback(() => {
     switch (status.state) {
-      case 'connected': return '#0c7'
+      case 'connected':
+        return '#0c7'
       case 'authenticating':
       case 'connecting':
       case 'joiningSession':
       case 'subscribing':
         return '#fc0'
-      case 'unavailable': return '#666'
-      default: return '#888'
+      case 'unavailable':
+        return '#666'
+      default:
+        return '#888'
     }
   }, [status.state])
 
   const getStateLabel = useCallback(() => {
     switch (status.state) {
-      case 'disconnected': return 'Disconnected'
-      case 'authenticating': return 'Authenticating...'
-      case 'connecting': return 'Connecting...'
-      case 'joiningSession': return 'Joining Session...'
-      case 'subscribing': return 'Subscribing...'
-      case 'connected': return 'Connected'
-      case 'unavailable': return 'Not Available'
-      default: return status.state
+      case 'disconnected':
+        return 'Disconnected'
+      case 'authenticating':
+        return 'Authenticating...'
+      case 'connecting':
+        return 'Connecting...'
+      case 'joiningSession':
+        return 'Joining Session...'
+      case 'subscribing':
+        return 'Subscribing...'
+      case 'connected':
+        return 'Connected'
+      case 'unavailable':
+        return 'Not Available'
+      default:
+        return status.state
     }
   }, [status.state])
 
@@ -169,11 +180,7 @@ export function VnasPanel() {
         )}
 
         {/* Error display */}
-        {status.error && (
-          <div className="vnas-panel-error">
-            {status.error}
-          </div>
-        )}
+        {status.error && <div className="vnas-panel-error">{status.error}</div>}
 
         {/* Controls - only show if feature is available */}
         {status.available && (
@@ -182,20 +189,14 @@ export function VnasPanel() {
               <>
                 <div className="vnas-panel-row">
                   <label>Environment</label>
-                  <select
-                    value={selectedEnv}
-                    onChange={(e) => setSelectedEnv(e.target.value as VnasEnvironment)}
-                  >
+                  <select value={selectedEnv} onChange={(e) => setSelectedEnv(e.target.value as VnasEnvironment)}>
                     <option value="live">Live</option>
                     <option value="sweatbox1">Sweatbox 1</option>
                     <option value="sweatbox2">Sweatbox 2</option>
                   </select>
                 </div>
 
-                <button
-                  className="vnas-panel-button primary"
-                  onClick={handleStartAuth}
-                >
+                <button className="vnas-panel-button primary" onClick={handleStartAuth}>
                   Connect to vNAS
                 </button>
               </>
@@ -223,10 +224,7 @@ export function VnasPanel() {
                   >
                     Submit
                   </button>
-                  <button
-                    className="vnas-panel-button"
-                    onClick={handleCancelAuth}
-                  >
+                  <button className="vnas-panel-button" onClick={handleCancelAuth}>
                     Cancel
                   </button>
                 </div>
@@ -237,18 +235,12 @@ export function VnasPanel() {
               <>
                 {/* Subscribe button if not subscribed to current airport */}
                 {currentAirport?.icao && !isSubscribedTo(currentAirport.icao) && (
-                  <button
-                    className="vnas-panel-button"
-                    onClick={handleSubscribe}
-                  >
+                  <button className="vnas-panel-button" onClick={handleSubscribe}>
                     Subscribe to {currentAirport.icao}
                   </button>
                 )}
 
-                <button
-                  className="vnas-panel-button danger"
-                  onClick={handleDisconnect}
-                >
+                <button className="vnas-panel-button danger" onClick={handleDisconnect}>
                   Disconnect
                 </button>
               </>
@@ -258,9 +250,7 @@ export function VnasPanel() {
 
         {/* Note about OAuth credentials */}
         {status.available && status.state === 'disconnected' && (
-          <div className="vnas-panel-note">
-            Note: Requires OAuth credentials from VATSIM tech team.
-          </div>
+          <div className="vnas-panel-note">Note: Requires OAuth credentials from VATSIM tech team.</div>
         )}
       </div>
     </div>

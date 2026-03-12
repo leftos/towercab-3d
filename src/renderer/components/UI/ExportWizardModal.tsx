@@ -85,7 +85,7 @@ function ExportWizardModal({ onClose }: ExportWizardModalProps) {
       airportCount: airports.size,
       bookmarkCount,
       viewportCount,
-      totalSelections: selectedIds.size
+      totalSelections: selectedIds.size,
     }
   }, [selectedIds])
 
@@ -96,7 +96,7 @@ function ExportWizardModal({ onClose }: ExportWizardModalProps) {
       const data = exportSelectiveData(selectedIds)
       downloadExport(data)
       // Brief delay to show success state
-      await new Promise(resolve => setTimeout(resolve, 500))
+      await new Promise((resolve) => setTimeout(resolve, 500))
       onClose()
     } catch (error) {
       console.error('Export failed:', error)
@@ -108,10 +108,7 @@ function ExportWizardModal({ onClose }: ExportWizardModalProps) {
 
   return (
     <div className="settings-modal-overlay" onClick={onClose}>
-      <div
-        className="settings-modal export-wizard-modal"
-        onClick={e => e.stopPropagation()}
-      >
+      <div className="settings-modal export-wizard-modal" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="settings-header">
           <h2>Export Settings</h2>
@@ -137,9 +134,7 @@ function ExportWizardModal({ onClose }: ExportWizardModalProps) {
         <div className="settings-content">
           {step === 'select' && (
             <div className="export-select-step">
-              <p className="step-description">
-                Choose which settings and airport data to include in the export file.
-              </p>
+              <p className="step-description">Choose which settings and airport data to include in the export file.</p>
               <SettingsTreeView
                 nodes={treeNodes}
                 selectedIds={selectedIds}
@@ -158,7 +153,14 @@ function ExportWizardModal({ onClose }: ExportWizardModalProps) {
                   {summary.localCategoryCount > 0 && (
                     <div className="summary-item">
                       <span className="summary-icon">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <svg
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
                           <path d="M12 2L2 7l10 5 10-5-10-5z" />
                           <path d="M2 17l10 5 10-5" />
                           <path d="M2 12l10 5 10-5" />
@@ -171,7 +173,14 @@ function ExportWizardModal({ onClose }: ExportWizardModalProps) {
                   {summary.globalItemCount > 0 && (
                     <div className="summary-item">
                       <span className="summary-icon">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <svg
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
                           <circle cx="12" cy="12" r="10" />
                           <line x1="2" y1="12" x2="22" y2="12" />
                           <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
@@ -184,7 +193,14 @@ function ExportWizardModal({ onClose }: ExportWizardModalProps) {
                   {summary.airportCount > 0 && (
                     <div className="summary-item">
                       <span className="summary-icon">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <svg
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
                           <path d="M21 16v-2a4 4 0 00-4-4H7a4 4 0 00-4 4v2" />
                           <path d="M12 3v7" />
                           <path d="M7 10l5 3 5-3" />
@@ -197,7 +213,14 @@ function ExportWizardModal({ onClose }: ExportWizardModalProps) {
                   {summary.viewportCount > 0 && (
                     <div className="summary-item">
                       <span className="summary-icon">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <svg
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
                           <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
                           <line x1="8" y1="21" x2="16" y2="21" />
                           <line x1="12" y1="17" x2="12" y2="21" />
@@ -211,14 +234,11 @@ function ExportWizardModal({ onClose }: ExportWizardModalProps) {
               </div>
 
               <p className="export-info">
-                The export file will be saved as <code>towercab-export-{new Date().toISOString().slice(0, 10)}.json</code>
+                The export file will be saved as{' '}
+                <code>towercab-export-{new Date().toISOString().slice(0, 10)}.json</code>
               </p>
 
-              {exportError && (
-                <div className="export-error">
-                  {exportError}
-                </div>
-              )}
+              {exportError && <div className="export-error">{exportError}</div>}
             </div>
           )}
         </div>
@@ -245,14 +265,18 @@ function ExportWizardModal({ onClose }: ExportWizardModalProps) {
               <button className="control-button" onClick={() => setStep('select')}>
                 Back
               </button>
-              <button
-                className="control-button primary"
-                onClick={handleExport}
-                disabled={isExporting}
-              >
+              <button className="control-button primary" onClick={handleExport} disabled={isExporting}>
                 {isExporting ? (
                   <>
-                    <svg className="spinner" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg
+                      className="spinner"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
                       <circle cx="12" cy="12" r="10" opacity="0.25" />
                       <path d="M12 2a10 10 0 0 1 10 10" />
                     </svg>

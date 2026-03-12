@@ -77,7 +77,7 @@ interface CesiumPinchMoveEvent {
 export function useTouchInput(
   viewer: Cesium.Viewer | null,
   viewportId: string,
-  options: UseTouchInputOptions = {}
+  options: UseTouchInputOptions = {},
 ): void {
   const { onBreakTowerFollow, isInputEnabled = true } = options
 
@@ -105,7 +105,7 @@ export function useTouchInput(
   const lastPosRef = useRef({ x: 0, y: 0 })
   const pinchStateRef = useRef<PinchState>({
     isPinching: false,
-    wasMultiTouch: false
+    wasMultiTouch: false,
   })
   // Track accumulated movement to require a threshold before breaking follow
   const accumulatedMovementRef = useRef(0)
@@ -129,14 +129,14 @@ export function useTouchInput(
     // Get current viewport state (fresh each time)
     const getViewportState = () => {
       const state = useViewportStore.getState()
-      const viewport = state.viewports.find(v => v.id === viewportIdRef.current)
+      const viewport = state.viewports.find((v) => v.id === viewportIdRef.current)
       return {
         viewMode: viewport?.cameraState.viewMode ?? '3d',
         heading: viewport?.cameraState.heading ?? 0,
         topdownAltitude: viewport?.cameraState.topdownAltitude ?? 5000,
         followingCallsign: viewport?.cameraState.followingCallsign ?? null,
         followMode: viewport?.cameraState.followMode ?? 'tower',
-        isActive: state.activeViewportId === viewportIdRef.current
+        isActive: state.activeViewportId === viewportIdRef.current,
       }
     }
 
@@ -195,8 +195,11 @@ export function useTouchInput(
         const BREAK_FOLLOW_THRESHOLD = 15
 
         // Break tower follow once we've confirmed intentional single-finger movement
-        if (vpState.followingCallsign && vpState.followMode === 'tower' &&
-            accumulatedMovementRef.current >= BREAK_FOLLOW_THRESHOLD) {
+        if (
+          vpState.followingCallsign &&
+          vpState.followMode === 'tower' &&
+          accumulatedMovementRef.current >= BREAK_FOLLOW_THRESHOLD
+        ) {
           onBreakTowerFollow?.()
         }
       }
@@ -204,7 +207,7 @@ export function useTouchInput(
       if (vpState.viewMode === 'topdown') {
         // Pan in top-down view
         const panScale = vpState.topdownAltitude / 1000
-        const headingRad = vpState.heading * Math.PI / 180
+        const headingRad = (vpState.heading * Math.PI) / 180
         const cosH = Math.cos(headingRad)
         const sinH = Math.sin(headingRad)
         // Rotate delta by heading (inverted for grab-and-drag feel)
@@ -288,7 +291,7 @@ export function useTouchInput(
           }
         } else {
           // 3D view: proportional FOV zoom (pinch out = lower FOV = zoom in)
-          const vp = useViewportStore.getState().viewports.find(v => v.id === viewportIdRef.current)
+          const vp = useViewportStore.getState().viewports.find((v) => v.id === viewportIdRef.current)
           const fovScale = (vp?.cameraState?.fov ?? 60) / 60
           adjustFov(-pinchDelta * pinchSensitivity * 0.3 * fovScale)
         }
@@ -318,7 +321,7 @@ export function useTouchInput(
     moveRight,
     clearLookAtTarget,
     onBreakTowerFollow,
-    isInputEnabled
+    isInputEnabled,
   ])
 }
 

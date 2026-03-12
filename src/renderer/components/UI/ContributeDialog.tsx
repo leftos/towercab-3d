@@ -51,8 +51,8 @@ function ContributeDialog({ data, onClose }: ContributeDialogProps) {
               </code>
             </p>
             <p style={{ marginBottom: '20px', lineHeight: 1.5 }}>
-              Would you like to contribute this position to the project on GitHub?
-              This helps other users get accurate tower positions for {data.icao}.
+              Would you like to contribute this position to the project on GitHub? This helps other users get accurate
+              tower positions for {data.icao}.
             </p>
             <div className="contribute-dialog-buttons">
               <button className="control-button primary" onClick={handleContribute}>

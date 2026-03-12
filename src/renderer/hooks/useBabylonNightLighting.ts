@@ -6,7 +6,7 @@ import {
   BABYLON_NIGHT_HEMISPHERIC_MULT,
   BABYLON_NIGHT_DIRECTIONAL_MULT,
   HEMISPHERIC_LIGHT_INTENSITY,
-  DIRECTIONAL_LIGHT_INTENSITY
+  DIRECTIONAL_LIGHT_INTENSITY,
 } from '@/constants'
 
 /**
@@ -82,7 +82,7 @@ export interface BabylonNightLightingSettings {
 export function useBabylonNightLighting(
   scene: BABYLON.Scene | null,
   sunElevation: number | null,
-  settings: BabylonNightLightingSettings
+  settings: BabylonNightLightingSettings,
 ): void {
   const { enabled } = settings
 

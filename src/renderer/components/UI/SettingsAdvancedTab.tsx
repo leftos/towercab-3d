@@ -17,8 +17,12 @@ function SettingsAdvancedTab() {
   const updateUISettings = useSettingsStore((state) => state.updateUISettings)
 
   // Advanced settings
-  const enableInterpolationDebugLogs = useSettingsStore((state) => state.advanced?.enableInterpolationDebugLogs ?? false)
-  const enableDebugCoordinateOverlay = useSettingsStore((state) => state.advanced?.enableDebugCoordinateOverlay ?? false)
+  const enableInterpolationDebugLogs = useSettingsStore(
+    (state) => state.advanced?.enableInterpolationDebugLogs ?? false,
+  )
+  const enableDebugCoordinateOverlay = useSettingsStore(
+    (state) => state.advanced?.enableDebugCoordinateOverlay ?? false,
+  )
   const enableDynamicDisplayDelay = useSettingsStore((state) => state.advanced?.enableDynamicDisplayDelay ?? true)
   const updateAdvancedSettings = useSettingsStore((state) => state.updateAdvancedSettings)
 
@@ -53,9 +57,8 @@ function SettingsAdvancedTab() {
         alert('Invalid diagnostic file format. Check console for details.')
       }
     } catch (error) {
-      const message = error instanceof SyntaxError
-        ? 'Invalid JSON format'
-        : error instanceof Error ? error.message : 'Unknown error'
+      const message =
+        error instanceof SyntaxError ? 'Invalid JSON format' : error instanceof Error ? error.message : 'Unknown error'
       console.error('[Diagnostic Import] Failed to read file:', error)
       alert(`Failed to read diagnostic file: ${message}`)
     }
@@ -123,9 +126,8 @@ function SettingsAdvancedTab() {
             Dynamic Display Delay
           </label>
           <p className="setting-hint">
-            Automatically adjusts display delay per aircraft based on observation timing.
-            This minimizes latency while ensuring smooth interpolation between positions.
-            Disable to use fixed source-based delays (legacy behavior).
+            Automatically adjusts display delay per aircraft based on observation timing. This minimizes latency while
+            ensuring smooth interpolation between positions. Disable to use fixed source-based delays (legacy behavior).
           </p>
         </div>
       </CollapsibleSection>
@@ -141,8 +143,8 @@ function SettingsAdvancedTab() {
             Enable Interpolation Debug Logs
           </label>
           <p className="setting-hint">
-            Logs detailed interpolation data to the browser console for the followed aircraft.
-            Useful for diagnosing position snapping or timing issues. Open Developer Tools (F12) to view.
+            Logs detailed interpolation data to the browser console for the followed aircraft. Useful for diagnosing
+            position snapping or timing issues. Open Developer Tools (F12) to view.
           </p>
         </div>
 
@@ -156,17 +158,14 @@ function SettingsAdvancedTab() {
             Enable Debug Coordinate Overlay
           </label>
           <p className="setting-hint">
-            Shows a panel with camera coordinates. Click anywhere to copy terrain coordinates to clipboard.
-            Useful for reporting exact locations of terrain flattening issues.
+            Shows a panel with camera coordinates. Click anywhere to copy terrain coordinates to clipboard. Useful for
+            reporting exact locations of terrain flattening issues.
           </p>
         </div>
 
         <div className="setting-item">
           <div className="import-export-buttons">
-            <button
-              className="control-button"
-              onClick={() => diagnosticFileInputRef.current?.click()}
-            >
+            <button className="control-button" onClick={() => diagnosticFileInputRef.current?.click()}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                 <polyline points="17 8 12 3 7 8" />
@@ -183,8 +182,8 @@ function SettingsAdvancedTab() {
             />
           </div>
           <p className="setting-hint">
-            Load a .tc3d-diag file with raw timeline data for debugging.
-            Export with Ctrl+Shift+D or from the Aircraft Timeline modal.
+            Load a .tc3d-diag file with raw timeline data for debugging. Export with Ctrl+Shift+D or from the Aircraft
+            Timeline modal.
           </p>
         </div>
 
@@ -194,11 +193,7 @@ function SettingsAdvancedTab() {
               Viewing diagnostic data
               {importedAppState.airport ? ` (${importedAppState.airport.icao})` : ''}
             </p>
-            <button
-              className="control-button"
-              onClick={clearImportedReplay}
-              style={{ marginTop: '8px' }}
-            >
+            <button className="control-button" onClick={clearImportedReplay} style={{ marginTop: '8px' }}>
               Clear Diagnostic Data
             </button>
           </div>
@@ -226,17 +221,13 @@ function SettingsAdvancedTab() {
           <CollapsibleSection title="Troubleshooting">
             <div className="setting-row">
               <span className="setting-label">Repair Settings Migration</span>
-              <button
-                className="control-button"
-                onClick={handleRepairSettings}
-                disabled={repairStatus === 'running'}
-              >
+              <button className="control-button" onClick={handleRepairSettings} disabled={repairStatus === 'running'}>
                 {repairStatus === 'running' ? 'Repairing...' : 'Repair Settings'}
               </button>
             </div>
             <p className="setting-hint">
-              Settings recovery runs automatically on startup. Use this button to manually
-              re-check if settings are still missing after an upgrade.
+              Settings recovery runs automatically on startup. Use this button to manually re-check if settings are
+              still missing after an upgrade.
             </p>
             {repairResult && (
               <div style={{ marginTop: '8px' }}>

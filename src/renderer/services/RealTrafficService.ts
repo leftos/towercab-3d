@@ -15,7 +15,7 @@ import type {
   RTTrafficResponse,
   RTRawRecord,
   RTParkedTrafficResponse,
-  RTParkedRecord
+  RTParkedRecord,
 } from '../types/realtraffic'
 import type { AircraftState } from '../types/vatsim'
 import {
@@ -24,7 +24,7 @@ import {
   REALTRAFFIC_MAX_RETRIES,
   REALTRAFFIC_RETRY_DELAY,
   FEET_TO_METERS,
-  NM_TO_DEGREES
+  NM_TO_DEGREES,
 } from '../constants/realtraffic'
 import { useAirportStore } from '../stores/airportStore'
 import { geoidService } from './GeoidService'
@@ -124,7 +124,10 @@ class RealTrafficService {
         // Store session info
         this.sessionGuid = result.guid || null
         this.isPro = result.isPro || false
-        this.trafficRateLimit = Math.max(result.trafficRateLimit || REALTRAFFIC_DEFAULT_POLL_INTERVAL, REALTRAFFIC_MIN_POLL_INTERVAL)
+        this.trafficRateLimit = Math.max(
+          result.trafficRateLimit || REALTRAFFIC_DEFAULT_POLL_INTERVAL,
+          REALTRAFFIC_MIN_POLL_INTERVAL,
+        )
         this.weatherRateLimit = result.weatherRateLimit || REALTRAFFIC_DEFAULT_POLL_INTERVAL
 
         return {
@@ -132,7 +135,7 @@ class RealTrafficService {
           guid: result.guid,
           isPro: result.isPro,
           trafficRateLimit: this.trafficRateLimit,
-          weatherRateLimit: this.weatherRateLimit
+          weatherRateLimit: this.weatherRateLimit,
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
@@ -148,7 +151,7 @@ class RealTrafficService {
       const response = await this.fetchWithRetry(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       })
 
       const data: RTAuthResponse = await response.json()
@@ -172,7 +175,7 @@ class RealTrafficService {
         guid: data.GUID,
         isPro,
         trafficRateLimit: this.trafficRateLimit,
-        weatherRateLimit: this.weatherRateLimit
+        weatherRateLimit: this.weatherRateLimit,
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
@@ -196,7 +199,7 @@ class RealTrafficService {
     centerLat: number,
     centerLon: number,
     radiusNm: number,
-    timeOffset: number = 0
+    timeOffset: number = 0,
   ): Promise<TrafficResult> {
     if (!this.sessionGuid) {
       return { success: false, error: 'Not authenticated' }
@@ -205,7 +208,7 @@ class RealTrafficService {
     // Calculate bounding box from center and radius
     // Account for latitude affecting longitude degrees
     const latOffset = radiusNm * NM_TO_DEGREES
-    const lonOffset = radiusNm * NM_TO_DEGREES / Math.cos(centerLat * Math.PI / 180)
+    const lonOffset = (radiusNm * NM_TO_DEGREES) / Math.cos((centerLat * Math.PI) / 180)
 
     const latMin = centerLat - latOffset
     const latMax = centerLat + latOffset
@@ -221,7 +224,7 @@ class RealTrafficService {
           latMax,
           lonMin,
           lonMax,
-          timeOffset: (timeOffset > 0 && this.isPro) ? timeOffset : undefined
+          timeOffset: timeOffset > 0 && this.isPro ? timeOffset : undefined,
         }
 
         const responseText = await invoke<string>('realtraffic_traffic', { params })
@@ -238,7 +241,7 @@ class RealTrafficService {
             this.sessionGuid = null
             return {
               success: false,
-              error: 'Session expired, please re-authenticate'
+              error: 'Session expired, please re-authenticate',
             }
           }
 
@@ -246,7 +249,7 @@ class RealTrafficService {
             success: false,
             error: errorMessage,
             // Return current rate limit so caller doesn't reset to NaN
-            trafficRateLimit: this.trafficRateLimit
+            trafficRateLimit: this.trafficRateLimit,
           }
         }
 
@@ -260,12 +263,12 @@ class RealTrafficService {
 
         // Transform records to AircraftState
         // data.data is Record<hexid, RTRawRecord> where each value is an array
-        const aircraft = Object.values(data.data || {}).map(record => this.transformRecord(record))
+        const aircraft = Object.values(data.data || {}).map((record) => this.transformRecord(record))
 
         return {
           success: true,
           aircraft,
-          trafficRateLimit: this.trafficRateLimit
+          trafficRateLimit: this.trafficRateLimit,
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
@@ -285,14 +288,14 @@ class RealTrafficService {
       lon1: lonMin,
       lat2: latMax,
       lon2: lonMax,
-      toffset: (timeOffset > 0 && this.isPro) ? timeOffset : undefined
+      toffset: timeOffset > 0 && this.isPro ? timeOffset : undefined,
     }
 
     try {
       const response = await this.fetchWithRetry(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       })
 
       if (!response.ok) {
@@ -316,12 +319,12 @@ class RealTrafficService {
 
       // Transform records to AircraftState
       // data.data is Record<hexid, RTRawRecord> where each value is an array
-      const aircraft = Object.values(data.data).map(record => this.transformRecord(record))
+      const aircraft = Object.values(data.data).map((record) => this.transformRecord(record))
 
       return {
         success: true,
         aircraft,
-        trafficRateLimit: this.trafficRateLimit
+        trafficRateLimit: this.trafficRateLimit,
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
@@ -396,7 +399,7 @@ class RealTrafficService {
     // For heading display: use true_heading if available (nose direction),
     // otherwise fall back to track (direction of movement)
     // This is especially important for ground aircraft where heading != track
-    const displayHeading = (true_heading != null && !isNaN(true_heading)) ? true_heading : track
+    const displayHeading = true_heading != null && !isNaN(true_heading) ? true_heading : track
 
     return {
       callsign,
@@ -408,17 +411,17 @@ class RealTrafficService {
       heading: displayHeading, // Use true heading for display when available
       groundTrack: track, // Use ADS-B track for interpolation/extrapolation direction
       trueHeading: true_heading, // Store separately for explicit access
-      trackRate: (track_rate != null && !isNaN(track_rate)) ? track_rate : null,
-      roll: (roll != null && !isNaN(roll)) ? roll : null,
-      baroRate: (baro_rate != null && !isNaN(baro_rate)) ? baro_rate : null,
-      positionAge: (position_age != null && !isNaN(position_age)) ? position_age : null,
+      trackRate: track_rate != null && !isNaN(track_rate) ? track_rate : null,
+      roll: roll != null && !isNaN(roll) ? roll : null,
+      baroRate: baro_rate != null && !isNaN(baro_rate) ? baro_rate : null,
+      positionAge: position_age != null && !isNaN(position_age) ? position_age : null,
       onGround: on_ground,
-      apiTimestamp: (api_timestamp != null && !isNaN(api_timestamp)) ? api_timestamp : null,
+      apiTimestamp: api_timestamp != null && !isNaN(api_timestamp) ? api_timestamp : null,
       transponder: squawk,
       aircraftType: type || null,
       departure: iataToIcao(from_iata),
       arrival: iataToIcao(to_iata),
-      timestamp: Date.now()
+      timestamp: Date.now(),
     }
   }
 
@@ -433,18 +436,14 @@ class RealTrafficService {
    * @param radiusNm - Radius in nautical miles
    * @returns Traffic data result with parked aircraft states
    */
-  async fetchParkedTraffic(
-    centerLat: number,
-    centerLon: number,
-    radiusNm: number
-  ): Promise<TrafficResult> {
+  async fetchParkedTraffic(centerLat: number, centerLon: number, radiusNm: number): Promise<TrafficResult> {
     if (!this.sessionGuid) {
       return { success: false, error: 'Not authenticated' }
     }
 
     // Calculate bounding box from center and radius
     const latOffset = radiusNm * NM_TO_DEGREES
-    const lonOffset = radiusNm * NM_TO_DEGREES / Math.cos(centerLat * Math.PI / 180)
+    const lonOffset = (radiusNm * NM_TO_DEGREES) / Math.cos((centerLat * Math.PI) / 180)
 
     const latMin = centerLat - latOffset
     const latMax = centerLat + latOffset
@@ -459,7 +458,7 @@ class RealTrafficService {
           latMin,
           latMax,
           lonMin,
-          lonMax
+          lonMax,
         }
 
         const responseText = await invoke<string>('realtraffic_parked_traffic', { params })
@@ -475,14 +474,14 @@ class RealTrafficService {
             this.sessionGuid = null
             return {
               success: false,
-              error: 'Session expired, please re-authenticate'
+              error: 'Session expired, please re-authenticate',
             }
           }
 
           return {
             success: false,
             error: errorMessage,
-            trafficRateLimit: this.trafficRateLimit
+            trafficRateLimit: this.trafficRateLimit,
           }
         }
 
@@ -493,13 +492,13 @@ class RealTrafficService {
 
         // Transform parked records to AircraftState
         const aircraft = Object.entries(data.data || {}).map(([hexid, record]) =>
-          this.transformParkedRecord(hexid, record)
+          this.transformParkedRecord(hexid, record),
         )
 
         return {
           success: true,
           aircraft,
-          trafficRateLimit: this.trafficRateLimit
+          trafficRateLimit: this.trafficRateLimit,
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
@@ -518,14 +517,14 @@ class RealTrafficService {
       lat1: latMin,
       lon1: lonMin,
       lat2: latMax,
-      lon2: lonMax
+      lon2: lonMax,
     }
 
     try {
       const response = await this.fetchWithRetry(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       })
 
       if (!response.ok) {
@@ -549,13 +548,13 @@ class RealTrafficService {
 
       // Transform parked records to AircraftState
       const aircraft = Object.entries(data.data || {}).map(([hexid, record]) =>
-        this.transformParkedRecord(hexid, record)
+        this.transformParkedRecord(hexid, record),
       )
 
       return {
         success: true,
         aircraft,
-        trafficRateLimit: this.trafficRateLimit
+        trafficRateLimit: this.trafficRateLimit,
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
@@ -602,13 +601,13 @@ class RealTrafficService {
       baroRate: null,
       positionAge: null,
       onGround: 1, // Always on ground (parked)
-      apiTimestamp: (api_timestamp != null && !isNaN(api_timestamp)) ? api_timestamp : null,
+      apiTimestamp: api_timestamp != null && !isNaN(api_timestamp) ? api_timestamp : null,
       transponder: '',
       aircraftType: type || null,
       departure: departure, // ICAO format from gate_id
       arrival: null,
       timestamp: Date.now(),
-      isParked: true // Flag to identify parked aircraft for culling
+      isParked: true, // Flag to identify parked aircraft for culling
     }
   }
 
@@ -618,7 +617,7 @@ class RealTrafficService {
   private async fetchWithRetry(
     url: string,
     options: RequestInit,
-    retries: number = REALTRAFFIC_MAX_RETRIES
+    retries: number = REALTRAFFIC_MAX_RETRIES,
   ): Promise<Response> {
     let lastError: Error | null = null
 
@@ -655,7 +654,7 @@ class RealTrafficService {
    * Delay helper for retry logic
    */
   private delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms))
+    return new Promise((resolve) => setTimeout(resolve, ms))
   }
 
   // ============================================================================
@@ -731,7 +730,7 @@ class RealTrafficService {
       const response = await fetch('/api/realtraffic/deauth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ guid })
+        body: JSON.stringify({ guid }),
       })
 
       if (response.ok) {

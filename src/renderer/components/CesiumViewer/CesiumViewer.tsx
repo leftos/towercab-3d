@@ -137,7 +137,8 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
   // Performance settings
   const maxFramerate = useSettingsStore((state) => state.graphics.maxFramerate) ?? 60
   // Debug settings
-  const enableDebugCoordinateOverlay = useSettingsStore((state) => state.advanced?.enableDebugCoordinateOverlay) ?? false
+  const enableDebugCoordinateOverlay =
+    useSettingsStore((state) => state.advanced?.enableDebugCoordinateOverlay) ?? false
 
   // Weather store for fog effects, camera position updates, and cloud layers
   const fogDensity = useWeatherStore((state) => state.fogDensity)
@@ -165,10 +166,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
 
   // Viewport store for follow highlighting and view mode (read from this viewport)
   const viewports = useViewportStore((state) => state.viewports)
-  const thisViewport = useMemo(
-    () => viewports.find(v => v.id === viewportId),
-    [viewports, viewportId]
-  )
+  const thisViewport = useMemo(() => viewports.find((v) => v.id === viewportId), [viewports, viewportId])
   const cameraState = thisViewport?.cameraState
   const followingCallsign = cameraState?.followingCallsign ?? null
   const followMode = cameraState?.followMode ?? 'tower'
@@ -200,7 +198,10 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
   let isOrbitModeWithoutAirport = false
 
   // Check if in orbit mode without airport (use followed aircraft as reference)
-  if (isOrbitWithoutAirport(currentAirport, followMode, followingCallsign) && interpolatedAircraft.has(followingCallsign!)) {
+  if (
+    isOrbitWithoutAirport(currentAirport, followMode, followingCallsign) &&
+    interpolatedAircraft.has(followingCallsign!)
+  ) {
     const followedAircraft = interpolatedAircraft.get(followingCallsign!)!
     refLat = followedAircraft.interpolatedLatitude
     refLon = followedAircraft.interpolatedLongitude
@@ -215,7 +216,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
     groundElevationMeters = currentAirport.elevation ? currentAirport.elevation * 0.3048 : 0
     airportElevationFeet = currentAirport.elevation || 0
     // Tower altitude = ground elevation + tower height (convert tower height from meters to feet)
-    refAltitudeFeet = (currentAirport.elevation || 0) + (towerHeight / 0.3048)
+    refAltitudeFeet = (currentAirport.elevation || 0) + towerHeight / 0.3048
   }
 
   // =========================================================================
@@ -241,7 +242,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
     shadowFadingEnabled,
     shadowNormalOffset,
     inMemoryTileCacheSize,
-    modelBrightness: builtinModelBrightness  // Initial pool uses built-in brightness
+    modelBrightness: builtinModelBrightness, // Initial pool uses built-in brightness
   })
 
   // =========================================================================
@@ -253,7 +254,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
     googleMapsApiKey: imagerySettings.googleMapsApiKey,
     cesiumIonToken,
     cesiumAdjustments: imagerySettings.cesiumAdjustments,
-    googleAdjustments: imagerySettings.googleAdjustments
+    googleAdjustments: imagerySettings.googleAdjustments,
   })
 
   // =========================================================================
@@ -275,7 +276,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
     currentAirportIcao: currentAirport?.icao ?? null,
     runways: currentRunways,
     enabled: enableTerrainFlattening,
-    blendDistance: terrainBlendDistance
+    blendDistance: terrainBlendDistance,
   })
 
   // =========================================================================
@@ -297,7 +298,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
     aircraftShadowsOnly,
     shadowDepthBias,
     shadowPolygonOffsetFactor,
-    shadowPolygonOffsetUnits
+    shadowPolygonOffsetUnits,
   })
 
   // =========================================================================
@@ -309,7 +310,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
   // Darken satellite imagery based on sun position
   useCesiumNightDarkening(viewer, sunElevation, {
     enabled: enableNightDarkening && enableLighting, // Only works with lighting enabled
-    intensity: nightDarkeningIntensity
+    intensity: nightDarkeningIntensity,
   })
 
   // =========================================================================
@@ -322,7 +323,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
     if (!viewer || viewer.isDestroyed()) return
 
     // Check if any cloud layer is OVC (coverage >= 0.95)
-    const hasOvcLayer = cloudLayers.some(layer => layer.coverage >= 0.95)
+    const hasOvcLayer = cloudLayers.some((layer) => layer.coverage >= 0.95)
 
     // Toggle Cesium's star rendering
     if (viewer.scene.skyBox) {
@@ -386,10 +387,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
   // Inject terrain data into interpolation system for terrain correction
   // groundElevationMeters is in MSL and will be converted to ellipsoidal in the interpolation system
   useEffect(() => {
-    setInterpolationTerrainData(
-      groundAircraftTerrain,
-      groundElevationMeters
-    )
+    setInterpolationTerrainData(groundAircraftTerrain, groundElevationMeters)
   }, [groundAircraftTerrain, groundElevationMeters])
 
   // =========================================================================
@@ -406,7 +404,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
     followingCallsign,
     groundElevationMeters,
     silhouetteRefs,
-    sunElevation
+    sunElevation,
   )
 
   // =========================================================================
@@ -426,12 +424,12 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
   // =========================================================================
   const babylonOverlay = useBabylonOverlay({
     cesiumViewer: viewer,
-    canvas: babylonCanvas
+    canvas: babylonCanvas,
   })
 
   // Adjust Babylon.js lighting based on sun position
   useBabylonNightLighting(babylonOverlay?.scene ?? null, sunElevation, {
-    enabled: enableNightDarkening && enableLighting
+    enabled: enableNightDarkening && enableLighting,
   })
 
   useCesiumLabels({
@@ -454,8 +452,8 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
     searchQuery,
     filterAirportTraffic,
     isOrbitModeWithoutAirport,
-    groundAircraftTerrain,  // Pass terrain heights for correct label attachment
-    isInset  // Use more restrictive datablock filtering for inset viewports
+    groundAircraftTerrain, // Pass terrain heights for correct label attachment
+    isInset, // Use more restrictive datablock filtering for inset viewports
   })
 
   // =========================================================================
@@ -468,7 +466,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
   // =========================================================================
   useAutoAirportSwitch({
     cameraPosition: viewportId === 'main' ? cameraGeoPosition : null,
-    enabled: viewportId === 'main' && enableAutoAirportSwitch
+    enabled: viewportId === 'main' && enableAutoAirportSwitch,
   })
 
   // Enable weather interpolation when setting is on AND not at a specific airport
@@ -485,7 +483,13 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
       // This prevents interpolated weather from overwriting airport-specific data
       setUseInterpolation(false)
     }
-  }, [enableWeatherInterpolation, showWeatherEffects, currentAirport, setUseInterpolation, startInterpolatedAutoRefresh])
+  }, [
+    enableWeatherInterpolation,
+    showWeatherEffects,
+    currentAirport,
+    setUseInterpolation,
+    startInterpolatedAutoRefresh,
+  ])
 
   // Notify parent when viewer is ready (for VR integration)
   useEffect(() => {
@@ -589,9 +593,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
     // 'match' uses main viewport's maxFramerate setting, otherwise use the explicit value
     // Default to 'match' if maxFramerate field is missing (old settings)
     const insetFramerateSetting = insetGraphics?.maxFramerate ?? 'match'
-    const insetMaxFps = insetFramerateSetting === 'match'
-      ? maxFramerate
-      : insetFramerateSetting
+    const insetMaxFps = insetFramerateSetting === 'match' ? maxFramerate : insetFramerateSetting
     // 0 means unlimited (render every RAF frame)
     const minFrameInterval = insetMaxFps > 0 ? 1000 / insetMaxFps : 0
 
@@ -620,7 +622,9 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
       const now = performance.now()
       if (now - lastFpsLogTime >= 5000) {
         const fps = (renderCount / (now - lastFpsLogTime)) * 1000
-        insetLog(`[Inset FPS] ${fps.toFixed(1)} FPS (${renderCount} frames in ${((now - lastFpsLogTime) / 1000).toFixed(1)}s)`)
+        insetLog(
+          `[Inset FPS] ${fps.toFixed(1)} FPS (${renderCount} frames in ${((now - lastFpsLogTime) / 1000).toFixed(1)}s)`,
+        )
         renderCount = 0
         lastFpsLogTime = now
       }
@@ -685,18 +689,16 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
           // maximumScreenSpaceError: lower = more detail at distance, higher = less detail
           // cacheBytes: higher = more tiles cached in memory
           const qualitySettings = {
-            low: { maxError: 24, cacheBytes: 0 },           // Aggressive LOD reduction, no caching
-            medium: { maxError: 16, cacheBytes: 256 * 1024 * 1024 },  // Default Cesium behavior
-            high: { maxError: 8, cacheBytes: 512 * 1024 * 1024 }      // Keep detail longer
+            low: { maxError: 24, cacheBytes: 0 }, // Aggressive LOD reduction, no caching
+            medium: { maxError: 16, cacheBytes: 256 * 1024 * 1024 }, // Default Cesium behavior
+            high: { maxError: 8, cacheBytes: 512 * 1024 * 1024 }, // Keep detail longer
           }
           const settings = qualitySettings[buildingQuality] || qualitySettings.low
           tileset.cacheBytes = settings.cacheBytes
           tileset.maximumScreenSpaceError = settings.maxError
 
           // Disable building shadows when aircraftShadowsOnly is enabled
-          tileset.shadows = aircraftShadowsOnly
-            ? Cesium.ShadowMode.DISABLED
-            : Cesium.ShadowMode.ENABLED
+          tileset.shadows = aircraftShadowsOnly ? Cesium.ShadowMode.DISABLED : Cesium.ShadowMode.ENABLED
 
           viewer.scene.primitives.add(tileset)
           currentTileset = tileset
@@ -721,9 +723,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
   // Update building shadows when aircraftShadowsOnly changes
   useEffect(() => {
     if (!buildingsTileset) return
-    buildingsTileset.shadows = aircraftShadowsOnly
-      ? Cesium.ShadowMode.DISABLED
-      : Cesium.ShadowMode.ENABLED
+    buildingsTileset.shadows = aircraftShadowsOnly ? Cesium.ShadowMode.DISABLED : Cesium.ShadowMode.ENABLED
   }, [buildingsTileset, aircraftShadowsOnly])
 
   // Setup Babylon root node when airport changes OR when in orbit mode without airport
@@ -763,7 +763,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
         babylonOverlay.setupRootNode(
           interpolated.interpolatedLatitude,
           interpolated.interpolatedLongitude,
-          interpolated.interpolatedAltitude
+          interpolated.interpolatedAltitude,
         )
         rootNodeSetupRef.current = true
 
@@ -771,8 +771,17 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
         setRefPosIfChanged(interpolated.interpolatedLatitude, interpolated.interpolatedLongitude)
       }
     }
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally using specific babylonOverlay properties
-  }, [currentAirport, towerHeight, babylonOverlay.sceneReady, babylonOverlay.setupRootNode, followMode, followingCallsign, interpolatedAircraft, setReferencePosition])
+    // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally using specific babylonOverlay properties
+  }, [
+    currentAirport,
+    towerHeight,
+    babylonOverlay.sceneReady,
+    babylonOverlay.setupRootNode,
+    followMode,
+    followingCallsign,
+    interpolatedAircraft,
+    setReferencePosition,
+  ])
 
   // Sync Babylon overlay and update aircraft on each render frame
   useEffect(() => {
@@ -800,7 +809,9 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
       const primitiveCount = viewer.scene.primitives.length
       const globe = viewer.scene.globe
       // Access tile loading stats via internal surface (may not be available in all Cesium versions)
-      const surface = (globe as unknown as { _surface?: { tileProvider?: { _tilesToRenderByTextureCount?: unknown[] } } })._surface
+      const surface = (
+        globe as unknown as { _surface?: { tileProvider?: { _tilesToRenderByTextureCount?: unknown[] } } }
+      )._surface
       const tilesLoaded = surface?.tileProvider?._tilesToRenderByTextureCount?.length ?? 0
       const tilesLoading = (globe as unknown as { _tilesLoading?: number })._tilesLoading ?? 0
       performanceMonitor.markCesiumPostRender(primitiveCount, tilesLoaded, tilesLoading)
@@ -832,7 +843,8 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
           // Only update state if position changed significantly (~100m threshold)
           // This prevents React re-renders every frame
           const POSITION_THRESHOLD_DEG = 0.001
-          const positionChanged = !cameraGeoPosition ||
+          const positionChanged =
+            !cameraGeoPosition ||
             Math.abs(lat - cameraGeoPosition.lat) > POSITION_THRESHOLD_DEG ||
             Math.abs(lon - cameraGeoPosition.lon) > POSITION_THRESHOLD_DEG
 
@@ -859,7 +871,18 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
       removePreRender()
       removePostRender()
     }
-  }, [viewer, babylonOverlay, showWeatherEffects, enableWeatherInterpolation, enableAutoAirportSwitch, followMode, followingCallsign, currentAirport, updateCameraPosition, cameraGeoPosition])
+  }, [
+    viewer,
+    babylonOverlay,
+    showWeatherEffects,
+    enableWeatherInterpolation,
+    enableAutoAirportSwitch,
+    followMode,
+    followingCallsign,
+    currentAirport,
+    updateCameraPosition,
+    cameraGeoPosition,
+  ])
 
   // Memory diagnostic logging - logs counters every 5 seconds
   useEffect(() => {
@@ -868,31 +891,33 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
     const logMemoryCounters = async () => {
       const counters = getMemoryCounters()
       const babylonMeshes = babylonOverlay.getAircraftCallsigns().length
-      const poolUsed = [...modelPoolRefs.modelPoolAssignments.current.values()].filter(v => v !== null).length
+      const poolUsed = [...modelPoolRefs.modelPoolAssignments.current.values()].filter((v) => v !== null).length
 
       // Get Cesium tile cache size if viewer is available
       const cesiumTileCache = viewer?.scene?.globe?.tileCacheSize ?? 0
 
       // Get service worker cache stats (async but we use last known value to avoid blocking)
-      getServiceWorkerCacheStats().then(stats => { swCacheStats = stats })
+      getServiceWorkerCacheStats().then((stats) => {
+        swCacheStats = stats
+      })
       const cacheSizeMB = (swCacheStats.sizeBytes / (1024 * 1024)).toFixed(1)
 
       // Calculate memory estimate (rough)
       // StandardMaterial: ~2KB, Mesh: ~5KB, GUI Control: ~1KB
-      const estimatedLeakMB = (
-        (counters.materialsCreated - counters.materialsDisposed) * 2 +
-        (counters.meshesCreated - counters.meshesDisposed) * 5 +
-        (counters.guiControlsCreated - counters.guiControlsDisposed) * 1
-      ) / 1024
+      const estimatedLeakMB =
+        ((counters.materialsCreated - counters.materialsDisposed) * 2 +
+          (counters.meshesCreated - counters.meshesDisposed) * 5 +
+          (counters.guiControlsCreated - counters.guiControlsDisposed) * 1) /
+        1024
 
       // Suppress verbose memory logging - only log when leak is significant
       if (estimatedLeakMB > 50) {
         console.warn(
           `[Memory] Potential leak detected: ${estimatedLeakMB.toFixed(2)}MB | ` +
-          `Babylon - Mat: ${counters.materialsCreated - counters.materialsDisposed} Mesh: ${counters.meshesCreated - counters.meshesDisposed} GUI: ${counters.guiControlsCreated - counters.guiControlsDisposed} AC: ${babylonMeshes} | ` +
-          `Cesium - Pool: ${poolUsed}/100 TileCache: ${cesiumTileCache} | ` +
-          `VATSIM: ${pilotsFilteredByDistance}/${totalPilotsFromApi} | ` +
-          `SW Cache: ${swCacheStats.count} tiles ${cacheSizeMB}MB`
+            `Babylon - Mat: ${counters.materialsCreated - counters.materialsDisposed} Mesh: ${counters.meshesCreated - counters.meshesDisposed} GUI: ${counters.guiControlsCreated - counters.guiControlsDisposed} AC: ${babylonMeshes} | ` +
+            `Cesium - Pool: ${poolUsed}/100 TileCache: ${cesiumTileCache} | ` +
+            `VATSIM: ${pilotsFilteredByDistance}/${totalPilotsFromApi} | ` +
+            `SW Cache: ${swCacheStats.count} tiles ${cacheSizeMB}MB`,
         )
       }
     }
@@ -922,8 +947,8 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
         cartographic: {
           latitude: Cesium.Math.toDegrees(cartographic.latitude),
           longitude: Cesium.Math.toDegrees(cartographic.longitude),
-          height: cartographic.height
-        }
+          height: cartographic.height,
+        },
       }
     }
 
@@ -998,7 +1023,17 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
       handler.destroy()
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [viewer, isMeasuring, measurements, pendingPoint, setPendingPoint, setPreviewPoint, completeMeasurement, cancelPendingMeasurement, removeMeasurement])
+  }, [
+    viewer,
+    isMeasuring,
+    measurements,
+    pendingPoint,
+    setPendingPoint,
+    setPreviewPoint,
+    completeMeasurement,
+    cancelPendingMeasurement,
+    removeMeasurement,
+  ])
 
   // Datablock SLEW mode - click on aircraft to move its label position
   const pendingDirection = useDatablockPositionStore((state) => state.pendingDirection)
@@ -1026,7 +1061,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
         const position = Cesium.Cartesian3.fromDegrees(
           aircraft.interpolatedLongitude,
           aircraft.interpolatedLatitude,
-          aircraft.interpolatedAltitude
+          aircraft.interpolatedAltitude,
         )
         const windowPos = Cesium.SceneTransforms.worldToWindowCoordinates(viewer.scene, position)
         if (!windowPos) continue
@@ -1050,16 +1085,14 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
         if (datablockStore.pendingDirection === 5) {
           datablockStore.clearAircraftOverride(callsign)
           const appDefault = useGlobalSettingsStore.getState().display.defaultDatablockDirection
-          useUIFeedbackStore.getState().showFeedback(
-            `${callsign} datablock reset to default (${appDefault})`,
-            'success'
-          )
+          useUIFeedbackStore
+            .getState()
+            .showFeedback(`${callsign} datablock reset to default (${appDefault})`, 'success')
         } else {
           datablockStore.setAircraftPosition(callsign, datablockStore.pendingDirection)
-          useUIFeedbackStore.getState().showFeedback(
-            `${callsign} datablock → position ${datablockStore.pendingDirection}`,
-            'success'
-          )
+          useUIFeedbackStore
+            .getState()
+            .showFeedback(`${callsign} datablock → position ${datablockStore.pendingDirection}`, 'success')
         }
       }
       // Clear pending direction whether we found an aircraft or not
@@ -1071,12 +1104,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
 
   return (
     <div className={`cesium-viewer-container ${isInset ? 'inset' : ''}`} ref={containerRef}>
-      {!isInset && (
-        <DebugCoordinateOverlay
-          viewer={viewer}
-          enabled={enableDebugCoordinateOverlay}
-        />
-      )}
+      {!isInset && <DebugCoordinateOverlay viewer={viewer} enabled={enableDebugCoordinateOverlay} />}
     </div>
   )
 }

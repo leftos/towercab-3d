@@ -14,13 +14,10 @@ const FETCH_TIMEOUT = 10000
 
 /** Dynamic import of Tauri APIs (only available in Tauri mode) */
 async function getTauriApis() {
-  const [pathModule, fsModule] = await Promise.all([
-    import('@tauri-apps/api/path'),
-    import('@tauri-apps/plugin-fs')
-  ])
+  const [pathModule, fsModule] = await Promise.all([import('@tauri-apps/api/path'), import('@tauri-apps/plugin-fs')])
   return {
     resolveResource: pathModule.resolveResource,
-    readTextFile: fsModule.readTextFile
+    readTextFile: fsModule.readTextFile,
   }
 }
 
@@ -48,10 +45,7 @@ async function fetchWithTimeout(url: string, timeout: number): Promise<Response>
  * @param bundledFileName - Name of the bundled file in resources/ (e.g., "airports.json")
  * @returns The data as a string
  */
-export async function loadDataWithFallback(
-  url: string,
-  bundledFileName: string
-): Promise<string> {
+export async function loadDataWithFallback(url: string, bundledFileName: string): Promise<string> {
   // Try fetching fresh data first
   try {
     console.log(`[DataLoader] Fetching fresh data from ${url}...`)
@@ -100,10 +94,7 @@ export async function loadDataWithFallback(
 /**
  * Load JSON data from a URL with fallback to bundled resource
  */
-export async function loadJsonWithFallback<T>(
-  url: string,
-  bundledFileName: string
-): Promise<T> {
+export async function loadJsonWithFallback<T>(url: string, bundledFileName: string): Promise<T> {
   const data = await loadDataWithFallback(url, bundledFileName)
   return JSON.parse(data) as T
 }

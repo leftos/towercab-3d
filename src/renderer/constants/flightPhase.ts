@@ -161,9 +161,9 @@ export const ACCELERATION_HYSTERESIS = {
  */
 export const PHASE_DWELL_TIMES: Record<FlightPhase, number> = {
   // Critical phases - fast confirmation (500-1000ms)
-  short_final: 500,           // Need to see this quickly
-  go_around: 1000,            // Urgent but avoid false positives
-  departure_roll: 800,        // Important for sequencing
+  short_final: 500, // Need to see this quickly
+  go_around: 1000, // Urgent but avoid false positives
+  departure_roll: 800, // Important for sequencing
   landing_roll: 800,
 
   // High priority phases (1000-1500ms)
@@ -191,9 +191,9 @@ export const PHASE_DWELL_TIMES: Record<FlightPhase, number> = {
  * This prevents accidental exit due to momentary data noise.
  */
 export const STICKY_PHASE_EXIT_TIMES: Partial<Record<FlightPhase, number>> = {
-  landing_roll: 5000,      // Stay in landing_roll 5s minimum
-  holding_short: 3000,     // Stay in holding_short 3s minimum
-  departure_roll: 3000,    // Stay in departure_roll 3s minimum
+  landing_roll: 5000, // Stay in landing_roll 5s minimum
+  holding_short: 3000, // Stay in holding_short 3s minimum
+  departure_roll: 3000, // Stay in departure_roll 3s minimum
 }
 
 // ============================================================================

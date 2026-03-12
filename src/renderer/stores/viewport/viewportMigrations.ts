@@ -20,7 +20,7 @@ export const migrateCameraStoreBookmarks = (
     airportViewportConfigs: Record<string, AirportViewportConfig>
   },
   setState: (state: { airportViewportConfigs: Record<string, AirportViewportConfig> }) => void,
-  syncToGlobalSettings: () => void
+  syncToGlobalSettings: () => void,
 ) => {
   const MIGRATION_KEY = 'viewport-store-bookmark-migration-v1'
   if (localStorage.getItem(MIGRATION_KEY)) {
@@ -58,7 +58,7 @@ export const migrateCameraStoreBookmarks = (
         const mainViewport = createMainViewport()
         updatedConfigs[icao] = {
           viewports: [mainViewport],
-          activeViewportId: mainViewport.id
+          activeViewportId: mainViewport.id,
         }
       }
 
@@ -110,7 +110,7 @@ export const migrateToGlobalSettings = (
     globalOrbitSettings: GlobalOrbitSettings
     currentAirportIcao: string | null
   },
-  syncToGlobalSettings: () => void
+  syncToGlobalSettings: () => void,
 ) => {
   // v2 includes mainCamera which wasn't synced in v1
   const MIGRATION_KEY = 'viewport-store-global-migration-v2'

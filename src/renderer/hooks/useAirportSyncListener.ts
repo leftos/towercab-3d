@@ -21,11 +21,11 @@ import { useAirportStore } from '../stores/airportStore'
  * Call this hook once at the app level (e.g., in App.tsx).
  */
 export function useAirportSyncListener(): void {
-  const syncedAirport = useRemoteStatusStore(state => state.syncedAirport)
-  const realtrafficActive = useRemoteStatusStore(state => state.realtrafficActive)
-  const currentAirport = useAirportStore(state => state.currentAirport)
-  const selectAirport = useAirportStore(state => state.selectAirport)
-  const isLoaded = useAirportStore(state => state.isLoaded)
+  const syncedAirport = useRemoteStatusStore((state) => state.syncedAirport)
+  const realtrafficActive = useRemoteStatusStore((state) => state.realtrafficActive)
+  const currentAirport = useAirportStore((state) => state.currentAirport)
+  const selectAirport = useAirportStore((state) => state.selectAirport)
+  const isLoaded = useAirportStore((state) => state.isLoaded)
 
   // Track if this is the initial sync (avoid changing on first load)
   const initialSyncRef = useRef(true)

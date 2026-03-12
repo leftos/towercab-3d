@@ -95,11 +95,11 @@ function addSpeedSampleAndGetAverage(callsign: string, newSpeed: number): number
  */
 function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000 // Earth radius in meters
-  const dLat = (lat2 - lat1) * Math.PI / 180
-  const dLon = (lon2 - lon1) * Math.PI / 180
-  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2)
+  const dLat = ((lat2 - lat1) * Math.PI) / 180
+  const dLon = ((lon2 - lon1) * Math.PI) / 180
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2)
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
   return R * c
 }
@@ -120,11 +120,11 @@ interface VnasStore {
   aircraftStates: Map<string, AircraftState>
 
   // Session info (available facilities from CRC session)
-  sessionFacilities: string[]  // Facility IDs the user can subscribe to
-  sessionArtccId: string | null  // ARTCC ID for the current session
+  sessionFacilities: string[] // Facility IDs the user can subscribe to
+  sessionArtccId: string | null // ARTCC ID for the current session
 
   // Timing
-  lastUpdateTime: number  // Local time of last aircraft update
+  lastUpdateTime: number // Local time of last aircraft update
 
   // Actions
   tryRestoreSession: (environment: VnasEnvironment) => Promise<boolean>
@@ -172,7 +172,7 @@ const DEFAULT_STATUS: VnasStatus = {
   environment: 'live',
   subscribedFacilities: [],
   error: null,
-  available: true  // Assume available until we check
+  available: true, // Assume available until we check
 }
 
 export const useVnasStore = create<VnasStore>((set, get) => ({
@@ -219,11 +219,11 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
     }
 
     // Clear any previous error
-    set(state => ({
+    set((state) => ({
       status: {
         ...state.status,
-        error: null
-      }
+        error: null,
+      },
     }))
 
     try {
@@ -269,11 +269,11 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
     lastProcessedOAuthCallback = null
 
     // Clear any previous error when starting a new auth flow
-    set(state => ({
+    set((state) => ({
       status: {
         ...state.status,
-        error: null
-      }
+        error: null,
+      },
     }))
 
     try {
@@ -282,12 +282,12 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       return authUrl
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      set(state => ({
+      set((state) => ({
         status: {
           ...state.status,
           state: 'disconnected',
-          error: `Auth failed: ${message}`
-        }
+          error: `Auth failed: ${message}`,
+        },
       }))
       throw error
     }
@@ -307,12 +307,12 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       await invoke('vnas_complete_auth')
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      set(state => ({
+      set((state) => ({
         status: {
           ...state.status,
           state: 'disconnected',
-          error: `Auth completion failed: ${message}`
-        }
+          error: `Auth completion failed: ${message}`,
+        },
       }))
       throw error
     }
@@ -339,11 +339,11 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
     console.log('[vNAS] Handling OAuth callback:', callbackUrl)
 
     // Clear any previous error when processing new callback
-    set(state => ({
+    set((state) => ({
       status: {
         ...state.status,
-        error: null
-      }
+        error: null,
+      },
     }))
 
     try {
@@ -365,12 +365,12 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       console.error('[vNAS] OAuth callback failed:', message)
-      set(state => ({
+      set((state) => ({
         status: {
           ...state.status,
           state: 'disconnected',
-          error: `OAuth callback failed: ${message}`
-        }
+          error: `OAuth callback failed: ${message}`,
+        },
       }))
       throw error
     }
@@ -395,12 +395,12 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       set({ status })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      set(state => ({
+      set((state) => ({
         status: {
           ...state.status,
           state: 'disconnected',
-          error: `Connection failed: ${message}`
-        }
+          error: `Connection failed: ${message}`,
+        },
       }))
       throw error
     }
@@ -439,11 +439,11 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       invoke('broadcast_subscriptions', { facilities: status.subscribedFacilities }).catch(() => {})
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      set(state => ({
+      set((state) => ({
         status: {
           ...state.status,
-          error: `Subscription failed: ${message}`
-        }
+          error: `Subscription failed: ${message}`,
+        },
       }))
       throw error
     }
@@ -479,11 +479,11 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       invoke('broadcast_subscriptions', { facilities: status.subscribedFacilities }).catch(() => {})
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      set(state => ({
+      set((state) => ({
         status: {
           ...state.status,
-          error: `Subscription failed: ${message}`
-        }
+          error: `Subscription failed: ${message}`,
+        },
       }))
       throw error
     }
@@ -534,9 +534,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
   isSubscribedTo: (facilityId: string) => {
     const { subscribedFacilities } = get().status
     // Also check without K prefix
-    const strippedId = facilityId.startsWith('K') && facilityId.length === 4
-      ? facilityId.slice(1)
-      : facilityId
+    const strippedId = facilityId.startsWith('K') && facilityId.length === 4 ? facilityId.slice(1) : facilityId
     return subscribedFacilities.includes(facilityId) || subscribedFacilities.includes(strippedId)
   },
 
@@ -557,7 +555,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       set({
         status: DEFAULT_STATUS,
         aircraftStates: new Map(),
-        lastUpdateTime: 0
+        lastUpdateTime: 0,
       })
     } catch (error) {
       console.error('vNAS disconnect failed:', error)
@@ -567,7 +565,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       set({
         status: DEFAULT_STATUS,
         aircraftStates: new Map(),
-        lastUpdateTime: 0
+        lastUpdateTime: 0,
       })
     }
   },
@@ -592,11 +590,9 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
     let calculatedGroundspeed = 0
     if (oldState && oldState.vnasTimestamp) {
       const timeDeltaMs = observationTime - oldState.vnasTimestamp
-      if (timeDeltaMs > 0 && timeDeltaMs < 5000) { // Sanity check: 0-5 seconds
-        const distanceMeters = haversineDistance(
-          oldState.latitude, oldState.longitude,
-          aircraft.lat, aircraft.lon
-        )
+      if (timeDeltaMs > 0 && timeDeltaMs < 5000) {
+        // Sanity check: 0-5 seconds
+        const distanceMeters = haversineDistance(oldState.latitude, oldState.longitude, aircraft.lat, aircraft.lon)
         const metersPerSecond = distanceMeters / (timeDeltaMs / 1000)
         const instantaneousSpeed = metersPerSecondToKnots(metersPerSecond)
 
@@ -616,7 +612,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
     const altitudeMetersEllipsoidal = geoidService.mslToEllipsoidal(
       aircraft.lat,
       aircraft.lon,
-      aircraft.altitudeTrue * FEET_TO_METERS
+      aircraft.altitudeTrue * FEET_TO_METERS,
     )
 
     // Convert vNAS aircraft to AircraftState format
@@ -628,16 +624,16 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       cid: 0, // vNAS doesn't provide CID
       latitude: aircraft.lat,
       longitude: aircraft.lon,
-      altitude: altitudeMetersEllipsoidal,  // Meters ellipsoidal (WGS84)
+      altitude: altitudeMetersEllipsoidal, // Meters ellipsoidal (WGS84)
       groundspeed: calculatedGroundspeed,
       heading: aircraft.trueHeading,
       groundTrack: aircraft.trueGroundTrack, // Use for extrapolation if set
       transponder: '', // Not provided by vNAS
       aircraftType: aircraft.typeCode || null,
       departure: null, // Not provided by vNAS
-      arrival: null,   // Not provided by vNAS
+      arrival: null, // Not provided by vNAS
       timestamp: now + 1000, // Target time (1 second from now for 1Hz updates)
-      vnasTimestamp: observationTime // Actual observation time for groundspeed calculation
+      vnasTimestamp: observationTime, // Actual observation time for groundspeed calculation
     }
 
     // Update state map (used for .has() checks to detect vNAS coverage)
@@ -646,7 +642,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
 
     set({
       aircraftStates: newAircraftStates,
-      lastUpdateTime: now
+      lastUpdateTime: now,
     })
 
     // Feed observation into the unified timeline store
@@ -654,29 +650,29 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
     const observation: AircraftObservation = {
       latitude: aircraft.lat,
       longitude: aircraft.lon,
-      altitude: altitudeMetersEllipsoidal,  // Meters ellipsoidal (WGS84)
+      altitude: altitudeMetersEllipsoidal, // Meters ellipsoidal (WGS84)
       heading: aircraft.trueHeading,
-      groundspeed: calculatedGroundspeed,  // Calculated from position changes
+      groundspeed: calculatedGroundspeed, // Calculated from position changes
       groundTrack: aircraft.trueGroundTrack ?? null,
-      headingIsTrue: true,  // vNAS heading is always reliable (from simulator)
+      headingIsTrue: true, // vNAS heading is always reliable (from simulator)
       // vNAS provides AGL directly from simulator - use it for ground detection
       // Uses hysteresis to prevent oscillation at high-elevation airports
       onGround: getOnGroundWithHysteresis(aircraft.callsign, aircraft.altitudeAgl),
       pitch: null,
       roll: null,
       verticalRate: null,
-      observedAt: observationTime,  // Use Rust-side receive time for accurate timeline
+      observedAt: observationTime, // Use Rust-side receive time for accurate timeline
       receivedAt: now,
       source: 'vnas',
-      displayDelay: SOURCE_DISPLAY_DELAYS.vnas
+      displayDelay: SOURCE_DISPLAY_DELAYS.vnas,
     }
 
     const metadata: AircraftMetadata = {
-      cid: 0,  // vNAS doesn't provide CID
+      cid: 0, // vNAS doesn't provide CID
       aircraftType: aircraft.typeCode || null,
       transponder: '',
       departure: null,
-      arrival: null
+      arrival: null,
     }
 
     timelineStore.addObservation(aircraft.callsign, observation, metadata)
@@ -711,10 +707,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       if (oldState && oldState.vnasTimestamp) {
         const timeDeltaMs = observationTime - oldState.vnasTimestamp
         if (timeDeltaMs > 0 && timeDeltaMs < 5000) {
-          const distanceMeters = haversineDistance(
-            oldState.latitude, oldState.longitude,
-            ac.lat, ac.lon
-          )
+          const distanceMeters = haversineDistance(oldState.latitude, oldState.longitude, ac.lat, ac.lon)
           const metersPerSecond = distanceMeters / (timeDeltaMs / 1000)
           const instantaneousSpeed = metersPerSecondToKnots(metersPerSecond)
           if (instantaneousSpeed > 600) {
@@ -728,11 +721,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       calculatedSpeeds.set(ac.callsign, calculatedGroundspeed)
 
       // Convert vNAS altitude from feet MSL to meters ellipsoidal (WGS84)
-      const altitudeMetersEllipsoidal = geoidService.mslToEllipsoidal(
-        ac.lat,
-        ac.lon,
-        ac.altitudeTrue * FEET_TO_METERS
-      )
+      const altitudeMetersEllipsoidal = geoidService.mslToEllipsoidal(ac.lat, ac.lon, ac.altitudeTrue * FEET_TO_METERS)
       calculatedAltitudes.set(ac.callsign, altitudeMetersEllipsoidal)
 
       const newState: AircraftState = {
@@ -740,7 +729,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
         cid: 0,
         latitude: ac.lat,
         longitude: ac.lon,
-        altitude: altitudeMetersEllipsoidal,  // Meters ellipsoidal (WGS84)
+        altitude: altitudeMetersEllipsoidal, // Meters ellipsoidal (WGS84)
         groundspeed: calculatedGroundspeed,
         heading: ac.trueHeading,
         groundTrack: ac.trueGroundTrack, // Use for extrapolation if set
@@ -749,7 +738,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
         departure: null,
         arrival: null,
         timestamp: now + 1000,
-        vnasTimestamp: observationTime
+        vnasTimestamp: observationTime,
       }
 
       newAircraftStates.set(ac.callsign, newState)
@@ -757,7 +746,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
 
     set({
       aircraftStates: newAircraftStates,
-      lastUpdateTime: now
+      lastUpdateTime: now,
     })
 
     // Feed observations into the unified timeline store
@@ -773,28 +762,28 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       const observation: AircraftObservation = {
         latitude: ac.lat,
         longitude: ac.lon,
-        altitude: calculatedAltitudes.get(ac.callsign) ?? 0,  // Meters ellipsoidal (WGS84)
+        altitude: calculatedAltitudes.get(ac.callsign) ?? 0, // Meters ellipsoidal (WGS84)
         heading: ac.trueHeading,
         groundspeed: calculatedSpeeds.get(ac.callsign) ?? 0,
         groundTrack: ac.trueGroundTrack ?? null,
-        headingIsTrue: true,  // vNAS heading is always reliable (from simulator)
+        headingIsTrue: true, // vNAS heading is always reliable (from simulator)
         // vNAS provides AGL directly from simulator - uses hysteresis to prevent oscillation
         onGround: getOnGroundWithHysteresis(ac.callsign, ac.altitudeAgl),
         pitch: null,
         roll: null,
         verticalRate: null,
-        observedAt: observationTime,  // Use Rust-side receive time for accurate timeline
+        observedAt: observationTime, // Use Rust-side receive time for accurate timeline
         receivedAt: now,
         source: 'vnas',
-        displayDelay: SOURCE_DISPLAY_DELAYS.vnas
+        displayDelay: SOURCE_DISPLAY_DELAYS.vnas,
       }
 
       const metadata: AircraftMetadata = {
-        cid: 0,  // vNAS doesn't provide CID
+        cid: 0, // vNAS doesn't provide CID
         aircraftType: ac.typeCode || null,
         transponder: '',
         departure: null,
-        arrival: null
+        arrival: null,
       }
 
       observationBatch.push({ callsign: ac.callsign, observation, metadata })
@@ -837,11 +826,11 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
     try {
       const { invoke } = await import('@tauri-apps/api/core')
       const available = await invoke<boolean>('vnas_is_available')
-      set(state => ({
+      set((state) => ({
         status: {
           ...state.status,
-          available
-        }
+          available,
+        },
       }))
       return available
     } catch (error) {
@@ -878,10 +867,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
    */
   isAuthenticated: (): boolean => {
     const state = get().status.state
-    return state === 'connecting' ||
-           state === 'joiningSession' ||
-           state === 'subscribing' ||
-           state === 'connected'
+    return state === 'connecting' || state === 'joiningSession' || state === 'subscribing' || state === 'connected'
   },
 
   /**
@@ -958,9 +944,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
   canSubscribeTo: (icaoCode: string): boolean => {
     const { sessionFacilities } = get()
     // Session facilities use vNAS format (no K prefix), so check both
-    const facilityId = icaoCode.startsWith('K') && icaoCode.length === 4
-      ? icaoCode.slice(1)
-      : icaoCode
+    const facilityId = icaoCode.startsWith('K') && icaoCode.length === 4 ? icaoCode.slice(1) : icaoCode
     return sessionFacilities.includes(facilityId) || sessionFacilities.includes(icaoCode)
   },
 
@@ -975,11 +959,11 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
    * Update just the state field of the status (avoids race conditions with snapshots).
    */
   setStateOnly: (state: VnasStatus['state']) => {
-    set(store => ({
+    set((store) => ({
       status: {
         ...store.status,
-        state
-      }
+        state,
+      },
     }))
   },
 
@@ -987,11 +971,11 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
    * Set error message.
    */
   setError: (error: string | null) => {
-    set(state => ({
+    set((state) => ({
       status: {
         ...state.status,
-        error
-      }
+        error,
+      },
     }))
   },
 
@@ -999,11 +983,11 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
    * Set subscribed facilities (used by remote mode to sync from host).
    */
   setSubscribedFacilities: (facilities: string[]) => {
-    set(state => ({
+    set((state) => ({
       status: {
         ...state.status,
-        subscribedFacilities: facilities
-      }
+        subscribedFacilities: facilities,
+      },
     }))
   },
 
@@ -1036,7 +1020,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
     console.log(`[vNAS] Removed aircraft: ${callsign}`)
 
     set({
-      aircraftStates: newAircraftStates
+      aircraftStates: newAircraftStates,
     })
-  }
+  },
 }))

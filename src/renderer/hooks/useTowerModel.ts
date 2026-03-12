@@ -39,10 +39,7 @@ interface UseTowerModelOptions {
  * @param viewer - Cesium viewer instance (null during initialization)
  * @param options - Configuration options
  */
-export function useTowerModel(
-  viewer: Cesium.Viewer | null,
-  options: UseTowerModelOptions = {}
-): void {
+export function useTowerModel(viewer: Cesium.Viewer | null, options: UseTowerModelOptions = {}): void {
   const { enabled = true } = options
 
   // Get current airport from store
@@ -112,14 +109,11 @@ export function useTowerModel(
       height: placement.height,
       rotation: placement.rotation,
       source: placement.source,
-      scale
+      scale,
     })
 
     // Sample terrain height at tower position
-    const terrainPosition = Cesium.Cartographic.fromDegrees(
-      placement.lon,
-      placement.lat
-    )
+    const terrainPosition = Cesium.Cartographic.fromDegrees(placement.lon, placement.lat)
 
     Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, [terrainPosition])
       .then((sampledPositions) => {
@@ -137,15 +131,11 @@ export function useTowerModel(
         console.log(`[useTowerModel] Terrain sampled for ${icao}:`, {
           terrainHeight,
           placementHeight: placement.height,
-          finalHeight
+          finalHeight,
         })
 
         // Create position cartesian
-        const position = Cesium.Cartesian3.fromDegrees(
-          placement.lon,
-          placement.lat,
-          finalHeight
-        )
+        const position = Cesium.Cartesian3.fromDegrees(placement.lon, placement.lat, finalHeight)
 
         // Create heading/pitch/roll with rotation from placement
         const heading = Cesium.Math.toRadians(placement.rotation)
@@ -167,7 +157,7 @@ export function useTowerModel(
           url: modelUrl,
           modelMatrix,
           show: true,
-          shadows: Cesium.ShadowMode.ENABLED
+          shadows: Cesium.ShadowMode.ENABLED,
         })
           .then((model) => {
             // Verify we're still loading the same airport and viewer is valid
@@ -198,11 +188,7 @@ export function useTowerModel(
           return
         }
 
-        const position = Cesium.Cartesian3.fromDegrees(
-          placement.lon,
-          placement.lat,
-          placement.height
-        )
+        const position = Cesium.Cartesian3.fromDegrees(placement.lon, placement.lat, placement.height)
 
         const heading = Cesium.Math.toRadians(placement.rotation)
         const hpr = new Cesium.HeadingPitchRoll(heading, 0, 0)
@@ -217,7 +203,7 @@ export function useTowerModel(
           url: modelUrl,
           modelMatrix,
           show: true,
-          shadows: Cesium.ShadowMode.ENABLED
+          shadows: Cesium.ShadowMode.ENABLED,
         })
           .then((model) => {
             if (loadingIcaoRef.current !== icao || viewer.isDestroyed()) {
@@ -297,11 +283,7 @@ export function useTowerModel(
       const finalHeight = terrainHeightRef.current + newPos.height
 
       // Create new position
-      const position = Cesium.Cartesian3.fromDegrees(
-        newPos.lon,
-        newPos.lat,
-        finalHeight
-      )
+      const position = Cesium.Cartesian3.fromDegrees(newPos.lon, newPos.lat, finalHeight)
 
       // Create heading/pitch/roll
       const heading = Cesium.Math.toRadians(newPos.rotation)

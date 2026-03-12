@@ -249,7 +249,7 @@ interface UseAircraftFilteringOptions {
  */
 export function useAircraftFiltering(
   interpolatedAircraft: Map<string, InterpolatedAircraftState>,
-  options?: UseAircraftFilteringOptions
+  options?: UseAircraftFilteringOptions,
 ): FilteredAircraftResult {
   const includeFollowedRegardlessOfDistance = options?.includeFollowedRegardlessOfDistance ?? false
 
@@ -292,184 +292,184 @@ export function useAircraftFiltering(
   // This is intentional - no useMemo - to ensure smooth aircraft movement
   // The interpolatedAircraft Map is mutated every frame, so we read from it directly
   // Determine reference point for distance calculations
-    let refLat: number | undefined
-    let refLon: number | undefined
-    let refElevationMeters = 0
-    let refAltitudeFeet: number | undefined
-    let isOrbitModeWithoutAirport = false
+  let refLat: number | undefined
+  let refLon: number | undefined
+  let refElevationMeters = 0
+  let refAltitudeFeet: number | undefined
+  let isOrbitModeWithoutAirport = false
 
-    // Check if in orbit mode without airport (use followed aircraft as reference)
-    if (isOrbitWithoutAirport(currentAirport, followMode, followingCallsign) && interpolatedAircraft.has(followingCallsign!)) {
-      const followedAircraft = interpolatedAircraft.get(followingCallsign!)!
-      refLat = followedAircraft.interpolatedLatitude
-      refLon = followedAircraft.interpolatedLongitude
-      refElevationMeters = followedAircraft.interpolatedAltitude  // Already in METERS
-      refAltitudeFeet = followedAircraft.interpolatedAltitude
-      isOrbitModeWithoutAirport = true
-    } else if (currentAirport) {
-      // Normal mode: use tower position
-      const towerPos = getTowerPosition(currentAirport, towerHeight, customTowerPosition ?? undefined)
-      refLat = towerPos.latitude
-      refLon = towerPos.longitude
-      refElevationMeters = currentAirport.elevation ? currentAirport.elevation * 0.3048 : 0
-      // Tower altitude = ground elevation + tower height (convert tower height from meters to feet)
-      refAltitudeFeet = (currentAirport.elevation || 0) + (towerHeight / 0.3048)
+  // Check if in orbit mode without airport (use followed aircraft as reference)
+  if (
+    isOrbitWithoutAirport(currentAirport, followMode, followingCallsign) &&
+    interpolatedAircraft.has(followingCallsign!)
+  ) {
+    const followedAircraft = interpolatedAircraft.get(followingCallsign!)!
+    refLat = followedAircraft.interpolatedLatitude
+    refLon = followedAircraft.interpolatedLongitude
+    refElevationMeters = followedAircraft.interpolatedAltitude // Already in METERS
+    refAltitudeFeet = followedAircraft.interpolatedAltitude
+    isOrbitModeWithoutAirport = true
+  } else if (currentAirport) {
+    // Normal mode: use tower position
+    const towerPos = getTowerPosition(currentAirport, towerHeight, customTowerPosition ?? undefined)
+    refLat = towerPos.latitude
+    refLon = towerPos.longitude
+    refElevationMeters = currentAirport.elevation ? currentAirport.elevation * 0.3048 : 0
+    // Tower altitude = ground elevation + tower height (convert tower height from meters to feet)
+    refAltitudeFeet = (currentAirport.elevation || 0) + towerHeight / 0.3048
+  }
+
+  // If no reference point available, return empty result
+  if (refLat === undefined || refLon === undefined || refAltitudeFeet === undefined) {
+    return {
+      filtered: [],
+      referencePoint: null,
+      isOrbitModeWithoutAirport: false,
+      stats: {
+        total: 0,
+        afterDistance: 0,
+        afterTrafficType: 0,
+        afterWeather: 0,
+        afterSearch: 0,
+        afterAirport: 0,
+      },
     }
+  }
 
-    // If no reference point available, return empty result
-    if (refLat === undefined || refLon === undefined || refAltitudeFeet === undefined) {
-      return {
-        filtered: [],
-        referencePoint: null,
-        isOrbitModeWithoutAirport: false,
-        stats: {
-          total: 0,
-          afterDistance: 0,
-          afterTrafficType: 0,
-          afterWeather: 0,
-          afterSearch: 0,
-          afterAirport: 0
-        }
-      }
+  const cameraAltitudeMeters = refElevationMeters + towerHeight
+  const airportIcao = currentAirport?.icao?.toUpperCase()
+  const query = searchQuery.toLowerCase().trim()
+
+  // Stats tracking
+  const stats = {
+    total: interpolatedAircraft.size,
+    afterDistance: 0,
+    afterTrafficType: 0,
+    afterWeather: 0,
+    afterSearch: 0,
+    afterAirport: 0,
+  }
+
+  // Calculate distance for all aircraft
+  const withDistance: FilteredAircraftWithDistance[] = Array.from(interpolatedAircraft.values()).map((aircraft) => ({
+    ...aircraft,
+    distance: calculateDistanceNM(
+      refLat!,
+      refLon!,
+      aircraft.interpolatedLatitude,
+      aircraft.interpolatedLongitude,
+      refAltitudeFeet!,
+      aircraft.interpolatedAltitude,
+    ),
+  }))
+
+  // Filter 1: Distance
+  let filtered = withDistance.filter((aircraft) => {
+    // Always include followed aircraft if option enabled
+    if (includeFollowedRegardlessOfDistance && aircraft.callsign === followingCallsign) {
+      return true
     }
+    return aircraft.distance <= labelVisibilityDistance
+  })
+  stats.afterDistance = filtered.length
 
-    const cameraAltitudeMeters = refElevationMeters + towerHeight
-    const airportIcao = currentAirport?.icao?.toUpperCase()
-    const query = searchQuery.toLowerCase().trim()
-
-    // Stats tracking
-    const stats = {
-      total: interpolatedAircraft.size,
-      afterDistance: 0,
-      afterTrafficType: 0,
-      afterWeather: 0,
-      afterSearch: 0,
-      afterAirport: 0
-    }
-
-    // Calculate distance for all aircraft
-    const withDistance: FilteredAircraftWithDistance[] = Array.from(interpolatedAircraft.values()).map(
-      (aircraft) => ({
-        ...aircraft,
-        distance: calculateDistanceNM(
-          refLat!,
-          refLon!,
-          aircraft.interpolatedLatitude,
-          aircraft.interpolatedLongitude,
-          refAltitudeFeet!,
-          aircraft.interpolatedAltitude
-        )
-      })
-    )
-
-    // Filter 1: Distance
-    let filtered = withDistance.filter((aircraft) => {
-      // Always include followed aircraft if option enabled
-      if (includeFollowedRegardlessOfDistance && aircraft.callsign === followingCallsign) {
-        return true
-      }
-      return aircraft.distance <= labelVisibilityDistance
+  // Filter 2: Ground/Airborne traffic type
+  // In orbit mode without airport, show all traffic types
+  if (!isOrbitModeWithoutAirport) {
+    filtered = filtered.filter((aircraft) => {
+      // Use groundspeed to determine airborne status (consistent with positioning logic)
+      const isAirborne = aircraft.interpolatedGroundspeed >= GROUNDSPEED_THRESHOLD_KNOTS
+      if (isAirborne && !showAirborneTraffic) return false
+      if (!isAirborne && !showGroundTraffic) return false
+      return true
     })
-    stats.afterDistance = filtered.length
+  }
+  stats.afterTrafficType = filtered.length
 
-    // Filter 2: Ground/Airborne traffic type
-    // In orbit mode without airport, show all traffic types
-    if (!isOrbitModeWithoutAirport) {
-      filtered = filtered.filter((aircraft) => {
-        // Use groundspeed to determine airborne status (consistent with positioning logic)
-        const isAirborne = aircraft.interpolatedGroundspeed >= GROUNDSPEED_THRESHOLD_KNOTS
-        if (isAirborne && !showAirborneTraffic) return false
-        if (!isAirborne && !showGroundTraffic) return false
-        return true
-      })
-    }
-    stats.afterTrafficType = filtered.length
+  // Filter 3: Weather visibility (if enabled)
+  if (filterWeatherVisibility && showWeatherEffects) {
+    filtered = filtered.filter((aircraft) => {
+      const aircraftAltitudeMeters = aircraft.interpolatedAltitude // Already in METERS
+      const horizontalDistanceMeters = aircraft.distance * 1852 // NM to meters
 
-    // Filter 3: Weather visibility (if enabled)
-    if (filterWeatherVisibility && showWeatherEffects) {
-      filtered = filtered.filter((aircraft) => {
-        const aircraftAltitudeMeters = aircraft.interpolatedAltitude  // Already in METERS
-        const horizontalDistanceMeters = aircraft.distance * 1852 // NM to meters
-
-        // Check visibility range (surface visibility culling)
-        if (currentMetar && showCesiumFog) {
-          // Apply visibilityScale: 1.0 = match METAR, 2.0 = see twice as far
-          const visibilityMeters = currentMetar.visib * 1609.34 * visibilityScale // SM to meters, scaled
-          if (horizontalDistanceMeters > visibilityMeters) {
-            return false
-          }
+      // Check visibility range (surface visibility culling)
+      if (currentMetar && showCesiumFog) {
+        // Apply visibilityScale: 1.0 = match METAR, 2.0 = see twice as far
+        const visibilityMeters = currentMetar.visib * 1609.34 * visibilityScale // SM to meters, scaled
+        if (horizontalDistanceMeters > visibilityMeters) {
+          return false
         }
+      }
 
-        // Check cloud ceiling culling
-        // Only cull if clouds are enabled and we have cloud data
-        // Skip cloud culling in top-down view - clouds don't visually obscure in this mode
-        if (showClouds && cloudLayers.length > 0 && !isTopDown) {
-          const lowerAlt = Math.min(cameraAltitudeMeters, aircraftAltitudeMeters)
-          const higherAlt = Math.max(cameraAltitudeMeters, aircraftAltitudeMeters)
+      // Check cloud ceiling culling
+      // Only cull if clouds are enabled and we have cloud data
+      // Skip cloud culling in top-down view - clouds don't visually obscure in this mode
+      if (showClouds && cloudLayers.length > 0 && !isTopDown) {
+        const lowerAlt = Math.min(cameraAltitudeMeters, aircraftAltitudeMeters)
+        const higherAlt = Math.max(cameraAltitudeMeters, aircraftAltitudeMeters)
 
-          // Check if any BKN (0.75) or OVC (1.0) layer is between camera and aircraft
-          for (const layer of cloudLayers) {
-            // BKN = 0.75, OVC = 1.0 - these are "ceilings" that block visibility
-            if (layer.coverage >= 0.75) {
-              // Check if this ceiling is between camera and aircraft
-              if (layer.altitude > lowerAlt && layer.altitude < higherAlt) {
-                return false
-              }
+        // Check if any BKN (0.75) or OVC (1.0) layer is between camera and aircraft
+        for (const layer of cloudLayers) {
+          // BKN = 0.75, OVC = 1.0 - these are "ceilings" that block visibility
+          if (layer.coverage >= 0.75) {
+            // Check if this ceiling is between camera and aircraft
+            if (layer.altitude > lowerAlt && layer.altitude < higherAlt) {
+              return false
             }
           }
         }
+      }
 
-        return true
-      })
-    }
-    stats.afterWeather = filtered.length
+      return true
+    })
+  }
+  stats.afterWeather = filtered.length
 
-    // Filter 4: Search query (if not empty)
-    if (query) {
-      filtered = filtered.filter(
-        (aircraft) =>
-          aircraft.callsign.toLowerCase().includes(query) ||
-          aircraft.aircraftType?.toLowerCase().includes(query) ||
-          aircraft.departure?.toLowerCase().includes(query) ||
-          aircraft.arrival?.toLowerCase().includes(query)
-      )
-    }
-    stats.afterSearch = filtered.length
+  // Filter 4: Search query (if not empty)
+  if (query) {
+    filtered = filtered.filter(
+      (aircraft) =>
+        aircraft.callsign.toLowerCase().includes(query) ||
+        aircraft.aircraftType?.toLowerCase().includes(query) ||
+        aircraft.departure?.toLowerCase().includes(query) ||
+        aircraft.arrival?.toLowerCase().includes(query),
+    )
+  }
+  stats.afterSearch = filtered.length
 
-    // Filter 5: Airport traffic (if enabled)
-    if (filterAirportTraffic && airportIcao) {
-      filtered = filtered.filter(
-        (aircraft) =>
-          aircraft.departure?.toUpperCase() === airportIcao ||
-          aircraft.arrival?.toUpperCase() === airportIcao
-      )
-    }
-    stats.afterAirport = filtered.length
+  // Filter 5: Airport traffic (if enabled)
+  if (filterAirportTraffic && airportIcao) {
+    filtered = filtered.filter(
+      (aircraft) =>
+        aircraft.departure?.toUpperCase() === airportIcao || aircraft.arrival?.toUpperCase() === airportIcao,
+    )
+  }
+  stats.afterAirport = filtered.length
 
-    // Sort by: active aircraft first (by distance), then parked aircraft (by distance)
-    // This ensures active aircraft get priority when hitting maxAircraftDisplay limit
-    const sorted = filtered
-      .sort((a, b) => {
-        // Active aircraft come before parked
-        const aParked = a.isParked ?? false
-        const bParked = b.isParked ?? false
-        if (aParked !== bParked) {
-          return aParked ? 1 : -1  // Non-parked first
-        }
-        // Within same category, sort by distance
-        return a.distance - b.distance
-      })
-      .slice(0, maxAircraftDisplay)
+  // Sort by: active aircraft first (by distance), then parked aircraft (by distance)
+  // This ensures active aircraft get priority when hitting maxAircraftDisplay limit
+  const sorted = filtered
+    .sort((a, b) => {
+      // Active aircraft come before parked
+      const aParked = a.isParked ?? false
+      const bParked = b.isParked ?? false
+      if (aParked !== bParked) {
+        return aParked ? 1 : -1 // Non-parked first
+      }
+      // Within same category, sort by distance
+      return a.distance - b.distance
+    })
+    .slice(0, maxAircraftDisplay)
 
-    return {
-      filtered: sorted,
-      referencePoint: {
-        lat: refLat,
-        lon: refLon,
-        altitudeFeet: refAltitudeFeet,
-        elevationMeters: refElevationMeters
-      },
-      isOrbitModeWithoutAirport,
-      stats
-    }
+  return {
+    filtered: sorted,
+    referencePoint: {
+      lat: refLat,
+      lon: refLon,
+      altitudeFeet: refAltitudeFeet,
+      elevationMeters: refElevationMeters,
+    },
+    isOrbitModeWithoutAirport,
+    stats,
+  }
 }

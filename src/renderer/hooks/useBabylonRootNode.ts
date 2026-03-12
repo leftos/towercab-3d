@@ -213,9 +213,7 @@ interface UseBabylonRootNodeOptions {
  * @see useBabylonCameraSync - For camera synchronization using ENU transforms
  * @see useBabylonOverlay - Primary consumer of this hook for aircraft positioning
  */
-export function useBabylonRootNode({
-  scene
-}: UseBabylonRootNodeOptions): UseBabylonRootNodeResult {
+export function useBabylonRootNode({ scene }: UseBabylonRootNodeOptions): UseBabylonRootNodeResult {
   // Root transform node positioned at ENU origin (tower location)
   const rootNodeRef = useRef<BABYLON.TransformNode | null>(null)
 
@@ -256,7 +254,7 @@ export function useBabylonRootNode({
       const rootNode = new BABYLON.TransformNode('RootNode', scene)
       rootNodeRef.current = rootNode
     },
-    [scene]
+    [scene],
   )
 
   /**
@@ -284,7 +282,7 @@ export function useBabylonRootNode({
     rootNode: rootNodeRef.current,
     setupRootNode,
     getEnuToFixed,
-    getFixedToEnu
+    getFixedToEnu,
   }
 }
 

@@ -131,7 +131,7 @@ export interface AircraftState {
   cid: number
   latitude: number
   longitude: number
-  altitude: number        // Altitude in METERS ellipsoidal (WGS84) - converted from MSL via GeoidService
+  altitude: number // Altitude in METERS ellipsoidal (WGS84) - converted from MSL via GeoidService
   groundspeed: number
   heading: number
   /**
@@ -208,14 +208,14 @@ export interface InterpolatedAircraftState extends AircraftState {
   // Interpolated values for smooth rendering
   interpolatedLatitude: number
   interpolatedLongitude: number
-  interpolatedAltitude: number  // Interpolated altitude in METERS ellipsoidal (WGS84)
+  interpolatedAltitude: number // Interpolated altitude in METERS ellipsoidal (WGS84)
   interpolatedHeading: number
   interpolatedGroundspeed: number
   // Emulated orientation (derived from physics)
-  interpolatedPitch: number     // Degrees, positive = nose up
-  interpolatedRoll: number      // Degrees, positive = right wing down
-  verticalRate: number          // Vertical rate in METERS/MINUTE
-  turnRate: number              // degrees/sec
+  interpolatedPitch: number // Degrees, positive = nose up
+  interpolatedRoll: number // Degrees, positive = right wing down
+  verticalRate: number // Vertical rate in METERS/MINUTE
+  turnRate: number // degrees/sec
   /**
    * On-ground flag from authoritative source data (vNAS AGL < 50ft, ADS-B ground bit).
    * - true = source confirms aircraft is on ground

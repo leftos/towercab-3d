@@ -22,17 +22,10 @@ export type {
   MeshBounds,
   ExtendedNodeData,
   ModelGroundData,
-  ModelWingData
+  ModelWingData,
 } from './gltf'
 
-import type {
-  Animation,
-  AnimationTrack,
-  AnimationSet,
-  NodeData,
-  ModelGroundData,
-  ModelWingData
-} from './gltf'
+import type { Animation, AnimationTrack, AnimationSet, NodeData, ModelGroundData, ModelWingData } from './gltf'
 
 import {
   getKeysAtTime,
@@ -40,7 +33,7 @@ import {
   computeMinYAtGearState,
   parseGroundDataGltf1,
   computeWingData,
-  parseWingDataGltf1
+  parseWingDataGltf1,
 } from './gltf'
 
 // =============================================================================
@@ -101,7 +94,6 @@ const pendingWingDataParses = new Map<string, Promise<ModelWingData | null>>()
 
 /** URLs that failed to fetch for wing data */
 const failedWingDataUrls = new Set<string>()
-
 
 // =============================================================================
 // Animation Set Parsing
@@ -225,7 +217,7 @@ function parseNodes(gltfJson: any): Map<string, NodeData> {
       rotation,
       scale,
       invRotation: invQuat,
-      invRotationMatrix: invMatrix
+      invRotationMatrix: invMatrix,
     })
   }
 
@@ -260,7 +252,7 @@ function parseAnimations(gltfJson: any, binData: ArrayBuffer): Animation[] {
         tracks.set(nodeName, {
           translationKeys: [],
           rotationKeys: [],
-          scaleKeys: []
+          scaleKeys: [],
         })
       }
       const track = tracks.get(nodeName)!
@@ -279,10 +271,9 @@ function parseAnimations(gltfJson: any, binData: ArrayBuffer): Animation[] {
       const outputBufferView = gltfJson.bufferViews[outputAccessor.bufferView]
       const outputOffset = (outputBufferView.byteOffset || 0) + (outputAccessor.byteOffset || 0)
       const componentCount = outputAccessor.type === 'VEC3' ? 3 : 4
-      const outputData = new Float32Array(binData.slice(
-        outputOffset,
-        outputOffset + outputAccessor.count * componentCount * 4
-      ))
+      const outputData = new Float32Array(
+        binData.slice(outputOffset, outputOffset + outputAccessor.count * componentCount * 4),
+      )
 
       // Build keyframes
       for (let j = 0; j < inputAccessor.count; j++) {
@@ -328,12 +319,10 @@ export function applyAnimationPercent(
   model: Cesium.Model,
   animationSet: AnimationSet,
   animationName: string,
-  percent: number
+  percent: number,
 ): boolean {
   // Find matching animation
-  const animation = animationSet.animations.find(a =>
-    a.name.toUpperCase().includes(animationName.toUpperCase())
-  )
+  const animation = animationSet.animations.find((a) => a.name.toUpperCase().includes(animationName.toUpperCase()))
 
   if (!animation) {
     return false
@@ -369,7 +358,7 @@ export function applyAnimationPercent(
         translation = new Cesium.Cartesian3(
           k0.value[0] - nodeData.translation[0],
           k0.value[1] - nodeData.translation[1],
-          k0.value[2] - nodeData.translation[2]
+          k0.value[2] - nodeData.translation[2],
         )
       } else {
         const t = (targetTime - k0.time) / (k1.time - k0.time)
@@ -379,7 +368,7 @@ export function applyAnimationPercent(
         translation = new Cesium.Cartesian3(
           lerped.x - nodeData.translation[0],
           lerped.y - nodeData.translation[1],
-          lerped.z - nodeData.translation[2]
+          lerped.z - nodeData.translation[2],
         )
       }
       // Transform to local node space
@@ -421,7 +410,7 @@ export function applyAnimationPercent(
         scale = new Cesium.Cartesian3(
           k0.value[0] / nodeData.scale[0],
           k0.value[1] / nodeData.scale[1],
-          k0.value[2] / nodeData.scale[2]
+          k0.value[2] / nodeData.scale[2],
         )
       } else {
         const t = (targetTime - k0.time) / (k1.time - k0.time)
@@ -431,7 +420,7 @@ export function applyAnimationPercent(
         scale = new Cesium.Cartesian3(
           lerped.x / nodeData.scale[0],
           lerped.y / nodeData.scale[1],
-          lerped.z / nodeData.scale[2]
+          lerped.z / nodeData.scale[2],
         )
       }
     }
@@ -441,7 +430,7 @@ export function applyAnimationPercent(
       translation,
       rotation,
       scale,
-      new Cesium.Matrix4()
+      new Cesium.Matrix4(),
     )
 
     node.matrix = Cesium.Matrix4.multiply(originalMatrix, transformMatrix, new Cesium.Matrix4())
@@ -467,7 +456,7 @@ export function applyGearAnimationsPercent(
   model: Cesium.Model,
   animationSet: AnimationSet,
   percent: number,
-  modelUrl?: string
+  modelUrl?: string,
 ): number {
   let appliedCount = 0
 
@@ -499,7 +488,7 @@ export function applyGearAnimationsPercent(
           animationSet,
           animation.name,
           snappedPercent,
-          progressCache
+          progressCache,
         )
         if (success) appliedCount++
       }
@@ -527,7 +516,7 @@ export function applyGearAnimationsPercent(
 function applyCachedGearTransforms(
   model: Cesium.Model,
   animationSet: AnimationSet,
-  cache: Map<string, CachedNodeTransform>
+  cache: Map<string, CachedNodeTransform>,
 ): number {
   let appliedCount = 0
 
@@ -548,14 +537,19 @@ function applyCachedGearTransforms(
 
     // Build transform from cached values
     const translation = new Cesium.Cartesian3(transform.translation.x, transform.translation.y, transform.translation.z)
-    const rotation = new Cesium.Quaternion(transform.rotation.x, transform.rotation.y, transform.rotation.z, transform.rotation.w)
+    const rotation = new Cesium.Quaternion(
+      transform.rotation.x,
+      transform.rotation.y,
+      transform.rotation.z,
+      transform.rotation.w,
+    )
     const scale = new Cesium.Cartesian3(transform.scale.x, transform.scale.y, transform.scale.z)
 
     const transformMatrix = Cesium.Matrix4.fromTranslationQuaternionRotationScale(
       translation,
       rotation,
       scale,
-      new Cesium.Matrix4()
+      new Cesium.Matrix4(),
     )
 
     node.matrix = Cesium.Matrix4.multiply(originalMatrix, transformMatrix, new Cesium.Matrix4())
@@ -573,11 +567,9 @@ function applyAnimationPercentWithCache(
   animationSet: AnimationSet,
   animationName: string,
   percent: number,
-  cache: Map<string, CachedNodeTransform>
+  cache: Map<string, CachedNodeTransform>,
 ): boolean {
-  const animation = animationSet.animations.find(a =>
-    a.name.toUpperCase().includes(animationName.toUpperCase())
-  )
+  const animation = animationSet.animations.find((a) => a.name.toUpperCase().includes(animationName.toUpperCase()))
 
   if (!animation) {
     return false
@@ -609,7 +601,7 @@ function applyAnimationPercentWithCache(
         translation = new Cesium.Cartesian3(
           k0.value[0] - nodeData.translation[0],
           k0.value[1] - nodeData.translation[1],
-          k0.value[2] - nodeData.translation[2]
+          k0.value[2] - nodeData.translation[2],
         )
       } else {
         const t = (targetTime - k0.time) / (k1.time - k0.time)
@@ -619,7 +611,7 @@ function applyAnimationPercentWithCache(
         translation = new Cesium.Cartesian3(
           lerped.x - nodeData.translation[0],
           lerped.y - nodeData.translation[1],
-          lerped.z - nodeData.translation[2]
+          lerped.z - nodeData.translation[2],
         )
       }
       Cesium.Matrix3.multiplyByVector(nodeData.invRotationMatrix, translation, translation)
@@ -659,7 +651,7 @@ function applyAnimationPercentWithCache(
         scale = new Cesium.Cartesian3(
           k0.value[0] / nodeData.scale[0],
           k0.value[1] / nodeData.scale[1],
-          k0.value[2] / nodeData.scale[2]
+          k0.value[2] / nodeData.scale[2],
         )
       } else {
         const t = (targetTime - k0.time) / (k1.time - k0.time)
@@ -669,7 +661,7 @@ function applyAnimationPercentWithCache(
         scale = new Cesium.Cartesian3(
           lerped.x / nodeData.scale[0],
           lerped.y / nodeData.scale[1],
-          lerped.z / nodeData.scale[2]
+          lerped.z / nodeData.scale[2],
         )
       }
     }
@@ -678,7 +670,7 @@ function applyAnimationPercentWithCache(
     cache.set(nodeName, {
       translation: { x: translation.x, y: translation.y, z: translation.z },
       rotation: { x: rotation.x, y: rotation.y, z: rotation.z, w: rotation.w },
-      scale: { x: scale.x, y: scale.y, z: scale.z }
+      scale: { x: scale.x, y: scale.y, z: scale.z },
     })
 
     // Build transform matrix and apply to node
@@ -686,7 +678,7 @@ function applyAnimationPercentWithCache(
       translation,
       rotation,
       scale,
-      new Cesium.Matrix4()
+      new Cesium.Matrix4(),
     )
 
     node.matrix = Cesium.Matrix4.multiply(originalMatrix, transformMatrix, new Cesium.Matrix4())
@@ -830,7 +822,7 @@ function parseGroundDataFromArrayBuffer(arrayBuffer: ArrayBuffer): ModelGroundDa
 
     // Parse animations to identify gear-related nodes
     const animations = parseAnimations(gltfJson, binDataChunk)
-    const gearAnimations = animations.filter(a => a.name.toUpperCase().includes('GEAR'))
+    const gearAnimations = animations.filter((a) => a.name.toUpperCase().includes('GEAR'))
 
     // Compute ground data at both gear states
     const gearUpMinY = computeMinYAtGearState(extendedNodes, gearAnimations, 0.0, gltfJson)
@@ -945,4 +937,3 @@ function parseWingDataFromArrayBuffer(arrayBuffer: ArrayBuffer): ModelWingData |
     return null
   }
 }
-

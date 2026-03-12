@@ -49,14 +49,14 @@ export const useRunwayStore = create<RunwayStore>()((set, get) => ({
       set({
         isLoading: false,
         isLoaded: true,
-        airportCount: runwayService.getAirportCount()
+        airportCount: runwayService.getAirportCount(),
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to load runway data'
       console.error('[runwayStore] Load failed:', message)
       set({
         isLoading: false,
-        error: message
+        error: message,
       })
     }
   },
@@ -67,5 +67,5 @@ export const useRunwayStore = create<RunwayStore>()((set, get) => ({
 
   getRunwaysWithCoordinates: (icao: string) => {
     return runwayService.getRunwaysWithCoordinates(icao)
-  }
+  },
 }))

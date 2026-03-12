@@ -15,24 +15,18 @@ import {
   getModelColorBlendAmount,
   getFsltlModelColorBlendAmount,
   GROUNDSPEED_THRESHOLD_KNOTS,
-  FSLTL_MODEL_HEIGHT_OFFSET
+  FSLTL_MODEL_HEIGHT_OFFSET,
 } from '../constants/rendering'
-import {
-  SUN_ELEVATION_DAY,
-  SUN_ELEVATION_NIGHT
-} from '../constants/lighting'
+import { SUN_ELEVATION_DAY, SUN_ELEVATION_NIGHT } from '../constants/lighting'
 import { useSettingsStore } from '../stores/settingsStore'
 import {
   updateGearAnimation,
   applyGearAnimation,
   clearGearState,
   initializeGearState,
-  getCurrentGearProgress
+  getCurrentGearProgress,
 } from '../utils/gearAnimationController'
-import {
-  getModelGroundData,
-  parseGroundDataFromUrl
-} from '../utils/gltfAnimationParser'
+import { getModelGroundData, parseGroundDataFromUrl } from '../utils/gltfAnimationParser'
 import { filterAircraftForRendering } from './useRenderCulling'
 
 /**
@@ -105,15 +99,9 @@ export function useAircraftModels(
   followingCallsign: string | null,
   groundElevationMeters: number,
   silhouetteRefs: SilhouetteRefs | null,
-  sunElevation: number | null
+  sunElevation: number | null,
 ) {
-  const {
-    modelPool,
-    modelPoolAssignments,
-    modelPoolUrls,
-    modelPoolLoading,
-    modelPoolReady
-  } = modelPoolRefs
+  const { modelPool, modelPoolAssignments, modelPoolUrls, modelPoolLoading, modelPoolReady } = modelPoolRefs
 
   // Get model brightness and tint color from settings - separate for built-in and FSLTL models
   const builtinModelBrightness = useSettingsStore((state) => state.graphics.builtinModelBrightness) ?? 1.7
@@ -173,11 +161,10 @@ export function useAircraftModels(
     if (!isInset) {
       for (const aircraft of interpolatedAircraft.values()) {
         // Resolve model via service (pass position for conversion queue prioritization)
-        const resolvedModelInfo = aircraftModelService.getModelInfo(
-          aircraft.aircraftType,
-          aircraft.callsign,
-          { lat: aircraft.interpolatedLatitude, lon: aircraft.interpolatedLongitude }
-        )
+        const resolvedModelInfo = aircraftModelService.getModelInfo(aircraft.aircraftType, aircraft.callsign, {
+          lat: aircraft.interpolatedLatitude,
+          lon: aircraft.interpolatedLongitude,
+        })
 
         // Track model info for broadcast to insets
         // Only broadcast when model info changes (new aircraft, conversion complete, etc.)
@@ -187,7 +174,7 @@ export function useAircraftModels(
           modelUrl,
           scale: [resolvedModelInfo.scale.x, resolvedModelInfo.scale.y, resolvedModelInfo.scale.z],
           rotationOffset: resolvedModelInfo.rotationOffset ?? 0,
-          isFsltl: resolvedModelInfo.isFsltl === true
+          isFsltl: resolvedModelInfo.isFsltl === true,
         }
         const serializedKey = `${modelUrl}|${serialized.scale.join(',')}|${serialized.rotationOffset}|${serialized.isFsltl}`
         const previousKey = broadcastedModelInfoRef.current.get(aircraft.callsign)
@@ -222,7 +209,7 @@ export function useAircraftModels(
     const { filteredAircraft } = filterAircraftForRendering({
       viewer,
       interpolatedAircraft,
-      alwaysInclude: followingCallsign
+      alwaysInclude: followingCallsign,
     })
 
     // Update camera position for model conversion queue prioritization
@@ -232,7 +219,7 @@ export function useAircraftModels(
       if (cartographic) {
         MSFSModelConversionService.setCameraPosition(
           Cesium.Math.toDegrees(cartographic.latitude),
-          Cesium.Math.toDegrees(cartographic.longitude)
+          Cesium.Math.toDegrees(cartographic.longitude),
         )
       }
     }
@@ -249,7 +236,10 @@ export function useAircraftModels(
     let nightLightBoost: number | null = null
     if (enableNightDarkening && viewMode === '3d' && sunElevation !== null && sunElevation < SUN_ELEVATION_DAY) {
       // Interpolate from 1.0 (at horizon) to full boost (at full night)
-      const nightProgress = Math.min(1.0, (SUN_ELEVATION_DAY - sunElevation) / (SUN_ELEVATION_DAY - SUN_ELEVATION_NIGHT))
+      const nightProgress = Math.min(
+        1.0,
+        (SUN_ELEVATION_DAY - sunElevation) / (SUN_ELEVATION_DAY - SUN_ELEVATION_NIGHT),
+      )
       // Apply boost: 1.0 at day, aircraftNightVisibility at night
       nightLightBoost = 1.0 + (aircraftNightVisibility - 1.0) * nightProgress
     }
@@ -277,10 +267,10 @@ export function useAircraftModels(
             scale: {
               x: broadcastModel.scale[0],
               y: broadcastModel.scale[1],
-              z: broadcastModel.scale[2]
+              z: broadcastModel.scale[2],
             },
             rotationOffset: broadcastModel.rotationOffset,
-            isFsltl: broadcastModel.isFsltl
+            isFsltl: broadcastModel.isFsltl,
           }
         } else {
           // Fallback to generic model if no broadcast info yet
@@ -288,18 +278,17 @@ export function useAircraftModels(
             modelUrl: './b738.glb',
             scale: { x: 1, y: 1, z: 1 },
             rotationOffset: 0,
-            isFsltl: false
+            isFsltl: false,
           }
         }
       } else {
         // Main app context: resolve model via service
         // Note: Model info broadcast to insets is handled in the separate pass above
         // which runs on ALL aircraft, not just those passing render culling
-        modelInfo = aircraftModelService.getModelInfo(
-          aircraft.aircraftType,
-          aircraft.callsign,
-          { lat: aircraft.interpolatedLatitude, lon: aircraft.interpolatedLongitude }
-        )
+        modelInfo = aircraftModelService.getModelInfo(aircraft.aircraftType, aircraft.callsign, {
+          lat: aircraft.interpolatedLatitude,
+          lon: aircraft.interpolatedLongitude,
+        })
       }
 
       // Model height: interpolatedAltitude is already terrain-corrected by interpolation system
@@ -354,7 +343,11 @@ export function useAircraftModels(
 
           // If model URL changed, load the new model asynchronously
           // Skip empty URLs (pending conversions) - keep using current model until conversion completes
-          if (currentModelUrl !== modelInfo.modelUrl && modelInfo.modelUrl && !modelPoolLoading.current.has(poolIndex)) {
+          if (
+            currentModelUrl !== modelInfo.modelUrl &&
+            modelInfo.modelUrl &&
+            !modelPoolLoading.current.has(poolIndex)
+          ) {
             modelPoolLoading.current.add(poolIndex)
             modelPoolUrls.current.set(poolIndex, modelInfo.modelUrl)
 
@@ -380,7 +373,7 @@ export function useAircraftModels(
             Cesium.Model.fromGltfAsync({
               url: modelUrl,
               show: false,
-              modelMatrix: model.modelMatrix,  // Copy current transform
+              modelMatrix: model.modelMatrix, // Copy current transform
               shadows: Cesium.ShadowMode.ENABLED,
               color: modelColor,
               colorBlendMode: Cesium.ColorBlendMode.MIX,
@@ -389,37 +382,39 @@ export function useAircraftModels(
                 // Capture animation count from parsed glTF
                 const animCount = gltf.animations?.length ?? 0
                 modelAnimationCountsRef.current.set(modelUrl, animCount)
-              }
-            }).then(newModel => {
-              if (viewer.isDestroyed()) return
-
-              // Remove old model from scene
-              const oldModel = modelPool.current.get(poolIndex)
-              if (oldModel) {
-                viewer.scene.primitives.remove(oldModel)
-              }
-
-              // Add new model to scene and update pool
-              viewer.scene.primitives.add(newModel)
-              modelPool.current.set(poolIndex, newModel)
-              modelPoolLoading.current.delete(poolIndex)
-            }).catch(err => {
-              // Only log error once per URL to avoid console spam
-              if (!failedModelUrlsRef.current.has(modelUrl)) {
-                failedModelUrlsRef.current.add(modelUrl)
-                console.warn(`[Models] Failed to load ${modelUrl}:`, err.message || err)
-              }
-              modelPoolLoading.current.delete(poolIndex)
-              // Reset URL to trigger retry on next frame
-              modelPoolUrls.current.set(poolIndex, './b738.glb')
+              },
             })
+              .then((newModel) => {
+                if (viewer.isDestroyed()) return
+
+                // Remove old model from scene
+                const oldModel = modelPool.current.get(poolIndex)
+                if (oldModel) {
+                  viewer.scene.primitives.remove(oldModel)
+                }
+
+                // Add new model to scene and update pool
+                viewer.scene.primitives.add(newModel)
+                modelPool.current.set(poolIndex, newModel)
+                modelPoolLoading.current.delete(poolIndex)
+              })
+              .catch((err) => {
+                // Only log error once per URL to avoid console spam
+                if (!failedModelUrlsRef.current.has(modelUrl)) {
+                  failedModelUrlsRef.current.add(modelUrl)
+                  console.warn(`[Models] Failed to load ${modelUrl}:`, err.message || err)
+                }
+                modelPoolLoading.current.delete(poolIndex)
+                // Reset URL to trigger retry on next frame
+                modelPoolUrls.current.set(poolIndex, './b738.glb')
+              })
           }
 
           // Build modelMatrix with position, rotation, and non-uniform scale
           const position = Cesium.Cartesian3.fromDegrees(
             aircraft.interpolatedLongitude,
             aircraft.interpolatedLatitude,
-            modelHeight
+            modelHeight,
           )
 
           // Track position deltas for followed aircraft (diagnostic logging)
@@ -427,12 +422,13 @@ export function useAircraftModels(
             const prev = prevModelPositionsRef.current.get(aircraft.callsign)
             if (prev) {
               const delta = Cesium.Cartesian3.distance(prev, position)
-              if (delta > 5.0) { // Log significant jumps > 5 meters
+              if (delta > 5.0) {
+                // Log significant jumps > 5 meters
                 const metrics = performanceMonitor.getMetrics()
                 console.warn(
                   `[Cesium Model] Position jump for ${aircraft.callsign}: ${delta.toFixed(2)}m | ` +
-                  `FPS: ${Math.round(metrics.fps)} | Frame interval: ${metrics.frameInterval.toFixed(2)}ms | ` +
-                  `Operations: ${metrics.totalFrame.toFixed(2)}ms`
+                    `FPS: ${Math.round(metrics.fps)} | Frame interval: ${metrics.frameInterval.toFixed(2)}ms | ` +
+                    `Operations: ${metrics.totalFrame.toFixed(2)}ms`,
                 )
               }
             }
@@ -448,7 +444,7 @@ export function useAircraftModels(
           const hpr = new Cesium.HeadingPitchRoll(
             Cesium.Math.toRadians(aircraft.interpolatedHeading - 90 + 180 + rotationOffset),
             Cesium.Math.toRadians(aircraft.interpolatedPitch),
-            Cesium.Math.toRadians(aircraft.interpolatedRoll)
+            Cesium.Math.toRadians(aircraft.interpolatedRoll),
           )
 
           // Create base transformation matrix (translation + rotation)
@@ -458,9 +454,7 @@ export function useAircraftModels(
           const totalScaleX = viewModeScale * modelInfo.scale.x
           const totalScaleY = viewModeScale * modelInfo.scale.y
           const totalScaleZ = viewModeScale * modelInfo.scale.z
-          const scaleMatrix = Cesium.Matrix4.fromScale(
-            new Cesium.Cartesian3(totalScaleX, totalScaleY, totalScaleZ)
-          )
+          const scaleMatrix = Cesium.Matrix4.fromScale(new Cesium.Cartesian3(totalScaleX, totalScaleY, totalScaleZ))
           Cesium.Matrix4.multiply(modelMatrix, scaleMatrix, modelMatrix)
 
           // Apply the transformation
@@ -524,7 +518,7 @@ export function useAircraftModels(
               altitudeAglFeet,
               verticalRateFpm,
               isOnGround,
-              Date.now()
+              Date.now(),
             )
 
             // Apply the animation progress to the model
@@ -594,7 +588,7 @@ export function useAircraftModels(
     enableNightDarkening,
     aircraftNightVisibility,
     sunElevation,
-    isInset
+    isInset,
   ])
 
   // Keep callback in a ref so the listener doesn't need to be re-attached when dependencies change

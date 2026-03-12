@@ -43,7 +43,7 @@ class PerformanceMonitor {
     fps: 0,
     frameInterval: 0,
     idleTime: 0,
-    unaccountedTime: 0
+    unaccountedTime: 0,
   }
 
   // Cesium phase timestamps for detailed timing
@@ -225,7 +225,7 @@ class PerformanceMonitor {
       fps: 0,
       frameInterval: 0,
       idleTime: 0,
-      unaccountedTime: 0
+      unaccountedTime: 0,
     }
     this.frameTimes = []
     this.idleTimes = []

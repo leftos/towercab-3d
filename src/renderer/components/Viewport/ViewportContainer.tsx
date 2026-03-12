@@ -1,4 +1,13 @@
-import { useCallback, useMemo, useRef, useState, type ReactNode, type MouseEvent, type KeyboardEvent, useEffect } from 'react'
+import {
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type MouseEvent,
+  type KeyboardEvent,
+  useEffect,
+} from 'react'
 import { useViewportStore } from '../../stores/viewportStore'
 import { useDragResize, type ResizeDirection } from '../../hooks/useDragResize'
 import './ViewportContainer.css'
@@ -33,10 +42,7 @@ function ViewportContainer({ viewportId, isInset = false, children }: ViewportCo
   const viewports = useViewportStore((state) => state.viewports)
 
   // Find viewport from the viewports array - memoized to prevent unnecessary recalculations
-  const viewport = useMemo(
-    () => viewports.find(v => v.id === viewportId),
-    [viewports, viewportId]
-  )
+  const viewport = useMemo(() => viewports.find((v) => v.id === viewportId), [viewports, viewportId])
 
   const isActive = activeViewportId === viewportId
 
@@ -51,33 +57,44 @@ function ViewportContainer({ viewportId, isInset = false, children }: ViewportCo
         x: newPosition.x,
         y: newPosition.y,
         width: newSize.width,
-        height: newSize.height
+        height: newSize.height,
       })
-    }
+    },
   })
 
-  const handleClick = useCallback((e: MouseEvent) => {
-    // Don't activate if clicking on interactive elements within the viewport
-    const target = e.target as HTMLElement
-    if (target.tagName === 'BUTTON' || target.tagName === 'INPUT' || target.closest('button') || target.closest('input')) {
-      return
-    }
-
-    if (!isActive) {
-      setActiveViewport(viewportId)
-      if (isInset) {
-        bringToFront(viewportId)
+  const handleClick = useCallback(
+    (e: MouseEvent) => {
+      // Don't activate if clicking on interactive elements within the viewport
+      const target = e.target as HTMLElement
+      if (
+        target.tagName === 'BUTTON' ||
+        target.tagName === 'INPUT' ||
+        target.closest('button') ||
+        target.closest('input')
+      ) {
+        return
       }
-    }
-  }, [isActive, viewportId, isInset, setActiveViewport, bringToFront])
+
+      if (!isActive) {
+        setActiveViewport(viewportId)
+        if (isInset) {
+          bringToFront(viewportId)
+        }
+      }
+    },
+    [isActive, viewportId, isInset, setActiveViewport, bringToFront],
+  )
 
   // Start editing label on double-click
-  const handleLabelDoubleClick = useCallback((e: MouseEvent) => {
-    e.stopPropagation()
-    e.preventDefault()
-    setEditLabelValue(viewport?.label || 'Inset')
-    setIsEditingLabel(true)
-  }, [viewport?.label])
+  const handleLabelDoubleClick = useCallback(
+    (e: MouseEvent) => {
+      e.stopPropagation()
+      e.preventDefault()
+      setEditLabelValue(viewport?.label || 'Inset')
+      setIsEditingLabel(true)
+    },
+    [viewport?.label],
+  )
 
   // Save label on blur or Enter
   const handleLabelSave = useCallback(() => {
@@ -89,15 +106,18 @@ function ViewportContainer({ viewportId, isInset = false, children }: ViewportCo
   }, [editLabelValue, viewport?.label, viewportId, setViewportLabel])
 
   // Handle key events in label input
-  const handleLabelKeyDown = useCallback((e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      handleLabelSave()
-    } else if (e.key === 'Escape') {
-      e.preventDefault()
-      setIsEditingLabel(false)
-    }
-  }, [handleLabelSave])
+  const handleLabelKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        handleLabelSave()
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        setIsEditingLabel(false)
+      }
+    },
+    [handleLabelSave],
+  )
 
   // Focus input when editing starts
   useEffect(() => {
@@ -109,13 +129,16 @@ function ViewportContainer({ viewportId, isInset = false, children }: ViewportCo
 
   // For insets, use position/size from drag hook (live updates during drag)
   // For main viewport, no positioning needed
-  const insetStyle = isInset && viewport ? {
-    left: `${(isDragging || isResizing ? position.x : viewport.layout.x) * 100}%`,
-    top: `${(isDragging || isResizing ? position.y : viewport.layout.y) * 100}%`,
-    width: `${(isDragging || isResizing ? size.width : viewport.layout.width) * 100}%`,
-    height: `${(isDragging || isResizing ? size.height : viewport.layout.height) * 100}%`,
-    zIndex: viewport.layout.zIndex
-  } : undefined
+  const insetStyle =
+    isInset && viewport
+      ? {
+          left: `${(isDragging || isResizing ? position.x : viewport.layout.x) * 100}%`,
+          top: `${(isDragging || isResizing ? position.y : viewport.layout.y) * 100}%`,
+          width: `${(isDragging || isResizing ? size.width : viewport.layout.width) * 100}%`,
+          height: `${(isDragging || isResizing ? size.height : viewport.layout.height) * 100}%`,
+          zIndex: viewport.layout.zIndex,
+        }
+      : undefined
 
   return (
     <div
@@ -140,11 +163,7 @@ function ViewportContainer({ viewportId, isInset = false, children }: ViewportCo
               onMouseDown={(e) => e.stopPropagation()}
             />
           ) : (
-            <span
-              className="viewport-label"
-              onDoubleClick={handleLabelDoubleClick}
-              title="Double-click to rename"
-            >
+            <span className="viewport-label" onDoubleClick={handleLabelDoubleClick} title="Double-click to rename">
               {viewport?.label || 'Inset'}
             </span>
           )}
@@ -160,19 +179,14 @@ function ViewportContainer({ viewportId, isInset = false, children }: ViewportCo
           </button>
         </div>
       )}
-      <div className="viewport-content">
-        {children}
-      </div>
+      <div className="viewport-content">{children}</div>
       {isActive && <div className="active-indicator" />}
 
       {/* Resize handles for inset viewports */}
-      {isInset && RESIZE_HANDLES.map((direction) => (
-        <div
-          key={direction}
-          className={`resize-handle resize-${direction}`}
-          {...getResizeHandleProps(direction)}
-        />
-      ))}
+      {isInset &&
+        RESIZE_HANDLES.map((direction) => (
+          <div key={direction} className={`resize-handle resize-${direction}`} {...getResizeHandleProps(direction)} />
+        ))}
     </div>
   )
 }

@@ -10,9 +10,15 @@ import type {
   View3dPosition,
   RawView3dPosition,
   View2dPosition,
-  ResolvedView2dPosition
+  ResolvedView2dPosition,
 } from '../types/mod'
-import { isSupportedModelFormat, getModelFormat, SUPPORTED_MODEL_FORMATS, isLegacyTowerPosition, convertLegacyToNewFormat } from '../types/mod'
+import {
+  isSupportedModelFormat,
+  getModelFormat,
+  SUPPORTED_MODEL_FORMATS,
+  isLegacyTowerPosition,
+  convertLegacyToNewFormat,
+} from '../types/mod'
 import { modApi, joinPath } from '../utils/tauriApi'
 import { customVMRService } from './CustomVMRService'
 import { VNAS_RANGE_TO_ALTITUDE_MULTIPLIER, TOPDOWN_ALTITUDE_DEFAULT } from '../constants/camera'
@@ -23,8 +29,8 @@ import { VNAS_RANGE_TO_ALTITUDE_MULTIPLIER, TOPDOWN_ALTITUDE_DEFAULT } from '../
 export interface TowerPlacement {
   lat: number
   lon: number
-  height: number      // height offset above terrain in meters
-  rotation: number    // model rotation in degrees (0=north)
+  height: number // height offset above terrain in meters
+  rotation: number // model rotation in degrees (0=north)
   source: 'manifest' | 'tower-positions' | 'airport-center'
 }
 
@@ -44,7 +50,7 @@ function getModelPositionFromManifest(manifest: TowerModManifest): {
       lat: manifest.modelPosition.lat,
       lon: manifest.modelPosition.lon,
       height: manifest.modelPosition.height ?? 0,
-      rotation: manifest.modelPosition.rotation ?? 0
+      rotation: manifest.modelPosition.rotation ?? 0,
     }
   }
 
@@ -54,7 +60,7 @@ function getModelPositionFromManifest(manifest: TowerModManifest): {
       lat: manifest.position.lat,
       lon: manifest.position.lon,
       height: manifest.heightOffset ?? 0,
-      rotation: 0
+      rotation: 0,
     }
   }
 
@@ -72,26 +78,30 @@ export function getCameraPositionFromManifest(manifest: TowerModManifest): {
   heading: number
 } | null {
   // New format: cameraPosition with height
-  if (manifest.cameraPosition?.lat !== undefined &&
-      manifest.cameraPosition?.lon !== undefined &&
-      manifest.cameraPosition?.height !== undefined) {
+  if (
+    manifest.cameraPosition?.lat !== undefined &&
+    manifest.cameraPosition?.lon !== undefined &&
+    manifest.cameraPosition?.height !== undefined
+  ) {
     return {
       lat: manifest.cameraPosition.lat,
       lon: manifest.cameraPosition.lon,
       height: manifest.cameraPosition.height,
-      heading: manifest.cameraPosition.heading ?? 0
+      heading: manifest.cameraPosition.heading ?? 0,
     }
   }
 
   // Deprecated format: cabPosition (with aglHeight) + cabHeading
-  if (manifest.cabPosition?.lat !== undefined &&
-      manifest.cabPosition?.lon !== undefined &&
-      manifest.cabPosition?.aglHeight !== undefined) {
+  if (
+    manifest.cabPosition?.lat !== undefined &&
+    manifest.cabPosition?.lon !== undefined &&
+    manifest.cabPosition?.aglHeight !== undefined
+  ) {
     return {
       lat: manifest.cabPosition.lat,
       lon: manifest.cabPosition.lon,
       height: manifest.cabPosition.aglHeight,
-      heading: manifest.cabHeading ?? 0
+      heading: manifest.cabHeading ?? 0,
     }
   }
 
@@ -147,7 +157,7 @@ export interface ModLoadingResult {
   vmrFiles: string[]
   towerPositions: {
     builtin: number
-    custom: string[]  // ICAO codes with custom positions
+    custom: string[] // ICAO codes with custom positions
   }
   errors: ModError[]
 }
@@ -155,11 +165,11 @@ export interface ModLoadingResult {
 class ModService {
   private registry: ModRegistry = {
     aircraft: new Map(),
-    towers: new Map()
+    towers: new Map(),
   }
   private customTowerPositions: Map<string, CustomTowerPosition> = new Map()
   private loaded = false
-  private loading = false  // Guard against React StrictMode double-mount
+  private loading = false // Guard against React StrictMode double-mount
 
   // Track loading results for Mods UI
   private loadingResult: ModLoadingResult = {
@@ -167,7 +177,7 @@ class ModService {
     aircraft: [],
     vmrFiles: [],
     towerPositions: { builtin: 0, custom: [] },
-    errors: []
+    errors: [],
   }
 
   // Track disabled mods (paths)
@@ -180,10 +190,10 @@ class ModService {
    */
   async loadMods(disabledModPaths: string[] = []): Promise<void> {
     if (this.loaded || this.loading) return
-    this.loading = true  // Set immediately to prevent React StrictMode double-mount
+    this.loading = true // Set immediately to prevent React StrictMode double-mount
 
     // Store disabled mods for checking
-    this.disabledMods = new Set(disabledModPaths.map(p => p.toLowerCase()))
+    this.disabledMods = new Set(disabledModPaths.map((p) => p.toLowerCase()))
 
     // Reset loading result
     this.loadingResult = {
@@ -191,7 +201,7 @@ class ModService {
       aircraft: [],
       vmrFiles: [],
       towerPositions: { builtin: 0, custom: [] },
-      errors: []
+      errors: [],
     }
 
     try {
@@ -205,17 +215,19 @@ class ModService {
 
       // Load custom tower positions FIRST (needed for tower mod placement fallback)
       await this.loadCustomTowerPositions()
-      const view3dCount = [...this.customTowerPositions.values()].filter(p => p.view3d).length
-      const view2dCount = [...this.customTowerPositions.values()].filter(p => p.view2d).length
+      const view3dCount = [...this.customTowerPositions.values()].filter((p) => p.view3d).length
+      const view2dCount = [...this.customTowerPositions.values()].filter((p) => p.view2d).length
 
       // Get list of user-custom tower positions (not bundled)
       const customIcaos = await modApi.getCustomTowerPositionIcaos()
 
       this.loadingResult.towerPositions = {
         builtin: this.customTowerPositions.size,
-        custom: customIcaos
+        custom: customIcaos,
       }
-      console.log(`[ModService] Loaded ${this.customTowerPositions.size} tower position(s) (view3d: ${view3dCount}, view2d: ${view2dCount})`)
+      console.log(
+        `[ModService] Loaded ${this.customTowerPositions.size} tower position(s) (view3d: ${view3dCount}, view2d: ${view2dCount})`,
+      )
 
       // Discover and load all mods recursively (supports git repos at any depth)
       await this.loadAllDiscoveredMods()
@@ -225,12 +237,14 @@ class ModService {
         console.log(`[ModService] Loaded ${this.loadingResult.aircraft.length} aircraft mod(s)`)
       }
       if (this.loadingResult.towers.length > 0) {
-        const towerDetails = this.loadingResult.towers.map(t => {
-          const placementInfo = t.placement
-            ? `position: ${t.placement.lat.toFixed(4)}, ${t.placement.lon.toFixed(4)}, height: ${t.placement.height}m, rotation: ${t.placement.rotation}° from ${t.placement.source}`
-            : 'no position'
-          return `  - ${t.icao}: ${t.manifest.name} (${placementInfo})`
-        }).join('\n')
+        const towerDetails = this.loadingResult.towers
+          .map((t) => {
+            const placementInfo = t.placement
+              ? `position: ${t.placement.lat.toFixed(4)}, ${t.placement.lon.toFixed(4)}, height: ${t.placement.height}m, rotation: ${t.placement.rotation}° from ${t.placement.source}`
+              : 'no position'
+            return `  - ${t.icao}: ${t.manifest.name} (${placementInfo})`
+          })
+          .join('\n')
         console.log(`[ModService] Loaded ${this.loadingResult.towers.length} tower mod(s):\n${towerDetails}`)
       }
 
@@ -271,7 +285,7 @@ class ModService {
         // Extract git info
         const gitInfo: ModGitInfo = {
           isGitRepo: modInfo.isGitRepo,
-          repoName: modInfo.repoName
+          repoName: modInfo.repoName,
         }
 
         try {
@@ -287,7 +301,7 @@ class ModService {
           this.loadingResult.errors.push({
             path: modInfo.path,
             error: errorMsg.includes('manifest') ? 'Missing or invalid manifest.json' : errorMsg,
-            type: modInfo.modType === 'aircraft' ? 'aircraft' : 'tower'
+            type: modInfo.modType === 'aircraft' ? 'aircraft' : 'tower',
           })
         }
       }
@@ -304,7 +318,7 @@ class ModService {
       this.loadingResult.errors.push({
         path: basePath,
         error: 'Invalid or missing model file',
-        type: 'aircraft'
+        type: 'aircraft',
       })
       return
     }
@@ -319,7 +333,7 @@ class ModService {
       aircraftTypes: manifest.aircraftTypes || [],
       manifest,
       enabled: true,
-      gitInfo
+      gitInfo,
     })
   }
 
@@ -331,7 +345,7 @@ class ModService {
       this.loadingResult.errors.push({
         path: basePath,
         error: 'Invalid or missing model file',
-        type: 'tower'
+        type: 'tower',
       })
       return
     }
@@ -342,9 +356,8 @@ class ModService {
 
     // Get the ICAO from the manifest's airports array (first one for display)
     // Fall back to folder name if airports array is empty
-    const icao = manifest.airports?.[0]?.toUpperCase() ||
-      basePath.replace(/\\/g, '/').split('/').pop()?.toUpperCase() ||
-      'UNKNOWN'
+    const icao =
+      manifest.airports?.[0]?.toUpperCase() || basePath.replace(/\\/g, '/').split('/').pop()?.toUpperCase() || 'UNKNOWN'
 
     // Compute placement for logging
     const placement = this.computeTowerPlacement(manifest, icao)
@@ -356,7 +369,7 @@ class ModService {
       manifest,
       enabled: true,
       placement,
-      gitInfo
+      gitInfo,
     })
   }
 
@@ -374,7 +387,7 @@ class ModService {
         lon: modelPos.lon,
         height: modelPos.height,
         rotation: modelPos.rotation,
-        source: 'manifest'
+        source: 'manifest',
       }
     }
 
@@ -386,9 +399,9 @@ class ModService {
       return {
         lat: customPos.view3d.lat,
         lon: customPos.view3d.lon,
-        height: 0,  // Model at ground level, not at camera height
+        height: 0, // Model at ground level, not at camera height
         rotation: 0,
-        source: 'tower-positions'
+        source: 'tower-positions',
       }
     }
 
@@ -422,14 +435,12 @@ class ModService {
             const v3d = parsed.view3d as RawView3dPosition
             // Support both 'height' (new) and 'aglHeight' (deprecated) field names
             const height = v3d.height ?? v3d.aglHeight
-            if (typeof v3d.lat === 'number' &&
-                typeof v3d.lon === 'number' &&
-                typeof height === 'number') {
+            if (typeof v3d.lat === 'number' && typeof v3d.lon === 'number' && typeof height === 'number') {
               position.view3d = {
                 lat: v3d.lat,
                 lon: v3d.lon,
                 height: height,
-                heading: v3d.heading
+                heading: v3d.heading,
               }
             } else {
               console.warn(`Invalid view3d for ${icao}: missing required fields (lat, lon, height)`)
@@ -452,15 +463,15 @@ class ModService {
                 lat: v2d.lat,
                 lon: v2d.lon,
                 altitude,
-                vNasRange: v2d.vNasRange,  // Preserve raw value for reference
-                heading: v2d.heading
+                vNasRange: v2d.vNasRange, // Preserve raw value for reference
+                heading: v2d.heading,
               }
             } else {
               // view2d exists but has no altitude info - use heading only with default altitude
               if (typeof v2d.heading === 'number') {
                 position.view2d = {
                   altitude: TOPDOWN_ALTITUDE_DEFAULT,
-                  heading: v2d.heading
+                  heading: v2d.heading,
                 }
               }
             }
@@ -474,7 +485,6 @@ class ModService {
           }
         }
       }
-
     } catch (error) {
       console.warn('Failed to load tower positions:', error)
       // Not a fatal error - app continues with defaults
@@ -541,15 +551,11 @@ class ModService {
   /**
    * Register an aircraft mod
    */
-  registerAircraftMod(
-    manifest: AircraftModManifest,
-    modelUrl: string,
-    basePath: string
-  ): void {
+  registerAircraftMod(manifest: AircraftModManifest, modelUrl: string, basePath: string): void {
     const loadedMod: LoadedMod<AircraftModManifest> = {
       manifest,
       modelUrl,
-      basePath
+      basePath,
     }
 
     // Register for each aircraft type
@@ -561,15 +567,11 @@ class ModService {
   /**
    * Register a tower mod
    */
-  registerTowerMod(
-    manifest: TowerModManifest,
-    modelUrl: string,
-    basePath: string
-  ): void {
+  registerTowerMod(manifest: TowerModManifest, modelUrl: string, basePath: string): void {
     const loadedMod: LoadedMod<TowerModManifest> = {
       manifest,
       modelUrl,
-      basePath
+      basePath,
     }
 
     // Register for each airport
@@ -605,7 +607,7 @@ class ModService {
   getStats(): { aircraftModels: number; towerModels: number } {
     return {
       aircraftModels: this.registry.aircraft.size,
-      towerModels: this.registry.towers.size
+      towerModels: this.registry.towers.size,
     }
   }
 
@@ -652,7 +654,7 @@ class ModService {
         lon: modelPos.lon,
         height: modelPos.height,
         rotation: modelPos.rotation,
-        source: 'manifest'
+        source: 'manifest',
       }
     }
 
@@ -664,9 +666,9 @@ class ModService {
       return {
         lat: customPos.view3d.lat,
         lon: customPos.view3d.lon,
-        height: 0,  // Model at ground level, not at camera height
+        height: 0, // Model at ground level, not at camera height
         rotation: 0,
-        source: 'tower-positions'
+        source: 'tower-positions',
       }
     }
 
@@ -687,7 +689,7 @@ class ModService {
    * This should be called before loadMods() or will require a reload
    */
   setDisabledMods(paths: string[]): void {
-    this.disabledMods = new Set(paths.map(p => p.toLowerCase().replace(/\\/g, '/')))
+    this.disabledMods = new Set(paths.map((p) => p.toLowerCase().replace(/\\/g, '/')))
   }
 }
 

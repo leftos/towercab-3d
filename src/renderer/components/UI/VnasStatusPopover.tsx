@@ -83,29 +83,41 @@ export function VnasStatusPopover({ onClose, toggleRef }: VnasStatusPopoverProps
 
   const getStateLabel = useCallback(() => {
     switch (vnasStatus.state) {
-      case 'disconnected': return 'Disconnected'
-      case 'authenticating': return 'Authenticating...'
-      case 'connecting': return 'Connecting...'
-      case 'joiningSession': return 'Joining Session...'
-      case 'waitingForSession': return 'Waiting for CRC...'
-      case 'subscribing': return 'Ready for vNAS Airport...'
-      case 'connected': return 'Connected'
-      case 'unavailable': return 'Not Available'
-      default: return vnasStatus.state
+      case 'disconnected':
+        return 'Disconnected'
+      case 'authenticating':
+        return 'Authenticating...'
+      case 'connecting':
+        return 'Connecting...'
+      case 'joiningSession':
+        return 'Joining Session...'
+      case 'waitingForSession':
+        return 'Waiting for CRC...'
+      case 'subscribing':
+        return 'Ready for vNAS Airport...'
+      case 'connected':
+        return 'Connected'
+      case 'unavailable':
+        return 'Not Available'
+      default:
+        return vnasStatus.state
     }
   }, [vnasStatus.state])
 
   const getStateColor = useCallback(() => {
     switch (vnasStatus.state) {
-      case 'connected': return '#81c784'
+      case 'connected':
+        return '#81c784'
       case 'authenticating':
       case 'connecting':
       case 'joiningSession':
       case 'waitingForSession':
       case 'subscribing':
         return '#ffb74d'
-      case 'unavailable': return '#888'
-      default: return '#ef5350'
+      case 'unavailable':
+        return '#888'
+      default:
+        return '#ef5350'
     }
   }, [vnasStatus.state])
 
@@ -159,13 +171,17 @@ export function VnasStatusPopover({ onClose, toggleRef }: VnasStatusPopoverProps
     }
   }, [vnasDisconnect])
 
-  const isConnecting = ['authenticating', 'connecting', 'joiningSession', 'waitingForSession', 'subscribing'].includes(vnasStatus.state)
+  const isConnecting = ['authenticating', 'connecting', 'joiningSession', 'waitingForSession', 'subscribing'].includes(
+    vnasStatus.state,
+  )
 
   return (
     <div className="vnas-popover" ref={popoverRef}>
       <div className="vnas-popover-header">
         <span>vNAS Real-Time Updates</span>
-        <button className="vnas-popover-close" onClick={onClose}>×</button>
+        <button className="vnas-popover-close" onClick={onClose}>
+          ×
+        </button>
       </div>
 
       <div className="vnas-popover-content">
@@ -181,20 +197,13 @@ export function VnasStatusPopover({ onClose, toggleRef }: VnasStatusPopoverProps
         </div>
 
         {/* Error message */}
-        {vnasStatus.error && (
-          <div className="vnas-popover-error">
-            {vnasStatus.error}
-          </div>
-        )}
+        {vnasStatus.error && <div className="vnas-popover-error">{vnasStatus.error}</div>}
 
         {/* Environment selector - only when disconnected */}
         {vnasStatus.state === 'disconnected' && !isAuthenticating && (
           <div className="vnas-popover-env">
             <label>Environment</label>
-            <select
-              value={selectedEnv}
-              onChange={(e) => setSelectedEnv(e.target.value as VnasEnvironment)}
-            >
+            <select value={selectedEnv} onChange={(e) => setSelectedEnv(e.target.value as VnasEnvironment)}>
               <option value="live">Live</option>
               <option value="sweatbox1">Sweatbox 1</option>
               <option value="sweatbox2">Sweatbox 2</option>

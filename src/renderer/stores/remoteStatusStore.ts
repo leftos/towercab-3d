@@ -16,9 +16,9 @@ export type ObservationSource = 'vatsim' | 'vnas' | 'realtraffic'
  * Used to determine appropriate stale thresholds.
  */
 export const SOURCE_UPDATE_INTERVALS: Record<ObservationSource, number> = {
-  vatsim: 15000,      // 15 seconds
-  vnas: 1000,         // 1 second (1 Hz)
-  realtraffic: 3000,  // ~2-3 seconds
+  vatsim: 15000, // 15 seconds
+  vnas: 1000, // 1 second (1 Hz)
+  realtraffic: 3000, // ~2-3 seconds
 }
 
 /**
@@ -27,9 +27,9 @@ export const SOURCE_UPDATE_INTERVALS: Record<ObservationSource, number> = {
  * Set to ~1.5x the expected update interval to allow for network jitter.
  */
 export const SOURCE_STALE_THRESHOLDS: Record<ObservationSource, number> = {
-  vatsim: 25000,      // 25 seconds (15s interval + 10s buffer)
-  vnas: 5000,         // 5 seconds (1s interval + 4s buffer)
-  realtraffic: 8000,  // 8 seconds (~3s interval + 5s buffer)
+  vatsim: 25000, // 25 seconds (15s interval + 10s buffer)
+  vnas: 5000, // 5 seconds (1s interval + 4s buffer)
+  realtraffic: 8000, // 8 seconds (~3s interval + 5s buffer)
 }
 
 interface RemoteStatusState {
@@ -84,13 +84,13 @@ export const useRemoteStatusStore = create<RemoteStatusState>((set, get) => ({
         observationCount: count,
         countStartTime: now,
         lastObservationTime: now,
-        lastSource: source ?? state.lastSource
+        lastSource: source ?? state.lastSource,
       })
     } else {
       set({
         observationCount: state.observationCount + count,
         lastObservationTime: now,
-        lastSource: source ?? state.lastSource
+        lastSource: source ?? state.lastSource,
       })
     }
   },
@@ -98,7 +98,7 @@ export const useRemoteStatusStore = create<RemoteStatusState>((set, get) => ({
   setAirportSync: (icao: string | null, realtrafficActive: boolean) => {
     set({
       syncedAirport: icao,
-      realtrafficActive
+      realtrafficActive,
     })
   },
 
@@ -110,7 +110,7 @@ export const useRemoteStatusStore = create<RemoteStatusState>((set, get) => ({
       countStartTime: Date.now(),
       lastSource: null,
       realtrafficActive: false,
-      syncedAirport: null
+      syncedAirport: null,
     })
-  }
+  },
 }))

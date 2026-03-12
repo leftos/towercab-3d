@@ -56,7 +56,13 @@ function TopBar({ onCommandClick }: TopBarProps) {
   const vnasState = useVnasStore((state) => state.status.state)
   const vnasAvailable = useVnasStore((state) => state.status.available)
   const vnasConnected = vnasState === 'connected'
-  const vnasConnecting = ['authenticating', 'connecting', 'joiningSession', 'waitingForSession', 'subscribing'].includes(vnasState)
+  const vnasConnecting = [
+    'authenticating',
+    'connecting',
+    'joiningSession',
+    'waitingForSession',
+    'subscribing',
+  ].includes(vnasState)
 
   // Remote status (WebSocket connection health) - used for mobile layout in remote mode
   const remoteWsConnected = useRemoteStatusStore((state) => state.wsConnected)
@@ -70,15 +76,9 @@ function TopBar({ onCommandClick }: TopBarProps) {
     : dataSource === 'realtraffic'
       ? rtStatus === 'connected'
       : vatsimIsConnected
-  const trafficCount = dataSource === 'realtraffic'
-    ? rtTotalAircraft
-    : vatsimTotalPilots
-  const countLabel = dataSource === 'realtraffic'
-    ? 'aircraft'
-    : 'pilots online'
-  const sourceLabel = dataSource === 'realtraffic'
-    ? 'RealTraffic'
-    : 'VATSIM'
+  const trafficCount = dataSource === 'realtraffic' ? rtTotalAircraft : vatsimTotalPilots
+  const countLabel = dataSource === 'realtraffic' ? 'aircraft' : 'pilots online'
+  const sourceLabel = dataSource === 'realtraffic' ? 'RealTraffic' : 'VATSIM'
 
   const [zuluTime, setZuluTime] = useState('')
   const [showVnasPopover, setShowVnasPopover] = useState(false)
@@ -131,10 +131,10 @@ function TopBar({ onCommandClick }: TopBarProps) {
         {!isMobileLayout && !isRemoteMode() && (
           <>
             <div className="status-info">
-              <span className="aircraft-count">{trafficCount} {countLabel}</span>
-              <span className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>
-                {sourceLabel}
+              <span className="aircraft-count">
+                {trafficCount} {countLabel}
               </span>
+              <span className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>{sourceLabel}</span>
               {/* vNAS indicator - shown when VATSIM is selected and vNAS is available (Tauri only) */}
               {dataSource === 'vatsim' && vnasAvailable && isTauri() && (
                 <div className="vnas-indicator-wrapper">
@@ -142,7 +142,13 @@ function TopBar({ onCommandClick }: TopBarProps) {
                     ref={vnasToggleRef}
                     className={`vnas-indicator ${vnasConnected ? 'connected' : vnasConnecting ? 'connecting' : 'disconnected'}`}
                     onClick={() => setShowVnasPopover(!showVnasPopover)}
-                    title={vnasConnected ? 'vNAS real-time updates active - Click to manage' : vnasConnecting ? 'vNAS connecting... - Click to manage' : 'Click to enable vNAS real-time updates'}
+                    title={
+                      vnasConnected
+                        ? 'vNAS real-time updates active - Click to manage'
+                        : vnasConnecting
+                          ? 'vNAS connecting... - Click to manage'
+                          : 'Click to enable vNAS real-time updates'
+                    }
                   >
                     vNAS
                   </button>

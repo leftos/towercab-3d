@@ -24,7 +24,7 @@ import type {
   SerializedSettings,
   SerializedWeather,
   SerializedAirport,
-  SerializedImagery
+  SerializedImagery,
 } from '../types/shared-worker'
 // Re-export isInsetContext from tauriApi for backward compatibility
 export { isInsetContext } from '../utils/tauriApi'
@@ -42,13 +42,7 @@ interface UseInsetStoreSyncOptions {
  *
  * @param options - Data received from SharedWorker via useSharedWorkerConsumer
  */
-export function useInsetStoreSync({
-  settings,
-  weather,
-  cesiumToken,
-  imagery,
-  airport,
-}: UseInsetStoreSyncOptions) {
+export function useInsetStoreSync({ settings, weather, cesiumToken, imagery, airport }: UseInsetStoreSyncOptions) {
   const initializedRef = useRef(false)
 
   // Sync Cesium Ion token to globalSettingsStore
@@ -80,8 +74,8 @@ export function useInsetStoreSync({
           provider: imagery.provider,
           googleMapsApiKey: imagery.googleMapsApiKey,
           cesiumAdjustments: imagery.cesiumAdjustments,
-          googleAdjustments: imagery.googleAdjustments
-        }
+          googleAdjustments: imagery.googleAdjustments,
+        },
       })
     }
   }, [imagery])
@@ -119,10 +113,10 @@ export function useInsetStoreSync({
     // The visibility check in isDatablockVisibleByWeather requires currentMetar.visib
     useWeatherStore.setState({
       fogDensity: weather.fogDensity,
-      cloudLayers: weather.cloudLayers.map(layer => ({
+      cloudLayers: weather.cloudLayers.map((layer) => ({
         altitude: layer.altitude,
         coverage: layer.coverage,
-        type: layer.type
+        type: layer.type,
       })),
       // Set minimal METAR with visibility for weather-based datablock culling
       // Only the visib field is needed for the visibility check
@@ -135,8 +129,8 @@ export function useInsetStoreSync({
         rawOb: '',
         precipitation: [],
         hasThunderstorm: false,
-        wind: { direction: 0, speed: 0, gustSpeed: null, isVariable: false }
-      }
+        wind: { direction: 0, speed: 0, gustSpeed: null, isVariable: false },
+      },
     })
   }, [weather])
 
@@ -157,13 +151,13 @@ export function useInsetStoreSync({
       lat: airport.latitude,
       lon: airport.longitude,
       elevation: airport.elevation,
-      tz: ''
+      tz: '',
     }
 
     // Update airport store with received airport
     useAirportStore.setState({
       currentAirport: airportData,
-      towerHeight: airport.towerHeight
+      towerHeight: airport.towerHeight,
     })
   }, [airport])
 
@@ -179,7 +173,7 @@ export function useInsetStoreSync({
   }, [cesiumToken])
 
   return {
-    isReady: !!cesiumToken && initializedRef.current
+    isReady: !!cesiumToken && initializedRef.current,
   }
 }
 

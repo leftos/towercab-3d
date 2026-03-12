@@ -55,9 +55,10 @@ function DeviceOptimizationPrompt() {
   if (!showPrompt) return null
 
   const presetDisplayName = suggestedPreset === 'mobile' ? 'Mobile' : 'iPad/Tablet'
-  const presetDescription = suggestedPreset === 'mobile'
-    ? 'Lower graphics settings for smooth performance on phones'
-    : 'Reduced shadows and tile caching for smooth iPad performance'
+  const presetDescription =
+    suggestedPreset === 'mobile'
+      ? 'Lower graphics settings for smooth performance on phones'
+      : 'Reduced shadows and tile caching for smooth iPad performance'
 
   return (
     <div className="device-opt-overlay">
@@ -72,8 +73,8 @@ function DeviceOptimizationPrompt() {
         <h2 className="device-opt-title">Optimize for {presetDisplayName}?</h2>
 
         <p className="device-opt-description">
-          We detected you&apos;re using a touch device. Would you like to apply
-          optimized settings for better performance?
+          We detected you&apos;re using a touch device. Would you like to apply optimized settings for better
+          performance?
         </p>
 
         <div className="device-opt-preset-info">
@@ -107,9 +108,7 @@ function DeviceOptimizationPrompt() {
           </button>
         </div>
 
-        <p className="device-opt-note">
-          You can change these later in Settings → Graphics
-        </p>
+        <p className="device-opt-note">You can change these later in Settings → Graphics</p>
       </div>
     </div>
   )

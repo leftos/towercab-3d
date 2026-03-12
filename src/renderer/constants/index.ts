@@ -20,23 +20,19 @@ export {
   // Aircraft model pool
   AIRCRAFT_POOL_SIZE,
   MODEL_POOL_SIZE,
-
   // Shadow configuration
   SHADOW_MAX_DISTANCE_KM,
   SHADOW_DISC_RADIUS,
-
   // Aircraft positioning
   GROUND_AIRCRAFT_TERRAIN_OFFSET,
   FLYING_AIRCRAFT_TERRAIN_OFFSET,
   FSLTL_MODEL_HEIGHT_OFFSET,
-
   // Colors
   FALLBACK_MODEL_COLOR,
   SHADOW_COLOR,
-
   // Rendering performance
   LABEL_CENTER_SCREEN_THRESHOLD_PX,
-  LABEL_PROJECTION_MIN_DISTANCE_M
+  LABEL_PROJECTION_MIN_DISTANCE_M,
 } from './rendering'
 
 // ============================================================================
@@ -48,20 +44,16 @@ export {
   FOV_MIN,
   FOV_MAX,
   FOV_DEFAULT,
-
   // Camera speeds
   CAMERA_MOVE_SPEED_MULTIPLIER,
   CAMERA_ROTATION_SPEED,
   CAMERA_ZOOM_SPEED,
-
   // Pitch limits
   PITCH_MIN,
   PITCH_MAX,
   PITCH_DEFAULT,
-
   // Heading
   HEADING_DEFAULT,
-
   // Orbit mode
   ORBIT_DISTANCE_MIN,
   ORBIT_DISTANCE_MAX,
@@ -70,23 +62,19 @@ export {
   ORBIT_PITCH_MAX,
   ORBIT_PITCH_DEFAULT,
   ORBIT_HEADING_DEFAULT,
-
   // Follow mode
   FOLLOW_ZOOM_DEFAULT,
   FOLLOW_ZOOM_MIN,
   FOLLOW_ZOOM_MAX,
-
   // Top-down view
   TOPDOWN_ALTITUDE_DEFAULT,
   TOPDOWN_ALTITUDE_MIN,
   TOPDOWN_ALTITUDE_MAX,
-
   // Airport transition
   AIRPORT_FLYTO_DURATION,
-
   // Globe view (main menu)
   GLOBE_VIEW_HEIGHT,
-  GLOBE_FLYTO_DURATION
+  GLOBE_FLYTO_DURATION,
 } from './camera'
 
 // ============================================================================
@@ -98,22 +86,18 @@ export {
   VATSIM_DATA_URL,
   AVIATION_WEATHER_URL,
   AIRPORTS_DB_URL,
-
   // VATSIM polling
   VATSIM_POLL_INTERVAL,
   VATSIM_ACTUAL_UPDATE_INTERVAL,
-
   // Weather refresh
   WEATHER_REFRESH_INTERVAL,
   NEAREST_METAR_THROTTLE,
   POSITION_CHANGE_THRESHOLD,
-
   // Caching
   TILE_CACHE_TTL,
-
   // Retry configuration
   API_MAX_RETRIES,
-  API_RETRY_DELAY
+  API_RETRY_DELAY,
 } from './api'
 
 // ============================================================================
@@ -124,7 +108,6 @@ export {
   // Scene and camera
   CAMERA_MIN_Z,
   CAMERA_MAX_Z,
-
   // Cloud layers
   CLOUD_POOL_SIZE,
   CLOUD_PLANE_DIAMETER,
@@ -132,7 +115,6 @@ export {
   CLOUD_DIFFUSE_COLOR,
   CLOUD_EMISSIVE_COLOR,
   CLOUD_BASE_ALPHA,
-
   // Fog dome
   FOG_DOME_BASE_DIAMETER,
   FOG_DOME_SEGMENTS,
@@ -142,7 +124,6 @@ export {
   FOG_BASE_ALPHA,
   FOG_FRESNEL_BIAS,
   FOG_FRESNEL_POWER,
-
   // Visibility-based fog adjustment
   VISIBILITY_THRESHOLD_EXTREMELY_LOW,
   VISIBILITY_THRESHOLD_LOW,
@@ -156,10 +137,8 @@ export {
   FOG_FRESNEL_BIAS_EXTREMELY_LOW,
   FOG_FRESNEL_BIAS_LOW_MIN,
   FOG_FRESNEL_BIAS_MODERATE,
-
   // Cloud ceiling visibility
   CLOUD_CEILING_COVERAGE_THRESHOLD,
-
   // Cloud patchiness (noise-based)
   CLOUD_NOISE_TEXTURE_SIZE,
   CLOUD_NOISE_OCTAVES,
@@ -179,7 +158,6 @@ export {
   CLOUD_LAYER_COVERAGE_TRANSITION_SPEED,
   CLOUD_LAYER_FADE_SPEED,
   CLOUD_LAYER_COVERAGE_REGEN_THRESHOLD,
-
   // Overcast dome
   CLOUD_DOME_COVERAGE_THRESHOLD,
   CLOUD_DOME_RADIUS,
@@ -188,7 +166,6 @@ export {
   CLOUD_DOME_HORIZON_DARKENING,
   CLOUD_DOME_FRESNEL_BIAS,
   CLOUD_DOME_FRESNEL_POWER,
-
   // Above-cloud view
   CLOUD_ABOVE_TRANSITION_BUFFER,
   CLOUD_DOME_FRESNEL_BIAS_ABOVE,
@@ -196,14 +173,12 @@ export {
   CLOUD_ABOVE_DIFFUSE_COLOR,
   CLOUD_ABOVE_EMISSIVE_COLOR,
   CLOUD_ABOVE_BASE_ALPHA,
-
   // Lighting
   HEMISPHERIC_LIGHT_INTENSITY,
   HEMISPHERIC_LIGHT_GROUND_COLOR,
   DIRECTIONAL_LIGHT_INTENSITY,
-
   // Unit conversions
-  STATUTE_MILES_TO_METERS
+  STATUTE_MILES_TO_METERS,
 } from './babylon'
 
 // ============================================================================
@@ -216,20 +191,17 @@ export {
   DEFAULT_REPLAY_DURATION_MINUTES,
   MIN_REPLAY_DURATION_MINUTES,
   MAX_REPLAY_DURATION_MINUTES,
-
   // Playback configuration
   PLAYBACK_SPEEDS,
   DEFAULT_PLAYBACK_SPEED,
   PLAYBACK_UI_UPDATE_INTERVAL_MS,
-
   // Memory estimates
   BYTES_PER_AIRCRAFT_STATE,
   estimateReplayMemoryMB,
-
   // Export file format
   REPLAY_EXPORT_VERSION,
   REPLAY_FILE_EXTENSION,
-  REPLAY_FILE_PREFIX
+  REPLAY_FILE_PREFIX,
 } from './replay'
 
 // ============================================================================
@@ -257,7 +229,6 @@ export {
   RAIN_EMITTER_BOX_HEIGHT,
   RAIN_DRIFT_RANGE,
   RAIN_WIND_GRAVITY,
-
   // Snow particles
   SNOW_EMIT_RATE_BASE,
   SNOW_PARTICLE_LIFETIME,
@@ -270,23 +241,19 @@ export {
   SNOW_WIND_GRAVITY,
   SNOW_EMITTER_HEIGHT,
   SNOW_EMITTER_BOX_HEIGHT,
-
   // Emitter
   EMITTER_BOX_SIZE,
   EMITTER_HEIGHT_ABOVE_CAMERA,
   EMITTER_HEIGHT_RANGE,
-
   // Intensity
   INTENSITY_LIGHT,
   INTENSITY_MODERATE,
   INTENSITY_HEAVY,
-
   // Visibility scaling
   PRECIP_VIS_THRESHOLD_HIGH,
   PRECIP_VIS_THRESHOLD_LOW,
   PRECIP_VIS_FACTOR_MIN,
   PRECIP_VIS_FACTOR_MAX,
-
   // Lightning
   LIGHTNING_INTERVAL_MIN,
   LIGHTNING_INTERVAL_MAX,
@@ -295,7 +262,6 @@ export {
   LIGHTNING_MULTI_FLASH_PROBABILITY,
   LIGHTNING_MULTI_FLASH_DELAY_MS,
   LIGHTNING_MULTI_FLASH_MAX,
-
   // Wind
   KNOTS_TO_MS,
   WIND_EFFECT_SCALE,
@@ -305,9 +271,8 @@ export {
   GUST_DURATION_MAX,
   GUST_RAMP_FRACTION,
   VARIABLE_WIND_VARIANCE,
-
   // METAR codes
-  METAR_PRECIP_CODES
+  METAR_PRECIP_CODES,
 } from './precipitation'
 
 // ============================================================================
@@ -323,12 +288,10 @@ export {
   CLOUD_ALTITUDE_BAND_FEET,
   INTERPOLATION_UPDATE_THROTTLE_MS,
   INTERPOLATION_POSITION_THRESHOLD_DEG,
-
   // Auto-airport switching
   AUTO_SWITCH_CHECK_INTERVAL_MS,
   AUTO_SWITCH_HYSTERESIS_NM,
   AUTO_SWITCH_MIN_DISTANCE_NM,
-
   // Weather smoothing / hysteresis
   VISIBILITY_TRANSITION_TIME,
   FOG_DENSITY_TRANSITION_TIME,
@@ -341,7 +304,7 @@ export {
   THUNDERSTORM_CESSATION_DELAY,
   VISIBILITY_CHANGE_THRESHOLD,
   WIND_DIRECTION_CHANGE_THRESHOLD,
-  WIND_SPEED_CHANGE_THRESHOLD
+  WIND_SPEED_CHANGE_THRESHOLD,
 } from './weather'
 
 // ============================================================================
@@ -354,22 +317,18 @@ export {
   SUN_ELEVATION_CIVIL_TWILIGHT,
   SUN_ELEVATION_NAUTICAL_TWILIGHT,
   SUN_ELEVATION_NIGHT,
-
   // Imagery brightness values
   NIGHT_BRIGHTNESS_MIN,
   NIGHT_BRIGHTNESS_TWILIGHT,
   NIGHT_BRIGHTNESS_CIVIL,
   NIGHT_GAMMA_BOOST,
-
   // Babylon.js night lighting multipliers
   BABYLON_NIGHT_HEMISPHERIC_MULT,
   BABYLON_NIGHT_DIRECTIONAL_MULT,
   BABYLON_NIGHT_FOG_EMISSIVE_MULT,
   BABYLON_NIGHT_CLOUD_EMISSIVE_MULT,
-
   // Performance
   SUN_POSITION_UPDATE_INTERVAL,
-
   // Weather particle pre-warming
-  PARTICLE_PREWARM_JUMP_THRESHOLD
+  PARTICLE_PREWARM_JUMP_THRESHOLD,
 } from './lighting'

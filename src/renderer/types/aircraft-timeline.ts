@@ -19,12 +19,12 @@ export interface AircraftObservation {
   // Position
   latitude: number
   longitude: number
-  altitude: number  // meters
+  altitude: number // meters
 
   // Movement
-  heading: number       // degrees, nose direction
-  groundspeed: number   // knots
-  groundTrack: number | null  // degrees, direction of travel (for extrapolation)
+  heading: number // degrees, nose direction
+  groundspeed: number // knots
+  groundTrack: number | null // degrees, direction of travel (for extrapolation)
 
   /**
    * True if heading came from actual ADS-B data (true_heading field).
@@ -114,7 +114,7 @@ export interface AircraftMetadata {
  */
 export function mergeAircraftMetadata(
   existing: AircraftMetadata | undefined,
-  incoming: AircraftMetadata
+  incoming: AircraftMetadata,
 ): AircraftMetadata {
   if (!existing) {
     return incoming
@@ -135,7 +135,7 @@ export function mergeAircraftMetadata(
     aircraftType: incoming.aircraftType ?? existing.aircraftType,
 
     // Preserve isParked if incoming doesn't specify
-    isParked: incoming.isParked ?? existing.isParked
+    isParked: incoming.isParked ?? existing.isParked,
   }
 }
 
@@ -199,7 +199,7 @@ export interface TimelineInterpolationResult {
   // Interpolated/extrapolated position
   latitude: number
   longitude: number
-  altitude: number  // meters
+  altitude: number // meters
   heading: number
   groundspeed: number
   groundTrack: number | null

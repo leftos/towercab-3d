@@ -40,21 +40,13 @@ let cachedCullingResult: CachedCullingResult | null = null
  * Calculate distance in nautical miles between two lat/lon points
  * Uses Haversine formula for accuracy
  */
-function calculateDistanceNM(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number
-): number {
+function calculateDistanceNM(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 3440.065 // Earth radius in nautical miles
-  const dLat = (lat2 - lat1) * Math.PI / 180
-  const dLon = (lon2 - lon1) * Math.PI / 180
+  const dLat = ((lat2 - lat1) * Math.PI) / 180
+  const dLon = ((lon2 - lon1) * Math.PI) / 180
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) *
-    Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon / 2) *
-    Math.sin(dLon / 2)
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2)
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
   return R * c
 }
@@ -136,7 +128,7 @@ function getCameraLatLon(viewer: Cesium.Viewer | null): { lat: number; lon: numb
 
   return {
     lat: Cesium.Math.toDegrees(cartographic.latitude),
-    lon: Cesium.Math.toDegrees(cartographic.longitude)
+    lon: Cesium.Math.toDegrees(cartographic.longitude),
   }
 }
 
@@ -147,12 +139,7 @@ const scratchCartesian = new Cesium.Cartesian3()
  * Check if a point (lat/lon/alt) is visible in the camera frustum
  * Uses expanded frustum (1.1x) to allow aircraft to enter smoothly
  */
-function isPointInFrustum(
-  viewer: Cesium.Viewer,
-  lat: number,
-  lon: number,
-  alt: number
-): boolean {
+function isPointInFrustum(viewer: Cesium.Viewer, lat: number, lon: number, alt: number): boolean {
   // Convert to Cartesian3
   const position = Cesium.Cartesian3.fromDegrees(lon, lat, alt, undefined, scratchCartesian)
 
@@ -167,7 +154,7 @@ function isPointInFrustum(
   // Check if point is inside the frustum
   // computeVisibility returns Intersect.INSIDE, INTERSECTING, or OUTSIDE
   const visibility = frameState.cullingVolume.computeVisibility(
-    new Cesium.BoundingSphere(position, 100) // 100m radius to account for aircraft size
+    new Cesium.BoundingSphere(position, 100), // 100m radius to account for aircraft size
   )
 
   return visibility !== Cesium.Intersect.OUTSIDE
@@ -188,10 +175,7 @@ const AVERAGE_AIRCRAFT_SIZE_METERS = 35
  * @param viewer - Cesium viewer for FOV
  * @returns Approximate size as percentage of screen height (0.0 to 1.0)
  */
-function getScreenSpacePercentage(
-  distanceMeters: number,
-  viewer: Cesium.Viewer
-): number {
+function getScreenSpacePercentage(distanceMeters: number, viewer: Cesium.Viewer): number {
   if (distanceMeters <= 0) return Infinity // Very close, always visible
 
   // Get vertical field of view in radians
@@ -256,7 +240,7 @@ export function filterAircraftForRendering({
   interpolatedAircraft,
   maxAircraft,
   renderRadiusNM,
-  alwaysInclude
+  alwaysInclude,
 }: RenderCullingOptions): RenderCullingResult {
   // Get current frame number from Cesium scene (0 if viewer not available)
   // frameState is not in Cesium's public types but exists at runtime
@@ -265,10 +249,12 @@ export function filterAircraftForRendering({
   // Check cache: if we filtered the same Map within the same frame, reuse result
   // We check the Map reference (not contents) since it's the same shared Map
   // that gets mutated by the interpolation loop
-  if (cachedCullingResult &&
-      cachedCullingResult.sourceMapRef === interpolatedAircraft &&
-      cachedCullingResult.frameNumber === frameNumber &&
-      frameNumber > 0) {
+  if (
+    cachedCullingResult &&
+    cachedCullingResult.sourceMapRef === interpolatedAircraft &&
+    cachedCullingResult.frameNumber === frameNumber &&
+    frameNumber > 0
+  ) {
     return cachedCullingResult.result
   }
 
@@ -288,7 +274,7 @@ export function filterAircraftForRendering({
     const result: RenderCullingResult = {
       filteredAircraft: new Map(),
       totalCount: 0,
-      filteredCount: 0
+      filteredCount: 0,
     }
     // Cache even empty results
     cachedCullingResult = { frameNumber, sourceMapRef: interpolatedAircraft, result }
@@ -302,7 +288,7 @@ export function filterAircraftForRendering({
     const result: RenderCullingResult = {
       filteredAircraft: interpolatedAircraft,
       totalCount,
-      filteredCount: totalCount
+      filteredCount: totalCount,
     }
     cachedCullingResult = { frameNumber, sourceMapRef: interpolatedAircraft, result }
     return result
@@ -326,7 +312,7 @@ export function filterAircraftForRendering({
       cameraPos.lat,
       cameraPos.lon,
       aircraft.interpolatedLatitude,
-      aircraft.interpolatedLongitude
+      aircraft.interpolatedLongitude,
     )
 
     // Skip if outside radius (unless always-include)
@@ -340,7 +326,7 @@ export function filterAircraftForRendering({
         viewer,
         aircraft.interpolatedLatitude,
         aircraft.interpolatedLongitude,
-        aircraft.interpolatedAltitude
+        aircraft.interpolatedAltitude,
       )
       if (!inFrustum) {
         continue
@@ -376,7 +362,7 @@ export function filterAircraftForRendering({
 
   // Ensure always-include aircraft is in the final list
   if (alwaysInclude && alwaysIncludeEntry) {
-    const alwaysIncludeInList = finalList.some(a => a.callsign === alwaysInclude)
+    const alwaysIncludeInList = finalList.some((a) => a.callsign === alwaysInclude)
     if (!alwaysIncludeInList) {
       // Replace the last element (one of the k-th closest) with always-include
       if (finalList.length >= effectiveMaxAircraft) {
@@ -396,7 +382,7 @@ export function filterAircraftForRendering({
   const result: RenderCullingResult = {
     filteredAircraft,
     totalCount,
-    filteredCount: filteredAircraft.size
+    filteredCount: filteredAircraft.size,
   }
 
   // Cache for reuse within the same frame

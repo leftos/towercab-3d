@@ -209,13 +209,13 @@ import type { PrecipitationType } from '@/types'
 
 /** Mapping of METAR precipitation codes to precipitation types */
 export const METAR_PRECIP_CODES: Record<string, PrecipitationType> = {
-  'RA': 'rain',
-  'SN': 'snow',
-  'DZ': 'drizzle',
-  'GR': 'hail',
-  'GS': 'hail',
-  'PL': 'ice',
-  'SG': 'snow',
-  'IC': 'snow',
-  'UP': 'unknown'
+  RA: 'rain',
+  SN: 'snow',
+  DZ: 'drizzle',
+  GR: 'hail',
+  GS: 'hail',
+  PL: 'ice',
+  SG: 'snow',
+  IC: 'snow',
+  UP: 'unknown',
 }

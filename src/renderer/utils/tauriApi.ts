@@ -153,7 +153,7 @@ export const modApi = {
     const response = await fetch(`/api/mods/${modType}`)
     if (!response.ok) return []
     const mods: ModInfo[] = await response.json()
-    return mods.map(m => m.name)
+    return mods.map((m) => m.name)
   },
 
   /**
@@ -204,19 +204,25 @@ export const modApi = {
    * @param filePaths Array of absolute paths to VMR files
    * @returns Parsed VMR rules
    */
-  parseVMRFiles: async (filePaths: string[]): Promise<Array<{
-    typeCode: string
-    modelName: string
-    callsignPrefix: string | null
-    sourceVmr: string
-  }>> => {
+  parseVMRFiles: async (
+    filePaths: string[],
+  ): Promise<
+    Array<{
+      typeCode: string
+      modelName: string
+      callsignPrefix: string | null
+      sourceVmr: string
+    }>
+  > => {
     if (isTauri()) {
-      return invoke<Array<{
-        typeCode: string
-        modelName: string
-        callsignPrefix: string | null
-        sourceVmr: string
-      }>>('parse_vmr_files', { filePaths })
+      return invoke<
+        Array<{
+          typeCode: string
+          modelName: string
+          callsignPrefix: string | null
+          sourceVmr: string
+        }>
+      >('parse_vmr_files', { filePaths })
     }
     // In browser mode, VMR rules come from HTTP API
     return []
@@ -308,20 +314,23 @@ export const modApi = {
    * This is intended for Shift+Save Default to export shareable positions
    * In browser mode, sends to HTTP API
    */
-  updateTowerPosition: async (icao: string, position: {
-    view3d?: {
-      lat: number
-      lon: number
-      height: number
-      heading?: number
-    }
-    view2d?: {
-      lat?: number
-      lon?: number
-      altitude: number
-      heading?: number
-    }
-  }): Promise<void> => {
+  updateTowerPosition: async (
+    icao: string,
+    position: {
+      view3d?: {
+        lat: number
+        lon: number
+        height: number
+        heading?: number
+      }
+      view2d?: {
+        lat?: number
+        lon?: number
+        altitude: number
+        heading?: number
+      }
+    },
+  ): Promise<void> => {
     if (isTauri()) {
       return invoke<void>('update_tower_position', { icao, position })
     }
@@ -329,12 +338,12 @@ export const modApi = {
     const response = await fetch(`/api/tower-positions/${encodeURIComponent(icao)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(position)
+      body: JSON.stringify(position),
     })
     if (!response.ok) {
       throw new Error(`Failed to update tower position: ${response.status}`)
     }
-  }
+  },
 }
 
 /**
@@ -389,12 +398,12 @@ export const globalSettingsApi = {
     const response = await fetch('/api/global-settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(settings)
+      body: JSON.stringify(settings),
     })
     if (!response.ok) {
       throw new Error(`Failed to save global settings: ${response.status}`)
     }
-  }
+  },
 }
 
 /**
@@ -414,27 +423,23 @@ export const httpServerApi = {
   /**
    * Start the HTTP server on the specified port
    */
-  start: (port: number): Promise<ServerStatus> =>
-    invoke<ServerStatus>('start_http_server', { port }),
+  start: (port: number): Promise<ServerStatus> => invoke<ServerStatus>('start_http_server', { port }),
 
   /**
    * Stop the HTTP server
    */
-  stop: (): Promise<void> =>
-    invoke<void>('stop_http_server'),
+  stop: (): Promise<void> => invoke<void>('stop_http_server'),
 
   /**
    * Get the current server status
    */
-  getStatus: (): Promise<ServerStatus> =>
-    invoke<ServerStatus>('get_http_server_status'),
+  getStatus: (): Promise<ServerStatus> => invoke<ServerStatus>('get_http_server_status'),
 
   /**
    * Set whether the app should minimize to tray instead of quitting.
    * When enabled, also shows the system tray icon.
    */
-  setMinimizeToTray: (enabled: boolean): Promise<void> =>
-    invoke<void>('set_minimize_to_tray', { enabled })
+  setMinimizeToTray: (enabled: boolean): Promise<void> => invoke<void>('set_minimize_to_tray', { enabled }),
 }
 
 /**
@@ -451,7 +456,7 @@ export const shellApi = {
     }
     // In browser mode, use window.open
     window.open(url, '_blank', 'noopener,noreferrer')
-  }
+  },
 }
 
 /**
@@ -461,7 +466,7 @@ export const appApi = {
   /**
    * Get the app version from Tauri config
    */
-  getVersion
+  getVersion,
 }
 
 /**
@@ -476,7 +481,7 @@ export const appApi = {
 export async function convertToAssetUrl(
   filePath: string,
   type: 'msfs' | 'aircraft' | 'towers' = 'msfs',
-  relativePath?: string
+  relativePath?: string,
 ): Promise<string> {
   // If path is already an HTTP URL, return as-is
   if (filePath.startsWith('/api/') || filePath.startsWith('http://') || filePath.startsWith('https://')) {
@@ -492,9 +497,7 @@ export async function convertToAssetUrl(
   // In browser mode, convert to HTTP API URL
   // Extract the relative path from the file path or use the provided one
   if (relativePath) {
-    const apiPath = type === 'msfs'
-      ? `/api/msfs/${relativePath}`
-      : `/api/mods/${type}/${relativePath}`
+    const apiPath = type === 'msfs' ? `/api/msfs/${relativePath}` : `/api/mods/${type}/${relativePath}`
     return apiPath
   }
 
@@ -530,13 +533,20 @@ export async function convertToAssetUrl(
  */
 export function convertToAssetUrlSync(filePath: string): string {
   // If path is already an HTTP URL or asset URL, return as-is
-  if (filePath.startsWith('/api/') || filePath.startsWith('http://') || filePath.startsWith('https://') || filePath.startsWith('asset://')) {
+  if (
+    filePath.startsWith('/api/') ||
+    filePath.startsWith('http://') ||
+    filePath.startsWith('https://') ||
+    filePath.startsWith('asset://')
+  ) {
     return filePath
   }
 
   // In Tauri mode, use the internal convertFileSrc (it's synchronous)
   if (isTauri()) {
-    const internals = (window as unknown as { __TAURI_INTERNALS__?: { convertFileSrc: (path: string, protocol?: string) => string } }).__TAURI_INTERNALS__
+    const internals = (
+      window as unknown as { __TAURI_INTERNALS__?: { convertFileSrc: (path: string, protocol?: string) => string } }
+    ).__TAURI_INTERNALS__
     if (internals?.convertFileSrc) {
       return internals.convertFileSrc(filePath)
     }
@@ -576,7 +586,7 @@ export const tauriApi = {
   app: appApi,
   isTauri,
   convertToAssetUrl,
-  convertToAssetUrlSync
+  convertToAssetUrlSync,
 }
 
 export default tauriApi

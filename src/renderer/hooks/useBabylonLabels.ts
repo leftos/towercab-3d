@@ -13,7 +13,7 @@ interface UseBabylonLabelsOptions {
 // Memory diagnostic counters for label management
 const memoryCounters = {
   guiControlsCreated: 0,
-  guiControlsDisposed: 0
+  guiControlsDisposed: 0,
 }
 
 /**
@@ -32,7 +32,10 @@ export function getLabelMemoryCounters() {
  * @returns Hex color string (e.g., "#ff0000")
  */
 function rgbToHex(r: number, g: number, b: number): string {
-  const toHex = (v: number) => Math.round(v * 255).toString(16).padStart(2, '0')
+  const toHex = (v: number) =>
+    Math.round(v * 255)
+      .toString(16)
+      .padStart(2, '0')
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`
 }
 
@@ -315,200 +318,197 @@ function rgbToHex(r: number, g: number, b: number): string {
  * @see useBabylonScene - For GUI texture initialization
  * @see getLabelMemoryCounters - For memory diagnostic counters
  */
-export function useBabylonLabels(
-  options: UseBabylonLabelsOptions
-): UseBabylonLabelsResult {
+export function useBabylonLabels(options: UseBabylonLabelsOptions): UseBabylonLabelsResult {
   const { guiTexture, isTopDownView = false, fontSize = 12 } = options
 
   const aircraftLabelsRef = useRef<Map<string, AircraftLabel>>(new Map())
 
   // Create or update aircraft label
-  const updateLabel = useCallback((
-    callsign: string,
-    color: { r: number; g: number; b: number },
-    isFollowed: boolean,
-    labelText?: string
-  ) => {
-    if (!guiTexture) return
+  const updateLabel = useCallback(
+    (callsign: string, color: { r: number; g: number; b: number }, isFollowed: boolean, labelText?: string) => {
+      if (!guiTexture) return
 
-    let labelData = aircraftLabelsRef.current.get(callsign)
+      let labelData = aircraftLabelsRef.current.get(callsign)
 
-    if (!labelData) {
-      // Create label container
-      const label = new GUI.Rectangle(`${callsign}_label`)
-      memoryCounters.guiControlsCreated++
-      label.width = 'auto'
-      label.height = 'auto'
-      label.cornerRadius = 4
-      label.thickness = 1
-      label.background = isFollowed ? 'rgba(0, 50, 80, 0.85)' : 'rgba(0, 0, 0, 0.85)'
-      label.color = rgbToHex(color.r, color.g, color.b)
-      label.adaptWidthToChildren = true
-      label.adaptHeightToChildren = true
-      label.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT
-      label.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_TOP
-      label.zIndex = 10
-      label.isVisible = false
-      guiTexture.addControl(label)
+      if (!labelData) {
+        // Create label container
+        const label = new GUI.Rectangle(`${callsign}_label`)
+        memoryCounters.guiControlsCreated++
+        label.width = 'auto'
+        label.height = 'auto'
+        label.cornerRadius = 4
+        label.thickness = 1
+        label.background = isFollowed ? 'rgba(0, 50, 80, 0.85)' : 'rgba(0, 0, 0, 0.85)'
+        label.color = rgbToHex(color.r, color.g, color.b)
+        label.adaptWidthToChildren = true
+        label.adaptHeightToChildren = true
+        label.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT
+        label.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_TOP
+        label.zIndex = 10
+        label.isVisible = false
+        guiTexture.addControl(label)
 
-      // Create text block
-      const text = new GUI.TextBlock(`${callsign}_text`)
-      memoryCounters.guiControlsCreated++
-      text.text = labelText || callsign
-      text.color = rgbToHex(color.r, color.g, color.b)
-      text.fontSize = fontSize
-      text.fontFamily = 'monospace'
-      text.fontWeight = 'bold'
-      text.textHorizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT
-      text.resizeToFit = true
-      text.paddingLeft = '4px'
-      text.paddingRight = '4px'
-      text.paddingTop = '2px'
-      text.paddingBottom = '2px'
-      label.addControl(text)
+        // Create text block
+        const text = new GUI.TextBlock(`${callsign}_text`)
+        memoryCounters.guiControlsCreated++
+        text.text = labelText || callsign
+        text.color = rgbToHex(color.r, color.g, color.b)
+        text.fontSize = fontSize
+        text.fontFamily = 'monospace'
+        text.fontWeight = 'bold'
+        text.textHorizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT
+        text.resizeToFit = true
+        text.paddingLeft = '4px'
+        text.paddingRight = '4px'
+        text.paddingTop = '2px'
+        text.paddingBottom = '2px'
+        label.addControl(text)
 
-      // Create leader line
-      // Initialize coordinates off-screen to prevent dot appearing at center
-      // (GUI.Line defaults to center alignment with x1=y1=x2=y2=0)
-      const leaderLine = new GUI.Line(`${callsign}_leaderLine`)
-      memoryCounters.guiControlsCreated++
-      leaderLine.lineWidth = 3
-      leaderLine.color = rgbToHex(color.r, color.g, color.b)
-      leaderLine.zIndex = 1
-      leaderLine.x1 = -10000
-      leaderLine.y1 = -10000
-      leaderLine.x2 = -10000
-      leaderLine.y2 = -10000
-      leaderLine.isVisible = false
-      guiTexture.addControl(leaderLine)
+        // Create leader line
+        // Initialize coordinates off-screen to prevent dot appearing at center
+        // (GUI.Line defaults to center alignment with x1=y1=x2=y2=0)
+        const leaderLine = new GUI.Line(`${callsign}_leaderLine`)
+        memoryCounters.guiControlsCreated++
+        leaderLine.lineWidth = 3
+        leaderLine.color = rgbToHex(color.r, color.g, color.b)
+        leaderLine.zIndex = 1
+        leaderLine.x1 = -10000
+        leaderLine.y1 = -10000
+        leaderLine.x2 = -10000
+        leaderLine.y2 = -10000
+        leaderLine.isVisible = false
+        guiTexture.addControl(leaderLine)
 
-      labelData = { label, labelText: text, leaderLine }
-      aircraftLabelsRef.current.set(callsign, labelData)
-    }
+        labelData = { label, labelText: text, leaderLine }
+        aircraftLabelsRef.current.set(callsign, labelData)
+      }
 
-    // Update colors, text, and font size
-    labelData.leaderLine.color = rgbToHex(color.r, color.g, color.b)
-    labelData.labelText.text = labelText || callsign
-    labelData.labelText.color = rgbToHex(color.r, color.g, color.b)
-    labelData.labelText.fontSize = fontSize
-    labelData.label.color = rgbToHex(color.r, color.g, color.b)
-    labelData.label.background = isFollowed ? 'rgba(0, 50, 80, 0.85)' : 'rgba(0, 0, 0, 0.85)'
-    const scale = isFollowed ? 1.2 : 1.0
-    labelData.label.scaleX = scale
-    labelData.label.scaleY = scale
-  }, [guiTexture, fontSize])
+      // Update colors, text, and font size
+      labelData.leaderLine.color = rgbToHex(color.r, color.g, color.b)
+      labelData.labelText.text = labelText || callsign
+      labelData.labelText.color = rgbToHex(color.r, color.g, color.b)
+      labelData.labelText.fontSize = fontSize
+      labelData.label.color = rgbToHex(color.r, color.g, color.b)
+      labelData.label.background = isFollowed ? 'rgba(0, 50, 80, 0.85)' : 'rgba(0, 0, 0, 0.85)'
+      const scale = isFollowed ? 1.2 : 1.0
+      labelData.label.scaleX = scale
+      labelData.label.scaleY = scale
+    },
+    [guiTexture, fontSize],
+  )
 
   // Update label position and leader line
-  const updateLabelPosition = useCallback((
-    callsign: string,
-    screenX: number,
-    screenY: number,
-    labelOffsetX: number,
-    labelOffsetY: number
-  ) => {
-    const labelData = aircraftLabelsRef.current.get(callsign)
-    if (!labelData) return
+  const updateLabelPosition = useCallback(
+    (callsign: string, screenX: number, screenY: number, labelOffsetX: number, labelOffsetY: number) => {
+      const labelData = aircraftLabelsRef.current.get(callsign)
+      if (!labelData) return
 
-    // Scale CSS pixel coordinates to device pixels for high-DPI displays (4K monitors)
-    // Cesium's worldToWindowCoordinates returns CSS pixels, but Babylon GUI operates
-    // in device pixels when the canvas is scaled by devicePixelRatio
-    const dpr = window.devicePixelRatio || 1
-    const scaledScreenX = screenX * dpr
-    const scaledScreenY = screenY * dpr
-    const scaledOffsetX = labelOffsetX * dpr
-    const scaledOffsetY = labelOffsetY * dpr
+      // Scale CSS pixel coordinates to device pixels for high-DPI displays (4K monitors)
+      // Cesium's worldToWindowCoordinates returns CSS pixels, but Babylon GUI operates
+      // in device pixels when the canvas is scaled by devicePixelRatio
+      const dpr = window.devicePixelRatio || 1
+      const scaledScreenX = screenX * dpr
+      const scaledScreenY = screenY * dpr
+      const scaledOffsetX = labelOffsetX * dpr
+      const scaledOffsetY = labelOffsetY * dpr
 
-    // Get label dimensions for calculations, accounting for scale (followed aircraft are 1.2x)
-    const scaleX = labelData.label.scaleX ?? 1
-    const scaleY = labelData.label.scaleY ?? 1
-    const labelW = (labelData.label.widthInPixels || 80) * scaleX
-    const labelH = (labelData.label.heightInPixels || 24) * scaleY
+      // Get label dimensions for calculations, accounting for scale (followed aircraft are 1.2x)
+      const scaleX = labelData.label.scaleX ?? 1
+      const scaleY = labelData.label.scaleY ?? 1
+      const labelW = (labelData.label.widthInPixels || 80) * scaleX
+      const labelH = (labelData.label.heightInPixels || 24) * scaleY
 
-    // Check if aircraft is at least marginally within viewport
-    // If aircraft is completely off-screen, hide the label entirely
-    if (guiTexture) {
-      const size = guiTexture.getSize()
-      if (size.width > 0 && size.height > 0) {
-        const aircraftMargin = 50 * dpr // Aircraft must be within 50px of viewport edge (scaled)
-        if (scaledScreenX < -aircraftMargin || scaledScreenX > size.width + aircraftMargin ||
-            scaledScreenY < -aircraftMargin || scaledScreenY > size.height + aircraftMargin) {
-          // Aircraft is off-screen, hide label
-          labelData.label.isVisible = false
-          labelData.leaderLine.isVisible = false
-          return
+      // Check if aircraft is at least marginally within viewport
+      // If aircraft is completely off-screen, hide the label entirely
+      if (guiTexture) {
+        const size = guiTexture.getSize()
+        if (size.width > 0 && size.height > 0) {
+          const aircraftMargin = 50 * dpr // Aircraft must be within 50px of viewport edge (scaled)
+          if (
+            scaledScreenX < -aircraftMargin ||
+            scaledScreenX > size.width + aircraftMargin ||
+            scaledScreenY < -aircraftMargin ||
+            scaledScreenY > size.height + aircraftMargin
+          ) {
+            // Aircraft is off-screen, hide label
+            labelData.label.isVisible = false
+            labelData.leaderLine.isVisible = false
+            return
+          }
         }
       }
-    }
 
-    // Position label with offset from model screen position
-    let labelX = scaledScreenX + scaledOffsetX
-    let labelY = scaledScreenY + scaledOffsetY
+      // Position label with offset from model screen position
+      let labelX = scaledScreenX + scaledOffsetX
+      let labelY = scaledScreenY + scaledOffsetY
 
-    // Clamp label position to viewport boundaries (keep fully visible)
-    // Only apply clamping if guiTexture has valid dimensions
-    if (guiTexture) {
-      const size = guiTexture.getSize()
-      if (size.width > 0 && size.height > 0) {
-        const margin = 5 // Small margin from edge
-        labelX = Math.max(margin, Math.min(labelX, size.width - labelW - margin))
-        labelY = Math.max(margin, Math.min(labelY, size.height - labelH - margin))
+      // Clamp label position to viewport boundaries (keep fully visible)
+      // Only apply clamping if guiTexture has valid dimensions
+      if (guiTexture) {
+        const size = guiTexture.getSize()
+        if (size.width > 0 && size.height > 0) {
+          const margin = 5 // Small margin from edge
+          labelX = Math.max(margin, Math.min(labelX, size.width - labelW - margin))
+          labelY = Math.max(margin, Math.min(labelY, size.height - labelH - margin))
+        }
       }
-    }
 
-    labelData.label.left = labelX
-    labelData.label.top = labelY
+      labelData.label.left = labelX
+      labelData.label.top = labelY
 
-    // Line from label center to model screen position (using scaled coordinates)
-    const labelCenterX = labelX + labelW / 2
-    const labelCenterY = labelY + labelH / 2
+      // Line from label center to model screen position (using scaled coordinates)
+      const labelCenterX = labelX + labelW / 2
+      const labelCenterY = labelY + labelH / 2
 
-    // Calculate direction from label to model (all in device pixels)
-    const dirX = scaledScreenX - labelCenterX
-    const dirY = scaledScreenY - labelCenterY
-    const dist = Math.sqrt(dirX * dirX + dirY * dirY)
+      // Calculate direction from label to model (all in device pixels)
+      const dirX = scaledScreenX - labelCenterX
+      const dirY = scaledScreenY - labelCenterY
+      const dist = Math.sqrt(dirX * dirX + dirY * dirY)
 
-    if (dist < 1) {
-      // Too close, hide line but show label
+      if (dist < 1) {
+        // Too close, hide line but show label
+        labelData.label.isVisible = true
+        labelData.leaderLine.isVisible = false
+        return
+      }
+
+      // Normalize direction
+      const nx = dirX / dist
+      const ny = dirY / dist
+
+      // Line starts at label edge - calculate intersection with rectangle
+      const tX = Math.abs(nx) > 0.001 ? labelW / 2 / Math.abs(nx) : 10000
+      const tY = Math.abs(ny) > 0.001 ? labelH / 2 / Math.abs(ny) : 10000
+      const tEdge = Math.min(tX, tY) + 3 * dpr // +3 pixel gap from edge (scaled)
+
+      const startX = labelCenterX + nx * tEdge
+      const startY = labelCenterY + ny * tEdge
+
+      // Line ends near model (leave small gap - larger in 2D top-down view, scaled for DPI)
+      const endGap = (isTopDownView ? LEADER_LINE_END_GAP_2D_PX : LEADER_LINE_END_GAP_3D_PX) * dpr
+      const endX = scaledScreenX - nx * endGap
+      const endY = scaledScreenY - ny * endGap
+
+      // Set line coordinates BEFORE making visible to prevent flash at (0,0)
+      labelData.leaderLine.x1 = startX
+      labelData.leaderLine.y1 = startY
+      labelData.leaderLine.x2 = endX
+      labelData.leaderLine.y2 = endY
+
+      // Now show label and leader line (coordinates already set)
       labelData.label.isVisible = true
-      labelData.leaderLine.isVisible = false
-      return
-    }
+      labelData.leaderLine.isVisible = true
 
-    // Normalize direction
-    const nx = dirX / dist
-    const ny = dirY / dist
-
-    // Line starts at label edge - calculate intersection with rectangle
-    const tX = Math.abs(nx) > 0.001 ? (labelW / 2) / Math.abs(nx) : 10000
-    const tY = Math.abs(ny) > 0.001 ? (labelH / 2) / Math.abs(ny) : 10000
-    const tEdge = Math.min(tX, tY) + 3 * dpr  // +3 pixel gap from edge (scaled)
-
-    const startX = labelCenterX + nx * tEdge
-    const startY = labelCenterY + ny * tEdge
-
-    // Line ends near model (leave small gap - larger in 2D top-down view, scaled for DPI)
-    const endGap = (isTopDownView ? LEADER_LINE_END_GAP_2D_PX : LEADER_LINE_END_GAP_3D_PX) * dpr
-    const endX = scaledScreenX - nx * endGap
-    const endY = scaledScreenY - ny * endGap
-
-    // Set line coordinates BEFORE making visible to prevent flash at (0,0)
-    labelData.leaderLine.x1 = startX
-    labelData.leaderLine.y1 = startY
-    labelData.leaderLine.x2 = endX
-    labelData.leaderLine.y2 = endY
-
-    // Now show label and leader line (coordinates already set)
-    labelData.label.isVisible = true
-    labelData.leaderLine.isVisible = true
-
-    // Report label bounds for click detection (allow clicking on datablock itself)
-    useDatablockPositionStore.getState().setLabelBounds(callsign, {
-      x: labelX,
-      y: labelY,
-      width: labelW,
-      height: labelH
-    })
-  }, [guiTexture, isTopDownView])
+      // Report label bounds for click detection (allow clicking on datablock itself)
+      useDatablockPositionStore.getState().setLabelBounds(callsign, {
+        x: labelX,
+        y: labelY,
+        width: labelW,
+        height: labelH,
+      })
+    },
+    [guiTexture, isTopDownView],
+  )
 
   // Remove aircraft label
   const removeLabel = useCallback((callsign: string) => {
@@ -564,7 +564,7 @@ export function useBabylonLabels(
     clearAllLabels,
     getLabel,
     getAircraftCallsigns,
-    hideAllLabels
+    hideAllLabels,
   }
 }
 

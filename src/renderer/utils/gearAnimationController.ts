@@ -49,11 +49,11 @@ export interface GearAnimationConfig {
 
 /** Default gear animation configuration */
 export const DEFAULT_GEAR_CONFIG: GearAnimationConfig = {
-  extendAltitude: 2000,          // Extend gear when descending below 2000ft AGL
-  retractAltitude: 150,          // Retract gear when climbing above 150ft AGL
-  descentRateThreshold: -100,    // ft/min - consider descending if < -100 ft/min
-  climbRateThreshold: 100,       // ft/min - consider climbing if > 100 ft/min
-  transitionTime: 12.0           // 12 seconds to extend/retract (realistic timing)
+  extendAltitude: 2000, // Extend gear when descending below 2000ft AGL
+  retractAltitude: 150, // Retract gear when climbing above 150ft AGL
+  descentRateThreshold: -100, // ft/min - consider descending if < -100 ft/min
+  climbRateThreshold: 100, // ft/min - consider climbing if > 100 ft/min
+  transitionTime: 12.0, // 12 seconds to extend/retract (realistic timing)
 }
 
 /** Per-aircraft gear animation state */
@@ -80,11 +80,11 @@ function getGearState(callsign: string): GearAnimationState {
   let state = gearStates.get(callsign)
   if (!state) {
     state = {
-      progress: 1.0,  // Start with gear down (safer default)
+      progress: 1.0, // Start with gear down (safer default)
       targetProgress: 1.0,
       transitionStartTime: 0,
       transitionStartProgress: 1.0,
-      isTransitioning: false
+      isTransitioning: false,
     }
     gearStates.set(callsign, state)
   }
@@ -114,7 +114,7 @@ export function initializeGearState(
   altitude: number,
   verticalRate: number,
   isOnGround: boolean,
-  config: GearAnimationConfig = DEFAULT_GEAR_CONFIG
+  config: GearAnimationConfig = DEFAULT_GEAR_CONFIG,
 ): void {
   // For NEW aircraft (verticalRate=0 indicates no history), be more conservative about gear state.
   // VATSIM can report high groundspeed for ground aircraft (landing roll, stale data, reconnects),
@@ -128,25 +128,17 @@ export function initializeGearState(
 
   // For new aircraft, only assume gear UP if clearly at cruise altitude
   // For aircraft with vertical rate history, use normal logic
-  const assumeGearDown = isNewAircraft
-    ? !clearlyCruising
-    : (isOnGround || altitude < config.extendAltitude)
+  const assumeGearDown = isNewAircraft ? !clearlyCruising : isOnGround || altitude < config.extendAltitude
 
   // Calculate what the gear state should be based on current aircraft conditions
-  const initialProgress = calculateTargetGearProgress(
-    altitude,
-    verticalRate,
-    isOnGround,
-    assumeGearDown,
-    config
-  )
+  const initialProgress = calculateTargetGearProgress(altitude, verticalRate, isOnGround, assumeGearDown, config)
 
   const state: GearAnimationState = {
     progress: initialProgress,
     targetProgress: initialProgress,
     transitionStartTime: 0,
     transitionStartProgress: initialProgress,
-    isTransitioning: false
+    isTransitioning: false,
   }
   gearStates.set(callsign, state)
 }
@@ -171,7 +163,7 @@ export function calculateTargetGearProgress(
   verticalRate: number,
   isOnGround: boolean,
   currentGearDown: boolean,
-  config: GearAnimationConfig = DEFAULT_GEAR_CONFIG
+  config: GearAnimationConfig = DEFAULT_GEAR_CONFIG,
 ): number {
   // Always gear down when on ground
   if (isOnGround) {
@@ -218,10 +210,10 @@ export function updateGearAnimation(
   verticalRate: number,
   isOnGround: boolean,
   currentTime: number,
-  config: GearAnimationConfig = DEFAULT_GEAR_CONFIG
+  config: GearAnimationConfig = DEFAULT_GEAR_CONFIG,
 ): number {
   const state = getGearState(callsign)
-  const currentGearDown = state.progress > 0.5  // Consider gear "down" if more than halfway
+  const currentGearDown = state.progress > 0.5 // Consider gear "down" if more than halfway
   const targetProgress = calculateTargetGearProgress(altitude, verticalRate, isOnGround, currentGearDown, config)
 
   // Check if target changed
@@ -242,8 +234,8 @@ export function updateGearAnimation(
     const easedProgress = easeInOutCubic(transitionProgress)
 
     // Interpolate between start and target
-    state.progress = state.transitionStartProgress +
-      (state.targetProgress - state.transitionStartProgress) * easedProgress
+    state.progress =
+      state.transitionStartProgress + (state.targetProgress - state.transitionStartProgress) * easedProgress
 
     // Check if transition complete
     if (transitionProgress >= 1.0) {
@@ -282,7 +274,7 @@ export function applyGearAnimation(
   gearProgress: number,
   callsign: string,
   modelUrl: string,
-  _knownAnimationCount?: number
+  _knownAnimationCount?: number,
 ): void {
   if (!model.ready) {
     return
@@ -301,7 +293,7 @@ export function applyGearAnimation(
     animationSetsLoading.add(modelUrl)
 
     // Start async parse of animation data
-    parseAnimationSetFromUrl(modelUrl).then(animSet => {
+    parseAnimationSetFromUrl(modelUrl).then((animSet) => {
       animationSetsLoading.delete(modelUrl)
       if (animSet) {
         animationSets.set(modelUrl, animSet)
@@ -324,9 +316,7 @@ export function applyGearAnimation(
  * Cubic ease in-out function for smooth transitions
  */
 function easeInOutCubic(t: number): number {
-  return t < 0.5
-    ? 4 * t * t * t
-    : 1 - Math.pow(-2 * t + 2, 3) / 2
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
 }
 
 /**

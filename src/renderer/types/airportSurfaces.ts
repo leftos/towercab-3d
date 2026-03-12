@@ -38,7 +38,7 @@ export const SURFACE_TYPE_NAMES: Record<SurfaceTypeCode, string> = {
   l: 'lakebed',
   w: 'water',
   n: 'snow',
-  o: 'other'
+  o: 'other',
 }
 
 /**

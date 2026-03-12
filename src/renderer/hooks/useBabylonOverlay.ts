@@ -177,7 +177,7 @@ import { useSettingsStore } from '../stores/settingsStore'
  */
 export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOptions) {
   // Get view mode for precipitation effects
-  const viewMode = useViewportStore((state) => state.viewports.find(v => v.id === 'main')?.cameraState.viewMode)
+  const viewMode = useViewportStore((state) => state.viewports.find((v) => v.id === 'main')?.cameraState.viewMode)
   const isTopDownView = viewMode === 'topdown'
 
   // Get datablock font size setting
@@ -187,38 +187,32 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
   const { engine, scene, camera, guiTexture, sceneReady } = useBabylonScene({
     canvas: canvas!,
     antialias: true,
-    transparent: true
+    transparent: true,
   })
 
   // 2. Initialize weather effects (fog dome, cloud layers)
   const { fogDome, getCloudMeshes, isVisibleByWeather } = useBabylonWeather({
     scene,
-    isTopDownView
+    isTopDownView,
   })
 
   // 3. Initialize precipitation effects (rain, snow, lightning)
   useBabylonPrecipitation({
     scene,
     camera,
-    isTopDownView
+    isTopDownView,
   })
 
   // 4. Initialize label management (datablock labels, leader lines)
-  const {
-    updateLabel,
-    updateLabelPosition,
-    removeLabel,
-    getAircraftCallsigns,
-    hideAllLabels
-  } = useBabylonLabels({
+  const { updateLabel, updateLabelPosition, removeLabel, getAircraftCallsigns, hideAllLabels } = useBabylonLabels({
     guiTexture,
     isTopDownView,
-    fontSize: datablockFontSize
+    fontSize: datablockFontSize,
   })
 
   // 5. Initialize ENU root node (coordinate system, transforms)
   const { setupRootNode, getFixedToEnu } = useBabylonRootNode({
-    scene
+    scene,
   })
 
   // 6. Initialize camera synchronization
@@ -227,7 +221,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     camera,
     fogDome,
     getCloudMeshes,
-    getFixedToEnu
+    getFixedToEnu,
   })
 
   // Render one frame: sync camera + render scene
@@ -242,21 +236,21 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     (callsign: string, text: string, r: number, g: number, b: number) => {
       updateLabel(callsign, { r, g, b }, false, text)
     },
-    [updateLabel]
+    [updateLabel],
   )
 
   const updateLeaderLineAdapter = useCallback(
     (callsign: string, aircraftX: number, aircraftY: number, offsetX: number, offsetY: number) => {
       updateLabelPosition(callsign, aircraftX, aircraftY, offsetX, offsetY)
     },
-    [updateLabelPosition]
+    [updateLabelPosition],
   )
 
   const removeAircraftLabelAdapter = useCallback(
     (callsign: string) => {
       removeLabel(callsign)
     },
-    [removeLabel]
+    [removeLabel],
   )
 
   const isDatablockVisibleByWeatherAdapter = useCallback(
@@ -264,10 +258,10 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
       return isVisibleByWeather({
         cameraAltitudeMeters: cameraAltitudeAGL,
         aircraftAltitudeMeters: aircraftAltitudeAGL,
-        horizontalDistanceMeters: distanceMeters
+        horizontalDistanceMeters: distanceMeters,
       })
     },
-    [isVisibleByWeather]
+    [isVisibleByWeather],
   )
 
   // Public API - delegates to specialized hooks with adapter functions for backward compatibility
@@ -293,7 +287,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
 
     // Rendering
     render,
-    syncCamera: syncCameraInternal
+    syncCamera: syncCameraInternal,
   }
 }
 
@@ -309,7 +303,7 @@ export function getMemoryCounters() {
     meshesCreated: 0,
     meshesDisposed: 0,
     guiControlsCreated: 0,
-    guiControlsDisposed: 0
+    guiControlsDisposed: 0,
   }
 }
 

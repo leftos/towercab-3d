@@ -45,7 +45,7 @@ export function ModelPreviewModal({ modelInfo, onClose }: ModelPreviewModalProps
 
         // Quality settings
         msaaSamples: 4,
-        creditContainer: document.createElement('div')
+        creditContainer: document.createElement('div'),
       })
 
       // Disable the globe and imagery for simple 3D model display
@@ -66,7 +66,7 @@ export function ModelPreviewModal({ modelInfo, onClose }: ModelPreviewModalProps
 
       // Simple directional lighting for model visibility
       viewer.scene.light = new Cesium.DirectionalLight({
-        direction: new Cesium.Cartesian3(0.3, -0.5, -0.8)
+        direction: new Cesium.Cartesian3(0.3, -0.5, -0.8),
       })
 
       viewerRef.current = viewer
@@ -98,7 +98,7 @@ export function ModelPreviewModal({ modelInfo, onClose }: ModelPreviewModalProps
     Cesium.Model.fromGltfAsync({
       url: modelInfo.modelUrl,
       show: true,
-      shadows: Cesium.ShadowMode.DISABLED
+      shadows: Cesium.ShadowMode.DISABLED,
     })
       .then((model: Cesium.Model) => {
         if (!viewer || viewer.isDestroyed()) return
@@ -109,20 +109,14 @@ export function ModelPreviewModal({ modelInfo, onClose }: ModelPreviewModalProps
 
         // Apply rotation around Z axis for heading (if specified)
         if (modelInfo.rotationOffset && modelInfo.rotationOffset !== 0) {
-          const rotation = Cesium.Matrix3.fromRotationZ(
-            Cesium.Math.toRadians(modelInfo.rotationOffset)
-          )
+          const rotation = Cesium.Matrix3.fromRotationZ(Cesium.Math.toRadians(modelInfo.rotationOffset))
           const rotationMatrix = Cesium.Matrix4.fromRotationTranslation(rotation)
           modelMatrix = Cesium.Matrix4.multiply(modelMatrix, rotationMatrix, new Cesium.Matrix4())
         }
 
         // Apply scale
         const scaleMatrix = Cesium.Matrix4.fromScale(
-          new Cesium.Cartesian3(
-            modelInfo.scale.x,
-            modelInfo.scale.y,
-            modelInfo.scale.z
-          )
+          new Cesium.Cartesian3(modelInfo.scale.x, modelInfo.scale.y, modelInfo.scale.z),
         )
         modelMatrix = Cesium.Matrix4.multiply(modelMatrix, scaleMatrix, new Cesium.Matrix4())
 
@@ -143,22 +137,18 @@ export function ModelPreviewModal({ modelInfo, onClose }: ModelPreviewModalProps
           const distance = radius * 2.5
 
           // Camera positioned to the side and slightly above
-          const cameraPosition = new Cesium.Cartesian3(
-            center.x + distance,
-            center.y,
-            center.z + radius * 0.5
-          )
+          const cameraPosition = new Cesium.Cartesian3(center.x + distance, center.y, center.z + radius * 0.5)
 
           viewer.camera.position = cameraPosition
           viewer.camera.direction = Cesium.Cartesian3.normalize(
             Cesium.Cartesian3.subtract(center, cameraPosition, new Cesium.Cartesian3()),
-            new Cesium.Cartesian3()
+            new Cesium.Cartesian3(),
           )
           viewer.camera.up = Cesium.Cartesian3.UNIT_Z.clone()
           viewer.camera.right = Cesium.Cartesian3.cross(
             viewer.camera.direction,
             viewer.camera.up,
-            new Cesium.Cartesian3()
+            new Cesium.Cartesian3(),
           )
 
           setIsLoading(false)
@@ -204,14 +194,10 @@ export function ModelPreviewModal({ modelInfo, onClose }: ModelPreviewModalProps
       viewer.camera.position = cameraPosition
       viewer.camera.direction = Cesium.Cartesian3.normalize(
         Cesium.Cartesian3.subtract(center, cameraPosition, new Cesium.Cartesian3()),
-        new Cesium.Cartesian3()
+        new Cesium.Cartesian3(),
       )
       viewer.camera.up = Cesium.Cartesian3.UNIT_Z.clone()
-      viewer.camera.right = Cesium.Cartesian3.cross(
-        viewer.camera.direction,
-        viewer.camera.up,
-        new Cesium.Cartesian3()
-      )
+      viewer.camera.right = Cesium.Cartesian3.cross(viewer.camera.direction, viewer.camera.up, new Cesium.Cartesian3())
 
       animationFrameRef.current = requestAnimationFrame(animate)
     }

@@ -33,7 +33,7 @@ import {
   AOA_OFFSET_HIGH_SPEED_DEGREES,
   AOA_LOW_SPEED_THRESHOLD_KNOTS,
   AOA_HIGH_SPEED_THRESHOLD_KNOTS,
-  FLARE_START_ALTITUDE_METERS
+  FLARE_START_ALTITUDE_METERS,
 } from '../constants/rendering'
 import { STOPPED_SPEED_KTS } from '../constants/flightPhase'
 
@@ -81,7 +81,7 @@ interface NosewheelState {
   transition: { sourcePitch: number; progress: number } | null
   wasInFlare: boolean
   lastFlarePitch: number | null
-  groundCommitted: boolean  // Prevents flare re-engagement after touchdown
+  groundCommitted: boolean // Prevents flare re-engagement after touchdown
 }
 
 /** Consolidated timeline rate tracking state per aircraft */
@@ -94,7 +94,7 @@ interface TimelineRateState {
   smoothedAcceleration: number
   prevPitch: number | null
   prevRoll: number | null
-  smoothedHeading: number | null  // Rate-limited heading for smooth yaw
+  smoothedHeading: number | null // Rate-limited heading for smooth yaw
 }
 
 // Consolidated state Maps (3 Maps instead of 16)
@@ -125,7 +125,7 @@ function timelineToInterpolatedState(
   timeline: TimelineInterpolationResult,
   now: number,
   orientationEnabled: boolean,
-  orientationIntensity: number
+  orientationIntensity: number,
 ): InterpolatedAircraftState {
   const callsign = timeline.callsign
 
@@ -141,7 +141,7 @@ function timelineToInterpolatedState(
       smoothedAcceleration: 0,
       prevPitch: null,
       prevRoll: null,
-      smoothedHeading: null
+      smoothedHeading: null,
     }
     sharedTimelineRateStateRef.current.set(callsign, rateState)
   }
@@ -156,7 +156,8 @@ function timelineToInterpolatedState(
   let turnRate = 0 // deg/sec
   let acceleration = 0 // knots/sec
 
-  if (frameDelta > 0 && frameDelta < 100) { // Only calculate if reasonable frame time
+  if (frameDelta > 0 && frameDelta < 100) {
+    // Only calculate if reasonable frame time
     // Vertical rate: prefer actual ADS-B baro_rate when available
     if (timeline.verticalRate !== null) {
       // Use actual ADS-B vertical rate (in fpm), convert to m/min
@@ -170,7 +171,8 @@ function timelineToInterpolatedState(
       const altitudeChange = timeline.altitude - rateState.prevAltitude // meters
       const rawVerticalRate = (altitudeChange / frameDelta) * 60000 // m/min
       // Smooth the rate to reduce jitter
-      verticalRate = rateState.smoothedVerticalRate + (rawVerticalRate - rateState.smoothedVerticalRate) * RATE_SMOOTHING
+      verticalRate =
+        rateState.smoothedVerticalRate + (rawVerticalRate - rateState.smoothedVerticalRate) * RATE_SMOOTHING
       rateState.smoothedVerticalRate = verticalRate
     }
 
@@ -192,7 +194,8 @@ function timelineToInterpolatedState(
       const rawAcceleration = (speedChange / frameDelta) * 1000 // knots/sec
       // Clamp to realistic limits (jets rarely exceed 5 kts/s acceleration)
       const clampedAcceleration = Math.max(-10, Math.min(10, rawAcceleration))
-      acceleration = rateState.smoothedAcceleration + (clampedAcceleration - rateState.smoothedAcceleration) * RATE_SMOOTHING
+      acceleration =
+        rateState.smoothedAcceleration + (clampedAcceleration - rateState.smoothedAcceleration) * RATE_SMOOTHING
       rateState.smoothedAcceleration = acceleration
     }
   }
@@ -229,12 +232,16 @@ function timelineToInterpolatedState(
     // body pitch = flight path angle + angle of attack
     // On approach at -700 fpm with AoA ~5°, body pitch is ~+1° nose-up (realistic)
     if (!isOnGround) {
-      const speedFraction = Math.min(1, Math.max(0,
-        (timeline.groundspeed - AOA_LOW_SPEED_THRESHOLD_KNOTS) /
-        (AOA_HIGH_SPEED_THRESHOLD_KNOTS - AOA_LOW_SPEED_THRESHOLD_KNOTS)
-      ))
-      const aoaOffset = AOA_OFFSET_LOW_SPEED_DEGREES +
-        (AOA_OFFSET_HIGH_SPEED_DEGREES - AOA_OFFSET_LOW_SPEED_DEGREES) * speedFraction
+      const speedFraction = Math.min(
+        1,
+        Math.max(
+          0,
+          (timeline.groundspeed - AOA_LOW_SPEED_THRESHOLD_KNOTS) /
+            (AOA_HIGH_SPEED_THRESHOLD_KNOTS - AOA_LOW_SPEED_THRESHOLD_KNOTS),
+        ),
+      )
+      const aoaOffset =
+        AOA_OFFSET_LOW_SPEED_DEGREES + (AOA_OFFSET_HIGH_SPEED_DEGREES - AOA_OFFSET_LOW_SPEED_DEGREES) * speedFraction
       targetPitch += aoaOffset * orientationIntensity
     }
 
@@ -300,9 +307,7 @@ function timelineToInterpolatedState(
 
     // Determine rate limit based on ground/air state
     const isOnGround = timeline.onGround === true || timeline.groundspeed < 40
-    const maxHeadingRate = isOnGround
-      ? MAX_HEADING_RATE_DEG_PER_SEC_GROUND
-      : MAX_HEADING_RATE_DEG_PER_SEC_AIR
+    const maxHeadingRate = isOnGround ? MAX_HEADING_RATE_DEG_PER_SEC_GROUND : MAX_HEADING_RATE_DEG_PER_SEC_AIR
 
     const dtSeconds = frameDelta / 1000
     const maxHeadingChange = maxHeadingRate * dtSeconds
@@ -366,7 +371,7 @@ function timelineToInterpolatedState(
     isInterpolated: true,
 
     // Display delay
-    displayDelay: timeline.displayDelay
+    displayDelay: timeline.displayDelay,
   }
 }
 
@@ -440,7 +445,6 @@ function updateInterpolation() {
   const aircraftDataRadiusNM = sharedAircraftDataRadiusNMRef.current
 
   {
-
     for (const [callsign, timeline] of timelineStates) {
       // Skip aircraft with fewer than 2 observations - we need at least 2 data points
       // to interpolate smoothly. Aircraft will "spawn in" once they have enough data.
@@ -469,7 +473,7 @@ function updateInterpolation() {
         referencePosition.latitude,
         referencePosition.longitude,
         timeline.latitude,
-        timeline.longitude
+        timeline.longitude,
       )
       if (distance > aircraftDataRadiusNM) {
         continue
@@ -478,12 +482,7 @@ function updateInterpolation() {
       activeCallsigns.add(callsign)
 
       // Convert timeline result to InterpolatedAircraftState
-      const interpolated = timelineToInterpolatedState(
-        timeline,
-        now,
-        orientationEnabled,
-        orientationIntensity
-      )
+      const interpolated = timelineToInterpolatedState(timeline, now, orientationEnabled, orientationIntensity)
 
       // Reuse existing entry or create new one
       const existing = statesMap.get(callsign)
@@ -539,7 +538,7 @@ function updateInterpolation() {
         smoothedTerrainHeight: 0,
         prevClampState: false,
         transition: null,
-        prevCorrectedHeight: entry.interpolatedAltitude
+        prevCorrectedHeight: entry.interpolatedAltitude,
       }
       sharedTerrainStateRef.current.set(callsign, terrainState)
     }
@@ -551,9 +550,15 @@ function updateInterpolation() {
 
     // Calculate altitude above ground level (AGL) for ground detection
     // Use terrain sample if available, otherwise convert MSL ground elevation to ellipsoidal
-    const altitudeAGL = sampledTerrainHeight !== undefined
-      ? reportedEllipsoidHeight - sampledTerrainHeight
-      : reportedEllipsoidHeight - geoidService.mslToEllipsoidal(entry.interpolatedLatitude, entry.interpolatedLongitude, groundElevationMetersMsl)
+    const altitudeAGL =
+      sampledTerrainHeight !== undefined
+        ? reportedEllipsoidHeight - sampledTerrainHeight
+        : reportedEllipsoidHeight -
+          geoidService.mslToEllipsoidal(
+            entry.interpolatedLatitude,
+            entry.interpolatedLongitude,
+            groundElevationMetersMsl,
+          )
 
     // ========================================================================
     // PROGRESSIVE LANDING/DEPARTURE BLENDING
@@ -575,11 +580,16 @@ function updateInterpolation() {
       if (terrainState.smoothedTerrainHeight === 0) {
         terrainState.smoothedTerrainHeight = sampledTerrainHeight
       }
-      terrainState.smoothedTerrainHeight += (sampledTerrainHeight - terrainState.smoothedTerrainHeight) * TERRAIN_SMOOTHING_LERP_FACTOR
+      terrainState.smoothedTerrainHeight +=
+        (sampledTerrainHeight - terrainState.smoothedTerrainHeight) * TERRAIN_SMOOTHING_LERP_FACTOR
       terrainClampedHeight = terrainState.smoothedTerrainHeight + GROUND_AIRCRAFT_TERRAIN_OFFSET
     } else {
       // Fallback: use MSL ground elevation
-      const groundEllipsoidHeight = geoidService.mslToEllipsoidal(entry.interpolatedLatitude, entry.interpolatedLongitude, groundElevationMetersMsl)
+      const groundEllipsoidHeight = geoidService.mslToEllipsoidal(
+        entry.interpolatedLatitude,
+        entry.interpolatedLongitude,
+        groundElevationMetersMsl,
+      )
       terrainClampedHeight = groundEllipsoidHeight + GROUND_AIRCRAFT_TERRAIN_OFFSET
     }
 
@@ -587,7 +597,8 @@ function updateInterpolation() {
     let flyingOffset = FLYING_AIRCRAFT_TERRAIN_OFFSET
     if (sampledTerrainHeight !== undefined) {
       const transitionProgress = Math.min(1.0, Math.max(0, altitudeAGL / 30))
-      flyingOffset = GROUND_AIRCRAFT_TERRAIN_OFFSET +
+      flyingOffset =
+        GROUND_AIRCRAFT_TERRAIN_OFFSET +
         (FLYING_AIRCRAFT_TERRAIN_OFFSET - GROUND_AIRCRAFT_TERRAIN_OFFSET) * transitionProgress
     }
     const reportedHeightWithOffset = reportedEllipsoidHeight + flyingOffset
@@ -672,7 +683,8 @@ function updateInterpolation() {
         let sourceHeight: number
         if (terrainState.transition) {
           // Mid-transition: calculate current interpolated height
-          sourceHeight = terrainState.transition.source +
+          sourceHeight =
+            terrainState.transition.source +
             (terrainState.transition.target - terrainState.transition.source) * terrainState.transition.progress
         } else {
           // New transition: use previous frame's corrected height
@@ -681,7 +693,7 @@ function updateInterpolation() {
         terrainState.transition = {
           source: sourceHeight,
           target: targetHeight,
-          progress: 0
+          progress: 0,
         }
       }
     }
@@ -691,7 +703,9 @@ function updateInterpolation() {
       // Lerp from source to target over ~15 frames (~0.25 seconds at 60fps)
       // Slower transition for smoother landing appearance
       terrainState.transition.progress = Math.min(1.0, terrainState.transition.progress + HEIGHT_TRANSITION_LERP_FACTOR)
-      correctedHeight = terrainState.transition.source + (terrainState.transition.target - terrainState.transition.source) * terrainState.transition.progress
+      correctedHeight =
+        terrainState.transition.source +
+        (terrainState.transition.target - terrainState.transition.source) * terrainState.transition.progress
 
       // Update target if it changed during transition
       if (terrainState.transition.target !== targetHeight) {
@@ -724,7 +738,7 @@ function updateInterpolation() {
           transition: null,
           wasInFlare: false,
           lastFlarePitch: null,
-          groundCommitted: false
+          groundCommitted: false,
         }
         sharedNosewheelStateRef.current.set(callsign, nosewheelState)
       }
@@ -748,8 +762,8 @@ function updateInterpolation() {
       // Once committed (after first touchdown), flare logic is locked out to prevent
       // nose oscillation from noisy AGL data flickering the isInFlare flag
       if (!nosewheelState.groundCommitted) {
-        const isDescending = entry.verticalRate < -50  // m/min
-        const inFlareZone = altitudeAGLFlare > 0 && altitudeAGLFlare < 15  // meters
+        const isDescending = entry.verticalRate < -50 // m/min
+        const inFlareZone = altitudeAGLFlare > 0 && altitudeAGLFlare < 15 // meters
         const isInFlare = isDescending && inFlareZone
 
         const basePitch = entry.interpolatedPitch
@@ -758,9 +772,9 @@ function updateInterpolation() {
         entry.interpolatedPitch = calculateFlarePitch(
           entry.interpolatedPitch,
           altitudeAGLFlare,
-          entry.verticalRate,  // Already in m/min
+          entry.verticalRate, // Already in m/min
           entry.interpolatedGroundspeed,
-          orientationIntensity
+          orientationIntensity,
         )
 
         // If currently in flare, store the actual flare pitch for nosewheel transition
@@ -771,10 +785,10 @@ function updateInterpolation() {
         // Track flare state for nosewheel lowering transition
         if (nosewheelState.wasInFlare && !isInFlare && !nosewheelState.transition) {
           // Just exited flare! Start nosewheel lowering transition
-          const lastFlarePitch = nosewheelState.lastFlarePitch ?? (basePitch + FALLBACK_FLARE_PITCH_DEGREES)
+          const lastFlarePitch = nosewheelState.lastFlarePitch ?? basePitch + FALLBACK_FLARE_PITCH_DEGREES
           nosewheelState.transition = {
             sourcePitch: lastFlarePitch,
-            progress: 0
+            progress: 0,
           }
           nosewheelState.lastFlarePitch = null
           // Lock: prevent flare re-engagement until clearly airborne again
@@ -787,10 +801,16 @@ function updateInterpolation() {
       // Nosewheel transition runs even when groundCommitted
       if (nosewheelState.transition && nosewheelState.transition.progress < 1.0) {
         // Gradually lower nose over ~1 second at 60fps (~60 frames)
-        nosewheelState.transition.progress = Math.min(1.0, nosewheelState.transition.progress + NOSEWHEEL_LOWERING_LERP_FACTOR)
+        nosewheelState.transition.progress = Math.min(
+          1.0,
+          nosewheelState.transition.progress + NOSEWHEEL_LOWERING_LERP_FACTOR,
+        )
 
         // smoothstep: x^2 * (3 - 2x) for smooth acceleration/deceleration
-        const easedProgress = nosewheelState.transition.progress * nosewheelState.transition.progress * (3 - 2 * nosewheelState.transition.progress)
+        const easedProgress =
+          nosewheelState.transition.progress *
+          nosewheelState.transition.progress *
+          (3 - 2 * nosewheelState.transition.progress)
 
         // Blend from flare pitch to level (0 degrees)
         entry.interpolatedPitch = nosewheelState.transition.sourcePitch * (1 - easedProgress)
@@ -853,7 +873,7 @@ function updateInterpolation() {
   const currentCount = statesMap.size
   if (currentCount !== sharedLastAircraftCountRef.current) {
     sharedLastAircraftCountRef.current = currentCount
-    subscribers.forEach(callback => callback())
+    subscribers.forEach((callback) => callback())
   }
 
   performanceMonitor.endTimer('interpolation')
@@ -873,7 +893,7 @@ function updateInterpolation() {
  */
 export function setInterpolationTerrainData(
   groundAircraftTerrain: Map<string, TerrainData>,
-  groundElevationMetersMsl: number
+  groundElevationMetersMsl: number,
 ) {
   sharedGroundAircraftTerrainRef.current = groundAircraftTerrain
   sharedGroundElevationMetersRef.current = groundElevationMetersMsl
@@ -1031,7 +1051,7 @@ export function useAircraftInterpolation(): Map<string, InterpolatedAircraftStat
     sharedReferencePositionRef.current = useVatsimStore.getState().referencePosition
 
     // Subscribe this component to updates (for React re-renders when aircraft count changes)
-    const updateCallback = () => setVersion(v => v + 1)
+    const updateCallback = () => setVersion((v) => v + 1)
     subscribers.add(updateCallback)
 
     return () => {

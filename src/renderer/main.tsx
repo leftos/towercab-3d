@@ -50,18 +50,18 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, Error
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{
-          padding: '20px',
-          backgroundColor: '#1a1a2e',
-          color: '#ff6b6b',
-          fontFamily: 'monospace',
-          height: '100vh',
-          overflow: 'auto'
-        }}>
+        <div
+          style={{
+            padding: '20px',
+            backgroundColor: '#1a1a2e',
+            color: '#ff6b6b',
+            fontFamily: 'monospace',
+            height: '100vh',
+            overflow: 'auto',
+          }}
+        >
           <h1>Application Error</h1>
-          <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-            {this.state.error?.message}
-          </pre>
+          <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{this.state.error?.message}</pre>
           <h2>Stack Trace:</h2>
           <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '12px' }}>
             {this.state.error?.stack}
@@ -82,5 +82,5 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
     <ErrorBoundary>
       <App />
     </ErrorBoundary>
-  </React.StrictMode>
+  </React.StrictMode>,
 )

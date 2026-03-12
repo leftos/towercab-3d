@@ -55,8 +55,8 @@ export interface ExtendedNodeData {
   parentIndex: number | null
   childIndices: number[]
   meshIndex: number | null
-  localMatrix: number[]  // 4x4 matrix as 16 floats (column-major)
-  meshBounds: MeshBounds | null  // Bounds of attached mesh in local space
+  localMatrix: number[] // 4x4 matrix as 16 floats (column-major)
+  meshBounds: MeshBounds | null // Bounds of attached mesh in local space
 }
 
 /** Ground offset data computed from model geometry */

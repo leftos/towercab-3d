@@ -55,136 +55,139 @@ function InsetCesiumViewer({ viewportId }: InsetCesiumViewerProps) {
     const base = import.meta.env.DEV ? '/inset.html' : './inset.html'
     const params = new URLSearchParams({
       viewportId,
-      parentOrigin: window.location.origin
+      parentOrigin: window.location.origin,
     })
     return `${base}?${params.toString()}`
   }, [viewportId])
 
   // Handle messages from the iframe
-  const handleMessage = useCallback((event: MessageEvent<InsetMessage>) => {
-    // Verify origin (same origin for security)
-    if (event.origin !== window.location.origin) {
-      return
-    }
-
-    // Verify source is our iframe
-    if (event.source !== iframeRef.current?.contentWindow) {
-      return
-    }
-
-    const { type, viewportId: msgViewportId, payload } = event.data
-
-    // Handle debug-log messages from inset (these don't have viewportId)
-    if (type === 'debug-log') {
-      // Debug messages are silently ignored in production
-      return
-    }
-
-    // Ignore messages for other viewports
-    if (msgViewportId !== viewportId) {
-      return
-    }
-
-    switch (type) {
-      case 'inset-ready':
-        setIframeReady(true)
-        break
-
-      case 'inset-focus':
-        // User clicked/interacted with the inset - activate this viewport
-        useViewportStore.getState().setActiveViewport(viewportId)
-        break
-
-      case 'camera-change': {
-        // Camera state update from inset
-        // - Always update live state (viewports) immediately
-        // - Only persist (airportViewportConfigs) when final=true (manipulation ended)
-        if (payload && typeof payload === 'object') {
-          const cameraUpdate = payload as CameraStateUpdate
-          const isFinal = event.data.final === true
-
-          const store = useViewportStore.getState()
-          const viewportIndex = store.viewports.findIndex(v => v.id === viewportId)
-
-          if (viewportIndex >= 0) {
-            // Set flag to prevent echoing this update back to the inset
-            insetCameraUpdateInProgressRef.current = true
-
-            // Directly update this viewport's cameraState without changing activeViewport
-            const updatedViewports = [...store.viewports]
-            updatedViewports[viewportIndex] = {
-              ...updatedViewports[viewportIndex],
-              cameraState: {
-                ...updatedViewports[viewportIndex].cameraState,
-                ...(cameraUpdate.heading !== undefined && { heading: cameraUpdate.heading }),
-                ...(cameraUpdate.pitch !== undefined && { pitch: cameraUpdate.pitch }),
-                ...(cameraUpdate.fov !== undefined && { fov: cameraUpdate.fov }),
-                ...(cameraUpdate.positionOffsetX !== undefined && { positionOffsetX: cameraUpdate.positionOffsetX }),
-                ...(cameraUpdate.positionOffsetY !== undefined && { positionOffsetY: cameraUpdate.positionOffsetY }),
-                ...(cameraUpdate.positionOffsetZ !== undefined && { positionOffsetZ: cameraUpdate.positionOffsetZ }),
-                ...(cameraUpdate.orbitDistance !== undefined && { orbitDistance: cameraUpdate.orbitDistance }),
-                ...(cameraUpdate.orbitHeading !== undefined && { orbitHeading: cameraUpdate.orbitHeading }),
-                ...(cameraUpdate.orbitPitch !== undefined && { orbitPitch: cameraUpdate.orbitPitch })
-              }
-            }
-
-            if (isFinal) {
-              // Manipulation ended - persist to airportViewportConfigs for global-settings.json sync
-              const icao = store.currentAirportIcao
-              if (icao) {
-                const airportViewportConfigs = { ...store.airportViewportConfigs }
-                const existingConfig = airportViewportConfigs[icao]
-                airportViewportConfigs[icao] = {
-                  ...existingConfig,
-                  viewports: updatedViewports.map(v => ({
-                    ...v,
-                    cameraState: { ...v.cameraState, followingCallsign: null, preFollowState: null }
-                  })),
-                  activeViewportId: store.activeViewportId
-                }
-                useViewportStore.setState({ viewports: updatedViewports, airportViewportConfigs })
-              } else {
-                useViewportStore.setState({ viewports: updatedViewports })
-              }
-            } else {
-              // Still manipulating - only update live state, don't persist yet
-              useViewportStore.setState({ viewports: updatedViewports })
-            }
-
-            // Clear flag after a microtask to allow subscription to check it
-            queueMicrotask(() => {
-              insetCameraUpdateInProgressRef.current = false
-            })
-          }
-        }
-        break
+  const handleMessage = useCallback(
+    (event: MessageEvent<InsetMessage>) => {
+      // Verify origin (same origin for security)
+      if (event.origin !== window.location.origin) {
+        return
       }
 
-      case 'aircraft-select':
-        // Propagate aircraft selection to main app
-        // TODO: This should update the selected aircraft in the main UI
-        break
+      // Verify source is our iframe
+      if (event.source !== iframeRef.current?.contentWindow) {
+        return
+      }
 
-      case 'follow-request':
-        // Start following aircraft in this viewport
-        if (payload && typeof payload === 'object' && 'callsign' in payload) {
-          const callsign = (payload as { callsign: string }).callsign
-          const store = useViewportStore.getState()
-          store.setActiveViewport(viewportId)
-          store.followAircraft(callsign)
-        }
-        break
+      const { type, viewportId: msgViewportId, payload } = event.data
 
-      case 'error':
-        // Handle error from inset
-        if (payload && typeof payload === 'object' && 'error' in payload) {
-          const errorMsg = (payload as { error: string }).error
-          setError(errorMsg)
-          console.error(`[InsetCesiumViewer] Error in ${viewportId}:`, errorMsg)
+      // Handle debug-log messages from inset (these don't have viewportId)
+      if (type === 'debug-log') {
+        // Debug messages are silently ignored in production
+        return
+      }
+
+      // Ignore messages for other viewports
+      if (msgViewportId !== viewportId) {
+        return
+      }
+
+      switch (type) {
+        case 'inset-ready':
+          setIframeReady(true)
+          break
+
+        case 'inset-focus':
+          // User clicked/interacted with the inset - activate this viewport
+          useViewportStore.getState().setActiveViewport(viewportId)
+          break
+
+        case 'camera-change': {
+          // Camera state update from inset
+          // - Always update live state (viewports) immediately
+          // - Only persist (airportViewportConfigs) when final=true (manipulation ended)
+          if (payload && typeof payload === 'object') {
+            const cameraUpdate = payload as CameraStateUpdate
+            const isFinal = event.data.final === true
+
+            const store = useViewportStore.getState()
+            const viewportIndex = store.viewports.findIndex((v) => v.id === viewportId)
+
+            if (viewportIndex >= 0) {
+              // Set flag to prevent echoing this update back to the inset
+              insetCameraUpdateInProgressRef.current = true
+
+              // Directly update this viewport's cameraState without changing activeViewport
+              const updatedViewports = [...store.viewports]
+              updatedViewports[viewportIndex] = {
+                ...updatedViewports[viewportIndex],
+                cameraState: {
+                  ...updatedViewports[viewportIndex].cameraState,
+                  ...(cameraUpdate.heading !== undefined && { heading: cameraUpdate.heading }),
+                  ...(cameraUpdate.pitch !== undefined && { pitch: cameraUpdate.pitch }),
+                  ...(cameraUpdate.fov !== undefined && { fov: cameraUpdate.fov }),
+                  ...(cameraUpdate.positionOffsetX !== undefined && { positionOffsetX: cameraUpdate.positionOffsetX }),
+                  ...(cameraUpdate.positionOffsetY !== undefined && { positionOffsetY: cameraUpdate.positionOffsetY }),
+                  ...(cameraUpdate.positionOffsetZ !== undefined && { positionOffsetZ: cameraUpdate.positionOffsetZ }),
+                  ...(cameraUpdate.orbitDistance !== undefined && { orbitDistance: cameraUpdate.orbitDistance }),
+                  ...(cameraUpdate.orbitHeading !== undefined && { orbitHeading: cameraUpdate.orbitHeading }),
+                  ...(cameraUpdate.orbitPitch !== undefined && { orbitPitch: cameraUpdate.orbitPitch }),
+                },
+              }
+
+              if (isFinal) {
+                // Manipulation ended - persist to airportViewportConfigs for global-settings.json sync
+                const icao = store.currentAirportIcao
+                if (icao) {
+                  const airportViewportConfigs = { ...store.airportViewportConfigs }
+                  const existingConfig = airportViewportConfigs[icao]
+                  airportViewportConfigs[icao] = {
+                    ...existingConfig,
+                    viewports: updatedViewports.map((v) => ({
+                      ...v,
+                      cameraState: { ...v.cameraState, followingCallsign: null, preFollowState: null },
+                    })),
+                    activeViewportId: store.activeViewportId,
+                  }
+                  useViewportStore.setState({ viewports: updatedViewports, airportViewportConfigs })
+                } else {
+                  useViewportStore.setState({ viewports: updatedViewports })
+                }
+              } else {
+                // Still manipulating - only update live state, don't persist yet
+                useViewportStore.setState({ viewports: updatedViewports })
+              }
+
+              // Clear flag after a microtask to allow subscription to check it
+              queueMicrotask(() => {
+                insetCameraUpdateInProgressRef.current = false
+              })
+            }
+          }
+          break
         }
-        break
-    }
-  }, [viewportId])
+
+        case 'aircraft-select':
+          // Propagate aircraft selection to main app
+          // TODO: This should update the selected aircraft in the main UI
+          break
+
+        case 'follow-request':
+          // Start following aircraft in this viewport
+          if (payload && typeof payload === 'object' && 'callsign' in payload) {
+            const callsign = (payload as { callsign: string }).callsign
+            const store = useViewportStore.getState()
+            store.setActiveViewport(viewportId)
+            store.followAircraft(callsign)
+          }
+          break
+
+        case 'error':
+          // Handle error from inset
+          if (payload && typeof payload === 'object' && 'error' in payload) {
+            const errorMsg = (payload as { error: string }).error
+            setError(errorMsg)
+            console.error(`[InsetCesiumViewer] Error in ${viewportId}:`, errorMsg)
+          }
+          break
+      }
+    },
+    [viewportId],
+  )
 
   // Listen for postMessage from iframe
   useEffect(() => {
@@ -193,20 +196,20 @@ function InsetCesiumViewer({ viewportId }: InsetCesiumViewerProps) {
   }, [handleMessage])
 
   // Send message to iframe
-  const sendToIframe = useCallback((type: string, payload?: unknown) => {
-    if (!iframeRef.current?.contentWindow || !iframeReady) {
-      return
-    }
+  const sendToIframe = useCallback(
+    (type: string, payload?: unknown) => {
+      if (!iframeRef.current?.contentWindow || !iframeReady) {
+        return
+      }
 
-    try {
-      iframeRef.current.contentWindow.postMessage(
-        { type, viewportId, payload },
-        window.location.origin
-      )
-    } catch (err) {
-      console.error('[InsetCesiumViewer] Failed to send message to iframe:', err)
-    }
-  }, [viewportId, iframeReady])
+      try {
+        iframeRef.current.contentWindow.postMessage({ type, viewportId, payload }, window.location.origin)
+      } catch (err) {
+        console.error('[InsetCesiumViewer] Failed to send message to iframe:', err)
+      }
+    },
+    [viewportId, iframeReady],
+  )
 
   // Subscribe to activeViewportId changes and notify iframe of activation state
   useEffect(() => {
@@ -222,7 +225,7 @@ function InsetCesiumViewer({ viewportId }: InsetCesiumViewerProps) {
       (activeId) => {
         const isActive = activeId === viewportId
         sendToIframe('set-activated', { activated: isActive })
-      }
+      },
     )
 
     return unsubscribe
@@ -233,7 +236,9 @@ function InsetCesiumViewer({ viewportId }: InsetCesiumViewerProps) {
     if (!iframeReady) return
 
     // Helper to build camera update payload
-    const buildCameraPayload = (cameraState: NonNullable<ReturnType<typeof useViewportStore.getState>['viewports'][0]['cameraState']>) => ({
+    const buildCameraPayload = (
+      cameraState: NonNullable<ReturnType<typeof useViewportStore.getState>['viewports'][0]['cameraState']>,
+    ) => ({
       heading: cameraState.heading,
       pitch: cameraState.pitch,
       fov: cameraState.fov,
@@ -246,12 +251,12 @@ function InsetCesiumViewer({ viewportId }: InsetCesiumViewerProps) {
       pendingLookAtPosition: cameraState.pendingLookAtPosition,
       orbitDistance: cameraState.orbitDistance,
       orbitHeading: cameraState.orbitHeading,
-      orbitPitch: cameraState.orbitPitch
+      orbitPitch: cameraState.orbitPitch,
     })
 
     // Send initial camera state when inset becomes ready
     // This restores saved 6DOF camera position from global settings
-    const initialViewport = useViewportStore.getState().viewports.find(v => v.id === viewportId)
+    const initialViewport = useViewportStore.getState().viewports.find((v) => v.id === viewportId)
     if (initialViewport?.cameraState) {
       sendToIframe('camera-update', buildCameraPayload(initialViewport.cameraState))
     }
@@ -259,7 +264,7 @@ function InsetCesiumViewer({ viewportId }: InsetCesiumViewerProps) {
     // Subscribe to future changes
     const unsubscribe = useViewportStore.subscribe(
       (state) => {
-        const viewport = state.viewports.find(v => v.id === viewportId)
+        const viewport = state.viewports.find((v) => v.id === viewportId)
         return viewport?.cameraState
       },
       (cameraState) => {
@@ -276,7 +281,7 @@ function InsetCesiumViewer({ viewportId }: InsetCesiumViewerProps) {
           // its own heading/pitch from its camera position.
           sendToIframe('camera-update', buildCameraPayload(cameraState))
         }
-      }
+      },
     )
 
     return unsubscribe
@@ -293,11 +298,11 @@ function InsetCesiumViewer({ viewportId }: InsetCesiumViewerProps) {
 
     const unsubscribe = useViewportStore.subscribe(
       (state) => {
-        const viewport = state.viewports.find(v => v.id === viewportId)
+        const viewport = state.viewports.find((v) => v.id === viewportId)
         return {
           followingCallsign: viewport?.cameraState?.followingCallsign ?? null,
           pendingLookAtPosition: viewport?.cameraState?.pendingLookAtPosition ?? null,
-          isActive: state.activeViewportId === viewportId
+          isActive: state.activeViewportId === viewportId,
         }
       },
       ({ followingCallsign, pendingLookAtPosition, isActive }) => {
@@ -310,20 +315,20 @@ function InsetCesiumViewer({ viewportId }: InsetCesiumViewerProps) {
 
         // If this inset is active and pendingLookAtPosition changed (new look-at action), re-focus
         // This catches "look at aircraft" and "look at runway" actions from main app UI
-        const lookAtChanged = pendingLookAtPosition !== null && (
-          prevLookAtPosition === null ||
-          pendingLookAtPosition.lat !== prevLookAtPosition.lat ||
-          pendingLookAtPosition.lon !== prevLookAtPosition.lon
-        )
+        const lookAtChanged =
+          pendingLookAtPosition !== null &&
+          (prevLookAtPosition === null ||
+            pendingLookAtPosition.lat !== prevLookAtPosition.lat ||
+            pendingLookAtPosition.lon !== prevLookAtPosition.lon)
         if (isActive && lookAtChanged) {
           sendToIframe('request-focus', {})
         }
         prevLookAtPosition = pendingLookAtPosition
-      }
+      },
     )
 
     // Initialize previous state
-    const viewport = useViewportStore.getState().viewports.find(v => v.id === viewportId)
+    const viewport = useViewportStore.getState().viewports.find((v) => v.id === viewportId)
     prevFollowingCallsign = viewport?.cameraState?.followingCallsign ?? null
     prevLookAtPosition = viewport?.cameraState?.pendingLookAtPosition ?? null
 
@@ -380,7 +385,7 @@ function InsetCesiumViewer({ viewportId }: InsetCesiumViewerProps) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: '#666'
+          color: '#666',
         }}
       >
         Initializing viewport...
@@ -402,7 +407,7 @@ function InsetCesiumViewer({ viewportId }: InsetCesiumViewerProps) {
           justifyContent: 'center',
           color: '#ff6b6b',
           padding: '16px',
-          textAlign: 'center'
+          textAlign: 'center',
         }}
       >
         Inset Error: {error}
@@ -411,10 +416,7 @@ function InsetCesiumViewer({ viewportId }: InsetCesiumViewerProps) {
   }
 
   return (
-    <div
-      ref={containerRef}
-      style={{ width: '100%', height: '100%', position: 'relative' }}
-    >
+    <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
       <iframe
         ref={iframeRef}
         src={iframeSrc}
@@ -422,7 +424,7 @@ function InsetCesiumViewer({ viewportId }: InsetCesiumViewerProps) {
           width: '100%',
           height: '100%',
           border: 'none',
-          display: 'block'
+          display: 'block',
         }}
         // Security: allow scripts and same-origin access for postMessage
         // Disallow other potentially dangerous capabilities
@@ -442,7 +444,7 @@ function InsetCesiumViewer({ viewportId }: InsetCesiumViewerProps) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#888'
+            color: '#888',
           }}
         >
           Loading inset viewer...

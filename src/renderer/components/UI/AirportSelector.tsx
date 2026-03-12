@@ -39,13 +39,14 @@ function AirportSelector() {
 
   // Check if a specific airport has 1Hz updates available in current session
   // vNAS facility IDs don't have K prefix for US airports (KSFO -> SFO)
-  const hasVnas1Hz = useCallback((icao: string) => {
-    if (!hasVnasSession) return false
-    const facilityId = icao.startsWith('K') && icao.length === 4
-      ? icao.slice(1)
-      : icao
-    return sessionFacilities.includes(facilityId) || sessionFacilities.includes(icao)
-  }, [hasVnasSession, sessionFacilities])
+  const hasVnas1Hz = useCallback(
+    (icao: string) => {
+      if (!hasVnasSession) return false
+      const facilityId = icao.startsWith('K') && icao.length === 4 ? icao.slice(1) : icao
+      return sessionFacilities.includes(facilityId) || sessionFacilities.includes(icao)
+    },
+    [hasVnasSession, sessionFacilities],
+  )
 
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<Airport[]>([])
@@ -86,30 +87,41 @@ function AirportSelector() {
   const vnasAirports = useMemo(() => {
     if (airports.size === 0 || sessionFacilities.length === 0) return []
 
-    const converted = sessionFacilities.map(facilityId => {
-      // If it's a 3-letter code, try adding K prefix for US airports
-      if (facilityId.length === 3) {
-        const withK = `K${facilityId}`
-        if (airports.has(withK)) return withK
-      }
-      // Otherwise return as-is (international airports use 4-letter codes)
-      return facilityId
-    }).filter(icao => airports.has(icao))
+    const converted = sessionFacilities
+      .map((facilityId) => {
+        // If it's a 3-letter code, try adding K prefix for US airports
+        if (facilityId.length === 3) {
+          const withK = `K${facilityId}`
+          if (airports.has(withK)) return withK
+        }
+        // Otherwise return as-is (international airports use 4-letter codes)
+        return facilityId
+      })
+      .filter((icao) => airports.has(icao))
 
-    console.log('[AirportSelector] vNAS airports:', sessionFacilities.length, 'facilities ->', converted.length, 'airports')
+    console.log(
+      '[AirportSelector] vNAS airports:',
+      sessionFacilities.length,
+      'facilities ->',
+      converted.length,
+      'airports',
+    )
     return converted
   }, [sessionFacilities, airports])
 
   // Toggle favorite handler
-  const toggleFavorite = useCallback((icao: string, e: React.MouseEvent) => {
-    e.stopPropagation() // Don't trigger airport selection
+  const toggleFavorite = useCallback(
+    (icao: string, e: React.MouseEvent) => {
+      e.stopPropagation() // Don't trigger airport selection
 
-    if (favorites.includes(icao)) {
-      removeFavorite(icao, dataSource)
-    } else {
-      addFavorite(icao, dataSource)
-    }
-  }, [favorites, dataSource, addFavorite, removeFavorite])
+      if (favorites.includes(icao)) {
+        removeFavorite(icao, dataSource)
+      } else {
+        addFavorite(icao, dataSource)
+      }
+    },
+    [favorites, dataSource, addFavorite, removeFavorite],
+  )
 
   // Focus input when opened
   useEffect(() => {
@@ -128,11 +140,14 @@ function AirportSelector() {
     }
   }, [query, searchAirports])
 
-  const handleSelect = useCallback((icao: string) => {
-    selectAirport(icao)
-    setQuery('')
-    setOpen(false)
-  }, [selectAirport, setOpen])
+  const handleSelect = useCallback(
+    (icao: string) => {
+      selectAirport(icao)
+      setQuery('')
+      setOpen(false)
+    },
+    [selectAirport, setOpen],
+  )
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
@@ -167,9 +182,7 @@ function AirportSelector() {
     .filter((a): a is Airport => a !== undefined)
 
   // Get vNAS airport details
-  const vnasAirportDetails = vnasAirports
-    .map((icao) => airports.get(icao))
-    .filter((a): a is Airport => a !== undefined)
+  const vnasAirportDetails = vnasAirports.map((icao) => airports.get(icao)).filter((a): a is Airport => a !== undefined)
 
   // Star icon SVG component
   const StarIcon = ({ filled, size = 16 }: { filled: boolean; size?: number }) => (
@@ -230,7 +243,15 @@ function AirportSelector() {
     <div className="airport-selector-overlay" onClick={() => setOpen(false)}>
       <div className="airport-selector" onClick={(e) => e.stopPropagation()}>
         <div className="search-container">
-          <svg className="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg
+            className="search-icon"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.35-4.35" />
           </svg>
@@ -277,9 +298,7 @@ function AirportSelector() {
                   onClick={() => setActiveTab('recent')}
                 >
                   Recent
-                  {recentAirportDetails.length > 0 && (
-                    <span className="tab-count">{recentAirportDetails.length}</span>
-                  )}
+                  {recentAirportDetails.length > 0 && <span className="tab-count">{recentAirportDetails.length}</span>}
                 </button>
                 {dataSource === 'vatsim' && popularAirports.length > 0 && (
                   <button

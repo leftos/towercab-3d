@@ -27,22 +27,18 @@ import type { FlatteningPolygon } from '../types/terrain'
  * @param coordsY - Polygon Y coordinates (Float64Array)
  * @returns true if point is inside polygon
  */
-function pointInPolygonRayCast(
-  x: number,
-  y: number,
-  coordsX: Float64Array,
-  coordsY: Float64Array
-): boolean {
+function pointInPolygonRayCast(x: number, y: number, coordsX: Float64Array, coordsY: Float64Array): boolean {
   const n = coordsX.length
   let inside = false
 
   for (let i = 0, j = n - 1; i < n; j = i++) {
-    const xi = coordsX[i], yi = coordsY[i]
-    const xj = coordsX[j], yj = coordsY[j]
+    const xi = coordsX[i],
+      yi = coordsY[i]
+    const xj = coordsX[j],
+      yj = coordsY[j]
 
     // Check if ray from point intersects edge
-    if (((yi > y) !== (yj > y)) &&
-        (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) {
       inside = !inside
     }
   }
@@ -68,7 +64,7 @@ function pointInPolygonWithHoles(
   exteriorX: Float64Array,
   exteriorY: Float64Array,
   holesX: Float64Array[] | null,
-  holesY: Float64Array[] | null
+  holesY: Float64Array[] | null,
 ): boolean {
   // Must be inside exterior ring
   if (!pointInPolygonRayCast(x, y, exteriorX, exteriorY)) {
@@ -99,14 +95,7 @@ function pointInPolygonWithHoles(
  * @param y2 - Segment end Y
  * @returns Squared distance to segment
  */
-function distanceToSegmentSquared(
-  px: number,
-  py: number,
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number
-): number {
+function distanceToSegmentSquared(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
   const dx = x2 - x1
   const dy = y2 - y1
   const lengthSq = dx * dx + dy * dy
@@ -147,17 +136,13 @@ function distanceToPolygonEdge(
   y: number,
   coordsX: Float64Array,
   coordsY: Float64Array,
-  maxDistSq: number
+  maxDistSq: number,
 ): number {
   const n = coordsX.length
   let minDistSq = Infinity
 
   for (let i = 0, j = n - 1; i < n; j = i++) {
-    const distSq = distanceToSegmentSquared(
-      x, y,
-      coordsX[j], coordsY[j],
-      coordsX[i], coordsY[i]
-    )
+    const distSq = distanceToSegmentSquared(x, y, coordsX[j], coordsY[j], coordsX[i], coordsY[i])
 
     if (distSq < minDistSq) {
       minDistSq = distSq
@@ -177,7 +162,7 @@ function distanceToPolygonEdge(
 function degreesToMeters(distDegrees: number, lat: number): number {
   // Average meters per degree at this latitude
   const metersPerDegreeLat = 111320
-  const metersPerDegreeLon = 111320 * Math.cos(lat * Math.PI / 180)
+  const metersPerDegreeLon = 111320 * Math.cos((lat * Math.PI) / 180)
   // Use geometric mean for reasonable approximation
   const avgMetersPerDegree = Math.sqrt(metersPerDegreeLat * metersPerDegreeLon)
   return distDegrees * avgMetersPerDegree
@@ -188,7 +173,7 @@ function degreesToMeters(distDegrees: number, lat: number): number {
  */
 function metersToDegrees(distMeters: number, lat: number): number {
   const metersPerDegreeLat = 111320
-  const metersPerDegreeLon = 111320 * Math.cos(lat * Math.PI / 180)
+  const metersPerDegreeLon = 111320 * Math.cos((lat * Math.PI) / 180)
   const avgMetersPerDegree = Math.sqrt(metersPerDegreeLat * metersPerDegreeLon)
   return distMeters / avgMetersPerDegree
 }
@@ -203,7 +188,7 @@ function projectToRunwayElevation(
   gradientStart: [number, number],
   gradientEnd: [number, number],
   startElevation: number,
-  endElevation: number
+  endElevation: number,
 ): number {
   const [startLon, startLat] = gradientStart
   const [endLon, endLat] = gradientEnd
@@ -238,17 +223,17 @@ interface FloorData {
   blendDistance: number // meters for edge blending (0 = hard edge)
   // Optional gradient data for elevation interpolation
   gradientStart?: [number, number] // [lon, lat]
-  gradientEnd?: [number, number]   // [lon, lat]
+  gradientEnd?: [number, number] // [lon, lat]
   startElevation?: number
   endElevation?: number
   // If true, use IDW from runway thresholds instead of fixed height
   useFieldElevation?: boolean
 
   // Pre-computed data for fast geometry operations
-  exteriorX: Float64Array    // Exterior ring X coordinates (longitude)
-  exteriorY: Float64Array    // Exterior ring Y coordinates (latitude)
-  holesX: Float64Array[] | null  // Hole rings X coordinates (null if no holes)
-  holesY: Float64Array[] | null  // Hole rings Y coordinates (null if no holes)
+  exteriorX: Float64Array // Exterior ring X coordinates (longitude)
+  exteriorY: Float64Array // Exterior ring Y coordinates (latitude)
+  holesX: Float64Array[] | null // Hole rings X coordinates (null if no holes)
+  holesY: Float64Array[] | null // Hole rings Y coordinates (null if no holes)
 
   // Bounding box in degrees (for fast rejection)
   minLon: number
@@ -290,11 +275,15 @@ const DEFAULT_TILE_CACHE_SIZE = 500
 const TAXIWAY_RAMP_DISTANCE_METERS = 200
 
 export function createFlatteningTerrainProvider(
-  baseProvider: Cesium.CesiumTerrainProvider
+  baseProvider: Cesium.CesiumTerrainProvider,
 ): Cesium.CesiumTerrainProvider & {
   setFlatteningPolygons: (polygons: FlatteningPolygon[]) => void
   clearFlatteningPolygons: () => void
-  getHeightAndSlopeAtPosition: (lon: number, lat: number, headingDegrees: number) => { height: number; slopeDegrees: number } | null
+  getHeightAndSlopeAtPosition: (
+    lon: number,
+    lat: number,
+    headingDegrees: number,
+  ) => { height: number; slopeDegrees: number } | null
   setTileCacheSize: (size: number) => void
 } {
   // Store modification data by ID for fast lookup
@@ -406,19 +395,28 @@ export function createFlatteningTerrainProvider(
     for (const polygon of polygons) {
       // Validate elevation before processing
       if (!Number.isFinite(polygon.elevation)) {
-        console.error(`[FlatteningTerrainProvider] INVALID ELEVATION in polygon ${polygon.id}: elevation = ${polygon.elevation}`)
+        console.error(
+          `[FlatteningTerrainProvider] INVALID ELEVATION in polygon ${polygon.id}: elevation = ${polygon.elevation}`,
+        )
         continue // Skip invalid polygons
       }
       if (polygon.startElevation !== undefined && !Number.isFinite(polygon.startElevation)) {
-        console.error(`[FlatteningTerrainProvider] INVALID startElevation in polygon ${polygon.id}: ${polygon.startElevation}`)
+        console.error(
+          `[FlatteningTerrainProvider] INVALID startElevation in polygon ${polygon.id}: ${polygon.startElevation}`,
+        )
         continue
       }
       if (polygon.endElevation !== undefined && !Number.isFinite(polygon.endElevation)) {
-        console.error(`[FlatteningTerrainProvider] INVALID endElevation in polygon ${polygon.id}: ${polygon.endElevation}`)
+        console.error(
+          `[FlatteningTerrainProvider] INVALID endElevation in polygon ${polygon.id}: ${polygon.endElevation}`,
+        )
         continue
       }
       // Calculate bounding rectangle
-      let west = 180, south = 90, east = -180, north = -90
+      let west = 180,
+        south = 90,
+        east = -180,
+        north = -90
       for (const [lon, lat] of polygon.vertices) {
         if (lon < west) west = lon
         if (lon > east) east = lon
@@ -506,7 +504,7 @@ export function createFlatteningTerrainProvider(
         expandedMaxLon,
         expandedMinLat,
         expandedMaxLat,
-        blendDistanceDeg
+        blendDistanceDeg,
       })
 
       // Add to spatial index batch (in degrees for easier lookup)
@@ -516,7 +514,7 @@ export function createFlatteningTerrainProvider(
         maxX: east,
         maxY: north,
         floorId: polygon.id,
-        blendDistance: polygon.blendDistance
+        blendDistance: polygon.blendDistance,
       })
     }
 
@@ -525,8 +523,11 @@ export function createFlatteningTerrainProvider(
 
     // Build list of runway floors (with gradient data) for taxiway elevation computation
     runwayFloors = Array.from(floorDataMap.values()).filter(
-      floor => floor.gradientStart !== undefined && floor.gradientEnd !== undefined &&
-               floor.startElevation !== undefined && floor.endElevation !== undefined
+      (floor) =>
+        floor.gradientStart !== undefined &&
+        floor.gradientEnd !== undefined &&
+        floor.startElevation !== undefined &&
+        floor.endElevation !== undefined,
     )
 
     console.log(`[FlatteningTerrainProvider] Set ${polygons.length} flattening polygons`)
@@ -564,7 +565,7 @@ export function createFlatteningTerrainProvider(
     // Use the tile center latitude to estimate meters-per-degree
     const centerLat = (south + north) / 2
     const metersPerDegreeLat = 111320 // meters per degree latitude (constant)
-    const metersPerDegreeLon = 111320 * Math.cos(centerLat * Math.PI / 180)
+    const metersPerDegreeLon = 111320 * Math.cos((centerLat * Math.PI) / 180)
 
     // Find max blend distance from all floors (typically 30-100m)
     // Use 100m as safe default since we don't know which floors might match
@@ -577,7 +578,7 @@ export function createFlatteningTerrainProvider(
       minX: west - blendDegreesLon,
       minY: south - blendDegreesLat,
       maxX: east + blendDegreesLon,
-      maxY: north + blendDegreesLat
+      maxY: north + blendDegreesLat,
     })
 
     if (candidates.length === 0) return []
@@ -589,12 +590,12 @@ export function createFlatteningTerrainProvider(
       if (floor) {
         // Verify intersection with expanded bounds (accounting for blend distance)
         const blendRadiansLat = floor.blendDistance / 6371000
-        const blendRadiansLon = blendRadiansLat / Math.cos(centerLat * Math.PI / 180)
+        const blendRadiansLon = blendRadiansLat / Math.cos((centerLat * Math.PI) / 180)
         const expandedRect = new Cesium.Rectangle(
           floor.floorBoundingRect.west - blendRadiansLon,
           floor.floorBoundingRect.south - blendRadiansLat,
           floor.floorBoundingRect.east + blendRadiansLon,
-          floor.floorBoundingRect.north + blendRadiansLat
+          floor.floorBoundingRect.north + blendRadiansLat,
         )
         if (Cesium.Rectangle.intersection(tileRect, expandedRect) !== undefined) {
           results.push(floor)
@@ -625,14 +626,14 @@ export function createFlatteningTerrainProvider(
    * Calculate interpolated elevation along a runway gradient
    * Projects the point onto the runway centerline and interpolates elevation
    */
-  function getGradientElevation(
-    lon: number,
-    lat: number,
-    floor: FloorData
-  ): number {
+  function getGradientElevation(lon: number, lat: number, floor: FloorData): number {
     // If no gradient data, use flat elevation
-    if (!floor.gradientStart || !floor.gradientEnd ||
-        floor.startElevation === undefined || floor.endElevation === undefined) {
+    if (
+      !floor.gradientStart ||
+      !floor.gradientEnd ||
+      floor.startElevation === undefined ||
+      floor.endElevation === undefined
+    ) {
       return floor.floorHeight
     }
 
@@ -672,29 +673,29 @@ export function createFlatteningTerrainProvider(
    * @param fallbackHeight - Elevation to use if no thresholds found
    * @returns Weighted average elevation based on distance to thresholds
    */
-  function computeFieldElevation(
-    lon: number,
-    lat: number,
-    runwayFloors: FloorData[],
-    fallbackHeight: number
-  ): number {
+  function computeFieldElevation(lon: number, lat: number, runwayFloors: FloorData[], fallbackHeight: number): number {
     // Collect all threshold points and elevations
     const thresholds: { lon: number; lat: number; elevation: number }[] = []
 
     for (const floor of runwayFloors) {
-      if (floor.gradientStart === undefined || floor.gradientEnd === undefined ||
-          floor.startElevation === undefined || floor.endElevation === undefined) continue
+      if (
+        floor.gradientStart === undefined ||
+        floor.gradientEnd === undefined ||
+        floor.startElevation === undefined ||
+        floor.endElevation === undefined
+      )
+        continue
 
       // Add both runway threshold points
       thresholds.push({
         lon: floor.gradientStart[0],
         lat: floor.gradientStart[1],
-        elevation: floor.startElevation
+        elevation: floor.startElevation,
       })
       thresholds.push({
         lon: floor.gradientEnd[0],
         lat: floor.gradientEnd[1],
-        elevation: floor.endElevation
+        elevation: floor.endElevation,
       })
     }
 
@@ -706,7 +707,7 @@ export function createFlatteningTerrainProvider(
 
     for (const threshold of thresholds) {
       // Approximate distance in degrees (faster than haversine for relative comparison)
-      const dLon = (lon - threshold.lon) * Math.cos(lat * Math.PI / 180)
+      const dLon = (lon - threshold.lon) * Math.cos((lat * Math.PI) / 180)
       const dLat = lat - threshold.lat
       const distDegSq = dLon * dLon + dLat * dLat
 
@@ -741,7 +742,7 @@ export function createFlatteningTerrainProvider(
     lon: number,
     lat: number,
     taxiwayBaseHeight: number,
-    runwayFloors: FloorData[]
+    runwayFloors: FloorData[],
   ): { height: number; closestRunway: FloorData | null; distanceToRunway: number } {
     let closestRunwayHeight: number | null = null
     let closestRunwayDistToEdge = Infinity
@@ -749,16 +750,22 @@ export function createFlatteningTerrainProvider(
 
     for (const floor of runwayFloors) {
       // Only consider floors with complete gradient data
-      if (floor.gradientStart === undefined || floor.gradientEnd === undefined ||
-          floor.startElevation === undefined || floor.endElevation === undefined) continue
+      if (
+        floor.gradientStart === undefined ||
+        floor.gradientEnd === undefined ||
+        floor.startElevation === undefined ||
+        floor.endElevation === undefined
+      )
+        continue
 
       // Project position onto runway gradient to get elevation
       const projectedHeight = projectToRunwayElevation(
-        lon, lat,
+        lon,
+        lat,
         floor.gradientStart,
         floor.gradientEnd,
         floor.startElevation,
-        floor.endElevation
+        floor.endElevation,
       )
 
       // Use distance to runway edge to pick closest runway
@@ -818,7 +825,7 @@ export function createFlatteningTerrainProvider(
     tileRect: Cesium.Rectangle,
     minHeight: number,
     maxHeight: number,
-    floors: FloorData[]
+    floors: FloorData[],
   ): { newMinHeight: number; newMaxHeight: number; modified: boolean; modifiedCount: number } {
     const tileWidth = tileRect.east - tileRect.west
     const tileHeight = tileRect.north - tileRect.south
@@ -858,8 +865,12 @@ export function createFlatteningTerrainProvider(
       for (const floor of floors) {
         // OPTIMIZATION: Quick bbox rejection before expensive polygon tests
         // Check against expanded bbox (includes blend distance)
-        if (lon < floor.expandedMinLon || lon > floor.expandedMaxLon ||
-            lat < floor.expandedMinLat || lat > floor.expandedMaxLat) {
+        if (
+          lon < floor.expandedMinLon ||
+          lon > floor.expandedMaxLon ||
+          lat < floor.expandedMinLat ||
+          lat > floor.expandedMaxLat
+        ) {
           continue // Vertex is outside this floor's area of influence
         }
 
@@ -878,8 +889,12 @@ export function createFlatteningTerrainProvider(
         } else if (floor.blendDistance > 0) {
           // Check if within blend distance using inline distance calculation
           // Only check if within core bbox (not in polygon but might be in blend zone)
-          if (lon >= floor.minLon - floor.blendDistanceDeg && lon <= floor.maxLon + floor.blendDistanceDeg &&
-              lat >= floor.minLat - floor.blendDistanceDeg && lat <= floor.maxLat + floor.blendDistanceDeg) {
+          if (
+            lon >= floor.minLon - floor.blendDistanceDeg &&
+            lon <= floor.maxLon + floor.blendDistanceDeg &&
+            lat >= floor.minLat - floor.blendDistanceDeg &&
+            lat <= floor.maxLat + floor.blendDistanceDeg
+          ) {
             // Compute distance to polygon edge in degrees
             const maxDistDegSq = floor.blendDistanceDeg * floor.blendDistanceDeg
             const distDeg = distanceToPolygonEdge(lon, lat, floor.exteriorX, floor.exteriorY, maxDistDegSq)
@@ -897,7 +912,7 @@ export function createFlatteningTerrainProvider(
                 // Runway (gradient) or regular taxiway/apron (fixed height)
                 targetHeight = getGradientElevation(lon, lat, floor)
               }
-              const blendFactor = 1.0 - (distMeters / floor.blendDistance)
+              const blendFactor = 1.0 - distMeters / floor.blendDistance
               const easedFactor = blendFactor * blendFactor * (3 - 2 * blendFactor)
               blendFloors.push({ floor, height: targetHeight, factor: easedFactor })
             }
@@ -945,7 +960,7 @@ export function createFlatteningTerrainProvider(
         let weightedHeight = 0
 
         // Check if any blend floor is a runway (has gradient data)
-        const hasRunwayInBlend = blendFloors.some(bf => bf.floor.gradientStart !== undefined)
+        const hasRunwayInBlend = blendFloors.some((bf) => bf.floor.gradientStart !== undefined)
 
         for (const bf of blendFloors) {
           let heightToUse = bf.height
@@ -969,9 +984,9 @@ export function createFlatteningTerrainProvider(
             finalHeight,
             lon,
             lat,
-            insideFloors: insideFloors.map(f => ({ id: f.floor.id, height: f.height })),
-            blendFloors: blendFloors.map(f => ({ id: f.floor.id, height: f.height, factor: f.factor })),
-            originalHeight
+            insideFloors: insideFloors.map((f) => ({ id: f.floor.id, height: f.height })),
+            blendFloors: blendFloors.map((f) => ({ id: f.floor.id, height: f.height, factor: f.factor })),
+            originalHeight,
           })
           continue // Skip this vertex to prevent NaN propagation
         }
@@ -1004,11 +1019,11 @@ export function createFlatteningTerrainProvider(
   const originalRequestTileGeometry = baseProvider.requestTileGeometry.bind(baseProvider)
 
   // Override requestTileGeometry to intercept and modify terrain data
-  baseProvider.requestTileGeometry = function(
+  baseProvider.requestTileGeometry = function (
     x: number,
     y: number,
     level: number,
-    request?: Cesium.Request
+    request?: Cesium.Request,
   ): Promise<Cesium.TerrainData> | undefined {
     const tileKey = `${x}/${y}/${level}`
     const tileRect = baseProvider.tilingScheme.tileXYToRectangle(x, y, level)
@@ -1032,123 +1047,122 @@ export function createFlatteningTerrainProvider(
       return undefined
     }
 
-    return promise.then((terrainData: Cesium.TerrainData) => {
-      // Check if this is QuantizedMeshTerrainData
-      if (!(terrainData instanceof Cesium.QuantizedMeshTerrainData)) {
-        console.log(`[FlatteningTerrainProvider] Tile ${tileKey} is not QuantizedMeshTerrainData, skipping`)
-        cacheTile(tileKey, terrainData)
-        return terrainData
-      }
+    return promise
+      .then((terrainData: Cesium.TerrainData) => {
+        // Check if this is QuantizedMeshTerrainData
+        if (!(terrainData instanceof Cesium.QuantizedMeshTerrainData)) {
+          console.log(`[FlatteningTerrainProvider] Tile ${tileKey} is not QuantizedMeshTerrainData, skipping`)
+          cacheTile(tileKey, terrainData)
+          return terrainData
+        }
 
-      // Access internal data (these are private but we need them)
-      const mesh = terrainData as unknown as {
-        _minimumHeight: number
-        _maximumHeight: number
-        _quantizedVertices: Uint16Array
-        _indices: Uint16Array | Uint32Array
-        _westIndices: Uint16Array
-        _southIndices: Uint16Array
-        _eastIndices: Uint16Array
-        _northIndices: Uint16Array
-        _westSkirtHeight: number
-        _southSkirtHeight: number
-        _eastSkirtHeight: number
-        _northSkirtHeight: number
-        _boundingSphere: Cesium.BoundingSphere
-        _orientedBoundingBox: Cesium.OrientedBoundingBox
-        _horizonOcclusionPoint: Cesium.Cartesian3
-        _credits: Cesium.Credit[]
-      }
+        // Access internal data (these are private but we need them)
+        const mesh = terrainData as unknown as {
+          _minimumHeight: number
+          _maximumHeight: number
+          _quantizedVertices: Uint16Array
+          _indices: Uint16Array | Uint32Array
+          _westIndices: Uint16Array
+          _southIndices: Uint16Array
+          _eastIndices: Uint16Array
+          _northIndices: Uint16Array
+          _westSkirtHeight: number
+          _southSkirtHeight: number
+          _eastSkirtHeight: number
+          _northSkirtHeight: number
+          _boundingSphere: Cesium.BoundingSphere
+          _orientedBoundingBox: Cesium.OrientedBoundingBox
+          _horizonOcclusionPoint: Cesium.Cartesian3
+          _credits: Cesium.Credit[]
+        }
 
-      const vertexCount = mesh._quantizedVertices.length / 3
-      const uBuffer = new Uint16Array(vertexCount)
-      const vBuffer = new Uint16Array(vertexCount)
-      const heightBuffer = new Uint16Array(vertexCount)
+        const vertexCount = mesh._quantizedVertices.length / 3
+        const uBuffer = new Uint16Array(vertexCount)
+        const vBuffer = new Uint16Array(vertexCount)
+        const heightBuffer = new Uint16Array(vertexCount)
 
-      // Extract u, v, height from interleaved buffer
-      for (let i = 0; i < vertexCount; i++) {
-        uBuffer[i] = mesh._quantizedVertices[i]
-        vBuffer[i] = mesh._quantizedVertices[vertexCount + i]
-        heightBuffer[i] = mesh._quantizedVertices[vertexCount * 2 + i]
-      }
+        // Extract u, v, height from interleaved buffer
+        for (let i = 0; i < vertexCount; i++) {
+          uBuffer[i] = mesh._quantizedVertices[i]
+          vBuffer[i] = mesh._quantizedVertices[vertexCount + i]
+          heightBuffer[i] = mesh._quantizedVertices[vertexCount * 2 + i]
+        }
 
-      // Modify heights
-      const { newMinHeight, newMaxHeight, modified, modifiedCount: _modifiedCount } = modifyTerrain(
-        uBuffer,
-        vBuffer,
-        heightBuffer,
-        tileRect,
-        mesh._minimumHeight,
-        mesh._maximumHeight,
-        floors
-      )
+        // Modify heights
+        const {
+          newMinHeight,
+          newMaxHeight,
+          modified,
+          modifiedCount: _modifiedCount,
+        } = modifyTerrain(uBuffer, vBuffer, heightBuffer, tileRect, mesh._minimumHeight, mesh._maximumHeight, floors)
 
-      if (!modified) {
-        // Cache even unmodified tiles to avoid re-checking
-        cacheTile(tileKey, terrainData)
-        return terrainData
-      }
+        if (!modified) {
+          // Cache even unmodified tiles to avoid re-checking
+          cacheTile(tileKey, terrainData)
+          return terrainData
+        }
 
-      // Debug logging - uncomment to debug terrain flattening issues (also rename _modifiedCount back to modifiedCount above)
-      // if (!loggedTiles.has(tileKey)) {
-      //   loggedTiles.add(tileKey)
-      //   const pct = ((_modifiedCount / vertexCount) * 100).toFixed(0)
-      //   console.log(`[FlatteningTerrainProvider] Modified tile ${tileKey}: ${_modifiedCount}/${vertexCount} (${pct}%) flattened, height ${mesh._minimumHeight.toFixed(1)}-${mesh._maximumHeight.toFixed(1)} -> ${newMinHeight.toFixed(1)}-${newMaxHeight.toFixed(1)}`)
-      // }
+        // Debug logging - uncomment to debug terrain flattening issues (also rename _modifiedCount back to modifiedCount above)
+        // if (!loggedTiles.has(tileKey)) {
+        //   loggedTiles.add(tileKey)
+        //   const pct = ((_modifiedCount / vertexCount) * 100).toFixed(0)
+        //   console.log(`[FlatteningTerrainProvider] Modified tile ${tileKey}: ${_modifiedCount}/${vertexCount} (${pct}%) flattened, height ${mesh._minimumHeight.toFixed(1)}-${mesh._maximumHeight.toFixed(1)} -> ${newMinHeight.toFixed(1)}-${newMaxHeight.toFixed(1)}`)
+        // }
 
-      // Reconstruct quantized vertices
-      const newQuantizedVertices = new Uint16Array(vertexCount * 3)
-      for (let i = 0; i < vertexCount; i++) {
-        newQuantizedVertices[i] = uBuffer[i]
-        newQuantizedVertices[vertexCount + i] = vBuffer[i]
-        newQuantizedVertices[vertexCount * 2 + i] = heightBuffer[i]
-      }
+        // Reconstruct quantized vertices
+        const newQuantizedVertices = new Uint16Array(vertexCount * 3)
+        for (let i = 0; i < vertexCount; i++) {
+          newQuantizedVertices[i] = uBuffer[i]
+          newQuantizedVertices[vertexCount + i] = vBuffer[i]
+          newQuantizedVertices[vertexCount * 2 + i] = heightBuffer[i]
+        }
 
-      // Recompute bounding sphere to account for modified heights
-      // This is critical for frustum culling - if we use the original bounding sphere
-      // (computed from the original lower heights), tiles may be incorrectly culled
-      // when their modified geometry is raised above the original bounding volume.
-      const newBoundingSphere = Cesium.BoundingSphere.fromRectangle3D(
-        tileRect,
-        Cesium.Ellipsoid.WGS84,
-        newMaxHeight // Use max height to ensure the sphere encompasses all modified geometry
-      )
-      // Expand the radius slightly to account for the height range
-      const heightRange = newMaxHeight - newMinHeight
-      newBoundingSphere.radius += heightRange / 2
+        // Recompute bounding sphere to account for modified heights
+        // This is critical for frustum culling - if we use the original bounding sphere
+        // (computed from the original lower heights), tiles may be incorrectly culled
+        // when their modified geometry is raised above the original bounding volume.
+        const newBoundingSphere = Cesium.BoundingSphere.fromRectangle3D(
+          tileRect,
+          Cesium.Ellipsoid.WGS84,
+          newMaxHeight, // Use max height to ensure the sphere encompasses all modified geometry
+        )
+        // Expand the radius slightly to account for the height range
+        const heightRange = newMaxHeight - newMinHeight
+        newBoundingSphere.radius += heightRange / 2
 
-      // Create new QuantizedMeshTerrainData with modified heights
-      // Convert Uint16Array to number[] for Cesium's constructor
-      const modifiedTerrainData = new Cesium.QuantizedMeshTerrainData({
-        minimumHeight: newMinHeight,
-        maximumHeight: newMaxHeight,
-        quantizedVertices: newQuantizedVertices,
-        indices: mesh._indices,
-        boundingSphere: newBoundingSphere,
-        orientedBoundingBox: mesh._orientedBoundingBox, // TODO: may also need recomputation
-        horizonOcclusionPoint: mesh._horizonOcclusionPoint,
-        westIndices: Array.from(mesh._westIndices),
-        southIndices: Array.from(mesh._southIndices),
-        eastIndices: Array.from(mesh._eastIndices),
-        northIndices: Array.from(mesh._northIndices),
-        westSkirtHeight: mesh._westSkirtHeight,
-        southSkirtHeight: mesh._southSkirtHeight,
-        eastSkirtHeight: mesh._eastSkirtHeight,
-        northSkirtHeight: mesh._northSkirtHeight,
-        childTileMask: terrainData.wasCreatedByUpsampling() ? 0 : 15,
-        credits: mesh._credits
+        // Create new QuantizedMeshTerrainData with modified heights
+        // Convert Uint16Array to number[] for Cesium's constructor
+        const modifiedTerrainData = new Cesium.QuantizedMeshTerrainData({
+          minimumHeight: newMinHeight,
+          maximumHeight: newMaxHeight,
+          quantizedVertices: newQuantizedVertices,
+          indices: mesh._indices,
+          boundingSphere: newBoundingSphere,
+          orientedBoundingBox: mesh._orientedBoundingBox, // TODO: may also need recomputation
+          horizonOcclusionPoint: mesh._horizonOcclusionPoint,
+          westIndices: Array.from(mesh._westIndices),
+          southIndices: Array.from(mesh._southIndices),
+          eastIndices: Array.from(mesh._eastIndices),
+          northIndices: Array.from(mesh._northIndices),
+          westSkirtHeight: mesh._westSkirtHeight,
+          southSkirtHeight: mesh._southSkirtHeight,
+          eastSkirtHeight: mesh._eastSkirtHeight,
+          northSkirtHeight: mesh._northSkirtHeight,
+          childTileMask: terrainData.wasCreatedByUpsampling() ? 0 : 15,
+          credits: mesh._credits,
+        })
+
+        // Cache the processed tile (with LRU eviction)
+        cacheTile(tileKey, modifiedTerrainData)
+
+        return modifiedTerrainData
       })
-
-      // Cache the processed tile (with LRU eviction)
-      cacheTile(tileKey, modifiedTerrainData)
-
-      return modifiedTerrainData
-    }).catch((error) => {
-      // Log the error - this causes sampleTerrainMostDetailed to return undefined heights!
-      console.error(`[FlatteningTerrainProvider] EXCEPTION in tile ${tileKey}:`, error)
-      // Re-throw so Cesium handles it normally
-      throw error
-    })
+      .catch((error) => {
+        // Log the error - this causes sampleTerrainMostDetailed to return undefined heights!
+        console.error(`[FlatteningTerrainProvider] EXCEPTION in tile ${tileKey}:`, error)
+        // Re-throw so Cesium handles it normally
+        throw error
+      })
   }
 
   /**
@@ -1163,7 +1177,7 @@ export function createFlatteningTerrainProvider(
   function getHeightAndSlopeAtPosition(
     lon: number,
     lat: number,
-    headingDegrees: number
+    headingDegrees: number,
   ): { height: number; slopeDegrees: number } | null {
     if (floorDataMap.size === 0) return null
 
@@ -1175,7 +1189,7 @@ export function createFlatteningTerrainProvider(
       minX: lon - searchRadiusDeg,
       minY: lat - searchRadiusDeg,
       maxX: lon + searchRadiusDeg,
-      maxY: lat + searchRadiusDeg
+      maxY: lat + searchRadiusDeg,
     })
 
     if (candidates.length === 0) return null
@@ -1238,23 +1252,25 @@ export function createFlatteningTerrainProvider(
     let slopeDegrees = 0
 
     // Use closest runway for slope calculation (works for both runways and taxiways)
-    if (closestRunway && closestRunway.gradientStart && closestRunway.gradientEnd &&
-        closestRunway.startElevation !== undefined && closestRunway.endElevation !== undefined) {
+    if (
+      closestRunway &&
+      closestRunway.gradientStart &&
+      closestRunway.gradientEnd &&
+      closestRunway.startElevation !== undefined &&
+      closestRunway.endElevation !== undefined
+    ) {
       // Runway with gradient - calculate slope
       const [startLon, startLat] = closestRunway.gradientStart
       const [endLon, endLat] = closestRunway.gradientEnd
 
       // Calculate runway heading (direction from start to end threshold)
-      const runwayHeadingRad = Math.atan2(
-        (endLon - startLon) * Math.cos(lat * Math.PI / 180),
-        endLat - startLat
-      )
+      const runwayHeadingRad = Math.atan2((endLon - startLon) * Math.cos((lat * Math.PI) / 180), endLat - startLat)
       const runwayHeadingDeg = (Cesium.Math.toDegrees(runwayHeadingRad) + 360) % 360
 
       // Calculate runway length in meters
-      const dLat = (endLat - startLat) * Math.PI / 180
-      const dLon = (endLon - startLon) * Math.PI / 180
-      const avgLat = (startLat + endLat) / 2 * Math.PI / 180
+      const dLat = ((endLat - startLat) * Math.PI) / 180
+      const dLon = ((endLon - startLon) * Math.PI) / 180
+      const avgLat = (((startLat + endLat) / 2) * Math.PI) / 180
       const x = dLon * Math.cos(avgLat) * 6371000
       const y = dLat * 6371000
       const runwayLengthM = Math.sqrt(x * x + y * y)
@@ -1268,7 +1284,7 @@ export function createFlatteningTerrainProvider(
         // If heading same direction as runway gradient: use runway slope
         // If heading opposite: negate slope
         const headingDiff = ((headingDegrees - runwayHeadingDeg + 180 + 360) % 360) - 180
-        const headingAlignment = Math.cos(headingDiff * Math.PI / 180)
+        const headingAlignment = Math.cos((headingDiff * Math.PI) / 180)
 
         slopeDegrees = Cesium.Math.toDegrees(runwaySlopeRad) * headingAlignment
       }
@@ -1282,7 +1298,11 @@ export function createFlatteningTerrainProvider(
   const enhanced = baseProvider as Cesium.CesiumTerrainProvider & {
     setFlatteningPolygons: (polygons: FlatteningPolygon[]) => void
     clearFlatteningPolygons: () => void
-    getHeightAndSlopeAtPosition: (lon: number, lat: number, headingDegrees: number) => { height: number; slopeDegrees: number } | null
+    getHeightAndSlopeAtPosition: (
+      lon: number,
+      lat: number,
+      headingDegrees: number,
+    ) => { height: number; slopeDegrees: number } | null
     setTileCacheSize: (size: number) => void
   }
 
@@ -1305,7 +1325,7 @@ let wrappedBaseProvider: Cesium.CesiumTerrainProvider | null = null
  * If the base provider has changed since the last call, creates a new wrapper.
  */
 export function getFlatteningTerrainProvider(
-  baseProvider: Cesium.CesiumTerrainProvider
+  baseProvider: Cesium.CesiumTerrainProvider,
 ): ReturnType<typeof createFlatteningTerrainProvider> {
   // If base provider changed, recreate the wrapper
   if (flatteningProviderInstance && wrappedBaseProvider !== baseProvider) {
@@ -1347,7 +1367,7 @@ export function clearFlatteningTerrainProvider(): void {
 export function getHeightAndSlopeFromPolygons(
   lon: number,
   lat: number,
-  headingDegrees: number
+  headingDegrees: number,
 ): { height: number; slopeDegrees: number } | null {
   if (!flatteningProviderInstance) return null
   return flatteningProviderInstance.getHeightAndSlopeAtPosition(lon, lat, headingDegrees)

@@ -60,10 +60,7 @@ function applyAdjustments(layer: Cesium.ImageryLayer, adjustments: ImageryAdjust
  * })
  * ```
  */
-export function useImageryProvider(
-  viewer: Cesium.Viewer | null,
-  settings: ImagerySettings
-): void {
+export function useImageryProvider(viewer: Cesium.Viewer | null, settings: ImagerySettings): void {
   const { provider, googleMapsApiKey, cesiumIonToken, cesiumAdjustments, googleAdjustments } = settings
   const currentProviderRef = useRef<string | null>(null)
   const isInitializedRef = useRef(false)
@@ -109,7 +106,7 @@ export function useImageryProvider(
 
           // Create Google 2D satellite imagery provider
           const googleProvider = await Cesium.Google2DImageryProvider.fromUrl({
-            mapType: 'satellite'
+            mapType: 'satellite',
           })
 
           // Add at index 0 (base layer for night darkening compatibility)
@@ -120,9 +117,7 @@ export function useImageryProvider(
         } else {
           // Use Cesium Ion default (Bing Maps)
           // Asset ID 2 is the default Bing Maps Aerial imagery
-          newLayer = await Cesium.ImageryLayer.fromProviderAsync(
-            Cesium.IonImageryProvider.fromAssetId(2)
-          )
+          newLayer = await Cesium.ImageryLayer.fromProviderAsync(Cesium.IonImageryProvider.fromAssetId(2))
           imageryLayers.add(newLayer, 0)
           console.log('[useImageryProvider] Switched to Cesium Ion (Bing Maps)')
         }
@@ -141,9 +136,7 @@ export function useImageryProvider(
           console.log('[useImageryProvider] Falling back to Cesium Ion')
           try {
             const imageryLayers = viewer.imageryLayers
-            const fallbackLayer = await Cesium.ImageryLayer.fromProviderAsync(
-              Cesium.IonImageryProvider.fromAssetId(2)
-            )
+            const fallbackLayer = await Cesium.ImageryLayer.fromProviderAsync(Cesium.IonImageryProvider.fromAssetId(2))
             imageryLayers.add(fallbackLayer, 0)
             // Apply cesium adjustments for fallback
             applyAdjustments(fallbackLayer, cesiumAdjustments ?? DEFAULT_IMAGERY_ADJUSTMENTS)

@@ -38,7 +38,7 @@ export function createAirlineRuleKey(callsignPrefix: string, typeCode: string): 
  * VMR files use // to separate alternative model names
  */
 export function parseModelNames(modelName: string): string[] {
-  return modelName.split('//').filter(name => name.trim())
+  return modelName.split('//').filter((name) => name.trim())
 }
 
 /**
@@ -68,7 +68,7 @@ export function processApiRules<T extends RuleEntry>(
   rules: ParsedApiRule[],
   defaultRules: Map<string, T>,
   airlineRules: Map<string, T>,
-  createEntry: (rule: VMRRule, sourceVmr: string) => T
+  createEntry: (rule: VMRRule, sourceVmr: string) => T,
 ): void {
   for (const apiRule of rules) {
     const typeCode = normalizeTypeCode(apiRule.typeCode)
@@ -99,7 +99,7 @@ export function processApiRules<T extends RuleEntry>(
  * Get unique source VMR files from parsed rules
  */
 export function getUniqueSourceFiles(rules: ParsedApiRule[]): string[] {
-  const uniqueFiles = new Set(rules.map(r => r.sourceVmr))
+  const uniqueFiles = new Set(rules.map((r) => r.sourceVmr))
   return Array.from(uniqueFiles)
 }
 
@@ -117,7 +117,7 @@ export function findRuleMatch<T>(
   aircraftType: string,
   airlineCode: string | null,
   defaultRules: Map<string, T>,
-  airlineRules: Map<string, T>
+  airlineRules: Map<string, T>,
 ): { entry: T; isAirlineSpecific: boolean } | null {
   const normalizedType = normalizeTypeCode(aircraftType)
   const normalizedAirline = airlineCode?.toUpperCase()

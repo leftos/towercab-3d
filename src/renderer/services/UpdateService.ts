@@ -49,7 +49,7 @@ export async function checkForUpdates(): Promise<boolean> {
         version: update.version,
         currentVersion: update.currentVersion,
         date: update.date ?? null,
-        body: update.body ?? null
+        body: update.body ?? null,
       })
       store.setStatus('available')
       console.log(`[Update] Update available: v${update.version}`)
@@ -105,7 +105,6 @@ export async function downloadAndInstallUpdate(): Promise<void> {
 
     store.setStatus('ready')
     console.log('[Update] Update installed, ready to restart')
-
   } catch (error) {
     console.error('[Update] Download/install failed:', error)
     store.setError(error instanceof Error ? error.message : 'Failed to download update')
@@ -154,7 +153,9 @@ export function startAutoUpdateCheck(initialDelay: number = 5000): void {
     }, AUTO_CHECK_INTERVAL)
   }, initialDelay)
 
-  console.log(`[Update] Auto-update check scheduled (initial delay: ${initialDelay}ms, interval: ${AUTO_CHECK_INTERVAL}ms)`)
+  console.log(
+    `[Update] Auto-update check scheduled (initial delay: ${initialDelay}ms, interval: ${AUTO_CHECK_INTERVAL}ms)`,
+  )
 }
 
 /**

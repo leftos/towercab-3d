@@ -21,13 +21,7 @@
 
 import { convertToAssetUrlSync, modApi, isTauri } from '../utils/tauriApi'
 import type { CustomVMRRule, CustomVMRMatch } from '../types/mod'
-import {
-  type ParsedApiRule,
-  type VMRRule,
-  processApiRules,
-  getUniqueSourceFiles,
-  findRuleMatch
-} from './vmrUtils'
+import { type ParsedApiRule, type VMRRule, processApiRules, getUniqueSourceFiles, findRuleMatch } from './vmrUtils'
 
 /** Rule entry with base path for model resolution */
 interface CustomRuleEntry {
@@ -76,16 +70,11 @@ class CustomVMRServiceClass {
           const rules = await modApi.parseVMRFiles(vmrPaths)
 
           // Process parsed rules using shared utility with custom entry creation
-          processApiRules(
-            rules as ParsedApiRule[],
-            this.defaultRules,
-            this.airlineRules,
-            (rule, sourceVmr) => ({
-              rule,
-              sourceVmr,
-              basePath: this.getBasePath(sourceVmr)
-            })
-          )
+          processApiRules(rules as ParsedApiRule[], this.defaultRules, this.airlineRules, (rule, sourceVmr) => ({
+            rule,
+            sourceVmr,
+            basePath: this.getBasePath(sourceVmr),
+          }))
 
           // Track which files were processed
           this.loadedFiles = getUniqueSourceFiles(rules as ParsedApiRule[])
@@ -105,7 +94,7 @@ class CustomVMRServiceClass {
       if (this.defaultRules.size > 0 || this.airlineRules.size > 0) {
         console.log(
           `[CustomVMRService] Loaded ${this.loadedFiles.length} VMR file(s), ` +
-          `${this.defaultRules.size} default rules, ${this.airlineRules.size} airline rules`
+            `${this.defaultRules.size} default rules, ${this.airlineRules.size} airline rules`,
         )
       }
     } catch (error) {
@@ -131,12 +120,7 @@ class CustomVMRServiceClass {
       const basePath = '/api/mods/aircraft'
 
       // Process parsed rules using shared utility
-      processApiRules(
-        rules,
-        this.defaultRules,
-        this.airlineRules,
-        (rule, sourceVmr) => ({ rule, sourceVmr, basePath })
-      )
+      processApiRules(rules, this.defaultRules, this.airlineRules, (rule, sourceVmr) => ({ rule, sourceVmr, basePath }))
 
       // Pre-load manifests for all models
       if (rules.length > 0) {
@@ -175,11 +159,11 @@ class CustomVMRServiceClass {
     const allRules = new Set<string>()
 
     // Collect all unique model names from both default and airline rules
-    this.defaultRules.forEach(entry => {
-      entry.rule.modelNames.forEach(name => allRules.add(name))
+    this.defaultRules.forEach((entry) => {
+      entry.rule.modelNames.forEach((name) => allRules.add(name))
     })
-    this.airlineRules.forEach(entry => {
-      entry.rule.modelNames.forEach(name => allRules.add(name))
+    this.airlineRules.forEach((entry) => {
+      entry.rule.modelNames.forEach((name) => allRules.add(name))
     })
 
     // Pre-load manifest for each model
@@ -224,7 +208,7 @@ class CustomVMRServiceClass {
           const modelUrl = `${modelFolderPath}/model.glb`
           const modelCheck = await fetch(modelUrl, { method: 'HEAD' })
           this.manifestCache.set(modelFolderPath, {
-            fileExists: modelCheck.ok
+            fileExists: modelCheck.ok,
           })
         } else {
           this.manifestCache.set(modelFolderPath, { fileExists: false })
@@ -238,26 +222,27 @@ class CustomVMRServiceClass {
       const scale = typeof (manifest as any)?.scale === 'number' ? (manifest as any).scale : undefined
       // biome-ignore lint/suspicious/noExplicitAny: dynamic VMR parsing
       const rawRotation = (manifest as any)?.rotationOffset
-      const rotationOffset = rawRotation && typeof rawRotation === 'object'
-        ? {
-            // biome-ignore lint/suspicious/noExplicitAny: dynamic VMR parsing
-            x: typeof (rawRotation as any).x === 'number' ? (rawRotation as any).x : 0,
-            // biome-ignore lint/suspicious/noExplicitAny: dynamic VMR parsing
-            y: typeof (rawRotation as any).y === 'number' ? (rawRotation as any).y : 0,
-            // biome-ignore lint/suspicious/noExplicitAny: dynamic VMR parsing
-            z: typeof (rawRotation as any).z === 'number' ? (rawRotation as any).z : 0
-          }
-        : undefined
+      const rotationOffset =
+        rawRotation && typeof rawRotation === 'object'
+          ? {
+              // biome-ignore lint/suspicious/noExplicitAny: dynamic VMR parsing
+              x: typeof (rawRotation as any).x === 'number' ? (rawRotation as any).x : 0,
+              // biome-ignore lint/suspicious/noExplicitAny: dynamic VMR parsing
+              y: typeof (rawRotation as any).y === 'number' ? (rawRotation as any).y : 0,
+              // biome-ignore lint/suspicious/noExplicitAny: dynamic VMR parsing
+              z: typeof (rawRotation as any).z === 'number' ? (rawRotation as any).z : 0,
+            }
+          : undefined
 
       this.manifestCache.set(modelFolderPath, {
         scale,
         rotationOffset,
-        fileExists: true
+        fileExists: true,
       })
     } catch {
       // File doesn't exist or can't be parsed - mark as invalid
       this.manifestCache.set(modelFolderPath, {
-        fileExists: false
+        fileExists: false,
       })
     }
   }
@@ -275,12 +260,7 @@ class CustomVMRServiceClass {
   findBestModel(aircraftType: string | null, airlineCode: string | null): CustomVMRMatch | null {
     if (!aircraftType || !this.loaded) return null
 
-    const result = findRuleMatch(
-      aircraftType,
-      airlineCode,
-      this.defaultRules,
-      this.airlineRules
-    )
+    const result = findRuleMatch(aircraftType, airlineCode, this.defaultRules, this.airlineRules)
 
     if (!result) return null
 
@@ -321,17 +301,15 @@ class CustomVMRServiceClass {
 
       // In browser mode, basePath is already an HTTP path (/api/mods/aircraft)
       // In Tauri mode, convert file path to asset URL
-      const finalModelPath = basePath.startsWith('/api/')
-        ? modelPath
-        : convertToAssetUrlSync(modelPath)
+      const finalModelPath = basePath.startsWith('/api/') ? modelPath : convertToAssetUrlSync(modelPath)
 
       return {
         modelPath: finalModelPath,
         modelName: trimmedName,
         aircraftType: rule.typeCode,
-        airlineCode: null,  // Set by caller if airline-specific
+        airlineCode: null, // Set by caller if airline-specific
         scale: cachedManifest.scale ?? 1.0,
-        rotationOffset: cachedManifest.rotationOffset
+        rotationOffset: cachedManifest.rotationOffset,
       }
     }
 
@@ -367,7 +345,7 @@ class CustomVMRServiceClass {
     return {
       vmrFiles: this.loadedFiles.length,
       defaultRules: this.defaultRules.size,
-      airlineRules: this.airlineRules.size
+      airlineRules: this.airlineRules.size,
     }
   }
 

@@ -34,7 +34,7 @@ export function getAircraftDataSource(): AircraftDataSource {
   if (playbackMode === 'live') {
     return {
       timestamp: Date.now(),
-      playbackMode: 'live'
+      playbackMode: 'live',
     }
   }
 
@@ -57,7 +57,7 @@ export function getAircraftDataSource(): AircraftDataSource {
   if (!currentSnapshot) {
     return {
       timestamp: Date.now(),
-      playbackMode
+      playbackMode,
     }
   }
 
@@ -65,16 +65,16 @@ export function getAircraftDataSource(): AircraftDataSource {
   if (!nextSnapshot) {
     return {
       timestamp: currentSnapshot.timestamp,
-      playbackMode
+      playbackMode,
     }
   }
 
   // Calculate effective "now" between current and next snapshot
   const interval = nextSnapshot.timestamp - currentSnapshot.timestamp
-  const effectiveNow = currentSnapshot.timestamp + (segmentProgress * interval)
+  const effectiveNow = currentSnapshot.timestamp + segmentProgress * interval
 
   return {
     timestamp: effectiveNow,
-    playbackMode
+    playbackMode,
   }
 }

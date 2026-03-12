@@ -40,7 +40,7 @@ function getPolygonBBox(polygon: FlatteningPolygon): PolygonBBox {
     minY: minY - blendDegrees,
     maxX: maxX + blendDegrees,
     maxY: maxY + blendDegrees,
-    polygon
+    polygon,
   }
 }
 
@@ -50,10 +50,7 @@ function getPolygonBBox(polygon: FlatteningPolygon): PolygonBBox {
  * @param index - RBush spatial index
  * @param polygons - Array of flattening polygons to insert
  */
-export function insertPolygons(
-  index: RBush<PolygonBBox>,
-  polygons: FlatteningPolygon[]
-): void {
+export function insertPolygons(index: RBush<PolygonBBox>, polygons: FlatteningPolygon[]): void {
   const items = polygons.map(getPolygonBBox)
   index.load(items)
 }
@@ -82,15 +79,15 @@ export function searchTile(
   west: number,
   south: number,
   east: number,
-  north: number
+  north: number,
 ): FlatteningPolygon[] {
   const results = index.search({
     minX: west,
     minY: south,
     maxX: east,
-    maxY: north
+    maxY: north,
   })
-  return results.map(r => r.polygon)
+  return results.map((r) => r.polygon)
 }
 
 /**
@@ -106,13 +103,7 @@ export function searchPoint(
   index: RBush<PolygonBBox>,
   lon: number,
   lat: number,
-  radiusDegrees: number = 0.01
+  radiusDegrees: number = 0.01,
 ): FlatteningPolygon[] {
-  return searchTile(
-    index,
-    lon - radiusDegrees,
-    lat - radiusDegrees,
-    lon + radiusDegrees,
-    lat + radiusDegrees
-  )
+  return searchTile(index, lon - radiusDegrees, lat - radiusDegrees, lon + radiusDegrees, lat + radiusDegrees)
 }

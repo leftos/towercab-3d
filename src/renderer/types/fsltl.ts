@@ -18,10 +18,10 @@ export type TextureScale = 'full' | '2k' | '1k' | '512'
  * Mapping from TextureScale to max pixel dimension
  */
 export const TEXTURE_SCALE_PIXELS: Record<TextureScale, number | null> = {
-  full: null,  // No downscaling
+  full: null, // No downscaling
   '2k': 2048,
   '1k': 1024,
-  '512': 512
+  '512': 512,
 }
 
 /**
@@ -64,7 +64,7 @@ export interface FSLTLSettings {
 export const DEFAULT_FSLTL_SETTINGS: FSLTLSettings = {
   sourcePath: null,
   outputPath: null,
-  textureScale: '1k'
+  textureScale: '1k',
 }
 
 /**
@@ -110,7 +110,7 @@ export const DEFAULT_CONVERSION_PROGRESS: ConversionProgress = {
   completed: 0,
   current: null,
   errors: [],
-  converted: []
+  converted: [],
 }
 
 /**
@@ -204,7 +204,7 @@ export function registryToJSON(registry: FSLTLRegistry): FSLTLRegistryJSON {
   return {
     models: Array.from(registry.models.entries()),
     version: registry.version,
-    lastUpdated: registry.lastUpdated
+    lastUpdated: registry.lastUpdated,
   }
 }
 
@@ -237,7 +237,7 @@ export function registryFromJSON(json: FSLTLRegistryJSON): FSLTLRegistry {
     byAircraftType,
     byAirline,
     version: json.version,
-    lastUpdated: json.lastUpdated
+    lastUpdated: json.lastUpdated,
   }
 }
 
@@ -250,7 +250,7 @@ export function createEmptyRegistry(): FSLTLRegistry {
     byAircraftType: new Map(),
     byAirline: new Map(),
     version: 1,
-    lastUpdated: Date.now()
+    lastUpdated: Date.now(),
   }
 }
 
@@ -291,7 +291,7 @@ export function parseModelName(modelName: string): {
     // ZZZZ or ZZZ means no specific airline
     if (second !== 'ZZZZ' && second !== 'ZZZ') {
       // Could be airline code or part of a longer name like "UAL-United"
-      airlineCode = second.split('-')[0]  // Take code before any dash
+      airlineCode = second.split('-')[0] // Take code before any dash
     }
   }
 

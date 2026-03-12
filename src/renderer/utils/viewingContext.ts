@@ -21,7 +21,7 @@ export function isOrbitFollowing(followMode: FollowMode, followingCallsign: stri
 export function isOrbitWithoutAirport(
   currentAirport: Airport | null,
   followMode: FollowMode,
-  followingCallsign: string | null
+  followingCallsign: string | null,
 ): boolean {
   return !currentAirport && isOrbitFollowing(followMode, followingCallsign)
 }
@@ -38,7 +38,7 @@ export function isOrbitWithoutAirport(
 export function hasViewingContext(
   currentAirport: Airport | null,
   followMode: FollowMode,
-  followingCallsign: string | null
+  followingCallsign: string | null,
 ): boolean {
   return !!currentAirport || isOrbitFollowing(followMode, followingCallsign)
 }

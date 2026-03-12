@@ -88,24 +88,24 @@ function captureSnapshot(scene: Cesium.Scene): DebugSnapshot {
     position: {
       x: camera.position.x,
       y: camera.position.y,
-      z: camera.position.z
+      z: camera.position.z,
     },
     direction: {
       x: camera.direction.x,
       y: camera.direction.y,
-      z: camera.direction.z
+      z: camera.direction.z,
     },
     up: {
       x: camera.up.x,
       y: camera.up.y,
-      z: camera.up.z
+      z: camera.up.z,
     },
     right: {
       x: camera.right.x,
       y: camera.right.y,
-      z: camera.right.z
+      z: camera.right.z,
     },
-    positionCartographic: null
+    positionCartographic: null,
   }
 
   // Check camera position
@@ -126,7 +126,7 @@ function captureSnapshot(scene: Cesium.Scene): DebugSnapshot {
       cameraSnapshot.positionCartographic = {
         lat: Cesium.Math.toDegrees(cartographic.latitude),
         lon: Cesium.Math.toDegrees(cartographic.longitude),
-        height: cartographic.height
+        height: cartographic.height,
       }
       isInvalidNumber(cartographic.latitude, 'cartographic.latitude', issues)
       isInvalidNumber(cartographic.longitude, 'cartographic.longitude', issues)
@@ -139,7 +139,7 @@ function captureSnapshot(scene: Cesium.Scene): DebugSnapshot {
   // Capture frustum
   const frustum = camera.frustum
   const frustumSnapshot: FrustumSnapshot = {
-    type: frustum.constructor.name
+    type: frustum.constructor.name,
   }
 
   if (frustum instanceof Cesium.PerspectiveFrustum) {
@@ -189,7 +189,7 @@ function captureSnapshot(scene: Cesium.Scene): DebugSnapshot {
   const canvas = scene.canvas
   const canvasSnapshot = {
     width: canvas.width,
-    height: canvas.height
+    height: canvas.height,
   }
   if (canvas.width <= 0 || canvas.height <= 0) {
     issues.push(`Invalid canvas dimensions: ${canvas.width}x${canvas.height}`)
@@ -198,11 +198,12 @@ function captureSnapshot(scene: Cesium.Scene): DebugSnapshot {
   // Check drawing buffer
   let drawingBufferSize: { width: number; height: number } | null = null
   try {
-    const context = (scene as unknown as { context?: { drawingBufferWidth?: number; drawingBufferHeight?: number } }).context
+    const context = (scene as unknown as { context?: { drawingBufferWidth?: number; drawingBufferHeight?: number } })
+      .context
     if (context?.drawingBufferWidth !== undefined && context?.drawingBufferHeight !== undefined) {
       drawingBufferSize = {
         width: context.drawingBufferWidth,
-        height: context.drawingBufferHeight
+        height: context.drawingBufferHeight,
       }
       if (context.drawingBufferWidth <= 0 || context.drawingBufferHeight <= 0) {
         issues.push(`Invalid drawing buffer: ${context.drawingBufferWidth}x${context.drawingBufferHeight}`)
@@ -219,7 +220,7 @@ function captureSnapshot(scene: Cesium.Scene): DebugSnapshot {
     frustum: frustumSnapshot,
     canvas: canvasSnapshot,
     drawingBufferSize,
-    issues
+    issues,
   }
 }
 
@@ -277,7 +278,7 @@ export function applyCesiumDebugPatch(viewer: Cesium.Viewer): void {
   scene.renderError.addEventListener(errorHandler)
   console.log('[CesiumDebugPatch] Added renderError listener, numberOfListeners:', scene.renderError.numberOfListeners)
 
-  scene.render = function(time?: Cesium.JulianDate) {
+  scene.render = function (time?: Cesium.JulianDate) {
     frameCount++
 
     // Capture state before render
@@ -286,10 +287,7 @@ export function applyCesiumDebugPatch(viewer: Cesium.Viewer): void {
 
       // Log warning if issues detected BEFORE the crash happens
       if (lastSnapshot.issues.length > 0) {
-        console.warn(
-          `[CesiumDebugPatch] Frame ${frameCount} - Issues detected BEFORE render:`,
-          lastSnapshot.issues
-        )
+        console.warn(`[CesiumDebugPatch] Frame ${frameCount} - Issues detected BEFORE render:`, lastSnapshot.issues)
         console.warn('[CesiumDebugPatch] Full snapshot:', JSON.stringify(lastSnapshot, null, 2))
       }
     } catch (e) {

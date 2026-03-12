@@ -67,7 +67,7 @@ export const BYTES_PER_AIRCRAFT_STATE = 200
  * @returns Estimated memory usage in MB
  */
 export function estimateReplayMemoryMB(durationMinutes: number, averageAircraftCount: number = 100): number {
-  const snapshotCount = Math.ceil(durationMinutes * 60 / 15)
+  const snapshotCount = Math.ceil((durationMinutes * 60) / 15)
   const bytesPerSnapshot = averageAircraftCount * BYTES_PER_AIRCRAFT_STATE * 2 // current + previous states
   const totalBytes = snapshotCount * bytesPerSnapshot
   return totalBytes / (1024 * 1024)

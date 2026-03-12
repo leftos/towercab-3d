@@ -22,19 +22,19 @@ type SessionState = VnasStatus['state']
 let vnasInitialized = false
 
 export function useVnasEvents(): void {
-  const handleAircraftUpdate = useVnasStore(state => state.handleAircraftUpdate)
-  const removeAircraft = useVnasStore(state => state.removeAircraft)
-  const setStateOnly = useVnasStore(state => state.setStateOnly)
-  const setError = useVnasStore(state => state.setError)
-  const tryRestoreSession = useVnasStore(state => state.tryRestoreSession)
-  const connect = useVnasStore(state => state.connect)
-  const subscribe = useVnasStore(state => state.subscribe)
-  const isSubscribedTo = useVnasStore(state => state.isSubscribedTo)
-  const getSessionArtcc = useVnasStore(state => state.getSessionArtcc)
-  const getSessionAirports = useVnasStore(state => state.getSessionAirports)
-  const vnasState = useVnasStore(state => state.status.state)
-  const subscribedFacilities = useVnasStore(state => state.status.subscribedFacilities)
-  const currentAirport = useAirportStore(state => state.currentAirport)
+  const handleAircraftUpdate = useVnasStore((state) => state.handleAircraftUpdate)
+  const removeAircraft = useVnasStore((state) => state.removeAircraft)
+  const setStateOnly = useVnasStore((state) => state.setStateOnly)
+  const setError = useVnasStore((state) => state.setError)
+  const tryRestoreSession = useVnasStore((state) => state.tryRestoreSession)
+  const connect = useVnasStore((state) => state.connect)
+  const subscribe = useVnasStore((state) => state.subscribe)
+  const isSubscribedTo = useVnasStore((state) => state.isSubscribedTo)
+  const getSessionArtcc = useVnasStore((state) => state.getSessionArtcc)
+  const getSessionAirports = useVnasStore((state) => state.getSessionAirports)
+  const vnasState = useVnasStore((state) => state.status.state)
+  const subscribedFacilities = useVnasStore((state) => state.status.subscribedFacilities)
+  const currentAirport = useAirportStore((state) => state.currentAirport)
 
   // Auto-subscribe when airport changes and vNAS is ready
   // This handles the race condition where vNAS connects before airport is loaded
@@ -46,7 +46,7 @@ export function useVnasEvents(): void {
     const icao = currentAirport?.icao
     if (vnasState === 'subscribing' && icao && !isSubscribedTo(icao)) {
       console.log('[vNAS] Auto-subscribing to airport:', icao)
-      subscribe(icao).catch(err => {
+      subscribe(icao).catch((err) => {
         console.warn('[vNAS] Failed to auto-subscribe to airport:', err)
       })
     }
@@ -88,10 +88,7 @@ export function useVnasEvents(): void {
           if (event.payload === 'subscribing' || event.payload === 'connected') {
             try {
               // Fetch ARTCC and resolved airport list for debugging and UI
-              const [artcc, airports] = await Promise.all([
-                getSessionArtcc(),
-                getSessionAirports()
-              ])
+              const [artcc, airports] = await Promise.all([getSessionArtcc(), getSessionAirports()])
               console.log('[vNAS] Session info - ARTCC:', artcc, 'Airports:', airports)
             } catch (err) {
               console.warn('[vNAS] Failed to fetch session info:', err)
@@ -131,10 +128,7 @@ export function useVnasEvents(): void {
 
             // Fetch session info (airports available for 1Hz updates)
             try {
-              const [artcc, airports] = await Promise.all([
-                getSessionArtcc(),
-                getSessionAirports()
-              ])
+              const [artcc, airports] = await Promise.all([getSessionArtcc(), getSessionAirports()])
               console.log('[vNAS] Session info after restore - ARTCC:', artcc, 'Airports:', airports)
             } catch (err) {
               console.warn('[vNAS] Failed to fetch session info after restore:', err)
@@ -166,5 +160,15 @@ export function useVnasEvents(): void {
       unlistenDisconnected?.()
       unlistenError?.()
     }
-  }, [handleAircraftUpdate, removeAircraft, setStateOnly, setError, tryRestoreSession, connect, subscribe, getSessionArtcc, getSessionAirports])
+  }, [
+    handleAircraftUpdate,
+    removeAircraft,
+    setStateOnly,
+    setError,
+    tryRestoreSession,
+    connect,
+    subscribe,
+    getSessionArtcc,
+    getSessionAirports,
+  ])
 }

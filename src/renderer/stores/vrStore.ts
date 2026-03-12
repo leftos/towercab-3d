@@ -10,9 +10,9 @@ interface VRStore {
   vrError: string | null
 
   // VR settings
-  ipd: number  // Interpupillary distance in meters (default 0.063 = 63mm)
-  renderScale: number  // 0.5-1.0 for quality vs performance
-  maxAircraftInVR: number  // Limit aircraft count for performance
+  ipd: number // Interpupillary distance in meters (default 0.063 = 63mm)
+  renderScale: number // 0.5-1.0 for quality vs performance
+  maxAircraftInVR: number // Limit aircraft count for performance
 
   // Actions
   setVRSupported: (supported: boolean) => void
@@ -27,7 +27,7 @@ interface VRStore {
 }
 
 // Default interpupillary distance (average human IPD)
-const DEFAULT_IPD = 0.063  // 63mm in meters
+const DEFAULT_IPD = 0.063 // 63mm in meters
 
 export const useVRStore = create<VRStore>()(
   subscribeWithSelector((set) => ({
@@ -48,7 +48,7 @@ export const useVRStore = create<VRStore>()(
 
     setIPD: (ipd: number) => {
       // Clamp to reasonable range (50mm - 80mm)
-      const clamped = Math.max(0.050, Math.min(0.080, ipd))
+      const clamped = Math.max(0.05, Math.min(0.08, ipd))
       set({ ipd: clamped })
     },
 
@@ -75,6 +75,6 @@ export const useVRStore = create<VRStore>()(
         console.warn('Failed to check WebXR support:', error)
         set({ isVRSupported: false })
       }
-    }
-  }))
+    },
+  })),
 )

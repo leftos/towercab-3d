@@ -11,7 +11,7 @@ export type {
   SmartSortResult,
   SmartSortContext,
   PhaseDetectionResult,
-  RunwayProximity
+  RunwayProximity,
 } from './types'
 
 // Geographic math
@@ -19,7 +19,7 @@ export {
   haversineDistanceNm,
   haversineDistanceFt,
   calculateBearing,
-  headingDifference
+  headingDifference,
 } from './geoMath'
 
 // Flight phase detection
@@ -27,5 +27,5 @@ export {
   detectFlightPhase,
   recordPhase,
   cleanupPhaseHistory,
-  clearPhaseHistory
+  clearPhaseHistory,
 } from './flightPhaseDetector'

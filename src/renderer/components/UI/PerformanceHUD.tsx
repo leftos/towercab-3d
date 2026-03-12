@@ -89,7 +89,7 @@ export function PerformanceHUD({ visible }: PerformanceHUDProps) {
 
       {/* Work breakdown - these should add up to Work Time */}
       <div className="performance-row">
-        <span className="performance-label">  Cesium:</span>
+        <span className="performance-label"> Cesium:</span>
         <span className="performance-value">
           {formatMs(metrics.cesiumRender)}ms
           <span className="performance-pct">({cesiumRenderPct}%)</span>
@@ -97,21 +97,21 @@ export function PerformanceHUD({ visible }: PerformanceHUDProps) {
       </div>
 
       <div className="performance-row">
-        <span className="performance-label">    Update:</span>
+        <span className="performance-label"> Update:</span>
         <span className="performance-value" style={{ color: '#888' }}>
           {formatMs(metrics.cesiumUpdate)}ms
         </span>
       </div>
 
       <div className="performance-row">
-        <span className="performance-label">    Draw:</span>
+        <span className="performance-label"> Draw:</span>
         <span className="performance-value" style={{ color: '#888' }}>
           {formatMs(metrics.cesiumDraw)}ms
         </span>
       </div>
 
       <div className="performance-row">
-        <span className="performance-label">  Interpolation:</span>
+        <span className="performance-label"> Interpolation:</span>
         <span className="performance-value">
           {formatMs(metrics.interpolation)}ms
           <span className="performance-pct">({interpolationPct}%)</span>
@@ -119,7 +119,7 @@ export function PerformanceHUD({ visible }: PerformanceHUDProps) {
       </div>
 
       <div className="performance-row">
-        <span className="performance-label">  Aircraft:</span>
+        <span className="performance-label"> Aircraft:</span>
         <span className="performance-value">
           {formatMs(metrics.aircraftUpdate)}ms
           <span className="performance-pct">({aircraftUpdatePct}%)</span>
@@ -127,7 +127,7 @@ export function PerformanceHUD({ visible }: PerformanceHUDProps) {
       </div>
 
       <div className="performance-row">
-        <span className="performance-label">  Babylon Sync:</span>
+        <span className="performance-label"> Babylon Sync:</span>
         <span className="performance-value">
           {formatMs(metrics.babylonSync)}ms
           <span className="performance-pct">({babylonSyncPct}%)</span>
@@ -135,7 +135,7 @@ export function PerformanceHUD({ visible }: PerformanceHUDProps) {
       </div>
 
       <div className="performance-row">
-        <span className="performance-label">  Babylon Render:</span>
+        <span className="performance-label"> Babylon Render:</span>
         <span className="performance-value">
           {formatMs(metrics.babylonRender)}ms
           <span className="performance-pct">({babylonRenderPct}%)</span>
@@ -144,7 +144,7 @@ export function PerformanceHUD({ visible }: PerformanceHUDProps) {
 
       {metrics.unaccountedTime > 0.5 && (
         <div className="performance-row">
-          <span className="performance-label">  Other:</span>
+          <span className="performance-label"> Other:</span>
           <span className="performance-value" style={{ color: '#ff0' }}>
             {formatMs(metrics.unaccountedTime)}ms
             <span className="performance-pct">({unaccountedPct}%)</span>
@@ -155,12 +155,12 @@ export function PerformanceHUD({ visible }: PerformanceHUDProps) {
       <div className="performance-divider" />
 
       <div className="performance-row">
-        <span className="performance-label">  Primitives:</span>
+        <span className="performance-label"> Primitives:</span>
         <span className="performance-value">{metrics.cesiumPrimitives}</span>
       </div>
 
       <div className="performance-row">
-        <span className="performance-label">  Tiles:</span>
+        <span className="performance-label"> Tiles:</span>
         <span className="performance-value">
           {metrics.cesiumTilesLoaded} loaded
           {metrics.cesiumTilesLoading > 0 && (
@@ -169,9 +169,7 @@ export function PerformanceHUD({ visible }: PerformanceHUDProps) {
         </span>
       </div>
 
-      <div className="performance-footer">
-        Target: 60 FPS (16.67ms interval)
-      </div>
+      <div className="performance-footer">Target: 60 FPS (16.67ms interval)</div>
     </div>
   )
 }

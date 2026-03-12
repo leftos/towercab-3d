@@ -29,7 +29,7 @@ import type {
   SerializedAirport,
   SerializedImagery,
   SerializedModelInfo,
-  ModelInfoUpdatePayload
+  ModelInfoUpdatePayload,
 } from '../types/shared-worker'
 import type { AircraftObservation, AircraftMetadata } from '../types/aircraft-timeline'
 import { useAircraftTimelineStore } from '../stores/aircraftTimelineStore'
@@ -141,10 +141,7 @@ function getSharedWorkerConnection(): { worker: SharedWorker; port: MessagePort 
       console.log('[SharedWorkerConsumer] Creating SharedWorker:', SharedDataWorkerUrl)
 
       // Connect to existing SharedWorker using Vite-bundled worker URL
-      sharedWorker = new SharedWorker(
-        SharedDataWorkerUrl,
-        { type: 'module', name: 'towercab-shared' }
-      )
+      sharedWorker = new SharedWorker(SharedDataWorkerUrl, { type: 'module', name: 'towercab-shared' })
 
       // Handle worker-level errors (e.g., script load failures)
       sharedWorker.onerror = (error) => {
@@ -229,9 +226,7 @@ function getSharedWorkerConnection(): { worker: SharedWorker; port: MessagePort 
     }
   }
 
-  return sharedWorker && sharedWorkerPort
-    ? { worker: sharedWorker, port: sharedWorkerPort }
-    : null
+  return sharedWorker && sharedWorkerPort ? { worker: sharedWorker, port: sharedWorkerPort } : null
 }
 
 /**
@@ -257,7 +252,7 @@ export function insetLog(message: string, viewportId?: string): void {
     type: 'inset-log',
     payload: message,
     viewportId,
-    source: 'inset'
+    source: 'inset',
   })
 }
 
@@ -353,7 +348,7 @@ export function useSharedWorkerConsumer(viewportId: string): SharedWorkerConsume
       postToWorker({
         type: 'register-inset',
         viewportId,
-        source: 'inset'
+        source: 'inset',
       })
       registeredRef.current = true
     }
@@ -382,7 +377,7 @@ export function useSharedWorkerConsumer(viewportId: string): SharedWorkerConsume
     imagery,
     airport,
     connected,
-    lastUpdate
+    lastUpdate,
   }
 }
 
@@ -405,13 +400,13 @@ export function sendCameraUpdate(
     orbitDistance?: number
     orbitHeading?: number
     orbitPitch?: number
-  }
+  },
 ) {
   postToWorker({
     type: 'viewport-camera',
     payload: cameraState,
     viewportId,
-    source: 'inset'
+    source: 'inset',
   })
 }
 

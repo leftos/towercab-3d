@@ -58,14 +58,7 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
 
   // Get settings/weather/token/airport/imagery from SharedWorker
   // Aircraft observations are automatically fed to the timeline store via enableObservationAutoFeed()
-  const {
-    settings,
-    weather,
-    cesiumToken,
-    imagery,
-    airport,
-    connected,
-  } = useSharedWorkerConsumer(viewportId)
+  const { settings, weather, cesiumToken, imagery, airport, connected } = useSharedWorkerConsumer(viewportId)
 
   // Sync SharedWorker data to local stores (settings, weather, airport, imagery)
   // Aircraft data is handled by useSharedWorkerConsumer -> timeline store
@@ -87,13 +80,16 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
   const pendingCameraUpdateRef = useRef<CameraStateUpdate | null>(null)
 
   // Send messages to parent window via postMessage
-  const sendToParent = useCallback((message: InsetToParentMessage) => {
-    try {
-      window.parent.postMessage(message, parentOrigin)
-    } catch (err) {
-      console.error('[InsetApp] Failed to post message to parent:', err)
-    }
-  }, [parentOrigin])
+  const sendToParent = useCallback(
+    (message: InsetToParentMessage) => {
+      try {
+        window.parent.postMessage(message, parentOrigin)
+      } catch (err) {
+        console.error('[InsetApp] Failed to post message to parent:', err)
+      }
+    },
+    [parentOrigin],
+  )
 
   // Initialize viewport in local viewportStore when component mounts
   // The inset's viewportStore may have rehydrated state from localStorage (shared with main app)
@@ -103,12 +99,12 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
 
     // Check if viewport already exists
     const existingViewports = useViewportStore.getState().viewports
-    const hasViewport = existingViewports.some(v => v.id === viewportId)
+    const hasViewport = existingViewports.some((v) => v.id === viewportId)
 
     if (!hasViewport) {
       // Create a viewport entry for this inset
       // We use setState directly to avoid the addViewport logic which generates new IDs
-      useViewportStore.setState(state => ({
+      useViewportStore.setState((state) => ({
         viewports: [
           ...state.viewports,
           {
@@ -134,12 +130,12 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
               pendingLookAtPosition: null,
               cameraVersion: 0,
               savedMode3dState: null,
-              savedMode2dState: null
+              savedMode2dState: null,
             },
-            label: `Inset ${viewportId.slice(0, 8)}`
-          }
+            label: `Inset ${viewportId.slice(0, 8)}`,
+          },
         ],
-        activeViewportId: viewportId
+        activeViewportId: viewportId,
       }))
     } else {
       // Viewport exists (from rehydrated state), just ensure it's active
@@ -160,7 +156,7 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
         if (activeId !== viewportId) {
           useViewportStore.setState({ activeViewportId: viewportId })
         }
-      }
+      },
     )
     return unsubscribe
   }, [viewportId])
@@ -179,7 +175,7 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
           type: 'camera-change',
           viewportId,
           payload: pendingCameraUpdateRef.current,
-          final: true
+          final: true,
         })
         pendingCameraUpdateRef.current = null
       }
@@ -206,8 +202,8 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
   useEffect(() => {
     const unsubscribe = useViewportStore.subscribe((state, prevState) => {
       // Find this viewport's camera state
-      const viewport = state.viewports.find(v => v.id === viewportId)
-      const prevViewport = prevState.viewports.find(v => v.id === viewportId)
+      const viewport = state.viewports.find((v) => v.id === viewportId)
+      const prevViewport = prevState.viewports.find((v) => v.id === viewportId)
 
       if (!viewport || !prevViewport) return
 
@@ -226,7 +222,7 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
         followMode: camera.followMode,
         orbitDistance: camera.orbitDistance,
         orbitHeading: camera.orbitHeading,
-        orbitPitch: camera.orbitPitch
+        orbitPitch: camera.orbitPitch,
       })
 
       if (cameraKey === lastSentCameraRef.current) return
@@ -240,7 +236,8 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
       if (camera.positionOffsetX !== prevCamera.positionOffsetX) updates.positionOffsetX = camera.positionOffsetX
       if (camera.positionOffsetY !== prevCamera.positionOffsetY) updates.positionOffsetY = camera.positionOffsetY
       if (camera.positionOffsetZ !== prevCamera.positionOffsetZ) updates.positionOffsetZ = camera.positionOffsetZ
-      if (camera.followingCallsign !== prevCamera.followingCallsign) updates.followingCallsign = camera.followingCallsign
+      if (camera.followingCallsign !== prevCamera.followingCallsign)
+        updates.followingCallsign = camera.followingCallsign
       if (camera.orbitDistance !== prevCamera.orbitDistance) updates.orbitDistance = camera.orbitDistance
       if (camera.orbitHeading !== prevCamera.orbitHeading) updates.orbitHeading = camera.orbitHeading
       if (camera.orbitPitch !== prevCamera.orbitPitch) updates.orbitPitch = camera.orbitPitch
@@ -254,7 +251,7 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
             type: 'camera-change',
             viewportId,
             payload: updates,
-            final: false
+            final: false,
           })
         } else {
           // Not manipulating (e.g., keyboard input, follow mode) - send as final immediately
@@ -262,7 +259,7 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
             type: 'camera-change',
             viewportId,
             payload: updates,
-            final: true
+            final: true,
           })
         }
       }
@@ -272,23 +269,29 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
   }, [viewportId, sendToParent])
 
   // Handle aircraft selection in this inset (for future use)
-  const _handleAircraftSelect = useCallback((callsign: string) => {
-    sendToParent({
-      type: 'aircraft-select',
-      viewportId,
-      payload: { callsign }
-    })
-  }, [viewportId, sendToParent])
+  const _handleAircraftSelect = useCallback(
+    (callsign: string) => {
+      sendToParent({
+        type: 'aircraft-select',
+        viewportId,
+        payload: { callsign },
+      })
+    },
+    [viewportId, sendToParent],
+  )
 
   // Handle follow request - updates viewportStore which triggers camera sync
-  const _handleFollowRequest = useCallback((callsign: string) => {
-    useViewportStore.getState().followAircraft(callsign)
-    sendToParent({
-      type: 'follow-request',
-      viewportId,
-      payload: { callsign }
-    })
-  }, [viewportId, sendToParent])
+  const _handleFollowRequest = useCallback(
+    (callsign: string) => {
+      useViewportStore.getState().followAircraft(callsign)
+      sendToParent({
+        type: 'follow-request',
+        viewportId,
+        payload: { callsign },
+      })
+    },
+    [viewportId, sendToParent],
+  )
 
   // Listen for messages from parent
   useEffect(() => {
@@ -407,7 +410,7 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
       sendToParent({
         type: 'error',
         viewportId,
-        payload: { error }
+        payload: { error },
       })
     }
   }, [error, viewportId, sendToParent])
@@ -420,7 +423,7 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
     setCesiumReady(true)
     sendToParent({
       type: 'inset-ready',
-      viewportId
+      viewportId,
     })
   }, [viewportId, sendToParent])
 
@@ -434,7 +437,7 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
   const handleFocus = useCallback(() => {
     sendToParent({
       type: 'inset-focus',
-      viewportId
+      viewportId,
     })
   }, [viewportId, sendToParent])
 
@@ -447,7 +450,7 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
       // Don't skip based on hasSentFocusRef since that prevents re-activation after clicking elsewhere
       sendToParent({
         type: 'inset-focus',
-        viewportId
+        viewportId,
       })
     }
 
@@ -467,15 +470,17 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
   // Show loading state while waiting for SharedWorker connection and Cesium token
   if (!connected) {
     return (
-      <div style={{
-        width: '100%',
-        height: '100%',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#1a1a2e',
-        color: '#666'
-      }}>
+      <div
+        style={{
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: '#1a1a2e',
+          color: '#666',
+        }}
+      >
         Connecting to main app...
       </div>
     )
@@ -483,15 +488,17 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
 
   if (!cesiumToken) {
     return (
-      <div style={{
-        width: '100%',
-        height: '100%',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#1a1a2e',
-        color: '#666'
-      }}>
+      <div
+        style={{
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: '#1a1a2e',
+          color: '#666',
+        }}
+      >
         Waiting for Cesium token...
       </div>
     )
@@ -499,15 +506,17 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
 
   if (error) {
     return (
-      <div style={{
-        width: '100%',
-        height: '100%',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#1a1a2e',
-        color: '#ff6b6b'
-      }}>
+      <div
+        style={{
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: '#1a1a2e',
+          color: '#ff6b6b',
+        }}
+      >
         Error: {error}
       </div>
     )
@@ -516,15 +525,17 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
   // Wait for stores to be synced before rendering CesiumViewer
   if (!storesReady) {
     return (
-      <div style={{
-        width: '100%',
-        height: '100%',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#1a1a2e',
-        color: '#666'
-      }}>
+      <div
+        style={{
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: '#1a1a2e',
+          color: '#666',
+        }}
+      >
         Initializing stores...
       </div>
     )
@@ -538,7 +549,7 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
       style={{
         width: '100%',
         height: '100%',
-        position: 'relative'
+        position: 'relative',
       }}
       onMouseDown={handleFocus}
       onTouchStart={handleFocus}
@@ -562,7 +573,7 @@ function InsetApp({ viewportId, parentOrigin }: InsetAppProps) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#888'
+            color: '#888',
           }}
         >
           Loading Cesium viewer...

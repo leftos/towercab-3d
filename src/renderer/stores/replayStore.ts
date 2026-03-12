@@ -11,7 +11,7 @@ import {
   SNAPSHOT_INTERVAL_MS,
   DEFAULT_PLAYBACK_SPEED,
   REPLAY_EXPORT_VERSION,
-  REPLAY_FILE_PREFIX
+  REPLAY_FILE_PREFIX,
 } from '../constants/replay'
 
 /**
@@ -55,11 +55,7 @@ interface ReplayState {
 interface ReplayActions {
   // Recording
   /** Add a new snapshot to the buffer (called by vatsimStore) */
-  addSnapshot: (
-    aircraftStates: Map<string, AircraftState>,
-    vatsimTimestamp: number,
-    lastUpdateInterval: number
-  ) => void
+  addSnapshot: (aircraftStates: Map<string, AircraftState>, vatsimTimestamp: number, lastUpdateInterval: number) => void
   /** Start/stop recording */
   setRecording: (recording: boolean) => void
   /** Clear all recorded snapshots */
@@ -148,13 +144,11 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
       timestamp,
       vatsimTimestamp,
       aircraftStates: serializeAircraftStates(aircraftStates),
-      lastUpdateInterval
+      lastUpdateInterval,
     }
 
     // Add to circular buffer efficiently using slice instead of shift
-    const newSnapshots = snapshots.length >= maxSnapshots
-      ? [...snapshots.slice(1), snapshot]
-      : [...snapshots, snapshot]
+    const newSnapshots = snapshots.length >= maxSnapshots ? [...snapshots.slice(1), snapshot] : [...snapshots, snapshot]
 
     set({ snapshots: newSnapshots })
   },
@@ -181,7 +175,7 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
       set({
         isPlaying: true,
         playbackStartTime: Date.now(),
-        segmentProgress: startProgress
+        segmentProgress: startProgress,
       })
       return
     }
@@ -198,7 +192,7 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
       playbackStartTime: Date.now(),
       playbackStartIndex: startIndex,
       currentIndex: startIndex,
-      segmentProgress: 0
+      segmentProgress: 0,
     })
   },
 
@@ -213,7 +207,7 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
       currentIndex: 0,
       segmentProgress: 0,
       importedAppState: null,
-      importedTimeRange: null
+      importedTimeRange: null,
     })
   },
 
@@ -230,7 +224,7 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
       isPlaying: false,
       playbackMode: get().playbackMode === 'live' ? 'replay' : get().playbackMode,
       playbackStartTime: Date.now(),
-      playbackStartIndex: clampedIndex
+      playbackStartIndex: clampedIndex,
     })
   },
 
@@ -238,9 +232,7 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
     const { currentIndex, playbackMode, getActiveSnapshots } = get()
     const snapshots = getActiveSnapshots()
 
-    const newIndex = playbackMode === 'live'
-      ? Math.max(0, snapshots.length - 2)
-      : Math.max(0, currentIndex - 1)
+    const newIndex = playbackMode === 'live' ? Math.max(0, snapshots.length - 2) : Math.max(0, currentIndex - 1)
 
     // Clear interpolation state so aircraft jump to the correct position
     useAircraftTimelineStore.getState().clearInterpolationState()
@@ -249,7 +241,7 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
       currentIndex: newIndex,
       segmentProgress: 0,
       isPlaying: false,
-      playbackMode: playbackMode === 'live' ? 'replay' : playbackMode
+      playbackMode: playbackMode === 'live' ? 'replay' : playbackMode,
     })
   },
 
@@ -265,7 +257,7 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
       currentIndex: newIndex,
       segmentProgress: 0,
       isPlaying: false,
-      playbackMode: playbackMode === 'live' ? 'replay' : playbackMode
+      playbackMode: playbackMode === 'live' ? 'replay' : playbackMode,
     })
   },
 
@@ -275,12 +267,20 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
     set({
       playbackSpeed: speed,
       playbackStartTime: Date.now(),
-      playbackStartIndex: currentIndex
+      playbackStartIndex: currentIndex,
     })
   },
 
   updatePlayback: (deltaMs) => {
-    const { isPlaying, playbackSpeed, playbackMode, currentIndex, segmentProgress, getActiveSnapshots, importedTimeRange } = get()
+    const {
+      isPlaying,
+      playbackSpeed,
+      playbackMode,
+      currentIndex,
+      segmentProgress,
+      getActiveSnapshots,
+      importedTimeRange,
+    } = get()
 
     if (!isPlaying) return
 
@@ -319,14 +319,14 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
       set({
         isPlaying: false,
         currentIndex: snapshots.length - 1,
-        segmentProgress: 0
+        segmentProgress: 0,
       })
       return
     }
 
     set({
       currentIndex: newIndex,
-      segmentProgress: Math.min(1, newProgress)
+      segmentProgress: Math.min(1, newProgress),
     })
   },
 
@@ -354,7 +354,7 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
         lastReceivedAt: timeline.lastReceivedAt,
         dynamicDelay: timeline.dynamicDelay
           ? { ...timeline.dynamicDelay, intervalHistory: [...timeline.dynamicDelay.intervalHistory] }
-          : undefined
+          : undefined,
       })
     }
 
@@ -365,7 +365,7 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
       exportDate: new Date().toISOString(),
       appVersion: APP_VERSION,
       airport: currentAirport?.icao,
-      timelines: serialized
+      timelines: serialized,
     }
 
     // Create and download file
@@ -427,7 +427,7 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
       playbackMode: playbackMode === 'imported' ? 'live' : playbackMode,
       currentIndex: 0,
       segmentProgress: 0,
-      isPlaying: false
+      isPlaying: false,
     })
   },
 
@@ -457,7 +457,7 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
 
   getMaxSnapshots: () => {
     const maxMinutes = useSettingsStore.getState().memory.maxReplayDurationMinutes
-    return Math.ceil(maxMinutes * 60 / 15) // 15 second intervals
+    return Math.ceil((maxMinutes * 60) / 15) // 15 second intervals
   },
 
   getTotalDuration: () => {
@@ -467,16 +467,16 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
     }
     const snapshots = get().getActiveSnapshots()
     if (snapshots.length < 2) return 0
-    return (snapshots.length - 1) * SNAPSHOT_INTERVAL_MS / 1000
+    return ((snapshots.length - 1) * SNAPSHOT_INTERVAL_MS) / 1000
   },
 
   getCurrentTime: () => {
     const { playbackMode, importedTimeRange, currentIndex, segmentProgress } = get()
     if (playbackMode === 'imported' && importedTimeRange) {
-      return segmentProgress * (importedTimeRange.end - importedTimeRange.start) / 1000
+      return (segmentProgress * (importedTimeRange.end - importedTimeRange.start)) / 1000
     }
-    return (currentIndex + segmentProgress) * SNAPSHOT_INTERVAL_MS / 1000
-  }
+    return ((currentIndex + segmentProgress) * SNAPSHOT_INTERVAL_MS) / 1000
+  },
 }))
 
 // ========================================================================
@@ -493,9 +493,7 @@ function isDiagnosticPackage(data: unknown): data is DiagnosticPackage {
   )
 }
 
-function calculateTimeRange(
-  timelines: SerializedTimeline[]
-): { start: number; end: number } | null {
+function calculateTimeRange(timelines: SerializedTimeline[]): { start: number; end: number } | null {
   let minTime = Infinity
   let maxTime = -Infinity
   for (const timeline of timelines) {
@@ -504,15 +502,13 @@ function calculateTimeRange(
       if (obs.observedAt > maxTime) maxTime = obs.observedAt
     }
   }
-  return minTime < Infinity && maxTime > -Infinity
-    ? { start: minTime, end: maxTime }
-    : null
+  return minTime < Infinity && maxTime > -Infinity ? { start: minTime, end: maxTime } : null
 }
 
 function importDiagnosticPackage(
   data: DiagnosticPackage,
   set: (state: Partial<ReplayState>) => void,
-  _get: () => ReplayStore
+  _get: () => ReplayStore,
 ): boolean {
   if (!Array.isArray(data.timelines) || data.timelines.length === 0) {
     console.error('[Replay] Invalid diagnostic data: no timelines')
@@ -531,12 +527,12 @@ function importDiagnosticPackage(
     importedSnapshots: null,
     currentIndex: 0,
     segmentProgress: 0,
-    isPlaying: false
+    isPlaying: false,
   })
 
   console.log(
     `[Replay] Imported diagnostic: ${data.timelines.length} timelines` +
-    (data.appState.airport ? ` from ${data.appState.airport.icao}` : '')
+      (data.appState.airport ? ` from ${data.appState.airport.icao}` : ''),
   )
   return true
 }
@@ -544,7 +540,7 @@ function importDiagnosticPackage(
 function importV2Replay(
   data: ReplayExportDataV2,
   set: (state: Partial<ReplayState>) => void,
-  _get: () => ReplayStore
+  _get: () => ReplayStore,
 ): boolean {
   if (!Array.isArray(data.timelines) || data.timelines.length === 0) {
     console.error('[Replay] Invalid v2 import data: no timelines')
@@ -563,17 +559,19 @@ function importV2Replay(
     importedSnapshots: null,
     currentIndex: 0,
     segmentProgress: 0,
-    isPlaying: false
+    isPlaying: false,
   })
 
-  console.log(`[Replay] Imported v2 replay: ${data.timelines.length} timelines from ${data.airport || 'unknown airport'}`)
+  console.log(
+    `[Replay] Imported v2 replay: ${data.timelines.length} timelines from ${data.airport || 'unknown airport'}`,
+  )
   return true
 }
 
 function importV1Replay(
   data: ReplayExportData,
   set: (state: Partial<ReplayState>) => void,
-  _get: () => ReplayStore
+  _get: () => ReplayStore,
 ): boolean {
   if (data.version !== 1) {
     console.error(`[Replay] Expected v1, got version ${data.version}`)
@@ -600,10 +598,11 @@ function importV1Replay(
     playbackMode: 'imported',
     currentIndex: 0,
     segmentProgress: 0,
-    isPlaying: false
+    isPlaying: false,
   })
 
-  console.log(`[Replay] Imported v1 replay: ${v1Data.snapshots.length} snapshots from ${data.airport || 'unknown airport'} (converted to timelines)`)
+  console.log(
+    `[Replay] Imported v1 replay: ${v1Data.snapshots.length} snapshots from ${data.airport || 'unknown airport'} (converted to timelines)`,
+  )
   return true
 }
-

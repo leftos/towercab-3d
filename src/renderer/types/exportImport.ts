@@ -87,25 +87,28 @@ export interface SelectiveExportData {
   }
 
   /** Per-airport data */
-  airports: Record<string, {
-    /** All viewports for this airport (main + insets with geometry/camera) */
-    viewports?: unknown[]
-    /** Currently active viewport ID */
-    activeViewportId?: string
-    /** Saved default viewport configuration */
-    defaultConfig?: {
-      viewports: unknown[]
-      activeViewportId: string
+  airports: Record<
+    string,
+    {
+      /** All viewports for this airport (main + insets with geometry/camera) */
+      viewports?: unknown[]
+      /** Currently active viewport ID */
+      activeViewportId?: string
+      /** Saved default viewport configuration */
+      defaultConfig?: {
+        viewports: unknown[]
+        activeViewportId: string
+      }
+      /** 3D view mode camera defaults */
+      default3d?: Record<string, unknown>
+      /** 2D/topdown view mode camera defaults */
+      default2d?: Record<string, unknown>
+      /** Camera bookmarks (0-99 slots) */
+      bookmarks?: Record<number, unknown>
+      /** Datablock position (numpad style) */
+      datablockPosition?: number
     }
-    /** 3D view mode camera defaults */
-    default3d?: Record<string, unknown>
-    /** 2D/topdown view mode camera defaults */
-    default2d?: Record<string, unknown>
-    /** Camera bookmarks (0-99 slots) */
-    bookmarks?: Record<number, unknown>
-    /** Datablock position (numpad style) */
-    datablockPosition?: number
-  }>
+  >
 
   /** List of selected IDs for reference during import */
   exportedPaths: string[]

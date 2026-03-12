@@ -1,11 +1,7 @@
 import { useRef, useCallback, useEffect } from 'react'
 import * as Cesium from 'cesium'
 import { useVRStore } from '../stores/vrStore'
-import {
-  saveCameraState,
-  restoreCameraState,
-  configureEyeCamera
-} from '../utils/cesiumFrustumPatch'
+import { saveCameraState, restoreCameraState, configureEyeCamera } from '../utils/cesiumFrustumPatch'
 
 /**
  * Manages Cesium stereo rendering for WebXR VR mode by rendering separate left/right eye views.
@@ -148,7 +144,7 @@ interface UseCesiumStereoResult {
 export function useCesiumStereo(
   viewer: Cesium.Viewer | null,
   renderWidth: number = 1536,
-  renderHeight: number = 1536
+  renderHeight: number = 1536,
 ): UseCesiumStereoResult {
   const isVRActive = useVRStore((state) => state.isVRActive)
   const ipd = useVRStore((state) => state.ipd)
@@ -236,10 +232,14 @@ export function useCesiumStereo(
       // Copy Cesium canvas to right eye canvas
       rightContextRef.current.drawImage(
         cesiumCanvas,
-        0, 0,
-        cesiumCanvas.width, cesiumCanvas.height,
-        0, 0,
-        rightCanvasRef.current.width, rightCanvasRef.current.height
+        0,
+        0,
+        cesiumCanvas.width,
+        cesiumCanvas.height,
+        0,
+        0,
+        rightCanvasRef.current.width,
+        rightCanvasRef.current.height,
       )
 
       // Restore camera before rendering left eye
@@ -252,12 +252,15 @@ export function useCesiumStereo(
       // Copy Cesium canvas to left eye canvas
       leftContextRef.current.drawImage(
         cesiumCanvas,
-        0, 0,
-        cesiumCanvas.width, cesiumCanvas.height,
-        0, 0,
-        leftCanvasRef.current.width, leftCanvasRef.current.height
+        0,
+        0,
+        cesiumCanvas.width,
+        cesiumCanvas.height,
+        0,
+        0,
+        leftCanvasRef.current.width,
+        leftCanvasRef.current.height,
       )
-
     } finally {
       // Always restore camera state
       restoreCameraState(camera)
@@ -269,10 +272,10 @@ export function useCesiumStereo(
       leftCanvas: leftCanvasRef.current,
       rightCanvas: rightCanvasRef.current,
       leftContext: leftContextRef.current,
-      rightContext: rightContextRef.current
+      rightContext: rightContextRef.current,
     },
     renderStereoFrame,
-    isActive: isVRActive && viewer !== null
+    isActive: isVRActive && viewer !== null,
   }
 }
 
@@ -283,10 +286,7 @@ export function useCesiumStereo(
  * @param xrSession - Active WebXR session
  * @param xrRefSpace - XR reference space
  */
-export function useCesiumVRRotation(
-  viewer: Cesium.Viewer | null,
-  xrPose: XRViewerPose | null
-): void {
+export function useCesiumVRRotation(viewer: Cesium.Viewer | null, xrPose: XRViewerPose | null): void {
   useEffect(() => {
     if (!viewer || !xrPose) return
 
@@ -299,30 +299,17 @@ export function useCesiumVRRotation(
     // Convert XR orientation (quaternion) to Cesium rotation
     // XR uses (x, y, z, w) quaternion format
     const orientation = transform.orientation
-    const quaternion = new Cesium.Quaternion(
-      orientation.x,
-      orientation.y,
-      orientation.z,
-      orientation.w
-    )
+    const quaternion = new Cesium.Quaternion(orientation.x, orientation.y, orientation.z, orientation.w)
 
     // Create rotation matrix from quaternion
     const rotationMatrix = Cesium.Matrix3.fromQuaternion(quaternion)
 
     // Apply rotation to camera direction and up vectors
     // This rotates the camera based on head movement
-    const direction = Cesium.Matrix3.multiplyByVector(
-      rotationMatrix,
-      Cesium.Cartesian3.UNIT_Z,
-      new Cesium.Cartesian3()
-    )
+    const direction = Cesium.Matrix3.multiplyByVector(rotationMatrix, Cesium.Cartesian3.UNIT_Z, new Cesium.Cartesian3())
     Cesium.Cartesian3.negate(direction, direction) // Camera looks in -Z
 
-    const up = Cesium.Matrix3.multiplyByVector(
-      rotationMatrix,
-      Cesium.Cartesian3.UNIT_Y,
-      new Cesium.Cartesian3()
-    )
+    const up = Cesium.Matrix3.multiplyByVector(rotationMatrix, Cesium.Cartesian3.UNIT_Y, new Cesium.Cartesian3())
 
     camera.direction = direction
     camera.up = up

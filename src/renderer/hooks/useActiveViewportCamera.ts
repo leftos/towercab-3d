@@ -200,10 +200,7 @@ export function useActiveViewportCamera() {
   const activeViewportId = useViewportStore((state) => state.activeViewportId)
 
   // Memoize finding the active viewport to prevent unnecessary recalculations
-  const activeViewport = useMemo(
-    () => viewports.find(v => v.id === activeViewportId),
-    [viewports, activeViewportId]
-  )
+  const activeViewport = useMemo(() => viewports.find((v) => v.id === activeViewportId), [viewports, activeViewportId])
 
   const cameraState = activeViewport?.cameraState
 
@@ -246,7 +243,7 @@ export function useActiveViewportCamera() {
     activeViewport,
 
     // Camera state values (with defaults if no active viewport)
-    viewMode: cameraState?.viewMode ?? '3d' as ViewMode,
+    viewMode: cameraState?.viewMode ?? ('3d' as ViewMode),
     heading: cameraState?.heading ?? 0,
     pitch: cameraState?.pitch ?? -15,
     fov: cameraState?.fov ?? 60,
@@ -255,7 +252,7 @@ export function useActiveViewportCamera() {
     positionOffsetZ: cameraState?.positionOffsetZ ?? 0,
     topdownAltitude: cameraState?.topdownAltitude ?? 5000,
     followingCallsign: cameraState?.followingCallsign ?? null,
-    followMode: cameraState?.followMode ?? 'tower' as FollowMode,
+    followMode: cameraState?.followMode ?? ('tower' as FollowMode),
     followZoom: cameraState?.followZoom ?? 1,
     orbitDistance: cameraState?.orbitDistance ?? 500,
     orbitHeading: cameraState?.orbitHeading ?? 0,
@@ -293,7 +290,7 @@ export function useActiveViewportCamera() {
     followAircraftInOrbit,
     setLookAtTarget,
     lookAtPosition,
-    clearLookAtTarget
+    clearLookAtTarget,
   }
 }
 
@@ -305,10 +302,7 @@ export function useActiveViewportCameraState(): ViewportCameraState | undefined 
   const viewports = useViewportStore((state) => state.viewports)
   const activeViewportId = useViewportStore((state) => state.activeViewportId)
 
-  return useMemo(
-    () => viewports.find(v => v.id === activeViewportId)?.cameraState,
-    [viewports, activeViewportId]
-  )
+  return useMemo(() => viewports.find((v) => v.id === activeViewportId)?.cameraState, [viewports, activeViewportId])
 }
 
 export default useActiveViewportCamera

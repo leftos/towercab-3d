@@ -88,9 +88,8 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
       }
 
       // Calculate actual interval between VATSIM updates (used for replay)
-      const actualInterval = lastVatsimTimestamp > 0
-        ? vatsimTimestamp - lastVatsimTimestamp
-        : VATSIM_ACTUAL_UPDATE_INTERVAL
+      const actualInterval =
+        lastVatsimTimestamp > 0 ? vatsimTimestamp - lastVatsimTimestamp : VATSIM_ACTUAL_UPDATE_INTERVAL
 
       // Use local time for timestamps
       const now = Date.now()
@@ -105,12 +104,12 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
       let filteredPilots: PilotData[] = []
 
       if (referencePosition) {
-        filteredPilots = data.pilots.filter(pilot => {
+        filteredPilots = data.pilots.filter((pilot) => {
           const distance = calculateDistanceNM(
             referencePosition.latitude,
             referencePosition.longitude,
             pilot.latitude,
-            pilot.longitude
+            pilot.longitude,
           )
           return distance <= aircraftDataRadiusNM
         })
@@ -128,7 +127,7 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
         isConnected: true,
         lastUpdate: new Date(),
         isLoading: false,
-        error: null
+        error: null,
       })
 
       // =========================================================================
@@ -148,20 +147,20 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
         const observation: AircraftObservation = {
           latitude: pilot.latitude,
           longitude: pilot.longitude,
-          altitude: geoidService.mslToEllipsoidal(pilot.latitude, pilot.longitude, pilot.altitude * 0.3048),  // Convert feet MSL → meters ellipsoidal
+          altitude: geoidService.mslToEllipsoidal(pilot.latitude, pilot.longitude, pilot.altitude * 0.3048), // Convert feet MSL → meters ellipsoidal
           heading: pilot.heading,
           groundspeed: pilot.groundspeed,
-          groundTrack: null,  // VATSIM doesn't provide ground track
-          headingIsTrue: true,  // VATSIM heading is always reliable (from simulator)
+          groundTrack: null, // VATSIM doesn't provide ground track
+          headingIsTrue: true, // VATSIM heading is always reliable (from simulator)
           // Extended ADS-B data (not available from VATSIM)
           onGround: null,
           pitch: null,
           roll: null,
           verticalRate: null,
-          observedAt: vatsimTimestamp,  // When VATSIM says this was true
+          observedAt: vatsimTimestamp, // When VATSIM says this was true
           receivedAt: now,
           source: 'vatsim',
-          displayDelay: SOURCE_DISPLAY_DELAYS.vatsim
+          displayDelay: SOURCE_DISPLAY_DELAYS.vatsim,
         }
 
         const metadata: AircraftMetadata = {
@@ -169,7 +168,7 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
           aircraftType: pilot.flight_plan?.aircraft_short || null,
           transponder: pilot.transponder,
           departure: pilot.flight_plan?.departure || null,
-          arrival: pilot.flight_plan?.arrival || null
+          arrival: pilot.flight_plan?.arrival || null,
         }
 
         observationBatch.push({ callsign: pilot.callsign, observation, metadata })
@@ -190,30 +189,26 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
           cid: pilot.cid,
           latitude: pilot.latitude,
           longitude: pilot.longitude,
-          altitude: geoidService.mslToEllipsoidal(pilot.latitude, pilot.longitude, pilot.altitude * 0.3048),  // Convert VATSIM feet MSL → meters ellipsoidal
+          altitude: geoidService.mslToEllipsoidal(pilot.latitude, pilot.longitude, pilot.altitude * 0.3048), // Convert VATSIM feet MSL → meters ellipsoidal
           groundspeed: pilot.groundspeed,
           heading: pilot.heading,
           transponder: pilot.transponder,
           aircraftType: pilot.flight_plan?.aircraft_short || null,
           departure: pilot.flight_plan?.departure || null,
           arrival: pilot.flight_plan?.arrival || null,
-          timestamp: now
+          timestamp: now,
         }
         allAircraftStates.set(pilot.callsign, state)
       }
 
       // Trigger replay snapshot recording with ALL aircraft
-      useReplayStore.getState().addSnapshot(
-        allAircraftStates,
-        vatsimTimestamp,
-        actualInterval
-      )
+      useReplayStore.getState().addSnapshot(allAircraftStates, vatsimTimestamp, actualInterval)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       set({
         isConnected: false,
         isLoading: false,
-        error: `Failed to fetch VATSIM data: ${errorMessage}`
+        error: `Failed to fetch VATSIM data: ${errorMessage}`,
       })
       console.error('VATSIM API error:', error)
     }
@@ -272,12 +267,12 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
     const now = Date.now()
 
     // Filter pilots by distance from reference position
-    const filteredPilots = allPilots.filter(pilot => {
+    const filteredPilots = allPilots.filter((pilot) => {
       const distance = calculateDistanceNM(
         referencePosition.latitude,
         referencePosition.longitude,
         pilot.latitude,
-        pilot.longitude
+        pilot.longitude,
       )
       return distance <= aircraftDataRadiusNM
     })
@@ -309,7 +304,7 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
           observedAt: lastVatsimTimestamp || now,
           receivedAt: now,
           source: 'vatsim',
-          displayDelay: SOURCE_DISPLAY_DELAYS.vatsim
+          displayDelay: SOURCE_DISPLAY_DELAYS.vatsim,
         }
 
         const metadata: AircraftMetadata = {
@@ -317,7 +312,7 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
           aircraftType: pilot.flight_plan?.aircraft_short || null,
           transponder: pilot.transponder,
           departure: pilot.flight_plan?.departure || null,
-          arrival: pilot.flight_plan?.arrival || null
+          arrival: pilot.flight_plan?.arrival || null,
         }
 
         observationBatch.push({ callsign: pilot.callsign, observation, metadata })
@@ -331,7 +326,7 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
 
     set({
       pilots: filteredPilots,
-      pilotsFilteredByDistance: filteredPilots.length
+      pilotsFilteredByDistance: filteredPilots.length,
     })
-  }
+  },
 }))

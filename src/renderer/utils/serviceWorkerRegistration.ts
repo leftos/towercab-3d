@@ -18,7 +18,7 @@ export async function registerTileCacheServiceWorker(): Promise<ServiceWorkerReg
     const scope = import.meta.env.DEV ? '/' : './'
 
     const registration = await navigator.serviceWorker.register(swUrl, {
-      scope
+      scope,
     })
 
     // Wait for the service worker to be ready
@@ -61,10 +61,7 @@ export async function clearServiceWorkerCache(): Promise<boolean> {
       resolve(event.data.success)
     }
 
-    controller.postMessage(
-      { type: 'CLEAR_CACHE' },
-      [channel.port2]
-    )
+    controller.postMessage({ type: 'CLEAR_CACHE' }, [channel.port2])
 
     // Timeout after 5 seconds
     setTimeout(() => resolve(false), 5000)

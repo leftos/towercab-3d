@@ -165,7 +165,6 @@ class MSFSModelConversionServiceClass {
   /** AIG model index: modelName -> SourceModelInfo */
   private aigModels = new Map<string, SourceModelInfo>()
 
-
   /** Initialization promise - allows multiple callers to await the same initialization */
   private initPromise: Promise<void> | null = null
 
@@ -196,12 +195,11 @@ class MSFSModelConversionServiceClass {
    * Internal initialization logic
    */
   private async doInitialize(onProgress?: (status: string, progress?: number) => void): Promise<void> {
-
     const settings = useGlobalSettingsStore.getState().msfsModels
     console.log('[MSFSConversion] Initialize settings:', {
       cacheDirectory: settings.cacheDirectory,
       communityPath: settings.communityPath,
-      isTauri: isTauri()
+      isTauri: isTauri(),
     })
 
     // In remote browser mode, fetch model index from host
@@ -237,7 +235,7 @@ class MSFSModelConversionServiceClass {
           // Map sub-progress (0-100) to 30-100 range
           const progress = 30 + Math.round((subProgress ?? 50) * 0.7)
           onProgress?.(status, progress)
-        }
+        },
       )
     }
 
@@ -256,7 +254,7 @@ class MSFSModelConversionServiceClass {
         console.warn('[MSFSConversion] Failed to fetch model index:', response.status)
       } else {
         // Rust serializes with camelCase (serde rename_all = "camelCase")
-        const data = await response.json() as {
+        const data = (await response.json()) as {
           fsltl: Array<{
             source: string
             modelName: string
@@ -293,7 +291,7 @@ class MSFSModelConversionServiceClass {
             textureDirs: model.textureDirs,
             aircraftType: model.aircraftType,
             airlineCode: model.airlineCode,
-            atcId: model.atcId
+            atcId: model.atcId,
           })
         }
 
@@ -307,11 +305,13 @@ class MSFSModelConversionServiceClass {
             textureDirs: model.textureDirs,
             aircraftType: model.aircraftType,
             airlineCode: model.airlineCode,
-            atcId: model.atcId
+            atcId: model.atcId,
           })
         }
 
-        console.log(`[MSFSConversion] Loaded ${data.totalCount} models from remote (${data.fsltl.length} FSLTL, ${data.aig.length} AIG)`)
+        console.log(
+          `[MSFSConversion] Loaded ${data.totalCount} models from remote (${data.fsltl.length} FSLTL, ${data.aig.length} AIG)`,
+        )
       }
     } catch (error) {
       console.warn('[MSFSConversion] Failed to fetch model index:', error)
@@ -326,9 +326,9 @@ class MSFSModelConversionServiceClass {
         return
       }
 
-      const convertedModels = await modelsResponse.json() as Array<{
-        model_key: string    // Cache key like "fsltl_FSLTL_FAIB_B738_American"
-        path: string         // Full path on host (not used for URL)
+      const convertedModels = (await modelsResponse.json()) as Array<{
+        model_key: string // Cache key like "fsltl_FSLTL_FAIB_B738_American"
+        path: string // Full path on host (not used for URL)
         file_size: number
         converter_version: number | null
       }>
@@ -352,15 +352,17 @@ class MSFSModelConversionServiceClass {
           path: modelUrl,
           fileSize: model.file_size,
           lastAccessed: Date.now(),
-          isDiskCache: true
+          isDiskCache: true,
         })
         loadedCount++
       }
 
       // Count FSLTL vs AIG models for debugging
-      const fsltlCount = Array.from(this.memoryCache.keys()).filter(k => k.startsWith('fsltl_')).length
-      const aigCount = Array.from(this.memoryCache.keys()).filter(k => k.startsWith('aig_')).length
-      console.log(`[MSFSConversion] Loaded ${loadedCount} pre-converted models from host cache (${fsltlCount} FSLTL, ${aigCount} AIG)${skippedCount > 0 ? `, skipped ${skippedCount} outdated` : ''}`)
+      const fsltlCount = Array.from(this.memoryCache.keys()).filter((k) => k.startsWith('fsltl_')).length
+      const aigCount = Array.from(this.memoryCache.keys()).filter((k) => k.startsWith('aig_')).length
+      console.log(
+        `[MSFSConversion] Loaded ${loadedCount} pre-converted models from host cache (${fsltlCount} FSLTL, ${aigCount} AIG)${skippedCount > 0 ? `, skipped ${skippedCount} outdated` : ''}`,
+      )
     } catch (error) {
       console.warn('[MSFSConversion] Failed to fetch converted models:', error)
     }
@@ -370,21 +372,20 @@ class MSFSModelConversionServiceClass {
    * Load existing cached GLB models from disk into memory cache
    * This makes pre-converted models immediately available
    */
-  private async loadCachedModels(
-    cacheDir: string,
-    onProgress?: (status: string) => void
-  ): Promise<void> {
+  private async loadCachedModels(cacheDir: string, onProgress?: (status: string) => void): Promise<void> {
     if (!isTauri()) return
 
     try {
       const { invoke } = await import('@tauri-apps/api/core')
 
-      const cachedModels = await invoke<Array<{
-        path: string
-        model_key: string
-        file_size: number
-        converter_version: number | null
-      }>>('scan_cache_directory', { cacheDir })
+      const cachedModels = await invoke<
+        Array<{
+          path: string
+          model_key: string
+          file_size: number
+          converter_version: number | null
+        }>
+      >('scan_cache_directory', { cacheDir })
 
       if (cachedModels.length === 0) {
         console.log('[MSFSConversion] No cached models found')
@@ -399,7 +400,9 @@ class MSFSModelConversionServiceClass {
       for (const cached of cachedModels) {
         // Delete models with old/missing converter versions
         if (cached.converter_version !== CONVERTER_VERSION) {
-          console.log(`[MSFSConversion] Deleting outdated model ${cached.model_key} (version ${cached.converter_version ?? 'unknown'}, need ${CONVERTER_VERSION})`)
+          console.log(
+            `[MSFSConversion] Deleting outdated model ${cached.model_key} (version ${cached.converter_version ?? 'unknown'}, need ${CONVERTER_VERSION})`,
+          )
           try {
             await invoke<void>('delete_cache_file', { path: cached.path })
           } catch (e) {
@@ -413,13 +416,15 @@ class MSFSModelConversionServiceClass {
           path: cached.path,
           fileSize: cached.file_size,
           lastAccessed: Date.now(),
-          isDiskCache: true
+          isDiskCache: true,
         })
         this.totalCacheSize += cached.file_size
         loadedCount++
       }
 
-      console.log(`[MSFSConversion] Loaded ${loadedCount} cached models (${Math.round(this.totalCacheSize / 1024 / 1024)}MB)${deletedCount > 0 ? `, deleted ${deletedCount} outdated` : ''}`)
+      console.log(
+        `[MSFSConversion] Loaded ${loadedCount} cached models (${Math.round(this.totalCacheSize / 1024 / 1024)}MB)${deletedCount > 0 ? `, deleted ${deletedCount} outdated` : ''}`,
+      )
     } catch (error) {
       console.warn('[MSFSConversion] Failed to load cached models:', error)
     }
@@ -442,7 +447,7 @@ class MSFSModelConversionServiceClass {
    */
   async detectInstallations(
     communityPath: string,
-    onProgress?: (status: string, progress?: number) => void
+    onProgress?: (status: string, progress?: number) => void,
   ): Promise<MSFSDetectionResult> {
     if (!isTauri()) {
       // In browser mode, we can't access the file system directly
@@ -454,7 +459,7 @@ class MSFSModelConversionServiceClass {
 
       onProgress?.('Scanning Community folder...', 0)
       const result = await invoke<MSFSDetectionResult>('detect_msfs_installations', {
-        communityPath
+        communityPath,
       })
 
       this.lastDetection = result
@@ -507,7 +512,7 @@ class MSFSModelConversionServiceClass {
     communityPath: string,
     enableFsltl: boolean,
     enableAig: boolean,
-    onProgress?: (status: string, progress?: number) => void
+    onProgress?: (status: string, progress?: number) => void,
   ): Promise<MSFSDetectionResult> {
     if (!isTauri()) {
       return { fsltlFound: false, aigFound: false }
@@ -518,7 +523,7 @@ class MSFSModelConversionServiceClass {
 
       onProgress?.('Scanning Community folder...', 0)
       const result = await invoke<MSFSDetectionResult>('detect_msfs_installations', {
-        communityPath
+        communityPath,
       })
 
       this.lastDetection = result
@@ -574,7 +579,7 @@ class MSFSModelConversionServiceClass {
    */
   async indexSourceOnDemand(
     source: MSFSModelSource,
-    onProgress?: (progress: number, status: string) => void
+    onProgress?: (progress: number, status: string) => void,
   ): Promise<boolean> {
     if (!this.lastDetection) {
       console.warn('[MSFSConversion] Cannot index on-demand: detection not yet complete')
@@ -628,7 +633,7 @@ class MSFSModelConversionServiceClass {
    */
   private async buildFsltlIndex(
     fsltlPath: string,
-    onProgress?: (status: string, progress: number) => void
+    onProgress?: (status: string, progress: number) => void,
   ): Promise<void> {
     if (!isTauri()) return
 
@@ -644,12 +649,12 @@ class MSFSModelConversionServiceClass {
         (event) => {
           const { progress, processed, total } = event.payload
           onProgress?.(`Indexing FSLTL models (${processed}/${total})...`, progress)
-        }
+        },
       )
 
       try {
         const models = await invoke<SourceModelInfo[]>('list_fsltl_models', {
-          basePath: fsltlPath
+          basePath: fsltlPath,
         })
 
         this.fsltlModels.clear()
@@ -661,7 +666,9 @@ class MSFSModelConversionServiceClass {
 
         // Log sample model names to help debug matching
         const sampleNames = Array.from(this.fsltlModels.keys()).slice(0, 10)
-        console.log(`[MSFSConversion] Indexed ${this.fsltlModels.size} FSLTL models, samples: ${sampleNames.join(', ')}`)
+        console.log(
+          `[MSFSConversion] Indexed ${this.fsltlModels.size} FSLTL models, samples: ${sampleNames.join(', ')}`,
+        )
       } finally {
         unlisten()
       }
@@ -673,10 +680,7 @@ class MSFSModelConversionServiceClass {
   /**
    * Build index of available AIG models
    */
-  private async buildAigIndex(
-    aigPath: string,
-    onProgress?: (status: string, progress: number) => void
-  ): Promise<void> {
+  private async buildAigIndex(aigPath: string, onProgress?: (status: string, progress: number) => void): Promise<void> {
     if (!isTauri()) return
 
     try {
@@ -691,12 +695,12 @@ class MSFSModelConversionServiceClass {
         (event) => {
           const { progress, processed, total } = event.payload
           onProgress?.(`Indexing AIG models (${processed}/${total})...`, progress)
-        }
+        },
       )
 
       try {
         const models = await invoke<SourceModelInfo[]>('list_aig_models', {
-          basePath: aigPath
+          basePath: aigPath,
         })
 
         this.aigModels.clear()
@@ -752,10 +756,7 @@ class MSFSModelConversionServiceClass {
    * Note: Models with null airlineCode are private aircraft (e.g., N100VE) and should
    * only be matched via findModelByCallsign() with exact registration match.
    */
-  findModelByTypeAndAirline(
-    aircraftType: string,
-    airlineCode: string | null
-  ): SourceModelInfo | null {
+  findModelByTypeAndAirline(aircraftType: string, airlineCode: string | null): SourceModelInfo | null {
     const settings = this.getSettings()
 
     // Search in priority order
@@ -812,10 +813,7 @@ class MSFSModelConversionServiceClass {
    * Private aircraft (models with null airlineCode) should only be matched
    * when the callsign exactly matches the atc_id (e.g., "N100VE")
    */
-  findModelByCallsign(
-    aircraftType: string,
-    callsign: string
-  ): SourceModelInfo | null {
+  findModelByCallsign(aircraftType: string, callsign: string): SourceModelInfo | null {
     const settings = this.getSettings()
     const callsignUpper = callsign.toUpperCase()
 
@@ -853,7 +851,7 @@ class MSFSModelConversionServiceClass {
   findClosestModelForAirline(
     targetType: string,
     airlineCode: string,
-    maxSizeDifference = 0.5
+    maxSizeDifference = 0.5,
   ): { model: SourceModelInfo; scale: { x: number; y: number; z: number }; distance: number } | null {
     const settings = this.getSettings()
 
@@ -894,7 +892,7 @@ class MSFSModelConversionServiceClass {
           bestScale = {
             x: wingspanScale,
             y: (wingspanScale + lengthScale) / 2,
-            z: lengthScale
+            z: lengthScale,
           }
         }
       }
@@ -922,8 +920,18 @@ class MSFSModelConversionServiceClass {
 
     // Common narrowbody types to try, in order of preference
     const narrowbodyTypes = [
-      'B738', 'A320', 'A321', 'B739', 'A319', 'B737',
-      'A20N', 'A21N', 'A19N', 'B38M', 'B39M', 'B73X'
+      'B738',
+      'A320',
+      'A321',
+      'B739',
+      'A319',
+      'B737',
+      'A20N',
+      'A21N',
+      'A19N',
+      'B38M',
+      'B39M',
+      'B73X',
     ]
 
     // Search in source priority order
@@ -955,7 +963,7 @@ class MSFSModelConversionServiceClass {
    */
   findClosestModel(
     targetType: string,
-    maxSizeDifference = 0.5
+    maxSizeDifference = 0.5,
   ): { model: SourceModelInfo; scale: { x: number; y: number; z: number }; distance: number } | null {
     const settings = this.getSettings()
 
@@ -993,7 +1001,7 @@ class MSFSModelConversionServiceClass {
           bestScale = {
             x: wingspanScale,
             y: (wingspanScale + lengthScale) / 2,
-            z: lengthScale
+            z: lengthScale,
           }
         }
       }
@@ -1023,19 +1031,13 @@ class MSFSModelConversionServiceClass {
    * Calculate great-circle distance between two points in nautical miles.
    * Uses Haversine formula for accuracy.
    */
-  private calculateDistanceNM(
-    lat1: number,
-    lon1: number,
-    lat2: number,
-    lon2: number
-  ): number {
+  private calculateDistanceNM(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 3440.065 // Earth's radius in nautical miles
-    const dLat = (lat2 - lat1) * Math.PI / 180
-    const dLon = (lon2 - lon1) * Math.PI / 180
+    const dLat = ((lat2 - lat1) * Math.PI) / 180
+    const dLon = ((lon2 - lon1) * Math.PI) / 180
     const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-      Math.sin(dLon / 2) * Math.sin(dLon / 2)
+      Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2)
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
     return R * c
   }
@@ -1052,7 +1054,7 @@ class MSFSModelConversionServiceClass {
    */
   async convertModel(
     sourceInfo: SourceModelInfo,
-    aircraftPosition?: { lat: number; lon: number }
+    aircraftPosition?: { lat: number; lon: number },
   ): Promise<ConversionResult> {
     const modelKey = this.getModelKey(sourceInfo)
 
@@ -1089,7 +1091,7 @@ class MSFSModelConversionServiceClass {
    */
   private queueConversion(
     sourceInfo: SourceModelInfo,
-    aircraftPosition?: { lat: number; lon: number }
+    aircraftPosition?: { lat: number; lon: number },
   ): Promise<ConversionResult> {
     const modelKey = this.getModelKey(sourceInfo)
 
@@ -1103,7 +1105,7 @@ class MSFSModelConversionServiceClass {
     this.conversionStatus.set(modelKey, {
       converting: true,
       promise,
-      startedAt: Date.now()
+      startedAt: Date.now(),
     })
 
     // Trigger queue processing (will sort by distance and start if capacity available)
@@ -1117,7 +1119,7 @@ class MSFSModelConversionServiceClass {
    */
   private async executeConversion(
     sourceInfo: SourceModelInfo,
-    resolve: (result: ConversionResult) => void
+    resolve: (result: ConversionResult) => void,
   ): Promise<void> {
     this.activeConversions++
     const modelKey = this.getModelKey(sourceInfo)
@@ -1134,7 +1136,7 @@ class MSFSModelConversionServiceClass {
 
       // Pass output DIRECTORY to Python converter (not a file path)
       // Python will create: {outputDir}/{source}_{liveryTitle}.glb
-      const outputDir = settings.cacheDirectory || await this.getTempOutputDir()
+      const outputDir = settings.cacheDirectory || (await this.getTempOutputDir())
 
       // Determine source path - use specific aircraft folder, not the entire FSLTL/AIG folder
       let sourcePath: string
@@ -1163,7 +1165,7 @@ class MSFSModelConversionServiceClass {
       }>('convert_msfs_model', {
         sourcePath,
         folderName: sourceInfo.folderName,
-        outputDir,  // Changed: pass directory, not full file path
+        outputDir, // Changed: pass directory, not full file path
         textureScale: settings.textureScale,
         // Pass the specific livery title to convert only this livery
         liveryTitle: sourceInfo.modelName,
@@ -1172,7 +1174,7 @@ class MSFSModelConversionServiceClass {
         gltfPath: sourceInfo.gltfPath,
         // Pass explicit texture directories from indexing (critical for AIG models
         // where multiple liveries share the same base model folder)
-        textureDirs: sourceInfo.textureDirs
+        textureDirs: sourceInfo.textureDirs,
       })
 
       if (result.success && result.outputPath) {
@@ -1187,16 +1189,18 @@ class MSFSModelConversionServiceClass {
         resolve({
           success: true,
           glbPath: result.outputPath,
-          fileSize
+          fileSize,
         })
       } else {
         // Track as failed so we skip it on subsequent requests
         this.failedConversions.add(modelKey)
-        console.warn(`[MSFSConversion] Conversion failed for ${modelKey} (${result.durationMs}ms): ${result.error || 'No output file'}`)
+        console.warn(
+          `[MSFSConversion] Conversion failed for ${modelKey} (${result.durationMs}ms): ${result.error || 'No output file'}`,
+        )
         console.warn(`[MSFSConversion] Source: ${sourcePath}, Output dir: ${outputDir}`)
         resolve({
           success: false,
-          error: result.error || 'Unknown conversion error'
+          error: result.error || 'Unknown conversion error',
         })
       }
     } catch (error) {
@@ -1220,7 +1224,7 @@ class MSFSModelConversionServiceClass {
   private async executeRemoteConversion(
     sourceInfo: SourceModelInfo,
     resolve: (result: ConversionResult) => void,
-    modelKey: string
+    modelKey: string,
   ): Promise<void> {
     try {
       const settings = this.getSettings()
@@ -1230,15 +1234,15 @@ class MSFSModelConversionServiceClass {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model_name: sourceInfo.modelName,
-          texture_scale: settings.textureScale
-        })
+          texture_scale: settings.textureScale,
+        }),
       })
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`)
       }
 
-      const result = await response.json() as {
+      const result = (await response.json()) as {
         success: boolean
         output_path?: string
         error?: string
@@ -1255,19 +1259,19 @@ class MSFSModelConversionServiceClass {
           path: modelUrl,
           fileSize: 0,
           lastAccessed: Date.now(),
-          isDiskCache: true
+          isDiskCache: true,
         })
 
         resolve({
           success: true,
-          glbPath: modelUrl
+          glbPath: modelUrl,
         })
       } else {
         this.failedConversions.add(modelKey)
         console.warn(`[MSFSConversion] Remote conversion failed for ${modelKey}: ${result.error}`)
         resolve({
           success: false,
-          error: result.error || 'Unknown conversion error'
+          error: result.error || 'Unknown conversion error',
         })
       }
     } catch (error) {
@@ -1300,13 +1304,13 @@ class MSFSModelConversionServiceClass {
           this.cameraPosition!.lat,
           this.cameraPosition!.lon,
           a.aircraftPosition.lat,
-          a.aircraftPosition.lon
+          a.aircraftPosition.lon,
         )
         const distB = this.calculateDistanceNM(
           this.cameraPosition!.lat,
           this.cameraPosition!.lon,
           b.aircraftPosition.lat,
-          b.aircraftPosition.lon
+          b.aircraftPosition.lon,
         )
         return distA - distB
       })
@@ -1366,17 +1370,12 @@ class MSFSModelConversionServiceClass {
   /**
    * Add entry to cache, evicting LRU entries if over limit
    */
-  private addToCacheEntry(
-    modelKey: string,
-    path: string,
-    fileSize: number,
-    isDiskCache: boolean
-  ): void {
+  private addToCacheEntry(modelKey: string, path: string, fileSize: number, isDiskCache: boolean): void {
     const entry: CacheEntry = {
       path,
       fileSize,
       lastAccessed: Date.now(),
-      isDiskCache
+      isDiskCache,
     }
 
     this.memoryCache.set(modelKey, entry)
@@ -1430,10 +1429,7 @@ class MSFSModelConversionServiceClass {
   /**
    * Check if model is in disk cache
    */
-  private async checkDiskCache(
-    modelKey: string,
-    cacheDir: string
-  ): Promise<string | null> {
+  private async checkDiskCache(modelKey: string, cacheDir: string): Promise<string | null> {
     if (!isTauri()) return null
 
     try {
@@ -1522,8 +1518,8 @@ class MSFSModelConversionServiceClass {
     const settings = this.getSettings()
     return {
       entryCount: this.memoryCache.size,
-      totalSizeMB: Math.round(this.totalCacheSize / 1024 / 1024 * 100) / 100,
-      limitMB: settings.cacheLimitMB
+      totalSizeMB: Math.round((this.totalCacheSize / 1024 / 1024) * 100) / 100,
+      limitMB: settings.cacheLimitMB,
     }
   }
 
@@ -1545,7 +1541,7 @@ class MSFSModelConversionServiceClass {
   getModelCounts(): { fsltl: number; aig: number } {
     return {
       fsltl: this.fsltlModels.size,
-      aig: this.aigModels.size
+      aig: this.aigModels.size,
     }
   }
 
@@ -1562,7 +1558,7 @@ class MSFSModelConversionServiceClass {
       fsltlCount: this.fsltlModels.size,
       aigCount: this.aigModels.size,
       cacheCount: this.memoryCache.size,
-      isInitialized: this.initCompleted
+      isInitialized: this.initCompleted,
     }
   }
 }

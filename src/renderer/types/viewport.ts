@@ -158,7 +158,7 @@ export interface ViewModeDefaults {
   positionOffsetX: number
   positionOffsetY: number
   positionOffsetZ: number
-  topdownAltitude?: number  // Only for 2D mode
+  topdownAltitude?: number // Only for 2D mode
 }
 
 export interface AirportViewportConfig {

@@ -6,10 +6,10 @@ const CACHE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
 
 // Patterns for tile URLs we want to cache
 const TILE_URL_PATTERNS = [
-  /\.cesium\.com.*\/tiles\//,           // Cesium Ion tiles
-  /\.virtualearth\.net.*\/tiles\//,     // Bing Maps tiles
-  /\.arcgisonline\.com.*\/tile\//,      // ArcGIS tiles
-  /\.googleapis\.com.*\/tile\?/,        // Google tiles
+  /\.cesium\.com.*\/tiles\//, // Cesium Ion tiles
+  /\.virtualearth\.net.*\/tiles\//, // Bing Maps tiles
+  /\.arcgisonline\.com.*\/tile\//, // ArcGIS tiles
+  /\.googleapis\.com.*\/tile\?/, // Google tiles
   /\.openstreetmap\.org.*\/\d+\/\d+\/\d+/, // OSM tiles
 ]
 
@@ -30,7 +30,7 @@ self.addEventListener('fetch', (event) => {
   const url = event.request.url
 
   // Only cache tile requests
-  const isTileRequest = TILE_URL_PATTERNS.some(pattern => pattern.test(url))
+  const isTileRequest = TILE_URL_PATTERNS.some((pattern) => pattern.test(url))
   if (!isTileRequest) {
     return // Let the request pass through normally
   }
@@ -75,7 +75,7 @@ async function handleTileRequest(request) {
       const modifiedResponse = new Response(await responseToCache.blob(), {
         status: responseToCache.status,
         statusText: responseToCache.statusText,
-        headers
+        headers,
       })
 
       // Cache the response (fire and forget)
@@ -84,7 +84,8 @@ async function handleTileRequest(request) {
       })
 
       // Periodically clean up old cache entries
-      if (Math.random() < 0.01) { // 1% chance per request
+      if (Math.random() < 0.01) {
+        // 1% chance per request
         cleanupCache().catch(() => {})
       }
     }

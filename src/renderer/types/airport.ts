@@ -85,10 +85,10 @@ export interface Airport {
   city: string
   state: string
   country: string
-  elevation: number  // feet
+  elevation: number // feet
   lat: number
   lon: number
-  tz: string  // timezone
+  tz: string // timezone
 }
 
 export interface AirportDatabase {
@@ -98,54 +98,54 @@ export interface AirportDatabase {
 // Tower configuration for specific airports
 export interface TowerConfig {
   icao: string
-  height: number  // meters above airport elevation
-  offsetLat?: number  // offset from airport center in degrees
-  offsetLon?: number  // offset from airport center in degrees
-  defaultHeading?: number  // default view heading in degrees
+  height: number // meters above airport elevation
+  offsetLat?: number // offset from airport center in degrees
+  offsetLon?: number // offset from airport center in degrees
+  defaultHeading?: number // default view heading in degrees
 }
 
 // Known tower heights for major airports (in meters)
 export const KNOWN_TOWER_HEIGHTS: Record<string, number> = {
   // United States
-  'KJFK': 97,   // JFK - 321 ft
-  'KLAX': 84,   // LAX - 277 ft
-  'KORD': 60,   // Chicago O'Hare
-  'KATL': 121,  // Atlanta - 398 ft
-  'KSFO': 67,   // San Francisco
-  'KMIA': 79,   // Miami
-  'KDFW': 58,   // Dallas/Fort Worth
-  'KDEN': 99,   // Denver
-  'KLAS': 76,   // Las Vegas
-  'KSEA': 70,   // Seattle
-  'KBOS': 60,   // Boston Logan
-  'KPHX': 70,   // Phoenix
+  KJFK: 97, // JFK - 321 ft
+  KLAX: 84, // LAX - 277 ft
+  KORD: 60, // Chicago O'Hare
+  KATL: 121, // Atlanta - 398 ft
+  KSFO: 67, // San Francisco
+  KMIA: 79, // Miami
+  KDFW: 58, // Dallas/Fort Worth
+  KDEN: 99, // Denver
+  KLAS: 76, // Las Vegas
+  KSEA: 70, // Seattle
+  KBOS: 60, // Boston Logan
+  KPHX: 70, // Phoenix
 
   // Europe
-  'EGLL': 87,   // London Heathrow
-  'LFPG': 52,   // Paris CDG
-  'EDDF': 70,   // Frankfurt
-  'EHAM': 101,  // Amsterdam Schiphol
-  'LEMD': 60,   // Madrid
-  'LIRF': 52,   // Rome Fiumicino
-  'EGKK': 48,   // London Gatwick
-  'LFPO': 45,   // Paris Orly
-  'LEBL': 40,   // Barcelona
-  'LSZH': 55,   // Zurich
-  'LOWW': 85,   // Vienna
+  EGLL: 87, // London Heathrow
+  LFPG: 52, // Paris CDG
+  EDDF: 70, // Frankfurt
+  EHAM: 101, // Amsterdam Schiphol
+  LEMD: 60, // Madrid
+  LIRF: 52, // Rome Fiumicino
+  EGKK: 48, // London Gatwick
+  LFPO: 45, // Paris Orly
+  LEBL: 40, // Barcelona
+  LSZH: 55, // Zurich
+  LOWW: 85, // Vienna
 
   // Asia Pacific
-  'RJTT': 116,  // Tokyo Haneda
-  'RJAA': 65,   // Tokyo Narita
-  'VHHH': 88,   // Hong Kong
-  'WSSS': 70,   // Singapore Changi
-  'ZBAA': 90,   // Beijing Capital
-  'YSSY': 67,   // Sydney
-  'NZAA': 50,   // Auckland
+  RJTT: 116, // Tokyo Haneda
+  RJAA: 65, // Tokyo Narita
+  VHHH: 88, // Hong Kong
+  WSSS: 70, // Singapore Changi
+  ZBAA: 90, // Beijing Capital
+  YSSY: 67, // Sydney
+  NZAA: 50, // Auckland
 
   // Middle East
-  'OMDB': 87,   // Dubai
-  'OEJN': 70,   // Jeddah
-  'LLBG': 45,   // Tel Aviv
+  OMDB: 87, // Dubai
+  OEJN: 70, // Jeddah
+  LLBG: 45, // Tel Aviv
 }
 
 // Airport type classification for height estimation
@@ -167,15 +167,16 @@ export function classifyAirport(airport: Airport): AirportType {
   }
 
   // Regional airports (has regional in name or shorter runways implied by elevation)
-  if (airport.name.toLowerCase().includes('regional') ||
-      airport.name.toLowerCase().includes('municipal')) {
+  if (airport.name.toLowerCase().includes('regional') || airport.name.toLowerCase().includes('municipal')) {
     return 'regional'
   }
 
   // Small airports
-  if (airport.name.toLowerCase().includes('field') ||
-      airport.name.toLowerCase().includes('airpark') ||
-      airport.name.toLowerCase().includes('airstrip')) {
+  if (
+    airport.name.toLowerCase().includes('field') ||
+    airport.name.toLowerCase().includes('airpark') ||
+    airport.name.toLowerCase().includes('airstrip')
+  ) {
     return 'small'
   }
 
@@ -194,7 +195,7 @@ export function getEstimatedTowerHeight(airport: Airport): number {
   const airportType = classifyAirport(airport)
   switch (airportType) {
     case 'major_international':
-      return 75  // meters
+      return 75 // meters
     case 'large_domestic':
       return 50
     case 'regional':
@@ -202,6 +203,6 @@ export function getEstimatedTowerHeight(airport: Airport): number {
     case 'small':
       return 15
     default:
-      return 35  // default height
+      return 35 // default height
   }
 }

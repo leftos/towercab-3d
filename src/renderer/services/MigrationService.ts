@@ -43,7 +43,7 @@ function extractSettingsFromLevelDB(data: Uint8Array): string | null {
     /settings-store["']?\s*[:]*\s*(\{"state":\{[^}]+\}[^}]*\})/,
     /settings-store[^{]*(\{"state":\{.*?"version":\d+\})/,
     // Also try looking for the raw JSON structure
-    /(\{"state":\{"cesiumIonToken":[^}]+.*?"version":\d+\})/
+    /(\{"state":\{"cesiumIonToken":[^}]+.*?"version":\d+\})/,
   ]
 
   for (const pattern of patterns) {
@@ -110,7 +110,7 @@ export async function migrateFromElectron(): Promise<MigrationResult> {
     console.log(`Looking for Electron settings in: ${leveldbPath}`)
 
     // Check if the directory exists
-    if (!await exists(leveldbPath)) {
+    if (!(await exists(leveldbPath))) {
       console.log('Electron LevelDB directory not found')
       setMigrationComplete()
       return { success: true, message: 'No Electron installation found', settingsFound: false }
@@ -121,7 +121,7 @@ export async function migrateFromElectron(): Promise<MigrationResult> {
 
     // Look for .log and .ldb files which contain the actual data
     const dataFiles = files
-      .filter(f => f.name && (f.name.endsWith('.log') || f.name.endsWith('.ldb')))
+      .filter((f) => f.name && (f.name.endsWith('.log') || f.name.endsWith('.ldb')))
       .sort((a, b) => {
         // Sort by file number descending (newer files first)
         const numA = parseInt(a.name?.match(/(\d+)/)?.[1] || '0')
@@ -157,7 +157,7 @@ export async function migrateFromElectron(): Promise<MigrationResult> {
             return {
               success: true,
               message: 'Settings migrated from Electron version',
-              settingsFound: true
+              settingsFound: true,
             }
           }
         }
@@ -171,14 +171,13 @@ export async function migrateFromElectron(): Promise<MigrationResult> {
     setMigrationComplete()
     console.log('No settings found in Electron LevelDB files')
     return { success: true, message: 'No settings found to migrate', settingsFound: false }
-
   } catch (err) {
     console.error('Migration failed:', err)
     // Don't mark as complete on error - let user try again
     return {
       success: false,
       message: `Migration error: ${err instanceof Error ? err.message : 'Unknown error'}`,
-      settingsFound: false
+      settingsFound: false,
     }
   }
 }

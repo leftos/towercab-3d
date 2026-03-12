@@ -74,7 +74,9 @@ class AirportSurfacesService {
       }
 
       if (this.data) {
-        console.log(`[AirportSurfacesService] Loaded ${this.data._meta.airport_count} airports with ${this.data._meta.total_pavements} pavements`)
+        console.log(
+          `[AirportSurfacesService] Loaded ${this.data._meta.airport_count} airports with ${this.data._meta.total_pavements} pavements`,
+        )
       }
     } catch (error) {
       console.error('[AirportSurfacesService] Failed to load airport surfaces:', error)
@@ -88,19 +90,14 @@ class AirportSurfacesService {
    * Load data from Tauri bundled resources
    */
   private async loadFromTauri(): Promise<void> {
-    const [pathModule, fsModule] = await Promise.all([
-      import('@tauri-apps/api/path'),
-      import('@tauri-apps/plugin-fs')
-    ])
+    const [pathModule, fsModule] = await Promise.all([import('@tauri-apps/api/path'), import('@tauri-apps/plugin-fs')])
 
     // Read the compressed file (path must match tauri.conf.json resources entry)
     const resourcePath = await pathModule.resolveResource('resources/airport-surfaces.json.gz')
     const compressedData = await fsModule.readFile(resourcePath)
 
     // Decompress using the browser's DecompressionStream API
-    const decompressedStream = new Blob([compressedData])
-      .stream()
-      .pipeThrough(new DecompressionStream('gzip'))
+    const decompressedStream = new Blob([compressedData]).stream().pipeThrough(new DecompressionStream('gzip'))
 
     const reader = decompressedStream.getReader()
     const chunks: Uint8Array[] = []
@@ -133,7 +130,7 @@ class AirportSurfacesService {
 
     try {
       const response = await fetch('/api/airport-surfaces', {
-        signal: controller.signal
+        signal: controller.signal,
       })
       clearTimeout(timeoutId)
 
@@ -141,7 +138,7 @@ class AirportSurfacesService {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
 
-      this.data = await response.json() as AirportSurfacesData
+      this.data = (await response.json()) as AirportSurfacesData
     } catch (error) {
       clearTimeout(timeoutId)
       throw error
@@ -188,7 +185,7 @@ class AirportSurfacesService {
   getPavementPolygons(
     icao: string,
     surfaceTypes: string[] = ['a', 'c'], // Default to asphalt and concrete only
-    fieldElevationEllipsoidal?: number
+    fieldElevationEllipsoidal?: number,
   ): FlatteningPolygon[] {
     const airport = this.getAirportData(icao)
     if (!airport || !airport.p || airport.p.length === 0) {
@@ -199,16 +196,22 @@ class AirportSurfacesService {
     let elevationMeters: number
     if (fieldElevationEllipsoidal !== undefined && Number.isFinite(fieldElevationEllipsoidal)) {
       elevationMeters = fieldElevationEllipsoidal
-      console.log(`[AirportSurfacesService] Using runway-derived elevation for ${icao}: ${elevationMeters.toFixed(1)}m ellipsoidal`)
+      console.log(
+        `[AirportSurfacesService] Using runway-derived elevation for ${icao}: ${elevationMeters.toFixed(1)}m ellipsoidal`,
+      )
     } else {
       // Validate elevation - log if malformed (helps debug NaN issues)
       if (typeof airport.e !== 'number' || !Number.isFinite(airport.e)) {
-        console.error(`[AirportSurfacesService] INVALID ELEVATION for ${icao}: airport.e = ${airport.e} (type: ${typeof airport.e})`)
+        console.error(
+          `[AirportSurfacesService] INVALID ELEVATION for ${icao}: airport.e = ${airport.e} (type: ${typeof airport.e})`,
+        )
         return [] // Skip this airport to prevent NaN propagation
       }
 
       // Calculate centroid from pavement vertices for geoid lookup
-      let centerLat = 0, centerLon = 0, vertexCount = 0
+      let centerLat = 0,
+        centerLon = 0,
+        vertexCount = 0
       for (const pavement of airport.p) {
         for (const [lon, lat] of pavement.v) {
           centerLon += lon
@@ -223,10 +226,10 @@ class AirportSurfacesService {
 
       // Convert apt.dat MSL elevation to ellipsoidal
       const mslMeters = feetToMeters(airport.e)
-      elevationMeters = vertexCount > 0
-        ? geoidService.mslToEllipsoidal(centerLat, centerLon, mslMeters)
-        : mslMeters // Fallback if no vertices (shouldn't happen)
-      console.log(`[AirportSurfacesService] Using apt.dat elevation for ${icao}: ${mslMeters.toFixed(1)}m MSL (${elevationMeters.toFixed(1)}m ellipsoidal)`)
+      elevationMeters = vertexCount > 0 ? geoidService.mslToEllipsoidal(centerLat, centerLon, mslMeters) : mslMeters // Fallback if no vertices (shouldn't happen)
+      console.log(
+        `[AirportSurfacesService] Using apt.dat elevation for ${icao}: ${mslMeters.toFixed(1)}m MSL (${elevationMeters.toFixed(1)}m ellipsoidal)`,
+      )
     }
     const polygons: FlatteningPolygon[] = []
 
@@ -245,12 +248,7 @@ class AirportSurfacesService {
 
       // Convert to FlatteningPolygon format
       // Note: apt.dat uses [lon, lat] format which matches our FlatteningPolygon format
-      const polygon = this.convertPavementToPolygon(
-        pavement,
-        icao,
-        i,
-        elevationMeters
-      )
+      const polygon = this.convertPavementToPolygon(pavement, icao, i, elevationMeters)
 
       if (polygon) {
         polygons.push(polygon)
@@ -282,7 +280,7 @@ class AirportSurfacesService {
     pavement: AptDatPavement,
     icao: string,
     index: number,
-    elevationMeters: number
+    elevationMeters: number,
   ): FlatteningPolygon | null {
     // Ensure the exterior ring is closed
     const vertices = this.ensureRingClosed([...pavement.v] as [number, number][])
@@ -290,7 +288,7 @@ class AirportSurfacesService {
     // Process holes if present
     let holes: [number, number][][] | undefined
     if (pavement.h && pavement.h.length > 0) {
-      holes = pavement.h.map(hole => this.ensureRingClosed([...hole] as [number, number][]))
+      holes = pavement.h.map((hole) => this.ensureRingClosed([...hole] as [number, number][]))
     }
 
     // Determine source type based on surface
@@ -304,7 +302,7 @@ class AirportSurfacesService {
       holes,
       elevation: elevationMeters,
       blendDistance: PAVEMENT_BLEND_DISTANCE,
-      source
+      source,
       // Note: We don't set gradient fields for pavements since they should be flat
       // at the airport elevation
     }

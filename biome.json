@@ -9,52 +9,46 @@
     "includes": ["src/**"]
   },
   "formatter": {
-    "enabled": false
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 120
   },
   "assist": {
-    "enabled": false
+    "enabled": true
   },
   "linter": {
     "enabled": true,
     "rules": {
       "recommended": true,
       "a11y": {
-        "recommended": false
+        "recommended": true
       },
       "correctness": {
         "useExhaustiveDependencies": "warn",
         "useHookAtTopLevel": "error",
-        "useParseIntRadix": "off",
         "noUnusedImports": "warn",
-        "noUnusedVariables": "warn",
-        "noEmptyCharacterClassInRegex": "warn"
+        "noUnusedVariables": "warn"
       },
       "suspicious": {
         "noExplicitAny": "warn",
-        "noEmptyBlockStatements": "off",
-        "noImplicitAnyLet": "off",
-        "noGlobalIsNan": "off",
-        "noGlobalIsFinite": "off",
-        "noArrayIndexKey": "off",
-        "noAssignInExpressions": "off",
-        "useIterableCallbackReturn": "off"
-      },
-      "complexity": {
-        "noImportantStyles": "off",
-        "noUselessSwitchCase": "off",
-        "noUselessLoneBlockStatements": "off",
-        "useLiteralKeys": "off",
-        "useOptionalChain": "off",
-        "useArrowFunction": "off",
-        "useIndexOf": "off"
+        "noEmptyBlockStatements": "off"
       },
       "style": {
         "noNonNullAssertion": "off",
-        "noDescendingSpecificity": "off",
-        "useImportType": "off",
-        "useTemplate": "off",
-        "useExponentiationOperator": "off"
+        "useImportType": "warn"
       }
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "semicolons": "asNeeded"
+    }
+  },
+  "json": {
+    "formatter": {
+      "trailingCommas": "none"
     }
   }
 }

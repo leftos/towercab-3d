@@ -43,41 +43,43 @@ function ReplayControls({ onSettingsClick }: ReplayControlsProps) {
 
   // Computed values
   const isLive = playbackMode === 'live'
-  const hasSnapshots = isImported
-    ? importedTimeRange !== null
-    : activeSnapshots.length >= 2
-  const totalDuration = isImported && importedTimeRange
-    ? (importedTimeRange.end - importedTimeRange.start) / 1000
-    : getTotalDuration()
+  const hasSnapshots = isImported ? importedTimeRange !== null : activeSnapshots.length >= 2
+  const totalDuration =
+    isImported && importedTimeRange ? (importedTimeRange.end - importedTimeRange.start) / 1000 : getTotalDuration()
 
   // Calculate current timestamp for display
-  const currentTimestamp = isImported && importedTimeRange
-    ? importedTimeRange.start + segmentProgress * (importedTimeRange.end - importedTimeRange.start)
-    : (activeSnapshots[currentIndex]?.timestamp || Date.now())
-  const newestTimestamp = isImported && importedTimeRange
-    ? importedTimeRange.end
-    : (activeSnapshots[activeSnapshots.length - 1]?.timestamp || Date.now())
+  const currentTimestamp =
+    isImported && importedTimeRange
+      ? importedTimeRange.start + segmentProgress * (importedTimeRange.end - importedTimeRange.start)
+      : activeSnapshots[currentIndex]?.timestamp || Date.now()
+  const newestTimestamp =
+    isImported && importedTimeRange
+      ? importedTimeRange.end
+      : activeSnapshots[activeSnapshots.length - 1]?.timestamp || Date.now()
   const timeAgo = isLive ? 0 : (newestTimestamp - currentTimestamp) / 1000
 
   // Scrubber position: imported uses 0-1000 range, buffer replay uses snapshot indices
   const scrubberValue = isImported ? segmentProgress * 1000 : currentIndex + segmentProgress
   const scrubberMax = isImported ? 1000 : Math.max(1, activeSnapshots.length - 1)
 
-  const handleScrubberChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = parseFloat(e.target.value)
-    if (isImported) {
-      // Map 0-1000 to segmentProgress 0-1 and clear interpolation state
-      useAircraftTimelineStore.getState().clearInterpolationState()
-      useReplayStore.setState({
-        segmentProgress: value / 1000,
-        isPlaying: false,
-        playbackMode: 'imported'
-      })
-    } else {
-      const index = Math.floor(value)
-      seekTo(index)
-    }
-  }, [seekTo, isImported])
+  const handleScrubberChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = parseFloat(e.target.value)
+      if (isImported) {
+        // Map 0-1000 to segmentProgress 0-1 and clear interpolation state
+        useAircraftTimelineStore.getState().clearInterpolationState()
+        useReplayStore.setState({
+          segmentProgress: value / 1000,
+          isPlaying: false,
+          playbackMode: 'imported',
+        })
+      } else {
+        const index = Math.floor(value)
+        seekTo(index)
+      }
+    },
+    [seekTo, isImported],
+  )
 
   const handlePlayPause = useCallback(() => {
     if (isPlaying) {
@@ -87,9 +89,12 @@ function ReplayControls({ onSettingsClick }: ReplayControlsProps) {
     }
   }, [isPlaying, play, pause])
 
-  const handleSpeedChange = useCallback((speed: PlaybackSpeed) => {
-    setPlaybackSpeed(speed)
-  }, [setPlaybackSpeed])
+  const handleSpeedChange = useCallback(
+    (speed: PlaybackSpeed) => {
+      setPlaybackSpeed(speed)
+    },
+    [setPlaybackSpeed],
+  )
 
   // Keyboard shortcuts for replay
   useEffect(() => {
@@ -178,10 +183,7 @@ function ReplayControls({ onSettingsClick }: ReplayControlsProps) {
             disabled={!hasSnapshots}
             className="scrubber-input"
           />
-          <div
-            className="scrubber-progress"
-            style={{ width: `${(scrubberValue / scrubberMax) * 100}%` }}
-          />
+          <div className="scrubber-progress" style={{ width: `${(scrubberValue / scrubberMax) * 100}%` }} />
         </div>
 
         <div className="timeline-time">
@@ -194,9 +196,7 @@ function ReplayControls({ onSettingsClick }: ReplayControlsProps) {
               <span className="time-absolute">{formatUTCTime(currentTimestamp)}</span>
             </>
           )}
-          <span className="time-total">
-            Buffer: {formatDuration(totalDuration)}
-          </span>
+          <span className="time-total">Buffer: {formatDuration(totalDuration)}</span>
         </div>
       </div>
 
@@ -214,19 +214,11 @@ function ReplayControls({ onSettingsClick }: ReplayControlsProps) {
           ))}
         </div>
 
-        <button
-          className={`live-btn ${isLive ? 'active' : ''}`}
-          onClick={goLive}
-          title="Return to live"
-        >
+        <button className={`live-btn ${isLive ? 'active' : ''}`} onClick={goLive} title="Return to live">
           LIVE
         </button>
 
-        <button
-          className="control-button"
-          onClick={onSettingsClick}
-          title="Settings"
-        >
+        <button className="control-button" onClick={onSettingsClick} title="Settings">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="12" cy="12" r="3" />
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />

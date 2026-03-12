@@ -8,7 +8,7 @@ import {
   NIGHT_BRIGHTNESS_MIN,
   NIGHT_BRIGHTNESS_TWILIGHT,
   NIGHT_BRIGHTNESS_CIVIL,
-  NIGHT_GAMMA_BOOST
+  NIGHT_GAMMA_BOOST,
 } from '@/constants'
 
 export interface NightDarkeningSettings {
@@ -33,7 +33,6 @@ function smoothstep(edge0: number, edge1: number, x: number): number {
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t
 }
-
 
 /**
  * Calculate the target brightness based on sun elevation angle
@@ -135,7 +134,7 @@ function calculateTargetGamma(sunElevation: number): number {
 export function useCesiumNightDarkening(
   viewer: Cesium.Viewer | null,
   sunElevation: number | null,
-  settings: NightDarkeningSettings
+  settings: NightDarkeningSettings,
 ): void {
   const { enabled, intensity } = settings
   const lastBrightnessRef = useRef<number>(1.0)
@@ -163,8 +162,10 @@ export function useCesiumNightDarkening(
     const targetGamma = calculateTargetGamma(sunElevation)
 
     // Only update if values changed significantly (avoid unnecessary updates)
-    if (Math.abs(targetBrightness - lastBrightnessRef.current) > 0.001 ||
-        Math.abs(targetGamma - lastGammaRef.current) > 0.001) {
+    if (
+      Math.abs(targetBrightness - lastBrightnessRef.current) > 0.001 ||
+      Math.abs(targetGamma - lastGammaRef.current) > 0.001
+    ) {
       // Apply to imagery layer
       const imageryLayers = viewer.imageryLayers
       if (imageryLayers.length > 0) {

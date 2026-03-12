@@ -7,11 +7,11 @@ import type { Viewer } from 'cesium'
  */
 function getScreenSpaceError(quality: number): number {
   const qualityMap: Record<number, number> = {
-    1: 16,  // Low - fast loading, blurry at distance
-    2: 8,   // Medium - balanced
-    3: 4,   // High - good quality
-    4: 2,   // Very High - excellent quality (Cesium default)
-    5: 1    // Ultra - maximum quality, slower
+    1: 16, // Low - fast loading, blurry at distance
+    2: 8, // Medium - balanced
+    3: 4, // High - good quality
+    4: 2, // Very High - excellent quality (Cesium default)
+    5: 1, // Ultra - maximum quality, slower
   }
   return qualityMap[quality] ?? 4
 }
@@ -46,11 +46,7 @@ function getScreenSpaceError(quality: number): number {
  * useTerrainQuality(viewer, settings.terrainQuality, settings.inMemoryTileCacheSize)
  * ```
  */
-export function useTerrainQuality(
-  viewer: Viewer | null,
-  terrainQuality: number,
-  inMemoryTileCacheSize: number
-) {
+export function useTerrainQuality(viewer: Viewer | null, terrainQuality: number, inMemoryTileCacheSize: number) {
   // Track the last terrain quality to detect actual user changes vs initial mount
   const lastTerrainQualityRef = useRef<number | null>(null)
   const qualityChangeInProgressRef = useRef(false)

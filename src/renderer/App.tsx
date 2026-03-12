@@ -47,7 +47,12 @@ import { MSFSModelConversionService } from './services/MSFSModelConversionServic
 import { realTrafficService } from './services/RealTrafficService'
 import { isOrbitWithoutAirport } from './utils/viewingContext'
 import { isRemoteMode } from './utils/remoteMode'
-import { getUrlAirportParams, loadUrlCameraState, scheduleSaveUrlCameraState, flushUrlCameraSave } from './utils/urlParams'
+import {
+  getUrlAirportParams,
+  loadUrlCameraState,
+  scheduleSaveUrlCameraState,
+  flushUrlCameraSave,
+} from './utils/urlParams'
 import type { UrlCameraState } from './utils/urlParams'
 import { usePresenceWebSocket } from './hooks/usePresenceWebSocket'
 import { useVnasEvents } from './hooks/useVnasEvents'
@@ -92,7 +97,7 @@ function App() {
     currentStep: 0,
     totalSteps: 8,
     stepProgress: 0,
-    status: 'Initializing...'
+    status: 'Initializing...',
   })
 
   // Define loading steps with relative weights (heavier = takes longer)
@@ -104,18 +109,21 @@ function App() {
     { id: 'msfs', label: 'Detecting MSFS', weight: 30 },
     { id: 'vmr', label: 'Loading VMR rules', weight: 5 },
     { id: 'datasource', label: 'Connecting', weight: 15 },
-    { id: 'finalize', label: 'Finalizing', weight: 5 }
+    { id: 'finalize', label: 'Finalizing', weight: 5 },
   ]
 
   // Helper to update progress
-  const updateProgress = useCallback((step: number, stepProgress: number, status: string) => {
-    setLoadingProgress({
-      currentStep: step,
-      totalSteps: loadingSteps.length,
-      stepProgress,
-      status
-    })
-  }, [loadingSteps.length])
+  const updateProgress = useCallback(
+    (step: number, stepProgress: number, status: string) => {
+      setLoadingProgress({
+        currentStep: step,
+        totalSteps: loadingSteps.length,
+        stepProgress,
+        status,
+      })
+    },
+    [loadingSteps.length],
+  )
 
   // Track Cesium viewer for VR integration
   const [cesiumViewer, setCesiumViewer] = useState<Viewer | null>(null)
@@ -279,10 +287,10 @@ function App() {
       } catch (error) {
         console.error('Initialization error:', error)
         // Keep current step, just update status to show error
-        setLoadingProgress(prev => ({
+        setLoadingProgress((prev) => ({
           ...prev,
           stepProgress: 0,
-          status: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+          status: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
         }))
       }
     }
@@ -321,7 +329,7 @@ function App() {
       if (savedCamera) {
         const store = useViewportStore.getState()
         useViewportStore.setState({
-          viewports: store.viewports.map(v =>
+          viewports: store.viewports.map((v) =>
             v.id === store.activeViewportId
               ? {
                   ...v,
@@ -336,11 +344,11 @@ function App() {
                     positionOffsetZ: savedCamera.positionOffsetZ,
                     topdownAltitude: savedCamera.topdownAltitude,
                     followingCallsign: null,
-                    preFollowState: null
-                  }
+                    preFollowState: null,
+                  },
                 }
-              : v
-          )
+              : v,
+          ),
         })
       } else if (bookmark !== null) {
         useViewportStore.getState().loadBookmark(bookmark)
@@ -354,7 +362,7 @@ function App() {
     // Persist camera state changes for this URL (debounced, 2s hysteresis)
     const unsubscribe = useViewportStore.subscribe(
       (state) => {
-        const active = state.viewports.find(v => v.id === state.activeViewportId)
+        const active = state.viewports.find((v) => v.id === state.activeViewportId)
         if (!active) return null
         const cam = active.cameraState
         return {
@@ -365,20 +373,20 @@ function App() {
           positionOffsetX: cam.positionOffsetX,
           positionOffsetY: cam.positionOffsetY,
           positionOffsetZ: cam.positionOffsetZ,
-          topdownAltitude: cam.topdownAltitude
+          topdownAltitude: cam.topdownAltitude,
         } as UrlCameraState
       },
       (cameraState) => {
         if (cameraState) scheduleSaveUrlCameraState(cameraState)
       },
-      { equalityFn: (a, b) => JSON.stringify(a) === JSON.stringify(b) }
+      { equalityFn: (a, b) => JSON.stringify(a) === JSON.stringify(b) },
     )
 
     return () => {
       unsubscribe()
       flushUrlCameraSave()
     }
-  // biome-ignore lint/correctness/useExhaustiveDependencies: one-time init after load
+    // biome-ignore lint/correctness/useExhaustiveDependencies: one-time init after load
   }, [isLoading])
 
   // Deep link handler for OAuth callbacks (tc3d://oauth/callback)
@@ -404,7 +412,9 @@ function App() {
             // Handle OAuth callback
             if (url.startsWith('tc3d://oauth/callback')) {
               console.log('[App] OAuth callback received, processing...')
-              useVnasStore.getState().handleOAuthCallback(url)
+              useVnasStore
+                .getState()
+                .handleOAuthCallback(url)
                 .then(() => {
                   console.log('[App] OAuth callback processed successfully')
                   showFeedback('vNAS authentication successful', 'success')
@@ -484,7 +494,16 @@ function App() {
     return () => {
       stopAutoRefresh()
     }
-  }, [currentIcao, showWeatherEffects, orbitWithoutAirport, fetchWeather, startAutoRefresh, startNearestAutoRefresh, stopAutoRefresh, clearWeather])
+  }, [
+    currentIcao,
+    showWeatherEffects,
+    orbitWithoutAirport,
+    fetchWeather,
+    startAutoRefresh,
+    startNearestAutoRefresh,
+    stopAutoRefresh,
+    clearWeather,
+  ])
 
   // Register modals with UI feedback store for keyboard blocking
   useEffect(() => {
@@ -512,9 +531,11 @@ function App() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Skip if typing in input field
-      if (e.target instanceof HTMLInputElement ||
-          e.target instanceof HTMLTextAreaElement ||
-          e.target instanceof HTMLSelectElement) {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLSelectElement
+      ) {
         return
       }
 
@@ -556,8 +577,16 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [showMetarOverlay, updateUISettings, currentAirportIcao, loadBookmark, showFeedback, togglePerformanceHUD, toggleModelMatchingModal, toggleTimelineDebugModal])
-
+  }, [
+    showMetarOverlay,
+    updateUISettings,
+    currentAirportIcao,
+    loadBookmark,
+    showFeedback,
+    togglePerformanceHUD,
+    toggleModelMatchingModal,
+    toggleTimelineDebugModal,
+  ])
 
   if (isLoading) {
     return <LoadingScreen progress={loadingProgress} steps={loadingSteps} />
@@ -584,20 +613,13 @@ function App() {
       {!isVRActive && <ControlsBar />}
       {!isVRActive && <TouchControls />}
       {/* Touch command input modal - shown on mobile when Cmd button clicked */}
-      {!isVRActive && (
-        <TouchCommandInput
-          isOpen={showTouchCommand}
-          onClose={() => setShowTouchCommand(false)}
-        />
-      )}
+      {!isVRActive && <TouchCommandInput isOpen={showTouchCommand} onClose={() => setShowTouchCommand(false)} />}
       {!isVRActive && import.meta.env.DEV && <WeatherDebugPanel />}
       {!isVRActive && import.meta.env.DEV && <VnasPanel />}
       {!isVRActive && <AirportSelector />}
       {!isVRActive && <MeasuringTool cesiumViewer={cesiumViewer} />}
       <PerformanceHUD visible={showPerformanceHUD} />
-      {!isVRActive && showModelMatchingModal && (
-        <ModelMatchingModal onClose={() => setShowModelMatchingModal(false)} />
-      )}
+      {!isVRActive && showModelMatchingModal && <ModelMatchingModal onClose={() => setShowModelMatchingModal(false)} />}
       {!isVRActive && showTimelineDebugModal && (
         <AircraftTimelineModal onClose={() => setShowTimelineDebugModal(false)} />
       )}
@@ -609,14 +631,16 @@ function App() {
           <div className="token-prompt-modal">
             <h2>Cesium Ion Access Token Required</h2>
             <p>
-              TowerCab 3D uses Cesium Ion for terrain and satellite imagery.
-              You need a free access token to continue.
+              TowerCab 3D uses Cesium Ion for terrain and satellite imagery. You need a free access token to continue.
             </p>
             <ol>
               <li>
                 <a
                   href="#"
-                  onClick={(e) => { e.preventDefault(); shellApi.openExternal('https://ion.cesium.com/signup/') }}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    shellApi.openExternal('https://ion.cesium.com/signup/')
+                  }}
                   className="external-link"
                 >
                   Create a free Cesium Ion account
@@ -625,12 +649,15 @@ function App() {
               <li>
                 <a
                   href="#"
-                  onClick={(e) => { e.preventDefault(); shellApi.openExternal('https://ion.cesium.com/tokens') }}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    shellApi.openExternal('https://ion.cesium.com/tokens')
+                  }}
                   className="external-link"
                 >
                   Go to Access Tokens
-                </a>
-                {' '}and copy your default token
+                </a>{' '}
+                and copy your default token
               </li>
               <li>Paste it below:</li>
             </ol>
@@ -642,10 +669,7 @@ function App() {
               className="token-input"
             />
             <div className="token-prompt-buttons">
-              <button
-                className="token-button secondary"
-                onClick={() => setShowTokenPrompt(false)}
-              >
+              <button className="token-button secondary" onClick={() => setShowTokenPrompt(false)}>
                 Skip for now
               </button>
               <button

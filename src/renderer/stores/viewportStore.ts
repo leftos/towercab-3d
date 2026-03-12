@@ -1,6 +1,14 @@
 import { create } from 'zustand'
 import { persist, subscribeWithSelector } from 'zustand/middleware'
-import type { ViewMode, FollowMode, ViewportLayout, ViewportCameraState, Viewport, CameraBookmark, ModeSpecificState } from '../types'
+import type {
+  ViewMode,
+  FollowMode,
+  ViewportLayout,
+  ViewportCameraState,
+  Viewport,
+  CameraBookmark,
+  ModeSpecificState,
+} from '../types'
 import { useVatsimStore } from './vatsimStore'
 import { useAirportStore } from './airportStore'
 import { useGlobalSettingsStore } from './globalSettingsStore'
@@ -29,7 +37,7 @@ import {
   ORBIT_HEADING_DEFAULT,
   ORBIT_PITCH_DEFAULT,
   ORBIT_PITCH_MIN,
-  ORBIT_PITCH_MAX
+  ORBIT_PITCH_MAX,
 } from '../constants'
 
 // Import extracted modules
@@ -43,20 +51,17 @@ import {
   normalizeLoadedViewports,
   getNextInsetPosition,
   updateViewportCameraState,
-  scheduleAutoSave
+  scheduleAutoSave,
 } from './viewport/viewportHelpers'
 
 import {
   toGlobalViewportSettings,
   scheduleGlobalSync,
   setIsLoadingFromGlobal,
-  mergeGlobalAirportConfig
+  mergeGlobalAirportConfig,
 } from './viewport/globalSettingsSync'
 
-import {
-  migrateCameraStoreBookmarks,
-  migrateToGlobalSettings
-} from './viewport/viewportMigrations'
+import { migrateCameraStoreBookmarks, migrateToGlobalSettings } from './viewport/viewportMigrations'
 
 import { DEFAULT_GLOBAL_VIEWPORT_SETTINGS } from '../types'
 import { updateUrlParams } from '../utils/urlParams'
@@ -136,12 +141,12 @@ interface ViewportStore {
   // Default view actions
   saveCurrentAsDefault: () => void
   resetToDefault: () => void
-  resetToAppDefault: () => void  // Reset to app defaults, ignoring user-saved default
+  resetToAppDefault: () => void // Reset to app defaults, ignoring user-saved default
   hasCustomDefault: () => boolean
 
   // Bookmark actions (0-99)
   saveBookmark: (slot: number, name?: string) => void
-  loadBookmark: (slot: number) => boolean  // Returns true if bookmark exists
+  loadBookmark: (slot: number) => boolean // Returns true if bookmark exists
   deleteBookmark: (slot: number) => void
   renameBookmark: (slot: number, name: string | undefined) => void
   getBookmarks: () => { [slot: number]: CameraBookmark } | undefined
@@ -177,12 +182,15 @@ const syncToGlobalSettings = () => {
   const globalSettings = toGlobalViewportSettings(
     state.airportViewportConfigs,
     state.globalOrbitSettings,
-    state.currentAirportIcao
+    state.currentAirportIcao,
   )
 
-  useGlobalSettingsStore.getState().setViewports(globalSettings).catch(err => {
-    console.error('[ViewportStore] Failed to sync to global settings:', err)
-  })
+  useGlobalSettingsStore
+    .getState()
+    .setViewports(globalSettings)
+    .catch((err) => {
+      console.error('[ViewportStore] Failed to sync to global settings:', err)
+    })
 }
 
 /**
@@ -224,26 +232,28 @@ const loadFromGlobalSettings = () => {
       } else {
         // No local config - need to create one and pass fallback viewport
         // so mergeGlobalAirportConfig can restore insets from global
-        const orbitSettings = globalViewports.orbitSettings && typeof globalViewports.orbitSettings === 'object'
-          ? globalViewports.orbitSettings
-          : undefined
+        const orbitSettings =
+          globalViewports.orbitSettings && typeof globalViewports.orbitSettings === 'object'
+            ? globalViewports.orbitSettings
+            : undefined
         const mainViewport = createMainViewport(undefined, orbitSettings)
         const mergedUpdates = mergeGlobalAirportConfig(undefined, globalConfig, mainViewport)
         updatedConfigs[icao] = {
           viewports: mergedUpdates.viewports || [mainViewport],
           activeViewportId: mainViewport.id,
-          ...mergedUpdates
+          ...mergedUpdates,
         }
       }
     }
 
-    const orbitSettings = globalViewports.orbitSettings && typeof globalViewports.orbitSettings === 'object'
-      ? globalViewports.orbitSettings
-      : state.globalOrbitSettings
+    const orbitSettings =
+      globalViewports.orbitSettings && typeof globalViewports.orbitSettings === 'object'
+        ? globalViewports.orbitSettings
+        : state.globalOrbitSettings
 
     useViewportStore.setState({
       airportViewportConfigs: updatedConfigs,
-      globalOrbitSettings: orbitSettings
+      globalOrbitSettings: orbitSettings,
     })
 
     console.log('[ViewportStore] Loaded from global settings')
@@ -270,7 +280,7 @@ export const useViewportStore = create<ViewportStore>()(
           globalOrbitSettings: {
             distance: ORBIT_DISTANCE_DEFAULT,
             heading: ORBIT_HEADING_DEFAULT,
-            pitch: ORBIT_PITCH_DEFAULT
+            pitch: ORBIT_PITCH_DEFAULT,
           },
 
           // Viewport management
@@ -283,7 +293,7 @@ export const useViewportStore = create<ViewportStore>()(
             // Use global orbit settings when creating fresh camera state
             let cameraState = createDefaultCameraState(undefined, state.globalOrbitSettings)
             if (copyFromViewportId) {
-              const sourceViewport = state.viewports.find(v => v.id === copyFromViewportId)
+              const sourceViewport = state.viewports.find((v) => v.id === copyFromViewportId)
               if (sourceViewport) {
                 cameraState = { ...sourceViewport.cameraState, followingCallsign: null, preFollowState: null }
               }
@@ -298,12 +308,12 @@ export const useViewportStore = create<ViewportStore>()(
             const newViewport: Viewport = {
               id: newId,
               layout: { ...defaultLayout, ...layout },
-              cameraState
+              cameraState,
             }
 
             set({
               viewports: [...state.viewports, newViewport],
-              activeViewportId: newId // Auto-activate new viewport
+              activeViewportId: newId, // Auto-activate new viewport
             })
 
             return newId
@@ -315,24 +325,20 @@ export const useViewportStore = create<ViewportStore>()(
             if (state.viewports[0]?.id === id) return
             if (state.viewports.length <= 1) return
 
-            const newViewports = state.viewports.filter(v => v.id !== id)
-            const newActiveId = state.activeViewportId === id
-              ? newViewports[0].id
-              : state.activeViewportId
+            const newViewports = state.viewports.filter((v) => v.id !== id)
+            const newActiveId = state.activeViewportId === id ? newViewports[0].id : state.activeViewportId
 
             set({
               viewports: newViewports,
-              activeViewportId: newActiveId
+              activeViewportId: newActiveId,
             })
           },
 
           updateViewportLayout: (id, layout) => {
-            set(state => ({
-              viewports: state.viewports.map(viewport =>
-                viewport.id === id
-                  ? { ...viewport, layout: { ...viewport.layout, ...layout } }
-                  : viewport
-              )
+            set((state) => ({
+              viewports: state.viewports.map((viewport) =>
+                viewport.id === id ? { ...viewport, layout: { ...viewport.layout, ...layout } } : viewport,
+              ),
             }))
           },
 
@@ -340,30 +346,26 @@ export const useViewportStore = create<ViewportStore>()(
             const state = get()
             // Only update if viewport exists AND is not already active
             // This prevents unnecessary re-renders on repeated clicks
-            if (state.activeViewportId !== id && state.viewports.some(v => v.id === id)) {
+            if (state.activeViewportId !== id && state.viewports.some((v) => v.id === id)) {
               set({ activeViewportId: id })
             }
           },
 
           setViewportLabel: (id, label) => {
-            set(state => ({
-              viewports: state.viewports.map(viewport =>
-                viewport.id === id ? { ...viewport, label } : viewport
-              )
+            set((state) => ({
+              viewports: state.viewports.map((viewport) => (viewport.id === id ? { ...viewport, label } : viewport)),
             }))
           },
 
           bringToFront: (id) => {
             const state = get()
-            const maxZIndex = Math.max(...state.viewports.map(v => v.layout.zIndex))
-            const viewport = state.viewports.find(v => v.id === id)
+            const maxZIndex = Math.max(...state.viewports.map((v) => v.layout.zIndex))
+            const viewport = state.viewports.find((v) => v.id === id)
             if (viewport && viewport.layout.zIndex < maxZIndex) {
               set({
-                viewports: state.viewports.map(v =>
-                  v.id === id
-                    ? { ...v, layout: { ...v.layout, zIndex: maxZIndex + 1 } }
-                    : v
-                )
+                viewports: state.viewports.map((v) =>
+                  v.id === id ? { ...v, layout: { ...v.layout, zIndex: maxZIndex + 1 } } : v,
+                ),
               })
             }
           },
@@ -389,7 +391,7 @@ export const useViewportStore = create<ViewportStore>()(
                   positionOffsetX: state.positionOffsetX,
                   positionOffsetY: state.positionOffsetY,
                   positionOffsetZ: state.positionOffsetZ,
-                  topdownAltitude: state.topdownAltitude
+                  topdownAltitude: state.topdownAltitude,
                 }
 
                 if (currentViewMode === '3d') {
@@ -449,7 +451,7 @@ export const useViewportStore = create<ViewportStore>()(
                 }
 
                 return updates
-              })
+              }),
             })
           },
 
@@ -469,7 +471,7 @@ export const useViewportStore = create<ViewportStore>()(
                   positionOffsetX: state.positionOffsetX,
                   positionOffsetY: state.positionOffsetY,
                   positionOffsetZ: state.positionOffsetZ,
-                  topdownAltitude: state.topdownAltitude
+                  topdownAltitude: state.topdownAltitude,
                 }
 
                 if (currentViewMode === '3d') {
@@ -529,7 +531,7 @@ export const useViewportStore = create<ViewportStore>()(
                 }
 
                 return updates
-              })
+              }),
             })
           },
 
@@ -538,8 +540,8 @@ export const useViewportStore = create<ViewportStore>()(
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
-                heading: normalized
-              }))
+                heading: normalized,
+              })),
             })
           },
 
@@ -548,8 +550,8 @@ export const useViewportStore = create<ViewportStore>()(
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
-                pitch: clamped
-              }))
+                pitch: clamped,
+              })),
             })
           },
 
@@ -558,8 +560,8 @@ export const useViewportStore = create<ViewportStore>()(
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
-                fov: clamped
-              }))
+                fov: clamped,
+              })),
             })
           },
 
@@ -567,8 +569,8 @@ export const useViewportStore = create<ViewportStore>()(
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, (state) => ({
-                heading: ((state.heading + delta) % 360 + 360) % 360
-              }))
+                heading: (((state.heading + delta) % 360) + 360) % 360,
+              })),
             })
           },
 
@@ -576,8 +578,8 @@ export const useViewportStore = create<ViewportStore>()(
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, (state) => ({
-                pitch: Math.max(PITCH_MIN, Math.min(PITCH_MAX, state.pitch + delta))
-              }))
+                pitch: Math.max(PITCH_MIN, Math.min(PITCH_MAX, state.pitch + delta)),
+              })),
             })
           },
 
@@ -585,8 +587,8 @@ export const useViewportStore = create<ViewportStore>()(
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, (state) => ({
-                fov: Math.max(FOV_MIN, Math.min(FOV_MAX, state.fov + delta))
-              }))
+                fov: Math.max(FOV_MIN, Math.min(FOV_MAX, state.fov + delta)),
+              })),
             })
           },
 
@@ -595,8 +597,8 @@ export const useViewportStore = create<ViewportStore>()(
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
-                topdownAltitude: clamped
-              }))
+                topdownAltitude: clamped,
+              })),
             })
           },
 
@@ -604,8 +606,11 @@ export const useViewportStore = create<ViewportStore>()(
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, (state) => ({
-                topdownAltitude: Math.max(TOPDOWN_ALTITUDE_MIN, Math.min(TOPDOWN_ALTITUDE_MAX, state.topdownAltitude + delta))
-              }))
+                topdownAltitude: Math.max(
+                  TOPDOWN_ALTITUDE_MIN,
+                  Math.min(TOPDOWN_ALTITUDE_MAX, state.topdownAltitude + delta),
+                ),
+              })),
             })
           },
 
@@ -613,12 +618,12 @@ export const useViewportStore = create<ViewportStore>()(
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, (state) => {
-                const headingRad = state.heading * Math.PI / 180
+                const headingRad = (state.heading * Math.PI) / 180
                 return {
                   positionOffsetX: state.positionOffsetX + Math.sin(headingRad) * distance,
-                  positionOffsetY: state.positionOffsetY + Math.cos(headingRad) * distance
+                  positionOffsetY: state.positionOffsetY + Math.cos(headingRad) * distance,
                 }
-              })
+              }),
             })
           },
 
@@ -626,12 +631,12 @@ export const useViewportStore = create<ViewportStore>()(
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, (state) => {
-                const headingRad = state.heading * Math.PI / 180
+                const headingRad = (state.heading * Math.PI) / 180
                 return {
                   positionOffsetX: state.positionOffsetX + Math.cos(headingRad) * distance,
-                  positionOffsetY: state.positionOffsetY - Math.sin(headingRad) * distance
+                  positionOffsetY: state.positionOffsetY - Math.sin(headingRad) * distance,
                 }
-              })
+              }),
             })
           },
 
@@ -639,8 +644,8 @@ export const useViewportStore = create<ViewportStore>()(
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, (state) => ({
-                positionOffsetZ: state.positionOffsetZ + distance
-              }))
+                positionOffsetZ: state.positionOffsetZ + distance,
+              })),
             })
           },
 
@@ -650,8 +655,8 @@ export const useViewportStore = create<ViewportStore>()(
               viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
                 positionOffsetX: 0,
                 positionOffsetY: 0,
-                positionOffsetZ: 0
-              }))
+                positionOffsetZ: 0,
+              })),
             })
           },
 
@@ -659,8 +664,8 @@ export const useViewportStore = create<ViewportStore>()(
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
-                positionOffsetX: x
-              }))
+                positionOffsetX: x,
+              })),
             })
           },
 
@@ -668,8 +673,8 @@ export const useViewportStore = create<ViewportStore>()(
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
-                positionOffsetY: y
-              }))
+                positionOffsetY: y,
+              })),
             })
           },
 
@@ -677,8 +682,8 @@ export const useViewportStore = create<ViewportStore>()(
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
-                positionOffsetZ: z
-              }))
+                positionOffsetZ: z,
+              })),
             })
           },
 
@@ -689,8 +694,8 @@ export const useViewportStore = create<ViewportStore>()(
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
-                lookAtTarget: { heading: normalizedHeading, pitch: clampedPitch }
-              }))
+                lookAtTarget: { heading: normalizedHeading, pitch: clampedPitch },
+              })),
             })
           },
 
@@ -704,7 +709,7 @@ export const useViewportStore = create<ViewportStore>()(
 
             // Get the active viewport's position offsets to calculate actual camera position
             const { activeViewportId, viewports } = get()
-            const activeViewport = viewports.find(v => v.id === activeViewportId)
+            const activeViewport = viewports.find((v) => v.id === activeViewportId)
             const positionOffsetX = activeViewport?.cameraState?.positionOffsetX ?? 0
             const positionOffsetY = activeViewport?.cameraState?.positionOffsetY ?? 0
             const positionOffsetZ = activeViewport?.cameraState?.positionOffsetZ ?? 0
@@ -712,7 +717,7 @@ export const useViewportStore = create<ViewportStore>()(
             // Apply position offsets to get actual camera position
             const cameraPos = applyPositionOffsets(
               { latitude: towerPos.latitude, longitude: towerPos.longitude, height: towerPos.height },
-              { x: positionOffsetX, y: positionOffsetY, z: positionOffsetZ }
+              { x: positionOffsetX, y: positionOffsetY, z: positionOffsetZ },
             )
 
             // Calculate bearing from actual camera position to target
@@ -724,7 +729,7 @@ export const useViewportStore = create<ViewportStore>()(
             const cameraAltFt = cameraPos.height * 3.28084 // Convert meters to feet
             const altDiffFt = cameraAltFt - altitudeFt
             const pitchRad = Math.atan2(altDiffFt, distanceFt)
-            const pitchAngle = -(pitchRad * 180 / Math.PI) // Negative because looking down
+            const pitchAngle = -((pitchRad * 180) / Math.PI) // Negative because looking down
 
             // Set both lookAtTarget (calculated heading/pitch) and pendingLookAtPosition (raw coords)
             // The pendingLookAtPosition is forwarded to insets so they can calculate their own heading/pitch
@@ -733,8 +738,8 @@ export const useViewportStore = create<ViewportStore>()(
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
                 lookAtTarget: { heading: normalizedHeading, pitch: clampedPitch },
-                pendingLookAtPosition: { lat, lon, altitudeFt }
-              }))
+                pendingLookAtPosition: { lat, lon, altitudeFt },
+              })),
             })
           },
 
@@ -743,8 +748,8 @@ export const useViewportStore = create<ViewportStore>()(
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
                 lookAtTarget: null,
-                pendingLookAtPosition: null
-              }))
+                pendingLookAtPosition: null,
+              })),
             })
           },
 
@@ -753,12 +758,14 @@ export const useViewportStore = create<ViewportStore>()(
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, (state) => {
-                const preFollowState = state.followingCallsign ? state.preFollowState : {
-                  heading: state.heading,
-                  pitch: state.pitch,
-                  fov: state.fov,
-                  viewMode: state.viewMode
-                }
+                const preFollowState = state.followingCallsign
+                  ? state.preFollowState
+                  : {
+                      heading: state.heading,
+                      pitch: state.pitch,
+                      fov: state.fov,
+                      viewMode: state.viewMode,
+                    }
                 // In topdown mode, use orbit follow (tower follow is incompatible with topdown)
                 // Orbit settings persist across aircraft switches - only resetView() resets them
                 // Preserve current zoom level: followZoom = baseFov / currentFov
@@ -768,17 +775,17 @@ export const useViewportStore = create<ViewportStore>()(
                   : Math.max(0.5, Math.min(5.0, FOV_DEFAULT / state.fov))
                 return {
                   followingCallsign: callsign,
-                  followMode: state.viewMode === 'topdown' ? 'orbit' as FollowMode : state.followMode,
+                  followMode: state.viewMode === 'topdown' ? ('orbit' as FollowMode) : state.followMode,
                   followZoom: preservedFollowZoom,
-                  preFollowState
+                  preFollowState,
                 }
-              })
+              }),
             })
 
             // Immediately update reference position to trigger VATSIM re-filter
             // Use allPilots (unfiltered) since the aircraft might not be in aircraftStates yet
             const vatsimStore = useVatsimStore.getState()
-            const pilot = vatsimStore.allPilots.find(p => p.callsign === callsign)
+            const pilot = vatsimStore.allPilots.find((p) => p.callsign === callsign)
             if (pilot) {
               vatsimStore.setReferencePosition(pilot.latitude, pilot.longitude)
             }
@@ -788,12 +795,14 @@ export const useViewportStore = create<ViewportStore>()(
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, (state) => {
-                const preFollowState = state.followingCallsign ? state.preFollowState : {
-                  heading: state.heading,
-                  pitch: state.pitch,
-                  fov: state.fov,
-                  viewMode: state.viewMode
-                }
+                const preFollowState = state.followingCallsign
+                  ? state.preFollowState
+                  : {
+                      heading: state.heading,
+                      pitch: state.pitch,
+                      fov: state.fov,
+                      viewMode: state.viewMode,
+                    }
                 // Orbit settings persist across aircraft switches - only resetView() resets them
                 // Preserve current zoom level: followZoom = baseFov / currentFov
                 // If already following, keep current followZoom; otherwise calculate from FOV
@@ -804,15 +813,15 @@ export const useViewportStore = create<ViewportStore>()(
                   followingCallsign: callsign,
                   followMode: 'orbit' as FollowMode,
                   followZoom: preservedFollowZoom,
-                  preFollowState
+                  preFollowState,
                 }
-              })
+              }),
             })
 
             // Immediately update reference position to trigger VATSIM re-filter
             // Use allPilots (unfiltered) since the aircraft might not be in aircraftStates yet
             const vatsimStore = useVatsimStore.getState()
-            const pilot = vatsimStore.allPilots.find(p => p.callsign === callsign)
+            const pilot = vatsimStore.allPilots.find((p) => p.callsign === callsign)
             if (pilot) {
               vatsimStore.setReferencePosition(pilot.latitude, pilot.longitude)
             }
@@ -828,11 +837,11 @@ export const useViewportStore = create<ViewportStore>()(
                     heading: state.preFollowState.heading,
                     pitch: state.preFollowState.pitch,
                     fov: state.preFollowState.fov,
-                    preFollowState: null
+                    preFollowState: null,
                   }
                 }
                 return { followingCallsign: null, preFollowState: null }
-              })
+              }),
             })
           },
 
@@ -843,8 +852,8 @@ export const useViewportStore = create<ViewportStore>()(
                 followingCallsign: null,
                 preFollowState: null,
                 heading,
-                pitch
-              }))
+                pitch,
+              })),
             })
           },
 
@@ -852,8 +861,8 @@ export const useViewportStore = create<ViewportStore>()(
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
-                preFollowState: null
-              }))
+                preFollowState: null,
+              })),
             })
           },
 
@@ -866,7 +875,7 @@ export const useViewportStore = create<ViewportStore>()(
                   return { followMode: mode, viewMode: '3d' as ViewMode }
                 }
                 return { followMode: mode }
-              })
+              }),
             })
           },
 
@@ -883,7 +892,7 @@ export const useViewportStore = create<ViewportStore>()(
                   return { followMode: newFollowMode }
                 }
                 return {}
-              })
+              }),
             })
           },
 
@@ -892,8 +901,8 @@ export const useViewportStore = create<ViewportStore>()(
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
-                followZoom: clamped
-              }))
+                followZoom: clamped,
+              })),
             })
           },
 
@@ -901,8 +910,8 @@ export const useViewportStore = create<ViewportStore>()(
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, (state) => ({
-                followZoom: Math.max(FOLLOW_ZOOM_MIN, Math.min(FOLLOW_ZOOM_MAX, state.followZoom + delta))
-              }))
+                followZoom: Math.max(FOLLOW_ZOOM_MIN, Math.min(FOLLOW_ZOOM_MAX, state.followZoom + delta)),
+              })),
             })
           },
 
@@ -912,22 +921,22 @@ export const useViewportStore = create<ViewportStore>()(
             const { activeViewportId, viewports, globalOrbitSettings } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
-                orbitDistance: clamped
+                orbitDistance: clamped,
               })),
-              globalOrbitSettings: { ...globalOrbitSettings, distance: clamped }
+              globalOrbitSettings: { ...globalOrbitSettings, distance: clamped },
             })
           },
 
           adjustOrbitDistance: (delta) => {
             const { activeViewportId, viewports, globalOrbitSettings } = get()
-            const activeViewport = viewports.find(v => v.id === activeViewportId)
+            const activeViewport = viewports.find((v) => v.id === activeViewportId)
             const currentDistance = activeViewport?.cameraState.orbitDistance ?? globalOrbitSettings.distance
             const newDistance = Math.max(ORBIT_DISTANCE_MIN, Math.min(ORBIT_DISTANCE_MAX, currentDistance + delta))
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
-                orbitDistance: newDistance
+                orbitDistance: newDistance,
               })),
-              globalOrbitSettings: { ...globalOrbitSettings, distance: newDistance }
+              globalOrbitSettings: { ...globalOrbitSettings, distance: newDistance },
             })
           },
 
@@ -936,22 +945,22 @@ export const useViewportStore = create<ViewportStore>()(
             const { activeViewportId, viewports, globalOrbitSettings } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
-                orbitHeading: normalized
+                orbitHeading: normalized,
               })),
-              globalOrbitSettings: { ...globalOrbitSettings, heading: normalized }
+              globalOrbitSettings: { ...globalOrbitSettings, heading: normalized },
             })
           },
 
           adjustOrbitHeading: (delta) => {
             const { activeViewportId, viewports, globalOrbitSettings } = get()
-            const activeViewport = viewports.find(v => v.id === activeViewportId)
+            const activeViewport = viewports.find((v) => v.id === activeViewportId)
             const currentHeading = activeViewport?.cameraState.orbitHeading ?? globalOrbitSettings.heading
-            const newHeading = ((currentHeading + delta) % 360 + 360) % 360
+            const newHeading = (((currentHeading + delta) % 360) + 360) % 360
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
-                orbitHeading: newHeading
+                orbitHeading: newHeading,
               })),
-              globalOrbitSettings: { ...globalOrbitSettings, heading: newHeading }
+              globalOrbitSettings: { ...globalOrbitSettings, heading: newHeading },
             })
           },
 
@@ -960,22 +969,22 @@ export const useViewportStore = create<ViewportStore>()(
             const { activeViewportId, viewports, globalOrbitSettings } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
-                orbitPitch: clamped
+                orbitPitch: clamped,
               })),
-              globalOrbitSettings: { ...globalOrbitSettings, pitch: clamped }
+              globalOrbitSettings: { ...globalOrbitSettings, pitch: clamped },
             })
           },
 
           adjustOrbitPitch: (delta) => {
             const { activeViewportId, viewports, globalOrbitSettings } = get()
-            const activeViewport = viewports.find(v => v.id === activeViewportId)
+            const activeViewport = viewports.find((v) => v.id === activeViewportId)
             const currentPitch = activeViewport?.cameraState.orbitPitch ?? globalOrbitSettings.pitch
             const newPitch = Math.max(ORBIT_PITCH_MIN, Math.min(ORBIT_PITCH_MAX, currentPitch + delta))
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, () => ({
-                orbitPitch: newPitch
+                orbitPitch: newPitch,
               })),
-              globalOrbitSettings: { ...globalOrbitSettings, pitch: newPitch }
+              globalOrbitSettings: { ...globalOrbitSettings, pitch: newPitch },
             })
           },
 
@@ -990,9 +999,9 @@ export const useViewportStore = create<ViewportStore>()(
                 const airportViewportConfigs = { ...state.airportViewportConfigs }
                 const existingConfig = airportViewportConfigs[state.currentAirportIcao]
                 airportViewportConfigs[state.currentAirportIcao] = {
-                  viewports: state.viewports.map(v => ({
+                  viewports: state.viewports.map((v) => ({
                     ...v,
-                    cameraState: { ...v.cameraState, followingCallsign: null, preFollowState: null }
+                    cameraState: { ...v.cameraState, followingCallsign: null, preFollowState: null },
                   })),
                   activeViewportId: state.activeViewportId,
                   // Preserve all saved settings from the existing config
@@ -1000,7 +1009,7 @@ export const useViewportStore = create<ViewportStore>()(
                   default3d: existingConfig?.default3d,
                   default2d: existingConfig?.default2d,
                   bookmarks: existingConfig?.bookmarks,
-                  datablockPosition: existingConfig?.datablockPosition
+                  datablockPosition: existingConfig?.datablockPosition,
                 }
                 set({ airportViewportConfigs, currentAirportIcao: null })
               }
@@ -1014,9 +1023,9 @@ export const useViewportStore = create<ViewportStore>()(
               const airportViewportConfigs = { ...state.airportViewportConfigs }
               const existingConfig = airportViewportConfigs[state.currentAirportIcao]
               airportViewportConfigs[state.currentAirportIcao] = {
-                viewports: state.viewports.map(v => ({
+                viewports: state.viewports.map((v) => ({
                   ...v,
-                  cameraState: { ...v.cameraState, followingCallsign: null, preFollowState: null }
+                  cameraState: { ...v.cameraState, followingCallsign: null, preFollowState: null },
                 })),
                 activeViewportId: state.activeViewportId,
                 // Preserve all saved settings from the existing config
@@ -1024,7 +1033,7 @@ export const useViewportStore = create<ViewportStore>()(
                 default3d: existingConfig?.default3d,
                 default2d: existingConfig?.default2d,
                 bookmarks: existingConfig?.bookmarks,
-                datablockPosition: existingConfig?.datablockPosition
+                datablockPosition: existingConfig?.datablockPosition,
               }
               set({ airportViewportConfigs })
             }
@@ -1033,14 +1042,11 @@ export const useViewportStore = create<ViewportStore>()(
             const savedConfig = state.airportViewportConfigs[normalizedIcao]
             if (savedConfig) {
               // Normalize to ensure main viewport has fixed ID (migration from old configs)
-              const normalized = normalizeLoadedViewports(
-                savedConfig.viewports,
-                savedConfig.activeViewportId
-              )
+              const normalized = normalizeLoadedViewports(savedConfig.viewports, savedConfig.activeViewportId)
               set({
                 currentAirportIcao: normalizedIcao,
                 viewports: normalized.viewports,
-                activeViewportId: normalized.activeViewportId
+                activeViewportId: normalized.activeViewportId,
               })
             } else {
               // Create fresh main viewport for new airport
@@ -1054,7 +1060,7 @@ export const useViewportStore = create<ViewportStore>()(
               set({
                 currentAirportIcao: normalizedIcao,
                 viewports: [mainViewport],
-                activeViewportId: mainViewport.id
+                activeViewportId: mainViewport.id,
               })
             }
           },
@@ -1065,14 +1071,14 @@ export const useViewportStore = create<ViewportStore>()(
             const icao = state.currentAirportIcao
             if (!icao) return
 
-            const activeViewport = state.viewports.find(v => v.id === state.activeViewportId)
+            const activeViewport = state.viewports.find((v) => v.id === state.activeViewportId)
             if (!activeViewport) return
 
             const airportViewportConfigs = { ...state.airportViewportConfigs }
             if (!airportViewportConfigs[icao]) {
               airportViewportConfigs[icao] = {
                 viewports: state.viewports,
-                activeViewportId: state.activeViewportId
+                activeViewportId: state.activeViewportId,
               }
             }
 
@@ -1084,7 +1090,7 @@ export const useViewportStore = create<ViewportStore>()(
               positionOffsetX: cam.positionOffsetX,
               positionOffsetY: cam.positionOffsetY,
               positionOffsetZ: cam.positionOffsetZ,
-              topdownAltitude: cam.topdownAltitude
+              topdownAltitude: cam.topdownAltitude,
             }
 
             // Save to the appropriate view mode slot
@@ -1102,7 +1108,7 @@ export const useViewportStore = create<ViewportStore>()(
             const icao = state.currentAirportIcao
             if (!icao) return
 
-            const activeViewport = state.viewports.find(v => v.id === state.activeViewportId)
+            const activeViewport = state.viewports.find((v) => v.id === state.activeViewportId)
             if (!activeViewport) return
 
             const config = state.airportViewportConfigs[icao]
@@ -1111,25 +1117,21 @@ export const useViewportStore = create<ViewportStore>()(
 
             if (savedDefaults) {
               // Apply saved defaults for the current view mode (doesn't change view mode)
-              const updatedViewports = updateViewportCameraState(
-                state.viewports,
-                state.activeViewportId,
-                () => {
-                  const updates: Partial<ViewportCameraState> = {
-                    heading: savedDefaults.heading,
-                    pitch: savedDefaults.pitch,
-                    fov: savedDefaults.fov,
-                    positionOffsetX: savedDefaults.positionOffsetX,
-                    positionOffsetY: savedDefaults.positionOffsetY,
-                    positionOffsetZ: savedDefaults.positionOffsetZ
-                  }
-                  // Include topdown altitude for 2D mode
-                  if (currentViewMode === 'topdown' && savedDefaults.topdownAltitude !== undefined) {
-                    updates.topdownAltitude = savedDefaults.topdownAltitude
-                  }
-                  return updates
+              const updatedViewports = updateViewportCameraState(state.viewports, state.activeViewportId, () => {
+                const updates: Partial<ViewportCameraState> = {
+                  heading: savedDefaults.heading,
+                  pitch: savedDefaults.pitch,
+                  fov: savedDefaults.fov,
+                  positionOffsetX: savedDefaults.positionOffsetX,
+                  positionOffsetY: savedDefaults.positionOffsetY,
+                  positionOffsetZ: savedDefaults.positionOffsetZ,
                 }
-              )
+                // Include topdown altitude for 2D mode
+                if (currentViewMode === 'topdown' && savedDefaults.topdownAltitude !== undefined) {
+                  updates.topdownAltitude = savedDefaults.topdownAltitude
+                }
+                return updates
+              })
               set({ viewports: updatedViewports })
             } else {
               // No user-saved default for this view mode, fall back to app default
@@ -1145,7 +1147,7 @@ export const useViewportStore = create<ViewportStore>()(
             const icao = state.currentAirportIcao
             if (!icao) return
 
-            const activeViewport = state.viewports.find(v => v.id === state.activeViewportId)
+            const activeViewport = state.viewports.find((v) => v.id === state.activeViewportId)
             if (!activeViewport) return
 
             const currentViewMode = activeViewport.cameraState.viewMode
@@ -1159,7 +1161,7 @@ export const useViewportStore = create<ViewportStore>()(
               useAirportStore.setState({
                 customTowerPosition: position3d,
                 customHeading: position3d.heading ?? 0,
-                towerHeight: position3d.height
+                towerHeight: position3d.height,
               })
             }
 
@@ -1176,7 +1178,7 @@ export const useViewportStore = create<ViewportStore>()(
                   heading: position2d.heading ?? HEADING_DEFAULT,
                   topdownAltitude: position2d.altitude,
                   pitch: PITCH_DEFAULT,
-                  fov: FOV_DEFAULT
+                  fov: FOV_DEFAULT,
                 }
               } else if (position3d) {
                 // Derive 2D from 3D: use 3D heading but default altitude
@@ -1187,7 +1189,7 @@ export const useViewportStore = create<ViewportStore>()(
                   heading: position3d.heading ?? HEADING_DEFAULT,
                   topdownAltitude: TOPDOWN_ALTITUDE_DEFAULT,
                   pitch: PITCH_DEFAULT,
-                  fov: FOV_DEFAULT
+                  fov: FOV_DEFAULT,
                 }
               } else {
                 // Pure defaults
@@ -1198,7 +1200,7 @@ export const useViewportStore = create<ViewportStore>()(
                   heading: HEADING_DEFAULT,
                   topdownAltitude: TOPDOWN_ALTITUDE_DEFAULT,
                   pitch: PITCH_DEFAULT,
-                  fov: FOV_DEFAULT
+                  fov: FOV_DEFAULT,
                 }
               }
             } else {
@@ -1210,7 +1212,7 @@ export const useViewportStore = create<ViewportStore>()(
                 positionOffsetZ: 0,
                 heading,
                 pitch: PITCH_DEFAULT,
-                fov: FOV_DEFAULT
+                fov: FOV_DEFAULT,
               }
             }
 
@@ -1218,7 +1220,7 @@ export const useViewportStore = create<ViewportStore>()(
             const updatedViewports = updateViewportCameraState(
               state.viewports,
               state.activeViewportId,
-              () => newCameraState
+              () => newCameraState,
             )
 
             set({ viewports: updatedViewports })
@@ -1229,7 +1231,7 @@ export const useViewportStore = create<ViewportStore>()(
             const icao = state.currentAirportIcao
             if (!icao) return false
 
-            const activeViewport = state.viewports.find(v => v.id === state.activeViewportId)
+            const activeViewport = state.viewports.find((v) => v.id === state.activeViewportId)
             if (!activeViewport) return false
 
             const config = state.airportViewportConfigs[icao]
@@ -1251,7 +1253,7 @@ export const useViewportStore = create<ViewportStore>()(
             const icao = state.currentAirportIcao
             if (!icao) return
 
-            const activeViewport = state.viewports.find(v => v.id === state.activeViewportId)
+            const activeViewport = state.viewports.find((v) => v.id === state.activeViewportId)
             if (!activeViewport) return
 
             const cam = activeViewport.cameraState
@@ -1264,14 +1266,14 @@ export const useViewportStore = create<ViewportStore>()(
               positionOffsetX: cam.positionOffsetX,
               positionOffsetY: cam.positionOffsetY,
               positionOffsetZ: cam.positionOffsetZ,
-              topdownAltitude: cam.topdownAltitude
+              topdownAltitude: cam.topdownAltitude,
             }
 
             const airportViewportConfigs = { ...state.airportViewportConfigs }
             if (!airportViewportConfigs[icao]) {
               airportViewportConfigs[icao] = {
                 viewports: state.viewports,
-                activeViewportId: state.activeViewportId
+                activeViewportId: state.activeViewportId,
               }
             }
             if (!airportViewportConfigs[icao].bookmarks) {
@@ -1304,9 +1306,9 @@ export const useViewportStore = create<ViewportStore>()(
                 positionOffsetY: bookmark.positionOffsetY,
                 positionOffsetZ: bookmark.positionOffsetZ,
                 topdownAltitude: bookmark.topdownAltitude,
-                followingCallsign: null,  // Stop following when loading bookmark
-                preFollowState: null
-              }))
+                followingCallsign: null, // Stop following when loading bookmark
+                preFollowState: null,
+              })),
             })
 
             // Update URL params with bookmark in remote browser mode
@@ -1375,14 +1377,14 @@ export const useViewportStore = create<ViewportStore>()(
             // Create immutable update for proper state change detection
             const existingConfig = state.airportViewportConfigs[icao] ?? {
               viewports: state.viewports,
-              activeViewportId: state.activeViewportId
+              activeViewportId: state.activeViewportId,
             }
             const airportViewportConfigs = {
               ...state.airportViewportConfigs,
               [icao]: {
                 ...existingConfig,
-                datablockPosition: position
-              }
+                datablockPosition: position,
+              },
             }
 
             set({ airportViewportConfigs })
@@ -1404,9 +1406,10 @@ export const useViewportStore = create<ViewportStore>()(
             const { activeViewportId, viewports } = get()
             set({
               viewports: updateViewportCameraState(viewports, activeViewportId, (state) => {
-                const defaults = state.viewMode === '3d'
-                  ? { heading: HEADING_DEFAULT, pitch: PITCH_DEFAULT, fov: FOV_DEFAULT }
-                  : { heading: HEADING_DEFAULT, pitch: -90, fov: 60 }
+                const defaults =
+                  state.viewMode === '3d'
+                    ? { heading: HEADING_DEFAULT, pitch: PITCH_DEFAULT, fov: FOV_DEFAULT }
+                    : { heading: HEADING_DEFAULT, pitch: -90, fov: 60 }
                 return {
                   ...defaults,
                   positionOffsetX: 0,
@@ -1419,9 +1422,9 @@ export const useViewportStore = create<ViewportStore>()(
                   orbitDistance: ORBIT_DISTANCE_DEFAULT,
                   orbitHeading: ORBIT_HEADING_DEFAULT,
                   orbitPitch: ORBIT_PITCH_DEFAULT,
-                  preFollowState: null
+                  preFollowState: null,
                 }
-              })
+              }),
             })
           },
 
@@ -1431,25 +1434,25 @@ export const useViewportStore = create<ViewportStore>()(
             // position gets recalculated with updated terrain heights
             const { viewports } = get()
             set({
-              viewports: viewports.map(v => ({
+              viewports: viewports.map((v) => ({
                 ...v,
                 cameraState: {
                   ...v.cameraState,
-                  cameraVersion: (v.cameraState.cameraVersion ?? 0) + 1
-                }
-              }))
+                  cameraVersion: (v.cameraState.cameraVersion ?? 0) + 1,
+                },
+              })),
             })
           },
 
           // Selectors
           getActiveViewport: () => {
             const state = get()
-            return state.viewports.find(v => v.id === state.activeViewportId)
+            return state.viewports.find((v) => v.id === state.activeViewportId)
           },
 
           getActiveCameraState: () => {
             const state = get()
-            const activeViewport = state.viewports.find(v => v.id === state.activeViewportId)
+            const activeViewport = state.viewports.find((v) => v.id === state.activeViewportId)
             return activeViewport?.cameraState || createDefaultCameraState()
           },
 
@@ -1462,8 +1465,8 @@ export const useViewportStore = create<ViewportStore>()(
           },
 
           getViewportById: (id) => {
-            return get().viewports.find(v => v.id === id)
-          }
+            return get().viewports.find((v) => v.id === id)
+          },
         }
       },
       {
@@ -1471,7 +1474,7 @@ export const useViewportStore = create<ViewportStore>()(
         partialize: (state) => ({
           airportViewportConfigs: state.airportViewportConfigs,
           currentAirportIcao: state.currentAirportIcao,
-          globalOrbitSettings: state.globalOrbitSettings
+          globalOrbitSettings: state.globalOrbitSettings,
         }),
         onRehydrateStorage: () => (state) => {
           // After rehydration, load the saved viewport config for the current airport
@@ -1480,13 +1483,10 @@ export const useViewportStore = create<ViewportStore>()(
             const savedConfig = state.airportViewportConfigs[icao]
             if (savedConfig) {
               // Normalize to ensure main viewport has fixed ID (migration from old configs)
-              const normalized = normalizeLoadedViewports(
-                savedConfig.viewports,
-                savedConfig.activeViewportId
-              )
+              const normalized = normalizeLoadedViewports(savedConfig.viewports, savedConfig.activeViewportId)
               useViewportStore.setState({
                 viewports: normalized.viewports,
-                activeViewportId: normalized.activeViewportId
+                activeViewportId: normalized.activeViewportId,
               })
             }
           }
@@ -1496,15 +1496,15 @@ export const useViewportStore = create<ViewportStore>()(
           if (state?.globalOrbitSettings) {
             const { distance, heading, pitch } = state.globalOrbitSettings
             useViewportStore.setState((current) => ({
-              viewports: current.viewports.map(v => ({
+              viewports: current.viewports.map((v) => ({
                 ...v,
                 cameraState: {
                   ...v.cameraState,
                   orbitDistance: distance,
                   orbitHeading: heading,
-                  orbitPitch: pitch
-                }
-              }))
+                  orbitPitch: pitch,
+                },
+              })),
             }))
           }
 
@@ -1513,7 +1513,7 @@ export const useViewportStore = create<ViewportStore>()(
             migrateCameraStoreBookmarks(
               () => useViewportStore.getState(),
               (newState) => useViewportStore.setState(newState),
-              syncToGlobalSettings
+              syncToGlobalSettings,
             )
           }
 
@@ -1524,7 +1524,7 @@ export const useViewportStore = create<ViewportStore>()(
             migrateToGlobalSettings(
               () => useGlobalSettingsStore.getState(),
               () => useViewportStore.getState(),
-              syncToGlobalSettings
+              syncToGlobalSettings,
             )
             loadFromGlobalSettings()
           }
@@ -1540,17 +1540,17 @@ export const useViewportStore = create<ViewportStore>()(
               }
             })
           }
-        }
-      }
-    )
-  )
+        },
+      },
+    ),
+  ),
 )
 
 // Subscribe to viewport/camera changes and auto-save
 useViewportStore.subscribe(
   (state) => ({
     viewports: state.viewports,
-    activeViewportId: state.activeViewportId
+    activeViewportId: state.activeViewportId,
   }),
   () => {
     scheduleAutoSave(() => {
@@ -1560,20 +1560,20 @@ useViewportStore.subscribe(
 
       const airportViewportConfigs = { ...state.airportViewportConfigs }
       airportViewportConfigs[icao] = {
-        viewports: state.viewports.map(v => ({
+        viewports: state.viewports.map((v) => ({
           ...v,
-          cameraState: { ...v.cameraState, followingCallsign: null, preFollowState: null }
+          cameraState: { ...v.cameraState, followingCallsign: null, preFollowState: null },
         })),
         activeViewportId: state.activeViewportId,
         defaultConfig: airportViewportConfigs[icao]?.defaultConfig,
-        bookmarks: airportViewportConfigs[icao]?.bookmarks,  // Preserve bookmarks
-        datablockPosition: airportViewportConfigs[icao]?.datablockPosition  // Preserve datablock position
+        bookmarks: airportViewportConfigs[icao]?.bookmarks, // Preserve bookmarks
+        datablockPosition: airportViewportConfigs[icao]?.datablockPosition, // Preserve datablock position
       }
 
       useViewportStore.setState({ airportViewportConfigs })
     })
   },
-  { equalityFn: (a, b) => JSON.stringify(a) === JSON.stringify(b) }
+  { equalityFn: (a, b) => JSON.stringify(a) === JSON.stringify(b) },
 )
 
 // Subscribe to global-relevant changes and sync to globalSettingsStore
@@ -1582,7 +1582,7 @@ useViewportStore.subscribe(
   (state) => ({
     airportViewportConfigs: state.airportViewportConfigs,
     globalOrbitSettings: state.globalOrbitSettings,
-    currentAirportIcao: state.currentAirportIcao
+    currentAirportIcao: state.currentAirportIcao,
   }),
   () => {
     // Don't sync if global settings not initialized yet
@@ -1604,5 +1604,5 @@ useViewportStore.subscribe(
     // Debounce the sync to avoid too many writes
     scheduleGlobalSync(syncToGlobalSettings)
   },
-  { equalityFn: (a, b) => JSON.stringify(a) === JSON.stringify(b) }
+  { equalityFn: (a, b) => JSON.stringify(a) === JSON.stringify(b) },
 )

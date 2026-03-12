@@ -3,7 +3,15 @@
 
 import { invoke } from '@tauri-apps/api/core'
 import { isTauri } from '@/utils/tauriApi'
-import type { Precipitation, PrecipitationType, PrecipitationIntensity, WindState, CloudLayer, PrecipitationState, DistancedMetar } from '@/types'
+import type {
+  Precipitation,
+  PrecipitationType,
+  PrecipitationIntensity,
+  WindState,
+  CloudLayer,
+  PrecipitationState,
+  DistancedMetar,
+} from '@/types'
 import { METAR_PRECIP_CODES, INTERPOLATION_STATION_COUNT, INTERPOLATION_RADIUS_NM } from '@/constants'
 
 const METAR_API_URL = 'https://aviationweather.gov/api/data/metar'
@@ -28,20 +36,20 @@ async function fetchUrl(url: string): Promise<string> {
 }
 
 export interface MetarCloudLayer {
-  cover: string  // SKC, FEW, SCT, BKN, OVC
-  base: number   // Altitude in feet AGL
+  cover: string // SKC, FEW, SCT, BKN, OVC
+  base: number // Altitude in feet AGL
 }
 
 export interface MetarData {
   icaoId: string
-  visib: number           // Visibility in statute miles
+  visib: number // Visibility in statute miles
   clouds: MetarCloudLayer[]
-  fltCat: string          // VFR, MVFR, IFR, LIFR
-  obsTime: number         // Observation timestamp (epoch ms)
-  rawOb: string           // Raw METAR string
-  precipitation: Precipitation[]  // Parsed precipitation types
-  hasThunderstorm: boolean        // Whether TS code is present
-  wind: WindState                 // Parsed wind data
+  fltCat: string // VFR, MVFR, IFR, LIFR
+  obsTime: number // Observation timestamp (epoch ms)
+  rawOb: string // Raw METAR string
+  precipitation: Precipitation[] // Parsed precipitation types
+  hasThunderstorm: boolean // Whether TS code is present
+  wind: WindState // Parsed wind data
 }
 
 interface CachedMetar {
@@ -59,11 +67,11 @@ interface NearestMetarCache {
 // Haversine distance calculation (duplicated from interpolation.ts for service isolation)
 function haversineDistanceNM(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 3440.065 // Earth radius in nautical miles
-  const dLat = (lat2 - lat1) * Math.PI / 180
-  const dLon = (lon2 - lon1) * Math.PI / 180
-  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2)
+  const dLat = ((lat2 - lat1) * Math.PI) / 180
+  const dLon = ((lon2 - lon1) * Math.PI) / 180
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2)
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
   return R * c
 }
@@ -99,11 +107,16 @@ function visibilityToFogDensity(visibility: number): number {
  */
 function cloudCoverToCoverage(cover: string): number {
   switch (cover.toUpperCase()) {
-    case 'FEW': return 0.25
-    case 'SCT': return 0.50
-    case 'BKN': return 0.75
-    case 'OVC': return 1.0
-    default: return 0
+    case 'FEW':
+      return 0.25
+    case 'SCT':
+      return 0.5
+    case 'BKN':
+      return 0.75
+    case 'OVC':
+      return 1.0
+    default:
+      return 0
   }
 }
 
@@ -111,10 +124,10 @@ function cloudCoverToCoverage(cover: string): number {
  * Convert MetarCloudLayer array to CloudLayer array
  */
 function convertCloudLayers(metarClouds: MetarCloudLayer[]): CloudLayer[] {
-  return metarClouds.map(c => ({
+  return metarClouds.map((c) => ({
     altitude: c.base * 0.3048, // feet to meters
     coverage: cloudCoverToCoverage(c.cover),
-    type: c.cover
+    type: c.cover,
   }))
 }
 
@@ -167,7 +180,7 @@ class MetarService {
         rawOb,
         precipitation,
         hasThunderstorm,
-        wind
+        wind,
       }
 
       // Cache the result
@@ -189,11 +202,7 @@ class MetarService {
    * @param longitude Longitude in decimal degrees
    * @param maxDistanceNM Maximum search radius in nautical miles (default: 100)
    */
-  async fetchNearestMetar(
-    latitude: number,
-    longitude: number,
-    maxDistanceNM: number = 100
-  ): Promise<MetarData | null> {
+  async fetchNearestMetar(latitude: number, longitude: number, maxDistanceNM: number = 100): Promise<MetarData | null> {
     const now = Date.now()
 
     // Round position to grid for cache lookup (~6nm grid)
@@ -205,9 +214,11 @@ class MetarService {
       const cachedLat = Math.round(this.nearestCache.lat / this.nearestCacheGridSize) * this.nearestCacheGridSize
       const cachedLon = Math.round(this.nearestCache.lon / this.nearestCacheGridSize) * this.nearestCacheGridSize
 
-      if (cachedLat === roundedLat &&
-          cachedLon === roundedLon &&
-          now - this.nearestCache.fetchTime < this.nearestFetchInterval) {
+      if (
+        cachedLat === roundedLat &&
+        cachedLon === roundedLon &&
+        now - this.nearestCache.fetchTime < this.nearestFetchInterval
+      ) {
         return this.nearestCache.data
       }
     }
@@ -219,7 +230,7 @@ class MetarService {
       // 1 degree latitude ≈ 60 nautical miles
       // 1 degree longitude ≈ 60 * cos(latitude) nautical miles
       const latOffset = maxDistanceNM / 60
-      const lonOffset = maxDistanceNM / (60 * Math.cos(latitude * Math.PI / 180))
+      const lonOffset = maxDistanceNM / (60 * Math.cos((latitude * Math.PI) / 180))
 
       const lat0 = (latitude - latOffset).toFixed(4)
       const lon0 = (longitude - lonOffset).toFixed(4)
@@ -265,7 +276,7 @@ class MetarService {
         rawOb,
         precipitation,
         hasThunderstorm,
-        wind
+        wind,
       }
 
       // Cache the result with position
@@ -273,7 +284,7 @@ class MetarService {
         data: metar,
         fetchTime: now,
         lat: latitude,
-        lon: longitude
+        lon: longitude,
       }
 
       // Also cache by ICAO for future direct lookups
@@ -301,7 +312,7 @@ class MetarService {
     latitude: number,
     longitude: number,
     maxDistanceNM: number = INTERPOLATION_RADIUS_NM,
-    maxStations: number = INTERPOLATION_STATION_COUNT
+    maxStations: number = INTERPOLATION_STATION_COUNT,
   ): Promise<DistancedMetar[]> {
     const now = Date.now()
 
@@ -310,7 +321,7 @@ class MetarService {
       // 1 degree latitude ≈ 60 nautical miles
       // 1 degree longitude ≈ 60 * cos(latitude) nautical miles
       const latOffset = maxDistanceNM / 60
-      const lonOffset = maxDistanceNM / (60 * Math.cos(latitude * Math.PI / 180))
+      const lonOffset = maxDistanceNM / (60 * Math.cos((latitude * Math.PI) / 180))
 
       const lat0 = (latitude - latOffset).toFixed(4)
       const lon0 = (longitude - lonOffset).toFixed(4)
@@ -328,7 +339,7 @@ class MetarService {
 
       // Process all stations and calculate distances
       const stationsWithDistance: Array<{
-        station: typeof data[0]
+        station: (typeof data)[0]
         distance: number
       }> = []
 
@@ -363,7 +374,7 @@ class MetarService {
           rawOb,
           precipitation,
           hasThunderstorm,
-          wind
+          wind,
         }
 
         // Cache by ICAO for future direct lookups
@@ -374,7 +385,7 @@ class MetarService {
           active: precipitation.length > 0,
           types: precipitation,
           visibilityFactor: visibility < 3 ? Math.max(1, 4 - visibility) : 1,
-          hasThunderstorm
+          hasThunderstorm,
         }
 
         return {
@@ -388,7 +399,7 @@ class MetarService {
           precipitation: precipitationState,
           wind,
           rawMetar: rawOb,
-          obsTime: metar.obsTime
+          obsTime: metar.obsTime,
         }
       })
 
@@ -422,14 +433,13 @@ class MetarService {
     if (!Array.isArray(clouds)) return []
 
     return clouds
-      .filter((c): c is { cover: string; base: number } =>
-        typeof c === 'object' && c !== null &&
-        typeof c.cover === 'string' &&
-        typeof c.base === 'number'
+      .filter(
+        (c): c is { cover: string; base: number } =>
+          typeof c === 'object' && c !== null && typeof c.cover === 'string' && typeof c.base === 'number',
       )
-      .map(c => ({
+      .map((c) => ({
         cover: c.cover.toUpperCase(),
-        base: c.base
+        base: c.base,
       }))
   }
 
@@ -446,7 +456,7 @@ class MetarService {
    * @param rawOb Raw METAR string
    * @returns Object with precipitation array and thunderstorm flag
    */
-  private parsePrecipitation(rawOb: string): { precipitation: Precipitation[], hasThunderstorm: boolean } {
+  private parsePrecipitation(rawOb: string): { precipitation: Precipitation[]; hasThunderstorm: boolean } {
     const precipitations: Precipitation[] = []
     let hasThunderstorm = false
 
@@ -476,9 +486,8 @@ class MetarService {
       }
 
       // Determine intensity
-      const intensity: PrecipitationIntensity = intensityPrefix === '-' ? 'light'
-        : intensityPrefix === '+' ? 'heavy'
-        : 'moderate'
+      const intensity: PrecipitationIntensity =
+        intensityPrefix === '-' ? 'light' : intensityPrefix === '+' ? 'heavy' : 'moderate'
 
       // Parse individual precipitation codes (handle combined like RASN, TSRA)
       // First strip TS if present since we handle it separately
@@ -492,7 +501,7 @@ class MetarService {
           precipitations.push({
             type: precipType,
             intensity,
-            code: `${intensityPrefix}${code}`
+            code: `${intensityPrefix}${code}`,
           })
         }
       }
@@ -520,7 +529,7 @@ class MetarService {
       direction: 0,
       speed: 0,
       gustSpeed: null,
-      isVariable: false
+      isVariable: false,
     }
 
     // Match wind group: direction (3 digits or VRB) + speed (2-3 digits) + optional gust + KT
@@ -557,7 +566,7 @@ class MetarService {
       direction,
       speed,
       gustSpeed,
-      isVariable
+      isVariable,
     }
   }
 

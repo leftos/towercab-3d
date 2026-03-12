@@ -10,7 +10,7 @@ const HEIGHT_BY_TYPE = {
   large_domestic: 50,
   regional: 30,
   small: 15,
-  unknown: 35
+  unknown: 35,
 }
 
 /**
@@ -47,7 +47,7 @@ export function getTowerPosition(
     lat: number
     lon: number
     height: number
-  }
+  },
 ): { latitude: number; longitude: number; height: number } {
   // Use custom position if provided, otherwise use airport center
   const latitude = view3dPosition?.lat ?? airport.lat
@@ -75,7 +75,7 @@ export function getTowerPosition(
   return {
     latitude,
     longitude,
-    height: ellipsoidalHeight
+    height: ellipsoidalHeight,
   }
 }
 

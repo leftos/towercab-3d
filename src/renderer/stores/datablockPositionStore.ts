@@ -105,15 +105,10 @@ export const useDatablockPositionStore = create<DatablockPositionStore>((set, ge
   findLabelAtPosition: (x, y) => {
     const { labelBounds } = get()
     for (const [callsign, bounds] of labelBounds) {
-      if (
-        x >= bounds.x &&
-        x <= bounds.x + bounds.width &&
-        y >= bounds.y &&
-        y <= bounds.y + bounds.height
-      ) {
+      if (x >= bounds.x && x <= bounds.x + bounds.width && y >= bounds.y && y <= bounds.y + bounds.height) {
         return callsign
       }
     }
     return null
-  }
+  },
 }))

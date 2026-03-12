@@ -4,9 +4,9 @@ import * as Cesium from 'cesium'
 export interface MeasurePoint {
   cartesian: Cesium.Cartesian3
   cartographic: {
-    latitude: number  // degrees
+    latitude: number // degrees
     longitude: number // degrees
-    height: number    // meters
+    height: number // meters
   }
 }
 
@@ -25,9 +25,9 @@ interface MeasureState {
   measurements: Measurement[]
 
   // Current in-progress measurement
-  pendingPoint: MeasurePoint | null  // First point clicked, waiting for second
-  previewPoint: MeasurePoint | null  // Mouse hover position for live preview
-  previewDistance: number | null     // Distance from pendingPoint to previewPoint
+  pendingPoint: MeasurePoint | null // First point clicked, waiting for second
+  previewPoint: MeasurePoint | null // Mouse hover position for live preview
+  previewDistance: number | null // Distance from pendingPoint to previewPoint
 
   // Actions
   startMeasuring: () => void
@@ -47,7 +47,7 @@ interface MeasureState {
 export function calculateGeodesicDistance(point1: MeasurePoint, point2: MeasurePoint): number {
   const geodesic = new Cesium.EllipsoidGeodesic(
     Cesium.Cartographic.fromDegrees(point1.cartographic.longitude, point1.cartographic.latitude),
-    Cesium.Cartographic.fromDegrees(point2.cartographic.longitude, point2.cartographic.latitude)
+    Cesium.Cartographic.fromDegrees(point2.cartographic.longitude, point2.cartographic.latitude),
   )
   return geodesic.surfaceDistance
 }
@@ -72,7 +72,7 @@ export const useMeasureStore = create<MeasureState>((set, get) => ({
       isActive: true,
       pendingPoint: null,
       previewPoint: null,
-      previewDistance: null
+      previewDistance: null,
     })
   },
 
@@ -81,7 +81,7 @@ export const useMeasureStore = create<MeasureState>((set, get) => ({
       isActive: false,
       pendingPoint: null,
       previewPoint: null,
-      previewDistance: null
+      previewDistance: null,
     })
   },
 
@@ -98,7 +98,7 @@ export const useMeasureStore = create<MeasureState>((set, get) => ({
     set({
       pendingPoint: point,
       previewPoint: null,
-      previewDistance: null
+      previewDistance: null,
     })
   },
 
@@ -112,7 +112,7 @@ export const useMeasureStore = create<MeasureState>((set, get) => ({
     const distance = calculateGeodesicDistance(state.pendingPoint, point)
     set({
       previewPoint: point,
-      previewDistance: distance
+      previewDistance: distance,
     })
   },
 
@@ -125,7 +125,7 @@ export const useMeasureStore = create<MeasureState>((set, get) => ({
       id: generateId(),
       point1: state.pendingPoint,
       point2: point,
-      distanceMeters: distance
+      distanceMeters: distance,
     }
 
     set({
@@ -134,7 +134,7 @@ export const useMeasureStore = create<MeasureState>((set, get) => ({
       previewPoint: null,
       previewDistance: null,
       // Keep measuring mode active so user can add more measurements
-      isActive: true
+      isActive: true,
     })
   },
 
@@ -142,14 +142,14 @@ export const useMeasureStore = create<MeasureState>((set, get) => ({
     set({
       pendingPoint: null,
       previewPoint: null,
-      previewDistance: null
+      previewDistance: null,
     })
   },
 
   removeMeasurement: (id: string) => {
     const state = get()
     set({
-      measurements: state.measurements.filter(m => m.id !== id)
+      measurements: state.measurements.filter((m) => m.id !== id),
     })
   },
 
@@ -158,7 +158,7 @@ export const useMeasureStore = create<MeasureState>((set, get) => ({
       measurements: [],
       pendingPoint: null,
       previewPoint: null,
-      previewDistance: null
+      previewDistance: null,
     })
-  }
+  },
 }))

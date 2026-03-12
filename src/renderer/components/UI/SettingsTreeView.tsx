@@ -35,9 +35,9 @@ function computeCheckState(node: TreeNodeData, selectedIds: Set<string>): CheckS
     return 'unchecked'
   }
 
-  const childStates = node.children.map(child => computeCheckState(child, selectedIds))
-  const allChecked = childStates.every(s => s === 'checked')
-  const allUnchecked = childStates.every(s => s === 'unchecked')
+  const childStates = node.children.map((child) => computeCheckState(child, selectedIds))
+  const allChecked = childStates.every((s) => s === 'checked')
+  const allUnchecked = childStates.every((s) => s === 'unchecked')
 
   if (allChecked) return 'checked'
   if (allUnchecked) return 'unchecked'
@@ -56,11 +56,7 @@ function getLeafIdsUnderNode(node: TreeNodeData): string[] {
 /**
  * Toggle a node's selection state
  */
-function toggleNodeSelection(
-  node: TreeNodeData,
-  currentState: CheckState,
-  selectedIds: Set<string>
-): Set<string> {
+function toggleNodeSelection(node: TreeNodeData, currentState: CheckState, selectedIds: Set<string>): Set<string> {
   const newSet = new Set(selectedIds)
   const shouldSelect = currentState !== 'checked'
   const leafIds = getLeafIdsUnderNode(node)
@@ -94,7 +90,7 @@ const TreeNode = memo(function TreeNode({
   selectedIds,
   expandedIds,
   onToggleExpand,
-  onToggleSelect
+  onToggleSelect,
 }: TreeNodeProps) {
   const isExpanded = expandedIds.has(node.id)
   const checkState = computeCheckState(node, selectedIds)
@@ -129,11 +125,7 @@ const TreeNode = memo(function TreeNode({
 
   return (
     <div className="tree-node" data-depth={depth}>
-      <div
-        className="tree-node-header"
-        onClick={handleRowClick}
-        style={{ paddingLeft: `${12 + depth * 20}px` }}
-      >
+      <div className="tree-node-header" onClick={handleRowClick} style={{ paddingLeft: `${12 + depth * 20}px` }}>
         {/* Expand/collapse chevron */}
         <span
           className={`tree-chevron ${hasChildren ? (isExpanded ? 'expanded' : '') : 'hidden'}`}
@@ -167,9 +159,7 @@ const TreeNode = memo(function TreeNode({
         </span>
 
         {/* Label */}
-        <span className={`tree-node-label ${!node.isLeaf ? 'category' : ''}`}>
-          {node.label}
-        </span>
+        <span className={`tree-node-label ${!node.isLeaf ? 'category' : ''}`}>{node.label}</span>
 
         {/* Setting count or badge */}
         {node.settingCount !== undefined && (
@@ -177,15 +167,13 @@ const TreeNode = memo(function TreeNode({
             ({node.settingCount} setting{node.settingCount !== 1 ? 's' : ''})
           </span>
         )}
-        {node.badge && (
-          <span className="tree-node-badge">{node.badge}</span>
-        )}
+        {node.badge && <span className="tree-node-badge">{node.badge}</span>}
       </div>
 
       {/* Children */}
       {hasChildren && isExpanded && (
         <div className="tree-children">
-          {node.children?.map(child => (
+          {node.children?.map((child) => (
             <TreeNode
               key={child.id}
               node={child}
@@ -202,18 +190,12 @@ const TreeNode = memo(function TreeNode({
   )
 })
 
-function SettingsTreeView({
-  nodes,
-  selectedIds,
-  onSelectionChange,
-  mode,
-  maxHeight = '400px'
-}: SettingsTreeViewProps) {
+function SettingsTreeView({ nodes, selectedIds, onSelectionChange, mode, maxHeight = '400px' }: SettingsTreeViewProps) {
   // Track which nodes are expanded
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => {
     // Default: expand top-level nodes
     const initial = new Set<string>()
-    nodes.forEach(node => initial.add(node.id))
+    nodes.forEach((node) => initial.add(node.id))
     return initial
   })
 
@@ -221,7 +203,7 @@ function SettingsTreeView({
   const allLeafIds = useMemo(() => getAllLeafIds(nodes), [nodes])
 
   const handleToggleExpand = useCallback((id: string) => {
-    setExpandedIds(prev => {
+    setExpandedIds((prev) => {
       const next = new Set(prev)
       if (next.has(id)) {
         next.delete(id)
@@ -232,10 +214,13 @@ function SettingsTreeView({
     })
   }, [])
 
-  const handleToggleSelect = useCallback((node: TreeNodeData, currentState: CheckState) => {
-    const newSelected = toggleNodeSelection(node, currentState, selectedIds)
-    onSelectionChange(newSelected)
-  }, [selectedIds, onSelectionChange])
+  const handleToggleSelect = useCallback(
+    (node: TreeNodeData, currentState: CheckState) => {
+      const newSelected = toggleNodeSelection(node, currentState, selectedIds)
+      onSelectionChange(newSelected)
+    },
+    [selectedIds, onSelectionChange],
+  )
 
   const handleSelectAll = () => {
     onSelectionChange(new Set(allLeafIds))
@@ -257,7 +242,7 @@ function SettingsTreeView({
 
   const handleCollapseAll = () => {
     // Keep only top-level expanded
-    const topLevel = new Set(nodes.map(n => n.id))
+    const topLevel = new Set(nodes.map((n) => n.id))
     setExpandedIds(topLevel)
   }
 
@@ -281,31 +266,16 @@ function SettingsTreeView({
           >
             Select All
           </button>
-          <button
-            type="button"
-            className="tree-toolbar-btn"
-            onClick={handleClearAll}
-            disabled={selectedCount === 0}
-          >
+          <button type="button" className="tree-toolbar-btn" onClick={handleClearAll} disabled={selectedCount === 0}>
             Clear All
           </button>
           <span className="tree-toolbar-separator" />
-          <button
-            type="button"
-            className="tree-toolbar-btn icon"
-            onClick={handleExpandAll}
-            title="Expand All"
-          >
+          <button type="button" className="tree-toolbar-btn icon" onClick={handleExpandAll} title="Expand All">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="6 9 12 15 18 9" />
             </svg>
           </button>
-          <button
-            type="button"
-            className="tree-toolbar-btn icon"
-            onClick={handleCollapseAll}
-            title="Collapse All"
-          >
+          <button type="button" className="tree-toolbar-btn icon" onClick={handleCollapseAll} title="Collapse All">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="18 15 12 9 6 15" />
             </svg>
@@ -315,7 +285,7 @@ function SettingsTreeView({
 
       {/* Tree content */}
       <div className="tree-content" style={{ maxHeight }}>
-        {nodes.map(node => (
+        {nodes.map((node) => (
           <TreeNode
             key={node.id}
             node={node}

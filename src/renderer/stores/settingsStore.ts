@@ -11,7 +11,7 @@ import type {
   FSLTLSettings,
   RealTrafficSettings,
   AdvancedSettings,
-  InsetGraphicsSettings
+  InsetGraphicsSettings,
 } from '../types/settings'
 import { DEFAULT_SETTINGS, DEFAULT_INSET_GRAPHICS_SETTINGS } from '../types/settings'
 
@@ -50,16 +50,16 @@ export const SETTINGS_PRESETS: Record<SettingsPreset, PresetSettings> = {
       enableShadows: true,
       shadowMapSize: 2048,
       enableAmbientOcclusion: false,
-      enableFxaa: true
+      enableFxaa: true,
     },
     memory: {
       inMemoryTileCacheSize: 2000,
-      maxReplayDurationMinutes: 15
+      maxReplayDurationMinutes: 15,
     },
     cesium: {
       terrainQuality: 3,
-      show3DBuildings: false
-    }
+      show3DBuildings: false,
+    },
   },
   ipad: {
     graphics: {
@@ -68,16 +68,16 @@ export const SETTINGS_PRESETS: Record<SettingsPreset, PresetSettings> = {
       shadowMapSize: 1024,
       enableAmbientOcclusion: false,
       enableFxaa: true,
-      enableAircraftSilhouettes: false
+      enableAircraftSilhouettes: false,
     },
     memory: {
       inMemoryTileCacheSize: 500,
-      maxReplayDurationMinutes: 5
+      maxReplayDurationMinutes: 5,
     },
     cesium: {
       terrainQuality: 2,
-      show3DBuildings: false
-    }
+      show3DBuildings: false,
+    },
   },
   mobile: {
     graphics: {
@@ -87,17 +87,17 @@ export const SETTINGS_PRESETS: Record<SettingsPreset, PresetSettings> = {
       enableAmbientOcclusion: false,
       enableFxaa: false,
       enableAircraftSilhouettes: false,
-      enableHdr: false
+      enableHdr: false,
     },
     memory: {
       inMemoryTileCacheSize: 200,
-      maxReplayDurationMinutes: 3
+      maxReplayDurationMinutes: 3,
     },
     cesium: {
       terrainQuality: 1,
-      show3DBuildings: false
-    }
-  }
+      show3DBuildings: false,
+    },
+  },
 }
 
 /**
@@ -169,7 +169,7 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
 
       updateCesiumSettings: (updates: Partial<CesiumSettings>) =>
         set((state) => ({
-          cesium: { ...state.cesium, ...updates }
+          cesium: { ...state.cesium, ...updates },
         })),
 
       updateGraphicsSettings: (updates: Partial<GraphicsSettings>) =>
@@ -181,41 +181,41 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
             ...(updates.msaaSamples !== undefined && {
               msaaSamples: [1, 2, 4, 8].includes(updates.msaaSamples)
                 ? updates.msaaSamples
-                : state.graphics.msaaSamples
+                : state.graphics.msaaSamples,
             }),
             ...(updates.shadowMapSize !== undefined && {
               shadowMapSize: [1024, 2048, 4096, 8192].includes(updates.shadowMapSize)
                 ? updates.shadowMapSize
-                : state.graphics.shadowMapSize
+                : state.graphics.shadowMapSize,
             }),
             // Clamp numeric values
             ...(updates.shadowMaxDistance !== undefined && {
-              shadowMaxDistance: Math.max(100, Math.min(20000, updates.shadowMaxDistance))
+              shadowMaxDistance: Math.max(100, Math.min(20000, updates.shadowMaxDistance)),
             }),
             ...(updates.shadowDarkness !== undefined && {
-              shadowDarkness: Math.max(0, Math.min(1, updates.shadowDarkness))
+              shadowDarkness: Math.max(0, Math.min(1, updates.shadowDarkness)),
             }),
             // Advanced shadow bias settings
             ...(updates.shadowDepthBias !== undefined && {
-              shadowDepthBias: Math.max(0.00001, Math.min(0.01, updates.shadowDepthBias))
+              shadowDepthBias: Math.max(0.00001, Math.min(0.01, updates.shadowDepthBias)),
             }),
             ...(updates.shadowPolygonOffsetFactor !== undefined && {
-              shadowPolygonOffsetFactor: Math.max(0.1, Math.min(5.0, updates.shadowPolygonOffsetFactor))
+              shadowPolygonOffsetFactor: Math.max(0.1, Math.min(5.0, updates.shadowPolygonOffsetFactor)),
             }),
             ...(updates.shadowPolygonOffsetUnits !== undefined && {
-              shadowPolygonOffsetUnits: Math.max(0.1, Math.min(10.0, updates.shadowPolygonOffsetUnits))
+              shadowPolygonOffsetUnits: Math.max(0.1, Math.min(10.0, updates.shadowPolygonOffsetUnits)),
             }),
             ...(updates.cameraNearPlane !== undefined && {
-              cameraNearPlane: Math.max(0.1, Math.min(10.0, updates.cameraNearPlane))
+              cameraNearPlane: Math.max(0.1, Math.min(10.0, updates.cameraNearPlane)),
             }),
             // Model brightness - separate sliders for built-in and FSLTL models
             ...(updates.builtinModelBrightness !== undefined && {
-              builtinModelBrightness: Math.max(0.5, Math.min(3.0, updates.builtinModelBrightness))
+              builtinModelBrightness: Math.max(0.5, Math.min(3.0, updates.builtinModelBrightness)),
             }),
             ...(updates.fsltlModelBrightness !== undefined && {
-              fsltlModelBrightness: Math.max(0.5, Math.min(3.0, updates.fsltlModelBrightness))
-            })
-          }
+              fsltlModelBrightness: Math.max(0.5, Math.min(3.0, updates.fsltlModelBrightness)),
+            }),
+          },
         })),
 
       updateCameraSettings: (updates: Partial<CameraSettings>) =>
@@ -225,18 +225,18 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
             ...updates,
             // Clamp numeric values
             ...(updates.defaultFov !== undefined && {
-              defaultFov: Math.max(10, Math.min(120, updates.defaultFov))
+              defaultFov: Math.max(10, Math.min(120, updates.defaultFov)),
             }),
             ...(updates.cameraSpeed !== undefined && {
-              cameraSpeed: Math.max(1, Math.min(10, updates.cameraSpeed))
+              cameraSpeed: Math.max(1, Math.min(10, updates.cameraSpeed)),
             }),
             ...(updates.mouseSensitivity !== undefined && {
-              mouseSensitivity: Math.max(0.1, Math.min(2.0, updates.mouseSensitivity))
+              mouseSensitivity: Math.max(0.1, Math.min(2.0, updates.mouseSensitivity)),
             }),
             ...(updates.joystickSensitivity !== undefined && {
-              joystickSensitivity: Math.max(1, Math.min(10, updates.joystickSensitivity))
-            })
-          }
+              joystickSensitivity: Math.max(1, Math.min(10, updates.joystickSensitivity)),
+            }),
+          },
         })),
 
       updateWeatherSettings: (updates: Partial<WeatherSettings>) =>
@@ -246,18 +246,18 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
             ...updates,
             // Clamp numeric values
             ...(updates.cloudOpacity !== undefined && {
-              cloudOpacity: Math.max(0.3, Math.min(0.8, updates.cloudOpacity))
+              cloudOpacity: Math.max(0.3, Math.min(0.8, updates.cloudOpacity)),
             }),
             ...(updates.fogIntensity !== undefined && {
-              fogIntensity: Math.max(0.5, Math.min(2.0, updates.fogIntensity))
+              fogIntensity: Math.max(0.5, Math.min(2.0, updates.fogIntensity)),
             }),
             ...(updates.visibilityScale !== undefined && {
-              visibilityScale: Math.max(0.5, Math.min(2.0, updates.visibilityScale))
+              visibilityScale: Math.max(0.5, Math.min(2.0, updates.visibilityScale)),
             }),
             ...(updates.precipitationIntensity !== undefined && {
-              precipitationIntensity: Math.max(0.5, Math.min(2.0, updates.precipitationIntensity))
-            })
-          }
+              precipitationIntensity: Math.max(0.5, Math.min(2.0, updates.precipitationIntensity)),
+            }),
+          },
         })),
 
       updateMemorySettings: (updates: Partial<MemorySettings>) =>
@@ -267,27 +267,18 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
             ...updates,
             // Clamp numeric values
             ...(updates.inMemoryTileCacheSize !== undefined && {
-              inMemoryTileCacheSize: Math.max(
-                50,
-                Math.min(5000, Math.round(updates.inMemoryTileCacheSize))
-              )
+              inMemoryTileCacheSize: Math.max(50, Math.min(5000, Math.round(updates.inMemoryTileCacheSize))),
             }),
             ...(updates.diskCacheSizeGB !== undefined && {
-              diskCacheSizeGB: Math.max(0.1, Math.min(10, updates.diskCacheSizeGB))
+              diskCacheSizeGB: Math.max(0.1, Math.min(10, updates.diskCacheSizeGB)),
             }),
             ...(updates.aircraftDataRadiusNM !== undefined && {
-              aircraftDataRadiusNM: Math.max(
-                10,
-                Math.min(500, Math.round(updates.aircraftDataRadiusNM))
-              )
+              aircraftDataRadiusNM: Math.max(10, Math.min(500, Math.round(updates.aircraftDataRadiusNM))),
             }),
             ...(updates.maxReplayDurationMinutes !== undefined && {
-              maxReplayDurationMinutes: Math.max(
-                1,
-                Math.min(60, Math.round(updates.maxReplayDurationMinutes))
-              )
-            })
-          }
+              maxReplayDurationMinutes: Math.max(1, Math.min(60, Math.round(updates.maxReplayDurationMinutes))),
+            }),
+          },
         })),
 
       updateAircraftSettings: (updates: Partial<AircraftSettings>) =>
@@ -297,28 +288,28 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
             ...updates,
             // Clamp numeric values
             ...(updates.labelVisibilityDistance !== undefined && {
-              labelVisibilityDistance: Math.max(1, Math.min(100, updates.labelVisibilityDistance))
+              labelVisibilityDistance: Math.max(1, Math.min(100, updates.labelVisibilityDistance)),
             }),
             ...(updates.maxAircraftDisplay !== undefined && {
-              maxAircraftDisplay: Math.max(10, Math.min(1000, updates.maxAircraftDisplay))
+              maxAircraftDisplay: Math.max(10, Math.min(1000, updates.maxAircraftDisplay)),
             }),
             ...(updates.orientationIntensity !== undefined && {
-              orientationIntensity: Math.max(0.25, Math.min(1.5, updates.orientationIntensity))
+              orientationIntensity: Math.max(0.25, Math.min(1.5, updates.orientationIntensity)),
             }),
             ...(updates.datablockFontSize !== undefined && {
-              datablockFontSize: Math.max(8, Math.min(20, Math.round(updates.datablockFontSize)))
-            })
-          }
+              datablockFontSize: Math.max(8, Math.min(20, Math.round(updates.datablockFontSize))),
+            }),
+          },
         })),
 
       updateUISettings: (updates: Partial<UISettings>) =>
         set((state) => ({
-          ui: { ...state.ui, ...updates }
+          ui: { ...state.ui, ...updates },
         })),
 
       updateFSLTLSettings: (updates: Partial<FSLTLSettings>) =>
         set((state) => ({
-          fsltl: { ...state.fsltl, ...updates }
+          fsltl: { ...state.fsltl, ...updates },
         })),
 
       updateRealTrafficSettings: (updates: Partial<RealTrafficSettings>) =>
@@ -328,14 +319,14 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
             ...updates,
             // Clamp radiusNm to valid range
             ...(updates.radiusNm !== undefined && {
-              radiusNm: Math.max(10, Math.min(200, updates.radiusNm))
-            })
-          }
+              radiusNm: Math.max(10, Math.min(200, updates.radiusNm)),
+            }),
+          },
         })),
 
       updateAdvancedSettings: (updates: Partial<AdvancedSettings>) =>
         set((state) => ({
-          advanced: { ...state.advanced, ...updates }
+          advanced: { ...state.advanced, ...updates },
         })),
 
       // ========================================================================
@@ -360,7 +351,7 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
           ui: state.ui,
           fsltl: state.fsltl,
           realtraffic: state.realtraffic,
-          advanced: state.advanced
+          advanced: state.advanced,
         }
         return JSON.stringify(settings, null, 2)
       },
@@ -434,9 +425,9 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
         set((state) => ({
           graphics: { ...state.graphics, ...preset.graphics },
           memory: { ...state.memory, ...preset.memory },
-          cesium: { ...state.cesium, ...preset.cesium }
+          cesium: { ...state.cesium, ...preset.cesium },
         }))
-      }
+      },
     }),
     {
       name: 'settings-store',
@@ -475,8 +466,8 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
             graphics: {
               ...state.graphics,
               builtinModelBrightness: oldBrightness,
-              fsltlModelBrightness: DEFAULT_SETTINGS.graphics.fsltlModelBrightness
-            }
+              fsltlModelBrightness: DEFAULT_SETTINGS.graphics.fsltlModelBrightness,
+            },
           }
         }
 
@@ -488,7 +479,7 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
           if (currentCache >= 500) {
             state = {
               ...state,
-              memory: { ...state.memory, inMemoryTileCacheSize: 2000 }
+              memory: { ...state.memory, inMemoryTileCacheSize: 2000 },
             }
           }
         }
@@ -501,8 +492,8 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
             graphics: {
               ...state.graphics,
               aircraftShadowsOnly: true,
-              enableNightDarkening: false
-            }
+              enableNightDarkening: false,
+            },
           }
         }
 
@@ -521,7 +512,7 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
                 terrain: 'match',
                 cache: 'match',
                 preloadTiles: true,
-                maxFramerate: 'match'
+                maxFramerate: 'match',
               }
             : DEFAULT_INSET_GRAPHICS_SETTINGS
 
@@ -529,8 +520,8 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
             ...state,
             graphics: {
               ...state.graphics,
-              insetGraphics
-            }
+              insetGraphics,
+            },
           }
           // Remove old highQualityInsets property
           delete state.graphics.highQualityInsets
@@ -556,9 +547,9 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
                   terrain: 'low',
                   cache: 'minimal',
                   preloadTiles: false,
-                  maxFramerate: 60  // Reasonable default for performance mode
-                }
-              }
+                  maxFramerate: 60, // Reasonable default for performance mode
+                },
+              },
             }
           }
         }
@@ -580,7 +571,7 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
             ...DEFAULT_SETTINGS.graphics,
             ...state.graphics,
             // Deep merge nested objects that may have new fields
-            insetGraphics: { ...DEFAULT_INSET_GRAPHICS_SETTINGS, ...state.graphics?.insetGraphics }
+            insetGraphics: { ...DEFAULT_INSET_GRAPHICS_SETTINGS, ...state.graphics?.insetGraphics },
           },
           camera: { ...DEFAULT_SETTINGS.camera, ...state.camera },
           weather: { ...DEFAULT_SETTINGS.weather, ...state.weather },
@@ -589,13 +580,13 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
           aircraft: { ...DEFAULT_SETTINGS.aircraft, ...state.aircraft },
           ui: { ...DEFAULT_SETTINGS.ui, ...state.ui },
           realtraffic: { ...DEFAULT_SETTINGS.realtraffic, ...state.realtraffic },
-          advanced: { ...DEFAULT_SETTINGS.advanced, ...state.advanced }
+          advanced: { ...DEFAULT_SETTINGS.advanced, ...state.advanced },
         }
 
         return repaired as SettingsStoreWithPresets
-      }
-    }
-  )
+      },
+    },
+  ),
 )
 
 /**
@@ -619,53 +610,41 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
       timeMode: oldSettings.timeMode ?? DEFAULT_SETTINGS.cesium.timeMode,
       fixedTimeHour: oldSettings.fixedTimeHour ?? DEFAULT_SETTINGS.cesium.fixedTimeHour,
       enableTerrainFlattening: oldSettings.enableTerrainFlattening ?? DEFAULT_SETTINGS.cesium.enableTerrainFlattening,
-      terrainBlendDistance: oldSettings.terrainBlendDistance ?? DEFAULT_SETTINGS.cesium.terrainBlendDistance
+      terrainBlendDistance: oldSettings.terrainBlendDistance ?? DEFAULT_SETTINGS.cesium.terrainBlendDistance,
     },
     graphics: {
       msaaSamples: oldSettings.msaaSamples ?? DEFAULT_SETTINGS.graphics.msaaSamples,
       enableFxaa: oldSettings.enableFxaa ?? DEFAULT_SETTINGS.graphics.enableFxaa,
       enableHdr: oldSettings.enableHdr ?? DEFAULT_SETTINGS.graphics.enableHdr,
       enableLogDepth: oldSettings.enableLogDepth ?? DEFAULT_SETTINGS.graphics.enableLogDepth,
-      enableGroundAtmosphere:
-        oldSettings.enableGroundAtmosphere ?? DEFAULT_SETTINGS.graphics.enableGroundAtmosphere,
-      enableAmbientOcclusion:
-        oldSettings.enableAmbientOcclusion ?? DEFAULT_SETTINGS.graphics.enableAmbientOcclusion,
+      enableGroundAtmosphere: oldSettings.enableGroundAtmosphere ?? DEFAULT_SETTINGS.graphics.enableGroundAtmosphere,
+      enableAmbientOcclusion: oldSettings.enableAmbientOcclusion ?? DEFAULT_SETTINGS.graphics.enableAmbientOcclusion,
       enableAircraftSilhouettes:
         oldSettings.enableAircraftSilhouettes ?? DEFAULT_SETTINGS.graphics.enableAircraftSilhouettes,
       enableShadows: oldSettings.enableShadows ?? DEFAULT_SETTINGS.graphics.enableShadows,
       shadowMapSize: oldSettings.shadowMapSize ?? DEFAULT_SETTINGS.graphics.shadowMapSize,
-      shadowMaxDistance:
-        oldSettings.shadowMaxDistance ?? DEFAULT_SETTINGS.graphics.shadowMaxDistance,
+      shadowMaxDistance: oldSettings.shadowMaxDistance ?? DEFAULT_SETTINGS.graphics.shadowMaxDistance,
       shadowDarkness: oldSettings.shadowDarkness ?? DEFAULT_SETTINGS.graphics.shadowDarkness,
       shadowSoftness: oldSettings.shadowSoftness ?? DEFAULT_SETTINGS.graphics.shadowSoftness,
-      shadowFadingEnabled:
-        oldSettings.shadowFadingEnabled ?? DEFAULT_SETTINGS.graphics.shadowFadingEnabled,
-      shadowNormalOffset:
-        oldSettings.shadowNormalOffset ?? DEFAULT_SETTINGS.graphics.shadowNormalOffset,
-      aircraftShadowsOnly:
-        oldSettings.aircraftShadowsOnly ?? DEFAULT_SETTINGS.graphics.aircraftShadowsOnly,
-      shadowDepthBias:
-        oldSettings.shadowDepthBias ?? DEFAULT_SETTINGS.graphics.shadowDepthBias,
+      shadowFadingEnabled: oldSettings.shadowFadingEnabled ?? DEFAULT_SETTINGS.graphics.shadowFadingEnabled,
+      shadowNormalOffset: oldSettings.shadowNormalOffset ?? DEFAULT_SETTINGS.graphics.shadowNormalOffset,
+      aircraftShadowsOnly: oldSettings.aircraftShadowsOnly ?? DEFAULT_SETTINGS.graphics.aircraftShadowsOnly,
+      shadowDepthBias: oldSettings.shadowDepthBias ?? DEFAULT_SETTINGS.graphics.shadowDepthBias,
       shadowPolygonOffsetFactor:
         oldSettings.shadowPolygonOffsetFactor ?? DEFAULT_SETTINGS.graphics.shadowPolygonOffsetFactor,
       shadowPolygonOffsetUnits:
         oldSettings.shadowPolygonOffsetUnits ?? DEFAULT_SETTINGS.graphics.shadowPolygonOffsetUnits,
-      cameraNearPlane:
-        oldSettings.cameraNearPlane ?? DEFAULT_SETTINGS.graphics.cameraNearPlane,
+      cameraNearPlane: oldSettings.cameraNearPlane ?? DEFAULT_SETTINGS.graphics.cameraNearPlane,
       builtinModelBrightness:
-        oldSettings.builtinModelBrightness ?? oldSettings.modelBrightness ?? DEFAULT_SETTINGS.graphics.builtinModelBrightness,
-      builtinModelTintColor:
-        oldSettings.builtinModelTintColor ?? DEFAULT_SETTINGS.graphics.builtinModelTintColor,
-      fsltlModelBrightness:
-        oldSettings.fsltlModelBrightness ?? DEFAULT_SETTINGS.graphics.fsltlModelBrightness,
-      enableNightDarkening:
-        oldSettings.enableNightDarkening ?? DEFAULT_SETTINGS.graphics.enableNightDarkening,
-      nightDarkeningIntensity:
-        oldSettings.nightDarkeningIntensity ?? DEFAULT_SETTINGS.graphics.nightDarkeningIntensity,
-      aircraftNightVisibility:
-        oldSettings.aircraftNightVisibility ?? DEFAULT_SETTINGS.graphics.aircraftNightVisibility,
-      maxFramerate:
-        oldSettings.maxFramerate ?? DEFAULT_SETTINGS.graphics.maxFramerate,
+        oldSettings.builtinModelBrightness ??
+        oldSettings.modelBrightness ??
+        DEFAULT_SETTINGS.graphics.builtinModelBrightness,
+      builtinModelTintColor: oldSettings.builtinModelTintColor ?? DEFAULT_SETTINGS.graphics.builtinModelTintColor,
+      fsltlModelBrightness: oldSettings.fsltlModelBrightness ?? DEFAULT_SETTINGS.graphics.fsltlModelBrightness,
+      enableNightDarkening: oldSettings.enableNightDarkening ?? DEFAULT_SETTINGS.graphics.enableNightDarkening,
+      nightDarkeningIntensity: oldSettings.nightDarkeningIntensity ?? DEFAULT_SETTINGS.graphics.nightDarkeningIntensity,
+      aircraftNightVisibility: oldSettings.aircraftNightVisibility ?? DEFAULT_SETTINGS.graphics.aircraftNightVisibility,
+      maxFramerate: oldSettings.maxFramerate ?? DEFAULT_SETTINGS.graphics.maxFramerate,
       insetGraphics: oldSettings.highQualityInsets
         ? {
             enabled: true,
@@ -676,9 +655,9 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
             terrain: 'match' as const,
             cache: 'match' as const,
             preloadTiles: true,
-            maxFramerate: 'match' as const
+            maxFramerate: 'match' as const,
           }
-        : DEFAULT_SETTINGS.graphics.insetGraphics
+        : DEFAULT_SETTINGS.graphics.insetGraphics,
     },
     camera: {
       defaultFov: oldSettings.defaultFov ?? DEFAULT_SETTINGS.camera.defaultFov,
@@ -686,85 +665,77 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
       mouseSensitivity: oldSettings.mouseSensitivity ?? DEFAULT_SETTINGS.camera.mouseSensitivity,
       joystickSensitivity: oldSettings.joystickSensitivity ?? DEFAULT_SETTINGS.camera.joystickSensitivity,
       enableAutoAirportSwitch: oldSettings.enableAutoAirportSwitch ?? DEFAULT_SETTINGS.camera.enableAutoAirportSwitch,
-      orbitCameraLag: oldSettings.orbitCameraLag ?? DEFAULT_SETTINGS.camera.orbitCameraLag
+      orbitCameraLag: oldSettings.orbitCameraLag ?? DEFAULT_SETTINGS.camera.orbitCameraLag,
     },
     weather: {
-      showWeatherEffects:
-        oldSettings.showWeatherEffects ?? DEFAULT_SETTINGS.weather.showWeatherEffects,
+      showWeatherEffects: oldSettings.showWeatherEffects ?? DEFAULT_SETTINGS.weather.showWeatherEffects,
       showCesiumFog: oldSettings.showCesiumFog ?? DEFAULT_SETTINGS.weather.showCesiumFog,
       showBabylonFog: oldSettings.showBabylonFog ?? DEFAULT_SETTINGS.weather.showBabylonFog,
       showClouds: oldSettings.showClouds ?? DEFAULT_SETTINGS.weather.showClouds,
       cloudOpacity: oldSettings.cloudOpacity ?? DEFAULT_SETTINGS.weather.cloudOpacity,
       fogIntensity: oldSettings.fogIntensity ?? DEFAULT_SETTINGS.weather.fogIntensity,
       visibilityScale: oldSettings.visibilityScale ?? DEFAULT_SETTINGS.weather.visibilityScale,
-      showPrecipitation:
-        oldSettings.showPrecipitation ?? DEFAULT_SETTINGS.weather.showPrecipitation,
-      precipitationIntensity:
-        oldSettings.precipitationIntensity ?? DEFAULT_SETTINGS.weather.precipitationIntensity,
-      showLightning: oldSettings.showLightning ?? oldSettings.weather?.showLightning ?? DEFAULT_SETTINGS.weather.showLightning,
-      enableWeatherInterpolation: oldSettings.enableWeatherInterpolation ?? DEFAULT_SETTINGS.weather.enableWeatherInterpolation
+      showPrecipitation: oldSettings.showPrecipitation ?? DEFAULT_SETTINGS.weather.showPrecipitation,
+      precipitationIntensity: oldSettings.precipitationIntensity ?? DEFAULT_SETTINGS.weather.precipitationIntensity,
+      showLightning:
+        oldSettings.showLightning ?? oldSettings.weather?.showLightning ?? DEFAULT_SETTINGS.weather.showLightning,
+      enableWeatherInterpolation:
+        oldSettings.enableWeatherInterpolation ?? DEFAULT_SETTINGS.weather.enableWeatherInterpolation,
     },
     memory: {
-      inMemoryTileCacheSize:
-        oldSettings.inMemoryTileCacheSize ?? DEFAULT_SETTINGS.memory.inMemoryTileCacheSize,
+      inMemoryTileCacheSize: oldSettings.inMemoryTileCacheSize ?? DEFAULT_SETTINGS.memory.inMemoryTileCacheSize,
       diskCacheSizeGB: oldSettings.diskCacheSizeGB ?? DEFAULT_SETTINGS.memory.diskCacheSizeGB,
-      aircraftDataRadiusNM:
-        oldSettings.aircraftDataRadiusNM ?? DEFAULT_SETTINGS.memory.aircraftDataRadiusNM,
+      aircraftDataRadiusNM: oldSettings.aircraftDataRadiusNM ?? DEFAULT_SETTINGS.memory.aircraftDataRadiusNM,
       maxReplayDurationMinutes:
-        oldSettings.maxReplayDurationMinutes ?? DEFAULT_SETTINGS.memory.maxReplayDurationMinutes
+        oldSettings.maxReplayDurationMinutes ?? DEFAULT_SETTINGS.memory.maxReplayDurationMinutes,
     },
     aircraft: {
-      labelVisibilityDistance:
-        oldSettings.labelVisibilityDistance ?? DEFAULT_SETTINGS.aircraft.labelVisibilityDistance,
-      maxAircraftDisplay:
-        oldSettings.maxAircraftDisplay ?? DEFAULT_SETTINGS.aircraft.maxAircraftDisplay,
-      showGroundTraffic:
-        oldSettings.showGroundTraffic ?? DEFAULT_SETTINGS.aircraft.showGroundTraffic,
-      showAirborneTraffic:
-        oldSettings.showAirborneTraffic ?? DEFAULT_SETTINGS.aircraft.showAirborneTraffic,
+      labelVisibilityDistance: oldSettings.labelVisibilityDistance ?? DEFAULT_SETTINGS.aircraft.labelVisibilityDistance,
+      maxAircraftDisplay: oldSettings.maxAircraftDisplay ?? DEFAULT_SETTINGS.aircraft.maxAircraftDisplay,
+      showGroundTraffic: oldSettings.showGroundTraffic ?? DEFAULT_SETTINGS.aircraft.showGroundTraffic,
+      showAirborneTraffic: oldSettings.showAirborneTraffic ?? DEFAULT_SETTINGS.aircraft.showAirborneTraffic,
       datablockMode: oldSettings.datablockMode ?? DEFAULT_SETTINGS.aircraft.datablockMode,
-      orientationEmulation:
-        oldSettings.orientationEmulation ?? DEFAULT_SETTINGS.aircraft.orientationEmulation,
-      orientationIntensity:
-        oldSettings.orientationIntensity ?? DEFAULT_SETTINGS.aircraft.orientationIntensity,
+      orientationEmulation: oldSettings.orientationEmulation ?? DEFAULT_SETTINGS.aircraft.orientationEmulation,
+      orientationIntensity: oldSettings.orientationIntensity ?? DEFAULT_SETTINGS.aircraft.orientationIntensity,
       pinFollowedAircraftToTop:
         oldSettings.pinFollowedAircraftToTop ?? DEFAULT_SETTINGS.aircraft.pinFollowedAircraftToTop,
-      autoAvoidOverlaps:
-        oldSettings.autoAvoidOverlaps ?? DEFAULT_SETTINGS.aircraft.autoAvoidOverlaps,
-      leaderDistance:
-        oldSettings.leaderDistance ?? DEFAULT_SETTINGS.aircraft.leaderDistance,
+      autoAvoidOverlaps: oldSettings.autoAvoidOverlaps ?? DEFAULT_SETTINGS.aircraft.autoAvoidOverlaps,
+      leaderDistance: oldSettings.leaderDistance ?? DEFAULT_SETTINGS.aircraft.leaderDistance,
       defaultDatablockDirection:
         oldSettings.defaultDatablockDirection ?? DEFAULT_SETTINGS.aircraft.defaultDatablockDirection,
-      datablockFontSize:
-        oldSettings.datablockFontSize ?? DEFAULT_SETTINGS.aircraft.datablockFontSize
+      datablockFontSize: oldSettings.datablockFontSize ?? DEFAULT_SETTINGS.aircraft.datablockFontSize,
     },
     ui: {
       theme: oldSettings.theme ?? DEFAULT_SETTINGS.ui.theme,
       showAircraftPanel: oldSettings.showAircraftPanel ?? DEFAULT_SETTINGS.ui.showAircraftPanel,
       showMetarOverlay: oldSettings.showMetarOverlay ?? DEFAULT_SETTINGS.ui.showMetarOverlay,
       askToContributePositions: oldSettings.askToContributePositions ?? DEFAULT_SETTINGS.ui.askToContributePositions,
-      deviceOptimizationPromptDismissed: oldSettings.deviceOptimizationPromptDismissed ?? DEFAULT_SETTINGS.ui.deviceOptimizationPromptDismissed,
+      deviceOptimizationPromptDismissed:
+        oldSettings.deviceOptimizationPromptDismissed ?? DEFAULT_SETTINGS.ui.deviceOptimizationPromptDismissed,
       aircraftPanelWidth: oldSettings.aircraftPanelWidth ?? DEFAULT_SETTINGS.ui.aircraftPanelWidth,
       aircraftPanelHeight: oldSettings.aircraftPanelHeight ?? DEFAULT_SETTINGS.ui.aircraftPanelHeight,
       settingsModalPosition: oldSettings.settingsModalPosition ?? DEFAULT_SETTINGS.ui.settingsModalPosition,
-      dockRunwayPanel: oldSettings.dockRunwayPanel ?? DEFAULT_SETTINGS.ui.dockRunwayPanel
+      dockRunwayPanel: oldSettings.dockRunwayPanel ?? DEFAULT_SETTINGS.ui.dockRunwayPanel,
     },
     fsltl: {
       sourcePath: oldSettings.fsltl?.sourcePath ?? DEFAULT_SETTINGS.fsltl.sourcePath,
       outputPath: oldSettings.fsltl?.outputPath ?? DEFAULT_SETTINGS.fsltl.outputPath,
       textureScale: oldSettings.fsltl?.textureScale ?? DEFAULT_SETTINGS.fsltl.textureScale,
-      enableFsltlModels: oldSettings.fsltl?.enableFsltlModels ?? DEFAULT_SETTINGS.fsltl.enableFsltlModels
+      enableFsltlModels: oldSettings.fsltl?.enableFsltlModels ?? DEFAULT_SETTINGS.fsltl.enableFsltlModels,
     },
     realtraffic: {
       dataSource: oldSettings.realtraffic?.dataSource ?? DEFAULT_SETTINGS.realtraffic.dataSource,
       licenseKey: oldSettings.realtraffic?.licenseKey ?? DEFAULT_SETTINGS.realtraffic.licenseKey,
       autoDetectLicense: oldSettings.realtraffic?.autoDetectLicense ?? DEFAULT_SETTINGS.realtraffic.autoDetectLicense,
-      radiusNm: oldSettings.realtraffic?.radiusNm ?? DEFAULT_SETTINGS.realtraffic.radiusNm
+      radiusNm: oldSettings.realtraffic?.radiusNm ?? DEFAULT_SETTINGS.realtraffic.radiusNm,
     },
     advanced: {
-      enableInterpolationDebugLogs: oldSettings.advanced?.enableInterpolationDebugLogs ?? DEFAULT_SETTINGS.advanced.enableInterpolationDebugLogs,
-      enableDebugCoordinateOverlay: oldSettings.advanced?.enableDebugCoordinateOverlay ?? DEFAULT_SETTINGS.advanced.enableDebugCoordinateOverlay,
-      enableDynamicDisplayDelay: oldSettings.advanced?.enableDynamicDisplayDelay ?? DEFAULT_SETTINGS.advanced.enableDynamicDisplayDelay
-    }
+      enableInterpolationDebugLogs:
+        oldSettings.advanced?.enableInterpolationDebugLogs ?? DEFAULT_SETTINGS.advanced.enableInterpolationDebugLogs,
+      enableDebugCoordinateOverlay:
+        oldSettings.advanced?.enableDebugCoordinateOverlay ?? DEFAULT_SETTINGS.advanced.enableDebugCoordinateOverlay,
+      enableDynamicDisplayDelay:
+        oldSettings.advanced?.enableDynamicDisplayDelay ?? DEFAULT_SETTINGS.advanced.enableDynamicDisplayDelay,
+    },
   }
 }

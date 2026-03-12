@@ -15,7 +15,7 @@ import './MetarOverlay.css'
 function calculateFlightCategory(visibilityStatuteMiles: number, cloudLayers: CloudLayer[]): FlightCategory {
   // Find ceiling (lowest BKN or OVC layer)
   const ceilingLayer = cloudLayers
-    .filter(l => l.type === 'BKN' || l.type === 'OVC')
+    .filter((l) => l.type === 'BKN' || l.type === 'OVC')
     .sort((a, b) => a.altitude - b.altitude)[0]
 
   // Convert ceiling from meters to feet (if exists)
@@ -55,9 +55,7 @@ export function MetarOverlay() {
   const currentMetar = useWeatherStore((state) => state.currentMetar)
   const interpolatedWeather = useWeatherStore((state) => state.interpolatedWeather)
   const showMetarOverlay = useSettingsStore((state) => state.ui.showMetarOverlay)
-  const enableWeatherInterpolation = useSettingsStore(
-    (state) => state.weather.enableWeatherInterpolation ?? true
-  )
+  const enableWeatherInterpolation = useSettingsStore((state) => state.weather.enableWeatherInterpolation ?? true)
 
   // Show overlay if we have either airport METAR or interpolated weather
   if (!showMetarOverlay || (!currentMetar && !interpolatedWeather)) {
@@ -82,22 +80,17 @@ export function MetarOverlay() {
 
   // Check if we're actually interpolating from multiple sources
   const sources = interpolatedWeather?.sourceStations
-  const isActuallyInterpolating =
-    enableWeatherInterpolation &&
-    sources &&
-    sources.length > 1
+  const isActuallyInterpolating = enableWeatherInterpolation && sources && sources.length > 1
 
   // Case 1: No airport METAR, only interpolated weather (e.g., orbit mode without airport)
   if (!currentMetar && interpolatedWeather) {
     const fltCat = calculateFlightCategory(interpolatedWeather.visibility, interpolatedWeather.cloudLayers)
     return (
       <div className={`metar-overlay ${getFlightCategoryClass(fltCat)}`}>
-        <div className="metar-text metar-interpolated-primary">
-          {formatInterpolatedMetar(interpolatedWeather)}
-        </div>
+        <div className="metar-text metar-interpolated-primary">{formatInterpolatedMetar(interpolatedWeather)}</div>
         {sources && sources.length > 0 && (
           <div className="metar-interpolated-sources-standalone">
-            ({sources.map(s => `${s.icao} ${Math.round(s.weight * 100)}%`).join(' | ')})
+            ({sources.map((s) => `${s.icao} ${Math.round(s.weight * 100)}%`).join(' | ')})
           </div>
         )}
       </div>
@@ -110,11 +103,9 @@ export function MetarOverlay() {
       <div className="metar-text">{currentMetar!.rawOb}</div>
       {isActuallyInterpolating && interpolatedWeather && (
         <div className="metar-interpolated">
-          <span className="metar-interpolated-data">
-            {formatInterpolatedMetar(interpolatedWeather)}
-          </span>
+          <span className="metar-interpolated-data">{formatInterpolatedMetar(interpolatedWeather)}</span>
           <span className="metar-interpolated-sources">
-            ({sources.map(s => `${s.icao} ${Math.round(s.weight * 100)}%`).join(' | ')})
+            ({sources.map((s) => `${s.icao} ${Math.round(s.weight * 100)}%`).join(' | ')})
           </span>
         </div>
       )}
@@ -128,7 +119,7 @@ export function MetarOverlay() {
 function formatInterpolatedMetar(weather: InterpolatedWeather): string {
   const parts: string[] = []
 
-  parts.push("Interpolated: ")
+  parts.push('Interpolated: ')
 
   // Wind: 270/12G18KT or VRB05KT
   const wind = weather.wind
@@ -160,7 +151,7 @@ function formatInterpolatedMetar(weather: InterpolatedWeather): string {
 
   // Precipitation indicator (before clouds, matching real METAR format)
   if (weather.precipitation.active && weather.precipitation.types.length > 0) {
-    parts.push(weather.precipitation.types.map(p => p.code).join(' '))
+    parts.push(weather.precipitation.types.map((p) => p.code).join(' '))
   }
 
   // Clouds - show significant layers
@@ -182,12 +173,14 @@ function formatCloudLayers(layers: CloudLayer[]): string {
   const sorted = [...layers].sort((a, b) => a.altitude - b.altitude)
   const significant = sorted.slice(0, 3)
 
-  return significant.map(layer => {
-    // Convert altitude from meters to hundreds of feet
-    const altHundreds = Math.round(layer.altitude * 3.28084 / 100)
-    const altStr = altHundreds.toString().padStart(3, '0')
-    return `${layer.type}${altStr}`
-  }).join(' ')
+  return significant
+    .map((layer) => {
+      // Convert altitude from meters to hundreds of feet
+      const altHundreds = Math.round((layer.altitude * 3.28084) / 100)
+      const altStr = altHundreds.toString().padStart(3, '0')
+      return `${layer.type}${altStr}`
+    })
+    .join(' ')
 }
 
 export default MetarOverlay

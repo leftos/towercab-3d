@@ -147,7 +147,7 @@ export async function startFsltlConversion(
   outputPath: string,
   textureScale: string,
   models: string[],
-  progressFile: string
+  progressFile: string,
 ): Promise<void> {
   if (!isTauri()) {
     throw new Error('[fsltlApi] startFsltlConversion not available in browser mode')
@@ -157,7 +157,7 @@ export async function startFsltlConversion(
     outputPath,
     textureScale,
     models,
-    progressFile
+    progressFile,
   })
 }
 
@@ -194,10 +194,7 @@ export async function readConversionProgress(progressFile: string): Promise<Conv
  * @returns true if model.glb exists
  * Note: Not available in browser mode
  */
-export async function checkFsltlModelExists(
-  outputPath: string,
-  modelName: string
-): Promise<boolean> {
+export async function checkFsltlModelExists(outputPath: string, modelName: string): Promise<boolean> {
   if (!isTauri()) {
     return false
   }
@@ -265,4 +262,3 @@ export async function listVmrFiles(directory: string): Promise<string[]> {
     return []
   }
 }
-

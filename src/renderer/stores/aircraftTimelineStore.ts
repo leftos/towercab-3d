@@ -30,7 +30,7 @@ import type {
   AircraftMetadata,
   AircraftTimeline,
   TimelineInterpolationResult,
-  DynamicDelayState
+  DynamicDelayState,
 } from '../types/aircraft-timeline'
 import { mergeAircraftMetadata } from '../types/aircraft-timeline'
 import type { VatsimSnapshot } from '../types/replay'
@@ -52,7 +52,7 @@ import {
   DYNAMIC_DELAY_MIN_OBSERVATIONS,
   DYNAMIC_DELAY_MAX_DECREASE_RATE,
   DYNAMIC_DELAY_EXTRAPOLATION_BUMP_MS,
-  DYNAMIC_DELAY_EXTRAPOLATION_DECAY_RATE
+  DYNAMIC_DELAY_EXTRAPOLATION_DECAY_RATE,
 } from '../constants/aircraft-timeline'
 import { useViewportStore } from './viewportStore'
 import { useReplayStore } from './replayStore'
@@ -65,11 +65,13 @@ import { calculateBearing } from '../utils/aircraft/geoMath'
 // The main app registers a callback to broadcast observations to insets.
 // Insets don't register a callback, so they receive but don't re-broadcast.
 
-type ObservationBroadcastCallback = (observations: Array<{
-  callsign: string
-  observation: AircraftObservation
-  metadata: AircraftMetadata
-}>) => void
+type ObservationBroadcastCallback = (
+  observations: Array<{
+    callsign: string
+    observation: AircraftObservation
+    metadata: AircraftMetadata
+  }>,
+) => void
 
 type RemovalBroadcastCallback = (callsigns: string[]) => void
 
@@ -82,12 +84,11 @@ let removalBroadcastCallback: RemovalBroadcastCallback | null = null
  */
 export function registerBroadcastCallbacks(
   onObservations: ObservationBroadcastCallback,
-  onRemovals: RemovalBroadcastCallback
+  onRemovals: RemovalBroadcastCallback,
 ): void {
   observationBroadcastCallback = onObservations
   removalBroadcastCallback = onRemovals
 }
-
 
 interface AircraftTimelineStore {
   // State
@@ -97,43 +98,45 @@ interface AircraftTimelineStore {
   lastKnownHeadings: Map<string, number>
 
   // Per-aircraft last rendered position (for starting new reconciliations)
-  lastRenderedPositions: Map<string, {
-    latitude: number
-    longitude: number
-    altitude: number
-  }>
+  lastRenderedPositions: Map<
+    string,
+    {
+      latitude: number
+      longitude: number
+      altitude: number
+    }
+  >
 
   // Per-aircraft reconciliation state for smooth transitions.
   // Tracks what 'after' observation we're interpolating toward and where we started from.
-  reconciliationStates: Map<string, {
-    // The observation time of 'after' we're currently interpolating toward
-    targetObservedAt: number
-    // Position we were at when this target was set (our starting point)
-    startLat: number
-    startLon: number
-    startAlt: number
-    // displayTime when we started interpolating toward this target
-    startDisplayTime: number
-    // Anchor (oldest obs) when this reconciliation was created
-    anchorObservedAt: number
-  }>
+  reconciliationStates: Map<
+    string,
+    {
+      // The observation time of 'after' we're currently interpolating toward
+      targetObservedAt: number
+      // Position we were at when this target was set (our starting point)
+      startLat: number
+      startLon: number
+      startAlt: number
+      // displayTime when we started interpolating toward this target
+      startDisplayTime: number
+      // Anchor (oldest obs) when this reconciliation was created
+      anchorObservedAt: number
+    }
+  >
 
   // Prune timer
   pruneTimer: NodeJS.Timeout | null
 
   // Actions - called by data sources
-  addObservation: (
-    callsign: string,
-    observation: AircraftObservation,
-    metadata: AircraftMetadata
-  ) => void
+  addObservation: (callsign: string, observation: AircraftObservation, metadata: AircraftMetadata) => void
 
   addObservationBatch: (
     observations: Array<{
       callsign: string
       observation: AircraftObservation
       metadata: AircraftMetadata
-    }>
+    }>,
   ) => void
 
   removeAircraft: (callsign: string) => void
@@ -235,23 +238,21 @@ function lerpHeading(a: number, b: number, t: number): number {
  * Calculate heading from position delta between two observations.
  * Returns heading in degrees (0-360) or null if positions are too close.
  */
-function calculateHeadingFromDelta(
-  lat1: number, lon1: number,
-  lat2: number, lon2: number
-): number | null {
+function calculateHeadingFromDelta(lat1: number, lon1: number, lat2: number, lon2: number): number | null {
   const latDelta = lat2 - lat1
   const lonDelta = lon2 - lon1
 
   // If positions are essentially the same, can't calculate heading
   const distance = Math.sqrt(latDelta * latDelta + lonDelta * lonDelta)
-  if (distance < 0.00001) {  // ~1 meter
+  if (distance < 0.00001) {
+    // ~1 meter
     return null
   }
 
   // Calculate bearing from point 1 to point 2
   // Using simple flat-earth approximation (accurate for short distances)
-  const lonDeltaCorrected = lonDelta * Math.cos(lat1 * Math.PI / 180)
-  let heading = Math.atan2(lonDeltaCorrected, latDelta) * 180 / Math.PI
+  const lonDeltaCorrected = lonDelta * Math.cos((lat1 * Math.PI) / 180)
+  let heading = (Math.atan2(lonDeltaCorrected, latDelta) * 180) / Math.PI
 
   // Normalize to 0-360
   if (heading < 0) heading += 360
@@ -275,18 +276,18 @@ function isHeadingReliable(obs: AircraftObservation): boolean {
  */
 function extrapolatePosition(
   obs: AircraftObservation,
-  extrapolationTimeMs: number
+  extrapolationTimeMs: number,
 ): { latitude: number; longitude: number; altitude: number } {
   const seconds = extrapolationTimeMs / 1000
   const minutes = seconds / 60
   const track = obs.groundTrack ?? obs.heading
-  const speedMps = obs.groundspeed * 0.514444  // knots to m/s
+  const speedMps = obs.groundspeed * 0.514444 // knots to m/s
   const distance = speedMps * seconds
 
   // Simple flat-earth approximation (accurate for short extrapolations)
-  const trackRad = track * Math.PI / 180
+  const trackRad = (track * Math.PI) / 180
   const latOffset = (distance * Math.cos(trackRad)) / 111320
-  const lonOffset = (distance * Math.sin(trackRad)) / (111320 * Math.cos(obs.latitude * Math.PI / 180))
+  const lonOffset = (distance * Math.sin(trackRad)) / (111320 * Math.cos((obs.latitude * Math.PI) / 180))
 
   // Extrapolate altitude using vertical rate if available
   // verticalRate is in feet per minute (fpm), need to convert to meters
@@ -302,7 +303,7 @@ function extrapolatePosition(
   return {
     latitude: obs.latitude + latOffset,
     longitude: obs.longitude + lonOffset,
-    altitude
+    altitude,
   }
 }
 
@@ -318,12 +319,12 @@ function extrapolatePosition(
  */
 function pruneObservations(
   observations: AircraftObservation[],
-  now: number
+  now: number,
 ): { pruned: AircraftObservation[]; wasPruned: boolean } {
   const cutoffTime = now - MAX_OBSERVATION_AGE_MS
 
   // Filter out observations older than the cutoff
-  let result = observations.filter(obs => obs.observedAt >= cutoffTime)
+  let result = observations.filter((obs) => obs.observedAt >= cutoffTime)
 
   // Always keep at least 2 observations for interpolation (if we have them)
   if (result.length < 2 && observations.length >= 2) {
@@ -339,7 +340,7 @@ function pruneObservations(
 
   return {
     pruned: result,
-    wasPruned: result.length !== observations.length
+    wasPruned: result.length !== observations.length,
   }
 }
 
@@ -356,10 +357,7 @@ function pruneObservations(
  * @param maxIntervals - Maximum number of intervals to return
  * @returns Array of intervals in milliseconds (most recent last)
  */
-function calculateObservationIntervals(
-  observations: AircraftObservation[],
-  maxIntervals: number
-): number[] {
+function calculateObservationIntervals(observations: AircraftObservation[], maxIntervals: number): number[] {
   if (observations.length < 2) return []
 
   const intervals: number[] = []
@@ -380,15 +378,12 @@ function calculateObservationIntervals(
  * Filter observations to prefer vNAS when recent.
  * This is the same logic used in interpolateTimeline for consistency.
  */
-function filterObservationsForSource(
-  observations: AircraftObservation[],
-  now: number
-): AircraftObservation[] {
-  const newestVnasObs = observations.filter(o => o.source === 'vnas').pop()
-  const hasRecentVnas = newestVnasObs && (now - newestVnasObs.receivedAt) < VNAS_PREFERENCE_THRESHOLD_MS
+function filterObservationsForSource(observations: AircraftObservation[], now: number): AircraftObservation[] {
+  const newestVnasObs = observations.filter((o) => o.source === 'vnas').pop()
+  const hasRecentVnas = newestVnasObs && now - newestVnasObs.receivedAt < VNAS_PREFERENCE_THRESHOLD_MS
 
   if (hasRecentVnas) {
-    const vnasOnly = observations.filter(o => o.source === 'vnas')
+    const vnasOnly = observations.filter((o) => o.source === 'vnas')
     if (vnasOnly.length > 0) {
       return vnasOnly
     }
@@ -416,10 +411,7 @@ function calculateTargetDelay(intervals: number[]): number {
   // Add jitter buffer and clamp to bounds
   const targetDelay = maxInterval + DYNAMIC_DELAY_JITTER_BUFFER_MS
 
-  return Math.max(
-    DYNAMIC_DELAY_MIN_MS,
-    Math.min(DYNAMIC_DELAY_MAX_MS, targetDelay)
-  )
+  return Math.max(DYNAMIC_DELAY_MIN_MS, Math.min(DYNAMIC_DELAY_MAX_MS, targetDelay))
 }
 
 /**
@@ -435,7 +427,7 @@ function calculateTargetDelay(intervals: number[]): number {
 function updateDynamicDelayState(
   existingState: DynamicDelayState | undefined,
   observations: AircraftObservation[],
-  now: number
+  now: number,
 ): DynamicDelayState {
   // Filter observations to prefer vNAS when active (same logic as interpolation)
   const filteredObs = filterObservationsForSource(observations, now)
@@ -449,16 +441,15 @@ function updateDynamicDelayState(
   if (!existingState) {
     // New aircraft - initialize with target as current
     // (or bootstrap delay if we don't have enough data yet)
-    const initialDelay = observations.length < DYNAMIC_DELAY_MIN_OBSERVATIONS
-      ? DYNAMIC_DELAY_BOOTSTRAP_MS
-      : targetDelayMs
+    const initialDelay =
+      observations.length < DYNAMIC_DELAY_MIN_OBSERVATIONS ? DYNAMIC_DELAY_BOOTSTRAP_MS : targetDelayMs
 
     return {
       currentDelayMs: initialDelay,
       targetDelayMs,
       lastUpdateTime: now,
       intervalHistory: intervals,
-      extrapolationBumpMs: 0
+      extrapolationBumpMs: 0,
     }
   }
 
@@ -468,7 +459,7 @@ function updateDynamicDelayState(
     targetDelayMs,
     lastUpdateTime: existingState.lastUpdateTime,
     intervalHistory: intervals,
-    extrapolationBumpMs: existingState.extrapolationBumpMs
+    extrapolationBumpMs: existingState.extrapolationBumpMs,
   }
 }
 
@@ -486,7 +477,7 @@ function updateDynamicDelayState(
 function applyDelayTransition(
   state: DynamicDelayState,
   now: number,
-  isExtrapolating: boolean
+  isExtrapolating: boolean,
 ): { delayMs: number; updatedState: DynamicDelayState } {
   const { currentDelayMs, targetDelayMs, lastUpdateTime, extrapolationBumpMs } = state
   const elapsed = now - lastUpdateTime
@@ -500,7 +491,7 @@ function applyDelayTransition(
     // This prevents runaway delay increases while still reacting to extrapolation.
     newExtrapolationBump = Math.min(
       Math.max(newExtrapolationBump, DYNAMIC_DELAY_EXTRAPOLATION_BUMP_MS),
-      DYNAMIC_DELAY_MAX_MS - targetDelayMs // Don't exceed max
+      DYNAMIC_DELAY_MAX_MS - targetDelayMs, // Don't exceed max
     )
   } else if (newExtrapolationBump > 0) {
     // Decay the bump when not extrapolating
@@ -509,10 +500,7 @@ function applyDelayTransition(
   }
 
   // Effective target includes the extrapolation bump
-  const effectiveTarget = Math.min(
-    DYNAMIC_DELAY_MAX_MS,
-    targetDelayMs + newExtrapolationBump
-  )
+  const effectiveTarget = Math.min(DYNAMIC_DELAY_MAX_MS, targetDelayMs + newExtrapolationBump)
 
   let newDelay: number
 
@@ -531,8 +519,8 @@ function applyDelayTransition(
       ...state,
       currentDelayMs: newDelay,
       lastUpdateTime: now,
-      extrapolationBumpMs: newExtrapolationBump
-    }
+      extrapolationBumpMs: newExtrapolationBump,
+    },
   }
 }
 
@@ -542,7 +530,7 @@ function applyDelayTransition(
  */
 function findBracketingObservations(
   observations: AircraftObservation[],
-  displayTime: number
+  displayTime: number,
 ): [AircraftObservation | null, AircraftObservation | null] {
   if (observations.length === 0) {
     return [null, null]
@@ -551,9 +539,9 @@ function findBracketingObservations(
   if (observations.length === 1) {
     const obs = observations[0]
     if (displayTime >= obs.observedAt) {
-      return [obs, null]  // Extrapolate forward
+      return [obs, null] // Extrapolate forward
     } else {
-      return [null, obs]  // Extrapolate backward (rare)
+      return [null, obs] // Extrapolate backward (rare)
     }
   }
 
@@ -572,9 +560,9 @@ function findBracketingObservations(
   const last = observations[observations.length - 1]
 
   if (displayTime < first.observedAt) {
-    return [null, first]  // Before all observations
+    return [null, first] // Before all observations
   } else {
-    return [last, null]  // After all observations (extrapolate)
+    return [last, null] // After all observations (extrapolate)
   }
 }
 
@@ -591,7 +579,7 @@ function deriveHeading(
   observations: AircraftObservation[],
   before: AircraftObservation | null,
   after: AircraftObservation | null,
-  lastKnownHeading: number | null
+  lastKnownHeading: number | null,
 ): { heading: number; isReliable: boolean } {
   // Get the most relevant observation for heading
   const primaryObs = after ?? before
@@ -611,8 +599,10 @@ function deriveHeading(
     const older = observations[i - 1]
 
     const calculatedHeading = calculateHeadingFromDelta(
-      older.latitude, older.longitude,
-      newer.latitude, newer.longitude
+      older.latitude,
+      older.longitude,
+      newer.latitude,
+      newer.longitude,
     )
 
     if (calculatedHeading !== null) {
@@ -631,12 +621,12 @@ function deriveHeading(
 
 // Reconciliation state for smooth transitions after extrapolation
 type ReconciliationState = {
-  targetObservedAt: number  // The 'after' observation we're heading toward
-  startLat: number          // Where we were when we started
+  targetObservedAt: number // The 'after' observation we're heading toward
+  startLat: number // Where we were when we started
   startLon: number
   startAlt: number
-  startDisplayTime: number  // displayTime when we started
-  anchorObservedAt: number  // Anchor (oldest obs) when this reconciliation was created
+  startDisplayTime: number // displayTime when we started
+  anchorObservedAt: number // Anchor (oldest obs) when this reconciliation was created
 }
 
 /**
@@ -655,7 +645,7 @@ function interpolateTimeline(
   lastKnownHeading: number | null,
   reconciliation: ReconciliationState | undefined,
   lastRenderedPos: { latitude: number; longitude: number; altitude: number } | undefined,
-  enableDynamicDelay: boolean
+  enableDynamicDelay: boolean,
 ): {
   result: TimelineInterpolationResult
   newLastKnownHeading: number
@@ -755,12 +745,14 @@ function interpolateTimeline(
     const PICK_COOLDOWN_MS = 3000
     const lastSeen = debugState.__interpDebugLastSeen as number | undefined
     const lastPickAttempt = debugState.__interpDebugLastPickAttempt as number | undefined
-    const isStale = debugState.__interpDebugCallsign && lastSeen && (currentTime - lastSeen > STALE_THRESHOLD_MS)
+    const isStale = debugState.__interpDebugCallsign && lastSeen && currentTime - lastSeen > STALE_THRESHOLD_MS
 
     if (isStale && !followedCallsign) {
       // Tracked aircraft disconnected and we're not following anyone - clear it
       const ts = new Date().toISOString().slice(11, 23)
-      console.log(`[Interp] ${ts} DEBUG Aircraft ${debugState.__interpDebugCallsign} disconnected, will auto-pick new target`)
+      console.log(
+        `[Interp] ${ts} DEBUG Aircraft ${debugState.__interpDebugCallsign} disconnected, will auto-pick new target`,
+      )
       debugState.__interpDebugCallsign = null
       debugState.__interpDebugLastSeen = null
     }
@@ -781,7 +773,7 @@ function interpolateTimeline(
     } else if (!debugState.__interpDebugCallsign && newestObs.groundspeed > 50) {
       // Fallback: auto-pick first aircraft with positive airspeed if not following anyone
       // But only if we haven't tried recently (cooldown to avoid spam)
-      const canPick = !lastPickAttempt || (currentTime - lastPickAttempt > PICK_COOLDOWN_MS)
+      const canPick = !lastPickAttempt || currentTime - lastPickAttempt > PICK_COOLDOWN_MS
       if (canPick) {
         debugState.__interpDebugCallsign = callsign
         debugState.__interpDebugCounter = 0
@@ -827,7 +819,7 @@ function interpolateTimeline(
       if (shouldLog) {
         const dtFromNewest = displayTime - newestObs.observedAt
         const visibility = typeof document !== 'undefined' ? document.visibilityState : 'unknown'
-        const justVisible = debugState.__justBecameVisible && (now - (debugState.__justBecameVisible as number)) < 1000
+        const justVisible = debugState.__justBecameVisible && now - (debugState.__justBecameVisible as number) < 1000
 
         // Build info tags
         const tags: string[] = []
@@ -839,16 +831,22 @@ function interpolateTimeline(
 
         const tagStr = tags.length > 0 ? ` [${tags.join(', ')}]` : ''
 
-        console.log(`[Interp] ${ts} ${callsign} ${mode} t=${t.toFixed(3)} obs=${observations.length} ` +
-          `interval=${(interval/1000).toFixed(1)}s dtNewest=${Math.round(dtFromNewest)}ms ` +
-          `now=${now}${tagStr}`)
+        console.log(
+          `[Interp] ${ts} ${callsign} ${mode} t=${t.toFixed(3)} obs=${observations.length} ` +
+            `interval=${(interval / 1000).toFixed(1)}s dtNewest=${Math.round(dtFromNewest)}ms ` +
+            `now=${now}${tagStr}`,
+        )
 
         // Log observation timestamps when new data arrives or anchor changes
         if ((obsCountChanged || oldestObsChanged) && observations.length >= 2) {
-          const obsInfo = observations.slice(0, 2).concat(observations.slice(-2))
+          const obsInfo = observations
+            .slice(0, 2)
+            .concat(observations.slice(-2))
             .map((o, i) => `${i < 2 ? 'oldest' : 'newest'}[${i % 2}]: ${o.observedAt}`)
           console.log(`[Interp] ${ts}   Observations: ${obsInfo.join(', ')}`)
-          console.log(`[Interp] ${ts}   displayTime=${displayTime} anchor=(obsAt=${oldestObs.observedAt}, rcvAt=${oldestObs.receivedAt})`)
+          console.log(
+            `[Interp] ${ts}   displayTime=${displayTime} anchor=(obsAt=${oldestObs.observedAt}, rcvAt=${oldestObs.receivedAt})`,
+          )
         }
 
         debugState.__interpLastObsCount = observations.length
@@ -892,14 +890,16 @@ function interpolateTimeline(
           startLon: lastRenderedPos.longitude,
           startAlt: lastRenderedPos.altitude,
           startDisplayTime: displayTime,
-          anchorObservedAt: oldestObs.observedAt
+          anchorObservedAt: oldestObs.observedAt,
         }
         // Debug: log when starting new reconciliation
         const debugState = globalThis as Record<string, unknown>
         if (callsign === debugState.__interpDebugCallsign) {
           const ts = new Date().toISOString().slice(11, 23)
           const reason = anchorChanged ? 'ANCHOR_SHIFT' : 'NEW_TARGET'
-          console.log(`[Interp] ${ts} ${callsign} ${reason} - using lastRenderedPos (${lastRenderedPos.latitude.toFixed(4)}, ${lastRenderedPos.longitude.toFixed(4)}) targetObs=${after.observedAt}`)
+          console.log(
+            `[Interp] ${ts} ${callsign} ${reason} - using lastRenderedPos (${lastRenderedPos.latitude.toFixed(4)}, ${lastRenderedPos.longitude.toFixed(4)}) targetObs=${after.observedAt}`,
+          )
         }
       } else {
         // First time seeing this aircraft - use 'before' as start
@@ -909,13 +909,15 @@ function interpolateTimeline(
           startLon: before.longitude,
           startAlt: before.altitude,
           startDisplayTime: before.observedAt,
-          anchorObservedAt: oldestObs.observedAt
+          anchorObservedAt: oldestObs.observedAt,
         }
         // Debug
         const debugState = globalThis as Record<string, unknown>
         if (callsign === debugState.__interpDebugCallsign) {
           const ts = new Date().toISOString().slice(11, 23)
-          console.log(`[Interp] ${ts} ${callsign} NEW TARGET - NO lastRenderedPos, using before (${before.latitude.toFixed(4)}, ${before.longitude.toFixed(4)}) targetObs=${after.observedAt}`)
+          console.log(
+            `[Interp] ${ts} ${callsign} NEW TARGET - NO lastRenderedPos, using before (${before.latitude.toFixed(4)}, ${before.longitude.toFixed(4)}) targetObs=${after.observedAt}`,
+          )
         }
       }
     } else {
@@ -937,14 +939,14 @@ function interpolateTimeline(
     // Calculate vertical rates for adjacent segments to detect phase changes:
     // - If rate changes significantly (level→climb, climb→level), use smoothstep
     // - If rate is consistent (steady climb), use linear
-    let altitudeBlend = 0  // 0 = linear, 1 = full smoothstep
+    let altitudeBlend = 0 // 0 = linear, 1 = full smoothstep
     if (observations.length >= 2 && interval > 0) {
       // Current segment vertical rate (m/min)
       const currentRate = (after.altitude - before.altitude) / (interval / 60000)
 
       // Check segment BEFORE current (if exists)
       const beforeIdx = observations.indexOf(before)
-      let prevRate = currentRate  // Default to same rate if no previous segment
+      let prevRate = currentRate // Default to same rate if no previous segment
       if (beforeIdx > 0) {
         const prevObs = observations[beforeIdx - 1]
         const prevInterval = before.observedAt - prevObs.observedAt
@@ -955,7 +957,7 @@ function interpolateTimeline(
 
       // Check segment AFTER current (if exists)
       const afterIdx = observations.indexOf(after)
-      let nextRate = currentRate  // Default to same rate if no next segment
+      let nextRate = currentRate // Default to same rate if no next segment
       if (afterIdx < observations.length - 1) {
         const nextObs = observations[afterIdx + 1]
         const nextInterval = nextObs.observedAt - after.observedAt
@@ -967,7 +969,7 @@ function interpolateTimeline(
       // Calculate how much the rate is changing at segment boundaries
       // Large changes = phase transition, apply more easing
       // Small changes = steady state, stay linear
-      const RATE_CHANGE_THRESHOLD = 100  // m/min - significant change threshold
+      const RATE_CHANGE_THRESHOLD = 100 // m/min - significant change threshold
       const prevRateChange = Math.abs(currentRate - prevRate)
       const nextRateChange = Math.abs(currentRate - nextRate)
 
@@ -978,10 +980,11 @@ function interpolateTimeline(
     }
 
     altitude = lerpBlended(newReconciliation.startAlt, after.altitude, reconT, altitudeBlend)
-    groundspeed = lerp(before.groundspeed, after.groundspeed, t)  // Speed uses observation-based t
-    groundTrack = before.groundTrack !== null && after.groundTrack !== null
-      ? lerpHeading(before.groundTrack, after.groundTrack, t)
-      : (after.groundTrack ?? before.groundTrack)
+    groundspeed = lerp(before.groundspeed, after.groundspeed, t) // Speed uses observation-based t
+    groundTrack =
+      before.groundTrack !== null && after.groundTrack !== null
+        ? lerpHeading(before.groundTrack, after.groundTrack, t)
+        : (after.groundTrack ?? before.groundTrack)
 
     // FALLBACK: Calculate groundTrack from position change when not provided by data source
     // This is essential for VATSIM data which doesn't include ground track.
@@ -992,7 +995,7 @@ function interpolateTimeline(
       const lonDiff = after.longitude - before.longitude
       const avgLat = (before.latitude + after.latitude) / 2
       const latMeters = latDiff * 111320 // 1 degree lat ≈ 111.32 km
-      const lonMeters = lonDiff * 111320 * Math.cos(avgLat * Math.PI / 180)
+      const lonMeters = lonDiff * 111320 * Math.cos((avgLat * Math.PI) / 180)
       const distanceMeters = Math.sqrt(latMeters * latMeters + lonMeters * lonMeters)
 
       // Require minimum movement to calculate reliable bearing:
@@ -1005,21 +1008,15 @@ function interpolateTimeline(
       const minDistanceForInterval = Math.max(3.0, 0.5 * intervalSeconds)
 
       if (distanceMeters > minDistanceForInterval) {
-        groundTrack = calculateBearing(
-          before.latitude, before.longitude,
-          after.latitude, after.longitude
-        )
+        groundTrack = calculateBearing(before.latitude, before.longitude, after.latitude, after.longitude)
       }
     }
 
     // Interpolate ADS-B data if available on both observations
-    onGround = after.onGround  // Use the later observation's ground state
-    pitch = before.pitch !== null && after.pitch !== null
-      ? lerp(before.pitch, after.pitch, t)
-      : (after.pitch ?? before.pitch)
-    roll = before.roll !== null && after.roll !== null
-      ? lerp(before.roll, after.roll, t)
-      : (after.roll ?? before.roll)
+    onGround = after.onGround // Use the later observation's ground state
+    pitch =
+      before.pitch !== null && after.pitch !== null ? lerp(before.pitch, after.pitch, t) : (after.pitch ?? before.pitch)
+    roll = before.roll !== null && after.roll !== null ? lerp(before.roll, after.roll, t) : (after.roll ?? before.roll)
 
     // Vertical rate: prefer ADS-B data, otherwise calculate from observation altitude delta
     if (before.verticalRate !== null && after.verticalRate !== null) {
@@ -1064,7 +1061,7 @@ function interpolateTimeline(
         const lonDiff = before.longitude - prev.longitude
         const avgLat = (prev.latitude + before.latitude) / 2
         const latMeters = latDiff * 111320
-        const lonMeters = lonDiff * 111320 * Math.cos(avgLat * Math.PI / 180)
+        const lonMeters = lonDiff * 111320 * Math.cos((avgLat * Math.PI) / 180)
         const distanceMeters = Math.sqrt(latMeters * latMeters + lonMeters * lonMeters)
 
         // Same threshold logic as interpolation case
@@ -1072,10 +1069,7 @@ function interpolateTimeline(
         const minDistanceForInterval = Math.max(3.0, 0.5 * intervalSeconds)
 
         if (distanceMeters > minDistanceForInterval) {
-          groundTrack = calculateBearing(
-            prev.latitude, prev.longitude,
-            before.latitude, before.longitude
-          )
+          groundTrack = calculateBearing(prev.latitude, prev.longitude, before.latitude, before.longitude)
         }
       }
     }
@@ -1153,16 +1147,18 @@ function interpolateTimeline(
   const debugState = globalThis as Record<string, unknown>
   if (callsign === debugState.__interpDebugCallsign && lastRenderedPos) {
     const latDelta = (latitude - lastRenderedPos.latitude) * 111320
-    const lonDelta = (longitude - lastRenderedPos.longitude) * 111320 * Math.cos(latitude * Math.PI / 180)
+    const lonDelta = (longitude - lastRenderedPos.longitude) * 111320 * Math.cos((latitude * Math.PI) / 180)
     const distance = Math.sqrt(latDelta * latDelta + lonDelta * lonDelta)
     if (distance > 50) {
       const ts = new Date().toISOString().slice(11, 23)
-      const justVisible = debugState.__justBecameVisible && (now - (debugState.__justBecameVisible as number)) < 2000
+      const justVisible = debugState.__justBecameVisible && now - (debugState.__justBecameVisible as number) < 2000
       const visibility = typeof document !== 'undefined' ? document.visibilityState : 'unknown'
-      console.log(`[Interp] ${ts} ${callsign} ⚠️ SNAP! delta=${distance.toFixed(1)}m ` +
-        `from=(${lastRenderedPos.latitude.toFixed(5)}, ${lastRenderedPos.longitude.toFixed(5)}) ` +
-        `to=(${latitude.toFixed(5)}, ${longitude.toFixed(5)}) ` +
-        `visibility=${visibility}${justVisible ? ' JUST_VISIBLE' : ''}`)
+      console.log(
+        `[Interp] ${ts} ${callsign} ⚠️ SNAP! delta=${distance.toFixed(1)}m ` +
+          `from=(${lastRenderedPos.latitude.toFixed(5)}, ${lastRenderedPos.longitude.toFixed(5)}) ` +
+          `to=(${latitude.toFixed(5)}, ${longitude.toFixed(5)}) ` +
+          `visibility=${visibility}${justVisible ? ' JUST_VISIBLE' : ''}`,
+      )
     }
   }
 
@@ -1200,11 +1196,11 @@ function interpolateTimeline(
       isExtrapolating,
       observationAge,
       observationCount: observations.length,
-      displayTime
+      displayTime,
     },
     newLastKnownHeading,
     newReconciliation,
-    newDynamicDelay
+    newDynamicDelay,
   }
 }
 
@@ -1238,14 +1234,14 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
 
       // Check if this observation is too close to the last one
       const lastObs = existing.observations[existing.observations.length - 1]
-      if (lastObs && (observation.receivedAt - lastObs.receivedAt) < MIN_OBSERVATION_INTERVAL) {
+      if (lastObs && observation.receivedAt - lastObs.receivedAt < MIN_OBSERVATION_INTERVAL) {
         // Too close, skip this observation but update metadata
         const updated = new Map(timelines)
         updated.set(callsign, {
           ...existing,
           metadata: mergedMetadata,
           lastSource: observation.source,
-          lastReceivedAt: observation.receivedAt
+          lastReceivedAt: observation.receivedAt,
         })
         set({ timelines: updated })
         return
@@ -1267,25 +1263,23 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
     }
 
     // Update dynamic delay state
-    const dynamicDelay = updateDynamicDelayState(
-      existing?.dynamicDelay,
-      observations,
-      observation.receivedAt
-    )
+    const dynamicDelay = updateDynamicDelayState(existing?.dynamicDelay, observations, observation.receivedAt)
 
     // Debug: Log observation additions for tracked aircraft
     if (import.meta.env.DEV) {
       const debugState = globalThis as Record<string, unknown>
       if (callsign === debugState.__interpDebugCallsign) {
         const ts = new Date().toISOString().slice(11, 23)
-        const anchorShift = oldestBefore !== null && oldestBefore !== oldestAfter
-          ? ` ANCHOR_SHIFT(${oldestBefore}→${oldestAfter})`
-          : ''
-        const intervalInfo = dynamicDelay.intervalHistory.length > 0
-          ? ` intervals=[${dynamicDelay.intervalHistory.map(i => i.toFixed(0)).join(',')}]ms target=${dynamicDelay.targetDelayMs.toFixed(0)}ms`
-          : ''
-        console.log(`[Interp] ${ts} ${callsign} +OBS obsAt=${observation.observedAt} rcvAt=${observation.receivedAt} ` +
-          `total=${observations.length}${pruned ? ' PRUNED' : ''}${anchorShift}${intervalInfo}`)
+        const anchorShift =
+          oldestBefore !== null && oldestBefore !== oldestAfter ? ` ANCHOR_SHIFT(${oldestBefore}→${oldestAfter})` : ''
+        const intervalInfo =
+          dynamicDelay.intervalHistory.length > 0
+            ? ` intervals=[${dynamicDelay.intervalHistory.map((i) => i.toFixed(0)).join(',')}]ms target=${dynamicDelay.targetDelayMs.toFixed(0)}ms`
+            : ''
+        console.log(
+          `[Interp] ${ts} ${callsign} +OBS obsAt=${observation.observedAt} rcvAt=${observation.receivedAt} ` +
+            `total=${observations.length}${pruned ? ' PRUNED' : ''}${anchorShift}${intervalInfo}`,
+        )
       }
     }
 
@@ -1296,7 +1290,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       metadata: mergedMetadata,
       lastSource: observation.source,
       lastReceivedAt: observation.receivedAt,
-      dynamicDelay
+      dynamicDelay,
     })
     set({ timelines: updated })
 
@@ -1336,7 +1330,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
             ...existing,
             metadata: mergedMetadata,
             // Update lastReceivedAt to keep the timeline alive
-            lastReceivedAt: observation.receivedAt
+            lastReceivedAt: observation.receivedAt,
           })
           continue
         }
@@ -1352,13 +1346,13 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
 
         // Check if this observation is too close to the last one
         const lastObs = existing.observations[existing.observations.length - 1]
-        if (lastObs && (observation.receivedAt - lastObs.receivedAt) < MIN_OBSERVATION_INTERVAL) {
+        if (lastObs && observation.receivedAt - lastObs.receivedAt < MIN_OBSERVATION_INTERVAL) {
           // Too close, skip but update metadata
           updated.set(callsign, {
             ...existing,
             metadata: mergedMetadata,
             lastSource: observation.source,
-            lastReceivedAt: observation.receivedAt
+            lastReceivedAt: observation.receivedAt,
           })
           continue
         }
@@ -1377,25 +1371,23 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       }
 
       // Update dynamic delay state
-      const dynamicDelay = updateDynamicDelayState(
-        existing?.dynamicDelay,
-        observations,
-        observation.receivedAt
-      )
+      const dynamicDelay = updateDynamicDelayState(existing?.dynamicDelay, observations, observation.receivedAt)
 
       // Debug: Log observation additions for tracked aircraft
       if (import.meta.env.DEV) {
         const debugState = globalThis as Record<string, unknown>
         if (callsign === debugState.__interpDebugCallsign) {
           const ts = new Date().toISOString().slice(11, 23)
-          const anchorShift = oldestBefore !== null && oldestBefore !== oldestAfter
-            ? ` ANCHOR_SHIFT(${oldestBefore}→${oldestAfter})`
-            : ''
-          const intervalInfo = dynamicDelay.intervalHistory.length > 0
-            ? ` intervals=[${dynamicDelay.intervalHistory.map(i => i.toFixed(0)).join(',')}]ms target=${dynamicDelay.targetDelayMs.toFixed(0)}ms`
-            : ''
-          console.log(`[Interp] ${ts} ${callsign} +OBS obsAt=${observation.observedAt} rcvAt=${observation.receivedAt} ` +
-            `total=${observations.length}${pruned ? ' PRUNED' : ''}${anchorShift}${intervalInfo}`)
+          const anchorShift =
+            oldestBefore !== null && oldestBefore !== oldestAfter ? ` ANCHOR_SHIFT(${oldestBefore}→${oldestAfter})` : ''
+          const intervalInfo =
+            dynamicDelay.intervalHistory.length > 0
+              ? ` intervals=[${dynamicDelay.intervalHistory.map((i) => i.toFixed(0)).join(',')}]ms target=${dynamicDelay.targetDelayMs.toFixed(0)}ms`
+              : ''
+          console.log(
+            `[Interp] ${ts} ${callsign} +OBS obsAt=${observation.observedAt} rcvAt=${observation.receivedAt} ` +
+              `total=${observations.length}${pruned ? ' PRUNED' : ''}${anchorShift}${intervalInfo}`,
+          )
         }
       }
 
@@ -1405,7 +1397,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
         metadata: mergedMetadata,
         lastSource: observation.source,
         lastReceivedAt: observation.receivedAt,
-        dynamicDelay
+        dynamicDelay,
       })
     }
 
@@ -1439,7 +1431,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
         timelines: updatedTimelines,
         lastKnownHeadings: updatedHeadings,
         lastRenderedPositions: updatedPositions,
-        reconciliationStates: updatedReconciliations
+        reconciliationStates: updatedReconciliations,
       })
 
       // Broadcast removal to insets (if callback registered by main app)
@@ -1481,7 +1473,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
         timelines: updatedTimelines,
         lastKnownHeadings: updatedHeadings,
         lastRenderedPositions: updatedPositions,
-        reconciliationStates: updatedReconciliations
+        reconciliationStates: updatedReconciliations,
       })
 
       // Broadcast removals to insets (if callback registered by main app)
@@ -1524,14 +1516,14 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       timelines: new Map(),
       lastKnownHeadings: new Map(),
       lastRenderedPositions: new Map(),
-      reconciliationStates: new Map()
+      reconciliationStates: new Map(),
     })
   },
 
   clearInterpolationState: () => {
     set({
       lastRenderedPositions: new Map(),
-      reconciliationStates: new Map()
+      reconciliationStates: new Map(),
     })
   },
 
@@ -1551,7 +1543,14 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
     const reconciliation = get().reconciliationStates.get(callsign)
     const lastPosition = get().lastRenderedPositions.get(callsign)
     const enableDynamicDelay = useSettingsStore.getState().advanced?.enableDynamicDisplayDelay ?? true
-    const result = interpolateTimeline(timeline, now, lastKnownHeading, reconciliation, lastPosition, enableDynamicDelay)
+    const result = interpolateTimeline(
+      timeline,
+      now,
+      lastKnownHeading,
+      reconciliation,
+      lastPosition,
+      enableDynamicDelay,
+    )
 
     // Return result without mutating store state
     // Heading/reconciliation/dynamicDelay updates are only applied by getInterpolatedStates() batch operation
@@ -1581,7 +1580,14 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       const lastKnownHeading = lastKnownHeadings.get(callsign) ?? null
       const lastPosition = lastRenderedPositions.get(callsign)
       const reconciliation = reconciliationStates.get(callsign)
-      const interpolation = interpolateTimeline(timeline, now, lastKnownHeading, reconciliation, lastPosition, enableDynamicDelay)
+      const interpolation = interpolateTimeline(
+        timeline,
+        now,
+        lastKnownHeading,
+        reconciliation,
+        lastPosition,
+        enableDynamicDelay,
+      )
 
       if (interpolation) {
         results.set(callsign, interpolation.result)
@@ -1595,7 +1601,12 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
         // Update last rendered position for next frame
         const { latitude, longitude, altitude } = interpolation.result
         const prevPos = lastRenderedPositions.get(callsign)
-        if (!prevPos || prevPos.latitude !== latitude || prevPos.longitude !== longitude || prevPos.altitude !== altitude) {
+        if (
+          !prevPos ||
+          prevPos.latitude !== latitude ||
+          prevPos.longitude !== longitude ||
+          prevPos.altitude !== altitude
+        ) {
           updatedPositions.set(callsign, { latitude, longitude, altitude })
           positionsChanged = true
         }
@@ -1616,7 +1627,8 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
         if (interpolation.newDynamicDelay) {
           const oldDelay = timeline.dynamicDelay
           const newDelay = interpolation.newDynamicDelay
-          const delayChanged = !oldDelay ||
+          const delayChanged =
+            !oldDelay ||
             oldDelay.currentDelayMs !== newDelay.currentDelayMs ||
             oldDelay.extrapolationBumpMs !== newDelay.extrapolationBumpMs
 
@@ -1627,7 +1639,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
             }
             updatedTimelines.set(callsign, {
               ...timeline,
-              dynamicDelay: newDelay
+              dynamicDelay: newDelay,
             })
             timelinesChanged = true
           }
@@ -1641,7 +1653,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
         lastKnownHeadings: headingsChanged ? updatedHeadings : lastKnownHeadings,
         lastRenderedPositions: positionsChanged ? updatedPositions : lastRenderedPositions,
         reconciliationStates: reconciliationsChanged ? updatedReconciliations : reconciliationStates,
-        timelines: timelinesChanged ? updatedTimelines! : timelines
+        timelines: timelinesChanged ? updatedTimelines! : timelines,
       })
     }
 
@@ -1713,7 +1725,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
           source: 'replay',
           observedAt: snapshotTime,
           receivedAt: snapshotTime,
-          displayDelay: SOURCE_DISPLAY_DELAYS.replay  // No delay for replay - we're scrubbing through historical data
+          displayDelay: SOURCE_DISPLAY_DELAYS.replay, // No delay for replay - we're scrubbing through historical data
         }
 
         const metadata: AircraftMetadata = {
@@ -1721,7 +1733,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
           aircraftType: state.aircraftType,
           transponder: state.transponder,
           departure: state.departure,
-          arrival: state.arrival
+          arrival: state.arrival,
         }
 
         const existing = timelines.get(callsign)
@@ -1738,7 +1750,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
             observations: [observation],
             metadata,
             lastSource: 'replay',
-            lastReceivedAt: snapshotTime
+            lastReceivedAt: snapshotTime,
           })
         }
       }
@@ -1767,10 +1779,10 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       //   (interpolateTimeline computes: displayTime = oldest.observedAt + (now - oldest.receivedAt) - delay)
       //   With receivedAt = observedAt and delay = 0, displayTime = now, which is what we want.
       // - Set displayDelay = 0 (no delay for scrubbing historical data)
-      const normalizedObs: AircraftObservation[] = entry.observations.map(obs => ({
+      const normalizedObs: AircraftObservation[] = entry.observations.map((obs) => ({
         ...obs,
         receivedAt: obs.observedAt,
-        displayDelay: 0
+        displayDelay: 0,
       }))
 
       timelines.set(entry.callsign, {
@@ -1780,7 +1792,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
         lastSource: entry.lastSource,
         lastReceivedAt: entry.lastReceivedAt,
         // Clear dynamic delay — not meaningful for imported playback
-        dynamicDelay: undefined
+        dynamicDelay: undefined,
       })
     }
 
@@ -1807,5 +1819,5 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
     if (minTime === Infinity || maxTime === -Infinity) return null
 
     return { start: minTime, end: maxTime }
-  }
+  },
 }))

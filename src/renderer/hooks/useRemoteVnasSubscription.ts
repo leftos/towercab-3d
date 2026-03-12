@@ -34,10 +34,10 @@ function normalizeForVnas(icao: string): string {
  * Only active in remote mode.
  */
 export function useRemoteVnasSubscription(): void {
-  const currentAirport = useAirportStore(state => state.currentAirport)
-  const sessionFacilitiesRaw = useVnasStore(state => state.sessionFacilities)
+  const currentAirport = useAirportStore((state) => state.currentAirport)
+  const sessionFacilitiesRaw = useVnasStore((state) => state.sessionFacilities)
   const sessionFacilities = useMemo(() => sessionFacilitiesRaw ?? [], [sessionFacilitiesRaw])
-  const subscribedFacilities = useVnasStore(state => state.status.subscribedFacilities)
+  const subscribedFacilities = useVnasStore((state) => state.status.subscribedFacilities)
 
   // Track the previous airport to handle unsubscription
   const previousAirportRef = useRef<string | null>(null)

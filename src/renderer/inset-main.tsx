@@ -40,14 +40,11 @@ if (!viewportId) {
   ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
     <React.StrictMode>
       <InsetApp viewportId={viewportId} parentOrigin={parentOrigin} />
-    </React.StrictMode>
+    </React.StrictMode>,
   )
 
   // Notify parent that inset is ready
-  window.parent.postMessage(
-    { type: 'inset-ready', viewportId },
-    parentOrigin
-  )
+  window.parent.postMessage({ type: 'inset-ready', viewportId }, parentOrigin)
 
   console.log(`[InsetApp] Initialized with viewportId=${viewportId}`)
 }

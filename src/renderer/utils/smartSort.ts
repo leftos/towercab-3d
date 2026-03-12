@@ -15,17 +15,12 @@
  */
 
 import type { InterpolatedAircraftState } from '../types/vatsim'
-import type {
-  FlightPhase,
-  PriorityTier,
-  SmartSortResult,
-  SmartSortContext
-} from './aircraft/types'
+import type { FlightPhase, PriorityTier, SmartSortResult, SmartSortContext } from './aircraft/types'
 import {
   detectFlightPhase,
   cleanupPhaseHistory,
   cleanupStabilizationStates,
-  clearStabilizationStates
+  clearStabilizationStates,
 } from './aircraft/flightPhaseDetector'
 import { useAircraftTimelineStore } from '../stores/aircraftTimelineStore'
 import { haversineDistanceNm } from './aircraft/geoMath'
@@ -41,20 +36,20 @@ export { cleanupStabilizationStates, clearStabilizationStates }
 
 // Base phase scores
 const PHASE_SCORES: Record<FlightPhase, number> = {
-  go_around: 550,      // Missed approach - highest priority, unexpected event
+  go_around: 550, // Missed approach - highest priority, unexpected event
   short_final: 500,
   departure_roll: 450,
-  landing_roll: 425,   // Just landed, still on runway - high priority
+  landing_roll: 425, // Just landed, still on runway - high priority
   long_final: 400,
   lined_up: 350,
   holding_short: 300,
   pattern: 250,
-  pushback: 125,       // Pushing back - will need to taxi soon
+  pushback: 125, // Pushing back - will need to taxi soon
   active_taxi: 150,
-  stopped_taxi: 50,    // Stopped on ramp/taxiway/gate - lowest ground priority
+  stopped_taxi: 50, // Stopped on ramp/taxiway/gate - lowest ground priority
   distant_arrival: 100,
   departing_climb: 75,
-  unknown: 25
+  unknown: 25,
 }
 
 // ============================================================================
@@ -67,7 +62,7 @@ const PHASE_SCORES: Record<FlightPhase, number> = {
 function calculatePriorityScore(
   aircraft: InterpolatedAircraftState,
   phase: FlightPhase,
-  context: SmartSortContext
+  context: SmartSortContext,
 ): number {
   // Base score from phase
   let score = PHASE_SCORES[phase]
@@ -77,7 +72,7 @@ function calculatePriorityScore(
     aircraft.interpolatedLatitude,
     aircraft.interpolatedLongitude,
     context.airportLat,
-    context.airportLon
+    context.airportLon,
   )
   const distanceModifier = Math.max(-200, Math.min(200, (10 - distFromAirportNm) * 20))
   score += distanceModifier
@@ -112,7 +107,7 @@ function getTierFromScore(score: number): PriorityTier {
  */
 export function calculateSmartSort(
   aircraft: InterpolatedAircraftState[],
-  context: SmartSortContext
+  context: SmartSortContext,
 ): SmartSortResult[] {
   const results: SmartSortResult[] = []
 
@@ -120,7 +115,7 @@ export function calculateSmartSort(
   const timelineStore = useAircraftTimelineStore.getState()
 
   // Build set of active callsigns for cleanup
-  const activeCallsigns = new Set(aircraft.map(ac => ac.callsign))
+  const activeCallsigns = new Set(aircraft.map((ac) => ac.callsign))
 
   // Periodically clean up stale phase history and stabilization states
   cleanupPhaseHistory()
@@ -141,7 +136,7 @@ export function calculateSmartSort(
       tier,
       score,
       runway,
-      runwayDistance
+      runwayDistance,
     })
   }
 
@@ -169,7 +164,7 @@ export function getPhaseLabel(phase: FlightPhase): string {
     stopped_taxi: 'Stopped',
     departing_climb: 'Climbing',
     distant_arrival: 'Inbound',
-    unknown: ''
+    unknown: '',
   }
   return labels[phase]
 }
@@ -181,9 +176,9 @@ export function getPhaseAbbrev(phase: FlightPhase): string {
   const abbrevs: Record<FlightPhase, string> = {
     short_final: 'FIN',
     long_final: 'APP',
-    departure_roll: 'RLL',   // Rolling (departure)
-    landing_roll: 'RLO',     // Roll Out (landing)
-    go_around: 'G/A',        // Go Around
+    departure_roll: 'RLL', // Rolling (departure)
+    landing_roll: 'RLO', // Roll Out (landing)
+    go_around: 'G/A', // Go Around
     lined_up: 'LUP',
     holding_short: 'HLD',
     pattern: 'PAT',
@@ -192,7 +187,7 @@ export function getPhaseAbbrev(phase: FlightPhase): string {
     stopped_taxi: 'STP',
     departing_climb: 'CLB',
     distant_arrival: 'INB',
-    unknown: ''
+    unknown: '',
   }
   return abbrevs[phase]
 }

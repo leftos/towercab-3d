@@ -7,13 +7,7 @@
 
 import type { Animation, ExtendedNodeData, MeshBounds, ModelGroundData, ModelWingData } from './types'
 import { interpolateVec3, interpolateQuat } from './animationInterpolation'
-import {
-  matrixFromTRS,
-  multiplyMatrices,
-  identityMatrix,
-  transformPoint,
-  getBoundingBoxCorners
-} from './matrixMath'
+import { matrixFromTRS, multiplyMatrices, identityMatrix, transformPoint, getBoundingBoxCorners } from './matrixMath'
 
 /**
  * Parse extended node data including hierarchy and mesh bounds
@@ -50,11 +44,11 @@ export function parseExtendedNodes(gltfJson: any): Map<number, ExtendedNodeData>
     nodes.set(i, {
       index: i,
       name,
-      parentIndex: null,  // Will be set in second pass
+      parentIndex: null, // Will be set in second pass
       childIndices: node.children || [],
       meshIndex: node.mesh ?? null,
       localMatrix,
-      meshBounds
+      meshBounds,
     })
   }
 
@@ -79,8 +73,12 @@ export function getMeshBounds(gltfJson: any, meshIndex: number): MeshBounds | nu
   const mesh = gltfJson.meshes[meshIndex]
   if (!mesh || !mesh.primitives) return null
 
-  let minX = Infinity, minY = Infinity, minZ = Infinity
-  let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
+  let minX = Infinity,
+    minY = Infinity,
+    minZ = Infinity
+  let maxX = -Infinity,
+    maxY = -Infinity,
+    maxZ = -Infinity
 
   for (const primitive of mesh.primitives) {
     if (primitive.attributes?.POSITION === undefined) continue
@@ -101,7 +99,7 @@ export function getMeshBounds(gltfJson: any, meshIndex: number): MeshBounds | nu
 
   return {
     min: [minX, minY, minZ],
-    max: [maxX, maxY, maxZ]
+    max: [maxX, maxY, maxZ],
   }
 }
 
@@ -113,7 +111,7 @@ export function computeMinYAtGearState(
   gearAnimations: Animation[],
   gearProgress: number,
   // biome-ignore lint/suspicious/noExplicitAny: glTF JSON parsing
-  gltfJson: any
+  gltfJson: any,
 ): number {
   // Get gear animation transforms at the specified progress
   const animatedTransforms = computeGearAnimationTransforms(gearAnimations, gearProgress, gltfJson)
@@ -131,7 +129,7 @@ export function computeMinYAtGearState(
     const corners = getBoundingBoxCorners(node.meshBounds)
     for (const corner of corners) {
       const worldCorner = transformPoint(corner, worldMatrix)
-      globalMinY = Math.min(globalMinY, worldCorner[1])  // Y is up in glTF
+      globalMinY = Math.min(globalMinY, worldCorner[1]) // Y is up in glTF
     }
   }
 
@@ -145,7 +143,7 @@ export function computeGearAnimationTransforms(
   gearAnimations: Animation[],
   progress: number,
   // biome-ignore lint/suspicious/noExplicitAny: glTF JSON parsing
-  gltfJson: any
+  gltfJson: any,
 ): Map<string, number[]> {
   const transforms = new Map<string, number[]>()
 
@@ -192,7 +190,7 @@ export function computeGearAnimationTransforms(
 export function getWorldMatrix(
   nodeIndex: number,
   nodes: Map<number, ExtendedNodeData>,
-  animatedTransforms: Map<string, number[]>
+  animatedTransforms: Map<string, number[]>,
 ): number[] {
   const node = nodes.get(nodeIndex)
   if (!node) return identityMatrix()
@@ -229,7 +227,7 @@ export function parseGroundDataGltf1(gltfJson: any): ModelGroundData | null {
 
   // Count primitives with "reasonable" vertical bounds per axis
   // Landing gear is typically 2-6m below origin, fuselage height ~6-18m
-  const axisCounts = [0, 0, 0]  // X, Y, Z
+  const axisCounts = [0, 0, 0] // X, Y, Z
   const axisMinValues: [number[], number[], number[]] = [[], [], []]
 
   // Iterate over all meshes (object with named keys)
@@ -273,9 +271,12 @@ export function parseGroundDataGltf1(gltfJson: any): ModelGroundData | null {
   const minValues = axisMinValues[bestAxis]
   if (minValues.length === 0) {
     // Fallback: no reasonable bounds found, use global minimum of smallest range axis
-    let globalMinX = Infinity, globalMaxX = -Infinity
-    let globalMinY = Infinity, globalMaxY = -Infinity
-    let globalMinZ = Infinity, globalMaxZ = -Infinity
+    let globalMinX = Infinity,
+      globalMaxX = -Infinity
+    let globalMinY = Infinity,
+      globalMaxY = -Infinity
+    let globalMinZ = Infinity,
+      globalMaxZ = -Infinity
 
     for (const meshName of Object.keys(meshes)) {
       const mesh = meshes[meshName]
@@ -315,7 +316,7 @@ export function parseGroundDataGltf1(gltfJson: any): ModelGroundData | null {
 
   return {
     gearUpMinY: cappedMinVertical,
-    gearDownMinY: cappedMinVertical
+    gearDownMinY: cappedMinVertical,
   }
 }
 
@@ -330,9 +331,7 @@ export function parseGroundDataGltf1(gltfJson: any): ModelGroundData | null {
  *
  * Nav lights are on top of the wings, so we track the MAXIMUM Y at each wingtip X.
  */
-export function computeWingData(
-  nodes: Map<number, ExtendedNodeData>
-): ModelWingData | null {
+export function computeWingData(nodes: Map<number, ExtendedNodeData>): ModelWingData | null {
   // Track extreme X positions and the maximum Y at those positions
   // We use a tolerance to find corners "near" the wingtip X
   let leftMostX = Infinity
@@ -406,7 +405,7 @@ export function computeWingData(
     leftWingX: leftMostX,
     rightWingX: rightMostX,
     leftWingY: leftWingMaxY,
-    rightWingY: rightWingMaxY
+    rightWingY: rightWingMaxY,
   }
 }
 
@@ -492,6 +491,6 @@ export function parseWingDataGltf1(gltfJson: any): ModelWingData | null {
     leftWingX: leftMostX,
     rightWingX: rightMostX,
     leftWingY: leftWingMaxY,
-    rightWingY: rightWingMaxY
+    rightWingY: rightWingMaxY,
   }
 }

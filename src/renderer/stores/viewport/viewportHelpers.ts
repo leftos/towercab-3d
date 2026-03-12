@@ -8,7 +8,7 @@ import type {
   ViewportCameraState,
   Viewport,
   AirportViewportConfig,
-  ViewModeDefaults
+  ViewModeDefaults,
 } from '../../types'
 import {
   HEADING_DEFAULT,
@@ -18,7 +18,7 @@ import {
   TOPDOWN_ALTITUDE_DEFAULT,
   ORBIT_DISTANCE_DEFAULT,
   ORBIT_HEADING_DEFAULT,
-  ORBIT_PITCH_DEFAULT
+  ORBIT_PITCH_DEFAULT,
 } from '../../constants'
 
 // Re-export types that were previously defined here
@@ -57,7 +57,7 @@ export const generateId = () => crypto.randomUUID()
 export const createDefaultCameraState = (
   customHeading?: number,
   globalOrbit?: GlobalOrbitSettings,
-  topdownAltitude?: number
+  topdownAltitude?: number,
 ): ViewportCameraState => ({
   viewMode: '3d',
   heading: customHeading ?? HEADING_DEFAULT,
@@ -78,7 +78,7 @@ export const createDefaultCameraState = (
   pendingLookAtPosition: null,
   cameraVersion: 0,
   savedMode3dState: null,
-  savedMode2dState: null
+  savedMode2dState: null,
 })
 
 /**
@@ -87,12 +87,12 @@ export const createDefaultCameraState = (
 export const createMainViewport = (
   customHeading?: number,
   globalOrbit?: GlobalOrbitSettings,
-  topdownAltitude?: number
+  topdownAltitude?: number,
 ): Viewport => ({
   id: MAIN_VIEWPORT_ID,
   layout: { x: 0, y: 0, width: 1, height: 1, zIndex: 0 },
   cameraState: createDefaultCameraState(customHeading, globalOrbit, topdownAltitude),
-  label: 'Main'
+  label: 'Main',
 })
 
 // =============================================================================
@@ -105,7 +105,7 @@ export const createMainViewport = (
  */
 export const normalizeLoadedViewports = (
   viewports: Viewport[],
-  activeViewportId: string
+  activeViewportId: string,
 ): { viewports: Viewport[]; activeViewportId: string } => {
   if (viewports.length === 0) {
     const main = createMainViewport()
@@ -124,9 +124,7 @@ export const normalizeLoadedViewports = (
   })
 
   // Update activeViewportId if it was pointing to the old main ID
-  const normalizedActiveId = activeViewportId === oldMainId
-    ? MAIN_VIEWPORT_ID
-    : activeViewportId
+  const normalizedActiveId = activeViewportId === oldMainId ? MAIN_VIEWPORT_ID : activeViewportId
 
   return { viewports: normalizedViewports, activeViewportId: normalizedActiveId }
 }
@@ -136,36 +134,34 @@ export const normalizeLoadedViewports = (
  */
 export const getNextInsetPosition = (existingViewports: Viewport[]): ViewportLayout => {
   const defaultPositions = [
-    { x: 0.02, y: 0.02, width: 0.24, height: 0.30 }, // Top-left (first, avoids Nearby Aircraft panel)
-    { x: 0.74, y: 0.02, width: 0.24, height: 0.30 }, // Top-right
-    { x: 0.02, y: 0.68, width: 0.24, height: 0.30 }, // Bottom-left
-    { x: 0.74, y: 0.68, width: 0.24, height: 0.30 }, // Bottom-right
+    { x: 0.02, y: 0.02, width: 0.24, height: 0.3 }, // Top-left (first, avoids Nearby Aircraft panel)
+    { x: 0.74, y: 0.02, width: 0.24, height: 0.3 }, // Top-right
+    { x: 0.02, y: 0.68, width: 0.24, height: 0.3 }, // Bottom-left
+    { x: 0.74, y: 0.68, width: 0.24, height: 0.3 }, // Bottom-right
   ]
 
-  const insets = existingViewports.filter(v => v.layout.width < 0.5)
-  const usedPositions = insets.map(v => ({ x: v.layout.x, y: v.layout.y }))
+  const insets = existingViewports.filter((v) => v.layout.width < 0.5)
+  const usedPositions = insets.map((v) => ({ x: v.layout.x, y: v.layout.y }))
 
   // Find first unused default position
   for (const pos of defaultPositions) {
-    const isUsed = usedPositions.some(
-      used => Math.abs(used.x - pos.x) < 0.1 && Math.abs(used.y - pos.y) < 0.1
-    )
+    const isUsed = usedPositions.some((used) => Math.abs(used.x - pos.x) < 0.1 && Math.abs(used.y - pos.y) < 0.1)
     if (!isUsed) {
-      const maxZIndex = Math.max(0, ...existingViewports.map(v => v.layout.zIndex))
+      const maxZIndex = Math.max(0, ...existingViewports.map((v) => v.layout.zIndex))
       return { ...pos, zIndex: maxZIndex + 1 }
     }
   }
 
   // All default positions used, offset from last inset
   const lastInset = insets[insets.length - 1]
-  const maxZIndex = Math.max(0, ...existingViewports.map(v => v.layout.zIndex))
+  const maxZIndex = Math.max(0, ...existingViewports.map((v) => v.layout.zIndex))
   if (lastInset) {
     return {
       x: Math.min(0.74, lastInset.layout.x + 0.02),
       y: Math.min(0.68, lastInset.layout.y + 0.02),
       width: 0.24,
-      height: 0.30,
-      zIndex: maxZIndex + 1
+      height: 0.3,
+      zIndex: maxZIndex + 1,
     }
   }
 
@@ -182,14 +178,14 @@ export const getNextInsetPosition = (existingViewports: Viewport[]): ViewportLay
 export const updateViewportCameraState = (
   viewports: Viewport[],
   viewportId: string,
-  updater: (state: ViewportCameraState) => Partial<ViewportCameraState>
+  updater: (state: ViewportCameraState) => Partial<ViewportCameraState>,
 ): Viewport[] => {
-  return viewports.map(viewport => {
+  return viewports.map((viewport) => {
     if (viewport.id !== viewportId) return viewport
     const updates = updater(viewport.cameraState)
     return {
       ...viewport,
-      cameraState: { ...viewport.cameraState, ...updates }
+      cameraState: { ...viewport.cameraState, ...updates },
     }
   })
 }

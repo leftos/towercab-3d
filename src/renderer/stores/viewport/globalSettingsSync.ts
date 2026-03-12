@@ -12,7 +12,7 @@ import type {
   GlobalCameraBookmark,
   GlobalViewModeDefaults,
   GlobalInsetViewport,
-  Viewport
+  Viewport,
 } from '../../types'
 import { DEFAULT_GLOBAL_VIEWPORT_SETTINGS } from '../../types'
 import { TOPDOWN_ALTITUDE_DEFAULT } from '../../constants'
@@ -78,7 +78,7 @@ export const toGlobalViewModeDefaults = (local: ViewModeDefaults): GlobalViewMod
   positionOffsetX: local.positionOffsetX,
   positionOffsetY: local.positionOffsetY,
   positionOffsetZ: local.positionOffsetZ,
-  topdownAltitude: local.topdownAltitude
+  topdownAltitude: local.topdownAltitude,
 })
 
 /**
@@ -93,7 +93,7 @@ export const toGlobalCameraBookmark = (local: CameraBookmark): GlobalCameraBookm
   positionOffsetY: local.positionOffsetY,
   positionOffsetZ: local.positionOffsetZ,
   viewMode: local.viewMode,
-  topdownAltitude: local.topdownAltitude
+  topdownAltitude: local.topdownAltitude,
 })
 
 /**
@@ -108,7 +108,7 @@ export const toGlobalInsetViewport = (local: Viewport): GlobalInsetViewport => (
     y: local.layout.y,
     width: local.layout.width,
     height: local.layout.height,
-    zIndex: local.layout.zIndex
+    zIndex: local.layout.zIndex,
   },
   cameraState: {
     viewMode: local.cameraState.viewMode,
@@ -123,8 +123,8 @@ export const toGlobalInsetViewport = (local: Viewport): GlobalInsetViewport => (
     followZoom: local.cameraState.followZoom,
     orbitDistance: local.cameraState.orbitDistance,
     orbitHeading: local.cameraState.orbitHeading,
-    orbitPitch: local.cameraState.orbitPitch
-  }
+    orbitPitch: local.cameraState.orbitPitch,
+  },
 })
 
 /**
@@ -143,7 +143,7 @@ const toGlobalCameraState = (cameraState: Viewport['cameraState']) => ({
   followZoom: cameraState.followZoom,
   orbitDistance: cameraState.orbitDistance,
   orbitHeading: cameraState.orbitHeading,
-  orbitPitch: cameraState.orbitPitch
+  orbitPitch: cameraState.orbitPitch,
 })
 
 /**
@@ -189,15 +189,15 @@ export const toGlobalAirportConfig = (local: AirportViewportConfig): GlobalAirpo
 export const toGlobalViewportSettings = (
   airportConfigs: Record<string, AirportViewportConfig>,
   orbitSettings: GlobalOrbitSettings,
-  currentAirportIcao: string | null
+  currentAirportIcao: string | null,
 ): GlobalViewportSettings => ({
   airportConfigs: Object.fromEntries(
     Object.entries(airportConfigs)
       .map(([icao, config]) => [icao, toGlobalAirportConfig(config)])
-      .filter(([, config]) => Object.keys(config as object).length > 0)
+      .filter(([, config]) => Object.keys(config as object).length > 0),
   ),
   orbitSettings,
-  lastAirportIcao: currentAirportIcao
+  lastAirportIcao: currentAirportIcao,
 })
 
 // =============================================================================
@@ -225,7 +225,7 @@ export const fromGlobalViewModeDefaults = (global: GlobalViewModeDefaults): View
   positionOffsetX: global.positionOffsetX,
   positionOffsetY: global.positionOffsetY,
   positionOffsetZ: global.positionOffsetZ,
-  topdownAltitude: global.topdownAltitude
+  topdownAltitude: global.topdownAltitude,
 })
 
 /**
@@ -240,7 +240,7 @@ export const fromGlobalCameraBookmark = (global: GlobalCameraBookmark): CameraBo
   positionOffsetY: global.positionOffsetY,
   positionOffsetZ: global.positionOffsetZ,
   viewMode: validateViewMode(global.viewMode),
-  topdownAltitude: global.topdownAltitude ?? TOPDOWN_ALTITUDE_DEFAULT
+  topdownAltitude: global.topdownAltitude ?? TOPDOWN_ALTITUDE_DEFAULT,
 })
 
 /**
@@ -264,7 +264,7 @@ export const fromGlobalInsetViewport = (global: GlobalInsetViewport): Viewport =
     y: global.layout.y,
     width: global.layout.width,
     height: global.layout.height,
-    zIndex: global.layout.zIndex
+    zIndex: global.layout.zIndex,
   },
   cameraState: {
     viewMode: validateViewMode(global.cameraState.viewMode),
@@ -286,8 +286,8 @@ export const fromGlobalInsetViewport = (global: GlobalInsetViewport): Viewport =
     pendingLookAtPosition: null,
     cameraVersion: 0,
     savedMode3dState: null,
-    savedMode2dState: null
-  }
+    savedMode2dState: null,
+  },
 })
 
 /**
@@ -315,7 +315,7 @@ const fromGlobalCameraState = (global: GlobalAirportViewportConfig['mainCamera']
     pendingLookAtPosition: null,
     cameraVersion: 0,
     savedMode3dState: null,
-    savedMode2dState: null
+    savedMode2dState: null,
   }
 }
 
@@ -331,7 +331,7 @@ const fromGlobalCameraState = (global: GlobalAirportViewportConfig['mainCamera']
 export const mergeGlobalAirportConfig = (
   local: AirportViewportConfig | undefined,
   global: GlobalAirportViewportConfig,
-  fallbackMainViewport?: Viewport
+  fallbackMainViewport?: Viewport,
 ): Partial<AirportViewportConfig> => {
   const updates: Partial<AirportViewportConfig> = {}
 
@@ -362,7 +362,7 @@ export const mergeGlobalAirportConfig = (
     // Have local viewports - update main viewport camera from global, replace insets
     const mainViewport = {
       ...local.viewports[0],
-      cameraState: mainCameraState ?? local.viewports[0].cameraState
+      cameraState: mainCameraState ?? local.viewports[0].cameraState,
     }
     updates.viewports = [mainViewport, ...insetViewports]
   } else if (fallbackMainViewport) {
@@ -416,19 +416,21 @@ export const createSyncToGlobalSettings = (
   },
   getGlobalSettingsStore: () => {
     setViewports: (settings: GlobalViewportSettings) => Promise<void>
-  }
+  },
 ) => {
   return () => {
     const state = getState()
     const globalSettings = toGlobalViewportSettings(
       state.airportViewportConfigs,
       state.globalOrbitSettings,
-      state.currentAirportIcao
+      state.currentAirportIcao,
     )
 
-    getGlobalSettingsStore().setViewports(globalSettings).catch(err => {
-      console.error('[GlobalSettingsSync] Failed to sync to global settings:', err)
-    })
+    getGlobalSettingsStore()
+      .setViewports(globalSettings)
+      .catch((err) => {
+        console.error('[GlobalSettingsSync] Failed to sync to global settings:', err)
+      })
   }
 }
 
@@ -447,7 +449,7 @@ export const createLoadFromGlobalSettings = (
   setViewportState: (state: {
     airportViewportConfigs: Record<string, AirportViewportConfig>
     globalOrbitSettings: GlobalOrbitSettings
-  }) => void
+  }) => void,
 ) => {
   return () => {
     const globalState = getGlobalSettingsStore()
@@ -490,9 +492,10 @@ export const createLoadFromGlobalSettings = (
         } else {
           // No local config - create new config and restore from global
           // Create a main viewport first so we can restore insets from global
-          const orbitSettings = globalViewports.orbitSettings && typeof globalViewports.orbitSettings === 'object'
-            ? globalViewports.orbitSettings
-            : undefined
+          const orbitSettings =
+            globalViewports.orbitSettings && typeof globalViewports.orbitSettings === 'object'
+              ? globalViewports.orbitSettings
+              : undefined
           const mainViewport = createMainViewport(undefined, orbitSettings)
 
           // Pass the main viewport as fallback so insets can be restored from global
@@ -502,20 +505,21 @@ export const createLoadFromGlobalSettings = (
           updatedConfigs[icao] = {
             viewports: mergedUpdates.viewports || [mainViewport],
             activeViewportId: mainViewport.id,
-            ...mergedUpdates
+            ...mergedUpdates,
           }
         }
       }
 
       // Validate orbitSettings before using
-      const orbitSettings = globalViewports.orbitSettings && typeof globalViewports.orbitSettings === 'object'
-        ? globalViewports.orbitSettings
-        : state.globalOrbitSettings
+      const orbitSettings =
+        globalViewports.orbitSettings && typeof globalViewports.orbitSettings === 'object'
+          ? globalViewports.orbitSettings
+          : state.globalOrbitSettings
 
       // Update state
       setViewportState({
         airportViewportConfigs: updatedConfigs,
-        globalOrbitSettings: orbitSettings
+        globalOrbitSettings: orbitSettings,
       })
 
       console.log('[GlobalSettingsSync] Loaded from global settings')

@@ -37,7 +37,11 @@ export function formatDuration(totalSeconds: number): string {
  * Format heading angle with zero-padding (e.g., "045°")
  */
 export function formatAngle(angle: number): string {
-  return Math.round(((angle % 360) + 360) % 360).toString().padStart(3, '0') + '°'
+  return (
+    Math.round(((angle % 360) + 360) % 360)
+      .toString()
+      .padStart(3, '0') + '°'
+  )
 }
 
 /**

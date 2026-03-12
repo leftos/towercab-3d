@@ -87,12 +87,7 @@ function calculateFieldElevation(runways: Runway[]): { elevation: number; isFlat
  * @param distanceMeters - Distance in meters
  * @returns [longitude, latitude] of destination point
  */
-function destinationPoint(
-  lon: number,
-  lat: number,
-  bearing: number,
-  distanceMeters: number
-): [number, number] {
+function destinationPoint(lon: number, lat: number, bearing: number, distanceMeters: number): [number, number] {
   const point = turf.point([lon, lat])
   const destination = turf.destination(point, distanceMeters / 1000, bearing, { units: 'kilometers' })
   return destination.geometry.coordinates as [number, number]
@@ -114,7 +109,6 @@ function interpolateHeading(heading1: number, heading2: number, t: number): numb
   const result = h1 + diff * t
   return ((result % 360) + 360) % 360
 }
-
 
 /**
  * Create a runway polygon from runway data using intermediate edge points
@@ -158,14 +152,14 @@ function createRunwayPolygon(runway: Runway, blendDistance: number): FlatteningP
     lowEnd.lon,
     lowEnd.lat,
     (lowHeading + 180) % 360,
-    RUNWAY_EXTENSION_METERS + lowDisplacedMeters
+    RUNWAY_EXTENSION_METERS + lowDisplacedMeters,
   )
 
   const highEndExtended = destinationPoint(
     highEnd.lon,
     highEnd.lat,
     (highEnd.headingTrue + 180) % 360,
-    RUNWAY_EXTENSION_METERS + highDisplacedMeters
+    RUNWAY_EXTENSION_METERS + highDisplacedMeters,
   )
 
   // Generate points along both edges of the runway
@@ -186,18 +180,8 @@ function createRunwayPolygon(runway: Runway, blendDistance: number): FlatteningP
     const currentHeading = interpolateHeading(lowHeading, highHeadingSameDir, t)
 
     // Calculate perpendicular edge points
-    const leftPoint = destinationPoint(
-      centerLon,
-      centerLat,
-      (currentHeading - 90 + 360) % 360,
-      halfWidthMeters
-    )
-    const rightPoint = destinationPoint(
-      centerLon,
-      centerLat,
-      (currentHeading + 90) % 360,
-      halfWidthMeters
-    )
+    const leftPoint = destinationPoint(centerLon, centerLat, (currentHeading - 90 + 360) % 360, halfWidthMeters)
+    const rightPoint = destinationPoint(centerLon, centerLat, (currentHeading + 90) % 360, halfWidthMeters)
 
     leftEdge.push(leftPoint)
     rightEdge.push(rightPoint)
@@ -208,7 +192,7 @@ function createRunwayPolygon(runway: Runway, blendDistance: number): FlatteningP
   const vertices: [number, number][] = [
     ...leftEdge,
     ...rightEdge.reverse(),
-    leftEdge[0] // Close the ring
+    leftEdge[0], // Close the ring
   ]
 
   // Calculate individual end elevations for gradient
@@ -220,13 +204,17 @@ function createRunwayPolygon(runway: Runway, blendDistance: number): FlatteningP
   const highElevationMeters = geoidService.mslToEllipsoidal(highEnd.lat, highEnd.lon, highElevationMetersMsl)
 
   // Validate elevations to prevent NaN propagation in terrain flattening
-  if (!Number.isFinite(elevationMeters) || !Number.isFinite(lowElevationMeters) || !Number.isFinite(highElevationMeters)) {
+  if (
+    !Number.isFinite(elevationMeters) ||
+    !Number.isFinite(lowElevationMeters) ||
+    !Number.isFinite(highElevationMeters)
+  ) {
     console.error(`[AirportPolygonService] INVALID ELEVATION in runway ${runway.ident}:`, {
       elevationMeters,
       lowElevationMeters,
       highElevationMeters,
       lowEnd: lowEnd.elevationFt,
-      highEnd: highEnd.elevationFt
+      highEnd: highEnd.elevationFt,
     })
     return null
   }
@@ -241,7 +229,7 @@ function createRunwayPolygon(runway: Runway, blendDistance: number): FlatteningP
     gradientStart: [lowEnd.lon, lowEnd.lat],
     gradientEnd: [highEnd.lon, highEnd.lat],
     startElevation: lowElevationMeters,
-    endElevation: highElevationMeters
+    endElevation: highElevationMeters,
   }
 }
 
@@ -265,7 +253,7 @@ function createAirportFillPolygon(
   runways: Runway[],
   pavementPolygons: FlatteningPolygon[],
   elevation: number,
-  blendDistance: number
+  blendDistance: number,
 ): FlatteningPolygon | null {
   // Collect all points from runways and pavements
   const allPoints: [number, number][] = []
@@ -292,9 +280,7 @@ function createAirportFillPolygon(
   }
 
   // Create convex hull
-  const pointsFeature = turf.featureCollection(
-    allPoints.map(p => turf.point(p))
-  )
+  const pointsFeature = turf.featureCollection(allPoints.map((p) => turf.point(p)))
   const hull = turf.convex(pointsFeature)
 
   if (!hull) {
@@ -315,7 +301,7 @@ function createAirportFillPolygon(
     vertices: coords,
     elevation,
     blendDistance,
-    source: 'fill'
+    source: 'fill',
   }
 }
 
@@ -363,7 +349,7 @@ class AirportPolygonService {
     icao: string,
     runways: Runway[],
     blendDistance: number = DEFAULT_BLEND_DISTANCE,
-    includePavements: boolean = true
+    includePavements: boolean = true,
   ): AirportFlatteningConfig {
     const polygons: FlatteningPolygon[] = []
 
@@ -372,7 +358,9 @@ class AirportPolygonService {
     const fieldElevationResult = calculateFieldElevation(runways)
 
     // Calculate airport center from runway endpoints for geoid lookup
-    let centerLat = 0, centerLon = 0, pointCount = 0
+    let centerLat = 0,
+      centerLon = 0,
+      pointCount = 0
     for (const runway of runways) {
       if (runway.lowEnd.lat !== 0 || runway.lowEnd.lon !== 0) {
         centerLat += runway.lowEnd.lat
@@ -391,17 +379,22 @@ class AirportPolygonService {
     }
 
     // Convert field elevation from MSL to ellipsoidal for terrain flattening
-    const fieldElevationEllipsoidal = fieldElevationResult && pointCount > 0
-      ? geoidService.mslToEllipsoidal(centerLat, centerLon, fieldElevationResult.elevation)
-      : null
+    const fieldElevationEllipsoidal =
+      fieldElevationResult && pointCount > 0
+        ? geoidService.mslToEllipsoidal(centerLat, centerLon, fieldElevationResult.elevation)
+        : null
 
     if (fieldElevationResult) {
       const { elevation, isFlat } = fieldElevationResult
       const ellipsoidal = fieldElevationEllipsoidal ?? 0
       if (isFlat) {
-        console.log(`[AirportPolygonService] ${icao}: Flat airport detected, field elevation ${elevation.toFixed(1)}m MSL (${ellipsoidal.toFixed(1)}m ellipsoidal)`)
+        console.log(
+          `[AirportPolygonService] ${icao}: Flat airport detected, field elevation ${elevation.toFixed(1)}m MSL (${ellipsoidal.toFixed(1)}m ellipsoidal)`,
+        )
       } else {
-        console.log(`[AirportPolygonService] ${icao}: Variable runway elevations (${elevation.toFixed(1)}m avg), taxiways will use runway-proximity elevation`)
+        console.log(
+          `[AirportPolygonService] ${icao}: Variable runway elevations (${elevation.toFixed(1)}m avg), taxiways will use runway-proximity elevation`,
+        )
       }
     }
 
@@ -426,7 +419,7 @@ class AirportPolygonService {
       pavementPolygons = airportSurfacesService.getPavementPolygons(
         icao,
         ['a', 'c'], // asphalt and concrete
-        fieldElevationEllipsoidal ?? undefined // Default elevation
+        fieldElevationEllipsoidal ?? undefined, // Default elevation
       )
 
       if (pavementPolygons.length > 0) {
@@ -435,7 +428,9 @@ class AirportPolygonService {
         // continuous field elevation (inverse distance weighting from thresholds)
         // and ramp blending near runway edges. This creates smooth gradients
         // across the entire airport regardless of polygon boundaries.
-        console.log(`[AirportPolygonService] ${icao}: Added ${pavementPolygons.length} taxiway polygons at field elevation ${(fieldElevationEllipsoidal ?? 0).toFixed(1)}m`)
+        console.log(
+          `[AirportPolygonService] ${icao}: Added ${pavementPolygons.length} taxiway polygons at field elevation ${(fieldElevationEllipsoidal ?? 0).toFixed(1)}m`,
+        )
         polygons.push(...pavementPolygons)
       }
     }
@@ -450,12 +445,7 @@ class AirportPolygonService {
     // This creates a smooth gradient across the fill polygon that matches the airport slope.
     const isFlat = fieldElevationResult?.isFlat ?? false
     if (fieldElevationEllipsoidal !== null && (runways.length > 0 || pavementPolygons.length > 0)) {
-      const fillPolygon = createAirportFillPolygon(
-        runways,
-        pavementPolygons,
-        fieldElevationEllipsoidal,
-        blendDistance
-      )
+      const fillPolygon = createAirportFillPolygon(runways, pavementPolygons, fieldElevationEllipsoidal, blendDistance)
       if (fillPolygon) {
         // For sloped airports, mark the fill polygon to use field elevation computation
         // This uses IDW from runway thresholds for smooth gradient across the airport
@@ -463,7 +453,9 @@ class AirportPolygonService {
           fillPolygon.useFieldElevation = true
           console.log(`[AirportPolygonService] ${icao}: Added gradient fill polygon (uses IDW from runway thresholds)`)
         } else {
-          console.log(`[AirportPolygonService] ${icao}: Added airport fill polygon at ${fieldElevationEllipsoidal.toFixed(1)}m`)
+          console.log(
+            `[AirportPolygonService] ${icao}: Added airport fill polygon at ${fieldElevationEllipsoidal.toFixed(1)}m`,
+          )
         }
         // Insert at beginning - lower priority than specific polygons
         polygons.unshift(fillPolygon)
@@ -471,14 +463,12 @@ class AirportPolygonService {
     }
 
     // Calculate overall bounding box
-    const bounds = polygons.length > 0
-      ? calculateBounds(polygons)
-      : [0, 0, 0, 0] as [number, number, number, number]
+    const bounds = polygons.length > 0 ? calculateBounds(polygons) : ([0, 0, 0, 0] as [number, number, number, number])
 
     return {
       icao: icao.toUpperCase(),
       polygons,
-      bounds
+      bounds,
     }
   }
 
@@ -489,10 +479,7 @@ class AirportPolygonService {
    * @param blendDistance - Edge blend distance in meters
    * @returns Flattening polygon or null if runway has invalid coordinates
    */
-  createRunwayPolygon(
-    runway: Runway,
-    blendDistance: number = DEFAULT_BLEND_DISTANCE
-  ): FlatteningPolygon | null {
+  createRunwayPolygon(runway: Runway, blendDistance: number = DEFAULT_BLEND_DISTANCE): FlatteningPolygon | null {
     return createRunwayPolygon(runway, blendDistance)
   }
 }

@@ -11,12 +11,7 @@ import type { MeshBounds } from './types'
  * Create a 4x4 identity matrix
  */
 export function identityMatrix(): number[] {
-  return [
-    1, 0, 0, 0,
-    0, 1, 0, 0,
-    0, 0, 1, 0,
-    0, 0, 0, 1
-  ]
+  return [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
 }
 
 /**
@@ -25,9 +20,15 @@ export function identityMatrix(): number[] {
 export function matrixFromTRS(t: number[], r: number[], s: number[]): number[] {
   // Quaternion to rotation matrix
   const [qx, qy, qz, qw] = r
-  const xx = qx * qx, yy = qy * qy, zz = qz * qz
-  const xy = qx * qy, xz = qx * qz, yz = qy * qz
-  const wx = qw * qx, wy = qw * qy, wz = qw * qz
+  const xx = qx * qx,
+    yy = qy * qy,
+    zz = qz * qz
+  const xy = qx * qy,
+    xz = qx * qz,
+    yz = qy * qz
+  const wx = qw * qx,
+    wy = qw * qy,
+    wz = qw * qz
 
   const r00 = 1 - 2 * (yy + zz)
   const r01 = 2 * (xy - wz)
@@ -42,10 +43,22 @@ export function matrixFromTRS(t: number[], r: number[], s: number[]): number[] {
   // Apply scale to rotation matrix, then add translation
   // Column-major order
   return [
-    r00 * s[0], r10 * s[0], r20 * s[0], 0,
-    r01 * s[1], r11 * s[1], r21 * s[1], 0,
-    r02 * s[2], r12 * s[2], r22 * s[2], 0,
-    t[0], t[1], t[2], 1
+    r00 * s[0],
+    r10 * s[0],
+    r20 * s[0],
+    0,
+    r01 * s[1],
+    r11 * s[1],
+    r21 * s[1],
+    0,
+    r02 * s[2],
+    r12 * s[2],
+    r22 * s[2],
+    0,
+    t[0],
+    t[1],
+    t[2],
+    1,
   ]
 }
 
@@ -78,7 +91,7 @@ export function transformPoint(point: [number, number, number], matrix: number[]
   return [
     (matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12]) / safeW,
     (matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13]) / safeW,
-    (matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14]) / safeW
+    (matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14]) / safeW,
   ]
 }
 
@@ -97,6 +110,6 @@ export function getBoundingBoxCorners(bounds: MeshBounds): [number, number, numb
     [minX, minY, maxZ],
     [maxX, minY, maxZ],
     [minX, maxY, maxZ],
-    [maxX, maxY, maxZ]
+    [maxX, maxY, maxZ],
   ]
 }

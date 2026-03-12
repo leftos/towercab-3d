@@ -22,7 +22,11 @@ interface SettingsConfigurationTabProps {
   importStatus: 'idle' | 'success' | 'error'
 }
 
-function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, importStatus }: SettingsConfigurationTabProps) {
+function SettingsConfigurationTab({
+  onShowImportModal,
+  onShowExportModal,
+  importStatus,
+}: SettingsConfigurationTabProps) {
   // Cesium token from global settings
   const cesiumIonToken = useGlobalSettingsStore((state) => state.cesiumIonToken)
   const setCesiumIonToken = useGlobalSettingsStore((state) => state.setCesiumIonToken)
@@ -98,14 +102,17 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
   // Get server status on mount (only in Tauri) and sync tray state
   useEffect(() => {
     if (!isTauri()) return
-    httpServerApi.getStatus().then((status) => {
-      setServerStatus(status)
-      // If server is already running (e.g., auto-start), sync tray state
-      if (status.running && serverSettings.minimizeToTray !== false) {
-        httpServerApi.setMinimizeToTray(true).catch(console.error)
-      }
-    }).catch(console.error)
-  // biome-ignore lint/correctness/useExhaustiveDependencies: one-time init
+    httpServerApi
+      .getStatus()
+      .then((status) => {
+        setServerStatus(status)
+        // If server is already running (e.g., auto-start), sync tray state
+        if (status.running && serverSettings.minimizeToTray !== false) {
+          httpServerApi.setMinimizeToTray(true).catch(console.error)
+        }
+      })
+      .catch(console.error)
+    // biome-ignore lint/correctness/useExhaustiveDependencies: one-time init
   }, [])
 
   // Check vNAS availability on mount (only in Tauri)
@@ -210,76 +217,88 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
   // Helper to get vNAS state label
   const getVnasStateLabel = useCallback(() => {
     switch (vnasStatus.state) {
-      case 'disconnected': return 'Disconnected'
-      case 'authenticating': return 'Authenticating...'
-      case 'connecting': return 'Connecting...'
-      case 'joiningSession': return 'Joining Session...'
-      case 'waitingForSession': return 'Waiting for CRC...'
-      case 'subscribing': return 'Ready for vNAS Airport...'
-      case 'connected': return 'Connected'
-      case 'unavailable': return 'Not Available'
-      default: return vnasStatus.state
+      case 'disconnected':
+        return 'Disconnected'
+      case 'authenticating':
+        return 'Authenticating...'
+      case 'connecting':
+        return 'Connecting...'
+      case 'joiningSession':
+        return 'Joining Session...'
+      case 'waitingForSession':
+        return 'Waiting for CRC...'
+      case 'subscribing':
+        return 'Ready for vNAS Airport...'
+      case 'connected':
+        return 'Connected'
+      case 'unavailable':
+        return 'Not Available'
+      default:
+        return vnasStatus.state
     }
   }, [vnasStatus.state])
 
-  const handleDataSourceChange = useCallback((newSource: DataSourceType) => {
-    const currentDataSource = useGlobalSettingsStore.getState().realtraffic.dataSource
-    if (newSource === currentDataSource) return
+  const handleDataSourceChange = useCallback(
+    (newSource: DataSourceType) => {
+      const currentDataSource = useGlobalSettingsStore.getState().realtraffic.dataSource
+      if (newSource === currentDataSource) return
 
-    const airport = useAirportStore.getState().currentAirport
-    const mainViewport = useViewportStore.getState().viewports.find(v => v.id === 'main')
-    const isFollowing = mainViewport?.cameraState.followingCallsign ?? null
+      const airport = useAirportStore.getState().currentAirport
+      const mainViewport = useViewportStore.getState().viewports.find((v) => v.id === 'main')
+      const isFollowing = mainViewport?.cameraState.followingCallsign ?? null
 
-    // Stop following any aircraft
-    if (isFollowing) {
-      useViewportStore.getState().stopFollowing(false)
-    }
+      // Stop following any aircraft
+      if (isFollowing) {
+        useViewportStore.getState().stopFollowing(false)
+      }
 
-    // If no airport selected and we were following, go back to main menu
-    if (!airport && isFollowing) {
-      useAirportStore.getState().deselectAirport()
-    }
+      // If no airport selected and we were following, go back to main menu
+      if (!airport && isFollowing) {
+        useAirportStore.getState().deselectAirport()
+      }
 
-    // Update the data source setting
-    updateRealTrafficSettings({ dataSource: newSource })
+      // Update the data source setting
+      updateRealTrafficSettings({ dataSource: newSource })
 
-    // Clear the unified aircraft timeline store to remove stale data from previous source
-    useAircraftTimelineStore.getState().clear()
+      // Clear the unified aircraft timeline store to remove stale data from previous source
+      useAircraftTimelineStore.getState().clear()
 
-    // Stop the old data source and start the new one
-    // Note: In remote mode, we don't start polling - data comes from host via WebSocket
-    if (newSource === 'realtraffic') {
-      useVatsimStore.getState().stopPolling()
-      if (!isRemoteMode()) {
-        const rtStore = useRealTrafficStore.getState()
-        if (airport) {
-          rtStore.setReferencePosition(airport.lat, airport.lon)
-        }
-        if (rtStore.status === 'connected') {
-          rtStore.startPolling()
-        } else {
-          const storedLicenseKey = useGlobalSettingsStore.getState().realtraffic.licenseKey
-          if (storedLicenseKey) {
-            rtStore.authenticate(storedLicenseKey).then((success) => {
-              if (success) {
-                rtStore.startPolling()
-              }
-            })
+      // Stop the old data source and start the new one
+      // Note: In remote mode, we don't start polling - data comes from host via WebSocket
+      if (newSource === 'realtraffic') {
+        useVatsimStore.getState().stopPolling()
+        if (!isRemoteMode()) {
+          const rtStore = useRealTrafficStore.getState()
+          if (airport) {
+            rtStore.setReferencePosition(airport.lat, airport.lon)
+          }
+          if (rtStore.status === 'connected') {
+            rtStore.startPolling()
+          } else {
+            const storedLicenseKey = useGlobalSettingsStore.getState().realtraffic.licenseKey
+            if (storedLicenseKey) {
+              rtStore.authenticate(storedLicenseKey).then((success) => {
+                if (success) {
+                  rtStore.startPolling()
+                }
+              })
+            }
           }
         }
-      }
-    } else {
-      useRealTrafficStore.getState().stopPolling()
-      if (!isRemoteMode()) {
-        const vatsimStore = useVatsimStore.getState()
-        vatsimStore.resetTimestamp()
-        if (airport) {
-          vatsimStore.setReferencePosition(airport.lat, airport.lon)
+      } else {
+        useRealTrafficStore.getState().stopPolling()
+        if (!isRemoteMode()) {
+          const vatsimStore = useVatsimStore.getState()
+          vatsimStore.resetTimestamp()
+          if (airport) {
+            vatsimStore.setReferencePosition(airport.lat, airport.lon)
+          }
+          vatsimStore.startPolling()
         }
-        vatsimStore.startPolling()
       }
-    }
-  }, [updateRealTrafficSettings])
+    },
+    [updateRealTrafficSettings],
+  )
 
   const handleToggleServer = useCallback(async () => {
     if (!isTauri()) return
@@ -319,11 +338,13 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
   if (isRemoteMode()) {
     return (
       <div className="settings-remote-notice">
-        <div style={{
-          textAlign: 'center',
-          padding: '40px 20px',
-          color: 'rgba(255, 255, 255, 0.7)'
-        }}>
+        <div
+          style={{
+            textAlign: 'center',
+            padding: '40px 20px',
+            color: 'rgba(255, 255, 255, 0.7)',
+          }}
+        >
           <svg
             width="48"
             height="48"
@@ -337,15 +358,11 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
             <line x1="8" y1="21" x2="16" y2="21" />
             <line x1="12" y1="17" x2="12" y2="21" />
           </svg>
-          <h3 style={{ marginBottom: '12px', color: 'rgba(255, 255, 255, 0.9)' }}>
-            Remote Client Mode
-          </h3>
-          <p style={{ marginBottom: '8px' }}>
-            Configuration settings are managed by the host application.
-          </p>
+          <h3 style={{ marginBottom: '12px', color: 'rgba(255, 255, 255, 0.9)' }}>Remote Client Mode</h3>
+          <p style={{ marginBottom: '8px' }}>Configuration settings are managed by the host application.</p>
           <p style={{ fontSize: '0.9em', opacity: 0.8 }}>
-            Changes to Cesium tokens, data sources, MSFS models, and other global settings
-            must be made on the host PC running TowerCab 3D.
+            Changes to Cesium tokens, data sources, MSFS models, and other global settings must be made on the host PC
+            running TowerCab 3D.
           </p>
         </div>
       </div>
@@ -377,7 +394,10 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
             Get a free token at{' '}
             <a
               href="#"
-              onClick={(e) => { e.preventDefault(); shellApi.openExternal('https://ion.cesium.com/tokens') }}
+              onClick={(e) => {
+                e.preventDefault()
+                shellApi.openExternal('https://ion.cesium.com/tokens')
+              }}
               className="external-link"
             >
               ion.cesium.com
@@ -440,7 +460,10 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
               Get a key at{' '}
               <a
                 href="#"
-                onClick={(e) => { e.preventDefault(); shellApi.openExternal('https://console.cloud.google.com/apis/credentials') }}
+                onClick={(e) => {
+                  e.preventDefault()
+                  shellApi.openExternal('https://console.cloud.google.com/apis/credentials')
+                }}
                 className="external-link"
               >
                 Google Cloud Console
@@ -452,34 +475,31 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
 
         {/* Color Adjustments for current provider */}
         <div className="setting-item">
-          <label>
-            Color Adjustments ({imagerySettings.provider === 'google' ? 'Google Maps' : 'Cesium Ion'})
-          </label>
+          <label>Color Adjustments ({imagerySettings.provider === 'google' ? 'Google Maps' : 'Cesium Ion'})</label>
           <p className="setting-hint">
             Adjust colors for the current imagery provider. Each provider saves its own settings.
           </p>
         </div>
 
         {(() => {
-          const currentAdjustments = imagerySettings.provider === 'google'
-            ? imagerySettings.googleAdjustments
-            : imagerySettings.cesiumAdjustments
-          const adjustmentsKey = imagerySettings.provider === 'google'
-            ? 'googleAdjustments'
-            : 'cesiumAdjustments'
+          const currentAdjustments =
+            imagerySettings.provider === 'google'
+              ? imagerySettings.googleAdjustments
+              : imagerySettings.cesiumAdjustments
+          const adjustmentsKey = imagerySettings.provider === 'google' ? 'googleAdjustments' : 'cesiumAdjustments'
 
           const updateAdjustment = (field: keyof ImageryAdjustments, value: number) => {
             updateImagery({
               [adjustmentsKey]: {
                 ...currentAdjustments,
-                [field]: value
-              }
+                [field]: value,
+              },
             })
           }
 
           const resetAdjustments = () => {
             updateImagery({
-              [adjustmentsKey]: DEFAULT_IMAGERY_ADJUSTMENTS
+              [adjustmentsKey]: DEFAULT_IMAGERY_ADJUSTMENTS,
             })
           }
 
@@ -542,10 +562,7 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
               </div>
 
               <div className="setting-item">
-                <button
-                  className="secondary-button"
-                  onClick={resetAdjustments}
-                >
+                <button className="secondary-button" onClick={resetAdjustments}>
                   Reset to Default
                 </button>
               </div>
@@ -606,10 +623,7 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
                     {rtStatus === 'connecting' ? 'Connecting...' : 'Connect'}
                   </button>
                 ) : (
-                  <button
-                    className="token-save-button"
-                    onClick={handleDisconnectRt}
-                  >
+                  <button className="token-save-button" onClick={handleDisconnectRt}>
                     Disconnect
                   </button>
                 )}
@@ -629,7 +643,10 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
                   Get a license at{' '}
                   <a
                     href="#"
-                    onClick={(e) => { e.preventDefault(); shellApi.openExternal('https://www.flyrealtraffic.com') }}
+                    onClick={(e) => {
+                      e.preventDefault()
+                      shellApi.openExternal('https://www.flyrealtraffic.com')
+                    }}
                     className="external-link"
                   >
                     flyrealtraffic.com
@@ -650,9 +667,7 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
                 />
                 <span>{radiusNm} NM</span>
               </div>
-              <p className="setting-hint">
-                Aircraft within this radius of the tower will be fetched.
-              </p>
+              <p className="setting-hint">Aircraft within this radius of the tower will be fetched.</p>
             </div>
 
             <div className="setting-item">
@@ -668,7 +683,8 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
                 <span>{maxParkedAircraft}</span>
               </div>
               <p className="setting-hint">
-                Parked aircraft to include (0 = disabled). Active aircraft have priority; parked fill remaining display slots.
+                Parked aircraft to include (0 = disabled). Active aircraft have priority; parked fill remaining display
+                slots.
               </p>
             </div>
           </>
@@ -679,21 +695,31 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
       {dataSource === 'vatsim' && isTauri() && vnasStatus.available && (
         <CollapsibleSection title="Real-Time Updates (vNAS)">
           <p className="setting-hint" style={{ marginBottom: '12px' }}>
-            vNAS provides 1-second position updates from the VATSIM network, improving aircraft smoothness within ~30NM of your position.
+            vNAS provides 1-second position updates from the VATSIM network, improving aircraft smoothness within ~30NM
+            of your position.
           </p>
 
           {/* Connection Status */}
           <div className="setting-item">
             <label>Status</label>
-            <span style={{
-              color: vnasStatus.state === 'connected' ? '#81c784' :
-                     ['authenticating', 'connecting', 'joiningSession', 'waitingForSession', 'subscribing'].includes(vnasStatus.state) ? '#ffb74d' :
-                     '#ef5350',
-              fontWeight: 600
-            }}>
+            <span
+              style={{
+                color:
+                  vnasStatus.state === 'connected'
+                    ? '#81c784'
+                    : ['authenticating', 'connecting', 'joiningSession', 'waitingForSession', 'subscribing'].includes(
+                          vnasStatus.state,
+                        )
+                      ? '#ffb74d'
+                      : '#ef5350',
+                fontWeight: 600,
+              }}
+            >
               {getVnasStateLabel()}
               {vnasStatus.subscribedFacilities.length > 0 && vnasStatus.state === 'connected' && (
-                <span style={{ color: '#4fc3f7', marginLeft: '8px' }}>({vnasStatus.subscribedFacilities.join(', ')})</span>
+                <span style={{ color: '#4fc3f7', marginLeft: '8px' }}>
+                  ({vnasStatus.subscribedFacilities.join(', ')})
+                </span>
               )}
             </span>
           </div>
@@ -725,10 +751,7 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
               </div>
 
               <div className="setting-item">
-                <button
-                  className="control-button"
-                  onClick={handleVnasStartAuth}
-                >
+                <button className="control-button" onClick={handleVnasStartAuth}>
                   Connect to vNAS
                 </button>
                 <p className="setting-hint" style={{ marginTop: '8px' }}>
@@ -742,7 +765,8 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
           {vnasIsAuthenticating && (
             <>
               <p className="setting-hint" style={{ marginBottom: '8px' }}>
-                Complete authorization in your browser. If the app doesn&apos;t automatically connect, paste the callback URL below:
+                Complete authorization in your browser. If the app doesn&apos;t automatically connect, paste the
+                callback URL below:
               </p>
               <div className="setting-item">
                 <input
@@ -762,10 +786,7 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
                   >
                     Submit
                   </button>
-                  <button
-                    className="control-button"
-                    onClick={handleVnasCancelAuth}
-                  >
+                  <button className="control-button" onClick={handleVnasCancelAuth}>
                     Cancel
                   </button>
                 </div>
@@ -774,7 +795,9 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
           )}
 
           {/* Connected or connecting states - show disconnect button */}
-          {['connecting', 'joiningSession', 'waitingForSession', 'subscribing', 'connected'].includes(vnasStatus.state) && (
+          {['connecting', 'joiningSession', 'waitingForSession', 'subscribing', 'connected'].includes(
+            vnasStatus.state,
+          ) && (
             <div className="setting-item">
               <button
                 className="control-button"
@@ -824,7 +847,8 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
               Minimize to tray when closing (while server is running)
             </label>
             <p className="setting-hint">
-              When enabled, closing the window minimizes to the system tray instead of quitting, so remote clients stay connected.
+              When enabled, closing the window minimizes to the system tray instead of quitting, so remote clients stay
+              connected.
             </p>
           </div>
           <div className="setting-item">
@@ -876,21 +900,26 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
                     </button>
                   </div>
                 )}
-                {serverStatus.lanUrls && serverStatus.lanUrls.map((url, index) => (
-                  <div key={url} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <code style={{ background: 'rgba(255,255,255,0.1)', padding: '4px 8px', borderRadius: '4px' }}>
-                      {url}
-                    </code>
-                    <button
-                      className="control-button"
-                      onClick={() => handleCopyUrl(url)}
-                      style={{ padding: '4px 8px' }}
-                    >
-                      Copy
-                    </button>
-                    {index === 0 && <span className="setting-hint" style={{ marginLeft: '4px' }}>(Use for other devices)</span>}
-                  </div>
-                ))}
+                {serverStatus.lanUrls &&
+                  serverStatus.lanUrls.map((url, index) => (
+                    <div key={url} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <code style={{ background: 'rgba(255,255,255,0.1)', padding: '4px 8px', borderRadius: '4px' }}>
+                        {url}
+                      </code>
+                      <button
+                        className="control-button"
+                        onClick={() => handleCopyUrl(url)}
+                        style={{ padding: '4px 8px' }}
+                      >
+                        Copy
+                      </button>
+                      {index === 0 && (
+                        <span className="setting-hint" style={{ marginLeft: '4px' }}>
+                          (Use for other devices)
+                        </span>
+                      )}
+                    </div>
+                  ))}
               </div>
               <p className="setting-hint" style={{ marginTop: '8px' }}>
                 Open one of these URLs in Safari on your iPad to access TowerCab 3D remotely.
@@ -914,10 +943,7 @@ function SettingsConfigurationTab({ onShowImportModal, onShowExportModal, import
               </svg>
               Export Settings
             </button>
-            <button
-              className="control-button"
-              onClick={onShowImportModal}
-            >
+            <button className="control-button" onClick={onShowImportModal}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                 <polyline points="17 8 12 3 7 8" />

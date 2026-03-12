@@ -201,7 +201,7 @@ export const DEFAULT_IMAGERY_ADJUSTMENTS: ImageryAdjustments = {
   hueShift: 0,
   saturation: 1.0,
   brightness: 1.0,
-  contrast: 1.0
+  contrast: 1.0,
 }
 
 /**
@@ -406,7 +406,7 @@ export const DEFAULT_INSET_GRAPHICS_SETTINGS: InsetGraphicsSettings = {
   terrain: 'low',
   cache: 'minimal',
   preloadTiles: false,
-  maxFramerate: 'match'
+  maxFramerate: 'match',
 }
 
 /**
@@ -460,7 +460,7 @@ export interface InsetDisplaySettings {
 export const DEFAULT_INSET_DISPLAY_SETTINGS: InsetDisplaySettings = {
   datablockMode: 'callsign',
   groundLabelMode: 'crucialPhases',
-  visibilityMargin: 0.15
+  visibilityMargin: 0.15,
 }
 
 /**
@@ -631,7 +631,6 @@ export interface GraphicsSettings {
    * @see InsetGraphicsSettings for individual setting descriptions
    */
   insetGraphics: InsetGraphicsSettings
-
 }
 
 /**
@@ -990,7 +989,7 @@ export const MSFS_CACHE_LIMIT = {
   /** Maximum cache size in MB (20 GB) */
   MAX_MB: 20480,
   /** Default cache size in MB (5 GB) */
-  DEFAULT_MB: 5120
+  DEFAULT_MB: 5120,
 } as const
 
 /**
@@ -1080,7 +1079,7 @@ export const DEFAULT_MSFS_MODEL_SETTINGS: MSFSModelSettings = {
   cacheDirectory: null,
   cacheLimitMB: MSFS_CACHE_LIMIT.DEFAULT_MB,
   textureScale: '1k',
-  skipGenericVmrMatches: false
+  skipGenericVmrMatches: false,
 }
 
 // ============================================================================
@@ -1101,7 +1100,7 @@ export interface GlobalViewModeDefaults {
   positionOffsetX: number
   positionOffsetY: number
   positionOffsetZ: number
-  topdownAltitude?: number  // Only for 2D
+  topdownAltitude?: number // Only for 2D
 }
 
 /**
@@ -1216,9 +1215,9 @@ export const DEFAULT_GLOBAL_VIEWPORT_SETTINGS: GlobalViewportSettings = {
   orbitSettings: {
     distance: 500,
     heading: 0,
-    pitch: -30
+    pitch: -30,
   },
-  lastAirportIcao: null
+  lastAirportIcao: null,
 }
 
 /**
@@ -1315,7 +1314,7 @@ export const DEFAULT_GLOBAL_DISPLAY_SETTINGS: GlobalDisplaySettings = {
   autoAvoidOverlaps: true,
   groundLabelMode: 'all',
   groundLabelMinSpeed: 2,
-  inset: DEFAULT_INSET_DISPLAY_SETTINGS
+  inset: DEFAULT_INSET_DISPLAY_SETTINGS,
 }
 
 /**
@@ -1539,7 +1538,7 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
     provider: 'cesium',
     googleMapsApiKey: '',
     cesiumAdjustments: DEFAULT_IMAGERY_ADJUSTMENTS,
-    googleAdjustments: DEFAULT_IMAGERY_ADJUSTMENTS
+    googleAdjustments: DEFAULT_IMAGERY_ADJUSTMENTS,
   },
   msfsModels: DEFAULT_MSFS_MODEL_SETTINGS,
   // @deprecated - kept for migration only
@@ -1547,30 +1546,30 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
     sourcePath: null,
     outputPath: null,
     textureScale: '1k',
-    enableFsltlModels: true
+    enableFsltlModels: true,
   },
   airports: {
     defaultIcao: '',
     recentAirports: [],
     vatsimFavorites: [],
-    realtrafficFavorites: []
+    realtrafficFavorites: [],
   },
   server: {
     port: 8765,
     enabled: false,
     authToken: undefined,
     requireLocalNetwork: false,
-    minimizeToTray: true
+    minimizeToTray: true,
   },
   realtraffic: {
     dataSource: 'vatsim',
     licenseKey: '',
     radiusNm: 100,
-    maxParkedAircraft: 50
+    maxParkedAircraft: 50,
   },
   viewports: DEFAULT_GLOBAL_VIEWPORT_SETTINGS,
   display: DEFAULT_GLOBAL_DISPLAY_SETTINGS,
-  disabledMods: []
+  disabledMods: [],
 }
 
 /**
@@ -1767,21 +1766,24 @@ export interface SettingsStore {
  * Used for initialization and reset-to-defaults functionality.
  * Will be referenced by settingsStore in Phase 5.
  */
-export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
-  updateCesiumSettings: unknown
-  updateGraphicsSettings: unknown
-  updateCameraSettings: unknown
-  updateWeatherSettings: unknown
-  updateMemorySettings: unknown
-  updateAircraftSettings: unknown
-  updateUISettings: unknown
-  updateFSLTLSettings: unknown
-  updateRealTrafficSettings: unknown
-  updateAdvancedSettings: unknown
-  resetToDefaults: unknown
-  exportSettings: unknown
-  importSettings: unknown
-}> = {
+export const DEFAULT_SETTINGS: Omit<
+  SettingsStore,
+  keyof {
+    updateCesiumSettings: unknown
+    updateGraphicsSettings: unknown
+    updateCameraSettings: unknown
+    updateWeatherSettings: unknown
+    updateMemorySettings: unknown
+    updateAircraftSettings: unknown
+    updateUISettings: unknown
+    updateFSLTLSettings: unknown
+    updateRealTrafficSettings: unknown
+    updateAdvancedSettings: unknown
+    resetToDefaults: unknown
+    exportSettings: unknown
+    importSettings: unknown
+  }
+> = {
   cesium: {
     cesiumIonToken: '',
     terrainQuality: 3,
@@ -1791,7 +1793,7 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     timeMode: 'real',
     fixedTimeHour: 12,
     enableTerrainFlattening: true,
-    terrainBlendDistance: 50
+    terrainBlendDistance: 50,
   },
   graphics: {
     msaaSamples: 4,
@@ -1820,7 +1822,7 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     nightDarkeningIntensity: 0.7,
     aircraftNightVisibility: 1.5,
     maxFramerate: 60,
-    insetGraphics: DEFAULT_INSET_GRAPHICS_SETTINGS
+    insetGraphics: DEFAULT_INSET_GRAPHICS_SETTINGS,
   },
   camera: {
     defaultFov: 60,
@@ -1828,7 +1830,7 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     mouseSensitivity: 1.0,
     joystickSensitivity: 5,
     enableAutoAirportSwitch: false,
-    orbitCameraLag: 50
+    orbitCameraLag: 50,
   },
   weather: {
     showWeatherEffects: true,
@@ -1841,13 +1843,13 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     showPrecipitation: true,
     precipitationIntensity: 1.0,
     showLightning: true,
-    enableWeatherInterpolation: true
+    enableWeatherInterpolation: true,
   },
   memory: {
     inMemoryTileCacheSize: 2000,
     diskCacheSizeGB: 2,
     aircraftDataRadiusNM: 100,
-    maxReplayDurationMinutes: 15
+    maxReplayDurationMinutes: 15,
   },
   aircraft: {
     labelVisibilityDistance: 30,
@@ -1861,7 +1863,7 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     autoAvoidOverlaps: true,
     leaderDistance: 2,
     defaultDatablockDirection: 7,
-    datablockFontSize: 12
+    datablockFontSize: 12,
   },
   ui: {
     theme: 'dark',
@@ -1872,23 +1874,23 @@ export const DEFAULT_SETTINGS: Omit<SettingsStore, keyof {
     aircraftPanelWidth: 280,
     aircraftPanelHeight: 0,
     settingsModalPosition: { x: 0, y: 0 },
-    dockRunwayPanel: false
+    dockRunwayPanel: false,
   },
   fsltl: {
     sourcePath: null,
     outputPath: null,
     textureScale: '1k',
-    enableFsltlModels: true
+    enableFsltlModels: true,
   },
   realtraffic: {
     dataSource: 'vatsim',
     licenseKey: '',
     autoDetectLicense: true,
-    radiusNm: 100
+    radiusNm: 100,
   },
   advanced: {
     enableInterpolationDebugLogs: false,
     enableDebugCoordinateOverlay: false,
-    enableDynamicDisplayDelay: true
-  }
+    enableDynamicDisplayDelay: true,
+  },
 }

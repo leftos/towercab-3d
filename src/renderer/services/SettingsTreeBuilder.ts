@@ -21,7 +21,7 @@ export const CATEGORY_LABELS: Record<string, string> = {
   memory: 'Memory & Performance',
   aircraft: 'Aircraft Display',
   ui: 'User Interface',
-  fsltl: 'FSLTL Models'
+  fsltl: 'FSLTL Models',
 }
 
 /**
@@ -32,147 +32,162 @@ export const SUBCATEGORY_MAPPINGS: Record<string, Record<string, { label: string
     // NOTE: cesiumIonToken intentionally excluded - personal API key should never be exported
     terrain: {
       label: 'Terrain',
-      properties: ['terrainQuality', 'show3DBuildings']
+      properties: ['terrainQuality', 'show3DBuildings'],
     },
     timeLighting: {
       label: 'Time & Lighting',
-      properties: ['timeMode', 'fixedTimeHour', 'enableLighting']
-    }
+      properties: ['timeMode', 'fixedTimeHour', 'enableLighting'],
+    },
   },
   graphics: {
     antialiasing: {
       label: 'Anti-Aliasing',
-      properties: ['msaaSamples', 'enableFxaa']
+      properties: ['msaaSamples', 'enableFxaa'],
     },
     postProcessing: {
       label: 'Post-Processing',
-      properties: ['enableHdr', 'enableLogDepth', 'enableGroundAtmosphere', 'enableAmbientOcclusion', 'enableAircraftSilhouettes']
+      properties: [
+        'enableHdr',
+        'enableLogDepth',
+        'enableGroundAtmosphere',
+        'enableAmbientOcclusion',
+        'enableAircraftSilhouettes',
+      ],
     },
     shadows: {
       label: 'Shadows',
       properties: [
-        'enableShadows', 'shadowMapSize', 'shadowMaxDistance', 'shadowDarkness',
-        'shadowSoftness', 'shadowFadingEnabled', 'shadowNormalOffset', 'aircraftShadowsOnly',
-        'shadowDepthBias', 'shadowPolygonOffsetFactor', 'shadowPolygonOffsetUnits', 'cameraNearPlane'
-      ]
+        'enableShadows',
+        'shadowMapSize',
+        'shadowMaxDistance',
+        'shadowDarkness',
+        'shadowSoftness',
+        'shadowFadingEnabled',
+        'shadowNormalOffset',
+        'aircraftShadowsOnly',
+        'shadowDepthBias',
+        'shadowPolygonOffsetFactor',
+        'shadowPolygonOffsetUnits',
+        'cameraNearPlane',
+      ],
     },
     modelAppearance: {
       label: 'Model Appearance',
-      properties: ['builtinModelBrightness', 'builtinModelTintColor', 'fsltlModelBrightness']
+      properties: ['builtinModelBrightness', 'builtinModelTintColor', 'fsltlModelBrightness'],
     },
     nightEffects: {
       label: 'Night Effects',
-      properties: ['enableNightDarkening', 'nightDarkeningIntensity', 'aircraftNightVisibility']
+      properties: ['enableNightDarkening', 'nightDarkeningIntensity', 'aircraftNightVisibility'],
     },
     performance: {
       label: 'Performance',
-      properties: ['maxFramerate']
-    }
+      properties: ['maxFramerate'],
+    },
   },
   camera: {
     fov: {
       label: 'Field of View',
-      properties: ['defaultFov']
+      properties: ['defaultFov'],
     },
     speed: {
       label: 'Movement Speed',
-      properties: ['cameraSpeed']
+      properties: ['cameraSpeed'],
     },
     sensitivity: {
       label: 'Sensitivity',
-      properties: ['mouseSensitivity', 'joystickSensitivity']
+      properties: ['mouseSensitivity', 'joystickSensitivity'],
     },
     behavior: {
       label: 'Behavior',
-      properties: ['enableAutoAirportSwitch']
-    }
+      properties: ['enableAutoAirportSwitch'],
+    },
   },
   weather: {
     master: {
       label: 'Master Toggle',
-      properties: ['showWeatherEffects']
+      properties: ['showWeatherEffects'],
     },
     fog: {
       label: 'Fog',
-      properties: ['showCesiumFog', 'showBabylonFog', 'fogIntensity', 'visibilityScale']
+      properties: ['showCesiumFog', 'showBabylonFog', 'fogIntensity', 'visibilityScale'],
     },
     clouds: {
       label: 'Clouds',
-      properties: ['showClouds', 'cloudOpacity']
+      properties: ['showClouds', 'cloudOpacity'],
     },
     precipitation: {
       label: 'Precipitation',
-      properties: ['showPrecipitation', 'precipitationIntensity']
+      properties: ['showPrecipitation', 'precipitationIntensity'],
     },
     lightning: {
       label: 'Lightning & Interpolation',
-      properties: ['showLightning', 'enableWeatherInterpolation']
-    }
+      properties: ['showLightning', 'enableWeatherInterpolation'],
+    },
   },
   memory: {
     tileCache: {
       label: 'Tile Cache',
-      properties: ['inMemoryTileCacheSize', 'diskCacheSizeGB']
+      properties: ['inMemoryTileCacheSize', 'diskCacheSizeGB'],
     },
     dataRadius: {
       label: 'Aircraft Data Radius',
-      properties: ['aircraftDataRadiusNM']
+      properties: ['aircraftDataRadiusNM'],
     },
     replay: {
       label: 'Replay Buffer',
-      properties: ['maxReplayDurationMinutes']
-    }
+      properties: ['maxReplayDurationMinutes'],
+    },
   },
   aircraft: {
     visibility: {
       label: 'Visibility',
-      properties: ['labelVisibilityDistance', 'maxAircraftDisplay']
+      properties: ['labelVisibilityDistance', 'maxAircraftDisplay'],
     },
     trafficFilters: {
       label: 'Traffic Filters',
-      properties: ['showGroundTraffic', 'showAirborneTraffic']
+      properties: ['showGroundTraffic', 'showAirborneTraffic'],
     },
     datablock: {
       label: 'Datablock Mode & Font',
-      properties: ['datablockMode', 'datablockFontSize']
+      properties: ['datablockMode', 'datablockFontSize'],
     },
     leaderLines: {
       label: 'Leader Lines & Overlap',
-      properties: ['leaderDistance', 'autoAvoidOverlaps', 'defaultDatablockDirection', 'pinFollowedAircraftToTop']
+      properties: ['leaderDistance', 'autoAvoidOverlaps', 'defaultDatablockDirection', 'pinFollowedAircraftToTop'],
     },
     orientation: {
       label: 'Orientation Emulation',
-      properties: ['orientationEmulation', 'orientationIntensity']
-    }
+      properties: ['orientationEmulation', 'orientationIntensity'],
+    },
   },
   ui: {
     theme: {
       label: 'Theme',
-      properties: ['theme']
+      properties: ['theme'],
     },
     panels: {
       label: 'Panels',
-      properties: ['showAircraftPanel', 'showMetarOverlay', 'aircraftPanelWidth', 'aircraftPanelHeight']
+      properties: ['showAircraftPanel', 'showMetarOverlay', 'aircraftPanelWidth', 'aircraftPanelHeight'],
     },
     prompts: {
       label: 'Prompts',
-      properties: ['askToContributePositions', 'deviceOptimizationPromptDismissed']
-    }
+      properties: ['askToContributePositions', 'deviceOptimizationPromptDismissed'],
+    },
   },
   fsltl: {
     paths: {
       label: 'Paths',
-      properties: ['sourcePath', 'outputPath']
+      properties: ['sourcePath', 'outputPath'],
     },
     textureQuality: {
       label: 'Texture Quality',
-      properties: ['textureScale']
+      properties: ['textureScale'],
     },
     enableModels: {
       label: 'Enable Models',
-      properties: ['enableFsltlModels']
-    }
-  }
+      properties: ['enableFsltlModels'],
+    },
+  },
 }
 
 /**
@@ -183,7 +198,7 @@ export const SUBCATEGORY_MAPPINGS: Record<string, Record<string, { label: string
 export const GLOBAL_SUBCATEGORY_MAPPINGS: Record<string, { label: string; path: string }> = {
   fsltl: { label: 'FSLTL Configuration', path: 'fsltl' },
   airports: { label: 'Default/Recent Airports', path: 'airports' },
-  server: { label: 'Server Configuration', path: 'server' }
+  server: { label: 'Server Configuration', path: 'server' },
 }
 
 /**
@@ -194,7 +209,7 @@ export const AIRPORT_SUBCATEGORY_MAPPINGS: Record<string, { label: string; path:
   default3d: { label: '3D Default View', path: 'default3d' },
   default2d: { label: '2D Default View', path: 'default2d' },
   bookmarks: { label: 'Camera Bookmarks', path: 'bookmarks' },
-  datablockPosition: { label: 'Datablock Position', path: 'datablockPosition' }
+  datablockPosition: { label: 'Datablock Position', path: 'datablockPosition' },
 }
 
 /**
@@ -208,7 +223,7 @@ export function getSettingMappings(category: string): SettingMapping[] {
     id: `local.${category}.${subCatKey}`,
     category,
     subCategory: subCatKey,
-    properties: subCat.properties
+    properties: subCat.properties,
   }))
 }
 
@@ -223,7 +238,7 @@ export function buildExportTree(): TreeNodeData[] {
   return [
     buildLocalSettingsTree(settingsState as unknown as Record<string, unknown>),
     buildGlobalSettingsTree(),
-    buildAirportsTree(airportConfigs)
+    buildAirportsTree(airportConfigs),
   ]
 }
 
@@ -249,7 +264,7 @@ function buildLocalSettingsTree(_settings: Record<string, unknown>): TreeNodeDat
         label: subCat.label,
         isLeaf: true,
         settingCount: propCount,
-        description: `${propCount} setting${propCount > 1 ? 's' : ''}`
+        description: `${propCount} setting${propCount > 1 ? 's' : ''}`,
       })
     }
 
@@ -258,7 +273,7 @@ function buildLocalSettingsTree(_settings: Record<string, unknown>): TreeNodeDat
       label,
       isLeaf: false,
       children: subChildren,
-      settingCount: totalProps
+      settingCount: totalProps,
     })
   }
 
@@ -266,7 +281,7 @@ function buildLocalSettingsTree(_settings: Record<string, unknown>): TreeNodeDat
     id: 'local',
     label: 'Local Settings',
     isLeaf: false,
-    children
+    children,
   }
 }
 
@@ -274,20 +289,18 @@ function buildLocalSettingsTree(_settings: Record<string, unknown>): TreeNodeDat
  * Build the global settings tree node
  */
 function buildGlobalSettingsTree(): TreeNodeData {
-  const children: TreeNodeData[] = Object.entries(GLOBAL_SUBCATEGORY_MAPPINGS).map(
-    ([key, mapping]) => ({
-      id: `global.${key}`,
-      label: mapping.label,
-      isLeaf: true
-    })
-  )
+  const children: TreeNodeData[] = Object.entries(GLOBAL_SUBCATEGORY_MAPPINGS).map(([key, mapping]) => ({
+    id: `global.${key}`,
+    label: mapping.label,
+    isLeaf: true,
+  }))
 
   return {
     id: 'global',
     label: 'Global Settings',
     isLeaf: false,
     children,
-    description: 'Shared across all devices'
+    description: 'Shared across all devices',
   }
 }
 
@@ -297,18 +310,18 @@ function buildGlobalSettingsTree(): TreeNodeData {
 function buildAirportsTree(airportConfigs: Record<string, AirportViewportConfig>): TreeNodeData {
   const airports = Object.keys(airportConfigs).sort()
 
-  const children: TreeNodeData[] = airports.map(icao => {
+  const children: TreeNodeData[] = airports.map((icao) => {
     const config = airportConfigs[icao]
     const subChildren: TreeNodeData[] = []
 
     // Viewports (inset geometry and camera configs)
     if (config.viewports && config.viewports.length > 0) {
-      const insetCount = config.viewports.filter(v => v.id !== 'main').length
+      const insetCount = config.viewports.filter((v) => v.id !== 'main').length
       subChildren.push({
         id: `airports.${icao}.viewports`,
         label: 'Viewport Layout',
         isLeaf: true,
-        badge: insetCount > 0 ? `${insetCount} inset${insetCount > 1 ? 's' : ''}` : 'main only'
+        badge: insetCount > 0 ? `${insetCount} inset${insetCount > 1 ? 's' : ''}` : 'main only',
       })
     }
 
@@ -317,7 +330,7 @@ function buildAirportsTree(airportConfigs: Record<string, AirportViewportConfig>
       subChildren.push({
         id: `airports.${icao}.default3d`,
         label: '3D Default View',
-        isLeaf: true
+        isLeaf: true,
       })
     }
 
@@ -326,7 +339,7 @@ function buildAirportsTree(airportConfigs: Record<string, AirportViewportConfig>
       subChildren.push({
         id: `airports.${icao}.default2d`,
         label: '2D Default View',
-        isLeaf: true
+        isLeaf: true,
       })
     }
 
@@ -338,7 +351,7 @@ function buildAirportsTree(airportConfigs: Record<string, AirportViewportConfig>
           id: `airports.${icao}.bookmarks`,
           label: 'Camera Bookmarks',
           isLeaf: true,
-          badge: `${bookmarkCount} bookmark${bookmarkCount > 1 ? 's' : ''}`
+          badge: `${bookmarkCount} bookmark${bookmarkCount > 1 ? 's' : ''}`,
         })
       }
     }
@@ -348,7 +361,7 @@ function buildAirportsTree(airportConfigs: Record<string, AirportViewportConfig>
       subChildren.push({
         id: `airports.${icao}.datablockPosition`,
         label: 'Datablock Position',
-        isLeaf: true
+        isLeaf: true,
       })
     }
 
@@ -358,7 +371,7 @@ function buildAirportsTree(airportConfigs: Record<string, AirportViewportConfig>
       const count = Object.keys(config.bookmarks).length
       if (count > 0) badges.push(`${count} bookmark${count > 1 ? 's' : ''}`)
     }
-    const insetCount = config.viewports?.filter(v => v.id !== 'main').length || 0
+    const insetCount = config.viewports?.filter((v) => v.id !== 'main').length || 0
     if (insetCount > 0) badges.push(`${insetCount} inset${insetCount > 1 ? 's' : ''}`)
 
     return {
@@ -366,7 +379,7 @@ function buildAirportsTree(airportConfigs: Record<string, AirportViewportConfig>
       label: icao,
       isLeaf: false,
       children: subChildren,
-      badge: badges.length > 0 ? badges.join(', ') : undefined
+      badge: badges.length > 0 ? badges.join(', ') : undefined,
     }
   })
 
@@ -375,7 +388,7 @@ function buildAirportsTree(airportConfigs: Record<string, AirportViewportConfig>
     label: 'Per-Airport Data',
     isLeaf: false,
     children,
-    badge: `${airports.length} airport${airports.length !== 1 ? 's' : ''}`
+    badge: `${airports.length} airport${airports.length !== 1 ? 's' : ''}`,
   }
 }
 
@@ -432,19 +445,19 @@ function buildImportLocalSettingsTree(localSettings: Record<string, unknown>): T
     for (const [subKey, subCat] of Object.entries(subcats)) {
       // Check if any of the subcategory's properties exist in the import
       const hasAnyProperty = subCat.properties.some(
-        prop => (categoryData as Record<string, unknown>)[prop] !== undefined
+        (prop) => (categoryData as Record<string, unknown>)[prop] !== undefined,
       )
 
       if (hasAnyProperty) {
         const propCount = subCat.properties.filter(
-          prop => (categoryData as Record<string, unknown>)[prop] !== undefined
+          (prop) => (categoryData as Record<string, unknown>)[prop] !== undefined,
         ).length
 
         subChildren.push({
           id: `local.${category}.${subKey}`,
           label: subCat.label,
           isLeaf: true,
-          settingCount: propCount
+          settingCount: propCount,
         })
       }
     }
@@ -454,7 +467,7 @@ function buildImportLocalSettingsTree(localSettings: Record<string, unknown>): T
         id: `local.${category}`,
         label,
         isLeaf: false,
-        children: subChildren
+        children: subChildren,
       })
     }
   }
@@ -463,7 +476,7 @@ function buildImportLocalSettingsTree(localSettings: Record<string, unknown>): T
     id: 'local',
     label: 'Local Settings',
     isLeaf: false,
-    children
+    children,
   }
 }
 
@@ -478,7 +491,7 @@ function buildImportGlobalSettingsTree(globalSettings: Record<string, unknown>):
       children.push({
         id: `global.${key}`,
         label: mapping.label,
-        isLeaf: true
+        isLeaf: true,
       })
     }
   }
@@ -487,7 +500,7 @@ function buildImportGlobalSettingsTree(globalSettings: Record<string, unknown>):
     id: 'global',
     label: 'Global Settings',
     isLeaf: false,
-    children
+    children,
   }
 }
 
@@ -508,7 +521,7 @@ function buildImportAirportsTree(airports: Record<string, unknown>): TreeNodeDat
           id: `airports.${icao}.viewports`,
           label: 'Viewport Layout',
           isLeaf: true,
-          badge: insetCount > 0 ? `${insetCount} inset${insetCount > 1 ? 's' : ''}` : 'main only'
+          badge: insetCount > 0 ? `${insetCount} inset${insetCount > 1 ? 's' : ''}` : 'main only',
         })
       }
 
@@ -516,7 +529,7 @@ function buildImportAirportsTree(airports: Record<string, unknown>): TreeNodeDat
         subChildren.push({
           id: `airports.${icao}.default3d`,
           label: '3D Default View',
-          isLeaf: true
+          isLeaf: true,
         })
       }
 
@@ -524,7 +537,7 @@ function buildImportAirportsTree(airports: Record<string, unknown>): TreeNodeDat
         subChildren.push({
           id: `airports.${icao}.default2d`,
           label: '2D Default View',
-          isLeaf: true
+          isLeaf: true,
         })
       }
 
@@ -536,7 +549,7 @@ function buildImportAirportsTree(airports: Record<string, unknown>): TreeNodeDat
             id: `airports.${icao}.bookmarks`,
             label: 'Camera Bookmarks',
             isLeaf: true,
-            badge: `${count} bookmark${count > 1 ? 's' : ''}`
+            badge: `${count} bookmark${count > 1 ? 's' : ''}`,
           })
         }
       }
@@ -545,7 +558,7 @@ function buildImportAirportsTree(airports: Record<string, unknown>): TreeNodeDat
         subChildren.push({
           id: `airports.${icao}.datablockPosition`,
           label: 'Datablock Position',
-          isLeaf: true
+          isLeaf: true,
         })
       }
 
@@ -553,7 +566,7 @@ function buildImportAirportsTree(airports: Record<string, unknown>): TreeNodeDat
         id: `airports.${icao}`,
         label: icao,
         isLeaf: false,
-        children: subChildren
+        children: subChildren,
       }
     })
 
@@ -562,7 +575,7 @@ function buildImportAirportsTree(airports: Record<string, unknown>): TreeNodeDat
     label: 'Per-Airport Data',
     isLeaf: false,
     children,
-    badge: `${children.length} airport${children.length !== 1 ? 's' : ''}`
+    badge: `${children.length} airport${children.length !== 1 ? 's' : ''}`,
   }
 }
 

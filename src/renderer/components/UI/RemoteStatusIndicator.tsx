@@ -16,9 +16,9 @@ import { useRemoteStatusStore, SOURCE_STALE_THRESHOLDS } from '../../stores/remo
 import './RemoteStatusIndicator.css'
 
 function RemoteStatusIndicator() {
-  const wsConnected = useRemoteStatusStore(state => state.wsConnected)
-  const lastObservationTime = useRemoteStatusStore(state => state.lastObservationTime)
-  const lastSource = useRemoteStatusStore(state => state.lastSource)
+  const wsConnected = useRemoteStatusStore((state) => state.wsConnected)
+  const lastObservationTime = useRemoteStatusStore((state) => state.lastObservationTime)
+  const lastSource = useRemoteStatusStore((state) => state.lastSource)
 
   // Track "stale" state - no observations beyond source-specific threshold
   const [isStale, setIsStale] = useState(false)
@@ -32,10 +32,8 @@ function RemoteStatusIndicator() {
     const checkStale = () => {
       const now = Date.now()
       // Use source-specific threshold, default to VATSIM (most lenient) if unknown
-      const threshold = lastSource
-        ? SOURCE_STALE_THRESHOLDS[lastSource]
-        : SOURCE_STALE_THRESHOLDS.vatsim
-      const stale = lastObservationTime > 0 && (now - lastObservationTime) > threshold
+      const threshold = lastSource ? SOURCE_STALE_THRESHOLDS[lastSource] : SOURCE_STALE_THRESHOLDS.vatsim
+      const stale = lastObservationTime > 0 && now - lastObservationTime > threshold
       setIsStale(stale)
     }
 
@@ -65,9 +63,7 @@ function RemoteStatusIndicator() {
   }
 
   // Format time since last observation
-  const timeSinceObs = lastObservationTime > 0
-    ? Math.floor((Date.now() - lastObservationTime) / 1000)
-    : null
+  const timeSinceObs = lastObservationTime > 0 ? Math.floor((Date.now() - lastObservationTime) / 1000) : null
 
   return (
     <div className={`remote-status-indicator remote-status-indicator--${status}`}>

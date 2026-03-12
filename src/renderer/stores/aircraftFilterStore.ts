@@ -17,7 +17,7 @@ interface AircraftFilterStore {
 const DEFAULT_FILTERS = {
   searchQuery: '',
   filterAirportTraffic: false,
-  filterWeatherVisibility: false
+  filterWeatherVisibility: false,
 }
 
 export const useAircraftFilterStore = create<AircraftFilterStore>()(
@@ -31,10 +31,10 @@ export const useAircraftFilterStore = create<AircraftFilterStore>()(
 
       setFilterWeatherVisibility: (enabled: boolean) => set({ filterWeatherVisibility: enabled }),
 
-      resetFilters: () => set(DEFAULT_FILTERS)
+      resetFilters: () => set(DEFAULT_FILTERS),
     }),
     {
-      name: 'aircraft-filter-store'
-    }
-  )
+      name: 'aircraft-filter-store',
+    },
+  ),
 )

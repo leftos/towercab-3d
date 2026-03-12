@@ -8,20 +8,20 @@ import type { Runway } from '../../types/airport'
 
 /** Detected phase of flight for an aircraft */
 export type FlightPhase =
-  | 'short_final'      // < 2nm from threshold, aligned, descending
-  | 'long_final'       // 2-6nm from threshold, aligned, descending
-  | 'departure_roll'   // On runway, accelerating, departing from this airport
-  | 'landing_roll'     // On runway, decelerating, arriving at this airport
-  | 'go_around'        // Was on approach, now climbing - missed approach
-  | 'lined_up'         // On runway, stationary
-  | 'holding_short'    // Near runway, stopped
-  | 'pattern'          // In traffic pattern
-  | 'pushback'         // Moving backwards from gate (track opposite to heading)
-  | 'active_taxi'      // Moving on ground, not on runway
-  | 'stopped_taxi'     // Stopped on ground (ramp, taxiway, gate)
-  | 'departing_climb'  // Airborne, climbing, heading away
-  | 'distant_arrival'  // Airborne, > 6nm, inbound
-  | 'unknown'          // Cannot determine phase
+  | 'short_final' // < 2nm from threshold, aligned, descending
+  | 'long_final' // 2-6nm from threshold, aligned, descending
+  | 'departure_roll' // On runway, accelerating, departing from this airport
+  | 'landing_roll' // On runway, decelerating, arriving at this airport
+  | 'go_around' // Was on approach, now climbing - missed approach
+  | 'lined_up' // On runway, stationary
+  | 'holding_short' // Near runway, stopped
+  | 'pattern' // In traffic pattern
+  | 'pushback' // Moving backwards from gate (track opposite to heading)
+  | 'active_taxi' // Moving on ground, not on runway
+  | 'stopped_taxi' // Stopped on ground (ramp, taxiway, gate)
+  | 'departing_climb' // Airborne, climbing, heading away
+  | 'distant_arrival' // Airborne, > 6nm, inbound
+  | 'unknown' // Cannot determine phase
 
 /** Priority tier for UI grouping */
 export type PriorityTier = 'critical' | 'high' | 'medium' | 'low'

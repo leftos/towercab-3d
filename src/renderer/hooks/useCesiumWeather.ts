@@ -52,7 +52,7 @@ export function useCesiumWeather(
   viewer: Viewer | null,
   showWeatherEffects: boolean,
   showCesiumFog: boolean,
-  fogDensity: number
+  fogDensity: number,
 ) {
   // Update Cesium fog based on weather effects and METAR visibility
   // Cesium fog primarily reduces draw distance and fades terrain/imagery

@@ -17,11 +17,11 @@ import type { AircraftDataSource } from '../types/aircraft-timeline'
  * - RealTraffic: ~2s polls with 1.5-4.5s apiDelta, need ~5s for P90 coverage
  */
 export const SOURCE_DISPLAY_DELAYS: Record<AircraftDataSource, number> = {
-  vatsim: 17000,      // 17 seconds (15s updates + 1s poll + 1s jitter buffer)
-  vnas: 1500,         // 1.5 seconds (1Hz updates, just need minimal buffer)
-  realtraffic: 5000,  // 5 seconds
-  replay: 0,          // No delay for replay - we're scrubbing through historical data
-  broadcast: 50       // 50ms for inset broadcasts (~30-60Hz, need 2 observations for interpolation)
+  vatsim: 17000, // 17 seconds (15s updates + 1s poll + 1s jitter buffer)
+  vnas: 1500, // 1.5 seconds (1Hz updates, just need minimal buffer)
+  realtraffic: 5000, // 5 seconds
+  replay: 0, // No delay for replay - we're scrubbing through historical data
+  broadcast: 50, // 50ms for inset broadcasts (~30-60Hz, need 2 observations for interpolation)
 }
 
 /**
@@ -35,7 +35,7 @@ export const SOURCE_DISPLAY_DELAYS: Record<AircraftDataSource, number> = {
  * - vNAS (1Hz): ~300 observations
  * - RealTraffic (~2s): ~150 observations
  */
-export const MAX_OBSERVATION_AGE_MS = 5 * 60 * 1000  // 5 minutes
+export const MAX_OBSERVATION_AGE_MS = 5 * 60 * 1000 // 5 minutes
 
 /**
  * Hard cap on observations per aircraft as a safety limit.
@@ -53,7 +53,7 @@ export const MAX_OBSERVATIONS_PER_AIRCRAFT = 400
  * (aircraft stopped updating). We clamp extrapolation to prevent
  * aircraft from flying off into the distance.
  */
-export const MAX_EXTRAPOLATION_TIME = 30000  // 30 seconds
+export const MAX_EXTRAPOLATION_TIME = 30000 // 30 seconds
 
 /**
  * Time without any updates before removing aircraft from the timeline (ms).
@@ -61,7 +61,7 @@ export const MAX_EXTRAPOLATION_TIME = 30000  // 30 seconds
  * If we haven't received ANY data for this long, the aircraft is
  * considered gone (disconnected, out of range, etc.).
  */
-export const AIRCRAFT_TIMEOUT = 30000  // 30 seconds
+export const AIRCRAFT_TIMEOUT = 30000 // 30 seconds
 
 /**
  * How long to prefer vNAS observations over VATSIM for interpolation (ms).
@@ -73,7 +73,7 @@ export const AIRCRAFT_TIMEOUT = 30000  // 30 seconds
  * VATSIM observations are always added to keep the timeline alive, but they're
  * only used for interpolation when vNAS data is stale.
  */
-export const VNAS_PREFERENCE_THRESHOLD_MS = 30000  // 30 seconds
+export const VNAS_PREFERENCE_THRESHOLD_MS = 30000 // 30 seconds
 
 /**
  * Minimum time between observations to consider them distinct (ms).
@@ -81,12 +81,12 @@ export const VNAS_PREFERENCE_THRESHOLD_MS = 30000  // 30 seconds
  * If two observations arrive within this window, we might skip one
  * to avoid cluttering the timeline with near-duplicate data.
  */
-export const MIN_OBSERVATION_INTERVAL = 100  // 100ms
+export const MIN_OBSERVATION_INTERVAL = 100 // 100ms
 
 /**
  * How often to prune stale aircraft from the timeline store (ms).
  */
-export const PRUNE_INTERVAL = 10000  // 10 seconds
+export const PRUNE_INTERVAL = 10000 // 10 seconds
 
 // ============================================================================
 // Dynamic Display Delay Constants

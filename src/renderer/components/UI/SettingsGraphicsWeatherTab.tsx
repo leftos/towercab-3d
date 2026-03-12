@@ -3,7 +3,13 @@ import { useSettingsStore } from '../../stores/settingsStore'
 import { useWeatherStore } from '../../stores/weatherStore'
 import { formatTimeHour } from '../../utils/formatting'
 import CollapsibleSection from './settings/CollapsibleSection'
-import type { BuildingQuality, InsetMsaaPreset, InsetTerrainPreset, InsetCachePreset, InsetFrameratePreset } from '../../types'
+import type {
+  BuildingQuality,
+  InsetMsaaPreset,
+  InsetTerrainPreset,
+  InsetCachePreset,
+  InsetFrameratePreset,
+} from '../../types'
 import './ControlsBar.css'
 
 function SettingsGraphicsWeatherTab() {
@@ -102,9 +108,10 @@ function SettingsGraphicsWeatherTab() {
                 value={insetGraphics.maxFramerate ?? 'match'}
                 onChange={(e) => {
                   const value = e.target.value
-                  const frameRate: InsetFrameratePreset = value === 'match' ? 'match' : Number(value) as 30 | 60 | 120 | 144 | 0
+                  const frameRate: InsetFrameratePreset =
+                    value === 'match' ? 'match' : (Number(value) as 30 | 60 | 120 | 144 | 0)
                   updateGraphicsSettings({
-                    insetGraphics: { ...insetGraphics, maxFramerate: frameRate }
+                    insetGraphics: { ...insetGraphics, maxFramerate: frameRate },
                   })
                 }}
                 className="select-input"
@@ -118,9 +125,7 @@ function SettingsGraphicsWeatherTab() {
               </select>
             </div>
           </div>
-          <p className="setting-hint">
-            Limits rendering to reduce GPU usage. Use 60 FPS for most displays.
-          </p>
+          <p className="setting-hint">Limits rendering to reduce GPU usage. Use 60 FPS for most displays.</p>
         </div>
 
         <div className="setting-item">
@@ -146,9 +151,11 @@ function SettingsGraphicsWeatherTab() {
               <div className="setting-column-label">Insets</div>
               <select
                 value={insetGraphics.msaa}
-                onChange={(e) => updateGraphicsSettings({
-                  insetGraphics: { ...insetGraphics, msaa: e.target.value as InsetMsaaPreset }
-                })}
+                onChange={(e) =>
+                  updateGraphicsSettings({
+                    insetGraphics: { ...insetGraphics, msaa: e.target.value as InsetMsaaPreset },
+                  })
+                }
                 className="select-input"
               >
                 <option value="match">Match Main</option>
@@ -171,9 +178,7 @@ function SettingsGraphicsWeatherTab() {
             />
             FXAA (Fast Approximate Anti-Aliasing)
           </label>
-          <p className="setting-hint">
-            Post-process anti-aliasing. Works with MSAA for smoother edges.
-          </p>
+          <p className="setting-hint">Post-process anti-aliasing. Works with MSAA for smoother edges.</p>
         </div>
 
         <div className="setting-item">
@@ -185,9 +190,7 @@ function SettingsGraphicsWeatherTab() {
             />
             HDR (High Dynamic Range)
           </label>
-          <p className="setting-hint">
-            Enables high dynamic range rendering. May cause color banding on some GPUs.
-          </p>
+          <p className="setting-hint">Enables high dynamic range rendering. May cause color banding on some GPUs.</p>
         </div>
 
         <div className="setting-item">
@@ -199,9 +202,7 @@ function SettingsGraphicsWeatherTab() {
             />
             Logarithmic Depth Buffer
           </label>
-          <p className="setting-hint">
-            Improves depth precision at large distances. Reduces z-fighting artifacts.
-          </p>
+          <p className="setting-hint">Improves depth precision at large distances. Reduces z-fighting artifacts.</p>
         </div>
       </CollapsibleSection>
 
@@ -218,7 +219,9 @@ function SettingsGraphicsWeatherTab() {
                   max="5"
                   step="1"
                   value={terrainQuality}
-                  onChange={(e) => updateCesiumSettings({ terrainQuality: Number(e.target.value) as 1 | 2 | 3 | 4 | 5 })}
+                  onChange={(e) =>
+                    updateCesiumSettings({ terrainQuality: Number(e.target.value) as 1 | 2 | 3 | 4 | 5 })
+                  }
                 />
                 <span>{['Low', 'Med', 'High', 'VHigh', 'Ultra'][terrainQuality - 1]}</span>
               </div>
@@ -227,9 +230,11 @@ function SettingsGraphicsWeatherTab() {
               <div className="setting-column-label">Insets</div>
               <select
                 value={insetGraphics.terrain}
-                onChange={(e) => updateGraphicsSettings({
-                  insetGraphics: { ...insetGraphics, terrain: e.target.value as InsetTerrainPreset }
-                })}
+                onChange={(e) =>
+                  updateGraphicsSettings({
+                    insetGraphics: { ...insetGraphics, terrain: e.target.value as InsetTerrainPreset },
+                  })
+                }
                 className="select-input"
               >
                 <option value="match">Match Main</option>
@@ -238,9 +243,7 @@ function SettingsGraphicsWeatherTab() {
               </select>
             </div>
           </div>
-          <p className="setting-hint">
-            Lower quality loads faster. Higher quality shows more detail at distance.
-          </p>
+          <p className="setting-hint">Lower quality loads faster. Higher quality shows more detail at distance.</p>
         </div>
 
         <div className="setting-item">
@@ -274,9 +277,7 @@ function SettingsGraphicsWeatherTab() {
               Off
             </button>
           </div>
-          <p className="setting-hint">
-            Display OpenStreetMap 3D buildings. May impact performance.
-          </p>
+          <p className="setting-hint">Display OpenStreetMap 3D buildings. May impact performance.</p>
         </div>
 
         {show3DBuildings && (
@@ -316,9 +317,11 @@ function SettingsGraphicsWeatherTab() {
               <div className="setting-column-label">Insets</div>
               <select
                 value={insetGraphics.cache}
-                onChange={(e) => updateGraphicsSettings({
-                  insetGraphics: { ...insetGraphics, cache: e.target.value as InsetCachePreset }
-                })}
+                onChange={(e) =>
+                  updateGraphicsSettings({
+                    insetGraphics: { ...insetGraphics, cache: e.target.value as InsetCachePreset },
+                  })
+                }
                 className="select-input"
               >
                 <option value="match">Match Main</option>
@@ -327,9 +330,7 @@ function SettingsGraphicsWeatherTab() {
               </select>
             </div>
           </div>
-          <p className="setting-hint">
-            How many terrain/imagery tiles to cache in memory. Higher uses more RAM.
-          </p>
+          <p className="setting-hint">How many terrain/imagery tiles to cache in memory. Higher uses more RAM.</p>
         </div>
 
         <div className="setting-item">
@@ -337,15 +338,15 @@ function SettingsGraphicsWeatherTab() {
             <input
               type="checkbox"
               checked={insetGraphics.preloadTiles}
-              onChange={(e) => updateGraphicsSettings({
-                insetGraphics: { ...insetGraphics, preloadTiles: e.target.checked }
-              })}
+              onChange={(e) =>
+                updateGraphicsSettings({
+                  insetGraphics: { ...insetGraphics, preloadTiles: e.target.checked },
+                })
+              }
             />
             Preload Tiles in Insets
           </label>
-          <p className="setting-hint">
-            Preload nearby tiles for smoother camera movement in inset viewports.
-          </p>
+          <p className="setting-hint">Preload nearby tiles for smoother camera movement in inset viewports.</p>
         </div>
 
         <div className="setting-item">
@@ -436,9 +437,7 @@ function SettingsGraphicsWeatherTab() {
             />
             Globe Lighting
           </label>
-          <p className="setting-hint">
-            Enables sun-based lighting on terrain. Affects day/night cycle.
-          </p>
+          <p className="setting-hint">Enables sun-based lighting on terrain. Affects day/night cycle.</p>
         </div>
 
         <div className="setting-item">
@@ -450,9 +449,7 @@ function SettingsGraphicsWeatherTab() {
             />
             Ground Atmosphere
           </label>
-          <p className="setting-hint">
-            Adds atmospheric haze effect to distant terrain.
-          </p>
+          <p className="setting-hint">Adds atmospheric haze effect to distant terrain.</p>
         </div>
 
         <div className="setting-item">
@@ -486,9 +483,7 @@ function SettingsGraphicsWeatherTab() {
                 />
                 <span>{Math.round(nightDarkeningIntensity * 100)}%</span>
               </div>
-              <p className="setting-hint">
-                Higher values make nights darker.
-              </p>
+              <p className="setting-hint">Higher values make nights darker.</p>
             </div>
 
             <div className="setting-item">
@@ -521,7 +516,7 @@ function SettingsGraphicsWeatherTab() {
               onClick={() => {
                 updateGraphicsSettings({
                   enableShadows: true,
-                  insetGraphics: { ...insetGraphics, shadows: true }
+                  insetGraphics: { ...insetGraphics, shadows: true },
                 })
               }}
             >
@@ -532,7 +527,7 @@ function SettingsGraphicsWeatherTab() {
               onClick={() => {
                 updateGraphicsSettings({
                   enableShadows: true,
-                  insetGraphics: { ...insetGraphics, shadows: false }
+                  insetGraphics: { ...insetGraphics, shadows: false },
                 })
               }}
             >
@@ -543,7 +538,7 @@ function SettingsGraphicsWeatherTab() {
               onClick={() => {
                 updateGraphicsSettings({
                   enableShadows: false,
-                  insetGraphics: { ...insetGraphics, shadows: false }
+                  insetGraphics: { ...insetGraphics, shadows: false },
                 })
               }}
             >
@@ -574,7 +569,9 @@ function SettingsGraphicsWeatherTab() {
             <label>Shadow Map Size</label>
             <select
               value={shadowMapSize}
-              onChange={(e) => updateGraphicsSettings({ shadowMapSize: Number(e.target.value) as 1024 | 2048 | 4096 | 8192 })}
+              onChange={(e) =>
+                updateGraphicsSettings({ shadowMapSize: Number(e.target.value) as 1024 | 2048 | 4096 | 8192 })
+              }
               className="select-input"
             >
               <option value={1024}>1024 (Low)</option>
@@ -601,7 +598,8 @@ function SettingsGraphicsWeatherTab() {
               <span>{shadowMaxDistance}m</span>
             </div>
             <p className="setting-hint">
-              Maximum distance for rendering shadows. Higher values reduce banding but may impact performance. Default: 10000m (10km).
+              Maximum distance for rendering shadows. Higher values reduce banding but may impact performance. Default:
+              10000m (10km).
             </p>
           </div>
 
@@ -618,9 +616,7 @@ function SettingsGraphicsWeatherTab() {
               />
               <span>{(shadowDarkness * 100).toFixed(0)}%</span>
             </div>
-            <p className="setting-hint">
-              Shadow intensity. 0% = invisible, 100% = black.
-            </p>
+            <p className="setting-hint">Shadow intensity. 0% = invisible, 100% = black.</p>
           </div>
 
           <div className="setting-item">
@@ -632,9 +628,7 @@ function SettingsGraphicsWeatherTab() {
               />
               Soft Shadows
             </label>
-            <p className="setting-hint">
-              Blur shadow edges. Disable for sharper (but potentially aliased) shadows.
-            </p>
+            <p className="setting-hint">Blur shadow edges. Disable for sharper (but potentially aliased) shadows.</p>
           </div>
 
           <div className="setting-item">
@@ -646,9 +640,7 @@ function SettingsGraphicsWeatherTab() {
               />
               Shadow Fading
             </label>
-            <p className="setting-hint">
-              Fade shadows at the edge of shadow distance.
-            </p>
+            <p className="setting-hint">Fade shadows at the edge of shadow distance.</p>
           </div>
 
           <div className="setting-item">
@@ -660,9 +652,7 @@ function SettingsGraphicsWeatherTab() {
               />
               Normal Offset
             </label>
-            <p className="setting-hint">
-              Reduces shadow acne artifacts. Try disabling if you see banding.
-            </p>
+            <p className="setting-hint">Reduces shadow acne artifacts. Try disabling if you see banding.</p>
           </div>
 
           <div className="setting-item">
@@ -678,9 +668,7 @@ function SettingsGraphicsWeatherTab() {
               />
               <span>{shadowDepthBias.toFixed(5)}</span>
             </div>
-            <p className="setting-hint">
-              Reduces shadow banding. Increase if you see striped shadows.
-            </p>
+            <p className="setting-hint">Reduces shadow banding. Increase if you see striped shadows.</p>
           </div>
 
           <div className="setting-item">
@@ -696,9 +684,7 @@ function SettingsGraphicsWeatherTab() {
               />
               <span>{shadowPolygonOffsetFactor.toFixed(1)}</span>
             </div>
-            <p className="setting-hint">
-              Shadow depth offset multiplier based on polygon slope.
-            </p>
+            <p className="setting-hint">Shadow depth offset multiplier based on polygon slope.</p>
           </div>
 
           <div className="setting-item">
@@ -714,9 +700,7 @@ function SettingsGraphicsWeatherTab() {
               />
               <span>{shadowPolygonOffsetUnits.toFixed(1)}</span>
             </div>
-            <p className="setting-hint">
-              Constant shadow depth offset.
-            </p>
+            <p className="setting-hint">Constant shadow depth offset.</p>
           </div>
 
           <div className="setting-item">
@@ -749,9 +733,7 @@ function SettingsGraphicsWeatherTab() {
             />
             Enable Weather Effects
           </label>
-          <p className="setting-hint">
-            Fetches real weather data for the current airport.
-          </p>
+          <p className="setting-hint">Fetches real weather data for the current airport.</p>
         </div>
 
         <div className="setting-item">
@@ -764,17 +746,16 @@ function SettingsGraphicsWeatherTab() {
             />
             Interpolate Weather from Nearby Stations
           </label>
-          <p className="setting-hint">
-            Blend weather from the 3 nearest METAR stations based on camera position.
-          </p>
-          {showWeatherEffects && enableWeatherInterpolation && interpolatedWeather &&
+          <p className="setting-hint">Blend weather from the 3 nearest METAR stations based on camera position.</p>
+          {showWeatherEffects &&
+            enableWeatherInterpolation &&
+            interpolatedWeather &&
             interpolatedWeather.sourceStations.length > 1 && (
-            <p className="setting-hint" style={{ marginTop: '4px', opacity: 0.8 }}>
-              Sources: {interpolatedWeather.sourceStations.map(s =>
-                `${s.icao} (${Math.round(s.weight * 100)}%)`
-              ).join(', ')}
-            </p>
-          )}
+              <p className="setting-hint" style={{ marginTop: '4px', opacity: 0.8 }}>
+                Sources:{' '}
+                {interpolatedWeather.sourceStations.map((s) => `${s.icao} (${Math.round(s.weight * 100)}%)`).join(', ')}
+              </p>
+            )}
         </div>
 
         {showWeatherEffects && (
@@ -788,9 +769,7 @@ function SettingsGraphicsWeatherTab() {
                 />
                 Cesium Fog (Distance Fade)
               </label>
-              <p className="setting-hint">
-                Reduces terrain/imagery draw distance based on visibility.
-              </p>
+              <p className="setting-hint">Reduces terrain/imagery draw distance based on visibility.</p>
             </div>
 
             <div className="setting-item">
@@ -802,9 +781,7 @@ function SettingsGraphicsWeatherTab() {
                 />
                 Babylon Fog (Visual Atmosphere)
               </label>
-              <p className="setting-hint">
-                Adds visible fog effect to aircraft and overlays.
-              </p>
+              <p className="setting-hint">Adds visible fog effect to aircraft and overlays.</p>
             </div>
 
             <div className="setting-item">
@@ -847,9 +824,7 @@ function SettingsGraphicsWeatherTab() {
                 />
                 <span>{fogIntensity.toFixed(1)}x</span>
               </div>
-              <p className="setting-hint">
-                How opaque the fog dome appears. Lower = clearer.
-              </p>
+              <p className="setting-hint">How opaque the fog dome appears. Lower = clearer.</p>
             </div>
 
             <div className="setting-item">
@@ -866,9 +841,7 @@ function SettingsGraphicsWeatherTab() {
                 />
                 <span>{visibilityScale.toFixed(1)}x</span>
               </div>
-              <p className="setting-hint">
-                Multiplier for fog distance. 2.0 = see twice as far as METAR visibility.
-              </p>
+              <p className="setting-hint">Multiplier for fog distance. 2.0 = see twice as far as METAR visibility.</p>
             </div>
 
             <div className="setting-item">
@@ -896,9 +869,7 @@ function SettingsGraphicsWeatherTab() {
                 />
                 <span>{precipitationIntensity.toFixed(1)}x</span>
               </div>
-              <p className="setting-hint">
-                Particle density for rain and snow effects.
-              </p>
+              <p className="setting-hint">Particle density for rain and snow effects.</p>
             </div>
 
             <div className="setting-item">
@@ -920,7 +891,18 @@ function SettingsGraphicsWeatherTab() {
                 <span>
                   <strong>{currentMetar.fltCat}</strong> - Vis {currentMetar.visib}SM
                   {currentMetar.clouds.length > 0 && (
-                    <> | {currentMetar.clouds.map(c => `${c.cover}${Math.round(c.base / 100).toString().padStart(3, '0')}`).join(' ')}</>
+                    <>
+                      {' '}
+                      |{' '}
+                      {currentMetar.clouds
+                        .map(
+                          (c) =>
+                            `${c.cover}${Math.round(c.base / 100)
+                              .toString()
+                              .padStart(3, '0')}`,
+                        )
+                        .join(' ')}
+                    </>
                   )}
                 </span>
               ) : (
@@ -957,7 +939,11 @@ function SettingsGraphicsWeatherTab() {
               <button
                 className="modal-button confirm"
                 onClick={() => setShowRestartDialog(false)}
-                style={{ background: 'rgba(79, 195, 247, 0.2)', borderColor: 'rgba(79, 195, 247, 0.4)', color: '#4fc3f7' }}
+                style={{
+                  background: 'rgba(79, 195, 247, 0.2)',
+                  borderColor: 'rgba(79, 195, 247, 0.4)',
+                  color: '#4fc3f7',
+                }}
               >
                 OK
               </button>

@@ -18,7 +18,7 @@ export interface MoreMenuItem {
   id: string
   label: string
   icon: React.ReactNode
-  onClick?: () => void           // Optional if has submenu
+  onClick?: () => void // Optional if has submenu
   submenu?: MoreMenuSubmenuItem[] // Nested items
   active?: boolean
   disabled?: boolean

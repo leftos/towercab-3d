@@ -10,7 +10,7 @@ import {
   FLARE_END_ALTITUDE_METERS,
   FLARE_TARGET_PITCH_DEGREES,
   FLARE_MIN_DESCENT_RATE,
-  GROUNDSPEED_THRESHOLD_KNOTS
+  GROUNDSPEED_THRESHOLD_KNOTS,
 } from '../constants/rendering'
 
 /**
@@ -83,7 +83,7 @@ export function calculateFlarePitch(
   altitudeAGL: number | null,
   verticalRate: number,
   groundspeedKnots: number,
-  orientationIntensity: number
+  orientationIntensity: number,
 ): number {
   // Cannot calculate flare without AGL data
   if (altitudeAGL === null) return basePitch
@@ -147,19 +147,16 @@ export function calculateDistanceNM(
   lat2: number,
   lon2: number,
   alt1Meters?: number,
-  alt2Meters?: number
+  alt2Meters?: number,
 ): number {
   const R = 3440.065 // Earth radius in nautical miles
 
-  const dLat = (lat2 - lat1) * Math.PI / 180
-  const dLon = (lon2 - lon1) * Math.PI / 180
+  const dLat = ((lat2 - lat1) * Math.PI) / 180
+  const dLon = ((lon2 - lon1) * Math.PI) / 180
 
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) *
-    Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon / 2) *
-    Math.sin(dLon / 2)
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2)
 
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 
@@ -179,21 +176,14 @@ export function calculateDistanceNM(
 /**
  * Calculate bearing between two coordinates in degrees
  */
-export function calculateBearing(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number
-): number {
-  const dLon = (lon2 - lon1) * Math.PI / 180
-  const lat1Rad = lat1 * Math.PI / 180
-  const lat2Rad = lat2 * Math.PI / 180
+export function calculateBearing(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const dLon = ((lon2 - lon1) * Math.PI) / 180
+  const lat1Rad = (lat1 * Math.PI) / 180
+  const lat2Rad = (lat2 * Math.PI) / 180
 
   const y = Math.sin(dLon) * Math.cos(lat2Rad)
-  const x =
-    Math.cos(lat1Rad) * Math.sin(lat2Rad) -
-    Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLon)
+  const x = Math.cos(lat1Rad) * Math.sin(lat2Rad) - Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLon)
 
-  const bearing = Math.atan2(y, x) * 180 / Math.PI
+  const bearing = (Math.atan2(y, x) * 180) / Math.PI
   return ((bearing % 360) + 360) % 360
 }

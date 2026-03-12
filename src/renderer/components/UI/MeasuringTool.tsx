@@ -17,12 +17,17 @@ function MeasuringTool({ cesiumViewer }: MeasuringToolProps) {
   const clearAllMeasurements = useMeasureStore((state) => state.clearAllMeasurements)
 
   // Refs for Cesium entities - keyed by measurement id
-  const measurementEntitiesRef = useRef<Map<string, {
-    point1: Cesium.Entity
-    point2: Cesium.Entity
-    line: Cesium.Entity
-    label: Cesium.Entity
-  }>>(new Map())
+  const measurementEntitiesRef = useRef<
+    Map<
+      string,
+      {
+        point1: Cesium.Entity
+        point2: Cesium.Entity
+        line: Cesium.Entity
+        label: Cesium.Entity
+      }
+    >
+  >(new Map())
 
   // Refs for pending/preview entities
   const pendingPointEntityRef = useRef<Cesium.Entity | null>(null)
@@ -34,7 +39,7 @@ function MeasuringTool({ cesiumViewer }: MeasuringToolProps) {
     if (!cesiumViewer || cesiumViewer.isDestroyed()) return
 
     const existingIds = new Set(measurementEntitiesRef.current.keys())
-    const currentIds = new Set(measurements.map(m => m.id))
+    const currentIds = new Set(measurements.map((m) => m.id))
 
     // Remove entities for deleted measurements
     for (const id of existingIds) {
@@ -54,11 +59,7 @@ function MeasuringTool({ cesiumViewer }: MeasuringToolProps) {
     for (const m of measurements) {
       if (!measurementEntitiesRef.current.has(m.id)) {
         // Calculate midpoint for label
-        const midpoint = Cesium.Cartesian3.midpoint(
-          m.point1.cartesian,
-          m.point2.cartesian,
-          new Cesium.Cartesian3()
-        )
+        const midpoint = Cesium.Cartesian3.midpoint(m.point1.cartesian, m.point2.cartesian, new Cesium.Cartesian3())
 
         const point1Entity = cesiumViewer.entities.add({
           id: `measure_${m.id}_p1`,
@@ -68,8 +69,8 @@ function MeasuringTool({ cesiumViewer }: MeasuringToolProps) {
             color: Cesium.Color.CYAN,
             outlineColor: Cesium.Color.WHITE,
             outlineWidth: 2,
-            disableDepthTestDistance: Number.POSITIVE_INFINITY
-          }
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          },
         })
 
         const point2Entity = cesiumViewer.entities.add({
@@ -80,8 +81,8 @@ function MeasuringTool({ cesiumViewer }: MeasuringToolProps) {
             color: Cesium.Color.CYAN,
             outlineColor: Cesium.Color.WHITE,
             outlineWidth: 2,
-            disableDepthTestDistance: Number.POSITIVE_INFINITY
-          }
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          },
         })
 
         const lineEntity = cesiumViewer.entities.add({
@@ -91,10 +92,10 @@ function MeasuringTool({ cesiumViewer }: MeasuringToolProps) {
             width: 3,
             material: new Cesium.PolylineDashMaterialProperty({
               color: Cesium.Color.CYAN,
-              dashLength: 16
+              dashLength: 16,
             }),
-            clampToGround: true
-          }
+            clampToGround: true,
+          },
         })
 
         const labelEntity = cesiumViewer.entities.add({
@@ -112,15 +113,15 @@ function MeasuringTool({ cesiumViewer }: MeasuringToolProps) {
             backgroundPadding: new Cesium.Cartesian2(6, 4),
             verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
             pixelOffset: new Cesium.Cartesian2(0, -10),
-            disableDepthTestDistance: Number.POSITIVE_INFINITY
-          }
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          },
         })
 
         measurementEntitiesRef.current.set(m.id, {
           point1: point1Entity,
           point2: point2Entity,
           line: lineEntity,
-          label: labelEntity
+          label: labelEntity,
         })
       }
     }
@@ -171,8 +172,8 @@ function MeasuringTool({ cesiumViewer }: MeasuringToolProps) {
             color: Cesium.Color.YELLOW,
             outlineColor: Cesium.Color.WHITE,
             outlineWidth: 2,
-            disableDepthTestDistance: Number.POSITIVE_INFINITY
-          }
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          },
         })
       } else {
         pendingPointEntityRef.current.position = new Cesium.ConstantPositionProperty(pendingPoint.cartesian)
@@ -183,7 +184,7 @@ function MeasuringTool({ cesiumViewer }: MeasuringToolProps) {
         const midpoint = Cesium.Cartesian3.midpoint(
           pendingPoint.cartesian,
           previewPoint.cartesian,
-          new Cesium.Cartesian3()
+          new Cesium.Cartesian3(),
         )
 
         if (!previewLineEntityRef.current) {
@@ -194,15 +195,15 @@ function MeasuringTool({ cesiumViewer }: MeasuringToolProps) {
               width: 2,
               material: new Cesium.PolylineDashMaterialProperty({
                 color: Cesium.Color.YELLOW.withAlpha(0.7),
-                dashLength: 12
+                dashLength: 12,
               }),
-              clampToGround: true
-            }
+              clampToGround: true,
+            },
           })
         } else if (previewLineEntityRef.current.polyline) {
           previewLineEntityRef.current.polyline.positions = new Cesium.ConstantProperty([
             pendingPoint.cartesian,
-            previewPoint.cartesian
+            previewPoint.cartesian,
           ])
         }
 
@@ -224,8 +225,8 @@ function MeasuringTool({ cesiumViewer }: MeasuringToolProps) {
                 backgroundPadding: new Cesium.Cartesian2(6, 4),
                 verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
                 pixelOffset: new Cesium.Cartesian2(0, -8),
-                disableDepthTestDistance: Number.POSITIVE_INFINITY
-              }
+                disableDepthTestDistance: Number.POSITIVE_INFINITY,
+              },
             })
           } else {
             previewLabelEntityRef.current.position = new Cesium.ConstantPositionProperty(midpoint)
@@ -281,9 +282,7 @@ function MeasuringTool({ cesiumViewer }: MeasuringToolProps) {
       </div>
 
       <div className="measuring-content">
-        {isActive && !pendingPoint && (
-          <p className="measuring-hint">Click on the terrain to start measuring</p>
-        )}
+        {isActive && !pendingPoint && <p className="measuring-hint">Click on the terrain to start measuring</p>}
 
         {isActive && pendingPoint && !previewPoint && (
           <p className="measuring-hint">Move mouse to preview, click to confirm (Esc to cancel)</p>

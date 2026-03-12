@@ -32,10 +32,7 @@ class AirportService {
 
     try {
       // Try to fetch fresh data, fall back to bundled airports.json
-      const data: AirportDatabase = await loadJsonWithFallback(
-        AIRPORTS_DB_URL,
-        'airports.json'
-      )
+      const data: AirportDatabase = await loadJsonWithFallback(AIRPORTS_DB_URL, 'airports.json')
 
       for (const [icao, airport] of Object.entries(data)) {
         // Normalize the data
@@ -49,7 +46,7 @@ class AirportService {
           elevation: airport.elevation || 0,
           lat: airport.lat || 0,
           lon: airport.lon || 0,
-          tz: airport.tz || ''
+          tz: airport.tz || '',
         }
 
         // Only include airports with valid coordinates

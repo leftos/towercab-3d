@@ -36,7 +36,7 @@ function DebugCoordinateOverlay({ viewer, enabled }: DebugCoordinateOverlayProps
       setCameraPosition({
         lat: Cesium.Math.toDegrees(carto.latitude),
         lon: Cesium.Math.toDegrees(carto.longitude),
-        height: carto.height
+        height: carto.height,
       })
     }
 
@@ -67,7 +67,7 @@ function DebugCoordinateOverlay({ viewer, enabled }: DebugCoordinateOverlayProps
         const coord = {
           lat: Cesium.Math.toDegrees(carto.latitude),
           lon: Cesium.Math.toDegrees(carto.longitude),
-          height: carto.height
+          height: carto.height,
         }
         setClickedPosition(coord)
 

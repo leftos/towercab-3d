@@ -238,7 +238,7 @@ export interface RTErrorResponse {
 export const RT_ERROR_CODES = {
   INVALID_SESSION: 401,
   LICENSE_INVALID: 403,
-  RATE_LIMITED: 429
+  RATE_LIMITED: 429,
 } as const
 
 // ============================================================================
@@ -249,10 +249,10 @@ export const RT_ERROR_CODES = {
  * RealTraffic connection status
  */
 export type RTConnectionStatus =
-  | 'disconnected'   // Not connected, no session
-  | 'connecting'     // Authenticating
-  | 'connected'      // Active session
-  | 'error'          // Connection or auth error
+  | 'disconnected' // Not connected, no session
+  | 'connecting' // Authenticating
+  | 'connected' // Active session
+  | 'error' // Connection or auth error
 
 /**
  * RealTraffic store state interface
@@ -267,11 +267,11 @@ export interface RealTrafficStoreState {
   error: string | null
 
   // Rate limiting
-  trafficRateLimit: number  // Milliseconds between traffic requests
-  weatherRateLimit: number  // Milliseconds between weather requests
+  trafficRateLimit: number // Milliseconds between traffic requests
+  weatherRateLimit: number // Milliseconds between weather requests
 
   // Historical data (Pro license only)
-  timeOffset: number  // Minutes into the past (0 = real-time)
+  timeOffset: number // Minutes into the past (0 = real-time)
 
   // Reference position for bounding box queries
   referencePosition: { latitude: number; longitude: number } | null
@@ -326,5 +326,5 @@ export interface RealTrafficSettings {
 export const DEFAULT_REALTRAFFIC_SETTINGS: RealTrafficSettings = {
   licenseKey: '',
   autoDetectLicense: true,
-  radiusNm: 100
+  radiusNm: 100,
 }

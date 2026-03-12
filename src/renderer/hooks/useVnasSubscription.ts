@@ -32,11 +32,11 @@ function normalizeForVnas(icao: string): string {
  * Only active in host mode (Tauri desktop app).
  */
 export function useVnasSubscription(): void {
-  const currentAirport = useAirportStore(state => state.currentAirport)
-  const sessionFacilities = useVnasStore(state => state.sessionFacilities)
-  const subscribedFacilities = useVnasStore(state => state.status.subscribedFacilities)
-  const subscribeToFacility = useVnasStore(state => state.subscribeToFacility)
-  const unsubscribeFromFacility = useVnasStore(state => state.unsubscribeFromFacility)
+  const currentAirport = useAirportStore((state) => state.currentAirport)
+  const sessionFacilities = useVnasStore((state) => state.sessionFacilities)
+  const subscribedFacilities = useVnasStore((state) => state.status.subscribedFacilities)
+  const subscribeToFacility = useVnasStore((state) => state.subscribeToFacility)
+  const unsubscribeFromFacility = useVnasStore((state) => state.unsubscribeFromFacility)
 
   // Track the previous airport to handle unsubscription
   const previousAirportRef = useRef<string | null>(null)
@@ -101,6 +101,6 @@ export function useVnasSubscription(): void {
         unsubscribeFromFacility(currentIcao)
       }
     }
-  // biome-ignore lint/correctness/useExhaustiveDependencies: one-time subscription setup
+    // biome-ignore lint/correctness/useExhaustiveDependencies: one-time subscription setup
   }, [])
 }

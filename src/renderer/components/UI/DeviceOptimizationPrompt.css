@@ -105,7 +105,7 @@
 }
 
 .device-opt-preset-changes li::before {
-  content: '•';
+  content: "•";
   margin-right: 6px;
   color: rgba(0, 200, 255, 0.6);
 }

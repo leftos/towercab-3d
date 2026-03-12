@@ -34,16 +34,17 @@ export function isIPad(): boolean {
  * Check if running on iOS (iPhone/iPad)
  */
 export function isIOS(): boolean {
-  return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-    (navigator.platform === 'MacIntel' && isTouchDevice())
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && isTouchDevice())
 }
 
 /**
  * Check if running on a mobile device (phone or tablet)
  */
 export function isMobileDevice(): boolean {
-  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+  return (
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
     (isTouchDevice() && window.innerWidth < 1024)
+  )
 }
 
 /**
@@ -68,7 +69,7 @@ export function getDevicePerformanceTier(): 'high' | 'medium' | 'low' {
     // Limited CPU cores (< 4)
     (navigator.hardwareConcurrency && navigator.hardwareConcurrency < 4) ||
     // Older mobile devices
-    (/Android [1-6]\./.test(navigator.userAgent))
+    /Android [1-6]\./.test(navigator.userAgent)
 
   if (isLowEnd) {
     return 'low'
@@ -105,7 +106,7 @@ export function getRecommendedSettings() {
       terrainQuality: tier === 'high' ? 4 : tier === 'medium' ? 2 : 1,
       buildings: tier === 'high',
       maxModelPoolSize: tier === 'high' ? 200 : tier === 'medium' ? 100 : 50,
-      tileCacheSize: tier === 'high' ? 2000 : tier === 'medium' ? 1000 : 500
+      tileCacheSize: tier === 'high' ? 2000 : tier === 'medium' ? 1000 : 500,
     },
     // UI settings based on input method
     ui: {
@@ -114,7 +115,7 @@ export function getRecommendedSettings() {
       // Show keyboard hints only on non-touch devices
       showKeyboardHints: !touchDevice,
       // Larger fonts on touch devices for readability
-      fontSize: touchDevice ? 'large' : 'normal'
-    }
+      fontSize: touchDevice ? 'large' : 'normal',
+    },
   }
 }

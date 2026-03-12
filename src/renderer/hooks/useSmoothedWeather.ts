@@ -27,7 +27,7 @@ import {
   PRECIPITATION_ONSET_DELAY,
   PRECIPITATION_CESSATION_DELAY,
   THUNDERSTORM_ONSET_DELAY,
-  THUNDERSTORM_CESSATION_DELAY
+  THUNDERSTORM_CESSATION_DELAY,
 } from '@/constants'
 
 export interface SmoothedWeatherState {
@@ -74,7 +74,7 @@ interface SmoothingState {
   // Precipitation hysteresis
   precipitationActive: boolean
   precipitationIntensityFactor: number
-  precipitationOnsetTime: number | null     // When precip was first detected
+  precipitationOnsetTime: number | null // When precip was first detected
   precipitationCessationTime: number | null // When precip was last active
 
   // Thunderstorm hysteresis
@@ -164,7 +164,7 @@ export function useSmoothedWeather(options: UseSmoothedWeatherOptions = {}) {
     thunderstormFactor: 0,
     thunderstormOnsetTime: null,
     thunderstormCessationTime: null,
-    initialized: false
+    initialized: false,
   })
 
   // Last update time for delta calculation
@@ -184,9 +184,9 @@ export function useSmoothedWeather(options: UseSmoothedWeatherOptions = {}) {
       visibilityFactor: 1,
       hasThunderstorm: false,
       intensityFactor: 0,
-      thunderstormFactor: 0
+      thunderstormFactor: 0,
     },
-    isTransitioning: false
+    isTransitioning: false,
   })
 
   // Update targets when weather store changes
@@ -343,11 +343,7 @@ export function useSmoothedWeather(options: UseSmoothedWeatherOptions = {}) {
       const precipFadeFactor = calcLerpFactor(deltaSeconds, PRECIPITATION_FADE_TIME)
       const targetIntensity = state.precipitationActive ? 1 : 0
       if (Math.abs(state.precipitationIntensityFactor - targetIntensity) > 0.01) {
-        state.precipitationIntensityFactor = lerp(
-          state.precipitationIntensityFactor,
-          targetIntensity,
-          precipFadeFactor
-        )
+        state.precipitationIntensityFactor = lerp(state.precipitationIntensityFactor, targetIntensity, precipFadeFactor)
         isTransitioning = true
       } else {
         state.precipitationIntensityFactor = targetIntensity
@@ -372,11 +368,7 @@ export function useSmoothedWeather(options: UseSmoothedWeatherOptions = {}) {
       // Fade thunderstorm factor
       const targetThunderstorm = state.thunderstormActive ? 1 : 0
       if (Math.abs(state.thunderstormFactor - targetThunderstorm) > 0.01) {
-        state.thunderstormFactor = lerp(
-          state.thunderstormFactor,
-          targetThunderstorm,
-          precipFadeFactor
-        )
+        state.thunderstormFactor = lerp(state.thunderstormFactor, targetThunderstorm, precipFadeFactor)
         isTransitioning = true
       } else {
         state.thunderstormFactor = targetThunderstorm
@@ -401,7 +393,7 @@ export function useSmoothedWeather(options: UseSmoothedWeatherOptions = {}) {
       direction: Math.round(state.windDirection),
       speed: Math.round(state.windSpeed),
       gustSpeed: state.windGustSpeed !== null ? Math.round(state.windGustSpeed) : null,
-      isVariable: wind.isVariable
+      isVariable: wind.isVariable,
     }
     smoothed.precipitation = {
       active: state.precipitationIntensityFactor > 0.01,
@@ -409,7 +401,7 @@ export function useSmoothedWeather(options: UseSmoothedWeatherOptions = {}) {
       visibilityFactor: precipitation.visibilityFactor,
       hasThunderstorm: state.thunderstormFactor > 0.01,
       intensityFactor: state.precipitationIntensityFactor,
-      thunderstormFactor: state.thunderstormFactor
+      thunderstormFactor: state.thunderstormFactor,
     }
     smoothed.isTransitioning = isTransitioning
 
@@ -441,7 +433,7 @@ export function useSmoothedWeather(options: UseSmoothedWeatherOptions = {}) {
     /** Get the current smoothed weather state */
     getSmoothedWeather,
     /** Reference to smoothed state (for direct access in render loops) */
-    smoothedStateRef
+    smoothedStateRef,
   }
 }
 

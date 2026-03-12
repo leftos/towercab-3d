@@ -67,7 +67,7 @@ function SettingsModal({ isOpen, onClose, onShowImportModal, onShowExportModal, 
     // Convert back to offset from center
     return {
       x: constrainedLeft - centeredLeft,
-      y: constrainedTop - centeredTop
+      y: constrainedTop - centeredTop,
     }
   }, [])
 
@@ -83,19 +83,22 @@ function SettingsModal({ isOpen, onClose, onShowImportModal, onShowExportModal, 
   }, [isOpen, storedPosition, constrainPosition])
 
   // Handle mouse move during drag
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (!isDragging || !dragStartRef.current) return
+  const handleMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!isDragging || !dragStartRef.current) return
 
-    const deltaX = e.clientX - dragStartRef.current.mouseX
-    const deltaY = e.clientY - dragStartRef.current.mouseY
+      const deltaX = e.clientX - dragStartRef.current.mouseX
+      const deltaY = e.clientY - dragStartRef.current.mouseY
 
-    const newPos = {
-      x: dragStartRef.current.posX + deltaX,
-      y: dragStartRef.current.posY + deltaY
-    }
+      const newPos = {
+        x: dragStartRef.current.posX + deltaX,
+        y: dragStartRef.current.posY + deltaY,
+      }
 
-    setPosition(constrainPosition(newPos))
-  }, [isDragging, constrainPosition])
+      setPosition(constrainPosition(newPos))
+    },
+    [isDragging, constrainPosition],
+  )
 
   // Handle mouse up to end drag
   const handleMouseUp = useCallback(() => {
@@ -124,7 +127,7 @@ function SettingsModal({ isOpen, onClose, onShowImportModal, onShowExportModal, 
     if (!isOpen || !modalRef.current) return
 
     const observer = new ResizeObserver(() => {
-      setPosition(prev => constrainPosition(prev))
+      setPosition((prev) => constrainPosition(prev))
     })
 
     observer.observe(modalRef.current)
@@ -136,7 +139,7 @@ function SettingsModal({ isOpen, onClose, onShowImportModal, onShowExportModal, 
     if (!isOpen) return
 
     const handleResize = () => {
-      setPosition(prev => constrainPosition(prev))
+      setPosition((prev) => constrainPosition(prev))
     }
 
     window.addEventListener('resize', handleResize)
@@ -144,19 +147,22 @@ function SettingsModal({ isOpen, onClose, onShowImportModal, onShowExportModal, 
   }, [isOpen, constrainPosition])
 
   // Start dragging on header mouse down
-  const handleHeaderMouseDown = useCallback((e: React.MouseEvent) => {
-    // Only drag on left click and not on the close button
-    if (e.button !== 0 || (e.target as HTMLElement).closest('.close-button')) return
+  const handleHeaderMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      // Only drag on left click and not on the close button
+      if (e.button !== 0 || (e.target as HTMLElement).closest('.close-button')) return
 
-    e.preventDefault()
-    setIsDragging(true)
-    dragStartRef.current = {
-      mouseX: e.clientX,
-      mouseY: e.clientY,
-      posX: position.x,
-      posY: position.y
-    }
-  }, [position])
+      e.preventDefault()
+      setIsDragging(true)
+      dragStartRef.current = {
+        mouseX: e.clientX,
+        mouseY: e.clientY,
+        posX: position.x,
+        posY: position.y,
+      }
+    },
+    [position],
+  )
 
   // Close settings modal on Escape key
   useEffect(() => {
@@ -186,7 +192,7 @@ function SettingsModal({ isOpen, onClose, onShowImportModal, onShowExportModal, 
         onClick={(e) => e.stopPropagation()}
         style={{
           transform: `translate(${position.x}px, ${position.y}px)`,
-          cursor: isDragging ? 'grabbing' : undefined
+          cursor: isDragging ? 'grabbing' : undefined,
         }}
       >
         <div
@@ -231,10 +237,7 @@ function SettingsModal({ isOpen, onClose, onShowImportModal, onShowExportModal, 
           >
             Performance
           </button>
-          <button
-            className={`tab-button ${activeTab === 'mods' ? 'active' : ''}`}
-            onClick={() => setActiveTab('mods')}
-          >
+          <button className={`tab-button ${activeTab === 'mods' ? 'active' : ''}`} onClick={() => setActiveTab('mods')}>
             Mods
           </button>
           <button

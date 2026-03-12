@@ -66,7 +66,7 @@ function ControlsBar() {
     orbitDistance,
     positionOffsetX,
     positionOffsetY,
-    positionOffsetZ
+    positionOffsetZ,
   } = useActiveViewportCamera()
 
   // Viewport store - for default saving (shared across viewports)
@@ -142,7 +142,7 @@ function ControlsBar() {
         if (!dockRunwayPanel) {
           setShowRunwayDropdown(false)
         }
-      }
+      },
     }))
   }, [currentAirport, getRunwaysWithCoordinates, lookAtPosition, dockRunwayPanel])
 
@@ -230,9 +230,11 @@ function ControlsBar() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Skip if typing in input field
-      if (e.target instanceof HTMLInputElement ||
-          e.target instanceof HTMLTextAreaElement ||
-          e.target instanceof HTMLSelectElement) {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLSelectElement
+      ) {
         return
       }
 
@@ -243,7 +245,7 @@ function ControlsBar() {
 
       if (e.key.toLowerCase() === 'b' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault()
-        setShowBookmarkModal(prev => !prev)
+        setShowBookmarkModal((prev) => !prev)
       }
     }
 
@@ -269,7 +271,7 @@ function ControlsBar() {
         if (hasExisting) {
           // Show confirmation dialog
           const confirmed = window.confirm(
-            `A ${viewLabel} tower position for ${icao} already exists.\n\nDo you want to overwrite it?`
+            `A ${viewLabel} tower position for ${icao} already exists.\n\nDo you want to overwrite it?`,
           )
           if (!confirmed) return
         }
@@ -289,7 +291,7 @@ function ControlsBar() {
             existing2d ?? null,
             positionOffsetX,
             positionOffsetY,
-            heading
+            heading,
           )
 
           // Preserve existing 3D if present
@@ -298,7 +300,7 @@ function ControlsBar() {
               lat: existing3d.lat,
               lon: existing3d.lon,
               height: existing3d.height,
-              heading: existing3d.heading
+              heading: existing3d.heading,
             }
           }
 
@@ -306,7 +308,7 @@ function ControlsBar() {
             lat: shareablePos.lat,
             lon: shareablePos.lon,
             altitude: shareablePos.altitude,
-            heading: shareablePos.heading
+            heading: shareablePos.heading,
           }
 
           await modApi.updateTowerPosition(icao, { view2d: fileContent.view2d })
@@ -321,14 +323,14 @@ function ControlsBar() {
             positionOffsetX,
             positionOffsetY,
             positionOffsetZ,
-            heading
+            heading,
           )
 
           fileContent.view3d = {
             lat: shareablePos.lat,
             lon: shareablePos.lon,
             height: shareablePos.height,
-            heading: shareablePos.heading
+            heading: shareablePos.heading,
           }
 
           // Preserve existing 2D if present
@@ -337,7 +339,7 @@ function ControlsBar() {
               lat: existing2d.lat ?? currentAirport.lat,
               lon: existing2d.lon ?? currentAirport.lon,
               altitude: existing2d.altitude,
-              heading: existing2d.heading
+              heading: existing2d.heading,
             }
           }
 
@@ -381,7 +383,9 @@ function ControlsBar() {
   }
 
   const formatHeading = (angle: number) => {
-    return Math.round(((angle % 360) + 360) % 360).toString().padStart(3, '0')
+    return Math.round(((angle % 360) + 360) % 360)
+      .toString()
+      .padStart(3, '0')
   }
 
   const formatPitch = (angle: number) => {
@@ -412,7 +416,9 @@ function ControlsBar() {
       setTimeout(() => window.location.reload(), 500)
     } else {
       // Show error message
-      alert('Could not find Electron settings to migrate. Make sure you have run the Electron version of TowerCab on this computer.')
+      alert(
+        'Could not find Electron settings to migrate. Make sure you have run the Electron version of TowerCab on this computer.',
+      )
     }
   }
 
@@ -476,7 +482,9 @@ function ControlsBar() {
                     <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
                     <polyline points="9 22 9 12 15 12 15 22" />
                   </svg>
-                  <span className="button-label">{defaultSaved ? 'Saved!' : defaultLoaded ? 'Loaded!' : 'Defaults'}</span>
+                  <span className="button-label">
+                    {defaultSaved ? 'Saved!' : defaultLoaded ? 'Loaded!' : 'Defaults'}
+                  </span>
                 </button>
                 {showDefaultsDropdown && (
                   <div className="defaults-dropdown-menu">
@@ -490,7 +498,7 @@ function ControlsBar() {
                       {shiftPressed ? 'Save Tower Pos' : 'Set Default'}
                     </button>
                     <button
-                      className={`defaults-dropdown-item ${(!hasCustomDefault() && !shiftPressed) ? 'disabled' : ''}`}
+                      className={`defaults-dropdown-item ${!hasCustomDefault() && !shiftPressed ? 'disabled' : ''}`}
                       onClick={(e) => {
                         if (hasCustomDefault() || shiftPressed) {
                           handleResetToDefault(e)
@@ -526,9 +534,18 @@ function ControlsBar() {
                       <button
                         className={`runway-pin-btn ${dockRunwayPanel ? 'pinned' : ''}`}
                         onClick={() => updateUISettings({ dockRunwayPanel: !dockRunwayPanel })}
-                        title={dockRunwayPanel ? 'Unpin panel (close on selection)' : 'Pin panel (keep open on selection)'}
+                        title={
+                          dockRunwayPanel ? 'Unpin panel (close on selection)' : 'Pin panel (keep open on selection)'
+                        }
                       >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill={dockRunwayPanel ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill={dockRunwayPanel ? 'currentColor' : 'none'}
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
                           <path d="M12 2L12 12" />
                           <circle cx="12" cy="17" r="5" />
                         </svg>
@@ -536,11 +553,7 @@ function ControlsBar() {
                     </div>
                     <div className="runway-dropdown-list">
                       {runwayThresholds.map((item) => (
-                        <button
-                          key={item.id}
-                          className="runway-dropdown-item"
-                          onClick={item.onClick}
-                        >
+                        <button key={item.id} className="runway-dropdown-item" onClick={item.onClick}>
                           {item.label}
                         </button>
                       ))}
@@ -571,8 +584,8 @@ function ControlsBar() {
                       const event = new KeyboardEvent('keydown', { key: 'k', ctrlKey: true })
                       window.dispatchEvent(event)
                     },
-                    disabled: false
-                  }
+                    disabled: false,
+                  },
                 ]}
                 position="left"
               />
@@ -609,17 +622,21 @@ function ControlsBar() {
                   <span className="follow-indicator">Following: {followingCallsign}</span>
                   {followMode === 'tower' && (
                     <span className="follow-zoom-info">
-                      Zoom: {followZoom.toFixed(1)}x
-                      <span className="follow-range">(0.5–20)</span>
+                      Zoom: {followZoom.toFixed(1)}x<span className="follow-range">(0.5–20)</span>
                     </span>
                   )}
                   {followMode === 'orbit' && (
                     <span className="follow-zoom-info">
-                      Distance: {orbitDistance >= 1000 ? `${(orbitDistance / 1000).toFixed(1)}km` : `${Math.round(orbitDistance)}m`}
+                      Distance:{' '}
+                      {orbitDistance >= 1000
+                        ? `${(orbitDistance / 1000).toFixed(1)}km`
+                        : `${Math.round(orbitDistance)}m`}
                       <span className="follow-range">(50m–5km)</span>
                     </span>
                   )}
-                  <span className="follow-hint">Scroll to {followMode === 'tower' ? 'zoom' : 'adjust'} • O to switch • Esc to stop</span>
+                  <span className="follow-hint">
+                    Scroll to {followMode === 'tower' ? 'zoom' : 'adjust'} • O to switch • Esc to stop
+                  </span>
                 </div>
               )}
             </div>
@@ -677,7 +694,7 @@ function ControlsBar() {
                       </svg>
                     ),
                     onClick: toggleMeasuring,
-                    active: isMeasuring
+                    active: isMeasuring,
                   },
                   {
                     id: 'bookmarks',
@@ -689,7 +706,7 @@ function ControlsBar() {
                       </svg>
                     ),
                     onClick: () => setShowBookmarkModal(true),
-                    disabled: !currentAirport
+                    disabled: !currentAirport,
                   },
                   {
                     id: 'inset',
@@ -702,29 +719,21 @@ function ControlsBar() {
                     ),
                     onClick: () => addViewport(),
                     disabled: !currentAirport,
-                    badge: insetCount > 0 ? insetCount : undefined
-                  }
+                    badge: insetCount > 0 ? insetCount : undefined,
+                  },
                 ]}
                 position="right"
               />
 
               {currentAirport && (
-                <button
-                  className="control-button"
-                  onClick={() => setShowExitConfirm(true)}
-                  title="Back to Main Menu"
-                >
+                <button className="control-button" onClick={() => setShowExitConfirm(true)} title="Back to Main Menu">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M19 12H5M12 19l-7-7 7-7" />
                   </svg>
                 </button>
               )}
 
-              <button
-                className="control-button"
-                onClick={() => setShowSettings(!showSettings)}
-                title="Settings"
-              >
+              <button className="control-button" onClick={() => setShowSettings(!showSettings)} title="Settings">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="12" cy="12" r="3" />
                   <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
@@ -756,38 +765,24 @@ function ControlsBar() {
       )}
 
       {/* Export Settings Wizard Modal */}
-      {showExportModal && (
-        <ExportWizardModal
-          onClose={() => setShowExportModal(false)}
-        />
-      )}
+      {showExportModal && <ExportWizardModal onClose={() => setShowExportModal(false)} />}
 
       {/* Bookmark Manager Modal */}
-      {showBookmarkModal && (
-        <BookmarkManagerModal
-          onClose={() => setShowBookmarkModal(false)}
-        />
-      )}
+      {showBookmarkModal && <BookmarkManagerModal onClose={() => setShowBookmarkModal(false)} />}
 
       {/* Contribution Dialog */}
       {contributeDialogData && (
-        <ContributeDialog
-          data={contributeDialogData}
-          onClose={() => setContributeDialogData(null)}
-        />
+        <ContributeDialog data={contributeDialogData} onClose={() => setContributeDialogData(null)} />
       )}
 
       {/* Exit Airport Confirmation Modal */}
       {showExitConfirm && (
         <div className="modal-overlay" onClick={() => setShowExitConfirm(false)}>
-          <div className="modal exit-confirm-modal" onClick={e => e.stopPropagation()}>
+          <div className="modal exit-confirm-modal" onClick={(e) => e.stopPropagation()}>
             <h3>Leave {currentAirport?.icao}?</h3>
             <p>Return to the airport selection screen?</p>
             <div className="modal-buttons">
-              <button
-                className="modal-button cancel"
-                onClick={() => setShowExitConfirm(false)}
-              >
+              <button className="modal-button cancel" onClick={() => setShowExitConfirm(false)}>
                 Cancel
               </button>
               <button
