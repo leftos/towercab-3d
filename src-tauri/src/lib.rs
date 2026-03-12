@@ -1009,6 +1009,7 @@ pub fn run() {
             files::delete_cache_file,
             files::clear_cache_directory,
             files::check_path_writable,
+            files::save_diagnostic,
             files::validate_fsltl_source,
             files::list_fsltl_aircraft,
             files::get_converter_path,

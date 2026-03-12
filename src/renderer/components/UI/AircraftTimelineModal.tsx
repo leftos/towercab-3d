@@ -3,9 +3,11 @@ import { useAircraftTimelineStore } from '@/stores/aircraftTimelineStore'
 import { useAirportStore } from '@/stores/airportStore'
 import { useGlobalSettingsStore } from '@/stores/globalSettingsStore'
 import { useReplayStore } from '@/stores/replayStore'
+import { useUIFeedbackStore } from '@/stores/uiFeedbackStore'
 import { calculateDistanceNM } from '@/utils/geoMath'
 import { getTowerPosition } from '@/utils/towerHeight'
 import { SOURCE_DISPLAY_DELAYS } from '@/constants/aircraft-timeline'
+import { saveDiagnostic } from '@/services/DiagnosticService'
 import type { AircraftObservation, AircraftDataSource } from '@/types/aircraft-timeline'
 import './AircraftTimelineModal.css'
 
@@ -77,6 +79,8 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
 
   const [hoveredObs, setHoveredObs] = useState<HoveredObservation | null>(null)
   const [containerWidth, setContainerWidth] = useState(800)
+  const [savedDiagnosticPath, setSavedDiagnosticPath] = useState<string | null>(null)
+  const [isSavingDiagnostic, setIsSavingDiagnostic] = useState(false)
 
   // Get data from stores
   const timelines = useAircraftTimelineStore((state) => state.timelines)
@@ -528,6 +532,28 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
             Auto-scroll
           </button>
 
+          <button
+            className="timeline-autoscroll"
+            disabled={isSavingDiagnostic}
+            onClick={async () => {
+              setIsSavingDiagnostic(true)
+              try {
+                const path = await saveDiagnostic()
+                setSavedDiagnosticPath(path)
+              } catch (err) {
+                useUIFeedbackStore.getState().showFeedback(
+                  `Export failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+                  'error'
+                )
+              } finally {
+                setIsSavingDiagnostic(false)
+              }
+            }}
+            title="Export diagnostic package (.tc3d-diag) with raw timeline data"
+          >
+            {isSavingDiagnostic ? 'Saving...' : 'Export Diagnostic'}
+          </button>
+
           <div className="timeline-legend">
             {(Object.entries(SOURCE_COLORS) as [AircraftDataSource, string][]).map(([source, color]) => (
               <span key={source} className="legend-item">
@@ -667,6 +693,38 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
           </div>
         )}
       </div>
+
+      {savedDiagnosticPath && (
+        <div className="settings-modal-overlay" style={{ zIndex: 10001 }} onClick={() => setSavedDiagnosticPath(null)}>
+          <div className="settings-modal" style={{ maxWidth: '500px', width: 'auto' }} onClick={(e) => e.stopPropagation()}>
+            <div className="settings-header">
+              <h2>Diagnostic Exported</h2>
+              <button className="close-button" onClick={() => setSavedDiagnosticPath(null)}>&times;</button>
+            </div>
+            <div style={{ padding: '16px' }}>
+              <p style={{ marginBottom: '12px' }}>Saved to:</p>
+              <code style={{
+                display: 'block',
+                padding: '10px',
+                backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                borderRadius: '4px',
+                wordBreak: 'break-all',
+                fontSize: '13px',
+                userSelect: 'all'
+              }}>
+                {savedDiagnosticPath}
+              </code>
+              <button
+                className="control-button"
+                style={{ marginTop: '16px' }}
+                onClick={() => setSavedDiagnosticPath(null)}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -456,6 +456,8 @@ fn create_router(state: Arc<ServerState>) -> Router {
         .route("/api/observations/ws", get(observations_websocket_handler))
         // Presence WebSocket for tracking connected remote clients
         .route("/api/presence", get(presence_websocket_handler))
+        // Diagnostic export endpoint
+        .route("/api/diagnostic", post(save_diagnostic_handler))
         // Remote client logging endpoint
         .route("/api/log", post(remote_log))
         // Static file serving (must be last - catches all other routes)
@@ -1087,6 +1089,63 @@ struct ProxyQuery {
 
 // =============================================================================
 // Remote Client Logging
+// =============================================================================
+
+// =============================================================================
+// DIAGNOSTIC EXPORT
+// =============================================================================
+
+#[derive(Deserialize)]
+struct DiagnosticSaveRequest {
+    filename: String,
+    content: String,
+}
+
+#[derive(Serialize)]
+struct DiagnosticSaveResponse {
+    path: String,
+}
+
+/// POST /api/diagnostic - Save diagnostic package to host filesystem
+async fn save_diagnostic_handler(
+    State(state): State<Arc<ServerState>>,
+    Json(req): Json<DiagnosticSaveRequest>,
+) -> Result<Json<DiagnosticSaveResponse>, (StatusCode, String)> {
+    let diag_dir = state
+        .app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get app data directory: {}", e),
+            )
+        })?
+        .join("diagnostics");
+
+    fs::create_dir_all(&diag_dir).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to create diagnostics directory: {}", e),
+        )
+    })?;
+
+    let file_path = diag_dir.join(&req.filename);
+    fs::write(&file_path, &req.content).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to write diagnostic file: {}", e),
+        )
+    })?;
+
+    let normalized = normalize_path_string(&file_path);
+    tracing::info!("[Diagnostic] Saved to {}", normalized);
+
+    Ok(Json(DiagnosticSaveResponse { path: normalized }))
+}
+
+// =============================================================================
+// REMOTE LOGGING
 // =============================================================================
 
 /// Log entry sent from remote clients

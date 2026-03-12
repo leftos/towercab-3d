@@ -90,6 +90,36 @@ pub fn load_model_manifest(model_path: String) -> Result<Option<serde_json::Valu
 }
 
 // =============================================================================
+// DIAGNOSTIC EXPORT
+// =============================================================================
+
+/// Save diagnostic JSON to the app data diagnostics directory.
+/// Returns the full path of the saved file.
+#[tauri::command]
+pub fn save_diagnostic(
+    app: tauri::AppHandle,
+    filename: String,
+    content: String,
+) -> Result<String, String> {
+    use tauri::Manager;
+
+    let diag_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?
+        .join("diagnostics");
+
+    fs::create_dir_all(&diag_dir)
+        .map_err(|e| format!("Failed to create diagnostics directory: {}", e))?;
+
+    let file_path = diag_dir.join(&filename);
+    fs::write(&file_path, &content)
+        .map_err(|e| format!("Failed to write diagnostic file: {}", e))?;
+
+    Ok(crate::normalize_path_string(&file_path))
+}
+
+// =============================================================================
 // FILE UTILITIES
 // =============================================================================
 

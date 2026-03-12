@@ -5,6 +5,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Diagnostic export from the Aircraft Timeline modal saves raw timeline data for bug reproduction (Ctrl+Shift+D also works from remote browsers)
 - Replay exports now preserve full observation fidelity instead of lossy 15-second snapshots
 - Single import button accepts both replay and diagnostic files
 
