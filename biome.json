@@ -31,8 +31,7 @@
         "noUnusedVariables": "warn"
       },
       "suspicious": {
-        "noExplicitAny": "warn",
-        "noEmptyBlockStatements": "off"
+        "noExplicitAny": "warn"
       },
       "style": {
         "noNonNullAssertion": "off",
