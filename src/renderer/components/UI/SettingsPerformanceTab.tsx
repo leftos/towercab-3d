@@ -226,8 +226,8 @@ function SettingsPerformanceTab() {
             />
           </div>
           <p className="setting-hint">
-            Import accepts replay (.tc3d-replay.json) and diagnostic (.tc3d-diag.json) files.
-            Export with Ctrl+Shift+D for diagnostic packages.
+            Import a previously exported replay file.
+            To import diagnostic packages, use Advanced &gt; Debugging.
           </p>
         </div>
 

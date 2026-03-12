@@ -1,13 +1,17 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { useReplayStore } from '../../stores/replayStore'
 import { useUpdateStore } from '../../stores/updateStore'
 import { checkForUpdates } from '../../services/UpdateService'
 import { repairSettingsMigration } from '../../stores/globalSettingsStore'
 import { isRemoteMode } from '../../utils/remoteMode'
+import { DIAGNOSTIC_FILE_EXTENSION } from '../../constants/diagnostic'
 import CollapsibleSection from './settings/CollapsibleSection'
 import './ControlsBar.css'
 
 function SettingsAdvancedTab() {
+  const diagnosticFileInputRef = useRef<HTMLInputElement>(null)
+
   // Theme setting
   const theme = useSettingsStore((state) => state.ui.theme)
   const updateUISettings = useSettingsStore((state) => state.updateUISettings)
@@ -18,12 +22,46 @@ function SettingsAdvancedTab() {
   const enableDynamicDisplayDelay = useSettingsStore((state) => state.advanced?.enableDynamicDisplayDelay ?? true)
   const updateAdvancedSettings = useSettingsStore((state) => state.updateAdvancedSettings)
 
+  // Replay store (for diagnostic import)
+  const importReplay = useReplayStore((state) => state.importReplay)
+  const importedTimeRange = useReplayStore((state) => state.importedTimeRange)
+  const importedAppState = useReplayStore((state) => state.importedAppState)
+  const clearImportedReplay = useReplayStore((state) => state.clearImportedReplay)
+
   // Updates
   const updateStatus = useUpdateStore((state) => state.status)
 
   // Troubleshooting
   const [repairStatus, setRepairStatus] = useState<'idle' | 'running' | 'done'>('idle')
   const [repairResult, setRepairResult] = useState<{ recovered: string[]; errors: string[] } | null>(null)
+
+  const handleDiagnosticFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    try {
+      const text = await file.text()
+      const data = JSON.parse(text)
+
+      if (!data || typeof data !== 'object') {
+        alert('Invalid diagnostic file: not a valid JSON object')
+        return
+      }
+
+      const success = importReplay(data)
+      if (!success) {
+        alert('Invalid diagnostic file format. Check console for details.')
+      }
+    } catch (error) {
+      const message = error instanceof SyntaxError
+        ? 'Invalid JSON format'
+        : error instanceof Error ? error.message : 'Unknown error'
+      console.error('[Diagnostic Import] Failed to read file:', error)
+      alert(`Failed to read diagnostic file: ${message}`)
+    }
+
+    e.target.value = ''
+  }
 
   const handleRepairSettings = async () => {
     setRepairStatus('running')
@@ -122,6 +160,49 @@ function SettingsAdvancedTab() {
             Useful for reporting exact locations of terrain flattening issues.
           </p>
         </div>
+
+        <div className="setting-item">
+          <div className="import-export-buttons">
+            <button
+              className="control-button"
+              onClick={() => diagnosticFileInputRef.current?.click()}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+              Import Diagnostic
+            </button>
+            <input
+              ref={diagnosticFileInputRef}
+              type="file"
+              accept={`.${DIAGNOSTIC_FILE_EXTENSION}`}
+              onChange={handleDiagnosticFileChange}
+              style={{ display: 'none' }}
+            />
+          </div>
+          <p className="setting-hint">
+            Load a .tc3d-diag file with raw timeline data for debugging.
+            Export with Ctrl+Shift+D or from the Aircraft Timeline modal.
+          </p>
+        </div>
+
+        {importedTimeRange && importedAppState && (
+          <div className="setting-item">
+            <p className="setting-hint" style={{ color: '#ff9800' }}>
+              Viewing diagnostic data
+              {importedAppState.airport ? ` (${importedAppState.airport.icao})` : ''}
+            </p>
+            <button
+              className="control-button"
+              onClick={clearImportedReplay}
+              style={{ marginTop: '8px' }}
+            >
+              Clear Diagnostic Data
+            </button>
+          </div>
+        )}
       </CollapsibleSection>
 
       {/* Updates and Troubleshooting - Only visible on desktop app */}
