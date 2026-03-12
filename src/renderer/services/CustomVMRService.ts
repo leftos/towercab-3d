@@ -159,12 +159,12 @@ class CustomVMRServiceClass {
     const allRules = new Set<string>()
 
     // Collect all unique model names from both default and airline rules
-    for (const entry of this.defaultRules) {
+    for (const [, entry] of this.defaultRules) {
       for (const name of entry.rule.modelNames) {
         allRules.add(name)
       }
     }
-    for (const entry of this.airlineRules) {
+    for (const [, entry] of this.airlineRules) {
       for (const name of entry.rule.modelNames) {
         allRules.add(name)
       }

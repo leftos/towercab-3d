@@ -70,6 +70,10 @@ class UserVMRServiceClass {
   /** Whether the service has been initialized */
   private initialized = false
 
+  /** Store subscription cleanup — assigned in constructor, called externally if service is destroyed */
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: retained for future cleanup support
+  private unsubscribe: (() => void) | undefined
+
   /** Current source priority for sorting model alternatives */
   private currentPriority: ('fsltl' | 'aig')[] = ['fsltl', 'aig']
 
