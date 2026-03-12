@@ -99,26 +99,26 @@ class RunwayService {
       if (values.length < header.length) continue
 
       const raw: RawRunwayCSV = {
-        id: values[colIndex['id']] || '',
-        airport_ref: values[colIndex['airport_ref']] || '',
-        airport_ident: values[colIndex['airport_ident']] || '',
-        length_ft: values[colIndex['length_ft']] || '',
-        width_ft: values[colIndex['width_ft']] || '',
-        surface: values[colIndex['surface']] || '',
-        lighted: values[colIndex['lighted']] || '',
-        closed: values[colIndex['closed']] || '',
-        le_ident: values[colIndex['le_ident']] || '',
-        le_latitude_deg: values[colIndex['le_latitude_deg']] || '',
-        le_longitude_deg: values[colIndex['le_longitude_deg']] || '',
-        le_elevation_ft: values[colIndex['le_elevation_ft']] || '',
-        le_heading_degT: values[colIndex['le_heading_degT']] || '',
-        le_displaced_threshold_ft: values[colIndex['le_displaced_threshold_ft']] || '',
-        he_ident: values[colIndex['he_ident']] || '',
-        he_latitude_deg: values[colIndex['he_latitude_deg']] || '',
-        he_longitude_deg: values[colIndex['he_longitude_deg']] || '',
-        he_elevation_ft: values[colIndex['he_elevation_ft']] || '',
-        he_heading_degT: values[colIndex['he_heading_degT']] || '',
-        he_displaced_threshold_ft: values[colIndex['he_displaced_threshold_ft']] || '',
+        id: values[colIndex.id] || '',
+        airport_ref: values[colIndex.airport_ref] || '',
+        airport_ident: values[colIndex.airport_ident] || '',
+        length_ft: values[colIndex.length_ft] || '',
+        width_ft: values[colIndex.width_ft] || '',
+        surface: values[colIndex.surface] || '',
+        lighted: values[colIndex.lighted] || '',
+        closed: values[colIndex.closed] || '',
+        le_ident: values[colIndex.le_ident] || '',
+        le_latitude_deg: values[colIndex.le_latitude_deg] || '',
+        le_longitude_deg: values[colIndex.le_longitude_deg] || '',
+        le_elevation_ft: values[colIndex.le_elevation_ft] || '',
+        le_heading_degT: values[colIndex.le_heading_degT] || '',
+        le_displaced_threshold_ft: values[colIndex.le_displaced_threshold_ft] || '',
+        he_ident: values[colIndex.he_ident] || '',
+        he_latitude_deg: values[colIndex.he_latitude_deg] || '',
+        he_longitude_deg: values[colIndex.he_longitude_deg] || '',
+        he_elevation_ft: values[colIndex.he_elevation_ft] || '',
+        he_heading_degT: values[colIndex.he_heading_degT] || '',
+        he_displaced_threshold_ft: values[colIndex.he_displaced_threshold_ft] || '',
       }
 
       // Skip runways without threshold coordinates (many smaller airports lack this)
@@ -227,7 +227,7 @@ class RunwayService {
 
     // Parse heading, calculate from ident if missing
     let parsedHeading = parseFloat(heading)
-    if (isNaN(parsedHeading)) {
+    if (Number.isNaN(parsedHeading)) {
       // Extract heading from runway identifier (e.g., "09L" -> 90, "27R" -> 270)
       const match = ident.match(/^(\d{1,2})/)
       if (match) {

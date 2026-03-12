@@ -1359,15 +1359,6 @@ class MSFSModelConversionServiceClass {
   }
 
   /**
-   * Get a temporary output path for models when no cache directory is set
-   * (Returns a file path - for backwards compatibility)
-   */
-  private async getTempOutputPath(modelKey: string): Promise<string> {
-    const dir = await this.getTempOutputDir()
-    return `${dir}/${modelKey}.glb`
-  }
-
-  /**
    * Add entry to cache, evicting LRU entries if over limit
    */
   private addToCacheEntry(modelKey: string, path: string, fileSize: number, isDiskCache: boolean): void {

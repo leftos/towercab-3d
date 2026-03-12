@@ -119,7 +119,7 @@ class AirportService {
     // Exact IATA match
     if (airport.iata && airport.iata.toLowerCase() === query) {
       score += 90
-    } else if (airport.iata && airport.iata.toLowerCase().startsWith(query)) {
+    } else if (airport.iata?.toLowerCase().startsWith(query)) {
       score += 40
     }
 

@@ -141,7 +141,7 @@ class CustomVMRServiceClass {
     const normalized = vmrPath.replace(/\\/g, '/')
     const modsIndex = normalized.lastIndexOf('/mods/')
     if (modsIndex >= 0) {
-      return normalized.substring(0, modsIndex) + '/mods/aircraft'
+      return `${normalized.substring(0, modsIndex)}/mods/aircraft`
     }
     // Fallback: use parent directory of VMR file
     const lastSlash = normalized.lastIndexOf('/')

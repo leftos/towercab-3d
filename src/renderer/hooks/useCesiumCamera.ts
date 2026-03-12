@@ -142,10 +142,10 @@ export function useCesiumCamera(
   const followingCallsign = cameraState?.followingCallsign ?? null
   const followZoom = cameraState?.followZoom ?? 1
   const followMode = cameraState?.followMode ?? 'tower'
-  const orbitDistance = cameraState?.orbitDistance ?? 500
-  const orbitHeading = cameraState?.orbitHeading ?? 0
-  const orbitPitch = cameraState?.orbitPitch ?? -20
-  const cameraVersion = cameraState?.cameraVersion ?? 0
+  const _orbitDistance = cameraState?.orbitDistance ?? 500
+  const _orbitHeading = cameraState?.orbitHeading ?? 0
+  const _orbitPitch = cameraState?.orbitPitch ?? -20
+  const _cameraVersion = cameraState?.cameraVersion ?? 0
 
   // Viewport store - actions (these operate on this specific viewport when called from preRender,
   // but we'll use setState directly for the preRender callback to avoid activeViewport routing)
@@ -435,7 +435,8 @@ export function useCesiumCamera(
             const orbitCameraLag = useSettingsStore.getState().camera.orbitCameraLag ?? 50
 
             // Ensure we have a valid heading value
-            const validHeading = typeof aircraftHeading === 'number' && !isNaN(aircraftHeading) ? aircraftHeading : 0
+            const validHeading =
+              typeof aircraftHeading === 'number' && !Number.isNaN(aircraftHeading) ? aircraftHeading : 0
 
             // Calculate the TARGET absolute orbit angle (where camera should be)
             // This is the angle around the aircraft where the camera orbits
@@ -449,10 +450,10 @@ export function useCesiumCamera(
             }
 
             // Initialize smoothed values on first frame
-            if (smoothedOrbitAngleRef.current === null || isNaN(smoothedOrbitAngleRef.current)) {
+            if (smoothedOrbitAngleRef.current === null || Number.isNaN(smoothedOrbitAngleRef.current)) {
               smoothedOrbitAngleRef.current = targetOrbitAngle
             }
-            if (smoothedAltitudeRef.current === null || isNaN(smoothedAltitudeRef.current)) {
+            if (smoothedAltitudeRef.current === null || Number.isNaN(smoothedAltitudeRef.current)) {
               smoothedAltitudeRef.current = altitudeMeters
             }
 
@@ -469,10 +470,10 @@ export function useCesiumCamera(
             const smoothedAltitude = lerp(smoothedAltitudeRef.current, altitudeMeters, smoothingFactor)
 
             // Update refs for next frame (only if valid)
-            if (!isNaN(smoothedOrbitAngle)) {
+            if (!Number.isNaN(smoothedOrbitAngle)) {
               smoothedOrbitAngleRef.current = smoothedOrbitAngle
             }
-            if (!isNaN(smoothedAltitude)) {
+            if (!Number.isNaN(smoothedAltitude)) {
               smoothedAltitudeRef.current = smoothedAltitude
             }
 
@@ -995,18 +996,11 @@ export function useCesiumCamera(
     followingCallsign,
     followMode,
     followZoom,
-    orbitDistance,
-    orbitHeading,
-    orbitPitch,
     interpolatedAircraft,
-    setHeading,
-    setPitch,
     setHeadingInternal,
     setPitchInternal,
-    stopFollowingStore,
     clampToTerrain,
     custom2dPosition,
-    cameraVersion, // Triggers recalculation when terrain changes
   ])
 
   return {

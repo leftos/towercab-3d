@@ -40,11 +40,11 @@ export function VnasStatusPopover({ onClose, toggleRef }: VnasStatusPopoverProps
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node
       // Ignore clicks on the popover itself
-      if (popoverRef.current && popoverRef.current.contains(target)) {
+      if (popoverRef.current?.contains(target)) {
         return
       }
       // Ignore clicks on the toggle button (let the button handle its own toggle)
-      if (toggleRef?.current && toggleRef.current.contains(target)) {
+      if (toggleRef?.current?.contains(target)) {
         return
       }
       onClose()

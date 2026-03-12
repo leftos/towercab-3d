@@ -167,7 +167,7 @@ export const toGlobalAirportConfig = (local: AirportViewportConfig): GlobalAirpo
     global.bookmarks = {}
     for (const [slotStr, bookmark] of Object.entries(local.bookmarks)) {
       const slot = parseInt(slotStr, 10)
-      if (!isNaN(slot)) {
+      if (!Number.isNaN(slot)) {
         global.bookmarks[slot] = toGlobalCameraBookmark(bookmark)
       }
     }
@@ -345,7 +345,7 @@ export const mergeGlobalAirportConfig = (
     updates.bookmarks = {}
     for (const [slot, bookmark] of Object.entries(global.bookmarks)) {
       const slotNum = parseInt(slot, 10)
-      if (!isNaN(slotNum)) {
+      if (!Number.isNaN(slotNum)) {
         updates.bookmarks[slotNum] = fromGlobalCameraBookmark(bookmark)
       }
     }

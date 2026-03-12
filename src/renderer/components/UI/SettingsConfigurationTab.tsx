@@ -113,7 +113,7 @@ function SettingsConfigurationTab({
       })
       .catch(console.error)
     // biome-ignore lint/correctness/useExhaustiveDependencies: one-time init
-  }, [])
+  }, [serverSettings.minimizeToTray])
 
   // Check vNAS availability on mount (only in Tauri)
   useEffect(() => {
@@ -900,26 +900,25 @@ function SettingsConfigurationTab({
                     </button>
                   </div>
                 )}
-                {serverStatus.lanUrls &&
-                  serverStatus.lanUrls.map((url, index) => (
-                    <div key={url} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <code style={{ background: 'rgba(255,255,255,0.1)', padding: '4px 8px', borderRadius: '4px' }}>
-                        {url}
-                      </code>
-                      <button
-                        className="control-button"
-                        onClick={() => handleCopyUrl(url)}
-                        style={{ padding: '4px 8px' }}
-                      >
-                        Copy
-                      </button>
-                      {index === 0 && (
-                        <span className="setting-hint" style={{ marginLeft: '4px' }}>
-                          (Use for other devices)
-                        </span>
-                      )}
-                    </div>
-                  ))}
+                {serverStatus.lanUrls?.map((url, index) => (
+                  <div key={url} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <code style={{ background: 'rgba(255,255,255,0.1)', padding: '4px 8px', borderRadius: '4px' }}>
+                      {url}
+                    </code>
+                    <button
+                      className="control-button"
+                      onClick={() => handleCopyUrl(url)}
+                      style={{ padding: '4px 8px' }}
+                    >
+                      Copy
+                    </button>
+                    {index === 0 && (
+                      <span className="setting-hint" style={{ marginLeft: '4px' }}>
+                        (Use for other devices)
+                      </span>
+                    )}
+                  </div>
+                ))}
               </div>
               <p className="setting-hint" style={{ marginTop: '8px' }}>
                 Open one of these URLs in Safari on your iPad to access TowerCab 3D remotely.

@@ -75,7 +75,7 @@ body {
 
 /* Common utility classes */
 .hidden {
-  display: none !important;
+  display: none;
 }
 
 .sr-only {

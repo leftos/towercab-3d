@@ -48,7 +48,7 @@ function extractSettingsFromLevelDB(data: Uint8Array): string | null {
 
   for (const pattern of patterns) {
     const match = text.match(pattern)
-    if (match && match[1]) {
+    if (match?.[1]) {
       try {
         // Try to parse to validate it's JSON
         JSON.parse(match[1])
@@ -105,7 +105,7 @@ export async function migrateFromElectron(): Promise<MigrationResult> {
     // Tauri stores in %APPDATA%/com.towercab.app/
     // Navigate to the Electron path
     const electronPath = tauriAppData.replace(/[/\\]com\.towercab\.app[/\\]?$/, '/towercab-3d/')
-    const leveldbPath = electronPath + 'Local Storage/leveldb/'
+    const leveldbPath = `${electronPath}Local Storage/leveldb/`
 
     console.log(`Looking for Electron settings in: ${leveldbPath}`)
 
@@ -124,8 +124,8 @@ export async function migrateFromElectron(): Promise<MigrationResult> {
       .filter((f) => f.name && (f.name.endsWith('.log') || f.name.endsWith('.ldb')))
       .sort((a, b) => {
         // Sort by file number descending (newer files first)
-        const numA = parseInt(a.name?.match(/(\d+)/)?.[1] || '0')
-        const numB = parseInt(b.name?.match(/(\d+)/)?.[1] || '0')
+        const numA = parseInt(a.name?.match(/(\d+)/)?.[1] || '0', 10)
+        const numB = parseInt(b.name?.match(/(\d+)/)?.[1] || '0', 10)
         return numB - numA
       })
 

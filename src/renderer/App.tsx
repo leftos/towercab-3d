@@ -387,7 +387,7 @@ function App() {
       flushUrlCameraSave()
     }
     // biome-ignore lint/correctness/useExhaustiveDependencies: one-time init after load
-  }, [isLoading])
+  }, [isLoading, airports.has, selectAirport])
 
   // Deep link handler for OAuth callbacks (tc3d://oauth/callback)
   useEffect(() => {

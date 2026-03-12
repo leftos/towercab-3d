@@ -504,7 +504,7 @@ export async function readImportFile(file: File): Promise<ExportData | Selective
 
         resolve(data)
       } catch (error) {
-        reject(new Error('Failed to parse file: ' + (error instanceof Error ? error.message : 'Unknown error')))
+        reject(new Error(`Failed to parse file: ${error instanceof Error ? error.message : 'Unknown error'}`))
       }
     }
 

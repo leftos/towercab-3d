@@ -33,7 +33,7 @@ export function calculateIDWWeights(distances: number[], power: number = INTERPO
   if (distances.length === 1) return [1]
 
   // Handle zero distance (camera exactly at station)
-  const zeroIndex = distances.findIndex((d) => d === 0)
+  const zeroIndex = distances.indexOf(0)
   if (zeroIndex !== -1) {
     return distances.map((_, i) => (i === zeroIndex ? 1 : 0))
   }

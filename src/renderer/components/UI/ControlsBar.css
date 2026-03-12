@@ -1210,7 +1210,7 @@
   /* Hide less critical buttons, available in MoreMenu */
   .controls-left .hide-on-mobile,
   .controls-right .hide-on-mobile {
-    display: none !important;
+    display: none;
   }
 
   /* Make controls bar more compact */

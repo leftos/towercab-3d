@@ -254,10 +254,10 @@ class RealTrafficService {
         }
 
         // Update rate limits from response (only if valid numbers)
-        if (typeof data.rrl === 'number' && !isNaN(data.rrl)) {
+        if (typeof data.rrl === 'number' && !Number.isNaN(data.rrl)) {
           this.trafficRateLimit = Math.max(data.rrl, REALTRAFFIC_MIN_POLL_INTERVAL)
         }
-        if (typeof data.wrrl === 'number' && !isNaN(data.wrrl)) {
+        if (typeof data.wrrl === 'number' && !Number.isNaN(data.wrrl)) {
           this.weatherRateLimit = data.wrrl
         }
 
@@ -399,7 +399,7 @@ class RealTrafficService {
     // For heading display: use true_heading if available (nose direction),
     // otherwise fall back to track (direction of movement)
     // This is especially important for ground aircraft where heading != track
-    const displayHeading = true_heading != null && !isNaN(true_heading) ? true_heading : track
+    const displayHeading = true_heading != null && !Number.isNaN(true_heading) ? true_heading : track
 
     return {
       callsign,
@@ -411,12 +411,12 @@ class RealTrafficService {
       heading: displayHeading, // Use true heading for display when available
       groundTrack: track, // Use ADS-B track for interpolation/extrapolation direction
       trueHeading: true_heading, // Store separately for explicit access
-      trackRate: track_rate != null && !isNaN(track_rate) ? track_rate : null,
-      roll: roll != null && !isNaN(roll) ? roll : null,
-      baroRate: baro_rate != null && !isNaN(baro_rate) ? baro_rate : null,
-      positionAge: position_age != null && !isNaN(position_age) ? position_age : null,
+      trackRate: track_rate != null && !Number.isNaN(track_rate) ? track_rate : null,
+      roll: roll != null && !Number.isNaN(roll) ? roll : null,
+      baroRate: baro_rate != null && !Number.isNaN(baro_rate) ? baro_rate : null,
+      positionAge: position_age != null && !Number.isNaN(position_age) ? position_age : null,
       onGround: on_ground,
-      apiTimestamp: api_timestamp != null && !isNaN(api_timestamp) ? api_timestamp : null,
+      apiTimestamp: api_timestamp != null && !Number.isNaN(api_timestamp) ? api_timestamp : null,
       transponder: squawk,
       aircraftType: type || null,
       departure: iataToIcao(from_iata),
@@ -486,7 +486,7 @@ class RealTrafficService {
         }
 
         // Update rate limits from response (only if valid numbers)
-        if (typeof data.rrl === 'number' && !isNaN(data.rrl)) {
+        if (typeof data.rrl === 'number' && !Number.isNaN(data.rrl)) {
           this.trafficRateLimit = Math.max(data.rrl, REALTRAFFIC_MIN_POLL_INTERVAL)
         }
 
@@ -601,7 +601,7 @@ class RealTrafficService {
       baroRate: null,
       positionAge: null,
       onGround: 1, // Always on ground (parked)
-      apiTimestamp: api_timestamp != null && !isNaN(api_timestamp) ? api_timestamp : null,
+      apiTimestamp: api_timestamp != null && !Number.isNaN(api_timestamp) ? api_timestamp : null,
       transponder: '',
       aircraftType: type || null,
       departure: departure, // ICAO format from gate_id

@@ -95,7 +95,7 @@ export function getMeshBounds(gltfJson: any, meshIndex: number): MeshBounds | nu
     maxZ = Math.max(maxZ, posAccessor.max[2])
   }
 
-  if (!isFinite(minX)) return null
+  if (!Number.isFinite(minX)) return null
 
   return {
     min: [minX, minY, minZ],
@@ -133,7 +133,7 @@ export function computeMinYAtGearState(
     }
   }
 
-  return isFinite(globalMinY) ? globalMinY : 0
+  return Number.isFinite(globalMinY) ? globalMinY : 0
 }
 
 /**
@@ -358,7 +358,7 @@ export function computeWingData(nodes: Map<number, ExtendedNodeData>): ModelWing
     }
   }
 
-  if (!isFinite(leftMostX) || !isFinite(rightMostX)) {
+  if (!Number.isFinite(leftMostX) || !Number.isFinite(rightMostX)) {
     return null
   }
 
@@ -390,7 +390,7 @@ export function computeWingData(nodes: Map<number, ExtendedNodeData>): ModelWing
   }
 
   // Validate we found reasonable wing data
-  if (!isFinite(leftWingMaxY) || !isFinite(rightWingMaxY)) {
+  if (!Number.isFinite(leftWingMaxY) || !Number.isFinite(rightWingMaxY)) {
     return null
   }
 
@@ -442,7 +442,7 @@ export function parseWingDataGltf1(gltfJson: any): ModelWingData | null {
     }
   }
 
-  if (!isFinite(leftMostX) || !isFinite(rightMostX)) {
+  if (!Number.isFinite(leftMostX) || !Number.isFinite(rightMostX)) {
     return null
   }
 
@@ -478,7 +478,7 @@ export function parseWingDataGltf1(gltfJson: any): ModelWingData | null {
   }
 
   // Validate we found reasonable wing data
-  if (!isFinite(leftWingMaxY) || !isFinite(rightWingMaxY)) {
+  if (!Number.isFinite(leftWingMaxY) || !Number.isFinite(rightWingMaxY)) {
     return null
   }
 

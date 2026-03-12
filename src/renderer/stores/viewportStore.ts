@@ -1474,7 +1474,7 @@ export const useViewportStore = create<ViewportStore>()(
         }),
         onRehydrateStorage: () => (state) => {
           // After rehydration, load the saved viewport config for the current airport
-          if (state && state.currentAirportIcao) {
+          if (state?.currentAirportIcao) {
             const icao = state.currentAirportIcao
             const savedConfig = state.airportViewportConfigs[icao]
             if (savedConfig) {

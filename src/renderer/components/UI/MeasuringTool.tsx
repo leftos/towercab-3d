@@ -139,7 +139,7 @@ function MeasuringTool({ cesiumViewer }: MeasuringToolProps) {
       }
       entitiesMap.clear()
     }
-  }, [cesiumViewer, measurements])
+  }, [cesiumViewer, measurements, formatDistance])
 
   // Create/update pending point and preview line
   useEffect(() => {
@@ -252,7 +252,7 @@ function MeasuringTool({ cesiumViewer }: MeasuringToolProps) {
     }
 
     return cleanup
-  }, [cesiumViewer, pendingPoint, previewPoint, previewDistance])
+  }, [cesiumViewer, pendingPoint, previewPoint, previewDistance, formatDistance])
 
   // Format distance for display
   function formatDistance(meters: number): string {

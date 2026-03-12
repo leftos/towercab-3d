@@ -36,7 +36,7 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
   const customTowerPosition = useAirportStore((state) => state.customTowerPosition)
 
   // Counter to force re-render when model conversions complete
-  const [conversionVersion, setConversionVersion] = useState(0)
+  const [_conversionVersion, setConversionVersion] = useState(0)
 
   // Test panel state
   const [testAirline, setTestAirline] = useState('')
@@ -151,7 +151,7 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
       })
       .sort((a, b) => a.callsign.localeCompare(b.callsign))
     // biome-ignore lint/correctness/useExhaustiveDependencies: conversionVersion triggers refresh when models finish converting
-  }, [timelines, currentAirport, towerHeight, customTowerPosition, aircraftDataRadiusNM, conversionVersion])
+  }, [timelines, currentAirport, towerHeight, customTowerPosition, aircraftDataRadiusNM])
 
   // Format scale for display
   const formatScale = (scale: { x: number; y: number; z: number }): { text: string; isScaled: boolean } => {
@@ -208,7 +208,6 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
         return { label: 'closest', className: 'closest' }
       case 'pending':
         return { label: 'converting...', className: 'pending' }
-      case 'fallback':
       default:
         return { label: 'fallback', className: 'fallback' }
     }

@@ -102,5 +102,9 @@ export function useVnasSubscription(): void {
       }
     }
     // biome-ignore lint/correctness/useExhaustiveDependencies: one-time subscription setup
-  }, [])
+  }, [
+    // Note: This may not work reliably since the component is unmounting,
+    // but it's a best-effort cleanup
+    unsubscribeFromFacility,
+  ])
 }

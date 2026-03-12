@@ -117,7 +117,7 @@ export function useRemoteObservations(): void {
 
     const baseUrl = getApiBaseUrl()
     // Convert http:// to ws:// for WebSocket
-    const wsUrl = baseUrl.replace(/^http/, 'ws') + '/api/observations/ws'
+    const wsUrl = `${baseUrl.replace(/^http/, 'ws')}/api/observations/ws`
 
     console.log('[RemoteObservations] Connecting to:', wsUrl)
 

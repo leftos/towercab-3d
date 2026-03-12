@@ -162,15 +162,13 @@ function BookmarkManagerModal({ onClose }: BookmarkManagerModalProps) {
   }
 
   const formatHeading = (heading: number) => {
-    return (
-      Math.round(((heading % 360) + 360) % 360)
-        .toString()
-        .padStart(3, '0') + '\u00B0'
-    )
+    return `${Math.round(((heading % 360) + 360) % 360)
+      .toString()
+      .padStart(3, '0')}\u00B0`
   }
 
   const formatPitch = (pitch: number) => {
-    return (pitch >= 0 ? '+' : '') + Math.round(pitch) + '\u00B0'
+    return `${(pitch >= 0 ? '+' : '') + Math.round(pitch)}\u00B0`
   }
 
   // Count saved bookmarks

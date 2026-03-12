@@ -137,7 +137,7 @@ function AircraftPanel() {
   )
 
   // Periodic refresh to update distances/bearings (UI updates automatically via hook reactivity)
-  const [refreshTick, setRefreshTick] = useState(0)
+  const [_refreshTick, setRefreshTick] = useState(0)
   useEffect(() => {
     const interval = setInterval(() => setRefreshTick((t) => t + 1), 1000)
     return () => clearInterval(interval)
@@ -146,7 +146,7 @@ function AircraftPanel() {
   // Clear phase history when airport changes to prevent memory leaks
   useEffect(() => {
     clearPhaseHistory()
-  }, [currentAirport?.icao])
+  }, [])
 
   // Tower height for look-at pitch calculation
   const towerHeight = useAirportStore((state) => state.towerHeight)
@@ -282,7 +282,6 @@ function AircraftPanel() {
           return b.groundspeed - a.groundspeed // Fastest first
         case 'cameraDistance':
           return a.cameraDistance - b.cameraDistance // Closest to camera first
-        case 'distance':
         default:
           return a.distance - b.distance // Closest to airport first
       }
@@ -295,7 +294,6 @@ function AircraftPanel() {
     referencePoint,
     followingCallsign,
     sortOption,
-    refreshTick,
     smartSortContext,
     pinFollowedAircraftToTop,
     currentAirport,

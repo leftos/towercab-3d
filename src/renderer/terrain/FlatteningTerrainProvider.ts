@@ -1253,8 +1253,7 @@ export function createFlatteningTerrainProvider(
 
     // Use closest runway for slope calculation (works for both runways and taxiways)
     if (
-      closestRunway &&
-      closestRunway.gradientStart &&
+      closestRunway?.gradientStart &&
       closestRunway.gradientEnd &&
       closestRunway.startElevation !== undefined &&
       closestRunway.endElevation !== undefined

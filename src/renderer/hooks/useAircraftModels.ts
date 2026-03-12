@@ -261,7 +261,7 @@ export function useAircraftModels(
       if (isInset) {
         // Inset context: use model info from broadcast cache
         const broadcastModel = getModelInfoForCallsign(aircraft.callsign)
-        if (broadcastModel && broadcastModel.modelUrl) {
+        if (broadcastModel?.modelUrl) {
           modelInfo = {
             modelUrl: broadcastModel.modelUrl,
             scale: {
@@ -562,7 +562,7 @@ export function useAircraftModels(
       for (const [, idx] of callsignToPoolIndexRef.current.entries()) {
         const model = modelPool.current.get(idx)
         const isFsltl = modelPoolIsFsltlRef.current.get(idx) ?? false
-        if (model && model.show && !isFsltl) {
+        if (model?.show && !isFsltl) {
           builtinModels.push(model)
         }
       }

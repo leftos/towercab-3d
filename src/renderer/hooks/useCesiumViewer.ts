@@ -122,7 +122,7 @@ export interface SilhouetteRefs {
  */
 export function useCesiumViewer(
   containerRef: React.RefObject<HTMLDivElement>,
-  viewportId: string,
+  _viewportId: string,
   settings: CesiumViewerSettings,
 ): {
   viewer: Cesium.Viewer | null
@@ -487,7 +487,33 @@ export function useCesiumViewer(
       silhouetteStageRef.current = null
     }
     // biome-ignore lint/correctness/useExhaustiveDependencies: graphics settings used at init only; msaaSamples captured in ref (requires restart)
-  }, [cesiumIonToken, isInset, viewportId])
+  }, [
+    cesiumIonToken,
+    isInset,
+    containerRef.current,
+    enableAircraftSilhouettes,
+    enableAmbientOcclusion,
+    enableFxaa,
+    enableGroundAtmosphere,
+    enableHdr,
+    enableLighting,
+    enableLogDepth,
+    enableShadows,
+    inMemoryTileCacheSize,
+    insetGraphics.cache,
+    insetGraphics.msaa,
+    insetGraphics.preloadTiles,
+    insetGraphics.shadows,
+    insetGraphics.silhouettes,
+    insetGraphics.terrain,
+    modelBrightness,
+    shadowDarkness,
+    shadowFadingEnabled,
+    shadowMapSize,
+    shadowMaxDistance,
+    shadowNormalOffset,
+    shadowSoftness,
+  ])
 
   // Update model colors and blend amount when brightness setting changes
   useEffect(() => {

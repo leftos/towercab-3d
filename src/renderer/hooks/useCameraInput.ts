@@ -704,7 +704,7 @@ export function useCameraInput(
       // Handle numpad keys 1-9 for datablock positioning (without modifiers)
       // Key 5 means "reset to app default"
       if (!event.ctrlKey && !event.altKey && !event.shiftKey) {
-        const numKey = parseInt(key)
+        const numKey = parseInt(key, 10)
         if (numKey >= 1 && numKey <= 9) {
           const datablockStore = useDatablockPositionStore.getState()
           datablockStore.setPendingDirection(numKey as PendingDirection)
@@ -1046,7 +1046,6 @@ export function useCameraInput(
     setPitch,
     clearLookAtTarget,
     isInputEnabled,
-    viewportId,
   ])
 
   // NOTE: Viewport activation is handled ONLY by canvas clicks (LEFT_DOWN, RIGHT_DOWN, MIDDLE_DOWN)

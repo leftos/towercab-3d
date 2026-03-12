@@ -982,7 +982,7 @@ class AircraftModelServiceClass {
 
     // 5. No direct built-in model - try to find closest built-in match by dimensions
     const targetDims = aircraftDimensionsService.getDimensions(normalized)
-    if (targetDims && targetDims.wingspan && targetDims.length) {
+    if (targetDims?.wingspan && targetDims.length) {
       const { model, scale } = findClosestModel(targetDims.wingspan, targetDims.length)
       const closestDims = this.getModelDimensions(model)
       const result: ModelInfo = {

@@ -635,7 +635,7 @@ export function useBabylonWeather(options: UseBabylonWeatherOptions): UseBabylon
         })
       }
     }
-  }, [scene])
+  }, [])
 
   // Smooth cloud layer data before matching to prevent flickering from rapid METAR changes
   // Updates target values in cloudSmoothingRef, actual smoothing happens in animation loop
@@ -812,7 +812,7 @@ export function useBabylonWeather(options: UseBabylonWeatherOptions): UseBabylon
         }
       }
     }
-  }, [cloudLayers, showWeatherEffects, showClouds, isTopDownView])
+  }, [showWeatherEffects, showClouds, isTopDownView])
 
   // Instantly hide/show weather effects when switching between 3D and 2D view modes
   // (no gradual fade - user expects immediate response to view mode toggle)

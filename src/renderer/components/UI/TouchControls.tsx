@@ -47,7 +47,7 @@ function TouchCommandInput({ isOpen, onClose }: { isOpen: boolean; onClose: () =
   const processCommand = useCallback(
     (command: string) => {
       // Ensure command starts with a period
-      const normalizedCommand = command.startsWith('.') ? command : '.' + command
+      const normalizedCommand = command.startsWith('.') ? command : `.${command}`
 
       // Match save bookmark pattern: .XX. or .XX.NAME.
       if (normalizedCommand.endsWith('.')) {

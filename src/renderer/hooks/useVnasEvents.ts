@@ -33,7 +33,7 @@ export function useVnasEvents(): void {
   const getSessionArtcc = useVnasStore((state) => state.getSessionArtcc)
   const getSessionAirports = useVnasStore((state) => state.getSessionAirports)
   const vnasState = useVnasStore((state) => state.status.state)
-  const subscribedFacilities = useVnasStore((state) => state.status.subscribedFacilities)
+  const _subscribedFacilities = useVnasStore((state) => state.status.subscribedFacilities)
   const currentAirport = useAirportStore((state) => state.currentAirport)
 
   // Auto-subscribe when airport changes and vNAS is ready
@@ -50,7 +50,7 @@ export function useVnasEvents(): void {
         console.warn('[vNAS] Failed to auto-subscribe to airport:', err)
       })
     }
-  }, [vnasState, currentAirport?.icao, subscribedFacilities, subscribe, isSubscribedTo])
+  }, [vnasState, currentAirport?.icao, subscribe, isSubscribedTo])
 
   useEffect(() => {
     // Only set up listeners in Tauri mode (not remote browser)

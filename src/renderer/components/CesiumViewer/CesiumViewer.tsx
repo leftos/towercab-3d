@@ -780,6 +780,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
     followingCallsign,
     interpolatedAircraft,
     setReferencePosition,
+    customTowerPosition,
   ])
 
   // Sync Babylon overlay and update aircraft on each render frame

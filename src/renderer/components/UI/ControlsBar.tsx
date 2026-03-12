@@ -251,7 +251,7 @@ function ControlsBar() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [currentAirport])
+  }, [])
 
   const handleSaveAsDefault = async (e: React.MouseEvent) => {
     // Shift+click saves to tower-positions/{ICAO}.json for sharing
@@ -390,7 +390,7 @@ function ControlsBar() {
 
   const formatPitch = (angle: number) => {
     const sign = angle >= 0 ? '+' : ''
-    return sign + Math.round(angle) + '°'
+    return `${sign + Math.round(angle)}°`
   }
 
   const handleImportSuccess = () => {

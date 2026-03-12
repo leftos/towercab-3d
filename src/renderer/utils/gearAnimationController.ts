@@ -272,7 +272,7 @@ const animationSets = new Map<string, AnimationSet>()
 export function applyGearAnimation(
   model: Cesium.Model,
   gearProgress: number,
-  callsign: string,
+  _callsign: string,
   modelUrl: string,
   _knownAnimationCount?: number,
 ): void {

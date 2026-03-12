@@ -119,5 +119,5 @@ export function formatGroundspeed(groundspeedKnots: number): string {
  */
 export function formatHeading(heading: number): string {
   const normalized = Math.round(((heading % 360) + 360) % 360)
-  return normalized.toString().padStart(3, '0') + '°'
+  return `${normalized.toString().padStart(3, '0')}°`
 }

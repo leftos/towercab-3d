@@ -588,7 +588,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
     // Calculate groundspeed from position change (vNAS doesn't provide it directly)
     // Use actual time delta between observations, not assumed 1 second
     let calculatedGroundspeed = 0
-    if (oldState && oldState.vnasTimestamp) {
+    if (oldState?.vnasTimestamp) {
       const timeDeltaMs = observationTime - oldState.vnasTimestamp
       if (timeDeltaMs > 0 && timeDeltaMs < 5000) {
         // Sanity check: 0-5 seconds
@@ -704,7 +704,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
 
       // Calculate groundspeed from position change using actual time delta
       let calculatedGroundspeed = 0
-      if (oldState && oldState.vnasTimestamp) {
+      if (oldState?.vnasTimestamp) {
         const timeDeltaMs = observationTime - oldState.vnasTimestamp
         if (timeDeltaMs > 0 && timeDeltaMs < 5000) {
           const distanceMeters = haversineDistance(oldState.latitude, oldState.longitude, ac.lat, ac.lon)

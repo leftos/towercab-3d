@@ -528,7 +528,6 @@ class ModService {
         return position.view3d !== undefined
       case '2d':
         return position.view2d !== undefined
-      case 'any':
       default:
         return position.view3d !== undefined || position.view2d !== undefined
     }

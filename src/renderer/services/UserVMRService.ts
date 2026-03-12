@@ -73,9 +73,6 @@ class UserVMRServiceClass {
   /** Current source priority for sorting model alternatives */
   private currentPriority: ('fsltl' | 'aig')[] = ['fsltl', 'aig']
 
-  /** Unsubscribe function for settings listener */
-  private unsubscribe?: () => void
-
   constructor() {
     // Subscribe to priority changes to re-sort alternatives
     this.unsubscribe = useGlobalSettingsStore.subscribe((state) => {

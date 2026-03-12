@@ -5,7 +5,6 @@
  * Appears when user enables a source in Settings > MSFS Models.
  */
 
-import React from 'react'
 import { useIndexingStore } from '@/stores/indexingStore'
 import styles from './MSFSIndexingModal.module.css'
 

@@ -655,7 +655,7 @@ function detectRawFlightPhase(aircraft: InterpolatedAircraftState, context: Smar
   const alignedRunwayByHeading = findAlignedRunway(lat, lon, heading, context.runways, false)
 
   // Check if aircraft is on approach to any runway (aligned by track + inbound)
-  if (alignedRunwayByTrack && alignedRunwayByTrack.isInbound) {
+  if (alignedRunwayByTrack?.isInbound) {
     if (alignedRunwayByTrack.distanceNm < SHORT_FINAL_NM) {
       // Within 2nm and aligned = definitely short final
       return {

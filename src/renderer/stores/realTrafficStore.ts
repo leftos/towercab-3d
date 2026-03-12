@@ -322,7 +322,7 @@ export const useRealTrafficStore = create<RealTrafficStore>((set, get) => ({
 
     // Guard against NaN/undefined - keep existing rate limit if new one is invalid
     const newRateLimit =
-      typeof result.trafficRateLimit === 'number' && !isNaN(result.trafficRateLimit)
+      typeof result.trafficRateLimit === 'number' && !Number.isNaN(result.trafficRateLimit)
         ? result.trafficRateLimit
         : get().trafficRateLimit
 

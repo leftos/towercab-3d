@@ -19,7 +19,7 @@ export function formatRelativeTime(totalSeconds: number): string {
  */
 export function formatUTCTime(timestamp: number): string {
   const date = new Date(timestamp)
-  return date.toISOString().slice(11, 19) + ' UTC'
+  return `${date.toISOString().slice(11, 19)} UTC`
 }
 
 /**
@@ -37,11 +37,9 @@ export function formatDuration(totalSeconds: number): string {
  * Format heading angle with zero-padding (e.g., "045°")
  */
 export function formatAngle(angle: number): string {
-  return (
-    Math.round(((angle % 360) + 360) % 360)
-      .toString()
-      .padStart(3, '0') + '°'
-  )
+  return `${Math.round(((angle % 360) + 360) % 360)
+    .toString()
+    .padStart(3, '0')}°`
 }
 
 /**
@@ -49,7 +47,7 @@ export function formatAngle(angle: number): string {
  */
 export function formatPitch(angle: number): string {
   const sign = angle >= 0 ? '+' : ''
-  return sign + Math.round(angle) + '°'
+  return `${sign + Math.round(angle)}°`
 }
 
 /**

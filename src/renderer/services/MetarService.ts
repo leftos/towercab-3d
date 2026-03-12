@@ -420,7 +420,7 @@ class MetarService {
     if (typeof visib === 'string') {
       // Handle "10+" or similar
       const num = parseFloat(visib)
-      if (!isNaN(num)) return num
+      if (!Number.isNaN(num)) return num
     }
     // Default to good visibility if unknown
     return 10
