@@ -63,7 +63,7 @@ import {
 import { migrateCameraStoreBookmarks, migrateToGlobalSettings } from './viewport/viewportMigrations'
 
 // Re-export types for consumers
-export type { GlobalOrbitSettings, ViewModeDefaults, AirportViewportConfig }
+export type { AirportViewportConfig, GlobalOrbitSettings, ViewModeDefaults }
 
 // =============================================================================
 // ViewportStore Interface

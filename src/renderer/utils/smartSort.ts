@@ -25,9 +25,9 @@ import {
 import { haversineDistanceNm } from './aircraft/geoMath'
 import type { FlightPhase, PriorityTier, SmartSortContext, SmartSortResult } from './aircraft/types'
 
-// Re-export types for backwards compatibility
-export type { FlightPhase, PriorityTier, SmartSortResult, SmartSortContext }
 export { cleanupPhaseHistory, clearPhaseHistory } from './aircraft/flightPhaseDetector'
+// Re-export types for backwards compatibility
+export type { FlightPhase, PriorityTier, SmartSortContext, SmartSortResult }
 export { cleanupStabilizationStates, clearStabilizationStates }
 
 // ============================================================================
