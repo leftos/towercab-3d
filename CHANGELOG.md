@@ -4,6 +4,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+## [0.0.46-alpha] - 2026-04-04
+
 ### Added
 - Diagnostic exports now include recently removed aircraft (up to 5 minutes after disappearing), so aircraft that timed out before export are still captured
 - vNAS can now connect to the Test server in addition to Live and Sweatbox 1/2
