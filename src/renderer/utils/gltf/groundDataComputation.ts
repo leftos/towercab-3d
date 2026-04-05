@@ -37,7 +37,7 @@ export function parseExtendedNodes(gltfJson: any): Map<number, ExtendedNodeData>
 
     // Get mesh bounds if this node has a mesh
     let meshBounds: MeshBounds | null = null
-    if (node.mesh !== undefined && gltfJson.meshes && gltfJson.meshes[node.mesh]) {
+    if (node.mesh !== undefined && gltfJson.meshes?.[node.mesh]) {
       meshBounds = getMeshBounds(gltfJson, node.mesh)
     }
 
