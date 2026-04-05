@@ -4,6 +4,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Diagnostic exports now include recently removed aircraft (up to 5 minutes after disappearing), so aircraft that timed out before export are still captured
+
 ## [0.0.45-alpha] - 2026-03-11
 
 ### Added

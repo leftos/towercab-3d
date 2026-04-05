@@ -94,11 +94,17 @@ function buildFilename(icao: string | undefined): string {
  * Build a DiagnosticPackage from current app state.
  */
 export function exportDiagnostic(): DiagnosticPackage {
-  const timelines = useAircraftTimelineStore.getState().timelines
+  const { timelines, recentlyRemoved } = useAircraftTimelineStore.getState()
   const serialized: SerializedTimeline[] = []
 
   for (const [callsign, timeline] of timelines) {
     serialized.push(serializeTimeline(callsign, timeline))
+  }
+
+  // Include recently removed aircraft so diagnostics capture aircraft
+  // that timed out before the export was triggered
+  for (const [callsign, entry] of recentlyRemoved) {
+    serialized.push({ ...serializeTimeline(callsign, entry.timeline), removedAt: entry.removedAt })
   }
 
   return {

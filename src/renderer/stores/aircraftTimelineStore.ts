@@ -90,9 +90,18 @@ export function registerBroadcastCallbacks(
   removalBroadcastCallback = onRemovals
 }
 
+/** A removed timeline kept for diagnostic export */
+interface GraveyardEntry {
+  timeline: AircraftTimeline
+  removedAt: number
+}
+
 interface AircraftTimelineStore {
   // State
   timelines: Map<string, AircraftTimeline>
+
+  // Recently removed timelines kept for diagnostic capture
+  recentlyRemoved: Map<string, GraveyardEntry>
 
   // Per-aircraft last known good heading (for when current heading is unreliable)
   lastKnownHeadings: Map<string, number>
@@ -1206,6 +1215,7 @@ function interpolateTimeline(
 
 export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get) => ({
   timelines: new Map(),
+  recentlyRemoved: new Map(),
   lastKnownHeadings: new Map(),
   lastRenderedPositions: new Map(),
   reconciliationStates: new Map(),
@@ -1292,7 +1302,16 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       lastReceivedAt: observation.receivedAt,
       dynamicDelay,
     })
-    set({ timelines: updated })
+
+    // Remove from graveyard if aircraft reappeared
+    const { recentlyRemoved } = get()
+    if (recentlyRemoved.has(callsign)) {
+      const updatedGraveyard = new Map(recentlyRemoved)
+      updatedGraveyard.delete(callsign)
+      set({ timelines: updated, recentlyRemoved: updatedGraveyard })
+    } else {
+      set({ timelines: updated })
+    }
 
     // Broadcast observation to insets and remote browsers
     if (observationBroadcastCallback) {
@@ -1401,7 +1420,21 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       })
     }
 
-    set({ timelines: updated })
+    // Remove reappeared aircraft from graveyard
+    const { recentlyRemoved } = get()
+    let updatedGraveyard: Map<string, GraveyardEntry> | null = null
+    for (const { callsign } of batch) {
+      if (recentlyRemoved.has(callsign)) {
+        if (!updatedGraveyard) updatedGraveyard = new Map(recentlyRemoved)
+        updatedGraveyard.delete(callsign)
+      }
+    }
+
+    if (updatedGraveyard) {
+      set({ timelines: updated, recentlyRemoved: updatedGraveyard })
+    } else {
+      set({ timelines: updated })
+    }
 
     // Broadcast observations to insets (if callback registered by main app)
     if (observationBroadcastCallback && batch.length > 0) {
@@ -1413,10 +1446,15 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
    * Remove an aircraft from the timeline
    */
   removeAircraft: (callsign) => {
-    const { timelines, lastKnownHeadings, lastRenderedPositions, reconciliationStates } = get()
-    if (timelines.has(callsign)) {
+    const { timelines, recentlyRemoved, lastKnownHeadings, lastRenderedPositions, reconciliationStates } = get()
+    const timeline = timelines.get(callsign)
+    if (timeline) {
       const updatedTimelines = new Map(timelines)
       updatedTimelines.delete(callsign)
+
+      // Move to graveyard for diagnostic capture
+      const updatedGraveyard = new Map(recentlyRemoved)
+      updatedGraveyard.set(callsign, { timeline, removedAt: Date.now() })
 
       const updatedHeadings = new Map(lastKnownHeadings)
       updatedHeadings.delete(callsign)
@@ -1429,6 +1467,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
 
       set({
         timelines: updatedTimelines,
+        recentlyRemoved: updatedGraveyard,
         lastKnownHeadings: updatedHeadings,
         lastRenderedPositions: updatedPositions,
         reconciliationStates: updatedReconciliations,
@@ -1449,18 +1488,21 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
     const playbackMode = useReplayStore.getState().playbackMode
     if (playbackMode !== 'live') return
 
-    const { timelines, lastKnownHeadings, lastRenderedPositions, reconciliationStates } = get()
+    const { timelines, recentlyRemoved, lastKnownHeadings, lastRenderedPositions, reconciliationStates } = get()
     const now = Date.now()
     const removedCallsigns: string[] = []
 
     const updatedTimelines = new Map(timelines)
+    const updatedGraveyard = new Map(recentlyRemoved)
     const updatedHeadings = new Map(lastKnownHeadings)
     const updatedPositions = new Map(lastRenderedPositions)
     const updatedReconciliations = new Map(reconciliationStates)
 
+    // Move timed-out aircraft to graveyard
     for (const [callsign, timeline] of timelines) {
       if (now - timeline.lastReceivedAt > AIRCRAFT_TIMEOUT) {
         updatedTimelines.delete(callsign)
+        updatedGraveyard.set(callsign, { timeline, removedAt: now })
         updatedHeadings.delete(callsign)
         updatedPositions.delete(callsign)
         updatedReconciliations.delete(callsign)
@@ -1468,16 +1510,26 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       }
     }
 
-    if (removedCallsigns.length > 0) {
+    // Purge graveyard entries older than MAX_OBSERVATION_AGE_MS
+    for (const [callsign, entry] of recentlyRemoved) {
+      if (now - entry.removedAt > MAX_OBSERVATION_AGE_MS) {
+        updatedGraveyard.delete(callsign)
+      }
+    }
+
+    const graveyardChanged = updatedGraveyard.size !== recentlyRemoved.size
+
+    if (removedCallsigns.length > 0 || graveyardChanged) {
       set({
         timelines: updatedTimelines,
+        recentlyRemoved: updatedGraveyard,
         lastKnownHeadings: updatedHeadings,
         lastRenderedPositions: updatedPositions,
         reconciliationStates: updatedReconciliations,
       })
 
       // Broadcast removals to insets (if callback registered by main app)
-      if (removalBroadcastCallback) {
+      if (removedCallsigns.length > 0 && removalBroadcastCallback) {
         removalBroadcastCallback(removedCallsigns)
       }
     }
@@ -1514,6 +1566,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
   clear: () => {
     set({
       timelines: new Map(),
+      recentlyRemoved: new Map(),
       lastKnownHeadings: new Map(),
       lastRenderedPositions: new Map(),
       reconciliationStates: new Map(),

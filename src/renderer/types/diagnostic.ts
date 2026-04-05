@@ -21,6 +21,8 @@ export interface SerializedTimeline {
   lastSource: AircraftDataSource
   lastReceivedAt: number
   dynamicDelay?: DynamicDelayState
+  /** Set when the timeline was removed from active tracking (ms since epoch). */
+  removedAt?: number
 }
 
 /**
