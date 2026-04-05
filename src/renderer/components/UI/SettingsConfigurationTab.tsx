@@ -747,6 +747,7 @@ function SettingsConfigurationTab({
                   <option value="live">Live</option>
                   <option value="sweatbox1">Sweatbox 1</option>
                   <option value="sweatbox2">Sweatbox 2</option>
+                  <option value="test">Test</option>
                 </select>
               </div>
 

@@ -4,7 +4,7 @@
 /**
  * vNAS environment for connecting to different VATSIM environments
  */
-export type VnasEnvironment = 'live' | 'sweatbox1' | 'sweatbox2'
+export type VnasEnvironment = 'live' | 'sweatbox1' | 'sweatbox2' | 'test'
 
 /**
  * Session state for vNAS connection lifecycle

@@ -10,6 +10,8 @@
  */
 import { useEffect } from 'react'
 import { useAirportStore } from '../stores/airportStore'
+import { useGlobalSettingsStore } from '../stores/globalSettingsStore'
+import { useVatsimStore } from '../stores/vatsimStore'
 import { useVnasStore } from '../stores/vnasStore'
 import type { VnasAircraft, VnasStatus } from '../types/vnas'
 import { isRemoteMode } from '../utils/remoteMode'
@@ -83,6 +85,23 @@ export function useVnasEvents(): void {
           // Broadcast vNAS state to remote browsers
           const { invoke } = await import('@tauri-apps/api/core')
           invoke('broadcast_vnas_state', { state: event.payload }).catch(() => {})
+
+          // When connected to a non-Live environment, stop VATSIM data feed polling
+          // to avoid blending data from different environments
+          const vnasEnv = useVnasStore.getState().status.environment
+          if (event.payload === 'connected' && vnasEnv !== 'live') {
+            console.log(`[vNAS] Connected to ${vnasEnv} — stopping VATSIM data feed polling`)
+            useVatsimStore.getState().stopPolling()
+          }
+
+          // When disconnecting, restart VATSIM polling if that's the active data source
+          if (event.payload === 'disconnected') {
+            const dataSource = useGlobalSettingsStore.getState().realtraffic.dataSource
+            if (dataSource !== 'realtraffic') {
+              console.log('[vNAS] Disconnected — resuming VATSIM data feed polling')
+              useVatsimStore.getState().startPolling()
+            }
+          }
 
           // Fetch session info when we've joined a session (subscribing or connected state)
           if (event.payload === 'subscribing' || event.payload === 'connected') {

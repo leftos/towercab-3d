@@ -6,6 +6,10 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ### Added
 - Diagnostic exports now include recently removed aircraft (up to 5 minutes after disappearing), so aircraft that timed out before export are still captured
+- vNAS can now connect to the Test server in addition to Live and Sweatbox 1/2
+
+### Fixed
+- VATSIM live data feed is no longer fetched when vNAS is connected to a non-Live environment (Sweatbox or Test), preventing data from different environments being blended together
 
 ## [0.0.45-alpha] - 2026-03-11
 

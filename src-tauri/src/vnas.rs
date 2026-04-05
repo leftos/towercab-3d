@@ -32,6 +32,7 @@ pub enum Environment {
     Live,
     Sweatbox1,
     Sweatbox2,
+    Test,
 }
 
 /// Session state for frontend
@@ -166,6 +167,7 @@ mod real_impl {
                 Environment::Live => VnasEnvironment::Live,
                 Environment::Sweatbox1 => VnasEnvironment::Sweatbox1,
                 Environment::Sweatbox2 => VnasEnvironment::Sweatbox2,
+                Environment::Test => VnasEnvironment::Test,
             }
         }
     }
