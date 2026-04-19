@@ -103,8 +103,8 @@ importers:
         specifier: ^7.3.1
         version: 7.3.1(@types/node@25.5.0)
       vite-plugin-static-copy:
-        specifier: ^3.3.0
-        version: 3.3.0(vite@7.3.1(@types/node@25.5.0))
+        specifier: ^4.0.1
+        version: 4.0.1(vite@7.3.1(@types/node@25.5.0))
       vitest:
         specifier: ^4.1.4
         version: 4.1.4(@types/node@25.5.0)(@vitest/ui@4.1.4)(vite@7.3.1(@types/node@25.5.0))
@@ -1765,11 +1765,11 @@ packages:
   urijs@1.19.11:
     resolution: {integrity: sha512-HXgFDgDommxn5/bIv0cnQZsPhHDA90NPHD6+c/v21U5+Sx5hoP8+dP9IZXBU1gIfvdRfhG8cel9QNPeionfcCQ==}
 
-  vite-plugin-static-copy@3.3.0:
-    resolution: {integrity: sha512-XiAtZcev7nppxNFgKoD55rfL+ukVp/RtrnTJONRwRuzv/B2FK2h2ZRCYjvxhwBV/Oarse83SiyXBSxMTfeEM0Q==}
-    engines: {node: ^18.0.0 || >=20.0.0}
+  vite-plugin-static-copy@4.0.1:
+    resolution: {integrity: sha512-r3kQUrrimduikhyRm58ayemoxsgB8lZdn/JULLL4wpXHAZlYejtyZx7E/id7dwRtIOSYWu/tWvFjdEOTzso2MA==}
+    engines: {node: ^22.0.0 || >=24.0.0}
     peerDependencies:
-      vite: ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0
+      vite: ^6.0.0 || ^7.0.0 || ^8.0.0
 
   vite@7.3.1:
     resolution: {integrity: sha512-w+N7Hifpc3gRjZ63vYBXA56dvvRlNWRczTdmCBBa+CotUzAPf5b7YMdMR/8CQoeYE5LX3W4wj6RYTgonm1b9DA==}
@@ -4169,12 +4169,12 @@ snapshots:
 
   urijs@1.19.11: {}
 
-  vite-plugin-static-copy@3.3.0(vite@7.3.1(@types/node@25.5.0)):
+  vite-plugin-static-copy@4.0.1(vite@7.3.1(@types/node@25.5.0)):
     dependencies:
       chokidar: 3.6.0
       p-map: 7.0.4
       picocolors: 1.1.1
-      tinyglobby: 0.2.15
+      tinyglobby: 0.2.16
       vite: 7.3.1(@types/node@25.5.0)
 
   vite@7.3.1(@types/node@25.5.0):
