@@ -858,7 +858,7 @@ fn list_models_unified(
     // Now create livery entries using cached parse results
     let livery_start = std::time::Instant::now();
     let mut models = Vec::new();
-    let mut processed = 0;
+    let mut processed: usize = 0;
     let mut last_reported_pct = 0;
 
     for aircraft_dir in &folder_paths {
@@ -1128,8 +1128,7 @@ fn list_models_unified(
 
         // Update progress tracking
         processed += 1;
-        if total_folders > 0 {
-            let pct = (processed * 100 / total_folders) as u32;
+        if let Some(pct) = (processed * 100).checked_div(total_folders).map(|p| p as u32) {
             // Only emit every 5% to avoid flooding events
             if pct >= last_reported_pct + 5 || processed == total_folders {
                 last_reported_pct = pct;

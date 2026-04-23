@@ -53,32 +53,32 @@ fn parse_vmr_file(path: &std::path::Path) -> Vec<ParsedVmrRule> {
 
     loop {
         match reader.read_event() {
-            Ok(Event::Empty(ref e)) | Ok(Event::Start(ref e)) => {
-                if e.name().as_ref() == b"ModelMatchRule" {
-                    let mut type_code: Option<String> = None;
-                    let mut model_name: Option<String> = None;
-                    let mut callsign_prefix: Option<String> = None;
+            Ok(Event::Empty(ref e)) | Ok(Event::Start(ref e))
+                if e.name().as_ref() == b"ModelMatchRule" =>
+            {
+                let mut type_code: Option<String> = None;
+                let mut model_name: Option<String> = None;
+                let mut callsign_prefix: Option<String> = None;
 
-                    for attr in e.attributes().filter_map(|a| a.ok()) {
-                        let key = String::from_utf8_lossy(attr.key.as_ref());
-                        let value = String::from_utf8_lossy(&attr.value);
+                for attr in e.attributes().filter_map(|a| a.ok()) {
+                    let key = String::from_utf8_lossy(attr.key.as_ref());
+                    let value = String::from_utf8_lossy(&attr.value);
 
-                        match key.as_ref() {
-                            "TypeCode" => type_code = Some(value.to_uppercase()),
-                            "ModelName" => model_name = Some(value.to_string()),
-                            "CallsignPrefix" => callsign_prefix = Some(value.to_uppercase()),
-                            _ => {}
-                        }
+                    match key.as_ref() {
+                        "TypeCode" => type_code = Some(value.to_uppercase()),
+                        "ModelName" => model_name = Some(value.to_string()),
+                        "CallsignPrefix" => callsign_prefix = Some(value.to_uppercase()),
+                        _ => {}
                     }
+                }
 
-                    if let (Some(tc), Some(mn)) = (type_code, model_name) {
-                        rules.push(ParsedVmrRule {
-                            type_code: tc,
-                            model_name: mn,
-                            callsign_prefix,
-                            source_vmr: source_path.clone(),
-                        });
-                    }
+                if let (Some(tc), Some(mn)) = (type_code, model_name) {
+                    rules.push(ParsedVmrRule {
+                        type_code: tc,
+                        model_name: mn,
+                        callsign_prefix,
+                        source_vmr: source_path.clone(),
+                    });
                 }
             }
             Ok(Event::Eof) => break,
