@@ -13,9 +13,9 @@
     "outDir": "out",
     "declaration": true,
     "declarationMap": true,
-    "baseUrl": ".",
+    "types": [],
     "paths": {
-      "@/*": ["src/renderer/*"]
+      "@/*": ["./src/renderer/*"]
     }
   },
   "include": ["src/renderer/**/*.ts", "src/renderer/**/*.tsx"]

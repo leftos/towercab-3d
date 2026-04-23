@@ -135,7 +135,7 @@ interface AircraftTimelineStore {
   >
 
   // Prune timer
-  pruneTimer: NodeJS.Timeout | null
+  pruneTimer: number | null
 
   // Actions - called by data sources
   addObservation: (callsign: string, observation: AircraftObservation, metadata: AircraftMetadata) => void

@@ -44,7 +44,7 @@ interface RealTrafficStore {
 
   // Polling
   isPolling: boolean // Flag indicating polling is active
-  pollingTimeout: NodeJS.Timeout | null // Timer for next fetch
+  pollingTimeout: number | null // Timer for next fetch
   isLoading: boolean
 
   // Stats
