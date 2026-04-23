@@ -58,7 +58,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run Biome
-        run: pnpm biome check src/
+        run: pnpm biome check src/ --error-on-warnings
 
       - name: Run TypeScript type check
         run: pnpm run typecheck
