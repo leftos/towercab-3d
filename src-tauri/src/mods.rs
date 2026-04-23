@@ -8,7 +8,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::normalize_path_string;
 
@@ -428,8 +428,8 @@ fn discover_mods_recursive(
 
 /// Parse a manifest.json to determine mod type and extract discovery info
 fn parse_manifest_for_discovery(
-    mod_dir: &PathBuf,
-    mods_root: &PathBuf,
+    mod_dir: &Path,
+    mods_root: &Path,
 ) -> Result<DiscoveredMod, String> {
     let manifest_path = mod_dir.join("manifest.json");
     let content = fs::read_to_string(&manifest_path)
@@ -467,8 +467,8 @@ fn parse_manifest_for_discovery(
 }
 
 /// Check if a directory is inside a git repo and get the repo folder name
-fn find_git_repo_info(dir: &PathBuf, mods_root: &PathBuf) -> (bool, Option<String>) {
-    let mut current = dir.clone();
+fn find_git_repo_info(dir: &Path, mods_root: &Path) -> (bool, Option<String>) {
+    let mut current = dir.to_path_buf();
 
     while current.starts_with(mods_root) && current != *mods_root {
         let git_dir = current.join(".git");

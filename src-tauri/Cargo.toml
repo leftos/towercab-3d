@@ -63,3 +63,13 @@ windows-sys = { version = "0.61", features = ["Win32_System_JobObjects", "Win32_
 # RUSTFLAGS="-D warnings" that needs no env plumbing in workflows.
 [lints.rust]
 warnings = "deny"
+
+# Treat clippy's default lint groups as errors. Only applied when `cargo clippy`
+# is explicitly invoked (check.js --rust, CI); it has no effect on cargo check
+# or cargo build. Keep opinionated groups (pedantic/nursery/restriction) opt-in.
+[lints.clippy]
+correctness = { level = "deny", priority = -1 }
+suspicious = { level = "deny", priority = -1 }
+complexity = { level = "deny", priority = -1 }
+perf = { level = "deny", priority = -1 }
+style = { level = "deny", priority = -1 }

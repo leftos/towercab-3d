@@ -39,6 +39,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+          components: clippy
 
       - name: Install dependencies (Ubuntu only)
         if: matrix.platform == 'ubuntu-22.04'
@@ -124,6 +125,15 @@ jobs:
         env:
           CARGO_NET_GIT_FETCH_WITH_CLI: true
         run: cd src-tauri && cargo generate-lockfile
+
+      - name: Run Clippy
+        working-directory: src-tauri
+        env:
+          CARGO_NET_GIT_FETCH_WITH_CLI: ${{ steps.vnas-check.outputs.vnas_available == 'true' }}
+        run: >-
+          cargo clippy --all-targets
+          ${{ steps.vnas-check.outputs.vnas_available == 'true' && '--features vnas' || '' }}
+          -- -D warnings
 
       - name: Build Tauri app (with signing)
         if: steps.signing-check.outputs.signing_available == 'true'

@@ -152,21 +152,17 @@ fn parse_aircraft_cfg_unified(aircraft_dir: &std::path::Path) -> ParsedAircraftC
         let lower = trimmed.to_lowercase();
 
         // Parse [General] section - only need ICAO type designator
-        if in_general_section {
-            if lower.starts_with("icao_type_designator") {
-                if let Some(val) = extract_cfg_value_inline(trimmed) {
-                    result.icao_type = Some(val.to_uppercase());
-                }
+        if in_general_section && lower.starts_with("icao_type_designator") {
+            if let Some(val) = extract_cfg_value_inline(trimmed) {
+                result.icao_type = Some(val.to_uppercase());
             }
         }
 
         // Parse [VARIATION] section - base_container specifies the base model folder
-        if in_variation_section {
-            if lower.starts_with("base_container") {
-                if let Some(val) = extract_cfg_value_inline(trimmed) {
-                    // Store the raw value (e.g., "..\FSLTL_B77LF")
-                    result.base_container = Some(val);
-                }
+        if in_variation_section && lower.starts_with("base_container") {
+            if let Some(val) = extract_cfg_value_inline(trimmed) {
+                // Store the raw value (e.g., "..\FSLTL_B77LF")
+                result.base_container = Some(val);
             }
         }
 
@@ -577,10 +573,10 @@ fn parse_model_xml(xml_path: &std::path::Path) -> Option<String> {
                     }
                 }
 
-                if !model_file.is_empty() {
-                    if best_lod.is_none() || min_size > best_lod.as_ref().unwrap().0 {
-                        best_lod = Some((min_size, model_file));
-                    }
+                if !model_file.is_empty()
+                    && (best_lod.is_none() || min_size > best_lod.as_ref().unwrap().0)
+                {
+                    best_lod = Some((min_size, model_file));
                 }
             }
             Ok(Event::Eof) => break,
@@ -985,7 +981,7 @@ fn list_models_unified(
 
         if !liveries.is_empty() {
             // Scan texture directories ONCE for this folder (not per-livery!)
-            let mut folder_texture_dirs: Vec<String> = fs::read_dir(&aircraft_dir)
+            let mut folder_texture_dirs: Vec<String> = fs::read_dir(aircraft_dir)
                 .ok()
                 .into_iter()
                 .flatten()
@@ -1042,7 +1038,7 @@ fn list_models_unified(
                     source: config.source.to_string(),
                     model_name: livery.title.clone(),
                     folder_name: folder_name.clone(),
-                    aircraft_folder_path: normalize_path_string(&aircraft_dir),
+                    aircraft_folder_path: normalize_path_string(aircraft_dir),
                     gltf_path: gltf_path.clone(),
                     texture_dirs: livery_texture_dirs,
                     aircraft_type: aircraft_type.clone(),
@@ -1053,7 +1049,7 @@ fn list_models_unified(
         } else {
             // Fallback: No aircraft.cfg liveries found
             // Scan texture.* folders and create entries for each
-            let livery_folders: Vec<_> = fs::read_dir(&aircraft_dir)
+            let livery_folders: Vec<_> = fs::read_dir(aircraft_dir)
                 .ok()
                 .into_iter()
                 .flatten()
@@ -1088,7 +1084,7 @@ fn list_models_unified(
                         source: config.source.to_string(),
                         model_name,
                         folder_name: folder_name.clone(),
-                        aircraft_folder_path: normalize_path_string(&aircraft_dir),
+                        aircraft_folder_path: normalize_path_string(aircraft_dir),
                         gltf_path: gltf_path.clone(),
                         texture_dirs,
                         aircraft_type: aircraft_type.clone(),
@@ -1098,10 +1094,10 @@ fn list_models_unified(
                 }
             } else {
                 // No texture.* folders - create single entry with all textures
-                let all_texture_dirs = collect_texture_dirs(&aircraft_dir);
+                let all_texture_dirs = collect_texture_dirs(aircraft_dir);
 
                 // Try to get title from aircraft.cfg, fall back to folder name
-                let model_name = parse_aircraft_cfg_title(&aircraft_dir)
+                let model_name = parse_aircraft_cfg_title(aircraft_dir)
                     .unwrap_or_else(|| folder_name.clone());
 
                 // Try to extract airline from folder name (FSLTL_B738_AAL -> AAL)
@@ -1120,7 +1116,7 @@ fn list_models_unified(
                     source: config.source.to_string(),
                     model_name,
                     folder_name: folder_name.clone(),
-                    aircraft_folder_path: normalize_path_string(&aircraft_dir),
+                    aircraft_folder_path: normalize_path_string(aircraft_dir),
                     gltf_path: gltf_path.clone(),
                     texture_dirs: all_texture_dirs,
                     aircraft_type: aircraft_type.clone(),
@@ -1327,6 +1323,9 @@ pub async fn list_aig_models(
 /// - livery_title: Livery title from aircraft.cfg to convert (only this livery)
 /// - gltf_path: Explicit GLTF path (for AIG shared models where GLTF is in a different folder)
 /// - texture_dirs: Pre-computed texture directories from model indexing
+// Each argument is part of the Tauri IPC contract deserialized from the
+// frontend; grouping them into a struct would break that surface.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn convert_msfs_model(
     app: tauri::AppHandle,
@@ -1390,8 +1389,8 @@ pub async fn convert_msfs_model(
     // Use --no-discovery mode: Rust has already resolved all paths via model.cfg parsing,
     // so we skip Python's discovery and pass all required data directly.
     // This ensures consistent behavior - Rust is the single source of truth for path resolution.
-    let use_no_discovery = gltf_path.as_ref().map_or(false, |p| !p.is_empty())
-        && texture_dirs.as_ref().map_or(false, |t| !t.is_empty())
+    let use_no_discovery = gltf_path.as_ref().is_some_and(|p| !p.is_empty())
+        && texture_dirs.as_ref().is_some_and(|t| !t.is_empty())
         && !livery_title.is_empty();
 
     if use_no_discovery {
