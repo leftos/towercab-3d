@@ -188,7 +188,7 @@ class AirportSurfacesService {
     fieldElevationEllipsoidal?: number,
   ): FlatteningPolygon[] {
     const airport = this.getAirportData(icao)
-    if (!airport || !airport.p || airport.p.length === 0) {
+    if (!airport?.p || airport.p.length === 0) {
       return []
     }
 

@@ -607,7 +607,7 @@ class FSLTLServiceClass {
 
     // Get target dimensions
     const targetDims = aircraftDimensionsService.getDimensions(targetType)
-    if (!targetDims || !targetDims.wingspan || !targetDims.length) return null
+    if (!targetDims?.wingspan || !targetDims.length) return null
 
     let bestMatch: FSLTLModel | null = null
     let bestDistance = Infinity
@@ -616,7 +616,7 @@ class FSLTLServiceClass {
     for (const model of modelsForAirline) {
       // Get dimensions for this model's aircraft type
       const modelDims = aircraftDimensionsService.getDimensions(model.aircraftType)
-      if (!modelDims || !modelDims.wingspan || !modelDims.length) continue
+      if (!modelDims?.wingspan || !modelDims.length) continue
 
       // Calculate normalized Euclidean distance
       const wingspanDiff = (modelDims.wingspan - targetDims.wingspan) / targetDims.wingspan
@@ -662,7 +662,7 @@ class FSLTLServiceClass {
 
     // Get target dimensions
     const targetDims = aircraftDimensionsService.getDimensions(targetType)
-    if (!targetDims || !targetDims.wingspan || !targetDims.length) return null
+    if (!targetDims?.wingspan || !targetDims.length) return null
 
     let bestMatch: FSLTLModel | null = null
     let bestDistance = Infinity
@@ -675,7 +675,7 @@ class FSLTLServiceClass {
       if (model.airlineCode) continue
 
       const modelDims = aircraftDimensionsService.getDimensions(model.aircraftType)
-      if (!modelDims || !modelDims.wingspan || !modelDims.length) continue
+      if (!modelDims?.wingspan || !modelDims.length) continue
 
       const wingspanDiff = (modelDims.wingspan - targetDims.wingspan) / targetDims.wingspan
       const lengthDiff = (modelDims.length - targetDims.length) / targetDims.length
