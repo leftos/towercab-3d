@@ -57,3 +57,9 @@ vnas = ["dep:towercab-3d-vnas"]
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_System_JobObjects", "Win32_System_Threading", "Win32_Foundation", "Win32_Security"] }
+
+# Treat all rustc warnings as errors across every build path (cargo check,
+# cargo build, tauri build, local and CI). Portable equivalent of
+# RUSTFLAGS="-D warnings" that needs no env plumbing in workflows.
+[lints.rust]
+warnings = "deny"

@@ -71,7 +71,7 @@ export function parseExtendedNodes(gltfJson: any): Map<number, ExtendedNodeData>
 // biome-ignore lint/suspicious/noExplicitAny: glTF JSON parsing
 export function getMeshBounds(gltfJson: any, meshIndex: number): MeshBounds | null {
   const mesh = gltfJson.meshes[meshIndex]
-  if (!mesh || !mesh.primitives) return null
+  if (!mesh?.primitives) return null
 
   let minX = Infinity,
     minY = Infinity,
@@ -84,7 +84,7 @@ export function getMeshBounds(gltfJson: any, meshIndex: number): MeshBounds | nu
     if (primitive.attributes?.POSITION === undefined) continue
 
     const posAccessor = gltfJson.accessors[primitive.attributes.POSITION]
-    if (!posAccessor || !posAccessor.min || !posAccessor.max) continue
+    if (!posAccessor?.min || !posAccessor.max) continue
 
     // glTF POSITION accessors must have min/max per spec
     minX = Math.min(minX, posAccessor.min[0])

@@ -94,7 +94,7 @@ function runCommand(command, args, options = {}) {
 async function runLint(fix = false, quiet = false) {
   logHeader('Biome');
 
-  const args = ['biome', 'check', 'src/'];
+  const args = ['biome', 'check', 'src/', '--error-on-warnings'];
   if (fix) args.push('--fix');
 
   const result = await runCommand('npx', args);
