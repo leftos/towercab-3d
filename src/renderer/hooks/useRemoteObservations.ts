@@ -102,7 +102,7 @@ let moduleWsRef: WebSocket | null = null
  */
 export function useRemoteObservations(): void {
   const wsRef = useRef<WebSocket | null>(null)
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const reconnectTimeoutRef = useRef<number | null>(null)
   const addObservationBatch = useAircraftTimelineStore((state) => state.addObservationBatch)
   const removeAircraft = useAircraftTimelineStore((state) => state.removeAircraft)
   const setSubscribedFacilities = useVnasStore((state) => state.setSubscribedFacilities)

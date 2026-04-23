@@ -39,7 +39,7 @@ interface VatsimStore {
   isLoading: boolean
 
   // Polling
-  pollingInterval: NodeJS.Timeout | null
+  pollingInterval: number | null
 
   // Actions
   fetchData: () => Promise<void>

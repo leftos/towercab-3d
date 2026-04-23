@@ -3,7 +3,7 @@ import { getApiBaseUrl, isRemoteMode } from './remoteMode'
 
 let logBuffer: Array<{ level: string; message: string }> = []
 let isLoggingEnabled = false
-let flushInterval: NodeJS.Timeout | null = null
+let flushInterval: number | null = null
 let isInitialized = false
 let isRemote = false
 let clientId: string | null = null
