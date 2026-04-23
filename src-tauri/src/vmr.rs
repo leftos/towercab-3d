@@ -37,7 +37,7 @@ pub struct ParsedVmrRule {
 
 /// Parse a single VMR file using quick-xml
 fn parse_vmr_file(path: &std::path::Path) -> Vec<ParsedVmrRule> {
-    let source_path = normalize_path_string(&path.to_path_buf());
+    let source_path = normalize_path_string(path);
     let content = match fs::read_to_string(path) {
         Ok(c) => c,
         Err(e) => {

@@ -14,7 +14,7 @@
 
 use std::fs;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::sync::Mutex;
 
@@ -215,11 +215,11 @@ static OBSERVATIONS_TX: Mutex<Option<broadcast::Sender<server::ObservationMessag
 // =============================================================================
 
 /// Normalize path string by removing Windows extended path prefix (\\?\)
-pub fn normalize_path_string(path: &PathBuf) -> String {
+pub fn normalize_path_string(path: &Path) -> String {
     let s = path.to_string_lossy().to_string();
     // Remove \\?\ prefix that Windows uses for long paths
-    if s.starts_with(r"\\?\") {
-        s[4..].to_string()
+    if let Some(stripped) = s.strip_prefix(r"\\?\") {
+        stripped.to_string()
     } else {
         s
     }
@@ -234,8 +234,8 @@ pub fn to_extended_length_path(path: &str) -> String {
         return path.to_string();
     }
     // UNC paths need different handling (\\server\share -> \\?\UNC\server\share)
-    if path.starts_with(r"\\") {
-        return format!(r"\\?\UNC\{}", &path[2..]);
+    if let Some(stripped) = path.strip_prefix(r"\\") {
+        return format!(r"\\?\UNC\{stripped}");
     }
     // Regular absolute paths (C:\... -> \\?\C:\...)
     if path.len() >= 2 && path.chars().nth(1) == Some(':') {
@@ -286,10 +286,11 @@ fn get_lan_ips() -> Vec<String> {
                     if let std::net::SocketAddr::V4(v4) = addr {
                         let ip = v4.ip().to_string();
                         // Skip loopback and link-local addresses
-                        if !ip.starts_with("127.") && !ip.starts_with("169.254.") {
-                            if !ips.contains(&ip) {
-                                ips.push(ip);
-                            }
+                        if !ip.starts_with("127.")
+                            && !ip.starts_with("169.254.")
+                            && !ips.contains(&ip)
+                        {
+                            ips.push(ip);
                         }
                     }
                 }

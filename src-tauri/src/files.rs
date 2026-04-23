@@ -7,7 +7,7 @@
 //! - Cache directory management
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::normalize_path_string;
@@ -175,7 +175,7 @@ pub fn clear_cache_directory(path: String) -> Result<(), String> {
 // =============================================================================
 
 /// Check if a directory path is writable
-pub fn is_path_writable(path: &PathBuf) -> bool {
+pub fn is_path_writable(path: &Path) -> bool {
     // Try to create a test file
     let test_file = path.join(".write_test");
     match fs::write(&test_file, "test") {
