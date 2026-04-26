@@ -326,6 +326,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
 
     // Toggle Cesium's star rendering
     if (viewer.scene.skyBox) {
+      // @ts-expect-error Cesium 1.140 omits SkyBox.show from its type declarations; fixed upstream in 1.141.
       viewer.scene.skyBox.show = !hasOvcLayer
     }
     // Also toggle sun/moon for consistency

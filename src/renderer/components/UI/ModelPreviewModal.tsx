@@ -50,6 +50,7 @@ export function ModelPreviewModal({ modelInfo, onClose }: ModelPreviewModalProps
 
       // Disable the globe and imagery for simple 3D model display
       viewer.scene.globe.show = false
+      // @ts-expect-error Cesium 1.140 omits SkyBox.show from its type declarations; fixed upstream in 1.141.
       if (viewer.scene.skyBox) viewer.scene.skyBox.show = false
       if (viewer.scene.sun) viewer.scene.sun.show = false
       if (viewer.scene.moon) viewer.scene.moon.show = false
