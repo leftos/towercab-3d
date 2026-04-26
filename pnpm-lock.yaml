@@ -9,14 +9,14 @@ importers:
   .:
     dependencies:
       '@babylonjs/core':
-        specifier: ^9.3.1
-        version: 9.3.1
+        specifier: ^9.4.1
+        version: 9.4.1
       '@babylonjs/gui':
-        specifier: ^9.3.1
-        version: 9.3.1(@babylonjs/core@9.3.1)
+        specifier: ^9.4.1
+        version: 9.4.1(@babylonjs/core@9.4.1)
       '@babylonjs/loaders':
-        specifier: ^9.3.1
-        version: 9.3.1(@babylonjs/core@9.3.1)(babylonjs-gltf2interface@8.54.3)
+        specifier: ^9.4.1
+        version: 9.4.1(@babylonjs/core@9.4.1)(babylonjs-gltf2interface@8.54.3)
       '@msgpack/msgpack':
         specifier: ^3.1.3
         version: 3.1.3
@@ -194,16 +194,16 @@ packages:
     resolution: {integrity: sha512-LwdZHpScM4Qz8Xw2iKSzS+cfglZzJGvofQICy7W7v4caru4EaAmyUuO6BGrbyQ2mYV11W0U8j5mBhd14dd3B0A==}
     engines: {node: '>=6.9.0'}
 
-  '@babylonjs/core@9.3.1':
-    resolution: {integrity: sha512-gCAVsS40EF9SFXUoe5wl5lA03hwmRQoP9v3y8EdQ2aPSaozIApu4LrxI6yFgczzxGVa2utcj6rF6pgO5VuK7nw==}
+  '@babylonjs/core@9.4.1':
+    resolution: {integrity: sha512-zQcSyUAUUhdsTtBN6uF2jJxD8Okw2iVuj6J4N/E7SPlJCIg14KSiPETTnXSWcd46QVRN78ssCPXgr2IBbOn65g==}
 
-  '@babylonjs/gui@9.3.1':
-    resolution: {integrity: sha512-zVuBgK/o3y6VEgNT1lxHpgvXyZBR7c3vAr+fgGky0nT8uQtKOuURlO9uK4tQ74ipWEt1ytOV/PaOTLHH48kXfw==}
+  '@babylonjs/gui@9.4.1':
+    resolution: {integrity: sha512-qwFziszVDtfFDHw+WLZzTq1nP1SlKAsiUxlO0JQL/U+UqiEoKmL8AoTzIivMC3w5Q9rav8cmq/G8jMh5P7HS1w==}
     peerDependencies:
       '@babylonjs/core': ^9.0.0
 
-  '@babylonjs/loaders@9.3.1':
-    resolution: {integrity: sha512-rzXjBHARqh5MUZFltA26mX5NwQJtn9Wu1dR3Rch3sXZD9ShDBpUcEcdl7/LqbatysB9PKEN99tTN/ljwEUlRww==}
+  '@babylonjs/loaders@9.4.1':
+    resolution: {integrity: sha512-7nk+nPKv4JjWMeOxl4IfryLUg/5EyKSNF13R37WUasr3He2nyqDsswGVusdGEuW7z7fCMQyLoFVES4XhIhUe0A==}
     peerDependencies:
       '@babylonjs/core': ^9.0.0
       babylonjs-gltf2interface: ^9.0.0
@@ -1992,15 +1992,15 @@ snapshots:
       '@babel/helper-string-parser': 7.27.1
       '@babel/helper-validator-identifier': 7.28.5
 
-  '@babylonjs/core@9.3.1': {}
+  '@babylonjs/core@9.4.1': {}
 
-  '@babylonjs/gui@9.3.1(@babylonjs/core@9.3.1)':
+  '@babylonjs/gui@9.4.1(@babylonjs/core@9.4.1)':
     dependencies:
-      '@babylonjs/core': 9.3.1
+      '@babylonjs/core': 9.4.1
 
-  '@babylonjs/loaders@9.3.1(@babylonjs/core@9.3.1)(babylonjs-gltf2interface@8.54.3)':
+  '@babylonjs/loaders@9.4.1(@babylonjs/core@9.4.1)(babylonjs-gltf2interface@8.54.3)':
     dependencies:
-      '@babylonjs/core': 9.3.1
+      '@babylonjs/core': 9.4.1
       babylonjs-gltf2interface: 8.54.3
 
   '@biomejs/biome@2.4.13':
