@@ -101,10 +101,14 @@ export default defineConfig({
         inset: resolve('src/renderer/inset.html')
       },
       output: {
-        manualChunks: {
-          'cesium': ['cesium'],
-          'babylon': ['@babylonjs/core', '@babylonjs/loaders', '@babylonjs/gui'],
-          'react-vendor': ['react', 'react-dom']
+        // Vite 8 (Rolldown) dropped the object form of manualChunks; only the
+        // function form is accepted (and itself deprecated — switch to
+        // build.rolldownOptions.output.codeSplitting.groups when convenient).
+        manualChunks: (id: string) => {
+          if (/[\\/]node_modules[\\/]cesium[\\/]/.test(id)) return 'cesium'
+          if (/[\\/]node_modules[\\/]@babylonjs[\\/]/.test(id)) return 'babylon'
+          if (/[\\/]node_modules[\\/](react|react-dom)[\\/]/.test(id)) return 'react-vendor'
+          return undefined
         }
       }
     }
