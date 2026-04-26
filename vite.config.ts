@@ -99,16 +99,20 @@ export default defineConfig({
       input: {
         main: resolve('src/renderer/index.html'),
         inset: resolve('src/renderer/inset.html')
-      },
+      }
+    },
+    rolldownOptions: {
       output: {
-        // Vite 8 (Rolldown) dropped the object form of manualChunks; only the
-        // function form is accepted (and itself deprecated — switch to
-        // build.rolldownOptions.output.codeSplitting.groups when convenient).
-        manualChunks: (id: string) => {
-          if (/[\\/]node_modules[\\/]cesium[\\/]/.test(id)) return 'cesium'
-          if (/[\\/]node_modules[\\/]@babylonjs[\\/]/.test(id)) return 'babylon'
-          if (/[\\/]node_modules[\\/](react|react-dom)[\\/]/.test(id)) return 'react-vendor'
-          return undefined
+        // Replaces the deprecated manualChunks API. Each group emits a
+        // standalone chunk, which keeps cesium/babylon/react cacheable
+        // independently of the application code that imports them.
+        codeSplitting: {
+          groups: [
+            // cesium ships its widgets as a separate @cesium/widgets package; both must land in the same chunk.
+            { name: 'cesium', test: /[\\/]node_modules[\\/]@?cesium[\\/]/, priority: 10 },
+            { name: 'babylon', test: /[\\/]node_modules[\\/]@babylonjs[\\/]/, priority: 10 },
+            { name: 'react-vendor', test: /[\\/]node_modules[\\/](react|react-dom)[\\/]/, priority: 10 }
+          ]
         }
       }
     }
