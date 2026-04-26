@@ -99,12 +99,20 @@ export default defineConfig({
       input: {
         main: resolve('src/renderer/index.html'),
         inset: resolve('src/renderer/inset.html')
-      },
+      }
+    },
+    rolldownOptions: {
       output: {
-        manualChunks: {
-          'cesium': ['cesium'],
-          'babylon': ['@babylonjs/core', '@babylonjs/loaders', '@babylonjs/gui'],
-          'react-vendor': ['react', 'react-dom']
+        // Replaces the deprecated manualChunks API. Each group emits a
+        // standalone chunk, which keeps cesium/babylon/react cacheable
+        // independently of the application code that imports them.
+        codeSplitting: {
+          groups: [
+            // cesium ships its widgets as a separate @cesium/widgets package; both must land in the same chunk.
+            { name: 'cesium', test: /[\\/]node_modules[\\/]@?cesium[\\/]/, priority: 10 },
+            { name: 'babylon', test: /[\\/]node_modules[\\/]@babylonjs[\\/]/, priority: 10 },
+            { name: 'react-vendor', test: /[\\/]node_modules[\\/](react|react-dom)[\\/]/, priority: 10 }
+          ]
         }
       }
     }
