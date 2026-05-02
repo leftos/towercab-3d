@@ -4,6 +4,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Aircraft cards in the Nearby Aircraft panel now fill the full panel width.
+
 ## [0.0.46-alpha] - 2026-04-04
 
 ### Added

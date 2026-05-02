@@ -196,10 +196,17 @@
 }
 
 .aircraft-item {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: left;
   background: rgba(255, 255, 255, 0.05);
+  border: none;
   border-radius: 6px;
   padding: 10px 12px;
   margin-bottom: 6px;
+  color: inherit;
+  font: inherit;
   cursor: pointer;
   transition: all 0.2s ease;
 }
