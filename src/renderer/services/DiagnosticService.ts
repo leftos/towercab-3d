@@ -16,7 +16,6 @@ import { GROUNDSPEED_THRESHOLD_KNOTS } from '../constants/rendering'
 import { useAircraftTimelineStore } from '../stores/aircraftTimelineStore'
 import { useAirportStore } from '../stores/airportStore'
 import { useRealTrafficStore } from '../stores/realTrafficStore'
-import { useSettingsStore } from '../stores/settingsStore'
 import { useVatsimStore } from '../stores/vatsimStore'
 import { useViewportStore } from '../stores/viewportStore'
 import { useVnasStore } from '../stores/vnasStore'
@@ -45,7 +44,6 @@ function captureAppState(): DiagnosticAppState {
   const vatsimState = useVatsimStore.getState()
   const rtState = useRealTrafficStore.getState()
   const weatherState = useWeatherStore.getState()
-  const settingsState = useSettingsStore.getState()
 
   const mainViewport = viewportState.getMainViewport()
   const cam = mainViewport.cameraState
@@ -76,7 +74,6 @@ function captureAppState(): DiagnosticAppState {
     },
     settings: {
       sourceDisplayDelays: { ...SOURCE_DISPLAY_DELAYS },
-      enableDynamicDisplayDelay: settingsState.advanced?.enableDynamicDisplayDelay ?? true,
       groundspeedThresholdKnots: GROUNDSPEED_THRESHOLD_KNOTS,
     },
   }

@@ -5,7 +5,7 @@ import type { AircraftMetadata, AircraftObservation } from '../types/aircraft-ti
 import type { AircraftState } from '../types/vatsim'
 import type { VnasAircraft, VnasEnvironment, VnasStatus } from '../types/vnas'
 import { isRemoteMode } from '../utils/remoteMode'
-import { useAircraftTimelineStore } from './aircraftTimelineStore'
+import { addAircraftRemovalListener, useAircraftTimelineStore } from './aircraftTimelineStore'
 
 /** Feet to meters conversion factor */
 const FEET_TO_METERS = 0.3048
@@ -48,6 +48,31 @@ function getOnGroundWithHysteresis(callsign: string, altitudeAglFt: number): boo
 
 /** Number of samples to keep in the speed history window */
 const SPEED_WINDOW_SIZE = 5
+
+// Drop per-aircraft state when the timeline removes an aircraft (explicit removal
+// or stale-prune). Without this, speedHistory and groundStateHistory grow without
+// bound across a session because vNAS only clears them on explicit SignalR
+// removal messages or full disconnect.
+addAircraftRemovalListener((callsigns) => {
+  for (const callsign of callsigns) {
+    speedHistory.delete(callsign)
+    groundStateHistory.delete(callsign)
+  }
+})
+
+/**
+ * Initial-groundspeed fallback for the very first vNAS observation of an aircraft.
+ * vNAS doesn't transmit groundspeed; we derive it from successive position deltas,
+ * but the first sample has no prior to delta against. Look up the unified timeline
+ * for the most recent observation (typically VATSIM at ~15s cadence) and use its
+ * groundspeed so we don't report 0 kts for an in-flight airliner.
+ */
+function seedGroundspeedFromTimeline(callsign: string): number {
+  const timeline = useAircraftTimelineStore.getState().getTimeline(callsign)
+  if (!timeline || timeline.observations.length === 0) return 0
+  const newest = timeline.observations[timeline.observations.length - 1]
+  return Number.isFinite(newest.groundspeed) ? newest.groundspeed : 0
+}
 
 /**
  * Calculate windowed average speed for an aircraft.
@@ -585,9 +610,12 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
     // This is when the UDP packet was received on the backend
     const observationTime = aircraft.timestamp
 
-    // Calculate groundspeed from position change (vNAS doesn't provide it directly)
-    // Use actual time delta between observations, not assumed 1 second
-    let calculatedGroundspeed = 0
+    // Calculate groundspeed from position change (vNAS doesn't provide it directly).
+    // Without a prior vNAS sample we fall back to the most recent observation in the
+    // unified timeline (typically a VATSIM-reported groundspeed) — otherwise the first
+    // vNAS sample for an in-flight airliner would emit gs=0, briefly tripping the
+    // <40kt "on ground" classification in the interpolator.
+    let calculatedGroundspeed = seedGroundspeedFromTimeline(aircraft.callsign)
     if (oldState?.vnasTimestamp) {
       const timeDeltaMs = observationTime - oldState.vnasTimestamp
       if (timeDeltaMs > 0 && timeDeltaMs < 5000) {
@@ -702,8 +730,9 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       const observationTime = ac.timestamp
       vnasTimestamps.set(ac.callsign, observationTime)
 
-      // Calculate groundspeed from position change using actual time delta
-      let calculatedGroundspeed = 0
+      // Calculate groundspeed from position change using actual time delta.
+      // See handleAircraftUpdate for the rationale behind seeding from the timeline.
+      let calculatedGroundspeed = seedGroundspeedFromTimeline(ac.callsign)
       if (oldState?.vnasTimestamp) {
         const timeDeltaMs = observationTime - oldState.vnasTimestamp
         if (timeDeltaMs > 0 && timeDeltaMs < 5000) {

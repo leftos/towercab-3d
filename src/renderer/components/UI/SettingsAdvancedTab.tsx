@@ -23,7 +23,6 @@ function SettingsAdvancedTab() {
   const enableDebugCoordinateOverlay = useSettingsStore(
     (state) => state.advanced?.enableDebugCoordinateOverlay ?? false,
   )
-  const enableDynamicDisplayDelay = useSettingsStore((state) => state.advanced?.enableDynamicDisplayDelay ?? true)
   const updateAdvancedSettings = useSettingsStore((state) => state.updateAdvancedSettings)
 
   // Replay store (for diagnostic import)
@@ -112,23 +111,6 @@ function SettingsAdvancedTab() {
               Light
             </label>
           </div>
-        </div>
-      </CollapsibleSection>
-
-      <CollapsibleSection title="Performance">
-        <div className="setting-item">
-          <label className="setting-label">
-            <input
-              type="checkbox"
-              checked={enableDynamicDisplayDelay}
-              onChange={(e) => updateAdvancedSettings({ enableDynamicDisplayDelay: e.target.checked })}
-            />
-            Dynamic Display Delay
-          </label>
-          <p className="setting-hint">
-            Automatically adjusts display delay per aircraft based on observation timing. This minimizes latency while
-            ensuring smooth interpolation between positions. Disable to use fixed source-based delays (legacy behavior).
-          </p>
         </div>
       </CollapsibleSection>
 

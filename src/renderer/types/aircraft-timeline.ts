@@ -66,7 +66,19 @@ export interface AircraftObservation {
   verticalRate: number | null
 
   // Timing
-  /** When this position was TRUE (apiTimestamp, vnas timestamp, etc.) in ms since epoch */
+  /**
+   * When this position was TRUE, in Unix epoch ms.
+   * - VATSIM: server's `update_timestamp` (NTP-correct UTC).
+   * - vNAS: Rust `SystemTime::now()` at UDP receipt on the host machine.
+   * - RealTraffic: API `apiTimestamp` (server clock).
+   *
+   * All sources land in Unix epoch ms, but they come from different machines.
+   * Cross-source bracketing (`findBracketingObservations`) assumes those clocks
+   * are roughly NTP-synchronised — a host with a clock drifted by tens of seconds
+   * will produce misordered observations. This is intentional: defending against
+   * arbitrary clock skew would mean discarding the per-source `observedAt`
+   * information that the displayDelay buffer relies on for accurate interpolation.
+   */
   observedAt: number
   /** When we received this data (Date.now()) in ms since epoch */
   receivedAt: number

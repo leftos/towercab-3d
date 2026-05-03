@@ -1035,21 +1035,6 @@ export interface AdvancedSettings {
    * Useful for debugging terrain flattening issues and reporting exact locations.
    */
   enableDebugCoordinateOverlay: boolean
-
-  /**
-   * Enable dynamic display delay (default: true)
-   *
-   * When enabled, aircraft display delay is calculated dynamically based on
-   * actual observation intervals rather than using fixed per-source delays.
-   * This minimizes latency while ensuring smooth interpolation.
-   *
-   * The delay adapts to each aircraft's update rate:
-   * - Fast updates (1Hz): ~1.1s delay instead of 1.5s
-   * - Slow updates (15s): ~15.5s delay automatically
-   *
-   * Disable this to revert to the legacy fixed delay behavior.
-   */
-  enableDynamicDisplayDelay: boolean
 }
 
 /**
@@ -1992,6 +1977,5 @@ export const DEFAULT_SETTINGS: Omit<
   advanced: {
     enableInterpolationDebugLogs: false,
     enableDebugCoordinateOverlay: false,
-    enableDynamicDisplayDelay: true,
   },
 }

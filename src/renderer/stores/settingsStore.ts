@@ -748,8 +748,6 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
         oldSettings.advanced?.enableInterpolationDebugLogs ?? DEFAULT_SETTINGS.advanced.enableInterpolationDebugLogs,
       enableDebugCoordinateOverlay:
         oldSettings.advanced?.enableDebugCoordinateOverlay ?? DEFAULT_SETTINGS.advanced.enableDebugCoordinateOverlay,
-      enableDynamicDisplayDelay:
-        oldSettings.advanced?.enableDynamicDisplayDelay ?? DEFAULT_SETTINGS.advanced.enableDynamicDisplayDelay,
     },
   }
 }

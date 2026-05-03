@@ -134,9 +134,17 @@ export const DYNAMIC_DELAY_MIN_OBSERVATIONS = 3
 /**
  * Maximum rate at which delay can decrease (ms per second).
  * Prevents position jumps when delay shrinks too fast.
- * Increases are applied immediately (safe - adds buffer).
  */
 export const DYNAMIC_DELAY_MAX_DECREASE_RATE = 500
+
+/**
+ * Maximum rate at which delay can increase (ms per second).
+ * Without this, source flips like vNAS→VATSIM (target jumps from ~1.2s to ~15s
+ * because the interval window now sees 15s VATSIM gaps) would snap displayTime
+ * backwards by ~14s in a single frame. Rate-limiting matches the decrease cap
+ * so transitions in either direction look the same.
+ */
+export const DYNAMIC_DELAY_MAX_INCREASE_RATE = 500
 
 /**
  * Amount to increase delay when extrapolation is detected (ms).

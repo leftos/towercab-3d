@@ -250,12 +250,15 @@ function App() {
         })
         updateProgress(5, 100, 'VMR rules loaded')
 
+        // Always start the prune timer — it's the timeline's stale-aircraft GC and must
+        // run regardless of which data source ends up active (or none, if RT auth fails
+        // and the user later switches sources via Settings).
+        useAircraftTimelineStore.getState().startPruneTimer()
+
         // Step 6: Start data source polling based on settings
         // In remote mode, the host relays observations via WebSocket, so we don't poll directly
         if (isRemoteMode()) {
           updateProgress(6, 0, 'Connecting to host...')
-          // Start the timeline store prune timer (still needed for local timeline management)
-          useAircraftTimelineStore.getState().startPruneTimer()
           updateProgress(6, 100, 'Receiving from host')
         } else {
           const dataSource = useGlobalSettingsStore.getState().realtraffic.dataSource
@@ -268,8 +271,6 @@ function App() {
               // If authentication succeeded and we're connected, start polling
               if (useRealTrafficStore.getState().status === 'connected') {
                 rtStore.startPolling()
-                // Start the timeline store prune timer for RealTraffic
-                useAircraftTimelineStore.getState().startPruneTimer()
               }
               updateProgress(6, 100, 'Connected to RealTraffic')
             } else {
@@ -280,8 +281,6 @@ function App() {
             // VATSIM data source
             updateProgress(6, 0, 'Connecting to VATSIM...')
             startPolling()
-            // Start the timeline store prune timer for VATSIM
-            useAircraftTimelineStore.getState().startPruneTimer()
             updateProgress(6, 100, 'Connected to VATSIM')
           }
         }

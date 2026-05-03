@@ -87,14 +87,13 @@ interface NosewheelState {
 /** Consolidated timeline rate tracking state per aircraft */
 interface TimelineRateState {
   prevAltitude: number | null
-  prevHeading: number | null
   prevGroundspeed: number | null
   smoothedVerticalRate: number
   smoothedTurnRate: number
   smoothedAcceleration: number
   prevPitch: number | null
   prevRoll: number | null
-  smoothedHeading: number | null // Rate-limited heading for smooth yaw
+  smoothedHeading: number | null // Rate-limited heading; also drives turn-rate calc
 }
 
 // Consolidated state Maps (3 Maps instead of 16)
@@ -134,7 +133,6 @@ function timelineToInterpolatedState(
   if (!rateState) {
     rateState = {
       prevAltitude: null,
-      prevHeading: null,
       prevGroundspeed: null,
       smoothedVerticalRate: 0,
       smoothedTurnRate: 0,
@@ -150,6 +148,44 @@ function timelineToInterpolatedState(
 
   // Calculate frame delta (ms)
   const frameDelta = lastFrameTime > 0 ? now - lastFrameTime : 16.67 // ~60fps default
+
+  // ============================================================================
+  // HEADING RATE LIMITING (computed first so turn-rate can use the smoothed value)
+  // ============================================================================
+  // Apply rate limiting to heading to smooth out noisy yaw from 1Hz vNAS data.
+  // This prevents jerky heading changes while preserving realistic turn behavior.
+  // Ground aircraft get higher rate limit since they can pivot faster during taxi.
+
+  const prevSmoothedHeading = rateState.smoothedHeading
+  let smoothedHeading = timeline.heading
+
+  if (frameDelta > 0 && frameDelta < 100) {
+    const targetHeading = timeline.heading
+    const headingBase = prevSmoothedHeading ?? targetHeading
+
+    // Determine rate limit based on ground/air state
+    const isOnGround = timeline.onGround === true || timeline.groundspeed < 40
+    const maxHeadingRate = isOnGround ? MAX_HEADING_RATE_DEG_PER_SEC_GROUND : MAX_HEADING_RATE_DEG_PER_SEC_AIR
+
+    const dtSeconds = frameDelta / 1000
+    const maxHeadingChange = maxHeadingRate * dtSeconds
+
+    // Calculate heading delta with wraparound handling (shortest path)
+    let headingDelta = targetHeading - headingBase
+    if (headingDelta > 180) headingDelta -= 360
+    if (headingDelta < -180) headingDelta += 360
+
+    // Apply rate limiting
+    if (Math.abs(headingDelta) > maxHeadingChange) {
+      smoothedHeading = headingBase + Math.sign(headingDelta) * maxHeadingChange
+    } else {
+      smoothedHeading = targetHeading
+    }
+
+    // Normalize to 0-360
+    smoothedHeading = ((smoothedHeading % 360) + 360) % 360
+  }
+  rateState.smoothedHeading = smoothedHeading
 
   // Calculate rates from frame-to-frame changes
   let verticalRate = 0 // m/min
@@ -176,11 +212,13 @@ function timelineToInterpolatedState(
       rateState.smoothedVerticalRate = verticalRate
     }
 
-    // Turn rate: heading change per second
-    if (rateState.prevHeading !== null) {
-      const headingChange = angleDifference(rateState.prevHeading, timeline.heading)
+    // Turn rate: derive from the rate-limited heading we just computed so the
+    // resulting bank angle stays in lock-step with the visible yaw. Using the
+    // raw timeline.heading here would jerk the roll on noisy 1Hz vNAS samples
+    // even though the displayed heading is smooth.
+    if (prevSmoothedHeading !== null) {
+      const headingChange = angleDifference(prevSmoothedHeading, smoothedHeading)
       const rawTurnRate = (headingChange / frameDelta) * 1000 // deg/sec
-      // Clamp to realistic limits and smooth
       const clampedTurnRate = Math.max(-6, Math.min(6, rawTurnRate))
       turnRate = rateState.smoothedTurnRate + (clampedTurnRate - rateState.smoothedTurnRate) * RATE_SMOOTHING
       rateState.smoothedTurnRate = turnRate
@@ -202,7 +240,6 @@ function timelineToInterpolatedState(
 
   // Store current values for next frame
   rateState.prevAltitude = timeline.altitude
-  rateState.prevHeading = timeline.heading
   rateState.prevGroundspeed = timeline.groundspeed
 
   // Calculate pitch and roll from rates (orientation emulation)
@@ -292,45 +329,6 @@ function timelineToInterpolatedState(
   // Calculate track from groundTrack or default to heading
   const track = timeline.groundTrack ?? timeline.heading
 
-  // ============================================================================
-  // HEADING RATE LIMITING
-  // ============================================================================
-  // Apply rate limiting to heading to smooth out noisy yaw from 1Hz vNAS data.
-  // This prevents jerky heading changes while preserving realistic turn behavior.
-  // Ground aircraft get higher rate limit since they can pivot faster during taxi.
-
-  let smoothedHeading = timeline.heading
-
-  if (frameDelta > 0 && frameDelta < 100) {
-    const targetHeading = timeline.heading
-    const prevSmoothedHeading = rateState.smoothedHeading ?? targetHeading
-
-    // Determine rate limit based on ground/air state
-    const isOnGround = timeline.onGround === true || timeline.groundspeed < 40
-    const maxHeadingRate = isOnGround ? MAX_HEADING_RATE_DEG_PER_SEC_GROUND : MAX_HEADING_RATE_DEG_PER_SEC_AIR
-
-    const dtSeconds = frameDelta / 1000
-    const maxHeadingChange = maxHeadingRate * dtSeconds
-
-    // Calculate heading delta with wraparound handling (shortest path)
-    let headingDelta = targetHeading - prevSmoothedHeading
-    if (headingDelta > 180) headingDelta -= 360
-    if (headingDelta < -180) headingDelta += 360
-
-    // Apply rate limiting
-    if (Math.abs(headingDelta) > maxHeadingChange) {
-      smoothedHeading = prevSmoothedHeading + Math.sign(headingDelta) * maxHeadingChange
-    } else {
-      smoothedHeading = targetHeading
-    }
-
-    // Normalize to 0-360
-    smoothedHeading = ((smoothedHeading % 360) + 360) % 360
-
-    // Store for next frame
-    rateState.smoothedHeading = smoothedHeading
-  }
-
   // Build the InterpolatedAircraftState
   return {
     // Base AircraftState fields
@@ -377,6 +375,18 @@ function timelineToInterpolatedState(
 
 // Singleton animation loop function
 function updateInterpolation() {
+  try {
+    runInterpolationFrame()
+  } catch (error) {
+    // Don't let a single bad frame kill the singleton loop for the whole app.
+    // Without this, any throw inside the body permanently stops aircraft updates.
+    console.error('[Interpolation] Frame failed, continuing loop:', error)
+  } finally {
+    animationFrameId = requestAnimationFrame(updateInterpolation)
+  }
+}
+
+function runInterpolationFrame() {
   performanceMonitor.startTimer('interpolation')
 
   // Get timing and mode info from unified source (handles live vs replay mode)
@@ -876,9 +886,6 @@ function updateInterpolation() {
   }
 
   performanceMonitor.endTimer('interpolation')
-
-  // Schedule next frame
-  animationFrameId = requestAnimationFrame(updateInterpolation)
 }
 
 /**

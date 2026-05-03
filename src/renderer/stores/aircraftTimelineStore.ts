@@ -33,6 +33,7 @@ import {
   DYNAMIC_DELAY_INTERVAL_WINDOW,
   DYNAMIC_DELAY_JITTER_BUFFER_MS,
   DYNAMIC_DELAY_MAX_DECREASE_RATE,
+  DYNAMIC_DELAY_MAX_INCREASE_RATE,
   DYNAMIC_DELAY_MAX_MS,
   DYNAMIC_DELAY_MIN_MS,
   DYNAMIC_DELAY_MIN_OBSERVATIONS,
@@ -88,6 +89,30 @@ export function registerBroadcastCallbacks(
 ): void {
   observationBroadcastCallback = onObservations
   removalBroadcastCallback = onRemovals
+}
+
+/**
+ * Subscribers notified whenever aircraft are removed from the timeline (via
+ * explicit removal or stale-prune). Used by upstream sources like vnasStore to
+ * clean their per-aircraft state Maps so they don't leak across the session.
+ */
+type AircraftRemovalListener = (callsigns: string[]) => void
+const aircraftRemovalListeners = new Set<AircraftRemovalListener>()
+
+export function addAircraftRemovalListener(listener: AircraftRemovalListener): () => void {
+  aircraftRemovalListeners.add(listener)
+  return () => aircraftRemovalListeners.delete(listener)
+}
+
+function notifyAircraftRemoved(callsigns: string[]): void {
+  if (callsigns.length === 0) return
+  for (const listener of aircraftRemovalListeners) {
+    try {
+      listener(callsigns)
+    } catch (error) {
+      console.error('[Timeline] Aircraft removal listener threw:', error)
+    }
+  }
 }
 
 /** A removed timeline kept for diagnostic export */
@@ -386,19 +411,21 @@ function calculateObservationIntervals(observations: AircraftObservation[], maxI
 /**
  * Filter observations to prefer vNAS when recent.
  * This is the same logic used in interpolateTimeline for consistency.
+ *
+ * Requires at least two vNAS samples before excluding VATSIM. With a single
+ * vNAS observation we have no movement to interpolate against — `findBracketingObservations`
+ * would return [obs, null] and extrapolate from a stationary point, freezing the
+ * aircraft until the second vNAS observation arrives. Mixing in VATSIM until then
+ * gives us a valid bracketing pair and continuous motion.
  */
 function filterObservationsForSource(observations: AircraftObservation[], now: number): AircraftObservation[] {
-  const newestVnasObs = observations.filter((o) => o.source === 'vnas').pop()
-  const hasRecentVnas = newestVnasObs && now - newestVnasObs.receivedAt < VNAS_PREFERENCE_THRESHOLD_MS
+  const vnasOnly = observations.filter((o) => o.source === 'vnas')
+  if (vnasOnly.length < 2) return observations
 
-  if (hasRecentVnas) {
-    const vnasOnly = observations.filter((o) => o.source === 'vnas')
-    if (vnasOnly.length > 0) {
-      return vnasOnly
-    }
-  }
+  const newestVnasObs = vnasOnly[vnasOnly.length - 1]
+  if (now - newestVnasObs.receivedAt >= VNAS_PREFERENCE_THRESHOLD_MS) return observations
 
-  return observations
+  return vnasOnly
 }
 
 /**
@@ -474,8 +501,10 @@ function updateDynamicDelayState(
 
 /**
  * Apply smooth delay transition.
- * Increases are applied immediately (safe - adds buffer).
- * Decreases are rate-limited to prevent position jumps.
+ * Both increases and decreases are rate-limited to prevent visible position jumps:
+ * - Decreases at DYNAMIC_DELAY_MAX_DECREASE_RATE (avoid running out of buffer too fast)
+ * - Increases at DYNAMIC_DELAY_MAX_INCREASE_RATE (avoid displayTime regressing on
+ *   source flips like vNAS→VATSIM where target jumps from ~1.2s to ~15s)
  * Extrapolation bump is included and decays over time.
  *
  * @param state - Current dynamic delay state
@@ -513,11 +542,13 @@ function applyDelayTransition(
 
   let newDelay: number
 
-  // Increasing delay - apply immediately (safe)
   if (effectiveTarget >= currentDelayMs) {
-    newDelay = effectiveTarget
+    // Increasing delay - rate limit to prevent visible displayTime regression.
+    // Aircraft will move slightly slower than wall-clock during the increase but won't jump.
+    const maxIncrease = (elapsed / 1000) * DYNAMIC_DELAY_MAX_INCREASE_RATE
+    newDelay = Math.min(effectiveTarget, currentDelayMs + maxIncrease)
   } else {
-    // Decreasing delay - rate limit
+    // Decreasing delay - rate limit to avoid running out of buffer.
     const maxDecrease = (elapsed / 1000) * DYNAMIC_DELAY_MAX_DECREASE_RATE
     newDelay = Math.max(effectiveTarget, currentDelayMs - maxDecrease)
   }
@@ -654,7 +685,6 @@ function interpolateTimeline(
   lastKnownHeading: number | null,
   reconciliation: ReconciliationState | undefined,
   lastRenderedPos: { latitude: number; longitude: number; altitude: number } | undefined,
-  enableDynamicDelay: boolean,
 ): {
   result: TimelineInterpolationResult
   newLastKnownHeading: number
@@ -675,23 +705,20 @@ function interpolateTimeline(
   // to VATSIM's 15s updates when vNAS goes quiet.
   const observations = filterObservationsForSource(allObservations, now)
 
-  // Get display delay from the most recent observation in our filtered set
-  // This prevents position jumps when source changes (e.g., vNAS → VATSIM after landing)
-  // because each observation remembers its own display delay from when it was created.
-  // Fallback to SOURCE_DISPLAY_DELAYS[lastSource] for migration (old observations without displayDelay)
   const newestObs = observations[observations.length - 1]
   const oldestObs = observations[0]
 
-  // Determine display delay: use dynamic delay if enabled and available, otherwise static
+  // Display delay always comes from the dynamic-delay state, which adapts to per-aircraft
+  // observation cadence and rate-limits both increases and decreases for smooth transitions.
+  // Replay/imported timelines have no dynamicDelay state — fall back to the observation's
+  // recorded displayDelay (0 for replay).
   let displayDelay: number
   let currentDynamicDelayState: DynamicDelayState | undefined
 
-  if (enableDynamicDelay && dynamicDelay) {
-    // Use current delay from dynamic state (includes any extrapolation bump from previous frames)
+  if (dynamicDelay) {
     displayDelay = dynamicDelay.currentDelayMs
     currentDynamicDelayState = dynamicDelay
   } else {
-    // Static delay: use observation's recorded delay or fall back to source default
     displayDelay = newestObs.displayDelay ?? SOURCE_DISPLAY_DELAYS[lastSource]
   }
 
@@ -1245,12 +1272,14 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       // Check if this observation is too close to the last one
       const lastObs = existing.observations[existing.observations.length - 1]
       if (lastObs && observation.receivedAt - lastObs.receivedAt < MIN_OBSERVATION_INTERVAL) {
-        // Too close, skip this observation but update metadata
+        // Too close, skip this observation but update metadata.
+        // Preserve existing lastSource — the dropped observation didn't actually
+        // contribute a position, so its source shouldn't be propagated. Matches
+        // the batch path's behavior at the equivalent skip site.
         const updated = new Map(timelines)
         updated.set(callsign, {
           ...existing,
           metadata: mergedMetadata,
-          lastSource: observation.source,
           lastReceivedAt: observation.receivedAt,
         })
         set({ timelines: updated })
@@ -1343,13 +1372,14 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       if (observation.source === 'vatsim' && existing) {
         const newestExisting = existing.observations[existing.observations.length - 1]
         if (newestExisting && observation.observedAt <= newestExisting.observedAt) {
-          // VATSIM observation is older than what we have - skip position but update metadata
-          // The mergedMetadata already has the correct priority (VATSIM cid, transponder, departure, arrival)
+          // VATSIM observation is older than what we have - skip position but update metadata.
+          // Don't bump lastReceivedAt: we didn't actually accept new data. Bumping it would
+          // hide the staleness from the prune timer and let aircraft persist indefinitely
+          // while extrapolating from old vNAS data. Subsequent VATSIM cycles will produce
+          // observedAt > newestExisting.observedAt and refresh lastReceivedAt naturally.
           updated.set(callsign, {
             ...existing,
             metadata: mergedMetadata,
-            // Update lastReceivedAt to keep the timeline alive
-            lastReceivedAt: observation.receivedAt,
           })
           continue
         }
@@ -1366,11 +1396,12 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
         // Check if this observation is too close to the last one
         const lastObs = existing.observations[existing.observations.length - 1]
         if (lastObs && observation.receivedAt - lastObs.receivedAt < MIN_OBSERVATION_INTERVAL) {
-          // Too close, skip but update metadata
+          // Too close, skip but update metadata. Preserve existing lastSource —
+          // the dropped observation's position wasn't kept, so the source of the
+          // actual newest stored observation is unchanged.
           updated.set(callsign, {
             ...existing,
             metadata: mergedMetadata,
-            lastSource: observation.source,
             lastReceivedAt: observation.receivedAt,
           })
           continue
@@ -1477,6 +1508,10 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       if (removalBroadcastCallback) {
         removalBroadcastCallback([callsign])
       }
+
+      // Notify in-process subscribers (e.g., vnasStore) so they can clean up
+      // their per-aircraft state.
+      notifyAircraftRemoved([callsign])
     }
   },
 
@@ -1532,6 +1567,10 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       if (removedCallsigns.length > 0 && removalBroadcastCallback) {
         removalBroadcastCallback(removedCallsigns)
       }
+
+      // Notify in-process subscribers (e.g., vnasStore) so they can clean up
+      // their per-aircraft state.
+      notifyAircraftRemoved(removedCallsigns)
     }
   },
 
@@ -1595,15 +1634,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
     const lastKnownHeading = lastKnownHeadings.get(callsign) ?? null
     const reconciliation = get().reconciliationStates.get(callsign)
     const lastPosition = get().lastRenderedPositions.get(callsign)
-    const enableDynamicDelay = useSettingsStore.getState().advanced?.enableDynamicDisplayDelay ?? true
-    const result = interpolateTimeline(
-      timeline,
-      now,
-      lastKnownHeading,
-      reconciliation,
-      lastPosition,
-      enableDynamicDelay,
-    )
+    const result = interpolateTimeline(timeline, now, lastKnownHeading, reconciliation, lastPosition)
 
     // Return result without mutating store state
     // Heading/reconciliation/dynamicDelay updates are only applied by getInterpolatedStates() batch operation
@@ -1626,21 +1657,11 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
     let reconciliationsChanged = false
     let timelinesChanged = false
 
-    // Get dynamic delay setting once for all aircraft
-    const enableDynamicDelay = useSettingsStore.getState().advanced?.enableDynamicDisplayDelay ?? true
-
     for (const [callsign, timeline] of timelines) {
       const lastKnownHeading = lastKnownHeadings.get(callsign) ?? null
       const lastPosition = lastRenderedPositions.get(callsign)
       const reconciliation = reconciliationStates.get(callsign)
-      const interpolation = interpolateTimeline(
-        timeline,
-        now,
-        lastKnownHeading,
-        reconciliation,
-        lastPosition,
-        enableDynamicDelay,
-      )
+      const interpolation = interpolateTimeline(timeline, now, lastKnownHeading, reconciliation, lastPosition)
 
       if (interpolation) {
         results.set(callsign, interpolation.result)

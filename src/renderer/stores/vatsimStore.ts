@@ -11,6 +11,17 @@ import { useAircraftTimelineStore } from './aircraftTimelineStore'
 import { useReplayStore } from './replayStore'
 import { useSettingsStore } from './settingsStore'
 
+// Backoff schedule for VATSIM fetch failures. We don't want to hammer the API
+// at 1Hz when it's down or rate-limiting us. Resets to index 0 on the first
+// successful fetch.
+const VATSIM_BACKOFF_MS = [VATSIM_POLL_INTERVAL, 5000, 15000, 30000, 60000]
+
+// Module-scope guard so a slow fetch can't be re-entered by the next tick.
+// Without this, two in-flight fetches both pass the timestamp-equality skip
+// and produce duplicate observations.
+let fetchInFlight = false
+let consecutiveFailures = 0
+
 interface ReferencePosition {
   latitude: number
   longitude: number
@@ -38,8 +49,10 @@ interface VatsimStore {
   error: string | null
   isLoading: boolean
 
-  // Polling
+  // Polling — chained setTimeout (not setInterval) so failures can back off and
+  // a slow fetch can't be re-entered while still in flight.
   pollingInterval: number | null
+  isPolling: boolean
 
   // Actions
   fetchData: () => Promise<void>
@@ -64,9 +77,15 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
   error: null,
   isLoading: false,
   pollingInterval: null,
+  isPolling: false,
 
   // Fetch data from VATSIM API
   fetchData: async () => {
+    // Guard against overlapping fetches. setInterval used to fire every 1s
+    // regardless of whether the previous fetch had returned, which let two
+    // fetches race past the timestamp-equality skip and duplicate observations.
+    if (fetchInFlight) return
+    fetchInFlight = true
     set({ isLoading: true, error: null })
 
     try {
@@ -203,7 +222,11 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
 
       // Trigger replay snapshot recording with ALL aircraft
       useReplayStore.getState().addSnapshot(allAircraftStates, vatsimTimestamp, actualInterval)
+
+      // Successful fetch — reset failure counter so next interval is the normal poll cadence.
+      consecutiveFailures = 0
     } catch (error) {
+      consecutiveFailures += 1
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       set({
         isConnected: false,
@@ -211,33 +234,52 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
         error: `Failed to fetch VATSIM data: ${errorMessage}`,
       })
       console.error('VATSIM API error:', error)
+    } finally {
+      fetchInFlight = false
+
+      // Schedule next fetch if still polling. Using setTimeout (not setInterval)
+      // measures the delay from completion, ensuring failures back off instead
+      // of hammering the API at 1Hz.
+      if (get().isPolling) {
+        const delayMs =
+          consecutiveFailures > 0
+            ? VATSIM_BACKOFF_MS[Math.min(consecutiveFailures - 1, VATSIM_BACKOFF_MS.length - 1)]
+            : VATSIM_POLL_INTERVAL
+        const timer = setTimeout(() => {
+          if (get().isPolling) get().fetchData()
+        }, delayMs)
+        set({ pollingInterval: timer })
+      } else {
+        set({ pollingInterval: null })
+      }
     }
   },
 
   // Start polling for data
   startPolling: () => {
-    const { pollingInterval, fetchData } = get()
+    const { isPolling, fetchData } = get()
 
     // Don't start if already polling
-    if (pollingInterval) {
+    if (isPolling) {
       return
     }
 
-    // Fetch immediately
-    fetchData()
+    // Reset failure counter when (re)starting so we don't carry stale backoff state
+    // across stop/start cycles (e.g., toggling between data sources via Settings).
+    consecutiveFailures = 0
+    set({ isPolling: true })
 
-    // Set up interval
-    const interval = setInterval(fetchData, VATSIM_POLL_INTERVAL)
-    set({ pollingInterval: interval })
+    // Fetch immediately — finally{} chains the next setTimeout from here.
+    fetchData()
   },
 
   // Stop polling
   stopPolling: () => {
     const { pollingInterval } = get()
-    if (pollingInterval) {
-      clearInterval(pollingInterval)
-      set({ pollingInterval: null })
+    if (pollingInterval !== null) {
+      clearTimeout(pollingInterval)
     }
+    set({ isPolling: false, pollingInterval: null })
   },
 
   // Reset the timestamp to force next fetch to process data

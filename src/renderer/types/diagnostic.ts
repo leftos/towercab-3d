@@ -44,7 +44,6 @@ export interface DiagnosticAppState {
   weather: { metar: string | null }
   settings: {
     sourceDisplayDelays: Record<string, number>
-    enableDynamicDisplayDelay: boolean
     groundspeedThresholdKnots: number
   }
 }
