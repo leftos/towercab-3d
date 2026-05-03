@@ -6,8 +6,41 @@ on:
   pull_request:
     branches: [main]
 
+# Cancel in-progress PR builds when a new push lands on the same PR.
+# Main-branch builds run to completion so we don't lose installer artifacts.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  # Fast Linux job: lint + typecheck. Fails in ~1 minute, blocking the slow
+  # Windows build below from running when there's a trivial frontend error.
+  quick-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run Biome
+        run: pnpm biome check src/ --error-on-warnings
+
+      - name: Run TypeScript type check
+        run: pnpm run typecheck
+
   build:
+    needs: quick-checks
     strategy:
       fail-fast: false
       matrix:
@@ -21,6 +54,13 @@ jobs:
           #   target: x86_64-unknown-linux-gnu
 
     runs-on: ${{ matrix.platform }}
+
+    # sccache caches rustc invocations across runs in GitHub Actions cache.
+    # Combined with Swatinem/rust-cache (whole target/ + registry), this avoids
+    # recompiling unchanged crates on every push.
+    env:
+      SCCACHE_GHA_ENABLED: 'true'
+      RUSTC_WRAPPER: sccache
 
     steps:
       - name: Checkout repository
@@ -41,6 +81,9 @@ jobs:
           targets: ${{ matrix.target }}
           components: clippy
 
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.6
+
       - name: Install dependencies (Ubuntu only)
         if: matrix.platform == 'ubuntu-22.04'
         run: |
@@ -58,12 +101,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run Biome
-        run: pnpm biome check src/ --error-on-warnings
-
-      - name: Run TypeScript type check
-        run: pnpm run typecheck
-
+      # Required before clippy: tauri::context! validates bundle.resources at
+      # compile time, and frontendDist must exist for include_dir!.
       - name: Build FSLTL converter
         run: pnpm run build:converter
 
@@ -92,7 +131,37 @@ jobs:
           fi
         shell: bash
 
+      - name: Regenerate lockfile with vnas from git
+        if: steps.vnas-check.outputs.vnas_available == 'true'
+        env:
+          CARGO_NET_GIT_FETCH_WITH_CLI: true
+        run: cd src-tauri && cargo generate-lockfile
+
+      # Cache restore comes AFTER lockfile manipulation so the cache key (which
+      # hashes Cargo.lock) matches what the build will actually compile. The
+      # explicit `key` suffix splits the cache between vnas / no-vnas runs.
+      - name: Cache Rust dependencies and target/
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: vnas-${{ steps.vnas-check.outputs.vnas_available }}
+          cache-on-failure: true
+
+      - name: Run Clippy
+        working-directory: src-tauri
+        env:
+          CARGO_NET_GIT_FETCH_WITH_CLI: ${{ steps.vnas-check.outputs.vnas_available == 'true' }}
+        run: >-
+          cargo clippy --release --all-targets
+          ${{ steps.vnas-check.outputs.vnas_available == 'true' && '--features vnas' || '' }}
+          -- -D warnings
+
+      # ---- Below: only on push to main, not on PRs ----
+      # PRs get clippy as their gate; the full installer build is reserved for
+      # main-branch pushes (and tag pushes via release.yml).
+
       - name: Check signing key availability
+        if: github.event_name == 'push'
         id: signing-check
         env:
           SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -120,23 +189,8 @@ jobs:
           fi
         shell: bash
 
-      - name: Regenerate lockfile with vnas from git
-        if: steps.vnas-check.outputs.vnas_available == 'true'
-        env:
-          CARGO_NET_GIT_FETCH_WITH_CLI: true
-        run: cd src-tauri && cargo generate-lockfile
-
-      - name: Run Clippy
-        working-directory: src-tauri
-        env:
-          CARGO_NET_GIT_FETCH_WITH_CLI: ${{ steps.vnas-check.outputs.vnas_available == 'true' }}
-        run: >-
-          cargo clippy --all-targets
-          ${{ steps.vnas-check.outputs.vnas_available == 'true' && '--features vnas' || '' }}
-          -- -D warnings
-
       - name: Build Tauri app (with signing)
-        if: steps.signing-check.outputs.signing_available == 'true'
+        if: github.event_name == 'push' && steps.signing-check.outputs.signing_available == 'true'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -147,7 +201,7 @@ jobs:
           args: --target ${{ matrix.target }} ${{ steps.vnas-check.outputs.vnas_available == 'true' && '--features vnas' || '' }}
 
       - name: Build Tauri app (without signing)
-        if: steps.signing-check.outputs.signing_available != 'true'
+        if: github.event_name == 'push' && steps.signing-check.outputs.signing_available != 'true'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -156,7 +210,7 @@ jobs:
           args: --target ${{ matrix.target }} ${{ steps.vnas-check.outputs.vnas_available == 'true' && '--features vnas' || '' }}
 
       - name: Upload artifacts (Windows)
-        if: matrix.platform == 'windows-latest'
+        if: github.event_name == 'push' && matrix.platform == 'windows-latest'
         uses: actions/upload-artifact@v7
         with:
           name: windows-installer
