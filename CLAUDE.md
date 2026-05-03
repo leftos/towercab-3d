@@ -129,6 +129,20 @@ See `docs/architecture.md` for detailed documentation including:
 
 `@/` maps to `src/renderer/` (configured in vite.config.ts)
 
+## Design Tokens
+
+All shared colours, spacing, and typography live as CSS custom properties in the `:root` block of `src/renderer/assets/styles/global.css`. When adding or editing CSS, prefer tokens over literals:
+
+- **Colours:** `--accent`, `--accent-warn`, `--accent-danger`, `--accent-ok`, `--accent-pending`
+- **Surfaces:** `--bg-app`, `--bg-panel`, `--bg-panel-strong`, `--bg-overlay`
+- **White-alpha (borders, hover states, subtle backgrounds):** `--white-a05`, `--white-a08`, `--white-a10`, `--white-a15`, `--white-a20`, `--white-a30`
+- **Text:** `--text-primary`, `--text-secondary`, `--text-tertiary`, `--text-muted`
+- **Layout:** `--topbar-h`, `--controls-h` (and `-compact`/`-mobile` responsive variants)
+- **Radii / effects:** `--radius-sm/md/lg`, `--blur`, `--blur-strong`
+- **Fonts:** `--font-sans`, `--font-mono`
+
+Component-specific one-off colours (e.g. the bespoke palette in `SettingsModsTab.css`) may stay as literals when they don't match a semantic token. Do not re-introduce orphan `var(--xxx)` references that aren't defined in `:root` — they silently resolve to inherited or unset values. Do not put inline `<style>{...}</style>` blocks in `.tsx` files; create a sibling `.css` file and import it.
+
 ## Code Organization
 
 ### Types (`types/`)
