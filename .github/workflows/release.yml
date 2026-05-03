@@ -144,11 +144,11 @@ jobs:
           fi
         shell: bash
 
-      - name: Update vnas crate from git
+      - name: Regenerate lockfile with vnas from git
         if: steps.vnas-check.outputs.vnas_available == 'true'
         env:
           CARGO_NET_GIT_FETCH_WITH_CLI: true
-        run: cd src-tauri && cargo update -p towercab-3d-vnas
+        run: cd src-tauri && cargo generate-lockfile
 
       - name: Build frontend (for clippy)
         run: pnpm run vite:build
