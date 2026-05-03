@@ -11,6 +11,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 - A subtle hint above the bottom controls reminds you of the `.` command prefix and the `?` cheatsheet shortcut while an airport is selected.
 - Camera input axis inversion settings — independently flip horizontal/vertical axes for mouse drag, touch drag, and keyboard arrow keys, with separate toggles for orbit follow mode and an option to invert mouse-wheel zoom direction. Configure under Settings > Controls > Camera > Invert Axes.
 - The Nearby Aircraft panel now collapses into a thin edge-dock strip on tablet-sized windows (1100px or narrower) so it stops covering the airport. Tap the strip to expand. Drag the panel header to reposition it; pick which screen edge it docks to (Left or Right) under Settings > Aircraft & Labels > UI.
+- Animations now honour the OS "reduce motion" accessibility preference — pulses, slide-ins, and spinning indicators stay still when it is enabled.
 
 ### Changed
 - The airport name stays visible (truncated) on very narrow windows instead of disappearing entirely below 600px, making it easier to confirm which airport is loaded on phones.

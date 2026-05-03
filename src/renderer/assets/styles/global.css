@@ -1,5 +1,8 @@
 /* Global Styles for TowerCab 3D */
 
+/* TowerCab 3D is intentionally dark-only. We do not honour `prefers-color-scheme: light` —
+   air-traffic tooling is used in dim cabs and a light theme would wash out the globe. */
+
 :root {
   /* App backdrop */
   --bg-app: #0a0a0f;
@@ -114,7 +117,11 @@ body {
   color: white;
 }
 
-/* Focus styles */
+/* Focus styles — intentionally split:
+   `:focus` suppresses the default outline for mouse/touch interactions, while
+   `:focus-visible` re-applies a clear accent outline whenever focus arrives via the
+   keyboard. Do not delete `:focus-visible` thinking it is redundant — without it,
+   keyboard users get no focus indicator at all. */
 :focus {
   outline: none;
 }
@@ -176,3 +183,24 @@ body {
 .loading {
   animation: pulse 1.5s ease-in-out infinite;
 }
+
+/* Honour the OS-level "reduce motion" preference globally. This collapses every
+   animation and transition to effectively zero so vestibular-sensitive users do not
+   see infinite pulses, spins, shimmer, or slide-ins. Per-file overrides are not
+   needed — keep new motion declarations free of bespoke reduced-motion blocks.
+
+   `!important` is required: the rule must override animation/transition durations
+   declared on individual selectors of equal or higher specificity. This is the
+   canonical pattern (see MDN "prefers-reduced-motion"). */
+/* biome-ignore-start lint/complexity/noImportantStyles: required to override per-element animation/transition declarations under prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+/* biome-ignore-end lint/complexity/noImportantStyles: required to override per-element animation/transition declarations under prefers-reduced-motion */

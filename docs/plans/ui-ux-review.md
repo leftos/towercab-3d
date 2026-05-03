@@ -198,16 +198,19 @@ The `AircraftPanel` at fixed `top: 58px; right: 10px` covers ~30% of the visible
 
 ### Tasks
 
-- [ ] Audit all animations for `prefers-reduced-motion: reduce` support; currently zero handlers exist. Affected animations:
-  - `pulse-orange` (`ControlsBar.css:588-596`)
-  - `pulse-live` (`ControlsBar.css:830-840`)
-  - `shimmer` (`LoadingScreen.css:42-49`)
-  - `dropdownSlideUp` (`ControlsBar.css:1057-1066`)
-  - `slideDown` (`ControlsBar.css:842-851`)
-  - `fadeIn`, `slideUp` (`global.css:94-112`)
-- [ ] Reconsider `:focus { outline: none }` blanket rule in `global.css:67-69`; restrict outline removal to mouse interactions only, keep `:focus-visible` styling intact
-- [ ] Add explicit comment in `global.css` noting the app is intentionally dark-only (no `prefers-color-scheme` support) so future contributors don't accidentally add light-theme partials
-- [ ] Verify keyboard-only navigation through TopBar → ControlsBar → AircraftPanel works without traps
+- [x] Audit all animations for `prefers-reduced-motion: reduce` support. Replaced the originally listed per-animation work with a single global `*`-selector rule in `global.css` that clamps `animation-duration`, `animation-iteration-count`, `transition-duration`, and `scroll-behavior` for every element. The 4 partial per-file handlers added during Phases 3 and 5 (`LoadingScreen.css`, `ControlsBar.css`, `AircraftPanelDock.css`, `TouchOnboarding.css`) were removed as redundant.
+- [x] Reconsider `:focus { outline: none }` blanket rule. Verified the rule already pairs with `:focus-visible { outline: 2px solid var(--accent) }` in `global.css:117-125`, which is exactly the pattern the task asked for. Added an explanatory comment so a future contributor doesn't strip `:focus-visible` thinking it's redundant.
+- [x] Added an explicit comment near `:root` in `global.css` documenting the intentional absence of `prefers-color-scheme: light`.
+- [x] Verified keyboard-only navigation. Wrote `docs/testing/keyboard-nav.md` as the canonical manual test script, and ran a Playwright Tab walk that captured all 8 focusable TopBar/ControlsBar elements with no focus traps. AircraftPanel coverage is documented in the script for use after an airport is loaded.
+
+### Follow-up findings (not addressed in Phase 6 — separate accessibility pass)
+
+- ControlsBar dropdowns (Defaults, Look-at-Runway) are not arrow-key navigable.
+- Modals do not implement focus traps; Tab past the last element escapes into the page background.
+- Modals do not restore focus to the previously focused element on close.
+- TokenPrompt has no Escape handler.
+- No semantic landmarks (`<header>`, `<main>`, `<aside>`).
+- AircraftPanel resize handles are pointer-only.
 
 ### Out of scope for this phase
 

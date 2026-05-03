@@ -53,11 +53,21 @@ const SPEED_WINDOW_SIZE = 5
 // or stale-prune). Without this, speedHistory and groundStateHistory grow without
 // bound across a session because vNAS only clears them on explicit SignalR
 // removal messages or full disconnect.
-addAircraftRemovalListener((callsigns) => {
-  for (const callsign of callsigns) {
-    speedHistory.delete(callsign)
-    groundStateHistory.delete(callsign)
-  }
+//
+// Deferred via queueMicrotask: there is a circular module-init path
+// aircraftTimelineStore → replayStore/viewportStore → airportStore → vnasStore
+// → aircraftTimelineStore. Calling this synchronously at top level re-enters
+// aircraftTimelineStore before its `aircraftRemovalListeners` const has been
+// initialised, producing a TDZ ReferenceError. Microtask defers the call past
+// the synchronous module-evaluation phase, by which point both modules are fully
+// initialised. The registration still completes before any aircraft data flows.
+queueMicrotask(() => {
+  addAircraftRemovalListener((callsigns) => {
+    for (const callsign of callsigns) {
+      speedHistory.delete(callsign)
+      groundStateHistory.delete(callsign)
+    }
+  })
 })
 
 /**

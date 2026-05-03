@@ -113,10 +113,3 @@
   color: var(--accent-warn);
   opacity: 0.85;
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .loading-compass,
-  .loading-progress-bar {
-    animation: none;
-  }
-}

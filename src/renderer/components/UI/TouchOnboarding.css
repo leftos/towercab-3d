@@ -182,14 +182,3 @@
     opacity: 1;
   }
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .touch-onboarding-overlay,
-  .touch-onboarding-modal {
-    animation: none;
-  }
-  .pinch-finger,
-  .twist-fingers {
-    animation: none;
-  }
-}

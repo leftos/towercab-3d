@@ -97,10 +97,3 @@
     transform: translateX(0);
   }
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .aircraft-panel-dock,
-  .aircraft-panel-dock[data-dock-side="left"] {
-    animation: none;
-  }
-}
