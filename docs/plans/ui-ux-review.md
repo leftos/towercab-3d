@@ -15,31 +15,39 @@ This plan is organized so each phase can be implemented and shipped independentl
 
 ---
 
-## Phase 1: Design token layer (foundation)
+## Phase 1: Design token layer (foundation) — ✅ COMPLETE
 
 **Goal:** Eliminate hardcoded color/spacing literals scattered across 40+ CSS files. Unblocks every subsequent visual change.
 
-**Estimated effort:** 0.5 day
+**Estimated effort:** 0.5 day (actual: ~1 day across 11 commits)
 
 ### Tasks
 
-- [ ] Add `:root` CSS custom properties to `src/renderer/assets/styles/global.css`:
-  - Backgrounds: `--bg-app`, `--bg-panel` (rgba 18,22,32,0.95), `--bg-panel-strong` (rgba 26,30,42,0.98)
-  - Borders: `--border-subtle` (rgba 255,255,255,0.08), `--border-strong` (rgba 255,255,255,0.18)
+- [x] Add `:root` CSS custom properties to `src/renderer/assets/styles/global.css`:
+  - Backgrounds: `--bg-app`, `--bg-panel`, `--bg-panel-strong`, `--bg-overlay`
+  - White-alpha steps (borders/hover/subtle bg): `--white-a05`, `--white-a08`, `--white-a10`, `--white-a15`, `--white-a20`, `--white-a30`
+  - Text: `--text-primary`, `--text-secondary`, `--text-tertiary`, `--text-muted`
   - Accents: `--accent` (#4fc3f7), `--accent-warn` (#ffb74d), `--accent-danger` (#ef5350), `--accent-ok` (#81c784), `--accent-pending` (#fff176)
-  - Layout: `--topbar-h` (48px), `--controls-h` (48px)
-  - Radii: `--radius-sm` (4px), `--radius-md` (6px), `--radius-lg` (12px)
-  - Effects: `--blur` (blur(12px))
-- [ ] Migrate `TopBar.css`, `ControlsBar.css`, `AircraftPanel.css` to consume the tokens (highest-traffic surfaces first)
-- [ ] Migrate remaining UI CSS files (~37 files) — can be batched
-- [ ] Resolve cyan inconsistency: `TouchControls.css:79,113` and `DeviceOptimizationPrompt.css:53,83` use `rgba(0, 200, 255, x)` while everything else uses `#4fc3f7` — standardize on `var(--accent)`
-- [ ] Replace magic-number `top: 58px` in `AircraftPanel.css:2` with `calc(var(--topbar-h) + 10px)`
-- [ ] Extract inline `<style>` block in `App.tsx:690-779` (Cesium token prompt) into a proper `TokenPrompt.tsx` + `TokenPrompt.css`
+  - Layout: `--topbar-h`, `--topbar-h-compact`, `--topbar-h-mobile`, `--controls-h`, `--controls-h-compact`
+  - Radii: `--radius-sm`, `--radius-md`, `--radius-lg`
+  - Effects: `--blur`, `--blur-strong`
+  - Fonts: `--font-sans`, `--font-mono`
+- [x] Migrate `TopBar.css`, `ControlsBar.css`, `AircraftPanel.css` to consume the tokens (commit `226a9e4`)
+- [x] Extract inline `<style>` block in `App.tsx:690-779` into `TokenPrompt.tsx` + `TokenPrompt.css` (commit `6c206c7`)
+- [x] Resolve cyan inconsistency in `TouchControls.css` and `DeviceOptimizationPrompt.css` + rename FSLTL orphan vars (commit `9e125be`)
+- [x] Migrate modal/dialog group: 8 files (commit `855c936`)
+- [x] Migrate indicator/status group: 6 files (commit `8a07802`)
+- [x] Migrate tools/overlay group: 12 files (commit `f9f6779`)
+- [x] Replace magic-number `top: 58px` in `AircraftPanel.css:2` with `calc(var(--topbar-h) + 10px)` (part of `226a9e4`)
+- [x] Extract two additional inline `<style>` blocks discovered mid-work: `SettingsModsTab.tsx` and `TowerPositioningOverlay.tsx` (commit `8d30346`)
+- [x] Document the convention in `CLAUDE.md` (commit `0bc9f28`)
+- [x] Final grep sweep: zero `#4fc3f7` / `rgba(0, 200, 255` / `rgba(20, 20, 30, 0.95)` / `rgba(30, 30, 40, 0.98)` literals outside `:root`; zero `<style>` blocks in any `.tsx`
+- [x] Side fix: `vite.config.ts` excludes `@babylonjs/core` from esbuild pre-bundling so dev mode boots (commit `1ab5bcc`)
 
 ### Out of scope for this phase
 
 - Light/high-contrast themes (tokens enable this later but don't ship them yet)
-- Color palette changes — preserve current values, just give them names
+- Color palette changes — current values preserved exactly
 
 ---
 
@@ -225,14 +233,30 @@ This phase is **optional** and should only be undertaken after Phases 1-6 ship a
 
 ---
 
-## Implementation notes for the plan agent
+## Implementation notes
 
-- **Phase 1 must ship first.** Every other phase references the design tokens.
+- **Phase 1 must ship first.** Every other phase references the design tokens. ✅ shipped.
 - Phases 2, 3, 4, 5, 6 are independent of each other after Phase 1.
 - Phase 7 is optional and gated on user feedback after the functional improvements ship.
-- Each phase is small enough to ship as a single PR. Do not bundle phases.
+- Each phase is small enough to ship as a single PR (or a small handful of slices). Do not bundle phases.
 - All file paths in this doc are absolute references that should still be valid; verify before editing.
 - This review explicitly did NOT cover: VR mode (`VRScene.css`), settings tabs internals (`SettingsAdvancedTab` etc.), modding system UI (`MSFSModelSettingsPanel`), or replay controls polish — these may need separate reviews.
+
+## Kickoff prompts for re-planning each remaining phase
+
+Hand any of these to a planning agent (`/plan` or the `Plan` subagent) to generate a detailed execution plan for that phase. Each prompt is self-contained.
+
+**Phase 2 — Discoverability:** *"Plan Phase 2 of `docs/plans/ui-ux-review.md`. Audit `App.tsx` and `useCameraInput.ts` for the full keyboard shortcut list. Inventory current uses of `title=` attributes on ControlsBar buttons. Decide whether to use a Portal-based modal or an inline fullscreen overlay for the cheatsheet. Plan the toast persistence storage (settings flag or localStorage)."*
+
+**Phase 3 — First-run & loading polish:** *"Plan Phase 3 of `docs/plans/ui-ux-review.md`. The `TokenPrompt` component already exists (Phase 1, slice 2) — read it. Decide on the validation approach: client-side regex check, or async hit to Cesium Ion `/v1/me` endpoint? Pick one aviation motif (compass rose / runway numbering / radar sweep) — bias toward the simplest SVG."*
+
+**Phase 4 — Touch experience upgrade:** *"Plan Phase 4 of `docs/plans/ui-ux-review.md`. First action: verify what gestures Cesium's `ScreenSpaceEventHandler` actually responds to on touch — look at `CesiumViewer.tsx` and Cesium docs via Context7. Decide whether the touch onboarding sequence should be a modal series, a coachmark overlay, or a side-swipeable carousel."*
+
+**Phase 5 — Tablet-specific layout:** *"Plan Phase 5 of `docs/plans/ui-ux-review.md`. Audit current responsive behaviour at 1024×768 (iPad portrait) and 1366×1024 (iPad Pro landscape). Decide whether the edge-dock should use `position: fixed` strip or transform-based slide. Confirm whether `AircraftPanel`'s width is currently controlled by inline style (per `AircraftPanel.css:7` comment)."*
+
+**Phase 6 — Motion & accessibility hygiene:** *"Plan Phase 6 of `docs/plans/ui-ux-review.md`. List all `@keyframes` and `animation:` declarations across the codebase. Decide between disabling animations (`animation: none`) or shortening them to instant transitions for reduced-motion users. Plan a manual keyboard navigation test script."*
+
+**Phase 7 — Aesthetic identity (optional):** *"Plan Phase 7 of `docs/plans/ui-ux-review.md`. Confirm with user: (a) which typeface pairing? (b) self-host or CDN? Tauri prefers self-hosted. Audit how many `font-family` declarations the new `--font-sans` token needs to flow through. Pick the smallest possible aesthetic change set — this phase has highest risk for breaking existing-user trust."*
 
 ## References
 
