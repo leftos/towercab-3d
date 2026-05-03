@@ -10,7 +10,7 @@
   background: rgba(76, 175, 80, 0.15);
   border: 1px solid rgba(76, 175, 80, 0.3);
   border-radius: 6px;
-  color: #81c784;
+  color: var(--accent-ok);
   font-size: 12px;
   font-weight: 500;
 }

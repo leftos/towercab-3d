@@ -57,7 +57,7 @@
 }
 
 .update-button.primary {
-  background: #4fc3f7;
+  background: var(--accent);
   color: #000;
 }
 
@@ -79,20 +79,20 @@
 .progress-bar {
   width: 150px;
   height: 4px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--white-a10);
   border-radius: 2px;
   overflow: hidden;
 }
 
 .progress-fill {
   height: 100%;
-  background: #4fc3f7;
+  background: var(--accent);
   transition: width 0.2s ease-out;
 }
 
 /* Different states */
 .update-available {
-  border-color: #4fc3f7;
+  border-color: var(--accent);
 }
 
 .update-downloading {

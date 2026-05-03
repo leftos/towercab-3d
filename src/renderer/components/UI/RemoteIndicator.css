@@ -9,7 +9,7 @@
   gap: 8px;
   padding: 6px 10px;
   background: rgba(0, 0, 0, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--white-a10);
   border-radius: 6px;
   font-size: 11px;
   color: rgba(255, 255, 255, 0.8);
@@ -74,7 +74,7 @@
 }
 
 .remote-indicator__host {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-tertiary);
   font-family: monospace;
   font-size: 10px;
 }
@@ -101,6 +101,6 @@
 }
 
 .remote-indicator__time {
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--white-a30);
   font-size: 9px;
 }
