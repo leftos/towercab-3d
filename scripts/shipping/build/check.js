@@ -94,10 +94,10 @@ function runCommand(command, args, options = {}) {
 async function runLint(fix = false, quiet = false) {
   logHeader('Biome');
 
-  const args = ['biome', 'check', 'src/', '--error-on-warnings'];
+  const args = ['exec', 'biome', 'check', 'src/', '--error-on-warnings'];
   if (fix) args.push('--fix');
 
-  const result = await runCommand('npx', args);
+  const result = await runCommand('pnpm', args);
 
   if (result.success) {
     logSuccess('Biome passed (no errors or warnings)');
@@ -114,10 +114,10 @@ async function runLint(fix = false, quiet = false) {
 async function runTypeCheck(quiet = false) {
   logHeader('TypeScript');
 
-  const args = ['tsc', '-p', 'tsconfig.web.json', '--noEmit'];
+  const args = ['exec', 'tsc', '-p', 'tsconfig.web.json', '--noEmit'];
   if (quiet) args.push('--pretty', 'false');
 
-  const result = await runCommand('npx', args);
+  const result = await runCommand('pnpm', args);
 
   if (result.success) {
     logSuccess('TypeScript passed (no errors)');
