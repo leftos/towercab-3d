@@ -88,7 +88,10 @@ export function useVnasSubscription(): void {
     subscribeToFacility(currentIcao)
   }, [currentAirport, sessionFacilities, subscribedFacilities, subscribeToFacility, unsubscribeFromFacility])
 
-  // Cleanup: unsubscribe when component unmounts
+  // Cleanup: unsubscribe when component unmounts.
+  // This is a one-time setup whose only side-effect is the cleanup function. May not work
+  // reliably since the component is unmounting, but it's a best-effort cleanup.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: cleanup-only effect — re-attaching on unsubscribeFromFacility ref changes would be incorrect
   useEffect(() => {
     return () => {
       if (isRemoteMode()) return
@@ -96,14 +99,8 @@ export function useVnasSubscription(): void {
       const currentIcao = previousAirportRef.current
       if (currentIcao) {
         console.log(`[VnasSubscription] Component unmounting, unsubscribing from ${currentIcao}`)
-        // Note: This may not work reliably since the component is unmounting,
-        // but it's a best-effort cleanup
         unsubscribeFromFacility(currentIcao)
       }
     }
-  }, [
-    // Note: This may not work reliably since the component is unmounting,
-    // but it's a best-effort cleanup
-    unsubscribeFromFacility,
-  ])
+  }, [])
 }

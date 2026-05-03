@@ -142,10 +142,13 @@ export function useCesiumCamera(
   const followingCallsign = cameraState?.followingCallsign ?? null
   const followZoom = cameraState?.followZoom ?? 1
   const followMode = cameraState?.followMode ?? 'tower'
-  const _orbitDistance = cameraState?.orbitDistance ?? 500
-  const _orbitHeading = cameraState?.orbitHeading ?? 0
-  const _orbitPitch = cameraState?.orbitPitch ?? -20
-  const _cameraVersion = cameraState?.cameraVersion ?? 0
+  const orbitDistance = cameraState?.orbitDistance ?? 500
+  const orbitHeading = cameraState?.orbitHeading ?? 0
+  const orbitPitch = cameraState?.orbitPitch ?? -20
+  // cameraVersion is bumped by viewportStore.refreshCamera() to force the camera-positioning
+  // effect below to re-run after terrain changes (e.g., flattening toggle). Read in the deps
+  // array, not in the body — the body re-reads orbit values from getState() each preRender.
+  const cameraVersion = cameraState?.cameraVersion ?? 0
 
   // Viewport store - actions (these operate on this specific viewport when called from preRender,
   // but we'll use setState directly for the preRender callback to avoid activeViewport routing)
@@ -632,7 +635,8 @@ export function useCesiumCamera(
     }
   }, [viewer, viewportId])
 
-  // Update camera position and orientation
+  // Update camera position and orientation.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: orbitDistance/Heading/Pitch are read live via useViewportStore.getState() in onPreRender; cameraVersion is bumped by refreshCamera() to force this effect to re-run after terrain changes (e.g., flattening toggle)
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return
 
@@ -1001,6 +1005,10 @@ export function useCesiumCamera(
     setPitchInternal,
     clampToTerrain,
     custom2dPosition,
+    orbitDistance,
+    orbitHeading,
+    orbitPitch,
+    cameraVersion,
   ])
 
   return {

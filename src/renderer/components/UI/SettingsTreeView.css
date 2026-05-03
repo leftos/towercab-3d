@@ -110,7 +110,7 @@
 }
 
 .tree-chevron.hidden {
-  visibility: hidden;
+  display: none;
 }
 
 .tree-chevron:hover {

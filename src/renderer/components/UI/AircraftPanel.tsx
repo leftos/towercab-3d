@@ -136,17 +136,22 @@ function AircraftPanel() {
     [isResizing],
   )
 
-  // Periodic refresh to update distances/bearings (UI updates automatically via hook reactivity)
-  const [_refreshTick, setRefreshTick] = useState(0)
+  // Periodic refresh to update distances/bearings every second.
+  // refreshTick is read in the nearbyAircraft useMemo deps below — it forces re-sort against
+  // freshly-interpolated aircraft positions even when no Zustand-tracked input changed.
+  const [refreshTick, setRefreshTick] = useState(0)
   useEffect(() => {
     const interval = setInterval(() => setRefreshTick((t) => t + 1), 1000)
     return () => clearInterval(interval)
   }, [])
 
-  // Clear phase history when airport changes to prevent memory leaks
+  // Clear phase history when airport changes to prevent memory leaks.
+  // The phase history is a module-level Map in flightPhaseDetector.ts that grows unbounded
+  // as aircraft come and go; without this clear, switching airports leaks the prior airport's history.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: currentAirport?.icao is the trigger for the side-effect, not read by the body
   useEffect(() => {
     clearPhaseHistory()
-  }, [])
+  }, [currentAirport?.icao])
 
   // Tower height for look-at pitch calculation
   const towerHeight = useAirportStore((state) => state.towerHeight)
@@ -186,7 +191,8 @@ function AircraftPanel() {
     }
   }, [currentAirport, runwaysLoaded, getRunwaysWithCoordinates])
 
-  // Calculate bearing and convert to AircraftListItem format with sorting
+  // Calculate bearing and convert to AircraftListItem format with sorting.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshTick is bumped every 1s to force re-evaluation against freshly-interpolated positions even when no upstream Zustand state changed
   const nearbyAircraft = useMemo((): AircraftListItem[] => {
     if (!referencePoint) return []
 
@@ -293,6 +299,7 @@ function AircraftPanel() {
     referencePoint,
     followingCallsign,
     sortOption,
+    refreshTick,
     smartSortContext,
     pinFollowedAircraftToTop,
     currentAirport,

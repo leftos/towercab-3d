@@ -122,7 +122,7 @@ export interface SilhouetteRefs {
  */
 export function useCesiumViewer(
   containerRef: React.RefObject<HTMLDivElement>,
-  _viewportId: string,
+  viewportId: string,
   settings: CesiumViewerSettings,
 ): {
   viewer: Cesium.Viewer | null
@@ -170,8 +170,13 @@ export function useCesiumViewer(
   // (WebGL context cannot change MSAA samples after creation)
   const initialMsaaSamplesRef = useRef(msaaSamples)
 
-  // Initialize Cesium viewer
-  // MSAA is captured at first render - changes require app restart
+  // Initialize Cesium viewer.
+  // MSAA is captured at first render - changes require app restart.
+  // Graphics settings (shadows/lighting/fog/silhouettes/etc.) are applied at init AND have
+  // dedicated runtime-update effects further down; including them in deps would destroy and
+  // rebuild the entire WebGL context every time a slider moves, evicting terrain tiles and
+  // the aircraft model pool.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: graphics settings are applied at init only and updated live by other effects below; cesiumIonToken/isInset/viewportId are the only triggers that should rebuild the viewer
   useEffect(() => {
     // Require a valid Cesium Ion token before creating the viewer
     // Without a token, terrain and imagery loading will fail
@@ -486,33 +491,7 @@ export function useCesiumViewer(
       edgeDetectionRef.current = null
       silhouetteStageRef.current = null
     }
-  }, [
-    cesiumIonToken,
-    isInset,
-    containerRef.current,
-    enableAircraftSilhouettes,
-    enableAmbientOcclusion,
-    enableFxaa,
-    enableGroundAtmosphere,
-    enableHdr,
-    enableLighting,
-    enableLogDepth,
-    enableShadows,
-    inMemoryTileCacheSize,
-    insetGraphics.cache,
-    insetGraphics.msaa,
-    insetGraphics.preloadTiles,
-    insetGraphics.shadows,
-    insetGraphics.silhouettes,
-    insetGraphics.terrain,
-    modelBrightness,
-    shadowDarkness,
-    shadowFadingEnabled,
-    shadowMapSize,
-    shadowMaxDistance,
-    shadowNormalOffset,
-    shadowSoftness,
-  ])
+  }, [cesiumIonToken, isInset, viewportId])
 
   // Update model colors and blend amount when brightness setting changes
   useEffect(() => {

@@ -6,6 +6,12 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ### Fixed
 - Aircraft cards in the Nearby Aircraft panel now fill the full panel width.
+- Cloud layers from METAR (FEW/SCT/BKN/OVC) now render correctly. Previously no cloud layers appeared at any airport.
+- Camera now repositions correctly after terrain changes (e.g., toggling terrain flattening). Previously the camera stayed at the old height until another camera input nudged it.
+- Toggling graphics settings (shadows, lighting, FXAA, fog, etc.) no longer destroys and recreates the entire 3D viewer. Previously each toggle caused a visible stutter, lost camera state, and re-downloaded terrain tiles.
+- Model Matching table now refreshes as new aircraft models finish converting, instead of showing stale "converting..." entries.
+- Settings tree leaf rows no longer reserve empty space where the chevron would be, fixing alignment of nested setting labels.
+- Memory leak when switching airports — aircraft phase history is now cleared on airport switch.
 
 ## [0.0.46-alpha] - 2026-04-04
 

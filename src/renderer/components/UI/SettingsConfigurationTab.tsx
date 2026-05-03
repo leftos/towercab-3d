@@ -99,7 +99,8 @@ function SettingsConfigurationTab({
     setGoogleApiKeySaved(false)
   }, [imagerySettings.googleMapsApiKey])
 
-  // Get server status on mount (only in Tauri) and sync tray state
+  // Get server status on mount (only in Tauri) and sync tray state.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: one-time init — re-running on every minimizeToTray toggle would refetch status and redundantly call setMinimizeToTray
   useEffect(() => {
     if (!isTauri()) return
     httpServerApi
@@ -112,7 +113,7 @@ function SettingsConfigurationTab({
         }
       })
       .catch(console.error)
-  }, [serverSettings.minimizeToTray])
+  }, [])
 
   // Check vNAS availability on mount (only in Tauri)
   useEffect(() => {

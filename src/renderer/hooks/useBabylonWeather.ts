@@ -607,7 +607,10 @@ export function useBabylonWeather(options: UseBabylonWeatherOptions): UseBabylon
     }
   }, [scene])
 
-  // Initialize cloud layer states when mesh pool is created
+  // Initialize cloud layer states when mesh pool is created.
+  // `scene` dep is load-bearing: the body reads cloudMeshPoolRef which is populated by the [scene]-deps
+  // effect above. Without this dep the effect runs once at mount with an empty pool and never re-runs.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above
   useEffect(() => {
     if (cloudMeshPoolRef.current.length === 0) return
 
@@ -635,7 +638,7 @@ export function useBabylonWeather(options: UseBabylonWeatherOptions): UseBabylon
         })
       }
     }
-  }, [])
+  }, [scene])
 
   // Smooth cloud layer data before matching to prevent flickering from rapid METAR changes
   // Updates target values in cloudSmoothingRef, actual smoothing happens in animation loop
@@ -700,9 +703,12 @@ export function useBabylonWeather(options: UseBabylonWeatherOptions): UseBabylon
     }
   }, [cloudLayers, consumeInstantUpdate])
 
-  // Match cloud layers to existing visual states and update targets
-  // Uses smoothed cloud layer values to prevent matching failures from rapid METAR changes
-  // This enables smooth transitions instead of instant regeneration
+  // Match cloud layers to existing visual states and update targets.
+  // Uses smoothed cloud layer values to prevent matching failures from rapid METAR changes.
+  // This enables smooth transitions instead of instant regeneration.
+  // `cloudLayers` dep is load-bearing: the body reads cloudSmoothingRef which is populated by the
+  // [cloudLayers]-deps effect above. Without this dep new METAR layers never get assigned to mesh slots.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above
   useEffect(() => {
     // Wait for both mesh pool and layer states to be initialized
     if (cloudMeshPoolRef.current.length === 0 || cloudLayerStatesRef.current.length === 0) return
@@ -812,7 +818,7 @@ export function useBabylonWeather(options: UseBabylonWeatherOptions): UseBabylon
         }
       }
     }
-  }, [showWeatherEffects, showClouds, isTopDownView])
+  }, [cloudLayers, showWeatherEffects, showClouds, isTopDownView])
 
   // Instantly hide/show weather effects when switching between 3D and 2D view modes
   // (no gradual fade - user expects immediate response to view mode toggle)

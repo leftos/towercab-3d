@@ -35,11 +35,15 @@ export function useVnasEvents(): void {
   const getSessionArtcc = useVnasStore((state) => state.getSessionArtcc)
   const getSessionAirports = useVnasStore((state) => state.getSessionAirports)
   const vnasState = useVnasStore((state) => state.status.state)
-  const _subscribedFacilities = useVnasStore((state) => state.status.subscribedFacilities)
+  const subscribedFacilities = useVnasStore((state) => state.status.subscribedFacilities)
   const currentAirport = useAirportStore((state) => state.currentAirport)
 
-  // Auto-subscribe when airport changes and vNAS is ready
-  // This handles the race condition where vNAS connects before airport is loaded
+  // Auto-subscribe when airport changes and vNAS is ready.
+  // This handles the race condition where vNAS connects before airport is loaded.
+  // subscribedFacilities is in deps so the effect re-fires when a sibling subscription
+  // completes during the same 'subscribing' state — multiple concurrent facility subscriptions
+  // are a real scenario. The !isSubscribedTo(icao) guard prevents double-fire.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: subscribedFacilities triggers re-evaluation when a concurrent sibling subscription completes
   useEffect(() => {
     if (isRemoteMode()) return
 
@@ -52,7 +56,7 @@ export function useVnasEvents(): void {
         console.warn('[vNAS] Failed to auto-subscribe to airport:', err)
       })
     }
-  }, [vnasState, currentAirport?.icao, subscribe, isSubscribedTo])
+  }, [vnasState, currentAirport?.icao, subscribe, isSubscribedTo, subscribedFacilities])
 
   useEffect(() => {
     // Only set up listeners in Tauri mode (not remote browser)

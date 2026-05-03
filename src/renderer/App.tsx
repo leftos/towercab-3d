@@ -310,6 +310,7 @@ function App() {
   const selectAirport = useAirportStore((state) => state.selectAirport)
   const airports = useAirportStore((state) => state.airports)
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: one-time init after airports load — re-running this would clobber any user-driven camera state with the URL-param defaults
   useEffect(() => {
     if (isLoading) return
 
@@ -386,7 +387,7 @@ function App() {
       unsubscribe()
       flushUrlCameraSave()
     }
-  }, [isLoading, airports.has, selectAirport])
+  }, [isLoading])
 
   // Deep link handler for OAuth callbacks (tc3d://oauth/callback)
   useEffect(() => {

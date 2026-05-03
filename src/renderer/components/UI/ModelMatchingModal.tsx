@@ -35,8 +35,10 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
   const towerHeight = useAirportStore((state) => state.towerHeight)
   const customTowerPosition = useAirportStore((state) => state.customTowerPosition)
 
-  // Counter to force re-render when model conversions complete
-  const [_conversionVersion, setConversionVersion] = useState(0)
+  // Counter to force re-render when model conversions complete.
+  // Read in the aircraftData useMemo deps below; setConversionVersion is fired from the
+  // 'model-conversion-complete' event listener so the table refreshes as new models finish converting.
+  const [conversionVersion, setConversionVersion] = useState(0)
 
   // Test panel state
   const [testAirline, setTestAirline] = useState('')
@@ -113,8 +115,9 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
     }
   }, [testAirline, testType, testCallsign, isTestLoading])
 
-  // Build model matching data for aircraft within range of current airport
-  // Uses timeline store - unified data source that works on both host and remote clients
+  // Build model matching data for aircraft within range of current airport.
+  // Uses timeline store - unified data source that works on both host and remote clients.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: conversionVersion is bumped on model-conversion-complete to force this useMemo to re-run; without it, newly-converted models never appear in the table.
   const aircraftData = useMemo<AircraftModelData[]>(() => {
     // No airport selected = no aircraft to show
     if (!currentAirport) {
@@ -150,7 +153,7 @@ function ModelMatchingModal({ onClose }: ModelMatchingModalProps) {
         }
       })
       .sort((a, b) => a.callsign.localeCompare(b.callsign))
-  }, [timelines, currentAirport, towerHeight, customTowerPosition, aircraftDataRadiusNM])
+  }, [timelines, currentAirport, towerHeight, customTowerPosition, aircraftDataRadiusNM, conversionVersion])
 
   // Format scale for display
   const formatScale = (scale: { x: number; y: number; z: number }): { text: string; isScaled: boolean } => {
