@@ -15,6 +15,7 @@ import MetarOverlay from './components/UI/MetarOverlay'
 import ModelMatchingModal from './components/UI/ModelMatchingModal'
 import { MSFSIndexingModal } from './components/UI/MSFSIndexingModal'
 import { PerformanceHUD } from './components/UI/PerformanceHUD'
+import TokenPrompt from './components/UI/TokenPrompt'
 import TopBar from './components/UI/TopBar'
 import TouchControls, { TouchCommandInput } from './components/UI/TouchControls'
 import TowerPositioningOverlay from './components/UI/TowerPositioningOverlay'
@@ -53,7 +54,6 @@ import { useVRStore } from './stores/vrStore'
 import { useWeatherStore } from './stores/weatherStore'
 import { stopFileLogging } from './utils/fileLogger'
 import { isRemoteMode } from './utils/remoteMode'
-import { shellApi } from './utils/tauriApi'
 import type { UrlCameraState } from './utils/urlParams'
 import {
   flushUrlCameraSave,
@@ -140,7 +140,6 @@ function App() {
 
   // Cesium token prompt
   const [showTokenPrompt, setShowTokenPrompt] = useState(false)
-  const [tokenInput, setTokenInput] = useState('')
 
   // Touch command modal state (opened from TopBar's MobileToolsFlyout)
   const [showTouchCommand, setShowTouchCommand] = useState(false)
@@ -625,159 +624,14 @@ function App() {
       )}
       <MSFSIndexingModal />
 
-      {/* Cesium Ion Token Prompt */}
       {showTokenPrompt && (
-        <div className="token-prompt-overlay">
-          <div className="token-prompt-modal">
-            <h2>Cesium Ion Access Token Required</h2>
-            <p>
-              TowerCab 3D uses Cesium Ion for terrain and satellite imagery. You need a free access token to continue.
-            </p>
-            <ol>
-              <li>
-                <button
-                  type="button"
-                  onClick={() => {
-                    shellApi.openExternal('https://ion.cesium.com/signup/')
-                  }}
-                  className="external-link"
-                >
-                  Create a free Cesium Ion account
-                </button>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  onClick={() => {
-                    shellApi.openExternal('https://ion.cesium.com/tokens')
-                  }}
-                  className="external-link"
-                >
-                  Go to Access Tokens
-                </button>{' '}
-                and copy your default token
-              </li>
-              <li>Paste it below:</li>
-            </ol>
-            <input
-              type="text"
-              value={tokenInput}
-              onChange={(e) => setTokenInput(e.target.value)}
-              placeholder="Paste your Cesium Ion access token here"
-              className="token-input"
-            />
-            <div className="token-prompt-buttons">
-              <button type="button" className="token-button secondary" onClick={() => setShowTokenPrompt(false)}>
-                Skip for now
-              </button>
-              <button
-                type="button"
-                className="token-button primary"
-                onClick={async () => {
-                  if (tokenInput.trim()) {
-                    // Save to global settings (host file system)
-                    await setCesiumIonToken(tokenInput.trim())
-                    Ion.defaultAccessToken = tokenInput.trim()
-                  }
-                  setShowTokenPrompt(false)
-                }}
-                disabled={!tokenInput.trim()}
-              >
-                Save Token
-              </button>
-            </div>
-          </div>
-          <style>{`
-            .token-prompt-overlay {
-              position: fixed;
-              top: 0;
-              left: 0;
-              right: 0;
-              bottom: 0;
-              background: rgba(0, 0, 0, 0.8);
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              z-index: 10000;
-            }
-            .token-prompt-modal {
-              background: #1a1a2e;
-              border: 1px solid #333;
-              border-radius: 8px;
-              padding: 24px;
-              max-width: 500px;
-              width: 90%;
-              color: #fff;
-            }
-            .token-prompt-modal h2 {
-              margin: 0 0 16px 0;
-              font-size: 20px;
-              color: #4fc3f7;
-            }
-            .token-prompt-modal p {
-              margin: 0 0 16px 0;
-              color: rgba(255, 255, 255, 0.8);
-              line-height: 1.5;
-            }
-            .token-prompt-modal ol {
-              margin: 0 0 16px 0;
-              padding-left: 20px;
-              color: rgba(255, 255, 255, 0.8);
-              line-height: 1.8;
-            }
-            .token-prompt-modal .external-link {
-              color: #4fc3f7;
-              text-decoration: none;
-            }
-            .token-prompt-modal .external-link:hover {
-              text-decoration: underline;
-            }
-            .token-input {
-              width: 100%;
-              padding: 10px 12px;
-              border: 1px solid #444;
-              border-radius: 4px;
-              background: #0a0a0f;
-              color: #fff;
-              font-size: 14px;
-              margin-bottom: 16px;
-              box-sizing: border-box;
-            }
-            .token-input:focus {
-              outline: none;
-              border-color: #4fc3f7;
-            }
-            .token-prompt-buttons {
-              display: flex;
-              gap: 12px;
-              justify-content: flex-end;
-            }
-            .token-button {
-              padding: 8px 16px;
-              border-radius: 4px;
-              font-size: 14px;
-              cursor: pointer;
-              border: none;
-            }
-            .token-button.primary {
-              background: #4fc3f7;
-              color: #000;
-            }
-            .token-button.primary:disabled {
-              opacity: 0.5;
-              cursor: not-allowed;
-            }
-            .token-button.secondary {
-              background: transparent;
-              border: 1px solid #444;
-              color: #aaa;
-            }
-            .token-button.secondary:hover {
-              border-color: #666;
-              color: #fff;
-            }
-          `}</style>
-        </div>
+        <TokenPrompt
+          onClose={() => setShowTokenPrompt(false)}
+          onSave={async (token) => {
+            await setCesiumIonToken(token)
+            Ion.defaultAccessToken = token
+          }}
+        />
       )}
 
       {/* Device Optimization Prompt for touch devices */}

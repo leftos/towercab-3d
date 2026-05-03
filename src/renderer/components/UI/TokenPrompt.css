@@ -1,0 +1,102 @@
+.token-prompt-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.token-prompt-modal {
+  background: #1a1a2e;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 24px;
+  max-width: 500px;
+  width: 90%;
+  color: #fff;
+}
+
+.token-prompt-modal h2 {
+  margin: 0 0 16px 0;
+  font-size: 20px;
+  color: var(--accent);
+}
+
+.token-prompt-modal p {
+  margin: 0 0 16px 0;
+  color: rgba(255, 255, 255, 0.8);
+  line-height: 1.5;
+}
+
+.token-prompt-modal ol {
+  margin: 0 0 16px 0;
+  padding-left: 20px;
+  color: rgba(255, 255, 255, 0.8);
+  line-height: 1.8;
+}
+
+.token-prompt-modal .external-link {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.token-prompt-modal .external-link:hover {
+  text-decoration: underline;
+}
+
+.token-prompt-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #444;
+  border-radius: var(--radius-sm);
+  background: var(--bg-app);
+  color: #fff;
+  font-size: 14px;
+  margin-bottom: 16px;
+  box-sizing: border-box;
+}
+
+.token-prompt-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.token-prompt-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.token-button {
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  cursor: pointer;
+  border: none;
+}
+
+.token-button.primary {
+  background: var(--accent);
+  color: #000;
+}
+
+.token-button.primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.token-button.secondary {
+  background: transparent;
+  border: 1px solid #444;
+  color: #aaa;
+}
+
+.token-button.secondary:hover {
+  border-color: #666;
+  color: #fff;
+}
