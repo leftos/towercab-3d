@@ -102,16 +102,16 @@ The following features have no discoverable surface:
 
 ### Tasks
 
-- [ ] Redesign `TokenPrompt.tsx` (extracted in Phase 1):
-  - Strong primary CTA, de-emphasized "Skip" with warning subtext ("App will not function without a token")
-  - Replace styled-button-as-link pattern with proper `<a>` elements that open externally via `shellApi.openExternal`
-  - Inline validation: "✓ Token validated" or "✗ Invalid token" after Save
-  - Touch-friendly button sizes (min 44px)
-- [ ] Polish `LoadingScreen.tsx`:
-  - Add subtle aviation motif behind logo (compass rose, runway numbering, or radar sweep — pick one)
-  - "This is taking longer than usual…" hint after 10s on stalled steps
-  - Respect `prefers-reduced-motion` — disable shimmer animation
-- [ ] Verify token-prompt and loading-screen contrast/sizing on iPad portrait/landscape
+- [x] Redesign `TokenPrompt.tsx` (extracted in Phase 1):
+  - Strong primary CTA, de-emphasized "Skip" with warning subtext ("Terrain and imagery won't load without a token")
+  - Replaced styled-button-as-link with proper `<a href onClick={openExternal}>` (shellApi.openExternal under the hood)
+  - Inline validation: regex pre-check + async hit to `https://api.cesium.com/v1/me`; status row distinguishes invalid (red) / unverified-network (amber) / validating; network failure surfaces a "Save anyway" button
+  - 44px min-height buttons; primary gets accent fill + glow shadow
+- [x] Polish `LoadingScreen.tsx`:
+  - Compass rose SVG behind logo (16 spokes + ring + N marker), low opacity, slow CCW rotation
+  - "This is taking longer than usual…" hint after 10s on the same step (timer resets on `currentStep` change)
+  - `@media (prefers-reduced-motion: reduce)` disables both compass rotation and progress-bar shimmer
+- [x] Verify token-prompt and loading-screen contrast/sizing on iPad portrait (768×1024) and landscape (1024×768): 44px tap targets confirmed, async validation against real Ion endpoint returns 401 path correctly, compass + stalled-hint render as designed
 
 ### Out of scope for this phase
 
