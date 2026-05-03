@@ -75,6 +75,13 @@ export default defineConfig({
     }
   },
 
+  // Babylon 9.x AudioV2 has a circular import that breaks when esbuild pre-bundles
+  // it (audioBus.js extends an undefined AbstractAudioBus). Skip optimization so the
+  // browser handles the ESM directly — native ESM resolves the cycle correctly.
+  optimizeDeps: {
+    exclude: ['@babylonjs/core']
+  },
+
   // Worker configuration - compile TypeScript workers to JS
   worker: {
     format: 'es',
