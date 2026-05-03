@@ -44,7 +44,7 @@ Generated docs are output to `src-tauri/target/doc/`. These provide detailed doc
 
 ### vNAS Integration
 
-The optional `vnas` feature enables 1Hz real-time aircraft updates via the private `towercab-3d-vnas` crate. Without it, the app uses 15-second VATSIM HTTP polling.
+The optional `vnas` feature enables 1Hz real-time aircraft updates via the private `towercab-3d-vnas` crate. Without it, the app polls VATSIM's HTTP feed every second, but VATSIM only refreshes upstream data every ~15s — so effective update rate without vNAS is ~15s.
 
 - **Public contributors:** Use `pnpm run dev` and `pnpm run build` - no private repo access needed
 - **With vNAS access:** Use `pnpm run dev:vnas` and `pnpm run build:vnas`
@@ -96,22 +96,7 @@ Fix all Biome and TypeScript errors before committing. Do not disable rules with
 
 ### Why Type Checking Matters
 
-**CRITICAL:** Vite does not perform type checking during builds - it only transpiles TypeScript to JavaScript using esbuild. This means type errors can slip through if you don't explicitly run `tsc`.
-
-**TypeScript errors were previously missed because:**
-1. `vite build` uses esbuild for transpilation, which skips type checking for performance
-2. Biome checks code style/patterns, not type correctness
-3. `skipLibCheck: true` in tsconfig.json skips checking node_modules types (for performance)
-4. There was no explicit `tsc --noEmit` check in the build workflow
-
-**The `pnpm run typecheck` script is now part of the build process to prevent this in the future.**
-
-Always run `pnpm run typecheck` before:
-- Creating a commit
-- Opening a pull request
-- Before `pnpm run build`
-
-The build script now automatically runs typecheck first, so production builds will fail if there are type errors.
+Vite uses esbuild and skips type checking; Biome checks style, not types. `pnpm run typecheck` runs `tsc --noEmit` and is wired into `pnpm run build`. Run it before commits and PRs.
 
 ## Architecture
 
@@ -123,7 +108,7 @@ See `docs/architecture.md` for detailed documentation including:
 - Component hierarchy
 - Coordinate system transformations (see also `coordinate-systems.md`)
 
-**Quick reference:** Tauri 2 desktop app with React 19 frontend. Dual rendering: CesiumJS (globe/terrain/aircraft) + Babylon.js overlay (labels/weather). Use `viewportStore` for camera state (not deprecated `cameraStore`). HTTP server (axum, port 8765) serves frontend to remote browsers. Use `remoteMode.ts` utilities to detect Tauri vs browser mode.
+**Quick reference:** Tauri 2 desktop app with React 19 frontend. Dual rendering: CesiumJS (globe/terrain/aircraft) + Babylon.js overlay (labels/weather). All camera state lives in `viewportStore`. HTTP server (axum, port 8765) serves frontend to remote browsers. Use `remoteMode.ts` utilities to detect Tauri vs browser mode.
 
 ## Path Alias
 
@@ -147,91 +132,27 @@ Component-specific one-off colours (e.g. the bespoke palette in `SettingsModsTab
 
 ### Types (`types/`)
 
-All TypeScript types centralized by domain. Import via `import type { ... } from '@/types'`:
+All TypeScript types centralized by domain — one file per area (vatsim, vnas, weather, camera, viewport, replay, mod, fsltl, settings, terrain, airportSurfaces, etc.). Re-exported via `types/index.ts`. Import via `import type { ... } from '@/types'`. Browse `src/renderer/types/` for the full list — file names map directly to domain.
 
-| File | Purpose |
-|------|---------|
-| `aircraft-timeline.ts` | Timeline debug modal state and snapshot types |
-| `airport.ts` | Airport data, tower height |
-| `babylon.ts` | Labels, weather meshes, ENU transforms |
-| `camera.ts` | Camera state, view/follow modes, bookmarks |
-| `exportImport.ts` | Settings export/import data structures |
-| `fsltl.ts` | FSLTL/AIG conversion, airline mapping, MSFSModelSettings |
-| `mod.ts` | Modding manifest formats |
-| `realtraffic.ts` | RealTraffic API structures, ADS-B position data |
-| `replay.ts` | Replay snapshots, playback state |
-| `settings.ts` | App settings (cesium, graphics, camera, weather, memory, aircraft, ui) + GlobalSettings (cesiumIonToken, MSFS paths, viewport data shared across devices) |
-| `vatsim.ts` | VATSIM API structures, pilot/aircraft state |
-| `vnas.ts` | vNAS integration types (session, aircraft updates) |
-| `viewport.ts` | Viewport layout, multi-viewport config |
-| `weather.ts` | METAR, clouds, fog, precipitation |
+Notable: `settings.ts` contains both `Settings` (per-browser, in `settingsStore`) and `GlobalSettings` (shared across devices, in `globalSettingsStore`).
 
 ### Constants (`constants/`)
 
-Configuration values and limits. Import via `import { ... } from '@/constants'`:
-
-| File | Purpose |
-|------|---------|
-| `aircraft-timeline.ts` | Timeline debug modal settings |
-| `api.ts` | Endpoints, poll intervals, cache TTL |
-| `babylon.ts` | Scene settings, visibility thresholds |
-| `camera.ts` | FOV/pitch limits, orbit defaults |
-| `lighting.ts` | Sun position, shadow configuration |
-| `precipitation.ts` | Rain/snow particles, wind effects |
-| `realtraffic.ts` | RealTraffic API configuration |
-| `rendering.ts` | Model pool, shadows, colors |
-| `replay.ts` | Buffer size, playback speeds |
-| `weather.ts` | Cloud/fog parameters |
-
-Use `SCREAMING_SNAKE_CASE` (e.g., `FOV_DEFAULT`, `ORBIT_DISTANCE_MAX`).
+Configuration values and limits, grouped by domain (`api.ts`, `camera.ts`, `lighting.ts`, `rendering.ts`, `weather.ts`, `precipitation.ts`, `replay.ts`, `flightPhase.ts`, `realtraffic.ts`, `babylon.ts`, etc.). Re-exported via `constants/index.ts`. Import via `import { ... } from '@/constants'`. Use `SCREAMING_SNAKE_CASE` (e.g., `FOV_DEFAULT`, `ORBIT_DISTANCE_MAX`, `VATSIM_POLL_INTERVAL`).
 
 ### Services (`services/`)
 
-Business logic and external API integrations:
+Business logic and external API integrations. Service names indicate purpose: `VatsimService`, `RealTrafficService`, `MetarService`, `AirportService`, `RunwayService`, `ModService`, `MSFSModelConversionService`, `MigrationService`, `ExportImportService`, `UpdateService`, etc. Browse `src/renderer/services/` for the full list.
 
-| Service | Purpose |
-|---------|---------|
-| `AircraftDimensionsService.ts` | Aircraft wingspan/length data for model scaling |
-| `AircraftModelService.ts` | Model lookup, matching, and loading coordination |
-| `AirportService.ts` | Airport data fetching and caching |
-| `CustomVMRService.ts` | User-defined VMR (model matching) rules |
-| `ExportImportService.ts` | Settings backup and restore |
-| `FSLTLService.ts` | Legacy FSLTL service (being replaced by MSFS conversion) |
-| `MetarService.ts` | METAR weather data parsing and fetching |
-| `MigrationService.ts` | Settings migration between versions |
-| `ModService.ts` | Custom aircraft/tower model loading |
-| `MSFSModelConversionService.ts` | FSLTL/AIG model conversion orchestration |
-| `RealTrafficService.ts` | RealTraffic API WebSocket client |
-| `RunwayService.ts` | Runway data fetching for flight phase detection |
-| `SettingsTreeBuilder.ts` | Hierarchical settings organization |
-| `UpdateService.ts` | App update checking and installation |
-| `UserVMRService.ts` | User VMR rule management |
-| `VatsimService.ts` | VATSIM API data fetching |
+### Stores (`stores/`) — key callouts
 
-### Stores (`stores/`)
+Zustand state management. Most stores are domain-named and self-explanatory (vatsim, vnas, realTraffic, replay, weather, runway, airport, indexing, ui feedback, update, vr, measure, etc.). Browse `src/renderer/stores/` for the full list. A few deserve explicit mention because picking the wrong one is a real footgun:
 
-Zustand state management (18 stores):
-
-| Store | Purpose |
-|-------|---------|
-| `aircraftFilterStore.ts` | Search query, airport traffic filter |
-| `aircraftTimelineStore.ts` | Debug timeline modal state |
-| `airportStore.ts` | Current airport, tower height |
-| `datablockPositionStore.ts` | Label positioning (global + per-aircraft) |
-| `globalSettingsStore.ts` | Shared settings (Cesium token, MSFS paths, bookmarks) |
-| `indexingStore.ts` | MSFS model indexing progress |
-| `measureStore.ts` | Measuring tool state |
-| `realTrafficStore.ts` | RealTraffic connection state |
-| `replayStore.ts` | Replay buffer and playback state |
-| `runwayStore.ts` | Runway data for current airport |
-| `settingsStore.ts` | Local per-browser settings |
-| `uiFeedbackStore.ts` | Toasts and notifications |
-| `updateStore.ts` | App update availability |
-| `vatsimStore.ts` | VATSIM pilots, aircraft states |
-| `viewportStore.ts` | Viewport layout, camera state (primary camera store) |
-| `vnasStore.ts` | vNAS connection state |
-| `vrStore.ts` | WebXR VR session state |
-| `weatherStore.ts` | METAR data, fog density |
+- `viewportStore` — primary camera state for all viewports. There is no `cameraStore`.
+- `settingsStore` (per-browser) vs `globalSettingsStore` (shared across devices via Rust backend) — pick deliberately when adding settings; see "Adding a New Setting".
+- `remoteStatusStore` — observation freshness/health for remote-browser clients; updated by `useRemoteObservations`.
+- `towerPositioningStore` — wizard state for tower mod placement (model + camera steps).
+- `datablockPositionStore` — label positioning (global default + per-aircraft overrides).
 
 ## External Dependencies
 
@@ -404,9 +325,9 @@ if (version < 7) {
 
 ### Modifying Weather Effects
 
-1. METAR fetching: `weatherStore.ts`
-2. Weather service: `services/WeatherService.ts`
-3. Fog/cloud rendering: `useBabylonOverlay.ts`
+1. METAR fetching/parsing: `services/MetarService.ts`, `weatherStore.ts`
+2. Fog/cloud rendering: `useBabylonOverlay.ts`, `useBabylonWeather.ts`, `useCesiumWeather.ts`
+3. Smoothing: `useSmoothedWeather.ts`
 4. Settings: `settingsStore.ts` (fog/cloud toggles, intensity)
 
 ### Modifying Viewport System
