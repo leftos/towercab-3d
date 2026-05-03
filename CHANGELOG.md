@@ -2,7 +2,13 @@
 
 All notable changes to TowerCab 3D will be documented in this file.
 
-## [Unreleased]
+## [0.1.0-alpha] - 2026-05-03
+
+### Highlights
+- **Keyboard shortcut cheatsheet** — press `?` (or the new top-bar `?` button) to open a searchable list of every keyboard shortcut, mouse gesture, and `.NN` bookmark command.
+- **Refreshed visual identity** — new self-hosted Geist typeface across the UI (with slashed zeros so callsigns and ICAO codes don't blur 0/O), tighter modal corners, and a warmer taxiway-light amber.
+- **Tablet-friendly Nearby Aircraft panel** — collapses into a thin edge-dock strip on windows 1100px or narrower, so it stops covering the airport.
+- **Camera input axis inversion** — independently flip horizontal/vertical axes for mouse drag, touch drag, and keyboard arrows, with separate toggles for orbit mode and mouse-wheel zoom direction.
 
 ### Added
 - Keyboard shortcut cheatsheet — press `?` or click the new `?` button in the top bar to open a searchable list of every keyboard shortcut, mouse gesture, and `.NN` bookmark command. A one-time tip appears after loading your first airport.
