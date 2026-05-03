@@ -20,6 +20,13 @@ Only resort to WebSearch/WebFetch if Context7 doesn't have the information neede
 
 When told to "check the logs", read temp/console.log. It's likely it's quite big, so try not to read it all into context.
 
+## E2E testing via Playwright MCP
+
+The `playwright` MCP is configured in `.mcp.json`. To exercise the frontend end-to-end:
+1. Start headless dev server: `pnpm run vite:dev` (port 5173)
+2. Navigate, click "Skip for now" on the Cesium token prompt — airports load from GitHub independently of the token
+3. To reset a one-time UI flag (e.g. `keyboardCheatsheetDismissed`, `deviceOptimizationPromptDismissed`), mutate via `browser_evaluate`: read `localStorage.getItem('settings-store')`, edit `parsed.state.ui.<flag>`, write back, then `browser_navigate` to reload
+
 ## Development Commands
 
 ```bash
@@ -30,7 +37,7 @@ pnpm run serve        # Development: frontend only in browser (no Tauri, no mods
 pnpm run build        # Build for production without vNAS
 pnpm run build:vnas   # Build for production with vNAS (requires private repo access)
 pnpm run build:converter  # Build FSLTL converter executable (requires Python + PyInstaller)
-pnpm run vite:dev     # Frontend only (internal, used by Tauri)
+pnpm run vite:dev     # Frontend only, no browser open — use for headless Playwright/E2E (port 5173)
 pnpm run vite:build   # Build frontend only (internal, used by Tauri)
 ```
 
@@ -153,6 +160,12 @@ Zustand state management. Most stores are domain-named and self-explanatory (vat
 - `remoteStatusStore` — observation freshness/health for remote-browser clients; updated by `useRemoteObservations`.
 - `towerPositioningStore` — wizard state for tower mod placement (model + camera steps).
 - `datablockPositionStore` — label positioning (global default + per-aircraft overrides).
+
+### UI conventions (modals + cross-component triggers)
+
+- **Modals must register with the modal stack:** call `useUIFeedbackStore.pushModal()` on open and `popModal()` on close. App.tsx and other global keyboard handlers gate on `isInputBlocked()`, which returns true when any modal is open or `CommandInput` is active. New modals that skip this will let camera shortcuts fire under the modal.
+- **Cross-component UI triggers use a request/acknowledge pair on `uiFeedbackStore`** (e.g. `settingsOpenRequested` + `requestOpenSettings()` + `acknowledgeOpenSettings()`). Use this when a global handler (App.tsx) needs to drive state owned by another component (e.g. Settings modal lives in ControlsBar). Mirrors the existing `clearTerrainCacheRequested` pattern.
+- **No React Portals.** All modals mount inline; backdrops use `position: fixed` with `role="presentation"` + `onClick={onClose}` and a `// biome-ignore lint/a11y/noStaticElementInteractions: modal overlay backdrop` comment. See `SettingsModal.tsx:168-183` for the canonical Esc handler + modal-stack registration pattern.
 
 ## External Dependencies
 

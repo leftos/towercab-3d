@@ -194,31 +194,39 @@ function CommandInput() {
     }
   }, [isActive, inputBuffer, processCommand])
 
-  // Don't render if not active, no feedback, and no pending direction
-  if (!isActive && !feedback && !pendingDirection) {
+  const showIdleHint = !isActive && !feedback && !pendingDirection && Boolean(currentAirportIcao)
+
+  if (!isActive && !feedback && !pendingDirection && !currentAirportIcao) {
     return null
   }
 
   return (
-    <div className="command-input-container">
-      {isActive && (
-        <div className="command-input-bar">
-          <span className="command-prompt">&gt;</span>
-          <span className="command-text">{inputBuffer}</span>
-          <span className="command-cursor">_</span>
+    <>
+      <div className="command-input-container">
+        {isActive && (
+          <div className="command-input-bar">
+            <span className="command-prompt">&gt;</span>
+            <span className="command-text">{inputBuffer}</span>
+            <span className="command-cursor">_</span>
+          </div>
+        )}
+        {pendingDirection && (
+          <div className="command-input-bar datablock-mode">
+            <span className="command-prompt">Datablock</span>
+            <span className="command-text datablock-position">
+              {pendingDirection} ({POSITION_LABELS[pendingDirection]})
+            </span>
+            <span className="datablock-hint">Enter=All | Click=Aircraft | Esc=Cancel</span>
+          </div>
+        )}
+        {feedback && <div className={`command-feedback ${feedback.type}`}>{feedback.message}</div>}
+      </div>
+      {showIdleHint && (
+        <div className="command-idle-hint" aria-hidden="true">
+          Press <kbd>.</kbd> for commands · Press <kbd>?</kbd> for help
         </div>
       )}
-      {pendingDirection && (
-        <div className="command-input-bar datablock-mode">
-          <span className="command-prompt">Datablock</span>
-          <span className="command-text datablock-position">
-            {pendingDirection} ({POSITION_LABELS[pendingDirection]})
-          </span>
-          <span className="datablock-hint">Enter=All | Click=Aircraft | Esc=Cancel</span>
-        </div>
-      )}
-      {feedback && <div className={`command-feedback ${feedback.type}`}>{feedback.message}</div>}
-    </div>
+    </>
   )
 }
 

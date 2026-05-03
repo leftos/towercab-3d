@@ -39,10 +39,11 @@ const stdout = result.stdout?.toString() ?? ''
 const stderr = result.stderr?.toString() ?? ''
 
 if (result.status !== 0) {
-  // Surface the diagnostics to Claude on non-zero exit.
+  // Surface diagnostics to Claude. PostToolUse hooks must exit 2 — not 1 —
+  // to route stderr back to the model. Exit 1 is shown to the user only.
   if (stdout) process.stderr.write(stdout)
   if (stderr) process.stderr.write(stderr)
-  process.exit(1)
+  process.exit(2)
 }
 
 process.exit(0)

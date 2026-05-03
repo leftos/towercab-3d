@@ -79,3 +79,40 @@
   font-size: 12px;
   margin-left: auto;
 }
+
+.command-idle-hint {
+  position: fixed;
+  bottom: calc(var(--controls-h) + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-overlay);
+  border: 1px solid var(--white-a08);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  pointer-events: none;
+  z-index: 90;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.command-idle-hint kbd {
+  display: inline-block;
+  padding: 0 4px;
+  background: var(--white-a08);
+  border: 1px solid var(--white-a15);
+  border-radius: 2px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 800px) {
+  .command-idle-hint {
+    display: none;
+  }
+}

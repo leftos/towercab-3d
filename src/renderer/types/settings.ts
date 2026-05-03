@@ -922,6 +922,16 @@ export interface UISettings {
   deviceOptimizationPromptDismissed: boolean
 
   /**
+   * Whether the keyboard shortcut cheatsheet tip has been dismissed (default: false)
+   *
+   * After the user loads their first airport, a small one-time tip appears pointing
+   * at the `?` key / TopBar help button. This flag tracks dismissal so it doesn't
+   * show again. Set to true when the user opens the cheatsheet, dismisses the tip,
+   * or lets it auto-fade.
+   */
+  keyboardCheatsheetDismissed: boolean
+
+  /**
    * Aircraft panel width in pixels (180-500, default: 280)
    *
    * The width of the nearby aircraft list panel on the right side of the screen.
@@ -1913,6 +1923,7 @@ export const DEFAULT_SETTINGS: Omit<
     showMetarOverlay: false,
     askToContributePositions: true,
     deviceOptimizationPromptDismissed: false,
+    keyboardCheatsheetDismissed: false,
     aircraftPanelWidth: 280,
     aircraftPanelHeight: 0,
     settingsModalPosition: { x: 0, y: 0 },

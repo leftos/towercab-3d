@@ -27,6 +27,10 @@ interface UIFeedbackStore {
   clearTerrainCacheRequested: boolean
   requestClearTerrainCache: () => void
   acknowledgeClearTerrainCache: () => void
+  // Settings modal open request (handled by ControlsBar, which owns the modal)
+  settingsOpenRequested: boolean
+  requestOpenSettings: () => void
+  acknowledgeOpenSettings: () => void
 }
 
 let feedbackTimeout: ReturnType<typeof setTimeout> | null = null
@@ -65,4 +69,8 @@ export const useUIFeedbackStore = create<UIFeedbackStore>((set, get) => ({
   clearTerrainCacheRequested: false,
   requestClearTerrainCache: () => set({ clearTerrainCacheRequested: true }),
   acknowledgeClearTerrainCache: () => set({ clearTerrainCacheRequested: false }),
+  // Settings modal open
+  settingsOpenRequested: false,
+  requestOpenSettings: () => set({ settingsOpenRequested: true }),
+  acknowledgeOpenSettings: () => set({ settingsOpenRequested: false }),
 }))

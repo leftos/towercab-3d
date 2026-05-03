@@ -33,9 +33,10 @@ function getCardinalDirection(heading: number): string {
 
 interface TopBarProps {
   onCommandClick?: () => void
+  onHelpClick?: () => void
 }
 
-function TopBar({ onCommandClick }: TopBarProps) {
+function TopBar({ onCommandClick, onHelpClick }: TopBarProps) {
   const currentAirport = useAirportStore((state) => state.currentAirport)
   const setAirportSelectorOpen = useAirportStore((state) => state.setAirportSelectorOpen)
   const heading = useViewportStore((state) => state.getActiveCameraState().heading)
@@ -125,6 +126,11 @@ function TopBar({ onCommandClick }: TopBarProps) {
       </div>
 
       <div className="top-bar-right">
+        {onHelpClick && (
+          <button type="button" className="help-button" onClick={onHelpClick} title="Keyboard shortcuts (?)">
+            ?
+          </button>
+        )}
         {/* Remote clients indicator - always shown on desktop when clients connected */}
         <RemoteClientsIndicator />
         {/* Status info and remote indicator - hidden on mobile (shown in flyout) and remote mode */}

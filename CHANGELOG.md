@@ -5,6 +5,10 @@ All notable changes to TowerCab 3D will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Keyboard shortcut cheatsheet — press `?` or click the new `?` button in the top bar to open a searchable list of every keyboard shortcut, mouse gesture, and `.NN` bookmark command. A one-time tip appears after loading your first airport.
+- `Ctrl+,` opens Settings (matches the convention used by VS Code and most desktop apps).
+- ControlsBar buttons now show keyboard-shortcut hints in their hover tooltips (e.g., "Settings (Ctrl+,)", "Bookmark Manager (Ctrl+B)") so power-user shortcuts are discoverable without consulting the docs.
+- A subtle hint above the bottom controls reminds you of the `.` command prefix and the `?` cheatsheet shortcut while an airport is selected.
 - Camera input axis inversion settings — independently flip horizontal/vertical axes for mouse drag, touch drag, and keyboard arrow keys, with separate toggles for orbit follow mode and an option to invert mouse-wheel zoom direction. Configure under Settings > Controls > Camera > Invert Axes.
 
 ### Fixed

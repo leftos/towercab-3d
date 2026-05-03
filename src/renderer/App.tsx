@@ -8,6 +8,8 @@ import CommandInput from './components/UI/CommandInput'
 import ControlsBar from './components/UI/ControlsBar'
 import DataLoadingOverlay from './components/UI/DataLoadingOverlay'
 import DeviceOptimizationPrompt from './components/UI/DeviceOptimizationPrompt'
+import KeyboardCheatsheet from './components/UI/KeyboardCheatsheet'
+import KeyboardCheatsheetTip from './components/UI/KeyboardCheatsheetTip'
 import LoadingScreen, { type LoadingProgress, type LoadingStep } from './components/UI/LoadingScreen'
 import MagnificationIndicator from './components/UI/MagnificationIndicator'
 import MeasuringTool from './components/UI/MeasuringTool'
@@ -143,6 +145,13 @@ function App() {
 
   // Touch command modal state (opened from TopBar's MobileToolsFlyout)
   const [showTouchCommand, setShowTouchCommand] = useState(false)
+
+  // Keyboard cheatsheet modal state (opened via `?` key or TopBar help button)
+  const [showCheatsheet, setShowCheatsheet] = useState(false)
+  const openCheatsheet = useCallback(() => {
+    updateUISettings({ keyboardCheatsheetDismissed: true })
+    setShowCheatsheet(true)
+  }, [updateUISettings])
 
   // Connect to presence WebSocket in remote mode (registers this client with the server)
   usePresenceWebSocket()
@@ -552,6 +561,12 @@ function App() {
       } else if (e.key === 'F4') {
         e.preventDefault()
         toggleTimelineDebugModal()
+      } else if (e.key === '?') {
+        e.preventDefault()
+        openCheatsheet()
+      } else if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+        e.preventDefault()
+        useUIFeedbackStore.getState().requestOpenSettings()
       } else if (e.ctrlKey && e.key.toLowerCase() === 'm') {
         e.preventDefault()
         updateUISettings({ showMetarOverlay: !showMetarOverlay })
@@ -585,6 +600,7 @@ function App() {
     togglePerformanceHUD,
     toggleModelMatchingModal,
     toggleTimelineDebugModal,
+    openCheatsheet,
   ])
 
   if (isLoading) {
@@ -597,7 +613,7 @@ function App() {
       <VRScene cesiumViewer={cesiumViewer} />
 
       {/* Hide normal UI when VR is active */}
-      {!isVRActive && <TopBar onCommandClick={() => setShowTouchCommand(true)} />}
+      {!isVRActive && <TopBar onCommandClick={() => setShowTouchCommand(true)} onHelpClick={openCheatsheet} />}
       {!isVRActive && <UpdateNotification />}
       {!isVRActive && <MetarOverlay />}
       {!isVRActive && <MagnificationIndicator />}
@@ -636,6 +652,10 @@ function App() {
 
       {/* Device Optimization Prompt for touch devices */}
       {!isVRActive && <DeviceOptimizationPrompt />}
+
+      {/* Keyboard cheatsheet (? key or TopBar help button) */}
+      {!isVRActive && <KeyboardCheatsheet isOpen={showCheatsheet} onClose={() => setShowCheatsheet(false)} />}
+      {!isVRActive && <KeyboardCheatsheetTip onShow={openCheatsheet} />}
     </div>
   )
 }

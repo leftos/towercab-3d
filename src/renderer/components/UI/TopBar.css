@@ -77,6 +77,33 @@
   color: var(--text-tertiary);
 }
 
+.help-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: var(--white-a08);
+  border: 1px solid var(--white-a15);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.help-button:hover {
+  background: var(--white-a15);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .zulu-time {
   font-family: var(--font-mono);
   font-size: 20px;

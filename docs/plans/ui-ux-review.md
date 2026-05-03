@@ -69,16 +69,17 @@ The following features have no discoverable surface:
 
 ### Tasks
 
-- [ ] Build a `?`-key cheatsheet overlay component (`KeyboardCheatsheet.tsx`)
+- [x] Build a `?`-key cheatsheet overlay component (`KeyboardCheatsheet.tsx`)
   - Lists every keyboard shortcut with action description
   - Documents `.NN` command grammar with examples
   - Documents globe gestures (mouse + touch)
   - Triggered by `?` key, dismissible by `Esc` or click-outside
   - Search/filter input at top for quick lookup
-- [ ] Add `?` button to TopBar (right side) that opens the cheatsheet
-- [ ] Add tooltips with keyboard shortcut hints to ControlsBar buttons (currently buttons hide their label below 1200px in `ControlsBar.css:1242-1244` with no tooltip fallback — users see only icons)
-- [ ] Add empty-state hint to CommandInput: "Type `.` for commands · Press `?` for help"
-- [ ] First-launch toast: "Press `?` to see keyboard shortcuts" (one-time, dismissible, stored in settings)
+- [x] Add `?` button to TopBar (right side) that opens the cheatsheet
+- [x] Add tooltips with keyboard shortcut hints to ControlsBar buttons (currently buttons hide their label below 1200px in `ControlsBar.css:1242-1244` with no tooltip fallback — users see only icons)
+- [x] Add empty-state hint to CommandInput: "Type `.` for commands · Press `?` for help"
+- [x] First-launch toast: "Press `?` to see keyboard shortcuts" (one-time, dismissible, stored in settings)
+- [x] Bind `Ctrl+,` to open Settings (added during tooltip work — fills idiomatic gap)
 
 ### Out of scope for this phase
 

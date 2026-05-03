@@ -431,7 +431,7 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
     }),
     {
       name: 'settings-store',
-      version: 33,
+      version: 34,
       migrate: (persistedState: unknown, version: number) => {
         // biome-ignore lint/suspicious/noExplicitAny: migration handles arbitrary persisted state
         let state: any = persistedState
@@ -719,6 +719,8 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
       askToContributePositions: oldSettings.askToContributePositions ?? DEFAULT_SETTINGS.ui.askToContributePositions,
       deviceOptimizationPromptDismissed:
         oldSettings.deviceOptimizationPromptDismissed ?? DEFAULT_SETTINGS.ui.deviceOptimizationPromptDismissed,
+      keyboardCheatsheetDismissed:
+        oldSettings.keyboardCheatsheetDismissed ?? DEFAULT_SETTINGS.ui.keyboardCheatsheetDismissed,
       aircraftPanelWidth: oldSettings.aircraftPanelWidth ?? DEFAULT_SETTINGS.ui.aircraftPanelWidth,
       aircraftPanelHeight: oldSettings.aircraftPanelHeight ?? DEFAULT_SETTINGS.ui.aircraftPanelHeight,
       settingsModalPosition: oldSettings.settingsModalPosition ?? DEFAULT_SETTINGS.ui.settingsModalPosition,

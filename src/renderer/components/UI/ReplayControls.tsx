@@ -135,7 +135,7 @@ function ReplayControls({ onSettingsClick }: ReplayControlsProps) {
           className="timeline-btn step-btn"
           onClick={stepBackward}
           disabled={!hasSnapshots || isImported || (!isLive && currentIndex === 0)}
-          title="Step backward (15s)"
+          title="Step backward 15s (←)"
         >
           <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16">
             <path fill="currentColor" d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
@@ -147,7 +147,7 @@ function ReplayControls({ onSettingsClick }: ReplayControlsProps) {
           className="timeline-btn play-btn"
           onClick={handlePlayPause}
           disabled={!hasSnapshots}
-          title={isPlaying ? 'Pause' : 'Play'}
+          title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
         >
           {isPlaying ? (
             <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
@@ -165,7 +165,7 @@ function ReplayControls({ onSettingsClick }: ReplayControlsProps) {
           className="timeline-btn step-btn"
           onClick={stepForward}
           disabled={!hasSnapshots || isImported || isLive || currentIndex >= activeSnapshots.length - 1}
-          title="Step forward (15s)"
+          title="Step forward 15s (→)"
         >
           <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16">
             <path fill="currentColor" d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
@@ -212,6 +212,7 @@ function ReplayControls({ onSettingsClick }: ReplayControlsProps) {
               className={`speed-btn ${playbackSpeed === speed ? 'active' : ''}`}
               onClick={() => handleSpeedChange(speed as PlaybackSpeed)}
               disabled={isLive}
+              title={`${speed}× playback speed`}
             >
               {speed}x
             </button>
@@ -222,7 +223,7 @@ function ReplayControls({ onSettingsClick }: ReplayControlsProps) {
           LIVE
         </button>
 
-        <button type="button" className="control-button" onClick={onSettingsClick} title="Settings">
+        <button type="button" className="control-button" onClick={onSettingsClick} title="Settings (Ctrl+,)">
           <svg
             aria-hidden="true"
             width="18"

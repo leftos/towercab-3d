@@ -87,6 +87,15 @@ function ControlsBar() {
   const deselectAirport = useAirportStore((state) => state.deselectAirport)
   const pushModal = useUIFeedbackStore((state) => state.pushModal)
   const popModal = useUIFeedbackStore((state) => state.popModal)
+  const settingsOpenRequested = useUIFeedbackStore((state) => state.settingsOpenRequested)
+  const acknowledgeOpenSettings = useUIFeedbackStore((state) => state.acknowledgeOpenSettings)
+
+  useEffect(() => {
+    if (settingsOpenRequested) {
+      setShowSettings(true)
+      acknowledgeOpenSettings()
+    }
+  }, [settingsOpenRequested, acknowledgeOpenSettings])
 
   // Determine if we have a valid reference point (airport or orbit-following)
   const hasReference = hasViewingContext(currentAirport, followMode, followingCallsign)
@@ -510,7 +519,7 @@ function ControlsBar() {
                   type="button"
                   className={`control-button ${showDefaultsDropdown ? 'active' : ''} ${defaultSaved || defaultLoaded ? 'success' : ''}`}
                   onClick={() => setShowDefaultsDropdown(!showDefaultsDropdown)}
-                  title="Default View Options"
+                  title="Default View Options — Shift+click items to access tower-position presets"
                   disabled={!currentAirport}
                 >
                   <svg
@@ -534,6 +543,7 @@ function ControlsBar() {
                     <button
                       type="button"
                       className="defaults-dropdown-item"
+                      title="Save current camera as default for this airport"
                       onClick={(e) => {
                         handleSaveAsDefault(e)
                         setShowDefaultsDropdown(false)
@@ -544,6 +554,7 @@ function ControlsBar() {
                     <button
                       type="button"
                       className={`defaults-dropdown-item ${!hasCustomDefault() && !shiftPressed ? 'disabled' : ''}`}
+                      title="Restore saved default view (Home key)"
                       onClick={(e) => {
                         if (hasCustomDefault() || shiftPressed) {
                           handleResetToDefault(e)
@@ -609,7 +620,13 @@ function ControlsBar() {
                     </div>
                     <div className="runway-dropdown-list">
                       {runwayThresholds.map((item) => (
-                        <button type="button" key={item.id} className="runway-dropdown-item" onClick={item.onClick}>
+                        <button
+                          type="button"
+                          key={item.id}
+                          className="runway-dropdown-item"
+                          title={`Look at runway ${item.label}`}
+                          onClick={item.onClick}
+                        >
                           {item.label}
                         </button>
                       ))}
@@ -730,7 +747,7 @@ function ControlsBar() {
                 type="button"
                 className="control-button hide-on-mobile"
                 onClick={() => setShowBookmarkModal(!showBookmarkModal)}
-                title="Bookmark Manager (Ctrl+B)"
+                title="Bookmark Manager (Ctrl+B) — type . for command grammar"
                 disabled={!currentAirport}
               >
                 <svg
@@ -865,7 +882,7 @@ function ControlsBar() {
                 type="button"
                 className="control-button"
                 onClick={() => setShowSettings(!showSettings)}
-                title="Settings"
+                title="Settings (Ctrl+,)"
               >
                 <svg
                   aria-hidden="true"

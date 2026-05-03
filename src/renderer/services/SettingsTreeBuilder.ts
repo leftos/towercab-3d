@@ -171,7 +171,7 @@ export const SUBCATEGORY_MAPPINGS: Record<string, Record<string, { label: string
     },
     prompts: {
       label: 'Prompts',
-      properties: ['askToContributePositions', 'deviceOptimizationPromptDismissed'],
+      properties: ['askToContributePositions', 'deviceOptimizationPromptDismissed', 'keyboardCheatsheetDismissed'],
     },
   },
   fsltl: {
