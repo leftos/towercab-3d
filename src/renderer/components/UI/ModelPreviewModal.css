@@ -11,7 +11,7 @@
 
 .model-preview-modal {
   background: #1e1e1e;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   width: 600px;
   height: 500px;
   display: flex;

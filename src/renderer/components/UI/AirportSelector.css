@@ -16,7 +16,7 @@
 .airport-selector {
   background: var(--bg-panel-strong);
   border: 1px solid var(--white-a15);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   width: 500px;
   max-width: 90vw;
   max-height: calc(100vh - 80px);

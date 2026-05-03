@@ -83,7 +83,7 @@
 }
 
 .mod-path {
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-size: 0.8em;
   color: #a0a0a0;
   word-break: break-all;
@@ -101,7 +101,7 @@
 }
 
 .mod-position {
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-size: 0.9em;
 }
 
@@ -112,7 +112,7 @@
 
 .vmr-file {
   display: block;
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-size: 0.85em;
   word-break: break-all;
 }
@@ -128,7 +128,7 @@
 }
 
 .error-path {
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-size: 0.9em;
   word-break: break-all;
 }
@@ -211,7 +211,7 @@
 
 .update-repo-name {
   font-weight: 500;
-  font-family: monospace;
+  font-family: var(--font-mono);
 }
 
 .update-status {

@@ -145,7 +145,7 @@
 .settings-modal {
   background: var(--bg-panel-strong);
   border: 1px solid var(--white-a15);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   width: 736px;
   max-width: 90vw;
   max-height: 80vh;
@@ -959,7 +959,7 @@
 .exit-confirm-modal {
   background: var(--bg-panel-strong);
   border: 1px solid var(--white-a15);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 24px;
   min-width: 300px;
   max-width: 90vw;
@@ -1021,7 +1021,7 @@
 .restart-dialog {
   background: var(--bg-panel-strong);
   border: 1px solid var(--white-a15);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 24px;
   min-width: 300px;
   max-width: 90vw;

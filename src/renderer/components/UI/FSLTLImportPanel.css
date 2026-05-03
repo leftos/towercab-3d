@@ -195,7 +195,7 @@
 .fsltl-progress-current {
   font-size: 11px;
   color: var(--text-tertiary);
-  font-family: monospace;
+  font-family: var(--font-mono);
 }
 
 .fsltl-cancel-button {

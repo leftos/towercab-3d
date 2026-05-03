@@ -14,7 +14,7 @@
 .token-prompt-modal {
   background: var(--bg-panel-strong);
   border: 1px solid var(--white-a10);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   padding: 24px;
   max-width: 520px;
   width: 90%;

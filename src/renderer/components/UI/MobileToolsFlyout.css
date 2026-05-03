@@ -71,7 +71,7 @@
   right: 0;
   background: var(--bg-panel);
   border: 1px solid var(--white-a15);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 12px;
   min-width: 140px;
   backdrop-filter: var(--blur);

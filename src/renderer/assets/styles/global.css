@@ -3,6 +3,24 @@
 /* TowerCab 3D is intentionally dark-only. We do not honour `prefers-color-scheme: light` —
    air-traffic tooling is used in dim cabs and a light theme would wash out the globe. */
 
+/* Self-hosted variable fonts. Source files live in src/renderer/public/fonts/ and were
+   extracted from the `geist` npm package (devDependency, OFL — see public/fonts/OFL.txt).
+   Tauri runs offline; CDN fonts are not viable. */
+@font-face {
+  font-family: "Geist";
+  src: url("/fonts/Geist-Variable.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("/fonts/GeistMono-Variable.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   /* App backdrop */
   --bg-app: #0a0a0f;
@@ -28,7 +46,7 @@
 
   /* Accents */
   --accent: #4fc3f7;
-  --accent-warn: #ffb74d;
+  --accent-warn: #ffb300;
   --accent-danger: #ef5350;
   --accent-ok: #81c784;
   --accent-pending: #fff176;
@@ -43,17 +61,18 @@
   /* Radii */
   --radius-sm: 4px;
   --radius-md: 6px;
-  --radius-lg: 12px;
+  --radius-lg: 8px;
 
   /* Effects */
   --blur: blur(10px);
   --blur-strong: blur(12px);
 
-  /* Fonts */
+  /* Fonts — Geist + Geist Mono self-hosted (see @font-face above). System stacks remain
+     as fallback in case the woff2 fails to load. */
   --font-sans:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans",
-    "Helvetica Neue", sans-serif;
-  --font-mono: "JetBrains Mono", "Fira Code", "Consolas", "Monaco", monospace;
+    "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans",
+    "Droid Sans", "Helvetica Neue", sans-serif;
+  --font-mono: "Geist Mono", "JetBrains Mono", "Fira Code", "Consolas", "Monaco", monospace;
 }
 
 * {
@@ -204,3 +223,24 @@ body {
   }
 }
 /* biome-ignore-end lint/complexity/noImportantStyles: required to override per-element animation/transition declarations under prefers-reduced-motion */
+
+/* Subtle film-grain texture across the entire viewport. The SVG turbulence is inlined
+   so there's no extra HTTP request. soft-light blend at ~2.5% opacity adds analog
+   character without colour shifting the satellite imagery underneath. Pointer events
+   pass through; gated by the OS-level reduced-transparency / increased-contrast prefs. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.7 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  opacity: 0.025;
+  mix-blend-mode: soft-light;
+}
+
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  body::after {
+    display: none;
+  }
+}

@@ -100,7 +100,7 @@
 }
 
 .airport-icao {
-  font-family: "Consolas", "Monaco", monospace;
+  font-family: var(--font-mono);
   font-weight: 600;
   color: var(--accent);
   min-width: 50px;

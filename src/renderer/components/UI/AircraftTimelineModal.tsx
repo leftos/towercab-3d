@@ -192,7 +192,7 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
 
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)'
       ctx.fillStyle = 'rgba(255, 255, 255, 0.7)'
-      ctx.font = '10px monospace'
+      ctx.font = '10px "Geist Mono", monospace'
       ctx.textAlign = 'center'
 
       for (let t = firstTick; t <= endTime; t += tickIntervalMs) {
@@ -215,7 +215,7 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
         const nowX = LABEL_WIDTH + ((now - startTime) / 1000) * config.timeScale
         if (nowX >= LABEL_WIDTH && nowX <= width) {
           ctx.fillStyle = '#f44336'
-          ctx.font = 'bold 10px sans-serif'
+          ctx.font = 'bold 10px "Geist", sans-serif'
           ctx.textAlign = 'center'
           ctx.fillText('NOW', nowX, 12)
         }
@@ -226,7 +226,7 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
         const replayX = LABEL_WIDTH + ((replayTime - startTime) / 1000) * config.timeScale
         if (replayX >= LABEL_WIDTH && replayX <= width) {
           ctx.fillStyle = '#ce93d8' // Purple to match replay source color
-          ctx.font = 'bold 10px sans-serif'
+          ctx.font = 'bold 10px "Geist", sans-serif'
           ctx.fillText('REPLAY', replayX, 12)
         }
       }
@@ -270,7 +270,7 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
 
         // Callsign label with delay info
         ctx.fillStyle = '#4fc3f7'
-        ctx.font = '12px monospace'
+        ctx.font = '12px "Geist Mono", monospace'
         ctx.textAlign = 'left'
         ctx.textBaseline = 'middle'
         const parkedSuffix = timeline.metadata.isParked ? ' (P)' : ''

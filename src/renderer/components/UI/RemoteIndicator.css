@@ -75,7 +75,7 @@
 
 .remote-indicator__host {
   color: var(--text-tertiary);
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
 }
 

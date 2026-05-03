@@ -13,7 +13,7 @@
   font-weight: bold;
   cursor: pointer;
   z-index: 1000;
-  font-family: monospace;
+  font-family: var(--font-mono);
 }
 
 .vnas-panel-toggle:hover {
@@ -32,7 +32,7 @@
   color: #fff;
   font-size: 12px;
   z-index: 1000;
-  font-family: monospace;
+  font-family: var(--font-mono);
 }
 
 .vnas-panel-header {
@@ -131,7 +131,7 @@
   color: #fff;
   cursor: pointer;
   font-size: 11px;
-  font-family: monospace;
+  font-family: var(--font-mono);
 }
 
 .vnas-panel-button:hover:not(:disabled) {
@@ -180,7 +180,7 @@
   border-radius: 4px;
   color: #fff;
   font-size: 10px;
-  font-family: monospace;
+  font-family: var(--font-mono);
   box-sizing: border-box;
 }
 

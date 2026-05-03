@@ -77,10 +77,33 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, Error
 // This caches tiles at the HTTP layer, transparent to Cesium
 registerTileCacheServiceWorker()
 
-ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
-  <React.StrictMode>
-    <ErrorBoundary>
-      <App />
-    </ErrorBoundary>
-  </React.StrictMode>,
-)
+// Wait for self-hosted webfonts to be ready before mounting React. Babylon GUI labels
+// and AircraftTimelineModal canvas text render text via WebGL/canvas APIs, which do NOT
+// pick up CSS-loaded webfonts unless the FontFaceSet API has loaded them. Awaiting here
+// guarantees Geist + Geist Mono are available from the first paint. Falls back gracefully
+// on timeout so a corrupt font file can't block app boot.
+async function bootstrap() {
+  try {
+    await Promise.race([
+      Promise.all([
+        document.fonts.load('400 12px "Geist"'),
+        document.fonts.load('500 12px "Geist"'),
+        document.fonts.load('400 12px "Geist Mono"'),
+        document.fonts.load('700 12px "Geist Mono"'),
+      ]),
+      new Promise((resolve) => setTimeout(resolve, 1500)),
+    ])
+  } catch {
+    // System fallback stack will pick up — non-fatal
+  }
+
+  ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
+    <React.StrictMode>
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>
+    </React.StrictMode>,
+  )
+}
+
+bootstrap()

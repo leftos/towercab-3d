@@ -255,6 +255,6 @@
 }
 
 .tooltip-value {
-  font-family: "Consolas", "Monaco", "Courier New", monospace;
+  font-family: var(--font-mono);
   color: rgba(255, 255, 255, 0.9);
 }

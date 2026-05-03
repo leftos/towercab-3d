@@ -199,7 +199,7 @@
 .touch-command-modal {
   background: rgba(30, 30, 40, 0.95);
   border: 1px solid var(--white-a20);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   padding: 20px;
   width: 100%;
   max-width: 360px;
@@ -255,7 +255,7 @@
   color: rgba(79, 195, 247, 0.8);
   font-size: 18px;
   font-weight: bold;
-  font-family: monospace;
+  font-family: var(--font-mono);
 }
 
 .touch-command-input {
@@ -264,7 +264,7 @@
   border: none;
   color: white;
   font-size: 18px;
-  font-family: monospace;
+  font-family: var(--font-mono);
   padding: 12px 8px;
   outline: none;
 }
@@ -312,7 +312,7 @@
   border-radius: 6px;
   color: white;
   font-size: 14px;
-  font-family: monospace;
+  font-family: var(--font-mono);
   cursor: pointer;
 }
 
@@ -334,7 +334,7 @@
 
 .touch-command-help strong {
   color: rgba(79, 195, 247, 0.8);
-  font-family: monospace;
+  font-family: var(--font-mono);
 }
 
 /* Compact layout on landscape orientation on phones (too cramped) */

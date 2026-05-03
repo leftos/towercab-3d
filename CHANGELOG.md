@@ -12,9 +12,13 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Camera input axis inversion settings — independently flip horizontal/vertical axes for mouse drag, touch drag, and keyboard arrow keys, with separate toggles for orbit follow mode and an option to invert mouse-wheel zoom direction. Configure under Settings > Controls > Camera > Invert Axes.
 - The Nearby Aircraft panel now collapses into a thin edge-dock strip on tablet-sized windows (1100px or narrower) so it stops covering the airport. Tap the strip to expand. Drag the panel header to reposition it; pick which screen edge it docks to (Left or Right) under Settings > Aircraft & Labels > UI.
 - Animations now honour the OS "reduce motion" accessibility preference — pulses, slide-ins, and spinning indicators stay still when it is enabled.
+- Self-hosted Geist typeface (Geist Sans + Geist Mono) replaces the system font stack throughout the UI; slashed zeros prevent 0/O confusion in callsigns and ICAO codes.
+- Subtle film-grain texture across the app for a warmer ambient feel; honours the OS "reduce transparency" accessibility preference.
 
 ### Changed
 - The airport name stays visible (truncated) on very narrow windows instead of disappearing entirely below 600px, making it easier to confirm which airport is loaded on phones.
+- Modal and dialog corners are slightly tighter for a more sober instrument-panel feel.
+- The warning amber accent shifts to a saturated taxiway-light hue.
 
 ### Fixed
 - Aircraft cards in the Nearby Aircraft panel now fill the full panel width.

@@ -37,7 +37,7 @@
   background: var(--white-a10);
   border: 1px solid var(--white-a20);
   border-radius: 3px;
-  font-family: "Consolas", "Monaco", monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   color: rgba(255, 255, 255, 0.7);
   margin-right: 4px;
@@ -75,7 +75,7 @@
 }
 
 .bookmark-slot {
-  font-family: "Consolas", "Monaco", monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   font-weight: 600;
   color: var(--accent);
@@ -118,7 +118,7 @@
 }
 
 .bookmark-preview {
-  font-family: "Consolas", "Monaco", monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   color: rgba(255, 255, 255, 0.5);
   white-space: nowrap;

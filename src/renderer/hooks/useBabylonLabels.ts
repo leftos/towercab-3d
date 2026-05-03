@@ -354,7 +354,7 @@ export function useBabylonLabels(options: UseBabylonLabelsOptions): UseBabylonLa
         text.text = labelText || callsign
         text.color = rgbToHex(color.r, color.g, color.b)
         text.fontSize = fontSize
-        text.fontFamily = 'monospace'
+        text.fontFamily = '"Geist Mono", monospace'
         text.fontWeight = 'bold'
         text.textHorizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT
         text.resizeToFit = true
