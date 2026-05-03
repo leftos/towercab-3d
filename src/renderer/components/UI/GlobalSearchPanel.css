@@ -2,8 +2,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--white-a10);
+  border: 1px solid var(--white-a20);
   border-radius: 6px;
   padding: 6px 12px;
   color: rgba(255, 255, 255, 0.8);
@@ -13,8 +13,8 @@
 }
 
 .global-search-btn:hover {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.3);
+  background: var(--white-a15);
+  border-color: var(--white-a30);
 }
 
 .search-btn-text {
@@ -23,8 +23,8 @@
 
 .search-shortcut {
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.4);
-  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-muted);
+  background: var(--white-a10);
   padding: 2px 6px;
   border-radius: 3px;
 }
@@ -36,7 +36,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--bg-overlay);
   display: flex;
   justify-content: center;
   align-items: flex-start;
@@ -50,7 +50,7 @@
   max-width: 90vw;
   max-height: 70vh;
   background: rgba(25, 25, 35, 0.98);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid var(--white-a15);
   border-radius: 12px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
   display: flex;
@@ -64,11 +64,11 @@
   align-items: center;
   gap: 12px;
   padding: 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--white-a10);
 }
 
 .search-header svg {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-tertiary);
   flex-shrink: 0;
 }
 
@@ -82,7 +82,7 @@
 }
 
 .global-search-input::placeholder {
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--text-muted);
 }
 
 .close-search-btn {
@@ -91,16 +91,16 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--white-a10);
   border: none;
   border-radius: 4px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-tertiary);
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .close-search-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--white-a20);
   color: rgba(255, 255, 255, 0.8);
 }
 
@@ -114,7 +114,7 @@
 .search-hint,
 .no-results {
   text-align: center;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--text-muted);
   padding: 24px;
   font-size: 13px;
 }
@@ -125,7 +125,7 @@
   gap: 4px;
   width: 100%;
   padding: 12px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--white-a05);
   border: 1px solid transparent;
   border-radius: 8px;
   margin-bottom: 4px;
@@ -153,13 +153,13 @@
 .result-callsign {
   font-weight: 700;
   font-size: 14px;
-  color: #4fc3f7;
+  color: var(--accent);
 }
 
 .result-type {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
-  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-tertiary);
+  background: var(--white-a10);
   padding: 2px 6px;
   border-radius: 3px;
 }
@@ -178,8 +178,8 @@
 
 .result-info {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.4);
-  font-family: "Consolas", "Monaco", monospace;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
 }
 
 /* Search Footer */
@@ -189,7 +189,7 @@
   align-items: center;
   padding: 10px 16px;
   background: rgba(0, 0, 0, 0.2);
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--white-a10);
 }
 
 .search-footer .footer-left {
@@ -205,7 +205,7 @@
 
 .footer-hint {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--text-muted);
 }
 
 /* Data source badge */
@@ -227,9 +227,9 @@
 }
 
 .search-footer .data-source-badge.fallback {
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--white-a08);
+  color: var(--text-tertiary);
+  border: 1px solid var(--white-a15);
 }
 
 /* Live indicator dot next to callsign */
@@ -249,10 +249,10 @@
 }
 
 .search-results::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--white-a20);
   border-radius: 3px;
 }
 
 .search-results::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--white-a30);
 }

@@ -28,14 +28,14 @@
   justify-content: center;
   height: 100%;
   background: linear-gradient(135deg, #1a1a2f 0%, #0d0d15 100%);
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-tertiary);
   font-size: 12px;
   gap: 4px;
 }
 
 .inset-placeholder .placeholder-hint {
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--white-a30);
 }
 
 /* Add inset button */
@@ -51,7 +51,7 @@
   background: rgba(20, 20, 30, 0.9);
   border: 1px solid rgba(79, 195, 247, 0.4);
   border-radius: 6px;
-  color: #4fc3f7;
+  color: var(--accent);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -60,7 +60,7 @@
 
 .add-inset-button:hover {
   background: rgba(30, 35, 50, 0.95);
-  border-color: #4fc3f7;
+  border-color: var(--accent);
   box-shadow: 0 0 12px rgba(79, 195, 247, 0.3);
 }
 

@@ -46,8 +46,8 @@
   width: 40px;
   height: 40px;
   border-radius: 10px;
-  background: rgba(0, 0, 0, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-overlay);
+  border: 1px solid var(--white-a10);
   color: rgba(255, 255, 255, 0.8);
   display: flex;
   align-items: center;
@@ -69,12 +69,12 @@
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  background: rgba(20, 20, 30, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--bg-panel);
+  border: 1px solid var(--white-a15);
   border-radius: 12px;
   padding: 12px;
   min-width: 140px;
-  backdrop-filter: blur(10px);
+  backdrop-filter: var(--blur);
   animation: slideIn 0.15s ease-out;
   z-index: 200;
 }
@@ -103,7 +103,7 @@
   align-items: center;
   gap: 10px;
   padding: 6px 8px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--white-a05);
   border-radius: 6px;
 }
 
@@ -179,7 +179,7 @@
 /* Divider between status and tools */
 .mobile-tools-divider {
   height: 1px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--white-a10);
   margin: 8px 0;
 }
 
@@ -196,8 +196,8 @@
   gap: 10px;
   width: 100%;
   padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--white-a08);
+  border: 1px solid var(--white-a10);
   border-radius: 8px;
   color: rgba(255, 255, 255, 0.9);
   font-size: 13px;
@@ -208,7 +208,7 @@
 
 .mobile-tool-btn:hover {
   background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: var(--white-a20);
 }
 
 .mobile-tool-btn:active {
@@ -221,7 +221,7 @@
   font-weight: bold;
   width: 16px;
   text-align: center;
-  color: #4fc3f7;
+  color: var(--accent);
 }
 
 /* Compact layout for landscape phones */

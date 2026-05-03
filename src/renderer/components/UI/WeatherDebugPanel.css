@@ -38,7 +38,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 6px 10px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--white-a10);
   border-bottom: 1px solid #444;
   border-radius: 6px 6px 0 0;
 }
@@ -286,7 +286,7 @@
 .weather-debug-hint {
   margin-top: 8px;
   padding: 8px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--white-a05);
   border-radius: 3px;
   color: #888;
   font-size: 11px;

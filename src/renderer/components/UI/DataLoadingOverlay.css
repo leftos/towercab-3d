@@ -16,7 +16,7 @@
 .data-loading-spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.2);
+  border: 2px solid var(--white-a20);
   border-top-color: #60a5fa;
   border-radius: 50%;
   animation: data-loading-spin 1s linear infinite;

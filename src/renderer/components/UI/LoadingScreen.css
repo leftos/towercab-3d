@@ -32,7 +32,7 @@
 /* Progress bar fill */
 .loading-progress-bar {
   height: 100%;
-  background: linear-gradient(90deg, #4fc3f7 0%, #29b6f6 50%, #4fc3f7 100%);
+  background: linear-gradient(90deg, var(--accent) 0%, #29b6f6 50%, var(--accent) 100%);
   background-size: 200% 100%;
   border-radius: 3px;
   transition: width 0.3s ease-out;
@@ -58,13 +58,13 @@
 }
 
 .loading-percentage {
-  color: #4fc3f7;
+  color: var(--accent);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
 .loading-step-count {
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--text-muted);
 }
 
 /* Status text */

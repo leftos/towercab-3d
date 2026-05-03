@@ -34,11 +34,11 @@
 
 /* Inactive state - subtle border */
 .viewport-container.inactive {
-  border-color: rgba(255, 255, 255, 0.1);
+  border-color: var(--white-a10);
 }
 
 .viewport-container.inactive.inset {
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: var(--white-a20);
 }
 
 /* Content area fills the container */
@@ -63,7 +63,7 @@
   z-index: 10;
   cursor: move;
   user-select: none;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--white-a10);
 }
 
 .viewport-container.active .viewport-header {
@@ -74,7 +74,7 @@
 .viewport-label {
   font-size: 12px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
