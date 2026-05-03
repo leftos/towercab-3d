@@ -18,12 +18,12 @@
   flex-direction: column;
   overflow: hidden;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--white-a10);
 }
 
 .model-preview-header {
   padding: 15px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--white-a10);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -62,7 +62,7 @@
 }
 
 .model-preview-header .close-button:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--white-a10);
   color: #ffffff;
 }
 
@@ -103,7 +103,7 @@
   width: 40px;
   height: 40px;
   border: 3px solid rgba(79, 195, 247, 0.3);
-  border-top-color: #4fc3f7;
+  border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -143,7 +143,7 @@
 }
 
 .model-preview-error .error-close-button {
-  background: #4fc3f7;
+  background: var(--accent);
   border: none;
   color: #ffffff;
   font-size: 14px;

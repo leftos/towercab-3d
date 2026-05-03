@@ -2,13 +2,13 @@
  * Settings Tree View Styles
  *
  * A hierarchical tree view with tri-state checkboxes for the Export/Import Wizard.
- * Uses the app's dark theme with cyan (#4fc3f7) accent color.
+ * Uses the app's dark theme with cyan (var(--accent)) accent color.
  */
 
 /* Tree container */
 .settings-tree-view {
   background: rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--white-a10);
   border-radius: 6px;
   overflow: hidden;
 }
@@ -19,7 +19,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 8px 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--white-a10);
   background: rgba(0, 0, 0, 0.2);
 }
 
@@ -35,8 +35,8 @@
 }
 
 .tree-toolbar-btn {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--white-a10);
+  border: 1px solid var(--white-a15);
   border-radius: 4px;
   padding: 4px 10px;
   font-size: 11px;
@@ -46,7 +46,7 @@
 }
 
 .tree-toolbar-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--white-a15);
   border-color: rgba(255, 255, 255, 0.25);
 }
 
@@ -65,7 +65,7 @@
 .tree-toolbar-separator {
   width: 1px;
   height: 16px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--white-a10);
   margin: 0 4px;
 }
 
@@ -90,7 +90,7 @@
 }
 
 .tree-node-header:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--white-a05);
 }
 
 /* Chevron for expand/collapse */
@@ -137,8 +137,8 @@
 }
 
 .tri-checkbox.checked {
-  background: #4fc3f7;
-  border-color: #4fc3f7;
+  background: var(--accent);
+  border-color: var(--accent);
 }
 
 .tri-checkbox.checked svg {
@@ -147,11 +147,11 @@
 
 .tri-checkbox.indeterminate {
   background: rgba(79, 195, 247, 0.4);
-  border-color: #4fc3f7;
+  border-color: var(--accent);
 }
 
 .tri-checkbox.indeterminate svg {
-  stroke: #4fc3f7;
+  stroke: var(--accent);
 }
 
 /* Node label */
@@ -166,7 +166,7 @@
 
 .tree-node-label.category {
   font-weight: 600;
-  color: #4fc3f7;
+  color: var(--accent);
 }
 
 /* Setting count */
@@ -214,7 +214,7 @@
 }
 
 .tree-content::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--white-a15);
   border-radius: 4px;
 }
 
@@ -238,7 +238,7 @@
 
 /* Category separator lines */
 .tree-node[data-depth="0"] + .tree-node[data-depth="0"] {
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--white-a05);
 }
 
 /* Highlight effect for hover on deeper levels */

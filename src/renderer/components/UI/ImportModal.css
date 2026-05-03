@@ -50,8 +50,8 @@
 }
 
 .selection-buttons button {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--white-a10);
+  border: 1px solid var(--white-a20);
   border-radius: 4px;
   padding: 4px 10px;
   font-size: 12px;
@@ -61,15 +61,15 @@
 }
 
 .selection-buttons button:hover {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.3);
+  background: var(--white-a15);
+  border-color: var(--white-a30);
 }
 
 .airport-list {
   max-height: 200px;
   overflow-y: auto;
   background: rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--white-a10);
   border-radius: 6px;
   padding: 8px;
 }
@@ -86,7 +86,7 @@
 }
 
 .airport-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--white-a05);
 }
 
 .airport-item:last-child {
@@ -102,7 +102,7 @@
 .airport-icao {
   font-family: "Consolas", "Monaco", monospace;
   font-weight: 600;
-  color: #4fc3f7;
+  color: var(--accent);
   min-width: 50px;
 }
 
@@ -142,13 +142,13 @@
   gap: 12px;
   margin-top: 20px;
   padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--white-a10);
 }
 
 .import-actions .control-button.primary {
   background: rgba(79, 195, 247, 0.2);
-  border-color: #4fc3f7;
-  color: #4fc3f7;
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .import-actions .control-button.primary:hover {
@@ -179,7 +179,7 @@
 
 .export-summary {
   background: rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--white-a10);
   border-radius: 6px;
   padding: 16px;
   margin-bottom: 16px;
@@ -189,7 +189,7 @@
   display: flex;
   justify-content: space-between;
   padding: 8px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--white-a05);
   font-size: 13px;
 }
 

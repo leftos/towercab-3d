@@ -26,7 +26,7 @@
   gap: 16px;
   padding: 8px 20px;
   background: rgba(0, 0, 0, 0.2);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--white-a10);
   font-size: 12px;
   color: rgba(255, 255, 255, 0.5);
 }
@@ -34,8 +34,8 @@
 .bookmark-keyboard-hints kbd {
   display: inline-block;
   padding: 2px 6px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--white-a10);
+  border: 1px solid var(--white-a20);
   border-radius: 3px;
   font-family: "Consolas", "Monaco", monospace;
   font-size: 11px;
@@ -58,7 +58,7 @@
 }
 
 .bookmark-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--white-a05);
 }
 
 .bookmark-item.selected {
@@ -78,7 +78,7 @@
   font-family: "Consolas", "Monaco", monospace;
   font-size: 13px;
   font-weight: 600;
-  color: #4fc3f7;
+  color: var(--accent);
   min-width: 32px;
 }
 
@@ -105,7 +105,7 @@
   flex: 1;
   min-width: 120px;
   background: rgba(0, 0, 0, 0.3);
-  border: 1px solid #4fc3f7;
+  border: 1px solid var(--accent);
   border-radius: 4px;
   padding: 4px 8px;
   font-size: 13px;
@@ -142,7 +142,7 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--white-a10);
   border: none;
   border-radius: 4px;
   color: rgba(255, 255, 255, 0.7);
@@ -151,7 +151,7 @@
 }
 
 .bookmark-action-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--white-a20);
   color: white;
 }
 

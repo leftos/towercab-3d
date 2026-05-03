@@ -7,7 +7,7 @@
 .model-matching-summary {
   padding: 12px 20px;
   background: rgba(0, 0, 0, 0.2);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--white-a10);
   font-size: 13px;
   color: rgba(255, 255, 255, 0.7);
 }
@@ -30,7 +30,7 @@
   background: rgba(0, 0, 0, 0.3);
   color: rgba(255, 255, 255, 0.8);
   font-weight: 600;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  border-bottom: 1px solid var(--white-a15);
   position: sticky;
   top: 0;
 }
@@ -42,7 +42,7 @@
 
 .model-matching-table td {
   padding: 8px 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--white-a05);
   color: rgba(255, 255, 255, 0.9);
 }
 
@@ -51,18 +51,18 @@
 }
 
 .model-matching-table .callsign {
-  font-family: "Consolas", "Monaco", monospace;
+  font-family: var(--font-mono);
   font-weight: 600;
-  color: #4fc3f7;
+  color: var(--accent);
 }
 
 .model-matching-table .type-code {
-  font-family: "Consolas", "Monaco", monospace;
+  font-family: var(--font-mono);
   color: rgba(255, 255, 255, 0.9);
 }
 
 .model-matching-table .model-name {
-  font-family: "Consolas", "Monaco", monospace;
+  font-family: var(--font-mono);
   color: rgba(255, 255, 255, 0.7);
 }
 
@@ -73,7 +73,7 @@
 }
 
 .model-matching-table .scale-value {
-  font-family: "Consolas", "Monaco", monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   color: rgba(255, 255, 255, 0.6);
 }
@@ -145,7 +145,7 @@
 .model-test-panel {
   padding: 12px 20px;
   background: rgba(0, 0, 0, 0.15);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--white-a10);
 }
 
 .model-test-inputs {
@@ -158,10 +158,10 @@
   width: 100px;
   padding: 6px 10px;
   background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--white-a20);
   border-radius: 4px;
   color: white;
-  font-family: "Consolas", "Monaco", monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   text-transform: uppercase;
 }
@@ -181,7 +181,7 @@
   background: rgba(79, 195, 247, 0.2);
   border: 1px solid rgba(79, 195, 247, 0.4);
   border-radius: 4px;
-  color: #4fc3f7;
+  color: var(--accent);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -234,7 +234,7 @@
 }
 
 .model-test-value {
-  font-family: "Consolas", "Monaco", monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   color: rgba(255, 255, 255, 0.9);
 }
