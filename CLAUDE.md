@@ -383,15 +383,9 @@ All three files must have matching version numbers. The Tauri build uses these t
 
 The `release.yml` workflow will automatically build and upload the installer to the GitHub release.
 
-### Using the Release Manager Agent
+### Using the prepare-release skill
 
-When the user requests a release, use the `release-manager` agent with clear instructions to complete the entire process without stopping for confirmation:
-
-```
-Release vX.X.X-alpha. Complete the entire release process without stopping for confirmation - the user has already approved this release.
-```
-
-Do not stop to ask "Would you like me to proceed?" - the user's request to release is the approval.
+When the user requests a release, invoke the `prepare-release` skill (`.claude/skills/prepare-release/SKILL.md`). It walks through the version bump, CHANGELOG promotion, pre-release checks, signed build, commit/tag/push, and post-release notes editing — pausing for explicit user approval at the draft-review checkpoint before any push. The skill is interactive by design; the user signals approval in conversation, not by re-issuing a command.
 
 ## Preserving Agent Output
 
