@@ -80,3 +80,4 @@ src-tauri/resources/airport-surfaces.debug.json
 
 # Claude temporary files
 tmpclaude*
+.claude/scheduled_tasks.lock
