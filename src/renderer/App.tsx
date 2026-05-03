@@ -2,6 +2,7 @@ import { Ion, type Viewer } from 'cesium'
 import { useCallback, useEffect, useState } from 'react'
 import CesiumViewer from './components/CesiumViewer/CesiumViewer'
 import AircraftPanel from './components/UI/AircraftPanel'
+import AircraftPanelDock from './components/UI/AircraftPanelDock'
 import AircraftTimelineModal from './components/UI/AircraftTimelineModal'
 import AirportSelector from './components/UI/AirportSelector'
 import CommandInput from './components/UI/CommandInput'
@@ -32,6 +33,7 @@ import { useAirportSyncListener } from './hooks/useAirportSyncListener'
 import { usePresenceWebSocket } from './hooks/usePresenceWebSocket'
 import { useRemoteObservations } from './hooks/useRemoteObservations'
 import { useRemoteVnasSubscription } from './hooks/useRemoteVnasSubscription'
+import { useTabletDockBehavior } from './hooks/useTabletDockBehavior'
 import { useVnasEvents } from './hooks/useVnasEvents'
 import { useVnasSubscription } from './hooks/useVnasSubscription'
 import { aircraftDimensionsService } from './services/AircraftDimensionsService'
@@ -67,6 +69,9 @@ import {
 import { isOrbitWithoutAirport } from './utils/viewingContext'
 
 function App() {
+  // Drives auto-collapse of the aircraft panel into its edge-dock strip on
+  // tablet-width viewports. Mounted once at the App root.
+  useTabletDockBehavior()
   const startPolling = useVatsimStore((state) => state.startPolling)
   const loadAirports = useAirportStore((state) => state.loadAirports)
   const currentAirport = useAirportStore((state) => state.currentAirport)
@@ -623,7 +628,12 @@ function App() {
       <div className="main-content">
         <ViewportManager mainViewportContent={<CesiumViewer onViewerReady={handleViewerReady} />}>
           {!isVRActive && <CommandInput />}
-          {!isVRActive && (currentAirport || followingCallsign) && <AircraftPanel />}
+          {!isVRActive && (currentAirport || followingCallsign) && (
+            <>
+              <AircraftPanel />
+              <AircraftPanelDock />
+            </>
+          )}
         </ViewportManager>
       </div>
       {!isVRActive && <ControlsBar />}

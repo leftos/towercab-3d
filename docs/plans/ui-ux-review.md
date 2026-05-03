@@ -172,16 +172,21 @@ The `AircraftPanel` at fixed `top: 58px; right: 10px` covers ~30% of the visible
 
 ### Tasks
 
-- [ ] Define a new `--tablet` breakpoint range (900-1100px) in CSS
-- [ ] Auto-narrow `AircraftPanel` to ~280px in tablet range
-- [ ] Add edge-dock collapse mode for `AircraftPanel`: a vertical strip on the right edge with icon + count, tap to expand
-- [ ] Optional: drag-to-reposition for `AircraftPanel` (resize handles already exist at `AircraftPanel.css:602-731`, drag handle is incremental)
-- [ ] Restore airport name display below 600px (currently `display: none` at `TopBar.css:238-240`) — too aggressive, even ICAO + truncated name fits
+- [x] Define a new `--tablet` breakpoint at `max-width: 1100px` (single threshold, not a true range — cleaner overlap with the existing 1049/1199 ControlsBar rules; iPad-Pro-landscape at 1366 stays "desktop", iPad-portrait at 1024 becomes "tablet")
+- [x] Add edge-dock collapse mode for `AircraftPanel`: a vertical strip with icon + count, tap to expand. Implemented as a separate `<AircraftPanelDock />` sibling component using `position: fixed`. State (`aircraftPanelEdgeDocked`) persisted in `settingsStore`; auto-collapse on tablet entry via `useTabletDockBehavior` with a session-scoped override flag (manual expand sticks until the viewport leaves tablet range).
+- [x] Configurable left/right dock side, persisted as `aircraftPanelDockSide` in settings; resize handles mirror to the inner edge automatically.
+- [x] Drag-to-reposition for `AircraftPanel` via `useAircraftPanelDrag` hook (pointer events with capture, works on touch). Position stored as offset from dock anchor (`aircraftPanelPosition`), so flipping dock side mirrors symmetrically. Re-clamps on resize.
+- [x] Restore airport name display below 600px — kept visible but truncated to 100px max-width with smaller font; ICAO and compass continue to hide as before.
+- [x] Settings UI: dock-side Left/Right toggle + "Reset Aircraft Panel Position" button in `SettingsAircraftLabelsTab` UI section.
 
 ### Out of scope for this phase
 
 - Multi-viewport layout changes for tablet (keep current behavior)
 - Reflowable AircraftPanel that re-docks based on follow state
+- Drag of the dock strip itself (only the expanded panel is draggable)
+- Persistence of the auto-collapse override across reloads (session-only `useRef` is sufficient)
+- Phone-specific (≤768) full takeover layout
+- Extracting a shared draggable-panel hook between `SettingsModal` and `AircraftPanel` (semantics differ — centered-offset vs anchor-offset, mouse-only vs pointer events)
 
 ---
 

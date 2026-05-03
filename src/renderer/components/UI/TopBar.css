@@ -261,9 +261,12 @@
     font-size: 13px;
   }
 
-  /* Hide airport name on very small screens */
+  /* Keep airport name visible but tightly truncated on very small screens —
+     hiding it entirely (previous behaviour) left only the ICAO and made it
+     hard for tablet/phone users to confirm which airport they're looking at. */
   .airport-name {
-    display: none;
+    max-width: 100px;
+    font-size: 11px;
   }
 
   .zulu-time {

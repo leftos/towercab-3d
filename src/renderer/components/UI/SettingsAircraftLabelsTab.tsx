@@ -27,6 +27,8 @@ function SettingsAircraftLabelsTab() {
   const updateAircraftSettings = useSettingsStore((state) => state.updateAircraftSettings)
 
   const showAircraftPanel = useSettingsStore((state) => state.ui.showAircraftPanel)
+  const aircraftPanelDockSide = useSettingsStore((state) => state.ui.aircraftPanelDockSide)
+  const aircraftPanelPosition = useSettingsStore((state) => state.ui.aircraftPanelPosition)
   const updateUISettings = useSettingsStore((state) => state.updateUISettings)
 
   // Aircraft appearance settings
@@ -430,6 +432,41 @@ function SettingsAircraftLabelsTab() {
             />
             Show Aircraft Panel
           </label>
+        </div>
+        <div className="setting-item">
+          <span className="setting-label">Aircraft Panel Dock Side</span>
+          <div className="button-group">
+            <button
+              type="button"
+              className={aircraftPanelDockSide === 'left' ? 'active' : ''}
+              onClick={() => updateUISettings({ aircraftPanelDockSide: 'left' })}
+            >
+              Left
+            </button>
+            <button
+              type="button"
+              className={aircraftPanelDockSide === 'right' ? 'active' : ''}
+              onClick={() => updateUISettings({ aircraftPanelDockSide: 'right' })}
+            >
+              Right
+            </button>
+          </div>
+          <p className="setting-hint">
+            Which screen edge the aircraft panel anchors to. The panel auto-collapses to a thin dock strip on
+            tablet-width viewports (1100px or narrower).
+          </p>
+        </div>
+        <div className="setting-item">
+          <button
+            type="button"
+            disabled={aircraftPanelPosition === null}
+            onClick={() => updateUISettings({ aircraftPanelPosition: null })}
+          >
+            Reset Aircraft Panel Position
+          </button>
+          <p className="setting-hint">
+            Clears the drag-to-reposition offset. The panel returns to its default anchor (top of the chosen dock side).
+          </p>
         </div>
       </CollapsibleSection>
     </>

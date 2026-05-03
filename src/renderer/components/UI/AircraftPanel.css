@@ -1,8 +1,8 @@
 .aircraft-panel {
   position: fixed;
-  top: calc(var(--topbar-h) + 10px);
-  right: 10px;
-  /* width is controlled via inline style for resizing */
+  /* top, left/right, and width are controlled via inline style — top/edge for
+     drag-to-reposition, edge selection for left/right docking, width for
+     resizing. */
   max-height: calc(100vh - 120px);
   background: var(--bg-panel);
   border: 1px solid var(--white-a10);
@@ -19,6 +19,13 @@
   justify-content: space-between;
   padding: 12px 16px;
   border-bottom: 1px solid var(--white-a10);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.aircraft-panel.dragging .panel-header {
+  cursor: grabbing;
 }
 
 .panel-header .header-left {
@@ -614,26 +621,37 @@
   opacity: 1;
 }
 
-/* Left edge resize handle (for width) */
-.resize-handle-left {
-  left: -8px;
+/* Width-resize handle on the inner edge of the panel.
+   Defaults to the left edge (right-docked panel); flipped via [data-dock-side="left"] below. */
+.resize-handle-width {
   top: 0;
   bottom: 0;
   width: 16px;
   cursor: ew-resize;
+  left: -8px;
 }
 
-/* Visual indicator for left handle */
-.resize-handle-left::after {
+.aircraft-panel[data-dock-side="left"] .resize-handle-width {
+  left: auto;
+  right: -8px;
+}
+
+/* Visual indicator for width handle */
+.resize-handle-width::after {
   content: "";
   position: absolute;
-  left: 6px;
   top: 50%;
   transform: translateY(-50%);
   width: 4px;
   height: 40px;
   background: rgba(79, 195, 247, 0.6);
   border-radius: 2px;
+  left: 6px;
+}
+
+.aircraft-panel[data-dock-side="left"] .resize-handle-width::after {
+  left: auto;
+  right: 6px;
 }
 
 /* Bottom edge resize handle (for height) */
@@ -658,26 +676,41 @@
   border-radius: 2px;
 }
 
-/* Bottom-left corner resize handle (for both dimensions) */
+/* Bottom-inner corner resize handle (both dimensions).
+   Defaults to bottom-left (right-docked panel); flipped to bottom-right when left-docked. */
 .resize-handle-corner {
-  left: -8px;
   bottom: -8px;
   width: 24px;
   height: 24px;
   cursor: nesw-resize;
+  left: -8px;
+}
+
+.aircraft-panel[data-dock-side="left"] .resize-handle-corner {
+  left: auto;
+  right: -8px;
+  cursor: nwse-resize;
 }
 
 /* Visual indicator for corner handle */
 .resize-handle-corner::after {
   content: "";
   position: absolute;
-  left: 8px;
   bottom: 8px;
   width: 12px;
   height: 12px;
-  border-left: 3px solid rgba(79, 195, 247, 0.6);
   border-bottom: 3px solid rgba(79, 195, 247, 0.6);
   border-radius: 0 0 0 4px;
+  left: 8px;
+  border-left: 3px solid rgba(79, 195, 247, 0.6);
+}
+
+.aircraft-panel[data-dock-side="left"] .resize-handle-corner::after {
+  left: auto;
+  right: 8px;
+  border-left: none;
+  border-right: 3px solid rgba(79, 195, 247, 0.6);
+  border-radius: 0 0 4px 0;
 }
 
 /* Highlight handles when actively resizing */
@@ -691,9 +724,14 @@
 
 /* Make handles larger on touch devices for easier targeting */
 @media (pointer: coarse) {
-  .resize-handle-left {
+  .resize-handle-width {
     left: -16px;
     width: 32px;
+  }
+
+  .aircraft-panel[data-dock-side="left"] .resize-handle-width {
+    left: auto;
+    right: -16px;
   }
 
   .resize-handle-bottom {
@@ -708,12 +746,17 @@
     height: 40px;
   }
 
+  .aircraft-panel[data-dock-side="left"] .resize-handle-corner {
+    left: auto;
+    right: -16px;
+  }
+
   /* Always show handles on touch devices */
   .aircraft-panel .resize-handle {
     opacity: 0.7;
   }
 
-  .resize-handle-left::after {
+  .resize-handle-width::after {
     height: 60px;
     width: 6px;
   }
@@ -727,6 +770,24 @@
     width: 18px;
     height: 18px;
     border-width: 4px;
+  }
+}
+
+/* Tablet-width tweaks: roomier hit-targets and slightly tighter max-height
+   so the panel coexists with the topbar/controls/joystick. The panel also
+   auto-collapses to a dock strip in this range — see useTabletDockBehavior. */
+@media (max-width: 1100px) {
+  .aircraft-panel {
+    max-height: calc(100vh - var(--topbar-h) - var(--controls-h) - 30px);
+  }
+
+  .aircraft-panel .panel-header {
+    padding: 14px 16px;
+  }
+
+  .aircraft-panel .collapse-btn {
+    width: 32px;
+    height: 32px;
   }
 }
 

@@ -964,6 +964,34 @@ export interface UISettings {
   aircraftPanelHeight: number
 
   /**
+   * Which screen edge the aircraft panel anchors to (default: 'right')
+   *
+   * Independent of viewport size. When `aircraftPanelEdgeDocked` is true,
+   * the dock strip appears on this edge; when false, the expanded panel
+   * is anchored here.
+   */
+  aircraftPanelDockSide: 'left' | 'right'
+
+  /**
+   * Whether the aircraft panel is collapsed to an edge-dock strip (default: false)
+   *
+   * On tablet-width viewports (≤1100px) this auto-toggles to true on entry,
+   * unless the user has manually expanded during the current tablet session.
+   * Replaces the previous in-memory collapse toggle.
+   */
+  aircraftPanelEdgeDocked: boolean
+
+  /**
+   * Drag offset from the panel's docked anchor corner (default: null)
+   *
+   * `null` means the panel uses its default anchor position. When the user
+   * drags the panel header, this becomes a concrete offset. The values are
+   * relative to the dock anchor (positive x = inward) so flipping
+   * `aircraftPanelDockSide` mirrors the position correctly.
+   */
+  aircraftPanelPosition: { x: number; y: number } | null
+
+  /**
    * Settings modal position offset from center (default: { x: 0, y: 0 })
    *
    * The modal can be dragged by its header, and the position is persisted.
@@ -1943,6 +1971,9 @@ export const DEFAULT_SETTINGS: Omit<
     touchOnboardingCompleted: false,
     aircraftPanelWidth: 280,
     aircraftPanelHeight: 0,
+    aircraftPanelDockSide: 'right',
+    aircraftPanelEdgeDocked: false,
+    aircraftPanelPosition: null,
     settingsModalPosition: { x: 0, y: 0 },
     dockRunwayPanel: false,
   },

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useActiveViewportCamera } from '../../hooks/useActiveViewportCamera'
 import { useAircraftFiltering } from '../../hooks/useAircraftFiltering'
 import { useAircraftInterpolation } from '../../hooks/useAircraftInterpolation'
+import { useAircraftPanelDrag } from '../../hooks/useAircraftPanelDrag'
+import { markAircraftPanelDockUserOverride } from '../../hooks/useTabletDockBehavior'
 import { geoidService } from '../../services/GeoidService'
 import { useAircraftFilterStore } from '../../stores/aircraftFilterStore'
 import { useAirportStore } from '../../stores/airportStore'
@@ -56,10 +58,15 @@ function AircraftPanel() {
   const showWeatherEffects = useSettingsStore((state) => state.weather.showWeatherEffects)
   const pinFollowedAircraftToTop = useSettingsStore((state) => state.aircraft.pinFollowedAircraftToTop)
 
-  // Panel dimensions from settings
+  // Panel dimensions and dock state from settings
   const panelWidth = useSettingsStore((state) => state.ui.aircraftPanelWidth)
   const panelHeight = useSettingsStore((state) => state.ui.aircraftPanelHeight)
+  const dockSide = useSettingsStore((state) => state.ui.aircraftPanelDockSide)
+  const edgeDocked = useSettingsStore((state) => state.ui.aircraftPanelEdgeDocked)
   const updateUISettings = useSettingsStore((state) => state.updateUISettings)
+
+  // Ref needed by the drag hook for height clamping
+  const panelRef = useRef<HTMLDivElement>(null)
 
   // Panel filter state from store (affects both list and datablocks)
   const searchQuery = useAircraftFilterStore((state) => state.searchQuery)
@@ -76,9 +83,13 @@ function AircraftPanel() {
   // vNAS state for header badge
   const vnasConnected = useVnasStore((state) => state.status.state === 'connected')
 
-  // Local state for sorting and collapse (UI-only, doesn't affect filtering)
+  // Local state for sorting (UI-only, doesn't affect filtering). The
+  // expand/collapse state moved to settingsStore.aircraftPanelEdgeDocked
+  // so the dock strip and panel can share a single source of truth.
   const [sortOption, setSortOption] = useState<SortOption>('smart')
-  const [isCollapsed, setIsCollapsed] = useState(false)
+
+  // Drag-to-reposition (works on touch as well as mouse)
+  const { position: dragPosition, isDragging, handlers: dragHandlers } = useAircraftPanelDrag(panelRef)
 
   // Resize state
   const [isResizing, setIsResizing] = useState<'width' | 'height' | 'corner' | null>(null)
@@ -109,7 +120,11 @@ function AircraftPanel() {
       if (!isResizing || !resizeStartRef.current) return
 
       const { startX, startY, startWidth, startHeight } = resizeStartRef.current
-      const deltaX = startX - e.clientX // Inverted because dragging left should increase width
+      // The width-resize handle lives on the inner edge: left of the panel
+      // when right-docked, right of the panel when left-docked. Dragging the
+      // handle inward (toward the center of the screen) should always grow
+      // the panel — invert the cursor-delta sign on left-dock to match.
+      const deltaX = dockSide === 'right' ? startX - e.clientX : e.clientX - startX
       const deltaY = e.clientY - startY
 
       if (isResizing === 'width' || isResizing === 'corner') {
@@ -122,7 +137,7 @@ function AircraftPanel() {
         updateUISettings({ aircraftPanelHeight: newHeight })
       }
     },
-    [isResizing, updateUISettings],
+    [isResizing, updateUISettings, dockSide],
   )
 
   const handleResizeEnd = useCallback(
@@ -400,22 +415,35 @@ function AircraftPanel() {
     )
   }
 
-  if (!showAircraftPanel) return null
+  if (!showAircraftPanel || edgeDocked) return null
 
-  // Calculate panel style with dynamic dimensions
+  // Compute anchor offset CSS. Position values are offsets from the panel's
+  // docked anchor corner — positive x is always inward (away from the docked
+  // edge), so the same value mirrors symmetrically when dockSide flips.
+  const anchorTop = `calc(var(--topbar-h) + 10px + ${dragPosition.y}px)`
+  const anchorEdgePx = 10 + dragPosition.x
   const panelStyle: React.CSSProperties = {
     width: panelWidth,
-    ...(panelHeight > 0 && !isCollapsed ? { height: panelHeight, maxHeight: 'none' } : {}),
+    top: anchorTop,
+    ...(dockSide === 'right' ? { right: anchorEdgePx, left: 'auto' } : { left: anchorEdgePx, right: 'auto' }),
+    ...(panelHeight > 0 ? { height: panelHeight, maxHeight: 'none' } : {}),
+  }
+
+  const dockToEdge = () => {
+    markAircraftPanelDockUserOverride()
+    updateUISettings({ aircraftPanelEdgeDocked: true })
   }
 
   return (
     <div
-      className={`aircraft-panel ${isCollapsed ? 'collapsed' : ''} ${isResizing ? 'resizing' : ''}`}
+      ref={panelRef}
+      className={`aircraft-panel ${isResizing ? 'resizing' : ''} ${isDragging ? 'dragging' : ''}`}
+      data-dock-side={dockSide}
       style={panelStyle}
     >
-      {/* Left edge resize handle (for width) */}
+      {/* Width-resize handle on the inner edge (left of right-docked, right of left-docked) */}
       <div
-        className="resize-handle resize-handle-left"
+        className="resize-handle resize-handle-width"
         onPointerDown={(e) => handleResizeStart(e, 'width')}
         onPointerMove={handleResizeMove}
         onPointerUp={handleResizeEnd}
@@ -424,30 +452,32 @@ function AircraftPanel() {
       />
 
       {/* Bottom edge resize handle (for height) */}
-      {!isCollapsed && (
-        <div
-          className="resize-handle resize-handle-bottom"
-          onPointerDown={(e) => handleResizeStart(e, 'height')}
-          onPointerMove={handleResizeMove}
-          onPointerUp={handleResizeEnd}
-          onPointerCancel={handleResizeEnd}
-          title="Drag to resize height"
-        />
-      )}
+      <div
+        className="resize-handle resize-handle-bottom"
+        onPointerDown={(e) => handleResizeStart(e, 'height')}
+        onPointerMove={handleResizeMove}
+        onPointerUp={handleResizeEnd}
+        onPointerCancel={handleResizeEnd}
+        title="Drag to resize height"
+      />
 
-      {/* Bottom-left corner resize handle (for both) */}
-      {!isCollapsed && (
-        <div
-          className="resize-handle resize-handle-corner"
-          onPointerDown={(e) => handleResizeStart(e, 'corner')}
-          onPointerMove={handleResizeMove}
-          onPointerUp={handleResizeEnd}
-          onPointerCancel={handleResizeEnd}
-          title="Drag to resize"
-        />
-      )}
+      {/* Bottom-inner corner resize handle (for both) */}
+      <div
+        className="resize-handle resize-handle-corner"
+        onPointerDown={(e) => handleResizeStart(e, 'corner')}
+        onPointerMove={handleResizeMove}
+        onPointerUp={handleResizeEnd}
+        onPointerCancel={handleResizeEnd}
+        title="Drag to resize"
+      />
 
-      <div className="panel-header">
+      <div
+        className="panel-header"
+        onPointerDown={dragHandlers.onPointerDown}
+        onPointerMove={dragHandlers.onPointerMove}
+        onPointerUp={dragHandlers.onPointerUp}
+        onPointerCancel={dragHandlers.onPointerCancel}
+      >
         <div className="header-left">
           <h3>Nearby Aircraft</h3>
           {vnasConnected && (
@@ -466,12 +496,7 @@ function AircraftPanel() {
         </div>
         <div className="header-right">
           <span className="aircraft-count">{nearbyAircraft.length}</span>
-          <button
-            type="button"
-            className="collapse-btn"
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            title={isCollapsed ? 'Expand panel' : 'Collapse panel'}
-          >
+          <button type="button" className="collapse-btn" onClick={dockToEdge} title="Dock to edge">
             <svg
               aria-hidden="true"
               width="12"
@@ -481,191 +506,187 @@ function AircraftPanel() {
               stroke="currentColor"
               strokeWidth="2"
             >
-              {isCollapsed ? <polyline points="6 9 12 15 18 9" /> : <polyline points="18 15 12 9 6 15" />}
+              {dockSide === 'right' ? <polyline points="9 18 15 12 9 6" /> : <polyline points="15 18 9 12 15 6" />}
             </svg>
           </button>
         </div>
       </div>
 
-      {!isCollapsed && (
-        <>
-          <div className="panel-controls">
-            <input
-              type="text"
-              className="search-input"
-              placeholder="Search callsign, type, route (affects map)..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            <div className="filter-controls">
-              <button
-                type="button"
-                className={`filter-btn ${filterWeatherVisibility ? 'active' : ''}`}
-                onClick={() => setFilterWeatherVisibility(!filterWeatherVisibility)}
-                title="Only show aircraft visible through weather (affects both list and map)"
-                disabled={!showWeatherEffects}
-              >
-                Visible
-              </button>
-              <button
-                type="button"
-                className={`filter-btn ${filterAirportTraffic ? 'active' : ''}`}
-                onClick={() => setFilterAirportTraffic(!filterAirportTraffic)}
-                title="Only show aircraft departing from or arriving at this airport (affects both list and map)"
-                disabled={!currentAirport}
-              >
-                {currentAirport?.icao || 'Airport'}
-              </button>
-            </div>
-            <div className="sort-controls">
-              <span className="sort-label">Sort:</span>
-              <select
-                className="sort-select"
-                value={sortOption}
-                onChange={(e) => setSortOption(e.target.value as SortOption)}
-              >
-                <option value="smart">Smart</option>
-                <option value="distance">Distance (Airport)</option>
-                <option value="cameraDistance">Distance (Camera)</option>
-                <option value="callsign">Callsign</option>
-                <option value="altitude">Altitude</option>
-                <option value="speed">Speed</option>
-              </select>
-            </div>
+      <div className="panel-controls">
+        <input
+          type="text"
+          className="search-input"
+          placeholder="Search callsign, type, route (affects map)..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+        <div className="filter-controls">
+          <button
+            type="button"
+            className={`filter-btn ${filterWeatherVisibility ? 'active' : ''}`}
+            onClick={() => setFilterWeatherVisibility(!filterWeatherVisibility)}
+            title="Only show aircraft visible through weather (affects both list and map)"
+            disabled={!showWeatherEffects}
+          >
+            Visible
+          </button>
+          <button
+            type="button"
+            className={`filter-btn ${filterAirportTraffic ? 'active' : ''}`}
+            onClick={() => setFilterAirportTraffic(!filterAirportTraffic)}
+            title="Only show aircraft departing from or arriving at this airport (affects both list and map)"
+            disabled={!currentAirport}
+          >
+            {currentAirport?.icao || 'Airport'}
+          </button>
+        </div>
+        <div className="sort-controls">
+          <span className="sort-label">Sort:</span>
+          <select
+            className="sort-select"
+            value={sortOption}
+            onChange={(e) => setSortOption(e.target.value as SortOption)}
+          >
+            <option value="smart">Smart</option>
+            <option value="distance">Distance (Airport)</option>
+            <option value="cameraDistance">Distance (Camera)</option>
+            <option value="callsign">Callsign</option>
+            <option value="altitude">Altitude</option>
+            <option value="speed">Speed</option>
+          </select>
+        </div>
+      </div>
+
+      {followingCallsign && (
+        <div className="following-indicator">
+          <div className="following-info">
+            <span className="following-label">Following</span>
+            <span className="following-callsign">{followingCallsign}</span>
           </div>
-
-          {followingCallsign && (
-            <div className="following-indicator">
-              <div className="following-info">
-                <span className="following-label">Following</span>
-                <span className="following-callsign">{followingCallsign}</span>
-              </div>
-              <button
-                type="button"
-                className={`follow-mode-btn ${followMode}`}
-                onClick={toggleFollowMode}
-                title="Toggle follow mode (O)"
-              >
-                {followMode === 'tower' ? 'Tower' : 'Orbit'}
-              </button>
-              <button type="button" className="stop-following-btn" onClick={() => stopFollowing()}>
-                Stop (Esc)
-              </button>
-            </div>
-          )}
-
-          <div className="aircraft-list">
-            {nearbyAircraft.length === 0 ? (
-              <div className="no-aircraft">
-                {currentAirport ? 'No aircraft nearby' : 'Select an airport or search globally (Ctrl+K)'}
-              </div>
-            ) : (
-              nearbyAircraft.map((aircraft) => {
-                const isFollowing = followingCallsign === aircraft.callsign
-                const phaseLabel = aircraft.phase ? getPhaseLabel(aircraft.phase) : null
-                const tierClass = aircraft.tier ? getTierClass(aircraft.tier) : ''
-                return (
-                  <button
-                    type="button"
-                    key={aircraft.callsign}
-                    className={`aircraft-item ${isFollowing ? 'following' : ''} ${tierClass} clickable`}
-                    onClick={() => handleLookAt(aircraft)}
-                    onTouchStart={(e) => handleRowTouchStart(e, aircraft.callsign)}
-                    onTouchMove={handleRowTouchMove}
-                    onTouchEnd={handleRowTouchEnd}
-                    onTouchCancel={handleRowTouchEnd}
-                    title="Tap to look at aircraft · long-press to toggle follow"
-                  >
-                    <div className="aircraft-header">
-                      <div className="callsign-group">
-                        <span
-                          className="live-indicator"
-                          title={`Display delay: ${(aircraft.displayDelay / 1000).toFixed(1)}s`}
-                        >
-                          <svg aria-hidden="true" width="6" height="6" viewBox="0 0 6 6">
-                            <circle cx="3" cy="3" r="3" fill={aircraft.displayDelay < 3000 ? '#0c7' : '#fc0'} />
-                          </svg>
-                        </span>
-                        <span className="callsign">{aircraft.callsign}</span>
-                        <span className="aircraft-type">{aircraft.aircraftType || '???'}</span>
-                        {phaseLabel && (
-                          <span className={`phase-badge ${tierClass}`}>
-                            {phaseLabel}
-                            {aircraft.runway && <span className="runway-ident"> {aircraft.runway}</span>}
-                          </span>
-                        )}
-                      </div>
-                      <div className="aircraft-header-right">
-                        <button
-                          type="button"
-                          className={`follow-btn ${isFollowing ? 'active' : ''}`}
-                          onClick={(e) => {
-                            e.stopPropagation() // Don't trigger look-at
-                            handleFollowClick(aircraft.callsign)
-                          }}
-                          title={isFollowing ? 'Stop following' : 'Follow aircraft'}
-                        >
-                          {isFollowing ? (
-                            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                              <circle cx="12" cy="12" r="10" />
-                            </svg>
-                          ) : (
-                            <svg
-                              aria-hidden="true"
-                              width="14"
-                              height="14"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                            >
-                              <circle cx="12" cy="12" r="10" />
-                              <circle cx="12" cy="12" r="3" />
-                            </svg>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="aircraft-details">
-                      <div className="detail-row">
-                        <span className="label">ALT</span>
-                        <span className="value">{formatAltitude(aircraft.altitude)}</span>
-                      </div>
-                      <div className="detail-row">
-                        <span className="label">GS</span>
-                        <span className="value">{formatGroundspeed(aircraft.groundspeed)}</span>
-                      </div>
-                      <div className="detail-row">
-                        <span className="label">HDG</span>
-                        <span className="value">{formatHeading(aircraft.heading)}</span>
-                      </div>
-                    </div>
-
-                    <div className="aircraft-position">
-                      <span className="distance">{aircraft.distance.toFixed(1)} nm</span>
-                      <span className="bearing">{Math.round(aircraft.bearing).toString().padStart(3, '0')}°</span>
-                    </div>
-
-                    {(aircraft.departure && aircraft.departure !== 'null') ||
-                    (aircraft.arrival && aircraft.arrival !== 'null') ? (
-                      <div className="aircraft-route">
-                        <span className="route-from">
-                          {aircraft.departure && aircraft.departure !== 'null' ? aircraft.departure : '????'}
-                        </span>
-                        <span className="route-arrow">→</span>
-                        <span className="route-to">
-                          {aircraft.arrival && aircraft.arrival !== 'null' ? aircraft.arrival : '????'}
-                        </span>
-                      </div>
-                    ) : null}
-                  </button>
-                )
-              })
-            )}
-          </div>
-        </>
+          <button
+            type="button"
+            className={`follow-mode-btn ${followMode}`}
+            onClick={toggleFollowMode}
+            title="Toggle follow mode (O)"
+          >
+            {followMode === 'tower' ? 'Tower' : 'Orbit'}
+          </button>
+          <button type="button" className="stop-following-btn" onClick={() => stopFollowing()}>
+            Stop (Esc)
+          </button>
+        </div>
       )}
+
+      <div className="aircraft-list">
+        {nearbyAircraft.length === 0 ? (
+          <div className="no-aircraft">
+            {currentAirport ? 'No aircraft nearby' : 'Select an airport or search globally (Ctrl+K)'}
+          </div>
+        ) : (
+          nearbyAircraft.map((aircraft) => {
+            const isFollowing = followingCallsign === aircraft.callsign
+            const phaseLabel = aircraft.phase ? getPhaseLabel(aircraft.phase) : null
+            const tierClass = aircraft.tier ? getTierClass(aircraft.tier) : ''
+            return (
+              <button
+                type="button"
+                key={aircraft.callsign}
+                className={`aircraft-item ${isFollowing ? 'following' : ''} ${tierClass} clickable`}
+                onClick={() => handleLookAt(aircraft)}
+                onTouchStart={(e) => handleRowTouchStart(e, aircraft.callsign)}
+                onTouchMove={handleRowTouchMove}
+                onTouchEnd={handleRowTouchEnd}
+                onTouchCancel={handleRowTouchEnd}
+                title="Tap to look at aircraft · long-press to toggle follow"
+              >
+                <div className="aircraft-header">
+                  <div className="callsign-group">
+                    <span
+                      className="live-indicator"
+                      title={`Display delay: ${(aircraft.displayDelay / 1000).toFixed(1)}s`}
+                    >
+                      <svg aria-hidden="true" width="6" height="6" viewBox="0 0 6 6">
+                        <circle cx="3" cy="3" r="3" fill={aircraft.displayDelay < 3000 ? '#0c7' : '#fc0'} />
+                      </svg>
+                    </span>
+                    <span className="callsign">{aircraft.callsign}</span>
+                    <span className="aircraft-type">{aircraft.aircraftType || '???'}</span>
+                    {phaseLabel && (
+                      <span className={`phase-badge ${tierClass}`}>
+                        {phaseLabel}
+                        {aircraft.runway && <span className="runway-ident"> {aircraft.runway}</span>}
+                      </span>
+                    )}
+                  </div>
+                  <div className="aircraft-header-right">
+                    <button
+                      type="button"
+                      className={`follow-btn ${isFollowing ? 'active' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation() // Don't trigger look-at
+                        handleFollowClick(aircraft.callsign)
+                      }}
+                      title={isFollowing ? 'Stop following' : 'Follow aircraft'}
+                    >
+                      {isFollowing ? (
+                        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                          <circle cx="12" cy="12" r="10" />
+                        </svg>
+                      ) : (
+                        <svg
+                          aria-hidden="true"
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
+                          <circle cx="12" cy="12" r="10" />
+                          <circle cx="12" cy="12" r="3" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="aircraft-details">
+                  <div className="detail-row">
+                    <span className="label">ALT</span>
+                    <span className="value">{formatAltitude(aircraft.altitude)}</span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="label">GS</span>
+                    <span className="value">{formatGroundspeed(aircraft.groundspeed)}</span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="label">HDG</span>
+                    <span className="value">{formatHeading(aircraft.heading)}</span>
+                  </div>
+                </div>
+
+                <div className="aircraft-position">
+                  <span className="distance">{aircraft.distance.toFixed(1)} nm</span>
+                  <span className="bearing">{Math.round(aircraft.bearing).toString().padStart(3, '0')}°</span>
+                </div>
+
+                {(aircraft.departure && aircraft.departure !== 'null') ||
+                (aircraft.arrival && aircraft.arrival !== 'null') ? (
+                  <div className="aircraft-route">
+                    <span className="route-from">
+                      {aircraft.departure && aircraft.departure !== 'null' ? aircraft.departure : '????'}
+                    </span>
+                    <span className="route-arrow">→</span>
+                    <span className="route-to">
+                      {aircraft.arrival && aircraft.arrival !== 'null' ? aircraft.arrival : '????'}
+                    </span>
+                  </div>
+                ) : null}
+              </button>
+            )
+          })
+        )}
+      </div>
     </div>
   )
 }
