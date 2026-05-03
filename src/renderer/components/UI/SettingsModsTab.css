@@ -1,0 +1,228 @@
+.mods-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mod-item {
+  background: #1a1a2e;
+  border: 1px solid #333;
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+
+.mod-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mod-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  flex: 1;
+}
+
+.mod-checkbox input {
+  margin: 0;
+}
+
+.position-button {
+  font-size: 12px;
+  padding: 4px 10px;
+  flex-shrink: 0;
+}
+
+.position-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.mod-name {
+  font-weight: 500;
+  color: #fff;
+}
+
+.pending-badge {
+  color: #ffc107;
+  font-weight: bold;
+  margin-left: 4px;
+}
+
+.mod-details {
+  margin-top: 4px;
+  margin-left: 24px;
+  font-size: 0.85em;
+  color: #888;
+}
+
+.mod-author {
+  margin-right: 8px;
+}
+
+.mod-version {
+  opacity: 0.7;
+}
+
+.mod-repo-badge {
+  background: #4a90d9;
+  color: white;
+  font-size: 0.75em;
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-left: 8px;
+  font-weight: 500;
+}
+
+.mod-path-row {
+  margin-top: 6px;
+  margin-left: 24px;
+}
+
+.mod-path {
+  font-family: monospace;
+  font-size: 0.8em;
+  color: #a0a0a0;
+  word-break: break-all;
+}
+
+.mod-icao {
+  font-weight: 600;
+  margin-right: 8px;
+  color: #4a90d9;
+}
+
+.mod-types,
+.mod-stats {
+  display: block;
+}
+
+.mod-position {
+  font-family: monospace;
+  font-size: 0.9em;
+}
+
+.position-source {
+  opacity: 0.7;
+  font-style: italic;
+}
+
+.vmr-file {
+  display: block;
+  font-family: monospace;
+  font-size: 0.85em;
+  word-break: break-all;
+}
+
+.errors-list .mod-item {
+  border-color: #dc3545;
+  background: rgba(220, 53, 69, 0.1);
+}
+
+.error-icon {
+  color: #dc3545;
+  margin-right: 8px;
+}
+
+.error-path {
+  font-family: monospace;
+  font-size: 0.9em;
+  word-break: break-all;
+}
+
+.error-message {
+  margin-top: 4px;
+  color: #dc3545;
+}
+
+.pending-changes-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #1a1a2e;
+  border: 1px solid #ffc107;
+  border-radius: var(--radius-sm);
+  margin-top: 16px;
+}
+
+.pending-notice {
+  color: #ffc107;
+  font-size: 0.9em;
+}
+
+.control-button.primary {
+  background: #4a90d9;
+  border-color: #4a90d9;
+}
+
+.control-button.primary:hover {
+  background: #5a9fe9;
+}
+
+.git-repos-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.update-repos-button {
+  align-self: flex-start;
+}
+
+.update-repos-button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.update-result {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.update-result-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 0.9em;
+}
+
+.update-result-item.updated {
+  background: rgba(40, 167, 69, 0.15);
+  border: 1px solid #28a745;
+}
+
+.update-result-item.up-to-date {
+  background: #1a1a2e;
+  border: 1px solid #333;
+}
+
+.update-result-item.failed {
+  background: rgba(220, 53, 69, 0.15);
+  border: 1px solid #dc3545;
+}
+
+.update-repo-name {
+  font-weight: 500;
+  font-family: monospace;
+}
+
+.update-status {
+  color: #888;
+  font-size: 0.9em;
+}
+
+.update-result-item.updated .update-status {
+  color: #28a745;
+}
+
+.update-result-item.failed .update-status {
+  color: #dc3545;
+}
