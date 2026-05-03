@@ -20,6 +20,7 @@ import { PerformanceHUD } from './components/UI/PerformanceHUD'
 import TokenPrompt from './components/UI/TokenPrompt'
 import TopBar from './components/UI/TopBar'
 import TouchControls, { TouchCommandInput } from './components/UI/TouchControls'
+import TouchOnboarding from './components/UI/TouchOnboarding'
 import TowerPositioningOverlay from './components/UI/TowerPositioningOverlay'
 import UpdateNotification from './components/UI/UpdateNotification'
 import { VnasPanel } from './components/UI/VnasPanel'
@@ -652,6 +653,9 @@ function App() {
 
       {/* Device Optimization Prompt for touch devices */}
       {!isVRActive && <DeviceOptimizationPrompt />}
+
+      {/* Touch onboarding (auto-shown after device prompt is dismissed) */}
+      {!isVRActive && <TouchOnboarding />}
 
       {/* Keyboard cheatsheet (? key or TopBar help button) */}
       {!isVRActive && <KeyboardCheatsheet isOpen={showCheatsheet} onClose={() => setShowCheatsheet(false)} />}

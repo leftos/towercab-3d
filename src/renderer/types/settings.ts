@@ -669,6 +669,13 @@ export interface CameraSettings {
   joystickSensitivity: number
 
   /**
+   * On-screen corner the virtual joystick is anchored to (default: 'BL').
+   * Touch users can long-press the joystick to drag it to a different corner.
+   * Bottom-left ('BL') matches the historical fixed position.
+   */
+  joystickCorner: 'BL' | 'BR' | 'TL' | 'TR'
+
+  /**
    * Enable automatic airport switching when camera moves (default: false)
    *
    * When enabled, the application automatically switches to the nearest
@@ -930,6 +937,14 @@ export interface UISettings {
    * or lets it auto-fade.
    */
   keyboardCheatsheetDismissed: boolean
+
+  /**
+   * Whether the touch-device onboarding sequence has been completed or skipped
+   * (default: false). Shown on first launch on touch devices after the device
+   * optimization prompt. Walks the user through pinch-to-zoom, two-finger
+   * twist-to-rotate, and the on-screen joystick / command button.
+   */
+  touchOnboardingCompleted: boolean
 
   /**
    * Aircraft panel width in pixels (180-500, default: 280)
@@ -1874,6 +1889,7 @@ export const DEFAULT_SETTINGS: Omit<
     cameraSpeed: 5,
     mouseSensitivity: 1.0,
     joystickSensitivity: 5,
+    joystickCorner: 'BL',
     enableAutoAirportSwitch: false,
     orbitCameraLag: 50,
     mouseInvert: { invertX: false, invertY: false },
@@ -1924,6 +1940,7 @@ export const DEFAULT_SETTINGS: Omit<
     askToContributePositions: true,
     deviceOptimizationPromptDismissed: false,
     keyboardCheatsheetDismissed: false,
+    touchOnboardingCompleted: false,
     aircraftPanelWidth: 280,
     aircraftPanelHeight: 0,
     settingsModalPosition: { x: 0, y: 0 },

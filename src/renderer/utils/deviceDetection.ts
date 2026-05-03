@@ -92,6 +92,16 @@ export function prefersReducedMotion(): boolean {
 }
 
 /**
+ * Check if the primary pointing device is coarse (i.e. finger/stylus).
+ * Note: hybrid devices (touch + mouse) typically resolve to `pointer: fine`
+ * because the OS treats the mouse as primary, so this is true only for
+ * touch-first devices like iPad, phones, and TV remotes.
+ */
+export function isCoarsePointer(): boolean {
+  return window.matchMedia('(pointer: coarse)').matches
+}
+
+/**
  * Get recommended settings for the current device
  */
 export function getRecommendedSettings() {

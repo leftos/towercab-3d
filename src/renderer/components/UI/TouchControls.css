@@ -34,10 +34,34 @@
 /* Main container for touch controls (joystick only now) */
 .touch-controls-container {
   position: fixed;
-  bottom: 80px;
-  left: 20px;
   pointer-events: none;
   z-index: 999;
+}
+
+/* Corner anchoring driven by data-corner attribute. Default (and historical
+   behaviour) is bottom-left. */
+.touch-controls-container[data-corner="BL"] {
+  bottom: 80px;
+  left: 20px;
+}
+
+.touch-controls-container[data-corner="BR"] {
+  bottom: 80px;
+  right: 20px;
+}
+
+.touch-controls-container[data-corner="TL"] {
+  top: calc(var(--topbar-h) + 20px);
+  left: 20px;
+}
+
+.touch-controls-container[data-corner="TR"] {
+  top: calc(var(--topbar-h) + 20px);
+  right: 20px;
+}
+
+.touch-controls-container.dragging {
+  z-index: 1010;
 }
 
 .touch-controls-left {
@@ -315,8 +339,24 @@
 
 /* Compact layout on landscape orientation on phones (too cramped) */
 @media (max-height: 500px) and (orientation: landscape) {
-  .touch-controls-container {
+  .touch-controls-container[data-corner="BL"] {
     bottom: 10px;
+    left: 10px;
+  }
+
+  .touch-controls-container[data-corner="BR"] {
+    bottom: 10px;
+    right: 10px;
+  }
+
+  .touch-controls-container[data-corner="TL"] {
+    top: calc(var(--topbar-h) + 10px);
+    left: 10px;
+  }
+
+  .touch-controls-container[data-corner="TR"] {
+    top: calc(var(--topbar-h) + 10px);
+    right: 10px;
   }
 
   .touch-controls-left {
@@ -362,4 +402,11 @@
     height: 36px;
     bottom: 12px;
   }
+}
+
+/* Visual highlight while the user is repositioning the joystick container.
+   Placed after all .joystick-base rules so source order matches specificity. */
+.touch-controls-container.dragging .joystick-base {
+  border-color: rgba(79, 195, 247, 0.9);
+  box-shadow: 0 0 16px rgba(79, 195, 247, 0.6);
 }

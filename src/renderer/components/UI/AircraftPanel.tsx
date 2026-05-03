@@ -318,6 +318,67 @@ function AircraftPanel() {
     }
   }
 
+  // Long-press on a row toggles follow on touch devices. Tap continues to
+  // trigger look-at via the existing onClick handler. We track timer state
+  // and finger movement so the long-press only fires on a sustained, stationary
+  // touch, and we suppress the synthesized click that would otherwise still
+  // trigger look-at after the user lifted their finger.
+  const longPressTimerRef = useRef<number | null>(null)
+  const longPressFiredRef = useRef(false)
+  const touchStartPosRef = useRef<{ x: number; y: number } | null>(null)
+
+  const cancelLongPressTimer = () => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
+  }
+
+  useEffect(
+    () => () => {
+      if (longPressTimerRef.current !== null) {
+        window.clearTimeout(longPressTimerRef.current)
+        longPressTimerRef.current = null
+      }
+    },
+    [],
+  )
+
+  const handleRowTouchStart = (e: React.TouchEvent<HTMLButtonElement>, callsign: string) => {
+    if (e.touches.length !== 1) {
+      cancelLongPressTimer()
+      return
+    }
+    cancelLongPressTimer()
+    const touch = e.touches[0]
+    touchStartPosRef.current = { x: touch.clientX, y: touch.clientY }
+    longPressFiredRef.current = false
+    longPressTimerRef.current = window.setTimeout(() => {
+      longPressFiredRef.current = true
+      navigator.vibrate?.(10)
+      handleFollowClick(callsign)
+    }, 500)
+  }
+
+  const handleRowTouchMove = (e: React.TouchEvent<HTMLButtonElement>) => {
+    if (!touchStartPosRef.current || longPressTimerRef.current === null) return
+    const touch = e.touches[0]
+    const dx = touch.clientX - touchStartPosRef.current.x
+    const dy = touch.clientY - touchStartPosRef.current.y
+    if (Math.hypot(dx, dy) > 10) {
+      cancelLongPressTimer()
+    }
+  }
+
+  const handleRowTouchEnd = (e: React.TouchEvent<HTMLButtonElement>) => {
+    cancelLongPressTimer()
+    if (longPressFiredRef.current) {
+      e.preventDefault()
+      longPressFiredRef.current = false
+    }
+    touchStartPosRef.current = null
+  }
+
   /**
    * Look at an aircraft without engaging follow mode.
    * Smoothly animates the camera heading and pitch to center the aircraft on screen.
@@ -509,7 +570,11 @@ function AircraftPanel() {
                     key={aircraft.callsign}
                     className={`aircraft-item ${isFollowing ? 'following' : ''} ${tierClass} clickable`}
                     onClick={() => handleLookAt(aircraft)}
-                    title="Click to look at aircraft"
+                    onTouchStart={(e) => handleRowTouchStart(e, aircraft.callsign)}
+                    onTouchMove={handleRowTouchMove}
+                    onTouchEnd={handleRowTouchEnd}
+                    onTouchCancel={handleRowTouchEnd}
+                    title="Tap to look at aircraft · long-press to toggle follow"
                   >
                     <div className="aircraft-header">
                       <div className="callsign-group">

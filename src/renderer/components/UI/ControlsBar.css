@@ -507,6 +507,16 @@
   padding: 4px 14px;
 }
 
+.follow-indicator-dot {
+  display: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+  flex-shrink: 0;
+}
+
 .follow-indicator {
   font-size: 10px;
   font-weight: 600;
@@ -1329,9 +1339,44 @@
     margin-right: 2px;
   }
 
-  /* Hide follow status completely */
+  /* Below 800px we only keep a small follow-state dot, not the full status text. */
   .controls-center {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .follow-status {
+    padding: 0;
+    background: transparent;
+    border: none;
+  }
+
+  .follow-status > .follow-indicator,
+  .follow-status > .follow-zoom-info,
+  .follow-status > .follow-hint {
     display: none;
+  }
+
+  .follow-indicator-dot {
+    display: block;
+    animation: pulse-follow-dot 2s ease-in-out infinite;
+  }
+}
+
+@keyframes pulse-follow-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .follow-indicator-dot {
+    animation: none;
   }
 }
 

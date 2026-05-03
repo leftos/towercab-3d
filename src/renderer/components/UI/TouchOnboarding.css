@@ -1,0 +1,195 @@
+/**
+ * Touch Onboarding Styles
+ *
+ * Modeled on DeviceOptimizationPrompt — same overlay layering, same
+ * fadeIn/slideUp keyframes, same color palette. Designed to read clearly on
+ * iPad portrait (768px) and iPhone landscape.
+ */
+
+.touch-onboarding-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3000;
+  padding: 20px;
+  animation: touch-onboarding-fade 0.3s ease;
+}
+
+.touch-onboarding-modal {
+  background: var(--bg-panel-strong);
+  border: 1px solid var(--white-a15);
+  border-radius: 16px;
+  padding: 24px 22px;
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  animation: touch-onboarding-slide 0.3s ease;
+}
+
+.touch-onboarding-illustration {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 130px;
+  margin-bottom: 14px;
+  color: rgba(79, 195, 247, 0.9);
+}
+
+.touch-onboarding-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: white;
+  margin: 0 0 10px;
+}
+
+.touch-onboarding-caption {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0 0 18px;
+}
+
+.touch-onboarding-dots {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.touch-onboarding-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--white-a20);
+  transition: background 0.2s ease;
+}
+
+.touch-onboarding-dot.active {
+  background: rgba(79, 195, 247, 0.9);
+}
+
+.touch-onboarding-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.touch-onboarding-skip,
+.touch-onboarding-next {
+  flex: 1;
+  padding: 14px 20px;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.touch-onboarding-skip {
+  background: var(--white-a10);
+  border: 1px solid var(--white-a20);
+  color: rgba(255, 255, 255, 0.8);
+  flex: 0 0 auto;
+}
+
+.touch-onboarding-skip:active {
+  background: var(--white-a15);
+  transform: scale(0.98);
+}
+
+.touch-onboarding-next {
+  background: rgba(79, 195, 247, 0.3);
+  border: 1px solid rgba(79, 195, 247, 0.5);
+  color: white;
+}
+
+.touch-onboarding-next:active {
+  background: rgba(79, 195, 247, 0.5);
+  transform: scale(0.98);
+}
+
+/* Animated demos — pinch fingers move apart and back together; twist circles
+   rotate around the center. */
+
+.pinch-finger {
+  animation: pinch-spread 2.2s ease-in-out infinite;
+  transform-origin: 60px 60px;
+}
+
+.pinch-finger-a {
+  animation-name: pinch-spread-left;
+}
+
+.pinch-finger-b {
+  animation-name: pinch-spread-right;
+}
+
+@keyframes pinch-spread-left {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(-12px);
+  }
+}
+
+@keyframes pinch-spread-right {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(12px);
+  }
+}
+
+.twist-fingers {
+  transform-origin: 60px 60px;
+  animation: twist-rotate 3s linear infinite;
+}
+
+@keyframes twist-rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes touch-onboarding-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes touch-onboarding-slide {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .touch-onboarding-overlay,
+  .touch-onboarding-modal {
+    animation: none;
+  }
+  .pinch-finger,
+  .twist-fingers {
+    animation: none;
+  }
+}

@@ -700,6 +700,7 @@ function ControlsBar() {
             <div className="controls-center">
               {followingCallsign && (
                 <div className="follow-status">
+                  <span className="follow-indicator-dot" aria-hidden="true" />
                   <span className="follow-indicator">Following: {followingCallsign}</span>
                   {followMode === 'tower' && (
                     <span className="follow-zoom-info">

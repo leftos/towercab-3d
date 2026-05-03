@@ -117,6 +117,18 @@ See `docs/architecture.md` for detailed documentation including:
 
 **Quick reference:** Tauri 2 desktop app with React 19 frontend. Dual rendering: CesiumJS (globe/terrain/aircraft) + Babylon.js overlay (labels/weather). All camera state lives in `viewportStore`. HTTP server (axum, port 8765) serves frontend to remote browsers. Use `remoteMode.ts` utilities to detect Tauri vs browser mode.
 
+### Touch gestures
+
+TowerCab 3D **replaces** Cesium's default touch handling — `useTouchInput.ts` registers its own `PINCH_START / PINCH_MOVE / PINCH_END` and single-finger handlers on `ScreenSpaceEventHandler`. Cesium's stock pinch-to-zoom and pinch-tilt are not active; the gesture-to-action map below is the source of truth.
+
+| Gesture | Tower follow | Orbit follow | 3D free | Top-down |
+|---------|--------------|--------------|---------|----------|
+| One-finger drag | Heading + pitch | Orbit heading + pitch | Heading + pitch | Pan (screen-space, scaled by altitude) |
+| Two-finger pinch (distance) | Adjust follow zoom | Adjust orbit distance | Adjust FOV | Adjust altitude |
+| Two-finger twist (angle) | Twist/rotate vertical axis | Twist/rotate vertical axis | Twist/rotate vertical axis | Rotate map |
+
+A 15 px movement threshold on a single-finger drag is required before tower follow is broken — keeps small accidental drags from kicking the camera out of follow mode. The on-screen joystick (separate from globe gestures) is documented in `TouchControls.tsx`.
+
 ## Path Alias
 
 `@/` maps to `src/renderer/` (configured in vite.config.ts)

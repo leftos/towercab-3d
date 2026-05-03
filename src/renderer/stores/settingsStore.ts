@@ -431,7 +431,7 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
     }),
     {
       name: 'settings-store',
-      version: 34,
+      version: 35,
       migrate: (persistedState: unknown, version: number) => {
         // biome-ignore lint/suspicious/noExplicitAny: migration handles arbitrary persisted state
         let state: any = persistedState
@@ -664,6 +664,7 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
       cameraSpeed: oldSettings.cameraSpeed ?? DEFAULT_SETTINGS.camera.cameraSpeed,
       mouseSensitivity: oldSettings.mouseSensitivity ?? DEFAULT_SETTINGS.camera.mouseSensitivity,
       joystickSensitivity: oldSettings.joystickSensitivity ?? DEFAULT_SETTINGS.camera.joystickSensitivity,
+      joystickCorner: oldSettings.joystickCorner ?? DEFAULT_SETTINGS.camera.joystickCorner,
       enableAutoAirportSwitch: oldSettings.enableAutoAirportSwitch ?? DEFAULT_SETTINGS.camera.enableAutoAirportSwitch,
       orbitCameraLag: oldSettings.orbitCameraLag ?? DEFAULT_SETTINGS.camera.orbitCameraLag,
       mouseInvert: DEFAULT_SETTINGS.camera.mouseInvert,
@@ -721,6 +722,7 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
         oldSettings.deviceOptimizationPromptDismissed ?? DEFAULT_SETTINGS.ui.deviceOptimizationPromptDismissed,
       keyboardCheatsheetDismissed:
         oldSettings.keyboardCheatsheetDismissed ?? DEFAULT_SETTINGS.ui.keyboardCheatsheetDismissed,
+      touchOnboardingCompleted: oldSettings.touchOnboardingCompleted ?? DEFAULT_SETTINGS.ui.touchOnboardingCompleted,
       aircraftPanelWidth: oldSettings.aircraftPanelWidth ?? DEFAULT_SETTINGS.ui.aircraftPanelWidth,
       aircraftPanelHeight: oldSettings.aircraftPanelHeight ?? DEFAULT_SETTINGS.ui.aircraftPanelHeight,
       settingsModalPosition: oldSettings.settingsModalPosition ?? DEFAULT_SETTINGS.ui.settingsModalPosition,

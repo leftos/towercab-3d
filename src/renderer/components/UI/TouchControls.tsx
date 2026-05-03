@@ -189,7 +189,13 @@ function TouchCommandInput({ isOpen, onClose }: { isOpen: boolean; onClose: () =
 /**
  * Virtual joystick component for WASD movement
  */
-function VirtualJoystick({ onMove }: { onMove: (deltaX: number, deltaY: number) => void }) {
+function VirtualJoystick({
+  onMove,
+  onLongPress,
+}: {
+  onMove: (deltaX: number, deltaY: number) => void
+  onLongPress?: (startX: number, startY: number) => void
+}) {
   const joystickRef = useRef<HTMLDivElement>(null)
   const knobRef = useRef<HTMLDivElement>(null)
   const stateRef = useRef<JoystickState>({
@@ -200,9 +206,14 @@ function VirtualJoystick({ onMove }: { onMove: (deltaX: number, deltaY: number) 
     startY: 0,
   })
   const animationRef = useRef<number | null>(null)
+  const longPressTimerRef = useRef<number | null>(null)
+  const initialTouchPosRef = useRef<{ x: number; y: number } | null>(null)
+  const longPressFiredRef = useRef(false)
 
   const JOYSTICK_RADIUS = 50 // Max distance knob can move from center
   const DEAD_ZONE = 0.15 // 15% dead zone
+  const LONG_PRESS_MS = 500
+  const LONG_PRESS_MOVE_THRESHOLD = 5
 
   // Animation loop to continuously apply movement
   useEffect(() => {
@@ -223,6 +234,17 @@ function VirtualJoystick({ onMove }: { onMove: (deltaX: number, deltaY: number) 
     }
   }, [onMove])
 
+  // Clear pending long-press timer on unmount.
+  useEffect(
+    () => () => {
+      if (longPressTimerRef.current !== null) {
+        window.clearTimeout(longPressTimerRef.current)
+        longPressTimerRef.current = null
+      }
+    },
+    [],
+  )
+
   const handleTouchStart = (e: React.TouchEvent) => {
     e.preventDefault()
     const touch = e.touches[0]
@@ -240,16 +262,49 @@ function VirtualJoystick({ onMove }: { onMove: (deltaX: number, deltaY: number) 
       startY: centerY,
     }
 
+    initialTouchPosRef.current = { x: touch.clientX, y: touch.clientY }
+    longPressFiredRef.current = false
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current)
+    }
+    if (onLongPress) {
+      longPressTimerRef.current = window.setTimeout(() => {
+        longPressTimerRef.current = null
+        longPressFiredRef.current = true
+        navigator.vibrate?.(15)
+        // Cancel any in-progress joystick input — drag mode takes over.
+        stateRef.current.active = false
+        stateRef.current.deltaX = 0
+        stateRef.current.deltaY = 0
+        if (knobRef.current) {
+          knobRef.current.style.transform = 'translate(-50%, -50%)'
+        }
+        const pos = initialTouchPosRef.current
+        if (pos) onLongPress(pos.x, pos.y)
+      }, LONG_PRESS_MS)
+    }
+
     updateKnobPosition(touch.clientX - centerX, touch.clientY - centerY)
   }
 
   const handleTouchMove = (e: React.TouchEvent) => {
+    if (longPressFiredRef.current) return // drag mode owns the touch now
     e.preventDefault()
     if (!stateRef.current.active) return
 
     const touch = e.touches[0]
-    const state = stateRef.current
 
+    // Cancel pending long-press if the finger has moved beyond the slop threshold.
+    if (longPressTimerRef.current !== null && initialTouchPosRef.current) {
+      const ldx = touch.clientX - initialTouchPosRef.current.x
+      const ldy = touch.clientY - initialTouchPosRef.current.y
+      if (Math.hypot(ldx, ldy) > LONG_PRESS_MOVE_THRESHOLD) {
+        window.clearTimeout(longPressTimerRef.current)
+        longPressTimerRef.current = null
+      }
+    }
+
+    const state = stateRef.current
     const dx = touch.clientX - state.startX
     const dy = touch.clientY - state.startY
 
@@ -258,6 +313,12 @@ function VirtualJoystick({ onMove }: { onMove: (deltaX: number, deltaY: number) 
 
   const handleTouchEnd = (e: React.TouchEvent) => {
     e.preventDefault()
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
+    longPressFiredRef.current = false
+    initialTouchPosRef.current = null
     stateRef.current.active = false
     stateRef.current.deltaX = 0
     stateRef.current.deltaY = 0
@@ -367,6 +428,7 @@ function ZoomButtons() {
           fill="none"
           stroke="currentColor"
           strokeWidth="3"
+          strokeLinecap="round"
         >
           <line x1="12" y1="5" x2="12" y2="19" />
           <line x1="5" y1="12" x2="19" y2="12" />
@@ -389,6 +451,7 @@ function ZoomButtons() {
           fill="none"
           stroke="currentColor"
           strokeWidth="3"
+          strokeLinecap="round"
         >
           <line x1="5" y1="12" x2="19" y2="12" />
         </svg>
@@ -406,6 +469,10 @@ function ZoomButtons() {
  */
 function TouchControls() {
   const [isJoystickVisible, setIsJoystickVisible] = useState(true)
+  const [isDraggingContainer, setIsDraggingContainer] = useState(false)
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
+  const dragStartFingerRef = useRef<{ x: number; y: number } | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   // Viewport store actions
   const moveForward = useViewportStore((state) => state.moveForward)
@@ -413,6 +480,8 @@ function TouchControls() {
 
   // Settings
   const joystickSensitivity = useSettingsStore((state) => state.camera.joystickSensitivity)
+  const joystickCorner = useSettingsStore((state) => state.camera.joystickCorner)
+  const updateCameraSettings = useSettingsStore((state) => state.updateCameraSettings)
 
   // Handle joystick movement
   const handleJoystickMove = useCallback(
@@ -426,6 +495,48 @@ function TouchControls() {
     },
     [moveForward, moveRight, joystickSensitivity],
   )
+
+  const handleJoystickLongPress = useCallback((startX: number, startY: number) => {
+    dragStartFingerRef.current = { x: startX, y: startY }
+    setDragOffset({ x: 0, y: 0 })
+    setIsDraggingContainer(true)
+  }, [])
+
+  // While in drag mode, follow the user's finger and snap to the nearest
+  // screen quadrant on release.
+  useEffect(() => {
+    if (!isDraggingContainer) return
+
+    const onMove = (e: TouchEvent) => {
+      const start = dragStartFingerRef.current
+      if (!start || e.touches.length === 0) return
+      const t = e.touches[0]
+      setDragOffset({ x: t.clientX - start.x, y: t.clientY - start.y })
+    }
+    const onEnd = () => {
+      const rect = containerRef.current?.getBoundingClientRect()
+      if (rect) {
+        const cx = rect.left + rect.width / 2
+        const cy = rect.top + rect.height / 2
+        const horizontal = cx < window.innerWidth / 2 ? 'L' : 'R'
+        const vertical = cy < window.innerHeight / 2 ? 'T' : 'B'
+        const corner = `${vertical}${horizontal}` as 'BL' | 'BR' | 'TL' | 'TR'
+        updateCameraSettings({ joystickCorner: corner })
+      }
+      dragStartFingerRef.current = null
+      setIsDraggingContainer(false)
+      setDragOffset({ x: 0, y: 0 })
+    }
+
+    window.addEventListener('touchmove', onMove, { passive: true })
+    window.addEventListener('touchend', onEnd)
+    window.addEventListener('touchcancel', onEnd)
+    return () => {
+      window.removeEventListener('touchmove', onMove)
+      window.removeEventListener('touchend', onEnd)
+      window.removeEventListener('touchcancel', onEnd)
+    }
+  }, [isDraggingContainer, updateCameraSettings])
 
   // Don't render on non-touch devices (joystick only makes sense with touch)
   if (!isTouchDevice()) {
@@ -457,9 +568,14 @@ function TouchControls() {
 
       {/* Virtual joystick (left side) with zoom buttons */}
       {isJoystickVisible && (
-        <div className="touch-controls-container">
+        <div
+          ref={containerRef}
+          className={`touch-controls-container${isDraggingContainer ? ' dragging' : ''}`}
+          data-corner={joystickCorner}
+          style={isDraggingContainer ? { transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)` } : undefined}
+        >
           <div className="touch-controls-left">
-            <VirtualJoystick onMove={handleJoystickMove} />
+            <VirtualJoystick onMove={handleJoystickMove} onLongPress={handleJoystickLongPress} />
             <ZoomButtons />
           </div>
         </div>

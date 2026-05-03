@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useUIFeedbackStore } from '../../stores/uiFeedbackStore'
+import { isCoarsePointer } from '../../utils/deviceDetection'
 import SettingsAdvancedTab from './SettingsAdvancedTab'
 import SettingsAircraftLabelsTab from './SettingsAircraftLabelsTab'
 import SettingsConfigurationTab from './SettingsConfigurationTab'
@@ -32,6 +33,16 @@ function SettingsModal({ isOpen, onClose, onShowImportModal, onShowExportModal, 
   const [isDragging, setIsDragging] = useState(false)
   const dragStartRef = useRef<{ mouseX: number; mouseY: number; posX: number; posY: number } | null>(null)
   const modalRef = useRef<HTMLDivElement>(null)
+
+  // On touch-only devices the modal-header drag affordance is irrelevant and
+  // accidental finger drags would just reposition the modal mid-interaction.
+  const [coarsePointer, setCoarsePointer] = useState(() => (typeof window !== 'undefined' ? isCoarsePointer() : false))
+  useEffect(() => {
+    const mq = window.matchMedia('(pointer: coarse)')
+    const handler = (e: MediaQueryListEvent) => setCoarsePointer(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
 
   // Constrain position to keep modal within window bounds
   const constrainPosition = useCallback((pos: { x: number; y: number }) => {
@@ -151,6 +162,8 @@ function SettingsModal({ isOpen, onClose, onShowImportModal, onShowExportModal, 
     (e: React.MouseEvent) => {
       // Only drag on left click and not on the close button
       if (e.button !== 0 || (e.target as HTMLElement).closest('.close-button')) return
+      // Disable drag on touch-only devices to prevent accidental repositioning.
+      if (coarsePointer) return
 
       e.preventDefault()
       setIsDragging(true)
@@ -161,7 +174,7 @@ function SettingsModal({ isOpen, onClose, onShowImportModal, onShowExportModal, 
         posY: position.y,
       }
     },
-    [position],
+    [position, coarsePointer],
   )
 
   // Close settings modal on Escape key
@@ -201,7 +214,7 @@ function SettingsModal({ isOpen, onClose, onShowImportModal, onShowExportModal, 
         <div
           className="settings-header"
           onMouseDown={handleHeaderMouseDown}
-          style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+          style={{ cursor: coarsePointer ? 'default' : isDragging ? 'grabbing' : 'grab' }}
         >
           <h2>Settings</h2>
           <button type="button" className="close-button" onClick={onClose}>
