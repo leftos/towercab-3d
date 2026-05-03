@@ -431,7 +431,7 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
     }),
     {
       name: 'settings-store',
-      version: 32,
+      version: 33,
       migrate: (persistedState: unknown, version: number) => {
         // biome-ignore lint/suspicious/noExplicitAny: migration handles arbitrary persisted state
         let state: any = persistedState
@@ -666,6 +666,13 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
       joystickSensitivity: oldSettings.joystickSensitivity ?? DEFAULT_SETTINGS.camera.joystickSensitivity,
       enableAutoAirportSwitch: oldSettings.enableAutoAirportSwitch ?? DEFAULT_SETTINGS.camera.enableAutoAirportSwitch,
       orbitCameraLag: oldSettings.orbitCameraLag ?? DEFAULT_SETTINGS.camera.orbitCameraLag,
+      mouseInvert: DEFAULT_SETTINGS.camera.mouseInvert,
+      mouseOrbitInvert: DEFAULT_SETTINGS.camera.mouseOrbitInvert,
+      invertWheelZoom: DEFAULT_SETTINGS.camera.invertWheelZoom,
+      touchInvert: DEFAULT_SETTINGS.camera.touchInvert,
+      touchOrbitInvert: DEFAULT_SETTINGS.camera.touchOrbitInvert,
+      keyboardInvert: DEFAULT_SETTINGS.camera.keyboardInvert,
+      keyboardOrbitInvert: DEFAULT_SETTINGS.camera.keyboardOrbitInvert,
     },
     weather: {
       showWeatherEffects: oldSettings.showWeatherEffects ?? DEFAULT_SETTINGS.weather.showWeatherEffects,

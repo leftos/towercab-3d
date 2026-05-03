@@ -124,6 +124,7 @@ export type {
 
 export type {
   AircraftSettings,
+  AxisInvertSettings,
   BuildingQuality,
   CameraSettings,
   // Settings groups

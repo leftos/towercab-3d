@@ -638,6 +638,20 @@ export interface GraphicsSettings {
  *
  * Settings for camera movement speed and input sensitivity.
  */
+/**
+ * Per-axis invert flags for an input device
+ *
+ * Allows users to flip the horizontal (X) or vertical (Y) axis of an
+ * input device independently. Useful for users who prefer flight-sim
+ * style inverted controls.
+ */
+export interface AxisInvertSettings {
+  /** Invert horizontal axis (left/right rotation) */
+  invertX: boolean
+  /** Invert vertical axis (up/down rotation) */
+  invertY: boolean
+}
+
 export interface CameraSettings {
   /** Default field of view in degrees (10-120, default: 60) */
   defaultFov: number
@@ -680,6 +694,27 @@ export interface CameraSettings {
    * reacts to aircraft movement rather than being rigidly locked.
    */
   orbitCameraLag: number
+
+  /** Mouse drag invert in 3D / tower / top-down modes */
+  mouseInvert: AxisInvertSettings
+
+  /** Mouse drag invert when in orbit follow mode */
+  mouseOrbitInvert: AxisInvertSettings
+
+  /** Invert mouse-wheel scroll direction for FOV/altitude/follow zoom */
+  invertWheelZoom: boolean
+
+  /** Touch drag invert in 3D / tower modes */
+  touchInvert: AxisInvertSettings
+
+  /** Touch drag invert when in orbit follow mode */
+  touchOrbitInvert: AxisInvertSettings
+
+  /** Keyboard arrow key invert in 3D / tower modes */
+  keyboardInvert: AxisInvertSettings
+
+  /** Keyboard arrow key invert when in orbit follow mode */
+  keyboardOrbitInvert: AxisInvertSettings
 }
 
 /**
@@ -1831,6 +1866,13 @@ export const DEFAULT_SETTINGS: Omit<
     joystickSensitivity: 5,
     enableAutoAirportSwitch: false,
     orbitCameraLag: 50,
+    mouseInvert: { invertX: false, invertY: false },
+    mouseOrbitInvert: { invertX: false, invertY: false },
+    invertWheelZoom: false,
+    touchInvert: { invertX: false, invertY: false },
+    touchOrbitInvert: { invertX: false, invertY: false },
+    keyboardInvert: { invertX: false, invertY: false },
+    keyboardOrbitInvert: { invertX: false, invertY: false },
   },
   weather: {
     showWeatherEffects: true,

@@ -144,6 +144,24 @@ export interface TargetVelocities {
   altitude: number
 }
 
+export interface KeyboardInvertFlags {
+  /** Invert heading (X) in 3D / tower modes */
+  invertX: boolean
+  /** Invert pitch (Y) in 3D / tower modes */
+  invertY: boolean
+  /** Invert orbit heading (X) in orbit follow mode */
+  invertOrbitX: boolean
+  /** Invert orbit pitch (Y) in orbit follow mode */
+  invertOrbitY: boolean
+}
+
+const DEFAULT_KEYBOARD_INVERT: KeyboardInvertFlags = {
+  invertX: false,
+  invertY: false,
+  invertOrbitX: false,
+  invertOrbitY: false,
+}
+
 /**
  * Calculate target velocities based on pressed keys and current mode
  */
@@ -152,6 +170,7 @@ export function calculateTargetVelocities(
   viewMode: '3d' | 'topdown',
   followingCallsign: string | null,
   followMode: 'tower' | 'orbit',
+  invert: KeyboardInvertFlags = DEFAULT_KEYBOARD_INVERT,
 ): TargetVelocities {
   let targetForward = 0
   let targetRight = 0
@@ -199,6 +218,12 @@ export function calculateTargetVelocities(
     if (inOrbitMode) targetOrbitPitch = -1
     else targetPitch = -1
   }
+
+  // Apply invert flags (user preference for flipped axes)
+  if (invert.invertX) targetHeading = -targetHeading
+  if (invert.invertY) targetPitch = -targetPitch
+  if (invert.invertOrbitX) targetOrbitHeading = -targetOrbitHeading
+  if (invert.invertOrbitY) targetOrbitPitch = -targetOrbitPitch
 
   // Zoom controls (+/-)
   const zoomIn = pressedKeys.has('+') || pressedKeys.has('=')

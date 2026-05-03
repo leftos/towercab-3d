@@ -1,6 +1,9 @@
 import { useSettingsStore } from '../../stores/settingsStore'
+import type { AxisInvertSettings } from '../../types/settings'
 import CollapsibleSection from './settings/CollapsibleSection'
 import './ControlsBar.css'
+
+const DEFAULT_INVERT: AxisInvertSettings = { invertX: false, invertY: false }
 
 function SettingsControlsCameraTab() {
   // Camera settings
@@ -10,6 +13,13 @@ function SettingsControlsCameraTab() {
   const joystickSensitivity = useSettingsStore((state) => state.camera.joystickSensitivity)
   const enableAutoAirportSwitch = useSettingsStore((state) => state.camera.enableAutoAirportSwitch ?? false)
   const orbitCameraLag = useSettingsStore((state) => state.camera.orbitCameraLag ?? 50)
+  const mouseInvert = useSettingsStore((state) => state.camera.mouseInvert ?? DEFAULT_INVERT)
+  const mouseOrbitInvert = useSettingsStore((state) => state.camera.mouseOrbitInvert ?? DEFAULT_INVERT)
+  const invertWheelZoom = useSettingsStore((state) => state.camera.invertWheelZoom ?? false)
+  const touchInvert = useSettingsStore((state) => state.camera.touchInvert ?? DEFAULT_INVERT)
+  const touchOrbitInvert = useSettingsStore((state) => state.camera.touchOrbitInvert ?? DEFAULT_INVERT)
+  const keyboardInvert = useSettingsStore((state) => state.camera.keyboardInvert ?? DEFAULT_INVERT)
+  const keyboardOrbitInvert = useSettingsStore((state) => state.camera.keyboardOrbitInvert ?? DEFAULT_INVERT)
   const updateCameraSettings = useSettingsStore((state) => state.updateCameraSettings)
 
   return (
@@ -88,6 +98,147 @@ function SettingsControlsCameraTab() {
             <span>{joystickSensitivity}</span>
           </div>
           <p className="setting-hint">Virtual joystick movement speed on touch devices.</p>
+        </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection title="Invert Axes">
+        <div className="setting-item">
+          <strong>Mouse</strong>
+          <label>
+            <input
+              type="checkbox"
+              checked={mouseInvert.invertX}
+              onChange={(e) => updateCameraSettings({ mouseInvert: { ...mouseInvert, invertX: e.target.checked } })}
+            />
+            Invert X (heading)
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={mouseInvert.invertY}
+              onChange={(e) => updateCameraSettings({ mouseInvert: { ...mouseInvert, invertY: e.target.checked } })}
+            />
+            Invert Y (pitch)
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={mouseOrbitInvert.invertX}
+              onChange={(e) =>
+                updateCameraSettings({ mouseOrbitInvert: { ...mouseOrbitInvert, invertX: e.target.checked } })
+              }
+            />
+            Invert X in orbit mode
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={mouseOrbitInvert.invertY}
+              onChange={(e) =>
+                updateCameraSettings({ mouseOrbitInvert: { ...mouseOrbitInvert, invertY: e.target.checked } })
+              }
+            />
+            Invert Y in orbit mode
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={invertWheelZoom}
+              onChange={(e) => updateCameraSettings({ invertWheelZoom: e.target.checked })}
+            />
+            Invert wheel zoom
+          </label>
+          <p className="setting-hint">Flip mouse drag rotation and scroll-wheel zoom direction.</p>
+        </div>
+
+        <div className="setting-item">
+          <strong>Touch</strong>
+          <label>
+            <input
+              type="checkbox"
+              checked={touchInvert.invertX}
+              onChange={(e) => updateCameraSettings({ touchInvert: { ...touchInvert, invertX: e.target.checked } })}
+            />
+            Invert X (heading)
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={touchInvert.invertY}
+              onChange={(e) => updateCameraSettings({ touchInvert: { ...touchInvert, invertY: e.target.checked } })}
+            />
+            Invert Y (pitch)
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={touchOrbitInvert.invertX}
+              onChange={(e) =>
+                updateCameraSettings({ touchOrbitInvert: { ...touchOrbitInvert, invertX: e.target.checked } })
+              }
+            />
+            Invert X in orbit mode
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={touchOrbitInvert.invertY}
+              onChange={(e) =>
+                updateCameraSettings({ touchOrbitInvert: { ...touchOrbitInvert, invertY: e.target.checked } })
+              }
+            />
+            Invert Y in orbit mode
+          </label>
+          <p className="setting-hint">Flip single-finger drag rotation direction on touch devices.</p>
+        </div>
+
+        <div className="setting-item">
+          <strong>Keyboard</strong>
+          <label>
+            <input
+              type="checkbox"
+              checked={keyboardInvert.invertX}
+              onChange={(e) =>
+                updateCameraSettings({ keyboardInvert: { ...keyboardInvert, invertX: e.target.checked } })
+              }
+            />
+            Invert X (Arrow Left/Right)
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={keyboardInvert.invertY}
+              onChange={(e) =>
+                updateCameraSettings({ keyboardInvert: { ...keyboardInvert, invertY: e.target.checked } })
+              }
+            />
+            Invert Y (Arrow Up/Down)
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={keyboardOrbitInvert.invertX}
+              onChange={(e) =>
+                updateCameraSettings({
+                  keyboardOrbitInvert: { ...keyboardOrbitInvert, invertX: e.target.checked },
+                })
+              }
+            />
+            Invert X in orbit mode
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={keyboardOrbitInvert.invertY}
+              onChange={(e) =>
+                updateCameraSettings({
+                  keyboardOrbitInvert: { ...keyboardOrbitInvert, invertY: e.target.checked },
+                })
+              }
+            />
+            Invert Y in orbit mode
+          </label>
+          <p className="setting-hint">Flip arrow-key heading/pitch direction.</p>
         </div>
       </CollapsibleSection>
 

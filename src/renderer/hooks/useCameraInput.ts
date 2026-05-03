@@ -202,6 +202,11 @@ export function useCameraInput(
 
   // Settings store
   const mouseSensitivity = useSettingsStore((state) => state.camera.mouseSensitivity)
+  const mouseInvert = useSettingsStore((state) => state.camera.mouseInvert)
+  const mouseOrbitInvert = useSettingsStore((state) => state.camera.mouseOrbitInvert)
+  const invertWheelZoom = useSettingsStore((state) => state.camera.invertWheelZoom)
+  const keyboardInvert = useSettingsStore((state) => state.camera.keyboardInvert)
+  const keyboardOrbitInvert = useSettingsStore((state) => state.camera.keyboardOrbitInvert)
 
   // Viewport store - check if this viewport is active
   const activeViewportId = useViewportStore((state) => state.activeViewportId)
@@ -270,6 +275,11 @@ export function useCameraInput(
   const orbitPitchRef = useRef(orbitPitch)
   const orbitDistanceRef = useRef(orbitDistance)
   const mouseSensitivityRef = useRef(mouseSensitivity)
+  const mouseInvertRef = useRef(mouseInvert)
+  const mouseOrbitInvertRef = useRef(mouseOrbitInvert)
+  const invertWheelZoomRef = useRef(invertWheelZoom)
+  const keyboardInvertRef = useRef(keyboardInvert)
+  const keyboardOrbitInvertRef = useRef(keyboardOrbitInvert)
   const isActiveRef = useRef(activeViewportId === viewportId)
   const viewportIdRef = useRef(viewportId)
   const lookAtTargetRef = useRef(lookAtTarget)
@@ -290,6 +300,11 @@ export function useCameraInput(
   orbitPitchRef.current = orbitPitch
   orbitDistanceRef.current = orbitDistance
   mouseSensitivityRef.current = mouseSensitivity
+  mouseInvertRef.current = mouseInvert
+  mouseOrbitInvertRef.current = mouseOrbitInvert
+  invertWheelZoomRef.current = invertWheelZoom
+  keyboardInvertRef.current = keyboardInvert
+  keyboardOrbitInvertRef.current = keyboardOrbitInvert
   isActiveRef.current = activeViewportId === viewportId
   viewportIdRef.current = viewportId
   lookAtTargetRef.current = lookAtTarget
@@ -399,13 +414,17 @@ export function useCameraInput(
 
       if (followingCallsignRef.current && followModeRef.current === 'orbit') {
         // In orbit mode: adjust orbit heading/pitch
-        adjustOrbitHeading(deltaX * sensitivity)
-        adjustOrbitPitch(deltaY * sensitivity)
+        const orbitXSign = mouseOrbitInvertRef.current.invertX ? -1 : 1
+        const orbitYSign = mouseOrbitInvertRef.current.invertY ? -1 : 1
+        adjustOrbitHeading(deltaX * sensitivity * orbitXSign)
+        adjustOrbitPitch(deltaY * sensitivity * orbitYSign)
       } else {
         // Normal mode: update heading (horizontal movement) - positive deltaX = look right
-        adjustHeading(deltaX * sensitivity)
+        const xSign = mouseInvertRef.current.invertX ? -1 : 1
+        const ySign = mouseInvertRef.current.invertY ? -1 : 1
+        adjustHeading(deltaX * sensitivity * xSign)
         // Update pitch (vertical movement) - positive deltaY = look down
-        adjustPitch(-deltaY * sensitivity)
+        adjustPitch(-deltaY * sensitivity * ySign)
       }
 
       lastMousePosRef.current = { x: movement.endPosition.x, y: movement.endPosition.y }
@@ -495,6 +514,11 @@ export function useCameraInput(
       // Normalize wheel delta: one notch = ~1 unit
       // Cap at 150 to handle high-DPI mice, divide by 100 for unit scale
       let normalizedDelta = (Math.sign(event.deltaY) * Math.min(Math.abs(event.deltaY), 150)) / 100
+
+      // Optionally invert wheel direction (user preference)
+      if (invertWheelZoomRef.current) {
+        normalizedDelta = -normalizedDelta
+      }
 
       // Scale wheel sensitivity based on viewport size
       // Smaller viewports get reduced sensitivity to prevent aggressive zooming
@@ -801,6 +825,12 @@ export function useCameraInput(
         viewModeRef.current,
         followingCallsignRef.current,
         followModeRef.current,
+        {
+          invertX: keyboardInvertRef.current.invertX,
+          invertY: keyboardInvertRef.current.invertY,
+          invertOrbitX: keyboardOrbitInvertRef.current.invertX,
+          invertOrbitY: keyboardOrbitInvertRef.current.invertY,
+        },
       )
 
       // WASD movement (shift = sprint, ctrl = fine control)

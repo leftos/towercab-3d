@@ -4,6 +4,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Camera input axis inversion settings — independently flip horizontal/vertical axes for mouse drag, touch drag, and keyboard arrow keys, with separate toggles for orbit follow mode and an option to invert mouse-wheel zoom direction. Configure under Settings > Controls > Camera > Invert Axes.
+
 ### Fixed
 - Aircraft cards in the Nearby Aircraft panel now fill the full panel width.
 - Cloud layers from METAR (FEW/SCT/BKN/OVC) now render correctly. Previously no cloud layers appeared at any airport.

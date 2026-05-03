@@ -83,6 +83,8 @@ export function useTouchInput(
 
   // Settings
   const touchSensitivity = useSettingsStore((state) => state.camera.mouseSensitivity) // Reuse mouse sensitivity for touch
+  const touchInvert = useSettingsStore((state) => state.camera.touchInvert)
+  const touchOrbitInvert = useSettingsStore((state) => state.camera.touchOrbitInvert)
 
   // Viewport store actions
   const setActiveViewport = useViewportStore((state) => state.setActiveViewport)
@@ -101,6 +103,8 @@ export function useTouchInput(
   // Refs for current state (avoid stale closures)
   const viewportIdRef = useRef(viewportId)
   const touchSensitivityRef = useRef(touchSensitivity)
+  const touchInvertRef = useRef(touchInvert)
+  const touchOrbitInvertRef = useRef(touchOrbitInvert)
   const isDraggingRef = useRef(false)
   const lastPosRef = useRef({ x: 0, y: 0 })
   const pinchStateRef = useRef<PinchState>({
@@ -113,6 +117,8 @@ export function useTouchInput(
   // Keep refs updated
   viewportIdRef.current = viewportId
   touchSensitivityRef.current = touchSensitivity
+  touchInvertRef.current = touchInvert
+  touchOrbitInvertRef.current = touchOrbitInvert
 
   useEffect(() => {
     // Skip touch handling when input is disabled (e.g., inactive iframe inset)
@@ -217,12 +223,16 @@ export function useTouchInput(
         moveForward(worldDeltaY * panScale)
       } else if (vpState.followingCallsign && vpState.followMode === 'orbit') {
         // Orbit mode - rotate orbit (inverted for natural touch feel)
-        adjustOrbitHeading(-deltaX * sensitivity)
-        adjustOrbitPitch(-deltaY * sensitivity)
+        const orbitXSign = touchOrbitInvertRef.current.invertX ? -1 : 1
+        const orbitYSign = touchOrbitInvertRef.current.invertY ? -1 : 1
+        adjustOrbitHeading(-deltaX * sensitivity * orbitXSign)
+        adjustOrbitPitch(-deltaY * sensitivity * orbitYSign)
       } else {
         // 3D/Tower mode - rotate camera (inverted for natural touch feel)
-        adjustHeading(-deltaX * sensitivity)
-        adjustPitch(deltaY * sensitivity)
+        const xSign = touchInvertRef.current.invertX ? -1 : 1
+        const ySign = touchInvertRef.current.invertY ? -1 : 1
+        adjustHeading(-deltaX * sensitivity * xSign)
+        adjustPitch(deltaY * sensitivity * ySign)
       }
 
       lastPosRef.current = { x: movement.endPosition.x, y: movement.endPosition.y }
