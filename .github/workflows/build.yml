@@ -55,13 +55,6 @@ jobs:
 
     runs-on: ${{ matrix.platform }}
 
-    # sccache caches rustc invocations across runs in GitHub Actions cache.
-    # Combined with Swatinem/rust-cache (whole target/ + registry), this avoids
-    # recompiling unchanged crates on every push.
-    env:
-      SCCACHE_GHA_ENABLED: 'true'
-      RUSTC_WRAPPER: sccache
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -80,9 +73,6 @@ jobs:
         with:
           targets: ${{ matrix.target }}
           components: clippy
-
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
 
       - name: Install dependencies (Ubuntu only)
         if: matrix.platform == 'ubuntu-22.04'
