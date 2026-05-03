@@ -1,14 +1,14 @@
 .aircraft-panel {
   position: fixed;
-  top: 58px;
+  top: calc(var(--topbar-h) + 10px);
   right: 10px;
   /* width is controlled via inline style for resizing */
   max-height: calc(100vh - 120px);
-  background: rgba(20, 20, 30, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-panel);
+  border: 1px solid var(--white-a10);
   border-radius: 8px;
   z-index: 90;
-  backdrop-filter: blur(10px);
+  backdrop-filter: var(--blur);
   display: flex;
   flex-direction: column;
 }
@@ -18,7 +18,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--white-a10);
 }
 
 .panel-header .header-left {
@@ -42,7 +42,7 @@
 
 .panel-header .aircraft-count {
   background: rgba(79, 195, 247, 0.2);
-  color: #4fc3f7;
+  color: var(--accent);
   padding: 2px 8px;
   border-radius: 10px;
   font-size: 12px;
@@ -55,8 +55,8 @@
   justify-content: center;
   width: 24px;
   height: 24px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--white-a10);
+  border: 1px solid var(--white-a15);
   border-radius: 4px;
   color: rgba(255, 255, 255, 0.6);
   cursor: pointer;
@@ -64,7 +64,7 @@
 }
 
 .collapse-btn:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--white-a15);
   color: rgba(255, 255, 255, 0.9);
 }
 
@@ -83,14 +83,14 @@
   flex-direction: column;
   gap: 8px;
   padding: 10px 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--white-a10);
 }
 
 .search-input {
   width: 100%;
   padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--white-a08);
+  border: 1px solid var(--white-a15);
   border-radius: 6px;
   color: rgba(255, 255, 255, 0.9);
   font-size: 12px;
@@ -104,7 +104,7 @@
 
 .search-input:focus {
   border-color: rgba(79, 195, 247, 0.5);
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--white-a10);
 }
 
 .sort-controls {
@@ -123,8 +123,8 @@
 .sort-select {
   flex: 1;
   padding: 5px 8px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--white-a08);
+  border: 1px solid var(--white-a15);
   border-radius: 4px;
   color: rgba(255, 255, 255, 0.9);
   font-size: 11px;
@@ -155,8 +155,8 @@
 .filter-btn {
   flex: 1;
   padding: 5px 8px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--white-a08);
+  border: 1px solid var(--white-a15);
   border-radius: 4px;
   color: rgba(255, 255, 255, 0.6);
   font-size: 11px;
@@ -174,7 +174,7 @@
 .filter-btn.active {
   background: rgba(79, 195, 247, 0.2);
   border-color: rgba(79, 195, 247, 0.5);
-  color: #4fc3f7;
+  color: var(--accent);
 }
 
 .filter-btn:disabled {
@@ -200,7 +200,7 @@
   width: 100%;
   box-sizing: border-box;
   text-align: left;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--white-a05);
   border: none;
   border-radius: 6px;
   padding: 10px 12px;
@@ -212,7 +212,7 @@
 }
 
 .aircraft-item:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--white-a10);
 }
 
 .aircraft-item:last-child {
@@ -229,13 +229,13 @@
 .callsign {
   font-weight: 700;
   font-size: 14px;
-  color: #4fc3f7;
+  color: var(--accent);
 }
 
 .aircraft-type {
   font-size: 11px;
   color: rgba(255, 255, 255, 0.5);
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--white-a10);
   padding: 2px 6px;
   border-radius: 3px;
 }
@@ -262,7 +262,7 @@
 .detail-row .value {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.9);
-  font-family: "Consolas", "Monaco", monospace;
+  font-family: var(--font-mono);
 }
 
 .aircraft-position {
@@ -291,7 +291,7 @@
 }
 
 .route-arrow {
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--white-a30);
 }
 
 /* Scrollbar styling */
@@ -304,12 +304,12 @@
 }
 
 .aircraft-list::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--white-a20);
   border-radius: 3px;
 }
 
 .aircraft-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--white-a30);
 }
 
 /* Following indicator */
@@ -338,7 +338,7 @@
 .following-callsign {
   font-weight: 700;
   font-size: 14px;
-  color: #4fc3f7;
+  color: var(--accent);
 }
 
 .following-indicator .zoom-control {
@@ -349,7 +349,7 @@
 .following-indicator .zoom-label {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.7);
-  font-family: "Consolas", "Monaco", monospace;
+  font-family: var(--font-mono);
 }
 
 .stop-following-btn {
@@ -357,7 +357,7 @@
   border: 1px solid rgba(244, 67, 54, 0.4);
   border-radius: 4px;
   padding: 6px 12px;
-  color: #ef5350;
+  color: var(--accent-danger);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -371,8 +371,8 @@
 
 /* Follow mode toggle button */
 .follow-mode-btn {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--white-a10);
+  border: 1px solid var(--white-a20);
   border-radius: 4px;
   padding: 4px 10px;
   color: rgba(255, 255, 255, 0.7);
@@ -385,20 +385,20 @@
 }
 
 .follow-mode-btn:hover {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.3);
+  background: var(--white-a15);
+  border-color: var(--white-a30);
 }
 
 .follow-mode-btn.tower {
   background: rgba(79, 195, 247, 0.15);
   border-color: rgba(79, 195, 247, 0.3);
-  color: #4fc3f7;
+  color: var(--accent);
 }
 
 .follow-mode-btn.orbit {
   background: rgba(255, 152, 0, 0.15);
   border-color: rgba(255, 152, 0, 0.3);
-  color: #ffb74d;
+  color: var(--accent-warn);
 }
 
 /* Aircraft header with follow button */
@@ -414,8 +414,8 @@
   justify-content: center;
   width: 24px;
   height: 24px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--white-a10);
+  border: 1px solid var(--white-a20);
   border-radius: 4px;
   color: rgba(255, 255, 255, 0.6);
   cursor: pointer;
@@ -425,13 +425,13 @@
 .follow-btn:hover {
   background: rgba(79, 195, 247, 0.2);
   border-color: rgba(79, 195, 247, 0.4);
-  color: #4fc3f7;
+  color: var(--accent);
 }
 
 .follow-btn.active {
   background: rgba(79, 195, 247, 0.3);
-  border-color: #4fc3f7;
-  color: #4fc3f7;
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 /* Following state for aircraft item */
@@ -441,7 +441,7 @@
 }
 
 .aircraft-item.following .callsign {
-  color: #4fc3f7;
+  color: var(--accent);
 }
 
 /* Followed aircraft details (orbit mode without airport) */
@@ -461,13 +461,13 @@
 .followed-callsign {
   font-weight: 700;
   font-size: 16px;
-  color: #ffb74d;
+  color: var(--accent-warn);
 }
 
 .followed-type {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.6);
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--white-a10);
   padding: 3px 8px;
   border-radius: 4px;
 }
@@ -494,7 +494,7 @@
 .stat-value {
   font-size: 13px;
   color: rgba(255, 255, 255, 0.95);
-  font-family: "Consolas", "Monaco", monospace;
+  font-family: var(--font-mono);
   font-weight: 600;
 }
 
@@ -505,7 +505,7 @@
   font-size: 12px;
   color: rgba(255, 255, 255, 0.7);
   padding-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--white-a10);
 }
 
 .followed-route .route-from,
@@ -546,43 +546,43 @@
 /* Priority tier colors for badges */
 .phase-badge.priority-critical {
   background: rgba(244, 67, 54, 0.25);
-  color: #ef5350;
+  color: var(--accent-danger);
   border: 1px solid rgba(244, 67, 54, 0.4);
 }
 
 .phase-badge.priority-high {
   background: rgba(255, 152, 0, 0.25);
-  color: #ffb74d;
+  color: var(--accent-warn);
   border: 1px solid rgba(255, 152, 0, 0.4);
 }
 
 .phase-badge.priority-medium {
   background: rgba(255, 235, 59, 0.2);
-  color: #fff176;
+  color: var(--accent-pending);
   border: 1px solid rgba(255, 235, 59, 0.3);
 }
 
 .phase-badge.priority-low {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--white-a08);
   color: rgba(255, 255, 255, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid var(--white-a15);
 }
 
 /* Priority tier accent on aircraft items */
 .aircraft-item.priority-critical {
-  border-left: 3px solid #ef5350;
+  border-left: 3px solid var(--accent-danger);
 }
 
 .aircraft-item.priority-high {
-  border-left: 3px solid #ffb74d;
+  border-left: 3px solid var(--accent-warn);
 }
 
 .aircraft-item.priority-medium {
-  border-left: 3px solid #fff176;
+  border-left: 3px solid var(--accent-pending);
 }
 
 .aircraft-item.priority-low {
-  border-left: 3px solid rgba(255, 255, 255, 0.2);
+  border-left: 3px solid var(--white-a20);
 }
 
 /* Clickable aircraft row for look-at */
@@ -753,9 +753,9 @@
 }
 
 .data-source-badge.fallback {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--white-a08);
   color: rgba(255, 255, 255, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid var(--white-a15);
 }
 
 /* Small dot indicator shown next to individual aircraft callsigns */
@@ -769,7 +769,7 @@
 .delay-indicator {
   font-size: 10px;
   color: rgba(255, 255, 255, 0.4);
-  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-family: var(--font-mono);
   margin-left: 4px;
   flex-shrink: 0;
 }

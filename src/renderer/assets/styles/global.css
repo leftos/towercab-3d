@@ -1,5 +1,58 @@
 /* Global Styles for TowerCab 3D */
 
+:root {
+  /* App backdrop */
+  --bg-app: #0a0a0f;
+
+  /* Panel surfaces */
+  --bg-panel: rgba(20, 20, 30, 0.95);
+  --bg-panel-strong: rgba(30, 30, 40, 0.98);
+  --bg-overlay: rgba(0, 0, 0, 0.6);
+
+  /* White-alpha steps (used for borders, hover states, subtle backgrounds) */
+  --white-a05: rgba(255, 255, 255, 0.05);
+  --white-a08: rgba(255, 255, 255, 0.08);
+  --white-a10: rgba(255, 255, 255, 0.1);
+  --white-a15: rgba(255, 255, 255, 0.15);
+  --white-a20: rgba(255, 255, 255, 0.2);
+  --white-a30: rgba(255, 255, 255, 0.3);
+
+  /* Text */
+  --text-primary: rgba(255, 255, 255, 0.95);
+  --text-secondary: rgba(255, 255, 255, 0.7);
+  --text-tertiary: rgba(255, 255, 255, 0.5);
+  --text-muted: rgba(255, 255, 255, 0.4);
+
+  /* Accents */
+  --accent: #4fc3f7;
+  --accent-warn: #ffb74d;
+  --accent-danger: #ef5350;
+  --accent-ok: #81c784;
+  --accent-pending: #fff176;
+
+  /* Layout heights */
+  --topbar-h: 48px;
+  --topbar-h-compact: 44px;
+  --topbar-h-mobile: 40px;
+  --controls-h: 48px;
+  --controls-h-compact: 44px;
+
+  /* Radii */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 12px;
+
+  /* Effects */
+  --blur: blur(10px);
+  --blur-strong: blur(12px);
+
+  /* Fonts */
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans",
+    "Helvetica Neue", sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", "Consolas", "Monaco", monospace;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -15,12 +68,10 @@ body,
 }
 
 body {
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans",
-    "Helvetica Neue", sans-serif;
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: #0a0a0f;
+  background: var(--bg-app);
   color: white;
 }
 
@@ -32,10 +83,10 @@ body {
 
 .main-content {
   position: absolute;
-  top: 48px;
+  top: var(--topbar-h);
   left: 0;
   right: 0;
-  bottom: 48px;
+  bottom: var(--controls-h);
 }
 
 /* Custom scrollbar for the entire app */
@@ -45,16 +96,16 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--white-a05);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 4px;
+  background: var(--white-a20);
+  border-radius: var(--radius-sm);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--white-a30);
 }
 
 /* Selection color */
@@ -69,7 +120,7 @@ body {
 }
 
 :focus-visible {
-  outline: 2px solid #4fc3f7;
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 

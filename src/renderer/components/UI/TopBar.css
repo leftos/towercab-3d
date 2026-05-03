@@ -3,15 +3,15 @@
   top: 0;
   left: 0;
   right: 0;
-  height: 48px;
-  background: rgba(20, 20, 30, 0.95);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  height: var(--topbar-h);
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--white-a10);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 16px;
   z-index: 100;
-  backdrop-filter: blur(10px);
+  backdrop-filter: var(--blur);
 }
 
 .top-bar-left,
@@ -31,19 +31,19 @@
 }
 
 .compass-direction {
-  font-family: "Consolas", "Monaco", monospace;
+  font-family: var(--font-mono);
   font-size: 14px;
   font-weight: 600;
-  color: #4fc3f7;
+  color: var(--accent);
   min-width: 24px;
   text-align: center;
   margin-right: 12px;
 }
 
 .airport-button {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 6px;
+  background: var(--white-a10);
+  border: 1px solid var(--white-a20);
+  border-radius: var(--radius-md);
   padding: 8px 16px;
   color: white;
   cursor: pointer;
@@ -54,14 +54,14 @@
 }
 
 .airport-button:hover {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.3);
+  background: var(--white-a15);
+  border-color: var(--white-a30);
 }
 
 .airport-icao {
   font-weight: 700;
   font-size: 16px;
-  color: #4fc3f7;
+  color: var(--accent);
 }
 
 .airport-name {
@@ -74,14 +74,14 @@
 }
 
 .airport-placeholder {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-tertiary);
 }
 
 .zulu-time {
-  font-family: "Consolas", "Monaco", monospace;
+  font-family: var(--font-mono);
   font-size: 20px;
   font-weight: 600;
-  color: #4fc3f7;
+  color: var(--accent);
   letter-spacing: 1px;
 }
 
@@ -93,27 +93,27 @@
 
 .aircraft-count {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
 }
 
 .connection-status {
   font-size: 12px;
   font-weight: 600;
   padding: 4px 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .connection-status.connected {
   background: rgba(76, 175, 80, 0.2);
-  color: #81c784;
+  color: var(--accent-ok);
   border: 1px solid rgba(76, 175, 80, 0.4);
 }
 
 .connection-status.disconnected {
   background: rgba(244, 67, 54, 0.2);
-  color: #ef5350;
+  color: var(--accent-danger);
   border: 1px solid rgba(244, 67, 54, 0.4);
 }
 
@@ -126,7 +126,7 @@
   padding: 4px 10px;
   font-size: 12px;
   font-weight: 600;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all 0.15s ease;
   letter-spacing: 0.5px;
@@ -134,7 +134,7 @@
 
 .vnas-indicator.connected {
   background: rgba(76, 175, 80, 0.2);
-  color: #81c784;
+  color: var(--accent-ok);
   border: 1px solid rgba(76, 175, 80, 0.4);
 }
 
@@ -155,15 +155,15 @@
 }
 
 .vnas-indicator.disconnected {
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--white-a10);
+  color: var(--text-tertiary);
+  border: 1px solid var(--white-a20);
 }
 
 .vnas-indicator.disconnected:hover {
-  background: rgba(255, 255, 255, 0.15);
-  color: rgba(255, 255, 255, 0.7);
-  border-color: rgba(255, 255, 255, 0.3);
+  background: var(--white-a15);
+  color: var(--text-secondary);
+  border-color: var(--white-a30);
 }
 
 /* ============================================================================
@@ -173,7 +173,7 @@
 @media (max-width: 899px) {
   .top-bar {
     padding: 0 10px;
-    height: 44px;
+    height: var(--topbar-h-compact);
   }
 
   .compass-direction {
@@ -217,7 +217,7 @@
 @media (max-width: 600px) {
   .top-bar {
     padding: 0 8px;
-    height: 40px;
+    height: var(--topbar-h-mobile);
   }
 
   /* Hide compass direction on very small screens */
