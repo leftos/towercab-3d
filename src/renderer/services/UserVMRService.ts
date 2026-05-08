@@ -78,14 +78,22 @@ class UserVMRServiceClass {
   private currentPriority: ('fsltl' | 'aig')[] = ['fsltl', 'aig']
 
   constructor() {
-    // Subscribe to priority changes to re-sort alternatives
-    this.unsubscribe = useGlobalSettingsStore.subscribe((state) => {
-      const priority = state.msfsModels.priority
-      if (JSON.stringify(priority) !== JSON.stringify(this.currentPriority)) {
-        console.log('[UserVMRService] Priority changed, re-sorting alternatives:', priority)
-        this.currentPriority = [...priority]
-        this.sortAllAlternativesByPriority()
-      }
+    // Defer subscription until after module evaluation completes.
+    // This service singleton is constructed at module top level in a chunk that
+    // has a circular static dep with the index chunk where useGlobalSettingsStore
+    // lives. Calling .subscribe() synchronously here would access the store
+    // binding while it is still in TDZ, throwing "Cannot read properties of
+    // undefined (reading 'subscribe')" at boot. queueMicrotask runs after all
+    // module evaluation, by which time the binding is live.
+    queueMicrotask(() => {
+      this.unsubscribe = useGlobalSettingsStore.subscribe((state) => {
+        const priority = state.msfsModels.priority
+        if (JSON.stringify(priority) !== JSON.stringify(this.currentPriority)) {
+          console.log('[UserVMRService] Priority changed, re-sorting alternatives:', priority)
+          this.currentPriority = [...priority]
+          this.sortAllAlternativesByPriority()
+        }
+      })
     })
   }
 
