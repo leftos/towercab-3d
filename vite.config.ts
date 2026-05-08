@@ -13,6 +13,18 @@ const cesiumBaseUrl = 'cesium-package'
 // Use forward slashes for glob patterns (fast-glob requirement)
 const cesiumSource = resolve('node_modules/cesium/Build/Cesium').replace(/\\/g, '/')
 
+// vite-plugin-static-copy@4 computes destDir by joining `dest` with the
+// matched file's directory path relative to vite's `root`. With our root at
+// `src/renderer/` and source under `node_modules/cesium/Build/Cesium/<DirName>/`,
+// the relative dir is `node_modules/cesium/Build/Cesium/<DirName>[/<subdir>]`
+// (5+ segments). stripBase=4 strips `node_modules/cesium/Build/Cesium`, leaving
+// `<DirName>[/<subdir>]/<file>` — joined with dest=`cesium-package`, that
+// produces the desired `cesium-package/<DirName>/[<subdir>/]<file>` layout.
+// The plugin uses `../` traversals internally to undo destDir's prefix, so the
+// count is independent of project location on disk. If vite root or the cesium
+// npm package's internal directory depth changes, recount and adjust.
+const cesiumStripBase = 4
+
 // Check if Cesium assets already exist in dist (skip copying for faster rebuilds)
 const cesiumAssetsExist = existsSync(resolve('dist/cesium-package/Workers'))
 
@@ -149,23 +161,18 @@ export default defineConfig({
     writeBuildModeMarker(),
     // Only copy Cesium assets if they don't exist (speeds up rebuilds significantly).
     //
-    // NOTE: pinned to vite-plugin-static-copy ^3 in package.json. v4.0.0 made
-    // two breaking changes that silently corrupt this config:
-    //   1. Glob patterns no longer flatten — `<source>/Workers/**/*` preserves
-    //      the entire matched source path inside `dest`, so files end up at
-    //      `cesium-package/Workers/node_modules/cesium/Build/Cesium/Workers/<file>`
-    //      instead of `cesium-package/Workers/<file>`.
-    //   2. Globs only match files (not directories).
-    // The v4 result here is that Cesium's runtime worker requests 404 and Tauri
-    // serves index.html as text/html, surfacing as
-    // `InvalidStateError: source image could not be decoded` on the first
-    // imagery tile. v3 keeps the historic flatten-into-dest behavior we depend on.
+    // The dest is `cesium-package` (NOT `cesium-package/Workers` etc) and each
+    // target uses `rename: { stripBase: cesiumStripBase }`. v4 preserves the
+    // matched file's directory path under dest by default; stripBase trims the
+    // `node_modules/cesium/Build/Cesium` prefix off so files land at
+    // `cesium-package/<DirName>/<file>` instead of nested 4 dirs deep. See the
+    // `cesiumStripBase` definition above for details.
     ...(!cesiumAssetsExist ? [viteStaticCopy({
       targets: [
-        { src: `${cesiumSource}/ThirdParty/**/*`, dest: `${cesiumBaseUrl}/ThirdParty` },
-        { src: `${cesiumSource}/Workers/**/*`, dest: `${cesiumBaseUrl}/Workers` },
-        { src: `${cesiumSource}/Assets/**/*`, dest: `${cesiumBaseUrl}/Assets` },
-        { src: `${cesiumSource}/Widgets/**/*`, dest: `${cesiumBaseUrl}/Widgets` }
+        { src: `${cesiumSource}/ThirdParty/**/*`, dest: cesiumBaseUrl, rename: { stripBase: cesiumStripBase } },
+        { src: `${cesiumSource}/Workers/**/*`, dest: cesiumBaseUrl, rename: { stripBase: cesiumStripBase } },
+        { src: `${cesiumSource}/Assets/**/*`, dest: cesiumBaseUrl, rename: { stripBase: cesiumStripBase } },
+        { src: `${cesiumSource}/Widgets/**/*`, dest: cesiumBaseUrl, rename: { stripBase: cesiumStripBase } }
       ]
     })] : [])
   ]
