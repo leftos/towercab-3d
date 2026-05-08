@@ -147,7 +147,19 @@ export default defineConfig({
     react(),
     serveCesiumDev(),
     writeBuildModeMarker(),
-    // Only copy Cesium assets if they don't exist (speeds up rebuilds significantly)
+    // Only copy Cesium assets if they don't exist (speeds up rebuilds significantly).
+    //
+    // NOTE: pinned to vite-plugin-static-copy ^3 in package.json. v4.0.0 made
+    // two breaking changes that silently corrupt this config:
+    //   1. Glob patterns no longer flatten — `<source>/Workers/**/*` preserves
+    //      the entire matched source path inside `dest`, so files end up at
+    //      `cesium-package/Workers/node_modules/cesium/Build/Cesium/Workers/<file>`
+    //      instead of `cesium-package/Workers/<file>`.
+    //   2. Globs only match files (not directories).
+    // The v4 result here is that Cesium's runtime worker requests 404 and Tauri
+    // serves index.html as text/html, surfacing as
+    // `InvalidStateError: source image could not be decoded` on the first
+    // imagery tile. v3 keeps the historic flatten-into-dest behavior we depend on.
     ...(!cesiumAssetsExist ? [viteStaticCopy({
       targets: [
         { src: `${cesiumSource}/ThirdParty/**/*`, dest: `${cesiumBaseUrl}/ThirdParty` },
