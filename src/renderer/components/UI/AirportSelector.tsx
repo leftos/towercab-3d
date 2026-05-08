@@ -203,27 +203,29 @@ function AirportSelector() {
   const AirportItem = ({ airport, showFavoriteToggle = true }: { airport: Airport; showFavoriteToggle?: boolean }) => {
     const isFavorite = favorites.includes(airport.icao)
     return (
-      <button
-        type="button"
-        className="airport-result"
-        onClick={() => handleSelect(airport.icao)}
-        onKeyDown={(e) => e.key === 'Enter' && handleSelect(airport.icao)}
-      >
-        <div className="result-main">
-          {hasVnas1Hz(airport.icao) && (
-            <span className="vnas-indicator" title="1Hz real-time updates available (vNAS session)">
-              <svg aria-hidden="true" width="8" height="8" viewBox="0 0 8 8">
-                <circle cx="4" cy="4" r="4" fill="#0c7" />
-              </svg>
-            </span>
-          )}
-          <span className="result-icao">{airport.icao}</span>
-          {airport.iata && <span className="result-iata">{airport.iata}</span>}
-          <span className="result-name">{airport.name}</span>
-        </div>
-        <div className="result-location">
-          {airport.city}, {airport.country}
-        </div>
+      <div className="airport-row">
+        <button
+          type="button"
+          className="airport-result"
+          onClick={() => handleSelect(airport.icao)}
+          onKeyDown={(e) => e.key === 'Enter' && handleSelect(airport.icao)}
+        >
+          <div className="result-main">
+            {hasVnas1Hz(airport.icao) && (
+              <span className="vnas-indicator" title="1Hz real-time updates available (vNAS session)">
+                <svg aria-hidden="true" width="8" height="8" viewBox="0 0 8 8">
+                  <circle cx="4" cy="4" r="4" fill="#0c7" />
+                </svg>
+              </span>
+            )}
+            <span className="result-icao">{airport.icao}</span>
+            {airport.iata && <span className="result-iata">{airport.iata}</span>}
+            <span className="result-name">{airport.name}</span>
+          </div>
+          <div className="result-location">
+            {airport.city}, {airport.country}
+          </div>
+        </button>
         {showFavoriteToggle && (
           <button
             type="button"
@@ -234,7 +236,7 @@ function AirportSelector() {
             <StarIcon filled={isFavorite} />
           </button>
         )}
-      </button>
+      </div>
     )
   }
 

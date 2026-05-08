@@ -181,9 +181,14 @@
   margin: 8px 8px 12px 8px;
 }
 
-/* Make airport-result position relative for absolute positioning of star */
-.airport-result {
+.airport-row {
   position: relative;
+  display: flex;
+}
+
+.airport-row .airport-result {
+  flex: 1 1 auto;
+  width: 100%;
   padding-right: 40px;
 }
 
