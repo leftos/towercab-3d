@@ -2,6 +2,14 @@
 
 All notable changes to TowerCab 3D will be documented in this file.
 
+## [0.1.1-alpha] - 2026-05-07
+
+### Highlights
+- Fixes a crash that prevented v0.1.0-alpha from launching.
+
+### Fixed
+- App no longer crashes at startup. v0.1.0-alpha had a build packaging issue that prevented the app from loading; v0.1.0-alpha has been removed from the releases page.
+
 ## [0.1.0-alpha] - 2026-05-03
 
 ### Highlights
