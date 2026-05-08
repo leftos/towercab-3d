@@ -2,13 +2,14 @@
 
 All notable changes to TowerCab 3D will be documented in this file.
 
-## [0.1.1-alpha] - 2026-05-07
+## [0.1.1-alpha] - 2026-05-08
 
 ### Highlights
-- Fixes a crash that prevented v0.1.0-alpha from launching.
+- Fixes the startup and 3D-globe crashes that prevented v0.1.0-alpha from working. v0.1.0-alpha has been removed from the releases page.
 
 ### Fixed
-- App no longer crashes at startup. v0.1.0-alpha had a build packaging issue that prevented the app from loading; v0.1.0-alpha has been removed from the releases page.
+- App now starts up correctly. v0.1.0-alpha had a packaging issue that left some users with a blank screen on launch.
+- 3D globe now loads without crashing. v0.1.0-alpha had a separate packaging issue that stopped satellite imagery from rendering a few seconds after launch.
 
 ## [0.1.0-alpha] - 2026-05-03
 
