@@ -254,7 +254,7 @@ function TowerPositioningOverlay() {
                 <kbd>W</kbd>
                 <kbd>A</kbd>
                 <kbd>S</kbd>
-                <kbd>D</kbd> Move
+                <kbd>D</kbd> Move (camera-relative)
               </div>
               <div className="hint-row">
                 <kbd>Q</kbd>

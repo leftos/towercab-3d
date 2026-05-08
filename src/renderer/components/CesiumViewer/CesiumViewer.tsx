@@ -5,6 +5,7 @@ import { useAircraftModels } from '../../hooks/useAircraftModels'
 import { useAutoAirportSwitch } from '../../hooks/useAutoAirportSwitch'
 import { useBabylonNightLighting } from '../../hooks/useBabylonNightLighting'
 import { getMemoryCounters, useBabylonOverlay } from '../../hooks/useBabylonOverlay'
+import { useBabylonSunDirection } from '../../hooks/useBabylonSunDirection'
 import { useCesiumCamera } from '../../hooks/useCesiumCamera'
 import { useCesiumLabels } from '../../hooks/useCesiumLabels'
 import { useCesiumLighting } from '../../hooks/useCesiumLighting'
@@ -17,7 +18,6 @@ import { insetLog } from '../../hooks/useSharedWorkerConsumer'
 import { useSunElevation } from '../../hooks/useSunElevation'
 import { useTerrainFlattening } from '../../hooks/useTerrainFlattening'
 import { useTerrainQuality } from '../../hooks/useTerrainQuality'
-import { useTowerModel } from '../../hooks/useTowerModel'
 import { useAircraftFilterStore } from '../../stores/aircraftFilterStore'
 import { useAirportStore } from '../../stores/airportStore'
 import { useDatablockPositionStore } from '../../stores/datablockPositionStore'
@@ -408,15 +408,11 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
   )
 
   // =========================================================================
-  // 6a. Tower Model Rendering
-  // =========================================================================
-  // Loads 3D tower models from mods/towers/{ICAO}/ when available
-  // Only one tower model is rendered at a time (for the current airport)
-  useTowerModel(viewer)
-
-  // =========================================================================
   // 7. Datablock Label Rendering
   // =========================================================================
+  // Tower cab models are loaded inside the Babylon overlay (see useBabylonTowerModel
+  // composed into useBabylonOverlay below) so weather meshes can depth-test against
+  // the cab geometry. The previous Cesium-side useTowerModel hook has been removed.
   // (Reference position calculated above before hook initialization)
 
   // =========================================================================
@@ -430,6 +426,17 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
   // Adjust Babylon.js lighting based on sun position
   useBabylonNightLighting(babylonOverlay?.scene ?? null, sunElevation, {
     enabled: enableNightDarkening && enableLighting,
+  })
+
+  // Sync Babylon directional light's direction to the actual sun position so the
+  // tower cab lights and self-shadows realistically as the day progresses.
+  useBabylonSunDirection({
+    scene: babylonOverlay?.scene ?? null,
+    cesiumViewer: viewer,
+    getFixedToEnu: babylonOverlay.getFixedToEnu,
+    enabled: enableLighting,
+    timeMode,
+    fixedTimeHour,
   })
 
   useCesiumLabels({

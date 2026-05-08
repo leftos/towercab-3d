@@ -205,6 +205,8 @@ export interface UseBabylonSceneResult {
   camera: BABYLON.FreeCamera | null
   /** GUI texture for 2D overlays (or null if not initialized) */
   guiTexture: GUI.AdvancedDynamicTexture | null
+  /** Shadow generator on the directional light (or null if not initialized) */
+  shadowGenerator: BABYLON.ShadowGenerator | null
   /** Whether the scene is ready for rendering */
   sceneReady: boolean
 }

@@ -621,22 +621,33 @@ export function useCameraInput(
             // Rotation speed: 5 deg base, 45 deg with Shift, 1 deg with Ctrl
             const rotSpeed = event.shiftKey ? 45 : event.ctrlKey ? 1 : 5
 
+            // Camera-relative WASD. Cesium camera.heading is radians clockwise from north
+            // (0 = N, π/2 = E). Forward unit vector in (east, north) is (sin h, cos h);
+            // Right is forward rotated 90° clockwise = (cos h, -sin h).
+            const heading = viewer.camera.heading
+            const cosH = Math.cos(heading)
+            const sinH = Math.sin(heading)
+
             switch (key.toLowerCase()) {
               case 'w':
               case 'arrowup':
-                positioningState.adjustModelOffset('north', speed)
+                positioningState.adjustModelOffset('north', speed * cosH)
+                positioningState.adjustModelOffset('east', speed * sinH)
                 return
               case 's':
               case 'arrowdown':
-                positioningState.adjustModelOffset('north', -speed)
+                positioningState.adjustModelOffset('north', -speed * cosH)
+                positioningState.adjustModelOffset('east', -speed * sinH)
                 return
               case 'a':
               case 'arrowleft':
-                positioningState.adjustModelOffset('east', -speed)
+                positioningState.adjustModelOffset('north', speed * sinH)
+                positioningState.adjustModelOffset('east', -speed * cosH)
                 return
               case 'd':
               case 'arrowright':
-                positioningState.adjustModelOffset('east', speed)
+                positioningState.adjustModelOffset('north', -speed * sinH)
+                positioningState.adjustModelOffset('east', speed * cosH)
                 return
               case 'q':
                 positioningState.adjustModelOffset('up', -speed)

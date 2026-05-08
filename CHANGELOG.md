@@ -2,6 +2,18 @@
 
 All notable changes to TowerCab 3D will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- Modded tower cab interiors now cast and receive sun-direction shadows that change with the time of day.
+- Modded tower cab interiors now pick up environment lighting so glossy surfaces shade more naturally.
+
+### Changed
+- WASD in tower-cab repositioning mode is now camera-relative — keys move the cab relative to where the camera is facing.
+
+### Fixed
+- Fog and cloud weather effects no longer paint through modded tower cab walls.
+
 ## [0.1.1-alpha] - 2026-05-08
 
 ### Highlights
