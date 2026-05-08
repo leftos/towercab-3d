@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      fast:
+        description: 'Skip NSIS compression (much faster, larger installer; non-shippable)'
+        type: boolean
+        default: true
 
 # Cancel in-progress PR builds when a new push lands on the same PR.
 # Main-branch builds run to completion so we don't lose installer artifacts.
@@ -146,12 +152,12 @@ jobs:
           ${{ steps.vnas-check.outputs.vnas_available == 'true' && '--features vnas' || '' }}
           -- -D warnings
 
-      # ---- Below: only on push to main, not on PRs ----
+      # ---- Below: only on push to main or manual dispatch, not on PRs ----
       # PRs get clippy as their gate; the full installer build is reserved for
-      # main-branch pushes (and tag pushes via release.yml).
+      # main-branch pushes, manual dispatch, and tag pushes via release.yml.
 
       - name: Check signing key availability
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         id: signing-check
         env:
           SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -180,7 +186,7 @@ jobs:
         shell: bash
 
       - name: Build Tauri app (with signing)
-        if: github.event_name == 'push' && steps.signing-check.outputs.signing_available == 'true'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && steps.signing-check.outputs.signing_available == 'true'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -188,19 +194,25 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           CARGO_NET_GIT_FETCH_WITH_CLI: ${{ steps.vnas-check.outputs.vnas_available == 'true' }}
         with:
-          args: --target ${{ matrix.target }} ${{ steps.vnas-check.outputs.vnas_available == 'true' && '--features vnas' || '' }}
+          args: >-
+            --target ${{ matrix.target }}
+            ${{ steps.vnas-check.outputs.vnas_available == 'true' && '--features vnas' || '' }}
+            ${{ inputs.fast && '--config src-tauri/tauri.fast.conf.json' || '' }}
 
       - name: Build Tauri app (without signing)
-        if: github.event_name == 'push' && steps.signing-check.outputs.signing_available != 'true'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && steps.signing-check.outputs.signing_available != 'true'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_NET_GIT_FETCH_WITH_CLI: ${{ steps.vnas-check.outputs.vnas_available == 'true' }}
         with:
-          args: --target ${{ matrix.target }} ${{ steps.vnas-check.outputs.vnas_available == 'true' && '--features vnas' || '' }}
+          args: >-
+            --target ${{ matrix.target }}
+            ${{ steps.vnas-check.outputs.vnas_available == 'true' && '--features vnas' || '' }}
+            ${{ inputs.fast && '--config src-tauri/tauri.fast.conf.json' || '' }}
 
       - name: Upload artifacts (Windows)
-        if: github.event_name == 'push' && matrix.platform == 'windows-latest'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && matrix.platform == 'windows-latest'
         uses: actions/upload-artifact@v7
         with:
           name: windows-installer
