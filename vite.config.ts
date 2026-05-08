@@ -118,7 +118,13 @@ export default defineConfig({
             // cesium ships its widgets as a separate @cesium/widgets package; both must land in the same chunk.
             { name: 'cesium', test: /[\\/]node_modules[\\/]@?cesium[\\/]/, priority: 10 },
             { name: 'babylon', test: /[\\/]node_modules[\\/]@babylonjs[\\/]/, priority: 10 },
-            { name: 'react-vendor', test: /[\\/]node_modules[\\/](react|react-dom)[\\/]/, priority: 10 }
+            { name: 'react-vendor', test: /[\\/]node_modules[\\/](react|react-dom)[\\/]/, priority: 10 },
+            // zustand must live in its own chunk: stores are split into separate
+            // chunks (via dynamic imports in MigrationService etc.), and if `create`
+            // ships in the main index chunk it forms a circular dep — the stores
+            // call `create()` at module top level before the binding is initialized,
+            // producing `TypeError: F is not a function` at boot.
+            { name: 'zustand', test: /[\\/]node_modules[\\/]zustand[\\/]/, priority: 10 }
           ]
         }
       }
