@@ -82,3 +82,6 @@ src-tauri/resources/airport-surfaces.debug.json
 tmpclaude*
 .claude/scheduled_tasks.lock
 .playwright-mcp/
+
+# Local Claude Code multi-repo launcher (sees ../towercab-3d-vnas)
+claude-ws.ps1
