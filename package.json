@@ -85,8 +85,8 @@
     "cesium": "^1.140.0",
     "egm96-universal": "^1.1.1",
     "rbush": "^4.0.1",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
     "resium": "^1.19.4",
     "zustand": "^5.0.12"
   }
