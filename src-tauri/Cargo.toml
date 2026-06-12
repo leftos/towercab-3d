@@ -1,6 +1,6 @@
 [package]
 name = "towercab-3d"
-version = "0.1.2-alpha"
+version = "0.1.3-alpha"
 description = "3D Tower Cab View for VATSIM Controllers"
 authors = [""]
 license = "GPL-2.0"
@@ -43,6 +43,11 @@ tokio = { version = "1", features = ["rt-multi-thread", "net", "sync"] }
 mime_guess = "2"
 url = "2"  # For proper URL parsing in proxy validation
 futures-util = { version = "0.3", features = ["sink"] }  # For WebSocket stream handling
+
+# Transitive pin: cookie 0.18.x (pulled in by tower-http/reqwest) fails to compile against
+# time 0.3.48+ with E0119 (conflicting trait impls). Pin to the last compatible release so
+# `cargo generate-lockfile` (run locally and in CI) doesn't resolve to the broken version.
+time = "=0.3.47"
 
 # Synchronization primitives for vNAS state
 parking_lot = "0.12"
