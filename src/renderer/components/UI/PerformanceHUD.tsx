@@ -24,6 +24,7 @@ export function PerformanceHUD({ visible }: PerformanceHUDProps) {
 
   const formatMs = (ms: number) => ms.toFixed(2)
   const formatFps = (fps: number) => Math.round(fps)
+  const formatGpu = (ms: number) => (ms < 0 ? 'n/a' : `${ms.toFixed(2)}ms`)
 
   // Calculate percentages of total frame interval
   const frameTotal = metrics.frameInterval || 1
@@ -47,6 +48,19 @@ export function PerformanceHUD({ visible }: PerformanceHUDProps) {
 
   // Frame interval comes directly from metrics now
   const frameInterval = metrics.frameInterval
+
+  // GPU timing (real GPU execution time via timer queries). -1 means unsupported.
+  const gpuCesium = metrics.gpuCesiumMs
+  const gpuBabylon = metrics.gpuBabylonMs
+  const gpuTotal = (gpuCesium >= 0 ? gpuCesium : 0) + (gpuBabylon >= 0 ? gpuBabylon : 0)
+  // GPU-bound frames show gpuTotal close to the frame interval; a small gpuTotal with a large
+  // idle points at a scheduling/present problem instead.
+  const gpuColor = gpuTotal > frameTotal * 0.7 ? '#f00' : gpuTotal > 16.67 ? '#ff0' : '#0f0'
+
+  // Split the idle gap into JS that blocked the main thread vs pure GPU/compositor wait.
+  const blockedJs = metrics.blockedJsMs
+  const presentWait = Math.max(0, metrics.idleTime - blockedJs)
+  const blockedColor = blockedJs > 16.67 ? '#f00' : blockedJs > 4 ? '#ff0' : '#888'
 
   return (
     <div className="performance-hud">
@@ -82,6 +96,44 @@ export function PerformanceHUD({ visible }: PerformanceHUDProps) {
         <span className="performance-value">
           {formatMs(metrics.idleTime)}ms
           <span className="performance-pct">({idlePct}%)</span>
+        </span>
+      </div>
+
+      <div className="performance-row">
+        <span className="performance-label"> Blocked JS:</span>
+        <span className="performance-value" style={{ color: blockedColor }}>
+          {formatMs(blockedJs)}ms
+        </span>
+      </div>
+
+      <div className="performance-row">
+        <span className="performance-label"> GPU/Present:</span>
+        <span className="performance-value" style={{ color: '#888' }}>
+          {formatMs(presentWait)}ms
+        </span>
+      </div>
+
+      <div className="performance-divider" />
+
+      {/* Real GPU execution time (timer queries) - reveals GPU-bound frames the JS timers miss */}
+      <div className="performance-row">
+        <span className="performance-label">GPU Total:</span>
+        <span className="performance-value" style={{ color: metrics.gpuSupported ? gpuColor : '#888' }}>
+          {metrics.gpuSupported ? `${formatMs(gpuTotal)}ms` : 'n/a (no timer ext)'}
+        </span>
+      </div>
+
+      <div className="performance-row">
+        <span className="performance-label"> GPU Cesium:</span>
+        <span className="performance-value" style={{ color: '#888' }}>
+          {formatGpu(gpuCesium)}
+        </span>
+      </div>
+
+      <div className="performance-row">
+        <span className="performance-label"> GPU Babylon:</span>
+        <span className="performance-value" style={{ color: '#888' }}>
+          {formatGpu(gpuBabylon)}
         </span>
       </div>
 
@@ -168,6 +220,12 @@ export function PerformanceHUD({ visible }: PerformanceHUDProps) {
           )}
         </span>
       </div>
+
+      {metrics.gpuRenderer && (
+        <div className="performance-footer" style={{ wordBreak: 'break-word' }}>
+          {metrics.gpuRenderer}
+        </div>
+      )}
 
       <div className="performance-footer">Target: 60 FPS (16.67ms interval)</div>
     </div>

@@ -24,6 +24,16 @@ export interface PerformanceMetrics {
   idleTime: number
   /** Time not accounted for by individual timers (overhead, unmeasured work) */
   unaccountedTime: number
+  /** Real GPU execution time of the Cesium scene draw (ms), via timer query. -1 if unsupported. */
+  gpuCesiumMs: number
+  /** Real GPU execution time of the Babylon overlay render (ms), via timer query. -1 if unsupported. */
+  gpuBabylonMs: number
+  /** Whether GPU timer queries are available on this hardware/context. */
+  gpuSupported: boolean
+  /** Main-thread blocking (longtasks) observed in the gap between frames (ms). */
+  blockedJsMs: number
+  /** Unmasked GPU/driver string for the main Cesium context (empty until known). */
+  gpuRenderer: string
 }
 
 class PerformanceMonitor {
@@ -44,6 +54,11 @@ class PerformanceMonitor {
     frameInterval: 0,
     idleTime: 0,
     unaccountedTime: 0,
+    gpuCesiumMs: -1,
+    gpuBabylonMs: -1,
+    gpuSupported: false,
+    blockedJsMs: 0,
+    gpuRenderer: '',
   }
 
   // Cesium phase timestamps for detailed timing
@@ -56,6 +71,36 @@ class PerformanceMonitor {
   private idleTimes: number[] = []
   private readonly MAX_FRAME_SAMPLES = 60
   private previousFrameEndTime = 0
+
+  // Longtask attribution: a PerformanceObserver records main-thread tasks >50ms so we can
+  // tell how much of the inter-frame "idle" gap is actually JS blocking vs GPU/present wait.
+  private longTaskStamps: Array<{ start: number; duration: number }> = []
+  private blockedJsTimes: number[] = []
+
+  constructor() {
+    this.initLongTaskObserver()
+  }
+
+  private initLongTaskObserver(): void {
+    if (typeof PerformanceObserver === 'undefined') {
+      return
+    }
+    try {
+      const observer = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          this.longTaskStamps.push({ start: entry.startTime, duration: entry.duration })
+        }
+        // Cap buffer growth; only the most recent inter-frame window is ever consumed.
+        if (this.longTaskStamps.length > 256) {
+          this.longTaskStamps.splice(0, this.longTaskStamps.length - 256)
+        }
+      })
+      observer.observe({ entryTypes: ['longtask'] })
+    } catch (err) {
+      // longtask is unsupported in some embedded webviews — degrade silently (blockedJsMs stays 0).
+      console.debug('[performanceMonitor] longtask observer unavailable:', err)
+    }
+  }
 
   /**
    * Start timing a specific operation
@@ -173,9 +218,38 @@ class PerformanceMonitor {
 
       const avgIdleTime = this.idleTimes.reduce((a, b) => a + b, 0) / this.idleTimes.length
       this.metrics.idleTime = avgIdleTime
+
+      // Attribute longtasks that ran during the just-ended idle window to "blocked JS".
+      let blockedThisFrame = 0
+      for (const stamp of this.longTaskStamps) {
+        if (stamp.start >= this.previousFrameEndTime) {
+          blockedThisFrame += stamp.duration
+        }
+      }
+      this.longTaskStamps.length = 0
+      this.blockedJsTimes.push(blockedThisFrame)
+      if (this.blockedJsTimes.length > this.MAX_FRAME_SAMPLES) {
+        this.blockedJsTimes.shift()
+      }
+      this.metrics.blockedJsMs = this.blockedJsTimes.reduce((a, b) => a + b, 0) / this.blockedJsTimes.length
     }
 
     this.previousFrameStartTime = now
+  }
+
+  /**
+   * Record real GPU frame times measured via timer queries.
+   * Pass -1 for a context whose timing is unavailable.
+   */
+  setGpuTimings(cesiumMs: number, babylonMs: number, supported: boolean): void {
+    this.metrics.gpuCesiumMs = cesiumMs
+    this.metrics.gpuBabylonMs = babylonMs
+    this.metrics.gpuSupported = supported
+  }
+
+  /** Record the unmasked GPU/driver string for the main rendering context. */
+  setRendererInfo(renderer: string): void {
+    this.metrics.gpuRenderer = renderer
   }
 
   /**
@@ -226,9 +300,16 @@ class PerformanceMonitor {
       frameInterval: 0,
       idleTime: 0,
       unaccountedTime: 0,
+      gpuCesiumMs: -1,
+      gpuBabylonMs: -1,
+      gpuSupported: false,
+      blockedJsMs: 0,
+      gpuRenderer: '',
     }
     this.frameTimes = []
     this.idleTimes = []
+    this.blockedJsTimes = []
+    this.longTaskStamps = []
     this.timers.clear()
     this.cesiumPreUpdateTime = 0
     this.cesiumPreRenderTime = 0

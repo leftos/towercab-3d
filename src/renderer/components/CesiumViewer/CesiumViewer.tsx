@@ -29,6 +29,7 @@ import { useUIFeedbackStore } from '../../stores/uiFeedbackStore'
 import { useVatsimStore } from '../../stores/vatsimStore'
 import { useViewportStore } from '../../stores/viewportStore'
 import { useWeatherStore } from '../../stores/weatherStore'
+import { GpuFrameTimer, getRendererInfo } from '../../utils/gpuTimer'
 import { performanceMonitor } from '../../utils/performanceMonitor'
 import { getServiceWorkerCacheStats } from '../../utils/serviceWorkerRegistration'
 import { getTowerPosition } from '../../utils/towerHeight'
@@ -794,6 +795,24 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return
 
+    // GPU timer queries measure real GPU execution time, which the JS-side phase timers miss:
+    // a GPU-bound frame submits its draw calls quickly (small "Draw" time) but the GPU spends
+    // far longer executing them, and that cost otherwise hides inside "Idle/VSync". Main viewport
+    // only — insets render on their own context and RAF loop.
+    let cesiumGpuTimer: GpuFrameTimer | null = null
+    let babylonGpuTimer: GpuFrameTimer | null = null
+    let rendererLogged = false
+
+    const getCesiumGl = (): WebGL2RenderingContext | null => {
+      const gl = (viewer.scene as unknown as { context?: { _gl?: unknown } }).context?._gl
+      return gl instanceof WebGL2RenderingContext ? gl : null
+    }
+    const getBabylonGl = (): WebGL2RenderingContext | null => {
+      const engine = babylonOverlay.engine
+      const gl = engine ? (engine as unknown as { _gl?: unknown })._gl : null
+      return gl instanceof WebGL2RenderingContext ? gl : null
+    }
+
     // Track Cesium update phase (scene graph updates, culling, animations)
     const removePreUpdate = viewer.scene.preUpdate.addEventListener(() => {
       performanceMonitor.startFrame()
@@ -807,6 +826,29 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
     // Track Cesium render/draw phase (actual GPU drawing)
     const removePreRender = viewer.scene.preRender.addEventListener(() => {
       performanceMonitor.markCesiumPreRender()
+
+      if (!isInset) {
+        if (!cesiumGpuTimer) {
+          const gl = getCesiumGl()
+          if (gl) {
+            cesiumGpuTimer = new GpuFrameTimer(gl)
+            if (!rendererLogged) {
+              const info = getRendererInfo(gl)
+              performanceMonitor.setRendererInfo(info.renderer)
+              // Non-reactive read: this value is for the diagnostic log only and must not
+              // re-initialize the render listeners when the user changes the setting.
+              const cappedFps = useSettingsStore.getState().graphics.maxFramerate
+              console.log(
+                `[GPU] Cesium renderer="${info.renderer}" vendor="${info.vendor}" webgl2=${info.isWebgl2} timerQuery=${cesiumGpuTimer.isSupported} maxFramerate=${cappedFps}`,
+              )
+              rendererLogged = true
+            }
+          }
+        }
+        // Read back completed results, then open this frame's query around the Cesium draw.
+        cesiumGpuTimer?.poll()
+        cesiumGpuTimer?.begin()
+      }
     })
 
     // Update aircraft and sync Babylon overlay AFTER render when camera position is finalized
@@ -823,13 +865,32 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
       const tilesLoading = (globe as unknown as { _tilesLoading?: number })._tilesLoading ?? 0
       performanceMonitor.markCesiumPostRender(primitiveCount, tilesLoaded, tilesLoading)
 
+      // Close the Cesium GPU timer query opened in preRender.
+      cesiumGpuTimer?.end()
+
       performanceMonitor.startTimer('babylonSync')
       babylonOverlay.syncCamera()
       performanceMonitor.endTimer('babylonSync')
 
+      // Lazily create the Babylon GPU timer once the overlay engine/context exists.
+      if (!isInset && !babylonGpuTimer) {
+        const gl = getBabylonGl()
+        if (gl) {
+          babylonGpuTimer = new GpuFrameTimer(gl)
+        }
+      }
       performanceMonitor.startTimer('babylonRender')
+      babylonGpuTimer?.poll()
+      babylonGpuTimer?.begin()
       babylonOverlay.render()
+      babylonGpuTimer?.end()
       performanceMonitor.endTimer('babylonRender')
+
+      if (!isInset) {
+        const cesiumMs = cesiumGpuTimer?.isSupported ? cesiumGpuTimer.gpuMs : -1
+        const babylonMs = babylonGpuTimer?.isSupported ? babylonGpuTimer.gpuMs : -1
+        performanceMonitor.setGpuTimings(cesiumMs, babylonMs, cesiumMs >= 0 || babylonMs >= 0)
+      }
 
       // Update camera position for weather interpolation and auto-airport switching
       // Track position when:
@@ -877,6 +938,8 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
       removePostUpdate()
       removePreRender()
       removePostRender()
+      cesiumGpuTimer?.dispose()
+      babylonGpuTimer?.dispose()
     }
   }, [
     viewer,
@@ -889,6 +952,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
     currentAirport,
     updateCameraPosition,
     cameraGeoPosition,
+    isInset,
   ])
 
   // Memory diagnostic logging - logs counters every 5 seconds
@@ -925,6 +989,22 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
             `Cesium - Pool: ${poolUsed}/100 TileCache: ${cesiumTileCache} | ` +
             `VATSIM: ${pilotsFilteredByDistance}/${totalPilotsFromApi} | ` +
             `SW Cache: ${swCacheStats.count} tiles ${cacheSizeMB}MB`,
+        )
+      }
+
+      // Periodic frame-timing summary captured to temp/console.log (only when FPS is degraded),
+      // so a slowdown can be diagnosed from the log file without watching the on-screen monitor.
+      const m = performanceMonitor.getMetrics()
+      if (m.fps > 0 && m.fps < 50) {
+        const presentWaitMs = Math.max(0, m.idleTime - m.blockedJsMs)
+        const gpuTotalMs = Math.max(0, m.gpuCesiumMs) + Math.max(0, m.gpuBabylonMs)
+        const gpuSummary = m.gpuSupported
+          ? `gpu{total:${gpuTotalMs.toFixed(1)} cesium:${m.gpuCesiumMs.toFixed(1)} babylon:${m.gpuBabylonMs.toFixed(1)}}`
+          : 'gpu{unsupported}'
+        console.warn(
+          `[Perf] fps=${m.fps.toFixed(1)} interval=${m.frameInterval.toFixed(1)}ms work=${m.totalFrame.toFixed(1)}ms ` +
+            `idle=${m.idleTime.toFixed(1)}ms(blockedJS=${m.blockedJsMs.toFixed(1)} present=${presentWaitMs.toFixed(1)}) ` +
+            `${gpuSummary} renderer="${m.gpuRenderer}"`,
         )
       }
     }
