@@ -30,6 +30,7 @@ import type {
   InsetDisplaySettings,
   MSFSModelSettings,
   MSFSModelSource,
+  RenderingBackend,
 } from '@/types'
 import {
   DEFAULT_GLOBAL_DISPLAY_SETTINGS,
@@ -258,6 +259,9 @@ interface GlobalSettingsState extends GlobalSettings {
   /** Update Cesium Ion token */
   setCesiumIonToken: (token: string) => Promise<void>
 
+  /** Set the GPU rendering backend (desktop app, applied on next restart) */
+  setRenderingBackend: (backend: RenderingBackend) => Promise<void>
+
   /** Update FSLTL configuration (deprecated, use updateMsfsModels) */
   updateFsltl: (updates: Partial<GlobalSettings['fsltl']>) => Promise<void>
 
@@ -446,6 +450,11 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
   setCesiumIonToken: async (token: string) => {
     // Update state first, then save all current state
     set({ cesiumIonToken: token })
+    await saveSettings(get().getSettings())
+  },
+
+  setRenderingBackend: async (backend: RenderingBackend) => {
+    set({ renderingBackend: backend })
     await saveSettings(get().getSettings())
   },
 
@@ -730,6 +739,7 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
     const state = get()
     return {
       cesiumIonToken: state.cesiumIonToken,
+      renderingBackend: state.renderingBackend,
       imagery: state.imagery,
       msfsModels: state.msfsModels,
       fsltl: state.fsltl,

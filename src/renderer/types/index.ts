@@ -168,6 +168,8 @@ export type {
   // MSFS model types (on-the-fly conversion)
   MSFSModelSource,
   RealTrafficSettings,
+  // GPU rendering backend (ANGLE) selection
+  RenderingBackend,
   // Main settings store (NEW grouped structure for Phase 5)
   SettingsStore,
   ShadowQuality,

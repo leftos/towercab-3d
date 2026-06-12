@@ -510,6 +510,10 @@ impl Default for MsfsModelSettings {
 #[serde(rename_all = "camelCase")]
 pub struct GlobalSettings {
     pub cesium_ion_token: String,
+    /// GPU rendering backend (ANGLE) for WebView2. Read at startup in lib.rs to build the
+    /// `--use-angle` flag. One of: auto | d3d11 | d3d9 | gl | vulkan.
+    #[serde(default = "default_rendering_backend")]
+    pub rendering_backend: String,
     #[serde(default)]
     pub imagery: GlobalImagerySettings,
     pub fsltl: GlobalFsltlSettings,
@@ -533,10 +537,17 @@ pub struct GlobalSettings {
     pub vnas_tokens: Option<String>,
 }
 
+/// Default ANGLE backend: Direct3D 11 is the robust hardware path on Windows.
+/// Forcing OpenGL can fall back to the WARP software rasterizer on GPUs with weak GL drivers.
+fn default_rendering_backend() -> String {
+    "d3d11".to_string()
+}
+
 impl Default for GlobalSettings {
     fn default() -> Self {
         GlobalSettings {
             cesium_ion_token: String::new(),
+            rendering_backend: default_rendering_backend(),
             imagery: GlobalImagerySettings::default(),
             fsltl: GlobalFsltlSettings {
                 source_path: None,

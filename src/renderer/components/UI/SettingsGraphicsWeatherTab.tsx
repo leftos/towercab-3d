@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useWeatherStore } from '../../stores/weatherStore'
 import type {
@@ -7,14 +8,35 @@ import type {
   InsetFrameratePreset,
   InsetMsaaPreset,
   InsetTerrainPreset,
+  RenderingBackend,
 } from '../../types'
 import { formatTimeHour } from '../../utils/formatting'
+import { performanceMonitor } from '../../utils/performanceMonitor'
+import { isTauri } from '../../utils/tauriApi'
 import CollapsibleSection from './settings/CollapsibleSection'
 import './ControlsBar.css'
+
+/** Renderer strings that indicate the GPU fell back to CPU/software rasterization. */
+const SOFTWARE_RENDERER_PATTERN = /basic render driver|swiftshader|software|warp|llvmpipe/i
 
 function SettingsGraphicsWeatherTab() {
   // Restart required dialog state
   const [showRestartDialog, setShowRestartDialog] = useState(false)
+
+  // GPU rendering backend (global setting, desktop-only, applied on restart)
+  const renderingBackend = useGlobalSettingsStore((state) => state.renderingBackend)
+  const setRenderingBackend = useGlobalSettingsStore((state) => state.setRenderingBackend)
+
+  // Active WebGL renderer string, populated by the main viewer's GPU instrumentation.
+  // Polled so the readout reflects the live context (and flags software/WARP fallback).
+  const [activeRenderer, setActiveRenderer] = useState('')
+  useEffect(() => {
+    const update = () => setActiveRenderer(performanceMonitor.getMetrics().gpuRenderer)
+    update()
+    const id = setInterval(update, 1000)
+    return () => clearInterval(id)
+  }, [])
+  const isSoftwareRenderer = SOFTWARE_RENDERER_PATTERN.test(activeRenderer)
 
   // Rendering quality settings
   const maxFramerate = useSettingsStore((state) => state.graphics.maxFramerate) ?? 60
@@ -85,6 +107,46 @@ function SettingsGraphicsWeatherTab() {
   return (
     <>
       <CollapsibleSection title="Rendering Quality">
+        <div className="setting-item">
+          <span>Graphics Backend</span>
+          {isTauri() ? (
+            <select
+              value={renderingBackend}
+              onChange={(e) => {
+                void setRenderingBackend(e.target.value as RenderingBackend)
+                setShowRestartDialog(true)
+              }}
+              className="select-input"
+            >
+              <option value="d3d11">Direct3D 11 (Recommended)</option>
+              <option value="auto">Auto</option>
+              <option value="gl">OpenGL</option>
+              <option value="vulkan">Vulkan (experimental)</option>
+              <option value="d3d9">Direct3D 9 (legacy)</option>
+            </select>
+          ) : (
+            <p className="setting-hint">Configured on the host desktop app.</p>
+          )}
+          <p className="setting-hint">
+            GPU API used by the desktop app. Direct3D 11 is the most reliable on Windows. OpenGL and Vulkan can improve
+            shadow precision but may fall back to slow software rendering on some GPUs. Changing this requires an app
+            restart.
+          </p>
+          {activeRenderer && (
+            <p
+              className="setting-hint"
+              style={{
+                marginTop: '4px',
+                color: isSoftwareRenderer ? 'var(--accent-danger)' : 'var(--text-tertiary)',
+              }}
+            >
+              Active renderer: {activeRenderer}
+              {isSoftwareRenderer &&
+                ' — software rendering detected; your GPU is not being used. Switch to Direct3D 11 and restart.'}
+            </p>
+          )}
+        </div>
+
         <div className="setting-item">
           <span>Max Framerate</span>
           <div className="setting-pair">
@@ -942,7 +1004,7 @@ function SettingsGraphicsWeatherTab() {
           {/* biome-ignore lint/a11y/useKeyWithClickEvents: stops click propagation to overlay */}
           <div className="restart-dialog" role="dialog" onClick={(e) => e.stopPropagation()}>
             <h3>Restart Required</h3>
-            <p>MSAA changes will take effect the next time you start the app.</p>
+            <p>This change will take effect the next time you start the app.</p>
             <div className="modal-buttons">
               <button
                 type="button"

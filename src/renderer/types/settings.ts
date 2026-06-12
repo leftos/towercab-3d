@@ -1415,12 +1415,29 @@ export type GlobalDisplaySettingsUpdate = Omit<Partial<GlobalDisplaySettings>, '
  * @see globalSettingsStore - Store that manages these settings
  * @see settingsStore - Local settings that complement global settings
  */
+/**
+ * GPU rendering backend (ANGLE) for the desktop app's WebView2 context.
+ * Applied at process startup; changing it requires an app restart.
+ * - 'auto': let WebView2/Chromium choose (effectively D3D11 on Windows)
+ * - 'd3d11': Direct3D 11 — the robust hardware path on Windows (default)
+ * - 'd3d9': Direct3D 9 — legacy fallback for very old GPUs
+ * - 'gl': OpenGL — can improve shadow depth precision but falls back to software on GPUs with weak GL drivers
+ * - 'vulkan': Vulkan — experimental
+ */
+export type RenderingBackend = 'auto' | 'd3d11' | 'd3d9' | 'gl' | 'vulkan'
+
 export interface GlobalSettings {
   /**
    * Cesium Ion access token for terrain/imagery
    * User-provided, free tier available at https://cesium.com/ion/
    */
   cesiumIonToken: string
+
+  /**
+   * GPU rendering backend for the desktop app (ANGLE/WebView2).
+   * Applied at startup — changing it requires an app restart.
+   */
+  renderingBackend: RenderingBackend
 
   /**
    * Imagery provider configuration
@@ -1607,6 +1624,7 @@ export interface GlobalSettings {
  */
 export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   cesiumIonToken: '',
+  renderingBackend: 'd3d11',
   imagery: {
     provider: 'cesium',
     googleMapsApiKey: '',

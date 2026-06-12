@@ -750,12 +750,16 @@ fn check_fsltl_model_exists(output_path: String, model_name: String) -> Result<b
 // WEBVIEW CONFIGURATION
 // =============================================================================
 
-/// Set WebView2 browser arguments for GPU optimization
-fn set_webview2_args() {
+/// Set WebView2 browser arguments for GPU optimization.
+///
+/// `identifier` is the app bundle identifier, used to locate global-settings.json so the
+/// user-selected ANGLE backend can be applied before the WebView2 process (and its GPU
+/// context) is created.
+fn set_webview2_args(identifier: &str) {
     #[cfg(target_os = "windows")]
     {
         // GPU and rendering optimizations (same as Electron had)
-        let args = [
+        let mut args: Vec<&str> = vec![
             "--enable-gpu-rasterization",
             "--enable-zero-copy",
             "--ignore-gpu-blocklist",
@@ -763,12 +767,56 @@ fn set_webview2_args() {
             "--force_high_performance_gpu",
             "--disable-renderer-backgrounding",
             "--disable-backgrounding-occluded-windows",
-            "--use-angle=gl", // Use OpenGL instead of D3D11 for better shadow depth precision
-        ]
-        .join(" ");
+        ];
 
-        std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", args);
+        // ANGLE backend from the persisted global setting (restart-required). Defaults to D3D11,
+        // the robust hardware path on Windows. Forcing OpenGL/Vulkan can drop to the WARP software
+        // rasterizer (Microsoft Basic Render Driver) on GPUs with weak drivers — i.e. CPU rendering.
+        let use_angle = resolve_angle_backend(identifier).map(|b| format!("--use-angle={}", b));
+        if let Some(ref arg) = use_angle {
+            args.push(arg);
+        }
+
+        let joined = args.join(" ");
+        tracing::info!("[WebView2] Additional browser args: {}", joined);
+        std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", joined);
     }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = identifier;
+    }
+}
+
+/// Resolve the ANGLE backend flag value from persisted global settings.
+///
+/// Returns `None` for "auto" (omit `--use-angle` entirely and let WebView2 decide). Defaults
+/// to "d3d11" when the setting is missing or the file cannot be read, so a fresh install or a
+/// corrupt settings file still gets hardware acceleration.
+#[cfg(target_os = "windows")]
+fn resolve_angle_backend(identifier: &str) -> Option<&'static str> {
+    let backend = read_persisted_backend(identifier).unwrap_or_else(|| "d3d11".to_string());
+    match backend.as_str() {
+        "auto" => None,
+        "d3d9" => Some("d3d9"),
+        "gl" => Some("gl"),
+        "vulkan" => Some("vulkan"),
+        // "d3d11" and any unrecognized value use the safe hardware default.
+        _ => Some("d3d11"),
+    }
+}
+
+/// Read the `renderingBackend` field from global-settings.json without a Tauri AppHandle
+/// (this runs before the app is built). Best-effort: any failure yields `None`.
+#[cfg(target_os = "windows")]
+fn read_persisted_backend(identifier: &str) -> Option<String> {
+    let appdata = std::env::var("APPDATA").ok()?;
+    let path = std::path::Path::new(&appdata)
+        .join(identifier)
+        .join("global-settings.json");
+    let content = std::fs::read_to_string(path).ok()?;
+    let json: serde_json::Value = serde_json::from_str(&content).ok()?;
+    json.get("renderingBackend")?.as_str().map(str::to_string)
 }
 
 // =============================================================================
@@ -780,8 +828,12 @@ pub fn run() {
     // Initialize tracing subscriber (logs to file if --log flag was passed)
     init_logging();
 
+    // Build the Tauri context up front so we can read the bundle identifier (used to locate
+    // global-settings.json) before the WebView2 process — and its GPU backend — is created.
+    let context = tauri::generate_context!();
+
     // Set WebView2 GPU flags before creating the window
-    set_webview2_args();
+    set_webview2_args(&context.config().identifier);
 
     tauri::Builder::default()
         // IMPORTANT: Single-instance MUST be the first plugin registered.
@@ -1049,6 +1101,6 @@ pub fn run() {
             // Logging
             log_from_frontend,
         ])
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("error while running tauri application");
 }

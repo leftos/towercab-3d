@@ -2,6 +2,15 @@
 
 All notable changes to TowerCab 3D will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- New **Graphics Backend** setting under Settings → Graphics lets you choose the GPU rendering API — Direct3D 11 (recommended), Auto, OpenGL, Vulkan, or Direct3D 9. It shows which renderer is actually active and warns you if the app has fallen back to slow software rendering. Changing the backend takes effect after an app restart.
+- The Performance Monitor (F1) now reports real GPU frame time for the scene and overlay, and splits idle time into GPU/display wait versus blocked main-thread work — making it much easier to tell whether a slowdown is the GPU, the CPU, or frame scheduling.
+
+### Fixed
+- Fixed a severe performance problem (1-2 FPS) where the app could render entirely on the CPU instead of the GPU. It now defaults to the Direct3D 11 graphics backend, restoring full GPU-accelerated performance. If a system still ends up on software rendering, the new Graphics Backend setting can switch APIs.
+
 ## [0.1.2-alpha] - 2026-05-08
 
 ### Highlights
