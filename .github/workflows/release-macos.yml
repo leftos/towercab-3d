@@ -105,10 +105,36 @@ jobs:
           CARGO_NET_GIT_FETCH_WITH_CLI: true
         run: cd src-tauri && cargo generate-lockfile
 
-      # tauri-action with tagName uploads to the existing release for this tag
-      # (created by release.yml). For the updater latest.json it downloads the
-      # current asset and merges the darwin-aarch64 platform in, so the Windows
-      # entry isn't clobbered.
+      # Resolve the release created by release.yml. We look it up by ID via the
+      # list API (which includes drafts) rather than by tag: the "get release by
+      # tag" API can't see a draft, so during release.yml's draft window a tag
+      # lookup would 404 and tauri-action would create a duplicate release.
+      # Polls because release.yml's create-release job may not have run yet.
+      - name: Resolve release ID
+        id: resolve-release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          for attempt in $(seq 1 30); do
+            id=$(gh api "repos/${{ github.repository }}/releases" \
+              --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -n1)
+            if [ -n "$id" ]; then
+              echo "release_id=$id" >> "$GITHUB_OUTPUT"
+              echo "Resolved release id $id for $TAG"
+              exit 0
+            fi
+            echo "No release for $TAG yet (attempt $attempt/30); waiting for release.yml..."
+            sleep 20
+          done
+          echo "ERROR: no release for $TAG after polling — did release.yml fail?" >&2
+          exit 1
+        shell: bash
+
+      # tauri-action uploads the dmg to that release by ID (works whether it's
+      # still a draft or already published). For the updater latest.json it
+      # downloads the current asset and merges the darwin-aarch64 platform in,
+      # so the Windows entry isn't clobbered.
       - name: Build Tauri app (with signing)
         if: steps.signing-check.outputs.signing_available == 'true'
         uses: tauri-apps/tauri-action@v0
@@ -118,7 +144,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           CARGO_NET_GIT_FETCH_WITH_CLI: ${{ steps.vnas-check.outputs.vnas_available == 'true' }}
         with:
-          tagName: ${{ github.ref_name }}
+          releaseId: ${{ steps.resolve-release.outputs.release_id }}
           args: >-
             --target aarch64-apple-darwin
             ${{ steps.vnas-check.outputs.vnas_available == 'true' && '--features vnas' || '' }}
@@ -130,7 +156,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_NET_GIT_FETCH_WITH_CLI: ${{ steps.vnas-check.outputs.vnas_available == 'true' }}
         with:
-          tagName: ${{ github.ref_name }}
+          releaseId: ${{ steps.resolve-release.outputs.release_id }}
           args: >-
             --target aarch64-apple-darwin
             ${{ steps.vnas-check.outputs.vnas_available == 'true' && '--features vnas' || '' }}

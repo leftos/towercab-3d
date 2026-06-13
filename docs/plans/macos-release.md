@@ -70,3 +70,4 @@ Key change: **texconv.exe removed entirely.** Pillow ≥11.3 decodes BC1/BC3/BC5
 - [x] CI: `release-macos.yml` now runs Setup Python + `build:converter`.
 - [x] Removed committed `scripts/shipping/conversion/texconv.exe`; `.gitignore` tracks `fsltl_converter` (no ext).
 - [ ] Validate on macOS hardware: convert a real FSLTL/AIG livery (copied from Windows) and confirm textures look correct without texconv.
+- [x] Release coordination: `release-macos.yml` resolves the release by **ID** (the list API sees drafts) and uploads via `tauri-action`'s `releaseId`, not `tagName`. The get-by-tag API 404s on the draft `release.yml` creates, so a tag lookup during that window would spawn a duplicate release. (Supersedes the "by tag" note in section A.)
