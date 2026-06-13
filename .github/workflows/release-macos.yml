@@ -4,12 +4,19 @@ name: Release (macOS)
 # asynchronous and can take hours, so it must never gate the Windows release.
 # This workflow builds the Apple Silicon dmg and uploads it to the same GitHub
 # release (matched by tag), whenever it finishes — even long after the Windows
-# build has published.
+# build has published. It also accepts a manual run against an existing tag
+# (workflow_dispatch), e.g. to (re)build or notarize macOS for a past release.
 
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to build the macOS dmg for (e.g. v0.2.0-alpha)'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -20,6 +27,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          # On a tag push this is the tag; on manual dispatch, the chosen tag.
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v5
@@ -34,6 +44,9 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Setup Python
         uses: actions/setup-python@v6
@@ -114,7 +127,7 @@ jobs:
         id: resolve-release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
           for attempt in $(seq 1 30); do
             id=$(gh api "repos/${{ github.repository }}/releases" \
