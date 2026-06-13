@@ -2,7 +2,11 @@
 
 All notable changes to TowerCab 3D will be documented in this file.
 
-## [Unreleased]
+## [0.2.0-alpha] - 2026-06-12
+
+### Highlights
+- TowerCab 3D now runs on macOS (Apple Silicon).
+- MSFS aircraft models (FSLTL/AIG) can be converted and used on macOS — copy them from a Windows MSFS install.
 
 ### Added
 - TowerCab 3D is now available for macOS (Apple Silicon). FSLTL/AIG aircraft models can be converted and used on macOS too — copy them from a Windows MSFS install, since MSFS itself doesn't run on macOS. Builds are not yet notarized, so the first launch needs a right-click → Open to get past Gatekeeper.
