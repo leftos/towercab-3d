@@ -1357,8 +1357,12 @@ pub async fn convert_msfs_model(
         .iter()
         .find(|p| p.exists())
         .ok_or_else(|| {
-            "Converter executable not found. Ensure fsltl_converter.exe is in resources/"
-                .to_string()
+            if cfg!(target_os = "windows") {
+                "Converter executable not found. Ensure fsltl_converter.exe is in resources/"
+                    .to_string()
+            } else {
+                "MSFS model conversion is only available on Windows".to_string()
+            }
         })?
         .clone();
 
@@ -1701,7 +1705,13 @@ pub fn convert_model_by_name(
     let converter_path = possible_paths
         .iter()
         .find(|p| p.exists())
-        .ok_or_else(|| "Converter executable not found".to_string())?
+        .ok_or_else(|| {
+            if cfg!(target_os = "windows") {
+                "Converter executable not found".to_string()
+            } else {
+                "MSFS model conversion is only available on Windows".to_string()
+            }
+        })?
         .clone();
 
     // Create output directory if needed

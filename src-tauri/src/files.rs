@@ -357,5 +357,11 @@ pub fn get_converter_path(app: tauri::AppHandle) -> Result<String, String> {
         .iter()
         .find(|p| p.exists())
         .map(|p| p.to_string_lossy().to_string())
-        .ok_or_else(|| "Converter executable not found".to_string())
+        .ok_or_else(|| {
+            if cfg!(target_os = "windows") {
+                "Converter executable not found".to_string()
+            } else {
+                "MSFS model conversion is only available on Windows".to_string()
+            }
+        })
 }

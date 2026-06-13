@@ -1,0 +1,129 @@
+name: Release (macOS)
+
+# Separate from release.yml (Windows) on purpose: macOS notarization is
+# asynchronous and can take hours, so it must never gate the Windows release.
+# This workflow builds the Apple Silicon dmg and uploads it to the same GitHub
+# release (matched by tag), whenever it finishes — even long after the Windows
+# build has published.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    runs-on: macos-latest # arm64 since macos-14 — builds aarch64 natively
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # No FSLTL converter / texconv on macOS: MSFS is Windows-only, and
+      # tauri.macos.conf.json drops the .exe resources from the bundle, so
+      # tauri::context! resource validation passes without building them.
+
+      - name: Check vNAS availability and configure Git
+        id: vnas-check
+        env:
+          VNAS_TOKEN: ${{ secrets.VNAS_REPO_TOKEN }}
+        run: |
+          if [ -n "$VNAS_TOKEN" ]; then
+            echo "vnas_available=true" >> "$GITHUB_OUTPUT"
+            git config --global url."https://${VNAS_TOKEN}@github.com/".insteadOf "https://github.com/"
+            echo "vNAS repo access configured"
+          else
+            echo "vnas_available=false" >> "$GITHUB_OUTPUT"
+            echo "Building without vNAS (no VNAS_REPO_TOKEN secret)"
+            # sed -i.bak is portable across GNU (Linux/Git Bash) and BSD (macOS) sed.
+            cd src-tauri
+            sed -i.bak '/towercab-3d-vnas.*git.*Leftos/d' Cargo.toml
+            sed -i.bak 's/vnas = \["dep:towercab-3d-vnas"\]/vnas = []/' Cargo.toml
+            rm -f Cargo.toml.bak
+            cargo generate-lockfile
+            echo "Removed vNAS from Cargo.toml and regenerated Cargo.lock"
+          fi
+        shell: bash
+
+      - name: Check signing key availability
+        id: signing-check
+        env:
+          SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -n "$SIGNING_KEY" ]; then
+            echo "signing_available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "signing_available=false" >> "$GITHUB_OUTPUT"
+            echo "WARNING: Building release without updater signing (no TAURI_SIGNING_PRIVATE_KEY secret)"
+            # Disable updater plugin completely (portable BSD/GNU sed via -i.bak)
+            cd src-tauri
+            sed -i.bak '/tauri-plugin-updater/d' Cargo.toml
+            sed -i.bak '/"updater:default"/d' capabilities/desktop.json
+            sed -i.bak '/Register updater plugin/,/tauri_plugin_updater/d' src/lib.rs
+            rm -f Cargo.toml.bak capabilities/desktop.json.bak src/lib.rs.bak
+            # Remove updater config and disable updater artifacts in tauri.conf.json
+            node -e "
+              const fs = require('fs');
+              const config = JSON.parse(fs.readFileSync('tauri.conf.json', 'utf8'));
+              delete config.plugins.updater;
+              config.bundle.createUpdaterArtifacts = false;
+              fs.writeFileSync('tauri.conf.json', JSON.stringify(config, null, 2));
+            "
+            echo "Disabled tauri-plugin-updater"
+          fi
+        shell: bash
+
+      - name: Regenerate lockfile with vnas from git
+        if: steps.vnas-check.outputs.vnas_available == 'true'
+        env:
+          CARGO_NET_GIT_FETCH_WITH_CLI: true
+        run: cd src-tauri && cargo generate-lockfile
+
+      # tauri-action with tagName uploads to the existing release for this tag
+      # (created by release.yml). For the updater latest.json it downloads the
+      # current asset and merges the darwin-aarch64 platform in, so the Windows
+      # entry isn't clobbered.
+      - name: Build Tauri app (with signing)
+        if: steps.signing-check.outputs.signing_available == 'true'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          CARGO_NET_GIT_FETCH_WITH_CLI: ${{ steps.vnas-check.outputs.vnas_available == 'true' }}
+        with:
+          tagName: ${{ github.ref_name }}
+          args: >-
+            --target aarch64-apple-darwin
+            ${{ steps.vnas-check.outputs.vnas_available == 'true' && '--features vnas' || '' }}
+
+      - name: Build Tauri app (without signing)
+        if: steps.signing-check.outputs.signing_available != 'true'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CARGO_NET_GIT_FETCH_WITH_CLI: ${{ steps.vnas-check.outputs.vnas_available == 'true' }}
+        with:
+          tagName: ${{ github.ref_name }}
+          args: >-
+            --target aarch64-apple-darwin
+            ${{ steps.vnas-check.outputs.vnas_available == 'true' && '--features vnas' || '' }}

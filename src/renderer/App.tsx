@@ -57,6 +57,7 @@ import { useViewportStore } from './stores/viewportStore'
 import { useVnasStore } from './stores/vnasStore'
 import { useVRStore } from './stores/vrStore'
 import { useWeatherStore } from './stores/weatherStore'
+import { isMacDesktopApp } from './utils/deviceDetection'
 import { stopFileLogging } from './utils/fileLogger'
 import { isRemoteMode } from './utils/remoteMode'
 import type { UrlCameraState } from './utils/urlParams'
@@ -235,13 +236,18 @@ function App() {
         // Load aircraft dimensions data (non-blocking)
         aircraftDimensionsService.load()
 
-        // Step 4: Initialize MSFS model conversion service (detects FSLTL/AIG from Community folder)
-        updateProgress(4, 0, 'Detecting MSFS installations...')
-        // Pass a progress callback that updates step progress
-        await MSFSModelConversionService.initialize((status, progress) => {
-          updateProgress(4, progress ?? 50, status)
-        })
-        updateProgress(4, 100, 'MSFS detection complete')
+        // Step 4: Initialize MSFS model conversion service (detects FSLTL/AIG from Community folder).
+        // MSFS is Windows-only, so skip detection entirely on the macOS desktop app.
+        if (isMacDesktopApp()) {
+          updateProgress(4, 100, 'MSFS not available on macOS')
+        } else {
+          updateProgress(4, 0, 'Detecting MSFS installations...')
+          // Pass a progress callback that updates step progress
+          await MSFSModelConversionService.initialize((status, progress) => {
+            updateProgress(4, progress ?? 50, status)
+          })
+          updateProgress(4, 100, 'MSFS detection complete')
+        }
 
         // Step 5: Load user VMR files (from Settings > MSFS Aircraft Models)
         updateProgress(5, 0, 'Loading VMR rules...')

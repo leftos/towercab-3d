@@ -588,10 +588,14 @@ fn start_fsltl_conversion(
             .iter()
             .find(|p| p.exists())
             .ok_or_else(|| {
-                format!(
+                if cfg!(target_os = "windows") {
+                    format!(
                 "Converter executable not found. Tried: {:?}. Run 'npm run build:converter' first.",
                 possible_paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>()
             )
+                } else {
+                    "MSFS model conversion is only available on Windows".to_string()
+                }
             })?
             .clone();
 

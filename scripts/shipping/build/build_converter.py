@@ -48,6 +48,14 @@ def setup_venv(venv_dir: Path, requirements_file: Path) -> Path:
 
 
 def main():
+    # The FSLTL converter is a Windows-only sidecar: it bundles texconv.exe (a
+    # Windows DirectX tool) and is consumed only by the Windows MSFS model
+    # pipeline. MSFS doesn't exist on macOS/Linux, and tauri.macos.conf.json
+    # drops the .exe resources from the bundle, so there's nothing to build here.
+    if sys.platform != "win32":
+        print(f"[build_converter] Skipping FSLTL converter build on {sys.platform} (Windows-only sidecar).")
+        return 0
+
     # Paths
     script_dir = Path(__file__).parent  # scripts/shipping/build
     shipping_dir = script_dir.parent     # scripts/shipping
