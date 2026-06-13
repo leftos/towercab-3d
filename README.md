@@ -123,20 +123,21 @@ A 3D tower cab view application for VATSIM air traffic controllers. View real-ti
 
 ## Requirements
 
-- **Desktop App:** Windows 10/11 (64-bit), macOS 10.13+, or Linux
+- **Desktop App:** Windows 10/11 (64-bit) or macOS 11+ (Apple Silicon)
 - **Remote Access:** Any device with a modern web browser (Chrome, Safari, Edge, Firefox)
 - Cesium Ion account (free tier) for terrain and imagery
 - Node.js 18+ and Rust toolchain (only for development)
 
 ## Quick Start
 
-### Option A: Download the Installer (Recommended)
+### Option A: Download (Recommended)
 
-1. Download the latest Windows installer from [GitHub Releases](https://github.com/leftos/towercab-3d/releases)
-2. Run the installer and follow the prompts
-3. Launch TowerCab 3D from the Start Menu or desktop shortcut
-4. The app will automatically check for updates on startup and notify you when new versions are available
-5. Continue to [Get a Cesium Ion Token](#2-get-a-cesium-ion-token) below
+Download the latest build for your platform from [GitHub Releases](https://github.com/leftos/towercab-3d/releases):
+
+- **Windows:** Run the `.exe` installer, follow the prompts, then launch TowerCab 3D from the Start Menu or desktop shortcut.
+- **macOS (Apple Silicon):** Open the `.dmg` and drag TowerCab 3D to Applications. The app isn't notarized yet, so the first launch is blocked by Gatekeeper — right-click the app and choose **Open**, or run `xattr -dr com.apple.quarantine "/Applications/TowerCab 3D.app"`. MSFS itself doesn't run on macOS, but FSLTL/AIG models copied from a Windows MSFS install can still be converted and used (Settings → MSFS Aircraft Models).
+
+The app checks for updates on startup and notifies you when a new version is available. Continue to [Get a Cesium Ion Token](#2-get-a-cesium-ion-token) below.
 
 ### Option B: Run from Source (Development)
 
@@ -245,12 +246,19 @@ Save and restore camera positions quickly:
 pnpm run vite:build
 ```
 
-### Full Application Build (Windows Installer)
+### Full Application Build
+
+**Windows installer:**
 ```bash
 pnpm run build
 ```
+The installer is created in `src-tauri/target/release/bundle/` — the same installer distributed via [GitHub Releases](https://github.com/leftos/towercab-3d/releases).
 
-The installer will be created in the `src-tauri/target/release/bundle/` folder. This is the same installer distributed via [GitHub Releases](https://github.com/leftos/towercab-3d/releases).
+**macOS (Apple Silicon) dmg:**
+```bash
+pnpm tauri build --target aarch64-apple-darwin
+```
+The dmg is created in `src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/`. Builds are unsigned (see the macOS first-launch note under [Quick Start](#option-a-download-recommended)).
 
 ## Project Structure
 

@@ -6,7 +6,7 @@ Scope decisions (locked in):
 - **Signing:** Unsigned / ad-hoc. No Apple Developer Program, no notarization, no entitlements. Users right-click → Open (or `xattr -dr com.apple.quarantine`) on first launch.
 - **Testing:** Done locally on real Apple Silicon hardware.
 
-Guiding principle: **MSFS is Windows-only — there is no Community folder, FSLTL, or AIG on a Mac.** The MSFS model-conversion pipeline (`fsltl_converter.exe`, `texconv.exe`) is disabled/compiled-out on macOS, NOT ported. Aircraft still render from the bundled `.glb` models.
+Guiding principle (updated): **MSFS model conversion is now cross-platform.** Modern Pillow (≥11.3) decodes the BC7/DX10 DDS formats that previously needed Windows-only `texconv.exe`, so texconv was removed entirely and the converter (Python + Pillow) builds natively on macOS. MSFS itself still doesn't run on macOS — there's no local Community folder — so Mac users point the MSFS panel at FSLTL/AIG folders copied from a Windows install. (Earlier this plan disabled MSFS on macOS; that was reverted once the Pillow-BC7 path was proven.)
 
 Auto-updater keeps working on macOS: it uses minisign (`TAURI_SIGNING_PRIVATE_KEY`), which is independent of Apple code-signing. `tauri-action` merges a `darwin-aarch64` entry into the same `latest.json`.
 
@@ -48,10 +48,25 @@ Decision: macOS builds **only at release time, in a separate workflow** from Win
 
 ## F. Testing (on Apple Silicon hardware)
 
-The desktop app renders through **WKWebView on macOS, not Chromium/WebView2** — the dual Cesium + Babylon.js WebGL2 pipeline is the biggest unknown.
+The desktop app renders through **WKWebView on macOS, not Chromium/WebView2** — the dual Cesium + Babylon.js WebGL2 pipeline was the biggest unknown.
 
-- [ ] Build locally: `pnpm tauri build --target aarch64-apple-darwin --bundles app,dmg`.
-- [ ] Validate WKWebView rendering: Cesium globe + terrain + imagery, Babylon overlay (labels/leader lines/weather), WebGL2, frame rate.
-- [ ] Validate trackpad/touch gestures, camera modes, datablock positioning.
-- [ ] Validate HTTP server (port 8765) + remote browser access from another device.
-- [ ] Validate `tc3d://` deep link, auto-updater install, window-state persistence, tray menu.
+- [x] Build locally on Apple Silicon: `pnpm run dev` and `pnpm tauri build --target aarch64-apple-darwin` both succeeded.
+- [x] WKWebView rendering confirmed working (Cesium globe + Babylon overlay).
+- [ ] (Optional spot-checks) `tc3d://` deep link, auto-updater install, window-state persistence, tray menu, remote browser access from another device — not individually exercised yet.
+
+---
+
+## Update — native MSFS conversion on macOS (supersedes the disabling above)
+
+After the initial Mac build shipped with MSFS disabled, we enabled **native MSFS model conversion on macOS**. This supersedes the "disabled/compiled-out on macOS" items in sections A–D.
+
+Key change: **texconv.exe removed entirely.** Pillow ≥11.3 decodes BC1/BC3/BC5/BC7 and DX10 DDS natively (verified empirically), which is all MSFS liveries use. The converter is now pure Python + Pillow and builds on every platform.
+
+- [x] Converter: removed `get_texconv_path`/`convert_dds_with_texconv` + `subprocess`/`tempfile` imports; unsupported formats fall back to a neutral placeholder. Bumped `pillow>=11.3`.
+- [x] `build_converter.py`: builds on all platforms; per-OS output name (`fsltl_converter[.exe]`); no texconv copy.
+- [x] Rust: `CONVERTER_BIN` const (`fsltl_converter[.exe]`) used at all 4 lookup sites; reverted the "Windows-only" converter messages.
+- [x] Frontend: reverted the macOS MSFS gating (panel shown, init runs); `MSFSModelSettingsPanel` hint is macOS-aware (point at a copied FSLTL/AIG folder). `isMacDesktopApp` removed; `isMacOS` kept for the hint.
+- [x] Config: `tauri.conf.json` drops `resources/texconv.exe`; `tauri.macos.conf.json` bundles `resources/fsltl_converter`.
+- [x] CI: `release-macos.yml` now runs Setup Python + `build:converter`.
+- [x] Removed committed `scripts/shipping/conversion/texconv.exe`; `.gitignore` tracks `fsltl_converter` (no ext).
+- [ ] Validate on macOS hardware: convert a real FSLTL/AIG livery (copied from Windows) and confirm textures look correct without texconv.

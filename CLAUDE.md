@@ -275,14 +275,14 @@ Scripts are organized under `scripts/` in two main categories:
 scripts/
 ├── shipping/           # Production and build scripts
 │   ├── build/          # Build tooling (converter, check, dev-wrapper)
-│   ├── conversion/     # Model conversion (convert_fsltl_batch.py, texconv.exe)
+│   ├── conversion/     # Model conversion (convert_fsltl_batch.py)
 │   └── data-generation/# One-off data scripts (aircraft data, airport surfaces, tower positions)
 └── debugging/          # Development and debugging utilities
 ```
 
 **Shipping scripts** are used for building, development, and data generation:
 - `shipping/build/` - Build tools: check.js, build_converter.py, dev-wrapper.js
-- `shipping/conversion/` - Runtime conversion: convert_fsltl_batch.py, texconv.exe
+- `shipping/conversion/` - Runtime conversion: convert_fsltl_batch.py
 - `shipping/data-generation/` - One-off scripts: convert-aircraft-data.py, extract-airport-surfaces.py, scrape-tower-positions.py
 
 **Debugging scripts** are utilities for development and troubleshooting:

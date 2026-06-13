@@ -73,8 +73,6 @@ try:
     import io
     import time
     import os
-    import subprocess
-    import tempfile
     from concurrent.futures import ThreadPoolExecutor, as_completed
     import threading
 except ImportError as e:
@@ -102,79 +100,6 @@ except Exception as e:
 #   6: Added --no-discovery mode; Rust now handles model.cfg parsing (fixes wrong engine variant for liveries)
 CONVERTER_VERSION = 8  # Bump when converter output changes (v8: exclude cargo/attachment GTLFs from model selection)
 
-# Global texconv.exe path (downloaded on first use)
-_texconv_path: Path | None = None
-_texconv_lock = threading.Lock()
-
-def get_texconv_path() -> Path | None:
-    """Get path to texconv.exe bundled with the application."""
-    global _texconv_path
-
-    with _texconv_lock:
-        if _texconv_path and _texconv_path.exists():
-            return _texconv_path
-
-        # When running as PyInstaller bundle, check next to the executable
-        if getattr(sys, 'frozen', False):
-            exe_dir = Path(sys.executable).parent
-            check_paths = [
-                exe_dir / "texconv.exe",
-            ]
-        else:
-            # Development mode - check script directory
-            script_dir = Path(__file__).parent
-            check_paths = [
-                script_dir / "texconv.exe",
-                Path("texconv.exe"),
-            ]
-
-        for check_path in check_paths:
-            if check_path.exists():
-                _texconv_path = check_path
-                return _texconv_path
-
-        print("ERROR: texconv.exe not found. It should be bundled with the converter.")
-        return None
-
-
-def convert_dds_with_texconv(dds_path: Path, target_size: int | None = None) -> bytes | None:
-    """Convert DDS to PNG using Microsoft's texconv.exe."""
-    texconv = get_texconv_path()
-    if not texconv:
-        return None
-
-    # Create temp directory for output
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir_path = Path(tmpdir)
-        output_file = tmpdir_path / (dds_path.stem + ".png")
-
-        # Run texconv to convert DDS -> PNG
-        try:
-            result = subprocess.run(
-                [str(texconv), "-ft", "png", "-o", str(tmpdir_path), "-y", str(dds_path)],
-                capture_output=True,
-                timeout=30
-            )
-            if result.returncode != 0 or not output_file.exists():
-                return None
-
-            # Read and optionally resize
-            img = Image.open(output_file)
-            # Convert to RGB to avoid premultiplied alpha issues during resize
-            if img.mode != 'RGB':
-                img = img.convert('RGB')
-
-            if target_size is not None and max(img.size) > target_size:
-                ratio = target_size / max(img.size)
-                new_size = (int(img.width * ratio), int(img.height * ratio))
-                img = img.resize(new_size, Image.LANCZOS)
-
-            buffer = io.BytesIO()
-            img.save(buffer, format='PNG', optimize=True)
-            return buffer.getvalue()
-        except Exception:
-            return None
-
 
 # Texture scale limits
 TEXTURE_SCALE_MAP = {
@@ -188,7 +113,8 @@ TEXTURE_SCALE_MAP = {
 def convert_dds_to_png(dds_path: Path, target_size: int | None = None) -> bytes:
     """Convert DDS file to PNG bytes, optionally resizing.
 
-    Uses PIL for common formats, falls back to texconv.exe for BC7 and other advanced formats.
+    Pillow decodes the DDS pixel formats MSFS uses (BC1/BC3/BC5/BC7 and DX10);
+    any format Pillow can't decode falls back to a neutral placeholder.
 
     IMPORTANT: We convert to RGB (dropping alpha) before resizing because:
     1. MSFS livery textures often have alpha channels used for day/night switching
@@ -216,14 +142,10 @@ def convert_dds_to_png(dds_path: Path, target_size: int | None = None) -> bytes:
         return buffer.getvalue()
 
     except NotImplementedError:
-        # Unsupported DDS format (e.g., BC7/DXGI format 78)
-        # Fall back to texconv.exe
-        result = convert_dds_with_texconv(dds_path, target_size)
-        if result:
-            return result
-
-        # texconv also failed - create placeholder
-        print(f"  Warning: Could not convert {dds_path.name}, using placeholder")
+        # Pillow can't decode this DDS pixel format (rare — modern Pillow handles
+        # BC1/BC3/BC5/BC7 and DX10). Emit a neutral placeholder so the rest of the
+        # model still converts.
+        print(f"  Warning: Could not decode {dds_path.name} (unsupported DDS format), using placeholder")
         img = Image.new('RGBA', (64, 64), (128, 128, 128, 255))
         buffer = io.BytesIO()
         img.save(buffer, format='PNG')

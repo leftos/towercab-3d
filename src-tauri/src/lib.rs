@@ -551,6 +551,13 @@ async fn fetch_url(url: String) -> Result<String, String> {
 // FSLTL BATCH CONVERSION
 // =============================================================================
 
+/// Filename of the bundled FSLTL model converter sidecar — `.exe` on Windows,
+/// no extension on macOS/Linux (PyInstaller output naming).
+#[cfg(windows)]
+pub(crate) const CONVERTER_BIN: &str = "fsltl_converter.exe";
+#[cfg(not(windows))]
+pub(crate) const CONVERTER_BIN: &str = "fsltl_converter";
+
 /// Start FSLTL conversion process in background
 #[tauri::command]
 fn start_fsltl_conversion(
@@ -571,16 +578,18 @@ fn start_fsltl_conversion(
         .map_err(|e| format!("Failed to get resource directory: {}", e))?;
 
     // In dev mode, CARGO_MANIFEST_DIR points to src-tauri/
-    let dev_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/fsltl_converter.exe");
+    let dev_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("resources")
+        .join(CONVERTER_BIN);
 
     let possible_paths = [
         // Production: bundled resources preserve directory structure
-        resource_path.join("resources").join("fsltl_converter.exe"),
+        resource_path.join("resources").join(CONVERTER_BIN),
         // Dev mode: relative to src-tauri/
         dev_path,
         // Fallback paths
-        PathBuf::from("src-tauri/resources/fsltl_converter.exe"),
-        PathBuf::from("fsltl_converter.exe"),
+        PathBuf::from("src-tauri/resources").join(CONVERTER_BIN),
+        PathBuf::from(CONVERTER_BIN),
     ];
 
     let converter_path =
@@ -588,14 +597,10 @@ fn start_fsltl_conversion(
             .iter()
             .find(|p| p.exists())
             .ok_or_else(|| {
-                if cfg!(target_os = "windows") {
-                    format!(
-                "Converter executable not found. Tried: {:?}. Run 'npm run build:converter' first.",
-                possible_paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>()
-            )
-                } else {
-                    "MSFS model conversion is only available on Windows".to_string()
-                }
+                format!(
+                    "Converter executable not found. Tried: {:?}. Run 'pnpm run build:converter' first.",
+                    possible_paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>()
+                )
             })?
             .clone();
 

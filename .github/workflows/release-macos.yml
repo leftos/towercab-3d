@@ -35,12 +35,19 @@ jobs:
         with:
           targets: aarch64-apple-darwin
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
 
-      # No FSLTL converter / texconv on macOS: MSFS is Windows-only, and
-      # tauri.macos.conf.json drops the .exe resources from the bundle, so
-      # tauri::context! resource validation passes without building them.
+      - name: Install Python dependencies
+        run: pip install Pillow pyinstaller
+
+      # The FSLTL converter is cross-platform (Python + Pillow); Pillow decodes
+      # the BC7/DX10 DDS formats that previously required Windows-only texconv.
+      # build_converter.py outputs a native `fsltl_converter` (no .exe) here.
+      - name: Build FSLTL converter
+        run: pnpm run build:converter
 
       - name: Check vNAS availability and configure Git
         id: vnas-check

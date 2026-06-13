@@ -10,7 +10,6 @@ import type { DataSourceType } from '../../types/realtraffic'
 import type { ImageryAdjustments } from '../../types/settings'
 import { DEFAULT_IMAGERY_ADJUSTMENTS } from '../../types/settings'
 import type { VnasEnvironment } from '../../types/vnas'
-import { isMacDesktopApp } from '../../utils/deviceDetection'
 import { isRemoteMode } from '../../utils/remoteMode'
 import { httpServerApi, isTauri, type ServerStatus, shellApi } from '../../utils/tauriApi'
 import MSFSModelSettingsPanel from './MSFSModelSettingsPanel'
@@ -816,8 +815,7 @@ function SettingsConfigurationTab({
         </CollapsibleSection>
       )}
 
-      {/* MSFS (FSLTL/AIG) model conversion is Windows-only; hide it on the macOS desktop app. */}
-      {!isMacDesktopApp() && <MSFSModelSettingsPanel />}
+      <MSFSModelSettingsPanel />
 
       {isTauri() && (
         <CollapsibleSection title="Remote Browser Access">

@@ -61,9 +61,9 @@ temp/
 # Claude AI settings
 .claude/settings.local.json
 
-# FSLTL Converter executables (built/copied by build_converter.py)
+# FSLTL Converter executable (built by build_converter.py; .exe on Windows, no extension on macOS/Linux)
 src-tauri/resources/fsltl_converter.exe
-src-tauri/resources/texconv.exe
+src-tauri/resources/fsltl_converter
 
 # Tauri signed build script
 build-signed.ps1

@@ -16,7 +16,7 @@ use tauri::{Emitter, Manager};
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 
-use crate::{normalize_path_string, to_extended_length_path};
+use crate::{normalize_path_string, to_extended_length_path, CONVERTER_BIN};
 
 // =============================================================================
 // TYPES
@@ -1344,26 +1344,21 @@ pub async fn convert_msfs_model(
         .resource_dir()
         .map_err(|e| format!("Failed to get resource directory: {}", e))?;
 
-    let dev_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/fsltl_converter.exe");
+    let dev_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("resources")
+        .join(CONVERTER_BIN);
 
     let possible_paths = [
-        resource_path.join("resources").join("fsltl_converter.exe"),
+        resource_path.join("resources").join(CONVERTER_BIN),
         dev_path,
-        PathBuf::from("src-tauri/resources/fsltl_converter.exe"),
-        PathBuf::from("fsltl_converter.exe"),
+        PathBuf::from("src-tauri/resources").join(CONVERTER_BIN),
+        PathBuf::from(CONVERTER_BIN),
     ];
 
     let converter_path = possible_paths
         .iter()
         .find(|p| p.exists())
-        .ok_or_else(|| {
-            if cfg!(target_os = "windows") {
-                "Converter executable not found. Ensure fsltl_converter.exe is in resources/"
-                    .to_string()
-            } else {
-                "MSFS model conversion is only available on Windows".to_string()
-            }
-        })?
+        .ok_or_else(|| "Converter executable not found in resources/".to_string())?
         .clone();
 
     // Create output directory if needed
@@ -1693,25 +1688,21 @@ pub fn convert_model_by_name(
         .resource_dir()
         .map_err(|e| format!("Failed to get resource directory: {}", e))?;
 
-    let dev_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/fsltl_converter.exe");
+    let dev_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("resources")
+        .join(CONVERTER_BIN);
 
     let possible_paths = [
-        resource_path.join("resources").join("fsltl_converter.exe"),
+        resource_path.join("resources").join(CONVERTER_BIN),
         dev_path,
-        PathBuf::from("src-tauri/resources/fsltl_converter.exe"),
-        PathBuf::from("fsltl_converter.exe"),
+        PathBuf::from("src-tauri/resources").join(CONVERTER_BIN),
+        PathBuf::from(CONVERTER_BIN),
     ];
 
     let converter_path = possible_paths
         .iter()
         .find(|p| p.exists())
-        .ok_or_else(|| {
-            if cfg!(target_os = "windows") {
-                "Converter executable not found".to_string()
-            } else {
-                "MSFS model conversion is only available on Windows".to_string()
-            }
-        })?
+        .ok_or_else(|| "Converter executable not found".to_string())?
         .clone();
 
     // Create output directory if needed

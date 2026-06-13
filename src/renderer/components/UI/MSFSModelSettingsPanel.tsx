@@ -19,6 +19,7 @@ import { type MSFSDetectionResult, MSFSModelConversionService } from '../../serv
 import { useGlobalSettingsStore, useMsfsModelSettings } from '../../stores/globalSettingsStore'
 import type { FSLTLTextureScale, MSFSModelSource } from '../../types'
 import { MSFS_CACHE_LIMIT } from '../../types'
+import { isMacOS } from '../../utils/deviceDetection'
 import { isRemoteMode } from '../../utils/remoteMode'
 import { isTauri } from '../../utils/tauriApi'
 import CollapsibleSection from './settings/CollapsibleSection'
@@ -310,7 +311,11 @@ function MSFSModelSettingsPanel() {
               </span>
             </div>
           )}
-          <p className="setting-hint">Select your MSFS Community folder to auto-detect FSLTL and AIG installations.</p>
+          <p className="setting-hint">
+            {isMacOS()
+              ? 'MSFS does not run on macOS — point this at a folder holding FSLTL/AIG models copied from a Windows MSFS Community folder to detect and convert them.'
+              : 'Select your MSFS Community folder to auto-detect FSLTL and AIG installations.'}
+          </p>
         </div>
 
         {/* Source Priority & Enable/Disable */}

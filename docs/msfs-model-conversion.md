@@ -106,9 +106,8 @@ For each image in the GLTF:
 
 1. **Find texture file**: Search model directory and texture directories for `.DDS`, `.dds`, `.PNG`, `.png` variants
 2. **Convert DDS**:
-   - Try PIL first (fast, handles common DDS formats)
-   - Fall back to `texconv.exe` for BC7/DXT10 formats
-   - Create placeholder if both fail
+   - Decode with Pillow, which handles the DDS formats MSFS uses (BC1/BC3/BC5/BC7 and DX10)
+   - Create a neutral placeholder if Pillow can't decode the format
 3. **Resize** (optional): Scale to target size (512, 1k, 2k, or full)
 4. **Convert to RGB**: Drop alpha channel before resize to avoid premultiplied alpha artifacts
 
@@ -805,8 +804,7 @@ Both must match. When loading cached models on startup, the frontend skips GLBs 
 | `scripts/shipping/build/build_converter.py` | PyInstaller build script |
 | `scripts/shipping/build/converter-requirements.txt` | Python dependencies |
 | `scripts/shipping/build/fsltl_converter.spec` | PyInstaller spec file |
-| `scripts/shipping/conversion/texconv.exe` | Microsoft texture converter |
-| `src-tauri/resources/fsltl_converter.exe` | Bundled converter |
+| `src-tauri/resources/fsltl_converter[.exe]` | Bundled converter (`.exe` on Windows) |
 | `src-tauri/src/msfs.rs` | Rust backend |
 | `src/renderer/services/MSFSModelConversionService.ts` | Frontend service |
 

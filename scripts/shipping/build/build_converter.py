@@ -11,12 +11,12 @@ Usage:
     python scripts/shipping/build/build_converter.py
 
 Output:
-    src-tauri/resources/fsltl_converter.exe
+    src-tauri/resources/fsltl_converter        (macOS/Linux)
+    src-tauri/resources/fsltl_converter.exe     (Windows)
 """
 
 import subprocess
 import sys
-import shutil
 import venv
 from pathlib import Path
 
@@ -48,14 +48,6 @@ def setup_venv(venv_dir: Path, requirements_file: Path) -> Path:
 
 
 def main():
-    # The FSLTL converter is a Windows-only sidecar: it bundles texconv.exe (a
-    # Windows DirectX tool) and is consumed only by the Windows MSFS model
-    # pipeline. MSFS doesn't exist on macOS/Linux, and tauri.macos.conf.json
-    # drops the .exe resources from the bundle, so there's nothing to build here.
-    if sys.platform != "win32":
-        print(f"[build_converter] Skipping FSLTL converter build on {sys.platform} (Windows-only sidecar).")
-        return 0
-
     # Paths
     script_dir = Path(__file__).parent  # scripts/shipping/build
     shipping_dir = script_dir.parent     # scripts/shipping
@@ -106,24 +98,15 @@ def main():
         print(f"[build_converter] ERROR: PyInstaller failed with code {result.returncode}")
         return 1
 
-    # Verify output
-    output_exe = output_dir / "fsltl_converter.exe"
-    if not output_exe.exists():
-        print(f"[build_converter] ERROR: Output file not found at {output_exe}")
+    # Verify output (PyInstaller appends .exe on Windows, no extension elsewhere)
+    output_name = "fsltl_converter.exe" if sys.platform == "win32" else "fsltl_converter"
+    output_bin = output_dir / output_name
+    if not output_bin.exists():
+        print(f"[build_converter] ERROR: Output file not found at {output_bin}")
         return 1
 
-    size_mb = output_exe.stat().st_size / (1024 * 1024)
-    print(f"[build_converter] SUCCESS: {output_exe} ({size_mb:.1f} MB)")
-
-    # Copy texconv.exe alongside the converter
-    texconv_src = shipping_dir / "conversion" / "texconv.exe"
-    texconv_dest = output_dir / "texconv.exe"
-    if texconv_src.exists():
-        shutil.copy2(texconv_src, texconv_dest)
-        print(f"[build_converter] Copied texconv.exe to {texconv_dest}")
-    else:
-        print(f"[build_converter] WARNING: texconv.exe not found at {texconv_src}")
-        print("[build_converter] BC7/DXT10 texture conversion will not work!")
+    size_mb = output_bin.stat().st_size / (1024 * 1024)
+    print(f"[build_converter] SUCCESS: {output_bin} ({size_mb:.1f} MB)")
 
     return 0
 

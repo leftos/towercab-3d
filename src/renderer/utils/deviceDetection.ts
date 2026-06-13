@@ -5,8 +5,6 @@
  * adapting UI and performance settings.
  */
 
-import { isTauriMode } from './remoteMode'
-
 /**
  * Check if the current device supports touch input
  */
@@ -45,17 +43,6 @@ export function isIOS(): boolean {
  */
 export function isMacOS(): boolean {
   return /Mac/i.test(navigator.userAgent) && !isTouchDevice()
-}
-
-/**
- * True when running as the native desktop app (Tauri) on macOS — not iPad and
- * not a remote browser. Used to hide Windows-only features such as MSFS model
- * conversion. In remote-browser mode this is always false (the client is not
- * the host), so remote clients keep their existing behavior regardless of the
- * host OS.
- */
-export function isMacDesktopApp(): boolean {
-  return isTauriMode() && isMacOS()
 }
 
 /**

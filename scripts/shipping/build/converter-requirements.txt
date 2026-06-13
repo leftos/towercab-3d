@@ -4,8 +4,8 @@
 # PyInstaller for bundling
 pyinstaller>=6.0
 
-# Image processing (DDS texture support)
-pillow>=10.0
+# Image processing (DDS texture support; >=11.3 for native BC7/DX10 decode, replacing texconv)
+pillow>=11.3
 
 # NumPy for array operations
 # IMPORTANT: Must use 1.x - numpy 2.x has PyInstaller bundling issues
