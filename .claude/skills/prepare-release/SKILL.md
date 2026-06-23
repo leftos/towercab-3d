@@ -156,9 +156,19 @@ The workflow creates a **draft** release with auto-generated notes (PR-title-der
    ## Changelog
 
    [full unreleased-section body verbatim, preserving sub-headings]
+
+   ---
+
+   ### Installing on macOS (Apple Silicon)
+
+   This build isn't notarized by Apple yet, so on first launch macOS reports it as **"damaged and can't be opened."** It isn't damaged — this is how macOS treats unsigned apps downloaded from the internet. To open it, drag TowerCab 3D to Applications, then run this in Terminal and launch the app normally:
+
+   ```
+   xattr -dr com.apple.quarantine "/Applications/TowerCab 3D.app"
+   ```
    ```
 
-   Apply it via `gh release edit vX.X.X-alpha --notes-file <path>` (write to a temp file under `.tmp/` to avoid quoting issues).
+   The **Installing on macOS** footer is mandatory on every release (the build is unsigned); include it verbatim. Apply the body via `gh release edit vX.X.X-alpha --notes-file <path>` (write to a temp file under `.tmp/` to avoid quoting issues).
 4. **Mark the release published if it's still a draft.** The workflow creates `draft: true`; it may already be undrafted by an upload step. Check with `gh release view vX.X.X-alpha --json isDraft`. If still draft, `gh release edit vX.X.X-alpha --draft=false`.
 
 ## Errors and recovery

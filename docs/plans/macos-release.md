@@ -3,7 +3,7 @@
 Scope decisions (locked in):
 
 - **Architecture:** Apple Silicon only (`aarch64-apple-darwin`). Intel/Rosetta and universal binaries out of scope.
-- **Signing:** Unsigned / ad-hoc. No Apple Developer Program, no notarization, no entitlements. Users right-click → Open (or `xattr -dr com.apple.quarantine`) on first launch.
+- **Signing:** Unsigned / ad-hoc. No Apple Developer Program, no notarization, no entitlements. The quarantined `.dmg` trips Gatekeeper's "damaged and can't be opened" message on first launch; users clear it with `xattr -dr com.apple.quarantine "/Applications/TowerCab 3D.app"`. (Right-click → Open only bypasses the "unidentified developer" gate, not "damaged".)
 - **Testing:** Done locally on real Apple Silicon hardware.
 
 Guiding principle (updated): **MSFS model conversion is now cross-platform.** Modern Pillow (≥11.3) decodes the BC7/DX10 DDS formats that previously needed Windows-only `texconv.exe`, so texconv was removed entirely and the converter (Python + Pillow) builds natively on macOS. MSFS itself still doesn't run on macOS — there's no local Community folder — so Mac users point the MSFS panel at FSLTL/AIG folders copied from a Windows install. (Earlier this plan disabled MSFS on macOS; that was reverted once the Pillow-BC7 path was proven.)
@@ -43,7 +43,7 @@ Decision: macOS builds **only at release time, in a separate workflow** from Win
 
 ## E. Docs / distribution
 
-- [ ] README: document macOS build (Apple Silicon only) and the unsigned first-launch step (right-click → Open / `xattr -dr com.apple.quarantine`).
+- [x] README: document macOS build (Apple Silicon only) and the unsigned first-launch step (`xattr -dr com.apple.quarantine`, explaining the "damaged" Gatekeeper message). Release bodies carry the same note via `release.yml` + the `prepare-release` skill.
 - [ ] CHANGELOG entry under `[Unreleased]` → Added: "macOS (Apple Silicon) build".
 
 ## F. Testing (on Apple Silicon hardware)

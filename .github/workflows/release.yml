@@ -25,6 +25,20 @@ jobs:
           draft: true
           generate_release_notes: true
           prerelease: false
+          # Prepended above the auto-generated notes so the macOS install note
+          # is present even on a bare tag-push release. The prepare-release skill
+          # later overwrites the body with curated notes that carry the same
+          # footer, so both release paths surface it.
+          body: |
+            ### Installing on macOS (Apple Silicon)
+
+            This build isn't notarized by Apple yet, so on first launch macOS reports it as **"damaged and can't be opened."** It isn't damaged — this is how macOS treats unsigned apps downloaded from the internet. To open it, drag TowerCab 3D to Applications, then run this in Terminal and launch the app normally:
+
+            ```
+            xattr -dr com.apple.quarantine "/Applications/TowerCab 3D.app"
+            ```
+
+            ---
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

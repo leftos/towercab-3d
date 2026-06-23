@@ -135,7 +135,11 @@ A 3D tower cab view application for VATSIM air traffic controllers. View real-ti
 Download the latest build for your platform from [GitHub Releases](https://github.com/leftos/towercab-3d/releases):
 
 - **Windows:** Run the `.exe` installer, follow the prompts, then launch TowerCab 3D from the Start Menu or desktop shortcut.
-- **macOS (Apple Silicon):** Open the `.dmg` and drag TowerCab 3D to Applications. The app isn't notarized yet, so the first launch is blocked by Gatekeeper — right-click the app and choose **Open**, or run `xattr -dr com.apple.quarantine "/Applications/TowerCab 3D.app"`. MSFS itself doesn't run on macOS, but FSLTL/AIG models copied from a Windows MSFS install can still be converted and used (Settings → MSFS Aircraft Models).
+- **macOS (Apple Silicon):** Open the `.dmg` and drag TowerCab 3D to Applications. The app isn't notarized by Apple yet, so on first launch macOS reports it as **"damaged and can't be opened."** It isn't damaged — this is how macOS treats unsigned apps downloaded from the internet. To open it, run this in Terminal, then launch the app normally:
+  ```bash
+  xattr -dr com.apple.quarantine "/Applications/TowerCab 3D.app"
+  ```
+  MSFS itself doesn't run on macOS, but FSLTL/AIG models copied from a Windows MSFS install can still be converted and used (Settings → MSFS Aircraft Models).
 
 The app checks for updates on startup and notifies you when a new version is available. Continue to [Get a Cesium Ion Token](#2-get-a-cesium-ion-token) below.
 
