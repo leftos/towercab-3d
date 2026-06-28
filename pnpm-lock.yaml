@@ -9,14 +9,14 @@ importers:
   .:
     dependencies:
       '@babylonjs/core':
-        specifier: ^9.5.0
-        version: 9.5.0
+        specifier: ^9.14.0
+        version: 9.14.0
       '@babylonjs/gui':
-        specifier: ^9.5.0
-        version: 9.5.0(@babylonjs/core@9.5.0)
+        specifier: ^9.14.0
+        version: 9.14.0(@babylonjs/core@9.14.0)
       '@babylonjs/loaders':
-        specifier: ^9.5.0
-        version: 9.5.0(@babylonjs/core@9.5.0)(babylonjs-gltf2interface@8.54.3)
+        specifier: ^9.14.0
+        version: 9.14.0(@babylonjs/core@9.14.0)(babylonjs-gltf2interface@8.54.3)
       '@msgpack/msgpack':
         specifier: ^3.1.3
         version: 3.1.3
@@ -197,16 +197,16 @@ packages:
     resolution: {integrity: sha512-LwdZHpScM4Qz8Xw2iKSzS+cfglZzJGvofQICy7W7v4caru4EaAmyUuO6BGrbyQ2mYV11W0U8j5mBhd14dd3B0A==}
     engines: {node: '>=6.9.0'}
 
-  '@babylonjs/core@9.5.0':
-    resolution: {integrity: sha512-DTqkOTueTp/xSw/VTVzrxLpBWjamVIKXbAbgqDHRR/V3Am5F5LRGscaWjWgPc5INv7HD2zTln/lyWdm47KQkgQ==}
+  '@babylonjs/core@9.14.0':
+    resolution: {integrity: sha512-gEXo5KF8wEu+k0bZbNLLfwW2LoIQm6d2ljdOc16p2kLapclVnHc4nZOk8q6l8N4scWD7GYM9WuX3au1namokiw==}
 
-  '@babylonjs/gui@9.5.0':
-    resolution: {integrity: sha512-AzptYadbJ/1/BUrvLhvNyABN9OAKrtFYYyYMMB6lEV+ymgcoyt1NKgdd/DEUzr5LXbxBb9rJIm9GsDSIyrnuCg==}
+  '@babylonjs/gui@9.14.0':
+    resolution: {integrity: sha512-rQEPweusAUZ1nw/jJ7SE0SynUJE8ZChO8pPtSI59UdaBJa9JM9BcWnX0+58+T0tYiRu1U4XJdccint/Jotjbqw==}
     peerDependencies:
       '@babylonjs/core': ^9.0.0
 
-  '@babylonjs/loaders@9.5.0':
-    resolution: {integrity: sha512-e2PqqPQ2A6xCJ6yW2NtcCzCKfN7neJjpxCUWBXqVUc268QnC1DNV49PM6bVpzNzTqzYjapMR9u5apcvAWo2iYQ==}
+  '@babylonjs/loaders@9.14.0':
+    resolution: {integrity: sha512-tEML9oS8X4upjJi74muCIpShYvxflXSYYgAE9xNFbx93ec6fmhUB68vGWyzvr7eqk9jkYzonRp06bqmQebVgUg==}
     peerDependencies:
       '@babylonjs/core': ^9.0.0
       babylonjs-gltf2interface: ^9.0.0
@@ -1362,6 +1362,11 @@ packages:
     engines: {node: '>=6.0.0'}
     hasBin: true
 
+  baseline-browser-mapping@2.10.40:
+    resolution: {integrity: sha512-BSSLZ9/Cjjv7Gtj5B68ZzXcXUg8iOf3fme+FCuh8rC/Go+Kmh8cox7M3A8dolou16s64QjLPOSdngh7GxXvkSw==}
+    engines: {node: '>=6.0.0'}
+    hasBin: true
+
   bignumber.js@9.3.1:
     resolution: {integrity: sha512-Ko0uX15oIUS7wJ3Rb30Fs6SkVbLmPBAKdlm7q9+ak9bbIeFf0MwuBsQV6z7+X768/cHsfg+WlysDWJcmthjsjQ==}
 
@@ -1383,6 +1388,9 @@ packages:
 
   caniuse-lite@1.0.30001788:
     resolution: {integrity: sha512-6q8HFp+lOQtcf7wBK+uEenxymVWkGKkjFpCvw5W25cmMwEDU45p1xQFBQv8JDlMMry7eNxyBaR+qxgmTUZkIRQ==}
+
+  caniuse-lite@1.0.30001799:
+    resolution: {integrity: sha512-hG1bReV+OUU+MOqK4t/ZWI0tZOyz3rqS9XuhOUz1cIcbwBKjOyJEJuw9ER5JuNyqxNk8u/JUVbGibBOL1yrjFw==}
 
   cesium@1.140.0:
     resolution: {integrity: sha512-3RvW0rvZWuXiS6regtNE5u9vt0uXohgpsRBIo6Qc922IIIamkitYiEdr4fg+u4qX4EoK9xS3BosCza7iPOExEQ==}
@@ -1669,6 +1677,11 @@ packages:
 
   nanoid@3.3.11:
     resolution: {integrity: sha512-N8SpfPUnUp1bK+PMYW8qSWdl9U+wwNWI4QKxOYDy9JAro3WMX7p2OeVRF9v+347pnakNevPmiHhNmZ2HbFA76w==}
+    engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
+    hasBin: true
+
+  nanoid@3.3.15:
+    resolution: {integrity: sha512-y7Wygv/7mEOvxTuEQDB8StXdMRBWf1kR/tlhAzBRUFkB2jfcLOAxO/SHmOO2zgz1pVgK29/kyupn059/bCHdjA==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
@@ -2151,15 +2164,15 @@ snapshots:
       '@babel/helper-string-parser': 7.27.1
       '@babel/helper-validator-identifier': 7.28.5
 
-  '@babylonjs/core@9.5.0': {}
+  '@babylonjs/core@9.14.0': {}
 
-  '@babylonjs/gui@9.5.0(@babylonjs/core@9.5.0)':
+  '@babylonjs/gui@9.14.0(@babylonjs/core@9.14.0)':
     dependencies:
-      '@babylonjs/core': 9.5.0
+      '@babylonjs/core': 9.14.0
 
-  '@babylonjs/loaders@9.5.0(@babylonjs/core@9.5.0)(babylonjs-gltf2interface@8.54.3)':
+  '@babylonjs/loaders@9.14.0(@babylonjs/core@9.14.0)(babylonjs-gltf2interface@8.54.3)':
     dependencies:
-      '@babylonjs/core': 9.5.0
+      '@babylonjs/core': 9.14.0
       babylonjs-gltf2interface: 8.54.3
 
   '@biomejs/biome@2.4.14':
@@ -3909,6 +3922,8 @@ snapshots:
 
   baseline-browser-mapping@2.10.20: {}
 
+  baseline-browser-mapping@2.10.40: {}
+
   bignumber.js@9.3.1: {}
 
   binary-extensions@2.3.0: {}
@@ -3928,6 +3943,8 @@ snapshots:
       update-browserslist-db: 1.2.3(browserslist@4.28.2)
 
   caniuse-lite@1.0.30001788: {}
+
+  caniuse-lite@1.0.30001799: {}
 
   cesium@1.140.0:
     dependencies:
@@ -4182,12 +4199,14 @@ snapshots:
 
   nanoid@3.3.11: {}
 
+  nanoid@3.3.15: {}
+
   next@16.2.4(@babel/core@7.29.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5):
     dependencies:
       '@next/env': 16.2.4
       '@swc/helpers': 0.5.15
-      baseline-browser-mapping: 2.10.20
-      caniuse-lite: 1.0.30001788
+      baseline-browser-mapping: 2.10.40
+      caniuse-lite: 1.0.30001799
       postcss: 8.4.31
       react: 19.2.5
       react-dom: 19.2.5(react@19.2.5)
@@ -4241,7 +4260,7 @@ snapshots:
 
   postcss@8.4.31:
     dependencies:
-      nanoid: 3.3.11
+      nanoid: 3.3.15
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
