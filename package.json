@@ -48,7 +48,7 @@
   "license": "GPL-2.0",
   "devDependencies": {
     "@biomejs/biome": "2.4.14",
-    "@tauri-apps/cli": "^2.11.0",
+    "@tauri-apps/cli": "^2.11.3",
     "@types/geojson": "^7946.0.16",
     "@types/node": "^25.5.0",
     "@types/rbush": "^4.0.0",
