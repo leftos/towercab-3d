@@ -18,7 +18,7 @@ Decision: macOS builds **only at release time, in a separate workflow** from Win
 
 - [x] New `.github/workflows/release-macos.yml`: triggers on `v*` tags, `runs-on: macos-latest` (arm64, native), target `aarch64-apple-darwin`, uploads to the same GitHub release by tag (`tauri-action` with `tagName`). No converter/Python steps (MSFS is Windows-only; `tauri.macos.conf.json` drops `.exe` resources from the bundle). Portable `sed -i.bak` so the token-less vnas/updater-disable paths work on BSD sed too.
 - [x] `tauri-action` merges the `darwin-aarch64` entry into the existing release's `latest.json` (reads + merges `platforms` before re-upload), so Windows auto-update isn't clobbered. Verify at first real macOS release.
-- [ ] (Future) Notarization slots into `release-macos.yml` as additional `tauri-action` env (`APPLE_CERTIFICATE`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`) — out of scope while unsigned/ad-hoc.
+- [ ] (Planned) Notarization slots into `release-macos.yml` as a cert-import step + additional `tauri-action` env (`APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, and the App Store Connect API-key trio `APPLE_API_KEY` / `APPLE_API_ISSUER` / `APPLE_API_KEY_PATH`). Credentials are reused from `leftos/yaat` (same Developer ID Application cert + notary key; no Installer cert since Tauri ships a `.dmg`, not a `.pkg`). Full setup guide + workflow snippet: [macos-code-signing.md](../macos-code-signing.md).
 
 ## B. Tauri bundle config
 
