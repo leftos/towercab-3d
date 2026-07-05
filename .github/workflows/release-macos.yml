@@ -150,7 +150,7 @@ jobs:
       # so the Windows entry isn't clobbered.
       - name: Build Tauri app (with signing)
         if: steps.signing-check.outputs.signing_available == 'true'
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -164,7 +164,7 @@ jobs:
 
       - name: Build Tauri app (without signing)
         if: steps.signing-check.outputs.signing_available != 'true'
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_NET_GIT_FETCH_WITH_CLI: ${{ steps.vnas-check.outputs.vnas_available == 'true' }}
