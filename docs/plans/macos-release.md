@@ -1,5 +1,7 @@
 # macOS Redistributable — Release Plan
 
+> **Status (verified 2026-09-08):** shipped in v0.2.0-alpha — the release carries `TowerCab.3D_0.2.0-alpha_aarch64.dmg`, `.app.tar.gz` + `.sig`, and `latest.json` lists `darwin-aarch64`. Every remaining unchecked item below is either explicitly out of scope (notarization) or a runtime spot-check that needs Apple Silicon hardware.
+
 Scope decisions (locked in):
 
 - **Architecture:** Apple Silicon only (`aarch64-apple-darwin`). Intel/Rosetta and universal binaries out of scope.
@@ -22,29 +24,29 @@ Decision: macOS builds **only at release time, in a separate workflow** from Win
 
 ## B. Tauri bundle config
 
-- [ ] Make the macOS bundle not require Windows-only resources. `tauri.conf.json:44-47` lists `fsltl_converter.exe`, `texconv.exe`, `update-mods.ps1`. A `tauri build` on macOS will fail if these paths are absent. Fix via a macOS config overlay (e.g. `tauri.macos.conf.json` passed in the mac CI/build args) that overrides `bundle.resources` to drop the Windows files, OR restructure resources to be platform-specific.
-- [ ] Handle bundle targets per platform: `targets` is `["nsis"]` (invalid on mac). Either pass `--bundles app,dmg` in the macOS build args, or set targets to include dmg/app and rely on Tauri filtering out inapplicable ones.
+- [x] (Verified 2026-09-08: done via `src-tauri/tauri.macos.conf.json`, auto-merged by Tauri on macOS; `resources` omits every Windows file; v0.2.0-alpha shipped a `.dmg`.) Make the macOS bundle not require Windows-only resources. `tauri.conf.json:44-47` lists `fsltl_converter.exe`, `texconv.exe`, `update-mods.ps1`. A `tauri build` on macOS will fail if these paths are absent. Fix via a macOS config overlay (e.g. `tauri.macos.conf.json` passed in the mac CI/build args) that overrides `bundle.resources` to drop the Windows files, OR restructure resources to be platform-specific.
+- [x] (Verified 2026-09-08: `tauri.macos.conf.json` sets `targets: ["app", "dmg"]`.) Handle bundle targets per platform: `targets` is `["nsis"]` (invalid on mac). Either pass `--bundles app,dmg` in the macOS build args, or set targets to include dmg/app and rely on Tauri filtering out inapplicable ones.
 - [x] Bump `bundle.macOS.minimumSystemVersion` from `10.13` to `11.0` (Apple Silicon requires macOS 11+).
 - [x] `scripts/shipping/build/build_converter.py` early-returns on non-Windows, so `pnpm run build` (which chains `build:converter`) works on macOS without PyInstaller/texconv.
 
 ## C. Rust backend
 
-- [ ] `#[cfg(target_os = "windows")]`-guard the MSFS detection/conversion commands and the converter-path lookups (`msfs.rs`, `lib.rs`, `files.rs`) so non-Windows compiles to clean "not available on this platform" stubs instead of searching for `fsltl_converter.exe`.
-- [ ] Verify the `tc3d://` deep link registers on macOS via the app bundle (`Info.plist`). The runtime `register_all()` is `#[cfg(any(windows, linux))]` — correct, macOS registers via the bundle, not at runtime.
+- [x] (Superseded 2026-09-08 by the native-conversion update below: MSFS commands now run on macOS; `CONVERTER_BIN` is `#[cfg]`-selected in `lib.rs:556-559`, job-object handling is `#[cfg(windows)]`-guarded.) `#[cfg(target_os = "windows")]`-guard the MSFS detection/conversion commands and the converter-path lookups (`msfs.rs`, `lib.rs`, `files.rs`) so non-Windows compiles to clean "not available on this platform" stubs instead of searching for `fsltl_converter.exe`.
+- [ ] (Still open — runtime check on hardware. Config is in place: `tauri.conf.json:79-81` declares the `tc3d` scheme and the deep-link plugin writes `CFBundleURLTypes` at build time.) Verify the `tc3d://` deep link registers on macOS via the app bundle (`Info.plist`). The runtime `register_all()` is `#[cfg(any(windows, linux))]` — correct, macOS registers via the bundle, not at runtime.
 - [ ] Confirm tray-icon, single-instance, window-state plugins behave on macOS (all supported; verify at runtime).
 
 ## D. Frontend / UX
 
-- [ ] Add platform detection (`@tauri-apps/plugin-os`, or a backend `get_platform` command).
-- [ ] Hide `<MSFSModelSettingsPanel />` on macOS (`SettingsConfigurationTab.tsx:818`).
-- [ ] Skip `MSFSModelConversionService.initialize()` on macOS (`App.tsx:238-244`) so startup doesn't run "Detecting MSFS installations…".
+- [x] (Verified 2026-09-08: `isMacOS()` in `src/renderer/utils/deviceDetection.ts:44`, used by `MSFSModelSettingsPanel.tsx:315`.) Add platform detection.
+- [x] (Superseded — deliberately reverted; panel is shown on macOS with a macOS-aware hint. See update below.) Hide `<MSFSModelSettingsPanel />` on macOS (`SettingsConfigurationTab.tsx:818`).
+- [x] (Superseded — deliberately reverted; init runs on macOS. See update below.) Skip `MSFSModelConversionService.initialize()` on macOS (`App.tsx:238-244`) so startup doesn't run "Detecting MSFS installations…".
 - [x] RealTraffic license path: no work needed — `REALTRAFFIC_LICENSE_PATH_WIN/MAC` constants (`realtraffic.ts:46,53`) are dead code, referenced nowhere. RealTraffic uses an API key, not `.lic` detection. (Flagged as optional cleanup.)
 - [x] Modifier-key labels: **decided to leave as "Ctrl"**. Ctrl works for every shortcut on macOS (the ⌘-capable ones accept `ctrlKey || metaKey`; the rest are `ctrlKey`-only). A blanket ⌘ relabel would be *wrong* for Ctrl+M (⌘M = minimize), Ctrl+0–9 (⌘1–9 = browser tabs in remote mode), and the Ctrl-only camera fine-control modifiers. So labels stay accurate as-is; no change.
 
 ## E. Docs / distribution
 
 - [x] README: document macOS build (Apple Silicon only) and the unsigned first-launch step (`xattr -dr com.apple.quarantine`, explaining the "damaged" Gatekeeper message). Release bodies carry the same note via `release.yml` + the `prepare-release` skill.
-- [ ] CHANGELOG entry under `[Unreleased]` → Added: "macOS (Apple Silicon) build".
+- [x] (Verified 2026-09-08: shipped in `CHANGELOG.md` under 0.1.3-alpha and 0.2.0-alpha.) CHANGELOG entry: "macOS (Apple Silicon) build".
 
 ## F. Testing (on Apple Silicon hardware)
 
