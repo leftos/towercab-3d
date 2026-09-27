@@ -1,7 +1,7 @@
 ---
 name: tauri-settings-bridge-reviewer
 description: Verify the Rust ↔ TypeScript settings bridge is in sync. The Rust struct in src-tauri/src/settings.rs deserializes/serializes settings to disk; fields not in the Rust struct are silently dropped. Use whenever src/renderer/types/settings.ts (GlobalSettings) or src-tauri/src/settings.rs is modified. Examples:\n\n<example>\nContext: User added a new field to GlobalSettings.\nuser: "I added a new msfsModels.preferOnboard flag to GlobalSettings"\nassistant: "Let me run the tauri-settings-bridge-reviewer to make sure the Rust struct is updated to match — otherwise the new field will be silently dropped on save."\n<commentary>This is the canonical bug this agent prevents.</commentary>\n</example>\n\n<example>\nContext: User refactored Rust settings.\nuser: "I cleaned up the Rust Settings struct"\nassistant: "Before we ship that, let me launch tauri-settings-bridge-reviewer to confirm no TS-side fields were orphaned."\n<commentary>Proactive bridge audit on Rust changes.</commentary>\n</example>
-tools: Read, Grep, Glob
+tools: Read, Grep, Glob, SendMessage
 model: sonnet
 ---
 
