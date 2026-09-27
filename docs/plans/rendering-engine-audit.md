@@ -5,7 +5,7 @@ Audit date: 2026-09-08. Findings from an inventory of every Cesium/Babylon API t
 | Library | Shipped | Latest | Notes |
 |---|---|---|---|
 | `cesium` | 1.140.0 | 1.145.0 (2026-09-02) | No package-layout, worker, or asset changes. Node ≥ 22 for build tooling (CI already on 22). |
-| `@babylonjs/core`, `gui`, `loaders` | 9.5.0 | 9.25.0 (2026-09-03) | No 10.x planned. Babylon Lite is a separate WebGPU-only engine, not an upgrade path. |
+| `@babylonjs/core`, `gui`, `loaders` | 9.5.0 | 9.28.0 (2026-09-24) | No 10.x planned. Babylon Lite is a separate WebGPU-only engine, not an upgrade path. Changelog re-checked 9.26.0–9.28.0 on 2026-09-27. |
 
 Ordering: A → B → C are sequential (upgrade, then the fixes that depend on it, then quick wins). D onward are independent and can be picked in any order.
 
@@ -28,16 +28,18 @@ Upstream fixes gained by this bump that touch code we run:
 - 1.143 — invalid glTF sampler wrap modes fall back to REPEAT instead of throwing (FSLTL/AIG converted models).
 - 1.142 — multiple key modifiers on one `ScreenSpaceEventHandler.setInputAction`.
 
-### A2. Babylon 9.5 → 9.25
+### A2. Babylon 9.5 → 9.28
 
-Jump straight to 9.25.0. Releases 9.8–9.18 carried the tree-shaking "pure barrel" migration with weekly regress/fix cycles (glTF loader auto-registration broke in 9.15/9.16, restored 9.16.2 and 9.19).
+Jump straight to 9.28.0. Releases 9.8–9.18 carried the tree-shaking "pure barrel" migration with weekly regress/fix cycles (glTF loader auto-registration broke in 9.15/9.16, restored 9.16.2 and 9.19).
 
-- [ ] Bump `@babylonjs/core`, `@babylonjs/gui`, `@babylonjs/loaders` to `^9.25.0`, `pnpm install`, `pnpm run typecheck`, `pnpm biome check src/`.
+- [x] Bump `@babylonjs/core`, `@babylonjs/gui`, `@babylonjs/loaders` to `^9.28.0`, `pnpm install`, `pnpm run typecheck`, `pnpm biome check src/` — done in PR #116, which also pins `babylonjs-gltf2interface` 9.28.0 to satisfy the loaders' `^9` peer. The checks below have not been run yet.
 - [ ] Test whether `optimizeDeps.exclude: ['@babylonjs/core']` in `vite.config.ts:92-96` (AudioV2 circular-import workaround) is still needed. Remove it if `pnpm run vite:dev` boots cleanly without it.
 - [ ] Verify tower cab loads through the side-effect import `@babylonjs/loaders/glTF` (`useBabylonScene.ts:4`) and that the +90° handedness composition in `useBabylonTowerModel.ts:200-221` still lines up with Cesium (check a known mod, e.g. OAK).
 - [ ] Verify rain/snow still render and survive a camera teleport (dispose + recreate path, `useBabylonPrecipitation.ts:660-668, 840-852`).
 - [ ] Verify datablock labels and leader lines at DPR 1 and DPR 2 after `engine.resize()`.
 - [ ] Measure the `babylon` chunk size before/after (`vite.config.ts:129` chunk group). The pure barrel only pays off with tree-shakeable imports — see D1.
+- [ ] Verify OVC clouds with the cloud-opacity slider below 1. They are the only material with `needDepthPrePass = true`, and it is opaque with `alpha = alpha * opacity` (`useBabylonWeather.ts:942-947`); 9.28 made the depth pre-pass honour every alpha source.
+- [ ] Verify the IBL environment still loads and lights the cab's PBR materials. `CubeTexture` with load/error callbacks at `useBabylonScene.ts:329-342`; 9.28 changed the cube/prefiltered texture load contract.
 
 Upstream fixes gained:
 - 9.9 — `adaptToDeviceRatio` option state fixed (enables D2).
@@ -45,6 +47,9 @@ Upstream fixes gained:
 - 9.19.1 — one-frame render flash when recreating a mesh in the same tick (our teleport path).
 - 9.22.2 — 43 correctness fixes from a systematic core scan.
 - 9.25 — dynamic WebXR viewport scaling (VR frame rate).
+- 9.26.0 — GUI `FlexPanel` and `em`/`rem` units (see D2).
+- 9.26.1 — GPU particle quad-offset fix and per-particle size on `GPUParticleSystem` (see F); Gaussian classification decoupled for tree shaking (see D1).
+- 9.28 — StandardMaterial depth pre-pass honours every alpha source; cube/prefiltered texture load contract completed (both verification items above).
 
 ---
 
@@ -71,7 +76,7 @@ Upstream fixes gained:
 ## D. Babylon quick wins
 
 - [ ] **D1. Tree-shakeable imports.** Every file does `import * as BABYLON from '@babylonjs/core'` (9 files) / `import * as GUI from '@babylonjs/gui'` (2 files). After A2, convert to named imports (`import { Engine, Scene, ... } from '@babylonjs/core'`) and re-measure the chunk. Depends on A2.
-- [ ] **D2. Replace manual DPR sizing with `adaptToDeviceRatio`.** `useBabylonScene.ts:268-269, 350-356` writes `canvas.width/height` by hand and then calls `guiTexture.scaleTo()` (`:361`) to un-stretch labels. With the 9.9 fix, the engine option should make both redundant. Re-test the `dpr` multiplications in `useBabylonLabels.ts:406-413`. Depends on A2.
+- [ ] **D2. Replace manual DPR sizing with `adaptToDeviceRatio`.** `useBabylonScene.ts:268-269, 350-356` writes `canvas.width/height` by hand and then calls `guiTexture.scaleTo()` (`:361`) to un-stretch labels. With the 9.9 fix, the engine option should make both redundant. Re-test the `dpr` multiplications in `useBabylonLabels.ts:406-413`, and try the 9.26 `em`/`rem` GUI units there in place of manual `dpr` scaling; `FlexPanel` may also replace hand-laid multi-line datablocks. Depends on A2.
 - [ ] **Text legibility.** `TextBlock` labels have no `outlineWidth` / `outlineColor` or `shadowBlur` (`useBabylonLabels.ts:352-365`). A 1–2 px outline is the cheap fix for labels over bright imagery.
 - [ ] **Skip no-op label updates.** `updateLabel` (`useBabylonLabels.ts:387-395`) reassigns `text`, `color`, `fontSize`, `background`, `scaleX/Y` every call. Early-out when unchanged; `rgbToHex` allocates three strings per aircraft per frame.
 - [ ] **Measure `useInvalidateRectOptimization`.** Default is on; with ~100 controls all moving every frame the dirty-rect union approaches a full invalidate anyway. Compare frame time with it off.
@@ -90,7 +95,7 @@ Upstream fixes gained:
 
 ## F. Larger Babylon opportunities (need design)
 
-- [ ] **GPU particles for rain.** `useBabylonPrecipitation.ts:250-328` runs a CPU `ParticleSystem` with 50 k capacity and 100 k/s emit rate, updating every particle on the main thread. `GPUParticleSystem` works on WebGL2. Use `noiseTexture` + `noiseStrength` for wind turbulence instead of rewriting `direction1/direction2/gravity` every frame (`:496-552`), and colour/size gradients for fade.
+- [ ] **GPU particles for rain.** `useBabylonPrecipitation.ts:250-328` runs a CPU `ParticleSystem` with 50 k capacity and 100 k/s emit rate, updating every particle on the main thread. `GPUParticleSystem` works on WebGL2. Use `noiseTexture` + `noiseStrength` for wind turbulence instead of rewriting `direction1/direction2/gravity` every frame (`:496-552`), and colour/size gradients for fade. Needs ≥ 9.26.1 for the GPU particle quad-offset fix; that release also added per-particle size.
 - [ ] **Overlay in VR.** `VRScene.tsx` builds a second, independent engine; labels, weather, and the cab are absent in VR despite the docblock (`:15-18`). Decide whether VR should render the overlay scene or stay Cesium-only, and fix the docblock either way. If staying, adopt 9.25 dynamic viewport scaling.
 - [ ] **MSDF text renderer** (`@babylonjs/addons`) as the GPU alternative to canvas-2D GUI text if label counts or DPR make the ADT the bottleneck. Measure first (D).
 

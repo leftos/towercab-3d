@@ -4,7 +4,7 @@ Entry point for all in-flight work. Each task is a checkbox; detail lives in the
 
 ## Current focus
 
-- [ ] Rendering engine audit (Cesium 1.140 → 1.145, Babylon 9.5 → 9.25, underused features, dead code, doc drift) — see [rendering-engine-audit.md](./rendering-engine-audit.md). Start with section A (upgrades), then B (bugs found).
+- [ ] Rendering engine audit (Cesium 1.140 → 1.145, Babylon 9.5 → 9.28 (bumped in PR #116, checks pending), underused features, dead code, doc drift) — see [rendering-engine-audit.md](./rendering-engine-audit.md). Start with section A (upgrades), then B (bugs found).
 
 ## Backlog
 
