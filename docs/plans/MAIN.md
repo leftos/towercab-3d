@@ -9,10 +9,17 @@ Open work is grouped into **waves**: release-sized bundles that share owning fil
 
 ## Current focus
 
-- [ ] **Agent test harness for the `tauri-app` MCP**: a dev-only `window.__tc3d` with the Cesium viewer, Babylon scene and stores; `camera.get()` / `camera.set({ heading, pitch, fov })` / `lookAt(lat, lon, height)`; and `project(lat, lon, height)` → page coordinates. Removes the DOM scraping, arrow-key steering and hash-pinned `engineStore.js` imports the Wave 1 run needed. Also document in `CLAUDE.md`: Shift+Home resets to the app default, and the dev mods folder is `src-tauri/target/debug/mods` (clone `github.com/leftos/tc3d-mod-koak-tower` there for a tower).
-- [ ] `TowerPositioningOverlay` triggers a React DOM-nesting error ("In HTML, … cannot be a descendant of …") when an airport loads. Find the nested element and fix it.
+Work these in order: the harness first, since the DPR fix is verified with it.
+
+- [ ] **Agent test harness for the `tauri-app` MCP**: a dev-only (`import.meta.env.DEV`) `window.__tc3d` exposing the Cesium viewer, Babylon scene and engine, and the viewport and weather stores; `camera.get()` / `camera.set({ heading, pitch, fov })` / `lookAt(lat, lon, height)` over `viewportStore`; and `project(lat, lon, height)` → page coordinates. Friction it removes, from the Wave 1 run:
+  - Babylon was reachable only by `import()` of `engineStore.js` at its exact Vite URL, `?v=<hash>` included; the hash changes on every dependency re-optimize, and `performance.getEntriesByType('resource')` caps at 250 entries, so the URL had to be read from the console log.
+  - No handle on the Cesium camera: heading was scraped from the `HDG` status-bar text, and aiming meant timed arrow-key presses in a loop.
+  - Finding an object on screen took hand-written `Vector3.Project` math; Babylon's `camera.isInFrustum` reported the on-screen tower as not visible, so it is not evidence of visibility.
+  - Add a `readPixels` helper: rain is drawn additively with alpha 0, so CDP screenshots and canvas `drawImage` alpha both miss it.
+  - Document in `CLAUDE.md` (E2E section): Shift+Home resets the camera to the app default ("Defaults" is the user default); the dev mods folder is `src-tauri/target/debug/mods` (clone `github.com/leftos/tc3d-mod-koak-tower` there for a tower); the weather debug panel's Apply replaces all weather, clouds included; CDP `Emulation.*` overrides last only for the `browser_run_code_unsafe` call that sets them; an airport switch stalls page timers ~10 s; say "hands off" to the user before driving the window.
 - [ ] **Datablocks at DPR 2 draw at half size and half position** (iPad and high-DPI remote browsers). `useBabylonScene.ts:268-272, 350-361` sizes the canvas to `clientWidth × devicePixelRatio` by hand, but `engine.resize()` on an engine created without `adaptToDeviceRatio` resets it to CSS size, while `guiTexture.scaleTo` keeps the GUI at DPR size (measured: canvas 1596×800, GUI 3192×1600). Same on Babylon 9.5 and 9.28. Fix via `D2`; verify by launching under CDP `Emulation.setDeviceMetricsOverride` `deviceScaleFactor: 2` and checking a label sits on its aircraft.
-- [x] **Wave 1 — Babylon 9.28 landing** (PR #116), checked in the desktop app 2026-09-27: `A2.2`–`A2.8` all resolved in [rendering-engine-audit.md](./rendering-engine-audit.md). Found the DPR 2 label bug above (pre-existing) and dead OVC code (`G10`).
+- [ ] `TowerPositioningOverlay` triggers a React DOM-nesting error ("In HTML, … cannot be a descendant of …") when an airport loads. Find the nested element and fix it.
+- [x] **Wave 1 — Babylon 9.28 landing** (PR #116), checked in the desktop app 2026-09-27: `A2.2`–`A2.8` all resolved in [rendering-engine-audit.md](./rendering-engine-audit.md). Found the DPR 2 label bug above (pre-existing) and dead OVC code (`G10`). Getting `main` green on Tauri 2.12 also took PR #117 (plugin minors pinned on both sides, NSIS template merged with upstream 2.12).
 
 ## Next up
 
@@ -20,22 +27,22 @@ Open work is grouped into **waves**: release-sized bundles that share owning fil
   - Shared: `package.json`, `CesiumViewer.tsx`, `ModelPreviewModal.tsx`, `useCesiumViewer.ts`, `useCesiumLighting.ts`, `terrain/FlatteningTerrainProvider.ts`, `useRenderCulling.ts`.
   - Gate: rendering review.
   - Command: `pnpm run check`.
-  - Human: the user runs `pnpm run dev` for terrain flattening, the private-API sites, worker and imagery loading, and shadow darkness at load versus after a slider change.
+  - App check (`tauri-app` MCP): terrain flattening, the private-API sites, worker and imagery loading, and shadow darkness at load versus after a slider change.
 - [ ] **Wave 3 — Babylon overlay fixes and dead hooks**: `B2`, `B3`, `B4`, `G5`, `G6`, `G7`, `G10`.
   - Shared: `useBabylonOverlay.ts`, `useBabylonCameraSync.ts`, `useBabylonRootNode.ts`, `useBabylonLabels.ts`, `useBabylonPrecipitation.ts`, `CesiumViewer.tsx`, `types/babylon.ts`.
   - Gate: code review.
   - Command: `pnpm run check`.
-  - Human: rain renders with the network off (`B4`); labels and fog still track the camera (`B2`).
+  - App check (`tauri-app` MCP): rain renders with the network off (`B4`); labels and fog still track the camera (`B2`).
 - [ ] **Wave 4 — Babylon quick wins**: `D1`–`D6`. Needs Wave 1.
   - Shared: the 9 `import * as BABYLON` files, `useBabylonScene.ts`, `useBabylonLabels.ts`.
   - Gate: rendering review.
   - Command: `pnpm run check`; `pnpm run vite:build` for the chunk size before and after `D1`.
-  - Human: label legibility over bright imagery (`D3`); frame time with and without the invalidate-rect optimization (`D5`).
+  - App check (`tauri-app` MCP): label legibility over bright imagery (`D3`); frame time with and without the invalidate-rect optimization (`D5`).
 - [ ] **Wave 5 — Render resolution and Cesium quick wins**: `C1`–`C6`, `D7` (one slider drives `resolutionScale` and Babylon hardware scaling).
   - Shared: `useCesiumViewer.ts`, `CesiumViewer.tsx`, `useAircraftModels.ts`, `useGroundAircraftTerrain.ts`, `useRenderCulling.ts`, settings (via the `add-setting` skill).
   - Gate: rendering review, UI review for the new setting.
   - Command: `pnpm run check`.
-  - Human: silhouettes, pick-based slew, and the resolution slider on desktop and iPad.
+  - App check (`tauri-app` MCP): silhouettes, pick-based slew, and the resolution slider; the user checks it on an iPad.
 - [ ] **Wave 6 — Cesium-side dead code**: `G1`, `G2`, `G3`, `G4`, `G8`, `G9`.
   - Shared: `package.json`, `utils/tileCache.ts`, `utils/cesiumFrustumPatch.ts`, `hooks/useCesiumStereo.ts`, `CesiumViewer.tsx`, `utils/gearAnimationController.ts`, `constants/realtraffic.ts`.
   - Gate: code review.
@@ -49,9 +56,21 @@ Open work is grouped into **waves**: release-sized bundles that share owning fil
 - [ ] **Wave 8 — vNAS dual-source and reconnect**: the six open lines of the Testing Checklist in `../towercab-3d-vnas/docs/vnas-udp-integration-plan.md` (reconnect backoff, clean reconnect, boundary transition, stale-VATSIM "jarring" rejection, per-aircraft source indicator, Sweatbox). Independent of the rendering waves.
   - Shared: `stores/aircraftTimelineStore.ts`, `constants/aircraft-timeline.ts`, `stores/vnasStore.ts`, `src-tauri/src/vnas.rs`, and the crate's `src/lib.rs`.
   - Gate: code review; aviation review for the boundary behaviour.
-  - Command: `pnpm run check`; in the crate, `cargo fmt`, `cargo clippy`, `cargo test`.
+  - Command: `pnpm run check`; in the crate, `cargo test` (its prek hook runs fmt and clippy on commit).
   - Human: the user runs `pnpm run dev:vnas` against a live session and follows an aircraft across the 30 NM boundary.
 - [ ] **Wave 9 — macOS runtime checks**: [macos-release.md](./macos-release.md), all five. Human checks only, on Apple Silicon hardware with the released `.dmg`.
+
+- [ ] **Wave 10 — Cleanup singles** (pre-existing; independent, any order):
+  - [ ] actionlint SC2086: unquoted `$GITHUB_OUTPUT` in the "Check vNAS repo access" and signing-check steps of `.github/workflows/build.yml` and `release.yml`.
+  - [ ] Vite `INEFFECTIVE_DYNAMIC_IMPORT` warnings: `stores/airportStore.ts` (dynamic in `vnasStore.ts`), `utils/terrainCache.ts` (dynamic in `CesiumViewer.tsx`), `services/MigrationService.ts` (dynamic in `ControlsBar.tsx`) are also imported statically. Make each import static or truly lazy.
+  - [ ] pnpm skips protobufjs's build script ("Ignored build scripts: protobufjs@8.0.0"). Decide with `pnpm approve-builds` whether it needs to run.
+  - [ ] `src-tauri/src/lib.rs` has 72 rustfmt differences. Run `cargo fmt` over `src-tauri` in its own commit, then add `cargo fmt --check` to CI and a fmt hook to `.pre-commit-config.yaml`.
+  - [ ] A clone without the untracked `src-tauri/.cargo/config.toml` (the local vNAS `[patch]`) resolves `towercab-3d-vnas` from git and rewrites `Cargo.lock`, so `cargo build` and the clippy hook dirty the lockfile. Decide how public contributors should build.
+  - [ ] `towercab-3d-vnas` `master` has no branch protection. Rulesets on a private repo need a paid plan; check the plan, then add the same force-push and deletion block `main` has here (ruleset "Protect main").
+
+## First release after 2026-09-27
+
+- [ ] The next `v*` tag is the first run of: `tauri-action` v1 in `release.yml` and `release-macos.yml` (v1 now overwrites the name and body of an existing release, so check the notes the `prepare-release` skill writes survive), and the pinned-toolchain step (`rustup toolchain install` + `rustup target add`) in both release workflows. Watch both runs and fix forward.
 
 ## Design track
 
