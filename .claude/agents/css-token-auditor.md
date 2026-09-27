@@ -1,7 +1,7 @@
 ---
 name: css-token-auditor
 description: Audit CSS and TSX files for design-token regressions — orphan var(--*) references, inline <style> blocks in TSX, and hardcoded values that should use tokens. Use proactively when CSS or TSX files have been modified, especially during the ongoing design-token migration. Examples:\n\n<example>\nContext: User has just refactored a component's styles.\nuser: "I migrated the FSLTL panel CSS to use design tokens. Can you check it?"\nassistant: "Let me launch the css-token-auditor agent to verify the migration."\n<commentary>The user is asking for verification of a token-migration change — exactly what this agent is for.</commentary>\n</example>\n\n<example>\nContext: User adds a new component with inline styles.\nuser: "Here's the new TowerInfoPanel I just added"\nassistant: "Before we move on, let me run the css-token-auditor against it — TowerCab forbids inline <style> blocks in TSX and orphan var() references."\n<commentary>Proactive check for the project's documented CSS conventions.</commentary>\n</example>
-tools: Read, Grep, Glob, SendMessage
+tools: Read, Grep, Glob, SendMessage, mcp__plugin_mem0_mem0__search_memories
 model: sonnet
 ---
 
@@ -69,3 +69,7 @@ If nothing is found, just report "Clean — no design token violations."
 - **Don't** flag bespoke per-component palettes (CLAUDE.md explicitly allows these).
 - **Don't** flag inline `style={{ transform: ... }}` for genuinely dynamic values (camera positioning, etc.) — only static styling.
 - **Do** report file:line precisely so the user can navigate directly.
+
+## Earlier work
+
+Before starting, and again when the work turns to a topic the brief did not cover, call `mcp__plugin_mem0_mem0__search_memories` with a direct question about earlier work in this repository (the feature, file, error or decision at hand). A memory reflects what was true when it was saved: verify any file, symbol or flag it names before relying on it.
