@@ -87,9 +87,10 @@ export default defineConfig({
     }
   },
 
-  // Babylon 9.x AudioV2 has a circular import that breaks when esbuild pre-bundles
-  // it (audioBus.js extends an undefined AbstractAudioBus). Skip optimization so the
-  // browser handles the ESM directly — native ESM resolves the cycle correctly.
+  // esbuild pre-bundling breaks Babylon 9.x's circular imports: a module reads an export
+  // that is still undefined when the bundle evaluates it (e.g. ShadersWGSL/shadowMap.fragment.js
+  // throws "Cannot read properties of undefined (reading 'name')" and the app never boots).
+  // Skip optimization so the browser loads the ESM directly — native ESM resolves the cycles.
   optimizeDeps: {
     exclude: ['@babylonjs/core']
   },
