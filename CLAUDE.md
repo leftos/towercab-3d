@@ -100,6 +100,8 @@ The optional `vnas` feature enables 1Hz real-time aircraft updates via the priva
 
 Using relative paths or forward slashes causes "File has been unexpectedly modified" errors and other failures. Always construct the full absolute path with backslashes before calling Edit or Write.
 
+**Commit hooks:** run `prek install` once per clone. `.pre-commit-config.yaml` then runs Biome and typecheck on staged frontend files and clippy on staged `.rs` files. The Rust toolchain is pinned in `rust-toolchain.toml`; bump it deliberately, since a new stable can add lints that fail unchanged code.
+
 **Important:** Always run Biome and TypeScript checks before committing changes:
 
 ```bash

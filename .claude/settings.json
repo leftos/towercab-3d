@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/block-windows-nul-redirect.cjs"
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/block-windows-nul-redirect.cjs\""
           }
         ]
       }
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/biome-on-edit.cjs"
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/biome-on-edit.cjs\""
           }
         ]
       }
