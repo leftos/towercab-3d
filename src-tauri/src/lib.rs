@@ -786,7 +786,13 @@ fn set_webview2_args(identifier: &str) {
             args.push(arg);
         }
 
-        let joined = args.join(" ");
+        // Keep flags from the launching environment (e.g. --remote-debugging-port for automation).
+        let mut joined = args.join(" ");
+        let inherited = std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").unwrap_or_default();
+        if !inherited.trim().is_empty() {
+            joined.push(' ');
+            joined.push_str(inherited.trim());
+        }
         tracing::info!("[WebView2] Additional browser args: {}", joined);
         std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", joined);
     }
