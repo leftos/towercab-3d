@@ -1,0 +1,24 @@
+# Run by prek (`prek install` once per clone). Each hook runs only when its own kind of file is
+# staged; CI's clippy and the weekly toolchain pin catch drift in files a commit did not touch.
+repos:
+  - repo: local
+    hooks:
+      - id: biome
+        name: biome check
+        entry: pnpm biome check --no-errors-on-unmatched
+        language: system
+        files: ^src/.*\.(ts|tsx|js|jsx|json|css)$
+      - id: typecheck
+        name: tsc --noEmit
+        entry: pnpm run typecheck
+        language: system
+        pass_filenames: false
+        files: ^src/.*\.(ts|tsx)$
+      - id: cargo-clippy
+        name: cargo clippy -D warnings
+        # Run from src-tauri so cargo loads src-tauri/.cargo/config.toml (the local vNAS [patch]);
+        # --manifest-path from the root skips it and rewrites Cargo.lock.
+        entry: bash -c 'cd src-tauri && cargo clippy --all-targets -- -D warnings'
+        language: system
+        pass_filenames: false
+        files: ^src-tauri/.*\.rs$

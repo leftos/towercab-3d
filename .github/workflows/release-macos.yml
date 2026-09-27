@@ -40,10 +40,12 @@ jobs:
           node-version: '22'
           cache: 'pnpm'
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-darwin
+      # Version and components come from rust-toolchain.toml.
+      - name: Install Rust (pinned)
+        shell: bash
+        run: |
+          rustup toolchain install
+          rustup target add aarch64-apple-darwin
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

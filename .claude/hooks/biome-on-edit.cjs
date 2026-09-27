@@ -19,20 +19,20 @@ try {
 const filePath = input?.tool_input?.file_path ?? ''
 if (!/\.(ts|tsx)$/.test(filePath)) process.exit(0)
 
-// Only lint files inside the repo's src/ — Biome config is scoped there.
-const normalized = filePath.replace(/\\/g, '/')
-if (!/\/src\//.test(normalized)) process.exit(0)
+// The repo root is two levels above this script, whatever the session's cwd is.
+const repoRoot = path.resolve(__dirname, '..', '..').replace(/\\/g, '/')
 
-// Resolve a path relative to repo root for clean Biome output.
-const repoRoot = process.cwd().replace(/\\/g, '/')
-const rel = normalized.startsWith(repoRoot)
-  ? normalized.slice(repoRoot.length + 1)
-  : normalized
+// Only lint files inside this repo's src/ — Biome config is scoped there.
+const normalized = path.resolve(filePath).replace(/\\/g, '/')
+const srcPrefix = `${repoRoot}/src/`
+if (!normalized.toLowerCase().startsWith(srcPrefix.toLowerCase())) process.exit(0)
+
+const rel = normalized.slice(repoRoot.length + 1)
 
 const result = spawnSync('pnpm', ['biome', 'check', rel], {
   stdio: ['ignore', 'pipe', 'pipe'],
   shell: true,
-  cwd: process.cwd(),
+  cwd: repoRoot,
 })
 
 const stdout = result.stdout?.toString() ?? ''
