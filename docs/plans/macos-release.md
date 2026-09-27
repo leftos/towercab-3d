@@ -1,75 +1,18 @@
-# macOS Redistributable — Release Plan
+# macOS Redistributable — Remaining Checks
 
-> **Status (verified 2026-09-08):** shipped in v0.2.0-alpha — the release carries `TowerCab.3D_0.2.0-alpha_aarch64.dmg`, `.app.tar.gz` + `.sig`, and `latest.json` lists `darwin-aarch64`. Every remaining unchecked item below is either explicitly out of scope (notarization) or a runtime spot-check that needs Apple Silicon hardware.
+The Apple Silicon build shipped in v0.2.0-alpha (`.dmg`, `.app.tar.gz` + `.sig`, and a `darwin-aarch64` entry in `latest.json`). Build, bundle, CI, and native MSFS conversion work is done; the rationale lives where the work does: `.github/workflows/release-macos.yml` (separate workflow, release resolved by ID), `README.md` (install and Gatekeeper step), `docs/msfs-model-conversion.md` (Pillow decodes DDS, no texconv).
 
 Scope decisions (locked in):
 
 - **Architecture:** Apple Silicon only (`aarch64-apple-darwin`). Intel/Rosetta and universal binaries out of scope.
-- **Signing:** Unsigned / ad-hoc. No Apple Developer Program, no notarization, no entitlements. The quarantined `.dmg` trips Gatekeeper's "damaged and can't be opened" message on first launch; users clear it with `xattr -dr com.apple.quarantine "/Applications/TowerCab 3D.app"`. (Right-click → Open only bypasses the "unidentified developer" gate, not "damaged".)
-- **Testing:** Done locally on real Apple Silicon hardware.
+- **Signing:** Unsigned / ad-hoc. No Apple Developer Program, no notarization. If that changes, notarization slots into `release-macos.yml` as `tauri-action` env (`APPLE_CERTIFICATE`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`).
 
-Guiding principle (updated): **MSFS model conversion is now cross-platform.** Modern Pillow (≥11.3) decodes the BC7/DX10 DDS formats that previously needed Windows-only `texconv.exe`, so texconv was removed entirely and the converter (Python + Pillow) builds natively on macOS. MSFS itself still doesn't run on macOS — there's no local Community folder — so Mac users point the MSFS panel at FSLTL/AIG folders copied from a Windows install. (Earlier this plan disabled MSFS on macOS; that was reverted once the Pillow-BC7 path was proven.)
+## Runtime checks on Apple Silicon hardware
 
-Auto-updater keeps working on macOS: it uses minisign (`TAURI_SIGNING_PRIVATE_KEY`), which is independent of Apple code-signing. `tauri-action` merges a `darwin-aarch64` entry into the same `latest.json`.
+Each is a human check: run the released `.dmg` build on a Mac.
 
----
-
-## A. CI / build pipeline
-
-Decision: macOS builds **only at release time, in a separate workflow** from Windows. Rationale: future notarization is asynchronous (can take hours–days), so it must not gate the Windows release. `release.yml` and `build.yml` stay Windows-only and untouched.
-
-- [x] New `.github/workflows/release-macos.yml`: triggers on `v*` tags, `runs-on: macos-latest` (arm64, native), target `aarch64-apple-darwin`, uploads to the same GitHub release by tag (`tauri-action` with `tagName`). No converter/Python steps (MSFS is Windows-only; `tauri.macos.conf.json` drops `.exe` resources from the bundle). Portable `sed -i.bak` so the token-less vnas/updater-disable paths work on BSD sed too.
-- [x] `tauri-action` merges the `darwin-aarch64` entry into the existing release's `latest.json` (reads + merges `platforms` before re-upload), so Windows auto-update isn't clobbered. Verify at first real macOS release.
-- [ ] (Future) Notarization slots into `release-macos.yml` as additional `tauri-action` env (`APPLE_CERTIFICATE`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`) — out of scope while unsigned/ad-hoc.
-
-## B. Tauri bundle config
-
-- [x] (Verified 2026-09-08: done via `src-tauri/tauri.macos.conf.json`, auto-merged by Tauri on macOS; `resources` omits every Windows file; v0.2.0-alpha shipped a `.dmg`.) Make the macOS bundle not require Windows-only resources. `tauri.conf.json:44-47` lists `fsltl_converter.exe`, `texconv.exe`, `update-mods.ps1`. A `tauri build` on macOS will fail if these paths are absent. Fix via a macOS config overlay (e.g. `tauri.macos.conf.json` passed in the mac CI/build args) that overrides `bundle.resources` to drop the Windows files, OR restructure resources to be platform-specific.
-- [x] (Verified 2026-09-08: `tauri.macos.conf.json` sets `targets: ["app", "dmg"]`.) Handle bundle targets per platform: `targets` is `["nsis"]` (invalid on mac). Either pass `--bundles app,dmg` in the macOS build args, or set targets to include dmg/app and rely on Tauri filtering out inapplicable ones.
-- [x] Bump `bundle.macOS.minimumSystemVersion` from `10.13` to `11.0` (Apple Silicon requires macOS 11+).
-- [x] `scripts/shipping/build/build_converter.py` early-returns on non-Windows, so `pnpm run build` (which chains `build:converter`) works on macOS without PyInstaller/texconv.
-
-## C. Rust backend
-
-- [x] (Superseded 2026-09-08 by the native-conversion update below: MSFS commands now run on macOS; `CONVERTER_BIN` is `#[cfg]`-selected in `lib.rs:556-559`, job-object handling is `#[cfg(windows)]`-guarded.) `#[cfg(target_os = "windows")]`-guard the MSFS detection/conversion commands and the converter-path lookups (`msfs.rs`, `lib.rs`, `files.rs`) so non-Windows compiles to clean "not available on this platform" stubs instead of searching for `fsltl_converter.exe`.
-- [ ] (Still open — runtime check on hardware. Config is in place: `tauri.conf.json:79-81` declares the `tc3d` scheme and the deep-link plugin writes `CFBundleURLTypes` at build time.) Verify the `tc3d://` deep link registers on macOS via the app bundle (`Info.plist`). The runtime `register_all()` is `#[cfg(any(windows, linux))]` — correct, macOS registers via the bundle, not at runtime.
-- [ ] Confirm tray-icon, single-instance, window-state plugins behave on macOS (all supported; verify at runtime).
-
-## D. Frontend / UX
-
-- [x] (Verified 2026-09-08: `isMacOS()` in `src/renderer/utils/deviceDetection.ts:44`, used by `MSFSModelSettingsPanel.tsx:315`.) Add platform detection.
-- [x] (Superseded — deliberately reverted; panel is shown on macOS with a macOS-aware hint. See update below.) Hide `<MSFSModelSettingsPanel />` on macOS (`SettingsConfigurationTab.tsx:818`).
-- [x] (Superseded — deliberately reverted; init runs on macOS. See update below.) Skip `MSFSModelConversionService.initialize()` on macOS (`App.tsx:238-244`) so startup doesn't run "Detecting MSFS installations…".
-- [x] RealTraffic license path: no work needed — `REALTRAFFIC_LICENSE_PATH_WIN/MAC` constants (`realtraffic.ts:46,53`) are dead code, referenced nowhere. RealTraffic uses an API key, not `.lic` detection. (Flagged as optional cleanup.)
-- [x] Modifier-key labels: **decided to leave as "Ctrl"**. Ctrl works for every shortcut on macOS (the ⌘-capable ones accept `ctrlKey || metaKey`; the rest are `ctrlKey`-only). A blanket ⌘ relabel would be *wrong* for Ctrl+M (⌘M = minimize), Ctrl+0–9 (⌘1–9 = browser tabs in remote mode), and the Ctrl-only camera fine-control modifiers. So labels stay accurate as-is; no change.
-
-## E. Docs / distribution
-
-- [x] README: document macOS build (Apple Silicon only) and the unsigned first-launch step (`xattr -dr com.apple.quarantine`, explaining the "damaged" Gatekeeper message). Release bodies carry the same note via `release.yml` + the `prepare-release` skill.
-- [x] (Verified 2026-09-08: shipped in `CHANGELOG.md` under 0.1.3-alpha and 0.2.0-alpha.) CHANGELOG entry: "macOS (Apple Silicon) build".
-
-## F. Testing (on Apple Silicon hardware)
-
-The desktop app renders through **WKWebView on macOS, not Chromium/WebView2** — the dual Cesium + Babylon.js WebGL2 pipeline was the biggest unknown.
-
-- [x] Build locally on Apple Silicon: `pnpm run dev` and `pnpm tauri build --target aarch64-apple-darwin` both succeeded.
-- [x] WKWebView rendering confirmed working (Cesium globe + Babylon overlay).
-- [ ] (Optional spot-checks) `tc3d://` deep link, auto-updater install, window-state persistence, tray menu, remote browser access from another device — not individually exercised yet.
-
----
-
-## Update — native MSFS conversion on macOS (supersedes the disabling above)
-
-After the initial Mac build shipped with MSFS disabled, we enabled **native MSFS model conversion on macOS**. This supersedes the "disabled/compiled-out on macOS" items in sections A–D.
-
-Key change: **texconv.exe removed entirely.** Pillow ≥11.3 decodes BC1/BC3/BC5/BC7 and DX10 DDS natively (verified empirically), which is all MSFS liveries use. The converter is now pure Python + Pillow and builds on every platform.
-
-- [x] Converter: removed `get_texconv_path`/`convert_dds_with_texconv` + `subprocess`/`tempfile` imports; unsupported formats fall back to a neutral placeholder. Bumped `pillow>=11.3`.
-- [x] `build_converter.py`: builds on all platforms; per-OS output name (`fsltl_converter[.exe]`); no texconv copy.
-- [x] Rust: `CONVERTER_BIN` const (`fsltl_converter[.exe]`) used at all 4 lookup sites; reverted the "Windows-only" converter messages.
-- [x] Frontend: reverted the macOS MSFS gating (panel shown, init runs); `MSFSModelSettingsPanel` hint is macOS-aware (point at a copied FSLTL/AIG folder). `isMacDesktopApp` removed; `isMacOS` kept for the hint.
-- [x] Config: `tauri.conf.json` drops `resources/texconv.exe`; `tauri.macos.conf.json` bundles `resources/fsltl_converter`.
-- [x] CI: `release-macos.yml` now runs Setup Python + `build:converter`.
-- [x] Removed committed `scripts/shipping/conversion/texconv.exe`; `.gitignore` tracks `fsltl_converter` (no ext).
-- [ ] Validate on macOS hardware: convert a real FSLTL/AIG livery (copied from Windows) and confirm textures look correct without texconv.
-- [x] Release coordination: `release-macos.yml` resolves the release by **ID** (the list API sees drafts) and uploads via `tauri-action`'s `releaseId`, not `tagName`. The get-by-tag API 404s on the draft `release.yml` creates, so a tag lookup during that window would spawn a duplicate release. (Supersedes the "by tag" note in section A.)
+- [ ] `tc3d://` deep link opens the app. macOS registers the scheme from the bundle's `Info.plist` (the runtime `register_all()` is `#[cfg(any(windows, linux))]`).
+- [ ] Tray icon, single-instance, and window-state persistence behave.
+- [ ] Auto-updater installs an update from `latest.json`.
+- [ ] Remote browser access from another device reaches the Mac host.
+- [ ] Convert a real FSLTL/AIG livery copied from a Windows install; textures look correct.

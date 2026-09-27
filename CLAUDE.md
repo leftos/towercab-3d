@@ -22,10 +22,19 @@ When told to "check the logs", read temp/console.log. It's likely it's quite big
 
 ## E2E testing via Playwright MCP
 
-The `playwright` MCP is configured in `.mcp.json`. To exercise the frontend end-to-end:
-1. Start headless dev server: `pnpm run vite:dev` (port 5173)
-2. Navigate, click "Skip for now" on the Cesium token prompt — airports load from GitHub independently of the token
-3. To reset a one-time UI flag (e.g. `keyboardCheatsheetDismissed`, `deviceOptimizationPromptDismissed`), mutate via `browser_evaluate`: read `localStorage.getItem('settings-store')`, edit `parsed.state.ui.<flag>`, write back, then `browser_navigate` to reload
+Two MCP servers in `.mcp.json` drive the app:
+
+- **`tauri-app`** attaches to the running desktop app's WebView2 over CDP (`http://localhost:9222`). This is the real app: Rust backend, host settings and Cesium token, mods, METAR, and (in a dev build) the weather debug panel. Launch the app with the debugging port open, in the background, and stop it when done:
+  ```powershell
+  $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = '--remote-debugging-port=9222'; pnpm run dev
+  ```
+  (`pnpm run dev:vnas` the same way.) Outside the webview, the tray menu and native file dialogs are not reachable; deep links (`start tc3d://…`), single-instance and window state can be exercised from the shell.
+- **`playwright`** launches Edge against the frontend alone. Every `/api/*` request then returns the SPA's HTML, so mods, tower positions, METAR (`/api/proxy`) and saved global settings are absent and the Cesium token lasts only until reload. VATSIM traffic loads directly. To use it:
+  1. Start the dev server: `pnpm run vite:dev` (port 5173)
+  2. Navigate, click "Skip for now" on the Cesium token prompt — airports load from GitHub independently of the token
+  3. To reset a one-time UI flag (e.g. `keyboardCheatsheetDismissed`, `deviceOptimizationPromptDismissed`), mutate via `browser_evaluate`: read `localStorage.getItem('settings-store')`, edit `parsed.state.ui.<flag>`, write back, then `browser_navigate` to reload
+
+In either, `WeatherDebugPanel` (dev builds only) forces rain, snow and cloud coverage without waiting for real weather.
 
 ## Development Commands
 
@@ -75,7 +84,7 @@ The optional `vnas` feature enables 1Hz real-time aircraft updates via the priva
 
 **Note:** The `pnpm run build` command automatically runs `build:converter` to create the FSLTL model converter executable. This requires Python 3 with Pillow installed. PyInstaller is auto-installed if missing.
 
-**Note for Claude:** Only the user can run `pnpm run dev` as it launches the Tauri app with a GUI. Ask the user to run this command and report back any errors.
+**Note for Claude:** You may launch `pnpm run dev` / `pnpm run dev:vnas` in the background to test your work (see "E2E testing via Playwright MCP" for the debugging-port launch). The window opens on the user's desktop, so stop the app when you are done with it.
 
 **Windows Warning:** Never use `2>nul` to suppress stderr in terminal commands. On Windows, this creates a file literally named `nul` which is extremely difficult to delete (requires special tools or booting from Linux). Use `2>$null` in PowerShell or simply omit stderr redirection.
 

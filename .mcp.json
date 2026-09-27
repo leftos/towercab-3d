@@ -2,7 +2,11 @@
   "mcpServers": {
     "playwright": {
       "command": "npx",
-      "args": ["-y", "@playwright/mcp@latest"]
+      "args": ["-y", "@playwright/mcp@latest", "--browser", "msedge"]
+    },
+    "tauri-app": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest", "--cdp-endpoint", "http://localhost:9222"]
     },
     "context7": {
       "command": "npx",
