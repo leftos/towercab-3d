@@ -2,8 +2,10 @@ name: Build
 
 on:
   push:
+    paths-ignore: ["**.md"]
     branches: [main]
   pull_request:
+    paths-ignore: ["**.md"]
     branches: [main]
   workflow_dispatch:
     inputs:
