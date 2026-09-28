@@ -114,11 +114,11 @@ jobs:
           VNAS_TOKEN: ${{ secrets.VNAS_REPO_TOKEN }}
         run: |
           if [ -n "$VNAS_TOKEN" ]; then
-            echo "vnas_available=true" >> $GITHUB_OUTPUT
+            echo "vnas_available=true" >> "$GITHUB_OUTPUT"
             git config --global url."https://${VNAS_TOKEN}@github.com/".insteadOf "https://github.com/"
             echo "vNAS repo access configured"
           else
-            echo "vnas_available=false" >> $GITHUB_OUTPUT
+            echo "vnas_available=false" >> "$GITHUB_OUTPUT"
             echo "Building without vNAS (no VNAS_REPO_TOKEN secret)"
             # Remove vnas from Cargo.toml and regenerate lockfile
             # (Don't use static Cargo.lock.public - it would overwrite dependabot updates)
@@ -166,9 +166,9 @@ jobs:
           SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: |
           if [ -n "$SIGNING_KEY" ]; then
-            echo "signing_available=true" >> $GITHUB_OUTPUT
+            echo "signing_available=true" >> "$GITHUB_OUTPUT"
           else
-            echo "signing_available=false" >> $GITHUB_OUTPUT
+            echo "signing_available=false" >> "$GITHUB_OUTPUT"
             echo "Building without updater signing (no TAURI_SIGNING_PRIVATE_KEY secret)"
             # Disable updater plugin completely
             cd src-tauri
