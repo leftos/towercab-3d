@@ -1,5 +1,6 @@
 import * as Cesium from 'cesium'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useAgentHarness } from '../../hooks/useAgentHarness'
 import { setInterpolationTerrainData, useAircraftInterpolation } from '../../hooks/useAircraftInterpolation'
 import { useAircraftModels } from '../../hooks/useAircraftModels'
 import { useAutoAirportSwitch } from '../../hooks/useAutoAirportSwitch'
@@ -425,6 +426,9 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
     cesiumViewer: viewer,
     canvas: babylonCanvas,
   })
+
+  // Dev-only agent test harness (window.__tc3d) for MCP-driven tests
+  useAgentHarness(viewer, { engine: babylonOverlay.engine ?? null, scene: babylonOverlay.scene ?? null })
 
   // Adjust Babylon.js lighting based on sun position
   useBabylonNightLighting(babylonOverlay?.scene ?? null, sunElevation, {

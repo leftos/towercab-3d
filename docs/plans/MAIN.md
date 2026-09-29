@@ -11,7 +11,7 @@ Open work is grouped into **waves**: release-sized bundles that share owning fil
 
 Work these in order: the harness first, since the DPR fix is verified with it.
 
-- [ ] **Agent test harness for the `tauri-app` MCP**: a dev-only (`import.meta.env.DEV`) `window.__tc3d` exposing the Cesium viewer, Babylon scene and engine, and the viewport and weather stores; `camera.get()` / `camera.set({ heading, pitch, fov })` / `lookAt(lat, lon, height)` over `viewportStore`; and `project(lat, lon, height)` → page coordinates. Friction it removes, from the Wave 1 run:
+- [x] **Agent test harness for the `tauri-app` MCP** (shipped 2026-09-28: `useAgentHarness.ts`, documented in CLAUDE.md's E2E section; checked live at KSFO): a dev-only (`import.meta.env.DEV`) `window.__tc3d` exposing the Cesium viewer, Babylon scene and engine, and the viewport and weather stores; `camera.get()` / `camera.set({ heading, pitch, fov })` / `lookAt(lat, lon, height)` over `viewportStore`; and `project(lat, lon, height)` → page coordinates. Friction it removes, from the Wave 1 run:
   - Babylon was reachable only by `import()` of `engineStore.js` at its exact Vite URL, `?v=<hash>` included; the hash changes on every dependency re-optimize, and `performance.getEntriesByType('resource')` caps at 250 entries, so the URL had to be read from the console log.
   - No handle on the Cesium camera: heading was scraped from the `HDG` status-bar text, and aiming meant timed arrow-key presses in a loop.
   - Finding an object on screen took hand-written `Vector3.Project` math; Babylon's `camera.isInFrustum` reported the on-screen tower as not visible, so it is not evidence of visibility.

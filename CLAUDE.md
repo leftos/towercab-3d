@@ -36,6 +36,23 @@ Two MCP servers in `.mcp.json` drive the app:
 
 In either, `WeatherDebugPanel` (dev builds only) forces rain, snow and cloud coverage without waiting for real weather.
 
+**`window.__tc3d`** (dev builds only, installed by `useAgentHarness.ts`; type `AgentHarness` in `types/harness.ts`) is the handle to drive the app from `browser_evaluate`:
+
+- `viewer` (Cesium), `babylon.engine` / `babylon.scene`, and `stores.viewport` / `stores.weather` / `stores.settings` (Zustand hooks: `.getState()`, `.setState()`).
+- `camera.get()` returns the active viewport's `{ heading, pitch, fov, followMode, followingCallsign }`; `camera.set({ heading, pitch, fov })` sets any of them.
+- `lookAt(lat, lon, altitudeFt)` aims the active viewport at a position.
+- `project(lat, lon, heightM)` returns the page CSS-pixel point for `browser_click` and friends, or `null` when the point is behind the camera.
+- `readPixels(x, y, w, h)` returns the Babylon canvas's RGBA bytes for a page rectangle (bottom-left row order). Rain is drawn additively with alpha 0, so screenshots and canvas `drawImage` miss it; read pixels instead.
+
+Driving notes:
+
+- Tell the user "hands off" before driving the window; mouse or keyboard input from them breaks a run.
+- Shift+Home resets the camera to the app default; the "Defaults" button restores the *user's* saved default.
+- The dev build reads mods from `src-tauri/target/debug/mods`; clone `github.com/leftos/tc3d-mod-koak-tower` into its `towers/` for a tower model.
+- The weather debug panel's Apply replaces all weather, clouds included.
+- CDP `Emulation.*` overrides last only for the `browser_run_code_unsafe` call that sets them.
+- An airport switch stalls page timers for about 10 s; wait before reading state.
+
 ## Development Commands
 
 ```bash
