@@ -71,7 +71,7 @@ $waitingCases = @(
 $cpuCases = @('Test-CpuProgress', 'Test-OrphanProgress', 'Test-PackagedProgress', 'Test-NestedJob', 'Test-ShortLivedChild', 'Test-Ceiling')
 # The cases that take the machine's slots, one after another, and last the failing-sampler case: its gates cannot say
 # how busy the machine was, so it has no skip to fall back on, and by then the waiting cases' processes have ended.
-$slotCases = @('Test-Slot', 'Test-SlotPool', 'Test-Nesting', 'Test-SamplerFailure')
+$slotCases = @('Test-Slot', 'Test-SlotPool', 'Test-SlotClaim', 'Test-Nesting', 'Test-SamplerFailure')
 # The prefix every slot case's gates put in front of their mutex names (GATE_TEST_SLOT_PREFIX), so that no other
 # session's gate holds the slots they use, and slot 0 of each kind under it, the one a gate of the kind takes first.
 $slotPrefix = "selftest-$PID-"
@@ -709,6 +709,30 @@ function Test-OtherPoolHeld {
 function Test-SlotPool {
     Test-OtherPoolHeld -Kind 'heavy' -Other $slotZero['light']
     Test-OtherPoolHeld -Kind 'light' -Other $slotZero['heavy']
+}
+
+# The claim file a slot gate writes for the dashboard, found by polling while the command sleeps: it names the gate's
+# pid, the slot and the command, and it is gone once the gate has ended.
+function Test-SlotClaim {
+    $label = 'a slot gate writes its claim file while it runs and deletes it after'
+    $claim = Join-Path $env:LOCALAPPDATA "gate\slots\${slotPrefix}gate-light-slot-0.json"
+    $arguments = @('-Log', "$dir/slot-claim.log", '-TimeoutSeconds', '30', '-Slot', 'light', '--',
+        'pwsh', '-NoProfile', '-c', 'Start-Sleep 4; exit 0')
+    $started = Start-SlotGate -Arguments $arguments -Counts @{ GATE_LIGHT_SLOTS = '1' }
+    $seen = $null
+    while (-not $seen -and -not $started.Process.HasExited) {
+        if (Test-Path -LiteralPath $claim) { $seen = Get-Content -LiteralPath $claim -Raw | ConvertFrom-Json }
+        else { Start-Sleep -Milliseconds 100 }
+    }
+    $gatePid = $started.Process.Id
+    $run = Complete-Pwsh -Started $started -Seconds 60
+    $why = Get-RunProblem -Case 'slot-claim' -Run $run -Expected 0
+    if (-not $why -and -not $seen) { $why = "no claim at $claim while the gate ran" }
+    if (-not $why -and ($seen.pid -ne $gatePid -or $seen.kind -ne 'light' -or $seen.index -ne 0 -or $seen.command -notmatch 'Start-Sleep 4')) {
+        $why = "the claim was $($seen | ConvertTo-Json -Compress), expected pid $gatePid, light slot 0 and the command"
+    }
+    if (-not $why -and (Test-Path -LiteralPath $claim)) { $why = "$claim was left behind after the gate ended" }
+    Write-Result $label $why
 }
 
 # Two gates with the native cache redirected to a folder holding only an older version's dll: the first compiles the

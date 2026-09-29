@@ -82,7 +82,12 @@ and tries again every 2 s, and its clocks start once it holds one. Mutexes rathe
 killed gate abandons its mutex, which the next gate then takes, saying so, where a semaphore's count would be lost for
 good. The command is started with GATE_SLOT_HELD=1, so a gate it runs in turn (a gate inside a gate) takes no slot of
 either kind and does not wait on the one its parent holds, though it still needs -Slot; set that variable yourself to
-run a gate outside the slots. GATE_SAMPLE_SECONDS sets the sampling interval, 5 s when unset.
+run a gate outside the slots. A gate holding a slot writes a claim file for gate-dashboard.ps1 (beside the canonical
+gate in ~/.claude/tools/gate) to read: $env:LOCALAPPDATA\gate\slots\<mutex name>.json, holding the gate's pid and start
+time, the slot, the caller's location, the command, the log and the ceiling. The gate deletes the file before it
+releases the slot. A killed gate leaves its file behind, and the next gate to take that slot overwrites it; the dashboard
+treats a file whose pid is gone as stale. A gate that cannot write the file says so and runs on.
+GATE_SAMPLE_SECONDS sets the sampling interval, 5 s when unset.
 GATE_TEST_SAMPLER_FAIL=1 is for the self-test only: it makes every sample throw, to prove the path above.
 GATE_TEST_SLOT_PREFIX is for the self-test only: up to 32 letters, digits and dashes put in front of both pools' mutex
 names (Local\<prefix>gate-slot-<i>, Local\<prefix>gate-light-slot-<i>), so its slot cases use slots no other session
@@ -1222,7 +1227,7 @@ function Enter-Slot {
             $name = "$prefix$slot"
             $mutex = [System.Threading.Mutex]::new($false, $name)
             if (Request-Mutex -Mutex $mutex -Name $name -Notes $notes) {
-                return [pscustomobject]@{ Mutex = $mutex; Notes = $notes }
+                return [pscustomobject]@{ Mutex = $mutex; Name = $name; Index = $slot; Notes = $notes; Claim = $null }
             }
             $mutex.Dispose()
         }
@@ -1236,9 +1241,48 @@ function Enter-Slot {
     }
 }
 
+# The file a gate holding the slot of this mutex writes for gate-dashboard.ps1 to read, named after the mutex.
+function Get-ClaimPath {
+    param([string]$MutexName)
+    return Join-Path $env:LOCALAPPDATA "gate\slots\$($MutexName -replace '^Local\\', '').json"
+}
+
+# Says in the slot's claim file which gate holds it and what it runs. Best effort: a gate that cannot write the file
+# says so once and runs on, and the dashboard shows the slot held without a command.
+function Write-SlotClaim {
+    param($Slot, [string]$Kind, [object[]]$Command, [hashtable]$Options)
+    $path = Get-ClaimPath $Slot.Name
+    try {
+        $claim = [ordered]@{
+            kind           = $Kind
+            index          = $Slot.Index
+            pid            = $PID
+            processStart   = (Get-Process -Id $PID).StartTime.ToUniversalTime().ToString('o')
+            started        = [DateTime]::UtcNow.ToString('o')
+            cwd            = $ExecutionContext.SessionState.Path.CurrentFileSystemLocation.ProviderPath
+            command        = @($Command | ForEach-Object { Format-Argument ([string]$_) }) -join ' '
+            log            = $Options['Log']
+            timeoutSeconds = [double]$Options['TimeoutSeconds']
+        }
+        New-Item -ItemType Directory -Force (Split-Path -Parent $path) | Out-Null
+        $temp = "$path.$PID.tmp"
+        [System.IO.File]::WriteAllText($temp, ($claim | ConvertTo-Json -Compress))
+        Move-Item -LiteralPath $temp -Destination $path -Force
+        $Slot.Claim = $path
+    }
+    catch {
+        Write-Gate "gate: could not write the slot claim $path ($($_.Exception.Message)); the dashboard shows the slot without its command"
+    }
+}
+
+# Deletes the claim file before the mutex is released, so it never deletes the claim of the gate that takes the slot next.
 function Exit-Slot {
     param($Slot)
     if ($Slot) {
+        if ($Slot.Claim) {
+            try { Remove-Item -LiteralPath $Slot.Claim -ErrorAction Stop }
+            catch { Write-Gate "gate: could not delete the slot claim $($Slot.Claim) ($($_.Exception.Message))" }
+        }
         $Slot.Mutex.ReleaseMutex()
         $Slot.Mutex.Dispose()
     }
@@ -1737,6 +1781,7 @@ function Invoke-Main {
     if ($env:GATE_SLOT_HELD -ne '1') {
         $slot = Enter-Slot -Kind $options['Slot']
         $notes = @($slot.Notes)
+        Write-SlotClaim -Slot $slot -Kind $options['Slot'] -Command $parsed.Command -Options $options
     }
     try {
         return Invoke-Watched -Command $parsed.Command -Options $options -Notes $notes
