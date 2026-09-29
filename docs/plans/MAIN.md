@@ -61,7 +61,7 @@ Work these in order: the harness first, since the DPR fix is verified with it.
 - [ ] **Wave 9 — macOS runtime checks**: [macos-release.md](./macos-release.md), all five. Human checks only, on Apple Silicon hardware with the released `.dmg`.
 
 - [ ] **Wave 10 — Cleanup singles** (pre-existing; independent, any order):
-  - [ ] actionlint SC2086: unquoted `$GITHUB_OUTPUT` in the "Check vNAS repo access" and signing-check steps of `.github/workflows/build.yml` and `release.yml`.
+  - [x] actionlint SC2086: unquoted `$GITHUB_OUTPUT` in the "Check vNAS repo access" and signing-check steps of `.github/workflows/build.yml` and `release.yml`. Shipped 2026-09-28 in `77d3551`; actionlint is clean on every workflow.
   - [ ] Vite `INEFFECTIVE_DYNAMIC_IMPORT` warnings: `stores/airportStore.ts` (dynamic in `vnasStore.ts`), `utils/terrainCache.ts` (dynamic in `CesiumViewer.tsx`), `services/MigrationService.ts` (dynamic in `ControlsBar.tsx`) are also imported statically. Make each import static or truly lazy.
   - [ ] pnpm skips protobufjs's build script ("Ignored build scripts: protobufjs@8.0.0"). Decide with `pnpm approve-builds` whether it needs to run.
   - [ ] `src-tauri/src/lib.rs` has 72 rustfmt differences. Run `cargo fmt` over `src-tauri` in its own commit, then add `cargo fmt --check` to CI and a fmt hook to `.pre-commit-config.yaml`.
