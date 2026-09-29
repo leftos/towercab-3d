@@ -2,6 +2,11 @@
 
 All notable changes to TowerCab 3D will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- New **Show Moon** setting under Settings → Graphics lets you hide the moon from the sky.
+
 ## [0.2.0-alpha] - 2026-06-12
 
 ### Highlights

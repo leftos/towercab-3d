@@ -431,7 +431,7 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
     }),
     {
       name: 'settings-store',
-      version: 36,
+      version: 37,
       migrate: (persistedState: unknown, version: number) => {
         // biome-ignore lint/suspicious/noExplicitAny: migration handles arbitrary persisted state
         let state: any = persistedState
@@ -618,6 +618,7 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
       enableHdr: oldSettings.enableHdr ?? DEFAULT_SETTINGS.graphics.enableHdr,
       enableLogDepth: oldSettings.enableLogDepth ?? DEFAULT_SETTINGS.graphics.enableLogDepth,
       enableGroundAtmosphere: oldSettings.enableGroundAtmosphere ?? DEFAULT_SETTINGS.graphics.enableGroundAtmosphere,
+      showMoon: DEFAULT_SETTINGS.graphics.showMoon,
       enableAmbientOcclusion: oldSettings.enableAmbientOcclusion ?? DEFAULT_SETTINGS.graphics.enableAmbientOcclusion,
       enableAircraftSilhouettes:
         oldSettings.enableAircraftSilhouettes ?? DEFAULT_SETTINGS.graphics.enableAircraftSilhouettes,

@@ -489,6 +489,9 @@ export interface GraphicsSettings {
   /** Enable ground atmosphere effect (atmospheric scattering, default: true) */
   enableGroundAtmosphere: boolean
 
+  /** Show the moon in the sky (default: true) */
+  showMoon: boolean
+
   /**
    * Enable SSAO (Screen-Space Ambient Occlusion)
    * Adds contact shadows but can cause visible banding artifacts (default: false)
@@ -1892,6 +1895,7 @@ export const DEFAULT_SETTINGS: Omit<
     enableHdr: false,
     enableLogDepth: true,
     enableGroundAtmosphere: true,
+    showMoon: true,
     enableAmbientOcclusion: false,
     enableAircraftSilhouettes: false,
     enableShadows: true,

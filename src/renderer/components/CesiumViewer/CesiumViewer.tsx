@@ -111,6 +111,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
   const enableHdr = useSettingsStore((state) => state.graphics.enableHdr)
   const enableLogDepth = useSettingsStore((state) => state.graphics.enableLogDepth)
   const enableGroundAtmosphere = useSettingsStore((state) => state.graphics.enableGroundAtmosphere)
+  const showMoon = useSettingsStore((state) => state.graphics.showMoon)
   const enableLighting = useSettingsStore((state) => state.cesium.enableLighting)
   const enableShadows = useSettingsStore((state) => state.graphics.enableShadows)
   const shadowMapSize = useSettingsStore((state) => state.graphics.shadowMapSize)
@@ -318,7 +319,8 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
   // =========================================================================
   // Babylon.js clouds render on a transparent canvas overlay, so they can't
   // truly block Cesium's stars. Instead, we hide Cesium's skyBox when there's
-  // an OVC (overcast) cloud layer that would obscure the sky.
+  // an OVC (overcast) cloud layer that would obscure the sky. The moon is also
+  // hidden when the user turns it off in settings.
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return
 
@@ -335,9 +337,9 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
       viewer.scene.sun.show = !hasOvcLayer
     }
     if (viewer.scene.moon) {
-      viewer.scene.moon.show = !hasOvcLayer
+      viewer.scene.moon.show = showMoon && !hasOvcLayer
     }
-  }, [viewer, cloudLayers])
+  }, [viewer, cloudLayers, showMoon])
 
   // =========================================================================
   // 3b. Camera Near Plane (for depth precision)

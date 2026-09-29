@@ -50,6 +50,7 @@ export const SUBCATEGORY_MAPPINGS: Record<string, Record<string, { label: string
         'enableHdr',
         'enableLogDepth',
         'enableGroundAtmosphere',
+        'showMoon',
         'enableAmbientOcclusion',
         'enableAircraftSilhouettes',
       ],

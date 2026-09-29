@@ -67,6 +67,7 @@ function SettingsGraphicsWeatherTab() {
   const nightDarkeningIntensity = useSettingsStore((state) => state.graphics.nightDarkeningIntensity)
   const aircraftNightVisibility = useSettingsStore((state) => state.graphics.aircraftNightVisibility)
   const enableGroundAtmosphere = useSettingsStore((state) => state.graphics.enableGroundAtmosphere)
+  const showMoon = useSettingsStore((state) => state.graphics.showMoon)
 
   // Shadow settings
   const enableShadows = useSettingsStore((state) => state.graphics.enableShadows)
@@ -515,6 +516,18 @@ function SettingsGraphicsWeatherTab() {
             Ground Atmosphere
           </label>
           <p className="setting-hint">Adds atmospheric haze effect to distant terrain.</p>
+        </div>
+
+        <div className="setting-item">
+          <label>
+            <input
+              type="checkbox"
+              checked={showMoon}
+              onChange={(e) => updateGraphicsSettings({ showMoon: e.target.checked })}
+            />
+            Show Moon
+          </label>
+          <p className="setting-hint">Draws the moon in the sky. Always hidden under overcast clouds.</p>
         </div>
 
         <div className="setting-item">
