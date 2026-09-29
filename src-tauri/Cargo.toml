@@ -46,14 +46,16 @@ futures-util = { version = "0.3", features = ["sink"] }  # For WebSocket stream 
 
 # Transitive pin: cookie 0.18.x (pulled in by tower-http/reqwest) fails to compile against
 # time 0.3.48+ with E0119 (conflicting trait impls). Pin to the last compatible release so
-# `cargo generate-lockfile` (run locally and in CI) doesn't resolve to the broken version.
+# a fresh resolve (a lockfile update, or a vNAS build pulling in new dependencies) doesn't pick the broken version.
 time = "=0.3.47"
 
 # Synchronization primitives for vNAS state
 parking_lot = "0.12"
 
-# vNAS integration for real-time aircraft updates (optional, requires private repo access)
-towercab-3d-vnas = { git = "https://github.com/Leftos/towercab-3d-vnas", branch = "master", optional = true }
+# vNAS integration for real-time aircraft updates (optional). The manifest points at the in-repo
+# public stub so the crate graph resolves without access to the private repo; vNAS builds swap the
+# real crate in through scripts/shipping/build/vnas.js.
+towercab-3d-vnas = { path = "vnas-stub", optional = true }
 
 [features]
 # Enable vNAS real-time updates (requires access to private towercab-3d-vnas repo)

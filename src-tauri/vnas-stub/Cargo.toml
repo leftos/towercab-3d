@@ -1,0 +1,5 @@
+[package]
+name = "towercab-3d-vnas"
+version = "0.1.0"
+edition = "2021"
+publish = false

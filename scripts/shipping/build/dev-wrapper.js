@@ -10,7 +10,7 @@
  * 2. When rebuilding:
  *    - Skips Cesium asset copy if already in dist (~2s savings)
  *    - Uses fast build mode (no minification for dev)
- * 3. Optionally updates vNAS if --vnas flag is passed
+ * 3. Points cargo at the private vNAS crate when --vnas is passed (the in-repo stub stands in otherwise)
  * 4. Starts tauri dev with the appropriate configuration
  *
  * Usage: node scripts/shipping/build/dev-wrapper.js [LOG_PATH] [--vnas] [--release] [--force]
@@ -30,6 +30,7 @@
 import { execSync } from 'child_process'
 import fs from 'fs'
 import path from 'path'
+import { runWithVnas } from './vnas.js'
 
 const BUILD_MODE_MARKER = 'dist/.build-mode'
 
@@ -178,25 +179,20 @@ if (useRelease) {
   command += ' --release'
 }
 if (useVnas) {
-  // First update vNAS, then run with vnas features
-  try {
-    execSync('pnpm run update:vnas', {
-      stdio: 'inherit',
-      env: process.env
-    })
-  } catch (error) {
-    console.error('Failed to update vNAS')
-    process.exit(error.status || 1)
-  }
   command += ' --features vnas'
 }
 
 // Execute tauri dev with environment variable
 try {
-  execSync(command, {
-    stdio: 'inherit',
-    env: { ...process.env, ...(logFile && { TOWERCAB_LOG_FILE: logFile }) }
-  })
+  if (useVnas) {
+    // Swaps the in-repo vNAS stub for the private crate while this runs.
+    runWithVnas(command)
+  } else {
+    execSync(command, {
+      stdio: 'inherit',
+      env: { ...process.env, ...(logFile && { TOWERCAB_LOG_FILE: logFile }) }
+    })
+  }
 } catch (error) {
   // execSync throws on non-zero exit, but we want to exit with the same code
   process.exit(error.status || 1)

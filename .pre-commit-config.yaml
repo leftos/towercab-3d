@@ -16,8 +16,8 @@ repos:
         files: ^src/.*\.(ts|tsx)$
       - id: cargo-clippy
         name: cargo clippy -D warnings
-        # Run from src-tauri so cargo loads src-tauri/.cargo/config.toml (the local vNAS [patch]);
-        # --manifest-path from the root skips it and rewrites Cargo.lock.
+        # The hook builds the public stub; running from src-tauri keeps cargo's config lookup the
+        # same as the dev scripts.
         entry: bash -c 'cd src-tauri && cargo clippy --all-targets -- -D warnings'
         language: system
         pass_filenames: false

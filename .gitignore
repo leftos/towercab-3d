@@ -6,6 +6,8 @@ dist/
 dist-ssr/
 out/
 build/
+# Build scripts, not build output
+!/scripts/shipping/build/
 *.local
 
 # Tauri build outputs

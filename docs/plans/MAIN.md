@@ -65,7 +65,7 @@ Work these in order: the harness first, since the DPR fix is verified with it.
   - [ ] Vite `INEFFECTIVE_DYNAMIC_IMPORT` warnings: `stores/airportStore.ts` (dynamic in `vnasStore.ts`), `utils/terrainCache.ts` (dynamic in `CesiumViewer.tsx`), `services/MigrationService.ts` (dynamic in `ControlsBar.tsx`) are also imported statically. Make each import static or truly lazy.
   - [ ] pnpm skips protobufjs's build script ("Ignored build scripts: protobufjs@8.0.0"). Decide with `pnpm approve-builds` whether it needs to run.
   - [ ] `src-tauri/src/lib.rs` has 72 rustfmt differences. Run `cargo fmt` over `src-tauri` in its own commit, then add `cargo fmt --check` to CI and a fmt hook to `.pre-commit-config.yaml`.
-  - [ ] A clone without the untracked `src-tauri/.cargo/config.toml` (the local vNAS `[patch]`) resolves `towercab-3d-vnas` from git and rewrites `Cargo.lock`, so `cargo build` and the clippy hook dirty the lockfile. Decide how public contributors should build.
+  - [x] A clone without the untracked `src-tauri/.cargo/config.toml` (the local vNAS `[patch]`) resolves `towercab-3d-vnas` from git and rewrites `Cargo.lock`, so `cargo build` and the clippy hook dirty the lockfile. Decide how public contributors should build. Shipped 2026-09-28: the manifest depends on the in-repo `vnas-stub`, and vNAS builds patch in the private crate through `scripts/shipping/build/vnas.js`; a build with no repo access was verified.
   - [ ] `towercab-3d-vnas` `master` has no branch protection. Rulesets on a private repo need a paid plan; check the plan, then add the same force-push and deletion block `main` has here (ruleset "Protect main").
 
 ## First release after 2026-09-27

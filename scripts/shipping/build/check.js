@@ -25,8 +25,10 @@
  */
 
 import { spawn } from 'child_process';
+import { readFileSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { writePatchConfig } from './vnas.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = join(__dirname, '..', '..', '..'); // scripts/shipping/build -> project root
@@ -198,48 +200,62 @@ async function runCargoCheck(quiet = false) {
   }
   logSuccess('Cargo clippy (without vnas) passed');
 
-  // Check with vnas feature (private build)
-  console.log();
-  log('Checking with vnas feature...', colors.blue);
-  const checkArgsWithVnas = [...checkArgs, '--features', 'vnas'];
-  const resultCheckWith = await runCommandWithOutput('cargo', checkArgsWithVnas, cargoOpts);
+  // Check with vnas feature (private build). The manifest depends on the in-repo
+  // stub, so these runs point cargo at the real crate with a patch config, and
+  // restore Cargo.lock afterwards: cargo rewrites it while the patch is in force.
+  const lockPath = join(ROOT_DIR, 'src-tauri', 'Cargo.lock');
+  const savedLock = readFileSync(lockPath);
+  const patchArg = `--config="${writePatchConfig()}"`;
 
-  if (!resultCheckWith.success) {
-    // Check if failure is due to missing private repo access
-    const output = resultCheckWith.stdout + resultCheckWith.stderr;
-    if (output.includes('towercab-3d-vnas') &&
-        (output.includes('failed to authenticate') ||
-         output.includes('could not read') ||
-         output.includes('failed to fetch'))) {
-      logWarning('Cargo check (with vnas) skipped - no access to private repo');
-      log('  This is expected for public contributors', colors.yellow);
-      return { success: true, code: 0 }; // Don't fail the build
+  try {
+    console.log();
+    log('Checking with vnas feature...', colors.blue);
+    const checkArgsWithVnas = [...checkArgs, '--features', 'vnas', patchArg];
+    const resultCheckWith = await runCommandWithOutput('cargo', checkArgsWithVnas, cargoOpts);
+
+    if (!resultCheckWith.success) {
+      // Check if failure is due to missing private repo access
+      const output = resultCheckWith.stdout + resultCheckWith.stderr;
+      if (output.includes('towercab-3d-vnas') &&
+          (output.includes('failed to authenticate') ||
+           output.includes('could not read') ||
+           output.includes('failed to fetch') ||
+           output.includes('unable to get password') ||
+           output.includes('Authentication failed') ||
+           output.includes('Repository not found'))) {
+        logWarning('Cargo check (with vnas) skipped - no access to private repo');
+        log('  This is expected for public contributors', colors.yellow);
+        return { success: true, code: 0 }; // Don't fail the build
+      }
+      logError('Cargo check (with vnas) found errors or warnings');
+      return { success: false, code: 1 };
     }
-    logError('Cargo check (with vnas) found errors or warnings');
-    return { success: false, code: 1 };
-  }
-  logSuccess('Cargo check (with vnas) passed');
+    logSuccess('Cargo check (with vnas) passed');
 
-  console.log();
-  log('Running clippy (with vnas)...', colors.blue);
-  const clippyArgsWithVnas = [
-    'clippy',
-    '--all-targets',
-    '--features',
-    'vnas',
-    ...(quiet ? ['--quiet'] : []),
-    '--',
-    '-D',
-    'warnings',
-  ];
-  const resultClippyWith = await runCommand('cargo', clippyArgsWithVnas, cargoOpts);
-  if (!resultClippyWith.success) {
-    logError('Cargo clippy (with vnas) found lints');
-    return resultClippyWith;
-  }
-  logSuccess('Cargo clippy (with vnas) passed');
+    console.log();
+    log('Running clippy (with vnas)...', colors.blue);
+    const clippyArgsWithVnas = [
+      'clippy',
+      '--all-targets',
+      '--features',
+      'vnas',
+      ...(quiet ? ['--quiet'] : []),
+      patchArg,
+      '--',
+      '-D',
+      'warnings',
+    ];
+    const resultClippyWith = await runCommand('cargo', clippyArgsWithVnas, cargoOpts);
+    if (!resultClippyWith.success) {
+      logError('Cargo clippy (with vnas) found lints');
+      return resultClippyWith;
+    }
+    logSuccess('Cargo clippy (with vnas) passed');
 
-  return { success: true, code: 0 };
+    return { success: true, code: 0 };
+  } finally {
+    writeFileSync(lockPath, savedLock);
+  }
 }
 
 /**

@@ -66,7 +66,7 @@ The optional `vnas` feature enables 1Hz real-time aircraft updates via the priva
 - **With vNAS access:** Use `pnpm run dev:vnas` and `pnpm run build:vnas`
 - **Signed builds:** `.\build-signed.ps1` (with vNAS) or `.\build-signed.ps1 -NoVnas`
 
-**Dependency updates:** The `pnpm run dev:vnas` and `pnpm run build:vnas` commands automatically run `cargo update -p towercab-3d-vnas` before building to fetch the latest commits from the private repo's master branch. This is also configured in the private repo's CI workflow, so builds always use the latest implementation.
+**How the private crate is reached:** `src-tauri/Cargo.toml` depends on the in-repo stub `src-tauri/vnas-stub` (same crate name, empty), so the dependency graph never names the private repo; cargo fetches every git source in a manifest, optional or not, so a git dependency there would block public builds entirely. A vNAS build runs through `scripts/shipping/build/vnas.js`, which passes cargo a `[patch]` (keyed by the stub's `file://` URL) pointing at the private repo's `master`, so every vNAS build picks up the latest commit, then restores `Cargo.lock`. Run any hand-written vNAS cargo command the same way: `node scripts/shipping/build/vnas.js cargo clippy --features vnas -- -D warnings`. Plain `cargo … --features vnas` compiles against the stub and fails. CI writes the same patch to `src-tauri/.cargo/config.toml` with `vnas.js --ci-config` when it has the repo token.
 
 **Private vNAS Crate Repository:**
 - **GitHub:** https://github.com/leftos/towercab-3d-vnas
