@@ -147,6 +147,8 @@ The app checks for updates on startup and notifies you when a new version is ava
 
 #### 1. Install Dependencies
 
+Prerequisites: Node.js with pnpm, the Rust toolchain, and Python 3 with Pillow (`pip install pillow`), which builds the MSFS model converter on first run.
+
 ```bash
 pnpm install
 ```

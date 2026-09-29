@@ -155,6 +155,23 @@ if (forceRebuild || needsRebuild()) {
   console.log('[dev-wrapper] Frontend up to date, skipping build')
 }
 
+// Tauri refuses to build when a bundled resource is missing, and the model converter
+// is a build artifact that a fresh clone or worktree does not have yet.
+const converterName = process.platform === 'win32' ? 'fsltl_converter.exe' : 'fsltl_converter'
+const converterPath = path.resolve('src-tauri/resources', converterName)
+if (!fs.existsSync(converterPath)) {
+  console.log(`[dev-wrapper] ${converterName} not found, building it...`)
+  try {
+    execSync('pnpm run build:converter', { stdio: 'inherit', env: process.env })
+  } catch (error) {
+    console.error(
+      `[dev-wrapper] Failed to build ${converterName}. It needs Python 3 with Pillow (pip install pillow);` +
+        ` PyInstaller installs itself. Alternatively, copy ${converterName} from another checkout into src-tauri/resources/.`,
+    )
+    process.exit(error.status || 1)
+  }
+}
+
 // Build the command
 let command = 'tauri dev --config src-tauri/tauri.dev.conf.json'
 if (useRelease) {
