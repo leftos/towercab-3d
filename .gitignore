@@ -85,3 +85,6 @@ tmpclaude*
 
 # Local Claude Code multi-repo launcher (sees ../towercab-3d-vnas)
 claude-ws.ps1
+
+# Scratch output (gate logs)
+.tmp/
