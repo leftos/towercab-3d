@@ -57,6 +57,7 @@ Open work is grouped into **waves**: release-sized bundles that share owning fil
   - Command: `pnpm run check`; in the crate, `cargo test` (its prek hook runs fmt and clippy on commit).
   - Human: the user runs `pnpm run dev:vnas` against a live session and follows an aircraft across the 30 NM boundary.
 - [ ] **Wave 9 — macOS runtime checks**: [macos-release.md](./macos-release.md), all five. Human checks only, on Apple Silicon hardware with the released `.dmg`.
+  - [ ] Review and land or close PR #112 (`docs/macos-code-signing.md`, `docs/plans/macos-release.md`: a signing and notarization guide reusing yaat's Developer ID cert). Checks pass; mergeability unknown. It contradicts `macos-release.md`'s locked "unsigned / ad-hoc" scope decision, so the user decides first.
 - [ ] **Wave 10 — Cleanup singles** (pre-existing; independent, any order):
   - [ ] Vite `INEFFECTIVE_DYNAMIC_IMPORT` warnings: `stores/airportStore.ts` (dynamic in `vnasStore.ts`), `utils/terrainCache.ts` (dynamic in `CesiumViewer.tsx`), `services/MigrationService.ts` (dynamic in `ControlsBar.tsx`) are also imported statically. Make each import static or truly lazy.
   - [ ] pnpm skips protobufjs's build script ("Ignored build scripts: protobufjs@8.0.0"). Decide with `pnpm approve-builds` whether it needs to run.
