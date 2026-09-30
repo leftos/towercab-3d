@@ -68,6 +68,8 @@ Work these in order: the harness first, since the DPR fix is verified with it.
   - [x] A clone without the untracked `src-tauri/.cargo/config.toml` (the local vNAS `[patch]`) resolves `towercab-3d-vnas` from git and rewrites `Cargo.lock`, so `cargo build` and the clippy hook dirty the lockfile. Decide how public contributors should build. Shipped 2026-09-28: the manifest depends on the in-repo `vnas-stub`, and vNAS builds patch in the private crate through `scripts/shipping/build/vnas.js`; a build with no repo access was verified.
   - [ ] `towercab-3d-vnas` `master` has no branch protection. Rulesets on a private repo need a paid plan; check the plan, then add the same force-push and deletion block `main` has here (ruleset "Protect main").
 
+- [ ] Reshape `docs/architecture.md` (982 lines of data flows) to the user-level architecture entry point (`~/.claude/docs/templates/ARCHITECTURE.md`): add a Task Index and a Layers section, keep "Hook Call Order (Critical!)" as Integration Footguns, and move each flow's detail into its own subsystem doc.
+
 ## First release after 2026-09-27
 
 - [ ] The next `v*` tag is the first run of: `tauri-action` v1 in `release.yml` and `release-macos.yml` (v1 now overwrites the name and body of an existing release, so check the notes the `prepare-release` skill writes survive), and the pinned-toolchain step (`rustup toolchain install` + `rustup target add`) in both release workflows. Watch both runs and fix forward.
