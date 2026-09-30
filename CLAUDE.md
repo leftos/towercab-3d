@@ -361,7 +361,7 @@ if (version < 7) {
 ### Adding a New Keyboard Shortcut
 
 1. Add key handler in `useCameraInput.ts` (for camera-related) or `App.tsx` (for global shortcuts)
-2. Update keyboard reference in `SettingsHelpTab.tsx`
+2. Update the keyboard reference in `KeyboardCheatsheet.tsx`
 3. Update USER_GUIDE.md keyboard shortcuts section if user-facing
 
 ### Modifying Aircraft Rendering
