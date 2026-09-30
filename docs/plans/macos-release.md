@@ -5,7 +5,14 @@ The Apple Silicon build shipped in v0.2.0-alpha (`.dmg`, `.app.tar.gz` + `.sig`,
 Scope decisions (locked in):
 
 - **Architecture:** Apple Silicon only (`aarch64-apple-darwin`). Intel/Rosetta and universal binaries out of scope.
-- **Signing:** Unsigned / ad-hoc. No Apple Developer Program, no notarization. If that changes, notarization slots into `release-macos.yml` as `tauri-action` env (`APPLE_CERTIFICATE`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`).
+- **Signing:** Developer ID signed and notarized, reusing `leftos/yaat`'s Developer ID Application certificate and App Store Connect notary key (Tauri ships a `.dmg`, so no Installer cert). Setup and the workflow change: [macos-code-signing.md](../macos-code-signing.md). Until it is wired in, `release-macos.yml` builds unsigned and the README's `xattr` workaround stands.
+
+## Signing and notarization
+
+- [ ] Add the seven `APPLE_*` / `KEYCHAIN_PASSWORD` secrets to `leftos/towercab-3d` (guide Steps 1–4). Human: needs the Mac keychain export and the `.p8`.
+- [ ] Wire the certificate import and the `APPLE_*` env into `.github/workflows/release-macos.yml` (guide Step 5), gated on `APPLE_CERTIFICATE` so forks still build unsigned. Needs the secrets first.
+- [ ] On the first signed release, check `spctl --assess` and `xcrun stapler validate` on a Mac (guide Step 7); if the FSLTL converter fails under the hardened runtime, add the entitlements (Step 6).
+- [ ] Once a notarized build is verified, drop the "damaged" / `xattr -dr com.apple.quarantine` notes from `README.md:138-140`, `.github/workflows/release.yml:35-38` and `.claude/skills/prepare-release/SKILL.md:164-167` (guide Step 8).
 
 ## Runtime checks on Apple Silicon hardware
 
