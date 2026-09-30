@@ -332,3 +332,9 @@ export {
   // Performance
   SUN_POSITION_UPDATE_INTERVAL,
 } from './lighting'
+
+// ============================================================================
+// VNAS CONSTANTS
+// ============================================================================
+
+export { VNAS_ENVIRONMENT_OPTIONS, type VnasEnvironmentOption } from './vnas'

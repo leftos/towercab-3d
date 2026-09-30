@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useAirportStore } from '@/stores/airportStore'
 import { useVnasStore } from '@/stores/vnasStore'
 import type { VnasEnvironment } from '@/types/vnas'
+import { VnasEnvironmentSelect } from './VnasEnvironmentSelect'
 import './VnasPanel.css'
 
 /**
@@ -10,7 +11,7 @@ import './VnasPanel.css'
  *
  * This panel allows developers to:
  * - Check if vNAS feature is compiled in
- * - Connect to vNAS (Live, Sweatbox1, Sweatbox2)
+ * - Pick a vNAS environment and connect to it
  * - Monitor connection status
  * - Subscribe to airport updates
  */
@@ -21,6 +22,7 @@ export function VnasPanel() {
   const [callbackUrl, setCallbackUrl] = useState('')
 
   const status = useVnasStore((state) => state.status)
+  const tryConnectWithStoredTokens = useVnasStore((state) => state.tryConnectWithStoredTokens)
   const startAuth = useVnasStore((state) => state.startAuth)
   const handleOAuthCallback = useVnasStore((state) => state.handleOAuthCallback)
   const subscribe = useVnasStore((state) => state.subscribe)
@@ -39,6 +41,11 @@ export function VnasPanel() {
   }, [checkAvailability, getStatus])
 
   const handleStartAuth = useCallback(async () => {
+    // YAAT Local signs in with a dev login, never OAuth; the store runs that sign-in
+    if (selectedEnv === 'yaatlocal') {
+      await tryConnectWithStoredTokens(selectedEnv)
+      return
+    }
     try {
       setIsAuthenticating(true)
       setCallbackUrl('')
@@ -55,7 +62,7 @@ export function VnasPanel() {
       console.error('vNAS auth failed:', error)
       setIsAuthenticating(false)
     }
-  }, [selectedEnv, startAuth])
+  }, [selectedEnv, startAuth, tryConnectWithStoredTokens])
 
   const handleManualCallback = useCallback(async () => {
     if (!callbackUrl.trim()) return
@@ -192,12 +199,7 @@ export function VnasPanel() {
               <>
                 <div className="vnas-panel-row">
                   <span>Environment</span>
-                  <select value={selectedEnv} onChange={(e) => setSelectedEnv(e.target.value as VnasEnvironment)}>
-                    <option value="live">Live</option>
-                    <option value="sweatbox1">Sweatbox 1</option>
-                    <option value="sweatbox2">Sweatbox 2</option>
-                    <option value="test">Test</option>
-                  </select>
+                  <VnasEnvironmentSelect value={selectedEnv} onChange={setSelectedEnv} />
                 </div>
 
                 <button type="button" className="vnas-panel-button primary" onClick={handleStartAuth}>

@@ -11,6 +11,7 @@ import type {
   MemorySettings,
   RealTrafficSettings,
   UISettings,
+  VnasSettings,
   WeatherSettings,
 } from '../types/settings'
 import { DEFAULT_INSET_GRAPHICS_SETTINGS, DEFAULT_SETTINGS } from '../types/settings'
@@ -114,6 +115,7 @@ interface SettingsStoreWithPresets {
   fsltl: FSLTLSettings
   realtraffic: RealTrafficSettings
   advanced: AdvancedSettings
+  vnas: VnasSettings
 
   updateCesiumSettings: (updates: Partial<CesiumSettings>) => void
   updateGraphicsSettings: (updates: Partial<GraphicsSettings>) => void
@@ -125,6 +127,7 @@ interface SettingsStoreWithPresets {
   updateFSLTLSettings: (updates: Partial<FSLTLSettings>) => void
   updateRealTrafficSettings: (updates: Partial<RealTrafficSettings>) => void
   updateAdvancedSettings: (updates: Partial<AdvancedSettings>) => void
+  updateVnasSettings: (updates: Partial<VnasSettings>) => void
   resetToDefaults: () => void
   exportSettings: () => string
   importSettings: (json: string) => boolean
@@ -329,6 +332,11 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
           advanced: { ...state.advanced, ...updates },
         })),
 
+      updateVnasSettings: (updates: Partial<VnasSettings>) =>
+        set((state) => ({
+          vnas: { ...state.vnas, ...updates },
+        })),
+
       // ========================================================================
       // RESET TO DEFAULTS
       // ========================================================================
@@ -352,6 +360,7 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
           fsltl: state.fsltl,
           realtraffic: state.realtraffic,
           advanced: state.advanced,
+          vnas: state.vnas,
         }
         return JSON.stringify(settings, null, 2)
       },
@@ -405,6 +414,9 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
           if (imported.advanced && typeof imported.advanced === 'object') {
             updates.advanced = { ...DEFAULT_SETTINGS.advanced, ...imported.advanced }
           }
+          if (imported.vnas && typeof imported.vnas === 'object') {
+            updates.vnas = { ...DEFAULT_SETTINGS.vnas, ...imported.vnas }
+          }
 
           set(updates)
           return true
@@ -431,7 +443,7 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
     }),
     {
       name: 'settings-store',
-      version: 37,
+      version: 38,
       migrate: (persistedState: unknown, version: number) => {
         // biome-ignore lint/suspicious/noExplicitAny: migration handles arbitrary persisted state
         let state: any = persistedState
@@ -581,6 +593,7 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
           ui: { ...DEFAULT_SETTINGS.ui, ...state.ui },
           realtraffic: { ...DEFAULT_SETTINGS.realtraffic, ...state.realtraffic },
           advanced: { ...DEFAULT_SETTINGS.advanced, ...state.advanced },
+          vnas: { ...DEFAULT_SETTINGS.vnas, ...state.vnas },
         }
 
         return repaired as SettingsStoreWithPresets
@@ -750,5 +763,6 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
       enableDebugCoordinateOverlay:
         oldSettings.advanced?.enableDebugCoordinateOverlay ?? DEFAULT_SETTINGS.advanced.enableDebugCoordinateOverlay,
     },
+    vnas: DEFAULT_SETTINGS.vnas,
   }
 }

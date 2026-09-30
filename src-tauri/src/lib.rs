@@ -1100,6 +1100,8 @@ pub fn run() {
             vnas::vnas_is_available,
             vnas::vnas_try_restore_session,
             vnas::vnas_start_auth,
+            vnas::vnas_yaat_local_sign_in,
+            vnas::vnas_probe_yaat_local,
             vnas::vnas_complete_auth,
             vnas::vnas_handle_oauth_callback,
             vnas::vnas_connect,

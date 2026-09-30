@@ -6,6 +6,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ### Added
 - New **Show Moon** setting under Settings → Graphics lets you hide the moon from the sky.
+- vNAS can join your CRC session on a YAAT training server: YAAT1, or YAAT Local when a local YAAT server is running.
 
 ## [0.2.0-alpha] - 2026-06-12
 

@@ -1,0 +1,47 @@
+.yaat-cid-prompt {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.yaat-cid-prompt-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--white-a10);
+  border: 1px solid var(--white-a20);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  padding: 6px 10px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+}
+
+.yaat-cid-prompt-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.yaat-cid-prompt-input::placeholder {
+  color: var(--text-muted);
+}
+
+.yaat-cid-prompt-button {
+  background: var(--white-a10);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  color: var(--accent);
+  padding: 6px 12px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.yaat-cid-prompt-button:hover:not(:disabled) {
+  background: var(--white-a20);
+}
+
+.yaat-cid-prompt-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

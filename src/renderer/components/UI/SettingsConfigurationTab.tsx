@@ -3,6 +3,7 @@ import { useAircraftTimelineStore } from '../../stores/aircraftTimelineStore'
 import { useAirportStore } from '../../stores/airportStore'
 import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
 import { useRealTrafficStore } from '../../stores/realTrafficStore'
+import { useSettingsStore } from '../../stores/settingsStore'
 import { useVatsimStore } from '../../stores/vatsimStore'
 import { useViewportStore } from '../../stores/viewportStore'
 import { useVnasStore } from '../../stores/vnasStore'
@@ -14,6 +15,8 @@ import { isRemoteMode } from '../../utils/remoteMode'
 import { httpServerApi, isTauri, type ServerStatus, shellApi } from '../../utils/tauriApi'
 import MSFSModelSettingsPanel from './MSFSModelSettingsPanel'
 import CollapsibleSection from './settings/CollapsibleSection'
+import { VnasEnvironmentSelect } from './VnasEnvironmentSelect'
+import { YaatLocalCidPrompt } from './YaatLocalCidPrompt'
 import './ControlsBar.css'
 
 interface SettingsConfigurationTabProps {
@@ -56,6 +59,9 @@ function SettingsConfigurationTab({
   const vnasHandleOAuthCallback = useVnasStore((state) => state.handleOAuthCallback)
   const vnasDisconnect = useVnasStore((state) => state.disconnect)
   const vnasCheckAvailability = useVnasStore((state) => state.checkAvailability)
+  const vnasYaatLocalCidRequired = useVnasStore((state) => state.yaatLocalCidRequired)
+  const yaatLocalUrl = useSettingsStore((state) => state.vnas.yaatLocalUrl)
+  const updateVnasSettings = useSettingsStore((state) => state.updateVnasSettings)
 
   // HTTP Server state
   const serverSettings = useGlobalSettingsStore((state) => state.server)
@@ -166,7 +172,7 @@ function SettingsConfigurationTab({
       // First try to connect using stored tokens (avoids OAuth if possible)
       const connected = await vnasTryConnect(vnasSelectedEnv)
       if (connected) {
-        console.log('[vNAS] Connected using stored tokens')
+        console.log('[vNAS] Connect finished without OAuth')
         return
       }
 
@@ -739,25 +745,42 @@ function SettingsConfigurationTab({
             <>
               <div className="setting-item">
                 <span>Environment</span>
-                <select
+                <VnasEnvironmentSelect
                   value={vnasSelectedEnv}
-                  onChange={(e) => setVnasSelectedEnv(e.target.value as VnasEnvironment)}
+                  onChange={setVnasSelectedEnv}
                   className="text-input"
                   style={{ width: '150px' }}
-                >
-                  <option value="live">Live</option>
-                  <option value="sweatbox1">Sweatbox 1</option>
-                  <option value="sweatbox2">Sweatbox 2</option>
-                  <option value="test">Test</option>
-                </select>
+                />
               </div>
+
+              <div className="setting-item">
+                <span>YAAT Local server URL</span>
+                <input
+                  type="text"
+                  className="text-input"
+                  value={yaatLocalUrl}
+                  onChange={(e) => updateVnasSettings({ yaatLocalUrl: e.target.value })}
+                  style={{ width: '100%' }}
+                />
+                <p className="setting-hint">
+                  Offered as an environment only when a local YAAT dev server answers here.
+                </p>
+              </div>
+
+              {vnasSelectedEnv === 'yaatlocal' && vnasYaatLocalCidRequired && (
+                <div className="setting-item">
+                  <YaatLocalCidPrompt />
+                </div>
+              )}
 
               <div className="setting-item">
                 <button type="button" className="control-button" onClick={handleVnasStartAuth}>
                   Connect to vNAS
                 </button>
                 <p className="setting-hint" style={{ marginTop: '8px' }}>
-                  You&apos;ll be redirected to VATSIM to authorize TowerCab 3D.
+                  {vnasSelectedEnv === 'yaatlocal'
+                    ? 'Signs in to the local YAAT server with your VATSIM CID.'
+                    : "You'll be redirected to VATSIM to authorize TowerCab 3D."}
                 </p>
               </div>
             </>

@@ -83,7 +83,7 @@ The optional `vnas` feature enables 1Hz real-time aircraft updates via the priva
 - **With vNAS access:** Use `pnpm run dev:vnas` and `pnpm run build:vnas`
 - **Signed builds:** `.\build-signed.ps1` (with vNAS) or `.\build-signed.ps1 -NoVnas`
 
-**How the private crate is reached:** `src-tauri/Cargo.toml` depends on the in-repo stub `src-tauri/vnas-stub` (same crate name, empty), so the dependency graph never names the private repo; cargo fetches every git source in a manifest, optional or not, so a git dependency there would block public builds entirely. A vNAS build runs through `scripts/shipping/build/vnas.js`, which passes cargo a `[patch]` (keyed by the stub's `file://` URL) pointing at the private repo's `master`, so every vNAS build picks up the latest commit, then restores `Cargo.lock`. Run any hand-written vNAS cargo command the same way: `node scripts/shipping/build/vnas.js cargo clippy --features vnas -- -D warnings`. Plain `cargo … --features vnas` compiles against the stub and fails. CI writes the same patch to `src-tauri/.cargo/config.toml` with `vnas.js --ci-config` when it has the repo token.
+**How the private crate is reached:** `src-tauri/Cargo.toml` depends on the in-repo stub `src-tauri/vnas-stub` (same crate name, empty), so the dependency graph never names the private repo; cargo fetches every git source in a manifest, optional or not, so a git dependency there would block public builds entirely. A vNAS build runs through `scripts/shipping/build/vnas.js`, which passes cargo a `[patch]` (keyed by the stub's `file://` URL) pointing at the private repo's `master`, so every vNAS build picks up the latest commit, then restores `Cargo.lock`. Run any hand-written vNAS cargo command the same way: `node scripts/shipping/build/vnas.js cargo clippy --features vnas -- -D warnings`. Plain `cargo … --features vnas` compiles against the stub and fails. To build against unpushed crate changes, set `TC3D_VNAS_CRATE_PATH` to a local checkout (PowerShell: `$env:TC3D_VNAS_CRATE_PATH='X:/dev/towercab-3d-vnas'`); `vnas.js` (and `pnpm run dev:vnas`, which goes through it) then patches in that path instead of GitHub `master`. CI writes the same patch to `src-tauri/.cargo/config.toml` with `vnas.js --ci-config` when it has the repo token.
 
 **Private vNAS Crate Repository:**
 - **GitHub:** https://github.com/leftos/towercab-3d-vnas
@@ -98,6 +98,7 @@ The optional `vnas` feature enables 1Hz real-time aircraft updates via the priva
 - Server-initiated callbacks (HandleSessionStarted) for session management
 - Ground track field for accurate aircraft extrapolation
 - WaitingForSession state when TC3D connects before CRC
+- Environments: Live, Sweatbox 1/2, Test, and two YAAT training servers (`yaat1`, `yaatlocal`; URLs and the YAAT *direct connection* in the crate's `CLAUDE.md` "Environment URLs"). YAAT has no UDP. YAAT1 signs in with VATSIM like Live; YAAT Local (`vnas_yaat_local_sign_in`) uses the dev server's `/vnas/auth/dev-login` with the stored login's CID or a typed one, and is offered only while `vnas_probe_yaat_local` finds a dev server at the configured URL
 
 **Note:** The `pnpm run build` command automatically runs `build:converter` to create the FSLTL model converter executable. This requires Python 3 with Pillow installed. PyInstaller is auto-installed if missing.
 

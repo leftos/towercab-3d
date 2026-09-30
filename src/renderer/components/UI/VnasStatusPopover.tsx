@@ -4,14 +4,16 @@
  * A small popover that appears when clicking the vNAS indicator in the TopBar.
  * Allows users to quickly:
  * - See connection status
- * - Change environment (Live, Sweatbox 1/2)
- * - Connect or disconnect
+ * - Change environment
+ * - Connect or disconnect, entering a CID when YAAT Local sign-in asks for one
  * - See errors if any
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useVnasStore } from '../../stores/vnasStore'
 import type { VnasEnvironment } from '../../types/vnas'
+import { VnasEnvironmentSelect } from './VnasEnvironmentSelect'
+import { YaatLocalCidPrompt } from './YaatLocalCidPrompt'
 import './VnasStatusPopover.css'
 
 interface VnasStatusPopoverProps {
@@ -29,6 +31,7 @@ export function VnasStatusPopover({ onClose, toggleRef }: VnasStatusPopoverProps
   const vnasStartAuth = useVnasStore((state) => state.startAuth)
   const vnasHandleOAuthCallback = useVnasStore((state) => state.handleOAuthCallback)
   const vnasDisconnect = useVnasStore((state) => state.disconnect)
+  const yaatLocalCidRequired = useVnasStore((state) => state.yaatLocalCidRequired)
 
   // Local state
   const [selectedEnv, setSelectedEnv] = useState<VnasEnvironment>(vnasStatus.environment)
@@ -126,8 +129,11 @@ export function VnasStatusPopover({ onClose, toggleRef }: VnasStatusPopoverProps
       // First try to connect using stored tokens (avoids OAuth if possible)
       const connected = await vnasTryConnect(selectedEnv)
       if (connected) {
-        console.log('[vNAS] Connected using stored tokens')
-        onClose()
+        // YAAT Local reports true even when sign-in failed; stay open to show its error or CID prompt
+        if (!useVnasStore.getState().status.error) {
+          console.log('[vNAS] Connected without OAuth')
+          onClose()
+        }
         return
       }
 
@@ -203,14 +209,15 @@ export function VnasStatusPopover({ onClose, toggleRef }: VnasStatusPopoverProps
         {vnasStatus.state === 'disconnected' && !isAuthenticating && (
           <div className="vnas-popover-env">
             <span>Environment</span>
-            <select value={selectedEnv} onChange={(e) => setSelectedEnv(e.target.value as VnasEnvironment)}>
-              <option value="live">Live</option>
-              <option value="sweatbox1">Sweatbox 1</option>
-              <option value="sweatbox2">Sweatbox 2</option>
-              <option value="test">Test</option>
-            </select>
+            <VnasEnvironmentSelect value={selectedEnv} onChange={setSelectedEnv} />
           </div>
         )}
+
+        {/* CID prompt - when YAAT Local sign-in has no CID to use */}
+        {vnasStatus.state === 'disconnected' &&
+          !isAuthenticating &&
+          selectedEnv === 'yaatlocal' &&
+          yaatLocalCidRequired && <YaatLocalCidPrompt onSignedIn={onClose} />}
 
         {/* Manual callback input - only during authentication */}
         {isAuthenticating && (

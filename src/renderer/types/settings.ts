@@ -1013,6 +1013,25 @@ export interface UISettings {
 }
 
 /**
+ * vNAS connection settings for this browser
+ */
+export interface VnasSettings {
+  /**
+   * URL of a local YAAT dev server (default: 'http://localhost:5130')
+   *
+   * The environment picker offers YAAT Local only when a YAAT dev server answers here.
+   */
+  yaatLocalUrl: string
+
+  /**
+   * VATSIM CID used to sign in to YAAT Local (default: '')
+   *
+   * Remembered once typed. Empty means sign in with the CID of the stored VATSIM login.
+   */
+  yaatLocalCid: string
+}
+
+/**
  * Advanced/debug settings for troubleshooting and diagnostics
  *
  * These settings are intended for power users and developers to diagnose
@@ -1813,6 +1832,9 @@ export interface SettingsStore {
   /** Advanced/debug settings */
   advanced: AdvancedSettings
 
+  /** vNAS connection settings */
+  vnas: VnasSettings
+
   // Actions (will be added in Phase 5)
   /** Update Cesium settings (partial update) */
   updateCesiumSettings: (updates: Partial<CesiumSettings>) => void
@@ -1844,6 +1866,9 @@ export interface SettingsStore {
   /** Update advanced/debug settings (partial update) */
   updateAdvancedSettings: (updates: Partial<AdvancedSettings>) => void
 
+  /** Update vNAS settings (partial update) */
+  updateVnasSettings: (updates: Partial<VnasSettings>) => void
+
   /** Reset all settings to defaults */
   resetToDefaults: () => void
 
@@ -1873,6 +1898,7 @@ export const DEFAULT_SETTINGS: Omit<
     updateFSLTLSettings: unknown
     updateRealTrafficSettings: unknown
     updateAdvancedSettings: unknown
+    updateVnasSettings: unknown
     resetToDefaults: unknown
     exportSettings: unknown
     importSettings: unknown
@@ -1999,5 +2025,9 @@ export const DEFAULT_SETTINGS: Omit<
   advanced: {
     enableInterpolationDebugLogs: false,
     enableDebugCoordinateOverlay: false,
+  },
+  vnas: {
+    yaatLocalUrl: 'http://localhost:5130',
+    yaatLocalCid: '',
   },
 }

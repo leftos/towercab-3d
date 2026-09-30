@@ -33,6 +33,12 @@ pub enum Environment {
     Sweatbox1,
     Sweatbox2,
     Test,
+    /// A local YAAT development server; signs in with a dev login, never OAuth
+    #[serde(rename = "yaatlocal")]
+    YaatLocal,
+    /// The public YAAT training server; signs in through VATSIM like Live
+    #[serde(rename = "yaat1")]
+    Yaat1,
 }
 
 /// Session state for frontend
@@ -106,6 +112,86 @@ impl Default for VnasStatus {
 }
 
 // =============================================================================
+// YAAT LOCAL PROBE (both builds)
+// =============================================================================
+
+/// Whether a local YAAT server answers at a base URL and accepts dev logins.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct YaatLocalProbe {
+    available: bool,
+}
+
+/// How long each probe request may take; the frontend polls, so a dead server must not stall it.
+const YAAT_LOCAL_PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(1500);
+
+/// The probe's base URL: `url` without a trailing `/`, or why it cannot be probed.
+fn yaat_local_probe_base(url: &str) -> Result<String, String> {
+    let base = url.trim().trim_end_matches('/');
+    let parsed = url::Url::parse(base).map_err(|e| format!("invalid URL {base:?}: {e}"))?;
+    match parsed.scheme() {
+        "http" | "https" => Ok(base.to_string()),
+        scheme => Err(format!("unsupported scheme {scheme:?} in {base:?}")),
+    }
+}
+
+/// Whether an `/auth/required` body says the server accepts dev logins (`required` is `false`).
+fn yaat_local_auth_not_required(body: &str) -> Result<(), String> {
+    let json: serde_json::Value =
+        serde_json::from_str(body).map_err(|e| format!("/auth/required body is not JSON: {e}"))?;
+    match json.get("required") {
+        Some(serde_json::Value::Bool(false)) => Ok(()),
+        Some(other) => Err(format!("/auth/required says required = {other}")),
+        None => Err("/auth/required body has no `required` field".to_string()),
+    }
+}
+
+/// GET `{base}{path}` and return the body when the server answers 2xx.
+async fn yaat_local_probe_get(
+    client: &reqwest::Client,
+    base: &str,
+    path: &str,
+) -> Result<String, String> {
+    let response = client
+        .get(format!("{base}{path}"))
+        .send()
+        .await
+        .map_err(|e| format!("GET {path} failed: {e}"))?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(format!("GET {path} answered {status}"));
+    }
+    response
+        .text()
+        .await
+        .map_err(|e| format!("GET {path} body unreadable: {e}"))
+}
+
+/// Why the YAAT Local server at `url` is not usable, or `Ok` when it is.
+async fn yaat_local_probe(url: &str) -> Result<(), String> {
+    let base = yaat_local_probe_base(url)?;
+    let client = reqwest::Client::builder()
+        .timeout(YAAT_LOCAL_PROBE_TIMEOUT)
+        .build()
+        .map_err(|e| format!("HTTP client unavailable: {e}"))?;
+    yaat_local_probe_get(&client, &base, "/api/version").await?;
+    let body = yaat_local_probe_get(&client, &base, "/auth/required").await?;
+    yaat_local_auth_not_required(&body)
+}
+
+/// Check whether a local YAAT server is running at `url` and accepts dev logins.
+#[tauri::command]
+pub async fn vnas_probe_yaat_local(url: String) -> YaatLocalProbe {
+    match yaat_local_probe(&url).await {
+        Ok(()) => YaatLocalProbe { available: true },
+        Err(reason) => {
+            tracing::debug!("YAAT Local not available at {url}: {reason}");
+            YaatLocalProbe { available: false }
+        }
+    }
+}
+
+// =============================================================================
 // REAL IMPLEMENTATION (when vnas feature is enabled)
 // =============================================================================
 
@@ -168,8 +254,38 @@ mod real_impl {
                 Environment::Sweatbox1 => VnasEnvironment::Sweatbox1,
                 Environment::Sweatbox2 => VnasEnvironment::Sweatbox2,
                 Environment::Test => VnasEnvironment::Test,
+                Environment::YaatLocal => VnasEnvironment::YaatLocal,
+                Environment::Yaat1 => VnasEnvironment::Yaat1,
             }
         }
+    }
+
+    /// Error for the OAuth commands when asked for YAAT Local, which has no OAuth.
+    const YAAT_LOCAL_NO_OAUTH: &str = "YAAT Local signs in with vnas_yaat_local_sign_in";
+
+    /// Error for `vnas_yaat_local_sign_in` when no CID was typed and no VATSIM login is
+    /// stored; the frontend matches this string exactly and asks the user for a CID.
+    const YAAT_LOCAL_CID_REQUIRED: &str = "yaat_local_cid_required";
+
+    /// Build the service config for an environment, with the YAAT Local base URL when given.
+    fn service_config(environment: Environment, yaat_local_url: Option<String>) -> VnasConfig {
+        let config = VnasConfig::new(environment.into());
+        match yaat_local_url {
+            Some(url) => config.with_yaat_local_base_url(url),
+            None => config,
+        }
+    }
+
+    /// Whether a service is connected or on its way there, so a new one must not replace it.
+    async fn is_session_active(service: &VnasService) -> bool {
+        matches!(
+            service.state().await,
+            VnasSessionState::Connected
+                | VnasSessionState::Connecting
+                | VnasSessionState::JoiningSession
+                | VnasSessionState::Subscribing
+                | VnasSessionState::WaitingForSession
+        )
     }
 
     impl From<VnasSessionState> for SessionState {
@@ -357,23 +473,15 @@ mod real_impl {
         state: State<'_, VnasState>,
         environment: Environment,
     ) -> Result<bool, String> {
-        // Check if we already have an active service with the same environment
-        {
-            let existing_service = state.service.read().await;
-            if let Some(service) = existing_service.as_ref() {
-                let session_state = service.state().await;
-                // If already connected or connecting, don't create a new service
-                if matches!(
-                    session_state,
-                    VnasSessionState::Connected
-                        | VnasSessionState::Connecting
-                        | VnasSessionState::JoiningSession
-                        | VnasSessionState::Subscribing
-                        | VnasSessionState::WaitingForSession
-                ) {
-                    tracing::debug!("vNAS session already active, skipping restore");
-                    return Ok(true);
-                }
+        if environment == Environment::YaatLocal {
+            return Err(YAAT_LOCAL_NO_OAUTH.to_string());
+        }
+
+        // If already connected or connecting, don't create a new service
+        if let Some(service) = state.service.read().await.as_ref() {
+            if is_session_active(service).await {
+                tracing::debug!("vNAS session already active, skipping restore");
+                return Ok(true);
             }
         }
 
@@ -385,9 +493,7 @@ mod real_impl {
         // Store app handle
         *state.app_handle.write() = Some(app.clone());
 
-        // Create VnasService with the selected environment
-        let config = VnasConfig::new(environment.into());
-        let service = VnasService::new(config);
+        let service = VnasService::new(service_config(environment, None));
 
         // Try to restore session
         match service.restore_session(tokens).await {
@@ -433,6 +539,10 @@ mod real_impl {
         state: State<'_, VnasState>,
         environment: Environment,
     ) -> Result<String, String> {
+        if environment == Environment::YaatLocal {
+            return Err(YAAT_LOCAL_NO_OAUTH.to_string());
+        }
+
         // Update status
         let mut status = state.status();
         status.state = SessionState::Authenticating;
@@ -443,9 +553,7 @@ mod real_impl {
         // Store app handle for later event emission
         *state.app_handle.write() = Some(app.clone());
 
-        // Create VnasService with the selected environment
-        let config = VnasConfig::new(environment.into());
-        let service = VnasService::new(config);
+        let service = VnasService::new(service_config(environment, None));
 
         // Start OAuth flow
         let auth_url = service.start_oauth().await.map_err(|e| {
@@ -459,6 +567,76 @@ mod real_impl {
 
         tracing::info!("vNAS OAuth flow started for {:?}", environment);
         Ok(auth_url)
+    }
+
+    /// The CID to sign in to YAAT Local as: the typed CID when there is one, otherwise the CID
+    /// of the stored VATSIM login, whose refreshed tokens are saved on the way.
+    async fn resolve_yaat_local_cid(
+        app: &AppHandle,
+        cid: Option<String>,
+    ) -> Result<String, String> {
+        if let Some(typed) = cid.map(|c| c.trim().to_string()).filter(|c| !c.is_empty()) {
+            if !typed.chars().all(|c| c.is_ascii_digit()) {
+                return Err("Invalid CID".to_string());
+            }
+            return Ok(typed);
+        }
+
+        if let Some(tokens) = load_tokens(app)? {
+            match VnasService::resolve_vatsim_cid(tokens).await {
+                Ok(Some(resolved)) => {
+                    save_tokens(app, &resolved.tokens)?;
+                    return Ok(resolved.cid);
+                }
+                Ok(None) => {
+                    tracing::debug!("Stored VATSIM login expired, YAAT Local needs a typed CID");
+                    clear_tokens(app)?;
+                }
+                Err(e) => return Err(e.to_string()),
+            }
+        }
+
+        Err(YAAT_LOCAL_CID_REQUIRED.to_string())
+    }
+
+    /// Sign in to a local YAAT development server with its dev login.
+    ///
+    /// The CID is the typed `cid` when given, otherwise the stored VATSIM login's CID; with
+    /// neither, returns `yaat_local_cid_required`. Call `vnas_connect` afterwards.
+    #[tauri::command]
+    pub async fn vnas_yaat_local_sign_in(
+        app: AppHandle,
+        state: State<'_, VnasState>,
+        yaat_local_url: String,
+        cid: Option<String>,
+    ) -> Result<(), String> {
+        if let Some(service) = state.service.read().await.as_ref() {
+            if is_session_active(service).await {
+                tracing::debug!("vNAS session already active, skipping YAAT Local sign-in");
+                return Ok(());
+            }
+        }
+
+        let cid = resolve_yaat_local_cid(&app, cid).await?;
+
+        let service =
+            VnasService::new(service_config(Environment::YaatLocal, Some(yaat_local_url)));
+        if let Err(e) = service.dev_login(&cid).await {
+            state.set_error(Some(e.to_string()));
+            state.update_state(SessionState::Disconnected);
+            return Err(e.to_string());
+        }
+
+        tracing::info!("YAAT Local dev login as CID {cid}");
+        *state.app_handle.write() = Some(app);
+        *state.service.write().await = Some(service);
+
+        let mut status = state.status();
+        status.environment = Environment::YaatLocal;
+        status.error = None;
+        state.set_status(status);
+
+        Ok(())
     }
 
     /// Complete the OAuth flow after browser callback.
@@ -837,7 +1015,10 @@ mod real_impl {
             .as_ref()
             .ok_or_else(|| "vNAS service not initialized".to_string())?;
 
-        let airports = service.session_airports().await.map_err(|e| e.to_string())?;
+        let airports = service
+            .session_airports()
+            .await
+            .map_err(|e| e.to_string())?;
         // Cache the resolved airports as session facilities (these are the ICAOs
         // that remote clients can see in the airport selector)
         cache_session_facilities(&airports);
@@ -906,13 +1087,10 @@ mod real_impl {
             .ok_or("Not connected - call vnas_connect first")?;
 
         // Subscribe to TowerCabAircraft topic
-        service
-            .subscribe_towercab(facility_id)
-            .await
-            .map_err(|e| {
-                state.set_error(Some(e.to_string()));
-                format!("Subscription failed: {}", e)
-            })?;
+        service.subscribe_towercab(facility_id).await.map_err(|e| {
+            state.set_error(Some(e.to_string()));
+            format!("Subscription failed: {}", e)
+        })?;
 
         state.add_facility(facility_id.to_string());
         state.update_state(SessionState::Connected);
@@ -924,7 +1102,10 @@ mod real_impl {
         let _ = app.emit("vnas-subscriptions-changed", &subscriptions);
         let _ = app.emit("vnas-state-changed", SessionState::Connected);
 
-        tracing::info!(facility_id, "Subscribed to TowerCabAircraft via remote request");
+        tracing::info!(
+            facility_id,
+            "Subscribed to TowerCabAircraft via remote request"
+        );
 
         Ok(())
     }
@@ -940,7 +1121,10 @@ mod real_impl {
 
         // Check if subscribed
         if !state.is_subscribed(facility_id) {
-            tracing::debug!(facility_id, "Not subscribed to facility, nothing to unsubscribe");
+            tracing::debug!(
+                facility_id,
+                "Not subscribed to facility, nothing to unsubscribe"
+            );
             return Ok(());
         }
 
@@ -1021,6 +1205,17 @@ mod stub_impl {
         _state: State<'_, VnasState>,
         _environment: Environment,
     ) -> Result<String, String> {
+        Err(UNAVAILABLE_MSG.to_string())
+    }
+
+    /// Sign in to a local YAAT development server (stub)
+    #[tauri::command]
+    pub async fn vnas_yaat_local_sign_in(
+        _app: AppHandle,
+        _state: State<'_, VnasState>,
+        _yaat_local_url: String,
+        _cid: Option<String>,
+    ) -> Result<(), String> {
         Err(UNAVAILABLE_MSG.to_string())
     }
 
@@ -1175,3 +1370,41 @@ pub use real_impl::*;
 
 #[cfg(not(feature = "vnas"))]
 pub use stub_impl::*;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn auth_required_false_means_available() {
+        assert!(yaat_local_auth_not_required(r#"{"required":false}"#).is_ok());
+    }
+
+    #[test]
+    fn auth_required_true_missing_or_bad_json_means_unavailable() {
+        assert!(yaat_local_auth_not_required(r#"{"required":true}"#).is_err());
+        assert!(yaat_local_auth_not_required(r#"{"other":false}"#).is_err());
+        assert!(yaat_local_auth_not_required(r#"{"required":"false"}"#).is_err());
+        assert!(yaat_local_auth_not_required("not json").is_err());
+        assert!(yaat_local_auth_not_required("").is_err());
+    }
+
+    #[test]
+    fn probe_base_accepts_http_and_https_and_trims_trailing_slash() {
+        assert_eq!(
+            yaat_local_probe_base("http://localhost:5000/"),
+            Ok("http://localhost:5000".to_string())
+        );
+        assert_eq!(
+            yaat_local_probe_base("https://yaat.example"),
+            Ok("https://yaat.example".to_string())
+        );
+    }
+
+    #[test]
+    fn probe_base_rejects_other_schemes_and_garbage() {
+        assert!(yaat_local_probe_base("ftp://localhost:5000").is_err());
+        assert!(yaat_local_probe_base("not a url").is_err());
+        assert!(yaat_local_probe_base("").is_err());
+    }
+}

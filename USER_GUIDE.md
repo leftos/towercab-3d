@@ -409,6 +409,15 @@ When using VATSIM with CRC (vNAS), the **vNAS** tab shows airports in your curre
 
 Aircraft at vNAS-enabled airports show a green indicator in the aircraft panel when receiving live updates.
 
+#### YAAT training servers
+
+TowerCab can also join your CRC session on a [YAAT](https://github.com/leftos/yaat) training server. Pick the server in the vNAS **Environment** list before connecting:
+
+- **YAAT1** — the public YAAT server. Sign in with VATSIM, as for Live.
+- **YAAT Local** — a YAAT server running on your own machine in development mode. It appears in the list only while one answers at the **YAAT Local server URL** (Settings → Configuration, default `http://localhost:5130`). It signs in with your VATSIM CID: TowerCab uses the CID of your saved VATSIM login, or asks for it once if you have none.
+
+Connect CRC to the same YAAT server and start a session; TowerCab joins it the way it joins a vNAS session. YAAT sends all aircraft updates over its hub connection, so traffic keeps YAAT's own update rate.
+
 ### Changing Airports
 
 When you select a new airport:

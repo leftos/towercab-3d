@@ -1,4 +1,4 @@
-import { create } from 'zustand'
+import { create, type StoreApi } from 'zustand'
 import { SOURCE_DISPLAY_DELAYS } from '../constants/aircraft-timeline'
 import { geoidService } from '../services/GeoidService'
 import type { AircraftMetadata, AircraftObservation } from '../types/aircraft-timeline'
@@ -6,6 +6,7 @@ import type { AircraftState } from '../types/vatsim'
 import type { VnasAircraft, VnasEnvironment, VnasStatus } from '../types/vnas'
 import { isRemoteMode } from '../utils/remoteMode'
 import { addAircraftRemovalListener, useAircraftTimelineStore } from './aircraftTimelineStore'
+import { useSettingsStore } from './settingsStore'
 
 /** Feet to meters conversion factor */
 const FEET_TO_METERS = 0.3048
@@ -161,10 +162,18 @@ interface VnasStore {
   // Timing
   lastUpdateTime: number // Local time of last aircraft update
 
+  /** True when YAAT Local sign-in needs a CID: none was saved and no VATSIM login is stored */
+  yaatLocalCidRequired: boolean
+
   // Actions
   tryRestoreSession: (environment: VnasEnvironment) => Promise<boolean>
-  /** Try to connect using stored tokens, returns true if successful, false if OAuth needed */
+  /**
+   * Try to connect using stored tokens, returns true if successful, false if OAuth needed.
+   * YAAT Local signs in with a dev login instead and always returns true.
+   */
   tryConnectWithStoredTokens: (environment: VnasEnvironment) => Promise<boolean>
+  /** Save the CID and sign in to YAAT Local with it */
+  signInYaatLocalWithCid: (cid: string) => Promise<void>
   startAuth: (environment: VnasEnvironment) => Promise<string>
   completeAuth: () => Promise<void>
   handleOAuthCallback: (callbackUrl: string) => Promise<void>
@@ -210,6 +219,57 @@ const DEFAULT_STATUS: VnasStatus = {
   available: true, // Assume available until we check
 }
 
+/** The exact rejection vnas_yaat_local_sign_in sends when it has no CID to sign in with */
+const YAAT_LOCAL_CID_REQUIRED = 'yaat_local_cid_required'
+
+/**
+ * Sign in to YAAT Local with a dev login, then connect and subscribe to the current airport.
+ * Errors land in status.error; this never throws.
+ *
+ * @param cid - The VATSIM CID to sign in as, or null to use the stored VATSIM login's CID
+ */
+async function signInYaatLocal(cid: string | null, set: StoreApi<VnasStore>['setState'], get: () => VnasStore) {
+  const { yaatLocalUrl } = useSettingsStore.getState().vnas
+
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    await invoke('vnas_yaat_local_sign_in', { yaatLocalUrl, cid })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (message === YAAT_LOCAL_CID_REQUIRED) {
+      set((state) => ({
+        yaatLocalCidRequired: true,
+        status: { ...state.status, state: 'disconnected', error: 'Enter your VATSIM CID to sign in to YAAT Local.' },
+      }))
+    } else {
+      console.warn('[vNAS] YAAT Local sign-in failed:', message)
+      set((state) => ({
+        status: { ...state.status, state: 'disconnected', error: `YAAT Local sign-in failed: ${message}` },
+      }))
+    }
+    return
+  }
+
+  set({ yaatLocalCidRequired: false })
+
+  try {
+    console.log('[vNAS] Signed in to YAAT Local, connecting...')
+    await get().connect()
+
+    const { useAirportStore } = await import('./airportStore')
+    const currentAirport = useAirportStore.getState().currentAirport
+    if (currentAirport?.icao) {
+      console.log('[vNAS] Auto-subscribing to current airport:', currentAirport.icao)
+      await get().subscribe(currentAirport.icao)
+    }
+  } catch (error) {
+    // connect() and subscribe() have already set their own state; name YAAT Local in the error
+    const message = error instanceof Error ? error.message : String(error)
+    console.warn('[vNAS] YAAT Local connection failed:', message)
+    set((state) => ({ status: { ...state.status, error: `YAAT Local sign-in failed: ${message}` } }))
+  }
+}
+
 export const useVnasStore = create<VnasStore>((set, get) => ({
   // Initial state
   status: DEFAULT_STATUS,
@@ -217,14 +277,21 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
   sessionFacilities: [],
   sessionArtccId: null,
   lastUpdateTime: 0,
+  yaatLocalCidRequired: false,
 
   /**
    * Try to restore a session from stored tokens.
    * Call this on app startup before showing OAuth UI.
    * Returns true if session was restored, false if user needs to authenticate.
+   * YAAT Local has no stored tokens, so it always returns false.
    */
   tryRestoreSession: async (environment: VnasEnvironment): Promise<boolean> => {
     if (isRemoteMode()) {
+      return false
+    }
+
+    if (environment === 'yaatlocal') {
+      console.warn('[vNAS] YAAT Local has no stored session; sign in with tryConnectWithStoredTokens')
       return false
     }
 
@@ -261,6 +328,13 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       },
     }))
 
+    // YAAT Local never falls back to OAuth, so it reports true whatever the outcome
+    if (environment === 'yaatlocal') {
+      const savedCid = useSettingsStore.getState().vnas.yaatLocalCid.trim()
+      await signInYaatLocal(savedCid === '' ? null : savedCid, set, get)
+      return true
+    }
+
     try {
       // First try to restore the session from stored tokens
       const restored = await get().tryRestoreSession(environment)
@@ -290,6 +364,20 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
   },
 
   /**
+   * Save the CID the user typed and sign in to YAAT Local with it.
+   */
+  signInYaatLocalWithCid: async (cid: string) => {
+    if (isRemoteMode()) {
+      return
+    }
+
+    const trimmed = cid.trim()
+    useSettingsStore.getState().updateVnasSettings({ yaatLocalCid: trimmed })
+    set((state) => ({ yaatLocalCidRequired: false, status: { ...state.status, error: null } }))
+    await signInYaatLocal(trimmed === '' ? null : trimmed, set, get)
+  },
+
+  /**
    * Start the OAuth authentication flow.
    * Returns the URL to open in the user's browser.
    */
@@ -298,6 +386,10 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       // Remote clients don't authenticate - host handles vNAS connection
       console.log('[vNAS] Remote mode - authentication handled by host')
       return ''
+    }
+
+    if (environment === 'yaatlocal') {
+      throw new Error('YAAT Local does not use OAuth; sign in with tryConnectWithStoredTokens')
     }
 
     // Reset frontend deduplication for new auth flow
@@ -591,6 +683,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
         status: DEFAULT_STATUS,
         aircraftStates: new Map(),
         lastUpdateTime: 0,
+        yaatLocalCidRequired: false,
       })
     } catch (error) {
       console.error('vNAS disconnect failed:', error)
@@ -601,6 +694,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
         status: DEFAULT_STATUS,
         aircraftStates: new Map(),
         lastUpdateTime: 0,
+        yaatLocalCidRequired: false,
       })
     }
   },
