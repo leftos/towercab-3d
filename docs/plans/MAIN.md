@@ -69,6 +69,7 @@ Work these in order: the harness first, since the DPR fix is verified with it.
   - [ ] `towercab-3d-vnas` `master` has no branch protection. Rulesets on a private repo need a paid plan; check the plan, then add the same force-push and deletion block `main` has here (ruleset "Protect main").
 
 - [ ] Reshape `docs/architecture.md` (982 lines of data flows) to the user-level architecture entry point (`~/.claude/docs/templates/ARCHITECTURE.md`): add a Task Index and a Layers section, keep "Hook Call Order (Critical!)" as Integration Footguns, and move each flow's detail into its own subsystem doc.
+- [ ] `.claude/skills/prepare-release/SKILL.md` step 7.3 runs the fixers `pnpm biome check src/ --fix` and `cargo fmt` outside the gate; wrap them in `pwsh tools/gate.ps1` as steps 101 and 108 now are.
 
 ## First release after 2026-09-27
 
