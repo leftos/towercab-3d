@@ -93,8 +93,6 @@ export interface BabylonSceneOptions {
   antialias?: boolean
   /** Enable transparent background (default: true for overlay mode) */
   transparent?: boolean
-  /** Device pixel ratio multiplier (default: window.devicePixelRatio) */
-  devicePixelRatio?: number
 }
 
 // ============================================================================

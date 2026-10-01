@@ -328,6 +328,11 @@ export function useBabylonLabels(options: UseBabylonLabelsOptions): UseBabylonLa
     (callsign: string, color: { r: number; g: number; b: number }, isFollowed: boolean, labelText?: string) => {
       if (!guiTexture) return
 
+      // The GUI texture is in device pixels because the engine adapts the canvas to the
+      // device ratio, so every label dimension scales by DPR. Reading the ratio on each
+      // call (rather than caching it) picks up a window moved between monitors.
+      const dpr = window.devicePixelRatio || 1
+
       let labelData = aircraftLabelsRef.current.get(callsign)
 
       if (!labelData) {
@@ -336,8 +341,6 @@ export function useBabylonLabels(options: UseBabylonLabelsOptions): UseBabylonLa
         memoryCounters.guiControlsCreated++
         label.width = 'auto'
         label.height = 'auto'
-        label.cornerRadius = 4
-        label.thickness = 1
         label.background = isFollowed ? 'rgba(0, 50, 80, 0.85)' : 'rgba(0, 0, 0, 0.85)'
         label.color = rgbToHex(color.r, color.g, color.b)
         label.adaptWidthToChildren = true
@@ -353,15 +356,10 @@ export function useBabylonLabels(options: UseBabylonLabelsOptions): UseBabylonLa
         memoryCounters.guiControlsCreated++
         text.text = labelText || callsign
         text.color = rgbToHex(color.r, color.g, color.b)
-        text.fontSize = fontSize
         text.fontFamily = '"Geist Mono", monospace'
         text.fontWeight = 'bold'
         text.textHorizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT
         text.resizeToFit = true
-        text.paddingLeft = '4px'
-        text.paddingRight = '4px'
-        text.paddingTop = '2px'
-        text.paddingBottom = '2px'
         label.addControl(text)
 
         // Create leader line
@@ -369,7 +367,6 @@ export function useBabylonLabels(options: UseBabylonLabelsOptions): UseBabylonLa
         // (GUI.Line defaults to center alignment with x1=y1=x2=y2=0)
         const leaderLine = new GUI.Line(`${callsign}_leaderLine`)
         memoryCounters.guiControlsCreated++
-        leaderLine.lineWidth = 3
         leaderLine.color = rgbToHex(color.r, color.g, color.b)
         leaderLine.zIndex = 1
         leaderLine.x1 = -10000
@@ -383,13 +380,21 @@ export function useBabylonLabels(options: UseBabylonLabelsOptions): UseBabylonLa
         aircraftLabelsRef.current.set(callsign, labelData)
       }
 
-      // Update colors, text, and font size
+      // Update colors, text, and DPR-scaled dimensions on every call, so a window moved
+      // between monitors of different DPR picks up the new ratio without recreation.
       labelData.leaderLine.color = rgbToHex(color.r, color.g, color.b)
+      labelData.leaderLine.lineWidth = 3 * dpr
       labelData.labelText.text = labelText || callsign
       labelData.labelText.color = rgbToHex(color.r, color.g, color.b)
-      labelData.labelText.fontSize = fontSize
+      labelData.labelText.fontSize = fontSize * dpr
+      labelData.labelText.paddingLeft = `${4 * dpr}px`
+      labelData.labelText.paddingRight = `${4 * dpr}px`
+      labelData.labelText.paddingTop = `${2 * dpr}px`
+      labelData.labelText.paddingBottom = `${2 * dpr}px`
       labelData.label.color = rgbToHex(color.r, color.g, color.b)
       labelData.label.background = isFollowed ? 'rgba(0, 50, 80, 0.85)' : 'rgba(0, 0, 0, 0.85)'
+      labelData.label.cornerRadius = 4 * dpr
+      labelData.label.thickness = 1 * dpr
       const scale = isFollowed ? 1.2 : 1.0
       labelData.label.scaleX = scale
       labelData.label.scaleY = scale
@@ -405,7 +410,7 @@ export function useBabylonLabels(options: UseBabylonLabelsOptions): UseBabylonLa
 
       // Scale CSS pixel coordinates to device pixels for high-DPI displays (4K monitors)
       // Cesium's worldToWindowCoordinates returns CSS pixels, but Babylon GUI operates
-      // in device pixels when the canvas is scaled by devicePixelRatio
+      // in device pixels because the engine adapts the canvas to the device ratio
       const dpr = window.devicePixelRatio || 1
       const scaledScreenX = screenX * dpr
       const scaledScreenY = screenY * dpr
@@ -415,8 +420,8 @@ export function useBabylonLabels(options: UseBabylonLabelsOptions): UseBabylonLa
       // Get label dimensions for calculations, accounting for scale (followed aircraft are 1.2x)
       const scaleX = labelData.label.scaleX ?? 1
       const scaleY = labelData.label.scaleY ?? 1
-      const labelW = (labelData.label.widthInPixels || 80) * scaleX
-      const labelH = (labelData.label.heightInPixels || 24) * scaleY
+      const labelW = (labelData.label.widthInPixels || 80 * dpr) * scaleX
+      const labelH = (labelData.label.heightInPixels || 24 * dpr) * scaleY
 
       // Check if aircraft is at least marginally within viewport
       // If aircraft is completely off-screen, hide the label entirely
@@ -447,7 +452,7 @@ export function useBabylonLabels(options: UseBabylonLabelsOptions): UseBabylonLa
       if (guiTexture) {
         const size = guiTexture.getSize()
         if (size.width > 0 && size.height > 0) {
-          const margin = 5 // Small margin from edge
+          const margin = 5 * dpr // Small margin from edge (scaled)
           labelX = Math.max(margin, Math.min(labelX, size.width - labelW - margin))
           labelY = Math.max(margin, Math.min(labelY, size.height - labelH - margin))
         }

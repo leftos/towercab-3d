@@ -67,6 +67,7 @@ const SHADOW_LIGHT_MAX_Z = 5000
  * - `preserveDrawingBuffer: true` - Required for screenshot/video capture
  * - `stencil: true` - Enables stencil buffer for advanced rendering
  * - `alpha: true` - Enables transparent canvas for overlay mode
+ * - `adaptToDeviceRatio` - The engine sizes the canvas to its CSS size × devicePixelRatio
  *
  * ## Scene Configuration
  *
@@ -115,10 +116,12 @@ const SHADOW_LIGHT_MAX_Z = 5000
  *
  * The hook automatically handles canvas resizing:
  * 1. Listens to window 'resize' events
- * 2. Updates canvas dimensions to match container (accounting for devicePixelRatio)
- * 3. Calls `engine.resize()` to update Babylon viewport
+ * 2. Calls `engine.resize()` to update the Babylon viewport
  *
- * This ensures crisp rendering on high-DPI displays and maintains correct aspect ratio.
+ * The engine owns the canvas's backing-store size: created with `adaptToDeviceRatio`,
+ * it sizes the canvas to its CSS size × devicePixelRatio (re-reading the ratio on each
+ * resize), so rendering stays crisp on high-DPI displays and the aspect ratio is
+ * preserved without any manual canvas sizing here.
  *
  * ## Resource Cleanup
  *
@@ -160,7 +163,6 @@ const SHADOW_LIGHT_MAX_Z = 5000
  * @param options.canvas - HTML canvas element for rendering (required, must be visible)
  * @param options.antialias - Enable MSAA 4x anti-aliasing (default: true)
  * @param options.transparent - Enable transparent background (default: true, required for overlay)
- * @param options.devicePixelRatio - Device pixel ratio multiplier (default: window.devicePixelRatio)
  * @returns Babylon scene state and resources
  *
  * @example
@@ -182,11 +184,10 @@ const SHADOW_LIGHT_MAX_Z = 5000
  * }
  *
  * @example
- * // Custom anti-aliasing and pixel ratio
+ * // Custom anti-aliasing
  * const { scene } = useBabylonScene({
  *   canvas: canvasRef.current,
- *   antialias: false,  // Disable for performance
- *   devicePixelRatio: 1  // Force 1x (non-retina) rendering
+ *   antialias: false  // Disable for performance
  * })
  *
  * @example
@@ -210,7 +211,7 @@ const SHADOW_LIGHT_MAX_Z = 5000
  * @see useBabylonLabels - For aircraft datablock labels
  */
 export function useBabylonScene(options: BabylonSceneOptions): UseBabylonSceneResult {
-  const { canvas, antialias = true, transparent = true, devicePixelRatio = window.devicePixelRatio } = options
+  const { canvas, antialias = true, transparent = true } = options
 
   const engineRef = useRef<BABYLON.Engine | null>(null)
   const sceneRef = useRef<BABYLON.Scene | null>(null)
@@ -258,21 +259,20 @@ export function useBabylonScene(options: BabylonSceneOptions): UseBabylonSceneRe
   useEffect(() => {
     if (!canvas || !canvasReady) return
 
-    // Set canvas size to match display size
+    // The engine reads the canvas's client size, so the canvas must be laid out first.
     const rect = canvas.getBoundingClientRect()
     if (rect.width === 0 || rect.height === 0) {
       // Shouldn't happen if canvasReady is true, but guard anyway
       return
     }
 
-    canvas.width = rect.width * devicePixelRatio
-    canvas.height = rect.height * devicePixelRatio
-
-    // Create Babylon engine
+    // Create Babylon engine. adaptToDeviceRatio lets the engine keep the canvas backing
+    // store at CSS size × devicePixelRatio, including when the ratio changes at runtime.
     const engine = new BABYLON.Engine(canvas, antialias, {
       preserveDrawingBuffer: true,
       stencil: true,
       alpha: transparent,
+      adaptToDeviceRatio: true,
     })
     engineRef.current = engine
 
@@ -342,24 +342,13 @@ export function useBabylonScene(options: BabylonSceneOptions): UseBabylonSceneRe
     )
     environmentTextureRef.current = envTexture
 
-    // Handle resize - update canvas dimensions and trigger engine resize
+    // Handle resize - engine.resize() re-reads the canvas's client size and the device
+    // ratio, then re-sizes the backing store and the viewport accordingly.
     const handleResize = () => {
       const rect = canvas.getBoundingClientRect()
       if (rect.width === 0 || rect.height === 0) return
 
-      const newWidth = rect.width * devicePixelRatio
-      const newHeight = rect.height * devicePixelRatio
-
-      // Only resize if dimensions actually changed
-      if (canvas.width !== newWidth || canvas.height !== newHeight) {
-        canvas.width = newWidth
-        canvas.height = newHeight
-        engine.resize()
-
-        // Force the GUI texture to update its internal dimensions to match the new canvas size
-        // This prevents label stretching and leader line misalignment after window resize
-        guiTexture.scaleTo(newWidth, newHeight)
-      }
+      engine.resize()
     }
 
     // Use ResizeObserver for more reliable detection of container size changes
@@ -389,7 +378,7 @@ export function useBabylonScene(options: BabylonSceneOptions): UseBabylonSceneRe
       guiTextureRef.current = null
       setSceneReady(false)
     }
-  }, [canvas, canvasReady, antialias, transparent, devicePixelRatio])
+  }, [canvas, canvasReady, antialias, transparent])
 
   return {
     engine: engineRef.current,

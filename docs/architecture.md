@@ -729,10 +729,12 @@ useBabylonOverlay was refactored from a monolithic 889-line hook into a thin orc
 ```
 useBabylonOverlay (Orchestrator - 265 LOC)
     ├─ 1. useBabylonScene({ canvas })
-    │      ├─ Creates Babylon.Engine with transparent background
+    │      ├─ Creates Babylon.Engine with transparent background and adaptToDeviceRatio
+    │      │  (the engine sizes the canvas to CSS size × devicePixelRatio)
     │      ├─ Creates Babylon.Scene with MSAA 4x anti-aliasing
     │      ├─ Creates FreeCamera (synchronized with Cesium)
-    │      ├─ Creates GUI AdvancedDynamicTexture for 2D overlays
+    │      ├─ Creates GUI AdvancedDynamicTexture for 2D overlays, in device pixels
+    │      │  (useBabylonLabels scales label positions and sizes by devicePixelRatio)
     │      ├─ Adds hemispheric and directional lighting
     │      └─ Handles canvas resizing and resource disposal
     │
