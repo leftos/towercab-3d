@@ -1,2 +1,4 @@
-# Force LF line endings for all text files to prevent CRLF issues in CI
+# LF everywhere; Windows batch files keep CRLF.
 * text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf

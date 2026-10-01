@@ -1,6 +1,13 @@
 # Run by prek (`prek install` once per clone). Each hook runs only when its own kind of file is
 # staged; CI's clippy and the weekly toolchain pin catch drift in files a commit did not touch.
 repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: mixed-line-ending
+        args: [--fix=lf]
+        exclude: '\.(bat|cmd)$'
+
   - repo: local
     hooks:
       - id: biome
