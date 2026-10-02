@@ -1,0 +1,184 @@
+{
+  "issues": {
+    "ARCH": {
+      "id": "bcf489db-2b02-49b4-9449-85f5afcbb501",
+      "identifier": "TC3D-15",
+      "linked": true
+    },
+    "DESIGN": {
+      "id": "a60fc568-74e9-45c3-8359-c3c8af471923",
+      "identifier": "TC3D-35",
+      "linked": true
+    },
+    "DIST": {
+      "id": "395763d5-b01c-4d0d-b6da-8abb339dd784",
+      "identifier": "TC3D-29",
+      "linked": true
+    },
+    "DOM": {
+      "id": "fbf132f3-ee90-4a95-86bf-0583c8cb1fb4",
+      "identifier": "TC3D-5",
+      "linked": true
+    },
+    "FMT": {
+      "id": "f5f51397-ab37-4f61-b215-a062af512c7f",
+      "identifier": "TC3D-27",
+      "linked": true
+    },
+    "GLOSS": {
+      "id": "5d2eb1e3-b0a2-4688-b2fc-2ecd023ef9e8",
+      "identifier": "TC3D-16",
+      "linked": true
+    },
+    "GS": {
+      "id": "f5feaddb-9fac-4bb0-b077-a74e368d1441",
+      "identifier": "TC3D-23",
+      "linked": true
+    },
+    "H": {
+      "id": "271b475c-5b2f-4d1e-8594-b138abe9cb38",
+      "identifier": "TC3D-14",
+      "linked": true
+    },
+    "INSET": {
+      "id": "75ed8a29-7070-4842-b48e-64ccac14e48e",
+      "identifier": "TC3D-17",
+      "linked": true
+    },
+    "LABELW": {
+      "id": "54b87a37-306c-4ef8-9253-080afbaae4d0",
+      "identifier": "TC3D-31",
+      "linked": true
+    },
+    "LAG": {
+      "id": "fda1528c-aa8c-4b9b-b90b-f04bf06eb22b",
+      "identifier": "TC3D-22",
+      "linked": true
+    },
+    "LC": {
+      "id": "c90c7730-0758-4742-94bc-73e625310cae",
+      "identifier": "TC3D-6",
+      "linked": true
+    },
+    "LC1": {
+      "id": "0ced429e-55a5-41a1-a7d7-75b99ab5635e",
+      "identifier": "TC3D-7",
+      "linked": true
+    },
+    "LC2": {
+      "id": "d379fdab-ff3a-4491-a24e-3a40d2cb096a",
+      "identifier": "TC3D-8",
+      "linked": true
+    },
+    "MAC": {
+      "id": "99afeab5-69aa-4021-8949-b4457d431985",
+      "identifier": "TC3D-24",
+      "linked": true
+    },
+    "MANI": {
+      "id": "e32f30a1-5252-42c9-b077-c735e5decb35",
+      "identifier": "TC3D-32",
+      "linked": true
+    },
+    "MSFS": {
+      "id": "db6c2410-f242-4afa-9104-6739438f5267",
+      "identifier": "TC3D-28",
+      "linked": true
+    },
+    "NEG": {
+      "id": "8ea55a35-1550-4986-9bf9-6248ced868bf",
+      "identifier": "TC3D-4",
+      "linked": true
+    },
+    "PROT": {
+      "id": "9c3c9fbd-8855-4057-9202-4c18cdd7a31a",
+      "identifier": "TC3D-33",
+      "linked": true
+    },
+    "PROTO": {
+      "id": "220a03cf-0f45-4c2e-9999-8dde06dd784d",
+      "identifier": "TC3D-26",
+      "linked": true
+    },
+    "REL": {
+      "id": "64653949-8fc3-46b6-a438-a1999928b5e7",
+      "identifier": "TC3D-34",
+      "linked": true
+    },
+    "RELSK": {
+      "id": "b0168f8c-1a7f-488e-a0fe-761a257374ce",
+      "identifier": "TC3D-30",
+      "linked": true
+    },
+    "REMOTE": {
+      "id": "92362abc-ec53-43ce-bd2d-d5ba472290c8",
+      "identifier": "TC3D-18",
+      "linked": true
+    },
+    "UDPDOC": {
+      "id": "7ae26689-ce3e-411f-9229-baca89ab4125",
+      "identifier": "TC3D-20",
+      "linked": true
+    },
+    "UNSUB": {
+      "id": "804ac142-80f1-4ea2-8179-a26dfbd1b748",
+      "identifier": "TC3D-21",
+      "linked": true
+    },
+    "VITE": {
+      "id": "47a1fe4b-4f92-45de-ad1f-d77878607c5a",
+      "identifier": "TC3D-25",
+      "linked": true
+    },
+    "W2": {
+      "id": "87a14946-e51e-4e5c-851e-6ac4e6d1f5d5",
+      "identifier": "TC3D-9",
+      "linked": true
+    },
+    "W3": {
+      "id": "201aa204-4495-4d99-83a2-8fd00d9384eb",
+      "identifier": "TC3D-10",
+      "linked": true
+    },
+    "W4": {
+      "id": "b25d1ae5-e02a-411c-a271-6578b549c246",
+      "identifier": "TC3D-11",
+      "linked": true
+    },
+    "W5": {
+      "id": "e2b5ac48-5e88-4414-afbf-c4577728da3d",
+      "identifier": "TC3D-12",
+      "linked": true
+    },
+    "W6": {
+      "id": "b09ca45f-c487-456e-b79d-ba62b9737d5b",
+      "identifier": "TC3D-13",
+      "linked": true
+    },
+    "W8": {
+      "id": "3951b936-6d52-4e39-8324-456c9e5c68c6",
+      "identifier": "TC3D-19",
+      "linked": true
+    },
+    "YAAT": {
+      "id": "7285eda2-5aac-4944-827d-9e8061fa0cbe",
+      "identifier": "TC3D-3",
+      "linked": true
+    }
+  },
+  "projects": {
+    "CF": "ecca28d2-a289-4eb3-aca7-ee78fb4785b3",
+    "DT": "62409797-2967-4bbd-9586-2c644d37e0d5",
+    "LC": "8c8df664-e7dd-4bcc-96f1-327883c967e4",
+    "REL": "ed3041d3-e1d0-450e-946c-fe9f32811a10",
+    "W10": "726563c4-c03b-47c3-9d82-fcb3e8c47cbb",
+    "W2": "4edaade0-3f89-4710-97f0-7d63de7243d6",
+    "W3": "18a8fb11-0307-44f2-9bd0-4092850066b5",
+    "W4": "a26e98ce-0db6-48b5-95bd-b667d1c30693",
+    "W5": "f5bc8f85-3ce8-48e9-a05c-10506db7868d",
+    "W6": "a6d3c4ca-25ea-4d94-b730-5d14d0adfe41",
+    "W7": "6c54a74b-1828-432a-8f9d-a7afa0f4b901",
+    "W8": "0e197952-d163-4011-8110-975d17b16e84",
+    "W9": "a5eff1d2-9099-4c9e-b087-f669c93f05c9"
+  }
+}

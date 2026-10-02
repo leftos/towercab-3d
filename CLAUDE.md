@@ -8,6 +8,10 @@ TowerCab 3D is a Tauri 2 desktop application that provides a 3D tower cab view f
 
 **Remote Browser Access:** The desktop app runs an HTTP server (port 8765) allowing access from browsers on the local network (iPad, tablets, other PCs). All mods, models, and settings are served from the host. Global settings (Cesium token, bookmarks, datablock positions) are shared across devices.
 
+## Plan
+
+The plan lives in Linear: every task is a Linear issue in team TC3D (which also plans the private `../towercab-3d-vnas` crate), grouped into projects worked in order (the `towercab-3d-nextup` profile names the order). `docs/plans/MAIN.md` is a generated snapshot of it, never edited by hand: change Linear, then regenerate it. A steer or finding mid-task gets an **add** first, before any reply in prose. The operations (**add**, **land**, **triage** and the rest) are in `~/.claude/docs/plan-operations.md`. A design for open work stays in `docs/plans/<name>.md`, linked from its project.
+
 ## Documentation Lookup
 
 When looking up documentation for libraries (Cesium, Babylon.js, React, etc.), always use the Context7 MCP tool first:

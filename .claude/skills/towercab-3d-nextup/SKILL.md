@@ -7,14 +7,16 @@ description: Profile for the user-level `nextup` skill in the towercab-3d repo (
 
 The generic loop is the user-level `nextup` skill; this file supplies only what is towercab-3d-specific.
 
+siblings: ../towercab-3d-vnas
+linear: towercab-3d
+
 ## Plan and tracker
 
-- Index: `docs/plans/MAIN.md`. Sections in priority order: `## Current focus`, then `## Next up` (waves, top to bottom; a wave is a release-sized bundle sharing owning files, its item IDs pointing into the linked subplan, e.g. `rendering-engine-audit.md`), then `## First release after …`, then `## Design track` (items that need a design before they take a wave slot). `## Blockers` is read before dispatching anything.
-- siblings: ../towercab-3d-vnas
-- `../towercab-3d-vnas` (the private vNAS crate, default branch `main`) has no plan index or changelog of its own: this index plans it, and its open work is the Testing Checklist at the end of its `docs/vnas-udp-integration-plan.md`, indexed here as a wave.
+- The plan lives in Linear: every task is a Linear issue in team TC3D, per `~/.claude/docs/plan-operations.md`; `docs/plans/MAIN.md` is its generated snapshot, never edited by hand. Project order, which is the order the queue is worked: `Current focus`, `vNAS session lifecycle`, then the waves (`Cesium 1.145 and shadow darkness` through `Cleanup singles`; a wave's item IDs point into its linked subplan, e.g. `rendering-engine-audit.md`), then `First release after 2026-09-27`, then `Design track` (items that need a design before they take a project slot). Blocked issues are read before dispatching anything.
+- `../towercab-3d-vnas` (the private vNAS crate, default branch `main`) has no plan or changelog of its own: team TC3D plans it, and its open work is the Testing Checklist at the end of its `docs/vnas-udp-integration-plan.md`, the project `vNAS dual-source and reconnect`.
 - Pre-loop hooks: none.
-- Finished-item convention: the landing commit **deletes the line** (git history keeps the item); a finished subplan moves to `docs/plans/archive/`. Review findings the item does not fix become lines in the same commit, in the wave that shares their files or under `## Next up`'s cleanup wave.
-- Tracker: `gh issue list --repo leftos/towercab-3d --state open --json number,title,createdAt`. No triage skill; place issues by the user-level step-0 rule. Crate work cites towercab-3d issues (`Closes https://github.com/leftos/towercab-3d/issues/N`).
+- An item **land**s after its commit; a finished subplan moves to `docs/plans/archive/`. Review findings the item does not fix get an **add**, in the project that shares their files, else in `Cleanup singles`.
+- Tracker: **triage** as plan-operations says (GitHub issues reach the team through Linear's sync; an untriaged one is top-level with no project), each placed in the project that shares its files, else in `Cleanup singles`. Crate work cites towercab-3d issues (`Closes https://github.com/leftos/towercab-3d/issues/N`).
 - Pull requests: `gh pr list --repo leftos/towercab-3d --state open --json number,title,author`, and the same with `--repo leftos/towercab-3d-vnas`.
 - Hotspots (two items touching one wait on each other): `src/renderer/types/settings.ts` (every setting, and `DEFAULT_SETTINGS`), `src/renderer/stores/settingsStore.ts` (the persisted `version` and the migration repair list), `src/renderer/stores/viewportStore.ts`, `src/renderer/stores/vnasStore.ts`, `src-tauri/src/vnas.rs`, `src-tauri/src/lib.rs` (the `generate_handler!` list), `src/renderer/hooks/useBabylonOverlay.ts`, `src/renderer/components/CesiumViewer/CesiumViewer.tsx`.
 
@@ -58,13 +60,13 @@ The generic loop is the user-level `nextup` skill; this file supplies only what 
 | A mod manifest field or model requirement | `MODDING.md` |
 | Remote-browser behaviour or an HTTP endpoint | `docs/remote-access-architecture.md` |
 | A vNAS environment, URL or connection step | the crate's `CLAUDE.md` "Environment URLs" and `docs/ARCHITECTURE.md` |
-| A term used in a project-specific sense | the glossary in `docs/README.md` once it exists (backlogged); until then, the plan's backlog line for it |
-| An item finished | its line deleted from `docs/plans/MAIN.md` |
+| A term used in a project-specific sense | the glossary in `docs/README.md` once it exists (an open issue); until then, a comment on that issue |
+| An item finished | its issue **land**ed after the commit |
 
 ## Landing
 
-- Non-feature items: the orchestrator writes docs, the changelog bullet and the MAIN.md line deletion in the worktree, commits there, then `/ship` (with `## Ship` below): land onto the recorded `landOn`, gate on `main`, push, close the issue, remove each half of the pair and its branch once landed by the user-level `nextup` §4 step 6 check.
-- An item under a feature marker (`branch: feat/<name>`) lands the same way onto the feature worktree, whose `landOn` is `feat/<name>`; `/ship` pushes the feature branch and watches its draft PR without merging it.
+- Non-feature items: the orchestrator writes docs and the changelog bullet in the worktree, commits there (a `Refs: TC3D-<n>` trailer per issue), then `/ship` (with `## Ship` below): land onto the recorded `landOn`, gate on `main`, push, close the issue, remove each half of the pair and its branch once landed by the user-level `nextup` §4 step 6 check.
+- An item under a feature marker (`branch: feat/<name>`) lands the same way onto the feature worktree, whose `landOn` is `feat/<name>`; `/ship` pushes the feature branch and watches its draft PR without merging it; the item is **land**ed with the note `on feat/<name>, ships with #N`.
 - Plan and docs-only commits go straight to `main` and are pushed.
 - The main checkout hosts at most one implementer, and none while a gate runs there.
 
@@ -85,5 +87,5 @@ Read by the user-level `ship`; each rule names the phase it adds to or overrides
 - Sibling (Phase 0): towercab-3d-vnas, shipped by the same phases. Source: the `towercab-3d-vnas` beside the worktree when on the same branch, else the main checkout's sibling. Target: always the main checkout's sibling, landing on its `main`.
 - Push order (Phase 4): the crate first, then towercab-3d. `vnas.js` builds every vNAS build (CI included) against the crate's GitHub `main`, so a host change pushed before the crate API it calls breaks those builds.
 - Gate (Phase 3), in towercab-3d's main checkout after a real cherry-pick: `pwsh tools/gate.ps1 -Log .tmp/check.log -TimeoutSeconds 900 -Slot heavy -- pnpm run check`; a crate change also its gates above in the crate's main checkout.
-- Additive conflict files (Phase 2): `CHANGELOG.md`, `docs/plans/MAIN.md`, `USER_GUIDE.md`.
+- Additive conflict files (Phase 2): `CHANGELOG.md`, `USER_GUIDE.md`. A conflict on the snapshot `docs/plans/MAIN.md` takes either side and runs **snapshot** again.
 - Issues (Phase 5): the issue repository is always `leftos/towercab-3d`, also for a crate-only fix.
