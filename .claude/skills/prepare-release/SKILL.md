@@ -170,6 +170,13 @@ The workflow creates a **draft** release with auto-generated notes (PR-title-der
 
    The **Installing on macOS** footer is mandatory on every release (the build is unsigned); include it verbatim. Apply the body via `gh release edit vX.X.X-alpha --notes-file <path>` (write to a temp file under `.tmp/` to avoid quoting issues).
 4. **Mark the release published if it's still a draft.** The workflow creates `draft: true`; it may already be undrafted by an upload step. Check with `gh release view vX.X.X-alpha --json isDraft`. If still draft, `gh release edit vX.X.X-alpha --draft=false`.
+5. **Complete the Linear release — no confirmation.** Cutting the release is the owner's ack for every issue that shipped in it, so this runs without asking once the release is published, from the repo root:
+
+   ```
+   uv run --project ~/.claude/tools/linear python -m linear release complete towercab-3d --version vX.X.X-alpha --sha $(git rev-parse vX.X.X-alpha^{commit}) --repo-root .
+   ```
+
+   Each Landed issue of the open release `vNext` whose landing commit is in the tag's history goes to Done with the comment `Released vX.X.X-alpha`, which closes its GitHub issue through the sync; the rest move to a new `vNext`; the release is renamed to the version (`~/.claude/docs/plan-operations.md`, **release**). Report its `<ID>: Done` / `<ID>: moved to vNext` lines. If it exits 2 with `LINEAR_OAUTH_CLIENT_ID is not set`, the shell predates the user variables: run it from PowerShell after `$env:LINEAR_OAUTH_CLIENT_ID = [Environment]::GetEnvironmentVariable('LINEAR_OAUTH_CLIENT_ID','User')` and the same for `LINEAR_OAUTH_CLIENT_SECRET`.
 
 ## Errors and recovery
 
