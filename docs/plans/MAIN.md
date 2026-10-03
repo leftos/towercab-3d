@@ -4,25 +4,30 @@
 
 ## Current focus
 
+- [!] TC3D-45 Join a YAAT room as its member, with no CRC session
 - [x] TC3D-43 Review aircraft motion: interpolation, taxi, flight, control surfaces, flare, gear and smart status · release vNext
-  - [ ] TC3D-48 Promote the aircraft-motion harness to tests/motion/
+  - [x] TC3D-48 Promote the aircraft-motion harness to tests/motion/ · release vNext
   - [ ] TC3D-49 Fix the one-site aircraft-motion bugs
-  - [ ] TC3D-50 Ground contact from vNAS height above ground
-  - [ ] TC3D-51 Treat vNAS silence for a stopped aircraft as parked
-  - [ ] TC3D-52 Aircraft orientation model: bank, rotation and flare
-  - [ ] TC3D-53 Curved VATSIM paths: splines with heading from the path
   - [ ] TC3D-54 Animate spoilers, reversers and wheels after native gear animation
 - [x] TC3D-5 Find the React DOM-nesting error seen when an airport loads · release vNext
 - [x] TC3D-3 YAAT1 environment: deploy yaat-server, then sign in with a real VATSIM login · release vNext
-- [!] TC3D-45 Join a YAAT room as its member, with no CRC session
-- [ ] TC3D-4 Join YAAT servers by negotiate and UDP, as on vNAS
+- [ ] TC3D-65 Phase badge: runway labels at the wrong times and labels lagging the display
+
+## Aircraft motion model
+
+- [ ] TC3D-52 Aircraft orientation model: bank, rotation and flare
+- [ ] TC3D-50 Ground contact from vNAS height above ground
+- [ ] TC3D-51 Treat vNAS silence for a stopped aircraft as parked
+- [ ] TC3D-53 Curved VATSIM paths: splines with heading from the path
 
 ## vNAS session lifecycle
 
 - [/] TC3D-6 vNAS session lifecycle: one subscribe per facility, clean session end
   - [ ] TC3D-7 Review round 1 on the vNAS lifecycle's Rust half
   - [ ] TC3D-8 App check, docs sweep and landing of the vNAS lifecycle
-- [ ] TC3D-47 vNAS teardown and event forwarder follow-ups
+- [/] TC3D-47 vNAS teardown and event forwarder follow-ups
+- [ ] TC3D-4 Join YAAT servers by negotiate and UDP, as on vNAS
+- [ ] TC3D-44 Crate logs the hub access token in the WebSocket URL
 
 ## Cesium 1.145 and shadow darkness
 
@@ -60,7 +65,7 @@
 - [ ] TC3D-22 Crate connect(): the invocation listener exits on RecvError::Lagged
 - [ ] TC3D-23 vnasStore: skip zero-distance groundspeed samples
 - [ ] TC3D-42 Remote browsers keep stale vNAS data after a vNAS session ends
-- [ ] TC3D-44 Crate logs the hub access token in the WebSocket URL
+- [ ] TC3D-66 Crate session_airports holds the session lock across Data API calls
 
 ## macOS signing and runtime checks
 
@@ -68,12 +73,6 @@
 
 ## Cleanup singles
 
-- [x] TC3D-37 Add the agent-mail-guard prek hook to both repos · release vNext
-- [x] TC3D-40 Set gate ceilings from measured durations · release vNext
-- [x] TC3D-41 Decide whether release blockers join the open release · release vNext
-- [x] TC3D-39 Nextup profile: a per-commit message file in the commit template · release vNext
-- [x] TC3D-38 Nextup profile: ship comments on issues instead of closing them; crate commits cite with Refs · release vNext
-- [x] TC3D-36 Commit the synced gate launcher in both repos · release vNext
 - [ ] TC3D-25 Fix Vite INEFFECTIVE_DYNAMIC_IMPORT warnings
 - [ ] TC3D-26 Decide whether protobufjs's skipped build script must run
 - [ ] TC3D-27 cargo fmt the host crate, then check it in CI and prek
@@ -83,6 +82,13 @@
 - [ ] TC3D-31 useCesiumLabels lays labels out against window.innerWidth
 - [ ] TC3D-32 Embed a common-controls manifest for the vNAS test binary
 - [ ] TC3D-33 Protect the crate repo's main branch
+- [x] TC3D-37 Add the agent-mail-guard prek hook to both repos · release vNext
+- [x] TC3D-40 Set gate ceilings from measured durations · release vNext
+- [x] TC3D-41 Decide whether release blockers join the open release · release vNext
+- [x] TC3D-39 Nextup profile: a per-commit message file in the commit template · release vNext
+- [x] TC3D-38 Nextup profile: ship comments on issues instead of closing them; crate commits cite with Refs · release vNext
+- [x] TC3D-36 Commit the synced gate launcher in both repos · release vNext
+- [ ] TC3D-64 Lint and type-check the tests/ folder
 
 ## First release after 2026-09-27
 
@@ -90,6 +96,8 @@
 
 ## Design track
 
+- [ ] TC3D-46 Design the VR rebuild with the overlay scene
+- [ ] TC3D-62 Assess rendering with a single engine
 - [x] TC3D-35 Design the larger Cesium and Babylon opportunities (E1–E3, F1–F3) · release vNext
   - [ ] TC3D-55 Expose frame timings on window.__tc3d (spike S0)
   - [ ] TC3D-56 Native glTF gear animation (E1)
@@ -98,5 +106,3 @@
   - [ ] TC3D-59 Cesium's own night lighting (E3)
   - [ ] TC3D-60 GPU particles for rain and snow (F1)
   - [ ] TC3D-61 MSDF datablock labels (F3)
-- [ ] TC3D-46 Design the VR rebuild with the overlay scene
-- [ ] TC3D-62 Assess rendering with a single engine
