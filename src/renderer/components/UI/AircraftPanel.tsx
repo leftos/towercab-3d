@@ -359,7 +359,7 @@ function AircraftPanel() {
     [],
   )
 
-  const handleRowTouchStart = (e: React.TouchEvent<HTMLButtonElement>, callsign: string) => {
+  const handleRowTouchStart = (e: React.TouchEvent<HTMLDivElement>, callsign: string) => {
     if (e.touches.length !== 1) {
       cancelLongPressTimer()
       return
@@ -375,7 +375,7 @@ function AircraftPanel() {
     }, 500)
   }
 
-  const handleRowTouchMove = (e: React.TouchEvent<HTMLButtonElement>) => {
+  const handleRowTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
     if (!touchStartPosRef.current || longPressTimerRef.current === null) return
     const touch = e.touches[0]
     const dx = touch.clientX - touchStartPosRef.current.x
@@ -385,7 +385,7 @@ function AircraftPanel() {
     }
   }
 
-  const handleRowTouchEnd = (e: React.TouchEvent<HTMLButtonElement>) => {
+  const handleRowTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
     cancelLongPressTimer()
     if (longPressFiredRef.current) {
       e.preventDefault()
@@ -588,11 +588,20 @@ function AircraftPanel() {
             const phaseLabel = aircraft.phase ? getPhaseLabel(aircraft.phase) : null
             const tierClass = aircraft.tier ? getTierClass(aircraft.tier) : ''
             return (
-              <button
-                type="button"
+              // biome-ignore lint/a11y/useSemanticElements: the row holds the follow button, and a button cannot contain a button
+              <div
+                role="button"
+                tabIndex={0}
                 key={aircraft.callsign}
                 className={`aircraft-item ${isFollowing ? 'following' : ''} ${tierClass} clickable`}
                 onClick={() => handleLookAt(aircraft)}
+                onKeyDown={(e) => {
+                  if (e.target !== e.currentTarget) return
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    handleLookAt(aircraft)
+                  }
+                }}
                 onTouchStart={(e) => handleRowTouchStart(e, aircraft.callsign)}
                 onTouchMove={handleRowTouchMove}
                 onTouchEnd={handleRowTouchEnd}
@@ -682,7 +691,7 @@ function AircraftPanel() {
                     </span>
                   </div>
                 ) : null}
-              </button>
+              </div>
             )
           })
         )}

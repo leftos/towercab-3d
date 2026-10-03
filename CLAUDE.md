@@ -33,7 +33,7 @@ Two MCP servers in `.mcp.json` drive the app:
   $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = '--remote-debugging-port=9222'; pnpm run dev
   ```
   (`pnpm run dev:vnas` the same way.) Outside the webview, the tray menu and native file dialogs are not reachable; deep links (`start tc3d://…`), single-instance and window state can be exercised from the shell.
-- **`playwright`** launches Edge against the frontend alone. Every `/api/*` request then returns the SPA's HTML, so mods, tower positions, METAR (`/api/proxy`) and saved global settings are absent and the Cesium token lasts only until reload. VATSIM traffic loads directly. To use it:
+- **`playwright`** launches Edge against the frontend alone. Every `/api/*` request then returns the SPA's HTML, so mods, tower positions, METAR (`/api/proxy`) and saved global settings are absent and the Cesium token lasts only until reload. A plain browser counts as remote mode (`isRemoteMode()`), so the app waits for the host and never polls VATSIM: no aircraft appear until polling is started by hand from `browser_evaluate` with `(await import('/stores/vatsimStore.ts')).useVatsimStore.getState().startPolling()`. To use it:
   1. Start the dev server: `pnpm run vite:dev` (port 5173)
   2. Navigate, click "Skip for now" on the Cesium token prompt — airports load from GitHub independently of the token
   3. To reset a one-time UI flag (e.g. `keyboardCheatsheetDismissed`, `deviceOptimizationPromptDismissed`), mutate via `browser_evaluate`: read `localStorage.getItem('settings-store')`, edit `parsed.state.ui.<flag>`, write back, then `browser_navigate` to reload
