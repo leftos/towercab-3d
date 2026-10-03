@@ -585,13 +585,16 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
         // Broadcast updated subscriptions to remote browsers
         invoke('broadcast_subscriptions', { facilities: status.subscribedFacilities }).catch(() => {})
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        set((state) => ({
-          status: {
-            ...state.status,
-            error: `Subscription failed: ${message}`,
-          },
-        }))
+        // A subscribe from a session that has since ended has no error to show
+        if (inFlightSubscribes.get(facilityId) === subscription) {
+          const message = error instanceof Error ? error.message : String(error)
+          set((state) => ({
+            status: {
+              ...state.status,
+              error: `Subscription failed: ${message}`,
+            },
+          }))
+        }
         throw error
       }
     }

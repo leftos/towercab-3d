@@ -133,6 +133,20 @@ describe('vnasStore.subscribeToFacility', () => {
     expect(useVnasStore.getState().isSubscribedTo('KOAK')).toBe(true)
   })
 
+  it('leaves no error behind when a subscribe from an ended session fails', async () => {
+    const staleReply = deferred()
+    heldReplies = [staleReply]
+
+    const stale = useVnasStore.getState().subscribeToFacility('KOAK')
+    await vi.waitFor(() => expect(subscribeCalls()).toHaveLength(1))
+
+    useVnasStore.getState().handleSessionEnded()
+    staleReply.reject(new Error('session ended'))
+    await expect(stale).rejects.toThrow('session ended')
+
+    expect(useVnasStore.getState().status.error).toBeNull()
+  })
+
   it('subscribes afresh after the session ends while a subscribe is pending', async () => {
     const staleReply = deferred()
     const freshReply = deferred()
