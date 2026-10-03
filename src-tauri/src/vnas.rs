@@ -872,30 +872,14 @@ mod real_impl {
         cache_state(SessionState::Connecting);
         let _ = app.emit("vnas-state-changed", SessionState::Connecting);
 
-        // Connect to SignalR hub
-        service.connect().await.map_err(|e| {
-            state.set_error(Some(e.to_string()));
-            state.update_state(SessionState::Disconnected);
-            cache_state(SessionState::Disconnected);
-            let _ = app.emit("vnas-state-changed", SessionState::Disconnected);
-            format!("Connection failed: {}", e)
-        })?;
-
-        tracing::info!("vNAS connected to SignalR hub");
-
-        // Check what state the service is in after connect
-        // It may be Subscribing (session found and joined) or WaitingForSession (CRC not running)
-        let service_state = service.state().await;
-        let frontend_state: SessionState = service_state.into();
-        state.update_state(frontend_state);
-        cache_state(frontend_state);
-        let _ = app.emit("vnas-state-changed", frontend_state);
-
-        // Start listening for events
+        // Start forwarding events before connecting, so no event the connect triggers
+        // (such as a background session join) is missed, and replace the previous
+        // forwarder here so the two never overlap.
         let event_tx = state.event_tx.clone();
-
+        let forwarder_app = app.clone();
         let mut events = service.events();
         let forwarder = tokio::spawn(async move {
+            let app = forwarder_app;
             while let Ok(event) = events.recv().await {
                 match event {
                     VnasEvent::AircraftUpdate(aircraft_list) => {
@@ -931,6 +915,25 @@ mod real_impl {
             }
         });
         state.replace_event_forwarder(forwarder);
+
+        // Connect to SignalR hub
+        service.connect().await.map_err(|e| {
+            state.set_error(Some(e.to_string()));
+            state.update_state(SessionState::Disconnected);
+            cache_state(SessionState::Disconnected);
+            let _ = app.emit("vnas-state-changed", SessionState::Disconnected);
+            format!("Connection failed: {}", e)
+        })?;
+
+        tracing::info!("vNAS connected to SignalR hub");
+
+        // Check what state the service is in after connect
+        // It may be Subscribing (session found and joined) or WaitingForSession (CRC not running)
+        let service_state = service.state().await;
+        let frontend_state: SessionState = service_state.into();
+        state.update_state(frontend_state);
+        cache_state(frontend_state);
+        let _ = app.emit("vnas-state-changed", frontend_state);
 
         Ok(())
     }
