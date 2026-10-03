@@ -440,8 +440,21 @@ export function applyAnimationPercent(
 }
 
 /**
+ * Whether gear progress drives this animation clip.
+ * MSFS models name nose-wheel steering clips with GEAR too (GEAR_STEER and the like);
+ * driving those by gear progress turns the nose wheel, so STEER clips are excluded.
+ *
+ * @param name - The glTF animation name
+ * @returns True for gear extension/retraction clips
+ */
+export function isGearClip(name: string): boolean {
+  const upper = name.toUpperCase()
+  return upper.includes('GEAR') && !upper.includes('STEER')
+}
+
+/**
  * Apply gear animations to a model at a specific percent
- * Finds all animations with "GEAR" in the name and applies them
+ * Applies every animation isGearClip accepts
  *
  * Uses cached transforms at discrete 2% intervals to avoid expensive
  * quaternion slerp and matrix operations every frame.
@@ -482,7 +495,7 @@ export function applyGearAnimationsPercent(
     progressCache = new Map()
 
     for (const animation of animationSet.animations) {
-      if (animation.name.toUpperCase().includes('GEAR')) {
+      if (isGearClip(animation.name)) {
         const success = applyAnimationPercentWithCache(
           model,
           animationSet,
@@ -501,7 +514,7 @@ export function applyGearAnimationsPercent(
 
   // No URL provided - fall back to non-cached path
   for (const animation of animationSet.animations) {
-    if (animation.name.toUpperCase().includes('GEAR')) {
+    if (isGearClip(animation.name)) {
       const success = applyAnimationPercent(model, animationSet, animation.name, snappedPercent)
       if (success) appliedCount++
     }
@@ -822,7 +835,7 @@ function parseGroundDataFromArrayBuffer(arrayBuffer: ArrayBuffer): ModelGroundDa
 
     // Parse animations to identify gear-related nodes
     const animations = parseAnimations(gltfJson, binDataChunk)
-    const gearAnimations = animations.filter((a) => a.name.toUpperCase().includes('GEAR'))
+    const gearAnimations = animations.filter((a) => isGearClip(a.name))
 
     // Compute ground data at both gear states
     const gearUpMinY = computeMinYAtGearState(extendedNodes, gearAnimations, 0.0, gltfJson)

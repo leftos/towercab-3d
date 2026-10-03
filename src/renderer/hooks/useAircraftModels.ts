@@ -19,6 +19,7 @@ import { neutralEnvironmentMapOptions } from '../utils/environmentMap'
 import {
   applyGearAnimation,
   clearGearState,
+  gearHeightAboveGroundMeters,
   getCurrentGearProgress,
   initializeGearState,
   updateGearAnimation,
@@ -330,7 +331,12 @@ export function useAircraftModels(
           // Initialize gear state based on aircraft's current conditions
           // This ensures aircraft spawning in flight have gear up, while ground aircraft have gear down
           const isOnGround = aircraft.interpolatedGroundspeed < GROUNDSPEED_THRESHOLD_KNOTS
-          const altitudeAglMeters = aircraft.interpolatedAltitude - groundElevationMeters
+          const altitudeAglMeters = gearHeightAboveGroundMeters(
+            aircraft.interpolatedAltitude,
+            groundElevationMeters,
+            aircraft.interpolatedLatitude,
+            aircraft.interpolatedLongitude,
+          )
           const altitudeAglFeet = altitudeAglMeters * 3.28084
           const verticalRateFpm = aircraft.verticalRate * 3.28084
           initializeGearState(aircraft.callsign, altitudeAglFeet, verticalRateFpm, isOnGround)
@@ -506,9 +512,13 @@ export function useAircraftModels(
             // Determine if aircraft is on ground based on groundspeed threshold
             const isOnGround = aircraft.interpolatedGroundspeed < GROUNDSPEED_THRESHOLD_KNOTS
 
-            // Calculate AGL (above ground level) by subtracting ground elevation from aircraft altitude
-            // Both values are in meters MSL, so the difference gives us AGL
-            const altitudeAglMeters = aircraft.interpolatedAltitude - groundElevationMeters
+            // AGL from the ellipsoidal aircraft altitude and the MSL ground, converted to one datum
+            const altitudeAglMeters = gearHeightAboveGroundMeters(
+              aircraft.interpolatedAltitude,
+              groundElevationMeters,
+              aircraft.interpolatedLatitude,
+              aircraft.interpolatedLongitude,
+            )
             const altitudeAglFeet = altitudeAglMeters * 3.28084
 
             // Convert vertical rate from meters/min to feet/min

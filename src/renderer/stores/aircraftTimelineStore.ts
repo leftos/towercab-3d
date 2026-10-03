@@ -27,7 +27,6 @@
 import { create } from 'zustand'
 import {
   AIRCRAFT_TIMEOUT,
-  DYNAMIC_DELAY_BOOTSTRAP_MS,
   DYNAMIC_DELAY_EXTRAPOLATION_BUMP_MS,
   DYNAMIC_DELAY_EXTRAPOLATION_DECAY_RATE,
   DYNAMIC_DELAY_INTERVAL_WINDOW,
@@ -45,6 +44,7 @@ import {
   SOURCE_DISPLAY_DELAYS,
   VNAS_PREFERENCE_THRESHOLD_MS,
 } from '../constants/aircraft-timeline'
+import { GROUNDSPEED_THRESHOLD_KNOTS } from '../constants/rendering'
 import type {
   AircraftMetadata,
   AircraftObservation,
@@ -409,6 +409,21 @@ function calculateObservationIntervals(observations: AircraftObservation[], maxI
 }
 
 /**
+ * The newest stored observation from the given source, or null when there is none.
+ * The minimum-spacing check compares against this so a sample from one source never
+ * causes a sample from another source to be dropped.
+ */
+function lastObservationOfSource(
+  observations: AircraftObservation[],
+  source: AircraftObservation['source'],
+): AircraftObservation | null {
+  for (let i = observations.length - 1; i >= 0; i--) {
+    if (observations[i].source === source) return observations[i]
+  }
+  return null
+}
+
+/**
  * Filter observations to prefer vNAS when recent.
  * This is the same logic used in interpolateTimeline for consistency.
  *
@@ -433,12 +448,16 @@ function filterObservationsForSource(observations: AircraftObservation[], now: n
  * Uses the maximum recent interval plus a jitter buffer to ensure
  * we always have enough time for interpolation.
  *
+ * Until there are enough observations to measure, the source's display delay is the target.
+ *
+ * @param observations - Observations the intervals were measured from (vNAS-filtered)
  * @param intervals - Recent observation intervals in ms
  * @returns Target delay in milliseconds
  */
-function calculateTargetDelay(intervals: number[]): number {
-  if (intervals.length === 0) {
-    return DYNAMIC_DELAY_BOOTSTRAP_MS
+function calculateTargetDelay(observations: AircraftObservation[], intervals: number[]): number {
+  if (observations.length < DYNAMIC_DELAY_MIN_OBSERVATIONS || intervals.length === 0) {
+    const newest = observations[observations.length - 1]
+    return newest.displayDelay ?? SOURCE_DISPLAY_DELAYS[newest.source]
   }
 
   // Use max interval to handle worst-case timing
@@ -472,16 +491,13 @@ function updateDynamicDelayState(
   const intervals = calculateObservationIntervals(filteredObs, DYNAMIC_DELAY_INTERVAL_WINDOW)
 
   // Calculate target delay
-  const targetDelayMs = calculateTargetDelay(intervals)
+  const targetDelayMs = calculateTargetDelay(filteredObs, intervals)
 
   if (!existingState) {
-    // New aircraft - initialize with target as current
-    // (or bootstrap delay if we don't have enough data yet)
-    const initialDelay =
-      observations.length < DYNAMIC_DELAY_MIN_OBSERVATIONS ? DYNAMIC_DELAY_BOOTSTRAP_MS : targetDelayMs
-
+    // New aircraft - start at the target (the source's display delay until intervals can be measured),
+    // so the delay never has to ramp up from a short bootstrap value at the rate limit
     return {
-      currentDelayMs: initialDelay,
+      currentDelayMs: targetDelayMs,
       targetDelayMs,
       lastUpdateTime: now,
       intervalHistory: intervals,
@@ -1139,13 +1155,15 @@ function interpolateTimeline(
     }
     isExtrapolating = true
   } else if (after) {
-    // EXTRAPOLATION BACKWARD: displayTime is before all observations (rare)
-    // Just use the first observation as-is
+    // HELD: displayTime is before all observations (a new aircraft, until display time reaches its first report).
+    // It is drawn at the first observation. On the ground it stands still, so report what is drawn: no speed,
+    // no track. An airborne first report keeps its speed and track so the aircraft stays at its altitude.
+    const heldOnGround = after.onGround === true || after.groundspeed < GROUNDSPEED_THRESHOLD_KNOTS
     latitude = after.latitude
     longitude = after.longitude
     altitude = after.altitude
-    groundspeed = after.groundspeed
-    groundTrack = after.groundTrack
+    groundspeed = heldOnGround ? 0 : after.groundspeed
+    groundTrack = heldOnGround ? null : after.groundTrack
     // Pass through ADS-B data
     onGround = after.onGround
     pitch = after.pitch
@@ -1269,8 +1287,8 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
     if (existing) {
       oldestBefore = existing.observations[0]?.observedAt ?? null
 
-      // Check if this observation is too close to the last one
-      const lastObs = existing.observations[existing.observations.length - 1]
+      // Check if this observation is too close to the last one from the same source
+      const lastObs = lastObservationOfSource(existing.observations, observation.source)
       if (lastObs && observation.receivedAt - lastObs.receivedAt < MIN_OBSERVATION_INTERVAL) {
         // Too close, skip this observation but update metadata.
         // Preserve existing lastSource — the dropped observation didn't actually
@@ -1393,8 +1411,8 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       if (existing) {
         oldestBefore = existing.observations[0]?.observedAt ?? null
 
-        // Check if this observation is too close to the last one
-        const lastObs = existing.observations[existing.observations.length - 1]
+        // Check if this observation is too close to the last one from the same source
+        const lastObs = lastObservationOfSource(existing.observations, observation.source)
         if (lastObs && observation.receivedAt - lastObs.receivedAt < MIN_OBSERVATION_INTERVAL) {
           // Too close, skip but update metadata. Preserve existing lastSource —
           // the dropped observation's position wasn't kept, so the source of the
@@ -1695,28 +1713,19 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
           reconciliationsChanged = true
         }
 
-        // Update dynamic delay state on the timeline only if meaningful values changed.
-        // Compare by value since applyDelayTransition always returns a new object.
-        // Only currentDelayMs matters for rendering; extrapolationBumpMs affects future transitions.
+        // Save the dynamic delay state every frame, even when the delay itself is steady:
+        // applyDelayTransition rate-limits by the time since lastUpdateTime, so a stale
+        // lastUpdateTime would let the first change after a steady period jump in one frame.
         if (interpolation.newDynamicDelay) {
-          const oldDelay = timeline.dynamicDelay
-          const newDelay = interpolation.newDynamicDelay
-          const delayChanged =
-            !oldDelay ||
-            oldDelay.currentDelayMs !== newDelay.currentDelayMs ||
-            oldDelay.extrapolationBumpMs !== newDelay.extrapolationBumpMs
-
-          if (delayChanged) {
-            // Lazily create the Map copy only when we have changes
-            if (!updatedTimelines) {
-              updatedTimelines = new Map(timelines)
-            }
-            updatedTimelines.set(callsign, {
-              ...timeline,
-              dynamicDelay: newDelay,
-            })
-            timelinesChanged = true
+          // Lazily create the Map copy only when there is a delay state to save
+          if (!updatedTimelines) {
+            updatedTimelines = new Map(timelines)
           }
+          updatedTimelines.set(callsign, {
+            ...timeline,
+            dynamicDelay: interpolation.newDynamicDelay,
+          })
+          timelinesChanged = true
         }
       }
     }

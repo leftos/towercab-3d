@@ -28,7 +28,28 @@
  */
 
 import type * as Cesium from 'cesium'
+import { geoidService } from '../services/GeoidService'
 import { type AnimationSet, applyGearAnimationsPercent, parseAnimationSetFromUrl } from './gltfAnimationParser'
+
+/**
+ * Height of an aircraft above the ground, in one datum, for the gear rules.
+ * The aircraft altitude is an ellipsoidal height while the ground elevation is MSL, so the
+ * ground is converted to an ellipsoidal height at the aircraft's position before subtracting.
+ *
+ * @param ellipsoidalAltitude - Aircraft altitude in meters above the WGS84 ellipsoid
+ * @param groundElevationMslMeters - Ground elevation in meters MSL
+ * @param lat - Aircraft latitude in degrees
+ * @param lon - Aircraft longitude in degrees
+ * @returns Height above the ground in meters
+ */
+export function gearHeightAboveGroundMeters(
+  ellipsoidalAltitude: number,
+  groundElevationMslMeters: number,
+  lat: number,
+  lon: number,
+): number {
+  return ellipsoidalAltitude - geoidService.mslToEllipsoidal(lat, lon, groundElevationMslMeters)
+}
 
 /** Gear animation state */
 export type GearState = 'up' | 'extending' | 'down' | 'retracting'

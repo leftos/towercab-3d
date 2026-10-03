@@ -120,14 +120,9 @@ export const DYNAMIC_DELAY_MIN_MS = 150
 export const DYNAMIC_DELAY_MAX_MS = 20000
 
 /**
- * Default delay used when there aren't enough observations to calculate
- * a dynamic delay (ms). Conservative value for new aircraft.
- */
-export const DYNAMIC_DELAY_BOOTSTRAP_MS = 2000
-
-/**
- * Minimum observations needed before switching from bootstrap delay
- * to calculated dynamic delay. Need at least 3 to have 2 intervals.
+ * Minimum observations needed before switching from the source's display delay
+ * (the observation's displayDelay, else SOURCE_DISPLAY_DELAYS) to the delay
+ * measured from observation intervals. Need at least 3 to have 2 intervals.
  */
 export const DYNAMIC_DELAY_MIN_OBSERVATIONS = 3
 
@@ -145,7 +140,6 @@ export const DYNAMIC_DELAY_MAX_DECREASE_RATE = 500
  * so transitions in either direction look the same.
  */
 export const DYNAMIC_DELAY_MAX_INCREASE_RATE = 500
-
 /**
  * Amount to increase delay when extrapolation is detected (ms).
  * This immediate bump ensures we don't extrapolate again on the next frame.

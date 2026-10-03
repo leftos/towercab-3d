@@ -294,7 +294,13 @@ function recordFrame(deps: FrameDeps, feed: FeedState, e: AircraftEntry, now: nu
 
   const onGroundApp = e.interpolatedGroundspeed < 40
   const vrFpm = e.verticalRate * 3.28084
-  const aglFtApp = (e.interpolatedAltitude - GROUND_MSL) * 3.28084
+  const aglFtApp =
+    deps.gear.gearHeightAboveGroundMeters(
+      e.interpolatedAltitude,
+      GROUND_MSL,
+      e.interpolatedLatitude,
+      e.interpolatedLongitude,
+    ) * 3.28084
   const aglFtEll = (e.interpolatedAltitude - deps.groundEllip) * 3.28084
   if (!feed.gearInit.has(e.callsign)) {
     feed.gearInit.add(e.callsign)

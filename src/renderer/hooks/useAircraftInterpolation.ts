@@ -9,7 +9,6 @@ import {
   DEPARTURE_BLEND_START_AGL,
   FALLBACK_FLARE_PITCH_DEGREES,
   FLARE_START_ALTITUDE_METERS,
-  FLYING_AIRCRAFT_TERRAIN_OFFSET,
   GROUND_AIRCRAFT_TERRAIN_OFFSET,
   HEIGHT_TRANSITION_LERP_FACTOR,
   LANDING_BLEND_DESCENT_RATE,
@@ -600,13 +599,12 @@ function runInterpolationFrame() {
       terrainClampedHeight = groundEllipsoidHeight + GROUND_AIRCRAFT_TERRAIN_OFFSET
     }
 
-    // Calculate flying height with progressive offset (0.1m at ground → 5m at 30m AGL)
-    let flyingOffset = FLYING_AIRCRAFT_TERRAIN_OFFSET
+    // Airborne aircraft are drawn at their reported (already ellipsoidal) altitude. Near the ground the
+    // ground offset fades out over the first 30 m AGL so the hand-off from the terrain clamp is continuous.
+    let flyingOffset = 0
     if (sampledTerrainHeight !== undefined) {
       const transitionProgress = Math.min(1.0, Math.max(0, altitudeAGL / 30))
-      flyingOffset =
-        GROUND_AIRCRAFT_TERRAIN_OFFSET +
-        (FLYING_AIRCRAFT_TERRAIN_OFFSET - GROUND_AIRCRAFT_TERRAIN_OFFSET) * transitionProgress
+      flyingOffset = GROUND_AIRCRAFT_TERRAIN_OFFSET * (1 - transitionProgress)
     }
     const reportedHeightWithOffset = reportedEllipsoidHeight + flyingOffset
 

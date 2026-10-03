@@ -111,14 +111,6 @@ export const LOW_ALTITUDE_AGL_THRESHOLD_M = 300
 export const GROUND_AIRCRAFT_TERRAIN_OFFSET = 0.1
 
 /**
- * Terrain offset for flying aircraft in meters
- *
- * Base offset added to altitude for aircraft in flight.
- * Accounts for geoid offset (ellipsoid vs MSL difference).
- */
-export const FLYING_AIRCRAFT_TERRAIN_OFFSET = 5
-
-/**
  * Additional height offset for FSLTL models in meters
  *
  * FSLTL models have their origin at ground level (gear touching ground),
@@ -637,7 +629,7 @@ export const DEPARTURE_BLEND_START_AGL = 5
 /**
  * Altitude AGL (meters) where departure blend is complete (fully on reported)
  *
- * At this altitude, aircraft uses full reported altitude with flying offset.
+ * At this altitude, aircraft uses full reported altitude.
  *
  * Default: 35 meters (~115 feet) - generous transition zone
  */
