@@ -164,6 +164,86 @@
       "id": "7285eda2-5aac-4944-827d-9e8061fa0cbe",
       "identifier": "TC3D-3",
       "linked": true
+    },
+    "agent": {
+      "id": "72992094-ac29-4da6-a40a-7e5d3e28a46d",
+      "identifier": "TC3D-92",
+      "linked": true
+    },
+    "aircraft": {
+      "id": "be84dbda-67b9-42e5-9170-2a1003a5c889",
+      "identifier": "TC3D-84",
+      "linked": true
+    },
+    "badges": {
+      "id": "4b7dbff3-637c-439f-acef-8bcd033dfccc",
+      "identifier": "TC3D-91",
+      "linked": true
+    },
+    "camera": {
+      "id": "afdf38ef-a0d1-4931-a6b7-20994cc24e5a",
+      "identifier": "TC3D-87",
+      "linked": true
+    },
+    "cleanup": {
+      "id": "b2adf804-7e13-4537-89b4-125720622b1c",
+      "identifier": "TC3D-93",
+      "linked": true
+    },
+    "connections": {
+      "id": "47f97db9-3d01-4ef2-96b9-855b9532f04e",
+      "identifier": "TC3D-82",
+      "linked": true
+    },
+    "developer": {
+      "id": "66304710-72bc-4f58-a3b2-0e5787949cc9",
+      "identifier": "TC3D-89",
+      "linked": true
+    },
+    "docs": {
+      "id": "0d257311-4126-45d1-a2ce-f1fbb03fb386",
+      "identifier": "TC3D-94",
+      "linked": true
+    },
+    "general": {
+      "id": "1c84a02f-921f-42e0-9a0a-51b371a4cfee",
+      "identifier": "TC3D-81",
+      "linked": true
+    },
+    "mods": {
+      "id": "144c6c7d-b757-4548-adf8-a67688159a45",
+      "identifier": "TC3D-80",
+      "linked": true
+    },
+    "scene": {
+      "id": "8097dcb5-c480-4787-83b8-ec63406582ac",
+      "identifier": "TC3D-85",
+      "linked": true
+    },
+    "search": {
+      "id": "f0b6057c-0fda-41cb-b99c-dd34f1ad3bc9",
+      "identifier": "TC3D-90",
+      "linked": true
+    },
+    "shell": {
+      "id": "30928ca7-2bb5-4614-b103-8238e2116b6e",
+      "identifier": "TC3D-79",
+      "linked": true
+    },
+    "storage": {
+      "id": "1876bcb1-943f-40c6-a5dc-43eb9667e7f1",
+      "identifier": "TC3D-88",
+      "linked": true
+    },
+    "traffic": {
+      "id": "452819d6-7f01-4c1e-bef2-79a4af5e8f2f",
+      "identifier": "TC3D-83",
+      "linked": true
+    },
+    "weather": {
+      "id": "d9f6ea4a-2d71-4f26-9856-be5aa42bd2f5",
+      "identifier": "TC3D-86",
+      "linked": true
     }
   },
   "projects": {
@@ -179,6 +259,7 @@
     "W6": "a6d3c4ca-25ea-4d94-b730-5d14d0adfe41",
     "W7": "6c54a74b-1828-432a-8f9d-a7afa0f4b901",
     "W8": "0e197952-d163-4011-8110-975d17b16e84",
-    "W9": "a5eff1d2-9099-4c9e-b087-f669c93f05c9"
+    "W9": "a5eff1d2-9099-4c9e-b087-f669c93f05c9",
+    "drawer": "c9131627-8e3a-466b-a43e-23f528e37eef"
   }
 }
