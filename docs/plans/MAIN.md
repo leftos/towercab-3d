@@ -108,3 +108,10 @@
   - [ ] TC3D-59 Cesium's own night lighting (E3)
   - [ ] TC3D-60 GPU particles for rain and snow (F1)
   - [ ] TC3D-61 MSDF datablock labels (F3)
+- [ ] TC3D-69 Design a binoculars key for a quick zoom on the selected aircraft
+- [ ] TC3D-70 Design METAR-accurate visibility: RVR, vertical visibility and calibrated fog
+- [ ] TC3D-71 Design airport lighting: runway, approach and taxiway lights and stop bars
+- [ ] TC3D-72 Design replay clips: marks, trimmed export and video
+- [ ] TC3D-73 Design a remote browser that follows the desktop's selected aircraft
+- [ ] TC3D-74 Design selecting an aircraft on the desktop from a phone
+- [ ] TC3D-75 Design a command palette for airports, bookmarks, aircraft and toggles
