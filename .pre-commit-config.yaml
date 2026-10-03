@@ -29,3 +29,9 @@ repos:
         language: system
         pass_filenames: false
         files: ^src-tauri/.*\.rs$
+      - id: agent-mail-guard
+        name: agent-mail lease guard
+        entry: pwsh -NoProfile -File tools/agent-mail-guard.ps1
+        language: system
+        pass_filenames: true
+        stages: [pre-commit]
