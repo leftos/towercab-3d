@@ -25,7 +25,7 @@ export function VnasPanel() {
   const tryConnectWithStoredTokens = useVnasStore((state) => state.tryConnectWithStoredTokens)
   const startAuth = useVnasStore((state) => state.startAuth)
   const handleOAuthCallback = useVnasStore((state) => state.handleOAuthCallback)
-  const subscribe = useVnasStore((state) => state.subscribe)
+  const subscribeToFacility = useVnasStore((state) => state.subscribeToFacility)
   const isSubscribedTo = useVnasStore((state) => state.isSubscribedTo)
   const disconnect = useVnasStore((state) => state.disconnect)
   const getStatus = useVnasStore((state) => state.getStatus)
@@ -93,11 +93,11 @@ export function VnasPanel() {
   const handleSubscribe = useCallback(async () => {
     if (!currentAirport?.icao) return
     try {
-      await subscribe(currentAirport.icao)
+      await subscribeToFacility(currentAirport.icao)
     } catch (error) {
       console.error('vNAS subscribe failed:', error)
     }
-  }, [subscribe, currentAirport?.icao])
+  }, [subscribeToFacility, currentAirport?.icao])
 
   const getStateColor = useCallback(() => {
     switch (status.state) {

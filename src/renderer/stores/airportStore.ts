@@ -159,7 +159,7 @@ export const useAirportStore = create<AirportStore>()((set, get) => ({
       const vnasState = useVnasStore.getState()
       if (vnasState.canSubscribe()) {
         // Fire and forget - don't await, don't block airport selection
-        vnasState.subscribe(icao).catch((err) => {
+        vnasState.subscribeToFacility(icao).catch((err) => {
           console.warn('vNAS auto-subscribe failed:', err)
         })
       }

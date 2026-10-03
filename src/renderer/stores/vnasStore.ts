@@ -50,6 +50,15 @@ function getOnGroundWithHysteresis(callsign: string, altitudeAglFt: number): boo
 /** Number of samples to keep in the speed history window */
 const SPEED_WINDOW_SIZE = 5
 
+/**
+ * Hub subscribes still in flight, keyed by the facility id sent to the hub.
+ * Several callers race to subscribe to the same facility (airport load, session
+ * restore, the auto-subscribe effect); only the first reaches the hub and the
+ * rest await its promise. An entry is deleted when its promise settles either way,
+ * and the whole map when the session ends.
+ */
+const inFlightSubscribes = new Map<string, Promise<void>>()
+
 // Drop per-aircraft state when the timeline removes an aircraft (explicit removal
 // or stale-prune). Without this, speedHistory and groundStateHistory grow without
 // bound across a session because vNAS only clears them on explicit SignalR
@@ -121,7 +130,7 @@ function addSpeedSampleAndGetAverage(callsign: string, newSpeed: number): number
  * 2. Browser opens auth.vfsp.net, user logs in with VATSIM
  * 3. After callback, completeAuth() is called
  * 4. connect() establishes SignalR WebSocket
- * 5. subscribe() registers for TowerCabAircraft updates
+ * 5. subscribeToFacility() registers for TowerCabAircraft updates
  * 6. Aircraft updates arrive via handleAircraftUpdate()
  */
 
@@ -178,9 +187,7 @@ interface VnasStore {
   completeAuth: () => Promise<void>
   handleOAuthCallback: (callbackUrl: string) => Promise<void>
   connect: () => Promise<void>
-  /** Subscribe to a facility (replaces existing subscriptions) */
-  subscribe: (facilityId: string) => Promise<void>
-  /** Subscribe to an additional facility (additive, supports multiple) */
+  /** Subscribe to a facility (additive, supports multiple) */
   subscribeToFacility: (facilityId: string) => Promise<void>
   /** Unsubscribe from a facility */
   unsubscribeFromFacility: (facilityId: string) => Promise<void>
@@ -209,6 +216,8 @@ interface VnasStore {
   setSubscribedFacilities: (facilities: string[]) => void
   setSessionFacilities: (facilities: string[]) => void
   removeAircraft: (callsign: string) => void
+  /** Drop the ended session's aircraft state, facility lists and vNAS observations */
+  handleSessionEnded: () => void
 }
 
 const DEFAULT_STATUS: VnasStatus = {
@@ -260,10 +269,10 @@ async function signInYaatLocal(cid: string | null, set: StoreApi<VnasStore>['set
     const currentAirport = useAirportStore.getState().currentAirport
     if (currentAirport?.icao) {
       console.log('[vNAS] Auto-subscribing to current airport:', currentAirport.icao)
-      await get().subscribe(currentAirport.icao)
+      await get().subscribeToFacility(currentAirport.icao)
     }
   } catch (error) {
-    // connect() and subscribe() have already set their own state; name YAAT Local in the error
+    // connect() and subscribeToFacility() have already set their own state; name YAAT Local in the error
     const message = error instanceof Error ? error.message : String(error)
     console.warn('[vNAS] YAAT Local connection failed:', message)
     set((state) => ({ status: { ...state.status, error: `YAAT Local sign-in failed: ${message}` } }))
@@ -352,7 +361,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       const currentAirport = useAirportStore.getState().currentAirport
       if (currentAirport?.icao) {
         console.log('[vNAS] Auto-subscribing to current airport:', currentAirport.icao)
-        await get().subscribe(currentAirport.icao)
+        await get().subscribeToFacility(currentAirport.icao)
       }
 
       return true
@@ -487,7 +496,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       const currentAirport = useAirportStore.getState().currentAirport
       if (currentAirport?.icao) {
         console.log('[vNAS] Auto-subscribing to current airport:', currentAirport.icao)
-        await get().subscribe(currentAirport.icao)
+        await get().subscribeToFacility(currentAirport.icao)
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -534,52 +543,13 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
   },
 
   /**
-   * Subscribe to TowerCabAircraft updates for a facility (replaces existing subscriptions).
+   * Subscribe to TowerCabAircraft updates for a facility (additive).
+   * Supports multiple simultaneous subscriptions within the same CRC session.
+   * Concurrent calls for one facility share a single hub subscribe.
    * @param icaoCode - ICAO code of the airport (e.g., "KSFO" or "SFO")
    *
    * Note: vNAS facility IDs don't include the K prefix for US airports.
    * This function automatically strips it (KSFO -> SFO).
-   */
-  subscribe: async (icaoCode: string) => {
-    if (isRemoteMode()) {
-      // In remote mode, vNAS subscriptions are handled by the host
-      return
-    }
-
-    // vNAS facility IDs don't have K prefix for US airports (KSFO -> SFO)
-    let facilityId = icaoCode
-    if (icaoCode.startsWith('K') && icaoCode.length === 4) {
-      facilityId = icaoCode.slice(1)
-      console.log(`[vNAS] Stripped K prefix: ${icaoCode} -> ${facilityId}`)
-    }
-
-    try {
-      const { invoke } = await import('@tauri-apps/api/core')
-      await invoke('vnas_subscribe', { facilityId })
-
-      // Explicitly fetch and update status after subscription.
-      // This ensures UI updates even if event listeners have issues.
-      const status = await invoke<VnasStatus>('vnas_get_status')
-      set({ status })
-
-      // Broadcast updated subscriptions to remote browsers
-      invoke('broadcast_subscriptions', { facilities: status.subscribedFacilities }).catch(() => {})
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      set((state) => ({
-        status: {
-          ...state.status,
-          error: `Subscription failed: ${message}`,
-        },
-      }))
-      throw error
-    }
-  },
-
-  /**
-   * Subscribe to TowerCabAircraft updates for an additional facility (additive).
-   * Supports multiple simultaneous subscriptions within the same CRC session.
-   * @param icaoCode - ICAO code of the airport (e.g., "KSFO" or "SFO")
    */
   subscribeToFacility: async (icaoCode: string) => {
     if (isRemoteMode()) {
@@ -587,6 +557,10 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       return
     }
 
+    if (get().isSubscribedTo(icaoCode)) {
+      return
+    }
+
     // vNAS facility IDs don't have K prefix for US airports (KSFO -> SFO)
     let facilityId = icaoCode
     if (icaoCode.startsWith('K') && icaoCode.length === 4) {
@@ -594,31 +568,51 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       console.log(`[vNAS] Stripped K prefix: ${icaoCode} -> ${facilityId}`)
     }
 
-    try {
-      const { invoke } = await import('@tauri-apps/api/core')
-      await invoke('vnas_subscribe_facility', { facilityId })
-
-      // Explicitly fetch and update status after subscription.
-      const status = await invoke<VnasStatus>('vnas_get_status')
-      set({ status })
-
-      // Broadcast updated subscriptions to remote browsers
-      invoke('broadcast_subscriptions', { facilities: status.subscribedFacilities }).catch(() => {})
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      set((state) => ({
-        status: {
-          ...state.status,
-          error: `Subscription failed: ${message}`,
-        },
-      }))
-      throw error
+    const inFlight = inFlightSubscribes.get(facilityId)
+    if (inFlight) {
+      return inFlight
     }
+
+    const subscribeOnHub = async () => {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core')
+        await invoke('vnas_subscribe_facility', { facilityId })
+
+        // Explicitly fetch and update status after subscription.
+        const status = await invoke<VnasStatus>('vnas_get_status')
+        set({ status })
+
+        // Broadcast updated subscriptions to remote browsers
+        invoke('broadcast_subscriptions', { facilities: status.subscribedFacilities }).catch(() => {})
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        set((state) => ({
+          status: {
+            ...state.status,
+            error: `Subscription failed: ${message}`,
+          },
+        }))
+        throw error
+      }
+    }
+
+    const subscription: Promise<void> = subscribeOnHub().finally(() => {
+      // A session that ended meanwhile cleared the map, and a newer subscribe may
+      // own this facility's entry now; only remove the entry if it is still ours.
+      if (inFlightSubscribes.get(facilityId) === subscription) {
+        inFlightSubscribes.delete(facilityId)
+      }
+    })
+
+    inFlightSubscribes.set(facilityId, subscription)
+    return subscription
   },
 
   /**
    * Unsubscribe from a facility.
    * Called when switching away from an airport.
+   * This drops the facility from the local subscribed list only — the hub-side
+   * subscription stays for the life of the session (there is no hub unsubscribe).
    */
   unsubscribeFromFacility: async (icaoCode: string) => {
     if (isRemoteMode()) {
@@ -1135,9 +1129,14 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
   /**
    * Remove an aircraft from the store.
    * Called when the SignalR hub sends an explicit disconnect message.
-   * This allows the aircraft to fall back to VATSIM data if available.
+   * The aircraft's vNAS observations are dropped from the unified timeline, so it
+   * falls back to VATSIM data when VATSIM also reports it.
    */
   removeAircraft: (callsign: string) => {
+    // Drop the vNAS half of the timeline whether or not this store still holds the
+    // aircraft: a hub disconnect means the 1Hz feed for it is over.
+    useAircraftTimelineStore.getState().dropSourceObservations('vnas', [callsign])
+
     const { aircraftStates } = get()
 
     // Only remove if the aircraft exists
@@ -1155,5 +1154,26 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
     set({
       aircraftStates: newAircraftStates,
     })
+  },
+
+  /**
+   * Drop everything the ended session left behind.
+   *
+   * Called when the service reports the session is over, whether the server ended
+   * it or the user disconnected: the per-aircraft maps, the facility lists and the
+   * session's vNAS observations all go. Aircraft that VATSIM also reports carry on
+   * from their VATSIM timeline.
+   */
+  handleSessionEnded: () => {
+    // A subscribe still in flight belongs to the old session; the next one must reach the hub
+    inFlightSubscribes.clear()
+    speedHistory.clear()
+    groundStateHistory.clear()
+    useAircraftTimelineStore.getState().dropSourceObservations('vnas')
+    set((state) => ({
+      aircraftStates: new Map(),
+      sessionFacilities: [],
+      status: { ...state.status, subscribedFacilities: [] },
+    }))
   },
 }))
