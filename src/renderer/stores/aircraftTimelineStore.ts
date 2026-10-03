@@ -544,8 +544,8 @@ function updateDynamicDelayState(
  *   source: The data source whose observations go.
  *   vatsimEntry: The aircraft's entry from the latest VATSIM pilot list, when VATSIM lists it.
  *     It becomes the newest observation (replacing any stored point at or after its
- *     observedAt), so the aircraft carries on from VATSIM's current position with a
- *     receive time of now instead of timing out on older points.
+ *     observedAt), so the aircraft carries on from VATSIM's latest position with that
+ *     batch's receive time instead of timing out on older points.
  *
  * Returns:
  *   The stripped timeline with lastSource, lastReceivedAt and dynamicDelay re-derived
@@ -578,17 +578,24 @@ function withoutSource(
 
 /**
  * Build a lookup from callsign to that aircraft's entry in the latest VATSIM pilot list,
- * as an observation received now. Finds nothing when the dropped source is VATSIM itself.
+ * timed as that batch was (its update timestamp, and the time this client received it).
+ *
+ * Finds nothing when the dropped source is VATSIM itself, or when the pilot list is not
+ * current: VATSIM is not polling (a non-Live vNAS environment, the RealTraffic data
+ * source) or its last successful fetch is older than AIRCRAFT_TIMEOUT (fetch backoff).
+ * A stale list would keep aircraft alive that VATSIM no longer reports.
  */
 function vatsimEntryLookup(droppedSource: AircraftDataSource): (callsign: string) => VatsimTimelineEntry | undefined {
-  if (droppedSource === 'vatsim') return () => undefined
+  const { allPilots, lastVatsimTimestamp, isPolling, lastUpdate } = useVatsimStore.getState()
+  if (droppedSource === 'vatsim' || !isPolling || !lastUpdate) return () => undefined
 
-  const { allPilots, lastVatsimTimestamp } = useVatsimStore.getState()
-  const now = Date.now()
+  const batchReceivedAt = lastUpdate.getTime()
+  if (Date.now() - batchReceivedAt > AIRCRAFT_TIMEOUT) return () => undefined
+
   const pilots = new Map(allPilots.map((pilot) => [pilot.callsign, pilot]))
   return (callsign) => {
     const pilot = pilots.get(callsign)
-    return pilot ? pilotToTimelineEntry(pilot, lastVatsimTimestamp || now, now) : undefined
+    return pilot ? pilotToTimelineEntry(pilot, lastVatsimTimestamp || batchReceivedAt, batchReceivedAt) : undefined
   }
 }
 
@@ -1650,7 +1657,8 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
    * Whether VATSIM also reports an aircraft is decided from the latest VATSIM pilot
    * list, not from the stored observations: during a long vNAS stream the VATSIM
    * points are skipped or pruned. An aircraft VATSIM lists keeps its timeline,
-   * stripped of the source and seeded with a fresh VATSIM observation received now.
+   * stripped of the source and seeded with an observation from the latest VATSIM
+   * batch, provided VATSIM is polling and that batch is younger than AIRCRAFT_TIMEOUT.
    * Otherwise a timeline left with no observations is removed exactly as
    * removeAircraft removes it, and one that still holds other sources keeps them,
    * with lastSource/lastReceivedAt/dynamicDelay re-derived from the newest survivor.

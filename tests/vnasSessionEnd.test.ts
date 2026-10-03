@@ -15,6 +15,7 @@ vi.mock('../src/renderer/stores/airportStore', () => ({
   useAirportStore: { getState: () => ({ currentAirport: null }) },
 }))
 
+import { AIRCRAFT_TIMEOUT } from '../src/renderer/constants/aircraft-timeline'
 import type { AircraftDataSource, AircraftMetadata, AircraftObservation } from '../src/renderer/types/aircraft-timeline'
 import type { PilotData } from '../src/renderer/types/vatsim'
 import { useAircraftTimelineStore } from '../src/renderer/stores/aircraftTimelineStore'
@@ -74,7 +75,7 @@ function pilot(callsign: string): PilotData {
 describe('vNAS session end', () => {
   beforeEach(() => {
     useReplayStore.setState({ playbackMode: 'live' })
-    useVatsimStore.setState({ allPilots: [], lastVatsimTimestamp: 0 })
+    useVatsimStore.setState({ allPilots: [], lastVatsimTimestamp: 0, isPolling: false, lastUpdate: null })
     useAircraftTimelineStore.getState().clear()
     useVnasStore.setState({
       aircraftStates: new Map(),
@@ -89,7 +90,7 @@ describe('vNAS session end', () => {
     })
   })
 
-  it('drops vNAS-only aircraft and strips vNAS observations from shared ones', () => {
+  it('drops vNAS-only aircraft and strips vNAS observations without a seed when VATSIM lists neither', () => {
     const now = Date.now()
     const { addObservation } = useAircraftTimelineStore.getState()
 
@@ -115,7 +116,13 @@ describe('vNAS session end', () => {
 
   it('keeps an aircraft VATSIM lists even when its timeline holds only vNAS observations', () => {
     const now = Date.now()
-    useVatsimStore.setState({ allPilots: [pilot('LISTED1')], lastVatsimTimestamp: now - 5000 })
+    const batchReceivedAt = now - 2000
+    useVatsimStore.setState({
+      allPilots: [pilot('LISTED1')],
+      lastVatsimTimestamp: now - 5000,
+      isPolling: true,
+      lastUpdate: new Date(batchReceivedAt),
+    })
 
     // The VATSIM points were skipped or pruned during the vNAS stream; only stale vNAS ones remain.
     const { addObservation } = useAircraftTimelineStore.getState()
@@ -128,7 +135,78 @@ describe('vNAS session end', () => {
     const listed = useAircraftTimelineStore.getState().timelines.get('LISTED1')
     expect(listed).toBeDefined()
     expect(listed?.observations.map((obs) => obs.source)).toEqual(['vatsim'])
+    expect(listed?.observations[0].receivedAt).toBe(batchReceivedAt)
     expect(listed?.lastSource).toBe('vatsim')
+    expect(listed?.lastReceivedAt).toBe(batchReceivedAt)
+  })
+
+  it('does not seed from the pilot list while VATSIM is not polling', () => {
+    const now = Date.now()
+    useVatsimStore.setState({
+      allPilots: [pilot('LISTED1')],
+      lastVatsimTimestamp: now - 5000,
+      isPolling: false,
+      lastUpdate: new Date(now - 2000),
+    })
+    useAircraftTimelineStore.getState().addObservation('LISTED1', observation('vnas', now - 1000, now - 900), METADATA)
+
+    useAircraftTimelineStore.getState().dropSourceObservations('vnas')
+
+    expect(useAircraftTimelineStore.getState().timelines.has('LISTED1')).toBe(false)
+  })
+
+  it('does not seed from a pilot list older than the aircraft timeout', () => {
+    const now = Date.now()
+    useVatsimStore.setState({
+      allPilots: [pilot('LISTED1')],
+      lastVatsimTimestamp: now - AIRCRAFT_TIMEOUT - 5000,
+      isPolling: true,
+      lastUpdate: new Date(now - AIRCRAFT_TIMEOUT - 1000),
+    })
+    useAircraftTimelineStore.getState().addObservation('LISTED1', observation('vnas', now - 1000, now - 900), METADATA)
+
+    useAircraftTimelineStore.getState().dropSourceObservations('vnas')
+
+    expect(useAircraftTimelineStore.getState().timelines.has('LISTED1')).toBe(false)
+  })
+
+  it('replaces a stored VATSIM point at the seed time and keeps older ones', () => {
+    const now = Date.now()
+    const vatsimTimestamp = now - 5000
+    const batchReceivedAt = now - 4000
+    useVatsimStore.setState({
+      allPilots: [pilot('BOTH1')],
+      lastVatsimTimestamp: vatsimTimestamp,
+      isPolling: true,
+      lastUpdate: new Date(batchReceivedAt),
+    })
+
+    const { addObservation } = useAircraftTimelineStore.getState()
+    addObservation('BOTH1', { ...observation('vatsim', now - 20000, now - 19000), latitude: 10 }, METADATA)
+    addObservation('BOTH1', { ...observation('vatsim', vatsimTimestamp, batchReceivedAt), latitude: 20 }, METADATA)
+    addObservation('BOTH1', observation('vnas', now - 1000, now - 900), METADATA)
+
+    useAircraftTimelineStore.getState().dropSourceObservations('vnas')
+
+    const observations = useAircraftTimelineStore.getState().timelines.get('BOTH1')?.observations ?? []
+    expect(observations.map((obs) => obs.observedAt)).toEqual([now - 20000, vatsimTimestamp])
+    expect(observations[0].latitude).toBe(10)
+    expect(observations[1].latitude).toBe(pilot('BOTH1').latitude)
+    expect(observations[1].receivedAt).toBe(batchReceivedAt)
+  })
+
+  it('leaves unlisted callsigns untouched when the drop is scoped', () => {
+    const now = Date.now()
+    const { addObservation } = useAircraftTimelineStore.getState()
+    addObservation('A', observation('vnas', now - 1000, now - 900), METADATA)
+    addObservation('B', observation('vnas', now - 1000, now - 900), METADATA)
+    const timelineB = useAircraftTimelineStore.getState().timelines.get('B')
+
+    useAircraftTimelineStore.getState().dropSourceObservations('vnas', ['A'])
+
+    const { timelines } = useAircraftTimelineStore.getState()
+    expect(timelines.has('A')).toBe(false)
+    expect(timelines.get('B')).toBe(timelineB)
   })
 
   it('leaves timelines alone outside live playback', () => {
