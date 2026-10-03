@@ -373,6 +373,7 @@ if (version < 7) {
 1. Interpolation logic (60 Hz smooth motion): `useAircraftInterpolation.ts`
 2. 3D model rendering: `CesiumViewer.tsx` (Cesium entities)
 3. Datablock labels and leader lines: `useBabylonOverlay.ts` (Babylon.js GUI)
+4. Regression suite: `tests/motion/` drives the interpolation hook, the timeline store, the phase detector and the gear controller with synthetic VATSIM (15 s) and vNAS (1 Hz) flights and compares each frame with truth (`pnpm vitest run tests/motion`; `MOTION_REPORT=1` writes `.tmp/motion/report.txt`). A motion fix lands with a red-first assertion there, turning its finding's `it.todo` into an `it`.
 
 ### Modifying Camera Behavior
 
