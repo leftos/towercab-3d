@@ -167,7 +167,9 @@ Yes, two parts, in the real app (`tauri-app`):
 - **E3-a Night model.** (1) *Scene light plus globe fade distances shrunk* (recommended if the A/B passes): one light dims terrain, buildings and models together, no imagery hack; worst case the 0.3 day/night floor is not dark enough and the night floor has to come from light intensity alone, making models darker than the user wants. (2) *Vertex-normal terrain lighting*: real slope shading and a tunable `vertexShadowDarkness`; worst case flattened runway tiles lose their normals (`FlatteningTerrainProvider.ts:1135-1153` drops `encodedNormals`) and render wrong or fail to shade, plus larger terrain downloads. (3) *Keep the imagery fake, add sky/atmosphere shifts only*: smallest change; worst case buildings and aircraft stay daylit over dark ground, as today.
 - **Settled (owner ruling):** E3-a option 1, scene light plus shrunk globe fade distances, subject to the A/B.
 - **E3-b Per-model environment maps.** (1) *Disable on pool models* if spike (b) shows a cost (recommended): worst case aircraft lose sky-tinted reflections and look flatter at dusk. (2) *Keep the defaults*: worst case frame hitches as aircraft cross 1 km boundaries at busy airports.
+- **Settled (owner ruling):** E3-b option 1, disable environment maps on pool models if spike (b) shows a cost.
 - **E3-c Settings shape.** (1) *Same keys, new implementation* (recommended): no new UI, no migration; worst case an existing intensity value looks different. (2) *A mode switch (imagery vs scene light)*: lets users pick; worst case two night paths to maintain, against "replace, don't deprecate".
+- **Settled (owner ruling):** E3-c option 1, same keys, new implementation.
 - **E3-d Default.** (1) *Leave `enableNightDarkening` off by default* (recommended until the new path has shipped once): worst case most users never see the night work. (2) *Turn it on by default with a migration*: worst case users who chose bright nights are switched over.
 - **Settled (owner ruling):** E3-d option 2, on by default with a settings migration once the scene-light model lands.
 
@@ -216,6 +218,7 @@ Yes. (1) Baseline: force heavy rain with `WeatherDebugPanel` (or `stores.weather
 - **F1-a Fallback without GPU particles.** (1) *One factory, CPU fallback at reduced capacity* (recommended): rain everywhere; worst case thinner rain on old remote browsers and two configurations to tune. (2) *GPU only*: one path; worst case no precipitation at all on browsers without WebGL2.
 - **Settled (owner ruling):** F1-a option 2, GPU only: no precipitation without WebGL2.
 - **F1-b Turbulence.** (1) *Keep the wind uniforms, add noise only if the spike shows a visible gain* (recommended): worst case no change in look. (2) *Adopt `noiseTexture` now*: worst case swirling, unrealistic rain at the 900 m/s streak speeds the constants use (`RAIN_VELOCITY = -900`, `constants/precipitation.ts:37`).
+- **Settled (owner ruling):** F1-b option 1, keep the wind uniforms; add noise only if the spike shows a visible gain.
 - **F1-c Snow too.** (1) *Rain and snow* (recommended): one factory, one pattern; worst case snow's 12–18 s lifetimes interact badly with `emitRateControl` (unmeasured). (2) *Rain only*: worst case two particle paths in one hook.
 - **Settled (owner ruling):** F1-c option 1, rain and snow.
 
