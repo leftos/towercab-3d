@@ -22,6 +22,55 @@ const VATSIM_BACKOFF_MS = [VATSIM_POLL_INTERVAL, 5000, 15000, 30000, 60000]
 let fetchInFlight = false
 let consecutiveFailures = 0
 
+/** One aircraft's entry for the unified timeline: a position observation and its flight metadata. */
+export interface VatsimTimelineEntry {
+  callsign: string
+  observation: AircraftObservation
+  metadata: AircraftMetadata
+}
+
+/**
+ * Map a VATSIM pilot record to a timeline entry.
+ *
+ * Args:
+ *   pilot: The pilot record from the VATSIM feed.
+ *   observedAt: When VATSIM says the position was true (the feed's update timestamp), epoch ms.
+ *   receivedAt: When this client received the record, epoch ms.
+ *
+ * Returns:
+ *   The `vatsim` observation (altitude converted from feet MSL to meters ellipsoidal) and metadata.
+ */
+export function pilotToTimelineEntry(pilot: PilotData, observedAt: number, receivedAt: number): VatsimTimelineEntry {
+  const observation: AircraftObservation = {
+    latitude: pilot.latitude,
+    longitude: pilot.longitude,
+    altitude: geoidService.mslToEllipsoidal(pilot.latitude, pilot.longitude, pilot.altitude * 0.3048),
+    heading: pilot.heading,
+    groundspeed: pilot.groundspeed,
+    groundTrack: null, // VATSIM doesn't provide ground track
+    headingIsTrue: true, // VATSIM heading is always reliable (from simulator)
+    // Extended ADS-B data (not available from VATSIM)
+    onGround: null,
+    pitch: null,
+    roll: null,
+    verticalRate: null,
+    observedAt,
+    receivedAt,
+    source: 'vatsim',
+    displayDelay: SOURCE_DISPLAY_DELAYS.vatsim,
+  }
+
+  const metadata: AircraftMetadata = {
+    cid: pilot.cid,
+    aircraftType: pilot.flight_plan?.aircraft_short || null,
+    transponder: pilot.transponder,
+    departure: pilot.flight_plan?.departure || null,
+    arrival: pilot.flight_plan?.arrival || null,
+  }
+
+  return { callsign: pilot.callsign, observation, metadata }
+}
+
 interface ReferencePosition {
   latitude: number
   longitude: number
@@ -163,34 +212,7 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
       // This ensures remote clients and insets receive all observations
       // and can do their own filtering based on their reference position
       for (const pilot of data.pilots) {
-        const observation: AircraftObservation = {
-          latitude: pilot.latitude,
-          longitude: pilot.longitude,
-          altitude: geoidService.mslToEllipsoidal(pilot.latitude, pilot.longitude, pilot.altitude * 0.3048), // Convert feet MSL → meters ellipsoidal
-          heading: pilot.heading,
-          groundspeed: pilot.groundspeed,
-          groundTrack: null, // VATSIM doesn't provide ground track
-          headingIsTrue: true, // VATSIM heading is always reliable (from simulator)
-          // Extended ADS-B data (not available from VATSIM)
-          onGround: null,
-          pitch: null,
-          roll: null,
-          verticalRate: null,
-          observedAt: vatsimTimestamp, // When VATSIM says this was true
-          receivedAt: now,
-          source: 'vatsim',
-          displayDelay: SOURCE_DISPLAY_DELAYS.vatsim,
-        }
-
-        const metadata: AircraftMetadata = {
-          cid: pilot.cid,
-          aircraftType: pilot.flight_plan?.aircraft_short || null,
-          transponder: pilot.transponder,
-          departure: pilot.flight_plan?.departure || null,
-          arrival: pilot.flight_plan?.arrival || null,
-        }
-
-        observationBatch.push({ callsign: pilot.callsign, observation, metadata })
+        observationBatch.push(pilotToTimelineEntry(pilot, vatsimTimestamp, now))
       }
 
       // Add all observations in batch (broadcasts to insets and remote clients)
@@ -331,33 +353,7 @@ export const useVatsimStore = create<VatsimStore>((set, get) => ({
     for (const pilot of filteredPilots) {
       const existingTimeline = timelineStore.getTimeline(pilot.callsign)
       if (!existingTimeline) {
-        const observation: AircraftObservation = {
-          latitude: pilot.latitude,
-          longitude: pilot.longitude,
-          altitude: geoidService.mslToEllipsoidal(pilot.latitude, pilot.longitude, pilot.altitude * 0.3048),
-          heading: pilot.heading,
-          groundspeed: pilot.groundspeed,
-          groundTrack: null,
-          headingIsTrue: true,
-          onGround: null,
-          pitch: null,
-          roll: null,
-          verticalRate: null,
-          observedAt: lastVatsimTimestamp || now,
-          receivedAt: now,
-          source: 'vatsim',
-          displayDelay: SOURCE_DISPLAY_DELAYS.vatsim,
-        }
-
-        const metadata: AircraftMetadata = {
-          cid: pilot.cid,
-          aircraftType: pilot.flight_plan?.aircraft_short || null,
-          transponder: pilot.transponder,
-          departure: pilot.flight_plan?.departure || null,
-          arrival: pilot.flight_plan?.arrival || null,
-        }
-
-        observationBatch.push({ callsign: pilot.callsign, observation, metadata })
+        observationBatch.push(pilotToTimelineEntry(pilot, lastVatsimTimestamp || now, now))
       }
     }
 

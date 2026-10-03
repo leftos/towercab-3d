@@ -26,11 +26,13 @@ let vnasInitialized = false
 export function useVnasEvents(): void {
   const handleAircraftUpdate = useVnasStore((state) => state.handleAircraftUpdate)
   const removeAircraft = useVnasStore((state) => state.removeAircraft)
+  const handleSessionEnded = useVnasStore((state) => state.handleSessionEnded)
   const setStateOnly = useVnasStore((state) => state.setStateOnly)
   const setError = useVnasStore((state) => state.setError)
   const tryRestoreSession = useVnasStore((state) => state.tryRestoreSession)
   const connect = useVnasStore((state) => state.connect)
-  const subscribe = useVnasStore((state) => state.subscribe)
+  const subscribeToFacility = useVnasStore((state) => state.subscribeToFacility)
+  const setSubscribedFacilities = useVnasStore((state) => state.setSubscribedFacilities)
   const isSubscribedTo = useVnasStore((state) => state.isSubscribedTo)
   const getSessionArtcc = useVnasStore((state) => state.getSessionArtcc)
   const getSessionAirports = useVnasStore((state) => state.getSessionAirports)
@@ -52,11 +54,11 @@ export function useVnasEvents(): void {
     const icao = currentAirport?.icao
     if (vnasState === 'subscribing' && icao && !isSubscribedTo(icao)) {
       console.log('[vNAS] Auto-subscribing to airport:', icao)
-      subscribe(icao).catch((err) => {
+      subscribeToFacility(icao).catch((err) => {
         console.warn('[vNAS] Failed to auto-subscribe to airport:', err)
       })
     }
-  }, [vnasState, currentAirport?.icao, subscribe, isSubscribedTo, subscribedFacilities])
+  }, [vnasState, currentAirport?.icao, subscribeToFacility, isSubscribedTo, subscribedFacilities])
 
   useEffect(() => {
     // Only set up listeners in Tauri mode (not remote browser)
@@ -75,6 +77,7 @@ export function useVnasEvents(): void {
     let unlistenAircraft: (() => void) | null = null
     let unlistenDisconnected: (() => void) | null = null
     let unlistenError: (() => void) | null = null
+    let unlistenSubscriptions: (() => void) | null = null
 
     const setupListenersAndRestore = async () => {
       try {
@@ -98,8 +101,12 @@ export function useVnasEvents(): void {
             useVatsimStore.getState().stopPolling()
           }
 
-          // When disconnecting, restart VATSIM polling if that's the active data source
+          // Disconnecting ends the session: drop its aircraft, facility lists and
+          // vNAS observations, then restart VATSIM polling if that's the active
+          // data source.
           if (event.payload === 'disconnected') {
+            handleSessionEnded()
+
             const dataSource = useGlobalSettingsStore.getState().realtraffic.dataSource
             if (dataSource !== 'realtraffic') {
               console.log('[vNAS] Disconnected — resuming VATSIM data feed polling')
@@ -124,9 +131,17 @@ export function useVnasEvents(): void {
           handleAircraftUpdate(event.payload)
         })
 
+        // Listen for the host's subscribed-facility list (the source of truth).
+        // The backend clears it when the session ends.
+        unlistenSubscriptions = await listen<string[]>('vnas-subscriptions-changed', (event) => {
+          setSubscribedFacilities(event.payload)
+        })
+
         // Listen for aircraft disconnections
-        // This is an explicit message from the SignalR hub that the aircraft should be removed.
-        // Different from simply not receiving updates (idle aircraft at gate).
+        // An explicit message from the SignalR hub that the aircraft's vNAS feed is
+        // over — different from simply not receiving updates (idle aircraft at gate).
+        // removeAircraft() drops its vNAS observations from the timeline, so it falls
+        // back to VATSIM when VATSIM also reports it.
         unlistenDisconnected = await listen<string>('vnas-aircraft-disconnected', (event) => {
           console.log('[vNAS] Aircraft disconnected:', event.payload)
           removeAircraft(event.payload)
@@ -161,7 +176,7 @@ export function useVnasEvents(): void {
             const currentAirport = useAirportStore.getState().currentAirport
             if (currentAirport?.icao) {
               console.log('[vNAS] Auto-subscribing to:', currentAirport.icao)
-              await subscribe(currentAirport.icao)
+              await subscribeToFacility(currentAirport.icao)
             }
           } catch (err) {
             console.warn('[vNAS] Failed to connect after restore:', err)
@@ -182,15 +197,18 @@ export function useVnasEvents(): void {
       unlistenAircraft?.()
       unlistenDisconnected?.()
       unlistenError?.()
+      unlistenSubscriptions?.()
     }
   }, [
     handleAircraftUpdate,
     removeAircraft,
+    handleSessionEnded,
     setStateOnly,
     setError,
     tryRestoreSession,
     connect,
-    subscribe,
+    subscribeToFacility,
+    setSubscribedFacilities,
     getSessionArtcc,
     getSessionAirports,
   ])
