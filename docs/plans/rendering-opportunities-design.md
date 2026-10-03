@@ -65,8 +65,10 @@ Yes, short, and it can run on 1.140 today because the animation code is identica
 ### Open decisions
 
 - **E1-a Scope.** (1) *Gear only, behaviour parity* (recommended): same visuals, less code, one fewer fetch; worst case a model whose gear animation also moves doors looks as it does today. (2) *Gear plus flaps/spoilers by flight phase*: needs a phase-to-progress map and per-type naming rules; worst case wrong or mis-named FSLTL clips show flaps deployed at cruise. (3) *All clips including looping props*: worst case steering and other baked clips snap from their converter-chosen neutral frame to frame 0 (`convert_fsltl_batch.py:742-762`) on every model.
+- **Steering clips (from `aircraft-motion-review.md`):** the gear filter matches every clip with "GEAR" in its name, so nose-wheel steering clips follow gear progress and sit at full lock with the gear down (27 of 105 sampled FSLTL models). Both the matrix path and the native path exclude clips with "STEER" in the name.
 - **Settled (owner ruling):** E1-a option 1, gear only, behaviour parity.
 - **E1-b If the spike fails.** (1) *Keep the matrix path and document the repro* (recommended); worst case the code stays as heavy as today. (2) *Keep matrices but source keyframes from the already-loaded model instead of a second fetch*: not verified that Cesium exposes the sampler data publicly; worst case it reads private loader fields, a new private-API site for `A1.5` to watch.
+- **Settled (owner ruling):** E1-b option 1, keep the matrix path and document the repro.
 
 ### Size and dependencies
 
@@ -109,8 +111,11 @@ Yes. (a) At a night fixed time (`stores.settings` → `cesium.timeMode = 'fixed'
 ### Open decisions
 
 - **E2-a Shader granularity.** (1) *Two shared instances, built-in and FSLTL* (recommended): matches today's per-category settings, uniforms set a few times a minute; worst case no per-aircraft effect (e.g. highlighting the followed aircraft) without more work. (2) *One instance per pool slot*: per-aircraft control; worst case 100 instances re-uploading uniforms and a longer hitch if programs are not shared (unmeasured).
+- **Settled (owner ruling):** E2-a option 1, two shared instances (built-in, FSLTL).
 - **E2-b Brightness above 1.1.** (1) *Emissive glow that keeps the livery* (recommended); worst case users who tuned the slider for a solid-colour look see a different result. (2) *Keep the post-lighting MIX glow* for that range; worst case two mechanisms for one slider.
+- **Settled (owner ruling):** E2-b option 1, emissive glow that keeps the livery.
 - **E2-c Nav lights.** (1) *Out of scope* (recommended): converted models' light geometry is not identified (not checked); worst case nobody gets nav lights. (2) *Spike the converter output for light meshes/emissive maps first*; worst case a converter change and model-cache rebuild for every user.
+- **Settled (owner ruling):** E2-c option 2, spike the converter output for light meshes first (the owner's MSFS models under `X:\games` may be converted for it, TC3D-35).
 
 ### Size and dependencies
 
@@ -164,6 +169,7 @@ Yes, two parts, in the real app (`tauri-app`):
 - **E3-b Per-model environment maps.** (1) *Disable on pool models* if spike (b) shows a cost (recommended): worst case aircraft lose sky-tinted reflections and look flatter at dusk. (2) *Keep the defaults*: worst case frame hitches as aircraft cross 1 km boundaries at busy airports.
 - **E3-c Settings shape.** (1) *Same keys, new implementation* (recommended): no new UI, no migration; worst case an existing intensity value looks different. (2) *A mode switch (imagery vs scene light)*: lets users pick; worst case two night paths to maintain, against "replace, don't deprecate".
 - **E3-d Default.** (1) *Leave `enableNightDarkening` off by default* (recommended until the new path has shipped once): worst case most users never see the night work. (2) *Turn it on by default with a migration*: worst case users who chose bright nights are switched over.
+- **Settled (owner ruling):** E3-d option 2, on by default with a settings migration once the scene-light model lands.
 
 ### Size and dependencies
 
@@ -208,8 +214,10 @@ Yes. (1) Baseline: force heavy rain with `WeatherDebugPanel` (or `stores.weather
 ### Open decisions
 
 - **F1-a Fallback without GPU particles.** (1) *One factory, CPU fallback at reduced capacity* (recommended): rain everywhere; worst case thinner rain on old remote browsers and two configurations to tune. (2) *GPU only*: one path; worst case no precipitation at all on browsers without WebGL2.
+- **Settled (owner ruling):** F1-a option 2, GPU only: no precipitation without WebGL2.
 - **F1-b Turbulence.** (1) *Keep the wind uniforms, add noise only if the spike shows a visible gain* (recommended): worst case no change in look. (2) *Adopt `noiseTexture` now*: worst case swirling, unrealistic rain at the 900 m/s streak speeds the constants use (`RAIN_VELOCITY = -900`, `constants/precipitation.ts:37`).
 - **F1-c Snow too.** (1) *Rain and snow* (recommended): one factory, one pattern; worst case snow's 12–18 s lifetimes interact badly with `emitRateControl` (unmeasured). (2) *Rain only*: worst case two particle paths in one hook.
+- **Settled (owner ruling):** F1-c option 1, rain and snow.
 
 ### Size and dependencies
 
@@ -290,6 +298,7 @@ The label share is the difference between the shown and hidden runs.
 ### Open decisions
 
 - **F3-a Pursue MSDF?** (1) *Measure only; close F3 unless the threshold is crossed* (recommended): worst case a real bottleneck on a device not measured. (2) *Build MSDF labels*: worst case per-colour renderers multiply draw calls, boxes and lines stay on the canvas texture so the saving is partial, and a font-atlas pipeline is added.
+- **Settled (owner ruling):** F3-a option 2, build MSDF labels; F3-b's threshold no longer gates the build (the measurement still runs, as the before/after baseline).
 - **F3-b Threshold.** (1) *Label share above 2 ms CPU or GPU at 100 labels on the owner's desktop, or above 4 ms on an iPad* (recommended): worst case a borderline machine just under the line. (2) *Any visible frame drop with labels on*: worst case noise in a subjective test.
 
 ### Size and dependencies
