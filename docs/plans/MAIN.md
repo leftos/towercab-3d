@@ -7,7 +7,7 @@
 - [!] TC3D-45 Join a YAAT room as its member, with no CRC session
 - [x] TC3D-43 Review aircraft motion: interpolation, taxi, flight, control surfaces, flare, gear and smart status · release vNext
   - [x] TC3D-48 Promote the aircraft-motion harness to tests/motion/ · release vNext
-  - [ ] TC3D-49 Fix the one-site aircraft-motion bugs
+  - [/] TC3D-49 Fix the one-site aircraft-motion bugs
   - [ ] TC3D-54 Animate spoilers, reversers and wheels after native gear animation
 - [x] TC3D-5 Find the React DOM-nesting error seen when an airport loads · release vNext
 - [x] TC3D-3 YAAT1 environment: deploy yaat-server, then sign in with a real VATSIM login · release vNext
@@ -66,6 +66,8 @@
 - [ ] TC3D-23 vnasStore: skip zero-distance groundspeed samples
 - [ ] TC3D-42 Remote browsers keep stale vNAS data after a vNAS session ends
 - [ ] TC3D-66 Crate session_airports holds the session lock across Data API calls
+- [ ] TC3D-67 vNAS lifecycle: close the races left after TC3D-47
+- [ ] TC3D-68 vNAS: stray rejections, a stale error, a lost disconnect during sign-in, and startup connecting to Live
 
 ## macOS signing and runtime checks
 
