@@ -5,7 +5,7 @@ The gate a repo runs: it hands every word to the user-level gate when the machin
 command under a smaller wrapper that keeps the log, the tail and the exit status.
 
 .DESCRIPTION
-sync-gate.ps1 publishes this file into a repo as tools/gate.ps1, and a repo carries this launcher rather than a copy of
+tools/sync-launchers.ps1 publishes this file into a repo as tools/gate.ps1, and a repo carries this launcher rather than a copy of
 the gate: a change to the canonical gate, at `$env:CLAUDE_CONFIG_DIR\tools\gate\gate.ps1`, or the user's
 `~/.claude\tools\gate\gate.ps1` when that variable is unset, reaches every repo at once, and a caller keeps invoking
 tools/gate.ps1 as it always did, `pwsh -NoProfile -File tools/gate.ps1 ...` or `& tools/gate.ps1 ...`.
@@ -26,7 +26,8 @@ block: a declared block sends the bare -- of a caller's command through PowerShe
 as a parameter name and stops. The command is every word after a --, or, when the caller's session ate the separator,
 every word from the first that is not one of the options.
 
-Usage: pwsh tools/gate.ps1 -Log <path> -TimeoutSeconds <n> -Slot heavy|light [-StallSeconds <n>] [-Tail <n>] [-NoMarkers] -- <command> [args...]
+Usage: pwsh tools/gate.ps1 -Log <path> -TimeoutSeconds <n> -Slot heavy|light|critical [-StallSeconds <n>] [-Tail <n>]
+           [-NoMarkers] -- <command> [args...]
        pwsh tools/gate.ps1 -StopTree <pid>
 #>
 
@@ -37,7 +38,7 @@ $ErrorActionPreference = 'Stop'
 # assignments in their parse trees.
 $markers = '^Build FAILED\.|error CS\d+|: error |Test run summary: Failed!|^\s*failed: [1-9]|gate: (TIMED OUT|STALLED|BACKSTOP)'
 $usage = @(
-    'usage: pwsh tools/gate.ps1 -Log <path> -TimeoutSeconds <n> -Slot heavy|light [-StallSeconds <n>] [-Tail <n>] [-NoMarkers] ' +
+    'usage: pwsh tools/gate.ps1 -Log <path> -TimeoutSeconds <n> -Slot heavy|light|critical [-StallSeconds <n>] [-Tail <n>] [-NoMarkers] ' +
     '-- <command> [args...]'
     '       pwsh tools/gate.ps1 -StopTree <pid>'
 )
