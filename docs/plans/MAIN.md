@@ -56,6 +56,7 @@
 - [ ] TC3D-16 Add docs/README.md with a glossary
 - [ ] TC3D-17 Re-read docs/inset-architecture.md; its broadcast files are gone
 - [ ] TC3D-18 Re-read docs/remote-access-architecture.md against its files
+- [ ] TC3D-77 Fix architecture.md's stale Settings UI section
 
 ## vNAS dual-source and reconnect
 
@@ -91,6 +92,27 @@
 - [x] TC3D-38 Nextup profile: ship comments on issues instead of closing them; crate commits cite with Refs · release vNext
 - [x] TC3D-36 Commit the synced gate launcher in both repos · release vNext
 - [ ] TC3D-64 Lint and type-check the tests/ folder
+- [ ] TC3D-78 Fix the in-memory tile cache's two disagreeing controls
+
+## Settings drawer
+
+- [ ] TC3D-76 Add the settings registry and row primitives
+- [ ] TC3D-79 Replace the Settings modal with the settings drawer shell
+- [ ] TC3D-80 Move Mods management to its own screen
+- [ ] TC3D-81 Migrate the General settings category to the registry
+- [ ] TC3D-82 Migrate the Connections settings category to the registry
+- [ ] TC3D-83 Migrate the Traffic & Labels settings category to the registry
+- [ ] TC3D-84 Migrate the Aircraft Models settings category to the registry
+- [ ] TC3D-85 Migrate the Scene settings category to the registry
+- [ ] TC3D-86 Migrate the Weather settings category to the registry
+- [ ] TC3D-87 Migrate the Camera & Input settings category to the registry
+- [ ] TC3D-88 Migrate the Storage & Replay settings category to the registry
+- [ ] TC3D-89 Migrate the Developer settings category to the registry
+- [ ] TC3D-90 Add settings search and the changed-from-default filter
+- [ ] TC3D-91 Add the advanced switch, scope and restart badges, and read-only remote rows
+- [ ] TC3D-92 Expose settings to agents through window.__tc3d.settings
+- [ ] TC3D-93 Build the settings export tree from the registry and delete the old Settings tabs
+- [ ] TC3D-94 Document the settings drawer
 
 ## First release after 2026-09-27
 
