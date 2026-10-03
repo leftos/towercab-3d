@@ -16,7 +16,8 @@ linear: towercab-3d
 - `../towercab-3d-vnas` (the private vNAS crate, default branch `main`) has no plan or changelog of its own: team TC3D plans it, and its open work is the Testing Checklist at the end of its `docs/vnas-udp-integration-plan.md`, the project `vNAS dual-source and reconnect`.
 - Pre-loop hooks: none.
 - An item **land**s after its commit; a finished subplan moves to `docs/plans/archive/`. Review findings the item does not fix get an **add**, in the project that shares their files, else in `Cleanup singles`.
-- Tracker: **triage** as plan-operations says (GitHub issues reach the team through Linear's sync; an untriaged one is top-level with no project), each placed in the project that shares its files, else in `Cleanup singles`. Crate work cites towercab-3d issues (`Closes https://github.com/leftos/towercab-3d/issues/N`).
+- Tracker: **triage** as plan-operations says (GitHub issues reach the team through Linear's sync; an untriaged one is top-level with no project), each placed in the project that shares its files, else in `Cleanup singles`. Crate work cites towercab-3d issues with `Refs https://github.com/leftos/towercab-3d/issues/N`, never a closing word: GitHub closes a cross-repo issue a pushed commit names with one, and only the release closes an issue here.
+- Release blockers: whenever an **add**, a **split** or a ruling makes an open issue wait on another (a sub-issue of an issue in the open release, or a fix that issue needs first), the blocker joins the open release too, and the relation is recorded with the Linear MCP `save_issue` and `blocks: ["<the release issue>"]`. Every pipeline's open release is named `vNext`, so look its id up each time with `list_releases` (`pipeline: "towercab-3d"`, `query: "vNext"`) and pass that id in `addReleases`; never the name, and never a stored id, since each release cut opens a new `vNext`.
 - Pull requests: `gh pr list --repo leftos/towercab-3d --state open --json number,title,author`, and the same with `--repo leftos/towercab-3d-vnas`.
 - Hotspots (two items touching one wait on each other): `src/renderer/types/settings.ts` (every setting, and `DEFAULT_SETTINGS`), `src/renderer/stores/settingsStore.ts` (the persisted `version` and the migration repair list), `src/renderer/stores/viewportStore.ts`, `src/renderer/stores/vnasStore.ts`, `src-tauri/src/vnas.rs`, `src-tauri/src/lib.rs` (the `generate_handler!` list), `src/renderer/hooks/useBabylonOverlay.ts`, `src/renderer/components/CesiumViewer/CesiumViewer.tsx`.
 
@@ -30,7 +31,7 @@ linear: towercab-3d
   - `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings` and `cargo test --manifest-path src-tauri/Cargo.toml --release` (`heavy`, 900)
   - vNAS build of any change to `src-tauri/src/vnas.rs` or the crate: `node scripts/shipping/build/vnas.js cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --features vnas -- -D warnings` (`heavy`, 900), with `TC3D_VNAS_CRATE_PATH` set to the pair's crate checkout while the crate change is unpushed (`CLAUDE.md`, "vNAS Integration")
   - Crate changes, in the crate root through its own `tools/gate.ps1`: `cargo test --release`, `cargo clippy --all-targets -- -D warnings`, `cargo fmt --check`, `cargo doc --no-deps` with no warnings
-  - A commit (prek runs Biome, `tsc` and clippy on staged files) as `pwsh tools/gate.ps1 -Log .tmp/commit.log -TimeoutSeconds 900 -Slot heavy -- git commit -F .tmp/msg.txt`
+  - A commit (prek runs Biome, `tsc` and clippy on staged files) as `pwsh tools/gate.ps1 -Log .tmp/commit.log -TimeoutSeconds 900 -Slot heavy -- git commit -F .tmp/msg-<slug>.txt`, the message written with the Write tool to that file, new to this commit (the slug from the subject), and committed in a later turn than the Write
 - App checks: a user-visible change is proved in the running desktop app through the `tauri-app` MCP (launch recipe and `window.__tc3d` in `CLAUDE.md`, "E2E testing via Playwright MCP"), after telling the user "hands off"; stop the app when done. vNAS work against a local YAAT server and CRC runs through the `yaat-client-driver` MCP (`yaat/docs/client-driver-mcp.md`).
 - Parent-side gate: `git -C <wt> status --short` in each half of the pair, and the same in both main checkouts.
 
@@ -65,7 +66,7 @@ linear: towercab-3d
 
 ## Landing
 
-- Non-feature items: the orchestrator writes docs and the changelog bullet in the worktree, commits there (a `Refs: TC3D-<n>` trailer per issue), then `/ship` (with `## Ship` below): land onto the recorded `landOn`, gate on `main`, push, close the issue, remove each half of the pair and its branch once landed by the user-level `nextup` §4 step 6 check.
+- Non-feature items: the orchestrator writes docs and the changelog bullet in the worktree, commits there (a `Refs: TC3D-<n>` trailer per issue), then `/ship` (with `## Ship` below): land onto the recorded `landOn`, gate on `main`, push, post the audit comment on the issue and leave it open (the release closes it: `prepare-release` moves it to Done), remove each half of the pair and its branch once landed by the user-level `nextup` §4 step 6 check.
 - An item under a feature marker (`branch: feat/<name>`) lands the same way onto the feature worktree, whose `landOn` is `feat/<name>`; `/ship` pushes the feature branch and watches its draft PR without merging it; the item is **land**ed with the note `on feat/<name>, ships with #N`.
 - Plan and docs-only commits go straight to `main` and are pushed.
 - The main checkout hosts at most one implementer, and none while a gate runs there.
@@ -88,4 +89,4 @@ Read by the user-level `ship`; each rule names the phase it adds to or overrides
 - Push order (Phase 4): the crate first, then towercab-3d. `vnas.js` builds every vNAS build (CI included) against the crate's GitHub `main`, so a host change pushed before the crate API it calls breaks those builds.
 - Gate (Phase 3), in towercab-3d's main checkout after a real cherry-pick: `pwsh tools/gate.ps1 -Log .tmp/check.log -TimeoutSeconds 900 -Slot heavy -- pnpm run check`; a crate change also its gates above in the crate's main checkout.
 - Additive conflict files (Phase 2): `CHANGELOG.md`, `USER_GUIDE.md`. A conflict on the snapshot `docs/plans/MAIN.md` takes either side and runs **snapshot** again.
-- Issues (Phase 5): the issue repository is always `leftos/towercab-3d`, also for a crate-only fix.
+- Issues (Phase 5): the issue repository is always `leftos/towercab-3d`, also for a crate-only fix. This repo has a release pipeline, so ship posts the audit comment and never closes the issue: it stays Landed until `linear release complete` moves it to Done, which closes it on GitHub through the sync.
