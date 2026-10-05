@@ -158,3 +158,4 @@
 - [ ] TC3D-73 Design a remote browser that follows the desktop's selected aircraft
 - [ ] TC3D-74 Design selecting an aircraft on the desktop from a phone
 - [ ] TC3D-75 Design a command palette for airports, bookmarks, aircraft and toggles
+- [ ] TC3D-110 Design reusable frontend packages for YAAT's built-in tower view
