@@ -57,6 +57,7 @@
 - [ ] TC3D-17 Re-read docs/inset-architecture.md; its broadcast files are gone
 - [ ] TC3D-18 Re-read docs/remote-access-architecture.md against its files
 - [ ] TC3D-77 Fix architecture.md's stale Settings UI section
+- [ ] TC3D-109 Fix architecture.md's stale camera, store and inset sections
 
 ## vNAS dual-source and reconnect
 
@@ -93,30 +94,50 @@
 - [x] TC3D-36 Commit the synced gate launcher in both repos · release vNext
 - [ ] TC3D-64 Lint and type-check the tests/ folder
 - [ ] TC3D-78 Fix the in-memory tile cache's two disagreeing controls
+- [ ] TC3D-105 Fill or delete the interpolated state's flightPhase field
+- [ ] TC3D-107 Reconcile the orbit camera defaults and fix wrong camera comments
+- [ ] TC3D-108 Import the phase detector's thresholds from constants/flightPhase.ts
 
 ## Settings drawer
 
-- [ ] TC3D-76 Add the settings registry and row primitives
-- [ ] TC3D-79 Replace the Settings modal with the settings drawer shell
-- [ ] TC3D-80 Move Mods management to its own screen
-- [ ] TC3D-81 Migrate the General settings category to the registry
-- [ ] TC3D-82 Migrate the Connections settings category to the registry
-- [ ] TC3D-83 Migrate the Traffic & Labels settings category to the registry
-- [ ] TC3D-84 Migrate the Aircraft Models settings category to the registry
-- [ ] TC3D-85 Migrate the Scene settings category to the registry
-- [ ] TC3D-86 Migrate the Weather settings category to the registry
-- [ ] TC3D-87 Migrate the Camera & Input settings category to the registry
-- [ ] TC3D-88 Migrate the Storage & Replay settings category to the registry
-- [ ] TC3D-89 Migrate the Developer settings category to the registry
-- [ ] TC3D-90 Add settings search and the changed-from-default filter
-- [ ] TC3D-91 Add the advanced switch, scope and restart badges, and read-only remote rows
-- [ ] TC3D-92 Expose settings to agents through window.__tc3d.settings
-- [ ] TC3D-93 Build the settings export tree from the registry and delete the old Settings tabs
-- [ ] TC3D-94 Document the settings drawer
+- [/] TC3D-76 Add the settings registry and row primitives
+- [/] TC3D-90 Add settings search and the changed-from-default filter
+- [/] TC3D-91 Add the advanced switch, scope and restart badges, and read-only remote rows
+- [/] TC3D-83 Migrate the Traffic & Labels settings category to the registry
+- [/] TC3D-81 Migrate the General settings category to the registry
+- [/] TC3D-92 Expose settings to agents through window.__tc3d.settings
+- [/] TC3D-87 Migrate the Camera & Input settings category to the registry
+- [/] TC3D-93 Build the settings export tree from the registry and delete the old Settings tabs
+- [/] TC3D-94 Document the settings drawer
+- [/] TC3D-86 Migrate the Weather settings category to the registry
+- [/] TC3D-80 Move Mods management to its own screen
+- [ ] TC3D-106 Restore or remove the camera near-plane setting
+- [/] TC3D-85 Migrate the Scene settings category to the registry
+- [/] TC3D-82 Migrate the Connections settings category to the registry
+- [/] TC3D-79 Replace the Settings modal with the settings drawer shell
+- [/] TC3D-88 Migrate the Storage & Replay settings category to the registry
+- [/] TC3D-84 Migrate the Aircraft Models settings category to the registry
+- [/] TC3D-89 Migrate the Developer settings category to the registry
 
 ## First release after 2026-09-27
 
 - [ ] TC3D-34 Watch the first release with tauri-action v1 and pinned toolchains
+
+## On-plane cameras
+
+- [ ] TC3D-95 Share the aircraft body frame between the model and the camera
+- [ ] TC3D-96 Resolve on-plane camera anchors from the manifest, glTF bounds and dimensions
+- [ ] TC3D-97 Add the onboard follow mode with cockpit, wing, chase and belly views
+- [ ] TC3D-98 Cycle camera views with V and look around in on-plane views
+- [ ] TC3D-99 Carry on-plane views to insets and the agent handle
+
+## Cinematic camera
+
+- [ ] TC3D-100 Share flight phases through a store instead of the aircraft panel
+- [ ] TC3D-101 Add the spotter camera mode and the camera pose blend
+- [ ] TC3D-102 Build the cinematic director: scoring, event hold and shot planning
+- [ ] TC3D-103 Run the cinematic director in the main view and insets
+- [ ] TC3D-104 Hide the UI and show a caption while the director runs full-screen
 
 ## Design track
 
