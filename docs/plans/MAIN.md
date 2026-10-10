@@ -4,13 +4,9 @@
 
 ## Current focus
 
+- [ ] TC3D-54 Animate spoilers, reversers and wheels after native gear animation
+- [/] TC3D-49 Fix the one-site aircraft-motion bugs
 - [!] TC3D-45 Join a YAAT room as its member, with no CRC session
-- [x] TC3D-43 Review aircraft motion: interpolation, taxi, flight, control surfaces, flare, gear and smart status · release vNext
-  - [x] TC3D-48 Promote the aircraft-motion harness to tests/motion/ · release vNext
-  - [/] TC3D-49 Fix the one-site aircraft-motion bugs
-  - [ ] TC3D-54 Animate spoilers, reversers and wheels after native gear animation
-- [x] TC3D-5 Find the React DOM-nesting error seen when an airport loads · release vNext
-- [x] TC3D-3 YAAT1 environment: deploy yaat-server, then sign in with a real VATSIM login · release vNext
 - [ ] TC3D-65 Phase badge: runway labels at the wrong times and labels lagging the display
 
 ## Aircraft motion model
@@ -58,6 +54,7 @@
 - [ ] TC3D-18 Re-read docs/remote-access-architecture.md against its files
 - [ ] TC3D-77 Fix architecture.md's stale Settings UI section
 - [ ] TC3D-109 Fix architecture.md's stale camera, store and inset sections
+- [ ] TC3D-122 Add a Task Index to architecture.md: the vNAS bridge and aircraft motion
 
 ## vNAS dual-source and reconnect
 
@@ -86,17 +83,15 @@
 - [ ] TC3D-31 useCesiumLabels lays labels out against window.innerWidth
 - [ ] TC3D-32 Embed a common-controls manifest for the vNAS test binary
 - [ ] TC3D-33 Protect the crate repo's main branch
-- [x] TC3D-37 Add the agent-mail-guard prek hook to both repos · release vNext
-- [x] TC3D-40 Set gate ceilings from measured durations · release vNext
-- [x] TC3D-41 Decide whether release blockers join the open release · release vNext
-- [x] TC3D-39 Nextup profile: a per-commit message file in the commit template · release vNext
-- [x] TC3D-38 Nextup profile: ship comments on issues instead of closing them; crate commits cite with Refs · release vNext
-- [x] TC3D-36 Commit the synced gate launcher in both repos · release vNext
 - [ ] TC3D-64 Lint and type-check the tests/ folder
 - [ ] TC3D-78 Fix the in-memory tile cache's two disagreeing controls
 - [ ] TC3D-105 Fill or delete the interpolated state's flightPhase field
 - [ ] TC3D-107 Reconcile the orbit camera defaults and fix wrong camera comments
 - [ ] TC3D-108 Import the phase detector's thresholds from constants/flightPhase.ts
+- [ ] TC3D-124 Split markdown lines of 500+ characters so Grep can see them
+- [ ] TC3D-125 Overcast leaves a clear-sky band at the horizon; dense fog renders dark teal
+- [ ] TC3D-126 KOAK tower mod: camera starts 220 m outside the cab; cab stays lit at night
+- [ ] TC3D-127 Remote browsers draw built-in models instead of the host's MSFS liveries
 
 ## Settings drawer
 
@@ -125,7 +120,7 @@
 
 ## On-plane cameras
 
-- [ ] TC3D-95 Share the aircraft body frame between the model and the camera
+- [/] TC3D-95 Share the aircraft body frame between the model and the camera
 - [ ] TC3D-96 Resolve on-plane camera anchors from the manifest, glTF bounds and dimensions
 - [ ] TC3D-97 Add the onboard follow mode with cockpit, wing, chase and belly views
 - [ ] TC3D-98 Cycle camera views with V and look around in on-plane views
@@ -133,7 +128,7 @@
 
 ## Cinematic camera
 
-- [ ] TC3D-100 Share flight phases through a store instead of the aircraft panel
+- [/] TC3D-100 Share flight phases through a store instead of the aircraft panel
 - [ ] TC3D-101 Add the spotter camera mode and the camera pose blend
 - [ ] TC3D-102 Build the cinematic director: scoring, event hold and shot planning
 - [ ] TC3D-103 Run the cinematic director in the main view and insets
@@ -141,16 +136,15 @@
 
 ## Design track
 
+- [ ] TC3D-61 MSDF datablock labels (F3)
+- [ ] TC3D-60 GPU particles for rain and snow (F1)
+- [ ] TC3D-59 Cesium's own night lighting (E3)
+- [ ] TC3D-58 Aircraft custom shaders for tint and night boost (E2)
+- [ ] TC3D-57 Spike: do converted models keep nav and strobe light meshes (E2-c)
+- [ ] TC3D-56 Native glTF gear animation (E1)
+- [ ] TC3D-55 Expose frame timings on window.__tc3d (spike S0)
 - [ ] TC3D-46 Design the VR rebuild with the overlay scene
 - [ ] TC3D-62 Assess rendering with a single engine
-- [x] TC3D-35 Design the larger Cesium and Babylon opportunities (E1–E3, F1–F3) · release vNext
-  - [ ] TC3D-55 Expose frame timings on window.__tc3d (spike S0)
-  - [ ] TC3D-56 Native glTF gear animation (E1)
-  - [ ] TC3D-57 Spike: do converted models keep nav and strobe light meshes (E2-c)
-  - [ ] TC3D-58 Aircraft custom shaders for tint and night boost (E2)
-  - [ ] TC3D-59 Cesium's own night lighting (E3)
-  - [ ] TC3D-60 GPU particles for rain and snow (F1)
-  - [ ] TC3D-61 MSDF datablock labels (F3)
 - [ ] TC3D-69 Design a binoculars key for a quick zoom on the selected aircraft
 - [ ] TC3D-70 Design METAR-accurate visibility: RVR, vertical visibility and calibrated fog
 - [ ] TC3D-71 Design airport lighting: runway, approach and taxiway lights and stop bars
@@ -158,4 +152,18 @@
 - [ ] TC3D-73 Design a remote browser that follows the desktop's selected aircraft
 - [ ] TC3D-74 Design selecting an aircraft on the desktop from a phone
 - [ ] TC3D-75 Design a command palette for airports, bookmarks, aircraft and toggles
-- [ ] TC3D-110 Design reusable frontend packages for YAAT's built-in tower view
+- [ ] TC3D-111 Adopt app-driving lessons from the sibling projects
+  - [ ] TC3D-112 Run agent-driven launches against a scratch app-data folder
+  - [ ] TC3D-113 Build before stopping the dev app on an agent restart
+  - [ ] TC3D-114 Launch the dev app unfocused and out of sight for agent runs
+  - [ ] TC3D-115 Gate the window's self-activation behind one switch, pinned by a source test
+  - [ ] TC3D-116 Add read-back checks to the driving notes and app-check step
+  - [ ] TC3D-117 Add a wait-for-condition call to the __tc3d hook
+  - [ ] TC3D-118 Record agent drives on the app's clock with marks and replayable input
+  - [ ] TC3D-119 Record the app window on a steady clock without minimising it
+  - [ ] TC3D-120 Queue file-dialog answers for agent-driven runs
+  - [ ] TC3D-121 Read back every __tc3d write and fail on a changed value
+
+## No project
+
+- [ ] TC3D-123 Add docs/README.md and a Task Index to the architecture doc
