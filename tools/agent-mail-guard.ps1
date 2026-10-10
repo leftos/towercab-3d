@@ -1,4 +1,5 @@
 #requires -Version 7
+
 <#
 .SYNOPSIS
 The prek hook `agent-mail-guard`: hands the staged paths to the user-level Agent Mail lease guard when the machine
