@@ -18,7 +18,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
-quick-xml = "0.37"  # For parsing VMR files
+quick-xml = "0.39"  # For parsing VMR files
 rayon = "1.10"  # For parallel VMR file parsing
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
