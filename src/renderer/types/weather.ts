@@ -6,7 +6,7 @@
  *
  * @see weatherStore - Store for managing weather state
  * @see MetarService - Service for fetching and parsing METAR data
- * @see useBabylonOverlay - Hook that renders fog dome and cloud layers
+ * @see useCesiumWeatherStages - Hook that renders the cloud and fog stage
  */
 
 /**
@@ -128,7 +128,7 @@ export type FlightCategory = 'VFR' | 'MVFR' | 'IFR' | 'LIFR'
  * ```
  *
  * @see weatherStore - Stores computed fog density
- * @see useBabylonOverlay - Renders fog dome based on density
+ * @see useCesiumWeather - Tunes Cesium's scene fog from the density
  */
 export type FogDensity = number
 
@@ -360,9 +360,3 @@ export interface InterpolatedWeather {
   /** Timestamp when interpolation was calculated (epoch ms) */
   calculatedAt: number
 }
-
-/**
- * Which renderer draws clouds and fog: the Cesium post-process stage or the
- * Babylon fog dome and cloud meshes. Exactly one of them draws at a time.
- */
-export type WeatherRenderer = 'cesium' | 'babylon'

@@ -9,26 +9,9 @@ interface Camera2DState {
   heading: number
 }
 
-// Distance threshold for repositioning cloud layers (meters)
-// Clouds are repositioned when camera moves this far from the last cloud center
-// This prevents the "following" visual artifact while ensuring continuous coverage
-const CLOUD_REPOSITION_THRESHOLD = 10000 // 10km
-
-interface CloudMeshData {
-  plane: BABYLON.Mesh
-  dome: BABYLON.Mesh
-  abovePlane: BABYLON.Mesh
-  material: BABYLON.StandardMaterial
-  domeMaterial: BABYLON.StandardMaterial
-  aboveMaterial: BABYLON.StandardMaterial
-}
-
 interface UseBabylonCameraSyncOptions {
   cesiumViewer: Cesium.Viewer | null
   camera: BABYLON.FreeCamera | null
-  fogDome: BABYLON.Mesh | null
-  /** Getter function for cloud meshes - called each frame to get current meshes */
-  getCloudMeshes: () => CloudMeshData[]
   /** Getter for fixed-to-ENU transformation matrix from useBabylonRootNode */
   getFixedToEnu: () => Cesium.Matrix4 | null
 }
@@ -58,12 +41,11 @@ interface UseBabylonCameraSyncResult {
  * - Handles both 3D perspective view and 2D top-down orthographic view
  * - Synchronizes camera position, rotation (Euler angles), and FOV each frame
  * - Manages terrain offset calculations for accurate altitude positioning
- * - Positions fog dome at camera location for weather effects
  *
  * ## Dependencies
  * - Requires: Cesium viewer and Babylon FreeCamera instances (must be initialized)
  * - Reads: Cesium camera's position, orientation, and FOV
- * - Writes: Babylon camera's position, rotation, FOV, and fog dome position
+ * - Writes: Babylon camera's position, rotation, and FOV
  * - Uses: ENU transform data from `setupEnuTransforms()` utility
  *
  * ## Call Order
@@ -72,13 +54,12 @@ interface UseBabylonCameraSyncResult {
  * function BabylonOverlay() {
  *   const cesiumViewer = useRef<Cesium.Viewer>(null)
  *   const babylonCamera = useRef<BABYLON.FreeCamera>(null)
- *   const fogDome = useRef<BABYLON.Mesh>(null)
  *
  *   // Setup camera sync
  *   const { setupBasePosition, syncCamera } = useBabylonCameraSync({
  *     cesiumViewer: cesiumViewer.current,
  *     camera: babylonCamera.current,
- *     fogDome: fogDome.current
+ *     getFixedToEnu
  *   })
  *
  *   // Initialize base position when airport changes
@@ -161,13 +142,6 @@ interface UseBabylonCameraSyncResult {
  *
  * The `get2DState()` function provides camera's current lat/lon/heading for this calculation.
  *
- * ## Fog Dome Positioning
- *
- * The fog dome (weather visibility sphere) is positioned at the camera location:
- * - Follows camera movement in both 3D and top-down modes
- * - Uses `fogDome.position.copyFrom(camera.position)` for direct copy
- * - Updated every frame during `syncCamera()`
- *
  * ## Performance Considerations
  *
  * - **Matrix multiplication**: One 4×4 matrix transform per frame (~60Hz)
@@ -188,7 +162,7 @@ interface UseBabylonCameraSyncResult {
  * @param options - Configuration options
  * @param options.cesiumViewer - The Cesium viewer instance (must not be destroyed)
  * @param options.camera - The Babylon FreeCamera to synchronize (must not be disposed)
- * @param options.fogDome - Optional fog dome mesh to position at camera (can be null)
+ * @param options.getFixedToEnu - Getter for the fixed-to-ENU matrix from useBabylonRootNode
  * @returns Camera sync controls and state accessors
  *
  * @example
@@ -196,7 +170,7 @@ interface UseBabylonCameraSyncResult {
  * const { setupBasePosition, syncCamera } = useBabylonCameraSync({
  *   cesiumViewer: viewer,
  *   camera: babylonCamera,
- *   fogDome: fogDomeMesh
+ *   getFixedToEnu
  * })
  *
  * // Setup ENU origin at tower
@@ -212,7 +186,7 @@ interface UseBabylonCameraSyncResult {
  * const { get2DState, isTopDownMode } = useBabylonCameraSync({
  *   cesiumViewer: viewer,
  *   camera: babylonCamera,
- *   fogDome: null
+ *   getFixedToEnu
  * })
  *
  * if (isTopDownMode()) {
@@ -225,7 +199,7 @@ interface UseBabylonCameraSyncResult {
  * const { getTerrainOffset } = useBabylonCameraSync({
  *   cesiumViewer: viewer,
  *   camera: babylonCamera,
- *   fogDome: null
+ *   getFixedToEnu
  * })
  *
  * const aircraftHeightAboveTerrain = aircraftAltitudeMSL - getTerrainOffset()
@@ -237,8 +211,6 @@ interface UseBabylonCameraSyncResult {
 export function useBabylonCameraSync({
   cesiumViewer,
   camera,
-  fogDome,
-  getCloudMeshes,
   getFixedToEnu,
 }: UseBabylonCameraSyncOptions): UseBabylonCameraSyncResult {
   // ENU transformation data
@@ -250,9 +222,6 @@ export function useBabylonCameraSync({
 
   // Terrain offset: difference between MSL elevation and actual Cesium terrain height
   const terrainOffsetRef = useRef<number>(0)
-
-  // Last position where clouds were centered (for threshold-based repositioning)
-  const cloudCenterRef = useRef<{ x: number; z: number }>({ x: 0, z: 0 })
 
   // Setup ENU transforms for a given base position
   const setupBasePosition = useCallback(
@@ -307,18 +276,7 @@ export function useBabylonCameraSync({
 
     // Look straight down with no rotation
     camera.rotation.set(Math.PI / 2, 0, 0)
-
-    // Position fog dome at camera position
-    if (fogDome) {
-      fogDome.position.copyFrom(camera.position)
-    }
-
-    // Hide cloud planes in top-down mode (they would obscure the view)
-    const cloudMeshes = getCloudMeshes()
-    for (const meshData of cloudMeshes) {
-      meshData.plane.isVisible = false
-    }
-  }, [cesiumViewer, camera, fogDome, getCloudMeshes])
+  }, [cesiumViewer, camera])
 
   // Sync Babylon camera for 3D view
   const syncCamera3D = useCallback((): boolean => {
@@ -338,47 +296,8 @@ export function useBabylonCameraSync({
     camera.rotation.set(syncData.rotation.rotationX, syncData.rotation.rotationY, syncData.rotation.rotationZ)
     camera.fov = syncData.fov
 
-    // Position fog dome at camera position
-    if (fogDome) {
-      fogDome.position.copyFrom(camera.position)
-    }
-
-    // Cloud layer positioning: reposition only when camera moves significantly
-    // This prevents the "following clouds" visual artifact while ensuring continuous coverage
-    const cameraX = camera.position.x
-    const cameraZ = camera.position.z
-    const cloudCenter = cloudCenterRef.current
-
-    // Calculate distance from camera to current cloud center
-    const dx = cameraX - cloudCenter.x
-    const dz = cameraZ - cloudCenter.z
-    const distanceFromCloudCenter = Math.sqrt(dx * dx + dz * dz)
-
-    // Reposition clouds if camera has moved beyond threshold
-    const shouldRepositionClouds = distanceFromCloudCenter > CLOUD_REPOSITION_THRESHOLD
-
-    // Reposition all cloud meshes when threshold exceeded
-    // View-dependent visibility is handled by useBabylonWeather
-    if (shouldRepositionClouds) {
-      const cloudMeshes = getCloudMeshes()
-      for (const meshData of cloudMeshes) {
-        // Reposition all cloud geometries (plane, dome, abovePlane)
-        meshData.plane.position.x = cameraX
-        meshData.plane.position.z = cameraZ
-        meshData.dome.position.x = cameraX
-        meshData.dome.position.z = cameraZ
-        meshData.abovePlane.position.x = cameraX
-        meshData.abovePlane.position.z = cameraZ
-      }
-    }
-
-    // Update cloud center reference if we repositioned
-    if (shouldRepositionClouds) {
-      cloudCenterRef.current = { x: cameraX, z: cameraZ }
-    }
-
     return true
-  }, [cesiumViewer, camera, fogDome, getCloudMeshes, getFixedToEnu])
+  }, [cesiumViewer, camera, getFixedToEnu])
 
   // Main sync camera function - dispatches to 2D or 3D based on view
   const syncCamera = useCallback(() => {

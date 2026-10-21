@@ -2,7 +2,7 @@
  * Babylon.js-specific type definitions
  *
  * These types define interfaces for Babylon.js rendering, including scene
- * management, weather effects, aircraft labels, and camera synchronization.
+ * management, aircraft labels, weather visibility culling, and camera synchronization.
  */
 
 import type * as BABYLON from '@babylonjs/core'
@@ -32,38 +32,6 @@ export interface AircraftLabel {
 }
 
 // ============================================================================
-// Weather Effect Types
-// ============================================================================
-
-/**
- * Cloud layer mesh and material data for weather visualization.
- *
- * Each cloud layer can be rendered as either:
- * - A flat horizontal plane (for FEW/SCT/BKN coverage with gaps)
- * - A curved dome mesh (for OVC overcast creating realistic sky appearance)
- *
- * The active mesh is determined by coverage level - OVC uses dome, others use plane.
- */
-export interface CloudMeshData {
-  /** Horizontal plane mesh for partial cloud coverage (FEW/SCT/BKN) - viewed from below */
-  plane: BABYLON.Mesh
-  /** Curved dome mesh for overcast coverage (OVC) - creates realistic overcast sky from below */
-  dome: BABYLON.Mesh
-  /** Horizontal plane mesh for above-cloud view - shows cloud tops when camera is above */
-  abovePlane: BABYLON.Mesh
-  /** Semi-transparent material with configurable opacity (for plane from below) */
-  material: BABYLON.StandardMaterial
-  /** Separate material for dome with fresnel effect (for below view) */
-  domeMaterial: BABYLON.StandardMaterial
-  /** Material for above-cloud plane (lighter colors, cloud tops appearance) */
-  aboveMaterial: BABYLON.StandardMaterial
-  /** Last coverage value used to generate the opacity texture (for caching) */
-  lastCoverage?: number
-  /** Whether the dome mesh is currently active (vs plane) */
-  usingDome?: boolean
-}
-
-// ============================================================================
 // Scene Initialization Types
 // ============================================================================
 
@@ -72,7 +40,7 @@ export interface CloudMeshData {
  *
  * The Babylon overlay is a transparent canvas positioned above the Cesium viewer,
  * synchronized via camera transforms. It renders screen-space elements (labels,
- * leader lines) and weather effects (fog dome, cloud layers).
+ * leader lines) and precipitation (rain, snow, lightning).
  */
 export interface BabylonOverlayOptions {
   /** Cesium viewer instance to synchronize with */
@@ -93,25 +61,6 @@ export interface BabylonSceneOptions {
   antialias?: boolean
   /** Enable transparent background (default: true for overlay mode) */
   transparent?: boolean
-}
-
-// ============================================================================
-// Camera Synchronization Types
-// ============================================================================
-
-/**
- * Options for Babylon camera synchronization with Cesium.
- *
- * Used by useBabylonCameraSync to configure ENU coordinate transforms and
- * camera matrix updates.
- */
-export interface BabylonCameraSyncOptions {
-  /** Cesium viewer to read camera state from */
-  cesiumViewer: Cesium.Viewer | null
-  /** Babylon camera to update */
-  camera: BABYLON.FreeCamera | null
-  /** Optional fog dome mesh to position at camera location */
-  fogDome?: BABYLON.Mesh | null
 }
 
 // ============================================================================
@@ -205,20 +154,6 @@ export interface UseBabylonSceneResult {
   guiTexture: GUI.AdvancedDynamicTexture | null
   /** Whether the scene is ready for rendering */
   sceneReady: boolean
-}
-
-/**
- * Return type for useBabylonWeather hook.
- *
- * Provides access to weather effect meshes and visibility culling function.
- */
-export interface UseBabylonWeatherResult {
-  /** Fog dome mesh (or null if not created) */
-  fogDome: BABYLON.Mesh | null
-  /** Getter function for cloud layer mesh data (0-4 layers) - use getter to avoid stale closure */
-  getCloudMeshes: () => CloudMeshData[]
-  /** Function to check if aircraft label should be visible based on weather */
-  isVisibleByWeather: (params: WeatherVisibilityParams) => boolean
 }
 
 /**

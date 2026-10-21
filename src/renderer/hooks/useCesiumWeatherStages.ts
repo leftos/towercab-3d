@@ -401,10 +401,9 @@ export interface WeatherStagesOptions extends ReferenceInputs {
  * visibility while weather interpolation is on) and the weather settings:
  * `showClouds` gates the clouds, `showBabylonFog` the fog and `visibilityScale`
  * scales the fog visibility while `fogIntensity` scales its optical depth, under
- * `showWeatherEffects`. Draws nothing in the top-down view or while
- * `weatherStageStore.renderer` is `'babylon'`, and is disabled while there is no
- * anchor or nothing to draw. Without a logarithmic depth buffer on the scene the
- * stage stays out (the Babylon overlay draws instead) and one warning is logged. The stage is kept last among the scene's
+ * `showWeatherEffects`. Draws nothing in the top-down view, and is disabled while
+ * there is no anchor or nothing to draw. Without a logarithmic depth buffer on the
+ * scene the stage stays out (no clouds or METAR fog are drawn) and one warning is logged. The stage is kept last among the scene's
  * post-process stages, so the aircraft silhouette outlines are fogged and
  * clouded too.
  *
@@ -424,7 +423,6 @@ export interface WeatherStagesOptions extends ReferenceInputs {
  *   tuned from METAR visibility while it does not
  */
 export function useCesiumWeatherStages(viewer: Cesium.Viewer | null, options: WeatherStagesOptions): boolean {
-  const renderer = useWeatherStageStore((state) => state.renderer)
   const showWeatherEffects = useSettingsStore((state) => state.weather.showWeatherEffects)
   const showClouds = useSettingsStore((state) => state.weather.showClouds)
   const showBabylonFog = useSettingsStore((state) => state.weather.showBabylonFog)
@@ -438,7 +436,7 @@ export function useCesiumWeatherStages(viewer: Cesium.Viewer | null, options: We
   // The scene's flag is fixed when the viewer is created; it is false without fragmentDepth too.
   const logDepth = viewer && !viewer.isDestroyed() ? viewer.scene.logarithmicDepthBuffer : true
   const viewMode = options.viewMode
-  const gates = weatherStageGates({ renderer, showWeatherEffects, showClouds, showBabylonFog, viewMode, logDepth })
+  const gates = weatherStageGates({ showWeatherEffects, showClouds, showBabylonFog, viewMode, logDepth })
 
   const refs = useRef<StageRefs>({
     frame: { current: null },
@@ -477,8 +475,8 @@ export function useCesiumWeatherStages(viewer: Cesium.Viewer | null, options: We
     if (!gates.missingLogDepth || warnedLogDepthRef.current) return
     warnedLogDepthRef.current = true
     console.warn(
-      '[WeatherStage] This view has no logarithmic depth buffer, so the Babylon overlay draws clouds and fog ' +
-        'instead of the Cesium stage.',
+      '[WeatherStage] This view has no logarithmic depth buffer, so the Cesium stage draws no clouds or METAR fog; ' +
+        "only the globe's distance fog shows.",
     )
   }, [gates.missingLogDepth])
 

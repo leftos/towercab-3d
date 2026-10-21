@@ -170,7 +170,7 @@ Source: CLAUDE.md:41, CLAUDE.md:56; docs/plans/rendering-opportunities-design.md
 
 Rain in the Babylon overlay is drawn additively with alpha 0, so CDP screenshots and canvas `drawImage` both miss it. Verify such effects with the hook's `readPixels(x, y, w, h)` on the Babylon canvas (RGBA, bottom-left row order) or a video, never a still screenshot.
 
-The converse also holds: `readPixels` covers only the Babylon canvas, so Cesium pixels, including the clouds and fog of the Cesium weather stage (the default renderer in a view with a logarithmic depth buffer; `weatherStage.renderer = 'babylon'` brings back the Babylon meshes), are still judged from page screenshots. The plan's standing verification line says "particles and other additive effects need a video or engine.readPixels, not a screenshot".
+The converse also holds: `readPixels` covers only the Babylon canvas, so Cesium pixels, including the clouds and fog of the Cesium weather stage (drawn only in a view with a logarithmic depth buffer), are still judged from page screenshots. The plan's standing verification line says "particles and other additive effects need a video or engine.readPixels, not a screenshot".
 Source: CLAUDE.md:49; src/renderer/hooks/useAgentHarness.ts:66-81; docs/plans/rendering-opportunities-design.md:109, 214; commit 8d672dc (MAIN.md "Verification, every wave"). Seen: Wave 1 run.
 
 ### CDP emulation overrides last only for the call that sets them

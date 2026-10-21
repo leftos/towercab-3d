@@ -35,8 +35,8 @@ interface UseBabylonRootNodeOptions {
  *   // 2. Setup root node (needs scene)
  *   const rootNode = useBabylonRootNode({ scene })
  *
- *   // 3. Create weather effects, labels, etc. (can use rootNode transforms)
- *   const weather = useBabylonWeather({ scene })
+ *   // 3. Create precipitation, labels, etc. (can use rootNode transforms)
+ *   const precipitation = useBabylonPrecipitation({ scene, camera, isTopDownView })
  *   const labels = useBabylonLabels({ scene, guiTexture })
  * }
  * ```

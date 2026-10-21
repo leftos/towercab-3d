@@ -35,10 +35,10 @@ import type { BabylonSceneOptions, UseBabylonSceneResult } from '@/types'
  *   const { engine, scene, camera, guiTexture, sceneReady } = useBabylonScene({ canvas })
  *
  *   // 2. Setup camera synchronization (needs camera from scene)
- *   const cameraSync = useBabylonCameraSync({ cesiumViewer, camera })
+ *   const cameraSync = useBabylonCameraSync({ cesiumViewer, camera, getFixedToEnu })
  *
- *   // 3. Create weather effects (needs scene for meshes)
- *   const weather = useBabylonWeather({ scene })
+ *   // 3. Create precipitation effects (needs scene and camera)
+ *   const precipitation = useBabylonPrecipitation({ scene, camera, isTopDownView })
  *
  *   // 4. Setup labels (needs guiTexture and scene)
  *   const labels = useBabylonLabels({ guiTexture, scene })
@@ -87,7 +87,9 @@ import type { BabylonSceneOptions, UseBabylonSceneResult } from '@/types'
  * ### Directional Light
  * - **Direction**: (-1, -2, -1) pointing down and southwest
  * - **Intensity**: 0.6 (configurable via DIRECTIONAL_LIGHT_INTENSITY)
- * - Dimmed at night by useBabylonNightLighting together with the hemispheric light
+ *
+ * Both lights keep a constant intensity day and night; nothing the overlay draws
+ * (labels, rain, snow, lightning) is lit by them.
  *
  * ## GUI Texture
  *
@@ -117,7 +119,7 @@ import type { BabylonSceneOptions, UseBabylonSceneResult } from '@/types'
  * 5. Clear all refs
  *
  * **Note:** Scene disposal automatically handles child resources (lights, cameras),
- * but external hooks (useBabylonWeather, useBabylonLabels) are responsible for
+ * but external hooks (useBabylonPrecipitation, useBabylonLabels) are responsible for
  * disposing their own resources before scene disposal.
  *
  * ## Scene Ready State
@@ -184,14 +186,14 @@ import type { BabylonSceneOptions, UseBabylonSceneResult } from '@/types'
  *   camera: camera
  * })
  *
- * // Weather effects (requires scene)
- * const weather = useBabylonWeather({ scene })
+ * // Precipitation effects (requires scene and camera)
+ * const precipitation = useBabylonPrecipitation({ scene, camera, isTopDownView })
  *
  * // Labels (requires guiTexture and scene)
  * const labels = useBabylonLabels({ guiTexture, scene })
  *
  * @see useBabylonCameraSync - For camera synchronization with Cesium
- * @see useBabylonWeather - For fog and cloud effects
+ * @see useBabylonPrecipitation - For rain, snow and lightning effects
  * @see useBabylonLabels - For aircraft datablock labels
  */
 export function useBabylonScene(options: BabylonSceneOptions): UseBabylonSceneResult {

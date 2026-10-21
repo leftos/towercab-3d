@@ -114,8 +114,6 @@ export type {
   PrecipitationState,
   // Precipitation
   PrecipitationType,
-  // Which renderer draws clouds and fog
-  WeatherRenderer,
   // Weather visibility culling
   WeatherVisibilityConditions,
   // Wind
@@ -318,15 +316,11 @@ export {
 export type {
   // Aircraft labels
   AircraftLabel,
-  // Camera synchronization
-  BabylonCameraSyncOptions,
   // Memory diagnostics
   BabylonMemoryCounters,
   // Scene initialization
   BabylonOverlayOptions,
   BabylonSceneOptions,
-  // Weather effects
-  CloudMeshData,
   // ENU transforms
   EnuTransformData,
   UseBabylonCameraSyncResult,
@@ -334,7 +328,6 @@ export type {
   UseBabylonRootNodeResult,
   // Hook return types
   UseBabylonSceneResult,
-  UseBabylonWeatherResult,
   // Weather visibility
   WeatherVisibilityParams,
 } from './babylon'
@@ -481,8 +474,8 @@ export type {
  *    - Used by: AircraftModelService, TowerModelService
  *
  * 8. **Babylon.js types** → `babylon.ts`
- *    - Babylon rendering, labels, weather effects, ENU transforms
- *    - Used by: useBabylonOverlay, useBabylonScene, useBabylonWeather, useBabylonLabels
+ *    - Babylon rendering, labels, weather visibility culling, ENU transforms
+ *    - Used by: useBabylonOverlay, useBabylonScene, useBabylonLabels
  *
  * 9. **FSLTL types** → `fsltl.ts`
  *    - FSLTL model conversion, registry, VMR parsing

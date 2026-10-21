@@ -4,7 +4,6 @@ import { CLOUD_STAGE_FS, WEATHER_COMPOSITE_FS } from '@/hooks/weather/cloudStage
 import type { CloudLayer } from '@/types'
 import {
   anchorGround,
-  babylonDrawsWeather,
   buildCloudLayerUniforms,
   effectiveVisibilitySM,
   type FrameGround,
@@ -161,7 +160,6 @@ describe('stageDrawsFog', () => {
 
 describe('weatherStageGates', () => {
   const allOn: WeatherStageGateInput = {
-    renderer: 'cesium',
     showWeatherEffects: true,
     showClouds: true,
     showBabylonFog: true,
@@ -189,7 +187,6 @@ describe('weatherStageGates', () => {
   it.each([
     ['the master weather switch is off', { showWeatherEffects: false }],
     ['the view is top-down', { viewMode: 'topdown' as const }],
-    ['the Babylon renderer is selected', { renderer: 'babylon' as const }],
   ])('draws nothing when %s', (_reason, change) => {
     expect(weatherStageGates({ ...allOn, ...change })).toEqual({
       stage: false,
@@ -462,19 +459,5 @@ describe('weatherStageHasWork', () => {
 
   it('is false without a frame to draw in, whatever the weather', () => {
     expect(weatherStageHasWork(1, 800, false)).toBe(false)
-  })
-})
-
-describe('babylonDrawsWeather', () => {
-  it('draws when the switch picks Babylon', () => {
-    expect(babylonDrawsWeather('babylon', true)).toBe(true)
-  })
-
-  it('stays off while the Cesium stage can draw', () => {
-    expect(babylonDrawsWeather('cesium', true)).toBe(false)
-  })
-
-  it('takes over when the Cesium stage cannot draw without the logarithmic depth buffer', () => {
-    expect(babylonDrawsWeather('cesium', false)).toBe(true)
   })
 })

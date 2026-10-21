@@ -90,12 +90,6 @@ export function useAgentHarness(
           window: performanceMonitor.getFrameWindow(),
         }),
         weatherStage: {
-          get renderer() {
-            return useWeatherStageStore.getState().renderer
-          },
-          set renderer(value) {
-            useWeatherStageStore.setState({ renderer: value })
-          },
           set: ({ camera, testAircraft }) => {
             const state = useWeatherStageStore.getState()
             useWeatherStageStore.setState({
@@ -113,7 +107,6 @@ export function useAgentHarness(
               if (current.name === WEATHER_STAGE_NAME) stage = current
             }
             return {
-              renderer: useWeatherStageStore.getState().renderer,
               stageInScene: stage !== null,
               stageEnabled: stage?.enabled ?? false,
               stageNames,
