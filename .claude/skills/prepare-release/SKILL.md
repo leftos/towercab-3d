@@ -98,14 +98,14 @@ Update the version string in all three files. They must match exactly (no leadin
 
 ### 7.3 Run pre-release checks
 
-Run `pwsh tools/gate.ps1 -Log .tmp/release-check.log -TimeoutSeconds 600 -Slot heavy -- pnpm run check`. This runs Biome, TypeScript, and Rust (`cargo check` / `clippy` / `fmt --check`). If issues surface (the failure lines in `.tmp/release-check.log`):
+Run `pwsh -NoProfile -File tools/gate.ps1 run --log .tmp/release-check.log --timeout 900 --slot heavy -- pnpm run check`. This runs Biome, TypeScript, and Rust (`cargo check` / `clippy` / `fmt --check`). If issues surface (the failure lines in `.tmp/release-check.log`):
 
 - Auto-fixable lints/format → run `pnpm biome check src/ --fix` and `cargo fmt`, then re-run the gated check.
 - Anything else → stop and surface the failure to the user. Do not commit a release with failing checks.
 
 ### 7.4 Run the signed build (optional but recommended)
 
-Run `pwsh tools/gate.ps1 -Log .tmp/release-build.log -TimeoutSeconds 1800 -Slot heavy -- pwsh ./build-signed.ps1` (with `-NoVnas` after the script per Step 0.3). This:
+Run `pwsh -NoProfile -File tools/gate.ps1 run --log .tmp/release-build.log --timeout 1800 --slot heavy -- pwsh ./build-signed.ps1` (with `-NoVnas` after the script per Step 0.3). This:
 
 - Verifies the release builds cleanly with the signing key
 - Refreshes `src-tauri/Cargo.lock` to embed the new version
