@@ -716,7 +716,7 @@ TowerCab 3D displays real-time weather based on METAR reports.
 
 **Cloud Layers:**
 - Clouds positioned at METAR-reported ceiling altitudes, hidden by anything closer to the camera
-- With the Logarithmic Depth Buffer graphics setting off, the older look is used: a fog dome and cloud planes that are not hidden by closer objects
+- With the Logarithmic Depth Buffer graphics setting off, no clouds or METAR fog are drawn, and only the globe's distance fog shows
 - Scattered (SCT), broken (BKN), and overcast (OVC) layers shown
 - Aircraft behind clouds may have hidden datablocks
 

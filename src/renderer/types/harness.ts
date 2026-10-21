@@ -5,7 +5,7 @@
  * viewer, Babylon overlay and a few Zustand stores, so a test can read camera
  * state, aim the camera, project a coordinate to a screen point, read back
  * rendered pixels, read frame timings, drive the Cesium cloud and fog stage
- * (renderer switch, camera override, test aircraft) and read the tower cab's state. It is installed by `useAgentHarness`
+ * (camera override, test aircraft) and read the tower cab's state. It is installed by `useAgentHarness`
  * and only exists in dev builds; production bundles drop it.
  *
  * @see useAgentHarness - Hook that installs the global
@@ -18,7 +18,6 @@ import type { useViewportStore } from '../stores/viewportStore'
 import type { useWeatherStore } from '../stores/weatherStore'
 import type { FollowMode } from './camera'
 import type { PerformanceMetrics } from './performance'
-import type { WeatherRenderer } from './weather'
 
 /** Median and p95 of one per-frame series, in milliseconds. */
 export interface PercentileStat {
@@ -137,7 +136,7 @@ export interface AgentHarness {
    */
   perf: () => { current: PerformanceMetrics; window: FrameWindowSummary }
 
-  /** The Cesium cloud and fog stage: renderer switch, drive aids and state */
+  /** The Cesium cloud and fog stage: drive aids and state */
   weatherStage: WeatherStageHandle
 
   /** The tower cab model of the main viewport, read live on each access */
@@ -184,8 +183,6 @@ export interface WeatherStageSetParams {
 
 /** Dev handle on the cloud and fog stage */
 export interface WeatherStageHandle {
-  /** Which renderer draws clouds and fog in this window; not saved */
-  renderer: WeatherRenderer
   /** Sets or clears the camera override and the test aircraft */
   set: (params: WeatherStageSetParams) => void
   /**
@@ -193,7 +190,6 @@ export interface WeatherStageHandle {
    * post-process stage names in draw order, and the depth facts its occlusion relies on
    */
   info: () => {
-    renderer: WeatherRenderer
     stageInScene: boolean
     stageEnabled: boolean
     stageNames: string[]

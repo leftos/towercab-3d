@@ -14,6 +14,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Remote access accepts only devices on your local network, unless you turn on **Allow devices outside the local network** in Settings → Configuration.
 - FSLTL and AIG model conversions now run at most two at a time and stop after five minutes; a browser connected to a busy desktop app waits and retries.
 - Clouds and fog are now drawn with the scene's depth, so aircraft, buildings and terrain in front of a cloud deck or fog bank hide it correctly.
+- Clouds and fog are now drawn with the scene's depth, so aircraft, buildings and terrain in front of a cloud deck or fog bank hide it correctly. They need the logarithmic depth setting on; with it off, no clouds or weather fog are drawn.
 - Fog Intensity sets how thick the depth-drawn fog looks, and terrain in low visibility is no longer fogged twice.
 - Tower mod cabs now darken at night with the rest of the view and cast a shadow on the ground.
 - Tower mod `rotation` now turns the cab clockwise, as documented; a cab with a rotation other than 0 may now face a different way.

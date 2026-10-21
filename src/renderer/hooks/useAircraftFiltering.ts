@@ -152,7 +152,7 @@ interface UseAircraftFilteringOptions {
  * ## Weather Visibility Culling
  *
  * The weather filter delegates to `isVisibleThroughWeather` in
- * `utils/weatherVisibility.ts`, which `useBabylonWeather` shares: aircraft beyond
+ * `utils/weatherVisibility.ts`, which `useBabylonOverlay` shares: aircraft beyond
  * the scaled METAR visibility, or behind a BKN/OVC layer between camera and
  * aircraft, are hidden. Cloud culling is skipped in top-down view.
  *

@@ -75,7 +75,7 @@ useAircraftInterpolation() [60 Hz singleton]
          └──→ useBabylonOverlay (60Hz rendering)
                 ├─ Datablock labels in screen space
                 ├─ Leader lines from aircraft to labels
-                └─ Weather effects (fog dome, cloud layers; hidden by default, the Cesium weather stage draws them)
+                └─ Rain, snow and lightning (clouds and METAR fog are the Cesium weather stage's)
 
 Note: AircraftPanel uses useAircraftFiltering for 1Hz UI updates
 ```
@@ -96,10 +96,10 @@ weatherStore.setWeather()
          │      └─ Applies fog density to Cesium scene (tuned from METAR visibility only while the stage draws no fog; otherwise held at Cesium's clear-weather values so terrain is not fogged twice)
          │
          ├──→ useCesiumWeatherStages
-         │      └─ Post-process stage drawing clouds and fog against scene depth (default renderer; also in insets; nothing in top-down)
+         │      └─ Post-process stage drawing clouds and fog against scene depth (also in insets; nothing in top-down, nor in a view with no logarithmic depth buffer, which shows only the globe's distance fog)
          │
          └──→ useBabylonOverlay
-                ├─ Fog dome mesh and cloud layer plane meshes (hidden unless weatherStageStore.renderer is 'babylon' or the view has no logarithmic depth buffer)
+                ├─ Rain, snow and lightning
                 └─ Datablock weather visibility culling (always on)
 ```
 
@@ -298,7 +298,7 @@ CesiumViewer Component Mount
     │      ├─ Adds the cloud and fog post-process stage (GLSL in hooks/weather/cloudStage.glsl.ts; pure helpers in utils/weatherStage.ts), kept after the silhouette stage so aircraft in cloud get no outline
     │      ├─ Split in one file into useWeatherAnchor, useWeatherStageFrame and useWeatherStageComposite
     │      ├─ Reads showWeatherEffects, showClouds, showBabylonFog, visibilityScale, fogIntensity (scales the fog's optical depth), weatherStore.useInterpolation / interpolatedWeather.visibility; disabled when there is nothing to draw (no layers, no fog, no anchor frame)
-    │      ├─ Reads the live scene.logarithmicDepthBuffer, not graphics.enableLogDepth: without it the stage is hidden, one warning is logged and the Babylon overlay draws clouds and fog instead
+    │      ├─ Reads the live scene.logarithmicDepthBuffer, not graphics.enableLogDepth: without it the stage is hidden, one warning is logged and the view shows only the globe's distance fog, with no clouds or METAR fog
     │      ├─ Cloud frame anchored on the airport (re-anchors past 100 m within it), or on the followed aircraft every 5 km in orbit-follow; terrain is resampled when the provider changes and retried each second on failure; ground changes between samples slide over 5 s; cloud noise is world-stable (origin resets past 50 km)
     │      └─ useWeatherStageDriveAids runs after useCesiumCamera (dev camera and test-aircraft aids)
     │
@@ -553,7 +553,7 @@ requestAnimationFrame
     ├─ useBabylonOverlay.render()
     │    ├─ Renders datablock labels in screen space
     │    ├─ Renders leader lines from aircraft to labels
-    │    ├─ Renders weather effects (fog dome, clouds)
+    │    ├─ Renders weather effects (rain, snow, lightning)
     │    └─ Renders measuring tool lines
     │
     └─ performanceMonitor.endFrame()
@@ -746,13 +746,8 @@ useBabylonOverlay (Orchestrator - 265 LOC)
     │      ├─ Adds hemispheric and directional lighting
     │      └─ Handles canvas resizing and resource disposal
     │
-    ├─ 2. useBabylonWeather({ scene, isTopDownView, enabled })
-    │      ├─ enabled is false by default (weatherStageStore.renderer is 'cesium') unless the view has no logarithmic depth buffer: the meshes below are hidden, only label culling runs
-    │      ├─ Creates fog dome mesh (hemisphere, BACKSIDE rendering)
-    │      ├─ Creates cloud layer mesh pool (4 planes, 50km diameter)
-    │      ├─ Updates fog scale/opacity based on METAR visibility
-    │      ├─ Updates cloud positions based on METAR ceiling data
-    │      └─ Provides isVisibleByWeather() for label culling, delegating to isVisibleThroughWeather() in utils/weatherVisibility.ts (shared with useAircraftFiltering)
+    ├─ 2. isVisibleByWeather() (a callback inside useBabylonOverlay, no hook of its own)
+    │      └─ Label culling, delegating to isVisibleThroughWeather() in utils/weatherVisibility.ts (shared with useAircraftFiltering)
     │
     ├─ 3. useBabylonLabels({ guiTexture })
     │      ├─ Creates aircraft datablock labels (Rectangle + TextBlock)
@@ -769,12 +764,11 @@ useBabylonOverlay (Orchestrator - 265 LOC)
     │      ├─ Provides getters for matrices and terrain offset
     │      └─ Disposes root node on unmount or airport change
     │
-    └─ 5. useBabylonCameraSync({ cesiumViewer, camera, fogDome })
+    └─ 5. useBabylonCameraSync({ cesiumViewer, camera, getFixedToEnu })
            ├─ Reads Cesium camera position/rotation/FOV
            ├─ Converts ECEF → ENU using fixedToEnu matrix
            ├─ Extracts Euler angles from direction/up vectors
            ├─ Updates Babylon camera position/rotation/FOV
-           ├─ Positions fog dome at camera location
            └─ Handles both 3D perspective and top-down modes
 ```
 
@@ -783,13 +777,12 @@ useBabylonOverlay (Orchestrator - 265 LOC)
 ```typescript
 // Correct order - each hook depends on previous ones
 const { engine, scene, camera, guiTexture, sceneReady } = useBabylonScene({ canvas })
-const { fogDome, isVisibleByWeather } = useBabylonWeather({ scene, enabled })
 const { updateLabel, updateLabelPosition, removeLabel } = useBabylonLabels({ guiTexture })
 const { setupRootNode } = useBabylonRootNode({ scene, cesiumViewer })
-const { syncCamera } = useBabylonCameraSync({ cesiumViewer, camera, fogDome })
+const { syncCamera } = useBabylonCameraSync({ cesiumViewer, camera, getFixedToEnu })
 
 // WRONG - camera sync before scene initialization
-const { syncCamera } = useBabylonCameraSync({ cesiumViewer, camera, fogDome })  // ❌ camera is null!
+const { syncCamera } = useBabylonCameraSync({ cesiumViewer, camera, getFixedToEnu })  // ❌ camera is null!
 const { camera } = useBabylonScene({ canvas })
 ```
 
@@ -798,7 +791,7 @@ const { camera } = useBabylonScene({ canvas })
 **For LLM Agents:**
 - 70% reduction in file size (889 → 265 LOC for orchestrator)
 - Clear hook boundaries with single responsibilities
-- Easier to locate specific functionality (search for "fog" → useBabylonWeather)
+- Easier to locate specific functionality (search for "label" → useBabylonLabels)
 - Better code search results (specialized files vs monolith)
 
 **For Developers:**
@@ -811,7 +804,6 @@ const { camera } = useBabylonScene({ canvas })
 **Memory Management:**
 Each hook manages its own resource disposal:
 - useBabylonScene → engine, scene, camera, GUI
-- useBabylonWeather → fog dome, cloud meshes
 - useBabylonLabels → labels, leader lines
 - useBabylonRootNode → root transform node
 - useBabylonCameraSync → no resources (stateless calculations)
@@ -931,7 +923,7 @@ src/renderer/
 │   ├─ vatsimStore.ts
 │   ├─ viewportStore.ts (PRIMARY CAMERA STORE)
 │   ├─ vnasStore.ts (vNAS connection state)
-│   ├─ weatherStageStore.ts (cloud and fog renderer switch, 'cesium' | 'babylon', not persisted)
+│   ├─ weatherStageStore.ts (dev-only drive aids of the cloud and fog stage, not persisted)
 │   └─ weatherStore.ts
 │
 ├─ services/

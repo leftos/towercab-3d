@@ -16,7 +16,7 @@ import {
   WEATHER_STAGE_NOISE_ORIGIN_RESET_M,
   WEATHER_STAGE_REANCHOR_DISTANCE_M,
 } from '@/constants'
-import type { CloudLayer, ViewMode, WeatherRenderer } from '@/types'
+import type { CloudLayer, ViewMode } from '@/types'
 import { haversineDistanceNm } from '@/utils/aircraft/geoMath'
 import { nmToMeters } from '@/utils/coordinates'
 
@@ -148,7 +148,6 @@ export function sceneFogValues(input: {
 
 /** Settings and scene state that decide whether and what the stage draws */
 export interface WeatherStageGateInput {
-  renderer: WeatherRenderer
   showWeatherEffects: boolean
   showClouds: boolean
   showBabylonFog: boolean
@@ -170,14 +169,14 @@ export interface WeatherStageGates {
 /**
  * Settings gating of the stage: `showClouds` gates the clouds and
  * `showBabylonFog` the fog, under the `showWeatherEffects` master switch; the
- * top-down view and the Babylon renderer draw none, and without the
- * logarithmic depth buffer the stage hides itself.
+ * top-down view draws none, and without the logarithmic depth buffer the
+ * stage hides itself.
  *
- * @param input - Settings, view mode, renderer switch and depth buffer state
+ * @param input - Settings, view mode and depth buffer state
  * @returns What the stage draws
  */
 export function weatherStageGates(input: WeatherStageGateInput): WeatherStageGates {
-  const active = input.renderer === 'cesium' && input.showWeatherEffects && input.viewMode !== 'topdown'
+  const active = input.showWeatherEffects && input.viewMode !== 'topdown'
   const wanted = active && (input.showClouds || input.showBabylonFog)
   if (!wanted || !input.logDepth) {
     return { stage: false, clouds: false, fog: false, missingLogDepth: wanted }
@@ -408,16 +407,4 @@ export function effectiveVisibilitySM(input: {
  */
 export function weatherStageHasWork(layerCount: number, visibilityMeters: number, hasFrame: boolean): boolean {
   return hasFrame && (layerCount > 0 || visibilityMeters > 0)
-}
-
-/**
- * Whether the Babylon fog dome and cloud meshes draw: when the switch picks
- * Babylon, and also when the Cesium stage cannot draw because the scene has
- * no logarithmic depth buffer, so the view never loses its weather.
- *
- * @param renderer - The renderer switch
- * @param logDepth - The scene's live `logarithmicDepthBuffer`
- */
-export function babylonDrawsWeather(renderer: WeatherRenderer, logDepth: boolean): boolean {
-  return renderer === 'babylon' || !logDepth
 }

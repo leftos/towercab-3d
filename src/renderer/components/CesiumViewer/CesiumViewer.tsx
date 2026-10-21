@@ -5,7 +5,6 @@ import { useAgentHarness } from '../../hooks/useAgentHarness'
 import { setInterpolationTerrainData, useAircraftInterpolation } from '../../hooks/useAircraftInterpolation'
 import { useAircraftModels } from '../../hooks/useAircraftModels'
 import { useAutoAirportSwitch } from '../../hooks/useAutoAirportSwitch'
-import { useBabylonNightLighting } from '../../hooks/useBabylonNightLighting'
 import { getMemoryCounters, useBabylonOverlay } from '../../hooks/useBabylonOverlay'
 import { useCesiumCamera } from '../../hooks/useCesiumCamera'
 import { useCesiumLabels } from '../../hooks/useCesiumLabels'
@@ -447,11 +446,6 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
 
   // Dev-only agent test harness (window.__tc3d) for MCP-driven tests
   useAgentHarness(viewer, { engine: babylonOverlay.engine ?? null, scene: babylonOverlay.scene ?? null }, getTowerModel)
-
-  // Adjust Babylon.js lighting based on sun position
-  useBabylonNightLighting(babylonOverlay?.scene ?? null, sunElevation, {
-    enabled: enableNightDarkening && enableLighting,
-  })
 
   useCesiumLabels({
     viewer,
