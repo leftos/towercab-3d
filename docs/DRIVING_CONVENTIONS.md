@@ -1,37 +1,65 @@
 # TowerCab 3D driving conventions
 
-These are the rules for letting an agent drive the running TowerCab 3D app. Agents drive it through two third-party `@playwright/mcp` servers declared in `.mcp.json`: `tauri-app` attaches to the desktop app's WebView2 over CDP (port 9222), and `playwright` launches Edge against the Vite frontend alone; inside the page they call the dev-only `window.__tc3d` hook, installed by `src/renderer/hooks/useAgentHarness.ts` and typed in `src/renderer/types/harness.ts`. The launch recipe, the hook's calls and the standing driving notes live in `CLAUDE.md`, section "E2E testing via Playwright MCP"; this file holds the lessons behind them. The comment under each heading (`<!-- rule: slug -->`, with `scope: project` when the rule means nothing outside this repo) is the rule's identity for the user-level `conventions-sync` skill, which trades driving lessons with the owner's other projects. A rule that describes something this repo does not do yet says so, and its work is in the plan. This repo declines the whole Server plumbing section, because it builds no MCP server of its own; it also declines the rules about OS-level input (all its input is Playwright's CDP input) and those about hooks that are injected per run, served over a pipe or socket, or answer through a request dispatcher, because its hook is compiled into dev builds and called through CDP evaluate.
+These are the rules for letting an agent drive the running TowerCab 3D app. Agents drive it through two third-party `@playwright/mcp` servers declared in `.mcp.json`: `tauri-app` attaches to the desktop app's WebView2 over CDP (port 9222), and `playwright` launches Edge against the Vite frontend alone; inside the page they call the dev-only `window.__tc3d` hook, installed by `src/renderer/hooks/useAgentHarness.ts` and typed in `src/renderer/types/harness.ts`.
+
+The launch recipe, the hook's calls and the standing driving notes live in `CLAUDE.md`, section "E2E testing via Playwright MCP"; this file holds the lessons behind them.
+
+The comment under each heading (`<!-- rule: slug -->`, with `scope: project` when the rule means nothing outside this repo) is the rule's identity for the user-level `conventions-sync` skill, which trades driving lessons with the owner's other projects. A rule that describes something this repo does not do yet says so, and its work is in the plan.
+
+This repo declines the whole Server plumbing section, because it builds no MCP server of its own; it also declines the rules about OS-level input (all its input is Playwright's CDP input) and those about hooks that are injected per run, served over a pipe or socket, or answer through a request dispatcher, because its hook is compiled into dev builds and called through CDP evaluate.
 
 ## Driving an app
 
 ### Drive the app from inside its webview
 <!-- rule: drive-owned-app-in-process -->
 
-Driving a desktop app from outside its process brings the window forward or moves the cursor: a survey in another project found no desktop-automation MCP server that drives from outside and fully avoids stealing focus, while the ones that never do run a hook inside the app. TowerCab 3D is driven from inside: the `tauri-app` server attaches to the app's WebView2 over CDP, input is dispatched to the page through CDP rather than through the OS cursor and keyboard, and state is read and set through the dev-only `window.__tc3d` hook from `browser_evaluate`. An app started without the debugging port cannot be attached; relaunch it with the port (see launch-isolated-lifecycle) rather than reaching for OS-level automation.
+Driving a desktop app from outside its process brings the window forward or moves the cursor: a survey in another project found no desktop-automation MCP server that drives from outside and fully avoids stealing focus, while the ones that never do run a hook inside the app.
+
+TowerCab 3D is driven from inside: the `tauri-app` server attaches to the app's WebView2 over CDP, input is dispatched to the page through CDP rather than through the OS cursor and keyboard, and state is read and set through the dev-only `window.__tc3d` hook from `browser_evaluate`. An app started without the debugging port cannot be attached; relaunch it with the port (see launch-isolated-lifecycle) rather than reaching for OS-level automation.
+
+The one check worth making outside the hook is on the app's own output: the unified log file (see unified-log-tail) is read from the shell, which still works while the page is paused in a debugger or before the hook has installed.
 Source: .mcp.json:7-10; src/renderer/hooks/useAgentHarness.ts:32-84; src-tauri/src/lib.rs:789-797; CLAUDE.md:31-34; a survey of desktop-automation MCP servers in another project. Seen: 0 here (seeded from yaat).
 
 ### Attach to the real app, and know what a frontend-only browser cannot see
 <!-- rule: real-app-over-frontend-only -->
 
-Drive the desktop app itself (WebView2 over CDP) for anything that touches the backend; a plain browser pointed at the dev frontend is a different app. In towercab-3d the frontend-only server gets the SPA's HTML for every `/api/*` request, so mods, tower positions, METAR and saved global settings are missing and the Cesium token lasts only until reload; worse, a plain browser counts as remote mode (`isRemoteMode()`), so the app waits for a host and never polls VATSIM, and no aircraft appear until polling is started by hand from `browser_evaluate`. The no-polling fact reached CLAUDE.md (commit 46a4598, 2026-10-02) five months after the frontend-only route was first documented (commit 66062dd, 2026-05-02), in the commit that fixed a bug found while driving. Write down, per driving route, exactly which subsystems are absent, so a run that "shows nothing" is not mistaken for a bug.
+Drive the desktop app itself (WebView2 over CDP) for anything that touches the backend; a plain browser pointed at the dev frontend is a different app.
+
+In towercab-3d the frontend-only server gets the SPA's HTML for every `/api/*` request, so mods, tower positions, METAR and saved global settings are missing and the Cesium token lasts only until reload; worse, a plain browser counts as remote mode (`isRemoteMode()`), so the app waits for a host and never polls VATSIM, and no aircraft appear until polling is started by hand from `browser_evaluate`.
+
+The no-polling fact reached CLAUDE.md (commit 46a4598, 2026-10-02) five months after the frontend-only route was first documented (commit 66062dd, 2026-05-02), in the commit that fixed a bug found while driving. Write down, per driving route, exactly which subsystems are absent, so a run that "shows nothing" is not mistaken for a bug.
 Source: CLAUDE.md:29-40; .mcp.json:3-10; commits 0275468 (tauri-app server added), 46a4598 (remote-mode/no-polling note). Seen: twice (Wave 1 run moved to the real app; TC3D-5 fix).
 
 ### Launch in the background with the debug port, start when the hook answers, and stop what you started
 <!-- rule: launch-isolated-lifecycle -->
 
-The agent may start the dev app itself, in the background, with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS='--remote-debugging-port=9222'` (`pnpm run dev`, or `pnpm run dev:vnas` the same way), and must stop it when finished, because the window opens on the user's desktop. Before this, app checks were listed in the plan as "Human: the user runs pnpm run dev"; the CDP attach turned them into agent-run "App check (tauri-app MCP)" lines. The app is ready when `window.__tc3d` exists on the attached page (the hook installs once the Cesium viewer exists), not when the process starts. The app is single-instance, so a second launch only focuses the first window, and the debugging port is fixed: one driving agent at a time, and an app the user already had running is left alone. Isolated app data is not met yet: the dev build's own identifier (`com.towercab.viewer.dev`) keeps it apart from an installed release, but a driven run reads and writes the developer's own dev settings, bookmarks and WebView2 storage. The rule is to point the app's data folder at a scratch folder through an environment variable the app honours, and to write what the session needs into that folder's settings before the launch, so the developer's own data stays untouched.
+The agent may start the dev app itself, in the background, with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS='--remote-debugging-port=9222'` (`pnpm run dev`, or `pnpm run dev:vnas` the same way), and must stop it when finished, because the window opens on the user's desktop.
+
+Before this, app checks were listed in the plan as "Human: the user runs pnpm run dev"; the CDP attach turned them into agent-run "App check (tauri-app MCP)" lines. The app is ready when `window.__tc3d` exists on the attached page (the hook installs once the Cesium viewer exists), not when the process starts.
+
+The app is single-instance, so a second launch only focuses the first window, and the debugging port is fixed: one driving agent at a time, and an app the user already had running is left alone. Isolated app data is not met yet: the dev build's own identifier (`com.towercab.viewer.dev`) keeps it apart from an installed release, but a driven run reads and writes the developer's own dev settings, bookmarks and WebView2 storage.
+
+The rule is to point the app's data folder at a scratch folder through an environment variable the app honours, and to write what the session needs into that folder's settings before the launch, so the developer's own data stays untouched.
 Source: CLAUDE.md:31-35, CLAUDE.md:109; .claude/skills/towercab-3d-nextup/SKILL.md:35; commit b39260a (plan wave lines rewritten from "Human:" to "App check"); src/renderer/hooks/useAgentHarness.ts:29-30; src-tauri/src/lib.rs:857-863; src-tauri/tauri.dev.conf.json:4; src-tauri/src/settings.rs:589. Seen: documented.
 
 ### Build before launch, and build before stopping on a restart
 <!-- rule: build-before-launch -->
 
-A launch builds what is stale before the app starts, and a red build refuses the launch. `pnpm run dev` does this for a launch: `scripts/shipping/build/dev-wrapper.js` rebuilds the frontend when a file under `src/renderer` or a build config is newer than `dist/index.html` (or the build mode changed), builds the model converter when it is missing, and exits non-zero on a failed build; `tauri dev` then compiles the Rust side before it opens a window. A restart is not covered yet: the documented route stops the app and runs `pnpm run dev` again, so a red build leaves no app running at all. The rule is build first, then stop, then launch, so a red build leaves the old app running and its errors are read while it still runs.
+A launch builds what is stale before the app starts, and a red build refuses the launch. `pnpm run dev` does this for a launch: `scripts/shipping/build/dev-wrapper.js` rebuilds the frontend when a file under `src/renderer` or a build config is newer than `dist/index.html` (or the build mode changed), builds the model converter when it is missing, and exits non-zero on a failed build; `tauri dev` then compiles the Rust side before it opens a window.
+
+A restart is not covered yet: the documented route stops the app and runs `pnpm run dev` again, so a red build leaves no app running at all. The rule is build first, then stop, then launch, so a red build leaves the old app running and its errors are read while it still runs.
 Source: scripts/shipping/build/dev-wrapper.js:41-77, 132-174; CLAUDE.md:31-34; another project's decision record and changelog fixes. Seen: 0 here (seeded from godot-mcp).
 
 ### Start the app quiet and out of the user's way, set at window creation
 <!-- rule: quiet-by-default -->
 
-A default driving run should be unfocused, out of sight, silent and frame-capped, with a visible run only when the user wants to watch. This is not met: `pnpm run dev` opens the window visible and focused on the user's desktop at 1600x900 (the `windows` entry in `src-tauri/tauri.conf.json` sets neither `focus` nor `visible`), which is why every app check starts with "hands off" and ends with stopping the app. Each part has to be set when the window is created, because later is too late: measured in another project, Windows shows a new window about 0.9 s after start, before any app code runs, and clamps an off-screen initial position onto the primary screen, and un-focusing a window created focused did not give the focus back. Showing a window without activating it still leaves it activatable: when the window in front of it is minimised, Windows hands the foreground to the next window in Z order, which can be the app, and only the `WS_EX_NOACTIVATE` style stops that; a window launched from a process that holds the foreground right (an agent's shell under the user's focused app) also paints above every window, so it goes to the bottom of the Z order before its first show. Turn sound off through the platform rather than the app's own mute, so the mute stays testable and nothing leaks into saved settings, and cap the frame rate: a hidden window in another project kept VSync and drew at the monitor's 239 Hz. Out of sight must still render; the host already passes `--disable-renderer-backgrounding` and `--disable-backgrounding-occluded-windows` among its WebView2 flags.
+A default driving run should be unfocused, out of sight, silent and frame-capped, with a visible run only when the user wants to watch. This is not met: `pnpm run dev` opens the window visible and focused on the user's desktop at 1600x900 (the `windows` entry in `src-tauri/tauri.conf.json` sets neither `focus` nor `visible`), which is why every app check starts with "hands off" and ends with stopping the app.
+
+Each part has to be set when the window is created, because later is too late: measured in another project, Windows shows a new window about 0.9 s after start, before any app code runs, and clamps an off-screen initial position onto the primary screen, and un-focusing a window created focused did not give the focus back.
+
+Showing a window without activating it still leaves it activatable: when the window in front of it is minimised, Windows hands the foreground to the next window in Z order, which can be the app, and only the `WS_EX_NOACTIVATE` style stops that; a window launched from a process that holds the foreground right (an agent's shell under the user's focused app) also paints above every window, so it goes to the bottom of the Z order before its first show.
+
+Turn sound off through the platform rather than the app's own mute, so the mute stays testable and nothing leaks into saved settings, and cap the frame rate: a hidden window in another project kept VSync and drew at the monitor's 239 Hz. Out of sight must still render; the host already passes `--disable-renderer-backgrounding` and `--disable-backgrounding-occluded-windows` among its WebView2 flags.
 Source: src-tauri/tauri.conf.json:13-23; src-tauri/src/lib.rs:777-778; CLAUDE.md:31, 53; other projects' decision records and window timings measured with a 5 ms poller; Windows docs for WS_EX_NOACTIVATE. Seen: 0 here (seeded from godot-mcp, yaat).
 
 ### Say "hands off" before driving the user's window
@@ -43,19 +71,29 @@ Source: CLAUDE.md:53; .claude/skills/towercab-3d-nextup/SKILL.md:35; commit b392
 ### Project world points to the page CSS pixels the input tools take, and judge visibility by that projection
 <!-- rule: one-coordinate-space -->
 
-Finding an object on screen took hand-written `Vector3.Project` math in Wave 1. The hook's `project(lat, lon, heightM)` returns a page CSS-pixel point (Cesium window coordinates offset by the canvas's `getBoundingClientRect()`), which feeds `browser_click` and friends directly, or null when the point cannot be projected. Return the coordinates the input tool consumes, in the space it consumes them, not engine-local ones. Judge whether something is on screen by that projection and the pixels there, not by an engine's own visibility test: Babylon's `camera.isInFrustum` reported the on-screen tower as not visible during Wave 1, so it was dropped as evidence of visibility.
+Finding an object on screen took hand-written `Vector3.Project` math in Wave 1. The hook's `project(lat, lon, heightM)` returns a page CSS-pixel point (Cesium window coordinates offset by the canvas's `getBoundingClientRect()`), which feeds `browser_click` and friends directly, or null when the point cannot be projected.
+
+Return the coordinates the input tool consumes, in the space it consumes them, not engine-local ones. Judge whether something is on screen by that projection and the pixels there, not by an engine's own visibility test: Babylon's `camera.isInFrustum` reported the on-screen tower as not visible during Wave 1, so it was dropped as evidence of visibility.
 Source: src/renderer/hooks/useAgentHarness.ts:58-65; src/renderer/types/harness.ts:63-69; CLAUDE.md:48; commit b39260a (MAIN.md friction list). Seen: Wave 1 run.
 
 ### Judge an action by its effect: read the value back
 <!-- rule: check-action-effects -->
 
-A tool that reported success is not proof the action worked. In another project a set-text call reported success on a folder box that reverted the path, and two save confirmations stacked up unseen while the agent concluded "save did nothing". After an input, read the result back before judging it: the store value through `window.__tc3d.stores` or `camera.get()`, and a fresh accessibility snapshot for any dialog or panel the action may have opened. A target that vanished because the action closed it may be success. Not met: the driving notes and the app-check step do not ask for the read-back yet.
+A tool that reported success is not proof the action worked. In another project a set-text call reported success on a folder box that reverted the path, and two save confirmations stacked up unseen while the agent concluded "save did nothing".
+
+After an input, read the result back before judging it: the store value through `window.__tc3d.stores` or `camera.get()`, and a fresh accessibility snapshot for any dialog or panel the action may have opened. A target that vanished because the action closed it may be success. Not met: the driving notes and the app-check step do not ask for the read-back yet.
 Source: CLAUDE.md:43-58; .claude/skills/towercab-3d-nextup/SKILL.md:35; another project's driving friction log over three sessions. Seen: 0 here (seeded from yaat).
 
 ### Wait on a condition after every action, never a sleep, and batch fixed sequences
 <!-- rule: wait-for-conditions -->
 
-After each action, wait for one condition that names the effect (a store value, a hook value, an element), polled inside the app, with a timeout that returns the last value seen rather than an error; never a fixed sleep. Not met: the hook has no wait primitive, so a run has only Playwright's `browser_wait_for` and the measured ~10 s airport-switch stall. In another project, without such waits, hitting a given simulated second depended on tool-call latency, and a hand-written runner carried hard-coded 500 ms, 3000 ms and 8000 ms sleeps. Wait on the value needed, not "not empty" (a placeholder holds too early), and since timeouts stretch under load, hold for app time by counting the app's own frames, never by a timeout. A fixed sequence goes through one call, so nothing goes stale between round trips: one `browser_evaluate` or `browser_run_code_unsafe` call can run several hook calls with their waits.
+After each action, wait for one condition that names the effect (a store value, a hook value, an element), polled inside the app, with a timeout that returns the last value seen rather than an error; never a fixed sleep. Not met: the hook has no wait primitive, so a run has only Playwright's `browser_wait_for` and the measured ~10 s airport-switch stall.
+
+In another project, without such waits, hitting a given simulated second depended on tool-call latency, and a hand-written runner carried hard-coded 500 ms, 3000 ms and 8000 ms sleeps. Wait on the value needed, not "not empty" (a placeholder holds too early), and since timeouts stretch under load, hold for app time by counting the app's own frames, never by a timeout.
+
+A wait on the app's output is checked outside the page, from the unified log (see unified-log-tail), so it works while the page is paused, and it starts from a point taken before the action (the log's length then), so a line written just before the wait still counts. Not met either: nothing waits on the log yet, so a run reads it after the fact.
+
+A fixed sequence goes through one call, so nothing goes stale between round trips: one `browser_evaluate` or `browser_run_code_unsafe` call can run several hook calls with their waits.
 Source: src/renderer/types/harness.ts:29-81; CLAUDE.md:57-58; other projects' wait and batch tools and a driving friction log. Seen: 0 here (seeded from godot-mcp, yaat).
 
 ### Wait out heavy transitions before reading state
@@ -69,7 +107,9 @@ Source: CLAUDE.md:58; commit b39260a. Seen: Wave 1 run.
 
 Before the hook existed, the Wave 1 run read the camera heading by scraping the `HDG` status-bar text and aimed the camera with timed arrow-key presses in a loop, which is slow and imprecise. The fix was a dev-only `camera.get()` / `camera.set({ heading, pitch, fov })` / `lookAt(lat, lon, altFt)` over the same store the UI uses. When a driving run needs a value the UI only renders as text, or a pose it can only reach by holding keys, that is a missing hook call, not a scripting problem.
 
-Do not reach app internals by their bundler-hashed module URL either. In Wave 1 the Babylon engine was reachable only by `import()` of `engineStore.js` at its exact Vite URL including `?v=<hash>`; the hash changes on every dependency re-optimize, and `performance.getEntriesByType('resource')` caps at 250 entries, so the URL had to be dug out of the console log each time. Put live engine objects on the hook instead. (Importing a source module by its dev-server source path, such as `/stores/vatsimStore.ts`, is stable and is still the documented way to start VATSIM polling in the frontend-only browser.)
+Do not reach app internals by their bundler-hashed module URL either. In Wave 1 the Babylon engine was reachable only by `import()` of `engineStore.js` at its exact Vite URL including `?v=<hash>`; the hash changes on every dependency re-optimize, and `performance.getEntriesByType('resource')` caps at 250 entries, so the URL had to be dug out of the console log each time.
+
+Put live engine objects on the hook instead. (Importing a source module by its dev-server source path, such as `/stores/vatsimStore.ts`, is stable and is still the documented way to start VATSIM polling in the frontend-only browser.)
 Source: commit b39260a (docs/plans/MAIN.md Wave 1 friction list, "Babylon was reachable only by import()…"); src/renderer/hooks/useAgentHarness.ts:41-57; CLAUDE.md:36. Seen: Wave 1 run; led to commit 20ccd0b.
 
 ### Force rare conditions through a dev-only control, and know what it replaces
@@ -81,7 +121,9 @@ Source: CLAUDE.md:41, CLAUDE.md:56; docs/plans/rendering-opportunities-design.md
 ### Screenshots miss additive, zero-alpha effects: read the render buffer
 <!-- rule: what-capture-misses -->
 
-Rain in the Babylon overlay is drawn additively with alpha 0, so CDP screenshots and canvas `drawImage` both miss it. Verify such effects with the hook's `readPixels(x, y, w, h)` on the Babylon canvas (RGBA, bottom-left row order) or a video, never a still screenshot. The converse also holds: `readPixels` covers only the Babylon canvas, so Cesium pixels are still judged from page screenshots. The plan's standing verification line says "particles and other additive effects need a video or engine.readPixels, not a screenshot".
+Rain in the Babylon overlay is drawn additively with alpha 0, so CDP screenshots and canvas `drawImage` both miss it. Verify such effects with the hook's `readPixels(x, y, w, h)` on the Babylon canvas (RGBA, bottom-left row order) or a video, never a still screenshot.
+
+The converse also holds: `readPixels` covers only the Babylon canvas, so Cesium pixels are still judged from page screenshots. The plan's standing verification line says "particles and other additive effects need a video or engine.readPixels, not a screenshot".
 Source: CLAUDE.md:49; src/renderer/hooks/useAgentHarness.ts:66-81; docs/plans/rendering-opportunities-design.md:109, 214; commit 8d672dc (MAIN.md "Verification, every wave"). Seen: Wave 1 run.
 
 ### CDP emulation overrides last only for the call that sets them
@@ -93,25 +135,37 @@ Source: CLAUDE.md:57; docs/plans/rendering-opportunities-design.md:296; commit b
 ### Record in app time with marks, and keep every drive replayable
 <!-- rule: record-and-replay -->
 
-The plan asks for a video to verify additive effects, but nothing here records a drive or replays one. The rule from another project: record on the app's own clock rather than wall time (its fixed-rate movie writer recorded a light scene at about 240 fps of wall time and a heavy one below 60), so gesture durations and waits count clip time; cut start and stop marks into clips; and record injected input on the app's single clock (merging server-logged gestures with app-logged events put two clocks a round trip apart), streamed in small batches so a capture survives a crash and replays through the input tool. A random run draws from a seeded generator that is stable across runtime versions, so a failing seed replays exactly.
+The plan asks for a video to verify additive effects, but nothing here records a drive or replays one.
+
+The rule from another project: record on the app's own clock rather than wall time (its fixed-rate movie writer recorded a light scene at about 240 fps of wall time and a heavy one below 60), so gesture durations and waits count clip time; and cut start and stop marks into clips.
+
+Record injected input on the app's single clock too (merging server-logged gestures with app-logged events put two clocks a round trip apart), streamed in small batches so a capture survives a crash and replays through the input tool.
+
+A random run draws from a seeded generator that is stable across runtime versions, so a failing seed replays exactly.
 Source: CLAUDE.md:49; commit 8d672dc (MAIN.md "Verification, every wave"); another project's architecture doc and changelog fixes. Seen: 0 here (seeded from godot-mcp).
 
 ### Record the window on a steady clock, never minimise it, and mark with the app's clock
 <!-- rule: record-steady-never-minimize -->
 
-There is no recorder here yet. When the window is recorded: Windows Graphics Capture delivers a frame only when the window redraws (one in 20 s on a static tab in another project), so write frames on the recorder's own steady timer and let ffmpeg stamp each with its arrival time (`-fps_mode vfr`), so a clip whose recorder fell behind still plays in real time, and report the dropped frames at stop. A minimised window stopped rendering in that project and restoring it took the foreground, so hide a recorded window by DWM cloaking instead (still captured at 30 fps there), never minimise it. Each mark stores wall time, clip seconds and the app's own clock read through the hook, because live playback shifted the app's events 1-2 s against the wall clock in that project.
+There is no recorder here yet. When the window is recorded: Windows Graphics Capture delivers a frame only when the window redraws (one in 20 s on a static tab in another project), so write frames on the recorder's own steady timer and let ffmpeg stamp each with its arrival time (`-fps_mode vfr`), so a clip whose recorder fell behind still plays in real time, and report the dropped frames at stop.
+
+A minimised window stopped rendering in that project and restoring it took the foreground, so hide a recorded window by DWM cloaking instead (still captured at 30 fps there), never minimise it. Each mark stores wall time, clip seconds and the app's own clock read through the hook, because live playback shifted the app's events 1-2 s against the wall clock in that project.
 Source: CLAUDE.md:49; another project's recording code and measurements; Windows Graphics Capture and DWM cloaking docs. Seen: 0 here (seeded from yaat).
 
 ### Answer file dialogs before the action that opens them
 <!-- rule: queue-file-answers -->
 
-The folder and file pickers (`pick_folder` and `pick_files` through the Tauri dialog plugin) open native dialogs outside the webview, so a CDP attach cannot reach them and a run that hits one stops there. In another project posted typing left the native picker empty and real keys were refused because the picker held the foreground. The rule: while an agent drives a dev build, the app opens no picker; the agent queues one answer (a path or a cancel) per dialog through the hook before the action, each dialog takes the oldest, and one opened on an empty queue fails at once. Not met yet.
+The folder and file pickers (`pick_folder` and `pick_files` through the Tauri dialog plugin) open native dialogs outside the webview, so a CDP attach cannot reach them and a run that hits one stops there. In another project posted typing left the native picker empty and real keys were refused because the picker held the foreground.
+
+The rule: while an agent drives a dev build, the app opens no picker; the agent queues one answer (a path or a cancel) per dialog through the hook before the action, each dialog takes the oldest, and one opened on an empty queue fails at once. Not met yet.
 Source: src-tauri/src/files.rs:21-45; CLAUDE.md:35; another project's driving friction log and dialog-queue tool. Seen: 0 here (seeded from yaat).
 
 ### Name what the webview cannot reach, and the shell route for each
 <!-- rule: name-out-of-reach-ui -->
 
 A CDP attach reaches only the page. Say so explicitly for each native surface: the tray menu and native file dialogs are out of reach; deep links (`start tc3d://…`), single-instance behaviour and window state are exercised from the shell instead. An agent that does not know this burns turns trying to click a native dialog.
+
+Where the app can avoid opening a native surface while an agent drives it, it does, and the hook answers in its place: a queued file pick for the folder and file pickers (see queue-file-answers, not met yet).
 Source: CLAUDE.md:35. Seen: documented.
 
 ### Read the app's errors from the unified log, not the whole file
@@ -123,7 +177,9 @@ Source: CLAUDE.md:23-25; scripts/shipping/build/dev-wrapper.js:16-27; src/render
 ### Build the hook from a real run's friction list
 <!-- rule: friction-log-per-session -->
 
-The harness was specified line by line from the friction the first agent-driven app run hit (hash-pinned imports, scraped heading text, key-press steering, hand-written projection, screenshots missing rain), and those notes first lived only in a gitignored scratch file before being folded into the tracked plan item. Record driving friction in the plan as it happens (an **add**, so it lands as a TC3D issue), with the tool, what happened against what was needed, and the workaround, and turn each item into a hook call or a documented driving note.
+The harness was specified line by line from the friction the first agent-driven app run hit (hash-pinned imports, scraped heading text, key-press steering, hand-written projection, screenshots missing rain), and those notes first lived only in a gitignored scratch file before being folded into the tracked plan item.
+
+Record driving friction in the plan as it happens (an **add**, so it lands as a TC3D issue), with the tool, what happened against what was needed, and the workaround, and turn each item into a hook call or a documented driving note.
 Source: commit b39260a ("fold the Wave 1 MCP friction notes (until now only in a gitignored scratch file) into the harness item"); commit 20ccd0b; CLAUDE.md:13. Seen: once, led to the harness.
 
 ### Reset one-time UI flags through persisted state, then reload
@@ -155,7 +211,9 @@ Source: src/renderer/hooks/useAgentHarness.ts:17-18, 32; src/renderer/types/harn
 ### Put every path that activates the window behind one gate, pinned by source tests
 <!-- rule: one-gate-source-pinned -->
 
-The app brings its window forward from several places: the single-instance callback and the tray's Show item and left click each call `unminimize` and `set_focus`. A driven run needs one gate that suppresses them all while an agent drives, and a source-scanning test that fails on any raw activate call outside it, because a UI framework activates windows too (in another project the framework activated a modal's owner after it closed and on any visible window-state change, found only by decompiling it). Not met: there is no gate and no such test; it follows quiet-by-default.
+The app brings its window forward from several places: the single-instance callback and the tray's Show item and left click each call `unminimize` and `set_focus`.
+
+A driven run needs one gate that suppresses them all while an agent drives, and a source-scanning test that fails on any raw activate call outside it, because a UI framework activates windows too (in another project the framework activated a modal's owner after it closed and on any visible window-state change, found only by decompiling it). Not met: there is no gate and no such test; it follows quiet-by-default.
 Source: src-tauri/src/lib.rs:857-863, 915-920, 935-940; another project's background-driving design and its source tests. Seen: 0 here (seeded from yaat).
 
 ### Install from the component that owns the engines, and remove only your own instance
@@ -191,7 +249,9 @@ Source: src/renderer/hooks/useAgentHarness.ts:67-70. Seen: documented.
 ### Convert every hook write by its declared type and read it back
 <!-- rule: verify-writes-read-back -->
 
-`camera.set` hands its fields to the viewport store's `setHeading`, `setPitch` and `setFov` and returns nothing, and those setters normalise the heading and clamp pitch and FOV to their limits, so a value out of range is changed with no word to the caller; writes through `stores.*.setState` are not read back either. The rule from another project, where setters given the wrong type changed nothing and logged nothing: the hook converts each value by its declared type, sets it, reads it back, and when the read-back differs puts the old value back and fails with the before and after values. Not met; the planned `settings.set`, validated against the control's range, is the natural first place.
+`camera.set` hands its fields to the viewport store's `setHeading`, `setPitch` and `setFov` and returns nothing, and those setters normalise the heading and clamp pitch and FOV to their limits, so a value out of range is changed with no word to the caller; writes through `stores.*.setState` are not read back either.
+
+The rule from another project, where setters given the wrong type changed nothing and logged nothing: the hook converts each value by its declared type, sets it, reads it back, and when the read-back differs puts the old value back and fails with the before and after values. Not met; the planned `settings.set`, validated against the control's range, is the natural first place.
 Source: src/renderer/hooks/useAgentHarness.ts:48-53; src/renderer/stores/viewportStore.ts:534-560; docs/plans/settings-drawer.md:82; another project's decision record. Seen: 0 here (seeded from godot-mcp).
 
 ### Convert page pixels with the canvas's own backing-store ratio, not devicePixelRatio

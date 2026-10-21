@@ -2,27 +2,27 @@
   "rules": {
     "arm-before-start": {
       "declined": "the CDP port is set by the launch; no dormant hook to join",
-      "user": "d9167b03ff6d6924"
+      "user": "745a7a52d6a1cad1"
     },
     "backing-store-ratio": {
       "repo": "ffcbf509712a69a9",
       "user": "c926ca623a872aa1"
     },
     "build-before-launch": {
-      "repo": "67048567ed72a6ce",
-      "user": "1bc8f3784a841f27"
+      "repo": "a959ceab06fb50bc",
+      "user": "b379c34bac572167"
     },
     "cancel-timed-out-requests": {
       "declined": "no server of its own; drives through third-party Playwright MCP",
-      "user": "b28aa32b9c3db402"
+      "user": "15f5c78d07fecc84"
     },
     "check-action-effects": {
-      "repo": "639dac32cc9e2f2d",
-      "user": "3406dfa4833edc3d"
+      "repo": "487d3ee9288805b1",
+      "user": "8b932e230120198d"
     },
     "coded-errors-never-throw": {
       "declined": "the hook is a window global called through CDP evaluate; no request dispatcher",
-      "user": "a312da8f45bbb1cb"
+      "user": "4db7422a30f223f1"
     },
     "design-names-hook-surface": {
       "repo": "e9fa8baadf3c8f76",
@@ -34,11 +34,11 @@
     },
     "discovery-file-per-pid": {
       "declined": "attaches over CDP on a fixed port through a third-party server",
-      "user": "47ab1932bbec8bfd"
+      "user": "5703da5682eac4dc"
     },
     "drive-owned-app-in-process": {
-      "repo": "f4c16df08d743e65",
-      "user": "17ce7241b4bfc394"
+      "repo": "42fc6ac562805091",
+      "user": "be66d24a8139e90d"
     },
     "emulation-per-call": {
       "repo": "0fbc405eaabb5823",
@@ -46,27 +46,27 @@
     },
     "error-feed-on-results": {
       "declined": "no server of its own; tool results come from the third-party Playwright MCP",
-      "user": "200f46e348a261de"
+      "user": "779511c62a903798"
     },
     "fixed-tool-surface": {
       "declined": "no server of its own; drives through third-party Playwright MCP",
-      "user": "8f6390c917ab507d"
+      "user": "b7e1581f0b353737"
     },
     "force-conditions-dev-panel": {
       "repo": "f54afba2a7eb765b",
       "user": "5bab8a6ad2cb8c99"
     },
     "friction-log-per-session": {
-      "repo": "5905090426730184",
-      "user": "d9c3c31c77a01fd0"
+      "repo": "be04f145bcb3f5e1",
+      "user": "66b5cb9c7a3cbc98"
     },
     "hook-dials-in-token": {
       "declined": "attaches over CDP through a third-party server",
-      "user": "3997ad42dcc9a9df"
+      "user": "ea51e654378037b4"
     },
     "hook-over-scraping": {
-      "repo": "fa18001f19f64050",
-      "user": "90d480cd2757e795"
+      "repo": "be854197529c0b49",
+      "user": "6089a9a2245a7544"
     },
     "hook-throws-when-unready": {
       "repo": "2bdefe6f82b092d8",
@@ -74,55 +74,55 @@
     },
     "inject-never-commit": {
       "declined": "the hook is compiled into the app under the dev flag",
-      "user": "1f9785dcea80e497"
+      "user": "62742adcba8347c6"
     },
     "install-owner-cleanup-own": {
       "repo": "aafaf1ec22420627",
       "user": "3a775768199ca968"
     },
     "launch-isolated-lifecycle": {
-      "repo": "beea7beb229ad4ec",
-      "user": "79841e3cc35bd56b"
+      "repo": "e8a4b1b17d9d66ba",
+      "user": "28a150edc237b497"
     },
     "load-adjusted-timeouts": {
       "declined": "no server of its own; drives through third-party Playwright MCP",
-      "user": "f233b8e8f0288681"
+      "user": "45cd99cd2da27dd7"
     },
     "mark-injected-input": {
       "declined": "input is Playwright CDP only; no OS input path",
-      "user": "f5ccf5bbedad9bd7"
+      "user": "b3f75d9310294ad1"
     },
     "merge-inherited-webview-args": {
       "repo": "41992ed8ba70fdb9",
       "user": "f5d059f2475ecb67"
     },
     "name-out-of-reach-ui": {
-      "repo": "54e599bd1c3a2e7c",
-      "user": "e35b7d8c79ecea1a"
+      "repo": "fff7d59dea873e93",
+      "user": "e01672b5229d4d44"
     },
     "never-block-main-thread": {
       "declined": "hook calls are short synchronous reads and sets; no waits run in it",
-      "user": "3e6a2c9e099b166d"
+      "user": "dcf14eb79d22e855"
     },
     "no-default-session": {
       "declined": "no server of its own; drives through third-party Playwright MCP",
-      "user": "789cf57942ac894d"
+      "user": "ac1efb7959c65ea8"
     },
     "one-coordinate-space": {
-      "repo": "16a86b7055b59cbd",
-      "user": "fb5bff1ef7b7ffe8"
+      "repo": "0877da3e7edae41f",
+      "user": "55d55375dbbace2e"
     },
     "one-env-switch": {
       "declined": "compiled out of release builds; the dev flag is its only gate",
-      "user": "71a6cbdc06ef7ea8"
+      "user": "5bfa4f85ef0398a7"
     },
     "one-gate-source-pinned": {
-      "repo": "6f57e339336fa5f6",
-      "user": "074e78fa8da328c2"
+      "repo": "ef1c6b4872bc7852",
+      "user": "8d4921b6c4fad4d3"
     },
     "one-id-registry": {
       "declined": "no server of its own; drives through third-party Playwright MCP",
-      "user": "660e4681d07a2cc2"
+      "user": "736abd48b579b02c"
     },
     "one-typed-window-global": {
       "repo": "0b0de7e80cda1914",
@@ -130,59 +130,59 @@
     },
     "opt-in-by-name": {
       "declined": "no server of its own; hook calls are typed methods on one global",
-      "user": "34a5a7e9b85b99d5"
+      "user": "2b1f0d8d66993f51"
     },
     "own-launched-processes": {
       "declined": "no server of its own; drives through third-party Playwright MCP",
-      "user": "a1e4fb8e8d88722a"
+      "user": "277bfa914d066981"
     },
     "posted-input-hygiene": {
       "declined": "input is Playwright CDP only; no OS input path",
-      "user": "cb158270b0393e25"
+      "user": "cf2273232c8a49b5"
     },
     "queue-file-answers": {
-      "repo": "05c89be78fa6104f",
+      "repo": "518821ea32dfbe9a",
       "user": "ebfaa4da3ea3e159"
     },
     "quiet-by-default": {
-      "repo": "a0826b40ec162b65",
-      "user": "70671da553c74f3c"
+      "repo": "128599798da85d4b",
+      "user": "6f85f9f72b58cf63"
     },
     "real-app-over-frontend-only": {
-      "repo": "8312a3857ab239da",
-      "user": "25391fd0fbce5897"
+      "repo": "3fa8b7dcd982cb4d",
+      "user": "5d6fb063892d6fe5"
     },
     "real-devices-leak-in": {
       "declined": "input is Playwright CDP only; no device input path",
-      "user": "2080245fcad3f6cd"
+      "user": "61bf56170dd34fe5"
     },
     "record-and-replay": {
-      "repo": "0d872d48232bdc16",
-      "user": "facfc27a182f31fc"
+      "repo": "302c7050c093d77d",
+      "user": "b9ad60542633fe76"
     },
     "record-steady-never-minimize": {
-      "repo": "4a4bd5c1e2d580a2",
-      "user": "ee65adf7954cc463"
+      "repo": "98d25592d33fc4ae",
+      "user": "c7abbb984fdaa216"
     },
     "recording-shellout-hardening": {
       "declined": "no server of its own; drives through third-party Playwright MCP",
-      "user": "7983f200c9555c3b"
+      "user": "b41a90509ac30655"
     },
     "refcount-shared-hook": {
       "declined": "the hook is compiled into the app; no shared file",
-      "user": "37a28ee5b0089915"
+      "user": "1380569a931c7157"
     },
     "refusals-name-the-fix": {
       "declined": "no server of its own; drives through third-party Playwright MCP",
-      "user": "440595fe9dd9284d"
+      "user": "c4299125d17cfe84"
     },
     "refuse-before-pressing": {
       "declined": "no server of its own; Playwright MCP does its own actionability checks",
-      "user": "6ed0a4a3ec6f43cb"
+      "user": "31a82a3b4c886604"
     },
     "run-server-from-copy": {
       "declined": "no server of its own; drives through third-party Playwright MCP",
-      "user": "eb9daecf6953e393"
+      "user": "e1357ad6c047e437"
     },
     "say-hands-off-first": {
       "repo": "b6e2a75f47b0513b",
@@ -190,7 +190,7 @@
     },
     "semantic-click-first": {
       "declined": "input is Playwright CDP only",
-      "user": "0dfdb877d73519e8"
+      "user": "08c21b44dbbdf1ea"
     },
     "shared-wire-types": {
       "declined": "no server of its own; the hook has no wire protocol",
@@ -198,15 +198,15 @@
     },
     "stdio-protocol-only": {
       "declined": "no server of its own; drives through third-party Playwright MCP",
-      "user": "b0ded98c65dede09"
+      "user": "dbd4a268b509a2fd"
     },
     "test-against-real-host": {
       "declined": "no server of its own; drives through third-party Playwright MCP",
-      "user": "d40660b8fdce00af"
+      "user": "c8e911bb5647b3c2"
     },
     "test-server-over-stdio": {
       "declined": "no server of its own; drives through third-party Playwright MCP",
-      "user": "9dec6f897204a1c1"
+      "user": "8c8df5532748dcfb"
     },
     "unified-log-tail": {
       "repo": "82ea47f042777795",
@@ -214,28 +214,28 @@
     },
     "verify-foreground-before-real": {
       "declined": "input is Playwright CDP only; no OS input path",
-      "user": "76d711df41844d00"
+      "user": "e60071112c854833"
     },
     "verify-writes-read-back": {
-      "repo": "0f0a926e49d7fa03",
-      "user": "f453e38c47aef7b1"
+      "repo": "617a6f8f40c43c0d",
+      "user": "9775496f794e1b4d"
     },
     "wait-after-heavy-transition": {
       "repo": "c62615fe5ee86633",
-      "user": "bc9d516029aa4ce8"
+      "user": "f211fee3057bfaec"
     },
     "wait-for-conditions": {
-      "repo": "db2d59f31b788839",
-      "user": "0f18f2bddb9a521a"
+      "repo": "f977169f7f40ce2a",
+      "user": "5ba0317410bb3123"
     },
     "waits-bounded-outcome-as-data": {
       "declined": "no server of its own; drives through third-party Playwright MCP",
-      "user": "5e4edf05ff574035"
+      "user": "c375cca2a2c76a41"
     },
     "what-capture-misses": {
-      "repo": "d40a11fe4735df91",
-      "user": "05e487db93813f43"
+      "repo": "9996551dea5e10f6",
+      "user": "81e92891fb8fe24c"
     }
   },
-  "user_revision": 1
+  "user_revision": 9
 }
