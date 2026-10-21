@@ -93,7 +93,7 @@ weatherStore.setWeather()
     └─ ceiling (feet AGL)
          ↓
          ├──→ useCesiumWeather
-         │      └─ Applies fog density to Cesium scene (scene.fog keeps running under the stage)
+         │      └─ Applies fog density to Cesium scene (tuned from METAR visibility only while the stage draws no fog; otherwise held at Cesium's clear-weather values so terrain is not fogged twice)
          │
          ├──→ useCesiumWeatherStages
          │      └─ Post-process stage drawing clouds and fog against scene depth (default renderer; also in insets; nothing in top-down)
@@ -294,17 +294,18 @@ CesiumViewer Component Mount
     │      ├─ Sets up shadow maps (size, distance, darkness)
     │      └─ Updates runtime when settings change
     │
-    ├─ 4. useCesiumWeather(viewer, showWeatherEffects, showCesiumFog, fogDensity)
-    │      ├─ Applies fog density from METAR visibility
-    │      └─ Adjusts visual density scalar and screen space error
-    │
-    ├─ 4b. useCesiumWeatherStages(viewer, { airportIcao, refLat, refLon, viewMode })
+    ├─ 4. useCesiumWeatherStages(viewer, { airportIcao, refLat, refLon, viewMode }), returning its gates
     │      ├─ Adds the cloud and fog post-process stage (GLSL in hooks/weather/cloudStage.glsl.ts; pure helpers in utils/weatherStage.ts), kept after the silhouette stage so aircraft in cloud get no outline
     │      ├─ Split in one file into useWeatherAnchor, useWeatherStageFrame and useWeatherStageComposite
-    │      ├─ Reads showWeatherEffects, showClouds, showBabylonFog, visibilityScale, weatherStore.useInterpolation / interpolatedWeather.visibility; disabled when there is nothing to draw (no layers, no fog, no anchor frame)
+    │      ├─ Reads showWeatherEffects, showClouds, showBabylonFog, visibilityScale, fogIntensity (scales the fog's optical depth), weatherStore.useInterpolation / interpolatedWeather.visibility; disabled when there is nothing to draw (no layers, no fog, no anchor frame)
     │      ├─ Reads the live scene.logarithmicDepthBuffer, not graphics.enableLogDepth: without it the stage is hidden, one warning is logged and the Babylon overlay draws clouds and fog instead
     │      ├─ Cloud frame anchored on the airport (re-anchors past 100 m within it), or on the followed aircraft every 5 km in orbit-follow; terrain is resampled when the provider changes and retried each second on failure; ground changes between samples slide over 5 s; cloud noise is world-stable (origin resets past 50 km)
     │      └─ useWeatherStageDriveAids runs after useCesiumCamera (dev camera and test-aircraft aids)
+    │
+    ├─ 4b. useCesiumWeather(viewer, showWeatherEffects, showCesiumFog, fogDensity, stageDrawsFog)
+    │      ├─ Runs after the stage hook and takes its stageDrawsFog (its `gates.fog` with an anchor frame); scene.fog.enabled follows showWeatherEffects && showCesiumFog
+    │      ├─ Stage draws fog: scene.fog held at Cesium's clear-weather values (density 0.0006, visualDensityScalar 0.15, screenSpaceErrorFactor 2.0, minimumBrightness 0.03)
+    │      └─ Stage draws no fog (Babylon overlay draws the weather, or no log depth): applies fog density from METAR visibility, with the visual density scalar and screen space error adjusted (pure helper sceneFogValues in utils/weatherStage.ts)
     │
     ├─ 5. useAircraftModels(viewer, modelPoolRefs, interpolatedAircraft, ...)
     │      ├─ Assigns aircraft to model pool slots
