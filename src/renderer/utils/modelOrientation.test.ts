@@ -48,30 +48,34 @@ describe('compassToModelHeading', () => {
   })
 })
 
-// The removed Babylon cab hook (useBabylonTowerModel), measured with Babylon's own math: at
-// rotation 0 it put glTF +X north and glTF +Z east. It turned counter-clockwise as rotation grew
-// (rotation 90 put +X west, 213 at bearing 147); the Cesium cab turns clockwise from north, as
-// MODDING.md and the positioning wizard say, through the same helper as aircraft.
+// The Cesium cab follows the earlier Cesium cab hook: at manifest rotation 0 its glTF +X faces
+// east, and it turns clockwise as the rotation grows (glTF +X bearing = rotation + 90, mod 360).
+// Existing tower manifests, KOAK among them, were tuned against that convention.
 describe('towerModelMatrix', () => {
-  it('faces the way the Babylon cab did at rotation 0: glTF +X north, +Z east', () => {
+  it('puts glTF +X east at rotation 0, as the earlier Cesium cab did (KOAK is centred on its shaft there)', () => {
     const m = towerModelMatrix(LON, LAT, HEIGHT, 0, 1)
-    expect(angleDiff(axisBearing(m, Cesium.Cartesian3.UNIT_X), 0)).toBeLessThan(1e-6)
+    expect(angleDiff(axisBearing(m, Cesium.Cartesian3.UNIT_X), 90)).toBeLessThan(1e-6)
     // Cesium turns glTF Y-up into Z-up inside the model, so glTF +Z is the model frame's -Y.
     const gltfZ = new Cesium.Cartesian3(0, -1, 0)
-    expect(angleDiff(axisBearing(m, gltfZ), 90)).toBeLessThan(1e-6)
+    expect(angleDiff(axisBearing(m, gltfZ), 180)).toBeLessThan(1e-6)
   })
 
-  it('turns clockwise from north (deliberately unlike the old Babylon cab at rotations 90 and 213)', () => {
-    for (const rotation of [90, 213]) {
+  it('turns clockwise from that rest pose: glTF +X bearing is rotation + 90', () => {
+    const cases: Array<[number, number]> = [
+      [90, 180],
+      [213, 303],
+      [300, 30],
+    ]
+    for (const [rotation, bearing] of cases) {
       const m = towerModelMatrix(LON, LAT, HEIGHT, rotation, 1)
-      expect(angleDiff(axisBearing(m, Cesium.Cartesian3.UNIT_X), rotation)).toBeLessThan(1e-6)
+      expect(angleDiff(axisBearing(m, Cesium.Cartesian3.UNIT_X), bearing)).toBeLessThan(1e-6)
     }
   })
 
-  it('uses the aircraft convention with no cab special case', () => {
+  it('goes through the shared compass helper with the cab 90-degree offset', () => {
     const rotation = 213
     const position = Cesium.Cartesian3.fromDegrees(LON, LAT, HEIGHT)
-    const hpr = new Cesium.HeadingPitchRoll(compassToModelHeading(rotation, 0), 0, 0)
+    const hpr = new Cesium.HeadingPitchRoll(compassToModelHeading(rotation + 90, 0), 0, 0)
     const expected = Cesium.Transforms.headingPitchRollToFixedFrame(position, hpr)
     const actual = towerModelMatrix(LON, LAT, HEIGHT, rotation, 1)
     for (let i = 0; i < 16; i++) {

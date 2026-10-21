@@ -424,7 +424,7 @@ if (version < 7) {
 
 1. The cab is a Cesium model (`useTowerModel.ts`), not Babylon, so it hides the weather stage's clouds and fog behind it and casts a Cesium shadow; its console lines start `[useTowerModel]`
 2. Placement: `ModService.getTowerPlacement` (manifest `modelPosition`, then tower-positions); ground height from `resolveGroundHeight` in `utils/towerHeight.ts` (field elevation until terrain loads); live wizard edits from `towerPositioningStore.ts`
-3. Axis convention: `utils/modelOrientation.ts` (`compassToModelHeading`, `aircraftModelHeading`) serves aircraft and cab alike; the glTF +X axis points along the given compass bearing (the manifest `rotation` for the cab; aircraft add 180 so their nose is on -X)
+3. Axis convention: `utils/modelOrientation.ts` (`compassToModelHeading`, `aircraftModelHeading`) serves aircraft and cab alike; `compassToModelHeading` points the glTF +X axis along a compass bearing; aircraft add 180 so their nose is on -X, and the cab adds 90 (`towerModelMatrix`) so its +X faces east at manifest `rotation` 0 and bearing `rotation + 90`, the convention KOAK's mod is tuned to
 4. Night darkening: `cabNightFactor` over the shared curve in `utils/nightBrightness.ts`, the same one `useCesiumNightDarkening.ts` uses for the imagery
 5. Inset windows never load mods (only the main window calls `modService.loadMods()`), so insets mount the hook but draw no cab
 6. `cab-environment.env` stays on disk but nothing loads it

@@ -15,7 +15,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Clouds and fog are now drawn with the scene's depth, so aircraft, buildings and terrain in front of a cloud deck or fog bank hide it correctly.
 - Fog Intensity sets how thick the depth-drawn fog looks, and terrain in low visibility is no longer fogged twice.
 - Tower mod cabs now darken at night with the rest of the view and cast a shadow on the ground.
-- Tower mod `rotation` now turns the cab clockwise from north, as documented; a cab with a rotation other than 0 now faces a different way.
+- Tower mod `rotation` now turns the cab clockwise, as documented; a cab with a rotation other than 0 may now face a different way.
 
 ### Fixed
 - Tower mod cabs no longer float about 30 m above their tower when the airport loads before the terrain.
