@@ -62,6 +62,10 @@ pub struct ObservationData {
     pub ground_track: f64,
     pub vertical_rate: f64,
     pub on_ground: bool,
+    /// Height above the ground in metres (vNAS), so remote screens run the host's ground-contact rule;
+    /// absent on the wire for sources without one
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub height_above_ground: Option<f64>,
     pub pitch: Option<f64>,
     pub roll: Option<f64>,
     /// Data source: "vatsim", "vnas", or "realtraffic"
@@ -2869,5 +2873,50 @@ mod tests {
         for bad in ["", "/", "./x", "a//b", "a/./b", "a\0b", "file.txt:stream"] {
             assert_refused(resolve_within(&root.0, bad), bad);
         }
+    }
+
+    fn observation(height_above_ground: Option<f64>) -> ObservationData {
+        ObservationData {
+            callsign: "DAL123".to_string(),
+            latitude: 37.72,
+            longitude: -122.22,
+            altitude: 10.0,
+            heading: 90.0,
+            groundspeed: 140.0,
+            ground_track: 90.0,
+            vertical_rate: 0.0,
+            on_ground: false,
+            height_above_ground,
+            pitch: None,
+            roll: None,
+            source: "vnas".to_string(),
+            observed_at: 1,
+            received_at: 2,
+            type_code: None,
+            origin: None,
+            destination: None,
+            flight_rules: None,
+        }
+    }
+
+    #[test]
+    fn observation_height_above_ground_is_camel_case_when_present() {
+        let json = serde_json::to_value(observation(Some(1.25))).unwrap();
+        assert_eq!(json["heightAboveGround"], serde_json::json!(1.25));
+    }
+
+    #[test]
+    fn observation_without_height_above_ground_omits_the_key() {
+        let json = serde_json::to_value(observation(None)).unwrap();
+        assert!(json.get("heightAboveGround").is_none(), "{json}");
+        assert!(json.get("height_above_ground").is_none(), "{json}");
+    }
+
+    #[test]
+    fn observation_from_a_payload_without_height_above_ground_has_none() {
+        let mut json = serde_json::to_value(observation(Some(1.25))).unwrap();
+        json.as_object_mut().unwrap().remove("heightAboveGround");
+        let parsed: ObservationData = serde_json::from_value(json).unwrap();
+        assert_eq!(parsed.height_above_ground, None);
     }
 }

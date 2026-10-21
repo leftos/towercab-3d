@@ -44,6 +44,12 @@ export interface AircraftObservation {
   onGround: boolean | null
 
   /**
+   * Height of the aircraft above the ground under it, in metres, as the source reports it (vNAS: the simulator's
+   * own AGL). Absent for VATSIM and RealTraffic; replay carries what was recorded. Ground contact is decided from it.
+   */
+  heightAboveGround?: number
+
+  /**
    * Pitch angle in degrees.
    * For broadcast source: pre-interpolated pitch from main app.
    * For other sources: null (calculated from vertical rate).
@@ -217,10 +223,18 @@ export interface TimelineInterpolationResult {
 
   // Extended ADS-B data (passed through from observations when available)
   /**
-   * On-ground flag from ADS-B transponder.
-   * true = on ground, false = airborne, null = unknown.
+   * On-ground flag for drawing, from the source's ground flag (ADS-B ground bit, vNAS 50/80 ft flag).
+   * true = on ground, false = airborne, null = unknown. Null when the flag comes from a vNAS observation
+   * and the result has no height above ground: the vNAS flag is for labels only.
    */
   onGround: boolean | null
+
+  /**
+   * Height above ground in metres at the displayed instant: lerped between two samples that carry it, the last
+   * sample's while extrapolating or held. Null for sources without it, and once the samples carrying it are older
+   * than `VNAS_PREFERENCE_THRESHOLD_MS`.
+   */
+  heightAboveGround: number | null
 
   /**
    * Pitch angle in degrees (interpolated from observations if available).

@@ -220,6 +220,13 @@ export type {
 } from './aircraft-timeline'
 
 // ============================================================================
+// LANDING GEAR AND REMOTE OBSERVATION TYPES
+// ============================================================================
+
+export type { GearContact, GearFrameInput } from './gear'
+export type { RemoteObservationData } from './remote'
+
+// ============================================================================
 // REALTRAFFIC API TYPES
 // ============================================================================
 

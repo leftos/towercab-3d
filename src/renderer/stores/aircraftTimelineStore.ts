@@ -449,6 +449,53 @@ function filterObservationsForSource(observations: AircraftObservation[], now: n
   return vnasOnly
 }
 
+/** The newest observation that carries a height above ground, or null when none does. */
+function newestHeightSample(observations: AircraftObservation[]): AircraftObservation | null {
+  for (let i = observations.length - 1; i >= 0; i--) {
+    if (observations[i].heightAboveGround !== undefined) return observations[i]
+  }
+  return null
+}
+
+/**
+ * Height above ground at the displayed instant.
+ *
+ * Lerped between two bracketing samples that both carry it; while extrapolating or held, the nearest sample's.
+ * Null when a bracketing sample lacks it, and once the newest sample carrying it was received
+ * `VNAS_PREFERENCE_THRESHOLD_MS` or more ago, so an aircraft fallen back to VATSIM is treated as a source
+ * without height.
+ */
+function heightAboveGroundAt(
+  observations: AircraftObservation[],
+  before: AircraftObservation | null,
+  after: AircraftObservation | null,
+  displayTime: number,
+  now: number,
+): number | null {
+  const newestWithHeight = newestHeightSample(observations)
+  if (!newestWithHeight || now - newestWithHeight.receivedAt >= VNAS_PREFERENCE_THRESHOLD_MS) return null
+
+  if (before && after) {
+    if (before.heightAboveGround === undefined || after.heightAboveGround === undefined) return null
+    const interval = after.observedAt - before.observedAt
+    const t = interval > 0 ? (displayTime - before.observedAt) / interval : 1
+    return lerp(before.heightAboveGround, after.heightAboveGround, t)
+  }
+  return (before ?? after)?.heightAboveGround ?? null
+}
+
+/**
+ * The interpolated state's ground flag, taken from the observation that supplies it.
+ *
+ * vNAS's flag is the 50/80 ft label hysteresis, not a ground contact, so without a height above ground at the
+ * displayed instant (a replay recorded before the field, or a bracket that mixes in a sample without it) it is
+ * null and the aircraft takes the blends of a source without ground state. The observation keeps its flag for labels.
+ */
+function drawingGroundFlag(flagSource: AircraftObservation, heightAboveGround: number | null): boolean | null {
+  if (flagSource.source === 'vnas' && heightAboveGround === null) return null
+  return flagSource.onGround
+}
+
 /**
  * Calculate the target display delay from observation intervals.
  * Uses the maximum recent interval plus a jitter buffer to ensure
@@ -933,7 +980,7 @@ function interpolateTimeline(
   let altitude: number
   let groundspeed: number
   let groundTrack: number | null
-  let onGround: boolean | null
+  let groundFlagSource: AircraftObservation
   let pitch: number | null
   let roll: number | null
   let verticalRate: number | null
@@ -1083,7 +1130,7 @@ function interpolateTimeline(
     }
 
     // Interpolate ADS-B data if available on both observations
-    onGround = after.onGround // Use the later observation's ground state
+    groundFlagSource = after // Use the later observation's ground state
     pitch =
       before.pitch !== null && after.pitch !== null ? lerp(before.pitch, after.pitch, t) : (after.pitch ?? before.pitch)
     roll = before.roll !== null && after.roll !== null ? lerp(before.roll, after.roll, t) : (after.roll ?? before.roll)
@@ -1145,7 +1192,7 @@ function interpolateTimeline(
     }
 
     // Pass through ADS-B data from last observation
-    onGround = before.onGround
+    groundFlagSource = before
     pitch = before.pitch
     roll = before.roll
 
@@ -1184,7 +1231,7 @@ function interpolateTimeline(
     groundspeed = heldOnGround ? 0 : after.groundspeed
     groundTrack = heldOnGround ? null : after.groundTrack
     // Pass through ADS-B data
-    onGround = after.onGround
+    groundFlagSource = after
     pitch = after.pitch
     roll = after.roll
     verticalRate = after.verticalRate
@@ -1243,6 +1290,8 @@ function interpolateTimeline(
     newDynamicDelay = updatedState
   }
 
+  const heightAboveGround = heightAboveGroundAt(allObservations, before, after, displayTime, now)
+
   return {
     result: {
       callsign,
@@ -1254,7 +1303,8 @@ function interpolateTimeline(
       groundTrack,
       reportedGroundspeed: newestObs.groundspeed,
       // Extended ADS-B data
-      onGround,
+      onGround: drawingGroundFlag(groundFlagSource, heightAboveGround),
+      heightAboveGround,
       pitch,
       roll,
       verticalRate,
