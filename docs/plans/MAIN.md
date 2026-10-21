@@ -19,16 +19,18 @@
 
 ### M1 Remove VR (1/1 done)
 
-### M2 Cab, clouds and fog in Cesium (0/9 done)
-- [ ] TC3D-144 Port spike A's cloud and fog stage into production · release vNext
-- [ ] TC3D-145 Draw fog in the weather composite instead of tuning scene.fog · release vNext
-- [ ] TC3D-146 Draw the tower cab as a Cesium model again · release vNext
-- [ ] TC3D-147 Tint clouds and fog by sun elevation · release vNext
-- [ ] TC3D-148 Turn the weather stage's knobs into quality presets · release vNext
-- [ ] TC3D-149 Delete the Babylon fog dome and cloud meshes · release vNext
-- [ ] TC3D-150 Measure the weather stage on an iPad and get the owner's look sign-off · release vNext
-- [ ] TC3D-138 Reconcile MODDING.md's +Y-forward model axes with the code's glTF +X forward · release vNext
-- [ ] TC3D-125 Overcast leaves a clear-sky band at the horizon; dense fog renders dark teal · release vNext
+### M2 Cab, clouds and fog in Cesium (1/11 done)
+- [ ] TC3D-213 Clouds, fog and cab in Cesium on feat/cesium-weather · release vNext
+  - [ ] TC3D-145 Draw fog in the weather composite instead of tuning scene.fog · release vNext
+  - [ ] TC3D-146 Draw the tower cab as a Cesium model again · release vNext
+  - [ ] TC3D-147 Tint clouds and fog by sun elevation · release vNext
+  - [ ] TC3D-148 Turn the weather stage's knobs into quality presets · release vNext
+  - [ ] TC3D-149 Delete the Babylon fog dome and cloud meshes · release vNext
+  - [ ] TC3D-150 Measure the weather stage on an iPad and get the owner's look sign-off · release vNext
+  - [ ] TC3D-125 Overcast leaves a clear-sky band at the horizon; dense fog renders dark teal · release vNext
+  - [ ] TC3D-138 Reconcile MODDING.md's +Y-forward model axes with the code's glTF +X forward · release vNext
+  - [ ] TC3D-219 Weather stage fog vanishes with the camera above about 32 km
+  - [ ] TC3D-221 Merge feat/cesium-weather to main (#262)
 
 ### M3 Rain, snow and lightning (0/2 done)
 - [ ] TC3D-151 Draw rain and snow in Cesium, depth-aware · release vNext
@@ -55,11 +57,11 @@
 ## OSM buildings
 
 ### B1 Shader on the ion tiles (2/7 done)
-- [ ] TC3D-163 Vary building colour per building from a stable hash · release vNext
-- [ ] TC3D-164 Draw type-aware facades from class and levels packed into the style colour · release vNext
 - [ ] TC3D-165 Draw curtain-wall glass on terminals through Cesium's reflections · release vNext
 - [ ] TC3D-166 Light windows at night by building use and local time · release vNext
 - [ ] TC3D-167 Add a buildings quality preset per device · release vNext
+- [/] TC3D-164 Draw type-aware facades from class and levels packed into the style colour (sub-issue of TC3D-211) · release vNext
+- [/] TC3D-163 Vary building colour per building from a stable hash (sub-issue of TC3D-211) · release vNext
 
 ### B2 Generated buildings near the field (0/3 done)
 - [ ] TC3D-168 Generate buildings from the local OSM planet near the field · release vNext
@@ -74,13 +76,16 @@
 
 ### No milestone
 - [ ] TC3D-184 Destroy the OSM buildings tileset when its load is cancelled
+- [ ] TC3D-211 OSM facades on feat/osm-facades · release vNext
+  - [/] TC3D-164 Draw type-aware facades from class and levels packed into the style colour · release vNext
+  - [/] TC3D-163 Vary building colour per building from a stable hash · release vNext
+  - [ ] TC3D-218 Type OSM building parts from their outline, then by shape near the field
+  - [ ] TC3D-220 Facade floor lines don't start at the building's ground
 
 ## vNAS session lifecycle
 
 - [/] TC3D-6 vNAS session lifecycle: one subscribe per facility, clean session end · release vNext
-  - [ ] TC3D-7 Review round 1 on the vNAS lifecycle's Rust half · release vNext
-  - [ ] TC3D-8 App check, docs sweep and landing of the vNAS lifecycle · release vNext
-- [/] TC3D-47 vNAS teardown and event forwarder follow-ups · release vNext
+  - [ ] TC3D-214 Merge feat/vnas-session-lifecycle to main (#261)
 - [ ] TC3D-4 Join YAAT servers by negotiate and UDP, as on vNAS · release vNext
 - [ ] TC3D-44 Crate logs the hub access token in the WebSocket URL · release vNext
 
@@ -88,18 +93,13 @@
 
 - [ ] TC3D-52 Aircraft orientation model: bank, rotation and flare
 - [ ] TC3D-50 Ground contact from vNAS height above ground · release vNext
-- [ ] TC3D-51 Treat vNAS silence for a stopped aircraft as parked
+- [ ] TC3D-51 Treat vNAS silence for a stopped aircraft as parked · release vNext
 - [ ] TC3D-53 Curved VATSIM paths: splines with heading from the path
 - [ ] TC3D-179 Use the terrain under the aircraft as the gear datum in orbit mode with no airport
 - [ ] TC3D-180 Skip VATSIM samples while an aircraft's vNAS data is fresh
 - [ ] TC3D-181 Convert ground elevation to ellipsoid height in label culling
 - [ ] TC3D-189 Held slow airborne first report is drawn on the ground
 - [ ] TC3D-190 Gear height uses the airport elevation, not the sampled terrain
-
-## Cesium 1.145 and shadow darkness
-
-- [ ] TC3D-9 Cesium 1.145 and shadow darkness (A1.1–A1.6, B1) · release vNext
-  - [ ] TC3D-199 Merge feat/cesium-1.145 to main (#260)
 
 ## Render resolution and Cesium quick wins
 
@@ -167,15 +167,11 @@
 - [ ] TC3D-197 Let several dev copies of the app run side by side, one per worktree
 - [ ] TC3D-198 GPU timer in __tc3d.perf() stops updating after its first results
 - [ ] TC3D-200 Runways with no end elevation are flattened to sea level
-- [ ] TC3D-201 Taxiway-to-runway ramp never runs, leaving a cliff at runway edges
-- [ ] TC3D-202 Airport fill polygon flattens whole valleys and hills
-- [ ] TC3D-203 Ground aircraft height disagrees with the drawn flattened ground
-- [ ] TC3D-204 Flattening tile cache reuses tile objects Cesium already freed
-- [ ] TC3D-205 Flattened tiles keep the server's bounding box and horizon point
-- [ ] TC3D-206 Changing flattening polygons does not reload tiles on screen
 - [ ] TC3D-207 apt.dat pavement extractor drops pavements and turns taxi lines into holes
-- [ ] TC3D-208 Runways flattened as a straight line between thresholds miss mid-runway terrain
-- [ ] TC3D-209 Terrain flattening e2e script compares flattened against flattened
+- [ ] TC3D-212 MSFS model cache limit is dropped on every settings save
+- [ ] TC3D-215 Leader distance of 1.5 fails the settings save; orbit pitch defaults differ
+- [ ] TC3D-216 A remote browser's settings import shows host-owned values the host refused
+- [ ] TC3D-217 Remote server access follow-ups: open sockets, router-suffix names, duplicate reads
 
 ## Settings drawer
 
@@ -247,4 +243,4 @@
 - [ ] TC3D-139 Design better-looking OSM buildings: restyle, facade shader or regenerated geometry · release vNext
 - [ ] TC3D-159 Design VR on Cesium through WebXR
 - [ ] TC3D-185 Design night and dusk lighting that follows natural light across the whole scene · release vNext
-- [ ] TC3D-210 Decide: fix the terrain flattening or replace it with the greenfield design
+- [ ] TC3D-210 Replace the terrain flattening with the greenfield airfield surface
