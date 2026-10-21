@@ -1,56 +1,82 @@
-#requires -Version 7
+#requires -Version 7.3
 
 <#
 .SYNOPSIS
-The gate a repo runs: it hands every word to the user-level gate when the machine has one, and otherwise runs the
-command under a smaller wrapper that keeps the log, the tail and the exit status.
+The repo's pass-through to gate.exe: it hands every word to the installed gate when the machine has one, and on a clone
+without it runs the command directly.
 
 .DESCRIPTION
-tools/sync-launchers.ps1 publishes this file into a repo as tools/gate.ps1, and a repo carries this launcher rather than a copy of
-the gate: a change to the canonical gate, at `$env:CLAUDE_CONFIG_DIR\tools\gate\gate.ps1`, or the user's
-`~/.claude\tools\gate\gate.ps1` when that variable is unset, reaches every repo at once, and a caller keeps invoking
-tools/gate.ps1 as it always did, `pwsh -NoProfile -File tools/gate.ps1 ...` or `& tools/gate.ps1 ...`.
+Callers run `pwsh -NoProfile -File tools/gate.ps1 ...` or `& tools/gate.ps1 ...`, in either spelling gate.exe reads:
+the PowerShell form `-Log <path> -TimeoutSeconds <n> -Slot <kind> [...] -- <command>` or the CLI form
+`run --log <path> --timeout <n> --slot <kind> [...] -- <command>`, and the other subcommands such as `stop-tree <pid>`.
 
-When the canonical gate is there, every word is handed to it in this same process, so the call is the gate's own:
--StopTree and the exit status included.
+The gate.exe it runs: `$env:GATE_BOX_EXE` when it is set and not empty (a command inside a routed run on a builder),
+which must be a fully qualified path to a file; otherwise the launcher says `gate: GATE_BOX_EXE names <value>, which is
+not a gate.exe here` on standard error and exits 127. With it unset or empty, the first that exists of
+`<Program Files root>\gate\bin\gate.exe` (a builder's admin install) and `$env:LOCALAPPDATA\gate\bin\gate.exe` (the
+user's install). The Program Files root is `$env:GATE_LAUNCHER_PROGRAM_FILES` when it is set and not empty, since
+Windows sets `$env:ProgramFiles` afresh in every process, and `$env:ProgramFiles` otherwise. PATH is not searched.
 
-When it is not, as on another developer's clone, the fallback runs the command itself. It keeps the whole output in the
-log, the last -Tail lines on the screen, the command's own exit status, the failure markers that make a zero exit whose
-output reports a failure a failure, below-normal priority for the command, and -StopTree, which stops the processes one
-Win32_Process snapshot shows under the pid, a process whose parent has already exited being beyond it, since only a job
-holds that one. It drops the parts that need the gate's machine: the slot pools, the watchdog's stall kill and ceiling,
-its wall-time backstop, the handling of build servers, and routing to the build box (it reads -Local and ignores it).
-It says it has no gate on standard error before the command starts, one line, `gate: <path> not found; running without
-slots or watchdog`, so a run with no watchdog is never read as one with.
+Every word goes to gate.exe as the caller gave it, -StopTree included. A caller whose session ate the -- gets it put back
+before the first command word, and the -name:value words the session split after it joined again; a call whose first
+word is a subcommand goes as it came, except a `run` whose -- was eaten, which gets it back the same way. The launcher
+prints nothing of its own: gate.exe's lines are the whole output. A Ctrl+C reaches gate.exe while the launcher ignores
+it, waits for gate.exe to end and exits with its whole status.
 
-Like the gate, and for the same reason, the options are read by hand out of $args rather than declared in a param
-block: a declared block sends the bare -- of a caller's command through PowerShell's parameter binder, which reads it
-as a parameter name and stops. The command is every word after a --, or, when the caller's session ate the separator,
-every word from the first that is not one of the options. A caller that starts this launcher with -File gives the
-binder a -name:value word to split in $args, where the process argv keeps it whole, so the words are read from the argv
-in that case, and a -name:value word the binder left as -name: and value is joined back into one word, the gate this
-launcher forwards to and the fallback's command both getting it whole.
+With no gate.exe found it says `gate: no gate.exe found; running the command without slots or watchdog` on standard
+error and runs the command itself, in this process. A leading `run` selects the CLI form. With a -- among the option
+words the command is exactly the words after it; when the caller's session ate the --, it is every word from the first
+that is neither an option nor an option's value, a -name: word split from its value joined back. Of the options only
+-Cd/--cd, the command's working folder, and -Env/--env NAME=VALUE, a variable set for the command and restored after
+it, are used; a GATE_ name is refused with exit 2. There is no log, no tail, no failure markers, no slot and no
+watchdog. The launcher exits with the command's status: a program's own, 0 for a PowerShell command that succeeded and
+1 for one that failed. -StopTree and stop-tree cannot run without gate.exe: they say so and exit 1. With no command
+words the launcher prints its usage and exits 2. -Reason/--reason "<why>" is required by gate.exe with -Local/--local,
+-Slot critical/--slot critical and -Alone/--alone; the launcher passes it through and checks nothing itself.
 
-Usage: pwsh tools/gate.ps1 -Log <path> -TimeoutSeconds <n> -Slot heavy|light|critical [-StallSeconds <n>] [-Tail <n>]
-           [-NoMarkers] [-Local] -- <command> [args...]
+The options are read by hand out of $args rather than declared in a param block: a declared block sends the bare -- of
+a caller's command through PowerShell's parameter binder, which reads it as a parameter name and stops. A caller that
+starts this launcher with -File gives the binder a -name:value word to split in $args, where the process argv keeps it
+whole, so the words are read from the argv in that case.
+
+Usage: pwsh tools/gate.ps1 -Log <path> -TimeoutSeconds <n> -Slot heavy|light|critical|none [-StallSeconds <n>] [-Tail <n>]
+           [-NoMarkers] [-Local] [-Alone] [-Reason "<why>"] [-Cd <folder>] [-Env NAME=value] -- <command> [args...]
+       pwsh tools/gate.ps1 run --log <path> --timeout <n> --slot heavy|light|critical|none [--alone] [--reason "<why>"]
+           [options] -- <command> [args...]
        pwsh tools/gate.ps1 -StopTree <pid>
+       pwsh tools/gate.ps1 stop-tree <pid>
 #>
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+# A native command's status is the launcher's to report: a caller's $true must not turn a non-zero exit into a throw.
+$PSNativeCommandUseErrorActionPreference = $false
 
-# The failure markers a zero exit must not hide: copied from gate.ps1, which the self-test proves by comparing the two
-# assignments in their parse trees.
-$markers = '^Build FAILED\.|error CS\d+|: error |Test run summary: Failed!|^\s*failed: [1-9]|gate: (TIMED OUT|STALLED|BACKSTOP)'
 $usage = @(
-    'usage: pwsh tools/gate.ps1 -Log <path> -TimeoutSeconds <n> -Slot heavy|light|critical [-StallSeconds <n>] [-Tail <n>] ' +
-    '[-NoMarkers] [-Local] -- <command> [args...]'
+    'usage: pwsh tools/gate.ps1 -Log <path> -TimeoutSeconds <n> -Slot heavy|light|critical|none [-StallSeconds <n>] [-Tail <n>] ' +
+    '[-NoMarkers] [-Local] [-Alone] [-Reason "<why>"] [-Cd <folder>] [-Env NAME=value] -- <command> [args...]'
+    '       pwsh tools/gate.ps1 run --log <path> --timeout <n> --slot heavy|light|critical|none [--alone] [--reason "<why>"] ' +
+    '[options] -- <command> [args...]'
     '       pwsh tools/gate.ps1 -StopTree <pid>'
+    '       pwsh tools/gate.ps1 stop-tree <pid>'
 )
-# The priority classes the fallback lowers for the command: a gate already at below normal or idle is left as it is.
-$aboveBelowNormal = @('Normal', 'AboveNormal', 'High', 'RealTime')
-# The canonical gate: under CLAUDE_CONFIG_DIR when that names a tree, else under the user's own ~/.claude.
-$gatePath = Join-Path ($env:CLAUDE_CONFIG_DIR ?? (Join-Path $HOME '.claude')) 'tools/gate/gate.ps1'
+# How the launcher reads each spelling's options when it must find the command itself: the PowerShell form's -Name and
+# -Name:value, and the CLI form's --name and --name=value after a leading `run`. Option names compare as PowerShell
+# compares strings, ignoring case.
+$spellings = @{
+    Compat = @{
+        Prefix = '-'
+        Joiner = ':'
+        Values = @('Log', 'TimeoutSeconds', 'Slot', 'StallSeconds', 'Tail', 'Reason', 'Cd', 'Env')
+        Flags = @('NoMarkers', 'Local', 'Alone')
+    }
+    Cli = @{
+        Prefix = '--'
+        Joiner = '='
+        Values = @('log', 'timeout', 'slot', 'stall', 'tail', 'reason', 'cd', 'env', 'bring-tracked', 'state-dir')
+        Flags = @('no-markers', 'local', 'alone')
+    }
+}
 
 # One line on standard error, the way the gate writes its own.
 function Write-Gate {
@@ -61,14 +87,6 @@ function Write-Gate {
 # The usage, one line at a time, on standard error.
 function Write-Usage {
     foreach ($line in $usage) { Write-Gate $line }
-}
-
-# True for a whole number above 0, the gate's own test for a process id in -StopTree and for -Tail here.
-function Test-WholeNumber {
-    param([string]$Value)
-    $number = 0
-    $style = [System.Globalization.NumberStyles]::None
-    return [int]::TryParse($Value, $style, [cultureinfo]::InvariantCulture, [ref]$number) -and $number -gt 0
 }
 
 # The argv index of this process's own script file, or -1 when the call names none: the entry right after a -File form,
@@ -130,10 +148,11 @@ function Expand-Word {
     return $flat.ToArray()
 }
 
-# Reads the option at $At into $Options; returns how many words it took, or 0 having said why it could not. An option
-# written -Name:value, as one word from the raw argv, is read as that option and its value in that one word.
+# Reads the option at $At into $Options; returns how many words it took, or 0 with the reason it could not added to
+# $Problems. An option written -Name:value, as one word from the raw argv, is read as that option and its value in that
+# one word.
 function Read-Option {
-    param([hashtable]$Options, [object[]]$Words, [int]$At)
+    param([hashtable]$Options, [object[]]$Words, [int]$At, [System.Collections.Generic.List[string]]$Problems)
     $word = [string]$Words[$At]
     $name = $word.Substring(1)
     $value = $null
@@ -142,12 +161,12 @@ function Read-Option {
         $value = $name.Substring($colon + 1)
         $name = $name.Substring(0, $colon)
     }
-    if ($name -in 'NoMarkers', 'Local') {
+    if ($name -in 'NoMarkers', 'Local', 'Alone') {
         $Options[$name] = $true
         return 1
     }
     if (-not $Options.ContainsKey($name)) {
-        Write-Gate "gate: cannot read the option $word"
+        $Problems.Add("gate: cannot read the option $word")
         return 0
     }
     if ($null -ne $value) {
@@ -155,7 +174,7 @@ function Read-Option {
         return 1
     }
     if ($At + 1 -ge $Words.Count) {
-        Write-Gate "gate: $word needs a value"
+        $Problems.Add("gate: $word needs a value")
         return 0
     }
     $Options[$name] = [string]$Words[$At + 1]
@@ -183,207 +202,262 @@ function Join-ColonWord {
     return $joined.ToArray()
 }
 
-# Splits the words into this launcher's options and the command, exactly as gate.ps1 splits them; $null, having said
-# why, for an option it cannot read.
-function Read-Argument {
-    param([object[]]$Words)
-    $options = @{ Log = ''; TimeoutSeconds = ''; Slot = ''; StallSeconds = '120'; Tail = '20'; NoMarkers = $false; Local = $false }
+# Reads the PowerShell form's options from the front of the words, as gate.exe's compatibility layer reads them, up to
+# where the command starts: Options, the options read; Dash, whether a -- is there; At, the index of that --, or, when
+# the caller's session ate it, of the first word that is not one of the options, the word count when there is no
+# command, and -1, with the reason added to $Problems, at an option it cannot read.
+function Find-CommandStart {
+    param([object[]]$Words, [System.Collections.Generic.List[string]]$Problems)
+    $options = @{
+        Log = ''; TimeoutSeconds = ''; Slot = ''; StallSeconds = '120'; Tail = '20'; NoMarkers = $false; Local = $false; Alone = $false
+        Reason = ''; Cd = ''; Env = ''
+    }
     $read = 0
     while ($read -lt $Words.Count) {
         $word = [string]$Words[$read]
-        if ($word -eq '--') {
-            return @{ Options = $options; Command = @(Join-ColonWord @($Words | Select-Object -Skip ($read + 1))) }
-        }
+        if ($word -eq '--') { return @{ Options = $options; Dash = $true; At = $read } }
         # A caller in its own session had the -- eaten by PowerShell's parser, so the command starts at the first word
         # that is not one of this launcher's options.
-        if (-not $word.StartsWith('-')) {
-            return @{ Options = $options; Command = @(Join-ColonWord @($Words | Select-Object -Skip $read)) }
-        }
-        $taken = Read-Option -Options $options -Words $Words -At $read
-        if ($taken -eq 0) { return $null }
+        if (-not $word.StartsWith('-')) { return @{ Options = $options; Dash = $false; At = $read } }
+        $taken = Read-Option -Options $options -Words $Words -At $read -Problems $Problems
+        if ($taken -eq 0) { return @{ Options = $options; Dash = $false; At = -1 } }
         $read += $taken
     }
-    return @{ Options = $options; Command = @() }
+    return @{ Options = $options; Dash = $false; At = $Words.Count }
 }
 
-# What the fallback must be given and cannot run without: the log, the command, and a -Tail it can read as a number.
-# The options it drops, -TimeoutSeconds and -Slot among them, are read and take their value without being checked.
-function Get-InputProblem {
-    param([hashtable]$Options, [object[]]$Command)
-    $problems = [System.Collections.Generic.List[string]]::new()
-    if (-not $Options['Log']) {
-        $problems.Add('gate: missing -Log <path>: every gate writes its whole output to a log, e.g. -Log .tmp/test.log')
+# Reads the option at $At in $Spelling, adding a -Cd folder and an -Env word to $Found; returns how many words it took,
+# or 0 when the word is not one of the spelling's options. A value option takes its value from the same word after the
+# spelling's joiner, or, when that is empty, from the next word.
+function Read-DirectOption {
+    param([hashtable]$Found, [object[]]$Words, [int]$At, [hashtable]$Spelling)
+    $word = [string]$Words[$At]
+    if (-not $word.StartsWith($Spelling.Prefix) -or $word -eq '--') { return 0 }
+    $name = $word.Substring($Spelling.Prefix.Length)
+    $value = ''
+    $cut = $name.IndexOf($Spelling.Joiner)
+    if ($cut -ge 0) {
+        $value = $name.Substring($cut + 1)
+        $name = $name.Substring(0, $cut)
     }
-    if ($Command.Count -lt 1) {
-        $problems.Add('gate: missing the command: put it after --, e.g. -- dotnet test')
+    if ($name -in $Spelling.Flags) { return 1 }
+    if ($name -notin $Spelling.Values) { return 0 }
+    $taken = 1
+    if (-not $value) {
+        if ($At + 1 -ge $Words.Count) { return 0 }
+        $value = [string]$Words[$At + 1]
+        $taken = 2
     }
-    $tail = $Options['Tail']
-    if ($tail -and -not (Test-WholeNumber $tail)) {
-        $problems.Add("gate: -Tail must be a whole number above 0, got '$tail'")
-    }
-    return , $problems
+    if ($name -eq 'Cd') { $Found.Cd = $value }
+    elseif ($name -eq 'Env') { $Found.Env.Add($value) }
+    return $taken
 }
 
-# The command run with & in this process: its output to $Log, its errors to $ErrLog, which is appended to the log and
-# removed once the command has ended. Returns the status, and 1 for a command that threw without a status of its own.
-function Invoke-GateCommand {
-    param([string]$Command, [object[]]$Rest, [string]$Log, [string]$ErrLog)
-    # A program and a script file both set the global $LASTEXITCODE, while an assignment in this scope would be
-    # shadowed by a variable of its own, so both sides of the run name that scope. A cmdlet or a function never sets
-    # one, and leaves the 0 it is given, or the 1 below when it threw.
-    $status = 0
-    $started = [bool](Get-Command -Name $Command -CommandType Application, ExternalScript -ErrorAction SilentlyContinue)
+# Where the command starts among the words read from $At in $Spelling: Dash, whether a -- ended the options; At, the
+# index of the first command word; Cd, the last -Cd folder or $null; Env, the -Env words in order. A word the spelling
+# does not know is skipped as a flag when $SkipUnknown is set or a -- follows it, and is otherwise the command's first
+# word, as is the first word that is neither an option nor an option's value.
+function Find-DirectStart {
+    param([object[]]$Words, [int]$At, [hashtable]$Spelling, [bool]$SkipUnknown)
+    $found = @{ Dash = $false; At = $Words.Count; Cd = $null; Env = [System.Collections.Generic.List[string]]::new() }
+    $later = [array]::IndexOf([string[]]@($Words | ForEach-Object { [string]$_ }), '--', [Math]::Min($At, $Words.Count))
+    $read = $At
+    while ($read -lt $Words.Count) {
+        $word = [string]$Words[$read]
+        if ($word -eq '--') {
+            $found.Dash = $true
+            $found.At = $read + 1
+            return $found
+        }
+        $taken = Read-DirectOption -Found $found -Words $Words -At $read -Spelling $Spelling
+        if ($taken -eq 0 -and $word.StartsWith('-') -and ($SkipUnknown -or $later -gt $read)) { $taken = 1 }
+        if ($taken -eq 0) {
+            $found.At = $read
+            return $found
+        }
+        $read += $taken
+    }
+    return $found
+}
+
+# A Ctrl+C handler that cancels the break for this process, compiled from an expression tree: Ctrl+C runs it on a
+# thread with no runspace, where a script block cannot run and takes pwsh down.
+function New-BreakIgnorer {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '',
+        Justification = 'It builds a handler and changes no state; the caller registers it.')]
+    param()
+    $breakArgs = [System.Linq.Expressions.Expression]::Parameter([ConsoleCancelEventArgs], 'e')
+    $source = [System.Linq.Expressions.Expression]::Parameter([object], 'sender')
+    $cancel = [System.Linq.Expressions.Expression]::Assign(
+        [System.Linq.Expressions.Expression]::Property($breakArgs, 'Cancel'), [System.Linq.Expressions.Expression]::Constant($true))
+    $parameters = [System.Linq.Expressions.ParameterExpression[]]@($source, $breakArgs)
+    return [System.Linq.Expressions.Expression]::Lambda[ConsoleCancelEventHandler]($cancel, $parameters).Compile()
+}
+
+# The words gate.exe is given: the caller's as they came, or, when the caller's session ate the --, the same words with
+# the -- put back before the first command word and the command's -name:value words the session split joined again. A
+# call whose first word is a subcommand goes as it came, but for a `run` whose --, read in the CLI form, was eaten; a
+# word that form does not know, such as one of gate.exe's hidden switches, is read as a flag.
+function Get-HandOverWord {
+    param([object[]]$Words)
+    if ($Words.Count -eq 0) { return $Words }
+    $first = [string]$Words[0]
+    if ($first -eq 'run') { $found = Find-DirectStart -Words $Words -At 1 -Spelling $spellings.Cli -SkipUnknown $true }
+    elseif ($first.StartsWith('-')) {
+        $found = Find-CommandStart -Words $Words -Problems ([System.Collections.Generic.List[string]]::new())
+    }
+    else { return $Words }
+    if ($found.Dash -or $found.At -lt 0 -or $found.At -ge $Words.Count) { return $Words }
+    $options = @($Words | Select-Object -First $found.At)
+    $command = @(Join-ColonWord @(Expand-Word -Words @($Words | Select-Object -Skip $found.At)))
+    return $options + @('--') + $command
+}
+
+# The gate.exe to hand over to, or $null when there is none. A GATE_BOX_EXE that is set and not empty is the only one
+# looked at, and one that is not a fully qualified path to a file ends the launcher with exit 127; otherwise the first
+# file that exists of the Program Files root's install and LOCALAPPDATA's, an unset or empty variable skipped.
+function Find-GateExe {
+    $box = $env:GATE_BOX_EXE
+    if ($box) {
+        if ([System.IO.Path]::IsPathFullyQualified($box) -and (Test-Path -LiteralPath $box -PathType Leaf)) { return $box }
+        Write-Gate "gate: GATE_BOX_EXE names $box, which is not a gate.exe here"
+        exit 127
+    }
+    # Windows sets ProgramFiles afresh in every process, so a caller cannot move it; the override can.
+    $programFiles = if ($env:GATE_LAUNCHER_PROGRAM_FILES) { $env:GATE_LAUNCHER_PROGRAM_FILES } else { $env:ProgramFiles }
+    $candidates = @(
+        if ($programFiles) { Join-Path $programFiles 'gate\bin\gate.exe' }
+        if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'gate\bin\gate.exe' }
+    )
+    foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
+    }
+    return $null
+}
+
+# The direct run's plan: Command, the command words; Cd, the folder to run it in or $null; Env, the -Env words. A
+# leading `run` selects the CLI form. With a -- among the option words the command is exactly the words after it;
+# without one, it starts at the first word that is neither an option nor an option's value, and a -name: word the
+# caller's session split from its value is joined back.
+function Read-DirectCommand {
+    param([object[]]$Words)
+    $cli = $Words.Count -gt 0 -and [string]$Words[0] -eq 'run'
+    $spelling = if ($cli) { $spellings.Cli } else { $spellings.Compat }
+    $found = Find-DirectStart -Words $Words -At ([int]$cli) -Spelling $spelling -SkipUnknown $false
+    $rest = @($Words | Select-Object -Skip $found.At)
+    $command = if ($found.Dash) { $rest } else { @(Join-ColonWord $rest) }
+    return @{ Command = @($command); Cd = $found.Cd; Env = $found.Env }
+}
+
+# The pid word of a -StopTree <pid>, -StopTree:<pid> or stop-tree <pid> call, '' when it gives none; $null for any
+# other call.
+function Get-StopTreeTarget {
+    param([object[]]$Words)
+    if ($Words.Count -eq 0) { return $null }
+    $first = [string]$Words[0]
+    if ($first -match '^-StopTree:(.+)$') { return $Matches[1] }
+    if ($first -notin '-StopTree', '-StopTree:', 'stop-tree') { return $null }
+    if ($Words.Count -ge 2) { return [string]$Words[1] }
+    return ''
+}
+
+# The name of the first -Env word that names a GATE_ variable, in any case, or $null: those are the gate's own.
+function Find-RefusedName {
+    param([System.Collections.Generic.List[string]]$Pairs)
+    foreach ($pair in $Pairs) {
+        $equals = $pair.IndexOf('=')
+        $name = if ($equals -ge 0) { $pair.Substring(0, $equals) } else { $pair }
+        if ($name -like 'GATE_*') { return $name }
+    }
+    return $null
+}
+
+# Sets each NAME=VALUE pair for the command in this process and returns each variable's earlier value, $null for one
+# that was not set, in the order set. A pair with no name before its = sets nothing, and a bare NAME, the form that
+# forwards the caller's own value, is already the command's.
+function Add-CommandVariable {
+    param([System.Collections.Generic.List[string]]$Pairs)
+    $saved = [System.Collections.Generic.List[object]]::new()
+    foreach ($pair in $Pairs) {
+        $equals = $pair.IndexOf('=')
+        if ($equals -le 0) { continue }
+        $name = $pair.Substring(0, $equals)
+        $saved.Add(@{ Name = $name; Value = [Environment]::GetEnvironmentVariable($name) })
+        [Environment]::SetEnvironmentVariable($name, $pair.Substring($equals + 1))
+    }
+    return , $saved
+}
+
+# Puts back the variables Add-CommandVariable set, last first, so a name set twice gets its first earlier value.
+function Restore-CommandVariable {
+    param([System.Collections.Generic.List[object]]$Saved)
+    for ($index = $Saved.Count - 1; $index -ge 0; $index--) {
+        [Environment]::SetEnvironmentVariable($Saved[$index].Name, $Saved[$index].Value)
+    }
+}
+
+# Runs the command words with & in this process, its output the launcher's own, and leaves its status in the global
+# $LASTEXITCODE: a program's or a script file's own, 0 for any other command that succeeded and 1 for one that threw.
+function Invoke-Direct {
+    param([object[]]$Command)
+    $first = [string]$Command[0]
+    $rest = @($Command | Select-Object -Skip 1)
+    $started = [bool](Get-Command -Name $first -CommandType Application, ExternalScript -ErrorAction SilentlyContinue)
     $global:LASTEXITCODE = 0
     try {
-        & $Command @Rest > $Log 2> $ErrLog
-        if ($started) { $status = [int]$global:LASTEXITCODE }
+        & $first @rest
+        if (-not $started) { $global:LASTEXITCODE = 0 }
     }
     catch {
-        $status = 1
-        Add-Content -Path $ErrLog -Value $_.Exception.Message
-    }
-    if (Test-Path -LiteralPath $ErrLog) {
-        $errors = Get-Content -Path $ErrLog -Raw
-        if ($errors) { Add-Content -Path $Log -Value $errors }
-        Remove-Item -LiteralPath $ErrLog -ErrorAction SilentlyContinue
-    }
-    return $status
-}
-
-# The failure markers with their line numbers, the log's last -Tail lines and the verdict, as the gate prints them;
-# returns the status, 1 for a zero exit whose log reports a failure unless -NoMarkers asked for the exit status alone.
-function Write-Verdict {
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '',
-        Justification = 'The tail and the verdict are for the console; the fallback''s output is the log, not the pipeline.')]
-    param([hashtable]$Options, [int]$Status, [string]$Log, [double]$Wall)
-    $there = Test-Path -LiteralPath $Log
-    if ($there -and -not $Options['NoMarkers']) {
-        if ($Status -eq 0 -and (Select-String -Path $Log -Pattern $markers -Quiet)) { $Status = 1 }
-        if ($Status -ne 0) {
-            Select-String -Path $Log -Pattern $markers | Select-Object -First 40 |
-                ForEach-Object { Write-Host "$($_.LineNumber):$($_.Line)" }
-        }
-    }
-    if ($there) { Get-Content -Path $Log -Tail ([int]$Options['Tail']) | ForEach-Object { Write-Host $_ } }
-    if ($Status -eq 0) { Write-Host "gate: passed in $([math]::Round($Wall)) s. Full output: $Log" }
-    else { Write-Gate "gate: FAILED (status $Status). Full output: $Log" }
-    return $Status
-}
-
-# The command run without the canonical gate: the log, the tail, the status and the markers are kept, the slots and the
-# watchdog are not. Returns the status.
-function Invoke-Fallback {
-    param([hashtable]$Options, [object[]]$Command)
-    Write-Gate "gate: $gatePath not found; running without slots or watchdog"
-    # Read against the caller's location once, before the command runs, as the gate reads its own -Log.
-    $log = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Options['Log'])
-    $logDir = Split-Path -Parent $log
-    if ($logDir -and -not (Test-Path $logDir)) { New-Item -ItemType Directory -Force $logDir | Out-Null }
-    Remove-Item $log, "$log.err" -ErrorAction SilentlyContinue
-    $self = Get-Process -Id $PID
-    $was = $self.PriorityClass
-    $lower = $aboveBelowNormal -contains [string]$was
-    try {
-        if ($lower) { $self.PriorityClass = 'BelowNormal' }
-        $clock = [System.Diagnostics.Stopwatch]::StartNew()
-        $status = Invoke-GateCommand -Command ([string]$Command[0]) -Rest @($Command | Select-Object -Skip 1) -Log $log `
-            -ErrLog "$log.err"
-        $wall = $clock.Elapsed.TotalSeconds
-    }
-    finally {
-        if ($lower) { $self.PriorityClass = $was }
-    }
-    return Write-Verdict -Options $Options -Status $status -Log $log -Wall $wall
-}
-
-# The root's descendants deepest first and then the root, read from one Win32_Process snapshot as a chain of parent
-# process ids, so a process whose parent has already exited is not among them.
-function Get-TreeOrder {
-    param([int]$Root)
-    $children = @{}
-    foreach ($entry in (Get-CimInstance -ClassName Win32_Process -Property ProcessId, ParentProcessId)) {
-        $parent = [int]$entry.ParentProcessId
-        $child = [int]$entry.ProcessId
-        if ($children.ContainsKey($parent)) { $children[$parent] = @($children[$parent]) + $child }
-        else { $children[$parent] = @($child) }
-    }
-    $order = [System.Collections.Generic.List[int]]::new()
-    Add-Descendant -Node $Root -Children $children -Order $order
-    $order.Add($Root)
-    return $order
-}
-
-# Adds $Node's children to $Order, each after its own children, so the deepest comes first.
-function Add-Descendant {
-    param([int]$Node, [hashtable]$Children, [System.Collections.Generic.List[int]]$Order)
-    if (-not $Children.ContainsKey($Node)) { return }
-    foreach ($child in $Children[$Node]) {
-        Add-Descendant -Node $child -Children $Children -Order $Order
-        $Order.Add($child)
+        Write-Gate "gate: $($_.Exception.Message)"
+        $global:LASTEXITCODE = 1
     }
 }
 
-# The processes of the tree stopped deepest first, the ones still running named in $Failures; returns how many were
-# stopped, a process that was already gone counting as neither.
-function Invoke-TreeStop {
-    param([int]$Root, [System.Collections.Generic.List[string]]$Failures)
-    $stopped = 0
-    foreach ($id in (Get-TreeOrder -Root $Root)) {
-        $process = Get-Process -Id $id -ErrorAction SilentlyContinue
-        if (-not $process) { continue }
-        try {
-            Stop-Process -Id $id -Force -ErrorAction Stop
-            $stopped++
-        }
+# With no gate.exe: a stop-tree refused, the usage for a call with no command, a GATE_ -Env name refused, else the
+# command run directly in its -Cd folder with its -Env pairs, which are put back after it; exits with the status.
+function Invoke-WithoutGate {
+    param([object[]]$Words)
+    $target = Get-StopTreeTarget -Words $Words
+    if ($null -ne $target) {
+        Write-Gate "gate: no gate.exe found; cannot stop the tree of $target"
+        exit 1
+    }
+    $plan = Read-DirectCommand -Words $Words
+    if ($plan.Command.Count -lt 1) {
+        Write-Gate 'gate: missing the command: put it after --, e.g. -- dotnet test'
+        Write-Usage
+        exit 2
+    }
+    $refused = Find-RefusedName -Pairs $plan.Env
+    if ($refused) {
+        Write-Gate "gate: -Env cannot set GATE_ names: $refused"
+        exit 2
+    }
+    Write-Gate 'gate: no gate.exe found; running the command without slots or watchdog'
+    if ($plan.Cd) {
+        try { Push-Location -LiteralPath $plan.Cd }
         catch {
-            if (Get-Process -Id $id -ErrorAction SilentlyContinue) { $Failures.Add("$($process.ProcessName) $id") }
+            Write-Gate "gate: cannot enter the -Cd folder $($plan.Cd): $($_.Exception.Message)"
+            exit 2
         }
     }
-    return $stopped
-}
-
-# -StopTree <pid>, the whole of the words: the target and the descendants one snapshot shows, stopped deepest first;
-# returns the exit status.
-function Invoke-StopTree {
-    param([object[]]$Words)
-    $value = if ($Words.Count -ge 2) { [string]$Words[1] } else { '' }
-    $problem = if ($Words.Count -ne 2) { 'gate: -StopTree takes one process id and nothing else' }
-    elseif (-not (Test-WholeNumber $value)) { "gate: -StopTree needs a process id, got '$value'" }
-    elseif (-not (Get-Process -Id ([int]$value) -ErrorAction SilentlyContinue)) { "gate: -StopTree: no live process has the id $value" }
-    if ($problem) {
-        Write-Gate $problem
-        Write-Usage
-        return 2
+    $saved = Add-CommandVariable -Pairs $plan.Env
+    try { Invoke-Direct -Command $plan.Command }
+    finally {
+        Restore-CommandVariable -Saved $saved
+        if ($plan.Cd) { Pop-Location }
     }
-    $root = [int]$value
-    $failures = [System.Collections.Generic.List[string]]::new()
-    $stopped = Invoke-TreeStop -Root $root -Failures $failures
-    foreach ($failure in $failures) { Write-Gate "gate: could not stop: $failure" }
-    [Console]::Out.WriteLine("gate: stopped 0 gate job(s) and $stopped process(es) under $root")
-    if ($failures.Count -gt 0) { return 1 }
-    return 0
+    exit $global:LASTEXITCODE
 }
 
-# The words of one call: -StopTree alone, or the options, the checks on them and the fallback; returns the exit status.
-function Invoke-Main {
-    param([object[]]$Words)
-    $Words = @(Expand-Word -Words $Words)
-    if ($Words.Count -gt 0 -and [string]$Words[0] -eq '-StopTree') { return Invoke-StopTree $Words }
-    $parsed = Read-Argument $Words
-    $problems = if ($parsed) { Get-InputProblem -Options $parsed.Options -Command $parsed.Command } else { @() }
-    if (-not $parsed -or $problems.Count -gt 0) {
-        foreach ($problem in $problems) { Write-Gate $problem }
-        Write-Usage
-        return 2
-    }
-    return Invoke-Fallback -Options $parsed.Options -Command $parsed.Command
-}
-
-# The canonical gate when the machine has one: every word, -StopTree and the separator included, is handed to it in
-# this same process, so nothing about the call changes.
 $words = @(Get-RawWord -Fallback $args)
-if (Test-Path -LiteralPath $gatePath) {
-    & $gatePath @words
-    exit ([int]$LASTEXITCODE)
-}
-exit (Invoke-Main -Words $words)
+$gateExe = Find-GateExe
+if (-not $gateExe) { Invoke-WithoutGate -Words @(Expand-Word -Words $words) }
+# Each word reaches gate.exe as itself, whatever quoting rule the caller's session set.
+$PSNativeCommandArgumentPassing = 'Standard'
+$ignoreBreak = New-BreakIgnorer
+[Console]::add_CancelKeyPress($ignoreBreak)
+try { & $gateExe @(Get-HandOverWord -Words $words) }
+finally { [Console]::remove_CancelKeyPress($ignoreBreak) }
+exit $LASTEXITCODE
