@@ -68,7 +68,8 @@ interface CesiumViewerProps {
  * 1. useCesiumViewer - core viewer initialization
  * 2. useTerrainQuality - terrain setup
  * 3. useCesiumLighting - lighting/shadows
- * 4. useCesiumWeather - weather effects; useCesiumWeatherStages - cloud and fog post-process stage
+ * 4. useCesiumWeatherStages - cloud and fog post-process stage (returns whether it draws fog), then
+ *    useCesiumWeather - Cesium scene fog, told whether the stage is drawing the fog
  * 5. useAircraftModels - aircraft model pool
  * 6. useCesiumLabels - datablock labels
  * 7. useBabylonOverlay - screen-space labels, leader lines, weather effects (requires viewer fully initialized)
@@ -383,8 +384,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
   // =========================================================================
   // 4. Weather Effects (Fog)
   // =========================================================================
-  useCesiumWeather(viewer, showWeatherEffects, showCesiumFog, fogDensity)
-  useCesiumWeatherStages(viewer, {
+  const stageDrawsFog = useCesiumWeatherStages(viewer, {
     airportIcao: currentAirport?.icao ?? null,
     refLat,
     refLon,
@@ -394,6 +394,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
     interpolatedAircraft,
     viewMode,
   })
+  useCesiumWeather(viewer, showWeatherEffects, showCesiumFog, fogDensity, stageDrawsFog)
 
   // =========================================================================
   // 5. Ground Aircraft Terrain Sampling (10x per second)

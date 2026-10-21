@@ -67,6 +67,85 @@ export function stageVisibilityMeters(visibSM: number | undefined, visibilitySca
   return Math.max(visibSM, WEATHER_STAGE_MIN_VISIBILITY_SM) * STATUTE_MILES_TO_METERS * visibilityScale
 }
 
+/** Cesium `scene.fog` values the weather hook writes */
+export interface SceneFogValues {
+  /** Whether the scene's own fog is on at all */
+  enabled: boolean
+  /** Fog density, how quickly distant terrain fades */
+  density: number
+  /** How strongly the fog shows on screen */
+  visualDensityScalar: number
+  /** Screen space error factor: terrain loads coarser while fogged */
+  screenSpaceErrorFactor: number
+  /** Floor on how dark the fog may get */
+  minimumBrightness: number
+}
+
+/** Cesium's default fog, applied whenever METAR visibility does not tune it */
+const SCENE_FOG_DEFAULT = {
+  density: 0.0006,
+  visualDensityScalar: 0.15,
+  screenSpaceErrorFactor: 2.0,
+  minimumBrightness: 0.03,
+} as const
+
+/** Fog density the derived values reach their densest look at (see weatherStore's visibilityToFogDensity) */
+const SCENE_FOG_DENSITY_MAX = 0.015
+
+/** Scene fog brightness floor while tuned from METAR visibility, so dense fog is not black */
+const SCENE_FOG_TUNED_MINIMUM_BRIGHTNESS = 0.1
+
+/**
+ * Extinction the stage's fog uses, from the quality knob and the user's `fogIntensity`.
+ *
+ * The shader multiplies the optical depth integral by `u_fogExtinction`, so fogIntensity 1
+ * keeps the base extinction, 2 doubles the optical depth and 0 removes the fog.
+ *
+ * @param baseExtinction - `WEATHER_STAGE_QUALITY.fogExtinction`
+ * @param fogIntensity - The `fogIntensity` weather setting
+ * @returns Extinction for the shader, floored at 0
+ */
+export function stageFogExtinction(baseExtinction: number, fogIntensity: number): number {
+  return Math.max(0, baseExtinction * fogIntensity)
+}
+
+/**
+ * The values to write to Cesium's `scene.fog`, from the fog toggle, the METAR
+ * fog density and whether the Cesium stage draws the fog itself.
+ *
+ * While the stage fogs the scene in its composite pass, the scene's own fog stays
+ * at Cesium's default (it still coarsens terrain LOD) instead of fogging the
+ * terrain twice, whatever the visibility. While the stage draws no fog (the
+ * Babylon overlay drawing instead, or the fog toggled off), the scene's fog is
+ * tuned from `fogDensity` as it always has been.
+ *
+ * @param input.fogEnabled - `showWeatherEffects && showCesiumFog`
+ * @param input.fogDensity - Fog density derived from METAR visibility (0 to 0.015)
+ * @param input.stageDrawsFog - Whether the Cesium stage draws the fog (`gates.fog`)
+ * @returns The enabled flag and the four values to copy onto `scene.fog`
+ */
+export function sceneFogValues(input: {
+  fogEnabled: boolean
+  fogDensity: number
+  stageDrawsFog: boolean
+}): SceneFogValues {
+  if (!input.fogEnabled || input.stageDrawsFog || input.fogDensity <= 0) {
+    return { enabled: input.fogEnabled, ...SCENE_FOG_DEFAULT }
+  }
+  // Dense fog shows strongly: 0.15 at no density up to 1.0 at SCENE_FOG_DENSITY_MAX.
+  const visualDensityScalar = Math.min(
+    1.0,
+    SCENE_FOG_DEFAULT.visualDensityScalar + (input.fogDensity / SCENE_FOG_DENSITY_MAX) * 0.85,
+  )
+  return {
+    enabled: true,
+    density: input.fogDensity,
+    visualDensityScalar,
+    screenSpaceErrorFactor: SCENE_FOG_DEFAULT.screenSpaceErrorFactor,
+    minimumBrightness: SCENE_FOG_TUNED_MINIMUM_BRIGHTNESS,
+  }
+}
+
 /** Settings and scene state that decide whether and what the stage draws */
 export interface WeatherStageGateInput {
   renderer: WeatherRenderer
@@ -104,6 +183,23 @@ export function weatherStageGates(input: WeatherStageGateInput): WeatherStageGat
     return { stage: false, clouds: false, fog: false, missingLogDepth: wanted }
   }
   return { stage: true, clouds: input.showClouds, fog: input.showBabylonFog, missingLogDepth: false }
+}
+
+/**
+ * Whether the stage actually draws the fog now: the fog gate is on and the
+ * stage has an anchor frame to draw in.
+ *
+ * `gates.fog` alone only says the settings ask for fog. With no anchor (no
+ * airport picked yet, or orbit-follow before the followed aircraft appears) the
+ * stage stays off, so Cesium's own scene fog must keep being tuned from METAR
+ * visibility instead of holding clear-weather values.
+ *
+ * @param gatesFog - Whether the settings gate asks the stage for fog (`gates.fog`)
+ * @param hasAnchor - Whether the stage has an anchor frame yet
+ * @returns True only when both hold
+ */
+export function stageDrawsFog(gatesFog: boolean, hasAnchor: boolean): boolean {
+  return gatesFog && hasAnchor
 }
 
 /** Position of the stage's east-north-up frame and what it is keyed on */

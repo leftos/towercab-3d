@@ -13,6 +13,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 - 3D buildings and aircraft no longer have an olive-green cast on their walls and fuselages; their reflected ground light is now a neutral grey.
 - Remote access accepts only devices on your local network, unless you turn on **Allow devices outside the local network** in Settings → Configuration.
 - Clouds and fog are now drawn with the scene's depth, so aircraft, buildings and terrain in front of a cloud deck or fog bank hide it correctly.
+- Fog Intensity sets how thick the depth-drawn fog looks, and terrain in low visibility is no longer fogged twice.
 
 ### Fixed
 - The remote access server no longer serves or writes files outside its own folders.

@@ -733,7 +733,7 @@ When weather effects are enabled:
 | Setting | Description |
 |---------|-------------|
 | Enable Fog | Toggle fog effects on/off |
-| Fog Intensity | Opacity of the fog dome (0.5x-2x) |
+| Fog Intensity | How thick weather fog looks (0.5x-2x) |
 | Visibility Scale | Multiplier for fog distance (2x = see twice as far as METAR) |
 | Enable Clouds | Toggle cloud layer display on/off |
 

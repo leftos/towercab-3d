@@ -22,6 +22,8 @@ import {
   type NoiseOriginAnchor,
   nextWeatherAnchor,
   noiseOriginNeedsReset,
+  stageDrawsFog,
+  stageFogExtinction,
   stageVisibilityMeters,
   type WeatherAnchor,
   type WeatherReference,
@@ -54,12 +56,15 @@ interface StageInputs {
   layers: Cesium.Cartesian4[]
   layerCount: number
   visibilityMeters: number
+  /** Optical depth multiplier of the fog, from the quality knob and `fogIntensity` */
+  fogExtinction: number
 }
 
 const NO_INPUTS: StageInputs = {
   layers: Array.from({ length: WEATHER_STAGE_MAX_LAYERS }, () => new Cesium.Cartesian4(0, 1, 0, 0)),
   layerCount: 0,
   visibilityMeters: 0,
+  fogExtinction: 0,
 }
 
 /** Mutable state shared by the stage's hooks and its uniform callbacks */
@@ -146,7 +151,7 @@ function createStage(viewer: Cesium.Viewer, refs: StageRefs, startMs: number): C
     },
     u_ecefToEnu: () => frame().ecefToEnuRotation,
     u_visibility: () => inputsRef.current.visibilityMeters,
-    u_fogExtinction: () => quality.fogExtinction,
+    u_fogExtinction: () => inputsRef.current.fogExtinction,
     u_fogHeightScale: () => quality.fogHeightScale,
   }
 
@@ -394,11 +399,11 @@ export interface WeatherStagesOptions extends ReferenceInputs {
  * Reads `weatherStore` (cloud layers; METAR visibility, or the interpolated
  * visibility while weather interpolation is on) and the weather settings:
  * `showClouds` gates the clouds, `showBabylonFog` the fog and `visibilityScale`
- * scales the fog visibility, under `showWeatherEffects`. Draws nothing in the
- * top-down view or while `weatherStageStore.renderer` is `'babylon'`, and is
- * disabled while there is no anchor or nothing to draw. Without a logarithmic
- * depth buffer on the scene the stage stays out (the Babylon overlay draws
- * instead) and one warning is logged. The stage is kept last among the scene's
+ * scales the fog visibility while `fogIntensity` scales its optical depth, under
+ * `showWeatherEffects`. Draws nothing in the top-down view or while
+ * `weatherStageStore.renderer` is `'babylon'`, and is disabled while there is no
+ * anchor or nothing to draw. Without a logarithmic depth buffer on the scene the
+ * stage stays out (the Babylon overlay draws instead) and one warning is logged. The stage is kept last among the scene's
  * post-process stages, so the aircraft silhouette outlines are fogged and
  * clouded too.
  *
@@ -413,13 +418,17 @@ export interface WeatherStagesOptions extends ReferenceInputs {
  *
  * @param viewer - Cesium viewer of this viewport (main or inset)
  * @param options - Reference position inputs and view mode of this viewport
+ * @returns Whether the stage actually draws the fog now (its fog gate on and an
+ *   anchor frame to draw in), so the caller can leave Cesium's own scene fog
+ *   tuned from METAR visibility while it does not
  */
-export function useCesiumWeatherStages(viewer: Cesium.Viewer | null, options: WeatherStagesOptions): void {
+export function useCesiumWeatherStages(viewer: Cesium.Viewer | null, options: WeatherStagesOptions): boolean {
   const renderer = useWeatherStageStore((state) => state.renderer)
   const showWeatherEffects = useSettingsStore((state) => state.weather.showWeatherEffects)
   const showClouds = useSettingsStore((state) => state.weather.showClouds)
   const showBabylonFog = useSettingsStore((state) => state.weather.showBabylonFog)
   const visibilityScale = useSettingsStore((state) => state.weather.visibilityScale)
+  const fogIntensity = useSettingsStore((state) => state.weather.fogIntensity)
   const cloudLayers = useWeatherStore((state) => state.cloudLayers)
   const metarSM = useWeatherStore((state) => state.currentMetar?.visib)
   const useInterpolation = useWeatherStore((state) => state.useInterpolation)
@@ -448,9 +457,20 @@ export function useCesiumWeatherStages(viewer: Cesium.Viewer | null, options: We
       }),
       layerCount: layers.length,
       visibilityMeters: gates.fog ? stageVisibilityMeters(visibSM, visibilityScale) : 0,
+      fogExtinction: stageFogExtinction(WEATHER_STAGE_QUALITY.fogExtinction, fogIntensity),
     }
     syncStageEnabled(refs)
-  }, [gates.clouds, gates.fog, cloudLayers, metarSM, useInterpolation, interpolatedSM, visibilityScale, refs])
+  }, [
+    gates.clouds,
+    gates.fog,
+    cloudLayers,
+    metarSM,
+    useInterpolation,
+    interpolatedSM,
+    visibilityScale,
+    fogIntensity,
+    refs,
+  ])
 
   useEffect(() => {
     if (!gates.missingLogDepth || warnedLogDepthRef.current) return
@@ -463,6 +483,7 @@ export function useCesiumWeatherStages(viewer: Cesium.Viewer | null, options: We
 
   useWeatherStageFrame(viewer, anchor, gates.stage, refs)
   useWeatherStageComposite(viewer, gates.stage, refs)
+  return stageDrawsFog(gates.fog, anchor !== null)
 }
 
 /**

@@ -13,6 +13,9 @@ import {
   horizontalNoiseOffset,
   nextWeatherAnchor,
   noiseOriginNeedsReset,
+  sceneFogValues,
+  stageDrawsFog,
+  stageFogExtinction,
   stageVisibilityMeters,
   type WeatherStageGateInput,
   weatherStageGates,
@@ -77,6 +80,82 @@ describe('stageVisibilityMeters', () => {
 
   it('floors visibility at 0.05 SM so zero visibility still draws finite fog', () => {
     expect(stageVisibilityMeters(0, 1)).toBeCloseTo(0.05 * STATUTE_MILES_TO_METERS)
+  })
+})
+
+describe('stageFogExtinction', () => {
+  it('is the base extinction at fogIntensity 1', () => {
+    expect(stageFogExtinction(1, 1)).toBe(1)
+  })
+
+  it('doubles the optical depth at fogIntensity 2', () => {
+    expect(stageFogExtinction(1, 2)).toBe(2)
+  })
+
+  it('is 0 at fogIntensity 0', () => {
+    expect(stageFogExtinction(1, 0)).toBe(0)
+  })
+
+  it('clamps a negative fogIntensity to 0', () => {
+    expect(stageFogExtinction(1, -1)).toBe(0)
+  })
+})
+
+describe('sceneFogValues', () => {
+  // What Cesium's scene.fog holds when the hook does not tune it from METAR visibility.
+  const noWeather = {
+    density: 0.0006,
+    visualDensityScalar: 0.15,
+    screenSpaceErrorFactor: 2.0,
+    minimumBrightness: 0.03,
+  }
+
+  it('tunes scene.fog from fogDensity while the Cesium stage draws no fog', () => {
+    expect(sceneFogValues({ fogEnabled: true, fogDensity: 0.0083, stageDrawsFog: false })).toEqual({
+      enabled: true,
+      density: 0.0083,
+      visualDensityScalar: 0.15 + (0.0083 / 0.015) * 0.85,
+      screenSpaceErrorFactor: 2.0,
+      minimumBrightness: 0.1,
+    })
+  })
+
+  it('applies the no-weather values while the Cesium stage draws the fog', () => {
+    expect(sceneFogValues({ fogEnabled: true, fogDensity: 0.0083, stageDrawsFog: true })).toEqual({
+      enabled: true,
+      ...noWeather,
+    })
+  })
+
+  it('applies the no-weather values at fogDensity 0 either way', () => {
+    expect(sceneFogValues({ fogEnabled: true, fogDensity: 0, stageDrawsFog: false })).toEqual({
+      enabled: true,
+      ...noWeather,
+    })
+    expect(sceneFogValues({ fogEnabled: true, fogDensity: 0, stageDrawsFog: true })).toEqual({
+      enabled: true,
+      ...noWeather,
+    })
+  })
+
+  it('leaves scene.fog off when the fog is toggled off, whatever the density or the stage', () => {
+    expect(sceneFogValues({ fogEnabled: false, fogDensity: 0.0083, stageDrawsFog: false })).toEqual({
+      enabled: false,
+      ...noWeather,
+    })
+    expect(sceneFogValues({ fogEnabled: false, fogDensity: 0.0083, stageDrawsFog: true })).toEqual({
+      enabled: false,
+      ...noWeather,
+    })
+  })
+})
+
+describe('stageDrawsFog', () => {
+  it('is true only with the fog gate on and an anchor frame', () => {
+    expect(stageDrawsFog(true, true)).toBe(true)
+    expect(stageDrawsFog(true, false)).toBe(false)
+    expect(stageDrawsFog(false, true)).toBe(false)
+    expect(stageDrawsFog(false, false)).toBe(false)
   })
 })
 
