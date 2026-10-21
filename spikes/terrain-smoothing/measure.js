@@ -11,11 +11,11 @@
 
   async function cesium() {
     if (window.__tsCesium) return window.__tsCesium
-    const url = performance
-      .getEntriesByType('resource')
-      .map((e) => e.name)
-      .find((n) => /\/\.vite\/deps\/cesium\.js/.test(n))
-    if (!url) throw new Error('Cesium dep URL not found in resource timing; is this the Vite dev server?')
+    // The app's own Cesium module instance: read the pre-bundled dep URL out of a Vite-transformed
+    // app module, so the import below returns the same instance (and the same ion token)
+    const src = await (await fetch('/hooks/useAgentHarness.ts')).text()
+    const url = src.match(/["']([^"']*\/\.vite\/deps\/cesium\.js[^"']*)["']/)?.[1]
+    if (!url) throw new Error('Cesium dep URL not found in /hooks/useAgentHarness.ts; is this the Vite dev server?')
     window.__tsCesium = await import(url)
     return window.__tsCesium
   }
@@ -84,7 +84,6 @@
     if (!apt) throw new Error(`No airport ${icao} in window.__tsAirports`)
     const t0 = performance.now()
     const centre = C.Cartographic.fromDegrees((apt.bbox.west + apt.bbox.east) / 2, (apt.bbox.south + apt.bbox.north) / 2)
-    const maxLevel = provider.availability ? provider.availability.computeMaximumLevelAtPosition(centre) : null
 
     const runways = []
     for (const rw of apt.runways) {
@@ -113,6 +112,8 @@
     for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) gridPts.push({ lon: west + i * dLon, lat: south + j * dLat })
     const gridH = await sample(C, provider, gridPts)
 
+    // Availability loads lazily with the tiles, so the deepest level is known only after sampling
+    const maxLevel = provider.availability ? provider.availability.computeMaximumLevelAtPosition(centre) : null
     const tin = maxLevel === null || opts.skipTin ? null : await tinVertices(C, provider, apt.bbox, maxLevel)
     return {
       icao,

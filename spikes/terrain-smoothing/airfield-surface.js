@@ -111,84 +111,147 @@
     }
   }
 
-  // Penalised least squares (Garcia 2010): minimise sum w (s - h)^2 + p |laplacian s|^2, with the
-  // penalty set from a half-power cutoff wavelength. Passes planes and constant-curvature surfaces.
-  function robustSmooth(heights, nx, ny, cell, cutoff) {
+  // Penalised least squares: minimise
+  //   sum w (s - h)^2 + p |laplacian s|^2 + mu sum (g . s - delta)^2
+  // with p set from a half-power cutoff wavelength (planes and constant-curvature surfaces pass), w the
+  // data weight (1 on pavement, small elsewhere, times a bisquare robustness weight), and each (g, delta)
+  // a published threshold height difference. Solved by conjugate gradients, preconditioned in the DCT
+  // domain where the penalty is diagonal.
+  const CONSTRAINT_WEIGHT = 2000
+
+  function fitSurface(heights, baseW, nx, ny, cell, cutoff, anchors = []) {
     // The DCT reflects the field at the grid edge, which turns a regional slope into a kink there.
     // Removing the best-fit plane first keeps that edge bias small; the plane is added back at the end.
-    const plane = fitPlane(heights, nx, ny)
-    const h = Float64Array.from(heights, (v, k) => v - plane(k % nx, Math.floor(k / nx)))
-    const result = smoothDetrended(h, nx, ny, cell, cutoff)
-    for (let k = 0; k < h.length; k++) result.s[k] += plane(k % nx, Math.floor(k / nx))
-    return result
+    const plane = weightedPlane(heights, baseW, nx, ny)
+    const h = Float64Array.from(heights, (v, k) => v - plane[k])
+    const constraints = anchors.map(({ idx, val, delta }) => {
+      let planeDelta = 0
+      for (let q = 0; q < idx.length; q++) planeDelta += val[q] * plane[idx[q]]
+      return { idx, val, delta: delta - planeDelta }
+    })
+    const ops = makeOps(nx, ny, cell, cutoff)
+    let w = Float64Array.from(baseW)
+    let s = new Float64Array(h.length)
+    let iterations = 0
+    for (let pass = 0; pass < 4; pass++) {
+      const result = solveWeighted(ops, h, w, s, constraints)
+      s = result.x
+      iterations += result.iterations
+      if (pass === 3) break
+      w = bisquare(h, s, baseW)
+    }
+    for (let k = 0; k < s.length; k++) s[k] += plane[k]
+    return { s, w, iterations }
   }
 
-  function fitPlane(h, nx, ny) {
-    const cx = (nx - 1) / 2
-    const cy = (ny - 1) / 2
-    let sxx = 0
-    let syy = 0
-    let sxh = 0
-    let syh = 0
-    let sh = 0
+  function bisquare(h, s, baseW) {
+    const r = Float64Array.from(h, (v, k) => v - s[k])
+    const onPaved = r.filter((_, k) => baseW[k] >= 0.5).sort()
+    const med = onPaved[onPaved.length >> 1]
+    const dev = Float64Array.from(onPaved, (v) => Math.abs(v - med)).sort()
+    const mad = dev[dev.length >> 1] * 1.4826 + 1e-6
+    return Float64Array.from(r, (v, k) => {
+      const u = v / (4.685 * mad)
+      return Math.abs(u) < 1 ? baseW[k] * (1 - u * u) ** 2 : 0
+    })
+  }
+
+  function weightedPlane(h, w, nx, ny) {
+    // Normal equations for a + b i + c j
+    const m = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+    const v = [0, 0, 0]
     for (let j = 0; j < ny; j++) {
       for (let i = 0; i < nx; i++) {
-        const x = i - cx
-        const y = j - cy
-        const v = h[j * nx + i]
-        sxx += x * x
-        syy += y * y
-        sxh += x * v
-        syh += y * v
-        sh += v
+        const k = j * nx + i
+        const basis = [1, i, j]
+        for (let a = 0; a < 3; a++) {
+          v[a] += w[k] * basis[a] * h[k]
+          for (let b = 0; b < 3; b++) m[a * 3 + b] += w[k] * basis[a] * basis[b]
+        }
       }
     }
-    // On a full symmetric grid the x, y and constant terms are orthogonal
-    const a = sh / (nx * ny)
-    const b = sxh / sxx
-    const c = syh / syy
-    return (i, j) => a + b * (i - cx) + c * (j - cy)
+    const [a, b, c] = solve3(m, v)
+    return Float64Array.from({ length: nx * ny }, (_, k) => a + b * (k % nx) + c * Math.floor(k / nx))
   }
 
-  function smoothDetrended(h, nx, ny, cell, cutoff) {
+  function solve3(m, v) {
+    const det = (q) => q[0] * (q[4] * q[8] - q[5] * q[7]) - q[1] * (q[3] * q[8] - q[5] * q[6]) + q[2] * (q[3] * q[7] - q[4] * q[6])
+    const d = det(m)
+    return [0, 1, 2].map((col) => {
+      const q = m.slice()
+      for (let row = 0; row < 3; row++) q[row * 3 + col] = v[row]
+      return det(q) / d
+    })
+  }
+
+  function makeOps(nx, ny, cell, cutoff) {
     const dx = makeDct(nx)
     const dy = makeDct(ny)
-    const gamma = new Float64Array(nx * ny)
+    const k = new Float64Array(nx * ny)
     const p = (cutoff / (2 * Math.PI)) ** 4
     for (let j = 0; j < ny; j++) {
       const ly = (2 - 2 * Math.cos((Math.PI * j) / ny)) / cell ** 2
       for (let i = 0; i < nx; i++) {
         const lam = (2 - 2 * Math.cos((Math.PI * i) / nx)) / cell ** 2 + ly
-        gamma[j * nx + i] = 1 / (1 + p * lam * lam)
+        k[j * nx + i] = p * lam * lam
       }
     }
-    const filter = (f) => {
+    const spectral = (x, scale) => {
+      const f = Float64Array.from(x)
       dct2d(f, nx, ny, dx, dy, false)
-      for (let k = 0; k < f.length; k++) f[k] *= gamma[k]
+      for (let q = 0; q < f.length; q++) f[q] *= scale(q)
       dct2d(f, nx, ny, dx, dy, true)
+      return f
     }
-    const s = Float64Array.from(h)
-    filter(s)
-    const w = new Float64Array(h.length).fill(1)
-    const r = new Float64Array(h.length)
-    for (let outer = 0; outer < 3; outer++) {
-      for (let k = 0; k < h.length; k++) r[k] = h[k] - s[k]
-      const sorted = Float64Array.from(r).sort()
-      const med = sorted[sorted.length >> 1]
-      const dev = Float64Array.from(r, (v) => Math.abs(v - med)).sort()
-      const mad = dev[dev.length >> 1] * 1.4826 + 1e-6
-      for (let k = 0; k < h.length; k++) {
-        const u = r[k] / (4.685 * mad)
-        w[k] = Math.abs(u) < 1 ? (1 - u * u) ** 2 : 0
-      }
-      for (let inner = 0; inner < 15; inner++) {
-        const f = new Float64Array(h.length)
-        for (let k = 0; k < h.length; k++) f[k] = w[k] * (h[k] - s[k]) + s[k]
-        filter(f)
-        s.set(f)
-      }
+    return { k, spectral }
+  }
+
+  function solveWeighted(ops, h, w, x0, constraints) {
+    const n = h.length
+    const dot = (a, b) => {
+      let t = 0
+      for (let q = 0; q < n; q++) t += a[q] * b[q]
+      return t
     }
-    return { s, w }
+    const applyA = (x) => {
+      const out = ops.spectral(x, (q) => ops.k[q])
+      for (let q = 0; q < n; q++) out[q] += w[q] * x[q]
+      for (const { idx, val } of constraints) {
+        let gx = 0
+        for (let t = 0; t < idx.length; t++) gx += val[t] * x[idx[t]]
+        for (let t = 0; t < idx.length; t++) out[idx[t]] += CONSTRAINT_WEIGHT * val[t] * gx
+      }
+      return out
+    }
+    let wMean = 0
+    for (let q = 0; q < n; q++) wMean += w[q] / n
+    const c = Math.max(wMean, 0.05)
+    const precond = (r) => ops.spectral(r, (q) => 1 / (c + ops.k[q]))
+    const b = Float64Array.from(h, (v, q) => w[q] * v)
+    for (const { idx, val, delta } of constraints) {
+      for (let t = 0; t < idx.length; t++) b[idx[t]] += CONSTRAINT_WEIGHT * delta * val[t]
+    }
+    const x = Float64Array.from(x0)
+    const ax = applyA(x)
+    const r = Float64Array.from(b, (v, q) => v - ax[q])
+    let z = precond(r)
+    const p = Float64Array.from(z)
+    let rz = dot(r, z)
+    const bNorm = Math.sqrt(dot(b, b)) + 1e-12
+    for (let it = 1; it <= 300; it++) {
+      const ap = applyA(p)
+      const alpha = rz / dot(p, ap)
+      for (let q = 0; q < n; q++) {
+        x[q] += alpha * p[q]
+        r[q] -= alpha * ap[q]
+      }
+      if (Math.sqrt(dot(r, r)) / bNorm < 1e-6) return { x, iterations: it }
+      z = precond(r)
+      const rzNew = dot(r, z)
+      for (let q = 0; q < n; q++) p[q] = z[q] + (rzNew / rz) * p[q]
+      rz = rzNew
+    }
+    return { x, iterations: 300 }
   }
 
   // ---------- Airfield mask and blend weight ----------
@@ -249,6 +312,7 @@
   function airfieldWeight(apt, grid, closing, blend) {
     const { nx, ny, west, south, dLon, dLat, cell } = grid
     const mask = new Uint8Array(nx * ny)
+    const paved = new Uint8Array(nx * ny)
     const cosLat = Math.cos(((apt.bbox.south + apt.bbox.north) / 2) * DEG)
     const toXY = (lon, lat) => [((lon - west) * DEG * R * cosLat), ((lat - south) * DEG * R)]
     const polys = apt.pavements.map((p) => ({ v: p.v.map(([lo, la]) => toXY(lo, la)), h: (p.h ?? []).map((r) => r.map(([lo, la]) => toXY(lo, la))) }))
@@ -256,19 +320,23 @@
       const [ax, ay] = toXY(rw.le.lon, rw.le.lat)
       const [bx, by] = toXY(rw.he.lon, rw.he.lat)
       const len = Math.hypot(bx - ax, by - ay)
-      return { ax, ay, ux: (bx - ax) / len, uy: (by - ay) / len, len }
+      return { ax, ay, ux: (bx - ax) / len, uy: (by - ay) / len, len, half: rw.widthM / 2 }
     })
     for (let j = 0; j < ny; j++) {
       for (let i = 0; i < nx; i++) {
         const x = i * cell
         const y = j * cell
-        let inside = strips.some((s) => {
+        let onStrip = false
+        let onRunway = false
+        for (const s of strips) {
           const along = (x - s.ax) * s.ux + (y - s.ay) * s.uy
-          const across = -(x - s.ax) * s.uy + (y - s.ay) * s.ux
-          return along >= -60 && along <= s.len + 60 && Math.abs(across) <= 75
-        })
-        if (!inside) inside = polys.some((p) => pointInRing(p.v, x, y) && !p.h.some((hole) => pointInRing(hole, x, y)))
-        mask[j * nx + i] = inside ? 1 : 0
+          const across = Math.abs(-(x - s.ax) * s.uy + (y - s.ay) * s.ux)
+          onStrip ||= along >= -60 && along <= s.len + 60 && across <= 75
+          onRunway ||= along >= 0 && along <= s.len && across <= s.half
+        }
+        const onPolygon = polys.some((p) => pointInRing(p.v, x, y) && !p.h.some((hole) => pointInRing(hole, x, y)))
+        paved[j * nx + i] = onRunway || onPolygon ? 1 : 0
+        mask[j * nx + i] = onStrip || onPolygon ? 1 : 0
       }
     }
     // Morphological closing fills the infields between runways and taxiways
@@ -283,7 +351,75 @@
     })
     void dLon
     void dLat
-    return { core, w }
+    return { paved, core, w }
+  }
+
+  // ---------- Published threshold anchors and the choice of cutoff ----------
+
+  const OFF_PAVEMENT_WEIGHT = 0.02
+  const LADDER = [300, 500, 800, 1200, 1800, 2500]
+  const SLOPE_LIMIT = 0.015
+
+  function stencil(grid, lon, lat) {
+    const fx = (lon - grid.west) / grid.dLon
+    const fy = (lat - grid.south) / grid.dLat
+    const i = Math.floor(fx)
+    const j = Math.floor(fy)
+    const tx = fx - i
+    const ty = fy - j
+    const k = j * grid.nx + i
+    return { idx: [k, k + 1, k + grid.nx, k + grid.nx + 1], val: [(1 - tx) * (1 - ty), tx * (1 - ty), (1 - tx) * ty, tx * ty] }
+  }
+
+  // Published threshold height differences (OurAirports, feet) for runways that list both ends
+  function thresholdAnchors(apt, grid) {
+    return apt.runways
+      .filter((rw) => rw.le.elevFt !== null && rw.he.elevFt !== null)
+      .map((rw) => {
+        const he = stencil(grid, rw.he.lon, rw.he.lat)
+        const le = stencil(grid, rw.le.lon, rw.le.lat)
+        return { idx: [...he.idx, ...le.idx], val: [...he.val, ...le.val.map((v) => -v)], delta: (rw.he.elevFt - rw.le.elevFt) * 0.3048 }
+      })
+  }
+
+  function radiusLimit(lengthM) {
+    if (lengthM >= 1800) return 30000
+    if (lengthM >= 1200) return 15000
+    return 7500
+  }
+
+  // Smallest radius of curvature (second differences over 100 m) and steepest 50 m slope along each centreline
+  function runwayShape(apt, grid, field) {
+    return apt.runways.map((rw) => {
+      const cosLat = Math.cos(rw.le.lat * DEG)
+      const de = (rw.he.lon - rw.le.lon) * DEG * R * cosLat
+      const dn = (rw.he.lat - rw.le.lat) * DEG * R
+      const length = Math.hypot(de, dn)
+      const profile = []
+      for (let s = 0; s <= length; s += 5) {
+        const lat = rw.le.lat + ((dn / length) * s) / R / DEG
+        const lon = rw.le.lon + ((de / length) * s) / (R * cosLat) / DEG
+        const { idx, val } = stencil(grid, lon, lat)
+        profile.push(idx.reduce((a, k, q) => a + val[q] * field[k], 0))
+      }
+      let maxCurv = 0
+      let maxSlope = 0
+      for (let q = 20; q < profile.length - 20; q++) maxCurv = Math.max(maxCurv, Math.abs(profile[q + 20] - 2 * profile[q] + profile[q - 20]) / 100 ** 2)
+      for (let q = 10; q < profile.length; q++) maxSlope = Math.max(maxSlope, Math.abs(profile[q] - profile[q - 10]) / 50)
+      return { id: rw.id, length, radius: 1 / Math.max(maxCurv, 1e-9), slope: maxSlope }
+    })
+  }
+
+  // Smallest cutoff on the ladder whose surface meets Annex 14 on every runway; 0 leaves raw terrain alone.
+  // Raw terrain passes when plausible for any runway: LiDAR-grade data carries real 10-20 cm micro-relief.
+  function chooseCutoff(apt, grid, h, baseW, anchors) {
+    if (runwayShape(apt, grid, h).every((r) => r.radius >= 7500 && r.slope <= SLOPE_LIMIT)) return { cutoff: 0, fit: null }
+    let fit = null
+    for (const cutoff of LADDER) {
+      fit = fitSurface(h, baseW, grid.nx, grid.ny, grid.cell, cutoff, anchors)
+      if (runwayShape(apt, grid, fit.s).every((r) => r.radius >= radiusLimit(r.length) && r.slope <= SLOPE_LIMIT)) return { cutoff, fit }
+    }
+    return { cutoff: LADDER[LADDER.length - 1], fit }
   }
 
   // ---------- Surface build ----------
@@ -298,7 +434,6 @@
     const C = await window.__tsSpike.cesium()
     const source = opts.source ?? (await window.__tsSpike.rawProvider())
     const apt = window.__tsAirports[icao]
-    const cutoff = opts.cutoffM ?? 800
     const closing = opts.closingM ?? 250
     const blend = opts.blendM ?? 300
     const margin = blend + (opts.paddingM ?? 1000)
@@ -322,11 +457,19 @@
     await C.sampleTerrainMostDetailed(source, cartos)
     const tSample = performance.now()
     const h = Float64Array.from(cartos, (c) => c.height)
-    const { s, w: robustW } = robustSmooth(h, nx, ny, cell, cutoff)
-    const tSmooth = performance.now()
     const grid = { nx, ny, west, south, dLon, dLat, cell }
-    const { core, w } = airfieldWeight(apt, grid, closing, blend)
+    const { paved, core, w } = airfieldWeight(apt, grid, closing, blend)
     const tMask = performance.now()
+    const baseW = Float64Array.from(paved, (m) => (m ? 1 : OFF_PAVEMENT_WEIGHT))
+    const anchors = thresholdAnchors(apt, grid)
+    let cutoff = opts.cutoffM ?? 'auto'
+    let fit
+    if (cutoff === 'auto') ({ cutoff, fit } = chooseCutoff(apt, grid, h, baseW, anchors))
+    else fit = fitSurface(h, baseW, nx, ny, cell, cutoff, anchors)
+    // Cutoff 0: the raw terrain already looks like a runway, so the airfield is left alone
+    const s = fit ? fit.s : h
+    const robustW = fit ? fit.w : baseW
+    const tSmooth = performance.now()
     let wMinLon = Infinity
     let wMaxLon = -Infinity
     let wMinLat = Infinity
@@ -349,8 +492,8 @@
       core,
       robustW,
       influence: C.Rectangle.fromDegrees(wMinLon - dLon, wMinLat - dLat, wMaxLon + dLon, wMaxLat + dLat),
-      timings: { sampleMs: Math.round(tSample - t0), smoothMs: Math.round(tSmooth - tSample), maskMs: Math.round(tMask - tSmooth) },
-      params: { cell, cutoff, closing, blend, margin },
+      timings: { sampleMs: Math.round(tSample - t0), maskMs: Math.round(tMask - tSample), fitMs: Math.round(tSmooth - tMask) },
+      params: { cell, cutoff, closing, blend, margin, cgIterations: fit ? fit.iterations : 0 },
     }
   }
 
@@ -479,9 +622,60 @@
     window.__tc3d.viewer.terrainProvider = await window.__tsSpike.rawProvider()
   }
 
+  // Capture aid: elevation contours every `spacing` metres on the globe, plus vertical exaggeration
+  async function contours(spacing, exaggeration = 1) {
+    const C = await window.__tsSpike.cesium()
+    const scene = window.__tc3d.viewer.scene
+    scene.globe.material = spacing
+      ? C.Material.fromType('ElevationContour', { spacing, width: 2, color: C.Color.YELLOW.withAlpha(0.9) })
+      : undefined
+    scene.verticalExaggeration = exaggeration
+  }
+
+  // Heights of the wrapped provider and of the drawn globe against S at points across the core
+  async function consistency(count = 400) {
+    const C = await window.__tsSpike.cesium()
+    const { surface, provider } = window.__tsSpike.current
+    const { nx, ny, west, south, dLon, dLat } = surface.grid
+    // Random points where the blend weight is 1, i.e. where aircraft would read S directly
+    const pts = []
+    for (let k = 0; pts.length < count && k < count * 50; k++) {
+      const lon = west + Math.random() * (nx - 1) * dLon
+      const lat = south + Math.random() * (ny - 1) * dLat
+      const at = surfaceAt(surface, lon, lat)
+      if (at.w >= 0.999) pts.push({ lon, lat, s: at.s })
+    }
+    const cartos = pts.map((q) => C.Cartographic.fromDegrees(q.lon, q.lat))
+    await C.sampleTerrainMostDetailed(provider, cartos)
+    const globe = window.__tc3d.viewer.scene.globe
+    let maxSampled = 0
+    let sumSq = 0
+    let maxDrawn = 0
+    let drawn = 0
+    pts.forEach((q, k) => {
+      const d = Math.abs(cartos[k].height - q.s)
+      maxSampled = Math.max(maxSampled, d)
+      sumSq += d * d
+      const g = globe.getHeight(C.Cartographic.fromDegrees(q.lon, q.lat))
+      if (g !== undefined) {
+        drawn++
+        maxDrawn = Math.max(maxDrawn, Math.abs(g - q.s))
+      }
+    })
+    return {
+      points: pts.length,
+      maxSampledVsS: maxSampled,
+      rmsSampledVsS: Math.sqrt(sumSq / Math.max(pts.length, 1)),
+      drawnPoints: drawn,
+      maxDrawnVsS: maxDrawn,
+      stats: provider.stats,
+    }
+  }
+
   window.__tsSpike = Object.assign(window.__tsSpike ?? {}, {
     makeDct,
-    robustSmooth,
+    fitSurface,
+    runwayShape,
     airfieldWeight,
     buildSurface,
     surfaceAt,
@@ -489,5 +683,7 @@
     AirfieldTerrainProvider,
     install,
     useRaw,
+    contours,
+    consistency,
   })
 })()

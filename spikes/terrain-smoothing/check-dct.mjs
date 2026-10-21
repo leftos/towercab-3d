@@ -41,11 +41,11 @@ for (let j = 0; j < ny; j++) {
 // A few building outliers
 for (let k = 0; k < 200; k++) h[Math.floor(Math.random() * h.length)] += 15
 const t0 = performance.now()
-const { s } = spike.robustSmooth(h, nx, ny, cell, 800)
+const { s, iterations } = spike.fitSurface(h, new Float64Array(h.length).fill(1), nx, ny, cell, 800)
 const ms = performance.now() - t0
 let maxErr = 0
 for (let j = 60; j < ny - 60; j++) for (let i = 60; i < nx - 60; i++) maxErr = Math.max(maxErr, Math.abs(s[j * nx + i] - truth[j * nx + i]))
-console.log(`robust smooth ${nx}x${ny} in ${ms.toFixed(0)} ms; interior max error vs truth ${maxErr.toFixed(3)} m (noise amplitude 2 m)`)
+console.log(`robust fit ${nx}x${ny} in ${ms.toFixed(0)} ms (${iterations} CG iterations); interior max error vs truth ${maxErr.toFixed(3)} m (noise amplitude 2 m)`)
 // Airfield mask at YMML on a 256 x 256 grid
 {
   const apt = JSON.parse(readFileSync(new URL('./airports.json', import.meta.url), 'utf8')).YMML
