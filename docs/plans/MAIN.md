@@ -7,32 +7,16 @@
 - [/] TC3D-160 Keep every request-built server path inside its root · release vNext — Urgent · Cleanup singles
 - [ ] TC3D-129 Stop the remote server returning every stored secret; fix its docs · release vNext — High · Cleanup singles
 
-## OSM buildings
+## Current focus
 
-### B1 Shader on the ion tiles (0/7 done)
-- [ ] TC3D-161 Set a neutral environment-map ground colour on tilesets and models · release vNext
-- [ ] TC3D-162 Fade facade windows to a flat tint with distance · release vNext
-- [ ] TC3D-163 Vary building colour per building from a stable hash · release vNext
-- [ ] TC3D-164 Draw type-aware facades from class and levels packed into the style colour · release vNext
-- [ ] TC3D-165 Draw curtain-wall glass on terminals through Cesium's reflections · release vNext
-- [ ] TC3D-166 Light windows at night by building use and local time · release vNext
-- [ ] TC3D-167 Add a buildings quality preset per device · release vNext
-
-### B2 Generated buildings near the field (0/3 done)
-- [ ] TC3D-168 Generate buildings from the local OSM planet near the field · release vNext
-- [ ] TC3D-169 Blend the generated area's edge into the ion buildings · release vNext
-- [ ] TC3D-170 Bake contact darkening and facade grammar into generated buildings · release vNext
-
-### B3 Trees, props and landmarks (0/4 done)
-- [ ] TC3D-171 Scatter trees from ESA WorldCover and OSM tree tags · release vNext
-- [ ] TC3D-172 Add roof props as instanced models near the field · release vNext
-- [ ] TC3D-173 Let mods override landmark buildings by OSM way id · release vNext
-- [ ] TC3D-174 Spike photorealistic 3D Tiles near the field as a desktop mode · release vNext
+- [ ] TC3D-54 Animate spoilers, reversers and wheels after native gear animation · release vNext
+- [ ] TC3D-49 Fix the one-site aircraft-motion bugs · release vNext
+- [ ] TC3D-45 Join a YAAT room as its member, with no CRC session · release vNext
+- [ ] TC3D-65 Phase badge: runway labels at the wrong times and labels lagging the display · release vNext
 
 ## Babylon to Cesium migration
 
-### M0 Groundwork (1/2 done)
-- [ ] TC3D-55 Expose frame timings on window.__tc3d (spike S0) · release vNext
+### M0 Groundwork (2/2 done)
 
 ### M1 Remove VR (1/1 done)
 
@@ -66,19 +50,32 @@
 ### M6 Docs (0/1 done)
 - [ ] TC3D-158 Rewrite the rendering docs for a Cesium-only app · release vNext
 
-## Current focus
+### No milestone
+- [ ] TC3D-183 Stop camera moves recreating the GPU timers and frame listeners
 
-- [ ] TC3D-54 Animate spoilers, reversers and wheels after native gear animation
-- [/] TC3D-49 Fix the one-site aircraft-motion bugs · release vNext
-- [ ] TC3D-45 Join a YAAT room as its member, with no CRC session
-- [ ] TC3D-65 Phase badge: runway labels at the wrong times and labels lagging the display
+## OSM buildings
 
-## Aircraft motion model
+### B1 Shader on the ion tiles (1/7 done)
+- [ ] TC3D-162 Fade facade windows to a flat tint with distance · release vNext
+- [ ] TC3D-163 Vary building colour per building from a stable hash · release vNext
+- [ ] TC3D-164 Draw type-aware facades from class and levels packed into the style colour · release vNext
+- [ ] TC3D-165 Draw curtain-wall glass on terminals through Cesium's reflections · release vNext
+- [ ] TC3D-166 Light windows at night by building use and local time · release vNext
+- [ ] TC3D-167 Add a buildings quality preset per device · release vNext
 
-- [ ] TC3D-52 Aircraft orientation model: bank, rotation and flare
-- [ ] TC3D-50 Ground contact from vNAS height above ground
-- [ ] TC3D-51 Treat vNAS silence for a stopped aircraft as parked
-- [ ] TC3D-53 Curved VATSIM paths: splines with heading from the path
+### B2 Generated buildings near the field (0/3 done)
+- [ ] TC3D-168 Generate buildings from the local OSM planet near the field · release vNext
+- [ ] TC3D-169 Blend the generated area's edge into the ion buildings · release vNext
+- [ ] TC3D-170 Bake contact darkening and facade grammar into generated buildings · release vNext
+
+### B3 Trees, props and landmarks (0/4 done)
+- [ ] TC3D-171 Scatter trees from ESA WorldCover and OSM tree tags · release vNext
+- [ ] TC3D-172 Add roof props as instanced models near the field · release vNext
+- [ ] TC3D-173 Let mods override landmark buildings by OSM way id · release vNext
+- [ ] TC3D-174 Spike photorealistic 3D Tiles near the field as a desktop mode · release vNext
+
+### No milestone
+- [ ] TC3D-184 Destroy the OSM buildings tileset when its load is cancelled
 
 ## vNAS session lifecycle
 
@@ -88,6 +85,19 @@
 - [/] TC3D-47 vNAS teardown and event forwarder follow-ups · release vNext
 - [ ] TC3D-4 Join YAAT servers by negotiate and UDP, as on vNAS · release vNext
 - [ ] TC3D-44 Crate logs the hub access token in the WebSocket URL · release vNext
+
+## Aircraft motion model
+
+- [ ] TC3D-52 Aircraft orientation model: bank, rotation and flare
+- [ ] TC3D-50 Ground contact from vNAS height above ground
+- [ ] TC3D-51 Treat vNAS silence for a stopped aircraft as parked
+- [ ] TC3D-53 Curved VATSIM paths: splines with heading from the path
+- [ ] TC3D-179 Use the terrain under the aircraft as the gear datum in orbit mode with no airport
+- [ ] TC3D-180 Skip VATSIM samples while an aircraft's vNAS data is fresh
+- [ ] TC3D-181 Convert ground elevation to ellipsoid height in label culling
+- [ ] TC3D-188 Judge the display delay after an aircraft loses vNAS: 170 s of extrapolation at 100 ms/s · release vNext
+- [ ] TC3D-189 Held slow airborne first report is drawn on the ground
+- [ ] TC3D-190 Gear height uses the airport elevation, not the sampled terrain
 
 ## Cesium 1.145 and shadow darkness
 
@@ -111,6 +121,7 @@
 - [ ] TC3D-109 Fix architecture.md's stale camera, store and inset sections
 - [ ] TC3D-122 Add a Task Index to architecture.md: the vNAS bridge and aircraft motion
 - [ ] TC3D-123 Add docs/README.md and a Task Index to the architecture doc
+- [ ] TC3D-186 Fix CLAUDE.md's aircraft rendering step: pooled Model primitives, not entities
 
 ## vNAS dual-source and reconnect
 
@@ -152,6 +163,8 @@
 - [ ] TC3D-134 Run Rust tests with cargo-nextest · release vNext
 - [ ] TC3D-175 Register the tower-positions PUT route with axum 0.7's path syntax
 - [ ] TC3D-176 Stop /api/realtraffic/* working as an open proxy
+- [ ] TC3D-178 Share the validated tower and diagnostic path builders between IPC and HTTP
+- [ ] TC3D-187 Tidy the remote server's path checks: TOCTOU, empty segments, blocking calls, log flooding
 
 ## Settings drawer
 
@@ -222,3 +235,4 @@
   - [ ] TC3D-121 Read back every __tc3d write and fail on a changed value
 - [ ] TC3D-139 Design better-looking OSM buildings: restyle, facade shader or regenerated geometry · release vNext
 - [ ] TC3D-159 Design VR on Cesium through WebXR
+- [ ] TC3D-185 Design night and dusk lighting that follows natural light across the whole scene · release vNext
