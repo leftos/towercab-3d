@@ -13,6 +13,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 - 3D buildings and aircraft no longer have an olive-green cast on their walls and fuselages; their reflected ground light is now a neutral grey.
 - Remote access accepts only devices on your local network, unless you turn on **Allow devices outside the local network** in Settings → Configuration.
 - FSLTL and AIG model conversions now run at most two at a time and stop after five minutes; a browser connected to a busy desktop app waits and retries.
+- Clouds and fog are now drawn with the scene's depth, so aircraft, buildings and terrain in front of a cloud deck or fog bank hide it correctly.
 
 ### Fixed
 - FSLTL and AIG aircraft now use their own livery's textures instead of another livery's, and AIG models with many liveries convert again.

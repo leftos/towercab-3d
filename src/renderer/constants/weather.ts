@@ -145,3 +145,73 @@ export const WIND_DIRECTION_CHANGE_THRESHOLD = 5
  * Minimum wind speed change (knots) to trigger transition
  */
 export const WIND_SPEED_CHANGE_THRESHOLD = 2
+
+// ============================================================================
+// CESIUM CLOUD AND FOG STAGE
+// ============================================================================
+
+/**
+ * Quality knobs of the Cesium cloud and fog post-process stage.
+ *
+ * - `steps`: raymarch steps per cloud layer crossing (shader maximum 128)
+ * - `resolutionScale`: cloud pass resolution relative to the canvas (0.25..1)
+ * - `densityScale`: cloud extinction per meter at full density
+ * - `fogExtinction`: k in the fog transmittance exp(-k * distance / visibility)
+ * - `fogHeightScale`: height in meters over which fog density falls by 1/e
+ * - `radius`: radius in meters around the anchor that cloud layers cover
+ */
+export const WEATHER_STAGE_QUALITY = {
+  steps: 48,
+  resolutionScale: 0.5,
+  densityScale: 0.04,
+  fogExtinction: 1.0,
+  fogHeightScale: 400,
+  radius: 40000,
+} as const
+
+/** Cloud slab thickness in meters by METAR cover code */
+export const CLOUD_THICKNESS_BY_TYPE_M: Readonly<Record<string, number>> = {
+  FEW: 250,
+  SCT: 350,
+  BKN: 450,
+  OVC: 600,
+}
+
+/** Cloud slab thickness in meters for a cover code missing from CLOUD_THICKNESS_BY_TYPE_M */
+export const CLOUD_THICKNESS_DEFAULT_M = 400
+
+/** Cloud layers the stage shader takes (u_layer0..u_layer3) */
+export const WEATHER_STAGE_MAX_LAYERS = 4
+
+/** Visibility (statute miles) at and above which the stage draws no fog */
+export const WEATHER_STAGE_NO_FOG_VISIBILITY_SM = 10
+
+/** Lowest visibility (statute miles) the stage's fog uses, so 0 SM stays finite */
+export const WEATHER_STAGE_MIN_VISIBILITY_SM = 0.05
+
+/**
+ * Distance in meters a followed aircraft (orbit mode without an airport) moves
+ * before the cloud anchor follows it; small against the cloud radius, large
+ * enough that a terrain sample is not taken every frame
+ */
+export const WEATHER_STAGE_REANCHOR_DISTANCE_M = 5000
+
+/**
+ * Distance in meters the reference moves within the same airport (a custom
+ * tower position, a tower switch) before the cloud anchor follows it
+ */
+export const WEATHER_STAGE_AIRPORT_REANCHOR_DISTANCE_M = 100
+
+/**
+ * Distance in meters between the anchor and the cloud noise origin past which
+ * the origin moves to the anchor: one deliberate noise pop per this distance,
+ * keeping the horizontal drift from rotated re-anchor axes under about 40 m per
+ * WEATHER_STAGE_REANCHOR_DISTANCE_M step before it
+ */
+export const WEATHER_STAGE_NOISE_ORIGIN_RESET_M = 50000
+
+/** How often (ms) the stage checks whether its anchor should move, and retries a failed terrain sample */
+export const WEATHER_STAGE_REANCHOR_CHECK_MS = 1000
+
+/** Time (ms) over which a change in the anchor's ground height blends into the cloud deck */
+export const WEATHER_STAGE_GROUND_BLEND_MS = 5000

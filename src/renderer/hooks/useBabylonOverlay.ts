@@ -1,5 +1,7 @@
 import { useCallback } from 'react'
+import { useWeatherStageStore } from '@/stores/weatherStageStore'
 import type { BabylonOverlayOptions } from '@/types'
+import { babylonDrawsWeather } from '@/utils/weatherStage'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useViewportStore } from '../stores/viewportStore'
 import { useBabylonCameraSync } from './useBabylonCameraSync'
@@ -192,9 +194,14 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
   })
 
   // 2. Initialize weather effects (fog dome, cloud layers)
+  //    Babylon draws them while the renderer switch picks it, or when the Cesium stage cannot draw
+  //    (no logarithmic depth buffer, fixed at viewer creation).
+  const weatherRenderer = useWeatherStageStore((state) => state.renderer)
+  const cesiumLogDepth = cesiumViewer && !cesiumViewer.isDestroyed() ? cesiumViewer.scene.logarithmicDepthBuffer : true
   const { fogDome, getCloudMeshes, isVisibleByWeather } = useBabylonWeather({
     scene,
     isTopDownView,
+    enabled: babylonDrawsWeather(weatherRenderer, cesiumLogDepth),
   })
 
   // 3. Initialize precipitation effects (rain, snow, lightning)

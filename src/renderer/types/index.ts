@@ -114,6 +114,8 @@ export type {
   PrecipitationState,
   // Precipitation
   PrecipitationType,
+  // Which renderer draws clouds and fog
+  WeatherRenderer,
   // Weather visibility culling
   WeatherVisibilityConditions,
   // Wind
@@ -432,6 +434,11 @@ export type {
   FrameTimingSummary,
   FrameWindowSummary,
   PercentileStat,
+  // Cloud and fog stage drive aids
+  WeatherStageCameraOverride,
+  WeatherStageHandle,
+  WeatherStageSetParams,
+  WeatherStageTestAircraft,
 } from './harness'
 
 // ============================================================================

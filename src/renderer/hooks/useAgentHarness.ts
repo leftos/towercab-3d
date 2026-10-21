@@ -1,6 +1,8 @@
 import type * as BABYLON from '@babylonjs/core'
 import * as Cesium from 'cesium'
 import { useEffect } from 'react'
+import { WEATHER_STAGE_NAME } from '@/hooks/useCesiumWeatherStages'
+import { useWeatherStageStore } from '@/stores/weatherStageStore'
 import type { AgentHarness } from '@/types'
 import { performanceMonitor } from '@/utils/performanceMonitor'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -12,7 +14,7 @@ import { useWeatherStore } from '../stores/weatherStore'
  *
  * The global exposes the Cesium viewer, the Babylon overlay engine and scene,
  * and the viewport/weather/settings store hooks, plus `camera`, `lookAt`,
- * `project`, `readPixels` and `perf` helpers. Agent-driven tests use it to
+ * `project`, `readPixels` and `perf` helpers and the `weatherStage` handle. Agent-driven tests use it to
  * inspect and drive the running app through the `tauri-app` and `playwright`
  * MCP servers.
  *
@@ -85,6 +87,40 @@ export function useAgentHarness(
           current: performanceMonitor.getMetrics(),
           window: performanceMonitor.getFrameWindow(),
         }),
+        weatherStage: {
+          get renderer() {
+            return useWeatherStageStore.getState().renderer
+          },
+          set renderer(value) {
+            useWeatherStageStore.setState({ renderer: value })
+          },
+          set: ({ camera, testAircraft }) => {
+            const state = useWeatherStageStore.getState()
+            useWeatherStageStore.setState({
+              cameraOverride: camera === undefined ? state.cameraOverride : camera,
+              testAircraft: testAircraft === undefined ? state.testAircraft : testAircraft,
+            })
+          },
+          info: () => {
+            const stages = viewer.scene.postProcessStages
+            const stageNames: string[] = []
+            let stage: { enabled: boolean } | null = null
+            for (let i = 0; i < stages.length; i++) {
+              const current = stages.get(i)
+              stageNames.push(current.name)
+              if (current.name === WEATHER_STAGE_NAME) stage = current
+            }
+            return {
+              renderer: useWeatherStageStore.getState().renderer,
+              stageInScene: stage !== null,
+              stageEnabled: stage?.enabled ?? false,
+              stageNames,
+              // Scene.numberOfFrustums is a getter Cesium leaves out of its type declarations.
+              numberOfFrustums: (viewer.scene as unknown as { numberOfFrustums: number }).numberOfFrustums,
+              logDepth: viewer.scene.logarithmicDepthBuffer,
+            }
+          },
+        },
       }
 
       window.__tc3d = harness

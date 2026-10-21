@@ -66,6 +66,11 @@ import {
 interface UseBabylonWeatherOptions {
   scene: BABYLON.Scene | null
   isTopDownView?: boolean
+  /**
+   * Whether Babylon draws the fog dome and cloud meshes. False while the Cesium
+   * stage draws clouds and fog; `isVisibleByWeather` keeps working either way.
+   */
+  enabled: boolean
 }
 
 /**
@@ -284,6 +289,7 @@ interface CloudLayerState {
  * @param options - Weather configuration options
  * @param options.scene - Initialized Babylon.js scene (required)
  * @param options.isTopDownView - Whether camera is in top-down mode (default: false)
+ * @param options.enabled - Whether the fog dome and cloud meshes are drawn; label culling runs either way
  * @returns Weather effect meshes and visibility culling function
  *
  * @example
@@ -334,8 +340,10 @@ interface CloudLayerState {
  * @see settingsStore - For weather effect toggles and intensities
  */
 export function useBabylonWeather(options: UseBabylonWeatherOptions): UseBabylonWeatherResult {
-  const { scene, isTopDownView = false } = options
+  const { scene, isTopDownView = false, enabled } = options
 
+  const enabledRef = useRef(enabled)
+  enabledRef.current = enabled
   const fogDomeRef = useRef<BABYLON.Mesh | null>(null)
   const fogDomeMaterialRef = useRef<BABYLON.StandardMaterial | null>(null)
   const cloudMeshPoolRef = useRef<CloudMeshData[]>([])
@@ -1014,6 +1022,17 @@ export function useBabylonWeather(options: UseBabylonWeatherOptions): UseBabylon
       // Clamp delta time to prevent huge jumps when tab was backgrounded
       const deltaSeconds = Math.min((now - lastTime) / 1000, 0.1)
       lastTime = now
+
+      // Disabled: the Cesium stage draws clouds and fog, so hide every mesh before this frame renders.
+      if (!enabledRef.current) {
+        if (fogDomeRef.current) fogDomeRef.current.isVisible = false
+        for (const meshData of cloudMeshPoolRef.current) {
+          meshData.plane.isVisible = false
+          meshData.dome.isVisible = false
+          meshData.abovePlane.isVisible = false
+        }
+        return
+      }
 
       // === FOG SMOOTHING ===
       // Smooth fog dome parameters toward targets for gradual weather transitions
