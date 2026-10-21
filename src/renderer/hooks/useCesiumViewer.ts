@@ -1,5 +1,6 @@
 import * as Cesium from 'cesium'
 import { useEffect, useRef, useState } from 'react'
+import { toCesiumShadowDarkness } from '@/utils/shadowDarkness'
 import { AIRCRAFT_POOL_SIZE, getModelColorBlendAmount, getModelColorRgb } from '../constants/rendering'
 import type { InsetGraphicsSettings } from '../types/settings'
 import { applyCesiumDebugPatch } from '../utils/cesiumDebugPatch'
@@ -342,7 +343,7 @@ export function useCesiumViewer(
         newViewer.shadowMap.size = shadowMapSize
         // Note: numberOfCascades is not configurable in Cesium API (only 1 or 4 cascades supported internally)
         newViewer.shadowMap.maximumDistance = shadowMaxDistance
-        newViewer.shadowMap.darkness = shadowDarkness
+        newViewer.shadowMap.darkness = toCesiumShadowDarkness(shadowDarkness)
         newViewer.shadowMap.fadingEnabled = shadowFadingEnabled
         newViewer.shadowMap.normalOffset = shadowNormalOffset
         newViewer.terrainShadows = Cesium.ShadowMode.ENABLED

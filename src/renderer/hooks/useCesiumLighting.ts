@@ -1,6 +1,7 @@
 import * as Cesium from 'cesium'
 import { useEffect } from 'react'
 import type { InsetGraphicsSettings, ViewMode } from '@/types'
+import { toCesiumShadowDarkness } from '@/utils/shadowDarkness'
 
 export interface CesiumLightingSettings {
   /** Whether this is an inset viewport (disables shadows for performance) */
@@ -121,8 +122,7 @@ export function useCesiumLighting(viewer: Cesium.Viewer | null, settings: Cesium
         viewer.shadowMap.softShadows = shadowSoftness
         viewer.shadowMap.size = shadowMapSize
         viewer.shadowMap.maximumDistance = shadowMaxDistance
-        // Invert: Cesium uses 0=dark, 1=light but we want 0=invisible, 1=dark in UI
-        viewer.shadowMap.darkness = 1 - shadowDarkness
+        viewer.shadowMap.darkness = toCesiumShadowDarkness(shadowDarkness)
         viewer.shadowMap.fadingEnabled = shadowFadingEnabled
         viewer.shadowMap.normalOffset = shadowNormalOffset
         // RECEIVE_ONLY: terrain receives shadows from aircraft but doesn't self-shadow
@@ -138,8 +138,7 @@ export function useCesiumLighting(viewer: Cesium.Viewer | null, settings: Cesium
         viewer.shadowMap.size = shadowMapSize
         // Note: numberOfCascades is not configurable in Cesium API (only 1 or 4 cascades supported internally)
         viewer.shadowMap.maximumDistance = shadowMaxDistance
-        // Invert: Cesium uses 0=dark, 1=light but we want 0=invisible, 1=dark in UI
-        viewer.shadowMap.darkness = 1 - shadowDarkness
+        viewer.shadowMap.darkness = toCesiumShadowDarkness(shadowDarkness)
         viewer.shadowMap.fadingEnabled = shadowFadingEnabled
         viewer.shadowMap.normalOffset = shadowNormalOffset
         // RECEIVE_ONLY: terrain receives shadows from aircraft but doesn't cast shadows on itself
