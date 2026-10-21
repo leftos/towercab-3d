@@ -97,6 +97,10 @@ pnpm run vite:headless  # Frontend plus the dev-only /api/* for the playwright-h
 pnpm run vite:build   # Build frontend only (internal, used by Tauri)
 ```
 
+### Cargo checks without a frontend build
+
+A cargo build normally needs `dist/` and `src-tauri/resources/fsltl_converter.exe`, gitignored build outputs a fresh checkout or worktree lacks. With `TC3D_CHECK_BUILD=1` set (exactly `1`), `src-tauri/build.rs` empties `bundle.resources`, so `cargo check`, `cargo clippy` and `cargo test` run without either; through the gate pass it as `--env TC3D_CHECK_BUILD=1`. Nothing is copied into `target/<profile>/resources/` that way, so run the dev app from a normal build. The switch refuses a `tauri build` (custom-protocol) build.
+
 ### Rust Documentation
 
 ```bash
