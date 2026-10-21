@@ -360,3 +360,9 @@ export interface InterpolatedWeather {
   /** Timestamp when interpolation was calculated (epoch ms) */
   calculatedAt: number
 }
+
+/**
+ * Which renderer draws clouds and fog: the Cesium post-process stage or the
+ * Babylon fog dome and cloud meshes. Exactly one of them draws at a time.
+ */
+export type WeatherRenderer = 'cesium' | 'babylon'

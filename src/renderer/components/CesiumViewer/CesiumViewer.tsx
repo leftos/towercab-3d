@@ -14,6 +14,7 @@ import { useCesiumLighting } from '../../hooks/useCesiumLighting'
 import { useCesiumNightDarkening } from '../../hooks/useCesiumNightDarkening'
 import { useCesiumViewer } from '../../hooks/useCesiumViewer'
 import { useCesiumWeather } from '../../hooks/useCesiumWeather'
+import { useCesiumWeatherStages, useWeatherStageDriveAids } from '../../hooks/useCesiumWeatherStages'
 import { useGroundAircraftTerrain } from '../../hooks/useGroundAircraftTerrain'
 import { useImageryProvider } from '../../hooks/useImageryProvider'
 import { insetLog } from '../../hooks/useSharedWorkerConsumer'
@@ -35,7 +36,7 @@ import { neutralEnvironmentMapOptions } from '../../utils/environmentMap'
 import { GpuFrameTimer, getRendererInfo, NO_GPU_RESULTS } from '../../utils/gpuTimer'
 import { performanceMonitor } from '../../utils/performanceMonitor'
 import { getServiceWorkerCacheStats } from '../../utils/serviceWorkerRegistration'
-import { getTowerPosition } from '../../utils/towerHeight'
+import { feetToMeters, getTowerPosition, metersToFeet } from '../../utils/towerHeight'
 import { hasViewingContext, isOrbitFollowing, isOrbitWithoutAirport } from '../../utils/viewingContext'
 import DebugCoordinateOverlay from '../UI/DebugCoordinateOverlay'
 import './CesiumViewer.css'
@@ -67,7 +68,7 @@ interface CesiumViewerProps {
  * 1. useCesiumViewer - core viewer initialization
  * 2. useTerrainQuality - terrain setup
  * 3. useCesiumLighting - lighting/shadows
- * 4. useCesiumWeather - weather effects
+ * 4. useCesiumWeather - weather effects; useCesiumWeatherStages - cloud and fog post-process stage
  * 5. useAircraftModels - aircraft model pool
  * 6. useCesiumLabels - datablock labels
  * 7. useBabylonOverlay - screen-space labels, leader lines, weather effects (requires viewer fully initialized)
@@ -217,10 +218,10 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
     const towerPos = getTowerPosition(currentAirport, towerHeight, customTowerPosition ?? undefined)
     refLat = towerPos.latitude
     refLon = towerPos.longitude
-    groundElevationMeters = currentAirport.elevation ? currentAirport.elevation * 0.3048 : 0
+    groundElevationMeters = feetToMeters(currentAirport.elevation || 0)
     airportElevationFeet = currentAirport.elevation || 0
     // Tower altitude = ground elevation + tower height (convert tower height from meters to feet)
-    refAltitudeFeet = (currentAirport.elevation || 0) + towerHeight / 0.3048
+    refAltitudeFeet = (currentAirport.elevation || 0) + metersToFeet(towerHeight)
   }
 
   // =========================================================================
@@ -383,6 +384,16 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
   // 4. Weather Effects (Fog)
   // =========================================================================
   useCesiumWeather(viewer, showWeatherEffects, showCesiumFog, fogDensity)
+  useCesiumWeatherStages(viewer, {
+    airportIcao: currentAirport?.icao ?? null,
+    refLat,
+    refLon,
+    // Without an airport groundElevationMeters is the followed aircraft's altitude, not an airport elevation.
+    airportElevationM: currentAirport ? groundElevationMeters : null,
+    followedCallsign: isOrbitWithoutAirport(currentAirport, followMode, followingCallsign) ? followingCallsign : null,
+    interpolatedAircraft,
+    viewMode,
+  })
 
   // =========================================================================
   // 5. Ground Aircraft Terrain Sampling (10x per second)
@@ -475,6 +486,8 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
   // 9. Camera Controls
   // =========================================================================
   useCesiumCamera(viewer, viewportId, interpolatedAircraft, isActivated)
+  // After useCesiumCamera so the dev camera override's preRender listener runs last.
+  useWeatherStageDriveAids(isInset ? null : viewer)
 
   // =========================================================================
   // 10. Auto-Airport Switching (only on main viewport)

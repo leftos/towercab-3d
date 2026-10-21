@@ -66,7 +66,8 @@ In either, `WeatherDebugPanel` (dev builds only) forces rain, snow and cloud cov
 - `camera.get()` returns the active viewport's `{ heading, pitch, fov, followMode, followingCallsign }`; `camera.set({ heading, pitch, fov })` sets any of them.
 - `lookAt(lat, lon, altitudeFt)` aims the active viewport at a position.
 - `project(lat, lon, heightM)` returns the page CSS-pixel point for `browser_click` and friends, or `null` when the point is behind the camera.
-- `readPixels(x, y, w, h)` returns the Babylon canvas's RGBA bytes for a page rectangle (bottom-left row order). Rain is drawn additively with alpha 0, so screenshots and canvas `drawImage` miss it; read pixels instead.
+- `readPixels(x, y, w, h)` returns the Babylon canvas's RGBA bytes for a page rectangle (bottom-left row order). Rain is drawn additively with alpha 0, so screenshots and canvas `drawImage` miss it; read pixels instead. It cannot see the Cesium weather stage's clouds and fog; use screenshots for those.
+- `weatherStage` drives the cloud and fog stage: `renderer` ('cesium' | 'babylon', get/set, not saved; each inset iframe has its own), `set({ camera?, testAircraft? })` (null clears an aid), and `info()` returning `{ renderer, stageInScene, stageEnabled, stageNames, numberOfFrustums, logDepth }`.
 - `perf()` returns `{ current, window }`: `current` is the `performanceMonitor.getMetrics()` snapshot, `window` the median and p95 (`{ median, p95 }`, or null) over the last 300 frames of `frameInterval`, `totalFrame`, `cesiumUpdate`, `cesiumDraw` and `babylonRender`, plus `gpuCesiumMs` / `gpuBabylonMs` over the last 300 GPU timer results (null until the timer yields a real result). Rendering spikes sample it over 300 frames and report median and p95.
 
 Driving notes:
@@ -428,7 +429,7 @@ if (version < 7) {
 ### Modifying Weather Effects
 
 1. METAR fetching/parsing: `services/MetarService.ts`, `weatherStore.ts`
-2. Fog/cloud rendering: `useBabylonOverlay.ts`, `useBabylonWeather.ts`, `useCesiumWeather.ts`
+2. Fog/cloud rendering: the Cesium post-process stage in `useCesiumWeatherStages.ts` (shader in `hooks/weather/cloudStage.glsl.ts`, pure helpers in `utils/weatherStage.ts`, renderer switch in `weatherStageStore.ts`); the Babylon fog dome and cloud meshes in `useBabylonWeather.ts` (hidden unless the switch says 'babylon' or the view has no logarithmic depth buffer; still does label culling) via `useBabylonOverlay.ts`; scene fog in `useCesiumWeather.ts`
 3. Smoothing: `useSmoothedWeather.ts`
 4. Settings: `settingsStore.ts` (fog/cloud toggles, intensity)
 
