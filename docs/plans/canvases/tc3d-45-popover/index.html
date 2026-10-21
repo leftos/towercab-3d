@@ -1,0 +1,589 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>vNAS Popover Wording</title>
+<style>
+/* Fonts: the app's own self-hosted files, linked from the source tree. */
+@font-face {
+  font-family: "Geist";
+  src: url("../../../../src/renderer/public/fonts/Geist-Variable.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("../../../../src/renderer/public/fonts/GeistMono-Variable.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+}
+
+/* ---- Copied from src/renderer/assets/styles/global.css :root ---- */
+:root {
+  --bg-app: #0a0a0f;
+  --bg-panel: rgba(20, 20, 30, 0.95);
+  --bg-panel-strong: rgba(30, 30, 40, 0.98);
+  --bg-overlay: rgba(0, 0, 0, 0.6);
+  --white-a05: rgba(255, 255, 255, 0.05);
+  --white-a08: rgba(255, 255, 255, 0.08);
+  --white-a10: rgba(255, 255, 255, 0.1);
+  --white-a15: rgba(255, 255, 255, 0.15);
+  --white-a20: rgba(255, 255, 255, 0.2);
+  --white-a30: rgba(255, 255, 255, 0.3);
+  --text-primary: rgba(255, 255, 255, 0.95);
+  --text-secondary: rgba(255, 255, 255, 0.7);
+  --text-tertiary: rgba(255, 255, 255, 0.5);
+  --text-muted: rgba(255, 255, 255, 0.4);
+  --accent: #4fc3f7;
+  --accent-warn: #ffb300;
+  --accent-danger: #ef5350;
+  --accent-ok: #81c784;
+  --accent-pending: #fff176;
+  --topbar-h: 48px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --blur: blur(10px);
+  --font-sans:
+    "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans",
+    "Droid Sans", "Helvetica Neue", sans-serif;
+  --font-mono: "Geist Mono", "JetBrains Mono", "Fira Code", "Consolas", "Monaco", monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  background: var(--bg-app);
+  color: white;
+}
+
+/* ---- Copied from src/renderer/components/UI/TopBar.css (top bar slice) ---- */
+.top-bar {
+  height: var(--topbar-h);
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--white-a10);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  backdrop-filter: var(--blur);
+}
+.top-bar-left, .top-bar-right { flex: 1; display: flex; align-items: center; }
+.top-bar-right { justify-content: flex-end; gap: 12px; }
+.airport-button {
+  background: var(--white-a10);
+  border: 1px solid var(--white-a20);
+  border-radius: var(--radius-md);
+  padding: 8px 16px;
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.airport-icao { font-weight: 700; font-size: 16px; color: var(--accent); }
+.airport-name {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.8);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.status-info { display: flex; align-items: center; gap: 16px; }
+.aircraft-count { font-size: 13px; color: var(--text-secondary); }
+.connection-status {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.connection-status.connected {
+  background: rgba(76, 175, 80, 0.2);
+  color: var(--accent-ok);
+  border: 1px solid rgba(76, 175, 80, 0.4);
+}
+.vnas-indicator {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.5px;
+}
+.vnas-indicator.connected { background: rgba(76, 175, 80, 0.2); color: var(--accent-ok); border: 1px solid rgba(76, 175, 80, 0.4); }
+.vnas-indicator.connecting { background: rgba(255, 193, 7, 0.2); color: #ffca28; border: 1px solid rgba(255, 193, 7, 0.4); }
+.vnas-indicator.disconnected { background: var(--white-a10); color: var(--text-tertiary); border: 1px solid var(--white-a20); }
+
+/* ---- Copied from src/renderer/components/UI/VnasStatusPopover.css ---- */
+.vnas-popover {
+  width: 280px;
+  background: rgba(20, 20, 30, 0.98);
+  border: 1px solid var(--white-a15);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(10px);
+}
+.vnas-popover-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--white-a10);
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+}
+.vnas-popover-close {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+.vnas-popover-content { padding: 12px 14px; }
+.vnas-popover-status { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.vnas-popover-status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.vnas-popover-status-text { font-size: 12px; font-weight: 600; }
+.vnas-popover-facility { margin-left: auto; font-size: 11px; color: var(--accent); font-weight: 600; }
+.vnas-popover-error {
+  padding: 8px 10px;
+  margin-bottom: 12px;
+  background: rgba(244, 67, 54, 0.15);
+  border: 1px solid rgba(244, 67, 54, 0.3);
+  border-radius: 4px;
+  color: var(--accent-danger);
+  font-size: 11px;
+  word-break: break-word;
+}
+.vnas-popover-env { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+/* The app styles `.vnas-popover-env label`, but the row's text is a <span>, so it renders unstyled. */
+.vnas-popover-env select {
+  background: rgba(30, 30, 40, 0.95);
+  border: 1px solid var(--white-a20);
+  border-radius: 4px;
+  color: #fff;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+.vnas-popover-actions { display: flex; gap: 8px; }
+.vnas-popover-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--white-a10);
+  border: 1px solid var(--white-a20);
+  color: #fff;
+}
+.vnas-popover-btn.primary { background: rgba(79, 195, 247, 0.2); border-color: rgba(79, 195, 247, 0.4); color: var(--accent); }
+.vnas-popover-btn.danger { background: rgba(244, 67, 54, 0.2); border-color: rgba(244, 67, 54, 0.4); color: var(--accent-danger); }
+
+/* ---- Proposed additions (new in this mock; not in the app) ---- */
+/* Dim reason line under the status (row 2a): aligned with the status text, past the dot. */
+.vnas-popover-detail {
+  margin: -8px 0 12px 16px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+/* In-popover notice (row 6a, 6c): the error box's shape in the accent colour. */
+.vnas-popover-notice {
+  padding: 8px 10px;
+  margin-bottom: 12px;
+  background: rgba(79, 195, 247, 0.1);
+  border: 1px solid rgba(79, 195, 247, 0.3);
+  border-radius: 4px;
+  color: var(--accent);
+  font-size: 11px;
+  line-height: 1.4;
+}
+/* Top-of-screen toast (row 6b, 6c). No toast exists in the app today. */
+.toast {
+  max-width: 340px;
+  margin: 0 auto;
+  padding: 10px 14px;
+  background: var(--bg-panel-strong);
+  border: 1px solid var(--white-a15);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  font-size: 12px;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+/* ---- Mock page layout (not app styling) ---- */
+.page { padding: 24px 16px 40px; max-width: 1720px; margin: 0 auto; }
+.page h1 { font-size: 20px; font-weight: 600; margin-bottom: 6px; }
+.page .lede { font-size: 13px; color: var(--text-secondary); line-height: 1.5; max-width: 1100px; margin-bottom: 20px; }
+.grid { display: grid; grid-template-columns: 230px repeat(3, 470px); gap: 16px; align-items: start; }
+.row-label { padding-top: 6px; }
+.row-label h2 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+.row-label p { font-size: 12px; color: var(--text-secondary); line-height: 1.45; margin-bottom: 6px; }
+.row-label .today { font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary); }
+.lane-head { font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; display: flex; gap: 8px; align-items: baseline; }
+.lane-head .letter {
+  display: inline-block; min-width: 20px; text-align: center; padding: 1px 6px;
+  border-radius: var(--radius-sm); background: var(--white-a10); color: #fff; font-family: var(--font-mono);
+}
+.lane-head .rec { color: var(--accent-ok); font-weight: 600; }
+.cell { border: 1px solid var(--white-a10); border-radius: var(--radius-lg); overflow: hidden; }
+.cell.recommended { border-color: rgba(129, 199, 132, 0.45); }
+.scene { background: linear-gradient(180deg, #1b2533 0%, #121820 60%, #0e1218 100%); }
+.hang { display: flex; justify-content: flex-end; padding: 8px 16px 18px; }
+.toast-zone { padding: 12px 16px 0; }
+.toast-zone.empty { padding: 12px 16px 0; font-size: 11px; color: var(--text-muted); text-align: center; }
+.caption { font-size: 11px; color: var(--text-tertiary); padding: 8px 2px 0; line-height: 1.4; }
+.section-gap { grid-column: 1 / -1; height: 10px; border-bottom: 1px solid var(--white-a08); margin-bottom: 10px; }
+@media (max-width: 1100px) {
+  .grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>TC3D-45: vNAS popover wording for joining a YAAT room</h1>
+  <p class="lede">
+    The vNAS status popover as it renders today (same CSS, tokens and fonts), shown under the top bar's vNAS button, with each proposed wording in place.
+    One row per state; lanes are the options, <b>a</b> recommended. Every cell is on <b>YAAT1</b> at <b>KOAK</b>; Live, Sweatbox and Test keep "Waiting for CRC...".
+    Text in orange, green and red uses the popover's own state colours (#ffb74d, #81c784, #ef5350).
+  </p>
+
+  <div class="grid">
+
+    <!-- ===================== Row 1 ===================== -->
+    <div class="row-label">
+      <h2>1. Waiting, no CRC and no room</h2>
+      <p>Signed in to a YAAT server; neither a CRC session nor a YAAT room with the user's CID exists yet.</p>
+      <div class="today">today: waitingForSession → "Waiting for CRC..."</div>
+    </div>
+
+    <div>
+      <div class="lane-head"><span class="letter">a</span><span class="rec">recommended</span></div>
+      <div class="cell recommended scene">
+        <div class="top-bar"><div class="top-bar-left"><div class="airport-button"><span class="airport-icao">KOAK</span><span class="airport-name">Metropolitan Oakland</span></div></div><div class="top-bar-right"><div class="status-info"><span class="connection-status connected">VATSIM</span><span class="vnas-indicator connecting">vNAS</span></div></div></div>
+        <div class="hang"><div class="vnas-popover">
+          <div class="vnas-popover-header"><span>vNAS Real-Time Updates</span><button type="button" class="vnas-popover-close">×</button></div>
+          <div class="vnas-popover-content">
+            <div class="vnas-popover-status"><span class="vnas-popover-status-dot" style="background-color:#ffb74d"></span><span class="vnas-popover-status-text" style="color:#ffb74d">Waiting for a YAAT room or CRC...</span></div>
+            <div class="vnas-popover-actions"><button type="button" class="vnas-popover-btn danger">Disconnect</button></div>
+          </div>
+        </div></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="lane-head"><span class="letter">b</span></div>
+      <div class="cell scene">
+        <div class="top-bar"><div class="top-bar-left"><div class="airport-button"><span class="airport-icao">KOAK</span><span class="airport-name">Metropolitan Oakland</span></div></div><div class="top-bar-right"><div class="status-info"><span class="connection-status connected">VATSIM</span><span class="vnas-indicator connecting">vNAS</span></div></div></div>
+        <div class="hang"><div class="vnas-popover">
+          <div class="vnas-popover-header"><span>vNAS Real-Time Updates</span><button type="button" class="vnas-popover-close">×</button></div>
+          <div class="vnas-popover-content">
+            <div class="vnas-popover-status"><span class="vnas-popover-status-dot" style="background-color:#ffb74d"></span><span class="vnas-popover-status-text" style="color:#ffb74d">Waiting for session...</span></div>
+            <div class="vnas-popover-actions"><button type="button" class="vnas-popover-btn danger">Disconnect</button></div>
+          </div>
+        </div></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="lane-head"><span class="letter">c</span></div>
+      <div class="cell scene">
+        <div class="top-bar"><div class="top-bar-left"><div class="airport-button"><span class="airport-icao">KOAK</span><span class="airport-name">Metropolitan Oakland</span></div></div><div class="top-bar-right"><div class="status-info"><span class="connection-status connected">VATSIM</span><span class="vnas-indicator connecting">vNAS</span></div></div></div>
+        <div class="hang"><div class="vnas-popover">
+          <div class="vnas-popover-header"><span>vNAS Real-Time Updates</span><button type="button" class="vnas-popover-close">×</button></div>
+          <div class="vnas-popover-content">
+            <div class="vnas-popover-status"><span class="vnas-popover-status-dot" style="background-color:#ffb74d"></span><span class="vnas-popover-status-text" style="color:#ffb74d">Join a room in YAAT or start CRC</span></div>
+            <div class="vnas-popover-actions"><button type="button" class="vnas-popover-btn danger">Disconnect</button></div>
+          </div>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="section-gap"></div>
+
+    <!-- ===================== Row 2 ===================== -->
+    <div class="row-label">
+      <h2>2. Between rooms</h2>
+      <p>The room ended or was closed. Same state as row 1: still signed in, waiting for the next room or a CRC session.</p>
+      <div class="today">today: waitingForSession → "Waiting for CRC..."</div>
+    </div>
+
+    <div>
+      <div class="lane-head"><span class="letter">a</span><span class="rec">recommended</span></div>
+      <div class="cell recommended scene">
+        <div class="top-bar"><div class="top-bar-left"><div class="airport-button"><span class="airport-icao">KOAK</span><span class="airport-name">Metropolitan Oakland</span></div></div><div class="top-bar-right"><div class="status-info"><span class="connection-status connected">VATSIM</span><span class="vnas-indicator connecting">vNAS</span></div></div></div>
+        <div class="hang"><div class="vnas-popover">
+          <div class="vnas-popover-header"><span>vNAS Real-Time Updates</span><button type="button" class="vnas-popover-close">×</button></div>
+          <div class="vnas-popover-content">
+            <div class="vnas-popover-status"><span class="vnas-popover-status-dot" style="background-color:#ffb74d"></span><span class="vnas-popover-status-text" style="color:#ffb74d">Waiting for a YAAT room or CRC...</span></div>
+            <div class="vnas-popover-detail">Room closed</div>
+            <div class="vnas-popover-actions"><button type="button" class="vnas-popover-btn danger">Disconnect</button></div>
+          </div>
+        </div></div>
+      </div>
+      <div class="caption">Row 1's label, plus the last reason as a dim line.</div>
+    </div>
+
+    <div>
+      <div class="lane-head"><span class="letter">b</span></div>
+      <div class="cell scene">
+        <div class="top-bar"><div class="top-bar-left"><div class="airport-button"><span class="airport-icao">KOAK</span><span class="airport-name">Metropolitan Oakland</span></div></div><div class="top-bar-right"><div class="status-info"><span class="connection-status connected">VATSIM</span><span class="vnas-indicator connecting">vNAS</span></div></div></div>
+        <div class="hang"><div class="vnas-popover">
+          <div class="vnas-popover-header"><span>vNAS Real-Time Updates</span><button type="button" class="vnas-popover-close">×</button></div>
+          <div class="vnas-popover-content">
+            <div class="vnas-popover-status"><span class="vnas-popover-status-dot" style="background-color:#ffb74d"></span><span class="vnas-popover-status-text" style="color:#ffb74d">Waiting for a YAAT room or CRC...</span></div>
+            <div class="vnas-popover-actions"><button type="button" class="vnas-popover-btn danger">Disconnect</button></div>
+          </div>
+        </div></div>
+      </div>
+      <div class="caption">Row 1's label only (shown with row 1's option a).</div>
+    </div>
+
+    <div>
+      <div class="lane-head"><span class="letter">c</span></div>
+      <div class="cell scene">
+        <div class="top-bar"><div class="top-bar-left"><div class="airport-button"><span class="airport-icao">KOAK</span><span class="airport-name">Metropolitan Oakland</span></div></div><div class="top-bar-right"><div class="status-info"><span class="connection-status connected">VATSIM</span><span class="vnas-indicator connecting">vNAS</span></div></div></div>
+        <div class="hang"><div class="vnas-popover">
+          <div class="vnas-popover-header"><span>vNAS Real-Time Updates</span><button type="button" class="vnas-popover-close">×</button></div>
+          <div class="vnas-popover-content">
+            <div class="vnas-popover-status"><span class="vnas-popover-status-dot" style="background-color:#ffb74d"></span><span class="vnas-popover-status-text" style="color:#ffb74d">Waiting for next room...</span></div>
+            <div class="vnas-popover-actions"><button type="button" class="vnas-popover-btn danger">Disconnect</button></div>
+          </div>
+        </div></div>
+      </div>
+      <div class="caption">A label of its own after a room has ended.</div>
+    </div>
+
+    <div class="section-gap"></div>
+
+    <!-- ===================== Row 3 ===================== -->
+    <div class="row-label">
+      <h2>3. In a room, subscribing</h2>
+      <p>The user's CID is in a room; TC3D is subscribing to the room's facility.</p>
+      <div class="today">today: subscribing → "Ready for vNAS Airport..."</div>
+    </div>
+
+    <div>
+      <div class="lane-head"><span class="letter">a</span><span class="rec">recommended</span></div>
+      <div class="cell recommended scene">
+        <div class="top-bar"><div class="top-bar-left"><div class="airport-button"><span class="airport-icao">KOAK</span><span class="airport-name">Metropolitan Oakland</span></div></div><div class="top-bar-right"><div class="status-info"><span class="connection-status connected">VATSIM</span><span class="vnas-indicator connecting">vNAS</span></div></div></div>
+        <div class="hang"><div class="vnas-popover">
+          <div class="vnas-popover-header"><span>vNAS Real-Time Updates</span><button type="button" class="vnas-popover-close">×</button></div>
+          <div class="vnas-popover-content">
+            <div class="vnas-popover-status"><span class="vnas-popover-status-dot" style="background-color:#ffb74d"></span><span class="vnas-popover-status-text" style="color:#ffb74d">Joining room...</span></div>
+            <div class="vnas-popover-actions"><button type="button" class="vnas-popover-btn danger">Disconnect</button></div>
+          </div>
+        </div></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="lane-head"><span class="letter">b</span></div>
+      <div class="cell scene">
+        <div class="top-bar"><div class="top-bar-left"><div class="airport-button"><span class="airport-icao">KOAK</span><span class="airport-name">Metropolitan Oakland</span></div></div><div class="top-bar-right"><div class="status-info"><span class="connection-status connected">VATSIM</span><span class="vnas-indicator connecting">vNAS</span></div></div></div>
+        <div class="hang"><div class="vnas-popover">
+          <div class="vnas-popover-header"><span>vNAS Real-Time Updates</span><button type="button" class="vnas-popover-close">×</button></div>
+          <div class="vnas-popover-content">
+            <div class="vnas-popover-status"><span class="vnas-popover-status-dot" style="background-color:#ffb74d"></span><span class="vnas-popover-status-text" style="color:#ffb74d">Ready for vNAS Airport...</span></div>
+            <div class="vnas-popover-actions"><button type="button" class="vnas-popover-btn danger">Disconnect</button></div>
+          </div>
+        </div></div>
+      </div>
+      <div class="caption">Unchanged from today.</div>
+    </div>
+
+    <div>
+      <div class="lane-head"><span class="letter">c</span></div>
+      <div class="cell scene">
+        <div class="top-bar"><div class="top-bar-left"><div class="airport-button"><span class="airport-icao">KOAK</span><span class="airport-name">Metropolitan Oakland</span></div></div><div class="top-bar-right"><div class="status-info"><span class="connection-status connected">VATSIM</span><span class="vnas-indicator connecting">vNAS</span></div></div></div>
+        <div class="hang"><div class="vnas-popover">
+          <div class="vnas-popover-header"><span>vNAS Real-Time Updates</span><button type="button" class="vnas-popover-close">×</button></div>
+          <div class="vnas-popover-content">
+            <div class="vnas-popover-status"><span class="vnas-popover-status-dot" style="background-color:#ffb74d"></span><span class="vnas-popover-status-text" style="color:#ffb74d">Connecting to room...</span></div>
+            <div class="vnas-popover-actions"><button type="button" class="vnas-popover-btn danger">Disconnect</button></div>
+          </div>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="section-gap"></div>
+
+    <!-- ===================== Row 4 ===================== -->
+    <div class="row-label">
+      <h2>4. In a room, connected</h2>
+      <p>Receiving the room's traffic at 1 Hz. The chip right of the status lists the subscribed facilities.</p>
+      <div class="today">today: connected → "Connected" + chip "KOAK"</div>
+    </div>
+
+    <div>
+      <div class="lane-head"><span class="letter">a</span><span class="rec">recommended</span></div>
+      <div class="cell recommended scene">
+        <div class="top-bar"><div class="top-bar-left"><div class="airport-button"><span class="airport-icao">KOAK</span><span class="airport-name">Metropolitan Oakland</span></div></div><div class="top-bar-right"><div class="status-info"><span class="connection-status connected">VATSIM</span><span class="vnas-indicator connected">vNAS</span></div></div></div>
+        <div class="hang"><div class="vnas-popover">
+          <div class="vnas-popover-header"><span>vNAS Real-Time Updates</span><button type="button" class="vnas-popover-close">×</button></div>
+          <div class="vnas-popover-content">
+            <div class="vnas-popover-status"><span class="vnas-popover-status-dot" style="background-color:#81c784"></span><span class="vnas-popover-status-text" style="color:#81c784">Connected</span><span class="vnas-popover-facility">KOAK · room</span></div>
+            <div class="vnas-popover-actions"><button type="button" class="vnas-popover-btn danger">Disconnect</button></div>
+          </div>
+        </div></div>
+      </div>
+      <div class="caption">Status unchanged; the chip marks a room session (a CRC session keeps the plain chip).</div>
+    </div>
+
+    <div>
+      <div class="lane-head"><span class="letter">b</span></div>
+      <div class="cell scene">
+        <div class="top-bar"><div class="top-bar-left"><div class="airport-button"><span class="airport-icao">KOAK</span><span class="airport-name">Metropolitan Oakland</span></div></div><div class="top-bar-right"><div class="status-info"><span class="connection-status connected">VATSIM</span><span class="vnas-indicator connected">vNAS</span></div></div></div>
+        <div class="hang"><div class="vnas-popover">
+          <div class="vnas-popover-header"><span>vNAS Real-Time Updates</span><button type="button" class="vnas-popover-close">×</button></div>
+          <div class="vnas-popover-content">
+            <div class="vnas-popover-status"><span class="vnas-popover-status-dot" style="background-color:#81c784"></span><span class="vnas-popover-status-text" style="color:#81c784">Connected to YAAT room</span><span class="vnas-popover-facility">KOAK</span></div>
+            <div class="vnas-popover-actions"><button type="button" class="vnas-popover-btn danger">Disconnect</button></div>
+          </div>
+        </div></div>
+      </div>
+      <div class="caption">The status names the room; the chip stays plain.</div>
+    </div>
+
+    <div>
+      <div class="lane-head"><span class="letter">c</span></div>
+      <div class="cell scene">
+        <div class="top-bar"><div class="top-bar-left"><div class="airport-button"><span class="airport-icao">KOAK</span><span class="airport-name">Metropolitan Oakland</span></div></div><div class="top-bar-right"><div class="status-info"><span class="connection-status connected">VATSIM</span><span class="vnas-indicator connected">vNAS</span></div></div></div>
+        <div class="hang"><div class="vnas-popover">
+          <div class="vnas-popover-header"><span>vNAS Real-Time Updates</span><button type="button" class="vnas-popover-close">×</button></div>
+          <div class="vnas-popover-content">
+            <div class="vnas-popover-status"><span class="vnas-popover-status-dot" style="background-color:#81c784"></span><span class="vnas-popover-status-text" style="color:#81c784">Connected</span><span class="vnas-popover-facility">KOAK</span></div>
+            <div class="vnas-popover-actions"><button type="button" class="vnas-popover-btn danger">Disconnect</button></div>
+          </div>
+        </div></div>
+      </div>
+      <div class="caption">Unchanged from today: a room and a CRC session look the same.</div>
+    </div>
+
+    <div class="section-gap"></div>
+
+    <!-- ===================== Row 5 ===================== -->
+    <div class="row-label">
+      <h2>5. Kicked by the instructor</h2>
+      <p>Disconnected; the Environment row and Connect button come back. Server reason: "Removed from the room".</p>
+      <div class="today">today: disconnected → "Disconnected" + error line</div>
+    </div>
+
+    <div>
+      <div class="lane-head"><span class="letter">a</span><span class="rec">recommended</span></div>
+      <div class="cell recommended scene">
+        <div class="top-bar"><div class="top-bar-left"><div class="airport-button"><span class="airport-icao">KOAK</span><span class="airport-name">Metropolitan Oakland</span></div></div><div class="top-bar-right"><div class="status-info"><span class="connection-status connected">VATSIM</span><span class="vnas-indicator disconnected">vNAS</span></div></div></div>
+        <div class="hang"><div class="vnas-popover">
+          <div class="vnas-popover-header"><span>vNAS Real-Time Updates</span><button type="button" class="vnas-popover-close">×</button></div>
+          <div class="vnas-popover-content">
+            <div class="vnas-popover-status"><span class="vnas-popover-status-dot" style="background-color:#ef5350"></span><span class="vnas-popover-status-text" style="color:#ef5350">Disconnected</span></div>
+            <div class="vnas-popover-error">Removed from the room by the instructor</div>
+            <div class="vnas-popover-env"><span>Environment</span><select><option>Live</option><option>Sweatbox 1</option><option>Sweatbox 2</option><option>Test</option><option selected>YAAT1</option></select></div>
+            <div class="vnas-popover-actions"><button type="button" class="vnas-popover-btn primary">Connect</button></div>
+          </div>
+        </div></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="lane-head"><span class="letter">b</span></div>
+      <div class="cell scene">
+        <div class="top-bar"><div class="top-bar-left"><div class="airport-button"><span class="airport-icao">KOAK</span><span class="airport-name">Metropolitan Oakland</span></div></div><div class="top-bar-right"><div class="status-info"><span class="connection-status connected">VATSIM</span><span class="vnas-indicator disconnected">vNAS</span></div></div></div>
+        <div class="hang"><div class="vnas-popover">
+          <div class="vnas-popover-header"><span>vNAS Real-Time Updates</span><button type="button" class="vnas-popover-close">×</button></div>
+          <div class="vnas-popover-content">
+            <div class="vnas-popover-status"><span class="vnas-popover-status-dot" style="background-color:#ef5350"></span><span class="vnas-popover-status-text" style="color:#ef5350">Disconnected</span></div>
+            <div class="vnas-popover-error">Kicked: Removed from the room</div>
+            <div class="vnas-popover-env"><span>Environment</span><select><option>Live</option><option>Sweatbox 1</option><option>Sweatbox 2</option><option>Test</option><option selected>YAAT1</option></select></div>
+            <div class="vnas-popover-actions"><button type="button" class="vnas-popover-btn primary">Connect</button></div>
+          </div>
+        </div></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="lane-head"><span class="letter">c</span></div>
+      <div class="cell scene">
+        <div class="top-bar"><div class="top-bar-left"><div class="airport-button"><span class="airport-icao">KOAK</span><span class="airport-name">Metropolitan Oakland</span></div></div><div class="top-bar-right"><div class="status-info"><span class="connection-status connected">VATSIM</span><span class="vnas-indicator disconnected">vNAS</span></div></div></div>
+        <div class="hang"><div class="vnas-popover">
+          <div class="vnas-popover-header"><span>vNAS Real-Time Updates</span><button type="button" class="vnas-popover-close">×</button></div>
+          <div class="vnas-popover-content">
+            <div class="vnas-popover-status"><span class="vnas-popover-status-dot" style="background-color:#ef5350"></span><span class="vnas-popover-status-text" style="color:#ef5350">Disconnected</span></div>
+            <div class="vnas-popover-error">Disconnected: Removed from the room</div>
+            <div class="vnas-popover-env"><span>Environment</span><select><option>Live</option><option>Sweatbox 1</option><option>Sweatbox 2</option><option>Test</option><option selected>YAAT1</option></select></div>
+            <div class="vnas-popover-actions"><button type="button" class="vnas-popover-btn primary">Connect</button></div>
+          </div>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="section-gap"></div>
+
+    <!-- ===================== Row 6 ===================== -->
+    <div class="row-label">
+      <h2>6. Room at an airport with no tower view</h2>
+      <p>The room is at KXYZ, which has no tower view. TC3D stays connected and keeps the current airport (KOAK).</p>
+      <p>Each cell shows the screen's top first (where a toast would sit), then the popover opened. The chip follows row 4's option a.</p>
+      <div class="today">today: no such state</div>
+    </div>
+
+    <div>
+      <div class="lane-head"><span class="letter">a</span><span class="rec">recommended</span></div>
+      <div class="cell recommended scene">
+        <div class="top-bar"><div class="top-bar-left"><div class="airport-button"><span class="airport-icao">KOAK</span><span class="airport-name">Metropolitan Oakland</span></div></div><div class="top-bar-right"><div class="status-info"><span class="connection-status connected">VATSIM</span><span class="vnas-indicator connected">vNAS</span></div></div></div>
+        <div class="toast-zone empty">no toast</div>
+        <div class="hang"><div class="vnas-popover">
+          <div class="vnas-popover-header"><span>vNAS Real-Time Updates</span><button type="button" class="vnas-popover-close">×</button></div>
+          <div class="vnas-popover-content">
+            <div class="vnas-popover-status"><span class="vnas-popover-status-dot" style="background-color:#81c784"></span><span class="vnas-popover-status-text" style="color:#81c784">Connected</span><span class="vnas-popover-facility">KXYZ · room</span></div>
+            <div class="vnas-popover-notice">No tower view for KXYZ; showing your current airport</div>
+            <div class="vnas-popover-actions"><button type="button" class="vnas-popover-btn danger">Disconnect</button></div>
+          </div>
+        </div></div>
+      </div>
+      <div class="caption">Popover line only: seen when the user opens the popover.</div>
+    </div>
+
+    <div>
+      <div class="lane-head"><span class="letter">b</span></div>
+      <div class="cell scene">
+        <div class="top-bar"><div class="top-bar-left"><div class="airport-button"><span class="airport-icao">KOAK</span><span class="airport-name">Metropolitan Oakland</span></div></div><div class="top-bar-right"><div class="status-info"><span class="connection-status connected">VATSIM</span><span class="vnas-indicator connected">vNAS</span></div></div></div>
+        <div class="toast-zone"><div class="toast">No tower view for KXYZ; showing your current airport</div></div>
+        <div class="hang"><div class="vnas-popover">
+          <div class="vnas-popover-header"><span>vNAS Real-Time Updates</span><button type="button" class="vnas-popover-close">×</button></div>
+          <div class="vnas-popover-content">
+            <div class="vnas-popover-status"><span class="vnas-popover-status-dot" style="background-color:#81c784"></span><span class="vnas-popover-status-text" style="color:#81c784">Connected</span><span class="vnas-popover-facility">KXYZ · room</span></div>
+            <div class="vnas-popover-actions"><button type="button" class="vnas-popover-btn danger">Disconnect</button></div>
+          </div>
+        </div></div>
+      </div>
+      <div class="caption">Toast at the top of the screen; the popover says nothing about it. No toast exists in the app yet, so its look is new.</div>
+    </div>
+
+    <div>
+      <div class="lane-head"><span class="letter">c</span></div>
+      <div class="cell scene">
+        <div class="top-bar"><div class="top-bar-left"><div class="airport-button"><span class="airport-icao">KOAK</span><span class="airport-name">Metropolitan Oakland</span></div></div><div class="top-bar-right"><div class="status-info"><span class="connection-status connected">VATSIM</span><span class="vnas-indicator connected">vNAS</span></div></div></div>
+        <div class="toast-zone"><div class="toast">No tower view for KXYZ; showing your current airport</div></div>
+        <div class="hang"><div class="vnas-popover">
+          <div class="vnas-popover-header"><span>vNAS Real-Time Updates</span><button type="button" class="vnas-popover-close">×</button></div>
+          <div class="vnas-popover-content">
+            <div class="vnas-popover-status"><span class="vnas-popover-status-dot" style="background-color:#81c784"></span><span class="vnas-popover-status-text" style="color:#81c784">Connected</span><span class="vnas-popover-facility">KXYZ · room</span></div>
+            <div class="vnas-popover-notice">No tower view for KXYZ; showing your current airport</div>
+            <div class="vnas-popover-actions"><button type="button" class="vnas-popover-btn danger">Disconnect</button></div>
+          </div>
+        </div></div>
+      </div>
+      <div class="caption">Toast once when the room lands at KXYZ, and the popover line for as long as the room stays there.</div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>
