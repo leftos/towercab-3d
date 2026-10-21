@@ -51,6 +51,8 @@ Use `tauri-app` for what needs the real app (the Rust backend, host WebSockets a
   $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = '--remote-debugging-port=9222'; pnpm run dev
   ```
   (`pnpm run dev:vnas` the same way.) Outside the webview, the tray menu and native file dialogs are not reachable; deep links (`start tc3d://…`), single-instance and window state can be exercised from the shell.
+
+  The window can be hidden for the run: the app keeps rendering at its frame cap, and CDP screenshots and input work, while it is hidden with `ShowWindow(hwnd, SW_HIDE)` (also minimized, off-screen or covered). Hide it as soon as it appears, never call `page.bringToFront()`, and show it again before closing it. The recipe is in `docs/DRIVING_CONVENTIONS.md`, rule hidden-window-keeps-rendering. The window still shows for a moment at launch, so say "hands off" until it is hidden.
 - **`playwright`** launches Edge against the frontend alone. Every `/api/*` request then returns the SPA's HTML, so mods, tower positions, METAR (`/api/proxy`) and saved global settings are absent and the Cesium token lasts only until reload. A plain browser counts as remote mode (`isRemoteMode()`), so the app waits for the host and never polls VATSIM: no aircraft appear until polling is started by hand from `browser_evaluate` with `(await import('/stores/vatsimStore.ts')).useVatsimStore.getState().startPolling()`. To use it:
   1. Start the dev server: `pnpm run vite:dev` (port 5173)
   2. Navigate, click "Skip for now" on the Cesium token prompt — airports load from GitHub independently of the token
@@ -71,7 +73,11 @@ Driving notes:
 
 - Tell the user "hands off" before driving the window; mouse or keyboard input from them breaks a run.
 - Shift+Home resets the camera to the app default; the "Defaults" button restores the *user's* saved default.
-- The dev build reads mods from `src-tauri/target/debug/mods`; clone `github.com/leftos/tc3d-mod-koak-tower` into its `towers/` for a tower model.
+- The dev build reads mods from `src-tauri/target/debug/mods`; clone `github.com/leftos/tc3d-mod-koak-tower` into its `towers/` for a tower model. The repo nests the mod one level down (`KOAK/`), and a tower-cab check also needs 3D buildings on and the camera aimed at the cab (see `docs/DRIVING_CONVENTIONS.md`, rule dev-mods-in-target).
+- The sun direction is `viewer.scene.context.uniformState.sunDirectionWC`, not `scene.light.direction`.
+- The selected airport is not restored after a reload; select it again.
+- Headless Edge over raw CDP renders at 1 fps until `page.bringToFront()` and needs `--disable-extensions`; do not restart Vite while its page is open (see `docs/DRIVING_CONVENTIONS.md`, rule headless-edge-quirks).
+- `pnpm run dev -- <log>` writes the log relative to `src-tauri/`, not the repo root.
 - The weather debug panel's Apply replaces all weather, clouds included.
 - CDP `Emulation.*` overrides last only for the `browser_run_code_unsafe` call that sets them.
 - An airport switch stalls page timers for about 10 s; wait before reading state.

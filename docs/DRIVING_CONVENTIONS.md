@@ -50,6 +50,8 @@ Before this, app checks were listed in the plan as "Human: the user runs pnpm ru
 The app is single-instance, so a second launch only focuses the first window, and the debugging port is fixed: one driving agent at a time, and an app the user already had running is left alone. Isolated app data is not met yet: the dev build's own identifier (`com.towercab.viewer.dev`) keeps it apart from an installed release, but a driven run reads and writes the developer's own dev settings, bookmarks and WebView2 storage.
 
 The rule is to point the app's data folder at a scratch folder through an environment variable the app honours, and to write what the session needs into that folder's settings before the launch, so the developer's own data stays untouched.
+
+A stop has one trap: the window-state plugin saves the window's visible flag, so closing a hidden window makes the next launch start hidden. Show it (`SW_SHOWNOACTIVATE`) before `CloseMainWindow()` (see hidden-window-keeps-rendering).
 Source: CLAUDE.md:31-35, CLAUDE.md:109; .claude/skills/towercab-3d-nextup/SKILL.md:35; commit b39260a (plan wave lines rewritten from "Human:" to "App check"); src/renderer/hooks/useAgentHarness.ts:29-30; src-tauri/src/lib.rs:857-863; src-tauri/tauri.dev.conf.json:4; src-tauri/src/settings.rs:589. Seen: documented.
 
 ### Build before launch, and build before stopping on a restart
@@ -63,7 +65,11 @@ Source: scripts/shipping/build/dev-wrapper.js:41-77, 132-174; CLAUDE.md:31-34; a
 ### Start the app quiet and out of the user's way, set at window creation
 <!-- rule: quiet-by-default -->
 
-A default driving run should be unfocused, out of sight, silent and frame-capped, with a visible run only when the user wants to watch. This is not met: `pnpm run dev` opens the window visible and focused on the user's desktop at 1600x900 (the `windows` entry in `src-tauri/tauri.conf.json` sets neither `focus` nor `visible`), which is why every app check starts with "hands off" and ends with stopping the app.
+A default driving run should be unfocused, out of sight, silent and frame-capped, with a visible run only when the user wants to watch. This is partly met: out of sight and frame-capped hold once the window is hidden after launch (see hidden-window-keeps-rendering).
+
+But `pnpm run dev` still opens the window visible and focused on the user's desktop at 1600x900 (the `windows` entry in `src-tauri/tauri.conf.json` sets neither `focus` nor `visible`, and the window-state plugin restores the saved window with `show()` then `set_focus()`), which is why every app check starts with "hands off".
+
+The dev-only `--agent` launch that opens the window hidden and unfocused (TC3D-253) removes that.
 
 Each part has to be set when the window is created, because later is too late: measured in another project, Windows shows a new window about 0.9 s after start, before any app code runs, and clamps an off-screen initial position onto the primary screen, and un-focusing a window created focused did not give the focus back.
 
@@ -72,10 +78,37 @@ Showing a window without activating it still leaves it activatable: when the win
 Turn sound off through the platform rather than the app's own mute, so the mute stays testable and nothing leaks into saved settings, and cap the frame rate: a hidden window in another project kept VSync and drew at the monitor's 239 Hz. Out of sight must still render; the host already passes `--disable-renderer-backgrounding` and `--disable-backgrounding-occluded-windows` among its WebView2 flags.
 Source: src-tauri/tauri.conf.json:13-23; src-tauri/src/lib.rs:777-778; CLAUDE.md:31, 53; other projects' decision records and window timings measured with a 5 ms poller; Windows docs for WS_EX_NOACTIVATE. Seen: 0 here (seeded from godot-mcp, yaat).
 
+### A hidden desktop window keeps rendering: hide it with SW_HIDE and drive it over CDP
+<!-- rule: hidden-window-keeps-rendering scope: project -->
+
+The desktop dev app keeps drawing at its frame cap (60 fps measured; `__tc3d.perf().window.frameInterval` median about 17 ms) while its window is hidden with `ShowWindow(hwnd, SW_HIDE)`, minimized, moved off-screen past every monitor, or covered.
+
+`document.visibilityState` stays `visible`, 100 ms timers keep pace, and CDP screenshots and CDP input (click, Escape) work without showing or focusing the window. No extra WebView2 flag is needed: the app already passes `--disable-renderer-backgrounding --disable-backgrounding-occluded-windows` (`src-tauri/src/lib.rs:777-778`) and wry never tells WebView2 the window is hidden; `--disable-features=CalculateNativeWinOcclusion` made no difference.
+
+Use `SW_HIDE` (0): it is the only state with nothing on screen and no taskbar button. Recipe:
+1. Check ports 9222 and 5173 are free.
+2. Start a background poller (PowerShell) that finds the app's window and sends `ShowWindow(hwnd, SW_HIDE)` the moment it is visible. Find it by process, not by title alone: take the processes whose `Path` is under this tree's `src-tauri\target\`, enumerate the top-level windows (`EnumWindows`, `GetWindowThreadProcessId` equal to the process id, `GetWindow(hwnd, GW_OWNER)` null) and take the one whose `GetWindowText` starts with `TowerCab`.
+
+   Import `user32.dll` through `Add-Type` (`EnumWindows`, `GetWindowThreadProcessId`, `GetWindow`, `GetWindowText`, `IsWindowVisible`, `ShowWindow`).
+3. Launch with `$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS='--remote-debugging-port=9222'; pnpm run dev`.
+4. Drive over CDP and never call `page.bringToFront()`.
+5. Before closing, `ShowWindow(hwnd, SW_SHOWNOACTIVATE)` (4) then `CloseMainWindow()`: the window-state plugin saves the visible flag, so closing while hidden makes the next launch start hidden.
+
+The other `ShowWindow` states, if a run wants one: `SW_SHOWMINNOACTIVE` (7) minimizes without activating; `SetWindowPos(hwnd, 0, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE)` with `x` past the virtual screen's right edge (`GetSystemMetrics` `SM_XVIRTUALSCREEN` 76 plus `SM_CXVIRTUALSCREEN` 78) moves it off-screen.
+
+Make the process per-monitor DPI aware first (`SetProcessDpiAwarenessContext(-4)`) so rectangles are physical pixels. Save `GetWindowPlacement` before moving it, and restore it afterwards.
+
+Still needs "hands off" at launch: the window shows for a moment and can take the keyboard focus (3.9 s measured) until the poller hides it, because the window-state plugin restores the saved window with `show()` then `set_focus()`. TC3D-253 (dev-only `--agent` launch: open the desktop app hidden and unfocused) is the follow-up that removes that.
+
+Wall time to budget: a fresh worktree takes about 5 minutes to set up (`pnpm install` 11 s, `vite:build` 31 s, a cold cargo build about 220 s through the gate); a launch to a responding `__tc3d` with KOAK selected takes 32 to 64 s.
+
+This is the opposite of headless Edge over raw CDP, which needs `page.bringToFront()` to render (see headless-edge-quirks).
+Source: spike TC3D-244 measurements; src-tauri/src/lib.rs:777-778; the spike's Win32 helper (FindWindow by process, ShowWindow constants) now described here. Seen: spike TC3D-244.
+
 ### Say "hands off" before driving the user's window
 <!-- rule: say-hands-off-first -->
 
-Tell the user "hands off" before driving the app window: the app runs on the user's own desktop and any mouse or keyboard input from them breaks a run. The nextup profile repeats it as a step of every app check. A run the user's input cannot reach (a hidden or never-activated window, see quiet-by-default) would need no warning; this app has no such run yet.
+Tell the user "hands off" before driving the app window: the app runs on the user's own desktop and any mouse or keyboard input from them breaks a run. The nextup profile repeats it as a step of every app check. A run the user's input cannot reach (a hidden or never-activated window, see quiet-by-default) needs no warning once the window is hidden (see hidden-window-keeps-rendering), but the launch itself still shows the window and can take the focus, so the warning stands until it is hidden.
 Source: CLAUDE.md:53; .claude/skills/towercab-3d-nextup/SKILL.md:35; commit b39260a (Wave 1 friction list). Seen: Wave 1 run (2026-09-27).
 
 ### Project world points to the page CSS pixels the input tools take, and judge visibility by that projection
@@ -159,7 +192,9 @@ Source: CLAUDE.md:49; commit 8d672dc (MAIN.md "Verification, every wave"); anoth
 
 There is no recorder here yet. When the window is recorded: Windows Graphics Capture delivers a frame only when the window redraws (one in 20 s on a static tab in another project), so write frames on the recorder's own steady timer and let ffmpeg stamp each with its arrival time (`-fps_mode vfr`), so a clip whose recorder fell behind still plays in real time, and report the dropped frames at stop.
 
-A minimised window stopped rendering in that project and restoring it took the foreground, so hide a recorded window by DWM cloaking instead (still captured at 30 fps there), never minimise it. Each mark stores wall time, clip seconds and the app's own clock read through the hook, because live playback shifted the app's events 1-2 s against the wall clock in that project.
+A minimised window stopped rendering in that project and restoring it took the foreground, so hide a recorded window by DWM cloaking instead (still captured at 30 fps there), never minimise it.
+
+(This app's WebView2 keeps rendering when minimized or `SW_HIDE`-hidden, see hidden-window-keeps-rendering; whether Windows Graphics Capture can record it is not measured.) Each mark stores wall time, clip seconds and the app's own clock read through the hook, because live playback shifted the app's events 1-2 s against the wall clock in that project.
 Source: CLAUDE.md:49; another project's recording code and measurements; Windows Graphics Capture and DWM cloaking docs. Seen: 0 here (seeded from yaat).
 
 ### Answer file dialogs before the action that opens them
@@ -181,7 +216,9 @@ Source: CLAUDE.md:35. Seen: documented.
 ### Read the app's errors from the unified log, not the whole file
 <!-- rule: unified-log-tail -->
 
-Launched with a log path (`pnpm run dev -- temp/console.log` or `TOWERCAB_LOG_FILE`), the app writes Rust logs and the webview's console (forwarded through `log_from_frontend`, buffered to 50 lines or 2 s) into one file; agents read `temp/console.log` without pulling it all into context, and the app logs a `[Perf]` frame-timing line there only when FPS drops below 50, so a slowdown is diagnosable from the file. Allow for the 2 s flush before concluding a line is absent.
+Launched with a log path (`pnpm run dev -- temp/console.log`, which is resolved relative to `src-tauri/`, not the repo root, or `TOWERCAB_LOG_FILE`), the app writes Rust logs and the webview's console (forwarded through `log_from_frontend`, buffered to 50 lines or 2 s) into one file.
+
+Agents read `temp/console.log` without pulling it all into context, and the app logs a `[Perf]` frame-timing line there only when FPS drops below 50, so a slowdown is diagnosable from the file. Allow for the 2 s flush before concluding a line is absent.
 Source: CLAUDE.md:23-25; scripts/shipping/build/dev-wrapper.js:16-27; src/renderer/utils/fileLogger.ts:11-12, 21-30; src-tauri/src/lib.rs:119-131, 195; src/renderer/components/CesiumViewer/CesiumViewer.tsx:1001-1014; scripts/debugging/denoise-logs.cjs:10-20. Seen: documented.
 
 ### Build the hook from a real run's friction list
@@ -192,10 +229,22 @@ The harness was specified line by line from the friction the first agent-driven 
 Record driving friction in the plan as it happens (an **add**, so it lands as a TC3D issue), with the tool, what happened against what was needed, and the workaround, and turn each item into a hook call or a documented driving note.
 Source: commit b39260a ("fold the Wave 1 MCP friction notes (until now only in a gitignored scratch file) into the harness item"); commit 20ccd0b; CLAUDE.md:13. Seen: once, led to the harness.
 
+### Headless Edge over raw CDP: bring it to front, drop extensions, leave Vite alone
+<!-- rule: headless-edge-quirks scope: project -->
+
+Measured in headless checks driven over raw CDP (or `playwright-headless`):
+- Headless Edge renders at 1 fps until `page.bringToFront()` is called (headless only; a hidden desktop window is the opposite, see hidden-window-keeps-rendering).
+- Launch it with `--disable-extensions`: even a fresh profile loaded extensions and logged about 88,000 "Unchecked runtime.lastError" lines in two minutes.
+- Do not restart Vite while the page is open: its client threw "send was called before connect" about 295,000 times in seven minutes. Close the page first.
+- `npm i` in a driver folder fails without a `package.json`; add one first.
+- The sun direction is `viewer.scene.context.uniformState.sunDirectionWC`, not `scene.light.direction`.
+Source: headless checks of TC3D-244's session. Seen: once.
+
 ### Reset one-time UI flags through persisted state, then reload
 <!-- rule: reset-flags-via-storage scope: project -->
 
 First-launch tips and dismissed prompts are reset by editing the persisted Zustand blob (`localStorage['settings-store']`, `parsed.state.ui.<flag>`) from `browser_evaluate` and reloading with `browser_navigate`, not by wiping the profile.
+A reload also forgets the selected airport (it is not restored), so select it again before reading scene state.
 Source: CLAUDE.md:39; commit 66062dd. Seen: documented, used for the keyboard cheatsheet tip.
 
 ### Know the two camera resets apart
@@ -208,7 +257,11 @@ Source: CLAUDE.md:54; commit b39260a. Seen: Wave 1 run.
 <!-- rule: dev-mods-in-target scope: project -->
 
 The dev build reads mods from `src-tauri/target/debug/mods`; a tower model comes from cloning `github.com/leftos/tc3d-mod-koak-tower` into its `towers/`. Without it a tower-related check has nothing to look at.
-Source: CLAUDE.md:55; commit b39260a. Seen: Wave 1 run.
+
+The mod repo nests the mod one level down (`KOAK/`), while the app wants `<folder>\towers\KOAK\{manifest.json, model.glb}`: lay it out that way and, for a headless run, point `TC3D_MODS_DIR` at `<folder>`.
+
+A tower-cab check also needs 3D buildings on, because the mod draws no shaft. The mod's camera sits about 225 m NNE of the cab facing about 075, so the cab is behind the default view; aim at bearing about 203 to see it. Read the OSM shaft centroid live from the feature's `cesium#latitude` / `cesium#longitude` rather than hard-coding it.
+Source: CLAUDE.md:55; commit b39260a. Seen: Wave 1 run; TC3D-244 checks.
 
 ## App-side hook
 
