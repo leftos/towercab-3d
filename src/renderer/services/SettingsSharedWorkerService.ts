@@ -421,6 +421,7 @@ class SettingsSharedWorkerService {
         groundTrack: observation.groundTrack ?? observation.heading,
         verticalRate: observation.verticalRate ?? 0,
         onGround: observation.onGround ?? false,
+        heightAboveGround: observation.heightAboveGround,
         pitch: observation.pitch,
         roll: observation.roll,
         source: observation.source,

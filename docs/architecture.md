@@ -80,6 +80,10 @@ useAircraftInterpolation() [60 Hz singleton]
 Note: AircraftPanel uses useAircraftFiltering for 1Hz UI updates
 ```
 
+**Ground contact and gear.** vNAS observations carry the simulator's height above ground (`heightAboveGround`, metres, 1 Hz; built in `vnasStore.ts`, carried to remote browsers by the observation messages). `aircraftTimelineStore.ts` interpolates it to the displayed instant. `useAircraftInterpolation.ts` turns it into `inContact` per frame: entered below 3 ft, left above 5 ft. In contact the aircraft sits on the sampled terrain; airborne it is drawn at the reported height. The vNAS 50/80 ft `onGround` flag stays on the observation for labels only: a vNAS observation without a height (old replays, the brief mixed VATSIM/vNAS window) gives no drawing ground flag (`drawingGroundFlag`), so the landing and departure blends apply. A source without a height takes `inContact` from the drawn result of those blends.
+
+`useAircraftModels.ts` feeds `inContact` and the data-source time to `updateGearAnimation` (`utils/gearAnimationController.ts`; inputs typed in `types/gear.ts`). In contact the gear is down. After contact ends, the gear retracts on positive climb once the aircraft has been out of contact 2 s of data time, over 8 s with an ease-out; that retract fires once per contact, after which the gear holds and extends only when descending below 2000 ft. The 150 ft climb rule takes over once the aircraft passes 150 ft out of contact or after a backward seek in replay. An aircraft not in contact since it was drawn (an airborne spawn, a go-around without touchdown) uses the 150 ft rule. `tests/motion/` covers it (`contact`, `gearRule`, `heightAboveGround`, `heightlessVnas`).
+
 ### Weather Data Flow
 
 ```

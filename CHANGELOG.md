@@ -20,6 +20,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Weather fog now fades in as visibility drops from 10 to 8 miles, and eases over six seconds when visibility changes, instead of popping.
 - Tower mod cabs now darken at night with the rest of the view and cast a shadow on the ground.
 - Tower mod `rotation` now turns the cab clockwise, as documented; a cab with a rotation other than 0 may now face a different way.
+- vNAS aircraft now touch down and lift off when the simulator's aircraft does, and raise their gear a few seconds after liftoff.
 
 ### Fixed
 - FSLTL and AIG aircraft now use their own livery's textures instead of another livery's, and AIG models with many liveries convert again.

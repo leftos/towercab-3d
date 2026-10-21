@@ -99,6 +99,32 @@ interface TimelineRateState {
 const sharedTerrainStateRef = { current: new Map<string, TerrainCorrectionState>() }
 const sharedNosewheelStateRef = { current: new Map<string, NosewheelState>() }
 const sharedTimelineRateStateRef = { current: new Map<string, TimelineRateState>() }
+/** Ground contact per aircraft with a height above ground, kept for the hysteresis */
+const sharedContactStateRef = { current: new Map<string, boolean>() }
+
+/** Ground contact is entered below this height above ground (3 ft) */
+const CONTACT_ENTER_HEIGHT_METERS = 3 * 0.3048
+/** Ground contact is left above this height above ground (5 ft) */
+const CONTACT_EXIT_HEIGHT_METERS = 5 * 0.3048
+
+/**
+ * Ground contact for this frame from the height above ground at the displayed instant, with hysteresis.
+ * An aircraft with no earlier contact state enters contact only below the entry height.
+ *
+ * @returns Whether the aircraft is in contact, or null when the source reports no height
+ */
+function updateContact(callsign: string, heightAboveGround: number | null): boolean | null {
+  if (heightAboveGround === null) {
+    sharedContactStateRef.current.delete(callsign)
+    return null
+  }
+  const wasInContact = sharedContactStateRef.current.get(callsign) ?? false
+  const inContact = wasInContact
+    ? heightAboveGround <= CONTACT_EXIT_HEIGHT_METERS
+    : heightAboveGround < CONTACT_ENTER_HEIGHT_METERS
+  sharedContactStateRef.current.set(callsign, inContact)
+  return inContact
+}
 
 // ============================================================================
 // TIMELINE FRAME TIMING
@@ -144,6 +170,10 @@ function timelineToInterpolatedState(
   }
 
   const lastFrameTime = sharedTimelineLastFrameTimeRef.current
+  const inContact = updateContact(callsign, timeline.heightAboveGround)
+  // On the ground for heading rate, pitch and roll: ground contact when the source reports its height above
+  // ground, otherwise the source's ground flag or a groundspeed under 40 kt
+  const isOnGround = inContact ?? (timeline.onGround === true || timeline.groundspeed < 40)
 
   // Calculate frame delta (ms)
   const frameDelta = lastFrameTime > 0 ? now - lastFrameTime : 16.67 // ~60fps default
@@ -163,7 +193,6 @@ function timelineToInterpolatedState(
     const headingBase = prevSmoothedHeading ?? targetHeading
 
     // Determine rate limit based on ground/air state
-    const isOnGround = timeline.onGround === true || timeline.groundspeed < 40
     const maxHeadingRate = isOnGround ? MAX_HEADING_RATE_DEG_PER_SEC_GROUND : MAX_HEADING_RATE_DEG_PER_SEC_AIR
 
     const dtSeconds = frameDelta / 1000
@@ -254,9 +283,6 @@ function timelineToInterpolatedState(
     rateState.prevPitch = pitch
     rateState.prevRoll = roll
   } else if (orientationEnabled) {
-    // Determine ground/air state (used for both pitch and roll)
-    const isOnGround = timeline.onGround === true || timeline.groundspeed < 40
-
     // Pitch from vertical rate (flight path angle)
     // ~1000 fpm climb = ~5 degrees pitch (standard approximation)
     // verticalRate is in m/min, convert to fpm for calculation
@@ -362,8 +388,10 @@ function timelineToInterpolatedState(
     acceleration,
     track,
 
-    // Ground detection from authoritative source (vNAS AGL, ADS-B ground bit)
+    // Source ground flag (vNAS 50/80 ft flag for labels, ADS-B ground bit); contact comes from the height
     isOnGround: timeline.onGround,
+    heightAboveGround: timeline.heightAboveGround,
+    inContact,
 
     isInterpolated: true,
 
@@ -420,11 +448,13 @@ function runInterpolationFrame() {
       // Entering imported replay mode - timelines are already loaded by
       // replayStore.importReplay() which calls loadImportedTimelines() or loadReplaySnapshots()
       sharedTimelineRateStateRef.current.clear()
+      sharedContactStateRef.current.clear()
     } else if (currentMode === 'replay') {
       // Entering buffer replay mode - scrub through existing timeline
       // The timeline already has live observations, no need to load anything
-      // Just clear rate tracking for fresh orientation calculations
+      // Just clear rate and contact tracking for fresh orientation and contact
       sharedTimelineRateStateRef.current.clear()
+      sharedContactStateRef.current.clear()
     } else if (currentMode === 'live' && previousMode === 'imported') {
       // Returning to live mode from imported replay - clear the data
       // Live observations will start populating the timeline again
@@ -516,6 +546,9 @@ function runInterpolationFrame() {
       existing.track = interpolated.track
       existing.timestamp = interpolated.timestamp
       existing.displayDelay = interpolated.displayDelay
+      existing.isOnGround = interpolated.isOnGround
+      existing.heightAboveGround = interpolated.heightAboveGround
+      existing.inContact = interpolated.inContact
     } else {
       statesMap.set(callsign, interpolated)
     }
@@ -616,20 +649,27 @@ function runInterpolationFrame() {
     if (isLowSpeed) {
       // Very low speed = definitely on ground, full terrain clamping
       groundBlendWeight = 1.0
+    } else if (entry.heightAboveGround !== null) {
+      // The source reports its height above ground: on the sampled terrain in contact, at the reported height
+      // otherwise (kept above the terrain). Without a terrain sample the reported height stands, since the
+      // reference airport's elevation may not be the field the aircraft is on. The landing and departure blends
+      // below are for sources without that height.
+      const sampled = sampledTerrainHeight !== undefined
+      const terrainAboveReported = sampled && terrainClampedHeight > reportedHeightWithOffset
+      groundBlendWeight = sampled && (entry.inContact || terrainAboveReported) ? 1.0 : 0
     } else if (entry.isOnGround === true && sampledTerrainHeight !== undefined) {
-      // Source data (vNAS AGL, ADS-B) confirms aircraft is on ground - trust it over computed AGL
+      // Source ground flag (RealTraffic's ADS-B ground bit) confirms aircraft is on ground - trust it over computed AGL
       // This is more reliable than altitude-based detection when MSL/ellipsoidal conversion has errors
       groundBlendWeight = 1.0
     } else if (sampledTerrainHeight !== undefined && terrainClampedHeight > reportedHeightWithOffset) {
       // Terrain higher than reported = prevent going underground
       groundBlendWeight = 1.0
     } else if (entry.isOnGround === false && altitudeAGL >= DEPARTURE_BLEND_END_AGL) {
-      // Source data (vNAS, ADS-B) confirms aircraft is airborne AND well above ground
+      // Source ground flag confirms aircraft is airborne AND well above ground
       // Skip progressive blending - trust reported altitude fully
       groundBlendWeight = 0
     } else if (entry.isOnGround === false) {
       // Source says airborne but aircraft is still very close to ground
-      // (e.g., vNAS AGL oscillating around 50ft threshold at high-elevation airports)
       // Use progressive departure blend instead of snapping to reported altitude,
       // which prevents visible oscillation when the ground flag toggles rapidly
       const blendRange = DEPARTURE_BLEND_END_AGL - DEPARTURE_BLEND_START_AGL
@@ -668,6 +708,11 @@ function runInterpolationFrame() {
 
     // For state transition tracking, consider "clamped" if blend weight > 0.5
     const shouldClampToTerrain = groundBlendWeight > 0.5
+
+    // A source without a height above ground takes its contact from the drawn result, so the gear has one input
+    if (entry.heightAboveGround === null) {
+      entry.inContact = shouldClampToTerrain
+    }
 
     // Reset smoothed terrain height for aircraft that are truly airborne
     if (groundBlendWeight === 0 && sampledTerrainHeight !== undefined && altitudeAGL > 50) {
@@ -749,9 +794,9 @@ function runInterpolationFrame() {
         sharedNosewheelStateRef.current.set(callsign, nosewheelState)
       }
 
-      // Calculate altitude above ground level (AGL)
-      // Use reported altitude (not corrected) since terrain height is in ellipsoid coords
-      const altitudeAGLFlare = reportedEllipsoidHeight - sampledTerrainHeight
+      // Height above ground for the flare: the source's own when it reports one, else the reported altitude
+      // (not corrected) above the terrain sample, both in ellipsoid coords
+      const altitudeAGLFlare = entry.heightAboveGround ?? reportedEllipsoidHeight - sampledTerrainHeight
 
       // Clear groundCommitted when clearly airborne again (handles go-around / touch-and-go)
       // Both conditions required to prevent false clears from a single noisy datum
@@ -872,6 +917,7 @@ function runInterpolationFrame() {
       sharedTerrainStateRef.current.delete(callsign)
       sharedNosewheelStateRef.current.delete(callsign)
       sharedTimelineRateStateRef.current.delete(callsign)
+      sharedContactStateRef.current.delete(callsign)
     }
   }
 

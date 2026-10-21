@@ -12,7 +12,8 @@
  */
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { GEAR_RETRACT_MIN_AIRBORNE_SECONDS } from '@/utils/gearAnimationController'
 import { angleDiff, type FrameRecord, runScenario, type ScenarioResult } from './harness'
 
 vi.mock('react', () => {
@@ -38,6 +39,26 @@ const VATSIM_GLIDE_POS_ERR_MAX_M = 60 // measured 13.1 m
 const GA_POS_ERR_MAX_M = 5.5 // measured 1.4 m
 const MIN_GEAR_DOWN = 0.95 // measured 1.00
 const PLAYBACK_OFF_FRACTION_MAX = 0.1 // measured 0.019 (1.9 % of moving frames)
+const DEPARTURE_AGL_ERR_MAX_M = 2 // measured 0.5 m (1451 m while isOnGround stayed frozen)
+// Contact is entered below 3 ft (0.91 m), the most an arrival can be drawn under its reported height before touchdown.
+const ARRIVAL_BELOW_TRUTH_MAX_M = 1 // measured 0.66 m
+// The sim's flare sinks at about 120 fpm through the last 3 ft, so contact starts before the wheels touch.
+// The band where the 50 ft ground flag used to drop the AoA offset and leave the bare -3 deg flight-path angle.
+const FLARE_CHECK_LOW_FT = 39
+const FLARE_CHECK_HIGH_FT = 51
+// The 5.2 check asks for pitch at or above 0 deg in that band: measured lowest 1.0 deg (vNAS, VATSIM seen first)
+const TOUCHDOWN_EARLY_MAX_S = 2 // measured 1.3 s for both vNAS scenarios (7.1 s and 5.5 s with the landing blend)
+const GEAR_LOOKBACK_S = 30
+const VATSIM_GEAR_UP_LATE_MAX_S = 6 // measured 3.8 s
+// Gear-up on a go-around without touchdown, before the early-climbing VATSIM chord is fixed (TC3D-53). Measured
+// -5.6 s: the same retract instant as the 150 ft rule's -4.0 s under the old 12 s ease-in-out, which took 1.6 s
+// to leave 0.99; the ease-out moves the gear at once.
+const GA_GEAR_UP_START_S = -5.6
+const GA_GEAR_UP_TOLERANCE_S = 0.5
+const GEAR_UP_AFTER_CONTACT_MAX_S = 3 // measured 2.1 s (7.3 s at 150 ft); gear starts up 2.9 s after liftoff
+const GEAR_TRANSITION_S = 8
+// Ease-out cubic leaves 0.67 one second into an 8 s retraction; linear 0.875, the old cubic ease-in-out 0.99.
+const GEAR_EASE_OUT_AT_1S_MAX = 0.75
 
 const ROOT = resolve(__dirname, '../..')
 const REPORT_PATH = resolve(ROOT, '.tmp/motion/report.txt')
@@ -72,6 +93,15 @@ function maxValue(recs: FrameRecord[], pick: (r: FrameRecord) => number): number
 
 function minValue(recs: FrameRecord[], pick: (r: FrameRecord) => number): number {
   return recs.reduce((m, r) => Math.min(m, pick(r)), Number.POSITIVE_INFINITY)
+}
+
+/**
+ * Seconds from a truth event to the first frame whose gear reads below fully down, looking back from
+ * GEAR_LOOKBACK_S before the event; negative when the gear starts up early, +Infinity when it never does.
+ */
+function gearUpStartS(recs: FrameRecord[], eventT: number): number {
+  const first = recs.find((r) => r.tLocal > eventT - GEAR_LOOKBACK_S && r.gearApp < 0.99)
+  return first ? first.tLocal - eventT : Number.POSITIVE_INFINITY
 }
 
 function phaseOrder(res: ScenarioResult, callsign: string): string[] {
@@ -170,11 +200,13 @@ function report(res: ScenarioResult, label: string): void {
     out.push(
       `  phase changes (${ph.length}): ${ph.map((p) => `${p.tLocal.toFixed(0)}s:${p.phase}[${p.segment}]`).join(' > ')}`,
     )
-    const gearRetract = recs.find((r) => r.tLocal > f.events.initial_climb - 30 && r.gearApp < 0.99)
-    if (f.callsign === 'DEP1' && gearRetract) {
-      out.push(
-        `  gear retract starts (app AGL) at ${(gearRetract.tLocal - f.events.initial_climb).toFixed(1)} s after liftoff`,
-      )
+    const gearEvent = f.callsign === 'GA1' ? 'go_around' : 'initial_climb'
+    if (f.callsign !== 'ARR1') {
+      out.push(`  gear retract starts at ${gearUpStartS(recs, f.events[gearEvent]).toFixed(1)} s after ${gearEvent}`)
+    }
+    const leftContact = recs.findIndex((r, i) => i > 0 && recs[i - 1].inContact === true && r.inContact === false)
+    if (leftContact > 0) {
+      out.push(`  leaves contact at ${(recs[leftContact].tLocal - f.events.initial_climb).toFixed(1)} s after liftoff`)
     }
     const wheelsOn = recs.find((r) => r.tLocal > f.events.rollout - 60 && r.agl < 0.2)
     if (f.callsign === 'ARR1' && wheelsOn) {
@@ -186,17 +218,22 @@ function report(res: ScenarioResult, label: string): void {
   appendFileSync(REPORT_PATH, `${out.join('\n')}\n`, 'utf8')
 }
 
-// The scenarios run at the top level, where collection has no timeout (tests/setup/hookBudget.ts).
-const vatsim: ScenarioResult = await runScenario({ fps: 60, useVnas: false, vnasFirst: false, durationS: DURATION })
-const vnas: ScenarioResult = await runScenario({ fps: 60, useVnas: true, vnasFirst: false, durationS: DURATION })
-const vnasFirst: ScenarioResult = await runScenario({ fps: 60, useVnas: true, vnasFirst: true, durationS: DURATION })
-if (REPORT) {
-  mkdirSync(dirname(REPORT_PATH), { recursive: true })
-  writeFileSync(REPORT_PATH, '', 'utf8')
-  report(vatsim, 'VATSIM only (15 s), 60 fps')
-  report(vnas, 'vNAS 1 Hz + VATSIM, VATSIM first, 60 fps')
-  report(vnasFirst, 'vNAS 1 Hz + VATSIM, vNAS first, 60 fps')
-}
+let vatsim: ScenarioResult
+let vnas: ScenarioResult
+let vnasFirst: ScenarioResult
+
+beforeAll(async () => {
+  vatsim = await runScenario({ fps: 60, useVnas: false, vnasFirst: false, durationS: DURATION })
+  vnas = await runScenario({ fps: 60, useVnas: true, vnasFirst: false, durationS: DURATION })
+  vnasFirst = await runScenario({ fps: 60, useVnas: true, vnasFirst: true, durationS: DURATION })
+  if (REPORT) {
+    mkdirSync(dirname(REPORT_PATH), { recursive: true })
+    writeFileSync(REPORT_PATH, '', 'utf8')
+    report(vatsim, 'VATSIM only (15 s), 60 fps')
+    report(vnas, 'vNAS 1 Hz + VATSIM, VATSIM first, 60 fps')
+    report(vnasFirst, 'vNAS 1 Hz + VATSIM, vNAS first, 60 fps')
+  }
+}, 300_000)
 
 describe('ground taxi motion under vNAS', () => {
   it(`straight taxi position error stays within ${TAXI_POS_ERR_MAX_M} m (measured 0.3 m)`, () => {
@@ -320,13 +357,107 @@ describe('findings the review measured that are still bugs today', () => {
     expect(offsetS, `left the final phases ${offsetS.toFixed(1)} s after the go-around began`).toBeLessThanOrEqual(8)
   })
   // TC3D-50
+  it(`3.1 isOnGround follows the timeline after the first frame, so a vNAS-first departure is not glued to the runway (TC3D-50)`, () => {
+    const recs = framesFor(vnasFirst, 'DEP1')
+    expect(recs.length).toBeGreaterThan(1000)
+    const mismatched = recs.filter((r) => r.isOnGroundEntry !== r.onGroundTimeline).length
+    expect(mismatched, 'frames where entry.isOnGround differs from the timeline onGround').toBe(0)
+    const airborne = inSegments(recs, ['climbing_turn', 'climb', 'level_off', 'cruise'])
+    expect(airborne.length).toBeGreaterThan(100)
+    const worst = maxAbs(airborne, (r) => r.agl - r.truth.agl)
+    expect(worst, `drawn AGL error after liftoff ${worst.toFixed(1)} m`).toBeLessThanOrEqual(DEPARTURE_AGL_ERR_MAX_M)
+  })
+
+  it('5.1 an arrival is not drawn on the runway before it touches down (TC3D-50)', () => {
+    for (const [label, res] of [
+      ['vNAS, VATSIM seen first', vnas],
+      ['vNAS seen first', vnasFirst],
+    ] as const) {
+      const flight = res.flights.find((f) => f.callsign === 'ARR1')
+      expect(flight, label).toBeDefined()
+      if (!flight) return
+      const recs = framesFor(res, 'ARR1')
+      const descent = inSegments(recs, ['glide', 'flare']).filter((r) => r.tLocal < flight.events.rollout)
+      expect(descent.length, label).toBeGreaterThan(100)
+      const sink = maxValue(descent, (r) => r.truth.agl - r.agl)
+      expect(sink, `${label}: drawn ${sink.toFixed(2)} m below truth before touchdown`).toBeLessThanOrEqual(
+        ARRIVAL_BELOW_TRUTH_MAX_M,
+      )
+      const wheelsOn = recs.find((r) => r.tLocal > flight.events.rollout - 60 && r.agl < 0.2)
+      const earlyS = wheelsOn ? flight.events.rollout - wheelsOn.tLocal : Number.POSITIVE_INFINITY
+      expect(earlyS, `${label}: drawn on the runway ${earlyS.toFixed(2)} s before truth touchdown`).toBeLessThanOrEqual(
+        TOUCHDOWN_EARLY_MAX_S,
+      )
+    }
+  })
+  it('5.2 a vNAS arrival does not pitch nose-down through the flare (TC3D-50)', () => {
+    for (const [label, res] of [
+      ['vNAS, VATSIM seen first', vnas],
+      ['vNAS seen first', vnasFirst],
+    ] as const) {
+      const recs = inSegments(framesFor(res, 'ARR1'), ['glide', 'flare']).filter(
+        (r) => r.truth.agl >= FLARE_CHECK_LOW_FT * 0.3048 && r.truth.agl <= FLARE_CHECK_HIGH_FT * 0.3048,
+      )
+      expect(recs.length, label).toBeGreaterThan(30)
+      const lowest = minValue(recs, (r) => r.pitch)
+      expect(lowest, `${label}: pitch ${lowest.toFixed(1)} deg between ${FLARE_CHECK_LOW_FT} and ${FLARE_CHECK_HIGH_FT} ft`).toBeGreaterThanOrEqual(0)
+    }
+  })
+  it('6.2 a VATSIM aircraft does not start its gear up before liftoff (TC3D-50)', () => {
+    const flight = vatsim.flights.find((f) => f.callsign === 'DEP1')
+    expect(flight).toBeDefined()
+    if (!flight) return
+    const liftoff = flight.events.initial_climb
+    const recs = framesFor(vatsim, 'DEP1')
+    expect(recs.filter((r) => r.tLocal > liftoff - GEAR_LOOKBACK_S && r.tLocal < liftoff).length).toBeGreaterThan(100)
+    const startS = gearUpStartS(recs, liftoff)
+    expect(startS, `gear started up ${startS.toFixed(1)} s after liftoff`).toBeGreaterThanOrEqual(0)
+    expect(startS, `gear started up ${startS.toFixed(1)} s after liftoff`).toBeLessThanOrEqual(VATSIM_GEAR_UP_LATE_MAX_S)
+  })
   it.todo(
-    '3.1 isOnGround follows the timeline after the first frame, so a vNAS-first departure is not glued to the runway (TC3D-50)',
+    '6.2 a VATSIM aircraft does not start its gear up before a go-around: the 15 s chord climbs early, finding 1.5 (TC3D-53)',
   )
-  it.todo('5.1 an arrival is not drawn on the runway before it touches down (TC3D-50)')
-  it.todo('5.2 a vNAS arrival does not pitch nose-down through the flare (TC3D-50)')
-  it.todo('6.2 a VATSIM aircraft does not start its gear up before liftoff or before a go-around (TC3D-50)')
-  it.todo('6.3 gear retraction starts a few seconds after liftoff, with an 8 s transition (TC3D-50)')
+  it(`a VATSIM go-around that never touched down keeps the 150 ft gear rule, gear up ${GA_GEAR_UP_START_S} s from it (TC3D-50)`, () => {
+    const flight = vatsim.flights.find((f) => f.callsign === 'GA1')
+    expect(flight).toBeDefined()
+    if (!flight) return
+    const startS = gearUpStartS(framesFor(vatsim, 'GA1'), flight.events.go_around)
+    expect(startS, `gear started up ${startS.toFixed(1)} s after the go-around`).toBeGreaterThanOrEqual(
+      GA_GEAR_UP_START_S - GA_GEAR_UP_TOLERANCE_S,
+    )
+    expect(startS, `gear started up ${startS.toFixed(1)} s after the go-around`).toBeLessThanOrEqual(
+      GA_GEAR_UP_START_S + GA_GEAR_UP_TOLERANCE_S,
+    )
+  })
+
+  it('6.3 gear retraction starts a few seconds after liftoff, with an 8 s transition (TC3D-50)', () => {
+    for (const [label, res] of [
+      ['vNAS, VATSIM seen first', vnas],
+      ['vNAS seen first', vnasFirst],
+    ] as const) {
+      const recs = framesFor(res, 'DEP1')
+      const leftContact = recs.findIndex((r, i) => i > 0 && recs[i - 1].inContact === true && r.inContact === false)
+      expect(leftContact, `${label}: the departure leaves contact`).toBeGreaterThan(0)
+      const moving = recs.findIndex((r, i) => i >= leftContact && r.gearApp < 1)
+      expect(moving, `${label}: the gear starts up`).toBeGreaterThan(0)
+      // The transition starts on the frame before the gear first moves (zero elapsed time, progress still 1)
+      const start = recs[moving - 1]
+      const delayS = start.frameTime - recs[leftContact].frameTime
+      expect(delayS, `${label}: gear started up ${delayS.toFixed(2)} s after leaving contact`).toBeGreaterThanOrEqual(
+        GEAR_RETRACT_MIN_AIRBORNE_SECONDS - 0.05,
+      )
+      expect(delayS, `${label}: gear started up ${delayS.toFixed(2)} s after leaving contact`).toBeLessThanOrEqual(
+        GEAR_UP_AFTER_CONTACT_MAX_S,
+      )
+      const oneSecondIn = recs.find((r) => r.frameTime >= start.frameTime + 1)
+      expect(oneSecondIn?.gearApp, `${label}: an ease-out moves most at the start`).toBeLessThanOrEqual(
+        GEAR_EASE_OUT_AT_1S_MAX,
+      )
+      const up = recs.find((r) => r.frameTime > start.frameTime && r.gearApp === 0)
+      const transitionS = (up?.frameTime ?? Number.POSITIVE_INFINITY) - start.frameTime
+      expect(transitionS, `${label}: gear transition ${transitionS.toFixed(2)} s`).toBeCloseTo(GEAR_TRANSITION_S, 1)
+    }
+  })
   // TC3D-51
   it.todo('1.3 vNAS silence from a stationary aircraft does not inflate the display delay (TC3D-51)')
   it.todo('1.4 a stopped aircraft does not extrapolate forward after the last vNAS sample (TC3D-51)')

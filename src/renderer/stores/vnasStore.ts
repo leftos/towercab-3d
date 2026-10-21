@@ -22,10 +22,10 @@ let lastProcessedOAuthCallback: string | null = null
 const speedHistory = new Map<string, number[]>()
 
 /**
- * Ground state hysteresis tracking per aircraft.
- * Prevents rapid toggling of the onGround flag when AGL oscillates near the threshold,
- * which causes visible oscillation between terrain-clamped and floating positions
- * (especially at high-elevation airports like KRNO where terrain models disagree).
+ * Ground state hysteresis tracking per aircraft, for the observation's `onGround` flag.
+ * The flag is for labels only: drawn height, pitch and ground contact come from the height above
+ * ground each observation carries (`heightAboveGround`), which the interpolation loop turns into
+ * contact per frame. The hysteresis keeps the flag from toggling when AGL oscillates near the threshold.
  *
  * Enter ground: AGL < 50ft, Exit ground: AGL > 80ft
  */
@@ -46,6 +46,19 @@ function getOnGroundWithHysteresis(callsign: string, altitudeAglFt: number): boo
   }
   groundStateHistory.set(callsign, onGround)
   return onGround
+}
+
+/**
+ * The ground fields of a vNAS observation: the 50/80 ft label flag and the simulator's height above ground in
+ * metres. A non-finite AGL leaves the height out, so that observation counts as one without height.
+ */
+function vnasGroundFields(
+  callsign: string,
+  altitudeAglFt: number,
+): Pick<AircraftObservation, 'onGround' | 'heightAboveGround'> {
+  const onGround = getOnGroundWithHysteresis(callsign, altitudeAglFt)
+  if (!Number.isFinite(altitudeAglFt)) return { onGround }
+  return { onGround, heightAboveGround: altitudeAglFt * FEET_TO_METERS }
 }
 
 /** Number of samples to keep in the speed history window */
@@ -900,9 +913,8 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       groundspeed: calculatedGroundspeed, // Calculated from position changes
       groundTrack: aircraft.trueGroundTrack ?? null,
       headingIsTrue: true, // vNAS heading is always reliable (from simulator)
-      // vNAS provides AGL directly from simulator - use it for ground detection
-      // Uses hysteresis to prevent oscillation at high-elevation airports
-      onGround: getOnGroundWithHysteresis(aircraft.callsign, aircraft.altitudeAgl),
+      // vNAS provides AGL directly from the simulator: the height for ground contact, plus the label flag
+      ...vnasGroundFields(aircraft.callsign, aircraft.altitudeAgl),
       pitch: null,
       roll: null,
       verticalRate: null,
@@ -1013,8 +1025,8 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
         groundspeed: calculatedSpeeds.get(ac.callsign) ?? 0,
         groundTrack: ac.trueGroundTrack ?? null,
         headingIsTrue: true, // vNAS heading is always reliable (from simulator)
-        // vNAS provides AGL directly from simulator - uses hysteresis to prevent oscillation
-        onGround: getOnGroundWithHysteresis(ac.callsign, ac.altitudeAgl),
+        // vNAS provides AGL directly from the simulator: the height for ground contact, plus the label flag
+        ...vnasGroundFields(ac.callsign, ac.altitudeAgl),
         pitch: null,
         roll: null,
         verticalRate: null,
