@@ -1,0 +1,189 @@
+<title>KSFO Buildings Spike</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; each view shows one picture with a three-way switch (plain, shader, generated) and a note per mode. */
+:root {
+  --bg: #f2f5f6; --panel: #ffffff; --ink: #142029; --muted: #566672; --line: #d6dee3; --accent: #0a7f9a;
+  --ok: #217a4b; --ok-bg: #e2f2e9; --warn: #8f5d06; --warn-bg: #fbf0d9; --chip-bg: #e7eef1;
+  --font-display: "Barlow Semi Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #0e151a; --panel: #152029; --ink: #e2e9ee; --muted: #93a4b1; --line: #263540; --accent: #3cc3e2; --ok: #6fd39c; --ok-bg: #16352a; --warn: #f0c060; --warn-bg: #3a2e12; --chip-bg: #1d2b35; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #0e151a; --panel: #152029; --ink: #e2e9ee; --muted: #93a4b1; --line: #263540; --accent: #3cc3e2; --ok: #6fd39c; --ok-bg: #16352a; --warn: #f0c060; --warn-bg: #3a2e12; --chip-bg: #1d2b35; color-scheme: dark; }
+body { background: var(--bg); color: var(--ink); font: 400 16px/1.55 var(--font-body); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 32px 64px; }
+.wrap { max-width: 980px; margin: 0 auto; display: grid; gap: 40px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: clamp(30px, 5vw, 44px); font-weight: 700; }
+h2 { font-size: 26px; font-weight: 600; }
+h3 { font-size: 20px; font-weight: 600; }
+p { margin: 0; max-width: 68ch; }
+code { font-family: var(--font-mono); font-size: 0.86em; }
+.eyebrow { font: 600 13px/1 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+header, section, .view { display: grid; gap: 14px; }
+.lede { font-size: 18px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { padding: 4px 10px; border-radius: 999px; font: 600 13px/1.3 var(--font-body); background: var(--chip-bg); }
+.chip.ok { background: var(--ok-bg); color: var(--ok); }
+.chip.warn { background: var(--warn-bg); color: var(--warn); }
+.glance { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.glance div { background: var(--panel); padding: 14px 16px; display: grid; gap: 4px; min-width: 0; }
+.k { font: 600 12px/1.2 var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.v { font: 600 20px/1.2 var(--font-display); }
+.n { font-size: 14px; color: var(--muted); }
+.switch { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel); width: fit-content; }
+.switch button { font: 600 14px/1 var(--font-mono); padding: 9px 14px; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.switch button + button { border-left: 1px solid var(--line); }
+.switch button[aria-pressed="true"] { background: var(--accent); color: var(--panel); }
+.shot { width: 100%; max-width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); display: block; background: #000; }
+.notes { display: grid; gap: 6px; }
+.notes p[hidden] { display: none; }
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 600 13px/1.3 var(--font-mono); letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+tr:last-child td { border-bottom: 0; }
+td.num { font-family: var(--font-mono); white-space: nowrap; }
+ul { margin: 0; padding-left: 20px; display: grid; gap: 8px; max-width: 72ch; }
+details { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 12px 16px; }
+details summary { cursor: pointer; font: 600 17px/1.3 var(--font-display); }
+details > *:not(summary) { margin-top: 12px; }
+.note { color: var(--muted); font-size: 15px; }
+footer { color: var(--muted); font-size: 14px; display: grid; gap: 4px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<main class="wrap">
+  <header>
+    <span class="eyebrow">TC3D-140 · Buildings spike · KSFO</span>
+    <h1>Better-looking OSM buildings</h1>
+    <p class="lede">The same OpenStreetMap buildings, drawn three ways from the KSFO tower: today's grey boxes, a facade shader on the existing tiles, and buildings regenerated from your local OSM planet with real roofs.</p>
+    <div class="chips"><span class="chip ok">Both approaches work</span><span class="chip ok">Lit windows at night</span><span class="chip warn">Generated area has a visible edge</span></div>
+  </header>
+
+  <div class="glance" role="list">
+    <div role="listitem"><span class="k">Shader</span><span class="v">2–4 days to ship</span><span class="n">Cesium only; no data pipeline</span></div>
+    <div role="listitem"><span class="k">Generated</span><span class="v">2–3 weeks to ship</span><span class="n">Per-airport build and cache; works in any engine</span></div>
+    <div role="listitem"><span class="k">Generated box</span><span class="v">5,442 buildings</span><span class="n">3.5 × 3.5 km, 207,168 triangles, 22.7 MB</span></div>
+    <div role="listitem"><span class="k">Frame cost</span><span class="v">Not measured</span><span class="n">All modes hit the 240 Hz cap on an RTX 4090</span></div>
+  </div>
+
+  <section aria-labelledby="views">
+    <h2 id="views">Views</h2>
+    <p class="note">Switch between the three modes on each picture.</p>
+
+    <article class="view" data-view="1-tower-noon">
+      <h3>From the tower at noon</h3>
+      <div class="switch" role="group" aria-label="Mode for the noon view"></div>
+      <img class="shot" alt="" width="1280" height="720">
+      <div class="notes">
+        <p data-mode="plain">Grey extrusions. The garage roof below the tower fills the lower half.</p>
+        <p data-mode="shader">Window grids, floor lines and roof texture read well. The walls have an olive cast, which comes from the tileset's own lighting and is also in plain mode.</p>
+        <p data-mode="generated">Footprints and heights are right. Terminals get office-style windows instead of glass curtain walls, and the central garage gets windows because OSM tags it only as a building.</p>
+      </div>
+    </article>
+
+    <article class="view" data-view="2-tower-night">
+      <h3>From the tower at night</h3>
+      <div class="switch" role="group" aria-label="Mode for the night view"></div>
+      <img class="shot" alt="" width="1280" height="720">
+      <div class="notes">
+        <p data-mode="plain">Dark boxes.</p>
+        <p data-mode="shader">About a quarter of the windows lit warm, facades dimmed.</p>
+        <p data-mode="generated">Same lit-window treatment on the regenerated buildings.</p>
+      </div>
+    </article>
+
+    <article class="view" data-view="3-west-hills">
+      <h3>West over San Bruno</h3>
+      <div class="switch" role="group" aria-label="Mode for the hills view"></div>
+      <img class="shot" alt="" width="1280" height="720">
+      <div class="notes">
+        <p data-mode="plain">Grey boxes across the residential hills.</p>
+        <p data-mode="shader">Windows on distant houses blur into a khaki texture.</p>
+        <p data-mode="generated">Dense red hipped and gabled roofs inside the generated box. Past 1.75 km it falls back to the grey ion buildings, and the edge shows.</p>
+      </div>
+    </article>
+
+    <article class="view" data-view="4-orbit">
+      <h3>Orbit over the terminals</h3>
+      <div class="switch" role="group" aria-label="Mode for the orbit view"></div>
+      <img class="shot" alt="" width="1280" height="720">
+      <div class="notes">
+        <p data-mode="plain">Grey boxes.</p>
+        <p data-mode="shader">The best daytime look of the three: light concrete roofs and window rows.</p>
+        <p data-mode="generated">Rooftop parts such as elevator cores are modelled; the flat grey roofs look dull.</p>
+      </div>
+    </article>
+  </section>
+
+  <section aria-labelledby="data">
+    <h2 id="data">What the OSM data gives</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Tag (KSFO, ~20 km box)</th><th scope="col">Buildings</th></tr></thead>
+        <tbody>
+          <tr><td>All buildings</td><td class="num">105,600</td></tr>
+          <tr><td>With a height</td><td class="num">4,912</td></tr>
+          <tr><td>With a floor count</td><td class="num">1,081</td></tr>
+          <tr><td>With a roof shape</td><td class="num">141</td></tr>
+          <tr><td>With a roof or wall colour</td><td class="num">23</td></tr>
+          <tr><td>With a roof or wall material</td><td class="num">13</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">Most roofs are inferred. In the generated box: 2,410 gabled, 2,030 hipped, 1,000 flat (parapets above 150 m²), 2 round hangar roofs. Houses get hipped or gabled roofs by a stable hash of their ID.</p>
+  </section>
+
+  <section aria-labelledby="ship">
+    <h2 id="ship">What shipping each would take</h2>
+    <ul>
+      <li><strong>Shader (2–4 days):</strong> move it into the app's building layer, tune the palette and the olive cast, and line floors up with each building's base. Cesium can't pass the building type to a shader as text, so the spike packs it into the style colour.</li>
+      <li><strong>Generated (2–3 weeks):</strong> build per airport at first visit or ahead of time and cache it; take ground height from elevation data instead of a browser page; compress the model (about 5–8× smaller); split it into tiles for distance detail. Facades still need terminal-specific glass and no windows on garages.</li>
+      <li>The two combine: generated buildings near the field, the shader on everything beyond.</li>
+    </ul>
+  </section>
+
+  <details>
+    <summary>What Cesium 1.140 gives a custom shader on these tiles</summary>
+    <ul>
+      <li>Positions and normals in model, world and eye space, and the feature ID per building.</li>
+      <li>Only binary batch-table properties reach the shader (<code>parseBatchTable.js:94/110</code>, <code>MetadataPipelineStage.js:276, 318</code>); text properties such as <code>building</code> never do.</li>
+      <li>The custom shader runs before style colouring (<code>ModelFS.glsl</code> lines 90, 96), so reading the style colour needs <code>selectedFeatureIdStage()</code>.</li>
+      <li>A Y-up glTF loaded with <code>Model.fromGltfAsync</code> needs <code>forwardAxis: Axis.X</code>, or it lands rotated.</li>
+    </ul>
+  </details>
+
+  <footer>
+    <span>Branch <code>spike-osm-buildings</code> at <code>0f8539d</code>. It will not be merged.</span>
+    <span>Data: OpenStreetMap planet of 2026-10-12, © OpenStreetMap contributors (ODbL). Linear: TC3D-140, TC3D-139.</span>
+  </footer>
+</main>
+
+<script>
+var MODES = ['plain', 'shader', 'generated'];
+document.querySelectorAll('.view').forEach(function (view) {
+  var base = view.getAttribute('data-view');
+  var img = view.querySelector('.shot');
+  var group = view.querySelector('.switch');
+  var title = view.querySelector('h3').textContent;
+  function show(mode) {
+    img.src = 'img/' + base + '-' + mode + '.webp';
+    img.alt = title + ', ' + mode + ' mode';
+    group.querySelectorAll('button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.mode === mode)); });
+    view.querySelectorAll('.notes p').forEach(function (p) { p.hidden = p.dataset.mode !== mode; });
+  }
+  MODES.forEach(function (mode) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.textContent = mode; b.dataset.mode = mode;
+    b.addEventListener('click', function () { show(mode); });
+    group.appendChild(b);
+  });
+  show('shader');
+});
+</script>
