@@ -40,9 +40,9 @@ header, section, .view { display: grid; gap: 14px; }
 .switch button { font: 600 14px/1 var(--font-mono); padding: 9px 14px; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
 .switch button + button { border-left: 1px solid var(--line); }
 .switch button[aria-pressed="true"] { background: var(--accent); color: var(--panel); }
-.shot { width: 100%; max-width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); display: block; background: #000; }
+.shot { width: 100%; height: auto; max-width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); display: block; background: #000; }
 .notes { display: grid; gap: 6px; }
-.notes p[hidden] { display: none; }
+[hidden] { display: none !important; }
 .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
 table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
 th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
@@ -80,7 +80,7 @@ footer { color: var(--muted); font-size: 14px; display: grid; gap: 4px; }
     <article class="view" data-view="1-tower-noon">
       <h3>From the tower at noon</h3>
       <div class="switch" role="group" aria-label="Mode for the noon view"></div>
-      <img class="shot" alt="" width="1280" height="720">
+      <img class="shot" data-mode="plain" src="img/1-tower-noon-plain.webp" alt="plain mode" width="1280" height="720"><img class="shot" data-mode="shader" src="img/1-tower-noon-shader.webp" alt="shader mode" width="1280" height="720"><img class="shot" data-mode="generated" src="img/1-tower-noon-generated.webp" alt="generated mode" width="1280" height="720">
       <div class="notes">
         <p data-mode="plain">Grey extrusions. The garage roof below the tower fills the lower half.</p>
         <p data-mode="shader">Window grids, floor lines and roof texture read well. The walls have an olive cast, which comes from the tileset's own lighting and is also in plain mode.</p>
@@ -91,7 +91,7 @@ footer { color: var(--muted); font-size: 14px; display: grid; gap: 4px; }
     <article class="view" data-view="2-tower-night">
       <h3>From the tower at night</h3>
       <div class="switch" role="group" aria-label="Mode for the night view"></div>
-      <img class="shot" alt="" width="1280" height="720">
+      <img class="shot" data-mode="plain" src="img/2-tower-night-plain.webp" alt="plain mode" width="1280" height="720"><img class="shot" data-mode="shader" src="img/2-tower-night-shader.webp" alt="shader mode" width="1280" height="720"><img class="shot" data-mode="generated" src="img/2-tower-night-generated.webp" alt="generated mode" width="1280" height="720">
       <div class="notes">
         <p data-mode="plain">Dark boxes.</p>
         <p data-mode="shader">About a quarter of the windows lit warm, facades dimmed.</p>
@@ -102,7 +102,7 @@ footer { color: var(--muted); font-size: 14px; display: grid; gap: 4px; }
     <article class="view" data-view="3-west-hills">
       <h3>West over San Bruno</h3>
       <div class="switch" role="group" aria-label="Mode for the hills view"></div>
-      <img class="shot" alt="" width="1280" height="720">
+      <img class="shot" data-mode="plain" src="img/3-west-hills-plain.webp" alt="plain mode" width="1280" height="720"><img class="shot" data-mode="shader" src="img/3-west-hills-shader.webp" alt="shader mode" width="1280" height="720"><img class="shot" data-mode="generated" src="img/3-west-hills-generated.webp" alt="generated mode" width="1280" height="720">
       <div class="notes">
         <p data-mode="plain">Grey boxes across the residential hills.</p>
         <p data-mode="shader">Windows on distant houses blur into a khaki texture.</p>
@@ -113,7 +113,7 @@ footer { color: var(--muted); font-size: 14px; display: grid; gap: 4px; }
     <article class="view" data-view="4-orbit">
       <h3>Orbit over the terminals</h3>
       <div class="switch" role="group" aria-label="Mode for the orbit view"></div>
-      <img class="shot" alt="" width="1280" height="720">
+      <img class="shot" data-mode="plain" src="img/4-orbit-plain.webp" alt="plain mode" width="1280" height="720"><img class="shot" data-mode="shader" src="img/4-orbit-shader.webp" alt="shader mode" width="1280" height="720"><img class="shot" data-mode="generated" src="img/4-orbit-generated.webp" alt="generated mode" width="1280" height="720">
       <div class="notes">
         <p data-mode="plain">Grey boxes.</p>
         <p data-mode="shader">The best daytime look of the three: light concrete roofs and window rows.</p>
@@ -169,12 +169,10 @@ footer { color: var(--muted); font-size: 14px; display: grid; gap: 4px; }
 var MODES = ['plain', 'shader', 'generated'];
 document.querySelectorAll('.view').forEach(function (view) {
   var base = view.getAttribute('data-view');
-  var img = view.querySelector('.shot');
   var group = view.querySelector('.switch');
   var title = view.querySelector('h3').textContent;
   function show(mode) {
-    img.src = 'img/' + base + '-' + mode + '.webp';
-    img.alt = title + ', ' + mode + ' mode';
+    view.querySelectorAll('.shot').forEach(function (im) { im.hidden = im.dataset.mode !== mode; });
     group.querySelectorAll('button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.mode === mode)); });
     view.querySelectorAll('.notes p').forEach(function (p) { p.hidden = p.dataset.mode !== mode; });
   }
