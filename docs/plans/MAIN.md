@@ -4,8 +4,7 @@
 
 ## Do first
 
-- [ ] TC3D-238 Prove the vNAS crate's log-capture test under load — Urgent · vNAS session lifecycle
-- [/] TC3D-230 Run render-only app checks headless, and spike a hidden real-app window · release vNext — High · Cleanup singles
+- [ ] TC3D-244 Spike: keep the desktop app rendering in a hidden window for agent checks · release vNext — High · Cleanup singles
 
 ## Current focus
 
@@ -20,10 +19,9 @@
 
 ### M1 Remove VR (1/1 done)
 
-### M2 Cab, clouds and fog in Cesium (2/12 done)
+### M2 Cab, clouds and fog in Cesium (2/11 done)
 - [ ] TC3D-213 Clouds, fog and cab in Cesium on feat/cesium-weather · release vNext
   - [/] TC3D-146 Draw the tower cab as a Cesium model again · release vNext
-  - [ ] TC3D-147 Tint clouds and fog by sun elevation · release vNext
   - [ ] TC3D-148 Turn the weather stage's knobs into quality presets · release vNext
   - [ ] TC3D-149 Delete the Babylon fog dome and cloud meshes · release vNext
   - [ ] TC3D-150 Measure the weather stage on an iPad and get the owner's look sign-off · release vNext
@@ -90,18 +88,22 @@
 - [ ] TC3D-234 Leave the vNAS crate Disconnected after a failed or cancelled connect
 - [ ] TC3D-239 Notice a closed hub socket while the vNAS crate waits for a session
 - [ ] TC3D-240 Make the host's vNAS unit tests start on this machine
+- [ ] TC3D-245 Put hang guards on the vNAS crate's hub test awaits
 
 ## Aircraft motion model
 
-- [ ] TC3D-52 Aircraft orientation model: bank, rotation and flare
-- [ ] TC3D-50 Ground contact from vNAS height above ground · release vNext
-- [ ] TC3D-51 Treat vNAS silence for a stopped aircraft as parked · release vNext
-- [ ] TC3D-53 Curved VATSIM paths: splines with heading from the path
 - [ ] TC3D-179 Use the terrain under the aircraft as the gear datum in orbit mode with no airport
 - [ ] TC3D-180 Skip VATSIM samples while an aircraft's vNAS data is fresh
 - [ ] TC3D-181 Convert ground elevation to ellipsoid height in label culling
 - [ ] TC3D-189 Held slow airborne first report is drawn on the ground
 - [ ] TC3D-190 Gear height uses the airport elevation, not the sampled terrain
+- [ ] TC3D-241 Aircraft motion on feat/aircraft-motion · release vNext
+  - [/] TC3D-50 Ground contact from vNAS height above ground · release vNext
+  - [ ] TC3D-51 Treat vNAS silence for a stopped aircraft as parked · release vNext
+  - [ ] TC3D-52 Aircraft orientation model: bank, rotation and flare
+  - [ ] TC3D-53 Curved VATSIM paths: splines with heading from the path
+  - [ ] TC3D-246 Check vNAS height above ground live for taxiing aircraft before merging feat/aircraft-motion · release vNext
+- [ ] TC3D-247 Aircraft motion follow-ups from TC3D-50's review
 
 ## Render resolution and Cesium quick wins
 
@@ -181,6 +183,9 @@
 - [ ] TC3D-233 Hide the Cesium ion token field in Settings behind a show button
 - [ ] TC3D-236 Draw tower mods in inset viewports
 - [ ] TC3D-237 Draw aircraft mods, or stop listing them
+- [ ] TC3D-243 Harden the headless dev API's path checks and error paths
+- [ ] TC3D-248 Load tower mod models in browser clients
+- [ ] TC3D-249 Restore the drawn cab when the tower wizard is cancelled
 
 ## Settings drawer
 
