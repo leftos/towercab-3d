@@ -20,7 +20,7 @@ The spike measured no frame cost: every mode hit the 240 Hz cap on the RTX 4090.
 - **Look.** The walls lose the olive tint the spike saw in every mode, including plain, and concrete reads as concrete.
 - **Build.** Both levels. Every `Cesium3DTileset` and `Model` gets a `DynamicEnvironmentMapManager` by default (`Cesium3DTileset.js:849`, `Model.js:399`). Its `groundColor` defaults to `AVERAGE_EARTH_GROUND_COLOR` = `#717145`, an olive (`DynamicEnvironmentMapManager.js:1010`), and walls take half their IBL from that ground hemisphere.
   Pass the colour as `environmentMapOptions` at creation (setting `environmentMapManager.groundColor` afterwards does not rebuild an already computed map). TC3D-161 did this with a neutral grey `#6E6E6E`; deriving the colour from the imagery around the field remains open.
-- **Cost.** Zero per frame; the map is already rebuilt only when the sun moves an hour or the camera moves 1 km (`maximumSecondsDifference`, `maximumPositionEpsilon`).
+- **Cost.** Zero per frame; the map is rebuilt only when its position moves 1 km (`maximumPositionEpsilon`), and on clock changes (`maximumSecondsDifference`) only when `scene.atmosphere.dynamicLighting` is `SUNLIGHT` (`DynamicEnvironmentMapManager.js:876-884`). The app leaves it at the default `NONE` (`Atmosphere.js:124`), so the reflected sky is a sun-overhead sky at every hour; changing that is TC3D-185's to decide.
 - **Measure.** Screenshot A/B only; no frame cost is expected.
 
 ### 2. Distance LOD: window grid fades to the facade's mean tint — rank 2
