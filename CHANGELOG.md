@@ -47,6 +47,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 ### Removed
 - The experimental VR mode and its VR button in the controls bar.
 
+### Fixed
+- vNAS: aircraft no longer linger in Nearby Aircraft after your CRC session ends, and each update arrives once instead of several times.
+
 ## [0.2.0-alpha] - 2026-06-12
 
 ### Highlights

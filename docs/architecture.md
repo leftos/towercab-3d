@@ -475,15 +475,26 @@ vnasStore
 ├─ sessionState: 'disconnected' | 'connecting' | 'connected' | 'waiting'
 ├─ sessionId: string | null
 ├─ lastUpdate: timestamp
+├─ subscribeToFacility(icao): the only subscribe (additive, no replace variant). Concurrent callers for one facility share one in-flight promise (`inFlightSubscribes`), so airport load, session restore and the auto-subscribe effect send one hub subscribe
+├─ handleSessionEnded(): clears the in-flight map, the per-aircraft maps, the facility lists and the session's vNAS timeline observations
 └─ Used by:
      ├─ VnasService (session management)
+     ├─ useVnasEvents (Tauri event listeners; calls handleSessionEnded when the state goes to disconnected, and mirrors the host's `vnas-subscriptions-changed` list)
      └─ TopBar (connection status)
+
+vNAS backend (src-tauri/src/vnas.rs, `vnas` feature)
+├─ Subscribe claims: `try_begin_subscribe` hands out a token per facility, `finish_subscribe` releases only the claim that still owns it, so a subscribe from an ended session cannot clear a newer one's claim
+├─ One event forwarder per `vnas_connect`, started before the connect so no event is missed; a reconnect aborts and awaits the previous forwarder before the new receiver subscribes, so no event is emitted twice; a Lagged receiver logs and carries on
+├─ Status is written by read-modify-write under one lock (`update_status`); a `Disconnected` state drops every subscription and in-flight claim
+└─ Session end (server `HandleSessionEnded` or user disconnect) reaches the frontend as the disconnected state; the crate has already torn the session down (see the crate's docs/ARCHITECTURE.md "Session teardown")
 
 aircraftTimelineStore
 ├─ isOpen: boolean
 ├─ selectedCallsign: string | null
 ├─ snapshots: AircraftSnapshot[]
+├─ dropSourceObservations(source, callsigns?): live playback only. An aircraft the latest VATSIM pilot list still reports (VATSIM polling, list younger than AIRCRAFT_TIMEOUT in constants/aircraft-timeline.ts) keeps its timeline, seeded with a VATSIM observation from that list (`pilotToTimelineEntry` in vatsimStore); otherwise a timeline left empty is removed like removeAircraft, and one holding other sources keeps them
 └─ Used by:
+     ├─ vnasStore (handleSessionEnded drops 'vnas' for all timelines; removeAircraft on a hub disconnect drops it for one)
      └─ AircraftTimelineModal (debug visualization)
 
 updateStore
