@@ -137,22 +137,24 @@ export const DYNAMIC_DELAY_MAX_DECREASE_RATE = 100
  * Maximum rate at which delay can increase (ms per second).
  * Without this, source flips like vNAS→VATSIM (target jumps from ~1.2s to ~15s
  * because the interval window now sees 15s VATSIM gaps) would snap displayTime
- * backwards by ~14s in a single frame. Rate-limiting matches the decrease cap
- * so transitions in either direction look the same.
+ * backwards by ~14s in a single frame. A rising delay plays the aircraft slower
+ * than real time, so it stops guessing ahead instead of jumping; at 500 ms per
+ * second that ~14s catch-up takes about 28s, against about 140s when the rise
+ * matched the 100 ms per second decrease cap.
  */
-export const DYNAMIC_DELAY_MAX_INCREASE_RATE = 100
+export const DYNAMIC_DELAY_MAX_INCREASE_RATE = 500
 
 /**
  * Most elapsed time one delay transition counts (ms). A frame gap longer than this (a hidden tab, a return to
- * live from buffer replay) moves the delay by this much worth of the rate limit, not by the whole gap: at
- * 100 ms per second, 100 ms. Frames at 1 fps or faster ease at the full rate.
+ * live from buffer replay) moves the delay by this much worth of the rate limit, not by the whole gap: 100 ms
+ * when the delay falls, 500 ms when it rises. Frames at 1 fps or faster ease at the full rate.
  */
 export const DYNAMIC_DELAY_MAX_ELAPSED_MS = 1000
 
 /**
  * Amount added to the delay target when extrapolation is detected (ms).
- * The delay rises toward the raised target at DYNAMIC_DELAY_MAX_INCREASE_RATE, so at 100 ms per second the
- * full bump takes 2 s to apply; until then the aircraft may keep extrapolating.
+ * The delay rises toward the raised target at DYNAMIC_DELAY_MAX_INCREASE_RATE, so at 500 ms per second the
+ * full bump takes 0.4 s to apply; until then the aircraft may keep extrapolating.
  */
 export const DYNAMIC_DELAY_EXTRAPOLATION_BUMP_MS = 200
 
