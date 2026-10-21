@@ -4,7 +4,7 @@
 
 ## Current focus
 
-- [ ] TC3D-45 Join a YAAT room as its member, with no CRC session · release vNext
+- [/] TC3D-45 Join a YAAT room as its member, with no CRC session · release vNext
 - [ ] TC3D-65 Phase badge: runway labels at the wrong times and labels lagging the display · release vNext
 - [ ] TC3D-196 A vNAS go-around is labelled Climbing, never Go Around
 
@@ -90,7 +90,7 @@
 - [ ] TC3D-189 Held slow airborne first report is drawn on the ground
 - [ ] TC3D-190 Gear height uses the airport elevation, not the sampled terrain
 - [ ] TC3D-241 Aircraft motion on feat/aircraft-motion · release vNext
-  - [ ] TC3D-51 Treat vNAS silence for a stopped aircraft as parked · release vNext
+  - [/] TC3D-51 Treat vNAS silence for a stopped aircraft as parked · release vNext
   - [ ] TC3D-52 Aircraft orientation model: bank, rotation and flare
   - [ ] TC3D-53 Curved VATSIM paths: splines with heading from the path
   - [ ] TC3D-246 Check vNAS height above ground live for taxiing aircraft before merging feat/aircraft-motion · release vNext
@@ -180,7 +180,8 @@
 - [ ] TC3D-237 Draw aircraft mods, or stop listing them
 - [ ] TC3D-243 Harden the headless dev API's path checks and error paths
 - [ ] TC3D-249 Restore the drawn cab when the tower wizard is cancelled
-- [ ] TC3D-254 Check-build switch: cargo check, clippy and test without dist/ or the converter exe · release vNext
+- [ ] TC3D-255 vNAS popover: Environment label renders at 16px white, unstyled
+- [ ] TC3D-256 FSLTL converter fails on AIG models with many liveries: texture-folder argument too long
 
 ## Settings drawer
 
