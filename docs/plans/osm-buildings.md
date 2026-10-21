@@ -19,7 +19,7 @@ The spike measured no frame cost: every mode hit the 240 Hz cap on the RTX 4090.
 ### 1. Neutral environment-map ground colour (fixes the olive cast) — own idea, rank 1
 - **Look.** The walls lose the olive tint the spike saw in every mode, including plain, and concrete reads as concrete.
 - **Build.** Both levels. Every `Cesium3DTileset` and `Model` gets a `DynamicEnvironmentMapManager` by default (`Cesium3DTileset.js:849`, `Model.js:399`). Its `groundColor` defaults to `AVERAGE_EARTH_GROUND_COLOR` = `#717145`, an olive (`DynamicEnvironmentMapManager.js:1010`), and walls take half their IBL from that ground hemisphere.
-  Set `tileset.environmentMapManager.groundColor` (and `groundAlbedo`) to an airport grey, or derive it from the imagery colour around the field. This is a hypothesis: confirm with one A/B.
+  Pass the colour as `environmentMapOptions` at creation (setting `environmentMapManager.groundColor` afterwards does not rebuild an already computed map). TC3D-161 did this with a neutral grey `#6E6E6E`; deriving the colour from the imagery around the field remains open.
 - **Cost.** Zero per frame; the map is already rebuilt only when the sun moves an hour or the camera moves 1 km (`maximumSecondsDifference`, `maximumPositionEpsilon`).
 - **Measure.** Screenshot A/B only; no frame cost is expected.
 

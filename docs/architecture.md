@@ -542,6 +542,10 @@ requestAnimationFrame
     └─ performanceMonitor.endFrame()
 ```
 
+### Environment-Map Lighting
+
+Cesium lights OSM buildings and aircraft models from a dynamic environment map whose ground hemisphere defaults to an olive. TowerCab 3D passes a neutral grey instead, as `environmentMapOptions` at creation (setting `groundColor` afterwards does not rebuild a computed map). The colour is `ENVIRONMENT_MAP_GROUND_COLOR` in `constants/lighting.ts`, wrapped by `neutralEnvironmentMapOptions()` in `utils/environmentMap.ts`. Creation sites: `createOsmBuildingsAsync` in `CesiumViewer.tsx`, `Model.fromGltfAsync` in `useCesiumViewer.ts` and `useAircraftModels.ts`, and `ModelPreviewModal.tsx`. A new tileset or model creation site must pass the same options.
+
 ### Coordinate Transform Pipeline
 
 ```

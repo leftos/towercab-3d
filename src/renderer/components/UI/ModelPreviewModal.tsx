@@ -2,6 +2,7 @@ import * as Cesium from 'cesium'
 import { useEffect, useRef, useState } from 'react'
 import type { ModelInfo } from '../../services/AircraftModelService'
 import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
+import { neutralEnvironmentMapOptions } from '../../utils/environmentMap'
 import './ModelPreviewModal.css'
 
 interface ModelPreviewModalProps {
@@ -100,6 +101,7 @@ export function ModelPreviewModal({ modelInfo, onClose }: ModelPreviewModalProps
       url: modelInfo.modelUrl,
       show: true,
       shadows: Cesium.ShadowMode.DISABLED,
+      environmentMapOptions: neutralEnvironmentMapOptions(),
     })
       .then((model: Cesium.Model) => {
         if (!viewer || viewer.isDestroyed()) return

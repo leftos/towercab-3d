@@ -15,6 +15,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import type { ViewMode } from '../types'
 import type { SerializedModelInfo } from '../types/shared-worker'
 import type { InterpolatedAircraftState } from '../types/vatsim'
+import { neutralEnvironmentMapOptions } from '../utils/environmentMap'
 import {
   applyGearAnimation,
   clearGearState,
@@ -378,6 +379,7 @@ export function useAircraftModels(
               color: modelColor,
               colorBlendMode: Cesium.ColorBlendMode.MIX,
               colorBlendAmount: blendAmount,
+              environmentMapOptions: neutralEnvironmentMapOptions(),
               gltfCallback: (gltf) => {
                 // Capture animation count from parsed glTF
                 const animCount = gltf.animations?.length ?? 0

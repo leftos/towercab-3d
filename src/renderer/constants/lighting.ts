@@ -107,3 +107,14 @@ export const SUN_POSITION_UPDATE_INTERVAL = 30000 // 30 seconds
  * particle systems are recreated with pre-warming
  */
 export const PARTICLE_PREWARM_JUMP_THRESHOLD = 500
+
+// =============================================================================
+// Cesium Environment Map
+// =============================================================================
+
+/**
+ * CSS colour used as the ground colour of Cesium's dynamic environment map
+ * A neutral grey with the same luminance as Cesium's olive default (#717145),
+ * so image-based lighting keeps its brightness without tinting buildings or models
+ */
+export const ENVIRONMENT_MAP_GROUND_COLOR = '#6E6E6E'

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { AIRCRAFT_POOL_SIZE, getModelColorBlendAmount, getModelColorRgb } from '../constants/rendering'
 import type { InsetGraphicsSettings } from '../types/settings'
 import { applyCesiumDebugPatch } from '../utils/cesiumDebugPatch'
+import { neutralEnvironmentMapOptions } from '../utils/environmentMap'
 
 export interface CesiumViewerSettings {
   /** Cesium Ion access token for terrain/imagery */
@@ -453,6 +454,7 @@ export function useCesiumViewer(
         color: modelColor,
         colorBlendMode: Cesium.ColorBlendMode.MIX,
         colorBlendAmount: blendAmount,
+        environmentMapOptions: neutralEnvironmentMapOptions(),
       })
         .then((model) => {
           if (newViewer.isDestroyed()) return

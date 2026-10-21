@@ -317,6 +317,8 @@ export {
   BABYLON_NIGHT_FOG_EMISSIVE_MULT,
   // Babylon.js night lighting multipliers
   BABYLON_NIGHT_HEMISPHERIC_MULT,
+  // Cesium environment map
+  ENVIRONMENT_MAP_GROUND_COLOR,
   NIGHT_BRIGHTNESS_CIVIL,
   // Imagery brightness values
   NIGHT_BRIGHTNESS_MIN,

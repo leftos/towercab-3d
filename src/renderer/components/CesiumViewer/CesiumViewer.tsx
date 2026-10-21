@@ -30,6 +30,7 @@ import { useUIFeedbackStore } from '../../stores/uiFeedbackStore'
 import { useVatsimStore } from '../../stores/vatsimStore'
 import { useViewportStore } from '../../stores/viewportStore'
 import { useWeatherStore } from '../../stores/weatherStore'
+import { neutralEnvironmentMapOptions } from '../../utils/environmentMap'
 import { GpuFrameTimer, getRendererInfo } from '../../utils/gpuTimer'
 import { performanceMonitor } from '../../utils/performanceMonitor'
 import { getServiceWorkerCacheStats } from '../../utils/serviceWorkerRegistration'
@@ -696,7 +697,13 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
     const loadBuildings = async () => {
       if (show3DBuildings) {
         try {
-          const tileset = await Cesium.createOsmBuildingsAsync()
+          // Cesium's declaration for createOsmBuildingsAsync lists only its own four options, but
+          // its JSDoc says "Any options allowed by the Cesium3DTileset constructor may be
+          // specified here", and the tileset it builds passes them on to its environment map
+          // manager.
+          const tileset = await Cesium.createOsmBuildingsAsync({
+            environmentMapOptions: neutralEnvironmentMapOptions(),
+          } as unknown as Parameters<typeof Cesium.createOsmBuildingsAsync>[0])
           if (isCancelled) return
 
           // Configure LOD based on buildingQuality setting
