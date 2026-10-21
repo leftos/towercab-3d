@@ -198,7 +198,7 @@ Business logic and external API integrations. Service names indicate purpose: `V
 
 ### Stores (`stores/`) — key callouts
 
-Zustand state management. Most stores are domain-named and self-explanatory (vatsim, vnas, realTraffic, replay, weather, runway, airport, indexing, ui feedback, update, vr, measure, etc.). Browse `src/renderer/stores/` for the full list. A few deserve explicit mention because picking the wrong one is a real footgun:
+Zustand state management. Most stores are domain-named and self-explanatory (vatsim, vnas, realTraffic, replay, weather, runway, airport, indexing, ui feedback, update, measure, etc.). Browse `src/renderer/stores/` for the full list. A few deserve explicit mention because picking the wrong one is a real footgun:
 
 - `viewportStore` — primary camera state for all viewports. There is no `cameraStore`.
 - `settingsStore` (per-browser) vs `globalSettingsStore` (shared across devices via Rust backend) — pick deliberately when adding settings; see "Adding a New Setting".

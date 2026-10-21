@@ -18,12 +18,11 @@ Welcome to TowerCab 3D, a real-time 3D tower visualization tool for VATSIM air t
 12. [Measuring Tool](#measuring-tool)
 13. [Weather Effects](#weather-effects)
 14. [Terrain Flattening](#terrain-flattening)
-15. [VR Support](#vr-support)
-16. [Settings](#settings)
-17. [MSFS Model Support](#msfs-model-support)
-18. [Modding](#modding)
-19. [Keyboard Shortcuts Reference](#keyboard-shortcuts-reference)
-20. [Troubleshooting](#troubleshooting)
+15. [Settings](#settings)
+16. [MSFS Model Support](#msfs-model-support)
+17. [Modding](#modding)
+18. [Keyboard Shortcuts Reference](#keyboard-shortcuts-reference)
+19. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -217,7 +216,6 @@ The bottom bar has two modes, toggled by the button on the far left:
 **Right Section:**
 - **Measure**: Activates distance measuring tool
 - **Add Inset**: Creates a new inset viewport
-- **VR Button**: Enters VR mode (only visible when VR headset detected)
 - **Settings Button**: Opens configuration modal
 
 #### Replay Controls Mode
@@ -776,40 +774,6 @@ Access these settings in **Settings > Graphics & Weather > Terrain**.
 - If aircraft appear to "float" at an airport, the terrain data may not be available for that location
 - Increase blend distance (up to 100m) for smoother transitions at the cost of flattening more surrounding area
 - Decrease blend distance (minimum 25m) for more precise runway boundaries
-
----
-
-## VR Support
-
-TowerCab 3D includes experimental WebXR support for VR headsets.
-
-### Requirements
-
-- VR headset connected via Quest Link, SteamVR, or similar
-- WebXR-compatible browser runtime
-- The VR button only appears when a headset is detected
-
-### Entering VR Mode
-
-1. Connect your VR headset and launch the headset runtime
-2. Look for the **VR** button in the controls bar
-3. Click the button to enter VR mode
-4. UI automatically hides for an immersive experience
-
-### VR Controls
-
-- Look around naturally with head tracking
-- Camera position follows your current tower/airport location
-- Stereo rendering provides depth perception
-
-### Exiting VR Mode
-
-- Remove headset or use the VR runtime's exit function
-- UI returns when VR mode ends
-
-### IPD Configuration
-
-Interpupillary distance (IPD) can be adjusted in settings for proper stereo separation.
 
 ---
 

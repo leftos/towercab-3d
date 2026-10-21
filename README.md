@@ -109,11 +109,6 @@ A 3D tower cab view application for VATSIM air traffic controllers. View real-ti
 - Multiple measurements can be active simultaneously
 - Right-click to remove individual measurements
 
-### VR Support (Experimental)
-- WebXR integration for VR headsets (Quest Link, SteamVR, etc.)
-- Stereo rendering with configurable IPD
-- Immersive tower cab experience
-
 ### Modding Support
 - Custom aircraft 3D models (glTF/GLB format)
 - Custom tower models for specific airports
@@ -296,7 +291,7 @@ towercab-3d/
 | **React 19** | UI framework |
 | **TypeScript 5** | Type-safe development |
 | **CesiumJS 1.136** | 3D globe rendering |
-| **Babylon.js 8** | Screen-space labels, leader lines, weather effects, VR rendering |
+| **Babylon.js 8** | Screen-space labels, leader lines, weather effects |
 | **Zustand 5** | State management |
 | **Vite 7** | Build tool |
 

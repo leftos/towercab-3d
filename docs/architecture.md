@@ -481,14 +481,6 @@ uiFeedbackStore
      ├─ ToastContainer (toast display)
      └─ Various components (show feedback)
 
-vrStore
-├─ isVRSupported: boolean
-├─ isVRActive: boolean
-├─ ipd: number
-└─ Used by:
-     ├─ VRButton (show/hide, session control)
-     └─ VRScene (WebXR session management)
-
 replayStore
 ├─ snapshots: VatsimSnapshot[] (circular buffer, 15s intervals)
 ├─ playbackMode: 'live' | 'replay' | 'imported'
@@ -606,8 +598,7 @@ App.tsx (root)
 │   │   ├─ Timeline scrubber
 │   │   └─ Speed selector
 │   ├─ Settings button (opens SettingsModal)
-│   ├─ Measure button
-│   └─ VR button (when available)
+│   └─ Measure button
 │
 ├─ SettingsModal (tabbed modal container)
 │   ├─ SettingsGeneralTab
@@ -647,12 +638,8 @@ App.tsx (root)
 │   ├─ Bookmark save/load (.XX syntax)
 │   └─ Command history
 │
-├─ MeasuringTool (overlay when active)
-│   └─ Distance measurements on terrain
-│
-└─ VRScene (only when VR active)
-    ├─ Babylon WebXR session
-    └─ Stereo Cesium background planes (left/right eye)
+└─ MeasuringTool (overlay when active)
+    └─ Distance measurements on terrain
 ```
 
 ## UI Component Decomposition
@@ -922,7 +909,6 @@ src/renderer/
 │   ├─ vatsimStore.ts
 │   ├─ viewportStore.ts (PRIMARY CAMERA STORE)
 │   ├─ vnasStore.ts (vNAS connection state)
-│   ├─ vrStore.ts
 │   └─ weatherStore.ts
 │
 ├─ services/

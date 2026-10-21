@@ -27,7 +27,6 @@ import UpdateNotification from './components/UI/UpdateNotification'
 import { VnasPanel } from './components/UI/VnasPanel'
 import { WeatherDebugPanel } from './components/UI/WeatherDebugPanel'
 import ViewportManager from './components/Viewport/ViewportManager'
-import VRScene from './components/VR/VRScene'
 import { useAircraftInterpolation } from './hooks/useAircraftInterpolation'
 import { useAirportSyncListener } from './hooks/useAirportSyncListener'
 import { usePresenceWebSocket } from './hooks/usePresenceWebSocket'
@@ -55,7 +54,6 @@ import { useVatsimStore } from './stores/vatsimStore'
 import { flushPendingGlobalSync } from './stores/viewport'
 import { useViewportStore } from './stores/viewportStore'
 import { useVnasStore } from './stores/vnasStore'
-import { useVRStore } from './stores/vrStore'
 import { useWeatherStore } from './stores/weatherStore'
 import { stopFileLogging } from './utils/fileLogger'
 import { isRemoteMode } from './utils/remoteMode'
@@ -87,10 +85,6 @@ function App() {
   const startNearestAutoRefresh = useWeatherStore((state) => state.startNearestAutoRefresh)
   const stopAutoRefresh = useWeatherStore((state) => state.stopAutoRefresh)
   const clearWeather = useWeatherStore((state) => state.clearWeather)
-
-  // VR state
-  const isVRActive = useVRStore((state) => state.isVRActive)
-  const checkVRSupport = useVRStore((state) => state.checkVRSupport)
 
   // Bookmark shortcuts
   const loadBookmark = useViewportStore((state) => state.loadBookmark)
@@ -133,7 +127,7 @@ function App() {
     [loadingSteps.length],
   )
 
-  // Track Cesium viewer for VR integration
+  // Track Cesium viewer for the measuring tool
   const [cesiumViewer, setCesiumViewer] = useState<Viewer | null>(null)
 
   // Debug overlays (from store, accessible by touch controls)
@@ -287,7 +281,6 @@ function App() {
 
         // Step 7: Finalize
         updateProgress(7, 0, 'Finalizing...')
-        checkVRSupport()
         updateProgress(7, 100, 'Ready')
 
         setIsLoading(false)
@@ -317,7 +310,7 @@ function App() {
         })
       }
     }
-  }, [startPolling, loadAirports, checkVRSupport, updateProgress])
+  }, [startPolling, loadAirports, updateProgress])
 
   // Auto-select airport from URL params in remote browser mode (e.g., /?airport=KJFK&bookmark=3)
   const selectAirport = useAirportStore((state) => state.selectAirport)
@@ -614,20 +607,16 @@ function App() {
 
   return (
     <div className="app">
-      {/* VR Scene - renders when VR is active */}
-      <VRScene cesiumViewer={cesiumViewer} />
-
-      {/* Hide normal UI when VR is active */}
-      {!isVRActive && <TopBar onCommandClick={() => setShowTouchCommand(true)} onHelpClick={openCheatsheet} />}
-      {!isVRActive && <UpdateNotification />}
-      {!isVRActive && <MetarOverlay />}
-      {!isVRActive && <MagnificationIndicator />}
-      {!isVRActive && <DataLoadingOverlay />}
-      {!isVRActive && <TowerPositioningOverlay />}
+      <TopBar onCommandClick={() => setShowTouchCommand(true)} onHelpClick={openCheatsheet} />
+      <UpdateNotification />
+      <MetarOverlay />
+      <MagnificationIndicator />
+      <DataLoadingOverlay />
+      <TowerPositioningOverlay />
       <div className="main-content">
         <ViewportManager mainViewportContent={<CesiumViewer onViewerReady={handleViewerReady} />}>
-          {!isVRActive && <CommandInput />}
-          {!isVRActive && (currentAirport || followingCallsign) && (
+          <CommandInput />
+          {(currentAirport || followingCallsign) && (
             <>
               <AircraftPanel />
               <AircraftPanelDock />
@@ -635,19 +624,17 @@ function App() {
           )}
         </ViewportManager>
       </div>
-      {!isVRActive && <ControlsBar />}
-      {!isVRActive && <TouchControls />}
+      <ControlsBar />
+      <TouchControls />
       {/* Touch command input modal - shown on mobile when Cmd button clicked */}
-      {!isVRActive && <TouchCommandInput isOpen={showTouchCommand} onClose={() => setShowTouchCommand(false)} />}
-      {!isVRActive && import.meta.env.DEV && <WeatherDebugPanel />}
-      {!isVRActive && import.meta.env.DEV && <VnasPanel />}
-      {!isVRActive && <AirportSelector />}
-      {!isVRActive && <MeasuringTool cesiumViewer={cesiumViewer} />}
+      <TouchCommandInput isOpen={showTouchCommand} onClose={() => setShowTouchCommand(false)} />
+      {import.meta.env.DEV && <WeatherDebugPanel />}
+      {import.meta.env.DEV && <VnasPanel />}
+      <AirportSelector />
+      <MeasuringTool cesiumViewer={cesiumViewer} />
       <PerformanceHUD visible={showPerformanceHUD} />
-      {!isVRActive && showModelMatchingModal && <ModelMatchingModal onClose={() => setShowModelMatchingModal(false)} />}
-      {!isVRActive && showTimelineDebugModal && (
-        <AircraftTimelineModal onClose={() => setShowTimelineDebugModal(false)} />
-      )}
+      {showModelMatchingModal && <ModelMatchingModal onClose={() => setShowModelMatchingModal(false)} />}
+      {showTimelineDebugModal && <AircraftTimelineModal onClose={() => setShowTimelineDebugModal(false)} />}
       <MSFSIndexingModal />
 
       {showTokenPrompt && (
@@ -661,14 +648,14 @@ function App() {
       )}
 
       {/* Device Optimization Prompt for touch devices */}
-      {!isVRActive && <DeviceOptimizationPrompt />}
+      <DeviceOptimizationPrompt />
 
       {/* Touch onboarding (auto-shown after device prompt is dismissed) */}
-      {!isVRActive && <TouchOnboarding />}
+      <TouchOnboarding />
 
       {/* Keyboard cheatsheet (? key or TopBar help button) */}
-      {!isVRActive && <KeyboardCheatsheet isOpen={showCheatsheet} onClose={() => setShowCheatsheet(false)} />}
-      {!isVRActive && <KeyboardCheatsheetTip onShow={openCheatsheet} />}
+      <KeyboardCheatsheet isOpen={showCheatsheet} onClose={() => setShowCheatsheet(false)} />
+      <KeyboardCheatsheetTip onShow={openCheatsheet} />
     </div>
   )
 }

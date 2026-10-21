@@ -35,9 +35,8 @@ Continue tabbing forward from TopBar. Expected order through controls-left:
 5. Measuring tool button.
 6. Bookmark manager button (hidden below mobile breakpoint).
 7. Add inset viewport button (hidden below mobile breakpoint).
-8. VR button.
-9. Settings button.
-10. Exit airport button.
+8. Settings button.
+9. Exit airport button.
 
 Verify each `<button>` is reachable and shows the focus outline. Press `Enter` or `Space` on the Defaults dropdown — the menu opens.
 

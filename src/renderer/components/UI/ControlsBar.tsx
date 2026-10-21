@@ -12,7 +12,6 @@ import type { RunwayEnd } from '../../types'
 import { calculateShareable2dPosition, calculateShareable3dPosition } from '../../utils/cameraGeometry'
 import { modApi } from '../../utils/tauriApi'
 import { hasViewingContext } from '../../utils/viewingContext'
-import VRButton from '../VR/VRButton'
 import BookmarkManagerModal from './BookmarkManagerModal'
 import ContributeDialog, { type ContributeDialogData } from './ContributeDialog'
 import ExportWizardModal from './ExportWizardModal'
@@ -786,10 +785,6 @@ function ControlsBar() {
                 </svg>
                 {insetCount > 0 && <span className="inset-count">{insetCount}</span>}
               </button>
-
-              <span className="hide-on-mobile">
-                <VRButton />
-              </span>
 
               {/* Right MoreMenu for small screens - groups hidden right-side buttons */}
               <MoreMenu

@@ -11,6 +11,9 @@ All notable changes to TowerCab 3D will be documented in this file.
 ### Fixed
 - Datablocks on iPads and other high-resolution screens now sit on their aircraft at full size, instead of half size and in the wrong place.
 
+### Removed
+- The experimental VR mode and its VR button in the controls bar.
+
 ## [0.2.0-alpha] - 2026-06-12
 
 ### Highlights
