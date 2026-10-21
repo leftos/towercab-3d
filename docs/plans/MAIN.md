@@ -4,15 +4,14 @@
 
 ## Do first
 
-- [/] TC3D-160 Keep every request-built server path inside its root · release vNext — Urgent · Cleanup singles
-- [ ] TC3D-129 Stop the remote server returning every stored secret; fix its docs · release vNext — High · Cleanup singles
+- [/] TC3D-129 Stop the remote server returning every stored secret; fix its docs · release vNext — High · Cleanup singles
 
 ## Current focus
 
 - [ ] TC3D-54 Animate spoilers, reversers and wheels after native gear animation · release vNext
-- [ ] TC3D-49 Fix the one-site aircraft-motion bugs · release vNext
 - [ ] TC3D-45 Join a YAAT room as its member, with no CRC session · release vNext
 - [ ] TC3D-65 Phase badge: runway labels at the wrong times and labels lagging the display · release vNext
+- [ ] TC3D-196 A vNAS go-around is labelled Climbing, never Go Around
 
 ## Babylon to Cesium migration
 
@@ -55,8 +54,7 @@
 
 ## OSM buildings
 
-### B1 Shader on the ion tiles (1/7 done)
-- [ ] TC3D-162 Fade facade windows to a flat tint with distance · release vNext
+### B1 Shader on the ion tiles (2/7 done)
 - [ ] TC3D-163 Vary building colour per building from a stable hash · release vNext
 - [ ] TC3D-164 Draw type-aware facades from class and levels packed into the style colour · release vNext
 - [ ] TC3D-165 Draw curtain-wall glass on terminals through Cesium's reflections · release vNext
@@ -89,19 +87,19 @@
 ## Aircraft motion model
 
 - [ ] TC3D-52 Aircraft orientation model: bank, rotation and flare
-- [ ] TC3D-50 Ground contact from vNAS height above ground
+- [ ] TC3D-50 Ground contact from vNAS height above ground · release vNext
 - [ ] TC3D-51 Treat vNAS silence for a stopped aircraft as parked
 - [ ] TC3D-53 Curved VATSIM paths: splines with heading from the path
 - [ ] TC3D-179 Use the terrain under the aircraft as the gear datum in orbit mode with no airport
 - [ ] TC3D-180 Skip VATSIM samples while an aircraft's vNAS data is fresh
 - [ ] TC3D-181 Convert ground elevation to ellipsoid height in label culling
-- [ ] TC3D-188 Judge the display delay after an aircraft loses vNAS: 170 s of extrapolation at 100 ms/s · release vNext
 - [ ] TC3D-189 Held slow airborne first report is drawn on the ground
 - [ ] TC3D-190 Gear height uses the airport elevation, not the sampled terrain
 
 ## Cesium 1.145 and shadow darkness
 
 - [ ] TC3D-9 Cesium 1.145 and shadow darkness (A1.1–A1.6, B1) · release vNext
+  - [ ] TC3D-199 Merge feat/cesium-1.145 to main (#260)
 
 ## Render resolution and Cesium quick wins
 
@@ -165,6 +163,19 @@
 - [ ] TC3D-176 Stop /api/realtraffic/* working as an open proxy
 - [ ] TC3D-178 Share the validated tower and diagnostic path builders between IPC and HTTP
 - [ ] TC3D-187 Tidy the remote server's path checks: TOCTOU, empty segments, blocking calls, log flooding
+- [ ] TC3D-195 Perf HUD tiles-loading counter reads a Cesium field that does not exist
+- [ ] TC3D-197 Let several dev copies of the app run side by side, one per worktree
+- [ ] TC3D-198 GPU timer in __tc3d.perf() stops updating after its first results
+- [ ] TC3D-200 Runways with no end elevation are flattened to sea level
+- [ ] TC3D-201 Taxiway-to-runway ramp never runs, leaving a cliff at runway edges
+- [ ] TC3D-202 Airport fill polygon flattens whole valleys and hills
+- [ ] TC3D-203 Ground aircraft height disagrees with the drawn flattened ground
+- [ ] TC3D-204 Flattening tile cache reuses tile objects Cesium already freed
+- [ ] TC3D-205 Flattened tiles keep the server's bounding box and horizon point
+- [ ] TC3D-206 Changing flattening polygons does not reload tiles on screen
+- [ ] TC3D-207 apt.dat pavement extractor drops pavements and turns taxi lines into holes
+- [ ] TC3D-208 Runways flattened as a straight line between thresholds miss mid-runway terrain
+- [ ] TC3D-209 Terrain flattening e2e script compares flattened against flattened
 
 ## Settings drawer
 
@@ -236,3 +247,4 @@
 - [ ] TC3D-139 Design better-looking OSM buildings: restyle, facade shader or regenerated geometry · release vNext
 - [ ] TC3D-159 Design VR on Cesium through WebXR
 - [ ] TC3D-185 Design night and dusk lighting that follows natural light across the whole scene · release vNext
+- [ ] TC3D-210 Decide: fix the terrain flattening or replace it with the greenfield design
