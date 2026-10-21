@@ -135,7 +135,9 @@ The optional `vnas` feature enables 1Hz real-time aircraft updates via the priva
 - Server-initiated callbacks (HandleSessionStarted) for session management
 - Ground track field for accurate aircraft extrapolation
 - WaitingForSession state when TC3D connects before CRC
-- Environments: Live, Sweatbox 1/2, Test, and two YAAT training servers (`yaat1`, `yaatlocal`; URLs and the YAAT *direct connection* in the crate's `CLAUDE.md` "Environment URLs"). YAAT has no UDP. YAAT1 signs in with VATSIM like Live; YAAT Local (`vnas_yaat_local_sign_in`) uses the dev server's `/vnas/auth/dev-login` with the stored login's CID or a typed one, and is offered only while `vnas_probe_yaat_local` finds a dev server at the configured URL
+- Environments: Live, Sweatbox 1/2, Test, and two YAAT training servers (`yaat1`, `yaatlocal`; URLs in the crate's `CLAUDE.md` "Environment URLs"). YAAT joins by negotiate like vNAS and has UDP too: from the hub's host, on the port `GetServerConfiguration` returns.
+
+  YAAT1 signs in with VATSIM like Live; YAAT Local (`vnas_yaat_local_sign_in`) uses the dev server's `/vnas/auth/dev-login` with the stored login's CID or a typed one, and is offered only while `vnas_probe_yaat_local` finds a dev server at the configured URL
 
 **Note:** The `pnpm run build` command automatically runs `build:converter` to create the FSLTL model converter executable. This requires Python 3 with Pillow installed. PyInstaller is auto-installed if missing.
 

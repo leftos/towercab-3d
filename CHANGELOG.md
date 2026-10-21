@@ -6,7 +6,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ### Added
 - New **Show Moon** setting under Settings → Graphics lets you hide the moon from the sky.
-- vNAS can join your CRC session on a YAAT training server: YAAT1, or YAAT Local when a local YAAT server is running.
+- vNAS can join your CRC session on a YAAT training server: YAAT1, or YAAT Local when a local YAAT server is running, with once-a-second aircraft updates as on live vNAS.
 - 3D buildings now show rows of windows on their walls, some of them lit at night.
 - New **Weather quality** setting (Low, Medium, High) under Settings → Graphics; iPads and phones start lower, and small insets step down.
 - New **About** tab in Settings shows the app version and the credits for the map, terrain, imagery and 3D building data in use.
@@ -43,12 +43,11 @@ All notable changes to TowerCab 3D will be documented in this file.
 - FSLTL and AIG liveries whose names contain dashes, slashes or other symbols now convert; every converted model converts again once after updating.
 - vNAS no longer disconnects when it receives aircraft data it cannot read that contains non-English characters.
 - An overcast now reaches the horizon and meets the distant haze in one grey, and broken layers beneath it no longer show bright horizon streaks.
+- vNAS no longer writes your sign-in tokens into the log file or into connection error messages.
+- vNAS: aircraft no longer linger in Nearby Aircraft after your CRC session ends, and each update arrives once instead of several times.
 
 ### Removed
 - The experimental VR mode and its VR button in the controls bar.
-
-### Fixed
-- vNAS: aircraft no longer linger in Nearby Aircraft after your CRC session ends, and each update arrives once instead of several times.
 
 ## [0.2.0-alpha] - 2026-06-12
 
