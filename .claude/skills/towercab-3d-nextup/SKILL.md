@@ -38,7 +38,8 @@ linear: towercab-3d
 
 ## Traps
 
-- Every cargo command fails in the Tauri build script until `dist/` exists (`glob pattern ../dist/**/* path not found`): run `pnpm run vite:build` once per fresh checkout or worktree, after `pnpm install --frozen-lockfile`.
+- Every cargo command fails in the Tauri build script until `dist/` exists (`glob pattern ../dist/**/* path not found`): run `pnpm run vite:build` once per fresh checkout or worktree, after `pnpm install --frozen-lockfile`. It also fails on `resource path resources\fsltl_converter.exe doesn't exist` (a gitignored build output): copy it from the main checkout's `src-tauri/resources/` into the worktree's.
+- The host's `cargo test --features vnas` binary does not start on this machine (`0xc0000139`, TC3D-240): host tests under `cfg(feature = "vnas")` cannot be run locally until that is fixed; say so in the report rather than retrying.
 - A `vnas.js` run that is killed (a stopped `pnpm run dev:vnas`) skips its `Cargo.lock` restore: check the diff is only the crate's dependencies, then `git checkout -- src-tauri/Cargo.lock`. `Cargo.lock` never lands carrying the private crate.
 - `cargo fmt` over the whole crate rewrites `lib.rs`, `mods.rs`, `msfs.rs` and `server.rs`, which are unformatted at HEAD (backlogged): format only the files the item touches (`rustfmt --edition 2021 <file>`).
 - `msfs::tests::test_aig_crj200_indexing_with_shared_model` reads the machine's MSFS Community folder and fails on this machine (backlogged); a red result there alone is not the item's.
