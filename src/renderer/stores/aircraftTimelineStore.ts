@@ -27,6 +27,7 @@
 import { create } from 'zustand'
 import {
   AIRCRAFT_TIMEOUT,
+  CONTACT_EXIT_HEIGHT_METERS,
   DYNAMIC_DELAY_EXTRAPOLATION_BUMP_MS,
   DYNAMIC_DELAY_EXTRAPOLATION_DECAY_RATE,
   DYNAMIC_DELAY_INTERVAL_WINDOW,
@@ -37,15 +38,21 @@ import {
   DYNAMIC_DELAY_MAX_MS,
   DYNAMIC_DELAY_MIN_MS,
   DYNAMIC_DELAY_MIN_OBSERVATIONS,
+  FEET_TO_METERS,
+  GROUNDSPEED_THRESHOLD_KNOTS,
   MAX_EXTRAPOLATION_TIME,
   MAX_OBSERVATION_AGE_MS,
   MAX_OBSERVATIONS_PER_AIRCRAFT,
   MIN_OBSERVATION_INTERVAL,
   PRUNE_INTERVAL,
   SOURCE_DISPLAY_DELAYS,
+  STOPPED_SPEED_KTS,
+  VNAS_PARKED_GAP_MS,
   VNAS_PREFERENCE_THRESHOLD_MS,
-} from '../constants/aircraft-timeline'
-import { GROUNDSPEED_THRESHOLD_KNOTS } from '../constants/rendering'
+  VNAS_STOP_WINDOW_MS,
+} from '@/constants'
+import { haversineDistanceFt } from '@/utils/aircraft/geoMath'
+import { knotsToMps, mpsToKnots } from '@/utils/coordinates'
 import type {
   AircraftMetadata,
   AircraftObservation,
@@ -321,7 +328,7 @@ function extrapolatePosition(
   const seconds = extrapolationTimeMs / 1000
   const minutes = seconds / 60
   const track = obs.groundTrack ?? obs.heading
-  const speedMps = obs.groundspeed * 0.514444 // knots to m/s
+  const speedMps = knotsToMps(obs.groundspeed)
   const distance = speedMps * seconds
 
   // Simple flat-earth approximation (accurate for short extrapolations)
@@ -405,13 +412,90 @@ function calculateObservationIntervals(observations: AircraftObservation[], maxI
   const startIdx = Math.max(0, observations.length - maxIntervals - 1)
 
   for (let i = startIdx; i < observations.length - 1; i++) {
-    const interval = observations[i + 1].receivedAt - observations[i].receivedAt
-    if (interval > 0) {
+    const next = observations[i + 1]
+    const interval = next.receivedAt - observations[i].receivedAt
+    const isParkedSilence =
+      interval > VNAS_PARKED_GAP_MS && next.source === 'vnas' && isStoppedVnasSample(observations, i)
+    if (interval > 0 && !isParkedSilence) {
       intervals.push(interval)
     }
   }
 
   return intervals
+}
+
+/** Whether each sample marks a stop, decided once per sample: only the samples before it decide it. */
+const stoppedSampleCache = new WeakMap<AircraftObservation, boolean>()
+
+/**
+ * Whether the sample at `index` is a vNAS sample of an aircraft standing on the ground, so the silence after it is
+ * parking. On the ground takes a height above ground at or below the contact exit height: vNAS's ground flag is the
+ * 50/80 ft label flag, so a sample without a height is never held. Exported for tests.
+ */
+export function isStoppedVnasSample(observations: AircraftObservation[], index: number): boolean {
+  const sample = observations[index]
+  const cached = stoppedSampleCache.get(sample)
+  if (cached !== undefined) return cached
+  const onGround = sample.heightAboveGround !== undefined && sample.heightAboveGround <= CONTACT_EXIT_HEIGHT_METERS
+  const stopped = sample.source === 'vnas' && onGround && hasStopped(observations, sample)
+  stoppedSampleCache.set(sample, stopped)
+  return stopped
+}
+
+/**
+ * Whether a vNAS sample shows the aircraft stopped: its last step is under STOPPED_SPEED_KTS, and so is the step
+ * before it or its speed over the stop window.
+ *
+ * Two slow steps catch a stop that vNAS goes quiet right after; the window catches a creep whose single steps vNAS
+ * repeats. The last step keeps a roll whose window still lags from reading as stopped. Samples are picked by time, not
+ * by their place in the timeline, so a packet received out of order does not decide it.
+ *
+ * Every speed is measured, never taken from the reported groundspeed: a sample with no vNAS sample in the
+ * VNAS_STOP_WINDOW_MS before it is not stopped. The window sample is older than the previous one, so the two slow
+ * measurements always cover two different spans.
+ */
+function hasStopped(observations: AircraftObservation[], sample: AircraftObservation): boolean {
+  const previous = newestVnasSampleIn(observations, sample.observedAt - VNAS_STOP_WINDOW_MS, sample.observedAt - 1)
+  if (!previous || stepSpeedKts(previous, sample) >= STOPPED_SPEED_KTS) return false
+  const beforePrevious = newestVnasSampleIn(
+    observations,
+    previous.observedAt - VNAS_STOP_WINDOW_MS,
+    previous.observedAt - 1,
+  )
+  if (beforePrevious && stepSpeedKts(beforePrevious, previous) < STOPPED_SPEED_KTS) return true
+  const windowStart = newestVnasSampleIn(
+    observations,
+    sample.observedAt - 2 * VNAS_STOP_WINDOW_MS,
+    Math.min(sample.observedAt - VNAS_STOP_WINDOW_MS, previous.observedAt - 1),
+  )
+  return windowStart !== null && stepSpeedKts(windowStart, sample) < STOPPED_SPEED_KTS
+}
+
+/**
+ * Forget the stop decisions of the stored samples observed after a vNAS sample that arrives late, so each is decided
+ * again with it.
+ */
+function forgetStopDecisionsAfter(observations: AircraftObservation[], late: AircraftObservation): void {
+  if (late.source !== 'vnas') return
+  for (const obs of observations) {
+    if (obs.observedAt > late.observedAt) stoppedSampleCache.delete(obs)
+  }
+}
+
+/** The newest vNAS sample observed between `from` and `to` (inclusive, ms), wherever it sits in the timeline. */
+function newestVnasSampleIn(observations: AircraftObservation[], from: number, to: number): AircraftObservation | null {
+  let newest: AircraftObservation | null = null
+  for (const obs of observations) {
+    const inRange = obs.source === 'vnas' && obs.observedAt >= from && obs.observedAt <= to
+    if (inRange && (!newest || obs.observedAt > newest.observedAt)) newest = obs
+  }
+  return newest
+}
+
+/** Speed in knots from `from` to `to` over the time between them. */
+function stepSpeedKts(from: AircraftObservation, to: AircraftObservation): number {
+  const meters = haversineDistanceFt(from.latitude, from.longitude, to.latitude, to.longitude) * FEET_TO_METERS
+  return mpsToKnots(meters / ((to.observedAt - from.observedAt) / 1000))
 }
 
 /**
@@ -1107,13 +1191,8 @@ function interpolateTimeline(
     // This is essential for VATSIM data which doesn't include ground track.
     // Without this, pushback detection fails because track defaults to heading.
     if (groundTrack === null && interval > 0) {
-      // Calculate distance moved in meters (approximate, using equirectangular projection)
-      const latDiff = after.latitude - before.latitude
-      const lonDiff = after.longitude - before.longitude
-      const avgLat = (before.latitude + after.latitude) / 2
-      const latMeters = latDiff * 111320 // 1 degree lat ≈ 111.32 km
-      const lonMeters = lonDiff * 111320 * Math.cos((avgLat * Math.PI) / 180)
-      const distanceMeters = Math.sqrt(latMeters * latMeters + lonMeters * lonMeters)
+      const distanceMeters =
+        haversineDistanceFt(before.latitude, before.longitude, after.latitude, after.longitude) * FEET_TO_METERS
 
       // Require minimum movement to calculate reliable bearing:
       // - At least 3 meters total (exceeds typical GPS noise of 2-5m)
@@ -1154,6 +1233,23 @@ function interpolateTimeline(
     } else {
       verticalRate = null
     }
+  } else if (
+    before &&
+    before === observations[observations.length - 1] &&
+    isStoppedVnasSample(observations, observations.length - 1)
+  ) {
+    // PARKED: vNAS goes silent for an aircraft that stands still, so the silence after a stopped sample (only the
+    // newest observation) is held at that sample, not extrapolated. Report what is drawn: no speed,
+    // no track. Holding is not extrapolation, so it does not bump the display delay.
+    latitude = before.latitude
+    longitude = before.longitude
+    altitude = before.altitude
+    groundspeed = 0
+    groundTrack = null
+    groundFlagSource = before
+    pitch = before.pitch
+    roll = before.roll
+    verticalRate = 0
   } else if (before) {
     // EXTRAPOLATION FORWARD: displayTime is after all observations
     const extrapolationTime = displayTime - before.observedAt
@@ -1173,13 +1269,8 @@ function interpolateTimeline(
       const obsInterval = before.observedAt - prev.observedAt
 
       if (obsInterval > 0) {
-        // Calculate distance moved in meters (approximate, using equirectangular projection)
-        const latDiff = before.latitude - prev.latitude
-        const lonDiff = before.longitude - prev.longitude
-        const avgLat = (prev.latitude + before.latitude) / 2
-        const latMeters = latDiff * 111320
-        const lonMeters = lonDiff * 111320 * Math.cos((avgLat * Math.PI) / 180)
-        const distanceMeters = Math.sqrt(latMeters * latMeters + lonMeters * lonMeters)
+        const distanceMeters =
+          haversineDistanceFt(prev.latitude, prev.longitude, before.latitude, before.longitude) * FEET_TO_METERS
 
         // Same threshold logic as interpolation case
         const intervalSeconds = obsInterval / 1000
@@ -1375,6 +1466,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       }
 
       // Add to existing timeline
+      forgetStopDecisionsAfter(existing.observations, observation)
       observations = [...existing.observations, observation]
 
       // Prune old observations by age (and hard cap)
@@ -1498,6 +1590,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
           continue
         }
 
+        forgetStopDecisionsAfter(existing.observations, observation)
         observations = [...existing.observations, observation]
 
         // Prune old observations by age (and hard cap)

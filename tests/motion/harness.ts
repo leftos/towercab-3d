@@ -96,6 +96,8 @@ export interface FrameRecord {
   gearApp: number
   gearEllipsoidal: number
   displayDelayMs: number
+  /** The delay the display delay is easing toward, from the receive intervals; null without a delay state. */
+  targetDelayMs: number | null
   extrapolating: boolean
 }
 
@@ -380,6 +382,7 @@ function recordFrame(deps: FrameDeps, feed: FeedState, e: AircraftEntry, now: nu
       now,
     ),
     displayDelayMs: ts.displayDelay,
+    targetDelayMs: deps.tl.useAircraftTimelineStore.getState().dynamicDelays.get(e.callsign)?.targetDelayMs ?? null,
     extrapolating: ts.isExtrapolating,
   })
   feed.frames.set(e.callsign, list)

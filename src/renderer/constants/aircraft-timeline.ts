@@ -75,6 +75,28 @@ export const AIRCRAFT_TIMEOUT = 30000 // 30 seconds
  */
 export const VNAS_PREFERENCE_THRESHOLD_MS = 30000 // 30 seconds
 
+/** Ground contact is entered below this height above ground (3 ft) */
+export const CONTACT_ENTER_HEIGHT_METERS = 3 * 0.3048
+
+/** Ground contact is left above this height above ground (5 ft); a stopped vNAS sample at or below it is parked */
+export const CONTACT_EXIT_HEIGHT_METERS = 5 * 0.3048
+
+/**
+ * Span of vNAS samples over which a sample's own speed is measured (ms).
+ *
+ * The speed is the distance from the sample at or just before this long earlier to the sample, over the time
+ * between them. Under STOPPED_SPEED_KTS the sample marks a stop: the silence after it is parking. A span rather
+ * than the last two samples, because vNAS can repeat a position for a moving aircraft.
+ */
+export const VNAS_STOP_WINDOW_MS = 3000 // 3 seconds
+
+/**
+ * Receive interval after a stopped vNAS sample beyond which it is parking silence, not a late sample (ms).
+ *
+ * Such an interval is left out of the display-delay statistics, so a hold does not raise the delay.
+ */
+export const VNAS_PARKED_GAP_MS = 3000 // 3 seconds
+
 /**
  * Minimum time between observations to consider them distinct (ms).
  *
