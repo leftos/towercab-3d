@@ -8,6 +8,16 @@
   :root {
     --bg: #0f1419; --panel: #182029; --line: #2b3742; --text: #e6edf3; --muted: #8b98a5;
     --runway: #39434d; --mark: #c9d1d9; --plane: #f0b429; --ghost: rgba(240, 180, 41, 0.28); --accent: #58a6ff;
+    --warn: #f0883e; --warn-fill: rgba(240, 136, 62, 0.32); --danger: #f85149; --vnas: #3fb950; --vatsim: #bc8cff;
+    --grid: #232d37; --btn: #22303c;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f6f8fa; --panel: #ffffff; --line: #d0d7de; --text: #1f2328; --muted: #57606a;
+      --runway: #d0d7de; --mark: #6e7781; --plane: #b07800; --ghost: rgba(176, 120, 0, 0.3); --accent: #0969da;
+      --warn: #bc4c00; --warn-fill: rgba(188, 76, 0, 0.22); --danger: #cf222e; --vnas: #1a7f37; --vatsim: #8250df;
+      --grid: #eaeef2; --btn: #eef1f4;
+    }
   }
   * { box-sizing: border-box; }
   body { margin: 0; padding: 24px 16px; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, sans-serif; }
@@ -22,6 +32,33 @@
   .readout b { color: var(--plane); }
   canvas { width: 100%; height: 70px; display: block; }
   .legend { color: var(--muted); font-size: 12px; }
+
+  /* After vNAS is lost */
+  .loss { margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--line); }
+  .loss p strong { color: var(--text); font-weight: 600; }
+  .controls { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
+    background: var(--bg); padding: 10px 0; margin-bottom: 12px; border-bottom: 1px solid var(--line); }
+  .controls .grp { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .controls button { font: 600 12px system-ui, sans-serif; color: var(--text); background: var(--btn); border: 1px solid var(--line);
+    border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+  .controls button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+  .controls #play { min-width: 64px; }
+  .controls input[type="range"] { width: 150px; accent-color: var(--accent); }
+  .controls .tl { font: 600 13px ui-monospace, monospace; color: var(--accent); min-width: 96px; }
+  table.summary { border-collapse: collapse; width: 100%; font-size: 13px; margin: 0 0 18px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  table.summary th, table.summary td { padding: 6px 10px; text-align: right; border-bottom: 1px solid var(--line); }
+  table.summary th:first-child, table.summary td:first-child { text-align: left; }
+  table.summary thead th { color: var(--muted); font-weight: 600; font-size: 12px; }
+  table.summary td { font-family: ui-monospace, monospace; white-space: nowrap; }
+  table.summary td:first-child { font-family: inherit; white-space: normal; }
+  table.summary tr:last-child td { border-bottom: none; }
+  .lane canvas.track { height: 66px; }
+  .lane canvas.plot { height: 132px; margin-top: 6px; }
+  .lane .readout .live b { color: var(--accent); }
+  .lane .readout .guess { color: var(--warn); font-weight: 600; }
+  .key { display: inline-flex; align-items: center; gap: 5px; margin-right: 14px; }
+  .sw { display: inline-block; width: 14px; height: 10px; border-radius: 2px; }
 </style>
 </head>
 <body>
@@ -31,6 +68,35 @@
   <div class="clock" id="clock">t = 0.0 s</div>
   <div id="lanes"></div>
   <p class="legend">Solid: the drawn aircraft. Faint: steady-speed reference. Runway marks every 150 m.</p>
+
+  <section class="loss" aria-labelledby="loss-h">
+    <h1 id="loss-h">After vNAS is lost</h1>
+    <p>One aircraft sends vNAS packets every second until <strong>t = 60 s</strong>, then only its VATSIM reports (every 15 s, at 7.4 s past each 15 s mark) reach the app, through t = 300 s. vNAS stays preferred for 30 s after its last packet, so the aircraft is drawn from vNAS data alone until t = 90 s. Each lane replays the store's delay logic (interval window, 150 ms jitter buffer, 200 ms extrapolation bump, reconciliation glide) with one change of rule. <strong>Orange</strong> means the aircraft is drawn ahead of the newest report it uses: the app is guessing from that report's speed, and the guess is corrected when the next report lands.</p>
+
+    <div class="controls" role="group" aria-label="Playback">
+      <button id="play" type="button">Pause</button>
+      <span class="grp">Speed <button type="button" data-speed="1">1x</button><button type="button" data-speed="5">5x</button><button type="button" data-speed="20">20x</button></span>
+      <span class="grp"><input id="scrub" type="range" min="0" max="300" step="0.1" value="0" aria-label="Time"></span>
+      <span class="tl" id="tlabel">t = 0.0 s</span>
+      <span class="grp">Motion <button type="button" data-motion="taxi">Taxi 15 kt</button><button type="button" data-motion="approach">Approach 140 kt</button></span>
+      <span class="grp">D stale <button type="button" data-stale="30">30 s</button><button type="button" data-stale="5">5 s</button></span>
+    </div>
+
+    <table class="summary" id="summary">
+      <thead><tr><th>Option</th><th>Guessing after loss</th><th>Settled after loss</th><th>Snap-back at hand-over<br>taxi / approach</th><th>Largest snap-back later<br>taxi / approach</th><th>Worst guess to hand-over<br>taxi / approach</th><th>Worst guess later<br>taxi / approach</th></tr></thead>
+      <tbody></tbody>
+    </table>
+
+    <div id="lossLanes"></div>
+    <p class="legend">
+      <span class="key"><span class="sw" style="background: var(--plane)"></span>drawn aircraft (orange while guessing)</span>
+      <span class="key"><span class="sw" style="background: var(--ghost)"></span>where it really was at the drawn moment</span>
+      <span class="key"><span class="sw" style="border: 2px solid var(--muted)"></span>where it is now</span>
+      <span class="key"><span class="sw" style="background: var(--vnas)"></span>last vNAS report</span>
+      <span class="key"><span class="sw" style="background: var(--vatsim)"></span>last VATSIM report</span>
+    </p>
+    <p class="legend">Taxi: 15 kt with three stops (slow at 1.5 kt/s from 75 s, 155 s and 245 s, hold 15 s, roll again). Approach: 170 kt slowing at 1 kt/s to 140 kt between 75 s and 105 s, then steady. The window follows the aircraft's present position; taxi marks every 25 m, approach marks every 200 m. Snap-back is the longest run of backward motion of the drawn aircraft; "at hand-over" counts the runs from the moment vNAS is dropped until 2 s after the first VATSIM report from then on (where C's step lands), "later" counts the runs after that. Worst guess is the largest gap between the drawn aircraft and where it really was at the drawn moment. Settled is the last moment after which the aircraft never guesses and its delay stays within 0.1 s of the final value. URL parameters: <code>?t=120</code> (paused at that time), <code>&amp;motion=approach</code>, <code>&amp;stale=5</code>.</p>
+  </section>
 </main>
 <script>
 const KT_TO_MS = 0.514444;
@@ -104,7 +170,7 @@ function drawLane(lane, t) {
 }
 
 const params = new URLSearchParams(location.search);
-const fixedT = params.has('t') ? Number(params.get('t')) : null;
+const fixedT = params.has('t') ? Number(params.get('t')) % LOOP_S : null;
 const t0 = performance.now();
 function frame(now) {
   const t = fixedT ?? ((now - t0) / 1000) % LOOP_S;
@@ -113,6 +179,460 @@ function frame(now) {
   if (fixedT === null) requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+</script>
+<script>
+// ---------------------------------------------------------------------------------------------
+// After vNAS is lost: a replay of aircraftTimelineStore's display-delay logic, in one dimension.
+// Constants mirror src/renderer/constants/aircraft-timeline.ts.
+// ---------------------------------------------------------------------------------------------
+(() => {
+  const KT = 0.514444;
+  const K = {
+    jitter: 150, min: 150, max: 20000, window: 5, minObs: 3, bump: 200, bumpDecay: 100,
+    maxElapsed: 1000, preference: 30000, maxExtrap: 30000, sourceDelay: { vnas: 1500, vatsim: 17000 },
+  };
+  const SIM_START_MS = -20000;
+  const SIM_END_MS = 300000;
+  const FPS = 30;
+  const FRAME_MS = 1000 / FPS;
+  const LOSS_MS = 60000;
+  const VATSIM_PHASE_MS = 7400;
+  const VATSIM_PERIOD_MS = 15000;
+  const SETTLE_TOLERANCE_MS = 100;
+
+  const MOTIONS = {
+    taxi: {
+      keys: [[-20, 15], [75, 15], [85, 0], [100, 0], [110, 15], [155, 15], [165, 0], [180, 0], [190, 15],
+        [245, 15], [255, 0], [270, 0], [280, 15], [300, 15]],
+      behind: 170, ahead: 50, tick: 25,
+    },
+    approach: { keys: [[-20, 170], [75, 170], [105, 140], [300, 140]], behind: 1700, ahead: 400, tick: 200 },
+  };
+
+  const OPTIONS = [
+    { id: 'A', title: 'A. Keep 100 ms/s both ways (today)', inc: 100, dec: 100, step: false, stale: null,
+      sub: 'The target rises to 15.15 s at the first VATSIM report after vNAS preference ends; the delay climbs to it at 100 ms per second, so the aircraft keeps being drawn ahead of its newest report for most of each 15 s cycle.' },
+    { id: 'B', title: 'B. Ease down at 100 ms/s, up at 500 ms/s', inc: 500, dec: 100, step: false, stale: null,
+      sub: 'Same trigger as A; the climb is five times faster, so the aircraft plays at 0.5x for about 28 s instead of guessing. Regaining vNAS still eases down at 100 ms/s.' },
+    { id: 'C', title: 'C. Step the delay when the source changes', inc: 100, dec: 100, step: true, stale: null,
+      sub: 'Same trigger as A; at that report the delay jumps straight to 15.15 s. One snap back to the older reports, then every frame is between two reports.' },
+    { id: 'D', title: 'D. Recompute the target as soon as vNAS is stale', inc: 100, dec: 100, step: false, stale: 30,
+      sub: 'The target becomes VATSIM’s 15.15 s the moment vNAS is stale (the toggle above sets when), not at the next VATSIM report; the climb is still 100 ms per second.' },
+  ];
+
+  // ---- truth -------------------------------------------------------------------------------
+  function speedKt(motion, ts) {
+    const k = MOTIONS[motion].keys;
+    for (let i = 0; i < k.length - 1; i++) {
+      if (ts <= k[i + 1][0]) {
+        const f = (ts - k[i][0]) / (k[i + 1][0] - k[i][0]);
+        return k[i][1] + (k[i + 1][1] - k[i][1]) * Math.max(0, f);
+      }
+    }
+    return k[k.length - 1][1];
+  }
+  function positionM(motion, ts) {
+    const k = MOTIONS[motion].keys;
+    let s = 0;
+    for (let i = 0; i < k.length - 1 && ts > k[i][0]; i++) {
+      const t1 = Math.min(ts, k[i + 1][0]);
+      s += ((speedKt(motion, k[i][0]) + speedKt(motion, t1)) / 2) * KT * (t1 - k[i][0]);
+    }
+    return s;
+  }
+
+  // ---- report schedule ---------------------------------------------------------------------
+  const EVENTS = [];
+  for (let s = SIM_START_MS; s <= LOSS_MS; s += 1000) EVENTS.push({ t: s, src: 'vnas' });
+  for (let s = VATSIM_PHASE_MS - 2 * VATSIM_PERIOD_MS; s <= SIM_END_MS; s += VATSIM_PERIOD_MS) {
+    if (s >= SIM_START_MS) EVENTS.push({ t: s, src: 'vatsim' });
+  }
+  EVENTS.sort((a, b) => a.t - b.t);
+
+  // ---- store logic -------------------------------------------------------------------------
+  function staleAfter(cfg) { return cfg.stale === null ? K.preference : cfg.stale * 1000; }
+  function vnasOf(obs) { return obs.filter((o) => o.src === 'vnas'); }
+  function isVnasStale(obs, now, cfg) {
+    const v = vnasOf(obs);
+    return v.length >= 2 && now - v[v.length - 1].t >= staleAfter(cfg);
+  }
+  // filterObservationsForSource, with the staleness window of the option.
+  function filterObs(obs, now, cfg) {
+    const v = vnasOf(obs);
+    if (v.length < 2) return obs;
+    if (now - v[v.length - 1].t >= staleAfter(cfg)) return obs;
+    return v;
+  }
+  function intervals(list) {
+    const out = [];
+    for (let i = Math.max(0, list.length - K.window - 1); i < list.length - 1; i++) {
+      const d = list[i + 1].t - list[i].t;
+      if (d > 0) out.push(d);
+    }
+    return out;
+  }
+  function targetDelay(list) {
+    const iv = intervals(list);
+    const clamp = (v) => Math.max(K.min, Math.min(K.max, v));
+    if (list.length < K.minObs || iv.length === 0) return clamp(K.sourceDelay[list[list.length - 1].src]);
+    return clamp(Math.max(...iv) + K.jitter);
+  }
+  // Option D measures the target from VATSIM reports alone once vNAS is stale.
+  function targetBasis(obs, now, cfg) {
+    const f = filterObs(obs, now, cfg);
+    const src = f === obs ? 'mixed' : 'vnas';
+    const basis = cfg.stale !== null && src === 'mixed' && vnasOf(obs).length >= 2
+      ? obs.filter((o) => o.src === 'vatsim') : f;
+    return { src, basis };
+  }
+  // updateDynamicDelayState: called when a report is added.
+  function onReport(state, obs, now, cfg) {
+    const { src, basis } = targetBasis(obs, now, cfg);
+    const target = targetDelay(basis);
+    if (!state) return { cur: target, target, last: now, bump: 0, src };
+    const next = { ...state, target, src };
+    if (cfg.step && src !== state.src) { next.cur = target; next.bump = 0; }
+    return next;
+  }
+  // applyDelayTransition
+  function transition(state, now, extrapolating, cfg) {
+    const el = Math.max(0, Math.min(K.maxElapsed, now - state.last));
+    let bump = state.bump;
+    if (extrapolating) bump = Math.min(Math.max(bump, K.bump), K.max - state.target);
+    else if (bump > 0) bump = Math.max(0, bump - (el / 1000) * K.bumpDecay);
+    const eff = Math.min(K.max, state.target + bump);
+    const cur = eff >= state.cur
+      ? Math.min(eff, state.cur + (el / 1000) * cfg.inc)
+      : Math.max(eff, state.cur - (el / 1000) * cfg.dec);
+    return { ...state, cur, bump, last: now };
+  }
+  function bracket(list, d) {
+    if (list.length === 1) return d >= list[0].t ? [list[0], null] : [null, list[0]];
+    for (let i = 0; i < list.length - 1; i++) {
+      if (list[i].t <= d && d <= list[i + 1].t) return [list[i], list[i + 1]];
+    }
+    return d < list[0].t ? [null, list[0]] : [list[list.length - 1], null];
+  }
+
+  function simulate(cfg, motion) {
+    const n = Math.floor((SIM_END_MS - SIM_START_MS) / FRAME_MS) + 1;
+    const r = {
+      t: new Float64Array(n), pos: new Float64Array(n), truthNow: new Float64Array(n), truthAtDisp: new Float64Array(n),
+      delay: new Float32Array(n), ahead: new Float32Array(n), extrap: new Uint8Array(n),
+      repPos: new Float64Array(n), repVnas: new Uint8Array(n),
+    };
+    const obs = [];
+    let state = null, recon = null, lastPos = null, ei = 0;
+    for (let i = 0; i < n; i++) {
+      const now = SIM_START_MS + i * FRAME_MS;
+      while (ei < EVENTS.length && EVENTS[ei].t <= now) {
+        const e = EVENTS[ei++];
+        obs.push({ t: e.t, src: e.src, pos: positionM(motion, e.t / 1000), gs: speedKt(motion, e.t / 1000) });
+        state = onReport(state, obs, now, cfg);
+      }
+      if (cfg.stale !== null && state.src === 'vnas' && isVnasStale(obs, now, cfg)) {
+        const { src, basis } = targetBasis(obs, now, cfg);
+        state = { ...state, src, target: targetDelay(basis) };
+      }
+      const list = filterObs(obs, now, cfg);
+      const delay = state.cur;
+      const disp = now - delay;
+      const [before, after] = bracket(list, disp);
+      let pos, extrap = false;
+      if (before && after) {
+        const anchorChanged = recon && recon.anchor !== list[0];
+        if (!recon || recon.target !== after.t || anchorChanged) {
+          recon = lastPos !== null
+            ? { target: after.t, start: lastPos, startDisp: disp, anchor: list[0] }
+            : { target: after.t, start: before.pos, startDisp: before.t, anchor: list[0] };
+        }
+        const dur = after.t - recon.startDisp;
+        const rt = dur > 0 ? Math.min(1, (disp - recon.startDisp) / dur) : 1;
+        pos = recon.start + (after.pos - recon.start) * rt;
+      } else if (before) {
+        pos = before.pos + before.gs * KT * Math.min(disp - before.t, K.maxExtrap) / 1000;
+        recon = null;
+        extrap = true;
+      } else {
+        pos = after.pos;
+        recon = null;
+      }
+      lastPos = pos;
+      state = transition(state, now, extrap, cfg);
+      const newest = obs[obs.length - 1];
+      r.t[i] = now; r.pos[i] = pos; r.delay[i] = delay; r.extrap[i] = extrap ? 1 : 0;
+      r.ahead[i] = Math.max(0, disp - list[list.length - 1].t);
+      r.truthNow[i] = positionM(motion, now / 1000);
+      r.truthAtDisp[i] = positionM(motion, disp / 1000);
+      r.repPos[i] = newest.pos; r.repVnas[i] = newest.src === 'vnas' ? 1 : 0;
+    }
+    // The hand-over: from the moment vNAS is dropped until 2 s after the first VATSIM report from then on.
+    const dropMs = LOSS_MS + staleAfter(cfg);
+    const firstVatsim = EVENTS.find((e) => e.src === 'vatsim' && e.t >= dropMs).t;
+    r.metrics = measure(r, dropMs, firstVatsim + 2000);
+    return r;
+  }
+
+  function measure(r, handoverStart, handoverEnd) {
+    const n = r.t.length;
+    const final = r.delay[n - 1];
+    let guess = 0, snapAt = 0, snapLater = 0, run = 0, runStart = 0, worst = 0, worstLater = 0, lastUnsettled = LOSS_MS;
+    const closeRun = () => {
+      if (run <= 0) return;
+      if (runStart >= handoverStart && runStart < handoverEnd) snapAt = Math.max(snapAt, run);
+      else if (runStart >= handoverEnd) snapLater = Math.max(snapLater, run);
+      run = 0;
+    };
+    for (let i = 1; i < n; i++) {
+      if (r.t[i] < LOSS_MS) continue;
+      if (r.extrap[i]) guess += FRAME_MS;
+      const d = r.pos[i] - r.pos[i - 1];
+      if (d < -1e-6) { if (run === 0) runStart = r.t[i]; run -= d; } else closeRun();
+      if (r.extrap[i]) {
+        const off = Math.abs(r.pos[i] - r.truthAtDisp[i]);
+        if (r.t[i] < handoverEnd) worst = Math.max(worst, off); else worstLater = Math.max(worstLater, off);
+      }
+      if (r.extrap[i] || Math.abs(r.delay[i] - final) > SETTLE_TOLERANCE_MS) lastUnsettled = r.t[i];
+    }
+    closeRun();
+    return { guessS: guess / 1000, snapAtM: snapAt, snapLaterM: snapLater, worstM: worst, worstLaterM: worstLater,
+      settleS: (lastUnsettled - LOSS_MS) / 1000, handoverStart, handoverEnd };
+  }
+
+  // ---- runs --------------------------------------------------------------------------------
+  const runs = {};
+  const keyOf = (opt, motion, stale) => `${opt.id}|${motion}|${opt.stale === null ? '-' : stale}`;
+  for (const opt of OPTIONS) {
+    for (const motion of Object.keys(MOTIONS)) {
+      for (const stale of opt.stale === null ? [null] : [30, 5]) {
+        runs[keyOf(opt, motion, stale)] = simulate({ ...opt, stale }, motion);
+      }
+    }
+  }
+
+  // ---- summary table -----------------------------------------------------------------------
+  const tbody = document.querySelector('#summary tbody');
+  const rowDefs = [];
+  for (const opt of OPTIONS) {
+    for (const stale of opt.stale === null ? [null] : [30, 5]) rowDefs.push({ opt, stale });
+  }
+  for (const { opt, stale } of rowDefs) {
+    const taxi = runs[keyOf(opt, 'taxi', stale)].metrics;
+    const appr = runs[keyOf(opt, 'approach', stale)].metrics;
+    const name = stale === null ? opt.title : `${opt.title} (stale after ${stale} s)`;
+    const tr = document.createElement('tr');
+    const pair = (a, b) => `${a.toFixed(0)} / ${b.toFixed(0)} m`;
+    tr.innerHTML = `<td>${name}</td><td>${taxi.guessS.toFixed(0)} s</td><td>${taxi.settleS.toFixed(0)} s</td>`
+      + `<td>${pair(taxi.snapAtM, appr.snapAtM)}</td><td>${pair(taxi.snapLaterM, appr.snapLaterM)}</td>`
+      + `<td>${pair(taxi.worstM, appr.worstM)}</td><td>${pair(taxi.worstLaterM, appr.worstLaterM)}</td>`;
+    tbody.appendChild(tr);
+  }
+  window.__lossRuns = { runs, rowDefs, keyOf, measure };
+
+  // ---- lanes -------------------------------------------------------------------------------
+  const params = new URLSearchParams(location.search);
+  const view = {
+    t: params.has('t') ? Math.min(300, Math.max(0, Number(params.get('t')))) : 0,
+    playing: !params.has('t'),
+    speed: 5,
+    motion: params.get('motion') === 'approach' ? 'approach' : 'taxi',
+    stale: params.get('stale') === '5' ? 5 : 30,
+  };
+  const host = document.getElementById('lossLanes');
+  const lanes = OPTIONS.map((opt) => {
+    const el = document.createElement('section');
+    el.className = 'lane';
+    el.innerHTML = `<h2>${opt.title}</h2><div class="sub">${opt.sub}</div>
+      <canvas class="track"></canvas><canvas class="plot"></canvas>
+      <div class="readout">
+        <span class="live">Delay <b class="v-delay"></b></span>
+        <span class="live">Ahead of newest report <b class="v-ahead"></b></span>
+        <span class="v-state"></span>
+      </div>
+      <div class="readout">
+        <span>Guessing <b class="m-guess"></b></span>
+        <span>Settled <b class="m-settle"></b></span>
+        <span>Snap-back: hand-over <b class="m-snap-at"></b>, later <b class="m-snap"></b></span>
+        <span>Worst guess: hand-over <b class="m-worst"></b>, later <b class="m-worst-later"></b></span>
+      </div>`;
+    host.appendChild(el);
+    const q = (s) => el.querySelector(s);
+    return { opt, track: q('.track'), plot: q('.plot'), vDelay: q('.v-delay'), vAhead: q('.v-ahead'), vState: q('.v-state'),
+      mGuess: q('.m-guess'), mSnapAt: q('.m-snap-at'), mSnap: q('.m-snap'), mWorst: q('.m-worst'), mWorstLater: q('.m-worst-later'), mSettle: q('.m-settle') };
+  });
+
+  const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  function prep(c) {
+    const dpr = window.devicePixelRatio || 1;
+    const w = c.clientWidth, h = c.clientHeight;
+    if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) {
+      c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
+    }
+    const g = c.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, w, h);
+    return { g, w, h };
+  }
+  const frameIndex = (r, ts) => Math.max(0, Math.min(r.t.length - 1, Math.round((ts * 1000 - SIM_START_MS) / FRAME_MS)));
+
+  function drawPlane(g, x, y, fill) {
+    g.fillStyle = fill;
+    g.beginPath();
+    g.moveTo(x + 10, y); g.lineTo(x - 8, y - 8); g.lineTo(x - 4, y); g.lineTo(x - 8, y + 8);
+    g.closePath(); g.fill();
+  }
+
+  function drawTrack(lane, r, i) {
+    const { g, w, h } = prep(lane.track);
+    const m = MOTIONS[view.motion];
+    const left = r.truthNow[i] - m.behind;
+    const span = m.behind + m.ahead;
+    const X = (s) => Math.max(6, Math.min(w - 6, ((s - left) / span) * w));
+    const y = h / 2 + 4;
+    g.fillStyle = css('--runway');
+    g.fillRect(0, y - 13, w, 26);
+    g.fillStyle = css('--mark');
+    for (let s = Math.ceil(left / m.tick) * m.tick; s < left + span; s += m.tick) g.fillRect(X(s), y - 1.5, 6, 3);
+    // last received report
+    const rx = X(r.repPos[i]);
+    g.fillStyle = r.repVnas[i] ? css('--vnas') : css('--vatsim');
+    g.beginPath(); g.moveTo(rx, y - 18); g.lineTo(rx + 5, y - 12); g.lineTo(rx, y - 6); g.lineTo(rx - 5, y - 12); g.closePath(); g.fill();
+    // where it really was at the drawn moment
+    drawPlane(g, X(r.truthAtDisp[i]), y, css('--ghost'));
+    // where it is now
+    g.strokeStyle = css('--muted'); g.lineWidth = 2;
+    g.beginPath(); g.arc(X(r.truthNow[i]), y, 8, 0, Math.PI * 2); g.stroke();
+    // drawn aircraft
+    const guessing = r.extrap[i] === 1;
+    const dx = X(r.pos[i]);
+    drawPlane(g, dx, y, guessing ? css('--warn') : css('--plane'));
+    const err = r.pos[i] - r.truthAtDisp[i];
+    g.font = '600 11px ui-monospace, monospace';
+    g.fillStyle = guessing ? css('--warn') : css('--muted');
+    g.textAlign = dx > w - 140 ? 'right' : 'left';
+    const label = guessing ? `guessing, ${err >= 0 ? '+' : ''}${err.toFixed(0)} m off` : `${Math.abs(err) < 0.5 ? 'on track' : `${err.toFixed(0)} m off`}`;
+    g.fillText(label, dx + (g.textAlign === 'right' ? -12 : 12), y + 25);
+  }
+
+  function drawPlot(lane, r, i, staleS) {
+    const { g, w, h } = prep(lane.plot);
+    const padL = 34, padR = 8, padT = 8, padB = 18;
+    const pw = w - padL - padR, ph = h - padT - padB;
+    const YMAX = 30;
+    const X = (ts) => padL + (ts / 300) * pw;
+    const Y = (sec) => padT + ph - (Math.min(sec, YMAX) / YMAX) * ph;
+    g.font = '10px ui-monospace, monospace';
+    g.strokeStyle = css('--grid'); g.lineWidth = 1; g.fillStyle = css('--muted');
+    g.textAlign = 'right'; g.textBaseline = 'middle';
+    for (let s = 0; s <= YMAX; s += 5) {
+      g.beginPath(); g.moveTo(padL, Y(s)); g.lineTo(w - padR, Y(s)); g.stroke();
+      if (s % 10 === 0 || s === 15) g.fillText(`${s} s`, padL - 4, Y(s));
+    }
+    g.textAlign = 'center'; g.textBaseline = 'top';
+    for (let ts = 0; ts <= 300; ts += 30) g.fillText(`${ts}`, X(ts), h - padB + 4);
+    // report ticks along the base
+    for (const e of EVENTS) {
+      if (e.t < 0) continue;
+      g.fillStyle = e.src === 'vnas' ? css('--vnas') : css('--vatsim');
+      const tall = e.src === 'vnas' ? 3 : 6;
+      g.fillRect(X(e.t / 1000) - 0.5, padT + ph - tall, e.src === 'vnas' ? 1 : 2, tall);
+    }
+    const i0 = frameIndex(r, 0);
+    const stride = 2;
+    // guessing area
+    g.fillStyle = css('--warn-fill');
+    g.beginPath(); g.moveTo(X(0), Y(0));
+    for (let k = i0; k < r.t.length; k += stride) g.lineTo(X(r.t[k] / 1000), Y(r.ahead[k] / 1000));
+    g.lineTo(X(300), Y(0)); g.closePath(); g.fill();
+    g.strokeStyle = css('--warn'); g.lineWidth = 1;
+    g.beginPath();
+    for (let k = i0; k < r.t.length; k += stride) {
+      const px = X(r.t[k] / 1000), py = Y(r.ahead[k] / 1000);
+      if (k === i0) g.moveTo(px, py); else g.lineTo(px, py);
+    }
+    g.stroke();
+    // display delay
+    g.strokeStyle = css('--accent'); g.lineWidth = 2;
+    g.beginPath();
+    for (let k = i0; k < r.t.length; k += stride) {
+      const px = X(r.t[k] / 1000), py = Y(r.delay[k] / 1000);
+      if (k === i0) g.moveTo(px, py); else g.lineTo(px, py);
+    }
+    g.stroke();
+    // markers
+    const vline = (ts, color, dash, text) => {
+      g.strokeStyle = color; g.lineWidth = 1.5; g.setLineDash(dash);
+      g.beginPath(); g.moveTo(X(ts), padT); g.lineTo(X(ts), padT + ph); g.stroke(); g.setLineDash([]);
+      if (text) {
+        g.textAlign = 'left'; g.textBaseline = 'top';
+        const tw = g.measureText(text).width;
+        g.fillStyle = css('--panel'); g.fillRect(X(ts) + 2, labelY - 1, tw + 4, 12);
+        g.fillStyle = color; g.fillText(text, X(ts) + 4, labelY);
+      }
+    };
+    let labelY = padT + 1;
+    vline(r.t[i] / 1000, css('--text'), [2, 2], '');
+    vline(LOSS_MS / 1000, css('--danger'), [], 'vNAS lost');
+    labelY = padT + 15;
+    vline(LOSS_MS / 1000 + staleS, css('--danger'), [4, 3], `vNAS dropped (${staleS} s)`);
+    // legend
+    g.textAlign = 'right'; g.textBaseline = 'top'; g.font = '600 10px system-ui, sans-serif';
+    g.fillStyle = css('--accent'); g.fillText('display delay', w - padR - 4, padT + 2);
+    g.fillStyle = css('--warn'); g.fillText('seconds ahead of newest report (guessing)', w - padR - 4, padT + 14);
+  }
+
+  function render() {
+    document.getElementById('tlabel').textContent = `t = ${view.t.toFixed(1)} s`;
+    document.getElementById('scrub').value = String(view.t);
+    for (const lane of lanes) {
+      const r = runs[keyOf(lane.opt, view.motion, view.stale)];
+      const i = frameIndex(r, view.t);
+      const staleS = lane.opt.stale === null ? 30 : view.stale;
+      drawTrack(lane, r, i);
+      drawPlot(lane, r, i, staleS);
+      lane.vDelay.textContent = `${(r.delay[i] / 1000).toFixed(2)} s`;
+      lane.vAhead.textContent = `${(r.ahead[i] / 1000).toFixed(1)} s`;
+      lane.vState.textContent = r.extrap[i] ? 'guessing' : 'between two reports';
+      lane.vState.className = r.extrap[i] ? 'guess' : '';
+      const mm = r.metrics;
+      lane.mGuess.textContent = `${mm.guessS.toFixed(0)} s after loss`;
+      lane.mSnapAt.textContent = `${mm.snapAtM.toFixed(0)} m`;
+      lane.mSnap.textContent = `${mm.snapLaterM.toFixed(0)} m`;
+      lane.mWorst.textContent = `${mm.worstM.toFixed(0)} m`;
+      lane.mWorstLater.textContent = `${mm.worstLaterM.toFixed(0)} m`;
+      lane.mSettle.textContent = `${mm.settleS.toFixed(0)} s after loss`;
+    }
+  }
+
+  // ---- controls ----------------------------------------------------------------------------
+  const playBtn = document.getElementById('play');
+  const syncButtons = () => {
+    playBtn.textContent = view.playing ? 'Pause' : 'Play';
+    for (const b of document.querySelectorAll('[data-speed]')) b.setAttribute('aria-pressed', String(Number(b.dataset.speed) === view.speed));
+    for (const b of document.querySelectorAll('[data-motion]')) b.setAttribute('aria-pressed', String(b.dataset.motion === view.motion));
+    for (const b of document.querySelectorAll('[data-stale]')) b.setAttribute('aria-pressed', String(Number(b.dataset.stale) === view.stale));
+  };
+  playBtn.addEventListener('click', () => { view.playing = !view.playing; syncButtons(); });
+  for (const b of document.querySelectorAll('[data-speed]')) b.addEventListener('click', () => { view.speed = Number(b.dataset.speed); syncButtons(); });
+  for (const b of document.querySelectorAll('[data-motion]')) b.addEventListener('click', () => { view.motion = b.dataset.motion; syncButtons(); render(); });
+  for (const b of document.querySelectorAll('[data-stale]')) b.addEventListener('click', () => { view.stale = Number(b.dataset.stale); syncButtons(); render(); });
+  document.getElementById('scrub').addEventListener('input', (e) => { view.t = Number(e.target.value); render(); });
+  window.addEventListener('resize', render);
+  syncButtons();
+
+  let lastNow = null;
+  function tick(now) {
+    if (view.playing && lastNow !== null) {
+      view.t += ((now - lastNow) / 1000) * view.speed;
+      if (view.t > 300) view.t = 0;
+    }
+    lastNow = now;
+    render();
+    requestAnimationFrame(tick);
+  }
+  render();
+  requestAnimationFrame(tick);
+})();
 </script>
 </body>
 </html>
