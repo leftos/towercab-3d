@@ -47,6 +47,7 @@ import {
 } from '../constants/aircraft-timeline'
 import { GROUNDSPEED_THRESHOLD_KNOTS } from '../constants/rendering'
 import type {
+  AircraftDataSource,
   AircraftMetadata,
   AircraftObservation,
   AircraftTimeline,
@@ -59,6 +60,7 @@ import type { VatsimSnapshot } from '../types/replay'
 import { calculateBearing } from '../utils/aircraft/geoMath'
 import { useReplayStore } from './replayStore'
 import { useSettingsStore } from './settingsStore'
+import { pilotToTimelineEntry, useVatsimStore, type VatsimTimelineEntry } from './vatsimStore'
 import { useViewportStore } from './viewportStore'
 
 // ============================================================================
@@ -180,6 +182,18 @@ interface AircraftTimelineStore {
   ) => void
 
   removeAircraft: (callsign: string) => void
+
+  /**
+   * Drop every observation contributed by one data source, for the listed
+   * callsigns or for all timelines when none are listed, in live playback only.
+   * An aircraft the latest VATSIM pilot list reports keeps its timeline, seeded
+   * with a fresh VATSIM observation. Otherwise a timeline left with no
+   * observations is removed as removeAircraft removes it, and one that still
+   * holds other sources keeps them and re-derives its newest-observation fields
+   * from the newest survivor.
+   */
+  dropSourceObservations: (source: AircraftDataSource, callsigns?: string[]) => void
+
   pruneStaleAircraft: () => void
   startPruneTimer: () => void
   stopPruneTimer: () => void
@@ -520,6 +534,76 @@ function updateDynamicDelayState(
     intervalHistory: intervals,
     extrapolationBumpMs: existingState.extrapolationBumpMs,
   }
+}
+
+/**
+ * A timeline with one source's observations removed, or null when nothing is left.
+ *
+ * Args:
+ *   timeline: The timeline to strip.
+ *   source: The data source whose observations go.
+ *   vatsimEntry: The aircraft's entry from the latest VATSIM pilot list, when VATSIM lists it.
+ *     It becomes the newest observation (replacing any stored point at or after its
+ *     observedAt), so the aircraft carries on from VATSIM's latest position with that
+ *     batch's receive time instead of timing out on older points.
+ *
+ * Returns:
+ *   The stripped timeline with lastSource, lastReceivedAt and dynamicDelay re-derived
+ *   from its newest observation, or null when no observation remains.
+ */
+function withoutSource(
+  timeline: AircraftTimeline,
+  source: AircraftDataSource,
+  vatsimEntry: VatsimTimelineEntry | undefined,
+): AircraftTimeline | null {
+  let observations = timeline.observations.filter((observation) => observation.source !== source)
+  let metadata = timeline.metadata
+  if (vatsimEntry) {
+    const seed = vatsimEntry.observation
+    observations = [...observations.filter((observation) => observation.observedAt < seed.observedAt), seed]
+    metadata = mergeAircraftMetadata(metadata, vatsimEntry.metadata)
+  }
+  if (observations.length === 0) return null
+
+  const newest = observations[observations.length - 1]
+  return {
+    ...timeline,
+    observations,
+    metadata,
+    lastSource: newest.source,
+    lastReceivedAt: newest.receivedAt,
+    dynamicDelay: updateDynamicDelayState(timeline.dynamicDelay, observations, newest.receivedAt),
+  }
+}
+
+/**
+ * Build a lookup from callsign to that aircraft's entry in the latest VATSIM pilot list,
+ * timed as that batch was (its update timestamp, and the time this client received it).
+ *
+ * Finds nothing when the dropped source is VATSIM itself, or when the pilot list is not
+ * current: VATSIM is not polling (a non-Live vNAS environment, the RealTraffic data
+ * source) or its last successful fetch is older than AIRCRAFT_TIMEOUT (fetch backoff).
+ * A stale list would keep aircraft alive that VATSIM no longer reports.
+ */
+function vatsimEntryLookup(droppedSource: AircraftDataSource): (callsign: string) => VatsimTimelineEntry | undefined {
+  const { allPilots, lastVatsimTimestamp, isPolling, lastUpdate } = useVatsimStore.getState()
+  if (droppedSource === 'vatsim' || !isPolling || !lastUpdate) return () => undefined
+
+  const batchReceivedAt = lastUpdate.getTime()
+  if (Date.now() - batchReceivedAt > AIRCRAFT_TIMEOUT) return () => undefined
+
+  const pilots = new Map(allPilots.map((pilot) => [pilot.callsign, pilot]))
+  return (callsign) => {
+    const pilot = pilots.get(callsign)
+    return pilot ? pilotToTimelineEntry(pilot, lastVatsimTimestamp || batchReceivedAt, batchReceivedAt) : undefined
+  }
+}
+
+/** Announce removed aircraft to insets and in-process listeners in one batch. */
+function announceRemovals(callsigns: string[]): void {
+  if (callsigns.length === 0) return
+  removalBroadcastCallback?.(callsigns)
+  notifyAircraftRemoved(callsigns)
 }
 
 /**
@@ -1565,6 +1649,68 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       // their per-aircraft state.
       notifyAircraftRemoved([callsign])
     }
+  },
+
+  /**
+   * Drop every observation contributed by one source.
+   *
+   * Whether VATSIM also reports an aircraft is decided from the latest VATSIM pilot
+   * list, not from the stored observations: during a long vNAS stream the VATSIM
+   * points are skipped or pruned. An aircraft VATSIM lists keeps its timeline,
+   * stripped of the source and seeded with an observation from the latest VATSIM
+   * batch, provided VATSIM is polling and that batch is younger than AIRCRAFT_TIMEOUT.
+   * Otherwise a timeline left with no observations is removed exactly as
+   * removeAircraft removes it, and one that still holds other sources keeps them,
+   * with lastSource/lastReceivedAt/dynamicDelay re-derived from the newest survivor.
+   * Removals are announced to insets and listeners in one batch. Only live playback
+   * is touched: replay and imported timelines keep their recorded sources.
+   */
+  dropSourceObservations: (source, callsigns) => {
+    if (useReplayStore.getState().playbackMode !== 'live') return
+
+    const { timelines, recentlyRemoved, lastKnownHeadings, lastRenderedPositions, reconciliationStates } = get()
+    const findVatsimEntry = vatsimEntryLookup(source)
+
+    const updatedTimelines = new Map(timelines)
+    const updatedGraveyard = new Map(recentlyRemoved)
+    const updatedHeadings = new Map(lastKnownHeadings)
+    const updatedPositions = new Map(lastRenderedPositions)
+    const updatedReconciliations = new Map(reconciliationStates)
+    const removedCallsigns: string[] = []
+    let changed = false
+
+    for (const callsign of callsigns ?? timelines.keys()) {
+      const timeline = updatedTimelines.get(callsign)
+      if (!timeline?.observations.some((observation) => observation.source === source)) continue
+      changed = true
+
+      const stripped = withoutSource(timeline, source, findVatsimEntry(callsign))
+      if (stripped) {
+        updatedTimelines.set(callsign, stripped)
+        continue
+      }
+
+      updatedTimelines.delete(callsign)
+      updatedGraveyard.set(callsign, { timeline, removedAt: Date.now() })
+      updatedHeadings.delete(callsign)
+      updatedPositions.delete(callsign)
+      updatedReconciliations.delete(callsign)
+      removedCallsigns.push(callsign)
+    }
+
+    // A hub disconnect for an aircraft with no vNAS observations changes nothing;
+    // skip the store update so subscribers do not see fresh map identities.
+    if (!changed) return
+
+    set({
+      timelines: updatedTimelines,
+      recentlyRemoved: updatedGraveyard,
+      lastKnownHeadings: updatedHeadings,
+      lastRenderedPositions: updatedPositions,
+      reconciliationStates: updatedReconciliations,
+    })
+
+    announceRemovals(removedCallsigns)
   },
 
   /**

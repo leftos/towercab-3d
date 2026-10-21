@@ -199,11 +199,15 @@ pub async fn vnas_probe_yaat_local(url: String) -> YaatLocalProbe {
 mod real_impl {
     use super::*;
     use crate::settings::{read_global_settings, write_global_settings};
+    use parking_lot::Mutex;
+    use std::collections::HashMap;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Arc;
     use std::sync::Mutex as StdMutex;
     use std::time::{SystemTime, UNIX_EPOCH};
     use tauri::Emitter;
     use tokio::sync::{broadcast, RwLock as TokioRwLock};
+    use tokio::task::{AbortHandle, Id as TaskId, JoinHandle};
 
     // =========================================================================
     // MODULE-LEVEL CACHES (for sync access from server.rs WebSocket handler)
@@ -244,7 +248,7 @@ mod real_impl {
     // Import types from the vNAS crate
     use towercab_3d_vnas::{
         Environment as VnasEnvironment, SessionState as VnasSessionState, StoredTokens,
-        TowerCabAircraftDto, VnasConfig, VnasEvent, VnasService,
+        TowerCabAircraftDto, VnasConfig, VnasError, VnasEvent, VnasService,
     };
 
     impl From<Environment> for VnasEnvironment {
@@ -325,25 +329,76 @@ mod real_impl {
         }
     }
 
+    /// The status reported to the frontend, plus the facilities whose hub subscribe is in
+    /// flight. One lock guards both, so checking and claiming a facility is one step.
+    #[derive(Default)]
+    struct StatusCell {
+        status: VnasStatus,
+        /// Facility id → the token of the claim that owns its in-flight subscribe.
+        pending_subscribes: HashMap<String, u64>,
+        /// The last claim token handed out; each claim takes the next one.
+        last_claim_token: u64,
+    }
+
+    /// A claimed in-flight subscribe; dropping it releases the claim.
+    ///
+    /// Release on drop covers every way out of a subscribe: success, an error, an early
+    /// return, or a caller that drops the future mid-await.
+    pub struct PendingSubscribe<'a> {
+        state: &'a VnasState,
+        facility_id: String,
+        token: u64,
+        finished: bool,
+    }
+
+    impl PendingSubscribe<'_> {
+        /// Release the claim after a successful hub subscribe.
+        ///
+        /// Returns whether the facility was recorded as subscribed (false when an
+        /// unsubscribe or a disconnect cancelled it while the subscribe was in flight).
+        pub fn succeed(mut self) -> bool {
+            self.finished = true;
+            self.state
+                .finish_subscribe(&self.facility_id, self.token, true)
+        }
+    }
+
+    impl Drop for PendingSubscribe<'_> {
+        fn drop(&mut self) {
+            if !self.finished {
+                self.state
+                    .finish_subscribe(&self.facility_id, self.token, false);
+            }
+        }
+    }
+
     /// vNAS state managed by Tauri (real implementation)
     pub struct VnasState {
-        status: RwLock<VnasStatus>,
-        /// The vNAS service instance (uses tokio RwLock for async access)
-        service: TokioRwLock<Option<VnasService>>,
+        status: RwLock<StatusCell>,
+        /// The vNAS service instance (uses tokio RwLock for async access). Callers clone
+        /// the `Arc` out with `current_service` and hold no guard across a call on it.
+        service: TokioRwLock<Option<Arc<VnasService>>>,
+        /// The task forwarding the service's events to the frontend
+        event_forwarder: Mutex<Option<JoinHandle<()>>>,
         /// Channel for broadcasting aircraft updates to frontend/WebSocket
         event_tx: broadcast::Sender<VnasAircraft>,
         /// App handle for emitting events
         app_handle: RwLock<Option<AppHandle>>,
         /// Last processed OAuth callback URL (for deduplication)
         last_oauth_callback: RwLock<Option<String>>,
+        /// Bumped by every disconnect's reset; a connect that read an older value writes
+        /// no status.
+        connect_epoch: AtomicU64,
     }
 
     impl VnasState {
         pub fn new() -> Self {
             let (event_tx, _) = broadcast::channel(1024);
             Self {
-                status: RwLock::new(VnasStatus::default()),
+                connect_epoch: AtomicU64::new(0),
+                status: RwLock::new(StatusCell::default()),
                 service: TokioRwLock::new(None),
+                event_forwarder: Mutex::new(None),
                 event_tx,
                 app_handle: RwLock::new(None),
                 last_oauth_callback: RwLock::new(None),
@@ -351,49 +406,202 @@ mod real_impl {
         }
 
         pub fn status(&self) -> VnasStatus {
-            self.status.read().clone()
+            self.status.read().status.clone()
         }
 
-        pub fn set_status(&self, status: VnasStatus) {
-            *self.status.write() = status;
+        /// Apply `f` to the status under one write lock, so a change any other status
+        /// writer makes between a separate read and write is never overwritten.
+        pub fn update_status(&self, f: impl FnOnce(&mut VnasStatus)) {
+            f(&mut self.status.write().status);
+        }
+
+        /// The connect epoch; a connect reads it on entry and passes it to
+        /// `update_status_if_epoch`.
+        fn connect_epoch(&self) -> u64 {
+            self.connect_epoch.load(Ordering::SeqCst)
+        }
+
+        /// Apply `f` to the status unless a disconnect's reset has bumped the connect
+        /// epoch since `epoch` was read. The compare and `f` run under one status write
+        /// lock, the lock the reset bumps the epoch under. Returns whether `f` ran.
+        fn update_status_if_epoch(&self, epoch: u64, f: impl FnOnce(&mut VnasStatus)) -> bool {
+            let mut cell = self.status.write();
+            if self.connect_epoch.load(Ordering::SeqCst) != epoch {
+                return false;
+            }
+            f(&mut cell.status);
+            true
+        }
+
+        /// Reset the status after a disconnect: state `Disconnected`, no subscriptions or
+        /// subscribes in flight, no error. Bumps the connect epoch under the same lock, so
+        /// a connect's status write lands before this reset or not at all.
+        fn reset_for_disconnect(&self) {
+            let mut cell = self.status.write();
+            self.connect_epoch.fetch_add(1, Ordering::SeqCst);
+            cell.status.state = SessionState::Disconnected;
+            cell.status.subscribed_facilities.clear();
+            cell.status.error = None;
+            cell.pending_subscribes.clear();
         }
 
         pub fn update_state(&self, state: SessionState) {
-            self.status.write().state = state;
+            self.status.write().status.state = state;
         }
 
         pub fn set_error(&self, error: Option<String>) {
-            self.status.write().error = error;
+            self.status.write().status.error = error;
         }
 
-        /// Add a facility to the subscription list (if not already present)
-        pub fn add_facility(&self, facility_id: String) {
-            let mut status = self.status.write();
-            if !status.subscribed_facilities.contains(&facility_id) {
-                status.subscribed_facilities.push(facility_id);
+        /// Claim a facility for a hub subscribe.
+        ///
+        /// Returns `None` when the facility is already subscribed or a subscribe for it is
+        /// in flight; otherwise marks it pending and returns the claim's token. Every token
+        /// must be passed to one `finish_subscribe`.
+        pub fn try_begin_subscribe(&self, facility_id: &str) -> Option<u64> {
+            let mut cell = self.status.write();
+            let subscribed = cell
+                .status
+                .subscribed_facilities
+                .iter()
+                .any(|f| f == facility_id);
+            if subscribed || cell.pending_subscribes.contains_key(facility_id) {
+                return None;
+            }
+            cell.last_claim_token += 1;
+            let token = cell.last_claim_token;
+            cell.pending_subscribes
+                .insert(facility_id.to_string(), token);
+            Some(token)
+        }
+
+        /// Release the claim `token` from `try_begin_subscribe`.
+        ///
+        /// Acts only while that claim still owns the facility: once an unsubscribe or a
+        /// disconnect cancelled it, a newer claim for the facility is left alone. On success
+        /// the facility is added to the subscriptions. Returns whether the facility is now
+        /// recorded as subscribed by this call.
+        pub fn finish_subscribe(&self, facility_id: &str, token: u64, success: bool) -> bool {
+            let mut cell = self.status.write();
+            if cell.pending_subscribes.get(facility_id) != Some(&token) {
+                return false;
+            }
+            cell.pending_subscribes.remove(facility_id);
+            let subscribed = &mut cell.status.subscribed_facilities;
+            let record = success && !subscribed.iter().any(|f| f == facility_id);
+            if record {
+                subscribed.push(facility_id.to_string());
+            }
+            record
+        }
+
+        /// `try_begin_subscribe` as a guard that releases the claim when dropped.
+        pub fn begin_subscribe(&self, facility_id: &str) -> Option<PendingSubscribe<'_>> {
+            self.try_begin_subscribe(facility_id)
+                .map(|token| PendingSubscribe {
+                    state: self,
+                    facility_id: facility_id.to_string(),
+                    token,
+                    finished: false,
+                })
+        }
+
+        /// Remove a facility from the subscriptions and cancel any subscribe in flight for it.
+        ///
+        /// Returns whether the facility was subscribed or pending.
+        pub fn remove_facility(&self, facility_id: &str) -> bool {
+            let mut cell = self.status.write();
+            let was_pending = cell.pending_subscribes.remove(facility_id).is_some();
+            let subscribed = &mut cell.status.subscribed_facilities;
+            let count = subscribed.len();
+            subscribed.retain(|f| f != facility_id);
+            was_pending || subscribed.len() != count
+        }
+
+        /// Keep `handle` as the event forwarder, aborting the forwarder it replaces.
+        ///
+        /// Every `vnas_connect` on the same service spawns a forwarder; without the abort
+        /// each earlier one would keep emitting every update again.
+        fn replace_event_forwarder(&self, handle: JoinHandle<()>) {
+            if let Some(previous) = self.event_forwarder.lock().replace(handle) {
+                previous.abort();
             }
         }
 
-        /// Remove a facility from the subscription list
-        pub fn remove_facility(&self, facility_id: &str) {
-            self.status
-                .write()
-                .subscribed_facilities
-                .retain(|f| f != facility_id);
+        /// Drop the stored event forwarder's handle if it is the task `id`, leaving a
+        /// newer connect's forwarder in place.
+        fn clear_event_forwarder_if(&self, id: TaskId) {
+            let mut stored = self.event_forwarder.lock();
+            if stored
+                .as_ref()
+                .is_some_and(|forwarder| forwarder.id() == id)
+            {
+                *stored = None;
+            }
         }
 
-        /// Clear all subscribed facilities
-        pub fn clear_facilities(&self) {
-            self.status.write().subscribed_facilities.clear();
+        /// Abort the event forwarder, if one is running, and return its handle so the
+        /// caller can wait for it to stop.
+        fn abort_event_forwarder(&self) -> Option<JoinHandle<()>> {
+            let forwarder = self.event_forwarder.lock().take();
+            if let Some(forwarder) = &forwarder {
+                forwarder.abort();
+            }
+            forwarder
         }
 
-        /// Check if a facility is already subscribed
-        pub fn is_subscribed(&self, facility_id: &str) -> bool {
-            self.status
-                .read()
-                .subscribed_facilities
-                .contains(&facility_id.to_string())
+        /// Clone the current service out of its lock, so no guard is held while a call on
+        /// it awaits: a disconnect's write lock then never waits on one.
+        async fn current_service(&self) -> Option<Arc<VnasService>> {
+            self.service.read().await.clone()
         }
+    }
+
+    /// Abort the event forwarder and wait until it has stopped, so no event it was still
+    /// draining is applied or emitted afterwards.
+    async fn stop_event_forwarder(state: &VnasState) {
+        let Some(forwarder) = state.abort_event_forwarder() else {
+            return;
+        };
+        if let Err(e) = forwarder.await {
+            if !e.is_cancelled() {
+                tracing::warn!("[vNAS] event forwarder failed: {e}");
+            }
+        }
+    }
+
+    /// Pass every event from `events` to `handle` until the channel closes.
+    ///
+    /// A receiver that falls more than the channel's capacity behind loses the oldest
+    /// events; the forwarder logs how many and carries on rather than stopping.
+    async fn forward_events<F: FnMut(VnasEvent)>(
+        mut events: broadcast::Receiver<VnasEvent>,
+        mut handle: F,
+    ) {
+        loop {
+            match events.recv().await {
+                Ok(event) => handle(event),
+                Err(broadcast::error::RecvError::Lagged(n)) => {
+                    tracing::warn!("[vNAS] event forwarder lagged, skipped {n} events");
+                }
+                Err(broadcast::error::RecvError::Closed) => return,
+            }
+        }
+    }
+
+    /// Write a session state reported by the service into the managed status.
+    ///
+    /// `Disconnected` means the hub session is gone, so it also drops every subscription
+    /// and every subscribe in flight. Returns whether it did.
+    fn apply_session_state(state: &VnasState, new_state: SessionState) -> bool {
+        let mut cell = state.status.write();
+        cell.status.state = new_state;
+        let ended = new_state == SessionState::Disconnected;
+        if ended {
+            cell.status.subscribed_facilities.clear();
+            cell.pending_subscribes.clear();
+        }
+        ended
     }
 
     impl Default for VnasState {
@@ -478,8 +686,8 @@ mod real_impl {
         }
 
         // If already connected or connecting, don't create a new service
-        if let Some(service) = state.service.read().await.as_ref() {
-            if is_session_active(service).await {
+        if let Some(service) = state.current_service().await {
+            if is_session_active(&service).await {
                 tracing::debug!("vNAS session already active, skipping restore");
                 return Ok(true);
             }
@@ -501,19 +709,18 @@ mod real_impl {
                 tracing::info!("vNAS session restored");
 
                 // Update status
-                let mut status = state.status();
-                status.environment = environment;
-                status.error = None;
-                state.set_status(status);
+                state.update_status(|status| {
+                    status.environment = environment;
+                    status.error = None;
+                });
 
                 // Store service
-                *state.service.write().await = Some(service);
+                let service = Arc::new(service);
+                *state.service.write().await = Some(Arc::clone(&service));
 
                 // Save potentially refreshed tokens
-                if let Some(new_tokens) = state.service.read().await.as_ref() {
-                    if let Some(tokens) = new_tokens.get_stored_tokens().await {
-                        save_tokens(&app, &tokens)?;
-                    }
+                if let Some(tokens) = service.get_stored_tokens().await {
+                    save_tokens(&app, &tokens)?;
                 }
 
                 Ok(true)
@@ -544,11 +751,11 @@ mod real_impl {
         }
 
         // Update status
-        let mut status = state.status();
-        status.state = SessionState::Authenticating;
-        status.environment = environment;
-        status.error = None;
-        state.set_status(status);
+        state.update_status(|status| {
+            status.state = SessionState::Authenticating;
+            status.environment = environment;
+            status.error = None;
+        });
 
         // Store app handle for later event emission
         *state.app_handle.write() = Some(app.clone());
@@ -563,7 +770,7 @@ mod real_impl {
         })?;
 
         // Store service for later use
-        *state.service.write().await = Some(service);
+        *state.service.write().await = Some(Arc::new(service));
 
         tracing::info!("vNAS OAuth flow started for {:?}", environment);
         Ok(auth_url)
@@ -610,8 +817,8 @@ mod real_impl {
         yaat_local_url: String,
         cid: Option<String>,
     ) -> Result<(), String> {
-        if let Some(service) = state.service.read().await.as_ref() {
-            if is_session_active(service).await {
+        if let Some(service) = state.current_service().await {
+            if is_session_active(&service).await {
                 tracing::debug!("vNAS session already active, skipping YAAT Local sign-in");
                 return Ok(());
             }
@@ -629,12 +836,12 @@ mod real_impl {
 
         tracing::info!("YAAT Local dev login as CID {cid}");
         *state.app_handle.write() = Some(app);
-        *state.service.write().await = Some(service);
+        *state.service.write().await = Some(Arc::new(service));
 
-        let mut status = state.status();
-        status.environment = Environment::YaatLocal;
-        status.error = None;
-        state.set_status(status);
+        state.update_status(|status| {
+            status.environment = Environment::YaatLocal;
+            status.error = None;
+        });
 
         Ok(())
     }
@@ -644,9 +851,9 @@ mod real_impl {
     #[tauri::command]
     pub async fn vnas_complete_auth(state: State<'_, VnasState>) -> Result<(), String> {
         // Get service reference
-        let service_guard = state.service.read().await;
-        let service = service_guard
-            .as_ref()
+        let service = state
+            .current_service()
+            .await
             .ok_or("OAuth not started - call vnas_start_auth first")?;
 
         // Wait for OAuth callback (this blocks until user completes browser auth)
@@ -705,9 +912,9 @@ mod real_impl {
             .ok_or("No authorization code in callback URL")?;
 
         // Get service reference
-        let service_guard = state.service.read().await;
-        let service = service_guard
-            .as_ref()
+        let service = state
+            .current_service()
+            .await
             .ok_or("OAuth not started - call vnas_start_auth first")?;
 
         // Complete OAuth with the authorization code from the deep link
@@ -736,6 +943,9 @@ mod real_impl {
     /// This establishes the SignalR WebSocket connection.
     #[tauri::command]
     pub async fn vnas_connect(app: AppHandle, state: State<'_, VnasState>) -> Result<(), String> {
+        // A disconnect from here on makes every status write below a no-op.
+        let epoch = state.connect_epoch();
+
         // Guard against double-connect (can happen with React Strict Mode)
         let current_state = state.status().state;
         match current_state {
@@ -750,138 +960,196 @@ mod real_impl {
         }
 
         // Check if authenticated
-        let service_guard = state.service.read().await;
-        let service = service_guard
-            .as_ref()
+        let service = state
+            .current_service()
+            .await
             .ok_or("Not authenticated - complete OAuth first")?;
 
         if !service.is_authenticated().await {
             return Err("Not authenticated - complete OAuth first".into());
         }
 
-        state.update_state(SessionState::Connecting);
-        cache_state(SessionState::Connecting);
-        let _ = app.emit("vnas-state-changed", SessionState::Connecting);
-
-        // Connect to SignalR hub
-        service.connect().await.map_err(|e| {
-            state.set_error(Some(e.to_string()));
-            state.update_state(SessionState::Disconnected);
-            cache_state(SessionState::Disconnected);
-            let _ = app.emit("vnas-state-changed", SessionState::Disconnected);
-            format!("Connection failed: {}", e)
-        })?;
-
-        tracing::info!("vNAS connected to SignalR hub");
-
-        // Check what state the service is in after connect
-        // It may be Subscribing (session found and joined) or WaitingForSession (CRC not running)
-        let service_state = service.state().await;
-        let frontend_state: SessionState = service_state.into();
-        state.update_state(frontend_state);
-        cache_state(frontend_state);
-        let _ = app.emit("vnas-state-changed", frontend_state);
-
-        // Start listening for events
-        let event_tx = state.event_tx.clone();
-        let status_lock = Arc::new(RwLock::new(state.status()));
-        let app_handle = state.app_handle.read().clone();
-
-        let mut events = service.events();
-        tokio::spawn(async move {
-            while let Ok(event) = events.recv().await {
-                match event {
-                    VnasEvent::AircraftUpdate(aircraft_list) => {
-                        for dto in aircraft_list {
-                            let aircraft = VnasAircraft::from(&dto);
-                            let _ = event_tx.send(aircraft.clone());
-
-                            // Emit to frontend via Tauri event
-                            if let Some(ref app) = app_handle {
-                                let _ = app.emit("vnas-aircraft-update", &aircraft);
-                            }
-                        }
-                    }
-                    VnasEvent::AircraftDisconnected(callsign) => {
-                        tracing::info!("[vNAS] Aircraft disconnected: {}", callsign);
-                        if let Some(ref app) = app_handle {
-                            let _ = app.emit("vnas-aircraft-disconnected", &callsign);
-                        }
-                    }
-                    VnasEvent::SessionStateChanged(new_state) => {
-                        let frontend_state: SessionState = new_state.into();
-                        status_lock.write().state = frontend_state;
-                        cache_state(frontend_state);
-                        tracing::info!("[vNAS] Session state changed: {:?}", frontend_state);
-                        if let Some(ref app) = app_handle {
-                            let _ = app.emit("vnas-state-changed", &frontend_state);
-                        }
-                    }
-                    VnasEvent::Error(error) => {
-                        tracing::info!("[vNAS] Error: {}", error);
-                        status_lock.write().error = Some(error.to_string());
-                        if let Some(ref app) = app_handle {
-                            let _ = app.emit("vnas-error", error.to_string());
-                        }
-                    }
-                }
-            }
-        });
-
-        Ok(())
-    }
-
-    /// Subscribe to TowerCabAircraft updates for a facility (replaces existing subscriptions).
-    ///
-    /// For backwards compatibility. Use `vnas_subscribe_facility` for additive subscriptions.
-    ///
-    /// # Arguments
-    /// * `facility_id` - ICAO code of the airport (e.g., "KBOS")
-    #[tauri::command]
-    pub async fn vnas_subscribe(
-        app: AppHandle,
-        state: State<'_, VnasState>,
-        facility_id: String,
-    ) -> Result<(), String> {
-        // Clear existing subscriptions and subscribe to this one
-        state.clear_facilities();
-        vnas_subscribe_facility(app, state, facility_id).await
-    }
-
-    /// Subscribe to TowerCabAircraft updates for an additional facility (additive).
-    ///
-    /// Supports multiple simultaneous subscriptions within the same CRC session.
-    /// Does nothing if already subscribed to the given facility.
-    ///
-    /// # Arguments
-    /// * `facility_id` - ICAO code of the airport (e.g., "KBOS")
-    #[tauri::command]
-    pub async fn vnas_subscribe_facility(
-        app: AppHandle,
-        state: State<'_, VnasState>,
-        facility_id: String,
-    ) -> Result<(), String> {
-        // Check if already subscribed
-        if state.is_subscribed(&facility_id) {
-            tracing::debug!(facility_id, "Already subscribed to facility");
+        if !publish_connect_state(&app, &state, epoch, SessionState::Connecting, None) {
+            abandon_detached_connect(&state, &service, None).await;
             return Ok(());
         }
 
-        let service_guard = state.service.read().await;
-        let service = service_guard
-            .as_ref()
-            .ok_or("Not connected - call vnas_connect first")?;
+        // Start forwarding events before connecting, so no event the connect triggers
+        // (such as a background session join) is missed. The previous forwarder is
+        // stopped before the new receiver subscribes, so no event reaches both and is
+        // emitted twice.
+        stop_event_forwarder(&state).await;
+        let event_tx = state.event_tx.clone();
+        let app_for_events = app.clone();
+        let events = service.events();
+        let forwarder = tokio::spawn(forward_events(events, move |event| {
+            let app = &app_for_events;
+            match event {
+                VnasEvent::AircraftUpdate(aircraft_list) => {
+                    for dto in aircraft_list {
+                        let aircraft = VnasAircraft::from(&dto);
+                        let _ = event_tx.send(aircraft.clone());
 
-        // Subscribe to TowerCabAircraft topic
-        service
-            .subscribe_towercab(&facility_id)
+                        // Emit to frontend via Tauri event
+                        let _ = app.emit("vnas-aircraft-update", &aircraft);
+                    }
+                }
+                VnasEvent::AircraftDisconnected(callsign) => {
+                    tracing::info!("[vNAS] Aircraft disconnected: {}", callsign);
+                    let _ = app.emit("vnas-aircraft-disconnected", &callsign);
+                }
+                VnasEvent::SessionStateChanged(new_state) => {
+                    let frontend_state: SessionState = new_state.into();
+                    let ended = apply_session_state(&app.state::<VnasState>(), frontend_state);
+                    cache_state(frontend_state);
+                    tracing::info!("[vNAS] Session state changed: {:?}", frontend_state);
+                    if ended {
+                        cache_subscribed_facilities(&[]);
+                        let _ = app.emit("vnas-subscriptions-changed", Vec::<String>::new());
+                    }
+                    let _ = app.emit("vnas-state-changed", &frontend_state);
+                }
+                VnasEvent::Error(error) => {
+                    tracing::info!("[vNAS] Error: {}", error);
+                    app.state::<VnasState>().set_error(Some(error.to_string()));
+                    let _ = app.emit("vnas-error", error.to_string());
+                }
+            }
+        }));
+        let forwarder_abort = forwarder.abort_handle();
+        state.replace_event_forwarder(forwarder);
+
+        // Connect to SignalR hub
+        let connected = service.connect().await;
+        if !publish_connect_result(&app, &state, &service, epoch, connected).await? {
+            abandon_detached_connect(&state, &service, Some(&forwarder_abort)).await;
+        }
+        Ok(())
+    }
+
+    /// Write a connect's `new_state` (and `error`, when given) into the status, refresh
+    /// the cached state and emit it, unless a disconnect has bumped the connect epoch
+    /// since `epoch` was read. Returns whether it published.
+    ///
+    /// The cache write and the emit also run under the status write lock, so a
+    /// disconnect's reset, cache write and `Disconnected` emit always land after them.
+    fn publish_connect_state(
+        app: &AppHandle,
+        state: &VnasState,
+        epoch: u64,
+        new_state: SessionState,
+        error: Option<String>,
+    ) -> bool {
+        state.update_status_if_epoch(epoch, |status| {
+            status.state = new_state;
+            if error.is_some() {
+                status.error = error;
+            }
+            cache_state(new_state);
+            let _ = app.emit("vnas-state-changed", new_state);
+        })
+    }
+
+    /// Publish what `service.connect()` returned.
+    ///
+    /// Returns `Ok(false)`, having written nothing, when a disconnect overtook the connect
+    /// (took the service out or bumped the connect epoch): the disconnect owns the status
+    /// and the frontend, and an error would show "Connection failed" after the user's own
+    /// disconnect. A connect a server-side teardown cancelled leaves the state
+    /// `Disconnected` with no error.
+    async fn publish_connect_result(
+        app: &AppHandle,
+        state: &VnasState,
+        service: &Arc<VnasService>,
+        epoch: u64,
+        connected: Result<(), VnasError>,
+    ) -> Result<bool, String> {
+        if !is_current_service(state, service).await {
+            return Ok(false);
+        }
+        match connected {
+            Ok(()) => {
+                tracing::info!("vNAS connected to SignalR hub");
+                // Subscribing (session found and joined) or WaitingForSession (CRC not running)
+                let frontend_state: SessionState = service.state().await.into();
+                Ok(publish_connect_state(
+                    app,
+                    state,
+                    epoch,
+                    frontend_state,
+                    None,
+                ))
+            }
+            Err(VnasError::ConnectCancelled) => {
+                tracing::info!("[vNAS] Connect cancelled by a server-side teardown");
+                let disconnected = SessionState::Disconnected;
+                Ok(publish_connect_state(app, state, epoch, disconnected, None))
+            }
+            Err(e) => {
+                let disconnected = SessionState::Disconnected;
+                if !publish_connect_state(app, state, epoch, disconnected, Some(e.to_string())) {
+                    return Ok(false);
+                }
+                Err(format!("Connection failed: {}", e))
+            }
+        }
+    }
+
+    /// Whether `service` is still the service in `state`, i.e. no disconnect took it out.
+    async fn is_current_service(state: &VnasState, service: &Arc<VnasService>) -> bool {
+        state
+            .current_service()
             .await
-            .map_err(|e| {
-                state.set_error(Some(e.to_string()));
-                format!("Subscription failed: {}", e)
-            })?;
+            .is_some_and(|current| Arc::ptr_eq(&current, service))
+    }
 
-        state.add_facility(facility_id.clone());
+    /// Wind down a connect that a disconnect overtook: tear the detached service down
+    /// and stop this connect's event forwarder, if it started one, clearing the stored
+    /// one only if it is still this connect's. Writes no status and emits nothing: the
+    /// disconnect did both.
+    async fn abandon_detached_connect(
+        state: &VnasState,
+        service: &VnasService,
+        forwarder: Option<&AbortHandle>,
+    ) {
+        tracing::info!("[vNAS] Disconnected while connecting; discarding the connection");
+        if let Err(e) = service.disconnect().await {
+            tracing::warn!("[vNAS] Disconnecting the discarded connection failed: {e}");
+        }
+        if let Some(forwarder) = forwarder {
+            forwarder.abort();
+            state.clear_event_forwarder_if(forwarder.id());
+        }
+    }
+
+    /// Subscribe to a facility's TowerCabAircraft topic once, however many callers race.
+    ///
+    /// A caller that finds the facility subscribed or its subscribe in flight returns
+    /// `Ok(false)` without contacting the hub. On success, records the facility, sets the
+    /// state to `Connected`, refreshes the caches and emits the new subscription list.
+    async fn subscribe_once(
+        app: &AppHandle,
+        state: &VnasState,
+        facility_id: &str,
+    ) -> Result<bool, String> {
+        let Some(pending) = state.begin_subscribe(facility_id) else {
+            tracing::debug!(facility_id, "Already subscribed or subscribing to facility");
+            return Ok(false);
+        };
+
+        let service = state
+            .current_service()
+            .await
+            .ok_or("Not connected - call vnas_connect first")?;
+        service.subscribe_towercab(facility_id).await.map_err(|e| {
+            state.set_error(Some(e.to_string()));
+            format!("Subscription failed: {}", e)
+        })?;
+        if !pending.succeed() {
+            tracing::debug!(facility_id, "Subscribe finished after it was cancelled");
+            return Ok(false);
+        }
+
         state.update_state(SessionState::Connected);
         cache_state(SessionState::Connected);
 
@@ -891,8 +1159,25 @@ mod real_impl {
         let _ = app.emit("vnas-subscriptions-changed", &subscriptions);
         let _ = app.emit("vnas-state-changed", SessionState::Connected);
 
-        tracing::info!(facility_id, "Subscribed to TowerCabAircraft");
+        Ok(true)
+    }
 
+    /// Subscribe to TowerCabAircraft updates for an additional facility (additive).
+    ///
+    /// Supports multiple simultaneous subscriptions within the same CRC session.
+    /// Does nothing if the facility is already subscribed or being subscribed.
+    ///
+    /// # Arguments
+    /// * `facility_id` - ICAO code of the airport (e.g., "KBOS")
+    #[tauri::command]
+    pub async fn vnas_subscribe_facility(
+        app: AppHandle,
+        state: State<'_, VnasState>,
+        facility_id: String,
+    ) -> Result<(), String> {
+        if subscribe_once(&app, &state, &facility_id).await? {
+            tracing::info!(facility_id, "Subscribed to TowerCabAircraft");
+        }
         Ok(())
     }
 
@@ -909,7 +1194,7 @@ mod real_impl {
         state: State<'_, VnasState>,
         facility_id: String,
     ) -> Result<(), String> {
-        state.remove_facility(&facility_id);
+        let _ = state.remove_facility(&facility_id);
 
         // Emit updated subscriptions list
         let subscriptions = state.status().subscribed_facilities;
@@ -929,23 +1214,38 @@ mod real_impl {
 
     /// Disconnect from vNAS.
     #[tauri::command]
-    pub async fn vnas_disconnect(state: State<'_, VnasState>) -> Result<(), String> {
-        // Disconnect service if connected
-        if let Some(service) = state.service.write().await.take() {
-            service.disconnect().await.map_err(|e| e.to_string())?;
+    pub async fn vnas_disconnect(
+        app: AppHandle,
+        state: State<'_, VnasState>,
+    ) -> Result<(), String> {
+        // Disconnect service if connected. The write guard is released before the
+        // disconnect awaits, so no command queues behind it meanwhile. A failure is only
+        // logged: the reset and the emits below run regardless.
+        let service = state.service.write().await.take();
+        if let Some(service) = service {
+            if let Err(e) = service.disconnect().await {
+                tracing::warn!("[vNAS] Disconnect failed: {e}");
+            }
         }
 
-        // Reset status
-        let mut status = state.status();
-        status.state = SessionState::Disconnected;
-        status.subscribed_facilities.clear();
-        status.error = None;
-        state.set_status(status);
+        // The forwarder may not have emitted the service's final `Disconnected` yet, and
+        // may still be draining queued events. Stop it before the reset, so no late state
+        // lands after it, and announce the end of the session here instead.
+        stop_event_forwarder(&state).await;
+
+        // Reset status, dropping subscriptions and subscribes in flight; a connect still
+        // in flight writes no status after this
+        state.reset_for_disconnect();
 
         // Clear caches
         cache_state(SessionState::Disconnected);
         cache_subscribed_facilities(&[]);
         cache_session_facilities(&[]);
+
+        // The forwarder may already have emitted the service's own `Disconnected`, so the
+        // frontend can see it twice; both events are idempotent there.
+        let _ = app.emit("vnas-subscriptions-changed", Vec::<String>::new());
+        let _ = app.emit("vnas-state-changed", SessionState::Disconnected);
 
         tracing::debug!("vNAS disconnected");
         Ok(())
@@ -978,9 +1278,9 @@ mod real_impl {
     pub async fn vnas_get_session_facilities(
         state: State<'_, VnasState>,
     ) -> Result<Vec<String>, String> {
-        let service_guard = state.service.read().await;
-        let service = service_guard
-            .as_ref()
+        let service = state
+            .current_service()
+            .await
             .ok_or_else(|| "vNAS service not initialized".to_string())?;
 
         let facilities = service.available_facilities().await;
@@ -994,9 +1294,9 @@ mod real_impl {
     pub async fn vnas_get_session_artcc(
         state: State<'_, VnasState>,
     ) -> Result<Option<String>, String> {
-        let service_guard = state.service.read().await;
-        let service = service_guard
-            .as_ref()
+        let service = state
+            .current_service()
+            .await
             .ok_or_else(|| "vNAS service not initialized".to_string())?;
 
         Ok(service.artcc_id().await)
@@ -1010,9 +1310,9 @@ mod real_impl {
     pub async fn vnas_get_session_airports(
         state: State<'_, VnasState>,
     ) -> Result<Vec<String>, String> {
-        let service_guard = state.service.read().await;
-        let service = service_guard
-            .as_ref()
+        let service = state
+            .current_service()
+            .await
             .ok_or_else(|| "vNAS service not initialized".to_string())?;
 
         let airports = service
@@ -1074,38 +1374,12 @@ mod real_impl {
         // Get the VnasState from Tauri's managed state
         let state = app.state::<VnasState>();
 
-        // Check if already subscribed
-        if state.is_subscribed(facility_id) {
-            tracing::debug!(facility_id, "Already subscribed to facility");
-            return Ok(());
+        if subscribe_once(app, &state, facility_id).await? {
+            tracing::info!(
+                facility_id,
+                "Subscribed to TowerCabAircraft via remote request"
+            );
         }
-
-        // Get service reference
-        let service_guard = state.service.read().await;
-        let service = service_guard
-            .as_ref()
-            .ok_or("Not connected - call vnas_connect first")?;
-
-        // Subscribe to TowerCabAircraft topic
-        service.subscribe_towercab(facility_id).await.map_err(|e| {
-            state.set_error(Some(e.to_string()));
-            format!("Subscription failed: {}", e)
-        })?;
-
-        state.add_facility(facility_id.to_string());
-        state.update_state(SessionState::Connected);
-        cache_state(SessionState::Connected);
-
-        // Emit updated subscriptions list
-        let subscriptions = state.status().subscribed_facilities;
-        cache_subscribed_facilities(&subscriptions);
-        let _ = app.emit("vnas-subscriptions-changed", &subscriptions);
-        let _ = app.emit("vnas-state-changed", SessionState::Connected);
-
-        tracing::info!(
-            facility_id,
-            "Subscribed to TowerCabAircraft via remote request"
-        );
 
         Ok(())
     }
@@ -1119,16 +1393,14 @@ mod real_impl {
         // Get the VnasState from Tauri's managed state
         let state = app.state::<VnasState>();
 
-        // Check if subscribed
-        if !state.is_subscribed(facility_id) {
+        // Drop the subscription, or cancel a subscribe in flight
+        if !state.remove_facility(facility_id) {
             tracing::debug!(
                 facility_id,
                 "Not subscribed to facility, nothing to unsubscribe"
             );
             return Ok(());
         }
-
-        state.remove_facility(facility_id);
 
         // Emit updated subscriptions list
         let subscriptions = state.status().subscribed_facilities;
@@ -1138,6 +1410,208 @@ mod real_impl {
         tracing::info!(facility_id, "Unsubscribed from facility via remote request");
 
         Ok(())
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        fn subscribed(state: &VnasState) -> Vec<String> {
+            state.status().subscribed_facilities
+        }
+
+        fn claim(state: &VnasState, facility_id: &str) -> u64 {
+            state
+                .try_begin_subscribe(facility_id)
+                .expect("facility should be claimable")
+        }
+
+        #[test]
+        fn try_begin_subscribe_claims_a_facility_once() {
+            let state = VnasState::new();
+            assert!(state.try_begin_subscribe("OAK").is_some());
+            assert!(state.try_begin_subscribe("OAK").is_none());
+            assert!(state.try_begin_subscribe("SFO").is_some());
+        }
+
+        #[test]
+        fn successful_subscribe_is_recorded_and_not_claimed_again() {
+            let state = VnasState::new();
+            let token = claim(&state, "OAK");
+            assert!(state.finish_subscribe("OAK", token, true));
+            assert_eq!(subscribed(&state), vec!["OAK".to_string()]);
+            assert!(state.try_begin_subscribe("OAK").is_none());
+        }
+
+        #[test]
+        fn failed_subscribe_releases_the_claim() {
+            let state = VnasState::new();
+            let token = claim(&state, "OAK");
+            assert!(!state.finish_subscribe("OAK", token, false));
+            assert!(subscribed(&state).is_empty());
+            assert!(state.try_begin_subscribe("OAK").is_some());
+        }
+
+        #[test]
+        fn unsubscribe_while_pending_wins_over_a_late_success() {
+            let state = VnasState::new();
+            let token = claim(&state, "OAK");
+            assert!(state.remove_facility("OAK"));
+            assert!(!state.finish_subscribe("OAK", token, true));
+            assert!(subscribed(&state).is_empty());
+            assert!(state.try_begin_subscribe("OAK").is_some());
+        }
+
+        #[test]
+        fn pending_guard_releases_on_drop_and_records_on_succeed() {
+            let state = VnasState::new();
+            {
+                let _pending = state.begin_subscribe("OAK").expect("first claim");
+                assert!(state.begin_subscribe("OAK").is_none());
+            }
+            assert!(subscribed(&state).is_empty());
+
+            let pending = state.begin_subscribe("OAK").expect("claim after release");
+            assert!(pending.succeed());
+            assert_eq!(subscribed(&state), vec!["OAK".to_string()]);
+            assert!(state.begin_subscribe("OAK").is_none());
+        }
+
+        #[test]
+        fn session_end_drops_subscriptions_and_subscribes_in_flight() {
+            let state = VnasState::new();
+            state.update_state(SessionState::Connected);
+            let oak = claim(&state, "OAK");
+            assert!(state.finish_subscribe("OAK", oak, true));
+            let sfo = claim(&state, "SFO");
+
+            assert!(apply_session_state(&state, SessionState::Disconnected));
+
+            assert_eq!(state.status().state, SessionState::Disconnected);
+            assert!(subscribed(&state).is_empty());
+            assert!(!state.finish_subscribe("SFO", sfo, true));
+            assert!(subscribed(&state).is_empty());
+            assert!(state.try_begin_subscribe("OAK").is_some());
+        }
+
+        #[test]
+        fn other_session_states_keep_subscriptions() {
+            let state = VnasState::new();
+            let token = claim(&state, "OAK");
+            assert!(state.finish_subscribe("OAK", token, true));
+
+            assert!(!apply_session_state(&state, SessionState::Connected));
+
+            assert_eq!(state.status().state, SessionState::Connected);
+            assert_eq!(subscribed(&state), vec!["OAK".to_string()]);
+        }
+
+        #[test]
+        fn dropping_a_cancelled_claim_keeps_the_newer_claim() {
+            let state = VnasState::new();
+            let stale = state.begin_subscribe("OAK").expect("claim A");
+            assert!(state.remove_facility("OAK"));
+            let current = state.begin_subscribe("OAK").expect("claim B");
+
+            drop(stale);
+
+            assert!(state.begin_subscribe("OAK").is_none());
+            assert!(current.succeed());
+            assert_eq!(subscribed(&state), vec!["OAK".to_string()]);
+        }
+
+        #[test]
+        fn late_success_of_a_cancelled_claim_keeps_the_newer_claim() {
+            let state = VnasState::new();
+            let stale = state.begin_subscribe("OAK").expect("claim A");
+            assert!(state.remove_facility("OAK"));
+            let current = state.begin_subscribe("OAK").expect("claim B");
+
+            assert!(!stale.succeed());
+
+            assert!(subscribed(&state).is_empty());
+            assert!(state.begin_subscribe("OAK").is_none());
+            assert!(current.succeed());
+            assert_eq!(subscribed(&state), vec!["OAK".to_string()]);
+        }
+
+        #[tokio::test]
+        async fn replacing_the_event_forwarder_aborts_the_previous_one() {
+            let state = VnasState::new();
+            let (alive_tx, alive_rx) = tokio::sync::oneshot::channel::<()>();
+            state.replace_event_forwarder(tokio::spawn(async move {
+                let _alive = alive_tx;
+                std::future::pending::<()>().await;
+            }));
+
+            state.replace_event_forwarder(tokio::spawn(std::future::pending::<()>()));
+
+            // The aborted task drops its future, and with it the sender.
+            let ended = tokio::time::timeout(std::time::Duration::from_secs(5), alive_rx).await;
+            assert!(
+                matches!(ended, Ok(Err(_))),
+                "previous forwarder still running"
+            );
+        }
+
+        #[tokio::test]
+        async fn event_forwarder_continues_after_lag() {
+            let (tx, events) = broadcast::channel(2);
+            for i in 0..5 {
+                tx.send(VnasEvent::AircraftDisconnected(format!("LAG{i}")))
+                    .expect("send");
+            }
+            let (seen_tx, mut seen) = tokio::sync::mpsc::unbounded_channel();
+            let forwarder = tokio::spawn(forward_events(events, move |event| {
+                if let VnasEvent::AircraftDisconnected(callsign) = event {
+                    let _ = seen_tx.send(callsign);
+                }
+            }));
+
+            let limit = std::time::Duration::from_secs(2);
+            for expected in ["LAG3", "LAG4"] {
+                let callsign = tokio::time::timeout(limit, seen.recv()).await;
+                assert_eq!(callsign, Ok(Some(expected.to_string())));
+            }
+            tx.send(VnasEvent::AircraftDisconnected("AFTER".to_string()))
+                .expect("the forwarder should still be receiving after the lag");
+            let callsign = tokio::time::timeout(limit, seen.recv()).await;
+            assert_eq!(callsign, Ok(Some("AFTER".to_string())));
+
+            drop(tx);
+            tokio::time::timeout(limit, forwarder)
+                .await
+                .expect("the forwarder should return once the sender is dropped")
+                .expect("forwarder task");
+        }
+
+        #[test]
+        fn update_status_applies_changes() {
+            let state = VnasState::new();
+            state.set_error(Some("old".to_string()));
+
+            state.update_status(|status| {
+                status.subscribed_facilities.push("OAK".to_string());
+                status.error = None;
+            });
+
+            assert_eq!(subscribed(&state), vec!["OAK".to_string()]);
+            assert_eq!(state.status().error, None);
+        }
+
+        #[test]
+        fn update_status_if_epoch_refuses_after_disconnect_reset() {
+            let state = VnasState::new();
+            let epoch = state.connect_epoch();
+            let connecting = |status: &mut VnasStatus| status.state = SessionState::Connecting;
+            assert!(state.update_status_if_epoch(epoch, connecting));
+
+            state.reset_for_disconnect();
+
+            assert!(!state.update_status_if_epoch(epoch, connecting));
+            assert_eq!(state.status().state, SessionState::Disconnected);
+            assert!(state.update_status_if_epoch(state.connect_epoch(), connecting));
+        }
     }
 }
 
@@ -1241,16 +1715,6 @@ mod stub_impl {
         Err(UNAVAILABLE_MSG.to_string())
     }
 
-    /// Subscribe to updates (stub)
-    #[tauri::command]
-    pub async fn vnas_subscribe(
-        _app: AppHandle,
-        _state: State<'_, VnasState>,
-        _facility_id: String,
-    ) -> Result<(), String> {
-        Err(UNAVAILABLE_MSG.to_string())
-    }
-
     /// Subscribe to additional facility (stub)
     #[tauri::command]
     pub async fn vnas_subscribe_facility(
@@ -1279,7 +1743,10 @@ mod stub_impl {
 
     /// Disconnect from vNAS (stub)
     #[tauri::command]
-    pub async fn vnas_disconnect(_state: State<'_, VnasState>) -> Result<(), String> {
+    pub async fn vnas_disconnect(
+        _app: AppHandle,
+        _state: State<'_, VnasState>,
+    ) -> Result<(), String> {
         Ok(()) // No-op, always succeeds
     }
 

@@ -1105,7 +1105,6 @@ pub fn run() {
             vnas::vnas_complete_auth,
             vnas::vnas_handle_oauth_callback,
             vnas::vnas_connect,
-            vnas::vnas_subscribe,
             vnas::vnas_subscribe_facility,
             vnas::vnas_unsubscribe_facility,
             vnas::vnas_get_subscribed_facilities,
