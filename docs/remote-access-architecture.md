@@ -203,6 +203,12 @@ pub struct ServerState {
 | `/api/log` | POST | Remote client logging endpoint |
 | `/api/diagnostic` | POST | Save a diagnostic file |
 
+Dev builds only: under `pnpm run vite:headless` (port 5174; never `pnpm run dev`, `vite preview` or a build) the Vite dev server answers a read-only subset of this table itself, for headless agent checks (`scripts/dev/devApi.ts`; recipe in `CLAUDE.md`, "E2E testing via Playwright MCP"). It serves `/api/global-settings` GET, the mod routes, `/api/tower-positions` GET, `/api/airport-surfaces`, `/api/proxy` and `/api/dev-health`, and passes `/api/realtraffic/*` to Vite's proxy.
+
+It differs from the desktop server: loopback sockets only (no private LAN ranges) with its own `Host` and `Origin` check, a 403 for `Sec-Fetch-Mode: navigate` and cross-site requests, `/api/proxy` limited to the METAR URL, `POST /api/global-settings` and `/api/log` answered 204 and dropped, other writes 405, WebSocket upgrades under `/api/` closed, and the ion token replaced by a placeholder with `/api/ion/v1/assets/<id>/endpoint` forwarding to Cesium ion.
+
+The desktop server is unchanged.
+
 ### Request path containment
 
 Every route that builds a file path from a request resolves it with `resolve_within` in `server.rs` and refuses a path that leaves its root: through `..`, a drive prefix, a UNC path, an NTFS stream (`:`), a symlink or junction (a dangling one included), or a name Windows cannot hold (`< > " | ? *`, control characters). `\` separates components like `/`. The static root (`dist`) is canonicalised once when the server starts; a missing `dist` fails the start.
@@ -535,6 +541,8 @@ Settings are stored on the host and synced to remote clients:
 ```
 ~/.config/towercab-3d/global-settings.json
 ```
+
+The dev build keeps its own file in the `com.towercab.viewer.dev` app data folder (`%APPDATA%\com.towercab.viewer.dev\global-settings.json` on Windows), which `vite:headless` reads per request, never writes, and overrides with `TC3D_SETTINGS_FILE`.
 
 **Remote (Browser):**
 - Reads via `GET /api/global-settings`

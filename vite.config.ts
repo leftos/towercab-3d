@@ -1,6 +1,8 @@
 import { resolve, join } from 'node:path'
-import { createReadStream, existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { defineConfig } from 'vite'
+import { serveCesiumAssets } from './scripts/dev/cesiumAssets'
+import { devApiOptionsFromEnv, devApiPlugin } from './scripts/dev/devApi'
 
 // Read version from package.json
 const packageJson = JSON.parse(readFileSync(resolve('package.json'), 'utf-8'))
@@ -34,11 +36,15 @@ const fastDevBuild = process.env.VITE_FAST_BUILD === '1'
 // Plugin to write build mode marker after build completes
 // This allows dev-wrapper.js to detect if last build was dev (unminified) or prod (minified)
 function writeBuildModeMarker(): Plugin {
+  let outDir = resolve('dist')
   return {
     name: 'write-build-mode-marker',
+    configResolved(config) {
+      outDir = resolve(config.root, config.build.outDir)
+    },
     closeBundle() {
       const mode = fastDevBuild ? 'dev' : 'prod'
-      writeFileSync(resolve('dist/.build-mode'), mode)
+      writeFileSync(join(outDir, '.build-mode'), mode)
     }
   }
 }
@@ -48,24 +54,7 @@ function serveCesiumDev(): Plugin {
   return {
     name: 'serve-cesium-dev',
     configureServer(server) {
-      server.middlewares.use((req, res, next) => {
-        if (req.url?.startsWith(`/${cesiumBaseUrl}/`)) {
-          const assetPath = req.url.replace(`/${cesiumBaseUrl}/`, '')
-          const filePath = join(cesiumSource, assetPath)
-          if (existsSync(filePath)) {
-            // Set appropriate content type
-            if (filePath.endsWith('.js')) res.setHeader('Content-Type', 'application/javascript')
-            else if (filePath.endsWith('.json')) res.setHeader('Content-Type', 'application/json')
-            else if (filePath.endsWith('.png')) res.setHeader('Content-Type', 'image/png')
-            else if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) res.setHeader('Content-Type', 'image/jpeg')
-            else if (filePath.endsWith('.css')) res.setHeader('Content-Type', 'text/css')
-            else if (filePath.endsWith('.wasm')) res.setHeader('Content-Type', 'application/wasm')
-            createReadStream(filePath).pipe(res)
-            return
-          }
-        }
-        next()
-      })
+      server.middlewares.use(serveCesiumAssets(cesiumSource, `/${cesiumBaseUrl}/`))
     }
   }
 }
@@ -159,6 +148,9 @@ export default defineConfig({
   plugins: [
     react(),
     serveCesiumDev(),
+    // `pnpm run vite:headless` only: answers /api/* from the dev build's settings and mods
+    // (scripts/dev/devApi.ts); every other serve and every build leave it out.
+    devApiPlugin((logger) => devApiOptionsFromEnv(resolve('.'), logger)),
     writeBuildModeMarker(),
     // Only copy Cesium assets if they don't exist (speeds up rebuilds significantly).
     //

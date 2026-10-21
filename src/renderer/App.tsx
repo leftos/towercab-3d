@@ -1,4 +1,4 @@
-import { Ion, type Viewer } from 'cesium'
+import type { Viewer } from 'cesium'
 import { useCallback, useEffect, useState } from 'react'
 import CesiumViewer from './components/CesiumViewer/CesiumViewer'
 import AircraftPanel from './components/UI/AircraftPanel'
@@ -55,6 +55,7 @@ import { flushPendingGlobalSync } from './stores/viewport'
 import { useViewportStore } from './stores/viewportStore'
 import { useVnasStore } from './stores/vnasStore'
 import { useWeatherStore } from './stores/weatherStore'
+import { setIonAccessToken } from './utils/devIonServer'
 import { stopFileLogging } from './utils/fileLogger'
 import { isRemoteMode } from './utils/remoteMode'
 import type { UrlCameraState } from './utils/urlParams'
@@ -208,7 +209,7 @@ function App() {
         // Set Cesium Ion access token (from global settings)
         const token = useGlobalSettingsStore.getState().cesiumIonToken
         if (token) {
-          Ion.defaultAccessToken = token
+          setIonAccessToken(token)
         }
 
         // Step 2: Load mods (tower positions, custom aircraft, etc.)
@@ -642,7 +643,7 @@ function App() {
           onClose={() => setShowTokenPrompt(false)}
           onSave={async (token) => {
             await setCesiumIonToken(token)
-            Ion.defaultAccessToken = token
+            setIonAccessToken(token)
           }}
         />
       )}

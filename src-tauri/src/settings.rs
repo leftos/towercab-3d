@@ -1381,6 +1381,79 @@ mod tests {
             .contains("SECRET-licence"));
     }
 
+    /// The fixture the dev server's Node port of `remote_view` (scripts/dev/settingsView.ts) is
+    /// tested against, committed at the repo root.
+    const REMOTE_VIEW_FIXTURE: &str = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../tests/fixtures/remote-view.json"
+    );
+
+    /// Every `FieldClass::Secret` path of `FIELD_CLASSES`, in table order.
+    fn secret_paths() -> Vec<String> {
+        FIELD_CLASSES
+            .iter()
+            .filter(|(_, class)| *class == FieldClass::Secret)
+            .map(|(path, _)| (*path).to_string())
+            .collect()
+    }
+
+    /// The fixture's content: the secret paths, and `populated()` with its remote view for
+    /// each imagery provider rule.
+    fn remote_view_fixture() -> Value {
+        let mut google = populated();
+        google.imagery.provider = "google".to_string();
+        let case = |name: &str, input: GlobalSettings| {
+            serde_json::json!({
+                "name": name,
+                "input": serde_json::to_value(&input).expect("serialise settings"),
+                "expected": serde_json::to_value(remote_view(&input)).expect("serialise view"),
+            })
+        };
+        serde_json::json!({
+            "secretPaths": secret_paths(),
+            "cases": [
+                case("imagery provider is not google", populated()),
+                case("imagery provider is google", google),
+            ],
+        })
+    }
+
+    fn read_remote_view_fixture() -> Value {
+        let text = fs::read_to_string(REMOTE_VIEW_FIXTURE).unwrap_or_else(|e| {
+            panic!(
+                "read {REMOTE_VIEW_FIXTURE}: {e}; write it by running this test with TC3D_UPDATE_FIXTURES=1"
+            )
+        });
+        serde_json::from_str(&text).expect("parse the remote view fixture")
+    }
+
+    #[test]
+    fn populated_fixture_matches() {
+        let generated = remote_view_fixture();
+        if std::env::var_os("TC3D_UPDATE_FIXTURES").is_some() {
+            let text = serde_json::to_string_pretty(&generated).expect("serialise fixture");
+            fs::write(REMOTE_VIEW_FIXTURE, text + "\n").expect("write the remote view fixture");
+        }
+        assert_eq!(
+            read_remote_view_fixture(),
+            generated,
+            "tests/fixtures/remote-view.json is stale: rerun with TC3D_UPDATE_FIXTURES=1, then make \
+             scripts/dev/settingsView.ts produce the new expected views"
+        );
+    }
+
+    #[test]
+    fn fixture_secret_paths_match_field_classes() {
+        let fixture = read_remote_view_fixture();
+        let listed: Vec<String> = fixture["secretPaths"]
+            .as_array()
+            .expect("secretPaths is an array")
+            .iter()
+            .map(|path| path.as_str().expect("secret path is a string").to_string())
+            .collect();
+        assert_eq!(listed, secret_paths());
+    }
+
     #[test]
     fn merge_keeps_host_fields_across_remote_round_trip() {
         let host = populated();

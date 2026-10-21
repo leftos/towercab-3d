@@ -26,8 +26,26 @@ When told to "check the logs", read temp/console.log. It's likely it's quite big
 
 ## E2E testing via Playwright MCP
 
-Two MCP servers in `.mcp.json` drive the app:
+Three MCP servers in `.mcp.json` drive the app. A check that only needs the rendered scene (weather, camera, labels, mods, tower models, METAR) runs headless with the host's data (`playwright-headless`), which opens no window on the user's desktop.
 
+Use `tauri-app` for what needs the real app (the Rust backend, host WebSockets and aircraft feed, the tray, native dialogs, deep links, single-instance, window state).
+
+- **`playwright-headless`** (`@playwright/mcp@0.0.83`, `--headless --isolated`, viewport 1600x900) drives headless Edge against `pnpm run vite:headless`, a Vite dev server on port 5174 (`vite --mode headless --strictPort`) that answers a read-only subset of `/api/*` itself from the dev build's data. Headless Edge got a real GPU with no extra flags. `pnpm run dev` and `vite:dev` never serve the dev API, and neither does `vite preview` or a build. Recipe:
+  1. Start `pnpm run vite:headless` in the background (stop it when done). By default it reads the desktop dev build's settings file (`%APPDATA%\com.towercab.viewer.dev\global-settings.json`) and mods from the main checkout's `src-tauri/target/debug/mods` (found through git, so a worktree reads the same mods). `TC3D_SETTINGS_FILE` and `TC3D_MODS_DIR` replace them, e.g. a fake settings file and a scratch mods folder.
+
+     Keep a settings file outside the repository, since the server refuses to start when it lies inside `server.fs.allow` or the project root (`/@fs/` would serve it).
+  2. Check `http://localhost:5174/api/dev-health` (answers only `{ settings: found|missing|unreadable, ionToken: boolean, modsRoot: found|missing }`); the start-up log prints `mods root: found|missing`, not the path.
+  3. Navigate to `http://localhost:5174/`.
+  - What the page shows: remote mode served by the dev server, with `/api/global-settings` (the remote view), `/api/mods/*`, `/api/tower-positions`, `/api/airport-surfaces` and `/api/proxy` (METAR only: `https://aviationweather.gov/api/data/metar` with `format=json` given once) answered; writes (`POST /api/global-settings`, `/api/log`) are accepted and dropped, other writes get 405.
+
+    The host WebSockets are closed at once, so the page shows the host as disconnected and, as with `playwright`, no aircraft appear until polling is started by hand. `/api/realtraffic/*` keeps Vite's existing proxy.
+  - The Cesium ion token never reaches the browser: the settings reply carries a placeholder token, the page points Cesium's ion server at the dev server's `/api/ion/` route (dev builds only), and that route forwards `GET /v1/assets/<id>/endpoint` to ion with the real token added server-side. The browser holds only the per-asset tokens ion returns.
+
+    With a fake or missing token the forwarder answers 401 (an ion token in the dev settings is required for terrain and imagery).
+  - Only same-origin script calls from the page are served: any `/api/*` request marked `Sec-Fetch-Mode: navigate` or `Sec-Fetch-Site: cross-site` gets 403 JSON (so opening an API URL with `browser_navigate` fails), while requests without fetch metadata (curl, Node) are served. The dev API answers loopback sockets only and checks `Host` and `Origin` itself.
+  - Transcript rules: never read or print the Cesium ion token, the Google Maps key or the dev settings file. Do not read `/api/global-settings` or the localStorage blob (`browser_evaluate` of `fetch('/api/global-settings')`, `useGlobalSettingsStore.getState()`, a whole `stores.settings.getState()`, `Ion.defaultAccessToken`) and do not `curl` the settings route; ask `/api/dev-health` whether a token is loaded.
+
+    Do not list `browser_network_requests` unfiltered, call `browser_network_request` on an ion or `/api/global-settings` entry, or save either into the repository (Vite's `/@fs/` serves it); console lines located at a failed ion URL print the URL. The Google key is served when Google is the imagery provider (as the desktop server serves it), so the same rules cover it.
 - **`tauri-app`** attaches to the running desktop app's WebView2 over CDP (`http://localhost:9222`). This is the real app: Rust backend, host settings and Cesium token, mods, METAR, and (in a dev build) the weather debug panel. Launch the app with the debugging port open, in the background, and stop it when done:
   ```powershell
   $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = '--remote-debugging-port=9222'; pnpm run dev
@@ -69,6 +87,7 @@ pnpm run build        # Build for production without vNAS
 pnpm run build:vnas   # Build for production with vNAS (requires private repo access)
 pnpm run build:converter  # Build FSLTL converter executable (requires Python + PyInstaller)
 pnpm run vite:dev     # Frontend only, no browser open — use for headless Playwright/E2E (port 5173)
+pnpm run vite:headless  # Frontend plus the dev-only /api/* for the playwright-headless MCP server (port 5174)
 pnpm run vite:build   # Build frontend only (internal, used by Tauri)
 ```
 

@@ -2,6 +2,7 @@ import * as Cesium from 'cesium'
 import { useEffect, useRef, useState } from 'react'
 import type { ModelInfo } from '../../services/AircraftModelService'
 import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
+import { setIonAccessToken } from '../../utils/devIonServer'
 import { neutralEnvironmentMapOptions } from '../../utils/environmentMap'
 import './ModelPreviewModal.css'
 
@@ -24,7 +25,7 @@ export function ModelPreviewModal({ modelInfo, onClose }: ModelPreviewModalProps
 
     try {
       // Set Cesium Ion token (required before creating viewer)
-      Cesium.Ion.defaultAccessToken = cesiumIonToken
+      setIonAccessToken(cesiumIonToken)
 
       // Create minimal Cesium viewer
       const viewer = new Cesium.Viewer(containerRef.current, {

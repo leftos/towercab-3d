@@ -1,6 +1,8 @@
 # TowerCab 3D driving conventions
 
-These are the rules for letting an agent drive the running TowerCab 3D app. Agents drive it through two third-party `@playwright/mcp` servers declared in `.mcp.json`: `tauri-app` attaches to the desktop app's WebView2 over CDP (port 9222), and `playwright` launches Edge against the Vite frontend alone; inside the page they call the dev-only `window.__tc3d` hook, installed by `src/renderer/hooks/useAgentHarness.ts` and typed in `src/renderer/types/harness.ts`.
+These are the rules for letting an agent drive the running TowerCab 3D app. Agents drive it through three third-party `@playwright/mcp` servers declared in `.mcp.json`: `tauri-app` attaches to the desktop app's WebView2 over CDP (port 9222), `playwright` launches Edge against the Vite frontend alone, and `playwright-headless` runs headless Edge against `pnpm run vite:headless`, whose dev server answers `/api/*` itself.
+
+Inside the page they call the dev-only `window.__tc3d` hook, installed by `src/renderer/hooks/useAgentHarness.ts` and typed in `src/renderer/types/harness.ts`.
 
 The launch recipe, the hook's calls and the standing driving notes live in `CLAUDE.md`, section "E2E testing via Playwright MCP"; this file holds the lessons behind them.
 
@@ -29,6 +31,14 @@ In towercab-3d the frontend-only server gets the SPA's HTML for every `/api/*` r
 
 The no-polling fact reached CLAUDE.md (commit 46a4598, 2026-10-02) five months after the frontend-only route was first documented (commit 66062dd, 2026-05-02), in the commit that fixed a bug found while driving. Write down, per driving route, exactly which subsystems are absent, so a run that "shows nothing" is not mistaken for a bug.
 Source: CLAUDE.md:29-40; .mcp.json:3-10; commits 0275468 (tauri-app server added), 46a4598 (remote-mode/no-polling note). Seen: twice (Wave 1 run moved to the real app; TC3D-5 fix).
+
+### Run render-only checks headless against the dev server's `/api/*`, and keep the ion token out of the transcript
+<!-- rule: headless-first-render-checks scope: project -->
+
+A check that needs only the rendered scene runs in the `playwright-headless` server against `pnpm run vite:headless` (port 5174), which opens no window on the user's desktop and answers `/api/*` with the dev build's settings, mods and METAR. Use `tauri-app` only for what needs the real app: the Rust backend, host WebSockets, the tray, native dialogs. The headless page shows the host disconnected and drops writes.
+
+The browser never holds the Cesium ion token (a placeholder plus a dev-server forwarder), and the agent never reads or prints the token, the Google Maps key or the settings file: no `/api/global-settings` read, no unfiltered network listing; `/api/dev-health` says whether a token is loaded. The recipe, defaults and the full list are in `CLAUDE.md`, section "E2E testing via Playwright MCP".
+Source: CLAUDE.md "E2E testing via Playwright MCP"; scripts/dev/devApi.ts; .mcp.json. Seen: documented.
 
 ### Launch in the background with the debug port, start when the hook answers, and stop what you started
 <!-- rule: launch-isolated-lifecycle -->
