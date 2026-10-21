@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terrain Path Decision</title>
+<style>
+  :root { --bg:#14171c; --panel:#1d2128; --text:#e6e8eb; --muted:#9aa3ad; --a:#e0a050; --b:#58b08a; --line:#2c323b; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 system-ui, sans-serif; }
+  header { padding:20px 16px 8px; max-width:1500px; margin:0 auto; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  header p { color:var(--muted); margin:0; }
+  .lanes { display:grid; grid-template-columns:1fr 1fr; gap:16px; padding:16px; max-width:1500px; margin:0 auto; }
+  @media (max-width: 900px) { .lanes { grid-template-columns:1fr; } }
+  .lane { background:var(--panel); border-radius:10px; padding:14px; border-top:4px solid var(--a); }
+  .lane.b { border-top-color:var(--b); }
+  .lane h2 { margin:0 0 6px; font-size:18px; }
+  .lane ul { margin:0 0 12px; padding-left:18px; color:var(--muted); }
+  figure { margin:0 0 14px; }
+  figure img { width:100%; display:block; border-radius:6px; border:1px solid var(--line); background:#000; }
+  figcaption { font-size:13px; color:var(--muted); margin-top:4px; }
+  .pair { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>TC3D-210: fix the terrain flattening, or replace it</h1>
+  <p>Left: what the current flattening does today, and the defects TC3D-200 to TC3D-209 would fix. Right: the greenfield smoothing spike (TC3D-194, branch spike-terrain-greenfield) at the same airports.</p>
+</header>
+<div class="lanes">
+  <section class="lane">
+    <h2>A. Fix the current flattening</h2>
+    <ul>
+      <li>Ten booked defects (TC3D-200..209); worst three: sea-level trench on a missing runway-end elevation (KORD), dead taxiway ramp (11 m cliff at KDEN, 4.6 m at YMML), fill polygon levelling valleys and hills by up to 40 m.</li>
+      <li>Keeps today's architecture; each defect is a bounded fix.</li>
+    </ul>
+    <figure><img src="../terrain-flattening-review/kord-09c27c-trench.png" alt="KORD 09C/27C trench"><figcaption>KORD 09C/27C: missing end elevation flattens the runway towards sea level.</figcaption></figure>
+    <figure><img src="../terrain-flattening-review/ymml-fill-sw.png" alt="YMML fill polygon"><figcaption>YMML south-west: the fill polygon levels the terrain around the field.</figcaption></figure>
+    <div class="pair">
+      <figure><img src="../terrain-flattening-review/heatmap-KDEN.png" alt="KDEN heatmap"><figcaption>KDEN height change (heatmap).</figcaption></figure>
+      <figure><img src="../terrain-flattening-review/heatmap-YMML.png" alt="YMML heatmap"><figcaption>YMML height change (heatmap).</figcaption></figure>
+    </div>
+  </section>
+  <section class="lane b">
+    <h2>B. Replace with greenfield smoothing</h2>
+    <ul>
+      <li>One pavement-weighted smooth surface per field, pinned to published threshold elevations; strength chosen per airport against Annex 14 slope limits (6 of 10 measured airports left untouched).</li>
+      <li>YMML spike: grades within 3 cm of published, steepest 50 m slope 13.1% to 1.2%, aircraft within 15 mm of the drawn ground.</li>
+      <li>Costs: a Web Worker for the fit (3.1 s on the main thread today), a cheaper smoothing search, and the unexplained tower-camera lift at YMML (187 m to 357 m).</li>
+    </ul>
+    <div class="pair">
+      <figure><img src="../terrain-smoothing-greenfield/app-ymml-raw.png" alt="YMML raw"><figcaption>YMML in the app, raw terrain.</figcaption></figure>
+      <figure><img src="../terrain-smoothing-greenfield/app-ymml-smoothed.png" alt="YMML smoothed"><figcaption>YMML in the app, smoothed.</figcaption></figure>
+      <figure><img src="../terrain-smoothing-greenfield/app-ymml-raw-contours.png" alt="YMML raw contours"><figcaption>Raw, contours.</figcaption></figure>
+      <figure><img src="../terrain-smoothing-greenfield/app-ymml-smoothed-contours.png" alt="YMML smoothed contours"><figcaption>Smoothed, contours.</figcaption></figure>
+    </div>
+    <figure><img src="../terrain-smoothing-greenfield/profile-YMML-16-34.png" alt="YMML 16/34 profile"><figcaption>YMML 16/34 centreline: raw terrain (red, 2.1 m RMS bumps) against the smoothed airfield surface and the spike provider as the app samples it.</figcaption></figure>
+  </section>
+</div>
+</body>
+</html>
