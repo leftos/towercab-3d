@@ -48,7 +48,7 @@ interface TowerPositioningState {
   // Step 1: Model positioning
   originalModelPosition: ModelPosition | null
   modelOffset: { north: number; east: number; up: number } // Meters
-  modelRotation: number // Degrees (0-360, clockwise from north)
+  modelRotation: number // Degrees (0-360, clockwise from the cab's rest pose, where glTF +X faces east)
 
   // Step 1: Control mode toggle (model vs camera controls)
   step1ControlMode: Step1ControlMode
