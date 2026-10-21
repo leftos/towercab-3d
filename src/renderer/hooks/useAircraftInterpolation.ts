@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { STOPPED_SPEED_KTS } from '../constants/flightPhase'
 import {
   AOA_HIGH_SPEED_THRESHOLD_KNOTS,
   AOA_LOW_SPEED_THRESHOLD_KNOTS,
   AOA_OFFSET_HIGH_SPEED_DEGREES,
   AOA_OFFSET_LOW_SPEED_DEGREES,
+  CONTACT_ENTER_HEIGHT_METERS,
+  CONTACT_EXIT_HEIGHT_METERS,
   DEPARTURE_BLEND_END_AGL,
   DEPARTURE_BLEND_START_AGL,
   FALLBACK_FLARE_PITCH_DEGREES,
@@ -23,8 +24,9 @@ import {
   NOSEWHEEL_LOWERING_LERP_FACTOR,
   PITCH_RATE_MULTIPLIER,
   ROLL_RATE_MULTIPLIER,
+  STOPPED_SPEED_KTS,
   TERRAIN_SMOOTHING_LERP_FACTOR,
-} from '../constants/rendering'
+} from '@/constants'
 import { geoidService } from '../services/GeoidService'
 import { useAircraftTimelineStore } from '../stores/aircraftTimelineStore'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -101,11 +103,6 @@ const sharedNosewheelStateRef = { current: new Map<string, NosewheelState>() }
 const sharedTimelineRateStateRef = { current: new Map<string, TimelineRateState>() }
 /** Ground contact per aircraft with a height above ground, kept for the hysteresis */
 const sharedContactStateRef = { current: new Map<string, boolean>() }
-
-/** Ground contact is entered below this height above ground (3 ft) */
-const CONTACT_ENTER_HEIGHT_METERS = 3 * 0.3048
-/** Ground contact is left above this height above ground (5 ft) */
-const CONTACT_EXIT_HEIGHT_METERS = 5 * 0.3048
 
 /**
  * Ground contact for this frame from the height above ground at the displayed instant, with hysteresis.

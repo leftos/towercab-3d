@@ -5,6 +5,7 @@
  * Identifies 14 distinct phases from short final to stopped taxi.
  */
 
+import { STOPPED_SPEED_KTS } from '@/constants'
 import { geoidService } from '../../services/GeoidService'
 import type { AircraftTimeline } from '../../types/aircraft-timeline'
 import type { Runway } from '../../types/airport'
@@ -30,7 +31,6 @@ const PATTERN_DISTANCE_NM = 5
 // elevation, not actual terrain - may be inaccurate for sloped terrain.
 const GROUND_ALTITUDE_AGL_FT = 100
 const PUSHBACK_MAX_SPEED_KTS = 8 // Pushback is typically 2-5 kts
-const STOPPED_SPEED_KTS = 2 // Below 2 kts is truly stopped (accounts for GPS jitter)
 const RUNWAY_ALIGNMENT_DEG = 25 // Generous for wind correction/crab angle
 const HOLDING_SHORT_DISTANCE_FT = 500
 const RUNWAY_WIDTH_BUFFER_FT = 150

@@ -13,6 +13,7 @@
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { knotsToMps } from '@/utils/coordinates'
 import { GEAR_RETRACT_MIN_AIRBORNE_SECONDS } from '@/utils/gearAnimationController'
 import { angleDiff, type FrameRecord, runScenario, type ScenarioResult } from './harness'
 
@@ -59,6 +60,19 @@ const GEAR_UP_AFTER_CONTACT_MAX_S = 3 // measured 2.1 s (7.3 s at 150 ft); gear 
 const GEAR_TRANSITION_S = 8
 // Ease-out cubic leaves 0.67 one second into an 8 s retraction; linear 0.875, the old cubic ease-in-out 0.99.
 const GEAR_EASE_OUT_AT_1S_MAX = 0.75
+// The vNAS line-up hold, from the hold to 15 s into the roll. The target display delay stays at the 1 Hz value, the
+// 1000 ms receive interval plus the 150 ms jitter buffer, with 1 ms for float rounding (min(20 s, gap + 150 ms) when
+// the silence counted). The drawn position while standing: 8.2 m of creep when the last sample was extrapolated.
+const PARKED_DELAY_WINDOW_S = 15
+const PARKED_TARGET_DELAY_MAX_MS = 1151
+const PARKED_POS_ERR_MAX_M = 0.05
+// The start of the roll after the hold: each frame step against the truth speed at that frame times this rate (the
+// display delay easing down at 100 ms/s plays the timeline at 1.1x), plus a margin; and the drawn position against
+// truth at the displayed instant. A regression pin: it measures the same with the hold and the statistics exclusion
+// taken out, because the harness's last stopped sample reports its true speed of about 0 kt.
+const ROLL_STEP_RATE_MAX = 1.2
+const ROLL_STEP_MARGIN_M = 0.05 // measured 0.017 m over the allowance
+const ROLL_POS_ERR_MAX_M = 2 // measured 0.61 m
 
 const ROOT = resolve(__dirname, '../..')
 const REPORT_PATH = resolve(ROOT, '.tmp/motion/report.txt')
@@ -459,8 +473,74 @@ describe('findings the review measured that are still bugs today', () => {
     }
   })
   // TC3D-51
-  it.todo('1.3 vNAS silence from a stationary aircraft does not inflate the display delay (TC3D-51)')
-  it.todo('1.4 a stopped aircraft does not extrapolate forward after the last vNAS sample (TC3D-51)')
+  it('1.3 vNAS silence from a stationary aircraft does not inflate the display delay (TC3D-51)', () => {
+    for (const [label, res] of [
+      ['vNAS, VATSIM seen first', vnas],
+      ['vNAS seen first', vnasFirst],
+    ] as const) {
+      const flight = res.flights.find((f) => f.callsign === 'DEP1')
+      expect(flight, label).toBeDefined()
+      if (!flight) return
+      const recs = framesFor(res, 'DEP1').filter(
+        (r) => r.tLocal >= flight.events.lined_up && r.tLocal <= flight.events.takeoff_roll + PARKED_DELAY_WINDOW_S,
+      )
+      expect(recs.length, label).toBeGreaterThan(1000)
+      // The target, not the current delay: with VATSIM seen first the current delay is still easing down from the
+      // VATSIM value here, which would hide a raised target
+      const worst = maxValue(recs, (r) => r.targetDelayMs ?? Number.POSITIVE_INFINITY)
+      expect(worst, `${label}: target display delay up to ${worst.toFixed(0)} ms around the line-up hold`).toBeLessThanOrEqual(
+        PARKED_TARGET_DELAY_MAX_MS,
+      )
+    }
+  })
+
+  it('1.4 a stopped aircraft does not extrapolate forward after the last vNAS sample (TC3D-51)', () => {
+    for (const [label, res] of [
+      ['vNAS, VATSIM seen first', vnas],
+      ['vNAS seen first', vnasFirst],
+    ] as const) {
+      const flight = res.flights.find((f) => f.callsign === 'DEP1')
+      expect(flight, label).toBeDefined()
+      if (!flight) return
+      // Frames shown before the first sample of the roll can be bracketed: the hold alone, not the start of the roll
+      const held = framesFor(res, 'DEP1').filter(
+        (r) => r.truth.segment === 'lined_up' && r.truth.gs === 0 && r.tLocal <= flight.events.takeoff_roll - 1.5,
+      )
+      expect(held.length, label).toBeGreaterThan(600)
+      expect(held.filter((r) => r.extrapolating).length, `${label}: held frames extrapolating`).toBe(0)
+      const drift = maxPosErr(held)
+      expect(drift, `${label}: drawn ${drift.toFixed(2)} m from where it stands`).toBeLessThanOrEqual(PARKED_POS_ERR_MAX_M)
+    }
+  })
+
+  it('1.3 regression pin: the takeoff roll after a long stop keeps starting from the held spot with no jump (TC3D-51)', () => {
+    for (const [label, res] of [
+      ['vNAS, VATSIM seen first', vnas],
+      ['vNAS seen first', vnasFirst],
+    ] as const) {
+      const flight = res.flights.find((f) => f.callsign === 'DEP1')
+      expect(flight, label).toBeDefined()
+      if (!flight) return
+      const recs = framesFor(res, 'DEP1').filter(
+        (r) => r.tLocal >= flight.events.lined_up && r.tLocal <= flight.events.takeoff_roll + PARKED_DELAY_WINDOW_S,
+      )
+      expect(recs.length, label).toBeGreaterThan(1000)
+      let worstExcess = Number.NEGATIVE_INFINITY
+      for (let i = 1; i < recs.length; i++) {
+        const step = Math.hypot(recs[i].x - recs[i - 1].x, recs[i].y - recs[i - 1].y)
+        const truthSpeedMps = knotsToMps(Math.max(recs[i].truth.gs, recs[i - 1].truth.gs))
+        const allowed = truthSpeedMps * (recs[i].frameTime - recs[i - 1].frameTime) * ROLL_STEP_RATE_MAX
+        worstExcess = Math.max(worstExcess, step - allowed)
+      }
+      expect(worstExcess, `${label}: a frame step exceeds the truth speed allowance by ${worstExcess.toFixed(3)} m`).toBeLessThanOrEqual(
+        ROLL_STEP_MARGIN_M,
+      )
+      const posErr = maxPosErr(recs)
+      expect(posErr, `${label}: drawn up to ${posErr.toFixed(2)} m from truth at the displayed instant`).toBeLessThanOrEqual(
+        ROLL_POS_ERR_MAX_M,
+      )
+    }
+  })
   // TC3D-52
   it.todo('3.2 bank is a coordinated turn at airliner speeds, not half of one (TC3D-52)')
   it.todo('3.4 the approach pitch is near 2.5-3 deg, not about 1 deg (TC3D-52)')
