@@ -217,13 +217,24 @@ export interface InterpolatedAircraftState extends AircraftState {
   verticalRate: number // Vertical rate in METERS/MINUTE
   turnRate: number // degrees/sec
   /**
-   * On-ground flag from authoritative source data (vNAS AGL < 50ft, ADS-B ground bit).
-   * - true = source confirms aircraft is on ground
-   * - false = source confirms aircraft is airborne
-   * - null = unknown, must infer from groundspeed/altitude
-   * More reliable than altitude-based detection when available.
+   * On-ground flag from the source (vNAS: below 50 ft, left above 80 ft, kept for labels; ADS-B ground bit).
+   * - true = source reports the aircraft on the ground
+   * - false = source reports it airborne
+   * - null = no flag (VATSIM)
+   * Ground contact for drawing and the gear is `inContact`, not this flag.
    */
   isOnGround: boolean | null
+  /**
+   * Height above ground in metres reported by the source at the displayed instant (vNAS), or null for
+   * sources without it (VATSIM, RealTraffic); replay carries what was recorded.
+   */
+  heightAboveGround: number | null
+  /**
+   * Ground contact decided per frame. From `heightAboveGround` when the source reports it: entered below 3 ft,
+   * left above 5 ft. Otherwise from the drawn result of the landing and departure height blends (drawn more than
+   * halfway onto the terrain). Null only before the aircraft's first drawn frame.
+   */
+  inContact: boolean | null
   /**
    * Ground acceleration in knots per second.
    * Positive = accelerating, negative = decelerating.

@@ -276,6 +276,9 @@ pub struct ObservationData {
     pub ground_track: f64,
     pub vertical_rate: f64,
     pub on_ground: bool,
+    // Height above ground in metres (vNAS); "heightAboveGround" on the wire, absent when None
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub height_above_ground: Option<f64>,
     pub pitch: Option<f64>,
     pub roll: Option<f64>,
     pub source: String,       // "vatsim" | "vnas" | "realtraffic"
@@ -287,6 +290,8 @@ pub struct ObservationData {
     pub flight_rules: Option<String>,
 }
 ```
+
+`heightAboveGround` carries vNAS's height above ground (metres) so a remote screen decides ground contact the same way the host does (entered below 3 ft, left above 5 ft). VATSIM and RealTraffic observations omit the key, and a remote browser treats a missing key (also what an older host sends) as no height. `SettingsSharedWorkerService.ts` puts the field on the batch it hands the host, and `toTimelineObservation` in `useRemoteObservations.ts` (typed by `RemoteObservationData` in `types/remote.ts`) copies it onto the timeline observation.
 
 ### WebSocket Message Types
 
@@ -357,7 +362,7 @@ export function useRemoteObservations(): void {
 
         case 'observations':
           // Convert to AircraftObservation format, add to timeline store
-          addObservationBatch(message.data.map(convertObservation))
+          addObservationBatch(message.data.map((obs) => toTimelineObservation(obs, Date.now())))
           break
 
         case 'removals':

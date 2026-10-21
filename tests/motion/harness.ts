@@ -55,6 +55,26 @@ export interface ScenarioOptions {
   useVnas: boolean
   vnasFirst: boolean
   durationS: number
+  /** Height of the drawn (Cesium) terrain above the sim's ground, in metres; 0 when omitted. */
+  terrainOffsetM?: number
+  /**
+   * When set, no aircraft gets a terrain sample (as above 300 m AGL, or a sample dropped) and the reference airport
+   * elevation is this many metres above the sim's ground.
+   */
+  unsampledReferenceOffsetM?: number
+  /** Metres added to and taken from the vNAS height above ground on alternate samples (floored at 0); 0 when omitted. */
+  vnasHeightJitterM?: number
+  /** vNAS observations carry no height above ground, as in a replay recorded before the field existed. */
+  vnasWithoutHeight?: boolean
+  /** vNAS observations carry no 50/80 ft ground flag (null), as VATSIM's do. */
+  vnasWithoutGroundFlag?: boolean
+}
+
+/** What each vNAS observation carries besides its position. */
+interface VnasFeedOptions {
+  jitterM: number
+  withHeight: boolean
+  withGroundFlag: boolean
 }
 
 export interface FrameRecord {
@@ -72,6 +92,7 @@ export interface FrameRecord {
   motionBearing: number | null
   isOnGroundEntry: boolean | null
   onGroundTimeline: boolean | null
+  inContact: boolean | null
   gearApp: number
   gearEllipsoidal: number
   displayDelayMs: number
@@ -172,6 +193,7 @@ function makeObservation(
     receivedAt: 0,
     source,
     displayDelay: source === 'vnas' ? 1500 : 17000,
+    ...(source === 'vnas' ? { heightAboveGround: s.agl } : {}),
   }
 }
 
@@ -185,7 +207,13 @@ function vatsimObservations(f: Flight, times: number[], groundEllip: number): Ob
 }
 
 /** vNAS at 1 Hz, receiving 80 ms later, with the 50/80 ft ground hysteresis and silence while parked. */
-function vnasObservations(f: Flight, start: number, durationS: number, groundEllip: number): Observation[] {
+function vnasObservations(
+  f: Flight,
+  start: number,
+  durationS: number,
+  groundEllip: number,
+  feed: VnasFeedOptions,
+): Observation[] {
   const out: Observation[] = []
   const meta = { cid: 0, aircraftType: 'B738', transponder: '', departure: null, arrival: null }
   const end = f.samples[f.samples.length - 1].t
@@ -195,7 +223,12 @@ function vnasObservations(f: Flight, start: number, durationS: number, groundEll
     const prevS = truthAt(f.samples, tg - f.offset - 2)
     if (s.gs < 1 && prevS && prevS.gs < 1) continue
     onGround = onGround ? s.agl / 0.3048 < 80 : s.agl / 0.3048 < 50
-    const observation = makeObservation(f, tg, 'vnas', onGround, groundEllip)
+    const observation = makeObservation(f, tg, 'vnas', feed.withGroundFlag ? onGround : null, groundEllip)
+    if (feed.withHeight) {
+      observation.heightAboveGround = Math.max(0, s.agl + (out.length % 2 === 0 ? -feed.jitterM : feed.jitterM))
+    } else {
+      delete observation.heightAboveGround
+    }
     observation.receivedAt = observation.observedAt + 80
     out.push({ callsign: f.callsign, receivedAt: observation.receivedAt, isVatsim: false, observation, metadata: meta })
   }
@@ -216,7 +249,13 @@ function buildObservations(flights: Flight[], opts: ScenarioOptions, groundEllip
     )
     if (opts.useVnas) {
       const firstVatsim = times[0] ?? f.offset
-      out.push(...vnasObservations(f, opts.vnasFirst ? f.offset : firstVatsim + 20, opts.durationS, groundEllip))
+      const start = opts.vnasFirst ? f.offset : firstVatsim + 20
+      const feed: VnasFeedOptions = {
+        jitterM: opts.vnasHeightJitterM ?? 0,
+        withHeight: !opts.vnasWithoutHeight,
+        withGroundFlag: !opts.vnasWithoutGroundFlag,
+      }
+      out.push(...vnasObservations(f, start, opts.durationS, groundEllip, feed))
     }
   }
   out.sort((a, b) => a.receivedAt - b.receivedAt)
@@ -254,11 +293,15 @@ function buildRunwayContext(runwayThr: { x: number; y: number }): SortContext {
 }
 
 /** Flat terrain under every aircraft below 300 m AGL or 40 kt, the gate useGroundAircraftTerrain uses. */
-function terrainFor(map: AircraftMap, groundEllip: number): Map<string, { height: number; slopeDegrees: number }> {
+function terrainFor(
+  map: AircraftMap,
+  groundEllip: number,
+  terrainHeight: number,
+): Map<string, { height: number; slopeDegrees: number }> {
   const terrain = new Map<string, { height: number; slopeDegrees: number }>()
   for (const e of map.values()) {
     if (e.interpolatedGroundspeed < 40 || e.interpolatedAltitude - groundEllip < 300) {
-      terrain.set(e.callsign, { height: groundEllip, slopeDegrees: 0 })
+      terrain.set(e.callsign, { height: terrainHeight, slopeDegrees: 0 })
     }
   }
   return terrain
@@ -292,7 +335,8 @@ function recordFrame(deps: FrameDeps, feed: FeedState, e: AircraftEntry, now: nu
   const motionBearing = moved ? ((Math.atan2(x - prev.x, y - prev.y) * 180) / Math.PI + 360) % 360 : null
   feed.prevXY.set(e.callsign, { x, y })
 
-  const onGroundApp = e.interpolatedGroundspeed < 40
+  // The gear's ground input is the entry's contact, as useAircraftModels passes it
+  const onGroundApp = e.inContact === true
   const vrFpm = e.verticalRate * 3.28084
   const aglFtApp =
     deps.gear.gearHeightAboveGroundMeters(
@@ -324,8 +368,17 @@ function recordFrame(deps: FrameDeps, feed: FeedState, e: AircraftEntry, now: nu
     motionBearing,
     isOnGroundEntry: e.isOnGround,
     onGroundTimeline: ts.onGround,
-    gearApp: deps.gear.updateGearAnimation(e.callsign, aglFtApp, vrFpm, onGroundApp, now),
-    gearEllipsoidal: deps.gear.updateGearAnimation(`${e.callsign}#ell`, aglFtEll, vrFpm, onGroundApp, now),
+    inContact: e.inContact,
+    gearApp: deps.gear.updateGearAnimation(
+      e.callsign,
+      { altitudeFt: aglFtApp, verticalRateFpm: vrFpm, inContact: onGroundApp, dataTime: e.timestamp },
+      now,
+    ),
+    gearEllipsoidal: deps.gear.updateGearAnimation(
+      `${e.callsign}#ell`,
+      { altitudeFt: aglFtEll, verticalRateFpm: vrFpm, inContact: onGroundApp, dataTime: e.timestamp },
+      now,
+    ),
     displayDelayMs: ts.displayDelay,
     extrapolating: ts.isExtrapolating,
   })
@@ -359,6 +412,8 @@ export async function runScenario(opts: ScenarioOptions): Promise<ScenarioResult
     const smart = await import('@/utils/smartSort')
 
     const groundEllip = geo.geoidService.mslToEllipsoidal(LAT0, LON0, GROUND_MSL)
+    const terrainHeight = groundEllip + (opts.terrainOffsetM ?? 0)
+    const unsampled = opts.unsampledReferenceOffsetM !== undefined
     const { flights, runwayThr } = buildFlights()
     const observations = buildObservations(flights, opts, groundEllip)
     const deps: FrameDeps = { tl, interp, gear, groundEllip, flightByCs: new Map(flights.map((f) => [f.callsign, f])) }
@@ -383,7 +438,8 @@ export async function runScenario(opts: ScenarioOptions): Promise<ScenarioResult
       const now = T0 + (f * 1000) / opts.fps
       vi.setSystemTime(now)
       obsIdx = drainObservations(tl, observations, obsIdx, now)
-      interp.setInterpolationTerrainData(terrainFor(map, groundEllip), GROUND_MSL)
+      const terrain = unsampled ? new Map() : terrainFor(map, groundEllip, terrainHeight)
+      interp.setInterpolationTerrainData(terrain, GROUND_MSL + (opts.unsampledReferenceOffsetM ?? 0))
 
       const cb = rafCallback as ((t: number) => void) | null
       rafCallback = null
