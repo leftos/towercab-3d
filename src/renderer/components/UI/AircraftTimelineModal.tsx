@@ -260,6 +260,7 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
       ctx.fillRect(0, 0, width, height)
 
       // Draw each track
+      const { dynamicDelays } = useAircraftTimelineStore.getState()
       filteredTimelines.forEach((timeline, index) => {
         const y = index * (config.trackHeight + TRACK_GAP)
         const centerY = y + config.trackHeight / 2
@@ -275,8 +276,9 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
         ctx.textBaseline = 'middle'
         const parkedSuffix = timeline.metadata.isParked ? ' (P)' : ''
         // Show current delay in ms, with target in parentheses if different
-        const currentDelay = timeline.dynamicDelay?.currentDelayMs
-        const targetDelay = timeline.dynamicDelay?.targetDelayMs
+        const dynamicDelay = dynamicDelays.get(timeline.callsign)
+        const currentDelay = dynamicDelay?.currentDelayMs
+        const targetDelay = dynamicDelay?.targetDelayMs
         let delayInfo = ''
         if (currentDelay !== undefined) {
           const currentSec = (currentDelay / 1000).toFixed(1)
@@ -321,7 +323,7 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
 
         // Draw per-aircraft display delay indicator (where this aircraft is currently rendered)
         // Get dynamic delay if available, otherwise use source default
-        const aircraftDelay = timeline.dynamicDelay?.currentDelayMs ?? SOURCE_DISPLAY_DELAYS[timeline.lastSource]
+        const aircraftDelay = currentDelay ?? SOURCE_DISPLAY_DELAYS[timeline.lastSource]
         const displayTime = replayTime !== null ? replayTime : now - aircraftDelay
         const delayX = LABEL_WIDTH + ((displayTime - startTime) / 1000) * config.timeScale
 
@@ -458,6 +460,7 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
       }
 
       const timeline = filteredTimelines[trackIndex]
+      const dynamicDelay = useAircraftTimelineStore.getState().dynamicDelays.get(timeline.callsign)
       const now = Date.now()
       const endTime = now
       const startTime = endTime - visibleDurationMs
@@ -479,12 +482,12 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
             observation: obs,
             callsign: timeline.callsign,
             isParked: timeline.metadata.isParked,
-            dynamicDelay: timeline.dynamicDelay
+            dynamicDelay: dynamicDelay
               ? {
-                  currentDelayMs: timeline.dynamicDelay.currentDelayMs,
-                  targetDelayMs: timeline.dynamicDelay.targetDelayMs,
-                  intervalHistory: timeline.dynamicDelay.intervalHistory,
-                  extrapolationBumpMs: timeline.dynamicDelay.extrapolationBumpMs,
+                  currentDelayMs: dynamicDelay.currentDelayMs,
+                  targetDelayMs: dynamicDelay.targetDelayMs,
+                  intervalHistory: dynamicDelay.intervalHistory,
+                  extrapolationBumpMs: dynamicDelay.extrapolationBumpMs,
                 }
               : undefined,
           })

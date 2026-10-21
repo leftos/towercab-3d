@@ -32,6 +32,7 @@ import {
   DYNAMIC_DELAY_INTERVAL_WINDOW,
   DYNAMIC_DELAY_JITTER_BUFFER_MS,
   DYNAMIC_DELAY_MAX_DECREASE_RATE,
+  DYNAMIC_DELAY_MAX_ELAPSED_MS,
   DYNAMIC_DELAY_MAX_INCREASE_RATE,
   DYNAMIC_DELAY_MAX_MS,
   DYNAMIC_DELAY_MIN_MS,
@@ -118,6 +119,7 @@ function notifyAircraftRemoved(callsigns: string[]): void {
 /** A removed timeline kept for diagnostic export */
 interface GraveyardEntry {
   timeline: AircraftTimeline
+  dynamicDelay: DynamicDelayState | undefined
   removedAt: number
 }
 
@@ -140,6 +142,10 @@ interface AircraftTimelineStore {
       altitude: number
     }
   >
+
+  // Per-aircraft display delay, saved every frame. Kept apart from `timelines` so the per-frame save does not
+  // replace the timelines map and wake its subscribers when no observation arrived.
+  dynamicDelays: Map<string, DynamicDelayState>
 
   // Per-aircraft reconciliation state for smooth transitions.
   // Tracks what 'after' observation we're interpolating toward and where we started from.
@@ -457,7 +463,8 @@ function filterObservationsForSource(observations: AircraftObservation[], now: n
 function calculateTargetDelay(observations: AircraftObservation[], intervals: number[]): number {
   if (observations.length < DYNAMIC_DELAY_MIN_OBSERVATIONS || intervals.length === 0) {
     const newest = observations[observations.length - 1]
-    return newest.displayDelay ?? SOURCE_DISPLAY_DELAYS[newest.source]
+    const sourceDelay = newest.displayDelay ?? SOURCE_DISPLAY_DELAYS[newest.source]
+    return Math.max(DYNAMIC_DELAY_MIN_MS, Math.min(DYNAMIC_DELAY_MAX_MS, sourceDelay))
   }
 
   // Use max interval to handle worst-case timing
@@ -522,19 +529,21 @@ function updateDynamicDelayState(
  * - Increases at DYNAMIC_DELAY_MAX_INCREASE_RATE (avoid displayTime regressing on
  *   source flips like vNAS→VATSIM where target jumps from ~1.2s to ~15s)
  * Extrapolation bump is included and decays over time.
+ * The elapsed time is clamped to [0, DYNAMIC_DELAY_MAX_ELAPSED_MS], so a backward scrub never runs the
+ * limit in reverse and a long gap between frames (a return to live, a hidden tab) never snaps the delay.
  *
  * @param state - Current dynamic delay state
  * @param now - Current timestamp
  * @param isExtrapolating - Whether we're currently extrapolating
  * @returns Updated current delay and new state
  */
-function applyDelayTransition(
+export function applyDelayTransition(
   state: DynamicDelayState,
   now: number,
   isExtrapolating: boolean,
 ): { delayMs: number; updatedState: DynamicDelayState } {
   const { currentDelayMs, targetDelayMs, lastUpdateTime, extrapolationBumpMs } = state
-  const elapsed = now - lastUpdateTime
+  const elapsed = Math.max(0, Math.min(DYNAMIC_DELAY_MAX_ELAPSED_MS, now - lastUpdateTime))
 
   // Calculate new extrapolation bump
   let newExtrapolationBump = extrapolationBumpMs
@@ -685,29 +694,38 @@ type ReconciliationState = {
   anchorObservedAt: number // Anchor (oldest obs) when this reconciliation was created
 }
 
+/** What earlier frames left for one aircraft, read by the next interpolation. */
+interface PriorFrameState {
+  /** Previously known reliable heading (for stationary aircraft) */
+  lastKnownHeading: number | null
+  /** Current reconciliation state (for smooth transitions) */
+  reconciliation: ReconciliationState | undefined
+  /** The position we rendered last frame (for starting new reconciliations) */
+  lastRenderedPos: { latitude: number; longitude: number; altitude: number } | undefined
+  /** The display delay state; absent for replay and imported timelines */
+  dynamicDelay: DynamicDelayState | undefined
+}
+
 /**
  * Compute interpolated/extrapolated state for an aircraft
  *
  * @param timeline - The aircraft's observation timeline
  * @param now - Current time in milliseconds
- * @param lastKnownHeading - Previously known reliable heading (for stationary aircraft)
- * @param reconciliation - Current reconciliation state (for smooth transitions)
- * @param lastRenderedPos - The position we rendered last frame (for starting new reconciliations)
- * @returns Interpolation result, updated heading, and updated reconciliation state
+ * @param prior - What earlier frames left for this aircraft
+ * @returns Interpolation result, updated heading, reconciliation and display delay state
  */
 function interpolateTimeline(
   timeline: AircraftTimeline,
   now: number,
-  lastKnownHeading: number | null,
-  reconciliation: ReconciliationState | undefined,
-  lastRenderedPos: { latitude: number; longitude: number; altitude: number } | undefined,
+  prior: PriorFrameState,
 ): {
   result: TimelineInterpolationResult
   newLastKnownHeading: number
   newReconciliation: ReconciliationState | null
   newDynamicDelay: DynamicDelayState | null
 } | null {
-  const { observations: allObservations, metadata, lastSource, callsign, dynamicDelay } = timeline
+  const { observations: allObservations, metadata, lastSource, callsign } = timeline
+  const { lastKnownHeading, reconciliation, lastRenderedPos, dynamicDelay } = prior
 
   if (allObservations.length === 0) {
     return null
@@ -1158,6 +1176,7 @@ function interpolateTimeline(
     // HELD: displayTime is before all observations (a new aircraft, until display time reaches its first report).
     // It is drawn at the first observation. On the ground it stands still, so report what is drawn: no speed,
     // no track. An airborne first report keeps its speed and track so the aircraft stays at its altitude.
+    // Holding is not extrapolation, so it does not bump the display delay.
     const heldOnGround = after.onGround === true || after.groundspeed < GROUNDSPEED_THRESHOLD_KNOTS
     latitude = after.latitude
     longitude = after.longitude
@@ -1169,7 +1188,6 @@ function interpolateTimeline(
     pitch = after.pitch
     roll = after.roll
     verticalRate = after.verticalRate
-    isExtrapolating = true
   } else {
     // No observations (shouldn't happen if we checked length > 0)
     return null
@@ -1234,6 +1252,7 @@ function interpolateTimeline(
       heading: finalHeading,
       groundspeed,
       groundTrack,
+      reportedGroundspeed: newestObs.groundspeed,
       // Extended ADS-B data
       onGround,
       pitch,
@@ -1263,6 +1282,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
   recentlyRemoved: new Map(),
   lastKnownHeadings: new Map(),
   lastRenderedPositions: new Map(),
+  dynamicDelays: new Map(),
   reconciliationStates: new Map(),
   pruneTimer: null,
 
@@ -1320,7 +1340,8 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
     }
 
     // Update dynamic delay state
-    const dynamicDelay = updateDynamicDelayState(existing?.dynamicDelay, observations, observation.receivedAt)
+    const { dynamicDelays } = get()
+    const dynamicDelay = updateDynamicDelayState(dynamicDelays.get(callsign), observations, observation.receivedAt)
 
     // Debug: Log observation additions for tracked aircraft
     if (import.meta.env.DEV) {
@@ -1347,17 +1368,18 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       metadata: mergedMetadata,
       lastSource: observation.source,
       lastReceivedAt: observation.receivedAt,
-      dynamicDelay,
     })
+    const updatedDelays = new Map(dynamicDelays)
+    updatedDelays.set(callsign, dynamicDelay)
 
     // Remove from graveyard if aircraft reappeared
     const { recentlyRemoved } = get()
     if (recentlyRemoved.has(callsign)) {
       const updatedGraveyard = new Map(recentlyRemoved)
       updatedGraveyard.delete(callsign)
-      set({ timelines: updated, recentlyRemoved: updatedGraveyard })
+      set({ timelines: updated, dynamicDelays: updatedDelays, recentlyRemoved: updatedGraveyard })
     } else {
-      set({ timelines: updated })
+      set({ timelines: updated, dynamicDelays: updatedDelays })
     }
 
     // Broadcast observation to insets and remote browsers
@@ -1371,8 +1393,9 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
    */
   addObservationBatch: (batch) => {
     if (useReplayStore.getState().playbackMode !== 'live') return
-    const { timelines } = get()
+    const { timelines, dynamicDelays } = get()
     const updated = new Map(timelines)
+    const updatedDelays = new Map(dynamicDelays)
 
     for (const { callsign, observation, metadata } of batch) {
       const existing = updated.get(callsign)
@@ -1439,7 +1462,8 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       }
 
       // Update dynamic delay state
-      const dynamicDelay = updateDynamicDelayState(existing?.dynamicDelay, observations, observation.receivedAt)
+      const dynamicDelay = updateDynamicDelayState(updatedDelays.get(callsign), observations, observation.receivedAt)
+      updatedDelays.set(callsign, dynamicDelay)
 
       // Debug: Log observation additions for tracked aircraft
       if (import.meta.env.DEV) {
@@ -1465,7 +1489,6 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
         metadata: mergedMetadata,
         lastSource: observation.source,
         lastReceivedAt: observation.receivedAt,
-        dynamicDelay,
       })
     }
 
@@ -1480,9 +1503,9 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
     }
 
     if (updatedGraveyard) {
-      set({ timelines: updated, recentlyRemoved: updatedGraveyard })
+      set({ timelines: updated, dynamicDelays: updatedDelays, recentlyRemoved: updatedGraveyard })
     } else {
-      set({ timelines: updated })
+      set({ timelines: updated, dynamicDelays: updatedDelays })
     }
 
     // Broadcast observations to insets (if callback registered by main app)
@@ -1495,7 +1518,14 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
    * Remove an aircraft from the timeline
    */
   removeAircraft: (callsign) => {
-    const { timelines, recentlyRemoved, lastKnownHeadings, lastRenderedPositions, reconciliationStates } = get()
+    const {
+      timelines,
+      recentlyRemoved,
+      lastKnownHeadings,
+      lastRenderedPositions,
+      dynamicDelays,
+      reconciliationStates,
+    } = get()
     const timeline = timelines.get(callsign)
     if (timeline) {
       const updatedTimelines = new Map(timelines)
@@ -1503,13 +1533,16 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
 
       // Move to graveyard for diagnostic capture
       const updatedGraveyard = new Map(recentlyRemoved)
-      updatedGraveyard.set(callsign, { timeline, removedAt: Date.now() })
+      updatedGraveyard.set(callsign, { timeline, dynamicDelay: dynamicDelays.get(callsign), removedAt: Date.now() })
 
       const updatedHeadings = new Map(lastKnownHeadings)
       updatedHeadings.delete(callsign)
 
       const updatedPositions = new Map(lastRenderedPositions)
       updatedPositions.delete(callsign)
+
+      const updatedDelays = new Map(dynamicDelays)
+      updatedDelays.delete(callsign)
 
       const updatedReconciliations = new Map(reconciliationStates)
       updatedReconciliations.delete(callsign)
@@ -1519,6 +1552,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
         recentlyRemoved: updatedGraveyard,
         lastKnownHeadings: updatedHeadings,
         lastRenderedPositions: updatedPositions,
+        dynamicDelays: updatedDelays,
         reconciliationStates: updatedReconciliations,
       })
 
@@ -1541,7 +1575,14 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
     const playbackMode = useReplayStore.getState().playbackMode
     if (playbackMode !== 'live') return
 
-    const { timelines, recentlyRemoved, lastKnownHeadings, lastRenderedPositions, reconciliationStates } = get()
+    const {
+      timelines,
+      recentlyRemoved,
+      lastKnownHeadings,
+      lastRenderedPositions,
+      dynamicDelays,
+      reconciliationStates,
+    } = get()
     const now = Date.now()
     const removedCallsigns: string[] = []
 
@@ -1549,15 +1590,17 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
     const updatedGraveyard = new Map(recentlyRemoved)
     const updatedHeadings = new Map(lastKnownHeadings)
     const updatedPositions = new Map(lastRenderedPositions)
+    const updatedDelays = new Map(dynamicDelays)
     const updatedReconciliations = new Map(reconciliationStates)
 
     // Move timed-out aircraft to graveyard
     for (const [callsign, timeline] of timelines) {
       if (now - timeline.lastReceivedAt > AIRCRAFT_TIMEOUT) {
         updatedTimelines.delete(callsign)
-        updatedGraveyard.set(callsign, { timeline, removedAt: now })
+        updatedGraveyard.set(callsign, { timeline, dynamicDelay: dynamicDelays.get(callsign), removedAt: now })
         updatedHeadings.delete(callsign)
         updatedPositions.delete(callsign)
+        updatedDelays.delete(callsign)
         updatedReconciliations.delete(callsign)
         removedCallsigns.push(callsign)
       }
@@ -1578,6 +1621,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
         recentlyRemoved: updatedGraveyard,
         lastKnownHeadings: updatedHeadings,
         lastRenderedPositions: updatedPositions,
+        dynamicDelays: updatedDelays,
         reconciliationStates: updatedReconciliations,
       })
 
@@ -1626,6 +1670,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       recentlyRemoved: new Map(),
       lastKnownHeadings: new Map(),
       lastRenderedPositions: new Map(),
+      dynamicDelays: new Map(),
       reconciliationStates: new Map(),
     })
   },
@@ -1645,14 +1690,16 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
    * batches heading updates efficiently.
    */
   getInterpolatedState: (callsign, now) => {
-    const { timelines, lastKnownHeadings } = get()
+    const { timelines, lastKnownHeadings, reconciliationStates, lastRenderedPositions, dynamicDelays } = get()
     const timeline = timelines.get(callsign)
     if (!timeline) return null
 
-    const lastKnownHeading = lastKnownHeadings.get(callsign) ?? null
-    const reconciliation = get().reconciliationStates.get(callsign)
-    const lastPosition = get().lastRenderedPositions.get(callsign)
-    const result = interpolateTimeline(timeline, now, lastKnownHeading, reconciliation, lastPosition)
+    const result = interpolateTimeline(timeline, now, {
+      lastKnownHeading: lastKnownHeadings.get(callsign) ?? null,
+      reconciliation: reconciliationStates.get(callsign),
+      lastRenderedPos: lastRenderedPositions.get(callsign),
+      dynamicDelay: dynamicDelays.get(callsign),
+    })
 
     // Return result without mutating store state
     // Heading/reconciliation/dynamicDelay updates are only applied by getInterpolatedStates() batch operation
@@ -1663,23 +1710,26 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
    * Get interpolated states for all aircraft
    */
   getInterpolatedStates: (now) => {
-    const { timelines, lastKnownHeadings, lastRenderedPositions, reconciliationStates } = get()
+    const { timelines, lastKnownHeadings, lastRenderedPositions, dynamicDelays, reconciliationStates } = get()
     const results = new Map<string, TimelineInterpolationResult>()
     const updatedHeadings = new Map(lastKnownHeadings)
     const updatedPositions = new Map(lastRenderedPositions)
+    const updatedDelays = new Map(dynamicDelays)
     const updatedReconciliations = new Map(reconciliationStates)
-    // Defer timeline Map creation until we actually need it (avoids allocation on every frame)
-    let updatedTimelines: Map<string, AircraftTimeline> | null = null
     let headingsChanged = false
     let positionsChanged = false
     let reconciliationsChanged = false
-    let timelinesChanged = false
+    let delaysChanged = false
 
     for (const [callsign, timeline] of timelines) {
       const lastKnownHeading = lastKnownHeadings.get(callsign) ?? null
-      const lastPosition = lastRenderedPositions.get(callsign)
       const reconciliation = reconciliationStates.get(callsign)
-      const interpolation = interpolateTimeline(timeline, now, lastKnownHeading, reconciliation, lastPosition)
+      const interpolation = interpolateTimeline(timeline, now, {
+        lastKnownHeading,
+        reconciliation,
+        lastRenderedPos: lastRenderedPositions.get(callsign),
+        dynamicDelay: dynamicDelays.get(callsign),
+      })
 
       if (interpolation) {
         results.set(callsign, interpolation.result)
@@ -1717,26 +1767,19 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
         // applyDelayTransition rate-limits by the time since lastUpdateTime, so a stale
         // lastUpdateTime would let the first change after a steady period jump in one frame.
         if (interpolation.newDynamicDelay) {
-          // Lazily create the Map copy only when there is a delay state to save
-          if (!updatedTimelines) {
-            updatedTimelines = new Map(timelines)
-          }
-          updatedTimelines.set(callsign, {
-            ...timeline,
-            dynamicDelay: interpolation.newDynamicDelay,
-          })
-          timelinesChanged = true
+          updatedDelays.set(callsign, interpolation.newDynamicDelay)
+          delaysChanged = true
         }
       }
     }
 
     // Batch update state if anything changed
-    if (headingsChanged || positionsChanged || reconciliationsChanged || timelinesChanged) {
+    if (headingsChanged || positionsChanged || reconciliationsChanged || delaysChanged) {
       set({
         lastKnownHeadings: headingsChanged ? updatedHeadings : lastKnownHeadings,
         lastRenderedPositions: positionsChanged ? updatedPositions : lastRenderedPositions,
         reconciliationStates: reconciliationsChanged ? updatedReconciliations : reconciliationStates,
-        timelines: timelinesChanged ? updatedTimelines! : timelines,
+        dynamicDelays: delaysChanged ? updatedDelays : dynamicDelays,
       })
     }
 
@@ -1874,8 +1917,6 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
         metadata: { ...entry.metadata },
         lastSource: entry.lastSource,
         lastReceivedAt: entry.lastReceivedAt,
-        // Clear dynamic delay — not meaningful for imported playback
-        dynamicDelay: undefined,
       })
     }
 

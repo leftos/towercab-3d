@@ -458,8 +458,9 @@ function runInterpolationFrame() {
     // Exception: Allow stopped aircraft (groundspeed < STOPPED_SPEED_KTS) with only
     // 1 observation. vNAS doesn't send updates for stationary aircraft, so they would
     // otherwise never appear. Since they're not moving, interpolation isn't needed -
-    // their VATSIM position is valid as-is.
-    if (timeline.observationCount < 2 && timeline.groundspeed >= STOPPED_SPEED_KTS) {
+    // their VATSIM position is valid as-is. The reported speed decides, not the held groundspeed of 0, so an
+    // aircraft first seen moving is not drawn held and then hidden when display time passes its first report.
+    if (timeline.observationCount < 2 && timeline.reportedGroundspeed >= STOPPED_SPEED_KTS) {
       continue
     }
 

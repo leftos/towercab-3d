@@ -192,12 +192,6 @@ export interface AircraftTimeline {
 
   /** When we last received any data for this aircraft */
   lastReceivedAt: number
-
-  /**
-   * Dynamic delay state for adaptive latency minimization.
-   * Optional for backwards compatibility - will be initialized on first use.
-   */
-  dynamicDelay?: DynamicDelayState
 }
 
 /**
@@ -215,6 +209,11 @@ export interface TimelineInterpolationResult {
   heading: number
   groundspeed: number
   groundTrack: number | null
+  /**
+   * Groundspeed of the newest observation (knots), as reported. Differs from `groundspeed` while an aircraft is
+   * held standing still at its first report.
+   */
+  reportedGroundspeed: number
 
   // Extended ADS-B data (passed through from observations when available)
   /**

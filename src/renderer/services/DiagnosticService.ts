@@ -20,20 +20,22 @@ import { useVatsimStore } from '../stores/vatsimStore'
 import { useViewportStore } from '../stores/viewportStore'
 import { useVnasStore } from '../stores/vnasStore'
 import { useWeatherStore } from '../stores/weatherStore'
-import type { AircraftTimeline } from '../types/aircraft-timeline'
+import type { AircraftTimeline, DynamicDelayState } from '../types/aircraft-timeline'
 import type { DiagnosticAppState, DiagnosticPackage, SerializedTimeline } from '../types/diagnostic'
 import { isTauri } from '../utils/tauriApi'
 
-function serializeTimeline(callsign: string, timeline: AircraftTimeline): SerializedTimeline {
+function serializeTimeline(
+  callsign: string,
+  timeline: AircraftTimeline,
+  dynamicDelay: DynamicDelayState | undefined,
+): SerializedTimeline {
   return {
     callsign,
     observations: [...timeline.observations],
     metadata: { ...timeline.metadata },
     lastSource: timeline.lastSource,
     lastReceivedAt: timeline.lastReceivedAt,
-    dynamicDelay: timeline.dynamicDelay
-      ? { ...timeline.dynamicDelay, intervalHistory: [...timeline.dynamicDelay.intervalHistory] }
-      : undefined,
+    dynamicDelay: dynamicDelay ? { ...dynamicDelay, intervalHistory: [...dynamicDelay.intervalHistory] } : undefined,
   }
 }
 
@@ -91,17 +93,20 @@ function buildFilename(icao: string | undefined): string {
  * Build a DiagnosticPackage from current app state.
  */
 export function exportDiagnostic(): DiagnosticPackage {
-  const { timelines, recentlyRemoved } = useAircraftTimelineStore.getState()
+  const { timelines, dynamicDelays, recentlyRemoved } = useAircraftTimelineStore.getState()
   const serialized: SerializedTimeline[] = []
 
   for (const [callsign, timeline] of timelines) {
-    serialized.push(serializeTimeline(callsign, timeline))
+    serialized.push(serializeTimeline(callsign, timeline, dynamicDelays.get(callsign)))
   }
 
   // Include recently removed aircraft so diagnostics capture aircraft
   // that timed out before the export was triggered
   for (const [callsign, entry] of recentlyRemoved) {
-    serialized.push({ ...serializeTimeline(callsign, entry.timeline), removedAt: entry.removedAt })
+    serialized.push({
+      ...serializeTimeline(callsign, entry.timeline, entry.dynamicDelay),
+      removedAt: entry.removedAt,
+    })
   }
 
   return {

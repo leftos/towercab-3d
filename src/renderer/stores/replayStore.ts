@@ -337,7 +337,7 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
   exportReplay: () => {
     // Serialize the timeline store's observation data (v2 format)
     const timelineStore = useAircraftTimelineStore.getState()
-    const timelines = timelineStore.timelines
+    const { timelines, dynamicDelays } = timelineStore
 
     if (timelines.size === 0) {
       console.warn('[Replay] No timeline data to export')
@@ -346,14 +346,15 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
 
     const serialized: SerializedTimeline[] = []
     for (const [callsign, timeline] of timelines) {
+      const dynamicDelay = dynamicDelays.get(callsign)
       serialized.push({
         callsign,
         observations: [...timeline.observations],
         metadata: { ...timeline.metadata },
         lastSource: timeline.lastSource,
         lastReceivedAt: timeline.lastReceivedAt,
-        dynamicDelay: timeline.dynamicDelay
-          ? { ...timeline.dynamicDelay, intervalHistory: [...timeline.dynamicDelay.intervalHistory] }
+        dynamicDelay: dynamicDelay
+          ? { ...dynamicDelay, intervalHistory: [...dynamicDelay.intervalHistory] }
           : undefined,
       })
     }

@@ -128,9 +128,10 @@ export const DYNAMIC_DELAY_MIN_OBSERVATIONS = 3
 
 /**
  * Maximum rate at which delay can decrease (ms per second).
- * Prevents position jumps when delay shrinks too fast.
+ * Prevents position jumps when delay shrinks too fast. At 100 ms per second the aircraft plays at 1.1x
+ * while the delay shrinks, so a new VATSIM aircraft's drop from 17 s to about 15.15 s takes about 18 s.
  */
-export const DYNAMIC_DELAY_MAX_DECREASE_RATE = 500
+export const DYNAMIC_DELAY_MAX_DECREASE_RATE = 100
 
 /**
  * Maximum rate at which delay can increase (ms per second).
@@ -139,10 +140,19 @@ export const DYNAMIC_DELAY_MAX_DECREASE_RATE = 500
  * backwards by ~14s in a single frame. Rate-limiting matches the decrease cap
  * so transitions in either direction look the same.
  */
-export const DYNAMIC_DELAY_MAX_INCREASE_RATE = 500
+export const DYNAMIC_DELAY_MAX_INCREASE_RATE = 100
+
 /**
- * Amount to increase delay when extrapolation is detected (ms).
- * This immediate bump ensures we don't extrapolate again on the next frame.
+ * Most elapsed time one delay transition counts (ms). A frame gap longer than this (a hidden tab, a return to
+ * live from buffer replay) moves the delay by this much worth of the rate limit, not by the whole gap: at
+ * 100 ms per second, 100 ms. Frames at 1 fps or faster ease at the full rate.
+ */
+export const DYNAMIC_DELAY_MAX_ELAPSED_MS = 1000
+
+/**
+ * Amount added to the delay target when extrapolation is detected (ms).
+ * The delay rises toward the raised target at DYNAMIC_DELAY_MAX_INCREASE_RATE, so at 100 ms per second the
+ * full bump takes 2 s to apply; until then the aircraft may keep extrapolating.
  */
 export const DYNAMIC_DELAY_EXTRAPOLATION_BUMP_MS = 200
 

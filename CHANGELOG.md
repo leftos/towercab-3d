@@ -12,6 +12,10 @@ All notable changes to TowerCab 3D will be documented in this file.
 - 3D buildings and aircraft no longer have an olive-green cast on their walls and fuselages; their reflected ground light is now a neutral grey.
 
 ### Fixed
+- Aircraft that first appear no longer jump backwards or crawl in slow motion before settling into smooth motion.
+- Aircraft in flight are no longer drawn 5 m above their reported altitude.
+- Nose wheels no longer appear turned to full lock while the gear is down.
+- Landing gear now extends and retracts at the right height at every airport, not only those near sea level.
 - Datablocks on iPads and other high-resolution screens now sit on their aircraft at full size, instead of half size and in the wrong place.
 
 ### Removed

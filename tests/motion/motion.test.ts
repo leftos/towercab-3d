@@ -33,7 +33,6 @@ const TAXI_PITCH_ROLL_MAX_DEG = 1.5 // measured 0.0 deg
 const CRUISE_POS_ERR_MAX_M = 8.5 // measured 2.5 m
 const VNAS_GLIDE_POS_ERR_MAX_M = 8.5 // measured 2.5 m
 const CRUISE_AGL_ERR_MAX_M = 1 // measured 0.0 m
-const REPORTED_ALTITUDE_ERR_MAX_M = 1 // finding 3.6: drawn at the reported altitude
 const VATSIM_CRUISE_POS_ERR_MAX_M = 90 // measured 30.1 m
 const VATSIM_GLIDE_POS_ERR_MAX_M = 60 // measured 13.1 m
 const GA_POS_ERR_MAX_M = 5.5 // measured 1.4 m
@@ -253,16 +252,10 @@ describe('airborne motion under vNAS', () => {
     expect(maxPosErr(recs)).toBeLessThanOrEqual(CRUISE_POS_ERR_MAX_M)
   })
 
-  it(`an airborne aircraft is drawn within ${CRUISE_AGL_ERR_MAX_M} m of its true height in level cruise (measured 0.0 m)`, () => {
+  it(`3.6 an airborne aircraft is drawn within ${CRUISE_AGL_ERR_MAX_M} m of its reported height in level cruise, not 5 m above it (measured 0.0 m, TC3D-49)`, () => {
     const recs = inSegments(framesFor(vnas, 'DEP1'), ['cruise'])
     expect(recs.length).toBeGreaterThan(100)
     expect(maxAbs(recs, (r) => r.agl - r.truth.agl)).toBeLessThanOrEqual(CRUISE_AGL_ERR_MAX_M)
-  })
-
-  it(`3.6 an airborne aircraft is drawn at its reported altitude, not 5 m above it (TC3D-49)`, () => {
-    const recs = inSegments(framesFor(vnas, 'DEP1'), ['cruise'])
-    expect(recs.length).toBeGreaterThan(100)
-    expect(maxAbs(recs, (r) => r.agl - r.truth.agl)).toBeLessThanOrEqual(REPORTED_ALTITUDE_ERR_MAX_M)
   })
 
   it(`the gliding arrival tracks truth within ${VNAS_GLIDE_POS_ERR_MAX_M} m (measured 2.5 m)`, () => {

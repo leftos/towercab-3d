@@ -5,7 +5,8 @@
  * at a fraction of real speed.
  */
 import { beforeAll, expect, it, vi } from 'vitest'
-import { type Flight, type FrameRecord, runScenario, type ScenarioResult } from './harness'
+import type { AircraftObservation } from '@/types/aircraft-timeline'
+import { type Flight, type FrameRecord, LAT0, LON0, runScenario, type ScenarioResult, T0, toLatLon } from './harness'
 import { type TruthSample, truthAt } from './sim'
 
 vi.mock('react', () => {
@@ -19,15 +20,40 @@ vi.mock('react', () => {
 })
 
 const SPAWN_CONVERGED_POS_ERR_M = 15
-const SPAWN_DURATION_S = 150
+const SPAWN_DURATION_S = 180
 const SPAWN_SETTLE_S = 2
 const MAX_BACKWARD_STEP_M = 2
 const PLAYBACK_WINDOW_S = 2
 const MIN_PLAYBACK_RATE = 0.8
 const HELD_HEIGHT_ERR_MAX_M = 15
+const MAX_PLAYBACK_RATE = 1.11
+const TAXI_GS_KT = 15
+const TAXI_RUN_S = 25
 
 let res: ScenarioResult
 let arr1: FrameRecord[]
+
+/** One VATSIM ground report, received at T0, with no on-ground flag (VATSIM sends none). */
+function taxiObservation(): AircraftObservation {
+  const { lat, lon } = toLatLon(0, 0)
+  return {
+    latitude: lat,
+    longitude: lon,
+    altitude: 10,
+    heading: 90,
+    groundspeed: 0,
+    groundTrack: null,
+    headingIsTrue: true,
+    onGround: null,
+    pitch: null,
+    roll: null,
+    verticalRate: null,
+    observedAt: T0 - 1000,
+    receivedAt: T0,
+    source: 'vatsim',
+    displayDelay: 17000,
+  }
+}
 
 beforeAll(async () => {
   res = await runScenario({ fps: 60, useVnas: false, vnasFirst: false, durationS: SPAWN_DURATION_S })
@@ -64,18 +90,33 @@ function maxBackwardStep(recs: FrameRecord[]): { metres: number; at: number } {
   return worst
 }
 
-/** Slowest displayed-time rate over any PLAYBACK_WINDOW_S window whose ends both have the aircraft moving. */
-function minPlaybackRate(recs: FrameRecord[]): { rate: number; at: number } {
-  let worst = { rate: Number.POSITIVE_INFINITY, at: Number.NaN }
+/** Displayed-time rate over every PLAYBACK_WINDOW_S window, optionally only those whose ends both have the aircraft moving. */
+function playbackRates(recs: FrameRecord[], movingOnly: boolean): { rate: number; at: number }[] {
+  const rates: { rate: number; at: number }[] = []
   let j = 0
   for (let i = 0; i < recs.length; i++) {
     while (j < recs.length && recs[j].frameTime - recs[i].frameTime < PLAYBACK_WINDOW_S) j++
     if (j >= recs.length) break
-    if (recs[i].truth.gs < 1 || recs[j].truth.gs < 1) continue
-    const rate = (recs[j].tLocal - recs[i].tLocal) / (recs[j].frameTime - recs[i].frameTime)
-    if (rate < worst.rate) worst = { rate, at: recs[i].frameTime }
+    if (movingOnly && (recs[i].truth.gs < 1 || recs[j].truth.gs < 1)) continue
+    rates.push({ rate: (recs[j].tLocal - recs[i].tLocal) / (recs[j].frameTime - recs[i].frameTime), at: recs[i].frameTime })
   }
-  return worst
+  return rates
+}
+
+/** Slowest displayed-time rate over any PLAYBACK_WINDOW_S window whose ends both have the aircraft moving. */
+function minPlaybackRate(recs: FrameRecord[]): { rate: number; at: number } {
+  return playbackRates(recs, true).reduce((m, r) => (r.rate < m.rate ? r : m), {
+    rate: Number.POSITIVE_INFINITY,
+    at: Number.NaN,
+  })
+}
+
+/** Fastest displayed-time rate over any PLAYBACK_WINDOW_S window. */
+function maxPlaybackRate(recs: FrameRecord[]): { rate: number; at: number } {
+  return playbackRates(recs, false).reduce((m, r) => (r.rate > m.rate ? r : m), {
+    rate: Number.NEGATIVE_INFINITY,
+    at: Number.NaN,
+  })
 }
 
 it(`ARR1 converges on truth within ${SPAWN_CONVERGED_POS_ERR_M} m once its delay settles (measured 2 m)`, () => {
@@ -99,6 +140,60 @@ it('1.1 a new VATSIM aircraft is not drawn ahead and then pulled back, and its d
   expect(slow.rate, `played at ${slow.rate.toFixed(2)}x from scenario ${slow.at.toFixed(2)} s`).toBeGreaterThanOrEqual(
     MIN_PLAYBACK_RATE,
   )
+})
+
+it(`1.1 after a new VATSIM aircraft's third report, display time never runs faster than ${MAX_PLAYBACK_RATE}x real time (TC3D-49)`, () => {
+  const flight = res.flights.find((f) => f.callsign === 'ARR1') as Flight
+  const thirdReport = flight.offset + firstReportLocal(flight) + 30
+  const recs = arr1.filter((r) => r.frameTime >= thirdReport)
+  expect(recs.length).toBeGreaterThan(1000)
+  const fast = maxPlaybackRate(recs)
+  expect(fast.rate, `played at ${fast.rate.toFixed(3)}x from scenario ${fast.at.toFixed(2)} s`).toBeLessThanOrEqual(
+    MAX_PLAYBACK_RATE,
+  )
+})
+
+it('a VATSIM aircraft first seen taxiing is not drawn until its second report, not shown held and then hidden (TC3D-49)', async () => {
+  const savedRaf = globalThis.requestAnimationFrame
+  let frame: ((t: number) => void) | null = null
+  globalThis.requestAnimationFrame = (cb: (t: number) => void) => {
+    frame = cb
+    return 1
+  }
+  vi.useFakeTimers({ toFake: ['Date'] })
+  try {
+    vi.setSystemTime(T0)
+    vi.resetModules()
+    // vnasStore registers a removal listener at module init; loading it first resolves the store import cycle.
+    await import('@/stores/vnasStore')
+    const tl = await import('@/stores/aircraftTimelineStore')
+    const vat = await import('@/stores/vatsimStore')
+    const interp = await import('@/hooks/useAircraftInterpolation')
+    vat.useVatsimStore.setState({ referencePosition: { latitude: LAT0, longitude: LON0 } })
+    // biome-ignore lint/correctness/useHookAtTopLevel: this is the interpolation singleton, driven outside React
+    const map = interp.useAircraftInterpolation()
+    tl.useAircraftTimelineStore.getState().addObservationBatch([
+      {
+        callsign: 'TAXI1',
+        observation: { ...taxiObservation(), groundspeed: TAXI_GS_KT },
+        metadata: { cid: 1, aircraftType: 'B738', transponder: '1200', departure: null, arrival: null },
+      },
+    ])
+    let drawnFrames = 0
+    for (let f = 0; f < TAXI_RUN_S * 60; f++) {
+      const now = T0 + (f * 1000) / 60
+      vi.setSystemTime(now)
+      const cb = frame as ((t: number) => void) | null
+      frame = null
+      if (!cb) throw new Error('interpolation loop did not re-arm requestAnimationFrame')
+      cb(now)
+      if (map.has('TAXI1')) drawnFrames++
+    }
+    expect(drawnFrames, 'frames TAXI1 was drawn with one observation').toBe(0)
+  } finally {
+    vi.useRealTimers()
+    globalThis.requestAnimationFrame = savedRaf
+  }
 })
 
 it('an aircraft held before its first report is reported standing still (groundspeed 0) until display time reaches it', () => {
