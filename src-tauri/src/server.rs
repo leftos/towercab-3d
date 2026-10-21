@@ -6,7 +6,7 @@
 use std::fs;
 use std::io::Read;
 use std::net::{IpAddr, SocketAddr};
-use std::path::PathBuf;
+use std::path::{Component, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -129,7 +129,7 @@ pub struct ClientRequest {
 pub struct ServerState {
     /// Tauri app handle for accessing app directories
     pub app_handle: tauri::AppHandle,
-    /// Path to the frontend dist folder
+    /// Canonical path to the frontend dist folder, resolved once when the server starts
     pub dist_path: PathBuf,
     /// Optional authentication token (if set, clients must provide Bearer token)
     pub auth_token: Option<String>,
@@ -239,6 +239,9 @@ pub async fn start_server(
 ) -> Result<ServerHandles, String> {
     // Find the dist folder (frontend build output)
     let dist_path = find_dist_path(&app_handle)?;
+    let dist_path = dist_path
+        .canonicalize()
+        .map_err(|e| format!("Failed to resolve dist folder {:?}: {}", dist_path, e))?;
 
     // Read auth settings from global settings
     let (auth_token, require_local_network) = {
@@ -652,19 +655,25 @@ async fn serve_any_mod_file(
     Path(path): Path<String>,
 ) -> Result<Response<Body>, (StatusCode, String)> {
     let mods_root = find_mods_root(&state.app_handle);
-    let file_path = mods_root.join(&path);
+    let file_path = mod_file_path(&mods_root, &path)?;
+    serve_file(&file_path).await
+}
 
-    // Security: ensure the path is within mods directory
-    let canonical = file_path
-        .canonicalize()
-        .map_err(|_| (StatusCode::NOT_FOUND, "File not found".to_string()))?;
-
-    let mods_canonical = mods_root.canonicalize().unwrap_or(mods_root.clone());
-    if !canonical.starts_with(&mods_canonical) {
-        return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
+/// Resolves the file a mod-file route serves under the mods folder.
+///
+/// Returns 403 for a path outside the mods folder, 404 when no file is there, and 500 when the
+/// file system could not be read.
+fn mod_file_path(mods_root: &std::path::Path, path: &str) -> Result<PathBuf, (StatusCode, String)> {
+    let file_path = resolve_within(mods_root, path).map_err(|e| {
+        e.into_response(
+            (StatusCode::FORBIDDEN, "Access denied".to_string()),
+            "Checking the mod file path",
+        )
+    })?;
+    if !file_path.is_file() {
+        return Err((StatusCode::NOT_FOUND, "File not found".to_string()));
     }
-
-    serve_file(&canonical).await
+    Ok(file_path)
 }
 
 /// GET /api/mods/aircraft - List aircraft mods with manifests
@@ -755,19 +764,8 @@ async fn serve_mod_file(
     path: &str,
 ) -> Result<Response<Body>, (StatusCode, String)> {
     let mods_root = find_mods_root(&state.app_handle);
-    let file_path = mods_root.join(mod_type).join(path);
-
-    // Security: ensure the path is within mods directory
-    let canonical = file_path
-        .canonicalize()
-        .map_err(|_| (StatusCode::NOT_FOUND, "File not found".to_string()))?;
-
-    let mods_canonical = mods_root.canonicalize().unwrap_or(mods_root.clone());
-    if !canonical.starts_with(&mods_canonical) {
-        return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
-    }
-
-    serve_file(&canonical).await
+    let file_path = mod_file_path(&mods_root, &format!("{}/{}", mod_type, path))?;
+    serve_file(&file_path).await
 }
 
 /// GET /api/msfs/models - List converted MSFS models (FSLTL/AIG)
@@ -849,21 +847,28 @@ async fn serve_msfs_model(
         ));
     };
 
-    let file_path = PathBuf::from(&cache_dir).join(&path);
+    let file_path = match resolve_within(std::path::Path::new(&cache_dir), &path) {
+        Ok(file_path) => file_path,
+        Err(ResolveError::Outside) => {
+            tracing::warn!(
+                "[Server] Refused MSFS model path outside the cache: {}",
+                path
+            );
+            return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
+        }
+        Err(e) => {
+            return Err(e.into_response(
+                (StatusCode::FORBIDDEN, "Access denied".to_string()),
+                "Checking the MSFS model path",
+            ))
+        }
+    };
 
-    // Security: ensure the path is within cache directory
-    let canonical = file_path
-        .canonicalize()
-        .map_err(|_| (StatusCode::NOT_FOUND, "File not found".to_string()))?;
-
-    let cache_canonical = PathBuf::from(&cache_dir)
-        .canonicalize()
-        .unwrap_or(PathBuf::from(&cache_dir));
-    if !canonical.starts_with(&cache_canonical) {
-        return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
+    if !file_path.is_file() {
+        return Err((StatusCode::NOT_FOUND, "File not found".to_string()));
     }
 
-    serve_file(&canonical).await
+    serve_file(&file_path).await
 }
 
 /// GET /api/msfs/index - Get the MSFS model index for remote clients
@@ -943,6 +948,20 @@ async fn update_tower_position(
     let mods_root = find_mods_root(&state.app_handle);
     let tower_positions_dir = mods_root.join("tower-positions");
 
+    // Write to individual file named {ICAO}.json
+    let file_path = tower_position_file_path(&tower_positions_dir, &icao).map_err(|e| {
+        e.into_response(
+            (
+                StatusCode::BAD_REQUEST,
+                format!(
+                    "Invalid ICAO code {:?}: expected 3-4 letters or digits",
+                    icao
+                ),
+            ),
+            "Checking the tower position path",
+        )
+    })?;
+
     // Create tower-positions directory if it doesn't exist
     fs::create_dir_all(&tower_positions_dir).map_err(|e| {
         (
@@ -950,9 +969,6 @@ async fn update_tower_position(
             format!("Failed to create tower-positions directory: {}", e),
         )
     })?;
-
-    // Write to individual file named {ICAO}.json
-    let file_path = tower_positions_dir.join(format!("{}.json", icao.to_uppercase()));
 
     // If file exists, merge with existing data (preserve other view if only updating one)
     let mut entry = if file_path.exists() {
@@ -1130,7 +1146,18 @@ async fn save_diagnostic_handler(
         )
     })?;
 
-    let file_path = diag_dir.join(&req.filename);
+    let file_path = diagnostic_file_path(&diag_dir, &req.filename).map_err(|e| {
+        e.into_response(
+            (
+                StatusCode::BAD_REQUEST,
+                format!(
+                    "Invalid diagnostic filename {:?}: expected tc3d-diag-<name>.tc3d-diag.json, the name made of letters, digits, '-', '_' or '.'",
+                    req.filename
+                ),
+            ),
+            "Checking the diagnostic file path",
+        )
+    })?;
     fs::write(&file_path, &req.content).map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -1768,11 +1795,20 @@ async fn serve_static(
 ) -> impl IntoResponse {
     let path = request.uri().path();
 
-    // Remove leading slash and handle root
-    let path = path.trim_start_matches('/');
-    let path = if path.is_empty() { "index.html" } else { path };
-
-    let file_path = state.dist_path.join(path);
+    // A path that could leave dist is refused, never answered with the SPA's HTML
+    let file_path = match resolve_static_path(&state.dist_path, path) {
+        Ok(file_path) => file_path,
+        Err(ResolveError::Outside) => {
+            tracing::warn!("[Server] Refused static path outside dist: {}", path);
+            return Err((StatusCode::NOT_FOUND, "Not found".to_string()));
+        }
+        Err(e) => {
+            return Err(e.into_response(
+                (StatusCode::NOT_FOUND, "Not found".to_string()),
+                "Checking the static file path",
+            ))
+        }
+    };
 
     // Debug: log what we're looking for
     tracing::info!(
@@ -1789,7 +1825,7 @@ async fn serve_static(
 
     // Check if this looks like a static asset request (has a file extension)
     // If so, don't serve index.html - return 404 instead
-    let has_extension = std::path::Path::new(path).extension().is_some_and(|ext| {
+    let has_extension = file_path.extension().is_some_and(|ext| {
         // Common static asset extensions that should NOT fall back to index.html
         let ext = ext.to_string_lossy().to_lowercase();
         matches!(
@@ -1872,4 +1908,564 @@ async fn serve_file(path: &PathBuf) -> Result<Response<Body>, (StatusCode, Strin
     }
 
     Ok(resp)
+}
+
+// =============================================================================
+// Request Path Containment
+// =============================================================================
+
+/// Why a path built from a request was refused.
+#[derive(Debug)]
+enum ResolveError {
+    /// The path leaves its root, could step out of it, or does not have the form the route accepts.
+    Outside,
+    /// The file system could not answer while the path was checked.
+    Io(std::io::Error),
+}
+
+impl ResolveError {
+    /// The response for this refusal: `outside` when the path is outside its root, else 500 with
+    /// the I/O error, which is also logged with `operation`.
+    fn into_response(self, outside: (StatusCode, String), operation: &str) -> (StatusCode, String) {
+        match self {
+            Self::Outside => outside,
+            Self::Io(e) => {
+                tracing::error!("[Server] {} failed: {}", operation, e);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("{} failed: {}", operation, e),
+                )
+            }
+        }
+    }
+}
+
+/// Joins an untrusted relative path from a request onto `root`, refusing any path that could leave it.
+///
+/// One leading `/` is ignored; after it, both `/` and `\` separate components, and every component
+/// must be a plain name: not empty, not `.` or `..`, free of NUL and `:` (a drive prefix or an NTFS
+/// stream), and a single `Component::Normal` on this platform. The target, or its deepest existing
+/// ancestor when it does not exist yet, is canonicalised and must stay under the canonical root,
+/// which refuses an escape through a symlink or junction; a dangling link is refused. A root that
+/// does not exist holds nothing a link could lead out of, so the plain join is returned.
+///
+/// Args:
+///     root: The folder the result must stay inside.
+///     untrusted: A relative path taken from a request.
+///
+/// Returns:
+///     The joined path (canonical when the target exists), `ResolveError::Outside` when the path is
+///     refused, or `ResolveError::Io` when the file system could not be read.
+fn resolve_within(root: &std::path::Path, untrusted: &str) -> Result<PathBuf, ResolveError> {
+    match root.canonicalize() {
+        Ok(canonical_root) => resolve_within_canonical(root, &canonical_root, untrusted),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => join_plain_names(root, untrusted),
+        Err(e) => Err(ResolveError::Io(e)),
+    }
+}
+
+/// `resolve_within` for a root whose canonical form the caller already holds.
+fn resolve_within_canonical(
+    root: &std::path::Path,
+    canonical_root: &std::path::Path,
+    untrusted: &str,
+) -> Result<PathBuf, ResolveError> {
+    let joined = join_plain_names(root, untrusted)?;
+    match fs::symlink_metadata(&joined) {
+        Ok(_) => {
+            let canonical = canonicalize_existing(&joined)?;
+            if canonical.starts_with(canonical_root) {
+                Ok(canonical)
+            } else {
+                Err(ResolveError::Outside)
+            }
+        }
+        Err(e) if is_missing_entry(&e) => {
+            let existing = canonicalize_existing(deepest_existing_ancestor(&joined)?)?;
+            if existing.starts_with(canonical_root) {
+                Ok(joined)
+            } else {
+                Err(ResolveError::Outside)
+            }
+        }
+        Err(e) => Err(ResolveError::Io(e)),
+    }
+}
+
+/// Joins `untrusted` onto `root` component by component, refusing any component that is not a plain name.
+fn join_plain_names(root: &std::path::Path, untrusted: &str) -> Result<PathBuf, ResolveError> {
+    let relative = untrusted.strip_prefix('/').unwrap_or(untrusted);
+    if relative.is_empty() {
+        return Err(ResolveError::Outside);
+    }
+
+    let mut joined = root.to_path_buf();
+    for segment in relative.split(['/', '\\']) {
+        if !is_plain_name(segment) {
+            return Err(ResolveError::Outside);
+        }
+        joined.push(segment);
+    }
+    Ok(joined)
+}
+
+/// Canonicalises a path whose entry exists; an entry whose target is missing (a dangling link) is
+/// refused as `Outside`.
+fn canonicalize_existing(path: &std::path::Path) -> Result<PathBuf, ResolveError> {
+    path.canonicalize().map_err(|e| match e.kind() {
+        std::io::ErrorKind::NotFound => ResolveError::Outside,
+        _ => ResolveError::Io(e),
+    })
+}
+
+/// The nearest ancestor of `path` that exists as an entry (a link counts as one).
+fn deepest_existing_ancestor(path: &std::path::Path) -> Result<&std::path::Path, ResolveError> {
+    for ancestor in path.ancestors().skip(1) {
+        match fs::symlink_metadata(ancestor) {
+            Ok(_) => return Ok(ancestor),
+            Err(e) if is_missing_entry(&e) => continue,
+            Err(e) => return Err(ResolveError::Io(e)),
+        }
+    }
+    Err(ResolveError::Outside)
+}
+
+/// Whether a `symlink_metadata` error means no entry is at that path: none there, a file where a
+/// folder was expected, or a name the file system cannot hold.
+fn is_missing_entry(error: &std::io::Error) -> bool {
+    matches!(
+        error.kind(),
+        std::io::ErrorKind::NotFound
+            | std::io::ErrorKind::NotADirectory
+            | std::io::ErrorKind::InvalidFilename
+    )
+}
+
+/// Whether `segment` is one plain file or folder name that cannot step out of its parent.
+///
+/// Characters Windows refuses in a name (`< > " | ? *` and ASCII controls) are refused on every
+/// platform, so such a request is answered as refused rather than as a file system error.
+fn is_plain_name(segment: &str) -> bool {
+    let has_reserved_char = segment
+        .chars()
+        .any(|c| c.is_ascii_control() || matches!(c, ':' | '<' | '>' | '"' | '|' | '?' | '*'));
+    if segment.is_empty() || has_reserved_char {
+        return false;
+    }
+    let mut components = std::path::Path::new(segment).components();
+    matches!(
+        (components.next(), components.next()),
+        (Some(Component::Normal(_)), None)
+    )
+}
+
+/// Resolves a static-file URL path under the canonical dist folder; the root URL maps to `index.html`.
+///
+/// Empty segments between `/` are dropped, as a browser's `/foo/` or `/assets//app.js` mean the same
+/// route or file without them; every remaining segment is checked by `resolve_within_canonical`.
+fn resolve_static_path(
+    canonical_dist: &std::path::Path,
+    url_path: &str,
+) -> Result<PathBuf, ResolveError> {
+    let segments: Vec<&str> = url_path.split('/').filter(|s| !s.is_empty()).collect();
+    let path = if segments.is_empty() {
+        "index.html".to_string()
+    } else {
+        segments.join("/")
+    };
+    resolve_within_canonical(canonical_dist, canonical_dist, &path)
+}
+
+/// The start of every diagnostic file name the client builds (`DiagnosticService.buildFilename`).
+const DIAGNOSTIC_FILE_PREFIX: &str = "tc3d-diag-";
+/// The end of every diagnostic file name the client builds.
+const DIAGNOSTIC_FILE_SUFFIX: &str = ".tc3d-diag.json";
+
+/// Whether `filename` has the form the client builds: `tc3d-diag-<middle>.tc3d-diag.json`, the middle
+/// non-empty and made of ASCII letters, digits, `-`, `_` and `.` only.
+///
+/// The fixed prefix and suffix rule out Windows device names (`COM1`, `NUL`) and a trailing dot or
+/// space, which Windows strips and so would write over another file.
+fn is_diagnostic_file_name(filename: &str) -> bool {
+    let middle = filename
+        .strip_prefix(DIAGNOSTIC_FILE_PREFIX)
+        .and_then(|rest| rest.strip_suffix(DIAGNOSTIC_FILE_SUFFIX));
+    middle.is_some_and(|middle| {
+        !middle.is_empty()
+            && middle
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+    })
+}
+
+/// Resolves the file a diagnostic upload is written to inside the diagnostics folder.
+///
+/// The filename must have the form the client builds (see `is_diagnostic_file_name`).
+fn diagnostic_file_path(
+    diag_dir: &std::path::Path,
+    filename: &str,
+) -> Result<PathBuf, ResolveError> {
+    if !is_diagnostic_file_name(filename) {
+        return Err(ResolveError::Outside);
+    }
+    resolve_within(diag_dir, filename)
+}
+
+/// Resolves the `{ICAO}.json` file a tower position update writes.
+///
+/// The code must be 3-4 ASCII letters, digits or `_` (the bundled airport list has `EK_2` and
+/// `EK_4`); it is upper-cased for the file name.
+fn tower_position_file_path(dir: &std::path::Path, icao: &str) -> Result<PathBuf, ResolveError> {
+    let is_code_char = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    let is_icao = (3..=4).contains(&icao.len()) && icao.chars().all(is_code_char);
+    if !is_icao {
+        return Err(ResolveError::Outside);
+    }
+    resolve_within(dir, &format!("{}.json", icao.to_uppercase()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A fresh, empty folder under the system temp folder, removed when dropped.
+    struct TempDir(PathBuf);
+
+    impl TempDir {
+        fn new(name: &str) -> Self {
+            let dir =
+                std::env::temp_dir().join(format!("tc3d-server-{}-{}", name, std::process::id()));
+            if dir.exists() {
+                fs::remove_dir_all(&dir).expect("clear stale temp dir");
+            }
+            fs::create_dir_all(&dir).expect("create temp dir");
+            Self(dir)
+        }
+
+        /// The folder's canonical path, as the server state holds the dist folder.
+        fn canonical(&self) -> PathBuf {
+            self.0.canonicalize().expect("canonicalise temp dir")
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            if let Err(e) = fs::remove_dir_all(&self.0) {
+                eprintln!("failed to remove temp dir {:?}: {}", self.0, e);
+            }
+        }
+    }
+
+    /// Asserts `resolved` was accepted and names a path under `root`, canonically when it exists.
+    fn assert_inside(resolved: Result<PathBuf, ResolveError>, root: &std::path::Path) {
+        let resolved = resolved.expect("path should be accepted");
+        let inside = match resolved.canonicalize() {
+            Ok(canonical) => canonical.starts_with(root.canonicalize().expect("canonicalise root")),
+            Err(_) => resolved.starts_with(root),
+        };
+        assert!(inside, "{:?} is not inside {:?}", resolved, root);
+    }
+
+    /// Asserts `resolved` was refused as outside its root, naming `input` on failure.
+    fn assert_refused(resolved: Result<PathBuf, ResolveError>, input: &str) {
+        assert!(
+            matches!(resolved, Err(ResolveError::Outside)),
+            "{:?} should be refused, got {:?}",
+            input,
+            resolved
+        );
+    }
+
+    #[test]
+    fn static_path_refuses_absolute_drive_path() {
+        let dist = TempDir::new("static-abs");
+        for bad in [
+            "/C:/Users/x/global-settings.json",
+            "C:/Users/x/global-settings.json",
+        ] {
+            assert_refused(resolve_static_path(&dist.canonical(), bad), bad);
+        }
+    }
+
+    #[test]
+    fn static_path_refuses_parent_segments() {
+        let dist = TempDir::new("static-parent");
+        for bad in ["/../x", "../x", "..\\x", "assets/../../x"] {
+            assert_refused(resolve_static_path(&dist.canonical(), bad), bad);
+        }
+    }
+
+    #[test]
+    fn static_path_refuses_unc_and_drive_relative_paths() {
+        let dist = TempDir::new("static-unc");
+        for bad in ["/\\\\server\\share\\x", "\\\\server\\share\\x", "C:x"] {
+            assert_refused(resolve_static_path(&dist.canonical(), bad), bad);
+        }
+    }
+
+    #[test]
+    fn static_path_keeps_existing_asset_inside_dist() {
+        let dist = TempDir::new("static-asset");
+        fs::create_dir_all(dist.0.join("assets")).unwrap();
+        fs::write(dist.0.join("assets").join("app.js"), "x").unwrap();
+        let resolved = resolve_static_path(&dist.canonical(), "/assets/app.js");
+        assert!(resolved.as_ref().is_ok_and(|p| p.is_file()));
+        assert_inside(resolved, &dist.canonical());
+    }
+
+    #[test]
+    fn static_path_ignores_empty_segments() {
+        let dist = TempDir::new("static-empty");
+        fs::create_dir_all(dist.0.join("assets")).unwrap();
+        fs::write(dist.0.join("assets").join("x.js"), "x").unwrap();
+
+        // A trailing slash names the SPA route, which the handler answers with index.html.
+        let route = resolve_static_path(&dist.canonical(), "/foo/").expect("route accepted");
+        assert!(route.ends_with("foo"), "{:?}", route);
+
+        let asset =
+            resolve_static_path(&dist.canonical(), "/assets//x.js").expect("asset accepted");
+        assert!(asset.is_file(), "{:?}", asset);
+        assert_inside(Ok(asset), &dist.canonical());
+    }
+
+    #[test]
+    fn static_path_refuses_names_windows_cannot_hold() {
+        let dist = TempDir::new("static-invalid");
+        for bad in ["/a*b", "/a|b", "/a?b", "/a<b", "/a>b", "/a\"b", "/a\u{1}b"] {
+            assert_refused(resolve_static_path(&dist.canonical(), bad), bad);
+        }
+    }
+
+    #[test]
+    fn static_path_through_existing_file_is_not_an_io_error() {
+        let dist = TempDir::new("static-through-file");
+        fs::write(dist.0.join("index.html"), "x").unwrap();
+        // The handler answers a missing path without an extension with the SPA index.
+        let resolved = resolve_static_path(&dist.canonical(), "/index.html/x")
+            .expect("path under a file is accepted as missing");
+        assert!(!resolved.exists(), "{:?}", resolved);
+    }
+
+    #[test]
+    fn mod_file_path_refuses_invalid_names_and_paths_through_files() {
+        let mods = TempDir::new("mods-invalid");
+        fs::create_dir_all(mods.0.join("towers").join("KSFO")).unwrap();
+        fs::write(mods.0.join("towers").join("KSFO").join("model.glb"), "x").unwrap();
+
+        for bad in ["towers/x*y", "towers/x|y", "towers/x?y"] {
+            let refused = mod_file_path(&mods.0, bad).expect_err("refused");
+            assert_eq!(refused.0, StatusCode::FORBIDDEN, "{:?}: {:?}", bad, refused);
+        }
+        let through_file = mod_file_path(&mods.0, "towers/KSFO/model.glb/x").expect_err("missing");
+        assert_eq!(through_file.0, StatusCode::NOT_FOUND, "{:?}", through_file);
+    }
+
+    #[test]
+    fn static_path_maps_root_to_index() {
+        let dist = TempDir::new("static-root");
+        let resolved = resolve_static_path(&dist.canonical(), "/").expect("root accepted");
+        assert!(resolved.ends_with("index.html"));
+    }
+
+    #[test]
+    fn static_path_keeps_percent_encoding_literal() {
+        // The fallback handler reads the raw URI path, which is never percent-decoded,
+        // so `%2e%2e` is a literal folder name inside dist.
+        let dist = TempDir::new("static-pct");
+        assert_inside(
+            resolve_static_path(&dist.canonical(), "/%2e%2e/x"),
+            &dist.canonical(),
+        );
+    }
+
+    #[test]
+    fn diagnostic_filename_refuses_paths() {
+        let dir = TempDir::new("diag-refuse");
+        for bad in ["../x", "C:/x", "C:x", "a/b", "a\\b", "/x", ""] {
+            assert_refused(diagnostic_file_path(&dir.0, bad), bad);
+        }
+    }
+
+    #[test]
+    fn diagnostic_filename_refuses_names_the_client_never_builds() {
+        let dir = TempDir::new("diag-form");
+        for bad in [
+            "COM1",
+            "AUX.json",
+            "nul",
+            "x.json.",
+            "x.json ",
+            "report.txt",
+            "tc3d-diag-COM1.json",
+            "tc3d-diag-.tc3d-diag.json",
+            "tc3d-diag-a b.tc3d-diag.json",
+            "tc3d-diag-KSFO.tc3d-diag.json.",
+            "tc3d-diag-KSFO.tc3d-diag.json ",
+        ] {
+            assert_refused(diagnostic_file_path(&dir.0, bad), bad);
+        }
+    }
+
+    #[test]
+    fn diagnostic_filename_accepts_client_name() {
+        let dir = TempDir::new("diag-accept");
+        for good in [
+            "tc3d-diag-KSFO-2026-10-21-1430.tc3d-diag.json",
+            "tc3d-diag-unknown-2026-10-21-0905.tc3d-diag.json",
+        ] {
+            assert_eq!(
+                diagnostic_file_path(&dir.0, good).expect("client name accepted"),
+                dir.0.join(good)
+            );
+        }
+    }
+
+    #[test]
+    fn tower_position_refuses_non_icao() {
+        let dir = TempDir::new("tower-refuse");
+        let refused = [
+            "../KSFO", "..%2FKSFO", "KS/FO", "KSFOX", "KS", "", "..", "E/K", "_..", "E\\K", "EK.2",
+        ];
+        for bad in refused {
+            assert_refused(tower_position_file_path(&dir.0, bad), bad);
+        }
+    }
+
+    #[test]
+    fn tower_position_accepts_icao() {
+        let dir = TempDir::new("tower-accept");
+        assert_eq!(
+            tower_position_file_path(&dir.0, "ksfo").expect("ICAO accepted"),
+            dir.0.join("KSFO.json")
+        );
+        assert_eq!(
+            tower_position_file_path(&dir.0, "0S9").expect("ICAO accepted"),
+            dir.0.join("0S9.json")
+        );
+        for underscored in ["EK_2", "EK_4"] {
+            assert_eq!(
+                tower_position_file_path(&dir.0, underscored).expect("code with '_' accepted"),
+                dir.0.join(format!("{}.json", underscored))
+            );
+        }
+    }
+
+    #[test]
+    fn msfs_path_stays_in_cache() {
+        // axum's `Path` extractor percent-decodes, so `%2e%2e/%2e%2e/x` arrives as `../../x`.
+        let cache = TempDir::new("msfs");
+        for bad in ["../../x", "/../../x", "C:/Windows/win.ini"] {
+            assert_refused(resolve_within(&cache.0, bad), bad);
+        }
+        assert_inside(resolve_within(&cache.0, "fsltl/model.glb"), &cache.0);
+    }
+
+    #[test]
+    fn mod_file_path_refuses_parent_segments() {
+        let mods = TempDir::new("mods-parent");
+        let refused = mod_file_path(&mods.0, "towers/../../x.json").expect_err("refused");
+        assert_eq!(refused.0, StatusCode::FORBIDDEN);
+    }
+
+    #[test]
+    fn mod_file_path_serves_plain_file() {
+        let mods = TempDir::new("mods-file");
+        fs::create_dir_all(mods.0.join("towers").join("KSFO")).unwrap();
+        fs::write(mods.0.join("towers").join("KSFO").join("model.glb"), "x").unwrap();
+        let served = mod_file_path(&mods.0, "towers/KSFO/model.glb").expect("file served");
+        assert!(served.is_file(), "{:?}", served);
+
+        let missing = mod_file_path(&mods.0, "towers/KSFO/none.glb").expect_err("missing");
+        assert_eq!(missing.0, StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn resolve_error_tells_outside_from_io() {
+        let root = TempDir::new("resolve-error");
+        assert_refused(resolve_within(&root.0, "../x"), "../x");
+
+        // A NUL in the root cannot be handed to the OS, so checking it is an I/O error on every platform.
+        let unreadable_root = root.0.join("bad\0root");
+        let io = resolve_within(&unreadable_root, "x.json");
+        assert!(matches!(io, Err(ResolveError::Io(_))), "got {:?}", io);
+
+        let outside = (StatusCode::FORBIDDEN, "Access denied".to_string());
+        assert_eq!(
+            ResolveError::Outside
+                .into_response(outside.clone(), "test")
+                .0,
+            StatusCode::FORBIDDEN
+        );
+        let io_error = ResolveError::Io(std::io::Error::other("disk gone"));
+        assert_eq!(
+            io_error.into_response(outside, "test").0,
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+    }
+
+    #[test]
+    fn resolve_within_accepts_path_under_missing_root() {
+        let parent = TempDir::new("missing-root");
+        let root = parent.0.join("not-yet");
+        assert_eq!(
+            resolve_within(&root, "a/b.json").expect("plain path accepted"),
+            root.join("a").join("b.json")
+        );
+        assert_refused(resolve_within(&root, "../b.json"), "../b.json");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn resolve_within_refuses_missing_target_through_junction() {
+        let root = TempDir::new("junction-root");
+        let outside = TempDir::new("junction-outside");
+        let link = root.0.join("link");
+        let status = std::process::Command::new("cmd")
+            .arg("/C")
+            .arg("mklink")
+            .arg("/J")
+            .arg(&link)
+            .arg(&outside.0)
+            .status()
+            .expect("run mklink");
+        assert!(status.success(), "mklink /J failed: {}", status);
+
+        for bad in ["link/new.json", "link/sub/new.json", "link"] {
+            assert_refused(resolve_within(&root.0, bad), bad);
+        }
+        assert_inside(resolve_within(&root.0, "new.json"), &root.0);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn resolve_within_refuses_dangling_junction() {
+        let root = TempDir::new("dangling-root");
+        let outside = TempDir::new("dangling-outside");
+        let target = outside.0.join("gone");
+        fs::create_dir(&target).expect("create junction target");
+        let link = root.0.join("link");
+        let status = std::process::Command::new("cmd")
+            .arg("/C")
+            .arg("mklink")
+            .arg("/J")
+            .arg(&link)
+            .arg(&target)
+            .status()
+            .expect("run mklink");
+        assert!(status.success(), "mklink /J failed: {}", status);
+        fs::remove_dir(&target).expect("delete junction target");
+
+        for bad in ["link/new.json", "link/sub/new.json", "link"] {
+            assert_refused(resolve_within(&root.0, bad), bad);
+        }
+    }
+
+    #[test]
+    fn resolve_within_refuses_odd_components() {
+        let root = TempDir::new("odd");
+        for bad in ["", "/", "./x", "a//b", "a/./b", "a\0b", "file.txt:stream"] {
+            assert_refused(resolve_within(&root.0, bad), bad);
+        }
+    }
 }

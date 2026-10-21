@@ -203,6 +203,17 @@ pub struct ServerState {
 | `/api/realtraffic/*` | POST | CORS proxy for RealTraffic API |
 | `/api/proxy` | GET | CORS proxy (VATSIM, Aviation Weather) |
 | `/api/log` | POST | Remote client logging endpoint |
+| `/api/diagnostic` | POST | Save a diagnostic file |
+
+### Request path containment
+
+Every route that builds a file path from a request resolves it with `resolve_within` in `server.rs` and refuses a path that leaves its root: through `..`, a drive prefix, a UNC path, an NTFS stream (`:`), a symlink or junction (a dangling one included), or a name Windows cannot hold (`< > " | ? *`, control characters). `\` separates components like `/`. The static root (`dist`) is canonicalised once when the server starts; a missing `dist` fails the start.
+
+- **Static files** (`/`, `/assets/*`, other paths): a refused path answers 404, never the SPA page. A missing file without a known asset extension still falls back to `index.html`.
+- **Mod files** (`/api/mods/file/*`, `/api/mods/aircraft/*`, `/api/mods/towers/*`) and **MSFS models** (`/api/msfs/*path`): 403 for a refused path, 404 for a missing file.
+- **`PUT /api/tower-positions/{icao}`**: the code must be 3-4 ASCII letters, digits or `_` (e.g. `EK_2`), upper-cased to `<CODE>.json` in `tower-positions`; anything else is 400.
+- **`POST /api/diagnostic`**: the filename must match `tc3d-diag-<middle>.tc3d-diag.json`, the middle made of ASCII letters, digits, `-`, `_` and `.`; anything else is 400.
+- An I/O error while resolving a root or path answers 500 on every route above.
 
 ### Security
 

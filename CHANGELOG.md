@@ -12,6 +12,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 - 3D buildings and aircraft no longer have an olive-green cast on their walls and fuselages; their reflected ground light is now a neutral grey.
 
 ### Fixed
+- The remote access server no longer serves or writes files outside its own folders.
 - Aircraft that first appear no longer jump backwards or crawl in slow motion before settling into smooth motion.
 - Aircraft in flight are no longer drawn 5 m above their reported altitude.
 - Nose wheels no longer appear turned to full lock while the gear is down.

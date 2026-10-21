@@ -39,7 +39,7 @@ The design for closing the remote server's credential leak, from a read-only inv
 4. Only Rust writes `vnasTokens`, and clearing them clears the file.
 5. Fresh and upgraded installs refuse non-local clients before any handler runs; the autostart (`lib.rs` ~:948-1001) runs before the webview, so the default lives in Rust.
 6. Requests with an unexpected Host are refused; WebSocket upgrades check `Origin`.
-7. Every path built from a request stays inside its root (containment issue).
+7. Every path built from a request stays inside its root (containment issue). Enforced by `resolve_within` in `src-tauri/src/server.rs`, which every static, mod, MSFS cache, diagnostic and tower-position route goes through.
 
 ## Fix shape
 
