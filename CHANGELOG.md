@@ -23,6 +23,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 - The flight phase badge now shows "Go Around" after a go-around, and leaves "Short Final" as soon as the aircraft climbs away.
 - Aircraft passing over an airport at altitude are no longer labelled "Final" or "Short Final".
 - Datablocks on iPads and other high-resolution screens now sit on their aircraft at full size, instead of half size and in the wrong place.
+- Tower and aircraft mod models now load on iPads and other browsers connected to the desktop app.
 
 ### Removed
 - The experimental VR mode and its VR button in the controls bar.
