@@ -972,7 +972,7 @@ Add custom aircraft models with airline-specific liveries. Mods match by ICAO ai
 
 ### Tower Mods
 
-Add custom control tower models for specific airports. Mods match by ICAO airport code (e.g., KJFK, EGLL).
+Add custom control tower models for specific airports. Mods match by ICAO airport code (e.g., KJFK, EGLL). The tower cab appears in the main view only, hides clouds and fog behind it, casts a shadow on the ground, and darkens at night when night darkening and lighting are on. Inset windows do not show it.
 
 ### Bundled Tower Positions
 

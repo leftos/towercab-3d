@@ -3,7 +3,7 @@ import * as Cesium from 'cesium'
 import { useEffect } from 'react'
 import { WEATHER_STAGE_NAME } from '@/hooks/useCesiumWeatherStages'
 import { useWeatherStageStore } from '@/stores/weatherStageStore'
-import type { AgentHarness } from '@/types'
+import type { AgentHarness, TowerModelHandle } from '@/types'
 import { performanceMonitor } from '@/utils/performanceMonitor'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useViewportStore } from '../stores/viewportStore'
@@ -14,7 +14,7 @@ import { useWeatherStore } from '../stores/weatherStore'
  *
  * The global exposes the Cesium viewer, the Babylon overlay engine and scene,
  * and the viewport/weather/settings store hooks, plus `camera`, `lookAt`,
- * `project`, `readPixels` and `perf` helpers and the `weatherStage` handle. Agent-driven tests use it to
+ * `project`, `readPixels` and `perf` helpers and the `weatherStage` and `towerModel` handles. Agent-driven tests use it to
  * inspect and drive the running app through the `tauri-app` and `playwright`
  * MCP servers.
  *
@@ -23,10 +23,12 @@ import { useWeatherStore } from '../stores/weatherStore'
  *
  * @param viewer - Cesium viewer of the main viewport, or null before it exists
  * @param babylon - Babylon overlay engine and scene (either may be null)
+ * @param getTowerModel - Getter for the tower cab's state, from `useTowerModel`
  */
 export function useAgentHarness(
   viewer: Cesium.Viewer | null,
   babylon: { engine: BABYLON.Engine | null; scene: BABYLON.Scene | null },
+  getTowerModel: () => TowerModelHandle,
 ): void {
   const { engine, scene } = babylon
 
@@ -121,6 +123,9 @@ export function useAgentHarness(
             }
           },
         },
+        get towerModel() {
+          return getTowerModel()
+        },
       }
 
       window.__tc3d = harness
@@ -129,5 +134,5 @@ export function useAgentHarness(
         if (window.__tc3d === harness) delete window.__tc3d
       }
     }
-  }, [viewer, engine, scene])
+  }, [viewer, engine, scene, getTowerModel])
 }

@@ -62,7 +62,7 @@ Reads: `weatherStore` (`precipitation`, `wind`, `cameraPosition`), `airportStore
 | `src/renderer/hooks/useBabylonScene.ts` | (above) | IBL environment `IBL_ENV_URL` = `src/renderer/public/cab-environment.env` (Babylon `studio.env`, `CREDITS.md:7-11`), `ShadowGenerator` 2048 |
 | `src/renderer/hooks/useBabylonRootNode.ts` | 289 | ENU `TransformNode`, geoid/terrain sampling for the cab and weather placement |
 
-Replaces it: Cesium `Model` as before commit 05d0611; the spike's `useTowerModel.ts` (311 lines, branch 715e42a) already does it behind a flag (the Cesium hook that existed in history).
+Replaces it: Cesium `Model` as before commit 05d0611; `hooks/useTowerModel.ts` now draws the cab in the main view (shadow, night darkening, one axis convention in `utils/modelOrientation.ts`), and `useBabylonTowerModel.ts`, `useBabylonSunDirection.ts` and the Babylon shadow generator and IBL load are deleted.
 
 Read by: `SettingsModsTab.tsx:137` (comment only: the positioning store starts at 0 and `useBabylonTowerModel` caches the terrain), `towerPositioningStore` wizard, TC3D-126 (cab unlit at night), TC3D-138 (axis convention: the Babylon path adds +90 degrees, the Cesium path would use `gltfForwardAxis = X`). Important coupling: the cab only lives in Babylon so Babylon clouds depth-test against it. The cab and the Babylon weather must leave Babylon together (see M2).
 
@@ -282,7 +282,7 @@ Other open issues that name a Babylon file or feature (from `.tmp/linear-list.js
 The answer took ~20 doc reads, ~25 searches and the `git show` of the spike branch beyond a Task Index row (there is no Task Index). Rows that should exist:
 - "Change how weather is drawn (clouds, fog, rain)": `hooks/useBabylonWeather.ts` + `hooks/weather/*` + `useBabylonPrecipitation.ts` (today); `useCesiumWeather.ts`, the weather stage hooks (after M2); `stores/weatherStore.ts`, `useSmoothedWeather.ts`, `types/settings.ts` `WeatherSettings` (:735).
 - "Change datablock labels or leader lines": `useCesiumLabels.ts` (layout, culling) -> `useBabylonOverlay.ts` adapter -> `useBabylonLabels.ts` -> `stores/datablockPositionStore.ts` -> `CesiumViewer.tsx:1145` (click hit-test).
-- "Change the tower cab model": `useBabylonTowerModel.ts` -> `useBabylonRootNode.ts` -> `towerPositioningStore.ts` -> `airportStore.ts:88-125`.
+- "Change the tower cab model": `hooks/useTowerModel.ts` -> `services/ModService.ts` (`getTowerPlacement`) -> `stores/towerPositioningStore.ts` -> `utils/modelOrientation.ts` -> `hooks/useAircraftModels.ts` -> `utils/nightBrightness.ts` -> `hooks/useCesiumLighting.ts` -> `MODDING.md` -> `stores/airportStore.ts` (camera default).
 - "Add or change an `__tc3d` harness call": `useAgentHarness.ts`, `types/harness.ts`, `CLAUDE.md` harness list, `docs/DRIVING_CONVENTIONS.md` (TC3D-123 notes the harness is in no doc).
 
 # MISSING ENTRY POINT

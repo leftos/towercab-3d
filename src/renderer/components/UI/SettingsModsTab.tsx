@@ -134,7 +134,7 @@ function SettingsModsTab({ onRequestClose }: SettingsModsTabProps) {
       onRequestClose?.()
 
       // Sample terrain height at tower position (for accurate model placement).
-      // The positioning store starts at 0; useBabylonTowerModel caches the real terrain
+      // The positioning store starts at 0; useTowerModel caches the real terrain
       // height when it loads the cab and uses that internally for live-edit math.
       const terrainHeight = 0
 

@@ -11,6 +11,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useWeatherStageStore } from '@/stores/weatherStageStore'
 import { useWeatherStore } from '@/stores/weatherStore'
 import type { ViewMode } from '@/types'
+import { aircraftModelHeading } from '@/utils/modelOrientation'
 import {
   anchorGround,
   buildCloudLayerUniforms,
@@ -515,7 +516,7 @@ export function useWeatherStageDriveAids(viewer: Cesium.Viewer | null): void {
     let model: Cesium.Model | null = null
     let cancelled = false
     const position = Cesium.Cartesian3.fromDegrees(testAircraft.lon, testAircraft.lat, testAircraft.heightM)
-    const hpr = new Cesium.HeadingPitchRoll(Cesium.Math.toRadians(testAircraft.heading), 0, 0)
+    const hpr = new Cesium.HeadingPitchRoll(aircraftModelHeading(testAircraft.heading, 0), 0, 0)
     Cesium.Model.fromGltfAsync({
       url: './b738.glb',
       modelMatrix: Cesium.Transforms.headingPitchRollToFixedFrame(position, hpr),

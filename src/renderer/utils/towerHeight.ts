@@ -14,6 +14,33 @@ const HEIGHT_BY_TYPE = {
 }
 
 /**
+ * Ground height under a tower cab, from the best source that has one.
+ *
+ * The terrain sample comes first, then the height of the globe tile already loaded there, then the
+ * airport's field elevation; the first finite value wins. A sample can come back without a height
+ * and the terrain provider can be missing at startup, so the field elevation keeps the cab near its
+ * shaft instead of on the ellipsoid.
+ *
+ * @param sampled - Height from `sampleTerrainMostDetailed`, in meters above the ellipsoid
+ * @param globeHeight - Height from `globe.getHeight`, in meters above the ellipsoid
+ * @param fieldEllipsoidal - Airport field elevation converted to meters above the ellipsoid
+ * @returns Ground height in meters above the ellipsoid
+ */
+export function resolveGroundHeight(
+  sampled: number | undefined,
+  globeHeight: number | undefined,
+  fieldEllipsoidal: number,
+): number {
+  if (sampled !== undefined && Number.isFinite(sampled)) {
+    return sampled
+  }
+  if (globeHeight !== undefined && Number.isFinite(globeHeight)) {
+    return globeHeight
+  }
+  return fieldEllipsoidal
+}
+
+/**
  * Get tower height for an airport
  * Returns height in meters above airport elevation
  */

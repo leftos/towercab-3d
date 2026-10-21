@@ -307,6 +307,12 @@ CesiumViewer Component Mount
     │      ├─ Stage draws fog: scene.fog held at Cesium's clear-weather values (density 0.0006, visualDensityScalar 0.15, screenSpaceErrorFactor 2.0, minimumBrightness 0.03)
     │      └─ Stage draws no fog (Babylon overlay draws the weather, or no log depth): applies fog density from METAR visibility, with the visual density scalar and screen space error adjusted (pure helper sceneFogValues in utils/weatherStage.ts)
     │
+    ├─ 4c. useTowerModel(viewer, { sunElevation, nightDarkeningEnabled, nightDarkeningIntensity }), returning a getter for the dev harness' `towerModel`
+    │      ├─ Draws the tower mod's cab as a Cesium model, so it writes scene depth (the weather stage's clouds and fog stop at it) and casts and receives Cesium shadows; insets mount it but draw no cab, since inset windows never load mods
+    │      ├─ Placement from modService.getTowerPlacement; base on resolveGroundHeight (utils/towerHeight.ts: terrain sample, globe tile, else field elevation), re-placed on terrainProviderChanged; orientation through utils/modelOrientation.ts (shared with aircraft)
+    │      ├─ Darkens at night with the imagery: light colour and image-based lighting scale by cabNightFactor from the curve in utils/nightBrightness.ts, shared with useCesiumNightDarkening
+    │      └─ While the positioning wizard's model step is open for the airport, its offsets rewrite the model matrix without reloading the glTF
+    │
     ├─ 5. useAircraftModels(viewer, modelPoolRefs, interpolatedAircraft, ...)
     │      ├─ Assigns aircraft to model pool slots
     │      ├─ Updates model positions/rotations every frame
@@ -555,7 +561,7 @@ requestAnimationFrame
 
 ### Environment-Map Lighting
 
-Cesium lights OSM buildings and aircraft models from a dynamic environment map whose ground hemisphere defaults to an olive. TowerCab 3D passes a neutral grey instead, as `environmentMapOptions` at creation (setting `groundColor` afterwards does not rebuild a computed map). The colour is `ENVIRONMENT_MAP_GROUND_COLOR` in `constants/lighting.ts`, wrapped by `neutralEnvironmentMapOptions()` in `utils/environmentMap.ts`. Creation sites: `createOsmBuildingsAsync` in `CesiumViewer.tsx`, `Model.fromGltfAsync` in `useCesiumViewer.ts` and `useAircraftModels.ts`, and `ModelPreviewModal.tsx`. A new tileset or model creation site must pass the same options.
+Cesium lights OSM buildings and aircraft models from a dynamic environment map whose ground hemisphere defaults to an olive. TowerCab 3D passes a neutral grey instead, as `environmentMapOptions` at creation (setting `groundColor` afterwards does not rebuild a computed map). The colour is `ENVIRONMENT_MAP_GROUND_COLOR` in `constants/lighting.ts`, wrapped by `neutralEnvironmentMapOptions()` in `utils/environmentMap.ts`. Creation sites: `createOsmBuildingsAsync` in `CesiumViewer.tsx`, `Model.fromGltfAsync` in `useCesiumViewer.ts`, `useAircraftModels.ts` and `useTowerModel.ts`, and `ModelPreviewModal.tsx`. A new tileset or model creation site must pass the same options.
 
 ### Coordinate Transform Pipeline
 
