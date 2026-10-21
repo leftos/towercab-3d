@@ -933,7 +933,8 @@ src/renderer/
 │   ├─ remoteMode.ts (Tauri vs browser detection, API base URL)
 │   ├─ tauriApi.ts (unified API for Tauri commands and HTTP)
 │   ├─ towerHeight.ts (tower position calculation)
-│   └─ performanceMonitor.ts (FPS tracking)
+│   ├─ frameStats.ts (median/p95 over a rolling sample window)
+│   └─ performanceMonitor.ts (phase timers, GPU timers, longtask attribution, 300-frame window in dev builds)
 │
 ├─ types/
 │   ├─ aircraft-timeline.ts (debug timeline snapshots)
@@ -943,6 +944,7 @@ src/renderer/
 │   ├─ exportImport.ts (settings backup/restore)
 │   ├─ fsltl.ts (MSFS model types, MSFSModelSettings)
 │   ├─ mod.ts (modding system types, manifest formats)
+│   ├─ performance.ts (PerformanceMetrics, FrameWindowSummary)
 │   ├─ realtraffic.ts (RealTraffic API types)
 │   ├─ replay.ts (replay snapshots, playback state)
 │   ├─ settings.ts (grouped settings interfaces)

@@ -2,6 +2,7 @@ import type * as BABYLON from '@babylonjs/core'
 import * as Cesium from 'cesium'
 import { useEffect } from 'react'
 import type { AgentHarness } from '@/types'
+import { performanceMonitor } from '@/utils/performanceMonitor'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useViewportStore } from '../stores/viewportStore'
 import { useWeatherStore } from '../stores/weatherStore'
@@ -11,8 +12,9 @@ import { useWeatherStore } from '../stores/weatherStore'
  *
  * The global exposes the Cesium viewer, the Babylon overlay engine and scene,
  * and the viewport/weather/settings store hooks, plus `camera`, `lookAt`,
- * `project` and `readPixels` helpers. Agent-driven tests use it to inspect and
- * drive the running app through the `tauri-app` and `playwright` MCP servers.
+ * `project`, `readPixels` and `perf` helpers. Agent-driven tests use it to
+ * inspect and drive the running app through the `tauri-app` and `playwright`
+ * MCP servers.
  *
  * The whole body sits behind `import.meta.env.DEV`, so Vite drops it from
  * production bundles.
@@ -79,6 +81,10 @@ export function useAgentHarness(
           const data = await engine.readPixels(px, py, w, h, true, false)
           return new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
         },
+        perf: () => ({
+          current: performanceMonitor.getMetrics(),
+          window: performanceMonitor.getFrameWindow(),
+        }),
       }
 
       window.__tc3d = harness

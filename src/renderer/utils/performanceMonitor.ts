@@ -3,38 +3,8 @@
  * Provides frame-by-frame timing data for performance optimization
  */
 
-export interface PerformanceMetrics {
-  interpolation: number
-  aircraftUpdate: number
-  babylonSync: number
-  babylonRender: number
-  /** Total Cesium time (update + render) */
-  cesiumRender: number
-  /** Cesium scene update phase (animations, transforms, culling) */
-  cesiumUpdate: number
-  /** Cesium actual render phase (GPU draw calls) */
-  cesiumDraw: number
-  cesiumPrimitives: number
-  cesiumTilesLoaded: number
-  cesiumTilesLoading: number
-  totalFrame: number
-  fps: number
-  frameInterval: number
-  /** Time between our work ending and next frame starting (browser/GPU/VSync wait) */
-  idleTime: number
-  /** Time not accounted for by individual timers (overhead, unmeasured work) */
-  unaccountedTime: number
-  /** Real GPU execution time of the Cesium scene draw (ms), via timer query. -1 if unsupported. */
-  gpuCesiumMs: number
-  /** Real GPU execution time of the Babylon overlay render (ms), via timer query. -1 if unsupported. */
-  gpuBabylonMs: number
-  /** Whether GPU timer queries are available on this hardware/context. */
-  gpuSupported: boolean
-  /** Main-thread blocking (longtasks) observed in the gap between frames (ms). */
-  blockedJsMs: number
-  /** Unmasked GPU/driver string for the main Cesium context (empty until known). */
-  gpuRenderer: string
-}
+import type { FrameWindowSummary, PerformanceMetrics } from '@/types'
+import { FrameWindow, NumberWindow } from '@/utils/frameStats'
 
 class PerformanceMonitor {
   private timers: Map<string, number> = new Map()
@@ -71,6 +41,13 @@ class PerformanceMonitor {
   private idleTimes: number[] = []
   private readonly MAX_FRAME_SAMPLES = 60
   private previousFrameEndTime = 0
+
+  // Per-frame (not averaged) values behind `getFrameWindow()`. Separate from the 60-sample
+  // means above, whose fields keep their meaning for the HUD.
+  private readonly frameWindow = new FrameWindow()
+  private readonly gpuCesiumWindow = new NumberWindow()
+  private readonly gpuBabylonWindow = new NumberWindow()
+  private lastFrameInterval = 0
 
   // Longtask attribution: a PerformanceObserver records main-thread tasks >50ms so we can
   // tell how much of the inter-frame "idle" gap is actually JS blocking vs GPU/present wait.
@@ -192,10 +169,12 @@ class PerformanceMonitor {
   startFrame(): void {
     const now = performance.now()
     this.frameStartTime = now
+    this.lastFrameInterval = 0
 
     // Calculate frame interval (start-to-start) - the true frame rate
     if (this.previousFrameStartTime > 0) {
       const frameInterval = now - this.previousFrameStartTime
+      this.lastFrameInterval = frameInterval
       this.frameTimes.push(frameInterval)
       if (this.frameTimes.length > this.MAX_FRAME_SAMPLES) {
         this.frameTimes.shift()
@@ -238,13 +217,28 @@ class PerformanceMonitor {
   }
 
   /**
-   * Record real GPU frame times measured via timer queries.
+   * Record real GPU frame times measured via timer queries, for the HUD.
    * Pass -1 for a context whose timing is unavailable.
    */
   setGpuTimings(cesiumMs: number, babylonMs: number, supported: boolean): void {
     this.metrics.gpuCesiumMs = cesiumMs
     this.metrics.gpuBabylonMs = babylonMs
     this.metrics.gpuSupported = supported
+  }
+
+  /**
+   * Record the GPU timer results read since the last poll, one window sample each.
+   *
+   * A frame that drains several results keeps every one of them, and a frame with
+   * no new result adds none, so the series never repeats a stale value.
+   *
+   * @param cesium - Results from the Cesium context, in milliseconds
+   * @param babylon - Results from the Babylon context, in milliseconds
+   */
+  pushGpuSamples(cesium: readonly number[], babylon: readonly number[]): void {
+    if (!import.meta.env.DEV) return
+    for (const milliseconds of cesium) this.gpuCesiumWindow.push(milliseconds)
+    for (const milliseconds of babylon) this.gpuBabylonWindow.push(milliseconds)
   }
 
   /** Record the unmasked GPU/driver string for the main rendering context. */
@@ -271,6 +265,17 @@ class PerformanceMonitor {
     this.metrics.unaccountedTime = Math.max(0, operationsTime - measuredTime)
 
     this.previousFrameEndTime = now
+
+    // Dev-only: production builds keep no frame history for the agent harness.
+    if (import.meta.env.DEV) {
+      this.frameWindow.push({
+        frameInterval: this.lastFrameInterval,
+        totalFrame: this.metrics.totalFrame,
+        cesiumUpdate: this.metrics.cesiumUpdate,
+        cesiumDraw: this.metrics.cesiumDraw,
+        babylonRender: this.metrics.babylonRender,
+      })
+    }
   }
 
   /**
@@ -278,6 +283,15 @@ class PerformanceMonitor {
    */
   getMetrics(): PerformanceMetrics {
     return { ...this.metrics }
+  }
+
+  /** Median and p95 of the last 300 frames' CPU series and the last 300 GPU results. */
+  getFrameWindow(): FrameWindowSummary {
+    return {
+      ...this.frameWindow.summarize(),
+      gpuCesiumMs: this.gpuCesiumWindow.summarize(),
+      gpuBabylonMs: this.gpuBabylonWindow.summarize(),
+    }
   }
 
   /**
@@ -306,6 +320,10 @@ class PerformanceMonitor {
       blockedJsMs: 0,
       gpuRenderer: '',
     }
+    this.frameWindow.clear()
+    this.gpuCesiumWindow.clear()
+    this.gpuBabylonWindow.clear()
+    this.lastFrameInterval = 0
     this.frameTimes = []
     this.idleTimes = []
     this.blockedJsTimes = []

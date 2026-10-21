@@ -411,12 +411,27 @@ export {
 } from './airportSurfaces'
 
 // ============================================================================
+// PERFORMANCE TYPES
+// ============================================================================
+
+export type {
+  // Per-frame timings from the performance monitor
+  PerformanceMetrics,
+} from './performance'
+
+// ============================================================================
 // DEV AGENT TEST HARNESS TYPES
 // ============================================================================
 
 export type {
   // Dev-only window.__tc3d handle
   AgentHarness,
+  // Frame-window samples and their median/p95 summaries
+  FrameRowSummary,
+  FrameSample,
+  FrameTimingSummary,
+  FrameWindowSummary,
+  PercentileStat,
 } from './harness'
 
 // ============================================================================

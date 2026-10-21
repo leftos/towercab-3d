@@ -47,6 +47,7 @@ In either, `WeatherDebugPanel` (dev builds only) forces rain, snow and cloud cov
 - `lookAt(lat, lon, altitudeFt)` aims the active viewport at a position.
 - `project(lat, lon, heightM)` returns the page CSS-pixel point for `browser_click` and friends, or `null` when the point is behind the camera.
 - `readPixels(x, y, w, h)` returns the Babylon canvas's RGBA bytes for a page rectangle (bottom-left row order). Rain is drawn additively with alpha 0, so screenshots and canvas `drawImage` miss it; read pixels instead.
+- `perf()` returns `{ current, window }`: `current` is the `performanceMonitor.getMetrics()` snapshot, `window` the median and p95 (`{ median, p95 }`, or null) over the last 300 frames of `frameInterval`, `totalFrame`, `cesiumUpdate`, `cesiumDraw` and `babylonRender`, plus `gpuCesiumMs` / `gpuBabylonMs` over the last 300 GPU timer results (null until the timer yields a real result). Rendering spikes sample it over 300 frames and report median and p95.
 
 Driving notes:
 

@@ -205,7 +205,7 @@ Source: CLAUDE.md:55; commit b39260a. Seen: Wave 1 run.
 ### Gate the whole hook behind the bundler's dev flag
 <!-- rule: dev-flag-gates-hook -->
 
-The entire install body sits inside `if (import.meta.env.DEV)`, so Vite drops it from production bundles; there is no runtime setting or query parameter that turns it on in a release. Every planned extension (`settings`, `cinematic`, `perf`) is specified as "dev-only like the rest".
+The entire install body sits inside `if (import.meta.env.DEV)`, so Vite drops it from production bundles; there is no runtime setting or query parameter that turns it on in a release. Every extension (`perf()` exists; `settings`, `cinematic` are planned) is specified as "dev-only like the rest".
 Source: src/renderer/hooks/useAgentHarness.ts:17-18, 32; src/renderer/types/harness.ts:7-8; docs/plans/rendering-opportunities-design.md:20. Seen: documented.
 
 ### Put every path that activates the window behind one gate, pinned by source tests
@@ -237,7 +237,7 @@ Source: src/renderer/types/harness.ts:29-88; CLAUDE.md:43-49. Seen: documented.
 ### Specify each feature's hook surface in its design
 <!-- rule: design-names-hook-surface -->
 
-New feature designs name the `window.__tc3d` calls that will let an agent verify them (`settings.list/get/set/reset` validated against the control's range, `cinematic.start/stop/state`, `camera.follow`, `perf()`), with the type going into `types/harness.ts`; the hook grows with the features instead of after them.
+New feature designs name the `window.__tc3d` calls that will let an agent verify them (`settings.list/get/set/reset` validated against the control's range, `cinematic.start/stop/state`, `camera.follow`; `perf()` is the model for a measurement call), with the type going into `types/harness.ts`; the hook grows with the features instead of after them.
 Source: docs/plans/settings-drawer.md:82; docs/plans/cinematic-camera.md:70; docs/plans/on-plane-cameras.md:70; docs/plans/rendering-opportunities-design.md:20; docs/plans/MAIN.md:108, 147. Seen: four designs.
 
 ### Fail loudly when the hook's target is not ready

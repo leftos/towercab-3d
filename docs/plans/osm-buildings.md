@@ -9,7 +9,7 @@ Inputs: the TC3D-140 spike report (`docs/plans/canvases/spike-osm-buildings/`), 
 The spike measured no frame cost: every mode hit the 240 Hz cap on the RTX 4090. The weather spike found the GPU timer reads 0 on this desktop's backend, and iPad Safari exposes no WebGL timer query. So:
 
 - **Harness.** A fixed `window.__tc3d` script: KSFO and KOAK cab views at noon and 22:00 local, plus one orbit, 600 frames each, `scene.requestRenderMode = false`, frame cap off. A/B one idea at a time and report the median and p95 frame interval.
-  `performanceMonitor.getMetrics()` (`utils/performanceMonitor.ts:279`) has the phase timings, but `__tc3d` doesn't expose it: add a `perf` handle (harness gap).
+  `performanceMonitor.getMetrics()` (`utils/performanceMonitor.ts:279`) has the phase timings, and `__tc3d.perf()` exposes it with median and p95 over 300 frames (TC3D-55).
 - **Desktop GPU-bound pass.** Also set `scene.resolutionScale = 2` so the GPU, not the CPU, sets the frame time; shader cost then shows up in the frame interval even without timer queries.
 - **iPad.** Use Safari Web Inspector from the MacBook (Timelines → Rendering Frames). Record frame interval p95, the dropped-frame share at 60 Hz, and a 10-minute soak for thermal throttling (compare minutes 0–1 with 9–10). Also record the tab's memory.
 - **Bar.** All building work together costs at most +1.5 ms p50 on the desktop GPU-bound pass over plain ion buildings. On the iPad, at most +2 percentage points of dropped frames after the soak, and no crash from memory. Each idea's own bar is a share of that.

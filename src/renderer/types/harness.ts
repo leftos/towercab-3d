@@ -3,9 +3,9 @@
  *
  * The harness gives agent-driven tests a handle on the running app's Cesium
  * viewer, Babylon overlay and a few Zustand stores, so a test can read camera
- * state, aim the camera, project a coordinate to a screen point and read back
- * rendered pixels. It is installed by `useAgentHarness` and only exists in dev
- * builds; production bundles drop it.
+ * state, aim the camera, project a coordinate to a screen point, read back
+ * rendered pixels and read frame timings. It is installed by `useAgentHarness`
+ * and only exists in dev builds; production bundles drop it.
  *
  * @see useAgentHarness - Hook that installs the global
  */
@@ -16,6 +16,54 @@ import type { useSettingsStore } from '../stores/settingsStore'
 import type { useViewportStore } from '../stores/viewportStore'
 import type { useWeatherStore } from '../stores/weatherStore'
 import type { FollowMode } from './camera'
+import type { PerformanceMetrics } from './performance'
+
+/** Median and p95 of one per-frame series, in milliseconds. */
+export interface PercentileStat {
+  median: number
+  p95: number
+}
+
+/** One frame's CPU-side timing sample, as held by the frame window. */
+export interface FrameSample {
+  /** Start-to-start interval of this frame (true frame period) */
+  frameInterval: number
+  /** Time the monitor's work took inside this frame */
+  totalFrame: number
+  /** Cesium scene update phase */
+  cesiumUpdate: number
+  /** Cesium render phase */
+  cesiumDraw: number
+  /** Babylon overlay render */
+  babylonRender: number
+}
+
+/** Median and p95 of the CPU-side series of the frames held. */
+export interface FrameTimingSummary {
+  frameInterval: PercentileStat | null
+  totalFrame: PercentileStat | null
+  cesiumUpdate: PercentileStat | null
+  cesiumDraw: PercentileStat | null
+  babylonRender: PercentileStat | null
+}
+
+/** The frame window's summary: every CPU-side series, plus how many rows it holds. */
+export interface FrameRowSummary extends FrameTimingSummary {
+  /** Rows held, at most the window's capacity */
+  frames: number
+}
+
+/**
+ * Everything `perf().window` reports: the frame rows plus the GPU series.
+ *
+ * A series with no samples is null. The GPU series hold one sample per GPU timer
+ * result, so they are null until the first result arrives, and never carry a
+ * sentinel for an unsupported or broken timer.
+ */
+export interface FrameWindowSummary extends FrameRowSummary {
+  gpuCesiumMs: PercentileStat | null
+  gpuBabylonMs: PercentileStat | null
+}
 
 /**
  * Dev-only handle on the running app, assigned to `window.__tc3d` in dev builds.
@@ -78,6 +126,14 @@ export interface AgentHarness {
    * @returns RGBA bytes in Babylon's bottom-left origin order
    */
   readPixels: (x: number, y: number, width: number, height: number) => Promise<Uint8Array>
+
+  /**
+   * Frame timings of the main viewport's Cesium loop.
+   *
+   * @returns `current`, the last completed frame's metrics, and `window`, the
+   * median and p95 of the last 300 frames' timing series
+   */
+  perf: () => { current: PerformanceMetrics; window: FrameWindowSummary }
 }
 
 declare global {

@@ -21,6 +21,12 @@ interface DebugRendererInfoExt {
   UNMASKED_VENDOR_WEBGL: number
 }
 
+/**
+ * Returned by {@link GpuFrameTimer.poll} when no query completed, so a frame with
+ * no GPU result allocates nothing. Frozen: callers must not push into it.
+ */
+export const NO_GPU_RESULTS: readonly number[] = Object.freeze([])
+
 export interface RendererInfo {
   /** Unmasked GPU/driver string (e.g. "NVIDIA GeForce RTX 4070" or "Microsoft Basic Render Driver"). */
   renderer: string
@@ -114,10 +120,17 @@ export class GpuFrameTimer {
     }
   }
 
-  /** Read back any completed query results. Call once per frame before {@link begin}. */
-  poll(): void {
+  /**
+   * Read back any completed query results. Call once per frame before {@link begin}.
+   *
+   * @returns Every result read since the previous poll, oldest first, in
+   * milliseconds. {@link NO_GPU_RESULTS} when no query has completed — and
+   * always once the timer has broken, so a broken timer reports no results
+   * rather than a stale or negative one.
+   */
+  poll(): readonly number[] {
     if (!this.ext || this.broken) {
-      return
+      return NO_GPU_RESULTS
     }
     const gl = this.gl
     // A disjoint event (GPU mode switch, power event) invalidates all in-flight timings.
@@ -126,8 +139,9 @@ export class GpuFrameTimer {
         this.pool.push(q)
       }
       this.pending.length = 0
-      return
+      return NO_GPU_RESULTS
     }
+    let results: number[] | null = null
     while (this.pending.length > 0) {
       const query = this.pending[0]
       if (!query) {
@@ -139,10 +153,14 @@ export class GpuFrameTimer {
         break
       }
       const nanoseconds = gl.getQueryParameter(query, gl.QUERY_RESULT) as number
-      this.lastGpuMs = nanoseconds / 1e6
+      const milliseconds = nanoseconds / 1e6
+      this.lastGpuMs = milliseconds
+      results ??= []
+      results.push(milliseconds)
       this.pending.shift()
       this.pool.push(query)
     }
+    return results ?? NO_GPU_RESULTS
   }
 
   /** Delete all GL query objects. Call when the owning context is being destroyed. */

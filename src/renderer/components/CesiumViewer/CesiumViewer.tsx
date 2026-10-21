@@ -31,7 +31,7 @@ import { useVatsimStore } from '../../stores/vatsimStore'
 import { useViewportStore } from '../../stores/viewportStore'
 import { useWeatherStore } from '../../stores/weatherStore'
 import { neutralEnvironmentMapOptions } from '../../utils/environmentMap'
-import { GpuFrameTimer, getRendererInfo } from '../../utils/gpuTimer'
+import { GpuFrameTimer, getRendererInfo, NO_GPU_RESULTS } from '../../utils/gpuTimer'
 import { performanceMonitor } from '../../utils/performanceMonitor'
 import { getServiceWorkerCacheStats } from '../../utils/serviceWorkerRegistration'
 import { getTowerPosition } from '../../utils/towerHeight'
@@ -814,6 +814,8 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
     // only — insets render on their own context and RAF loop.
     let cesiumGpuTimer: GpuFrameTimer | null = null
     let babylonGpuTimer: GpuFrameTimer | null = null
+    let cesiumGpuResults: readonly number[] = NO_GPU_RESULTS
+    let babylonGpuResults: readonly number[] = NO_GPU_RESULTS
     let rendererLogged = false
 
     const getCesiumGl = (): WebGL2RenderingContext | null => {
@@ -859,7 +861,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
           }
         }
         // Read back completed results, then open this frame's query around the Cesium draw.
-        cesiumGpuTimer?.poll()
+        cesiumGpuResults = cesiumGpuTimer?.poll() ?? NO_GPU_RESULTS
         cesiumGpuTimer?.begin()
       }
     })
@@ -893,7 +895,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
         }
       }
       performanceMonitor.startTimer('babylonRender')
-      babylonGpuTimer?.poll()
+      babylonGpuResults = babylonGpuTimer?.poll() ?? NO_GPU_RESULTS
       babylonGpuTimer?.begin()
       babylonOverlay.render()
       babylonGpuTimer?.end()
@@ -903,6 +905,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
         const cesiumMs = cesiumGpuTimer?.isSupported ? cesiumGpuTimer.gpuMs : -1
         const babylonMs = babylonGpuTimer?.isSupported ? babylonGpuTimer.gpuMs : -1
         performanceMonitor.setGpuTimings(cesiumMs, babylonMs, cesiumMs >= 0 || babylonMs >= 0)
+        performanceMonitor.pushGpuSamples(cesiumGpuResults, babylonGpuResults)
       }
 
       // Update camera position for weather interpolation and auto-airport switching
