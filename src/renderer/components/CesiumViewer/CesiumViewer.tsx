@@ -7,7 +7,6 @@ import { useAircraftModels } from '../../hooks/useAircraftModels'
 import { useAutoAirportSwitch } from '../../hooks/useAutoAirportSwitch'
 import { useBabylonNightLighting } from '../../hooks/useBabylonNightLighting'
 import { getMemoryCounters, useBabylonOverlay } from '../../hooks/useBabylonOverlay'
-import { useBabylonSunDirection } from '../../hooks/useBabylonSunDirection'
 import { useCesiumCamera } from '../../hooks/useCesiumCamera'
 import { useCesiumLabels } from '../../hooks/useCesiumLabels'
 import { useCesiumLighting } from '../../hooks/useCesiumLighting'
@@ -21,6 +20,7 @@ import { insetLog } from '../../hooks/useSharedWorkerConsumer'
 import { useSunElevation } from '../../hooks/useSunElevation'
 import { useTerrainFlattening } from '../../hooks/useTerrainFlattening'
 import { useTerrainQuality } from '../../hooks/useTerrainQuality'
+import { useTowerModel } from '../../hooks/useTowerModel'
 import { useAircraftFilterStore } from '../../stores/aircraftFilterStore'
 import { useAirportStore } from '../../stores/airportStore'
 import { useDatablockPositionStore } from '../../stores/datablockPositionStore'
@@ -396,6 +396,14 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
   })
   useCesiumWeather(viewer, showWeatherEffects, showCesiumFog, fogDensity, stageDrawsFog)
 
+  // Tower cab model; darkens at night with the imagery. Insets mount it too but draw nothing
+  // until inset windows load tower mods (only the main window calls modService.loadMods()).
+  const getTowerModel = useTowerModel(viewer, {
+    sunElevation,
+    nightDarkeningEnabled: enableNightDarkening && enableLighting,
+    nightDarkeningIntensity,
+  })
+
   // =========================================================================
   // 5. Ground Aircraft Terrain Sampling (10x per second)
   // =========================================================================
@@ -427,9 +435,6 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
   // =========================================================================
   // 7. Datablock Label Rendering
   // =========================================================================
-  // Tower cab models are loaded inside the Babylon overlay (see useBabylonTowerModel
-  // composed into useBabylonOverlay below) so weather meshes can depth-test against
-  // the cab geometry. The previous Cesium-side useTowerModel hook has been removed.
   // (Reference position calculated above before hook initialization)
 
   // =========================================================================
@@ -441,22 +446,11 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
   })
 
   // Dev-only agent test harness (window.__tc3d) for MCP-driven tests
-  useAgentHarness(viewer, { engine: babylonOverlay.engine ?? null, scene: babylonOverlay.scene ?? null })
+  useAgentHarness(viewer, { engine: babylonOverlay.engine ?? null, scene: babylonOverlay.scene ?? null }, getTowerModel)
 
   // Adjust Babylon.js lighting based on sun position
   useBabylonNightLighting(babylonOverlay?.scene ?? null, sunElevation, {
     enabled: enableNightDarkening && enableLighting,
-  })
-
-  // Sync Babylon directional light's direction to the actual sun position so the
-  // tower cab lights and self-shadows realistically as the day progresses.
-  useBabylonSunDirection({
-    scene: babylonOverlay?.scene ?? null,
-    cesiumViewer: viewer,
-    getFixedToEnu: babylonOverlay.getFixedToEnu,
-    enabled: enableLighting,
-    timeMode,
-    fixedTimeHour,
   })
 
   useCesiumLabels({

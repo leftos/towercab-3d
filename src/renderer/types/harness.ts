@@ -4,8 +4,8 @@
  * The harness gives agent-driven tests a handle on the running app's Cesium
  * viewer, Babylon overlay and a few Zustand stores, so a test can read camera
  * state, aim the camera, project a coordinate to a screen point, read back
- * rendered pixels, read frame timings and drive the Cesium cloud and fog stage
- * (renderer switch, camera override, test aircraft). It is installed by `useAgentHarness`
+ * rendered pixels, read frame timings, drive the Cesium cloud and fog stage
+ * (renderer switch, camera override, test aircraft) and read the tower cab's state. It is installed by `useAgentHarness`
  * and only exists in dev builds; production bundles drop it.
  *
  * @see useAgentHarness - Hook that installs the global
@@ -139,6 +139,19 @@ export interface AgentHarness {
 
   /** The Cesium cloud and fog stage: renderer switch, drive aids and state */
   weatherStage: WeatherStageHandle
+
+  /** The tower cab model of the main viewport, read live on each access */
+  readonly towerModel: TowerModelHandle
+}
+
+/** State of the tower cab model drawn by `useTowerModel` */
+export interface TowerModelHandle {
+  /** Whether a cab model is in the scene */
+  loaded: boolean
+  /** The cab's model matrix, column-major (`Cesium.Matrix4.toArray`), or null without a cab */
+  modelMatrix: number[] | null
+  /** Light factor applied to the cab: 1 by day or with night darkening off, lower at night */
+  nightFactor: number
 }
 
 /** A camera pose that replaces the app's camera every frame while set */

@@ -4,7 +4,7 @@
 
 ### `cab-environment.env`
 
-Prefiltered environment cubemap used as the Babylon.js scene `environmentTexture` for image-based lighting (IBL) on the modded tower cab interior.
+Prefiltered environment cubemap kept for image-based lighting (IBL) of the modded tower cab interior. Nothing loads it today; it stays on disk until the Babylon removal decides whether the Cesium cab needs it.
 
 - **File:** `src/renderer/public/cab-environment.env`
 - **Source:** [BabylonJS/Assets — `environments/studio.env`](https://github.com/BabylonJS/Assets/blob/master/environments/studio.env)

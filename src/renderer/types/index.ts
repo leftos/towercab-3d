@@ -434,6 +434,8 @@ export type {
   FrameTimingSummary,
   FrameWindowSummary,
   PercentileStat,
+  // Tower cab model state
+  TowerModelHandle,
   // Cloud and fog stage drive aids
   WeatherStageCameraOverride,
   WeatherStageHandle,

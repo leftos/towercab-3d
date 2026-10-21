@@ -9,7 +9,6 @@ import { useBabylonLabels } from './useBabylonLabels'
 import { useBabylonPrecipitation } from './useBabylonPrecipitation'
 import { useBabylonRootNode } from './useBabylonRootNode'
 import { useBabylonScene } from './useBabylonScene'
-import { useBabylonTowerModel } from './useBabylonTowerModel'
 import { useBabylonWeather } from './useBabylonWeather'
 
 /**
@@ -186,8 +185,8 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
   // Get datablock font size setting
   const datablockFontSize = useSettingsStore((state) => state.aircraft.datablockFontSize)
 
-  // 1. Initialize scene (engine, scene, camera, GUI, lighting, shadow generator)
-  const { engine, scene, camera, guiTexture, shadowGenerator, sceneReady } = useBabylonScene({
+  // 1. Initialize scene (engine, scene, camera, GUI, lighting)
+  const { engine, scene, camera, guiTexture, sceneReady } = useBabylonScene({
     canvas: canvas!,
     antialias: true,
     transparent: true,
@@ -223,16 +222,7 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     scene,
   })
 
-  // 6. Tower cab model (loads modded glTF into Babylon scene so weather meshes
-  //    depth-test against cab geometry — replaces the previous Cesium-side cab).
-  useBabylonTowerModel({
-    scene,
-    cesiumViewer,
-    getFixedToEnu,
-    shadowGenerator,
-  })
-
-  // 7. Initialize camera synchronization
+  // 6. Initialize camera synchronization (the tower cab is a Cesium model, see useTowerModel)
   const { syncCamera: syncCameraInternal } = useBabylonCameraSync({
     cesiumViewer,
     camera,

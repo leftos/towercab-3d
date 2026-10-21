@@ -14,8 +14,11 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Remote access accepts only devices on your local network, unless you turn on **Allow devices outside the local network** in Settings → Configuration.
 - Clouds and fog are now drawn with the scene's depth, so aircraft, buildings and terrain in front of a cloud deck or fog bank hide it correctly.
 - Fog Intensity sets how thick the depth-drawn fog looks, and terrain in low visibility is no longer fogged twice.
+- Tower mod cabs now darken at night with the rest of the view and cast a shadow on the ground.
+- Tower mod `rotation` now turns the cab clockwise from north, as documented; a cab with a rotation other than 0 now faces a different way.
 
 ### Fixed
+- Tower mod cabs no longer float about 30 m above their tower when the airport loads before the terrain.
 - The remote access server no longer serves or writes files outside its own folders.
 - Remote browsers no longer receive your stored keys and sign-ins, such as the RealTraffic key and vNAS login.
 - Remote browsers no longer receive the host's folder locations (MSFS Community, model cache, VMR, FSLTL, mods, diagnostics) from its settings, lists or error messages.
