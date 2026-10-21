@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Display delay easing</title>
+<style>
+  :root {
+    --bg: #0f1419; --panel: #182029; --line: #2b3742; --text: #e6edf3; --muted: #8b98a5;
+    --runway: #39434d; --mark: #c9d1d9; --plane: #f0b429; --ghost: rgba(240, 180, 41, 0.28); --accent: #58a6ff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px 16px; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, sans-serif; }
+  main { max-width: 980px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 6px; }
+  p { color: var(--muted); margin: 0 0 16px; max-width: 760px; }
+  .clock { font: 600 13px ui-monospace, monospace; color: var(--accent); margin-bottom: 12px; }
+  .lane { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; }
+  .lane h2 { font-size: 15px; margin: 0 0 2px; }
+  .lane .sub { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+  .readout { font: 13px ui-monospace, monospace; display: flex; gap: 18px; flex-wrap: wrap; margin-top: 6px; }
+  .readout b { color: var(--plane); }
+  canvas { width: 100%; height: 70px; display: block; }
+  .legend { color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Display delay easing for a new VATSIM aircraft</h1>
+  <p>An aircraft on final at 140 kt, seen from above. When its third report arrives (at 5 s here), its display delay eases from the 17 s start to the measured 15.15 s. While the delay shrinks, the aircraft is drawn faster than it flies. The faint marker is where it would be at a steady 140 kt. Each lane is one easing rate; the loop runs 30 s.</p>
+  <div class="clock" id="clock">t = 0.0 s</div>
+  <div id="lanes"></div>
+  <p class="legend">Solid: the drawn aircraft. Faint: steady-speed reference. Runway marks every 150 m.</p>
+</main>
+<script>
+const KT_TO_MS = 0.514444;
+const TRUE_SPEED_KT = 140;
+const LOOP_S = 30;
+const CATCHUP_START_S = 5;
+const DELAY_DROP_MS = 1850;
+const VIEW_M = 2400;
+const LANES = [
+  { title: 'A. Current: 500 ms per second', rate: 500 },
+  { title: 'B. 250 ms per second', rate: 250 },
+  { title: 'C. 100 ms per second', rate: 100 },
+];
+
+function playbackRate(lane, t) {
+  const catchupS = DELAY_DROP_MS / lane.rate;
+  const inCatchup = t >= CATCHUP_START_S && t < CATCHUP_START_S + catchupS;
+  return inCatchup ? 1 + lane.rate / 1000 : 1;
+}
+
+function drawnDistance(lane, t) {
+  const catchupS = DELAY_DROP_MS / lane.rate;
+  const extraS = Math.min(Math.max(t - CATCHUP_START_S, 0), catchupS) * (lane.rate / 1000);
+  return (t + extraS) * TRUE_SPEED_KT * KT_TO_MS;
+}
+
+const lanesEl = document.getElementById('lanes');
+for (const lane of LANES) {
+  const catchupS = DELAY_DROP_MS / lane.rate;
+  const el = document.createElement('section');
+  el.className = 'lane';
+  el.innerHTML = `<h2>${lane.title}</h2>
+    <div class="sub">Plays at ${(1 + lane.rate / 1000).toFixed(2)}x for ${catchupS.toFixed(1)} s</div>
+    <canvas></canvas>
+    <div class="readout"><span>Shown speed <b class="spd">140 kt</b></span><span>Ahead of steady <b class="ahead">0 m</b></span></div>`;
+  lanesEl.appendChild(el);
+  lane.canvas = el.querySelector('canvas');
+  lane.spd = el.querySelector('.spd');
+  lane.ahead = el.querySelector('.ahead');
+}
+
+function drawLane(lane, t) {
+  const c = lane.canvas;
+  const dpr = window.devicePixelRatio || 1;
+  const w = c.clientWidth, h = c.clientHeight;
+  if (c.width !== w * dpr) { c.width = w * dpr; c.height = h * dpr; }
+  const g = c.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+  const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n);
+  const startX = -150;
+  const pxPerM = w / VIEW_M;
+  const y = h / 2;
+  g.fillStyle = cssVar('--runway');
+  g.fillRect(0, y - 14, w, 28);
+  g.fillStyle = cssVar('--mark');
+  for (let m = 0; m < VIEW_M; m += 150) g.fillRect(m * pxPerM, y - 1.5, 40 * pxPerM, 3);
+  const steady = t * TRUE_SPEED_KT * KT_TO_MS;
+  const drawn = drawnDistance(lane, t);
+  const plane = (dist, color) => {
+    const x = (startX + dist) * pxPerM;
+    g.fillStyle = color;
+    g.beginPath();
+    g.moveTo(x + 9, y); g.lineTo(x - 7, y - 7); g.lineTo(x - 4, y); g.lineTo(x - 7, y + 7);
+    g.closePath(); g.fill();
+  };
+  plane(steady, cssVar('--ghost'));
+  plane(drawn, cssVar('--plane'));
+  lane.spd.textContent = `${Math.round(TRUE_SPEED_KT * playbackRate(lane, t))} kt`;
+  lane.ahead.textContent = `${Math.round(drawn - steady)} m`;
+}
+
+const params = new URLSearchParams(location.search);
+const fixedT = params.has('t') ? Number(params.get('t')) : null;
+const t0 = performance.now();
+function frame(now) {
+  const t = fixedT ?? ((now - t0) / 1000) % LOOP_S;
+  document.getElementById('clock').textContent = `t = ${t.toFixed(1)} s`;
+  for (const lane of LANES) drawLane(lane, t);
+  if (fixedT === null) requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
