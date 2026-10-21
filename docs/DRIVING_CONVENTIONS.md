@@ -43,7 +43,7 @@ Source: CLAUDE.md "E2E testing via Playwright MCP"; scripts/dev/devApi.ts; .mcp.
 ### Launch in the background with the debug port, start when the hook answers, and stop what you started
 <!-- rule: launch-isolated-lifecycle -->
 
-The agent may start the dev app itself, in the background, with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS='--remote-debugging-port=9222'` (`pnpm run dev`, or `pnpm run dev:vnas` the same way), and must stop it when finished, because the window opens on the user's desktop.
+The agent may start the dev app itself, in the background, with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS='--remote-debugging-port=9222'` (`pnpm --dir <tree> run dev -- --agent`, or `pnpm run dev:vnas -- --agent` the same way), and must stop it when finished. Name the tree with `--dir`: a Bash or PowerShell tool shell's working folder resets to the main checkout between calls, which once launched the main checkout's app instead of the worktree's.
 
 Before this, app checks were listed in the plan as "Human: the user runs pnpm run dev"; the CDP attach turned them into agent-run "App check (tauri-app MCP)" lines. The app is ready when `window.__tc3d` exists on the attached page (the hook installs once the Cesium viewer exists), not when the process starts.
 
@@ -51,7 +51,7 @@ The app is single-instance, so a second launch only focuses the first window, an
 
 The rule is to point the app's data folder at a scratch folder through an environment variable the app honours, and to write what the session needs into that folder's settings before the launch, so the developer's own data stays untouched.
 
-A stop has one trap: the window-state plugin saves the window's visible flag, so closing a hidden window makes the next launch start hidden. Show it (`SW_SHOWNOACTIVATE`) before `CloseMainWindow()` (see hidden-window-keeps-rendering).
+A stop has two traps. `CloseMainWindow()` cannot find a hidden window, so close a hidden agent app with `PostMessage(hwnd, WM_CLOSE)` or stop its process tree. And without `--agent` the window-state plugin saves the window's visible flag, so closing a window hidden with `SW_HIDE` makes the next launch start hidden: show it (`SW_SHOWNOACTIVATE`) before closing. With `--agent` no show step is needed, since the plugin does not save that window (see hidden-window-keeps-rendering).
 Source: CLAUDE.md:31-35, CLAUDE.md:109; .claude/skills/towercab-3d-nextup/SKILL.md:35; commit b39260a (plan wave lines rewritten from "Human:" to "App check"); src/renderer/hooks/useAgentHarness.ts:29-30; src-tauri/src/lib.rs:857-863; src-tauri/tauri.dev.conf.json:4; src-tauri/src/settings.rs:589. Seen: documented.
 
 ### Build before launch, and build before stopping on a restart
@@ -65,11 +65,11 @@ Source: scripts/shipping/build/dev-wrapper.js:41-77, 132-174; CLAUDE.md:31-34; a
 ### Start the app quiet and out of the user's way, set at window creation
 <!-- rule: quiet-by-default -->
 
-A default driving run should be unfocused, out of sight, silent and frame-capped, with a visible run only when the user wants to watch. This is partly met: out of sight and frame-capped hold once the window is hidden after launch (see hidden-window-keeps-rendering).
+A default driving run should be unfocused, out of sight, silent and frame-capped, with a visible run only when the user wants to watch. This is met for agent runs: `pnpm run dev -- --agent` creates the window hidden and unfocused and keeps it frame-capped (see hidden-window-keeps-rendering). Sound is not handled yet.
 
-But `pnpm run dev` still opens the window visible and focused on the user's desktop at 1600x900 (the `windows` entry in `src-tauri/tauri.conf.json` sets neither `focus` nor `visible`, and the window-state plugin restores the saved window with `show()` then `set_focus()`), which is why every app check starts with "hands off".
+Without `--agent`, `pnpm run dev` opens the window visible and focused on the user's desktop at 1600x900 (the `windows` entry in `src-tauri/tauri.conf.json` sets neither `focus` nor `visible`, and the window-state plugin restores the saved window with `show()` then `set_focus()`), so a visible run still starts with "hands off".
 
-The dev-only `--agent` launch that opens the window hidden and unfocused (TC3D-253) removes that.
+`--agent` adds `--config src-tauri/tauri.agent.conf.json` (the window entry with `visible: false, focus: false`; Tauri merges `--config` files in order) and sets `TC3D_AGENT_RUN=1`, which in debug builds keeps the window-state plugin off the main window (`window_state_plugin()` in `src-tauri/src/lib.rs`).
 
 Each part has to be set when the window is created, because later is too late: measured in another project, Windows shows a new window about 0.9 s after start, before any app code runs, and clamps an off-screen initial position onto the primary screen, and un-focusing a window created focused did not give the focus back.
 
@@ -78,14 +78,18 @@ Showing a window without activating it still leaves it activatable: when the win
 Turn sound off through the platform rather than the app's own mute, so the mute stays testable and nothing leaks into saved settings, and cap the frame rate: a hidden window in another project kept VSync and drew at the monitor's 239 Hz. Out of sight must still render; the host already passes `--disable-renderer-backgrounding` and `--disable-backgrounding-occluded-windows` among its WebView2 flags.
 Source: src-tauri/tauri.conf.json:13-23; src-tauri/src/lib.rs:777-778; CLAUDE.md:31, 53; other projects' decision records and window timings measured with a 5 ms poller; Windows docs for WS_EX_NOACTIVATE. Seen: 0 here (seeded from godot-mcp, yaat).
 
-### A hidden desktop window keeps rendering: hide it with SW_HIDE and drive it over CDP
+### A hidden desktop window keeps rendering: launch with --agent and drive it over CDP
 <!-- rule: hidden-window-keeps-rendering scope: project -->
 
-The desktop dev app keeps drawing at its frame cap (60 fps measured; `__tc3d.perf().window.frameInterval` median about 17 ms) while its window is hidden with `ShowWindow(hwnd, SW_HIDE)`, minimized, moved off-screen past every monitor, or covered.
+The desktop dev app keeps drawing at its frame cap (60 fps measured; `__tc3d.perf().window.frameInterval` median about 17 ms) while its window is hidden: created hidden by `--agent`, hidden with `ShowWindow(hwnd, SW_HIDE)`, minimized, moved off-screen past every monitor, or covered.
+
+Recipe: launch with `$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS='--remote-debugging-port=9222'; pnpm --dir <tree> run dev -- --agent`, drive over CDP and never call `page.bringToFront()`. Measured over 4023 samples at 10 ms from launch to the end of the run, the window was never visible and never foreground; `frameInterval` median 16.70 ms, p95 17.10 at KOAK; CDP screenshots and input worked; the saved `.window-state.json` was byte-identical afterwards. Close it with `PostMessage(hwnd, WM_CLOSE)` or by stopping its process tree: `CloseMainWindow()` cannot find a hidden window. No show-before-close step is needed.
+
+The rest of this rule is for hiding a window launched without `--agent`.
 
 `document.visibilityState` stays `visible`, 100 ms timers keep pace, and CDP screenshots and CDP input (click, Escape) work without showing or focusing the window. No extra WebView2 flag is needed: the app already passes `--disable-renderer-backgrounding --disable-backgrounding-occluded-windows` (`src-tauri/src/lib.rs:777-778`) and wry never tells WebView2 the window is hidden; `--disable-features=CalculateNativeWinOcclusion` made no difference.
 
-Use `SW_HIDE` (0): it is the only state with nothing on screen and no taskbar button. Recipe:
+Use `SW_HIDE` (0): it is the only state with nothing on screen and no taskbar button. Recipe without `--agent`:
 1. Check ports 9222 and 5173 are free.
 2. Start a background poller (PowerShell) that finds the app's window and sends `ShowWindow(hwnd, SW_HIDE)` the moment it is visible. Find it by process, not by title alone: take the processes whose `Path` is under this tree's `src-tauri\target\`, enumerate the top-level windows (`EnumWindows`, `GetWindowThreadProcessId` equal to the process id, `GetWindow(hwnd, GW_OWNER)` null) and take the one whose `GetWindowText` starts with `TowerCab`.
 
@@ -98,7 +102,7 @@ The other `ShowWindow` states, if a run wants one: `SW_SHOWMINNOACTIVE` (7) mini
 
 Make the process per-monitor DPI aware first (`SetProcessDpiAwarenessContext(-4)`) so rectangles are physical pixels. Save `GetWindowPlacement` before moving it, and restore it afterwards.
 
-Still needs "hands off" at launch: the window shows for a moment and can take the keyboard focus (3.9 s measured) until the poller hides it, because the window-state plugin restores the saved window with `show()` then `set_focus()`. TC3D-253 (dev-only `--agent` launch: open the desktop app hidden and unfocused) is the follow-up that removes that.
+Without `--agent` this still needs "hands off" at launch: the window shows for a moment and can take the keyboard focus (3.9 s measured) until the poller hides it, because the window-state plugin restores the saved window with `show()` then `set_focus()`.
 
 Wall time to budget: a fresh worktree takes about 5 minutes to set up (`pnpm install` 11 s, `vite:build` 31 s, a cold cargo build about 220 s through the gate); a launch to a responding `__tc3d` with KOAK selected takes 32 to 64 s.
 
@@ -108,7 +112,7 @@ Source: spike TC3D-244 measurements; src-tauri/src/lib.rs:777-778; the spike's W
 ### Say "hands off" before driving the user's window
 <!-- rule: say-hands-off-first -->
 
-Tell the user "hands off" before driving the app window: the app runs on the user's own desktop and any mouse or keyboard input from them breaks a run. The nextup profile repeats it as a step of every app check. A run the user's input cannot reach (a hidden or never-activated window, see quiet-by-default) needs no warning once the window is hidden (see hidden-window-keeps-rendering), but the launch itself still shows the window and can take the focus, so the warning stands until it is hidden.
+Tell the user "hands off" before driving the app window: the app runs on the user's own desktop and any mouse or keyboard input from them breaks a run. The nextup profile repeats it as a step of every app check. A run the user's input cannot reach needs no warning: a `--agent` launch never shows or focuses the window (see quiet-by-default, hidden-window-keeps-rendering). A launch without `--agent` shows the window and can take the focus, so the warning stands until it is hidden.
 Source: CLAUDE.md:53; .claude/skills/towercab-3d-nextup/SKILL.md:35; commit b39260a (Wave 1 friction list). Seen: Wave 1 run (2026-09-27).
 
 ### Project world points to the page CSS pixels the input tools take, and judge visibility by that projection

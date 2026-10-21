@@ -46,13 +46,13 @@ Use `tauri-app` for what needs the real app (the Rust backend, host WebSockets a
   - Transcript rules: never read or print the Cesium ion token, the Google Maps key or the dev settings file. Do not read `/api/global-settings` or the localStorage blob (`browser_evaluate` of `fetch('/api/global-settings')`, `useGlobalSettingsStore.getState()`, a whole `stores.settings.getState()`, `Ion.defaultAccessToken`) and do not `curl` the settings route; ask `/api/dev-health` whether a token is loaded.
 
     Do not list `browser_network_requests` unfiltered, call `browser_network_request` on an ion or `/api/global-settings` entry, or save either into the repository (Vite's `/@fs/` serves it); console lines located at a failed ion URL print the URL. The Google key is served when Google is the imagery provider (as the desktop server serves it), so the same rules cover it.
-- **`tauri-app`** attaches to the running desktop app's WebView2 over CDP (`http://localhost:9222`). This is the real app: Rust backend, host settings and Cesium token, mods, METAR, and (in a dev build) the weather debug panel. Launch the app with the debugging port open, in the background, and stop it when done:
+- **`tauri-app`** attaches to the running desktop app's WebView2 over CDP (`http://localhost:9222`). This is the real app: Rust backend, host settings and Cesium token, mods, METAR, and (in a dev build) the weather debug panel. Launch the app with the debugging port open, in the background, from the tree under test (`<tree>`; a shell's working folder resets to the main checkout between calls), and stop it when done:
   ```powershell
-  $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = '--remote-debugging-port=9222'; pnpm run dev
+  $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = '--remote-debugging-port=9222'; pnpm --dir <tree> run dev -- --agent
   ```
-  (`pnpm run dev:vnas` the same way.) Outside the webview, the tray menu and native file dialogs are not reachable; deep links (`start tc3d://…`), single-instance and window state can be exercised from the shell.
+  (`pnpm run dev:vnas -- --agent` the same way.) Outside the webview, the tray menu and native file dialogs are not reachable; deep links (`start tc3d://…`), single-instance and window state can be exercised from the shell.
 
-  The window can be hidden for the run: the app keeps rendering at its frame cap, and CDP screenshots and input work, while it is hidden with `ShowWindow(hwnd, SW_HIDE)` (also minimized, off-screen or covered). Hide it as soon as it appears, never call `page.bringToFront()`, and show it again before closing it. The recipe is in `docs/DRIVING_CONVENTIONS.md`, rule hidden-window-keeps-rendering. The window still shows for a moment at launch, so say "hands off" until it is hidden.
+  `--agent` (dev only) creates the window hidden and unfocused and leaves the developer's saved window state alone, so it opens nothing on the desktop and takes no focus, and no "hands off" is needed. The app keeps rendering at its frame cap and CDP screenshots and input work; never call `page.bringToFront()`. Close it by posting `WM_CLOSE` to its window or stopping its process tree (`CloseMainWindow()` cannot find a hidden window). To watch a run, launch without `--agent`. Details in `docs/DRIVING_CONVENTIONS.md`, rule hidden-window-keeps-rendering.
 - **`playwright`** launches Edge against the frontend alone. Every `/api/*` request then returns the SPA's HTML, so mods, tower positions, METAR (`/api/proxy`) and saved global settings are absent and the Cesium token lasts only until reload. A plain browser counts as remote mode (`isRemoteMode()`), so the app waits for the host and never polls VATSIM: no aircraft appear until polling is started by hand from `browser_evaluate` with `(await import('/stores/vatsimStore.ts')).useVatsimStore.getState().startPolling()`. To use it:
   1. Start the dev server: `pnpm run vite:dev` (port 5173)
   2. Navigate, click "Skip for now" on the Cesium token prompt — airports load from GitHub independently of the token
@@ -71,7 +71,7 @@ In either, `WeatherDebugPanel` (dev builds only) forces rain, snow and cloud cov
 
 Driving notes:
 
-- Tell the user "hands off" before driving the window; mouse or keyboard input from them breaks a run.
+- Tell the user "hands off" before driving a visible window (one launched without `--agent`); mouse or keyboard input from them breaks a run.
 - Shift+Home resets the camera to the app default; the "Defaults" button restores the *user's* saved default.
 - The dev build reads mods from `src-tauri/target/debug/mods`; clone `github.com/leftos/tc3d-mod-koak-tower` into its `towers/` for a tower model. The repo nests the mod one level down (`KOAK/`), and a tower-cab check also needs 3D buildings on and the camera aimed at the cab (see `docs/DRIVING_CONVENTIONS.md`, rule dev-mods-in-target).
 - The sun direction is `viewer.scene.context.uniformState.sunDirectionWC`, not `scene.light.direction`.
@@ -132,7 +132,7 @@ The optional `vnas` feature enables 1Hz real-time aircraft updates via the priva
 
 **Note:** The `pnpm run build` command automatically runs `build:converter` to create the FSLTL model converter executable. This requires Python 3 with Pillow installed. PyInstaller is auto-installed if missing.
 
-**Note for Claude:** You may launch `pnpm run dev` / `pnpm run dev:vnas` in the background to test your work (see "E2E testing via Playwright MCP" for the debugging-port launch). The window opens on the user's desktop, so stop the app when you are done with it.
+**Note for Claude:** You may launch `pnpm run dev` / `pnpm run dev:vnas` in the background to test your work (see "E2E testing via Playwright MCP" for the debugging-port launch). Launched with `-- --agent` the window is hidden and unfocused; without it the window opens on the user's desktop. Stop the app when you are done with it.
 
 **Windows Warning:** Never use `2>nul` to suppress stderr in terminal commands. On Windows, this creates a file literally named `nul` which is extremely difficult to delete (requires special tools or booting from Linux). Use `2>$null` in PowerShell or simply omit stderr redirection.
 

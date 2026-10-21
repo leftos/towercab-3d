@@ -834,6 +834,20 @@ fn read_persisted_backend(identifier: &str) -> Option<String> {
     json.get("renderingBackend")?.as_str().map(str::to_string)
 }
 
+/// Build the window-state plugin.
+///
+/// A dev build launched with `TC3D_AGENT_RUN=1` (`pnpm run dev -- --agent`) leaves the main
+/// window out of it, so the plugin neither shows nor focuses the hidden window and never saves
+/// its state over the developer's own. Release builds always restore and save every window.
+fn window_state_plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
+    let builder = tauri_plugin_window_state::Builder::new();
+    if cfg!(debug_assertions) && std::env::var("TC3D_AGENT_RUN").as_deref() == Ok("1") {
+        tracing::info!("[Agent] TC3D_AGENT_RUN=1: main window state not restored or saved");
+        return builder.with_denylist(&["main"]).build();
+    }
+    builder.build()
+}
+
 // =============================================================================
 // APP ENTRY POINT
 // =============================================================================
@@ -866,7 +880,7 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_window_state::Builder::new().build())
+        .plugin(window_state_plugin())
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
             // Register updater plugin (desktop only)
