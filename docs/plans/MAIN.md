@@ -15,9 +15,8 @@
 
 ### M1 Remove VR (1/1 done)
 
-### M2 Cab, clouds and fog in Cesium (1/12 done)
+### M2 Cab, clouds and fog in Cesium (2/12 done)
 - [ ] TC3D-213 Clouds, fog and cab in Cesium on feat/cesium-weather · release vNext
-  - [/] TC3D-145 Draw fog in the weather composite instead of tuning scene.fog · release vNext
   - [ ] TC3D-146 Draw the tower cab as a Cesium model again · release vNext
   - [ ] TC3D-147 Tint clouds and fog by sun elevation · release vNext
   - [ ] TC3D-148 Turn the weather stage's knobs into quality presets · release vNext
@@ -53,12 +52,10 @@
 
 ## OSM buildings
 
-### B1 Shader on the ion tiles (2/7 done)
+### B1 Shader on the ion tiles (4/7 done)
 - [ ] TC3D-165 Draw curtain-wall glass on terminals through Cesium's reflections · release vNext
 - [ ] TC3D-166 Light windows at night by building use and local time · release vNext
 - [ ] TC3D-167 Add a buildings quality preset per device · release vNext
-- [/] TC3D-164 Draw type-aware facades from class and levels packed into the style colour (sub-issue of TC3D-211) · release vNext
-- [/] TC3D-163 Vary building colour per building from a stable hash (sub-issue of TC3D-211) · release vNext
 
 ### B2 Generated buildings near the field (0/3 done)
 - [ ] TC3D-168 Generate buildings from the local OSM planet near the field · release vNext
@@ -74,10 +71,9 @@
 ### No milestone
 - [ ] TC3D-184 Destroy the OSM buildings tileset when its load is cancelled
 - [ ] TC3D-211 OSM facades on feat/osm-facades · release vNext
-  - [/] TC3D-164 Draw type-aware facades from class and levels packed into the style colour · release vNext
-  - [/] TC3D-163 Vary building colour per building from a stable hash · release vNext
   - [ ] TC3D-218 Type OSM building parts from their outline, then by shape near the field
   - [ ] TC3D-220 Facade floor lines don't start at the building's ground
+  - [ ] TC3D-226 Merge feat/osm-facades to main (#263)
 - [ ] TC3D-222 Drop the facade shader's second feature-ID fetch per fragment · release vNext
 - [ ] TC3D-225 Stop night sun shadows dimming lit windows and flickering after a time switch · release vNext
 
@@ -87,6 +83,8 @@
   - [ ] TC3D-214 Merge feat/vnas-session-lifecycle to main (#261)
 - [ ] TC3D-4 Join YAAT servers by negotiate and UDP, as on vNAS · release vNext
 - [ ] TC3D-44 Crate logs the hub access token in the WebSocket URL · release vNext
+- [ ] TC3D-227 Keep VATSIM sign-in secrets out of the vNAS crate's logs and errors · release vNext
+- [ ] TC3D-228 Stop the vNAS client panicking on non-ASCII server text · release vNext
 
 ## Aircraft motion model
 
@@ -172,6 +170,7 @@
 - [ ] TC3D-216 A remote browser's settings import shows host-owned values the host refused
 - [ ] TC3D-217 Remote server access follow-ups: open sockets, router-suffix names, duplicate reads
 - [ ] TC3D-223 Use design tokens for the remote-server settings' inline styles
+- [ ] TC3D-229 Stop CesiumViewer re-running its GPU timer effect every frame
 
 ## Settings drawer
 
