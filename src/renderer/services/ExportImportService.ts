@@ -309,7 +309,14 @@ export function importData(
             globalStore.updateAirports(data.globalSettings.airports as Parameters<typeof globalStore.updateAirports>[0])
           }
           if (data.globalSettings.server) {
-            globalStore.updateServer(data.globalSettings.server as Parameters<typeof globalStore.updateServer>[0])
+            // Only these: an imported file must never open the server to other networks
+            const { port, enabled, minimizeToTray } = data.globalSettings.server as Parameters<
+              typeof globalStore.updateServer
+            >[0]
+            const imported = Object.entries({ port, enabled, minimizeToTray }).filter(
+              ([, value]) => value !== undefined,
+            )
+            globalStore.updateServer(Object.fromEntries(imported))
           }
         }
       } else {

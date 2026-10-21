@@ -198,7 +198,7 @@ pub async fn vnas_probe_yaat_local(url: String) -> YaatLocalProbe {
 #[cfg(feature = "vnas")]
 mod real_impl {
     use super::*;
-    use crate::settings::{read_global_settings, write_global_settings};
+    use crate::settings::{read_vnas_tokens, write_vnas_tokens};
     use std::sync::Arc;
     use std::sync::Mutex as StdMutex;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -411,9 +411,7 @@ mod real_impl {
         let json = serde_json::to_string(tokens)
             .map_err(|e| format!("Failed to serialize tokens: {e}"))?;
 
-        let mut settings = read_global_settings(app.clone())?;
-        settings.vnas_tokens = Some(json);
-        write_global_settings(app.clone(), settings)?;
+        write_vnas_tokens(app, Some(json))?;
 
         tracing::debug!("vNAS tokens saved");
         Ok(())
@@ -421,9 +419,7 @@ mod real_impl {
 
     /// Load tokens from global settings
     fn load_tokens(app: &AppHandle) -> Result<Option<StoredTokens>, String> {
-        let settings = read_global_settings(app.clone())?;
-
-        let Some(json) = settings.vnas_tokens else {
+        let Some(json) = read_vnas_tokens(app)? else {
             return Ok(None);
         };
 
@@ -436,9 +432,7 @@ mod real_impl {
 
     /// Clear stored tokens from global settings
     fn clear_tokens(app: &AppHandle) -> Result<(), String> {
-        let mut settings = read_global_settings(app.clone())?;
-        settings.vnas_tokens = None;
-        write_global_settings(app.clone(), settings)?;
+        write_vnas_tokens(app, None)?;
         tracing::debug!("vNAS tokens cleared");
         Ok(())
     }

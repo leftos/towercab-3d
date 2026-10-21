@@ -59,11 +59,11 @@ TowerCab 3D can be accessed from any device on your local network through a web 
 
 ### How Remote Access Works
 
-When you launch the desktop app, it runs an HTTP server on port 8765. This server:
+When the HTTP server is running (port 8765), it:
 - Serves the complete TowerCab interface to web browsers
 - Streams all aircraft data via WebSocket (VATSIM, vNAS, and RealTraffic)
 - Provides all aircraft models and mods from your PC
-- Shares global settings (Cesium token, camera bookmarks, datablock positions)
+- Shares global settings (Cesium token, camera bookmarks, datablock positions); your RealTraffic license key, vNAS sign-in and Google Maps key (unless Google is the imagery provider) are never sent to remote devices, and remote devices cannot change host-only settings such as the server options, file paths or imagery provider
 - Provides touch-optimized controls for mobile devices
 
 Remote browsers receive all data from the host PC rather than polling sources directly. This means:
@@ -74,9 +74,9 @@ Remote browsers receive all data from the host PC rather than polling sources di
 
 ### Setting Up Remote Access
 
-1. **Start the Desktop App** on your main PC
-   - The HTTP server starts automatically on port 8765
-   - Go to Settings > Configuration to see all available LAN IP addresses
+1. **Start the Server** on your main PC
+   - Go to Settings > Configuration > Remote Browser Access and click "Start Server" (or tick "Start server automatically on app launch"); it listens on port 8765
+   - The same section lists all available LAN IP addresses
 
 2. **Find Your PC's IP Address**
    - **Easiest:** Check Settings > Configuration > Remote Browser Access for all available addresses
@@ -87,6 +87,8 @@ Remote browsers receive all data from the host PC rather than polling sources di
    - On your iPad, tablet, or another PC, open any modern web browser (Safari, Chrome, Edge, Firefox)
    - Navigate to `http://[your-pc-ip]:8765` (e.g., `http://192.168.1.100:8765`)
    - The TowerCab interface will load with all your settings and mods
+
+By default only devices on your local network can connect, and only by your PC's IP address, its name (e.g. `http://DESKTOP-ABC:8765`) or `name.local`. To reach the PC over a VPN or the internet, turn on **Allow devices outside the local network** in Settings > Configuration > Remote Browser Access. Anyone who can reach the port can then connect, so turn it on only on a network you trust.
 
 ### Touch Controls (iPad/Mobile)
 
@@ -173,7 +175,7 @@ The indicator uses source-aware thresholds: vNAS data is considered stale after 
 ### Firewall Configuration
 
 If you can't connect from remote devices:
-1. Ensure both devices are on the same local network (same Wi-Fi or wired network)
+1. Ensure both devices are on the same local network (same Wi-Fi or wired network), and that the address you typed is your PC's IP address, its name or `name.local`; devices outside the local network need "Allow devices outside the local network" turned on
 2. Check if your PC's firewall is blocking port 8765
 3. **Windows Firewall:** Add an inbound rule allowing TCP port 8765
 4. **macOS Firewall:** Go to System Preferences > Security & Privacy > Firewall > Firewall Options and ensure TowerCab is allowed
@@ -791,6 +793,7 @@ Access settings by clicking the gear icon in the bottom-right corner. Settings a
 | **Data Source** | VATSIM or RealTraffic | VATSIM |
 | **RealTraffic License Key** | Required for RealTraffic data | - |
 | **HTTP Server** | Enable remote browser access on port 8765 | Off |
+| **Allow devices outside the local network** | Let VPN or internet devices connect to the HTTP server | Off |
 | **MSFS Community Path** | Path to MSFS Community folder | Auto-detected |
 | **Enable FSLTL Models** | Use converted FSLTL aircraft models | On |
 | **Enable AIG Models** | Use converted AIG aircraft models | On |

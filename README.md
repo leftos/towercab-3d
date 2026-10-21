@@ -27,7 +27,7 @@ A 3D tower cab view application for VATSIM air traffic controllers. View real-ti
 
 ### Remote Browser Access
 - Access TowerCab from any device on your local network (iPad, tablets, other PCs)
-- Desktop app runs an HTTP server on port 8765 when launched
+- The desktop app serves it on port 8765 once you start the server in Settings → Configuration → Remote Browser Access; only devices on your local network can connect unless you allow others
 - Unified data streaming: all aircraft data (VATSIM, vNAS, RealTraffic) streamed via WebSocket
 - Automatic vNAS 1Hz updates when host has active CRC session (no configuration needed)
 - All mods, models, and settings served from host PC
@@ -151,10 +151,10 @@ pnpm install
 #### 2. Run in Development Mode
 
 ```bash
-pnpm run dev  # Starts desktop app with HTTP server on port 8765
+pnpm run dev  # Starts the desktop app
 ```
 
-The desktop app will start an HTTP server accessible at `http://[your-pc-ip]:8765` from other devices on your network.
+Start the server in Settings → Configuration → Remote Browser Access; it is then reachable at `http://[your-pc-ip]:8765` from other devices on your local network.
 
 ### 2. Get a Cesium Ion Token
 

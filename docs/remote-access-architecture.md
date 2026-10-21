@@ -40,7 +40,7 @@ The Tauri desktop app runs an **HTTP server** (axum, port 8765) that serves the 
 └───────────────────────────────────┬─────────────────────────────────┘
                                     │
                            (HTTP/WebSocket)
-                           (Local Network Only)
+                           (Local Network by default)
                                     │
         ┌───────────────────────────┴───────────────────────────┐
         │                                                       │
@@ -172,8 +172,6 @@ The server is implemented in `src-tauri/src/server.rs` using **axum**.
 pub struct ServerState {
     pub app_handle: tauri::AppHandle,
     pub dist_path: PathBuf,
-    pub auth_token: Option<String>,
-    pub require_local_network: bool,
     pub observations_tx: broadcast::Sender<ObservationMessage>,
     pub connected_clients: AtomicUsize,
     pub synced_airport: RwLock<Option<String>>,
@@ -187,8 +185,8 @@ pub struct ServerState {
 |-------|--------|---------|
 | `/` | GET | Serve React app (index.html) |
 | `/assets/*` | GET | Static assets (JS, CSS, images) |
-| `/api/global-settings` | GET | Read global settings |
-| `/api/global-settings` | POST | Write global settings |
+| `/api/global-settings` | GET | Read the remote view of the global settings (see "Settings exposed to remote clients") |
+| `/api/global-settings` | POST | Write global settings through `merge_remote_write`; answers with the remote view of what was stored |
 | `/api/mods/aircraft` | GET | List aircraft mods |
 | `/api/mods/towers` | GET | List tower mods |
 | `/api/mods/*path` | GET | Serve mod files (GLB models) |
@@ -218,6 +216,15 @@ Every route that builds a file path from a request resolves it with `resolve_wit
 ### Security
 
 **Local Network Restriction:**
+
+`auth_middleware` in `server.rs` runs before every handler and CORS answer. With `server.allowNonLocalClients` off (the default, `allow_non_local_clients` in Rust, read on every request so a change applies without a restart) it refuses with 403:
+- a source IP that is not local (`is_local_network_ip`, below);
+- a `Host` that is not a local name (`is_allowed_host`): a local-network IP literal, `localhost`, `*.local`, or a bare single-label name such as a Windows PC name (`DESKTOP-ABC`), with an optional port. A DNS-rebound page arrives under its own domain and is refused, as is a request without `Host`.
+
+With `allowNonLocalClients` on (Settings > Configuration > "Allow devices outside the local network"), any source IP and any `Host` that is present are served; this is for VPN or internet access. The field defaults to off in both Rust and TypeScript, so existing settings files that held the old `requireLocalNetwork` value restrict by default and drop that key on the next host save.
+
+**WebSocket Origin:** an upgrade (`/api/observations/ws`, `/api/presence`) is refused with 403 unless it has no `Origin` (a non-browser client), or an `http`/`https` `Origin` that is a local name (`is_local_host_name`) or equals the request's own `Host` (`is_same_origin`, the same-origin case that lets a VPN or internet client connect once non-local clients are allowed). This check applies whatever `allowNonLocalClients` says.
+
 ```rust
 fn is_local_network_ip(ip: &IpAddr) -> bool {
     match ip {
@@ -243,10 +250,7 @@ fn is_local_network_ip(ip: &IpAddr) -> bool {
 }
 ```
 
-**Authentication Middleware:**
-- Optional Bearer token validation
-- API routes require token if configured
-- Static files served without authentication
+There is no bearer token or other credential: access is decided by the network rules above.
 
 ## Observations Broadcasting
 
@@ -536,6 +540,9 @@ Settings are stored on the host and synced to remote clients:
 - Reads via `GET /api/global-settings`
 - Writes via `POST /api/global-settings`
 - Local per-browser settings in `localStorage` (not synced)
+- Loading sends no write: in remote mode `initializeGlobalSettings()` and the viewport and display migrations skip their writes, so an iPad opening the page never changes the host's settings
+
+A host save that finds `global-settings.json` unparseable first copies it to `global-settings.json.corrupt-{unix seconds}` beside it, then replaces the file with the settings being saved (the vNAS tokens it held are lost).
 
 ### Settings Flow
 
@@ -550,7 +557,7 @@ Host (Tauri)                            Remote (Browser)
      │        ↓                               │
      │ File: global-settings.json             │
      │                                        │
-     │                                        │ User changes Cesium token
+     │                                        │ User changes a shared setting (e.g. bookmark)
      │                                        │        ↓
      │                                        │ globalSettingsStore.update()
      │                                        │        ↓
@@ -558,23 +565,20 @@ Host (Tauri)                            Remote (Browser)
      │                                        │        ↓
      │<─────────────────────────────────────────────────│
      │        ↓                               │
-     │ Server writes global-settings.json    │
+     │ Server merges, writes global-settings.json │
 ```
 
-### Secret Preservation
+### Settings exposed to remote clients
 
-vNAS tokens are never sent to browsers:
+Both directions go through two functions in `settings.rs`, so a remote browser never reads or changes what only the host should hold:
 
-```rust
-// server.rs - POST /api/global-settings handler
+- **Read** (`remote_view`, used by the GET and by the POST's response): the settings with `realtraffic.licenseKey` and `vnasTokens` blanked, and `imagery.googleMapsApiKey` blanked unless `imagery.provider` is `google`. The Cesium ion token is kept: the remote viewer cannot start without it. Fields are blanked, not removed, because several have no serde default.
+- **Write** (`merge_remote_write`): the incoming object with every host-owned field copied back from the stored file: `server`, `renderingBackend`, `imagery.provider` and `imagery.googleMapsApiKey`, `fsltl.sourcePath`/`outputPath`, `msfsModels.communityPath`/`vmrFiles`/`cacheDirectory`, `realtraffic.licenseKey` and `vnasTokens`. The Cesium ion token is the one exception: a remote client may set it only while the host's is empty, and never overwrites one.
+- A test in `settings.rs` walks every JSON path of a fully populated `GlobalSettings` and requires each to be classed public, host-owned or secret (`FIELD_CLASSES`), so a new field fails it until classified.
 
-// Preserve existing vnas_tokens (secrets should not come from browser)
-if let Ok(existing_content) = fs::read_to_string(&settings_file) {
-    if let Ok(existing_settings) = serde_json::from_str::<GlobalSettings>(&existing_content) {
-        settings.vnas_tokens = existing_settings.vnas_tokens;
-    }
-}
-```
+The host webview reads every field except `vnasTokens` (`read_global_settings` never returns them). Only Rust writes the tokens (`read_vnas_tokens` / `write_vnas_tokens`, used by `vnas.rs`): a host write keeps the tokens already in the file, and an empty ion token from the host keeps the stored one. `vnasTokens` is not in the TypeScript `GlobalSettings` type.
+
+A settings export (`getSettings()`) holds no tokens, and importing one applies only `port`, `enabled` and `minimizeToTray` from its `server` block, so an imported file cannot open the server to other networks.
 
 ## Device Optimization
 
@@ -690,7 +694,7 @@ The proxy validates that URLs are on an allowed list before forwarding.
 │  │  ├─ broadcast_observations()     ├─ OBSERVATIONS_TX channel          │  │
 │  │  ├─ broadcast_aircraft_removals()├─ REST API handlers                │  │
 │  │  ├─ broadcast_subscriptions()    ├─ WebSocket handlers               │  │
-│  │  └─ broadcast_airport_sync()     └─ Auth middleware                  │  │
+│  │  └─ broadcast_airport_sync()     └─ Access middleware                │  │
 │  │                                                                       │  │
 │  │  settings.rs                     msfs.rs                             │  │
 │  │  ├─ GlobalSettings struct        ├─ Model detection                  │  │
@@ -701,7 +705,7 @@ The proxy validates that URLs are on an allowed list before forwarding.
 └───────────────────────────────────────────┼─────────────────────────────────┘
                                             │
                                    HTTP/WS (port 8765)
-                                   Local Network Only
+                                   Local Network by default
                                             │
            ┌────────────────────────────────┴────────────────────────────────┐
            │                                                                 │
@@ -737,7 +741,7 @@ The proxy validates that URLs are on an allowed list before forwarding.
 ## Design Principles
 
 ### 1. Single Source of Truth
-Global settings live only on the host's file system. Remote browsers read via API, never store locally.
+Global settings live only on the host's file system. Remote browsers read via API (minus host-only secrets), never store locally, and cannot change host-owned fields.
 
 ### 2. Unified Data Format
 All observation sources (VATSIM, vNAS, RealTraffic) convert to the same `ObservationData` struct before broadcast.
@@ -746,7 +750,7 @@ All observation sources (VATSIM, vNAS, RealTraffic) convert to the same `Observa
 Every API call checks `isTauri()` and branches to either Tauri commands or HTTP requests.
 
 ### 4. Local Network Isolation
-The server only accepts connections from private IP ranges (10.x, 172.16-31.x, 192.168.x, localhost).
+By default the server only accepts connections from private IP ranges (10.x, 172.16-31.x, 192.168.x, 169.254.x, localhost) that name this PC by IP address, `localhost`, `name.local` or its bare PC name. `server.allowNonLocalClients` lifts both checks; WebSocket `Origin` is checked either way.
 
 ### 5. Lazy Subscription
 Remote clients request vNAS subscriptions only when viewing an airport, not pre-subscribing to all facilities.

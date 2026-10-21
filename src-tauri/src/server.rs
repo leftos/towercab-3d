@@ -5,9 +5,9 @@
 
 use std::fs;
 use std::io::Read;
-use std::net::{IpAddr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::path::{Component, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use flate2::read::GzDecoder;
@@ -18,7 +18,7 @@ use axum::{
         ws::{Message, WebSocket},
         ConnectInfo, Path, Query, State, WebSocketUpgrade,
     },
-    http::{header, HeaderValue, Request, Response, StatusCode},
+    http::{header, HeaderMap, HeaderValue, Request, Response, StatusCode},
     middleware::{self, Next},
     response::IntoResponse,
     routing::{get, post, put},
@@ -33,10 +33,15 @@ use url::Url;
 use tauri::{Emitter, Manager};
 
 use crate::{
-    mods::{discover_all_mods, find_mods_root, read_tower_positions, DiscoveredMod, TowerPositionEntry},
+    mods::{
+        discover_all_mods, find_mods_root, read_tower_positions, DiscoveredMod, TowerPositionEntry,
+    },
     msfs::CachedGlbInfo,
     normalize_path_string,
-    settings::{get_global_settings_file, GlobalSettings},
+    settings::{
+        apply_remote_write, get_global_settings_file, read_remote_view, read_settings_file,
+        GlobalSettings, ALLOW_NON_LOCAL_CLIENTS,
+    },
 };
 
 // =============================================================================
@@ -131,10 +136,6 @@ pub struct ServerState {
     pub app_handle: tauri::AppHandle,
     /// Canonical path to the frontend dist folder, resolved once when the server starts
     pub dist_path: PathBuf,
-    /// Optional authentication token (if set, clients must provide Bearer token)
-    pub auth_token: Option<String>,
-    /// Whether to require connections from local network only
-    pub require_local_network: bool,
     /// Broadcast channel for unified observations (all data sources)
     pub observations_tx: broadcast::Sender<ObservationMessage>,
     /// Count of currently connected remote clients (WebSocket connections)
@@ -172,15 +173,164 @@ fn is_local_network_ip(ip: &IpAddr) -> bool {
     }
 }
 
-/// Middleware to check authentication and local network requirements
+/// Whether a `Host` header names this server the way a local client does (see
+/// `is_local_host_name`), with an optional port. A DNS-rebound page arrives with its own
+/// domain name and is refused, as is a request without `Host`.
+fn is_allowed_host(host_header: Option<&str>) -> bool {
+    host_header
+        .and_then(strip_port)
+        .is_some_and(is_local_host_name)
+}
+
+/// The host part of a `host[:port]` authority (IPv6 kept in brackets), or `None` when the
+/// port is malformed.
+fn strip_port(authority: &str) -> Option<&str> {
+    if authority.starts_with('[') {
+        let end = authority.find(']')?;
+        let (name, rest) = authority.split_at(end + 1);
+        let port_ok = rest.is_empty() || rest.strip_prefix(':').is_some_and(is_port);
+        return port_ok.then_some(name);
+    }
+    match authority.rsplit_once(':') {
+        Some((name, port)) => is_port(port).then_some(name),
+        None => Some(authority),
+    }
+}
+
+/// Decimal digits only (`u16` parsing alone would accept a leading `+`)
+fn is_port(port: &str) -> bool {
+    port.bytes().all(|b| b.is_ascii_digit()) && port.parse::<u16>().is_ok()
+}
+
+/// Whether a host name (IPv6 in brackets) names this server from the local network: a
+/// local-network IP literal, `localhost`, an mDNS `*.local` name, or a single-label name such
+/// as a Windows computer name (`DESKTOP-ABC`), case-insensitive. The one rule for the `Host`
+/// header, the WebSocket `Origin` and CORS origins.
+fn is_local_host_name(name: &str) -> bool {
+    if let Some(inner) = name
+        .strip_prefix('[')
+        .and_then(|rest| rest.strip_suffix(']'))
+    {
+        return inner
+            .parse::<Ipv6Addr>()
+            .is_ok_and(|ip| is_local_network_ip(&IpAddr::V6(ip)));
+    }
+    if let Ok(ip) = name.parse::<Ipv4Addr>() {
+        return is_local_network_ip(&IpAddr::V4(ip));
+    }
+    let name = name.to_ascii_lowercase();
+    if name == "localhost" {
+        return true;
+    }
+    match name.strip_suffix(".local") {
+        Some(mdns_name) => !mdns_name.is_empty() && mdns_name.split('.').all(is_dns_label),
+        None => is_dns_label(&name),
+    }
+}
+
+/// One DNS label: letters, digits and inner hyphens
+fn is_dns_label(label: &str) -> bool {
+    !label.is_empty()
+        && !label.starts_with('-')
+        && !label.ends_with('-')
+        && label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+}
+
+/// Whether a WebSocket upgrade's `Origin` may connect: absent (a non-browser client), or an
+/// `http`/`https` origin whose host is a local host name.
+fn is_allowed_origin(origin: Option<&str>) -> bool {
+    let Some(origin) = origin else {
+        return true;
+    };
+    let Ok(url) = Url::parse(origin) else {
+        return false;
+    };
+    let is_bare_origin = url.username().is_empty()
+        && url.password().is_none()
+        && url.path() == "/"
+        && url.query().is_none()
+        && url.fragment().is_none();
+    matches!(url.scheme(), "http" | "https")
+        && is_bare_origin
+        && url.host_str().is_some_and(is_local_host_name)
+}
+
+/// A 403 for a WebSocket upgrade from a page served by another site, else `None`.
+fn refuse_foreign_origin(headers: &HeaderMap) -> Option<Response<Body>> {
+    let origin = headers
+        .get(header::ORIGIN)
+        .map(|value| value.to_str().unwrap_or_default());
+    if is_allowed_origin(origin) {
+        return None;
+    }
+    tracing::warn!(
+        "[Server] Refused WebSocket upgrade from origin {:?}",
+        origin
+    );
+    Some((StatusCode::FORBIDDEN, "Access denied: unexpected Origin").into_response())
+}
+
+/// Whether a request asks to upgrade to a WebSocket
+fn is_websocket_upgrade(headers: &HeaderMap) -> bool {
+    headers
+        .get_all(header::UPGRADE)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .any(|value| value.to_ascii_lowercase().contains("websocket"))
+}
+
+/// The 403 body for a request whose `Host` is not a local name
+const REFUSED_HOST_MESSAGE: &str = "Access denied: connect using this PC's IP address, its \
+    name, or name.local. To allow other addresses, turn on 'Allow devices outside the local \
+    network' in Settings on the host.";
+
+/// Whether `origin` is the same origin as the request's `Host`: an `http`/`https` scheme,
+/// and its host and port, the port omitted for the scheme's default, compared
+/// case-insensitively
+fn is_same_origin(origin: &str, host_header: &str) -> bool {
+    let Ok(url) = Url::parse(origin) else {
+        return false;
+    };
+    if !matches!(url.scheme(), "http" | "https") {
+        return false;
+    }
+    let Some(host) = url.host_str() else {
+        return false;
+    };
+    let authority = match url.port() {
+        Some(port) => format!("{host}:{port}"),
+        None => host.to_string(),
+    };
+    authority.eq_ignore_ascii_case(host_header)
+}
+
+/// A 403 for a WebSocket upgrade whose `Origin` is neither a local host name nor the
+/// request's own `Host`, else `None`
+fn refuse_websocket_origin(headers: &HeaderMap, host: Option<&str>) -> Option<Response<Body>> {
+    let origin = headers
+        .get(header::ORIGIN)
+        .and_then(|value| value.to_str().ok());
+    if let (Some(origin), Some(host)) = (origin, host) {
+        if is_same_origin(origin, host) {
+            return None;
+        }
+    }
+    refuse_foreign_origin(headers)
+}
+
+/// Middleware that refuses, before any handler or CORS answer: clients outside the local
+/// network and requests whose `Host` is not a local name (both unless the host allows
+/// non-local clients, when any `Host` is served), and WebSocket upgrades whose `Origin` is
+/// neither a local name nor the request's own `Host` (always). `allow_non_local_clients` is
+/// read on every request, so a host settings change applies without a restart.
 async fn auth_middleware(
-    State(state): State<Arc<ServerState>>,
+    State(allow_non_local_clients): State<&'static AtomicBool>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     request: Request<Body>,
     next: Next,
 ) -> Result<Response<Body>, (StatusCode, String)> {
-    // Check local network requirement
-    if state.require_local_network && !is_local_network_ip(&addr.ip()) {
+    let allow_non_local_clients = allow_non_local_clients.load(Ordering::SeqCst);
+    if !allow_non_local_clients && !is_local_network_ip(&addr.ip()) {
         return Err((
             StatusCode::FORBIDDEN,
             format!(
@@ -190,33 +340,23 @@ async fn auth_middleware(
         ));
     }
 
-    // Check authentication token if configured
-    if let Some(ref expected_token) = state.auth_token {
-        let auth_header = request
-            .headers()
-            .get(header::AUTHORIZATION)
-            .and_then(|v| v.to_str().ok());
+    let host = request
+        .headers()
+        .get(header::HOST)
+        .and_then(|value| value.to_str().ok());
+    let host_allowed = if allow_non_local_clients {
+        host.is_some()
+    } else {
+        is_allowed_host(host)
+    };
+    if !host_allowed {
+        tracing::warn!("[Server] Refused request for host {:?}", host);
+        return Err((StatusCode::FORBIDDEN, REFUSED_HOST_MESSAGE.to_string()));
+    }
 
-        let is_authenticated = match auth_header {
-            Some(header) if header.starts_with("Bearer ") => {
-                let provided_token = &header[7..];
-                provided_token == expected_token
-            }
-            _ => false,
-        };
-
-        if !is_authenticated {
-            // Allow unauthenticated access to static files (the app itself)
-            let path = request.uri().path();
-            let is_api_route = path.starts_with("/api/");
-
-            if is_api_route {
-                return Err((
-                    StatusCode::UNAUTHORIZED,
-                    "Authentication required. Provide Bearer token in Authorization header."
-                        .to_string(),
-                ));
-            }
+    if is_websocket_upgrade(request.headers()) {
+        if let Some(refused) = refuse_websocket_origin(request.headers(), host) {
+            return Ok(refused);
         }
     }
 
@@ -243,32 +383,22 @@ pub async fn start_server(
         .canonicalize()
         .map_err(|e| format!("Failed to resolve dist folder {:?}: {}", dist_path, e))?;
 
-    // Read auth settings from global settings
-    let (auth_token, require_local_network) = {
+    let allow_non_local_clients = {
         let settings_file = get_global_settings_file(&app_handle)?;
-        if settings_file.exists() {
-            let content = fs::read_to_string(&settings_file)
-                .map_err(|e| format!("Failed to read settings: {}", e))?;
-            let settings: GlobalSettings = serde_json::from_str(&content)
-                .map_err(|e| format!("Failed to parse settings: {}", e))?;
-            (
-                settings.server.auth_token,
-                settings.server.require_local_network,
-            )
-        } else {
-            (None, false)
-        }
+        read_settings_file(&settings_file)?
+            .server
+            .allow_non_local_clients
     };
+    ALLOW_NON_LOCAL_CLIENTS.store(allow_non_local_clients, Ordering::SeqCst);
 
     tracing::info!(
         "[Server] Starting HTTP server on port {} (serving from {:?})",
         port,
         dist_path
     );
-    if auth_token.is_some() {
-        tracing::info!("[Server] Authentication enabled");
-    }
-    if require_local_network {
+    if allow_non_local_clients {
+        tracing::warn!("[Server] Clients outside the local network are allowed");
+    } else {
         tracing::info!("[Server] Restricted to local network only");
     }
 
@@ -279,8 +409,6 @@ pub async fn start_server(
     let state = Arc::new(ServerState {
         app_handle,
         dist_path,
-        auth_token,
-        require_local_network,
         observations_tx,
         connected_clients: AtomicUsize::new(0),
         synced_airport: std::sync::RwLock::new(None),
@@ -386,36 +514,14 @@ fn find_dist_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 
 /// Validate CORS origin - only allow local network origins
 fn validate_cors_origin(origin: &HeaderValue, _request_parts: &axum::http::request::Parts) -> bool {
-    let origin_str = match origin.to_str() {
-        Ok(s) => s,
-        Err(_) => return false,
-    };
-
-    // Parse the origin URL to extract the host
-    if let Ok(url) = Url::parse(origin_str) {
-        if let Some(host) = url.host_str() {
-            // Allow localhost variations
-            if host == "localhost" || host == "127.0.0.1" || host == "::1" {
-                return true;
-            }
-
-            // Check if host is an IP and is local network
-            if let Ok(ip) = host.parse::<IpAddr>() {
-                return is_local_network_ip(&ip);
-            }
-
-            // Allow .local domains (mDNS)
-            if host.ends_with(".local") {
-                return true;
-            }
-        }
-    }
-
-    false
+    origin
+        .to_str()
+        .is_ok_and(|origin| is_allowed_origin(Some(origin)))
 }
 
-/// Create the axum router with all routes
-fn create_router(state: Arc<ServerState>) -> Router {
+/// Wrap `routes` in CORS and, outside it, the access checks, so a refused client gets a 403
+/// and never a CORS answer
+fn guard(routes: Router, allow_non_local_clients: &'static AtomicBool) -> Router {
     // CORS layer with origin validation
     // Only allow origins from local network addresses
     let cors = CorsLayer::new()
@@ -423,9 +529,15 @@ fn create_router(state: Arc<ServerState>) -> Router {
         .allow_methods(Any)
         .allow_headers(Any);
 
-    let state_clone = state.clone();
+    routes.layer(cors).layer(middleware::from_fn_with_state(
+        allow_non_local_clients,
+        auth_middleware,
+    ))
+}
 
-    Router::new()
+/// Create the axum router with all routes
+fn create_router(state: Arc<ServerState>) -> Router {
+    let routes = Router::new()
         // API routes
         .route("/api/airport-surfaces", get(get_airport_surfaces))
         .route(
@@ -465,10 +577,8 @@ fn create_router(state: Arc<ServerState>) -> Router {
         .route("/api/log", post(remote_log))
         // Static file serving (must be last - catches all other routes)
         .fallback(get(serve_static))
-        // Apply auth middleware (checks auth token and local network requirement)
-        .layer(middleware::from_fn_with_state(state_clone, auth_middleware))
-        .layer(cors)
-        .with_state(state)
+        .with_state(state);
+    guard(routes, &ALLOW_NON_LOCAL_CLIENTS)
 }
 
 // =============================================================================
@@ -549,81 +659,45 @@ async fn get_airport_surfaces(
     Ok(resp)
 }
 
-/// GET /api/global-settings - Return global settings JSON
+/// GET /api/global-settings - Return the remote view of the global settings
 async fn get_global_settings(
     State(state): State<Arc<ServerState>>,
 ) -> Result<Json<GlobalSettings>, (StatusCode, String)> {
     let settings_file = get_global_settings_file(&state.app_handle)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
-
-    if !settings_file.exists() {
-        return Ok(Json(GlobalSettings::default()));
-    }
-
-    let content = fs::read_to_string(&settings_file).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to read settings: {}", e),
-        )
-    })?;
-
-    let settings: GlobalSettings = serde_json::from_str(&content).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to parse settings: {}", e),
-        )
-    })?;
-
-    Ok(Json(settings))
+    let view = run_settings_io(move || read_remote_view(&settings_file)).await?;
+    Ok(Json(view))
 }
 
-/// POST /api/global-settings - Update global settings
+/// Run settings file I/O, which blocks on the settings lock and the disk, off the async
+/// workers
+async fn run_settings_io<T: Send + 'static>(
+    work: impl FnOnce() -> Result<T, String> + Send + 'static,
+) -> Result<T, (StatusCode, String)> {
+    tokio::task::spawn_blocking(work)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Settings file task failed: {}", e),
+            )
+        })?
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))
+}
+
+/// POST /api/global-settings - Store a remote client's settings, keeping every host-owned
+/// and secret field, and return the remote view of the result
 async fn update_global_settings(
     State(state): State<Arc<ServerState>>,
-    Json(mut settings): Json<GlobalSettings>,
+    Json(incoming): Json<GlobalSettings>,
 ) -> Result<Json<GlobalSettings>, (StatusCode, String)> {
     let settings_file = get_global_settings_file(&state.app_handle)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
-    // Ensure parent directory exists
-    if let Some(parent) = settings_file.parent() {
-        fs::create_dir_all(parent).map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to create directory: {}", e),
-            )
-        })?;
-    }
-
-    // Preserve vnas_tokens if incoming settings don't have it but existing file does
-    if settings.vnas_tokens.is_none() && settings_file.exists() {
-        if let Ok(content) = fs::read_to_string(&settings_file) {
-            if let Ok(existing) = serde_json::from_str::<GlobalSettings>(&content) {
-                if existing.vnas_tokens.is_some() {
-                    tracing::debug!("[Server] Preserving existing vnas_tokens");
-                    settings.vnas_tokens = existing.vnas_tokens;
-                }
-            }
-        }
-    }
-
-    // Write settings to file
-    let content = serde_json::to_string_pretty(&settings).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to serialize settings: {}", e),
-        )
-    })?;
-
-    fs::write(&settings_file, content).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to write settings: {}", e),
-        )
-    })?;
+    let view = run_settings_io(move || apply_remote_write(&settings_file, incoming)).await?;
 
     tracing::info!("[Server] Updated global settings via API");
-    Ok(Json(settings))
+    Ok(Json(view))
 }
 
 /// Mod directory info for API response
@@ -777,25 +851,10 @@ async fn list_msfs_converted_models(
     let settings_file = get_global_settings_file(&state.app_handle)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
-    let cache_dir = if settings_file.exists() {
-        let content = fs::read_to_string(&settings_file).map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to read settings: {}", e),
-            )
-        })?;
-
-        let settings: GlobalSettings = serde_json::from_str(&content).map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to parse settings: {}", e),
-            )
-        })?;
-
-        settings.msfs_models.cache_directory.clone()
-    } else {
-        None
-    };
+    let cache_dir = read_settings_file(&settings_file)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?
+        .msfs_models
+        .cache_directory;
 
     let Some(cache_dir) = cache_dir else {
         return Ok(Json(Vec::new()));
@@ -820,25 +879,10 @@ async fn serve_msfs_model(
         Err(e) => return Err((StatusCode::INTERNAL_SERVER_ERROR, e)),
     };
 
-    let cache_dir = if settings_file.exists() {
-        let content = fs::read_to_string(&settings_file).map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to read settings: {}", e),
-            )
-        })?;
-
-        let settings: GlobalSettings = serde_json::from_str(&content).map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to parse settings: {}", e),
-            )
-        })?;
-
-        settings.msfs_models.cache_directory.clone()
-    } else {
-        None
-    };
+    let cache_dir = read_settings_file(&settings_file)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?
+        .msfs_models
+        .cache_directory;
 
     let Some(cache_dir) = cache_dir else {
         return Err((
@@ -876,8 +920,12 @@ async fn get_msfs_model_index(
     State(state): State<Arc<ServerState>>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     // Get the model index from the MSFS module
-    let index = crate::msfs::get_model_index(&state.app_handle)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to get model index: {}", e)))?;
+    let index = crate::msfs::get_model_index(&state.app_handle).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to get model index: {}", e),
+        )
+    })?;
 
     Ok(Json(index))
 }
@@ -1207,7 +1255,9 @@ async fn remote_log(Json(batch): Json<RemoteLogBatch>) -> StatusCode {
             "WARN" => tracing::warn!(target: "frontend", "[{}] {}", client_prefix, entry.message),
             "INFO" => tracing::info!(target: "frontend", "[{}] {}", client_prefix, entry.message),
             "DEBUG" => tracing::debug!(target: "frontend", "[{}] {}", client_prefix, entry.message),
-            _ => tracing::info!(target: "frontend", "[{}] [{}] {}", client_prefix, entry.level, entry.message),
+            _ => {
+                tracing::info!(target: "frontend", "[{}] [{}] {}", client_prefix, entry.level, entry.message)
+            }
         }
     }
 
@@ -1548,7 +1598,7 @@ async fn proxy_request(
 async fn observations_websocket_handler(
     ws: WebSocketUpgrade,
     State(state): State<Arc<ServerState>>,
-) -> impl IntoResponse {
+) -> Response<Body> {
     tracing::info!("[Observations WS] Upgrade request received");
     ws.on_upgrade(move |socket| handle_observations_websocket(socket, state))
 }
@@ -1578,7 +1628,12 @@ async fn handle_observations_websocket(socket: WebSocket, state: Arc<ServerState
     // Send current airport sync state (for RealTraffic mode)
     let (synced_airport, rt_active) = {
         let airport = state.synced_airport.read().ok().and_then(|g| g.clone());
-        let active = state.realtraffic_active.read().ok().map(|g| *g).unwrap_or(false);
+        let active = state
+            .realtraffic_active
+            .read()
+            .ok()
+            .map(|g| *g)
+            .unwrap_or(false);
         (airport, active)
     };
     let airport_sync_msg = ObservationMessage::AirportSync {
@@ -1735,10 +1790,7 @@ async fn handle_client_request(state: &Arc<ServerState>, request: ClientRequest)
             let _ = app_handle.emit("remote-airport-changed", ());
         }
         _ => {
-            tracing::warn!(
-                "[Observations WS] Unknown action: {}",
-                request.action
-            );
+            tracing::warn!("[Observations WS] Unknown action: {}", request.action);
         }
     }
 }
@@ -1755,7 +1807,7 @@ async fn handle_client_request(state: &Arc<ServerState>, request: ClientRequest)
 async fn presence_websocket_handler(
     ws: WebSocketUpgrade,
     State(state): State<Arc<ServerState>>,
-) -> impl IntoResponse {
+) -> Response<Body> {
     ws.on_upgrade(move |socket| handle_presence_websocket(socket, state))
 }
 
@@ -2128,6 +2180,346 @@ fn tower_position_file_path(dir: &std::path::Path, icao: &str) -> Result<PathBuf
 mod tests {
     use super::*;
 
+    #[test]
+    fn host_check_accepts_ip_literals_localhost_and_mdns_names() {
+        for good in [
+            "192.168.1.5:8765",
+            "192.168.1.5",
+            "[::1]:8765",
+            "[fe80::1]",
+            "localhost",
+            "localhost:8765",
+            "pc.local",
+            "PC.LOCAL:8765",
+        ] {
+            assert!(is_allowed_host(Some(good)), "{good:?} should be accepted");
+        }
+    }
+
+    #[test]
+    fn host_check_refuses_other_names_and_a_missing_host() {
+        for bad in [
+            "evil.example",
+            "evil.example:8765",
+            "127.0.0.1.evil.example",
+            "localhost.evil.example",
+            ".local",
+            "pc.local:notaport",
+            "[::1",
+            "::1",
+            "",
+        ] {
+            assert!(!is_allowed_host(Some(bad)), "{bad:?} should be refused");
+        }
+        assert!(!is_allowed_host(None), "a missing Host should be refused");
+    }
+
+    #[test]
+    fn origin_check_allows_absent_and_local_origins() {
+        for good in [
+            None,
+            Some("http://192.168.1.5:8765"),
+            Some("https://localhost"),
+            Some("http://[::1]:8765"),
+            Some("http://pc.local:8765"),
+        ] {
+            assert!(is_allowed_origin(good), "{good:?} should be allowed");
+        }
+    }
+
+    #[test]
+    fn origin_check_refuses_foreign_and_opaque_origins() {
+        for bad in [
+            "http://evil.example",
+            "http://127.0.0.1.evil.example:8765",
+            "null",
+            "file:///C:/x.html",
+            "ws://localhost:8765",
+            "not a url",
+        ] {
+            assert!(!is_allowed_origin(Some(bad)), "{bad:?} should be refused");
+        }
+    }
+
+    #[test]
+    fn local_network_ip_table() {
+        let cases = [
+            ("127.0.0.1", true),
+            ("127.255.0.9", true),
+            ("10.0.0.1", true),
+            ("172.16.0.1", true),
+            ("172.31.255.255", true),
+            ("172.15.0.1", false),
+            ("172.32.0.1", false),
+            ("192.168.1.5", true),
+            ("192.169.0.1", false),
+            ("169.254.1.1", true),
+            ("8.8.8.8", false),
+            ("100.64.0.1", false),
+            ("::1", true),
+            ("fe80::1", true),
+            ("febf::1", true),
+            ("fec0::1", false),
+            ("fc00::1", true),
+            ("fd12:3456::1", true),
+            ("2001:db8::1", false),
+        ];
+        for (ip, local) in cases {
+            let parsed: IpAddr = ip.parse().expect("test address parses");
+            assert_eq!(is_local_network_ip(&parsed), local, "{ip}");
+        }
+    }
+
+    #[test]
+    fn origin_check_refuses_public_ip_origin() {
+        assert!(!is_allowed_origin(Some("http://203.0.113.5")));
+    }
+
+    #[test]
+    fn host_check_accepts_single_label_names() {
+        for good in ["DESKTOP-ABC:8765", "desktop-abc", "mypc"] {
+            assert!(is_allowed_host(Some(good)), "{good:?} should be accepted");
+        }
+        for bad in [
+            "8.8.8.8",
+            "203.0.113.5:8765",
+            "[2001:db8::1]:8765",
+            "-pc",
+            "my_pc",
+        ] {
+            assert!(!is_allowed_host(Some(bad)), "{bad:?} should be refused");
+        }
+    }
+
+    /// Bounds a wait that only a broken server reaches.
+    const HANG_GUARD: std::time::Duration = std::time::Duration::from_secs(300);
+
+    /// A flag private to one test, as the server reads `ALLOW_NON_LOCAL_CLIENTS`.
+    fn test_flag(value: bool) -> &'static AtomicBool {
+        Box::leak(Box::new(AtomicBool::new(value)))
+    }
+
+    /// Serves the access checks around a route that always answers 200 "ok", on a free
+    /// loopback port. The server stops when the returned runtime is dropped.
+    fn serve_guarded(
+        allow_non_local_clients: &'static AtomicBool,
+    ) -> (tokio::runtime::Runtime, SocketAddr) {
+        let runtime = tokio::runtime::Runtime::new().expect("start runtime");
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind free port");
+        listener
+            .set_nonblocking(true)
+            .expect("non-blocking listener");
+        let addr = listener.local_addr().expect("listener address");
+        let app = guard(
+            Router::new().fallback(|| async { "ok" }),
+            allow_non_local_clients,
+        );
+        runtime.spawn(async move {
+            let listener = tokio::net::TcpListener::from_std(listener).expect("tokio listener");
+            axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .await
+            .expect("serve");
+        });
+        (runtime, addr)
+    }
+
+    /// Sends one raw HTTP/1.1 request and returns the status code and body.
+    fn send(addr: SocketAddr, request: &str) -> (u16, String) {
+        let (status, _, body) = send_for_head(addr, request);
+        (status, body)
+    }
+
+    /// Sends one raw HTTP/1.1 request and returns the status code, the head and the body.
+    fn send_for_head(addr: SocketAddr, request: &str) -> (u16, String, String) {
+        use std::io::Write;
+        let mut stream = std::net::TcpStream::connect(addr).expect("connect");
+        stream
+            .set_read_timeout(Some(HANG_GUARD))
+            .expect("set read timeout");
+        stream.write_all(request.as_bytes()).expect("send request");
+
+        let mut response = Vec::new();
+        let mut chunk = [0u8; 4096];
+        let header_end = loop {
+            let read = stream.read(&mut chunk).expect("read response");
+            assert!(read > 0, "connection closed before the response headers");
+            response.extend_from_slice(&chunk[..read]);
+            if let Some(end) = response.windows(4).position(|w| w == b"\r\n\r\n") {
+                break end + 4;
+            }
+        };
+        let head = String::from_utf8_lossy(&response[..header_end]).to_string();
+        let status = head
+            .split(' ')
+            .nth(1)
+            .and_then(|code| code.parse().ok())
+            .expect("status code");
+        let length: usize = head
+            .lines()
+            .find_map(|line| {
+                let (name, value) = line.split_once(':')?;
+                name.eq_ignore_ascii_case("content-length")
+                    .then(|| value.trim().parse().ok())?
+            })
+            .unwrap_or(0);
+        while response.len() < header_end + length {
+            let read = stream.read(&mut chunk).expect("read body");
+            assert!(read > 0, "connection closed before the response body");
+            response.extend_from_slice(&chunk[..read]);
+        }
+        let body = String::from_utf8_lossy(&response[header_end..header_end + length]).to_string();
+        (status, head, body)
+    }
+
+    /// A WebSocket upgrade request for `path` with the given `Host` and `Origin`.
+    fn upgrade_request(path: &str, host: &str, origin: &str) -> String {
+        format!(
+            "GET {path} HTTP/1.1\r\nHost: {host}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\
+             Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\
+             Origin: {origin}\r\n\r\n"
+        )
+    }
+
+    #[test]
+    fn same_origin_websocket_upgrade_is_allowed_for_non_local_hosts() {
+        let (_runtime, addr) = serve_guarded(test_flag(true));
+        let host = "home.example.com:8765";
+        let (status, _) = send(
+            addr,
+            &upgrade_request("/api/presence", host, "http://home.example.com:8765"),
+        );
+        assert_eq!(status, 200, "same-origin upgrade through a DNS name");
+        for origin in ["ws://home.example.com:8765", "ftp://home.example.com:8765"] {
+            let (status, _) = send(addr, &upgrade_request("/api/presence", host, origin));
+            assert_eq!(status, 403, "non-http same-host origin {origin}");
+        }
+        let (status, _) = send(
+            addr,
+            &upgrade_request("/api/presence", host, "http://other.example.com:8765"),
+        );
+        assert_eq!(status, 403, "cross-origin upgrade through a DNS name");
+    }
+
+    #[test]
+    fn cors_and_websocket_agree_on_origins() {
+        let (_runtime, addr) = serve_guarded(test_flag(false));
+        let host = "192.168.1.5:8765";
+        for origin in [
+            "http://8.8.8.8",
+            "http://203.0.113.5:8765",
+            "http://evil.example",
+            "http://192.168.1.6:8765",
+            "http://localhost:5173",
+            "http://pc.local",
+            "http://desktop-abc:8765",
+        ] {
+            let (_, head, _) = send_for_head(
+                addr,
+                &format!(
+                    "OPTIONS /api/global-settings HTTP/1.1\r\nHost: {host}\r\nOrigin: {origin}\r\n\
+                     Access-Control-Request-Method: POST\r\nConnection: close\r\n\r\n"
+                ),
+            );
+            let cors_allows = head
+                .to_ascii_lowercase()
+                .contains("access-control-allow-origin");
+            let (status, _) = send(addr, &upgrade_request("/api/presence", host, origin));
+            assert_eq!(
+                cors_allows,
+                status == 200,
+                "CORS and WebSocket disagree on {origin}"
+            );
+            if origin == "http://8.8.8.8" {
+                assert!(!cors_allows, "{origin} should be refused");
+            }
+        }
+    }
+
+    fn get(addr: SocketAddr, host: &str) -> (u16, String) {
+        send(
+            addr,
+            &format!("GET / HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n"),
+        )
+    }
+
+    const REFUSED_HOST_TEXT: &str = "Access denied: connect using this PC's IP address, its \
+        name, or name.local. To allow other addresses, turn on 'Allow devices outside the local \
+        network' in Settings on the host.";
+
+    #[test]
+    fn refused_host_gets_403_with_guidance() {
+        let (_runtime, addr) = serve_guarded(test_flag(false));
+        assert_eq!(get(addr, "DESKTOP-ABC:8765"), (200, "ok".to_string()));
+        assert_eq!(
+            get(addr, "evil.example:8765"),
+            (403, REFUSED_HOST_TEXT.to_string())
+        );
+    }
+
+    #[test]
+    fn foreign_origin_websocket_upgrade_is_refused_on_every_socket_route() {
+        let (_runtime, addr) = serve_guarded(test_flag(false));
+        for path in ["/api/observations/ws", "/api/presence"] {
+            let upgrade = |origin: &str| {
+                format!(
+                    "GET {path} HTTP/1.1\r\nHost: 192.168.1.5:8765\r\nUpgrade: websocket\r\n\
+                     Connection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
+                     Sec-WebSocket-Version: 13\r\nOrigin: {origin}\r\n\r\n"
+                )
+            };
+            let (status, _) = send(addr, &upgrade("http://evil.example"));
+            assert_eq!(status, 403, "foreign-Origin upgrade to {path}");
+            let (status, _) = send(addr, &upgrade("http://192.168.1.5:8765"));
+            assert_eq!(
+                status, 200,
+                "local-Origin upgrade to {path} reaches the route"
+            );
+        }
+    }
+
+    #[test]
+    fn preflight_from_refused_host_gets_403_not_a_cors_answer() {
+        let (_runtime, addr) = serve_guarded(test_flag(false));
+        let (status, _) = send(
+            addr,
+            "OPTIONS /api/global-settings HTTP/1.1\r\nHost: evil.example\r\n\
+             Origin: http://192.168.1.5:8765\r\nAccess-Control-Request-Method: POST\r\n\
+             Connection: close\r\n\r\n",
+        );
+        assert_eq!(status, 403);
+    }
+
+    #[test]
+    fn allow_non_local_clients_applies_to_the_next_request() {
+        let settings_dir = TempDir::new("allow-non-local");
+        let settings_file = settings_dir.0.join("global-settings.json");
+        let flag = test_flag(false);
+        let (_runtime, addr) = serve_guarded(flag);
+        assert_eq!(
+            get(addr, "mypc.lan:8765").0,
+            403,
+            "off: a DNS name is refused"
+        );
+
+        let mut settings = GlobalSettings::default();
+        settings.server.allow_non_local_clients = true;
+        crate::settings::write_host_settings_file(&settings_file, settings.clone(), flag)
+            .expect("host write");
+        assert_eq!(
+            get(addr, "mypc.lan:8765").0,
+            200,
+            "on: any host name is served"
+        );
+
+        settings.server.allow_non_local_clients = false;
+        crate::settings::write_host_settings_file(&settings_file, settings, flag)
+            .expect("host write");
+        assert_eq!(get(addr, "mypc.lan:8765").0, 403, "off again: refused");
+    }
+
     /// A fresh, empty folder under the system temp folder, removed when dropped.
     struct TempDir(PathBuf);
 
@@ -2325,7 +2717,17 @@ mod tests {
     fn tower_position_refuses_non_icao() {
         let dir = TempDir::new("tower-refuse");
         let refused = [
-            "../KSFO", "..%2FKSFO", "KS/FO", "KSFOX", "KS", "", "..", "E/K", "_..", "E\\K", "EK.2",
+            "../KSFO",
+            "..%2FKSFO",
+            "KS/FO",
+            "KSFOX",
+            "KS",
+            "",
+            "..",
+            "E/K",
+            "_..",
+            "E\\K",
+            "EK.2",
         ];
         for bad in refused {
             assert_refused(tower_position_file_path(&dir.0, bad), bad);

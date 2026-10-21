@@ -3,6 +3,7 @@
  * Handles one-time migrations from legacy data formats
  */
 
+import { isTauri } from '@/utils/tauriApi'
 import type { CameraBookmark } from '../../types'
 import { scheduleGlobalSync } from './globalSettingsSync'
 import type { AirportViewportConfig, GlobalOrbitSettings } from './viewportHelpers'
@@ -79,8 +80,10 @@ export const migrateCameraStoreBookmarks = (
     if (hasMigrations) {
       setState({ airportViewportConfigs: updatedConfigs })
       console.log('[ViewportMigrations] Migrated bookmarks from cameraStore to viewportStore')
-      // Sync to global settings
-      scheduleGlobalSync(syncToGlobalSettings)
+      // Sync to global settings on the host only: a remote browser's load never writes to the host
+      if (isTauri()) {
+        scheduleGlobalSync(syncToGlobalSettings)
+      }
     }
 
     localStorage.setItem(MIGRATION_KEY, 'done')
@@ -116,6 +119,11 @@ export const migrateToGlobalSettings = (
   const MIGRATION_KEY = 'viewport-store-global-migration-v2'
   if (localStorage.getItem(MIGRATION_KEY)) {
     return // Already migrated
+  }
+
+  // Host only: a remote browser's load never writes to the host, and its local configs stay
+  if (!isTauri()) {
+    return
   }
 
   const globalState = getGlobalSettingsState()

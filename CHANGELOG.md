@@ -11,9 +11,11 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ### Changed
 - 3D buildings and aircraft no longer have an olive-green cast on their walls and fuselages; their reflected ground light is now a neutral grey.
+- Remote access accepts only devices on your local network, unless you turn on **Allow devices outside the local network** in Settings → Configuration.
 
 ### Fixed
 - The remote access server no longer serves or writes files outside its own folders.
+- Remote browsers no longer receive your stored keys and sign-ins, such as the RealTraffic key and vNAS login.
 - Aircraft that first appear no longer jump backwards or crawl in slow motion before settling into smooth motion.
 - Aircraft in flight are no longer drawn 5 m above their reported altitude.
 - Nose wheels no longer appear turned to full lock while the gear is down.

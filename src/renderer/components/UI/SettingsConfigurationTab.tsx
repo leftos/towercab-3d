@@ -879,6 +879,20 @@ function SettingsConfigurationTab({
             </p>
           </div>
           <div className="setting-item">
+            <label>
+              <input
+                type="checkbox"
+                checked={serverSettings.allowNonLocalClients}
+                onChange={(e) => updateServer({ allowNonLocalClients: e.target.checked })}
+              />
+              Allow devices outside the local network
+            </label>
+            <p className="setting-hint">
+              Off: only devices on your local network can connect. Turn on only if you reach TowerCab 3D through a VPN
+              or the internet: anyone who can reach this port can then connect.
+            </p>
+          </div>
+          <div className="setting-item">
             <span>Server Port</span>
             <div className="slider-with-value">
               <input
