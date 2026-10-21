@@ -287,9 +287,11 @@ CesiumViewer Component Mount
     │      ├─ Sets maximumScreenSpaceError based on quality (1-5)
     │      └─ Handles runtime quality changes with cache eviction
     │
-    ├─ 3. useCesiumLighting(viewer, lightingSettings)
+    ├─ 3. useSunElevation(viewer) (sun from Cesium's clock, geodetic up), then useCesiumLighting(viewer, lightingSettings)
+    │      ├─ Sun elevation is computed first and passed in as lightingSettings.sunElevationDeg (null until known)
     │      ├─ Configures sun position and lighting
     │      ├─ Sets up shadow maps (size, distance, darkness)
+    │      ├─ Sun shadows are off while sunElevationDeg is below the horizon (null keeps them on)
     │      └─ Updates runtime when settings change
     │
     ├─ 4. useCesiumWeather(viewer, showWeatherEffects, showCesiumFog, fogDensity)

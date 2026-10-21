@@ -13,6 +13,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 - 3D buildings and aircraft no longer have an olive-green cast on their walls and fuselages; their reflected ground light is now a neutral grey.
 
 ### Fixed
+- Stale sun shadows no longer darken buildings and the ground at night, or flicker across walls after switching to a night time.
 - The remote access server no longer serves or writes files outside its own folders.
 - Aircraft that first appear no longer jump backwards or crawl in slow motion before settling into smooth motion.
 - Aircraft in flight are no longer drawn 5 m above their reported altitude.

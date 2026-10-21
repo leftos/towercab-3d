@@ -287,6 +287,9 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
   // =========================================================================
   // 3. Lighting and Shadow Configuration
   // =========================================================================
+  // Sun elevation at camera position, from Cesium's clock: sun shadows are off below the horizon, and imagery darkens at night
+  const sunElevation = useSunElevation(viewer)
+
   useCesiumLighting(viewer, {
     isInset,
     insetGraphics,
@@ -294,6 +297,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
     enableLighting,
     enableGroundAtmosphere,
     enableShadows,
+    sunElevationDeg: sunElevation,
     shadowMapSize,
     shadowMaxDistance,
     shadowDarkness,
@@ -309,9 +313,6 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
   // =========================================================================
   // 3a. Night-Time Darkening (requires enableLighting)
   // =========================================================================
-  // Calculate sun elevation angle at camera position
-  const sunElevation = useSunElevation(viewer, { timeMode, fixedTimeHour })
-
   // Darken satellite imagery based on sun position
   useCesiumNightDarkening(viewer, sunElevation, {
     enabled: enableNightDarkening && enableLighting, // Only works with lighting enabled

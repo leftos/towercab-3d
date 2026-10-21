@@ -849,7 +849,7 @@ See the [MSFS Model Support](#msfs-model-support) section for details on using F
 | **Show 3D Buildings** | OpenStreetMap building models | Off |
 | **Building Quality** | LOD for 3D buildings | Low |
 | **Time of Day** | Real-time or fixed local hour | Real |
-| **Enable Shadows** | Render terrain and aircraft shadows | On |
+| **Enable Shadows** | Render terrain and aircraft shadows (automatically off at night, while the sun is below the horizon) | On |
 | **Shadow Mode** | Which objects cast shadows | Aircraft Only |
 | **Enable Fog** | METAR-based fog effects | On |
 | **Fog Intensity** | Fog opacity multiplier | 1x |
