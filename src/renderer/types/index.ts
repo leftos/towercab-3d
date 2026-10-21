@@ -114,6 +114,8 @@ export type {
   PrecipitationState,
   // Precipitation
   PrecipitationType,
+  // Weather visibility culling
+  WeatherVisibilityConditions,
   // Wind
   WindState,
 } from './weather'

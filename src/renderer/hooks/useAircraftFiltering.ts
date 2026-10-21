@@ -5,10 +5,12 @@ import { useGlobalSettingsStore } from '@/stores/globalSettingsStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useViewportStore } from '@/stores/viewportStore'
 import { useWeatherStore } from '@/stores/weatherStore'
+import type { WeatherVisibilityConditions } from '@/types'
 import type { InterpolatedAircraftState } from '@/types/vatsim'
 import { calculateDistanceNM } from '@/utils/geoMath'
 import { getTowerPosition } from '@/utils/towerHeight'
 import { isOrbitWithoutAirport } from '@/utils/viewingContext'
+import { isVisibleThroughWeather } from '@/utils/weatherVisibility'
 
 interface FilteredAircraftWithDistance extends InterpolatedAircraftState {
   distance: number
@@ -149,23 +151,10 @@ interface UseAircraftFilteringOptions {
  *
  * ## Weather Visibility Culling
  *
- * ### Surface Visibility
- * ```typescript
- * visibilityMeters = metar.visibility * 1609.34 * visibilityScale
- * if (horizontalDistance > visibilityMeters) {
- *   // Hide aircraft (beyond visibility range)
- * }
- * ```
- *
- * ### Cloud Ceiling
- * ```typescript
- * // Check if any BKN/OVC layer is between camera and aircraft
- * if (layer.coverage >= 0.75 && layer.altitude between [cameraAlt, aircraftAlt]) {
- *   // Hide aircraft (obscured by clouds)
- * }
- * ```
- *
- * Cloud culling is skipped in top-down view because clouds don't visually block line-of-sight.
+ * The weather filter delegates to `isVisibleThroughWeather` in
+ * `utils/weatherVisibility.ts`, which `useBabylonWeather` shares: aircraft beyond
+ * the scaled METAR visibility, or behind a BKN/OVC layer between camera and
+ * aircraft, are hidden. Cloud culling is skipped in top-down view.
  *
  * ## Filtering Statistics
  *
@@ -388,40 +377,22 @@ export function useAircraftFiltering(
 
   // Filter 3: Weather visibility (if enabled)
   if (filterWeatherVisibility && showWeatherEffects) {
-    filtered = filtered.filter((aircraft) => {
-      const aircraftAltitudeMeters = aircraft.interpolatedAltitude // Already in METERS
-      const horizontalDistanceMeters = aircraft.distance * 1852 // NM to meters
-
-      // Check visibility range (surface visibility culling)
-      if (currentMetar && showCesiumFog) {
-        // Apply visibilityScale: 1.0 = match METAR, 2.0 = see twice as far
-        const visibilityMeters = currentMetar.visib * 1609.34 * visibilityScale // SM to meters, scaled
-        if (horizontalDistanceMeters > visibilityMeters) {
-          return false
-        }
-      }
-
-      // Check cloud ceiling culling
-      // Only cull if clouds are enabled and we have cloud data
-      // Skip cloud culling in top-down view - clouds don't visually obscure in this mode
-      if (showClouds && cloudLayers.length > 0 && !isTopDown) {
-        const lowerAlt = Math.min(cameraAltitudeMeters, aircraftAltitudeMeters)
-        const higherAlt = Math.max(cameraAltitudeMeters, aircraftAltitudeMeters)
-
-        // Check if any BKN (0.75) or OVC (1.0) layer is between camera and aircraft
-        for (const layer of cloudLayers) {
-          // BKN = 0.75, OVC = 1.0 - these are "ceilings" that block visibility
-          if (layer.coverage >= 0.75) {
-            // Check if this ceiling is between camera and aircraft
-            if (layer.altitude > lowerAlt && layer.altitude < higherAlt) {
-              return false
-            }
-          }
-        }
-      }
-
-      return true
-    })
+    const weatherConditions: WeatherVisibilityConditions = {
+      showWeatherEffects,
+      cullBeyondVisibility: showCesiumFog,
+      showClouds,
+      isTopDownView: isTopDown,
+      visibilityStatuteMiles: currentMetar ? currentMetar.visib : null,
+      visibilityScale,
+      cloudLayers,
+    }
+    filtered = filtered.filter((aircraft) =>
+      isVisibleThroughWeather(weatherConditions, {
+        cameraAltitudeMeters,
+        aircraftAltitudeMeters: aircraft.interpolatedAltitude, // Already in METERS
+        horizontalDistanceMeters: aircraft.distance * 1852, // NM to meters
+      }),
+    )
   }
   stats.afterWeather = filtered.length
 

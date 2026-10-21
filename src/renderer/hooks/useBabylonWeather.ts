@@ -6,7 +6,6 @@ import {
   CLOUD_ABOVE_EMISSIVE_COLOR,
   CLOUD_ABOVE_TRANSITION_BUFFER,
   CLOUD_BASE_ALPHA,
-  CLOUD_CEILING_COVERAGE_THRESHOLD,
   CLOUD_DIFFUSE_COLOR,
   CLOUD_DOME_COVERAGE_THRESHOLD,
   CLOUD_DOME_FRESNEL_BIAS,
@@ -51,6 +50,7 @@ import {
   VISIBILITY_TRANSITION_TIME,
 } from '@/constants'
 import type { CloudLayer, CloudMeshData, UseBabylonWeatherResult, WeatherVisibilityParams } from '@/types'
+import { isVisibleThroughWeather } from '@/utils/weatherVisibility'
 import { useAirportStore } from '../stores/airportStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useWeatherStore } from '../stores/weatherStore'
@@ -231,7 +231,9 @@ interface CloudLayerState {
  * ## Weather Visibility Culling
  *
  * The `isVisibleByWeather` function determines if aircraft labels should be
- * visible based on METAR weather conditions.
+ * visible based on METAR weather conditions. It delegates to
+ * `isVisibleThroughWeather` in `utils/weatherVisibility.ts`, which
+ * `useAircraftFiltering` shares.
  *
  * ### Surface Visibility Culling
  * Aircraft beyond METAR visibility range are hidden:
@@ -1368,35 +1370,19 @@ export function useBabylonWeather(options: UseBabylonWeatherOptions): UseBabylon
 
   // Weather-based visibility culling function
   const isVisibleByWeather = useCallback(
-    (params: WeatherVisibilityParams): boolean => {
-      const { cameraAltitudeMeters, aircraftAltitudeMeters, horizontalDistanceMeters } = params
-
-      if (!showWeatherEffects) return true
-
-      // Surface visibility culling
-      if (currentMetar && showCesiumFog) {
-        const visibilityMeters = currentMetar.visib * STATUTE_MILES_TO_METERS * visibilityScale
-        if (horizontalDistanceMeters > visibilityMeters) {
-          return false
-        }
-      }
-
-      // Cloud ceiling culling (skip in top-down view)
-      if (showClouds && cloudLayers.length > 0 && !isTopDownView) {
-        const lowerAlt = Math.min(cameraAltitudeMeters, aircraftAltitudeMeters)
-        const higherAlt = Math.max(cameraAltitudeMeters, aircraftAltitudeMeters)
-
-        for (const layer of cloudLayers) {
-          if (layer.coverage >= CLOUD_CEILING_COVERAGE_THRESHOLD) {
-            if (layer.altitude > lowerAlt && layer.altitude < higherAlt) {
-              return false
-            }
-          }
-        }
-      }
-
-      return true
-    },
+    (params: WeatherVisibilityParams): boolean =>
+      isVisibleThroughWeather(
+        {
+          showWeatherEffects,
+          cullBeyondVisibility: showCesiumFog,
+          showClouds,
+          isTopDownView,
+          visibilityStatuteMiles: currentMetar ? currentMetar.visib : null,
+          visibilityScale,
+          cloudLayers,
+        },
+        params,
+      ),
     [showWeatherEffects, showCesiumFog, showClouds, currentMetar, cloudLayers, visibilityScale, isTopDownView],
   )
 

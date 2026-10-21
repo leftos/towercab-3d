@@ -730,7 +730,7 @@ useBabylonOverlay (Orchestrator - 265 LOC)
     │      ├─ Creates cloud layer mesh pool (4 planes, 50km diameter)
     │      ├─ Updates fog scale/opacity based on METAR visibility
     │      ├─ Updates cloud positions based on METAR ceiling data
-    │      └─ Provides isVisibleByWeather() for label culling
+    │      └─ Provides isVisibleByWeather() for label culling, delegating to isVisibleThroughWeather() in utils/weatherVisibility.ts (shared with useAircraftFiltering)
     │
     ├─ 3. useBabylonLabels({ guiTexture })
     │      ├─ Creates aircraft datablock labels (Rectangle + TextBlock)

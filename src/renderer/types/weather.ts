@@ -77,6 +77,29 @@ export interface CloudLayer {
 }
 
 /**
+ * Weather state and toggles that decide whether weather hides an aircraft.
+ *
+ * Read once per frame or filter pass by the caller and passed to
+ * `isVisibleThroughWeather` alongside each aircraft's geometry.
+ */
+export interface WeatherVisibilityConditions {
+  /** Master weather toggle; when false nothing is culled */
+  showWeatherEffects: boolean
+  /** Toggle that enables surface-visibility culling (the caller's fog setting) */
+  cullBeyondVisibility: boolean
+  /** Toggle that enables cloud-ceiling culling */
+  showClouds: boolean
+  /** Top-down view skips cloud-ceiling culling */
+  isTopDownView: boolean
+  /** METAR visibility in statute miles, or null when there is no METAR */
+  visibilityStatuteMiles: number | null
+  /** Multiplier on METAR visibility (1.0 = match METAR, 2.0 = twice as far) */
+  visibilityScale: number
+  /** Current METAR cloud layers */
+  cloudLayers: readonly CloudLayer[]
+}
+
+/**
  * Flight category based on METAR conditions
  *
  * FAA/ICAO flight categories based on ceiling and visibility:
