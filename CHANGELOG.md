@@ -17,6 +17,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Aircraft in flight are no longer drawn 5 m above their reported altitude.
 - Nose wheels no longer appear turned to full lock while the gear is down.
 - Landing gear now extends and retracts at the right height at every airport, not only those near sea level.
+- The flight phase badge now shows "Go Around" after a go-around, and leaves "Short Final" as soon as the aircraft climbs away.
+- Aircraft passing over an airport at altitude are no longer labelled "Final" or "Short Final".
 - Datablocks on iPads and other high-resolution screens now sit on their aircraft at full size, instead of half size and in the wrong place.
 
 ### Removed

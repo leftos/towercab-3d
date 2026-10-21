@@ -21,6 +21,7 @@ import {
   PHASE_DWELL_TIMES,
   ROLL_PHASE_SCORES,
   STICKY_PHASE_EXIT_TIMES,
+  SUSTAINED_APPROACH_THRESHOLD_MS,
 } from '../../constants/flightPhase'
 import type { AircraftObservation, AircraftTimeline } from '../../types/aircraft-timeline'
 import type { InterpolatedAircraftState } from '../../types/vatsim'
@@ -30,6 +31,10 @@ import type { FlightPhase, PhaseDetectionResult, RunwayProximity, SmartSortConte
 // Minimum speed (kts) before transitioning from landing_roll to taxi
 // Aircraft below this speed can transition; above must stay in landing_roll
 const LANDING_ROLL_MIN_EXIT_SPEED_KTS = 35
+
+// How long a sustained approach stays on record after it was last seen, so a go-around that
+// starts just after the aircraft leaves the approach is still detected.
+const GO_AROUND_APPROACH_TTL_MS = 15000
 
 // ============================================================================
 // STATE MANAGEMENT
@@ -57,6 +62,7 @@ interface PhaseStabilizationState {
 
   // Approach tracking for go-around
   approachStartTime: number | null
+  approachLastSeenTime: number | null
   wasOnSustainedApproach: boolean
 }
 
@@ -81,6 +87,7 @@ function getOrCreateState(callsign: string, initialPhase: FlightPhase): PhaseSta
       rollPhaseEntryTime: 0,
       lastPhaseBeforeRoll: null,
       approachStartTime: null,
+      approachLastSeenTime: null,
       wasOnSustainedApproach: false,
     }
     stabilizationStates.set(callsign, state)
@@ -265,7 +272,7 @@ function isValidGoAround(
   }
 
   // 4. Current vertical rate check (fallback if timeline is sparse)
-  const verticalRateFpm = aircraft.verticalRate * METERS_TO_FEET * 60 // m/s to fpm
+  const verticalRateFpm = aircraft.verticalRate * METERS_TO_FEET // m/min to ft/min
   if (verticalRateFpm < GO_AROUND_CLIMB_FPM * 0.6) return false // Allow some margin
 
   return true
@@ -411,23 +418,19 @@ function updateApproachTracking(state: PhaseStabilizationState, rawPhase: Flight
     if (state.approachStartTime === null) {
       state.approachStartTime = now
     }
-    const approachDuration = now - state.approachStartTime
-    if (approachDuration >= 8000) {
-      // 8 seconds sustained
+    state.approachLastSeenTime = now
+    if (now - state.approachStartTime >= SUSTAINED_APPROACH_THRESHOLD_MS) {
       state.wasOnSustainedApproach = true
     }
-  } else {
-    // Off approach - check if we should reset
-    // Keep wasOnSustainedApproach true for a short window after leaving approach
-    // to catch go-arounds that happen just after touch-and-go
-    if (state.approachStartTime !== null) {
-      const timeSinceApproach = now - (state.approachStartTime + 8000)
-      if (timeSinceApproach > 15000) {
-        // 15 seconds after sustained approach ended
-        state.wasOnSustainedApproach = false
-        state.approachStartTime = null
-      }
-    }
+    return
+  }
+
+  // Off approach - keep wasOnSustainedApproach true for a short window after the approach
+  // was last seen, to catch go-arounds that happen just after touch-and-go
+  if (state.approachLastSeenTime !== null && now - state.approachLastSeenTime > GO_AROUND_APPROACH_TTL_MS) {
+    state.wasOnSustainedApproach = false
+    state.approachStartTime = null
+    state.approachLastSeenTime = null
   }
 }
 

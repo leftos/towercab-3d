@@ -42,6 +42,11 @@ const CLIMBING_THRESHOLD_FPM = 200
 const GO_AROUND_CLIMB_FPM = 500
 const GO_AROUND_DISTANCE_NM = 3
 const GO_AROUND_HISTORY_MS = 30000 // Look back 30 seconds for approach phase
+// Finals require the aircraft at or below a 3 deg glidepath to the threshold plus 1000 ft, measured
+// above the threshold's elevation: aligned and inbound alone labels an airliner cruising overhead
+// as being on final.
+const FINAL_APPROACH_GLIDEPATH_DEG = 3
+const FINAL_APPROACH_ALTITUDE_MARGIN_FT = 1000
 // Minimum runway length before warning (feet) - below this, data quality is suspect
 const MIN_RUNWAY_LENGTH_FT = 500
 
@@ -472,6 +477,33 @@ interface RawPhaseDetectionResult extends PhaseDetectionResult {
 }
 
 /**
+ * Elevation of the threshold a runway proximity match names, in feet MSL, or null when unknown.
+ * RunwayService parses a blank end elevation as 0 and most bundled runways carry none, so 0 means
+ * missing: fall back to the field elevation, as AirportPolygonService does.
+ */
+function thresholdElevationFt(proximity: RunwayProximity, context: SmartSortContext): number | null {
+  const end = proximity.runway.lowEnd.ident === proximity.endIdent ? proximity.runway.lowEnd : proximity.runway.highEnd
+  if (end.elevationFt !== 0) return end.elevationFt
+  return context.airportElevationFt !== 0 ? context.airportElevationFt : null
+}
+
+/**
+ * Whether an aircraft at `altitudeFt` MSL is no higher than a 3 deg glidepath to a threshold
+ * `distanceNm` away, plus 1000 ft. True when the threshold elevation is unknown: missing data
+ * must not hide finals.
+ */
+function isBelowFinalApproachCeiling(
+  altitudeFt: number,
+  proximity: RunwayProximity,
+  context: SmartSortContext,
+): boolean {
+  const thresholdFt = thresholdElevationFt(proximity, context)
+  if (thresholdFt === null) return true
+  const glidepathFt = Math.tan((FINAL_APPROACH_GLIDEPATH_DEG * Math.PI) / 180) * proximity.distanceNm * 6076.12
+  return altitudeFt - thresholdFt <= glidepathFt + FINAL_APPROACH_ALTITUDE_MARGIN_FT
+}
+
+/**
  * Detect the flight phase of an aircraft (raw, without stabilization).
  * This is the internal detection logic - use detectFlightPhase for stable results.
  */
@@ -654,8 +686,31 @@ function detectRawFlightPhase(aircraft: InterpolatedAircraftState, context: Smar
   // For departure detection, use heading (aircraft points in departure direction)
   const alignedRunwayByHeading = findAlignedRunway(lat, lon, heading, context.runways, false)
 
-  // Check if aircraft is on approach to any runway (aligned by track + inbound)
-  if (alignedRunwayByTrack?.isInbound) {
+  // Go-around detection: climbing aggressively near runway, low altitude.
+  // Checked before the finals below, because a climbing aircraft over the runway is going around,
+  // not on short final. KEY: must have been recently observed on approach (short_final or
+  // long_final), which prevents false positives from normal departures.
+  if (verticalRateFpm > GO_AROUND_CLIMB_FPM && aglFt < PATTERN_ALTITUDE_FT) {
+    const goAroundRunway = alignedRunwayByTrack || nearestRwy
+    if (goAroundRunway && goAroundRunway.distanceNm < GO_AROUND_DISTANCE_NM) {
+      // Only flag as go-around if we recently saw this aircraft on approach
+      if (wasRecentlyOnApproach(aircraft.callsign)) {
+        return {
+          phase: 'go_around',
+          runway: goAroundRunway.endIdent,
+          runwayDistance: goAroundRunway.distanceNm,
+          nearestRunway: nearestRwy,
+        }
+      }
+    }
+  }
+
+  // Check if aircraft is on approach to any runway: aligned by track, inbound, and no higher than
+  // the glidepath to the threshold it is pointing at.
+  const onGlidepath =
+    alignedRunwayByTrack !== null && isBelowFinalApproachCeiling(altitudeFt, alignedRunwayByTrack, context)
+
+  if (alignedRunwayByTrack?.isInbound && onGlidepath) {
     if (alignedRunwayByTrack.distanceNm < SHORT_FINAL_NM) {
       // Within 2nm and aligned = definitely short final
       return {
@@ -671,24 +726,6 @@ function detectRawFlightPhase(aircraft: InterpolatedAircraftState, context: Smar
           phase: 'long_final',
           runway: alignedRunwayByTrack.endIdent,
           runwayDistance: alignedRunwayByTrack.distanceNm,
-          nearestRunway: nearestRwy,
-        }
-      }
-    }
-  }
-
-  // Go-around detection: climbing aggressively near runway, low altitude
-  // KEY: Must have been recently observed on approach (short_final or long_final)
-  // This prevents false positives from normal departures
-  if (verticalRateFpm > GO_AROUND_CLIMB_FPM && aglFt < PATTERN_ALTITUDE_FT) {
-    const goAroundRunway = alignedRunwayByTrack || nearestRwy
-    if (goAroundRunway && goAroundRunway.distanceNm < GO_AROUND_DISTANCE_NM) {
-      // Only flag as go-around if we recently saw this aircraft on approach
-      if (wasRecentlyOnApproach(aircraft.callsign)) {
-        return {
-          phase: 'go_around',
-          runway: goAroundRunway.endIdent,
-          runwayDistance: goAroundRunway.distanceNm,
           nearestRunway: nearestRwy,
         }
       }
@@ -711,9 +748,15 @@ function detectRawFlightPhase(aircraft: InterpolatedAircraftState, context: Smar
     }
   }
 
-  // Check for base-to-final turn (close to runway, heading toward it, descending)
-  // This should be treated as approach, not pattern
-  if (nearestRwy && nearestRwy.distanceNm < 2 && nearestRwy.isInbound && isDescending) {
+  // Check for base-to-final turn (close to runway, heading toward it, descending, no higher than
+  // the glidepath). This should be treated as approach, not pattern.
+  if (
+    nearestRwy &&
+    nearestRwy.distanceNm < 2 &&
+    nearestRwy.isInbound &&
+    isDescending &&
+    isBelowFinalApproachCeiling(altitudeFt, nearestRwy, context)
+  ) {
     // Close, heading toward runway, descending = on approach even if not perfectly aligned
     return {
       phase: 'long_final',

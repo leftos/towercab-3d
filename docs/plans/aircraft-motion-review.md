@@ -171,7 +171,7 @@ No control surface, flap, spoiler or reverser is animated. The FSLTL converter b
 
 ### How it works today
 
-`detectRawFlightPhase` (`flightPhaseDetector.ts:478-764`) classifies from the interpolated (delayed) state: on a runway polygon below 100 ft and aligned it returns a roll phase by acceleration, then speed and flight plan; on the ground otherwise pushback (track vs heading over 90 deg), taxi, hold-short, stopped; airborne it checks final by track alignment and inbound bearing (2 and 6 nm), go-around, departure climb, base-to-final, pattern, inbound. `stabilizePhase` adds dwell times (0.5-2.5 s), sticky exits, distance hysteresis on finals, multi-signal roll classification and trajectory checks for go-arounds. It runs once a second while the panel is mounted.
+`detectRawFlightPhase` (`flightPhaseDetector.ts:478-764`) classifies from the interpolated (delayed) state: on a runway polygon below 100 ft and aligned it returns a roll phase by acceleration, then speed and flight plan; on the ground otherwise pushback (track vs heading over 90 deg), taxi, hold-short, stopped; airborne it checks go-around (climbing within 2 nm of a threshold) first, then final by track alignment, inbound bearing (2 and 6 nm) and height (at or below a 3 deg glidepath plus 1000 ft above the threshold, falling back to the field elevation when the runway has none), departure climb, base-to-final (same height ceiling), pattern, inbound. `stabilizePhase` adds dwell times (0.5-2.5 s), sticky exits, distance hysteresis on finals, multi-signal roll classification and trajectory checks for go-arounds. It runs once a second while the panel is mounted.
 
 ### Findings (most visible first)
 

@@ -311,7 +311,19 @@ describe('motion under the 15 s VATSIM feed alone', () => {
 
 describe('findings the review measured that are still bugs today', () => {
   // TC3D-49
-  it.todo('7.5 a climbing aircraft over the far threshold is labelled climbing, not "Short Final" (TC3D-49)')
+  it('7.5 a climbing aircraft over the runway stops reading "Short Final" when it climbs, not when it passes the threshold (TC3D-49)', () => {
+    // GA1 starts its go-around 863 m before the 09 threshold and passes it about 10 s later. With
+    // the finals check ahead of the climb check it stays Short Final until it has crossed the
+    // threshold; with the climb check first it leaves the final phases as soon as it climbs.
+    const goAroundFrames = framesFor(vnas, 'GA1').filter((r) => r.truth.segment === 'go_around')
+    expect(goAroundFrames.length).toBeGreaterThan(0)
+    const truthStartS = minValue(goAroundFrames, (r) => r.tLocal)
+    const leftFinals = (vnas.phases.get('GA1') ?? []).find(
+      (p) => p.segment === 'go_around' && p.phase !== 'short_final' && p.phase !== 'long_final',
+    )
+    const offsetS = leftFinals ? leftFinals.tLocal - truthStartS : Number.POSITIVE_INFINITY
+    expect(offsetS, `left the final phases ${offsetS.toFixed(1)} s after the go-around began`).toBeLessThanOrEqual(8)
+  })
   // TC3D-50
   it.todo(
     '3.1 isOnGround follows the timeline after the first frame, so a vNAS-first departure is not glued to the runway (TC3D-50)',
