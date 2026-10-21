@@ -15,12 +15,12 @@ Ordering: the items are grouped into waves in [MAIN.md](./MAIN.md) by shared fil
 
 ### A1. Cesium 1.140 → 1.145
 
-- [ ] `A1.1` Bump `cesium` to `^1.145.0`, `pnpm install`, `pnpm run typecheck`, `pnpm biome check src/`.
-- [ ] `A1.2` Remove the two `@ts-expect-error` comments for `SkyBox.show` (`CesiumViewer.tsx:333`, `ModelPreviewModal.tsx:53`) — typings fixed in 1.141.
-- [ ] `A1.3` Confirm `dompurify` resolves to ≥ 3.4.5 in `pnpm-lock.yaml` (CVE-2026-49458; lockfile currently has 3.3.3).
-- [ ] `A1.4` Smoke-test terrain flattening. `terrain/FlatteningTerrainProvider.ts:1060-1152` reads private `QuantizedMeshTerrainData` fields with no public replacement; re-verify on every Cesium bump.
-- [ ] `A1.5` Smoke-test the other private-API sites: `globe._surface._tileReplacementQueue.trimTiles` patch (`useCesiumViewer.ts:377-389`), `shadowMap._terrainBias` / `_primitiveBias` (`useCesiumLighting.ts:148-172`), `scene.frameState.cullingVolume` (`useRenderCulling.ts:148-158`), perf HUD counters (`CesiumViewer.tsx:868-871`).
-- [ ] `A1.6` Verify Cesium workers still resolve (`Build/Cesium/Workers/*`) and imagery decodes — silent 404s are the known failure mode with `vite-plugin-static-copy`.
+- [x] `A1.1` Bump `cesium` to `^1.146.0` (landed on `feat/cesium-1.145`, TC3D-191), `pnpm install`, `pnpm run typecheck`, `pnpm biome check src/`.
+- [x] `A1.2` Remove the two `@ts-expect-error` comments for `SkyBox.show` (`CesiumViewer.tsx:333`, `ModelPreviewModal.tsx:53`) — typings fixed in 1.141.
+- [x] `A1.3` Confirm `dompurify` resolves to ≥ 3.4.5 in `pnpm-lock.yaml` (CVE-2026-49458; lockfile currently has 3.3.3).
+- [x] `A1.4` Smoke-test terrain flattening. `terrain/FlatteningTerrainProvider.ts:1060-1152` reads private `QuantizedMeshTerrainData` fields with no public replacement; re-verify on every Cesium bump.
+- [x] `A1.5` Smoke-test the other private-API sites: `globe._surface._tileReplacementQueue.trimTiles` patch (`useCesiumViewer.ts:377-389`), `shadowMap._terrainBias` / `_primitiveBias` (`useCesiumLighting.ts:148-172`), `scene.frameState.cullingVolume` (`useRenderCulling.ts:148-158`), perf HUD counters (`CesiumViewer.tsx:868-871`).
+- [x] `A1.6` Verify Cesium workers still resolve (`Build/Cesium/Workers/*`) and imagery decodes — silent 404s are the known failure mode with `vite-plugin-static-copy`.
 
 Upstream fixes gained by this bump that touch code we run:
 - 1.144 — one-frame black flash from stale framebuffer binding cache (post-process stages + shadow maps trigger it).
@@ -46,7 +46,7 @@ Upstream fixes the D and F items rely on:
 
 ## B. Bugs found during the audit
 
-- [ ] `B1` `shadowMap.darkness` is inverted (`1 - x`) at `useCesiumLighting.ts:125,142` but not at `useCesiumViewer.ts:344`. Initial and updated shadow darkness disagree. Pick one convention.
+- [x] `B1` `shadowMap.darkness` is inverted (`1 - x`) at `useCesiumLighting.ts:125,142` but not at `useCesiumViewer.ts:344`. Initial and updated shadow darkness disagree. Pick one convention.
 - [ ] `B2` `syncCamera` runs twice per frame: once from the `postRender` handler (`CesiumViewer.tsx:862-893`) and again inside `render()` (`useBabylonOverlay.ts:238-242`). Drop one call.
 - [ ] `B3` Memory-leak warning at `CesiumViewer.tsx:984-999` can never fire: `getMemoryCounters()` in `useBabylonOverlay.ts:305-318` returns hardcoded zeros. Either wire `getLabelMemoryCounters()` (exists, never called) plus a real weather counter, or delete the warning.
 - [ ] `B4` Precipitation texture is fetched from `https://assets.babylonjs.com/textures/flare.png` at runtime (`useBabylonPrecipitation.ts:9`). Vendor it under `src/renderer/public/` so rain works offline / first run.
@@ -94,7 +94,7 @@ Upstream fixes the D and F items rely on:
 
 ## G. Dead code and dead dependencies
 
-- [ ] `G1` Remove `resium` from `package.json` — declared, zero imports.
+- [x] `G1` Remove `resium` from `package.json` — declared, zero imports.
 - [ ] `G2` Delete `src/renderer/utils/tileCache.ts` — IndexedDB caching providers, imported nowhere; the old DB is explicitly deleted at startup (`CesiumViewer.tsx:552`).
 - [ ] `G3` Delete the unused half of `utils/cesiumFrustumPatch.ts` (`applyEyeOffset`, `applyFrustumXOffset`, `resetFrustumOffset`, `applyCameraPositionOffset`, `renderStereoFrame`, `renderStereo`, `calculateStereoOffset`, `clearFrustumState`, `clearCameraState`) and `useCesiumVRRotation` (`useCesiumStereo.ts:289`).
 - [ ] `G4` Delete or wire the 27-line commented-out near-plane block at `CesiumViewer.tsx:346-379` (setting still read as `_cameraNearPlane` at `:133`).
