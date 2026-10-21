@@ -6,9 +6,10 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ### Added
 - New **Show Moon** setting under Settings → Graphics lets you hide the moon from the sky.
-- vNAS can join your CRC session on a YAAT training server: YAAT1, or YAAT Local when a local YAAT server is running.
+- vNAS can join your CRC session on a YAAT training server: YAAT1, or YAAT Local when a local YAAT server is running, with once-a-second aircraft updates as on live vNAS.
 
 ### Fixed
+- vNAS no longer writes your sign-in tokens into the log file or into connection error messages.
 - vNAS: aircraft no longer linger in Nearby Aircraft after your CRC session ends, and each update arrives once instead of several times.
 
 ## [0.2.0-alpha] - 2026-06-12

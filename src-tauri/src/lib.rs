@@ -110,14 +110,16 @@ static MINIMIZE_TO_TRAY: Mutex<bool> = Mutex::new(false);
 // =============================================================================
 
 use tracing_appender::non_blocking::WorkerGuard;
+use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 // Keep the non-blocking writer guard alive for the lifetime of the app
 static LOG_GUARD: Mutex<Option<WorkerGuard>> = Mutex::new(None);
 
-/// Initialize tracing subscriber with optional file logging.
-/// If TOWERCAB_LOG_FILE env var is set, logs go to both stdout and the file.
-fn init_logging() {
+/// The two filters every log layer sits behind: `rust_log` (the `RUST_LOG` value, or the
+/// default filter when it is unset or invalid), and a fixed filter keeping the vNAS crate's
+/// `SECRET_LOG_TARGETS` off.
+fn log_filters(rust_log: Option<&str>) -> (EnvFilter, Targets) {
     // In release builds, disable logs from the private vNAS crate to keep implementation private.
     // In debug builds, enable debug logging for both the main app and vNAS crate.
     #[cfg(debug_assertions)]
@@ -125,8 +127,100 @@ fn init_logging() {
     #[cfg(not(debug_assertions))]
     let default_filter = "info,towercab_3d=debug,towercab_3d_vnas=off";
 
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(default_filter));
+    let env_filter = rust_log
+        .and_then(|directives| EnvFilter::try_new(directives).ok())
+        .unwrap_or_else(|| EnvFilter::new(default_filter));
+
+    // A second, fixed filter beside RUST_LOG's: a record passes only if both filters let it
+    // through, so no RUST_LOG directive (a field or span directive included, which EnvFilter
+    // ranks ahead of a plain `target=off`) can turn these targets back on.
+    let secret_filter = Targets::new().with_default(LevelFilter::TRACE);
+    #[cfg(feature = "vnas")]
+    let secret_filter = secret_filter.with_targets(
+        towercab_3d_vnas::SECRET_LOG_TARGETS.map(|target| (target, LevelFilter::OFF)),
+    );
+    (env_filter, secret_filter)
+}
+
+#[cfg(all(test, feature = "vnas"))]
+mod log_filter_tests {
+    use super::log_filters;
+    use tracing::callsite::{Callsite, Identifier};
+    use tracing::field::FieldSet;
+    use tracing::metadata::Kind;
+    use tracing::subscriber::Interest;
+    use tracing::{Level, Metadata, Subscriber};
+    use tracing_subscriber::layer::SubscriberExt;
+
+    /// The callsite of a `log` record bridged into tracing, whose one field is `message`.
+    struct LogRecordCallsite(&'static Metadata<'static>);
+
+    impl Callsite for LogRecordCallsite {
+        fn set_interest(&self, _interest: Interest) {}
+
+        fn metadata(&self) -> &Metadata<'_> {
+            self.0
+        }
+    }
+
+    static HANDSHAKE: LogRecordCallsite = LogRecordCallsite(&HANDSHAKE_META);
+    static HANDSHAKE_META: Metadata<'static> = Metadata::new(
+        "log event",
+        "tungstenite::handshake::client",
+        Level::TRACE,
+        None,
+        None,
+        None,
+        FieldSet::new(&["message"], Identifier(&HANDSHAKE)),
+        Kind::EVENT,
+    );
+    static APP: LogRecordCallsite = LogRecordCallsite(&APP_META);
+    static APP_META: Metadata<'static> = Metadata::new(
+        "log event",
+        "towercab_3d",
+        Level::TRACE,
+        None,
+        None,
+        None,
+        FieldSet::new(&["message"], Identifier(&APP)),
+        Kind::EVENT,
+    );
+
+    /// Whether the filters `init_logging` builds for `rust_log` let a record of `metadata`
+    /// through. Builds the subscriber without installing it anywhere.
+    fn enabled(rust_log: &str, metadata: &'static Metadata<'static>) -> bool {
+        let (env_filter, secret_filter) = log_filters(Some(rust_log));
+        let subscriber = tracing_subscriber::registry()
+            .with(env_filter)
+            .with(secret_filter);
+        subscriber.register_callsite(metadata);
+        subscriber.enabled(metadata)
+    }
+
+    #[test]
+    fn secret_log_targets_stay_off_whatever_rust_log_says() {
+        for rust_log in [
+            "trace",
+            "tungstenite=trace",
+            "tungstenite::handshake::client=trace",
+            "tungstenite::handshake::client[message]=trace",
+        ] {
+            assert!(
+                !enabled(rust_log, &HANDSHAKE_META),
+                "RUST_LOG={rust_log} let tungstenite's handshake trace through"
+            );
+        }
+        assert!(
+            enabled("trace", &APP_META),
+            "the app's own trace logs should pass RUST_LOG=trace"
+        );
+    }
+}
+
+/// Initialize tracing subscriber with optional file logging.
+/// If TOWERCAB_LOG_FILE env var is set, logs go to both stdout and the file.
+fn init_logging() {
+    let (env_filter, secret_filter) = log_filters(std::env::var("RUST_LOG").ok().as_deref());
 
     if let Ok(path) = std::env::var("TOWERCAB_LOG_FILE") {
         // Create parent directories if needed
@@ -165,6 +259,7 @@ fn init_logging() {
 
                 tracing_subscriber::registry()
                     .with(env_filter)
+                    .with(secret_filter)
                     .with(stdout_layer)
                     .with(file_layer)
                     .init();
@@ -175,6 +270,7 @@ fn init_logging() {
                 // Fall back to stdout only
                 tracing_subscriber::registry()
                     .with(env_filter)
+                    .with(secret_filter)
                     .with(fmt::layer())
                     .init();
                 tracing::warn!("Failed to open log file {}: {}", path, e);
@@ -184,6 +280,7 @@ fn init_logging() {
         // No log file configured, stdout only
         tracing_subscriber::registry()
             .with(env_filter)
+            .with(secret_filter)
             .with(fmt::layer())
             .init();
     }
