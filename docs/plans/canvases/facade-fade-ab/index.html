@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Facade Fade A/B</title>
+<style>
+  :root {
+    --bg: #f6f6f3;
+    --panel: #ffffff;
+    --text: #1d1f22;
+    --muted: #5d636b;
+    --rule: #d9dbdf;
+    --accent: #0b6bcb;
+    --note-bg: #fff6dc;
+    --note-rule: #e8c766;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #131518;
+      --panel: #1b1e22;
+      --text: #e7e9ec;
+      --muted: #9aa1aa;
+      --rule: #30353b;
+      --accent: #6cb4ff;
+      --note-bg: #2b2616;
+      --note-rule: #7a6420;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #131518;
+    --panel: #1b1e22;
+    --text: #e7e9ec;
+    --muted: #9aa1aa;
+    --rule: #30353b;
+    --accent: #6cb4ff;
+    --note-bg: #2b2616;
+    --note-rule: #7a6420;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1800px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  h2 { font-size: 1.15rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 16px; }
+  .note {
+    background: var(--note-bg);
+    border-left: 4px solid var(--note-rule);
+    padding: 10px 14px;
+    margin: 0 0 20px;
+    border-radius: 4px;
+  }
+  .toc { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0 0 24px; padding: 0; list-style: none; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  section {
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    padding: 16px;
+    margin: 0 0 20px;
+  }
+  .cap { color: var(--muted); margin: 0 0 12px; font-size: 0.92rem; }
+  .cap code, td code, p code { font-size: 0.88em; }
+  .trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  figure { margin: 0; }
+  figure img, video { display: block; width: 100%; height: auto; border-radius: 4px; border: 1px solid var(--rule); }
+  figcaption { font-weight: 600; font-size: 0.9rem; margin: 4px 0 0; }
+  figcaption span { font-weight: 400; color: var(--muted); }
+  .clip { max-width: 1000px; }
+  table { border-collapse: collapse; width: 100%; max-width: 900px; font-size: 0.92rem; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--rule); }
+  th { color: var(--muted); font-weight: 600; }
+  td.num { font-variant-numeric: tabular-nums; }
+  .tables { display: grid; gap: 20px; }
+  .tables > div { overflow-x: auto; }
+  @media (max-width: 900px) {
+    .trio { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Facade window shader: fade A/B</h1>
+  <p class="sub">TC3D-162 working tree, real desktop app (dev build), 1596&times;800 Cesium canvas. Each view shows the buildings tileset with the shader removed (<b>before</b>), the shader with the distance fade off (<b>fade-off</b>, <code>u_fade</code> 0) and on (<b>fade-on</b>, <code>u_fade</code> 1). Click an image for full size.</p>
+
+  <p class="note">One window style on every building for now (hangars and garages included); building types come with TC3D-164.</p>
+
+  <p class="cap">Uniforms in every capture: <code>u_fadeStart</code> 0.25, <code>u_fadeEnd</code> 0.6 (cells per pixel), <code>u_cover</code> 0.30, <code>u_glassMean</code> (0.0249, 0.0373, 0.0540) linear. Time of day through the app's fixed-time mode: noon = 12:00 local, night = 22:00 local. Heading, pitch and FOV in degrees; offsets in metres east / north / up from the tower eye.</p>
+
+  <ul class="toc">
+    <li><a href="#ksfo-tower-noon">KSFO tower, noon</a></li>
+    <li><a href="#ksfo-tower-night">KSFO tower, night</a></li>
+    <li><a href="#ksfo-graze-noon">KSFO grazing, noon</a></li>
+    <li><a href="#ksfo-graze-night">KSFO grazing, night</a></li>
+    <li><a href="#pan">KSFO grazing pan clip</a></li>
+    <li><a href="#ksfo-garage-noon">KSFO garage, noon</a></li>
+    <li><a href="#ksfo-garage-night">KSFO garage, night</a></li>
+    <li><a href="#koak-tower-noon">KOAK tower, noon</a></li>
+    <li><a href="#koak-tower-night">KOAK tower, night</a></li>
+    <li><a href="#koak-hangar-noon">KOAK hangar, noon</a></li>
+    <li><a href="#koak-hangar-night">KOAK hangar, night</a></li>
+    <li><a href="#numbers">Frame time and measurements</a></li>
+  </ul>
+
+  <section id="ksfo-tower-noon">
+    <h2>KSFO tower view, noon</h2>
+    <p class="cap">Tower eye, heading 290, pitch &minus;4, FOV 60. Terminals and the central garage in front, San Bruno residential 2&ndash;5 km behind.</p>
+    <div class="trio">
+      <figure><a href="ksfo-tower-noon-before.png"><img src="ksfo-tower-noon-before.png" alt="KSFO tower view at noon, shader removed"></a><figcaption>before <span>no shader</span></figcaption></figure>
+      <figure><a href="ksfo-tower-noon-fade-off.png"><img src="ksfo-tower-noon-fade-off.png" alt="KSFO tower view at noon, fade off"></a><figcaption>fade-off <span>u_fade 0</span></figcaption></figure>
+      <figure><a href="ksfo-tower-noon-fade-on.png"><img src="ksfo-tower-noon-fade-on.png" alt="KSFO tower view at noon, fade on"></a><figcaption>fade-on <span>u_fade 1</span></figcaption></figure>
+    </div>
+  </section>
+
+  <section id="ksfo-tower-night">
+    <h2>KSFO tower view, night</h2>
+    <p class="cap">Same framing at 22:00 local. Lit share of windows 0.28.</p>
+    <div class="trio">
+      <figure><a href="ksfo-tower-night-before.png"><img src="ksfo-tower-night-before.png" alt="KSFO tower view at night, shader removed"></a><figcaption>before <span>no shader</span></figcaption></figure>
+      <figure><a href="ksfo-tower-night-fade-off.png"><img src="ksfo-tower-night-fade-off.png" alt="KSFO tower view at night, fade off"></a><figcaption>fade-off <span>u_fade 0</span></figcaption></figure>
+      <figure><a href="ksfo-tower-night-fade-on.png"><img src="ksfo-tower-night-fade-on.png" alt="KSFO tower view at night, fade on"></a><figcaption>fade-on <span>u_fade 1</span></figcaption></figure>
+    </div>
+  </section>
+
+  <section id="ksfo-graze-noon">
+    <h2>KSFO grazing view across San Bruno, noon</h2>
+    <p class="cap">Eye offset (&minus;1800, &minus;1200, +60), heading 320, pitch &minus;2, FOV 60: dense houses from 0.5 km to about 5 km at a grazing angle.</p>
+    <div class="trio">
+      <figure><a href="ksfo-graze-noon-before.png"><img src="ksfo-graze-noon-before.png" alt="KSFO grazing view at noon, shader removed"></a><figcaption>before <span>no shader</span></figcaption></figure>
+      <figure><a href="ksfo-graze-noon-fade-off.png"><img src="ksfo-graze-noon-fade-off.png" alt="KSFO grazing view at noon, fade off"></a><figcaption>fade-off <span>u_fade 0</span></figcaption></figure>
+      <figure><a href="ksfo-graze-noon-fade-on.png"><img src="ksfo-graze-noon-fade-on.png" alt="KSFO grazing view at noon, fade on"></a><figcaption>fade-on <span>u_fade 1</span></figcaption></figure>
+    </div>
+  </section>
+
+  <section id="ksfo-graze-night">
+    <h2>KSFO grazing view across San Bruno, night</h2>
+    <p class="cap">Same framing at 22:00 local.</p>
+    <div class="trio">
+      <figure><a href="ksfo-graze-night-before.png"><img src="ksfo-graze-night-before.png" alt="KSFO grazing view at night, shader removed"></a><figcaption>before <span>no shader</span></figcaption></figure>
+      <figure><a href="ksfo-graze-night-fade-off.png"><img src="ksfo-graze-night-fade-off.png" alt="KSFO grazing view at night, fade off"></a><figcaption>fade-off <span>u_fade 0</span></figcaption></figure>
+      <figure><a href="ksfo-graze-night-fade-on.png"><img src="ksfo-graze-night-fade-on.png" alt="KSFO grazing view at night, fade on"></a><figcaption>fade-on <span>u_fade 1</span></figcaption></figure>
+    </div>
+  </section>
+
+  <section id="pan">
+    <h2>KSFO grazing view, slow pan (shimmer)</h2>
+    <p class="cap">A 10&deg; / 5 s pan at 60 fps moves 0.033&deg; a frame. These are 60 consecutive frames at that step (2&deg; of the pan) from heading 318, cropped to the dense band, fade-off above and fade-on below, played at half speed (30 fps) on a loop. Noon.</p>
+    <video class="clip" src="ksfo-graze-noon-pan.mp4" autoplay loop muted playsinline controls></video>
+  </section>
+
+  <section id="ksfo-garage-noon">
+    <h2>KSFO central garage, close, noon</h2>
+    <p class="cap">Tower eye, heading 235, pitch &minus;14, FOV 35: the curved garage facade just below the tower.</p>
+    <div class="trio">
+      <figure><a href="ksfo-garage-noon-before.png"><img src="ksfo-garage-noon-before.png" alt="KSFO garage at noon, shader removed"></a><figcaption>before <span>no shader</span></figcaption></figure>
+      <figure><a href="ksfo-garage-noon-fade-off.png"><img src="ksfo-garage-noon-fade-off.png" alt="KSFO garage at noon, fade off"></a><figcaption>fade-off <span>u_fade 0</span></figcaption></figure>
+      <figure><a href="ksfo-garage-noon-fade-on.png"><img src="ksfo-garage-noon-fade-on.png" alt="KSFO garage at noon, fade on"></a><figcaption>fade-on <span>u_fade 1</span></figcaption></figure>
+    </div>
+  </section>
+
+  <section id="ksfo-garage-night">
+    <h2>KSFO central garage, close, night</h2>
+    <p class="cap">Same framing at 22:00 local.</p>
+    <div class="trio">
+      <figure><a href="ksfo-garage-night-before.png"><img src="ksfo-garage-night-before.png" alt="KSFO garage at night, shader removed"></a><figcaption>before <span>no shader</span></figcaption></figure>
+      <figure><a href="ksfo-garage-night-fade-off.png"><img src="ksfo-garage-night-fade-off.png" alt="KSFO garage at night, fade off"></a><figcaption>fade-off <span>u_fade 0</span></figcaption></figure>
+      <figure><a href="ksfo-garage-night-fade-on.png"><img src="ksfo-garage-night-fade-on.png" alt="KSFO garage at night, fade on"></a><figcaption>fade-on <span>u_fade 1</span></figcaption></figure>
+    </div>
+  </section>
+
+  <section id="koak-tower-noon">
+    <h2>KOAK tower view, noon</h2>
+    <p class="cap">Tower eye raised 25 m (the default eye sits under an OSM roof with no tower mod installed), heading 70, pitch &minus;6, FOV 60: cargo ramp in front, Oakland behind.</p>
+    <div class="trio">
+      <figure><a href="koak-tower-noon-before.png"><img src="koak-tower-noon-before.png" alt="KOAK tower view at noon, shader removed"></a><figcaption>before <span>no shader</span></figcaption></figure>
+      <figure><a href="koak-tower-noon-fade-off.png"><img src="koak-tower-noon-fade-off.png" alt="KOAK tower view at noon, fade off"></a><figcaption>fade-off <span>u_fade 0</span></figcaption></figure>
+      <figure><a href="koak-tower-noon-fade-on.png"><img src="koak-tower-noon-fade-on.png" alt="KOAK tower view at noon, fade on"></a><figcaption>fade-on <span>u_fade 1</span></figcaption></figure>
+    </div>
+  </section>
+
+  <section id="koak-tower-night">
+    <h2>KOAK tower view, night</h2>
+    <p class="cap">Same framing at 22:00 local.</p>
+    <div class="trio">
+      <figure><a href="koak-tower-night-before.png"><img src="koak-tower-night-before.png" alt="KOAK tower view at night, shader removed"></a><figcaption>before <span>no shader</span></figcaption></figure>
+      <figure><a href="koak-tower-night-fade-off.png"><img src="koak-tower-night-fade-off.png" alt="KOAK tower view at night, fade off"></a><figcaption>fade-off <span>u_fade 0</span></figcaption></figure>
+      <figure><a href="koak-tower-night-fade-on.png"><img src="koak-tower-night-fade-on.png" alt="KOAK tower view at night, fade on"></a><figcaption>fade-on <span>u_fade 1</span></figcaption></figure>
+    </div>
+  </section>
+
+  <section id="koak-hangar-noon">
+    <h2>KOAK south-field hangar, close, noon</h2>
+    <p class="cap">Tower eye +25 m, heading 182.8, pitch &minus;9.9, FOV 12 (telephoto on a long hangar on the south field).</p>
+    <div class="trio">
+      <figure><a href="koak-hangar-noon-before.png"><img src="koak-hangar-noon-before.png" alt="KOAK hangar at noon, shader removed"></a><figcaption>before <span>no shader</span></figcaption></figure>
+      <figure><a href="koak-hangar-noon-fade-off.png"><img src="koak-hangar-noon-fade-off.png" alt="KOAK hangar at noon, fade off"></a><figcaption>fade-off <span>u_fade 0</span></figcaption></figure>
+      <figure><a href="koak-hangar-noon-fade-on.png"><img src="koak-hangar-noon-fade-on.png" alt="KOAK hangar at noon, fade on"></a><figcaption>fade-on <span>u_fade 1</span></figcaption></figure>
+    </div>
+  </section>
+
+  <section id="koak-hangar-night">
+    <h2>KOAK south-field hangar, close, night</h2>
+    <p class="cap">Same framing at 22:00 local.</p>
+    <div class="trio">
+      <figure><a href="koak-hangar-night-before.png"><img src="koak-hangar-night-before.png" alt="KOAK hangar at night, shader removed"></a><figcaption>before <span>no shader</span></figcaption></figure>
+      <figure><a href="koak-hangar-night-fade-off.png"><img src="koak-hangar-night-fade-off.png" alt="KOAK hangar at night, fade off"></a><figcaption>fade-off <span>u_fade 0</span></figcaption></figure>
+      <figure><a href="koak-hangar-night-fade-on.png"><img src="koak-hangar-night-fade-on.png" alt="KOAK hangar at night, fade on"></a><figcaption>fade-on <span>u_fade 1</span></figcaption></figure>
+    </div>
+  </section>
+
+  <section id="numbers">
+    <h2>Frame time and measurements</h2>
+    <div class="tables">
+      <div>
+        <p class="cap">Frame time at the KSFO grazing view (noon), <code>requestRenderMode</code> off, <code>resolutionScale</code> 2, 300 frames each, two runs per mode in the order before, fade-off, fade-on, before, fade-off, fade-on. Milliseconds. Debug build: the frame is CPU-bound (Cesium draw-command work), so these show no shader cost either way. GPU time is unmeasured: the harness GPU timer read 0 during these runs and its 300-sample window did not change between them.</p>
+        <table>
+          <thead><tr><th>Mode</th><th>Run</th><th>Frame interval median</th><th>Frame interval p95</th><th>Cesium draw median (CPU)</th></tr></thead>
+          <tbody>
+            <tr><td>before</td><td>1</td><td class="num">30.0</td><td class="num">34.5</td><td class="num">25.4</td></tr>
+            <tr><td>before</td><td>2</td><td class="num">30.6</td><td class="num">35.5</td><td class="num">25.9</td></tr>
+            <tr><td>fade-off</td><td>1</td><td class="num">30.1</td><td class="num">34.8</td><td class="num">25.6</td></tr>
+            <tr><td>fade-off</td><td>2</td><td class="num">29.6</td><td class="num">35.3</td><td class="num">25.2</td></tr>
+            <tr><td>fade-on</td><td>1</td><td class="num">29.8</td><td class="num">34.5</td><td class="num">25.4</td></tr>
+            <tr><td>fade-on</td><td>2</td><td class="num">28.7</td><td class="num">32.8</td><td class="num">24.5</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <p class="cap">Shimmer during the pan: frame <i>i</i> against frame <i>i</i>+9 shifted back by the pan (7 px), mean absolute grey-level residual over 51 pairs. What the pan does not explain is shimmer and crawl; &ldquo;before&rdquo; is the no-shader baseline.</p>
+        <table>
+          <thead><tr><th>Mode</th><th>Far rows</th><th>Mid rows</th><th>Near rows</th></tr></thead>
+          <tbody>
+            <tr><td>before</td><td class="num">4.94</td><td class="num">6.90</td><td class="num">5.77</td></tr>
+            <tr><td>fade-off</td><td class="num">5.25</td><td class="num">8.62</td><td class="num">6.78</td></tr>
+            <tr><td>fade-on</td><td class="num">4.92</td><td class="num">8.40</td><td class="num">6.67</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <p class="cap">Brightness of the far tint: mean linear luminance of horizontal bands in the grazing captures, fade-on divided by fade-off. 1.000 means the flat tint keeps the window grid's average.</p>
+        <table>
+          <thead><tr><th>View</th><th>Far band</th><th>Mid band</th><th>Near band</th></tr></thead>
+          <tbody>
+            <tr><td>KSFO grazing, noon</td><td class="num">0.989</td><td class="num">0.999</td><td class="num">1.000</td></tr>
+            <tr><td>KSFO grazing, night</td><td class="num">1.141</td><td class="num">1.060</td><td class="num">1.011</td></tr>
+            <tr><td>KSFO tower, noon</td><td class="num">1.000</td><td class="num">1.000</td><td class="num">1.000</td></tr>
+            <tr><td>KSFO tower, night</td><td class="num">1.020</td><td class="num">1.003</td><td class="num">1.000</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</main>
+</body>
+</html>
