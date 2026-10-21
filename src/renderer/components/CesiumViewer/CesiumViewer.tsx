@@ -1,5 +1,6 @@
 import * as Cesium from 'cesium'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createFacadeShader } from '@/utils/facadeShader'
 import { useAgentHarness } from '../../hooks/useAgentHarness'
 import { setInterpolationTerrainData, useAircraftInterpolation } from '../../hooks/useAircraftInterpolation'
 import { useAircraftModels } from '../../hooks/useAircraftModels'
@@ -720,6 +721,8 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
 
           // Disable building shadows when aircraftShadowsOnly is enabled
           tileset.shadows = aircraftShadowsOnly ? Cesium.ShadowMode.DISABLED : Cesium.ShadowMode.ENABLED
+
+          tileset.customShader = createFacadeShader()
 
           viewer.scene.primitives.add(tileset)
           currentTileset = tileset

@@ -29,6 +29,34 @@ export const AIRCRAFT_POOL_SIZE = 100
 export const MODEL_POOL_SIZE = 50
 
 // ============================================================================
+// FACADE SHADER
+// ============================================================================
+
+/** Storey height (metres) of the window grid the facade shader lays on OSM building walls. */
+export const FACADE_FLOOR_HEIGHT_M = 3.0
+
+/** Bay width (metres): the horizontal spacing of the facade shader's windows. */
+export const FACADE_BAY_WIDTH_M = 2.6
+
+/** Lower-left corner of the window rectangle in one grid cell, as fractions of the bay width and storey height. */
+export const FACADE_WINDOW_LO = [0.2, 0.32] as const
+
+/** Upper-right corner of the window rectangle in one grid cell, as fractions of the bay width and storey height. */
+export const FACADE_WINDOW_HI = [0.8, 0.82] as const
+
+/**
+ * Grid-cell footprint (cells per pixel, the larger of the two axes) where the window grid starts
+ * fading to the facade's flat mean tint.
+ */
+export const FACADE_FADE_START = 0.25
+
+/** Grid-cell footprint (cells per pixel) where the window grid has fully faded to the flat tint. */
+export const FACADE_FADE_END = 0.6
+
+/** Share of windows lit at night. */
+export const FACADE_LIT_SHARE = 0.28
+
+// ============================================================================
 // SHADOW CONFIGURATION
 // ============================================================================
 
