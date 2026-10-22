@@ -12,7 +12,6 @@
 - [ ] TC3D-264 Hand the converter a JSON job with safe output names and read a JSON result · release vNext
 - [ ] TC3D-28 msfs.rs test reads the real MSFS Community folder
 - [ ] TC3D-265 Run every model conversion through one Rust owner with a timeout and a shared limit · release vNext
-- [ ] TC3D-266 Converter quick wins: exact cfg keys, atomic writes, per-callsign livery cache · release vNext
 - [ ] TC3D-267 Add fixture tests to the converter's Python, Rust and TypeScript layers
 - [ ] TC3D-127 Remote browsers draw built-in models instead of the host's MSFS liveries
 - [ ] TC3D-131 Skip the model-matching tests when the MSFS addon data is absent · release vNext
@@ -20,11 +19,11 @@
 - [ ] TC3D-289 Keep image positions when a glTF image has no URI in the converter
 - [ ] TC3D-290 Replace the converter's deprecated Pillow getdata call
 - [ ] TC3D-291 Finish the converter's package checks: extra device names, hard links, partial junctions
+- [ ] TC3D-293 Clear a no-type airline aircraft's pending model when its conversion finishes elsewhere
 
 ## Current focus
 
 - [/] TC3D-45 Join a YAAT room as its member, with no CRC session · release vNext
-- [ ] TC3D-65 Phase badge: runway labels at the wrong times and labels lagging the display · release vNext
 - [ ] TC3D-196 A vNAS go-around is labelled Climbing, never Go Around
 - [ ] TC3D-260 vNAS crate: a kick hidden in a lagged burst lets the resync join the next room
 - [ ] TC3D-288 Harden the vNAS crate's session actor: teardown race, stuck Connecting, hung calls, push starvation
@@ -124,6 +123,7 @@
   - [ ] TC3D-283 Stop a gear retract under way reversing when the aircraft crosses 150 ft
   - [ ] TC3D-284 Stop scanning every observation per frame for the newest height sample
   - [ ] TC3D-285 Spin VATSIM wheels backwards on pushback
+  - [/] TC3D-65 Phase badge: runway labels at the wrong times and labels lagging the display · release vNext
 - [ ] TC3D-247 Aircraft motion follow-ups from TC3D-50's review
 - [ ] TC3D-257 Split interpolateTimeline (550 lines) into one function per branch
 - [ ] TC3D-259 Order the aircraft timeline by observedAt so a late packet cannot lerp backwards
@@ -216,7 +216,6 @@
 - [ ] TC3D-278 Review and land PR #215 (dependabot)
 - [ ] TC3D-279 Review and land PR #214 (dependabot)
 - [ ] TC3D-287 Lint and format tests/ and scripts/ with Biome
-- [ ] TC3D-292 Disabled mods may still load after a restart · release vNext
 
 ## Settings drawer
 
