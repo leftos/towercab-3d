@@ -87,6 +87,7 @@ describe('vnasStore.subscribeToFacility', () => {
             subscribedFacilities: [...hubFacilities],
             error: null,
             available: true,
+            lastSessionEnd: null,
           }
         default:
           return null
@@ -100,6 +101,7 @@ describe('vnasStore.subscribeToFacility', () => {
         subscribedFacilities: [],
         error: null,
         available: true,
+        lastSessionEnd: null,
       },
     })
   })

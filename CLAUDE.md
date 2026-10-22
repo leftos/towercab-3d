@@ -97,7 +97,7 @@ The optional `vnas` feature enables 1Hz real-time aircraft updates via the priva
 - UDP connection for 1Hz data streaming
 - Server-initiated callbacks (HandleSessionStarted) for session management
 - Ground track field for accurate aircraft extrapolation
-- WaitingForSession state when TC3D connects before CRC
+- WaitingForSession state while no session is joined: TC3D connected before CRC, or a YAAT room member whose room has no open session (a room member joins with no CRC session)
 - Environments: Live, Sweatbox 1/2, Test, and two YAAT training servers (`yaat1`, `yaatlocal`; URLs in the crate's `CLAUDE.md` "Environment URLs"). YAAT joins by negotiate like vNAS and has UDP too: from the hub's host, on the port `GetServerConfiguration` returns.
 
   YAAT1 signs in with VATSIM like Live; YAAT Local (`vnas_yaat_local_sign_in`) uses the dev server's `/vnas/auth/dev-login` with the stored login's CID or a typed one, and is offered only while `vnas_probe_yaat_local` finds a dev server at the configured URL

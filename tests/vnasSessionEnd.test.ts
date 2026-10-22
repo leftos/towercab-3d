@@ -86,6 +86,7 @@ describe('vNAS session end', () => {
         subscribedFacilities: ['OAK'],
         error: null,
         available: true,
+        lastSessionEnd: null,
       },
     })
   })

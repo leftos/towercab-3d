@@ -226,6 +226,7 @@ const DEFAULT_STATUS: VnasStatus = {
   subscribedFacilities: [],
   error: null,
   available: true, // Assume available until we check
+  lastSessionEnd: null,
 }
 
 /** The exact rejection vnas_yaat_local_sign_in sends when it has no CID to sign in with */
