@@ -337,6 +337,29 @@ def detect_animations(gltf: dict) -> bool:
     return False
 
 
+TEMP_FILE_MAX_AGE_SECONDS = 3600  # Stale temp files left behind by a killed conversion
+
+
+def sweep_stale_temp_files(folder: Path) -> None:
+    """Remove the temp files an interrupted conversion left in the output folder."""
+    cutoff = time.time() - TEMP_FILE_MAX_AGE_SECONDS
+    try:
+        entries = list(folder.iterdir())
+    except OSError as e:
+        print(f"WARNING: could not list {folder} to sweep temp files: {e}", file=sys.stderr)
+        return
+    for path in entries:
+        if not (path.name.startswith('.') and path.name.endswith('.tmp')):
+            continue
+        try:
+            if path.is_file() and path.stat().st_mtime < cutoff:
+                path.unlink()
+        except FileNotFoundError:
+            continue  # its writer renamed it into place between the listing and the removal
+        except OSError as e:
+            print(f"WARNING: could not remove stale temp file {path}: {e}", file=sys.stderr)
+
+
 def convert_single_gltf(gltf_path: Path, output_path: Path, texture_dirs: list[Path],
                         texture_scale: int | None = None,
                         source_metadata: dict | None = None) -> dict:
@@ -941,13 +964,20 @@ def convert_single_gltf(gltf_path: Path, output_path: Path, texture_dirs: list[P
     # Create output directory
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Write GLB
-    with open(output_path, 'wb') as f:
-        f.write(header)
-        f.write(json_chunk_header)
-        f.write(json_bytes)
-        f.write(bin_chunk_header)
-        f.write(bytes(bin_data))
+    # Write beside the final name, then rename into place: a failed or killed conversion
+    # never leaves a truncated GLB under the name the app loads
+    temp_path = output_path.with_name(f'.{output_path.name}.{os.getpid()}.tmp')
+    try:
+        with open(temp_path, 'wb') as f:
+            f.write(header)
+            f.write(json_chunk_header)
+            f.write(json_bytes)
+            f.write(bin_chunk_header)
+            f.write(bytes(bin_data))
+        os.replace(temp_path, output_path)
+    except BaseException:
+        temp_path.unlink(missing_ok=True)
+        raise
 
     return {
         'success': True,
@@ -1557,6 +1587,7 @@ Examples:
 
     # Ensure output directory exists
     output_path.mkdir(parents=True, exist_ok=True)
+    sweep_stale_temp_files(output_path)
 
     # Parse requested liveries FIRST (before discovery) so we can enable early stopping
     if args.liveries_file:

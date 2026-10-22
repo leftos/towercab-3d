@@ -1,14 +1,17 @@
 """Tests that the converter refuses glTF and cfg paths that leave the model's MSFS package."""
 
 import base64
+import builtins
 import io
 import json
 import os
 import struct
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from PIL import Image
 
@@ -299,6 +302,81 @@ class ConverterPathTests(unittest.TestCase):
         result = self.convert()
         self.assertTrue(result["success"])
         self.assertEqual(embedded_colours(self.output), [OK_COLOUR])
+
+
+class ConverterAtomicWriteTests(unittest.TestCase):
+    """A failed or interrupted conversion leaves no partial GLB and no temp file behind."""
+
+    def setUp(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.base = Path(temp.name)
+        self.aircraft = build_package(self.base / "Community")
+        self.output_dir = self.base / "out"
+        self.output = self.output_dir / "model.glb"
+
+    def convert(self) -> dict:
+        return converter.convert_single_gltf(
+            self.aircraft / "model" / "t.gltf", self.output, [self.aircraft / "TEXTURE"]
+        )
+
+    def output_names(self) -> list[str]:
+        if not self.output_dir.exists():
+            return []
+        return sorted(path.name for path in self.output_dir.iterdir())
+
+    def test_failed_write_leaves_no_glb_and_no_temp(self) -> None:
+        real_open = builtins.open
+
+        class FailingHandle:
+            """Fails every write after the first, as a full disk would."""
+
+            def __init__(self, handle: io.BufferedWriter) -> None:
+                self.handle = handle
+                self.writes = 0
+
+            def write(self, data: bytes) -> int:
+                self.writes += 1
+                if self.writes > 1:
+                    raise OSError("simulated disk full")
+                return self.handle.write(data)
+
+            def __enter__(self) -> "FailingHandle":
+                return self
+
+            def __exit__(self, *exc_info: object) -> bool:
+                self.handle.close()
+                return False
+
+        def failing_open(path, mode: str = "r", *args, **kwargs):
+            handle = real_open(path, mode, *args, **kwargs)
+            return FailingHandle(handle) if "w" in mode else handle
+
+        with mock.patch("builtins.open", failing_open):
+            with self.assertRaises(OSError):
+                self.convert()
+        self.assertFalse(self.output.exists())
+        self.assertEqual(self.output_names(), [])
+
+    def test_successful_convert_leaves_only_the_glb(self) -> None:
+        result = self.convert()
+        self.assertTrue(result["success"])
+        self.assertEqual(self.output_names(), ["model.glb"])
+
+    def test_stale_temps_are_swept_and_fresh_ones_kept(self) -> None:
+        self.output_dir.mkdir(parents=True)
+        stale = self.output_dir / ".old.glb.111.tmp"
+        fresh = self.output_dir / ".new.glb.222.tmp"
+        notes = self.output_dir / ".notes.txt"
+        plain_tmp = self.output_dir / "old.tmp"
+        for path in (stale, fresh, notes, plain_tmp):
+            path.write_bytes(b"x")
+        two_hours_ago = time.time() - 2 * 60 * 60
+        for path in (stale, notes, plain_tmp):
+            os.utime(path, (two_hours_ago, two_hours_ago))
+        converter.sweep_stale_temp_files(self.output_dir)
+        untouched = sorted([fresh.name, notes.name, plain_tmp.name])
+        self.assertEqual(self.output_names(), untouched)
 
 
 if __name__ == "__main__":
