@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TC3D-148 Weather Presets</title>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --panel: #ffffff;
+    --text: #1b1f24;
+    --muted: #5b6470;
+    --line: #d9dde3;
+    --accent: #1f6feb;
+    --warn: #b35900;
+    --ok: #1a7f37;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    --sans: system-ui, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1216;
+      --panel: #171b21;
+      --text: #e6e9ee;
+      --muted: #9aa4b1;
+      --line: #2a313a;
+      --accent: #58a6ff;
+      --warn: #f0a04b;
+      --ok: #56d364;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1216;
+    --panel: #171b21;
+    --text: #e6e9ee;
+    --muted: #9aa4b1;
+    --line: #2a313a;
+    --accent: #58a6ff;
+    --warn: #f0a04b;
+    --ok: #56d364;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 var(--sans); }
+  main { max-width: 1800px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 32px 0 8px; }
+  p, li { color: var(--muted); max-width: 110ch; }
+  code, .mono { font-family: var(--mono); font-size: 12.5px; }
+  .bar { display: flex; gap: 8px; align-items: center; margin: 12px 0 0; flex-wrap: wrap; }
+  button { font: inherit; padding: 4px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; }
+  button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  .grid { display: grid; grid-template-columns: 150px repeat(3, minmax(0, 1fr)); gap: 10px; align-items: start; }
+  .grid.stacked { grid-template-columns: minmax(0, 1fr); }
+  .grid.stacked .rowlabel { margin-top: 18px; }
+  .lanehead, .cell, .rowlabel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+  .lanehead h3 { margin: 0 0 6px; font-size: 16px; }
+  .lanehead table, .cell table { border-collapse: collapse; width: 100%; }
+  .lanehead td, .cell td, .cell th { padding: 1px 6px 1px 0; font-family: var(--mono); font-size: 12px; text-align: left; }
+  .cell th { color: var(--muted); font-weight: 500; }
+  .lanehead td:first-child { color: var(--muted); }
+  .cost { color: var(--accent); }
+  .look { color: var(--muted); }
+  .rowlabel strong { display: block; font-size: 15px; }
+  .rowlabel span { color: var(--muted); font-size: 12.5px; display: block; }
+  .cell img { width: 100%; height: auto; display: block; border-radius: 4px; image-rendering: auto; }
+  .cell .crop img { image-rendering: pixelated; margin-top: 6px; }
+  .cell .note { margin: 6px 0 0; font-size: 12.5px; color: var(--muted); }
+  .spacer { visibility: hidden; }
+  .grid.stacked .spacer { display: none; }
+  table.perf { border-collapse: collapse; width: 100%; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+  table.perf th, table.perf td { border-bottom: 1px solid var(--line); padding: 4px 8px; text-align: right; font-family: var(--mono); font-size: 12.5px; }
+  table.perf th:first-child, table.perf td:first-child, table.perf th:nth-child(2), table.perf td:nth-child(2) { text-align: left; }
+  .perfwrap { overflow-x: auto; }
+  .tag { display: inline-block; padding: 0 6px; border-radius: 4px; border: 1px solid var(--line); font-size: 12px; }
+  .warn { color: var(--warn); }
+  @media (max-width: 900px) {
+    .grid { grid-template-columns: minmax(0, 1fr); }
+    .spacer { display: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>TC3D-148: weather stage quality presets</h1>
+  <p>Captures from the real app (feature branch <code>feat/cesium-weather</code> at 2042739), headless Edge against <code>pnpm run vite:headless</code>, KOAK tower camera, 13:00 local fixed time, 1596&times;800 canvas. Only the cost knobs change between lanes; the look knobs (<code>densityScale</code>, <code>fogExtinction</code>, <code>fogHeightScale</code>) are the same in every lane. Clouds drift with the wind, so cloud shapes move slightly between lanes of a row (each row was shot lane after lane within about a minute).</p>
+  <p>Read the clear-sky band (pale cyan strip between the deck edge and the terrain), the blockiness of cloud edges, and the softness of the far deck. The 2&times; crops under three rows are nearest-neighbour enlargements of the same capture.</p>
+  <div class="bar">
+    <button type="button" id="stack" aria-pressed="false">Stack lanes (larger images)</button>
+  </div>
+
+  <h2>Lanes and weathers</h2>
+  <div class="grid" id="grid">
+    <div class="spacer"></div>
+    <div class="lanehead">
+      <h3>A &middot; High</h3>
+      <table>
+        <tr><td>steps</td><td class="cost">120</td></tr>
+        <tr><td>resolutionScale</td><td class="cost">0.5</td></tr>
+        <tr><td>radius</td><td class="cost">100000 m</td></tr>
+        <tr><td>densityScale</td><td class="look">0.04</td></tr>
+        <tr><td>fogExtinction</td><td class="look">1.0</td></tr>
+        <tr><td>fogHeightScale</td><td class="look">400 m</td></tr>
+      </table>
+      <p class="note">The branch's current <code>WEATHER_STAGE_QUALITY</code>.</p>
+    </div>
+    <div class="lanehead">
+      <h3>B &middot; Medium</h3>
+      <table>
+        <tr><td>steps</td><td class="cost">72</td></tr>
+        <tr><td>resolutionScale</td><td class="cost">0.375</td></tr>
+        <tr><td>radius</td><td class="cost">60000 m</td></tr>
+        <tr><td>densityScale</td><td class="look">0.04</td></tr>
+        <tr><td>fogExtinction</td><td class="look">1.0</td></tr>
+        <tr><td>fogHeightScale</td><td class="look">400 m</td></tr>
+      </table>
+      <p class="note">Steps &times;0.6 with radius &times;0.6, so rays the radius clips (near the horizon) keep High's step length; 0.56&times; the cloud-pass pixels.</p>
+    </div>
+    <div class="lanehead">
+      <h3>C &middot; Low</h3>
+      <table>
+        <tr><td>steps</td><td class="cost">48</td></tr>
+        <tr><td>resolutionScale</td><td class="cost">0.25</td></tr>
+        <tr><td>radius</td><td class="cost">40000 m</td></tr>
+        <tr><td>densityScale</td><td class="look">0.04</td></tr>
+        <tr><td>fogExtinction</td><td class="look">1.0</td></tr>
+        <tr><td>fogHeightScale</td><td class="look">400 m</td></tr>
+      </table>
+      <p class="note">Steps &times;0.4 with radius &times;0.4 (48 steps over 40 km, the pre-TC3D-125 deck); the 0.25 clamp floor, 0.25&times; the pixels.</p>
+    </div>
+
+    <div class="rowlabel"><strong>BKN025, 10 SM</strong><span>Heading 300, pitch +6, FOV 60</span><span>Stage off GPU 1.70 / 3.29 ms</span></div>
+    <div class="cell">
+      <img src="img/bkn10-high.webp" alt="High, BKN 10 SM" loading="lazy">
+      <table><tr><th>ms</th><th>median</th><th>p95</th></tr>
+        <tr><td>frameInterval</td><td>16.7</td><td>17.2</td></tr>
+        <tr><td>totalFrame</td><td>3.2</td><td>4.7</td></tr>
+        <tr><td>cesiumDraw</td><td>3.1</td><td>4.6</td></tr>
+        <tr><td>gpuCesiumMs</td><td>3.64</td><td>4.84</td></tr></table>
+      <div class="crop"><img src="img/bkn10-high-crop.webp" alt="High, BKN detail" loading="lazy"></div>
+      <p class="note">No band over the hills; a faint 1 px pale fringe on the ridge line.</p>
+    </div>
+    <div class="cell">
+      <img src="img/bkn10-medium.webp" alt="Medium, BKN 10 SM" loading="lazy">
+      <table><tr><th>ms</th><th>median</th><th>p95</th></tr>
+        <tr><td>frameInterval</td><td>16.7</td><td>16.8</td></tr>
+        <tr><td>totalFrame</td><td>3.65</td><td>4.8</td></tr>
+        <tr><td>cesiumDraw</td><td>3.5</td><td>4.8</td></tr>
+        <tr><td>gpuCesiumMs</td><td>2.78</td><td>4.51</td></tr></table>
+      <div class="crop"><img src="img/bkn10-medium-crop.webp" alt="Medium, BKN detail" loading="lazy"></div>
+      <p class="note">Band of 2 to 12 px over the hills.</p>
+    </div>
+    <div class="cell">
+      <img src="img/bkn10-low.webp" alt="Low, BKN 10 SM" loading="lazy">
+      <table><tr><th>ms</th><th>median</th><th>p95</th></tr>
+        <tr><td>frameInterval</td><td>16.7</td><td>16.8</td></tr>
+        <tr><td>totalFrame</td><td>3.7</td><td>4.8</td></tr>
+        <tr><td>cesiumDraw</td><td>3.6</td><td>4.6</td></tr>
+        <tr><td>gpuCesiumMs</td><td>2.42</td><td>3.78</td></tr></table>
+      <div class="crop"><img src="img/bkn10-low-crop.webp" alt="Low, BKN detail" loading="lazy"></div>
+      <p class="note">Band of 11 to 22 px; 4 px blocks on cloud edges and the far deck.</p>
+    </div>
+
+    <div class="rowlabel"><strong>OVC015, 3 SM</strong><span>Heading 300, pitch +6, FOV 60</span><span>Stage off GPU 2.15 / 5.17 ms</span></div>
+    <div class="cell">
+      <img src="img/ovc3-high.webp" alt="High, OVC 3 SM" loading="lazy">
+      <table><tr><th>ms</th><th>median</th><th>p95</th></tr>
+        <tr><td>frameInterval</td><td>16.7</td><td>16.8</td></tr>
+        <tr><td>totalFrame</td><td>3.4</td><td>4.7</td></tr>
+        <tr><td>cesiumDraw</td><td>3.3</td><td>4.7</td></tr>
+        <tr><td>gpuCesiumMs</td><td>3.33</td><td>4.92</td></tr></table>
+    </div>
+    <div class="cell">
+      <img src="img/ovc3-medium.webp" alt="Medium, OVC 3 SM" loading="lazy">
+      <table><tr><th>ms</th><th>median</th><th>p95</th></tr>
+        <tr><td>frameInterval</td><td>16.7</td><td>16.8</td></tr>
+        <tr><td>totalFrame</td><td>3.1</td><td>4.7</td></tr>
+        <tr><td>cesiumDraw</td><td>3.0</td><td>4.6</td></tr>
+        <tr><td>gpuCesiumMs</td><td>3.06</td><td>4.70</td></tr></table>
+    </div>
+    <div class="cell">
+      <img src="img/ovc3-low.webp" alt="Low, OVC 3 SM" loading="lazy">
+      <table><tr><th>ms</th><th>median</th><th>p95</th></tr>
+        <tr><td>frameInterval</td><td>16.7</td><td>16.9</td></tr>
+        <tr><td>totalFrame</td><td>3.5</td><td>4.8</td></tr>
+        <tr><td>cesiumDraw</td><td>3.4</td><td>4.7</td></tr>
+        <tr><td>gpuCesiumMs</td><td>3.04</td><td>4.39</td></tr></table>
+      <p class="note">No visible difference from High: the fog hides the deck edge.</p>
+    </div>
+
+    <div class="rowlabel"><strong>FEW040, 10 SM</strong><span>Heading 300, pitch +6, FOV 60</span><span>Stage off GPU 2.18 / 5.01 ms</span></div>
+    <div class="cell">
+      <img src="img/few10-high.webp" alt="High, FEW 10 SM" loading="lazy">
+      <table><tr><th>ms</th><th>median</th><th>p95</th></tr>
+        <tr><td>frameInterval</td><td>16.7</td><td>16.9</td></tr>
+        <tr><td>totalFrame</td><td>4.1</td><td>5.0</td></tr>
+        <tr><td>cesiumDraw</td><td>4.0</td><td>4.9</td></tr>
+        <tr><td>gpuCesiumMs</td><td>4.89</td><td>5.80</td></tr></table>
+      <div class="crop"><img src="img/few10-high-crop.webp" alt="High, FEW detail" loading="lazy"></div>
+    </div>
+    <div class="cell">
+      <img src="img/few10-medium.webp" alt="Medium, FEW 10 SM" loading="lazy">
+      <table><tr><th>ms</th><th>median</th><th>p95</th></tr>
+        <tr><td>frameInterval</td><td>16.7</td><td>16.8</td></tr>
+        <tr><td>totalFrame</td><td>4.05</td><td>5.1</td></tr>
+        <tr><td>cesiumDraw</td><td>3.9</td><td>4.9</td></tr>
+        <tr><td>gpuCesiumMs</td><td>3.68</td><td>5.02</td></tr></table>
+      <div class="crop"><img src="img/few10-medium-crop.webp" alt="Medium, FEW detail" loading="lazy"></div>
+      <p class="note">The farthest row of small clouds thins out.</p>
+    </div>
+    <div class="cell">
+      <img src="img/few10-low.webp" alt="Low, FEW 10 SM" loading="lazy">
+      <table><tr><th>ms</th><th>median</th><th>p95</th></tr>
+        <tr><td>frameInterval</td><td>16.7</td><td>16.8</td></tr>
+        <tr><td>totalFrame</td><td>4.4</td><td>5.1</td></tr>
+        <tr><td>cesiumDraw</td><td>4.25</td><td>4.9</td></tr>
+        <tr><td>gpuCesiumMs</td><td>3.05</td><td>5.16</td></tr></table>
+      <div class="crop"><img src="img/few10-low-crop.webp" alt="Low, FEW detail" loading="lazy"></div>
+      <p class="note">Clouds stop well above the hills; blocky edges on every small cloud.</p>
+    </div>
+
+    <div class="rowlabel"><strong>Horizon: BKN025, 10 SM</strong><span>Heading 160 (down the bay, flat horizon), pitch +1, FOV 40</span><span>Stage off GPU 2.31 / 5.18 ms</span></div>
+    <div class="cell">
+      <img src="img/horizon-bkn10-high.webp" alt="High, horizon" loading="lazy">
+      <table><tr><th>ms</th><th>median</th><th>p95</th></tr>
+        <tr><td>frameInterval</td><td>16.7</td><td>16.8</td></tr>
+        <tr><td>totalFrame</td><td>5.1</td><td>5.9</td></tr>
+        <tr><td>cesiumDraw</td><td>5.0</td><td>5.8</td></tr>
+        <tr><td>gpuCesiumMs</td><td>4.20</td><td>5.47</td></tr></table>
+      <div class="crop"><img src="img/horizon-bkn10-high-crop.webp" alt="High, horizon detail" loading="lazy"></div>
+      <p class="note">A 1 to 8 px sliver over the flat water.</p>
+    </div>
+    <div class="cell">
+      <img src="img/horizon-bkn10-medium.webp" alt="Medium, horizon" loading="lazy">
+      <table><tr><th>ms</th><th>median</th><th>p95</th></tr>
+        <tr><td>frameInterval</td><td>16.7</td><td>16.8</td></tr>
+        <tr><td>totalFrame</td><td>4.85</td><td>5.5</td></tr>
+        <tr><td>cesiumDraw</td><td>4.7</td><td>5.4</td></tr>
+        <tr><td>gpuCesiumMs</td><td>3.31</td><td>4.84</td></tr></table>
+      <div class="crop"><img src="img/horizon-bkn10-medium-crop.webp" alt="Medium, horizon detail" loading="lazy"></div>
+      <p class="note">Band of 11 to 26 px.</p>
+    </div>
+    <div class="cell">
+      <img src="img/horizon-bkn10-low.webp" alt="Low, horizon" loading="lazy">
+      <table><tr><th>ms</th><th>median</th><th>p95</th></tr>
+        <tr><td>frameInterval</td><td>16.7</td><td>16.8</td></tr>
+        <tr><td>totalFrame</td><td>4.8</td><td>5.4</td></tr>
+        <tr><td>cesiumDraw</td><td>4.6</td><td>5.3</td></tr>
+        <tr><td>gpuCesiumMs</td><td>3.02</td><td>5.47</td></tr></table>
+      <div class="crop"><img src="img/horizon-bkn10-low-crop.webp" alt="Low, horizon detail" loading="lazy"></div>
+      <p class="note">Band of 28 to 43 px; the far deck is visibly pixelated.</p>
+    </div>
+  </div>
+
+  <h2>Frame cost, all cells</h2>
+  <p>Median / p95 in ms over the last 300 frames of <code>__tc3d.perf().window</code>, read after at least 320 frames at each pose with tiles loaded. <strong>frameInterval sits on the 60 Hz cap in every lane</strong> (<code>viewer.targetFrameRate</code> 60), so on this desktop it cannot tell the presets apart. Headless Edge did return GPU timer results, so <code>gpuCesiumMs</code> (Cesium's whole GPU frame) is shown with a stage-off baseline; "stage" is the lane median minus the off median. GPU timer series are noisy (the off baseline's p95 runs above some lanes'). Desktop only, NVIDIA RTX through ANGLE D3D11; iPad is TC3D-150.</p>
+  <div class="perfwrap">
+  <table class="perf">
+    <thead><tr><th>Weather / pose</th><th>Lane</th><th>frameInterval</th><th>totalFrame</th><th>cesiumDraw</th><th>gpuCesiumMs</th><th>stage GPU</th></tr></thead>
+    <tbody>
+      <tr><td>BKN025 10 SM</td><td>off</td><td>16.7 / 17.0</td><td>4.3 / 5.0</td><td>4.2 / 4.8</td><td>1.70 / 3.29</td><td>&ndash;</td></tr>
+      <tr><td></td><td>High</td><td>16.7 / 17.2</td><td>3.2 / 4.7</td><td>3.1 / 4.6</td><td>3.64 / 4.84</td><td>+1.94</td></tr>
+      <tr><td></td><td>Medium</td><td>16.7 / 16.8</td><td>3.65 / 4.8</td><td>3.5 / 4.8</td><td>2.78 / 4.51</td><td>+1.08</td></tr>
+      <tr><td></td><td>Low</td><td>16.7 / 16.8</td><td>3.7 / 4.8</td><td>3.6 / 4.6</td><td>2.42 / 3.78</td><td>+0.72</td></tr>
+      <tr><td>OVC015 3 SM</td><td>off</td><td>16.7 / 16.8</td><td>2.9 / 4.1</td><td>2.8 / 4.0</td><td>2.15 / 5.17</td><td>&ndash;</td></tr>
+      <tr><td></td><td>High</td><td>16.7 / 16.8</td><td>3.4 / 4.7</td><td>3.3 / 4.7</td><td>3.33 / 4.92</td><td>+1.18</td></tr>
+      <tr><td></td><td>Medium</td><td>16.7 / 16.8</td><td>3.1 / 4.7</td><td>3.0 / 4.6</td><td>3.06 / 4.70</td><td>+0.91</td></tr>
+      <tr><td></td><td>Low</td><td>16.7 / 16.9</td><td>3.5 / 4.8</td><td>3.4 / 4.7</td><td>3.04 / 4.39</td><td>+0.89</td></tr>
+      <tr><td>FEW040 10 SM</td><td>off</td><td>16.7 / 17.2</td><td>4.5 / 5.2</td><td>4.4 / 5.1</td><td>2.18 / 5.01</td><td>&ndash;</td></tr>
+      <tr><td></td><td>High</td><td>16.7 / 16.9</td><td>4.1 / 5.0</td><td>4.0 / 4.9</td><td>4.89 / 5.80</td><td>+2.71</td></tr>
+      <tr><td></td><td>Medium</td><td>16.7 / 16.8</td><td>4.05 / 5.1</td><td>3.9 / 4.9</td><td>3.68 / 5.02</td><td>+1.50</td></tr>
+      <tr><td></td><td>Low</td><td>16.7 / 16.8</td><td>4.4 / 5.1</td><td>4.25 / 4.9</td><td>3.05 / 5.16</td><td>+0.87</td></tr>
+      <tr><td>Horizon BKN025 10 SM</td><td>off</td><td>16.7 / 16.8</td><td>5.0 / 5.7</td><td>4.9 / 5.5</td><td>2.31 / 5.18</td><td>&ndash;</td></tr>
+      <tr><td></td><td>High</td><td>16.7 / 16.8</td><td>5.1 / 5.9</td><td>5.0 / 5.8</td><td>4.20 / 5.47</td><td>+1.89</td></tr>
+      <tr><td></td><td>Medium</td><td>16.7 / 16.8</td><td>4.85 / 5.5</td><td>4.7 / 5.4</td><td>3.31 / 4.84</td><td>+1.00</td></tr>
+      <tr><td></td><td>Low</td><td>16.7 / 16.8</td><td>4.8 / 5.4</td><td>4.6 / 5.3</td><td>3.02 / 5.47</td><td>+0.71</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h2>How it was driven</h2>
+  <ul>
+    <li>Knobs: <code>import('/constants/weather.ts')</code> returns the same <code>WEATHER_STAGE_QUALITY</code> object the stage hook reads (not frozen; <code>as const</code> is type-only), so <code>Object.assign</code> on it changes <code>steps</code> and <code>radius</code> live. <code>textureScale</code> is read once at stage creation, so each lane change turned <code>showClouds</code> and <code>showBabylonFog</code> off and back on, which removes and recreates the stage; the new stage's <code>get(0).textureScale</code> was read back (0.5 / 0.375 / 0.25). No tracked file was edited.</li>
+    <li>Weather: <code>setDebugOverriding(true)</code>, <code>setCloudLayers</code> with the debug panel's coverage values (BKN 0.6875, OVC 1.0, FEW 0.1875), <code>currentMetar.visib</code> set to 10 or 3, precipitation off, weather interpolation off. <code>__tc3d.weatherStage.info().stageEnabled</code> was true in every lane cell.</li>
+    <li>Camera: KOAK tower camera (<code>followMode: tower</code>, no tower mod loaded), set through <code>__tc3d.camera.set</code>. The aircraft panel and hints were hidden with a page style for the shots.</li>
+    <li>Lane D (Low with the look knobs also cut) was not shot: in <code>cloudStage.glsl.ts</code> the three look knobs only scale values inside the existing loops (the raymarch runs <code>u_steps</code> steps over the slab crossing, <code>dt = (t1 - t0) / u_steps</code>). The one way they touch cost is the march's early exit at transmittance 0.01, which a lower <code>densityScale</code> reaches later, so cutting it would cost more, not less.</li>
+  </ul>
+</main>
+<script>
+  const btn = document.getElementById('stack');
+  const grid = document.getElementById('grid');
+  btn.addEventListener('click', () => {
+    const on = grid.classList.toggle('stacked');
+    btn.setAttribute('aria-pressed', String(on));
+  });
+</script>
+</body>
+</html>
