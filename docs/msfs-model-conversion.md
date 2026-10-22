@@ -563,7 +563,8 @@ fn resolve_gltf_via_model_cfg(aircraft_dir: &Path) -> Option<(String, PathBuf)> 
 **--no-discovery Mode**: The converter now uses `--no-discovery` mode where Rust provides all resolved paths directly:
 - `--gltf-path`: The exact GLTF file to convert (resolved via model.cfg)
 - `--texture-dirs`: Pre-computed texture directories including base model's textures
-- Python converter trusts these paths instead of doing its own discovery
+- Python converter uses these paths instead of doing its own discovery, but still checks that each one resolves (junctions and symlinks followed) inside the model's MSFS package, the folder holding `SimObjects/Airplanes`; a texture folder outside it is dropped with a warning, and a `--gltf-path` outside `--source`'s package exits 1
+- Every glTF buffer and image URI and every `aircraft.cfg` `texture=` value must be a single plain file name beside the glTF (no path separators, drive colon, URI scheme including `data:`, `.`/`..`, trailing dot or space, device names, or `< > " | ? *`); otherwise that livery fails
 
 This ensures consistent behavior - Rust is the single source of truth for path resolution.
 

@@ -296,6 +296,18 @@ fsltl_converter.exe (Python sidecar)
 └─ Built via PyInstaller (pnpm run build:converter)
 ```
 
+### Package rule
+
+The converter opens only files inside the model's MSFS package (the folder holding `SimObjects/Airplanes`), with junctions and symlinks followed, and accepts a glTF buffer or image URI or an `aircraft.cfg` `texture=` value only as a plain file name. A whole-package junction (how AIG is installed on some machines) works; a junction on only `SimObjects` or `Airplanes` fails. Details in `docs/msfs-model-conversion.md`, "--no-discovery Mode".
+
+### Converter tests
+
+Stdlib `unittest` in `scripts/shipping/conversion/test_convert_fsltl_batch.py` (needs Pillow and numpy):
+
+```bash
+uv run --no-project --python 3.12 --with pillow --with numpy python -m unittest discover -s scripts/shipping/conversion -p "test_*.py" -v
+```
+
 ### Key Files
 
 | File | Purpose |
@@ -345,7 +357,7 @@ scripts/
 
 **Shipping scripts** are used for building, development, and data generation:
 - `shipping/build/` - Build tools: check.js, build_converter.py, dev-wrapper.js
-- `shipping/conversion/` - Runtime conversion: convert_fsltl_batch.py
+- `shipping/conversion/` - Runtime conversion: convert_fsltl_batch.py, and its tests test_convert_fsltl_batch.py
 - `shipping/data-generation/` - One-off scripts: convert-aircraft-data.py, extract-airport-surfaces.py, scrape-tower-positions.py
 
 **Debugging scripts** are utilities for development and troubleshooting:

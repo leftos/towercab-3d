@@ -26,6 +26,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Datablocks on iPads and other high-resolution screens now sit on their aircraft at full size, instead of half size and in the wrong place.
 - Tower and aircraft mod models now load on iPads and other browsers connected to the desktop app.
 - The MSFS model cache size limit, Unlimited included, now survives a restart instead of resetting and deleting converted models.
+- Converting an FSLTL or AIG model can no longer read files from outside that model's own MSFS package.
 
 ### Removed
 - The experimental VR mode and its VR button in the controls bar.
