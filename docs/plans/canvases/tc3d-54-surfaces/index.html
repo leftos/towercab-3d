@@ -1,0 +1,1109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TC3D-54 Surfaces Mock</title>
+    <style>
+      :root {
+        --page: #f6f5f1;
+        --ink: #1d232b;
+        --muted: #5d6673;
+        --panel: #ffffff;
+        --line: #d9d6cc;
+        --accent: #a8480a;
+        --chip: #ece9e0;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --page: #16191d;
+          --ink: #e7e9ec;
+          --muted: #9aa3ae;
+          --panel: #1f2328;
+          --line: #343a42;
+          --accent: #f0a050;
+          --chip: #2a2f36;
+        }
+      }
+      :root[data-theme="dark"] {
+        --page: #16191d;
+        --ink: #e7e9ec;
+        --muted: #9aa3ae;
+        --panel: #1f2328;
+        --line: #343a42;
+        --accent: #f0a050;
+        --chip: #2a2f36;
+      }
+      body {
+        margin: 0;
+        padding: 24px;
+        background: var(--page);
+        color: var(--ink);
+        font:
+          15px/1.45 system-ui,
+          sans-serif;
+      }
+      h1 {
+        margin: 0 0 4px;
+        font-size: 22px;
+      }
+      .intro {
+        max-width: 1100px;
+        margin: 0 0 12px;
+        color: var(--muted);
+      }
+      .intro b {
+        color: var(--ink);
+      }
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 16px;
+        margin: 0 0 12px;
+        font-size: 14px;
+      }
+      .legend i {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        margin-right: 5px;
+        vertical-align: -1px;
+        border-radius: 2px;
+      }
+      .timeline {
+        margin: 0 0 14px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .jumps {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: -8px 0 16px;
+      }
+      .jumps button {
+        font: inherit;
+        font-size: 13px;
+        padding: 3px 9px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--chip);
+        color: var(--ink);
+        cursor: pointer;
+      }
+      body .mt-grid {
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+      }
+      body .mt-view {
+        position: relative;
+      }
+      .span4 {
+        grid-column: span 4;
+      }
+      body .mt-lane p {
+        min-height: 2.9em;
+      }
+      .span6 {
+        grid-column: span 6;
+      }
+      .sec-head {
+        grid-column: 1 / -1;
+        margin: 14px 0 -4px;
+      }
+      .sec-head h2 {
+        margin: 0;
+        font-size: 19px;
+      }
+      .sec-head p {
+        margin: 2px 0 0;
+        max-width: 1200px;
+        color: var(--muted);
+      }
+      .sec-head.sub h2 {
+        font-size: 16px;
+      }
+      .note-box {
+        grid-column: 1 / span 4;
+        align-self: start;
+        padding: 12px;
+        border: 1px dashed var(--line);
+        border-radius: 8px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .risk-lane {
+        grid-column: 5 / span 4;
+      }
+      .ov {
+        position: absolute;
+        z-index: 3;
+        pointer-events: none;
+        color: #fff;
+        font:
+          12px/1.3 ui-monospace,
+          "Cascadia Mono",
+          Consolas,
+          monospace;
+      }
+      .ov.badge {
+        top: 6px;
+        left: 6px;
+        max-width: 54%;
+        padding: 3px 7px;
+        border-radius: 4px;
+        background: rgba(12, 16, 22, 0.8);
+        font-family: system-ui, sans-serif;
+        font-size: 13px;
+      }
+      .ov.badge b {
+        margin-right: 5px;
+        color: #ffb36b;
+      }
+      .ov.clock {
+        left: 6px;
+        bottom: 6px;
+        max-width: 46%;
+        padding: 3px 7px;
+        border-radius: 4px;
+        background: rgba(12, 16, 22, 0.8);
+        white-space: pre;
+        overflow: hidden;
+      }
+      .ov.inset {
+        right: 0;
+        bottom: 0;
+        width: 52%;
+        height: 52%;
+        box-sizing: border-box;
+        border: 2px solid #fff;
+      }
+      .ov.inset span {
+        position: absolute;
+        top: 2px;
+        left: 3px;
+        padding: 0 4px;
+        border-radius: 3px;
+        background: rgba(12, 16, 22, 0.75);
+        font-size: 11px;
+      }
+      .ov.chart {
+        top: 6px;
+        right: 6px;
+        width: 44%;
+        height: 40%;
+      }
+      .ov.paused {
+        top: 6px;
+        right: 6px;
+        padding: 3px 8px;
+        border-radius: 4px;
+        background: #c62828;
+        font-family: system-ui, sans-serif;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      #stills {
+        margin-top: 28px;
+      }
+      #stills h2 {
+        font-size: 19px;
+        margin: 0 0 4px;
+      }
+      #stills .grid {
+        display: grid;
+        gap: 14px;
+        grid-template-columns: repeat(auto-fill, minmax(min(420px, 100%), 1fr));
+      }
+      #stills figure {
+        margin: 0;
+        padding: 8px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+      }
+      #stills img {
+        width: 100%;
+        height: auto;
+        display: block;
+      }
+      #stills figcaption {
+        margin-top: 4px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      @media (max-width: 900px) {
+        body {
+          padding: 16px;
+        }
+        body .mt-grid {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .span4,
+        .span6,
+        .sec-head,
+        .note-box,
+        .risk-lane {
+          grid-column: 1 / -1;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>TC3D-54: spoilers, reversers and wheel spin after the native gear clip</h1>
+    <p class="intro">
+      Four questions, one section each; the lanes in a section are the options, side by side, all on one clock. Each lane is the
+      <b>tower follow view</b> (600 m abeam the rollout, 30 m up, 5° field of view, the zoom a controller uses to watch one
+      aircraft) with a <b>close camera</b> inset at about 60 m. Every lane flies the same landing: final at 140 kt, main-gear touchdown
+      at 6 s, rollout to 60 kt by 24 s, 15 kt taxi from 32 s, stop at 47 s, a 3 kt pushback from 50 s. The airframe is the app's
+      built-in <code>b738.glb</code> (upgraded from glTF 1.0 to 2.0 so three.js can load it); it has no gear, so the gear, wheels,
+      spoiler panels and reverser sleeves are proxies, sized to the 737-800, and the question is the motion, not the clip.
+    </p>
+    <div class="legend">
+      <span><i style="background: #ff6a00"></i>spoiler panels (hinged at the front edge, 45° deployed)</span>
+      <span><i style="background: #19b3d6"></i>reverser translating sleeve (slides 0.65 m aft)</span>
+      <span><i style="background: #2a2a2a"></i>cascades, uncovered when the sleeve opens</span>
+      <span><i style="background: #e01b24"></i>wheel marker spoke (the five grey spokes strobe; the red one shows the true turn)</span>
+    </div>
+    <p class="timeline">
+      Data timeline (s): 0 final 140 kt · 6 touchdown · 7.5 reversers start (Q2 a) · 15 mid-rollout · 24 60 kt, everything stows · 32–44
+      taxi 15 kt · 47–50 stopped · 50–56 pushback 3 kt. The airborne row in Q1 flies a takeoff instead: roll from 2 s, liftoff at 28 s.
+      Wheels stand still on final (no spin before main-gear contact).
+    </p>
+    <section id="stills">
+      <h2>Stills</h2>
+      <p class="intro">Headless renders of this page at the moments named; the live lanes above are the thing to judge, since spin and stepping only show in motion.</p>
+      <div class="grid">
+        <figure><img src="stills/t02-final.jpg" alt="All lanes on final at 140 kt" loading="lazy" /><figcaption>2 s · final, 140 kt, wheels still, everything stowed</figcaption></figure>
+        <figure><img src="stills/t07-td-plus-1.jpg" alt="All lanes one second after touchdown" loading="lazy" /><figcaption>7 s · TD+1 s: spoilers fully out, reversers not yet started; Q1 spin 20.2 / 18.5 / 60.5 rev/s</figcaption></figure>
+        <figure><img src="stills/t09-td-plus-3.jpg" alt="All lanes three seconds after touchdown" loading="lazy" /><figcaption>9 s · TD+3 s: Q2 a sleeves three-quarters open, b and c stowed, b-risk part open</figcaption></figure>
+        <figure><img src="stills/t09_5-q4-pause-1.jpg" alt="Q4 lanes in the first replay pause" loading="lazy" /><figcaption>9.5 s · Q4 first pause: data time holds the sleeve at 50 % and the wheels still; wall clock has it at 100 % and spinning</figcaption></figure>
+        <figure><img src="stills/t15-mid-rollout.jpg" alt="All lanes mid-rollout" loading="lazy" /><figcaption>15 s · mid-rollout, about 100 kt</figcaption></figure>
+        <figure><img src="stills/t16-q4-pause-2.jpg" alt="Q4 lanes in the second replay pause" loading="lazy" /><figcaption>16 s · Q4 second pause (TD+6 s data): wheels 0 vs 16.9 rev/s under the frozen aircraft</figcaption></figure>
+        <figure><img src="stills/t31-liftoff-plus-3.jpg" alt="Airborne lanes three seconds after liftoff" loading="lazy" /><figcaption>31 s · Q1 airborne row at LO+3 s: hold, coast (40 % of liftoff spin), freeze</figcaption></figure>
+        <figure><img src="stills/t38-taxi.jpg" alt="All lanes at 15 kt taxi" loading="lazy" /><figcaption>38 s · taxi 15 kt: Q3 charts show the uneven per-frame turn of 1 % and 2 % steps</figcaption></figure>
+        <figure><img src="stills/t53-pushback.jpg" alt="All lanes in the 3 kt pushback" loading="lazy" /><figcaption>53 s · pushback 3 kt: wheels turn backwards; Q3 b holds each pose for 2–3 frames</figcaption></figure>
+      </div>
+    </section>
+    <a hidden id="model" href="b738.glb"></a>
+    <script src="mock-three.js"></script>
+    <script>
+      const THREE = MockThree.THREE;
+      const V3 = THREE.Vector3;
+      const KT = 0.514444;
+      const DURATION = 64;
+      const DT = 0.005;
+      const TD = 6;
+      const LO = 28;
+      const TRUE_R = 0.55;
+      const MAIN_R = 0.55;
+      const NOSE_R = 0.34;
+      const GROUND_Y = -2.66;
+      const MAIN_Z = 0.2;
+      const NOSE_Z = -15.4;
+      const TOWER = new V3(500, 30, 600);
+      const SPOILER_MAX = THREE.MathUtils.degToRad(45);
+      const SLEEVE_TRAVEL = 0.65;
+
+      const LANDING_KT = [[0, 140], [6, 140], [24, 60], [32, 15], [44, 15], [47, 0], [50, 0], [51, -3], [55, -3], [56, 0], [999, 0]];
+      const TAKEOFF_KT = [[0, 0], [2, 0], [28, 150], [40, 165], [999, 165]];
+
+      function keyed(keys, t) {
+        for (let i = 1; i < keys.length; i++) {
+          if (t <= keys[i][0]) {
+            const [t0, v0] = keys[i - 1];
+            const [t1, v1] = keys[i];
+            return v0 + ((v1 - v0) * (t - t0)) / (t1 - t0);
+          }
+        }
+        return keys[keys.length - 1][1];
+      }
+
+      function cumulative(fn) {
+        const n = Math.ceil(70 / DT) + 2;
+        const out = new Float64Array(n);
+        for (let i = 1; i < n; i++) {
+          out[i] = out[i - 1] + 0.5 * (fn((i - 1) * DT) + fn(i * DT)) * DT;
+        }
+        return out;
+      }
+
+      function sample(arr, t) {
+        const x = Math.max(0, t / DT);
+        const i = Math.min(Math.floor(x), arr.length - 2);
+        const f = x - i;
+        return arr[i] + (arr[i + 1] - arr[i]) * f;
+      }
+
+      const landingS = cumulative((t) => keyed(LANDING_KT, t) * KT);
+      const takeoffS = cumulative((t) => keyed(TAKEOFF_KT, t) * KT);
+
+      const PROFILES = {
+        landing: {
+          kt: (t) => keyed(LANDING_KT, t),
+          onGround: (t) => t >= TD,
+          x: (t) => sample(landingS, t) - sample(landingS, TD),
+          height(t) {
+            if (t >= TD) return 0;
+            const tau = TD - t;
+            return tau <= 2 ? -0.79 * tau ** 3 + 3.17 * tau ** 2 + 0.6 * tau : 7.56 + 3.77 * (tau - 2);
+          },
+          pitchDeg(t) {
+            if (t < 4) return 2.5;
+            if (t < TD) return 2.5 + (3 * (t - 4)) / 2;
+            if (t < 9) return 5.5 * (1 - (t - TD) / 3);
+            return 0;
+          },
+          phase(t) {
+            if (t < TD) return "final";
+            if (t < 24) return "rollout";
+            if (t < 32) return "slowing to taxi";
+            if (t < 44) return "taxi";
+            if (t < 47) return "stopping";
+            if (t < 50) return "stopped";
+            if (t < 56) return "pushback";
+            return "stopped";
+          },
+          event: (t) => `TD${t < TD ? "-" : "+"}${Math.abs(t - TD).toFixed(1)}s`,
+        },
+        takeoff: {
+          kt: (t) => keyed(TAKEOFF_KT, t),
+          onGround: (t) => t < LO,
+          x: (t) => -300 + sample(takeoffS, t),
+          height(t) {
+            if (t < LO) return 0;
+            return t < 31 ? 1.5 * (t - LO) ** 2 : 13.5 + 9 * (t - 31);
+          },
+          pitchDeg(t) {
+            if (t < 26.5) return 0;
+            if (t < LO) return (8 * (t - 26.5)) / 1.5;
+            if (t < 31) return 8 + (7 * (t - LO)) / 3;
+            return 15;
+          },
+          phase(t) {
+            if (t < 2) return "lined up";
+            if (t < LO) return "takeoff roll";
+            return "climb, gear held down";
+          },
+          event: (t) => `LO${t < LO ? "-" : "+"}${Math.abs(t - LO).toFixed(1)}s`,
+        },
+      };
+
+      function hash01(k) {
+        let x = Math.imul(k ^ 0x9e3779b9, 0x85ebca6b);
+        x ^= x >>> 13;
+        x = Math.imul(x, 0xc2b2ae35);
+        x ^= x >>> 16;
+        return (x >>> 0) / 4294967296;
+      }
+
+      // Deceleration as the app would estimate it from 1 Hz position reports: last second's speed change plus report noise.
+      function measuredDecel(t) {
+        const k = Math.floor(t);
+        const kt = PROFILES.landing.kt;
+        return (kt(k - 1) - kt(k)) * KT + (hash01(k + 17) - 0.5) * 0.7;
+      }
+
+      const identity = (w) => w;
+      const PAUSES = [
+        [8.5, 10.5],
+        [14, 18],
+      ];
+      // Q4 replay: data time stops at TD+2.5 s for 2 s (reverser mid-travel) and at TD+6 s for 4 s.
+      function q4Map(w) {
+        if (w < 8.5) return w;
+        if (w < 10.5) return 8.5;
+        if (w < 14) return w - 2;
+        if (w < 18) return 12;
+        return w - 6;
+      }
+
+      function spoilerTarget(cfg, td) {
+        if (cfg.surfaces === "none" || cfg.profile !== "landing") return 0;
+        return td >= TD && PROFILES.landing.kt(td) > 60 ? 1 : 0;
+      }
+
+      function reverserTarget(cfg, td) {
+        if (cfg.profile !== "landing" || td < TD + 1.5 || PROFILES.landing.kt(td) <= 60) return 0;
+        if (cfg.surfaces === "a") return 1;
+        if (cfg.surfaces === "b") return measuredDecel(td) > cfg.threshold ? 1 : 0;
+        return 0;
+      }
+
+      function wheelRate(cfg, td, liftoffRate) {
+        const prof = PROFILES[cfg.profile];
+        if (prof.onGround(td)) return (prof.kt(td) * KT) / (2 * Math.PI * cfg.radius);
+        if (cfg.profile === "landing") return 0;
+        if (cfg.airborne === "hold") return liftoffRate;
+        if (cfg.airborne === "coast") return liftoffRate * Math.max(0, 1 - (td - LO) / 5);
+        return 0;
+      }
+
+      function approach(x, target, adv, upDur, downDur) {
+        return target > x ? Math.min(target, x + adv / upDur) : Math.max(target, x - adv / downDur);
+      }
+
+      // Steps the lane's state over wall time; a data-time lane advances only while data time does.
+      function simulate(cfg) {
+        const n = Math.ceil(DURATION / DT) + 2;
+        const P = new Float64Array(n);
+        const SP = new Float32Array(n);
+        const RV = new Float32Array(n);
+        const liftoffRate = (PROFILES.takeoff.kt(LO) * KT) / (2 * Math.PI * cfg.radius);
+        let p = 0;
+        let sp = 0;
+        let rv = 0;
+        let prevTd = cfg.map(0);
+        for (let i = 0; i < n; i++) {
+          const td = cfg.map(i * DT);
+          const adv = i === 0 ? 0 : cfg.timeBase === "wall" ? DT : td - prevTd;
+          prevTd = td;
+          p += wheelRate(cfg, td, liftoffRate) * adv;
+          sp = approach(sp, spoilerTarget(cfg, td), adv, 1.0, 1.5);
+          rv = approach(rv, reverserTarget(cfg, td), adv, 2.0, 2.0);
+          P[i] = p;
+          SP[i] = sp;
+          RV[i] = rv;
+        }
+        return { P, SP, RV };
+      }
+
+      function shownProgress(cfg, p) {
+        return cfg.step > 0 ? Math.floor(p / cfg.step + 1e-9) * cfg.step : p;
+      }
+
+      function shownAngleDeg(cfg, sim, w) {
+        return 360 * cfg.span * shownProgress(cfg, sample(sim.P, w));
+      }
+
+      function mulberry32(seed) {
+        return () => {
+          seed = (seed + 0x6d2b79f5) | 0;
+          let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+          t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+
+      const SHARED = {};
+
+      function sharedAssets() {
+        if (SHARED.ready) return SHARED;
+        const c = document.createElement("canvas");
+        c.width = c.height = 256;
+        const g = c.getContext("2d");
+        g.fillStyle = "#5c5f63";
+        g.fillRect(0, 0, 256, 256);
+        const rnd = mulberry32(7);
+        for (let i = 0; i < 1600; i++) {
+          const v = 62 + Math.floor(rnd() * 70);
+          g.fillStyle = `rgb(${v},${v},${v + 4})`;
+          g.fillRect(rnd() * 256, rnd() * 256, 2 + rnd() * 6, 2 + rnd() * 6);
+        }
+        g.fillStyle = "#34363a";
+        g.fillRect(0, 0, 5, 256);
+        g.fillRect(128, 0, 3, 256);
+        const tex = new THREE.CanvasTexture(c);
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(4000 / 8, 45 / 8);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.anisotropy = 8;
+        const std = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0, ...extra });
+        Object.assign(SHARED, {
+          ready: true,
+          grass: std(0x7d9a5a),
+          runway: std(0xffffff, { map: tex }),
+          paint: std(0xf4f4f0),
+          lightMat: std(0xfff3c4, { emissive: 0x8a7a3a }),
+          box: new THREE.BoxGeometry(1, 1, 1),
+          tire: std(0x1b1b1b, { roughness: 0.95 }),
+          hub: std(0xd9dde2, { roughness: 0.5 }),
+          spoke: std(0x3a3f46),
+          marker: std(0xe01b24, { emissive: 0x500000 }),
+          tread: std(0xf2f2f2),
+          strut: std(0x9aa0a6, { metalness: 0.3, roughness: 0.5 }),
+          spoiler: std(0xff6a00, { emissive: 0x4a1e00, side: THREE.DoubleSide }),
+          sleeve: std(0x19b3d6, { emissive: 0x05303a, side: THREE.DoubleSide }),
+          cascade: std(0x0d0d0d, { side: THREE.DoubleSide }),
+        });
+        return SHARED;
+      }
+
+      function instanced(scene, mat, transforms) {
+        const s = sharedAssets();
+        const mesh = new THREE.InstancedMesh(s.box, mat, transforms.length);
+        const m = new THREE.Matrix4();
+        transforms.forEach(([x, y, z, sx, sy, sz], i) => {
+          m.compose(new V3(x, y, z), new THREE.Quaternion(), new V3(sx, sy, sz));
+          mesh.setMatrixAt(i, m);
+        });
+        scene.add(mesh);
+      }
+
+      function buildWorld(scene) {
+        const s = sharedAssets();
+        scene.fog = new THREE.Fog(0x9ec4e8, 4000, 11000);
+        const grass = new THREE.Mesh(new THREE.PlaneGeometry(24000, 24000), s.grass);
+        grass.rotation.x = -Math.PI / 2;
+        scene.add(grass);
+        const runway = new THREE.Mesh(new THREE.PlaneGeometry(4000, 45), s.runway);
+        runway.rotation.x = -Math.PI / 2;
+        runway.position.set(500, 0.03, 0);
+        scene.add(runway);
+        const paint = [];
+        for (let x = -1480; x < 2480; x += 50) paint.push([x, 0.07, 0, 30, 0.04, 0.9]);
+        paint.push([500, 0.07, 21.5, 4000, 0.04, 0.9], [500, 0.07, -21.5, 4000, 0.04, 0.9]);
+        for (const x of [0, 150, 300, 450, 600]) {
+          const w = x === 300 ? 9 : 3;
+          paint.push([x, 0.07, 9, 22, 0.04, w], [x, 0.07, -9, 22, 0.04, w]);
+        }
+        instanced(scene, s.paint, paint);
+        const lights = [];
+        for (let x = -1500; x <= 2500; x += 60) lights.push([x, 0.25, 24, 0.35, 0.5, 0.35], [x, 0.25, -24, 0.35, 0.5, 0.35]);
+        instanced(scene, s.lightMat, lights);
+      }
+
+      function boxOf(model, name) {
+        const node = model.getObjectByName(name);
+        if (!node) throw new Error(`model has no node ${name}`);
+        return new THREE.Box3().setFromObject(node);
+      }
+
+      function modelParts(model) {
+        if (SHARED.parts) return SHARED.parts;
+        model.updateMatrixWorld(true);
+        const spoilers = [];
+        for (let i = 1; i <= 12; i++) spoilers.push(spoilerGeometry(boxOf(model, `spoiler${i}`)));
+        const engines = ["lreverserib", "No2reverser"].map((n) => boxOf(model, n));
+        SHARED.parts = { spoilers, engines };
+        return SHARED.parts;
+      }
+
+      // A flat panel hinged along the spoiler's front edge, built in model space from the stock spoiler's bounds.
+      function spoilerGeometry(box) {
+        const side = Math.sign(box.min.x + box.max.x);
+        const inbX = side < 0 ? box.max.x : box.min.x;
+        const outX = side < 0 ? box.min.x : box.max.x;
+        const zext = box.max.z - box.min.z;
+        const chord = Math.min(0.55, zext);
+        const span = Math.abs(outX - inbX);
+        const a = new V3(inbX, box.max.y - 0.1 * span + 0.03, box.min.z);
+        const b = new V3(outX, box.max.y + 0.03, box.min.z + (zext - chord));
+        const axis = b.clone().sub(a);
+        const len = axis.length();
+        axis.normalize();
+        const aft = new V3(0, 0, 1).addScaledVector(axis, -axis.z).normalize();
+        const up = new V3().crossVectors(aft, axis);
+        if (up.y < 0) up.negate();
+        const geo = new THREE.BoxGeometry(1, 1, 1);
+        geo.translate(0.5, 0.5, 0.5);
+        const basis = new THREE.Matrix4().makeBasis(axis.clone().multiplyScalar(len), up.clone().multiplyScalar(0.06), aft.clone().multiplyScalar(chord));
+        geo.applyMatrix4(basis);
+        const probe = aft.clone().applyQuaternion(new THREE.Quaternion().setFromAxisAngle(axis, 0.5));
+        const sign = probe.y > aft.y ? 1 : -1;
+        return { geo, hinge: a, axis, sign };
+      }
+
+      function makeWheel(radius, width, outward) {
+        const s = sharedAssets();
+        const g = new THREE.Group();
+        const add = (geo, mat, setup) => {
+          const m = new THREE.Mesh(geo, mat);
+          setup?.(m);
+          g.add(m);
+          return m;
+        };
+        const tireGeo = new THREE.CylinderGeometry(radius, radius, width, 28);
+        tireGeo.rotateZ(Math.PI / 2);
+        add(tireGeo, s.tire);
+        const hubGeo = new THREE.CylinderGeometry(radius * 0.64, radius * 0.64, 0.02, 24);
+        hubGeo.rotateZ(Math.PI / 2);
+        add(hubGeo, s.hub, (m) => (m.position.x = outward * (width / 2 + 0.011)));
+        const face = outward * (width / 2 + 0.03);
+        const radial = (mat, len, thick, centre, angle) =>
+          add(s.box, mat, (m) => {
+            m.scale.set(0.02, len, thick);
+            m.rotation.x = angle;
+            m.position.set(face, Math.cos(angle) * centre, Math.sin(angle) * centre);
+          });
+        for (let k = 0; k < 5; k++) radial(s.spoke, radius * 0.5, radius * 0.12, radius * 0.33, (k * 2 * Math.PI) / 5);
+        const markAngle = Math.PI / 5;
+        radial(s.marker, radius * 0.95, radius * 0.16, radius * 0.48, markAngle);
+        add(s.box, s.tread, (m) => {
+          m.scale.set(width * 1.04, 0.03, radius * 0.3);
+          m.rotation.x = markAngle;
+          m.position.set(0, Math.cos(markAngle) * (radius + 0.005), Math.sin(markAngle) * (radius + 0.005));
+        });
+        return g;
+      }
+
+      function addStrut(body, x, yTop, yBottom, z, r) {
+        const s = sharedAssets();
+        const geo = new THREE.CylinderGeometry(r, r, yTop - yBottom, 12);
+        const m = new THREE.Mesh(geo, s.strut);
+        m.position.set(x, (yTop + yBottom) / 2, z);
+        body.add(m);
+      }
+
+      function buildGear(body) {
+        const wheels = { main: [], nose: [] };
+        const s = sharedAssets();
+        const axleY = GROUND_Y + MAIN_R;
+        for (const side of [-1, 1]) {
+          addStrut(body, side * 2.86, -0.95, axleY, MAIN_Z, 0.13);
+          const axle = new THREE.Mesh(s.box, s.strut);
+          axle.scale.set(0.95, 0.12, 0.12);
+          axle.position.set(side * 2.86, axleY, MAIN_Z);
+          body.add(axle);
+          for (const outward of [-side, side]) {
+            const w = makeWheel(MAIN_R, 0.36, outward);
+            w.position.set(side * (2.86 + (outward === side ? 0.43 : -0.43)), axleY, MAIN_Z);
+            body.add(w);
+            wheels.main.push(w);
+          }
+        }
+        const noseY = GROUND_Y + NOSE_R;
+        addStrut(body, 0, -1.3, noseY, NOSE_Z, 0.1);
+        for (const side of [-1, 1]) {
+          const w = makeWheel(NOSE_R, 0.22, side);
+          w.position.set(side * 0.27, noseY, NOSE_Z);
+          body.add(w);
+          wheels.nose.push(w);
+        }
+        return wheels;
+      }
+
+      function buildSurfaces(body, parts) {
+        const s = sharedAssets();
+        const spoilers = parts.spoilers.map((sp) => {
+          const pivot = new THREE.Group();
+          pivot.position.copy(sp.hinge);
+          pivot.add(new THREE.Mesh(sp.geo, s.spoiler));
+          body.add(pivot);
+          return { pivot, axis: sp.axis, sign: sp.sign };
+        });
+        const sleeves = parts.engines.map((box) => {
+          const cx = (box.min.x + box.max.x) / 2;
+          const cy = (box.min.y + box.max.y) / 2;
+          const rFront = Math.max(box.max.x - box.min.x, box.max.y - box.min.y) / 2 + 0.02;
+          const len = box.max.z - box.min.z;
+          const cascadeGeo = new THREE.CylinderGeometry(rFront * 0.95, rFront * 0.95, 0.72, 28, 1, true);
+          cascadeGeo.rotateX(Math.PI / 2);
+          const cascade = new THREE.Mesh(cascadeGeo, s.cascade);
+          cascade.position.set(cx, cy, box.min.z + 0.36);
+          body.add(cascade);
+          const sleeveGeo = new THREE.CylinderGeometry(rFront * 0.86, rFront, len, 28, 1, true);
+          sleeveGeo.rotateX(Math.PI / 2);
+          const sleeve = new THREE.Mesh(sleeveGeo, s.sleeve);
+          const restZ = (box.min.z + box.max.z) / 2;
+          sleeve.position.set(cx, cy, restZ);
+          body.add(sleeve);
+          return { sleeve, restZ };
+        });
+        return { spoilers, sleeves };
+      }
+
+      function buildAircraft(ctx) {
+        const model = ctx.model;
+        const parts = modelParts(model);
+        ctx.scene.remove(model);
+        model.traverse((o) => {
+          if (/^(spoiler\d+|lreverserib.*|No2reverser.*)$/.test(o.name)) o.visible = false;
+        });
+        const root = new THREE.Group();
+        const pitch = new THREE.Group();
+        const body = new THREE.Group();
+        root.rotation.y = -Math.PI / 2;
+        root.add(pitch);
+        pitch.add(body);
+        body.position.set(0, -GROUND_Y, -MAIN_Z);
+        body.add(model);
+        const wheels = buildGear(body);
+        const surfaces = buildSurfaces(body, parts);
+        ctx.scene.add(root);
+        return { root, pitch, wheels, ...surfaces };
+      }
+
+      const INSET_VIEWS = {
+        wheel: { from: [0, 2, 60], at: [0, 0.55, 3.3], fov: 3.4, label: "close cam · 60 m · right main gear" },
+        surfaces: { from: [-34, 18, 46], at: [1.5, 1.4, 5.5], fov: 7, label: "close cam · 60 m · right wing and engine" },
+        both: { from: [-30, 9, 50], at: [2.2, 1.2, 4], fov: 7, label: "close cam · 60 m · wing, engine, gear" },
+      };
+
+      const INSET = {};
+
+      function insetRenderer(grid) {
+        if (INSET.renderer) return INSET.renderer;
+        const canvas = document.createElement("canvas");
+        canvas.className = "inset-canvas";
+        Object.assign(canvas.style, { position: "absolute", top: "0", left: "0", zIndex: "2", pointerEvents: "none" });
+        grid.append(canvas);
+        const r = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
+        r.setPixelRatio(window.devicePixelRatio);
+        r.setClearColor(0x000000, 0);
+        INSET.renderer = r;
+        INSET.grid = grid;
+        return r;
+      }
+
+      function renderInset(lane, scene) {
+        const grid = INSET.grid;
+        const r = INSET.renderer;
+        const w = grid.clientWidth;
+        const h = grid.clientHeight;
+        const size = r.getSize(new THREE.Vector2());
+        if (size.x !== w || size.y !== h) r.setSize(w, h);
+        const origin = grid.getBoundingClientRect();
+        const rect = lane.dom.inset.getBoundingClientRect();
+        const left = rect.left - origin.left + 2;
+        const top = rect.top - origin.top + 2;
+        const rw = rect.width - 4;
+        const rh = rect.height - 4;
+        if (rw <= 0 || rh <= 0) return;
+        const bottom = h - top - rh;
+        r.setScissorTest(true);
+        r.setViewport(left, bottom, rw, rh);
+        r.setScissor(left, bottom, rw, rh);
+        lane.insetCam.aspect = rw / rh;
+        lane.insetCam.updateProjectionMatrix();
+        r.render(scene, lane.insetCam);
+      }
+
+      function fmtClock(t) {
+        const m = Math.floor(t / 60);
+        const s = t - m * 60;
+        return `${m}:${s.toFixed(1).padStart(4, "0")}`;
+      }
+
+      function prepCanvas(canvas) {
+        const dpr = window.devicePixelRatio || 1;
+        const w = Math.round(canvas.clientWidth * dpr);
+        const h = Math.round(canvas.clientHeight * dpr);
+        if (canvas.width !== w || canvas.height !== h) {
+          canvas.width = w;
+          canvas.height = h;
+        }
+        const g = canvas.getContext("2d");
+        g.setTransform(dpr, 0, 0, dpr, 0, 0);
+        g.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+        g.fillStyle = "rgba(12,16,22,0.8)";
+        g.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+        g.font = "11px ui-monospace, Consolas, monospace";
+        return { g, W: canvas.clientWidth, H: canvas.clientHeight };
+      }
+
+      function drawDecelChart(lane, w) {
+        const { g, W, H } = prepCanvas(lane.dom.chart);
+        const x0 = 6;
+        const x1 = 26;
+        const pad = { l: 26, r: 6, t: 16, b: 14 };
+        const X = (t) => pad.l + ((t - x0) / (x1 - x0)) * (W - pad.l - pad.r);
+        const Y = (d) => pad.t + (1 - d / 3.5) * (H - pad.t - pad.b);
+        g.fillStyle = "#cfd6de";
+        g.fillText("decel m/s²,", pad.l, 11);
+        g.fillStyle = "#ffb36b";
+        g.fillText(`- - limit ${lane.cfg.threshold}`, pad.l + 80, 11);
+        for (const d of [0, 1, 2, 3]) {
+          g.fillStyle = "#8a939e";
+          g.fillText(String(d), 4, Y(d) + 4);
+        }
+        g.fillStyle = "rgba(25,179,214,0.35)";
+        for (let t = x0; t < x1; t += 0.1) {
+          const rv = sample(lane.sim.RV, t);
+          if (rv > 0.01) g.fillRect(X(t), Y(rv * 3.5), X(t + 0.1) - X(t) + 0.5, Y(0) - Y(rv * 3.5));
+        }
+        g.strokeStyle = "#ffffff";
+        g.lineWidth = 1.5;
+        g.beginPath();
+        for (let k = 7; k < 24; k++) {
+          const d = measuredDecel(k + 0.5);
+          g.moveTo(X(k), Y(d));
+          g.lineTo(X(k + 1), Y(d));
+        }
+        g.stroke();
+        g.strokeStyle = "#ffb36b";
+        g.setLineDash([4, 3]);
+        g.beginPath();
+        g.moveTo(X(x0), Y(lane.cfg.threshold));
+        g.lineTo(X(x1), Y(lane.cfg.threshold));
+        g.stroke();
+        g.setLineDash([]);
+        const td = lane.cfg.map(w);
+        if (td >= x0 && td <= x1) {
+          g.strokeStyle = "#ff4d4d";
+          g.beginPath();
+          g.moveTo(X(td), pad.t);
+          g.lineTo(X(td), Y(0));
+          g.stroke();
+        }
+        g.fillStyle = "#8a939e";
+        g.fillText("TD", X(6), H - 3);
+        g.textAlign = "right";
+        g.fillText("60 kt", X(24) + 12, H - 3);
+        g.textAlign = "center";
+        g.fillStyle = "rgba(25,179,214,0.95)";
+        g.fillText("■ sleeve open", X(15), H - 3);
+        g.textAlign = "left";
+      }
+
+      function drawStepChart(lane, w) {
+        const { g, W, H } = prepCanvas(lane.dom.chart);
+        const n = 24;
+        const pad = { l: 24, r: 6, t: 16, b: 14 };
+        const maxDeg = 20;
+        const Y = (d) => pad.t + (1 - d / maxDeg) * (H - pad.t - pad.b);
+        const bw = (W - pad.l - pad.r) / n;
+        g.fillStyle = "#cfd6de";
+        g.fillText("wheel °/frame @ 60 fps", pad.l, 11);
+        for (const d of [0, 10, 20]) {
+          g.fillStyle = "#8a939e";
+          g.fillText(String(d), 4, Y(d) + 4);
+        }
+        const trueInc = Math.abs(360 * (sample(lane.sim.P, w) - sample(lane.sim.P, w - 1 / 60)));
+        for (let k = 0; k < n; k++) {
+          const tk = w - (n - 1 - k) / 60;
+          const inc = Math.abs(shownAngleDeg(lane.cfg, lane.sim, tk) - shownAngleDeg(lane.cfg, lane.sim, tk - 1 / 60));
+          g.fillStyle = k === n - 1 ? "#ff4d4d" : "#e9edf2";
+          const y = Y(Math.min(inc, maxDeg));
+          g.fillRect(pad.l + k * bw + 1, y, bw - 2, Y(0) - y);
+        }
+        g.strokeStyle = "#ffb36b";
+        g.setLineDash([4, 3]);
+        g.beginPath();
+        g.moveTo(pad.l, Y(Math.min(trueInc, maxDeg)));
+        g.lineTo(W - pad.r, Y(Math.min(trueInc, maxDeg)));
+        g.stroke();
+        g.setLineDash([]);
+        g.fillStyle = "#ffb36b";
+        const trueY = Y(Math.min(trueInc, maxDeg));
+        g.textAlign = "right";
+        g.fillText(`true ${trueInc.toFixed(1)}°`, W - pad.r, trueY < 30 ? trueY + 12 : trueY - 3);
+        g.textAlign = "left";
+      }
+
+      function clockText(lane, w) {
+        const cfg = lane.cfg;
+        const prof = PROFILES[cfg.profile];
+        const td = cfg.map(w);
+        const kt = prof.kt(td);
+        const lines = [`data ${fmtClock(td)}  ${prof.event(td)}`, `${Math.abs(kt).toFixed(0)} kt${kt < -0.05 ? " back" : ""} · ${prof.phase(td)}`];
+        if (cfg.timeBase === "wall") lines[0] = `data ${fmtClock(td)} wall ${fmtClock(w)}`;
+        if (cfg.show.includes("wheel")) {
+          const h = 0.02;
+          const shown = (cfg.span * (sample(lane.sim.P, w + h) - sample(lane.sim.P, w - h))) / (2 * h);
+          const onGround = prof.onGround(td);
+          const truth = onGround ? (kt * KT) / (2 * Math.PI * TRUE_R) : null;
+          lines.push(`wheel ${shown.toFixed(1)} rev/s` + (truth === null ? "" : ` (true ${truth.toFixed(1)})`));
+        }
+        if (cfg.show.includes("surfaces")) {
+          const sp = Math.round(sample(lane.sim.SP, w) * 100);
+          const rv = Math.round(sample(lane.sim.RV, w) * 100);
+          lines.push(`spoilers ${sp}% rev ${rv}%`);
+        }
+        return lines.join("\n");
+      }
+
+      function makeLane(cfg) {
+        const lane = { cfg, sim: simulate(cfg), dom: null, ac: null, insetCam: null };
+        return {
+          label: cfg.label,
+          caption: cfg.caption,
+          _lane: lane,
+          setup(ctx) {
+            buildWorld(ctx.scene);
+            lane.ac = buildAircraft(ctx);
+            ctx.camera.fov = 5;
+            ctx.camera.near = 20;
+            ctx.camera.far = 20000;
+            ctx.camera.setViewOffset(1600, 900, 320, 90, 1600, 900);
+            lane.insetCam = new THREE.PerspectiveCamera(INSET_VIEWS[cfg.inset].fov, 16 / 9, 2, 20000);
+          },
+          update(ctx, w) {
+            const prof = PROFILES[cfg.profile];
+            const td = cfg.map(w);
+            const ac = lane.ac;
+            ac.root.position.set(prof.x(td), prof.height(td), 0);
+            ac.pitch.rotation.x = THREE.MathUtils.degToRad(prof.pitchDeg(td));
+            const angle = THREE.MathUtils.degToRad(shownAngleDeg(cfg, lane.sim, w));
+            for (const wheel of ac.wheels.main) wheel.rotation.x = -angle;
+            for (const wheel of ac.wheels.nose) wheel.rotation.x = -angle;
+            const sp = sample(lane.sim.SP, w);
+            for (const s of ac.spoilers) s.pivot.quaternion.setFromAxisAngle(s.axis, s.sign * SPOILER_MAX * sp);
+            const rv = sample(lane.sim.RV, w);
+            for (const s of ac.sleeves) s.sleeve.position.z = s.restZ + SLEEVE_TRAVEL * rv;
+            const target = ac.root.position.clone().add(new V3(0, 3, 0));
+            ctx.camera.position.copy(TOWER);
+            ctx.camera.lookAt(target);
+            const view = INSET_VIEWS[cfg.inset];
+            const base = ac.root.position;
+            lane.insetCam.position.set(base.x + view.from[0], base.y + view.from[1], view.from[2]);
+            lane.insetCam.lookAt(base.x + view.at[0], base.y + view.at[1], view.at[2]);
+            ctx.scene.updateMatrixWorld();
+            renderInset(lane, ctx.scene);
+            lane.dom.clock.textContent = clockText(lane, w);
+            if (lane.dom.paused) {
+              const pause = PAUSES.find(([a, b]) => w >= a && w < b);
+              lane.dom.paused.hidden = !pause;
+              if (pause) lane.dom.paused.textContent = `REPLAY PAUSED ${(w - pause[0]).toFixed(1)} / ${pause[1] - pause[0]} s`;
+            }
+            if (cfg.chart === "decel") drawDecelChart(lane, w);
+            if (cfg.chart === "steps") drawStepChart(lane, w);
+          },
+        };
+      }
+
+      const base = { profile: "landing", radius: 0.55, span: 1, step: 0, airborne: "zero", surfaces: "none", timeBase: "data", map: identity, chart: null };
+      const L = (o) => makeLane({ ...base, ...o });
+
+      const SECTIONS = [
+        {
+          head: [
+            "Q1 · Wheel radius and spin rate",
+            "Which radius turns ground speed into wheel spin? Watch the close cam at touchdown (6 s), taxi (32–44 s) and the pushback (50–56 s, wheels turn backwards). Spin starts at main-gear contact.",
+          ],
+          lanes: [
+            L({ cls: "span4", tag: "Q1 a", short: "per-category radius", label: "(a) Per-category radius, 1 clip = 1 revolution", caption: "Spin = v / (2π r): regional 0.45 m, narrowbody 0.55 m (this 737), widebody 0.7 m. Nose wheels (0.34 m) get 0.55 too, so they turn 0.62×.", show: ["wheel"], inset: "wheel" }),
+            L({ cls: "span4", tag: "Q1 b", short: "0.6 m for every type", radius: 0.6, label: "(b) One radius, 0.6 m, for every type", caption: "On the 737's 0.55 m tyre the wheel turns 8 % slow, so it slips against the runway; a 0.45 m regional tyre would turn 25 % slow.", show: ["wheel"], inset: "wheel" }),
+            L({ cls: "span4", tag: "Q1 c", short: "clip spans 3 revs", span: 3, label: "(c) Worst case of (a): the clip spans 3 revolutions", caption: "Same rate as (a) but each clip loop turns the wheel 3 times: 3× too fast; at 15 kt the five spokes strobe backwards at 60 fps.", show: ["wheel"], inset: "wheel" }),
+          ],
+        },
+        {
+          sub: true,
+          head: [
+            "Q1 · Airborne after takeoff (radius as in a)",
+            "A takeoff instead of the landing: roll from 2 s, liftoff at 28 s. Gear is held down here so the spin stays in view; on the real airframe the native retract clip hides the wheels a few seconds after liftoff, and a real 737 brakes its main wheels as the gear retracts.",
+          ],
+          lanes: [
+            L({ cls: "span4", tag: "Q1 air", short: "hold", profile: "takeoff", airborne: "hold", label: "Hold: wheels keep their liftoff spin", caption: "The last ground speed's spin carries on for the whole flight, into the gear bay and onto final.", show: ["wheel"], inset: "wheel" }),
+            L({ cls: "span4", tag: "Q1 air", short: "coast 5 s", profile: "takeoff", airborne: "coast", label: "Coast: spin falls to zero over 5 s", caption: "Linear spin-down from the liftoff rate, stopped by LO+5 s.", show: ["wheel"], inset: "wheel" }),
+            L({ cls: "span4", tag: "Q1 air", short: "freeze", profile: "takeoff", airborne: "freeze", label: "Freeze: wheels stop at liftoff", caption: "Spin drops to zero the frame the gear leaves the ground.", show: ["wheel"], inset: "wheel" }),
+          ],
+        },
+        {
+          head: [
+            "Q2 · When do spoilers and reversers deploy?",
+            "Spoilers deploy in 1 s, stow in 1.5 s; the sleeve travels in 2 s each way. Watch touchdown (6 s), TD+1.5 s (7.5 s) and the stow at 60 kt (24 s). Wheels spin as in Q1 a.",
+          ],
+          lanes: [
+            L({ cls: "span4", tag: "Q2 a", short: "both, every landing", surfaces: "a", label: "(a) Both on every landing", caption: "Spoilers at touchdown above 60 kt; reversers 1.5 s after touchdown while decelerating; both stow at 60 kt.", show: ["surfaces"], inset: "surfaces" }),
+            L({ cls: "span4", tag: "Q2 b", short: "reversers on hard decel", surfaces: "b", threshold: 2.8, chart: "decel", label: "(b) Spoilers always, reversers on high deceleration", caption: "This landing is a gentle one (2.3 m/s², threshold 2.8): the reversers stay stowed.", show: ["surfaces"], inset: "surfaces" }),
+            L({ cls: "span4", tag: "Q2 c", short: "spoilers only", surfaces: "c", label: "(c) Spoilers only, reversers never", caption: "Spoilers as in (a); the sleeves never move.", show: ["surfaces"], inset: "surfaces" }),
+          ],
+          note: "<b>Flicker risk in (b).</b> The app only knows deceleration from position reports (1 Hz on vNAS, 15 s on VATSIM), so the estimate jumps around. The lane on the right is (b) with the threshold at this landing's own deceleration (2.3 m/s²): the sleeves open and close as the estimate crosses it. A deploy/stow gap (hysteresis) or a latch until 60 kt would stop it.",
+        },
+        {
+          extra: true,
+          lanes: [
+            L({ cls: "risk-lane", tag: "Q2 b", short: "risk: threshold 2.3", surfaces: "b", threshold: 2.3, chart: "decel", label: "(b) at the threshold: reversers flicker", caption: "Same rule, threshold at 2.3 m/s², right where this landing decelerates.", show: ["surfaces"], inset: "surfaces" }),
+          ],
+        },
+        {
+          head: [
+            "Q3 · Wheel pose step at taxi speed",
+            "The spin clip's pose is picked in steps of clip progress. At 15 kt (32–44 s) the wheel turns 13.4° per 60 fps frame, so 1 % and 2 % steps show as uneven turns per frame (chart, red bar = this frame); in the 3 kt pushback (50–56 s, 2.7° per frame) a 2 % step holds each pose for 2–3 frames.",
+          ],
+          lanes: [
+            L({ cls: "span4", tag: "Q3 a", short: "1 % steps (3.6°)", step: 0.01, chart: "steps", label: "(a) 1 % steps, 3.6°", caption: "100 poses per revolution.", show: ["wheel"], inset: "wheel" }),
+            L({ cls: "span4", tag: "Q3 b", short: "2 % steps (7.2°)", step: 0.02, chart: "steps", label: "(b) 2 % steps, 7.2° (the gear cache's step)", caption: "50 poses per revolution, the step the gear clip cache already uses.", show: ["wheel"], inset: "wheel" }),
+            L({ cls: "span4", tag: "Q3 c", short: "continuous", step: 0, chart: "steps", label: "(c) Continuous", caption: "The pose follows clip progress exactly.", show: ["wheel"], inset: "wheel" }),
+          ],
+        },
+        {
+          head: [
+            "Q4 · Time base during a replay pause",
+            "The replay pauses at TD+6 s (12 s data) for 4 s. Spoilers and sleeves are fully out by then, so a second, 2 s pause at TD+2.5 s (8.5 s data, sleeve half open) is added to show a transition held mid-way. The aircraft freezes in both lanes; the badge shows the pause.",
+          ],
+          lanes: [
+            L({ cls: "span6", tag: "Q4 a", short: "data time", surfaces: "a", map: q4Map, timeBase: "data", label: "(a) Data time", caption: "Wheels stop in both pauses and the sleeve holds half open through the first; everything resumes with the data.", show: ["wheel", "surfaces"], inset: "both" }),
+            L({ cls: "span6", tag: "Q4 b", short: "wall clock", surfaces: "a", map: q4Map, timeBase: "wall", label: "(b) Wall clock", caption: "Wheels keep turning under the frozen aircraft and the sleeve finishes opening during the pause.", show: ["wheel", "surfaces"], inset: "both" }),
+          ],
+        },
+      ];
+
+      const allLanes = SECTIONS.flatMap((s) => s.lanes);
+      MockThree.lanes({ duration: DURATION, lanes: allLanes });
+
+      const grid = document.querySelector(".mt-grid");
+      insetRenderer(grid);
+      const cards = [...grid.querySelectorAll(".mt-lane")];
+      let index = 0;
+      for (const section of SECTIONS) {
+        const first = cards[index];
+        if (section.head) {
+          const head = document.createElement("div");
+          head.className = "sec-head" + (section.sub ? " sub" : "");
+          head.innerHTML = `<h2></h2><p></p>`;
+          head.querySelector("h2").textContent = section.head[0];
+          head.querySelector("p").textContent = section.head[1];
+          grid.insertBefore(head, first);
+        }
+        if (section.note) {
+          const note = document.createElement("div");
+          note.className = "note-box";
+          note.innerHTML = section.note;
+          section.noteEl = note;
+        }
+        for (const lane of section.lanes) {
+          const card = cards[index++];
+          const cfg = lane._lane.cfg;
+          card.classList.add(cfg.cls);
+          const view = card.querySelector(".mt-view");
+          const el = (cls, tagName = "div") => {
+            const e = document.createElement(tagName);
+            e.className = `ov ${cls}`;
+            view.append(e);
+            return e;
+          };
+          const badge = el("badge");
+          badge.innerHTML = "<b></b><span></span>";
+          badge.querySelector("b").textContent = cfg.tag;
+          badge.querySelector("span").textContent = cfg.short;
+          const inset = el("inset");
+          inset.innerHTML = "<span></span>";
+          inset.querySelector("span").textContent = INSET_VIEWS[cfg.inset].label;
+          const dom = { badge, inset, clock: el("clock") };
+          if (cfg.chart) dom.chart = el("chart", "canvas");
+          if (cfg.map === q4Map) {
+            dom.paused = el("paused");
+            dom.paused.hidden = true;
+          }
+          lane._lane.dom = dom;
+        }
+      }
+      const riskCard = cards.find((c) => c.classList.contains("risk-lane"));
+      const q2 = SECTIONS.find((s) => s.noteEl);
+      grid.insertBefore(q2.noteEl, riskCard);
+
+      const jumps = document.createElement("div");
+      jumps.className = "jumps";
+      const marks = [
+        ["Final", 2],
+        ["Touchdown", 6],
+        ["TD+1 s", 7],
+        ["TD+3 s", 9],
+        ["Mid-rollout", 15],
+        ["60 kt stow", 24.5],
+        ["Taxi 15 kt", 38],
+        ["Q4 pause 1", 9.5],
+        ["Q4 pause 2", 16],
+        ["Pushback", 53],
+        ["Liftoff+3 s (Q1 air)", 31],
+      ];
+      for (const [name, t] of marks) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = `${name} · ${t} s`;
+        b.addEventListener("click", () => {
+          const slider = document.querySelector(".mt-bar input");
+          slider.value = String(t);
+          slider.dispatchEvent(new Event("input"));
+        });
+        jumps.append(b);
+      }
+      grid.before(jumps);
+
+      const stills = document.getElementById("stills");
+      if (new URLSearchParams(location.search).has("t")) stills.hidden = true;
+      document.body.append(stills);
+    </script>
+  </body>
+</html>

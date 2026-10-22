@@ -13,13 +13,14 @@
  * 3. Points cargo at the private vNAS crate when --vnas is passed (the in-repo stub stands in otherwise)
  * 4. Starts tauri dev with the appropriate configuration
  *
- * Usage: node scripts/shipping/build/dev-wrapper.js [LOG_PATH] [--vnas] [--release] [--force]
+ * Usage: node scripts/shipping/build/dev-wrapper.js [LOG_PATH] [--vnas] [--release] [--force] [--agent]
  * Examples:
  *   pnpm run dev
  *   pnpm run dev -- temp/console.log
  *   pnpm run dev:vnas
  *   pnpm run dev:vnas -- temp/console.log
  *   pnpm run dev -- --force              # Force rebuild even if no changes
+ *   pnpm run dev -- --agent              # Window starts hidden and unfocused; saved window state untouched
  *   pnpm run release                     # Optimized Rust + minified frontend
  *   pnpm run release:vnas                # Same with vNAS
  *
@@ -100,11 +101,14 @@ let logFile = process.env.TOWERCAB_LOG_FILE || null
 let useVnas = false
 let useRelease = false
 let forceRebuild = false
+let agentRun = false
 
 // Parse all arguments (order-independent)
 for (const arg of args) {
   if (arg === '--vnas') {
     useVnas = true
+  } else if (arg === '--agent') {
+    agentRun = true
   } else if (arg === '--release') {
     useRelease = true
   } else if (arg === '--force') {
@@ -180,6 +184,12 @@ if (useRelease) {
 }
 if (useVnas) {
   command += ' --features vnas'
+}
+if (agentRun) {
+  // Opens the window hidden and unfocused; the Rust side keeps the window-state plugin off it.
+  command += ' --config src-tauri/tauri.agent.conf.json'
+  process.env.TC3D_AGENT_RUN = '1'
+  console.log('[dev-wrapper] Agent run: window starts hidden and unfocused')
 }
 
 // Execute tauri dev with environment variable

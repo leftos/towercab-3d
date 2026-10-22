@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 TowerCab 3D is a Tauri 2 desktop application that provides a 3D tower cab view for VATSIM air traffic controllers. It displays real-time aircraft positions on a 3D globe with satellite imagery and terrain, featuring smooth camera controls, aircraft following modes, and extensive customization options.
 
-**Remote Browser Access:** The desktop app runs an HTTP server (port 8765) allowing access from browsers on the local network (iPad, tablets, other PCs). All mods, models, and settings are served from the host. Global settings (Cesium token, bookmarks, datablock positions) are shared across devices.
+**Remote Browser Access:** The desktop app runs an HTTP server (port 8765) allowing access from browsers on the local network (iPad, tablets, other PCs), refusing other addresses unless `server.allowNonLocalClients` is on. All mods, models, and settings are served from the host. Global settings (Cesium token, bookmarks, datablock positions) are shared across devices; secrets (other than the Cesium token) and host folder paths stay on the host, no remote response carries a host path, and a remote write cannot change host-owned fields (see `docs/remote-access-architecture.md`, "Settings exposed to remote clients").
 
 ## Plan
 
@@ -26,13 +26,33 @@ When told to "check the logs", read temp/console.log. It's likely it's quite big
 
 ## E2E testing via Playwright MCP
 
-Two MCP servers in `.mcp.json` drive the app:
+Three MCP servers in `.mcp.json` drive the app. A check that only needs the rendered scene (weather, camera, labels, mods, tower models, METAR) runs headless with the host's data (`playwright-headless`), which opens no window on the user's desktop.
 
-- **`tauri-app`** attaches to the running desktop app's WebView2 over CDP (`http://localhost:9222`). This is the real app: Rust backend, host settings and Cesium token, mods, METAR, and (in a dev build) the weather debug panel. Launch the app with the debugging port open, in the background, and stop it when done:
+Use `tauri-app` for what needs the real app (the Rust backend, host WebSockets and aircraft feed, the tray, native dialogs, deep links, single-instance, window state).
+
+- **`playwright-headless`** (`@playwright/mcp@0.0.83`, `--headless --isolated`, viewport 1600x900) drives headless Edge against `pnpm run vite:headless`, a Vite dev server on port 5174 (`vite --mode headless --strictPort`) that answers a read-only subset of `/api/*` itself from the dev build's data. Headless Edge got a real GPU with no extra flags. `pnpm run dev` and `vite:dev` never serve the dev API, and neither does `vite preview` or a build. Recipe:
+  1. Start `pnpm run vite:headless` in the background (stop it when done). By default it reads the desktop dev build's settings file (`%APPDATA%\com.towercab.viewer.dev\global-settings.json`) and mods from the main checkout's `src-tauri/target/debug/mods` (found through git, so a worktree reads the same mods). `TC3D_SETTINGS_FILE` and `TC3D_MODS_DIR` replace them, e.g. a fake settings file and a scratch mods folder.
+
+     Keep a settings file outside the repository, since the server refuses to start when it lies inside `server.fs.allow` or the project root (`/@fs/` would serve it).
+  2. Check `http://localhost:5174/api/dev-health` (answers only `{ settings: found|missing|unreadable, ionToken: boolean, modsRoot: found|missing }`); the start-up log prints `mods root: found|missing`, not the path.
+  3. Navigate to `http://localhost:5174/`.
+  - What the page shows: remote mode served by the dev server, with `/api/global-settings` (the remote view), `/api/mods/*`, `/api/tower-positions`, `/api/airport-surfaces` and `/api/proxy` (METAR only: `https://aviationweather.gov/api/data/metar` with `format=json` given once) answered; writes (`POST /api/global-settings`, `/api/log`) are accepted and dropped, other writes get 405.
+
+    The host WebSockets are closed at once, so the page shows the host as disconnected and, as with `playwright`, no aircraft appear until polling is started by hand. `/api/realtraffic/*` keeps Vite's existing proxy.
+  - The Cesium ion token never reaches the browser: the settings reply carries a placeholder token, the page points Cesium's ion server at the dev server's `/api/ion/` route (dev builds only), and that route forwards `GET /v1/assets/<id>/endpoint` to ion with the real token added server-side. The browser holds only the per-asset tokens ion returns.
+
+    With a fake or missing token the forwarder answers 401 (an ion token in the dev settings is required for terrain and imagery).
+  - Only same-origin script calls from the page are served: any `/api/*` request marked `Sec-Fetch-Mode: navigate` or `Sec-Fetch-Site: cross-site` gets 403 JSON (so opening an API URL with `browser_navigate` fails), while requests without fetch metadata (curl, Node) are served. The dev API answers loopback sockets only and checks `Host` and `Origin` itself.
+  - Transcript rules: never read or print the Cesium ion token, the Google Maps key or the dev settings file. Do not read `/api/global-settings` or the localStorage blob (`browser_evaluate` of `fetch('/api/global-settings')`, `useGlobalSettingsStore.getState()`, a whole `stores.settings.getState()`, `Ion.defaultAccessToken`) and do not `curl` the settings route; ask `/api/dev-health` whether a token is loaded.
+
+    Do not list `browser_network_requests` unfiltered, call `browser_network_request` on an ion or `/api/global-settings` entry, or save either into the repository (Vite's `/@fs/` serves it); console lines located at a failed ion URL print the URL. The Google key is served when Google is the imagery provider (as the desktop server serves it), so the same rules cover it.
+- **`tauri-app`** attaches to the running desktop app's WebView2 over CDP (`http://localhost:9222`). This is the real app: Rust backend, host settings and Cesium token, mods, METAR, and (in a dev build) the weather debug panel. Launch the app with the debugging port open, in the background, from the tree under test (`<tree>`; a shell's working folder resets to the main checkout between calls), and stop it when done:
   ```powershell
-  $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = '--remote-debugging-port=9222'; pnpm run dev
+  $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = '--remote-debugging-port=9222'; pnpm --dir <tree> run dev -- --agent
   ```
-  (`pnpm run dev:vnas` the same way.) Outside the webview, the tray menu and native file dialogs are not reachable; deep links (`start tc3d://…`), single-instance and window state can be exercised from the shell.
+  (`pnpm run dev:vnas -- --agent` the same way.) Outside the webview, the tray menu and native file dialogs are not reachable; deep links (`start tc3d://…`), single-instance and window state can be exercised from the shell.
+
+  `--agent` (dev only) creates the window hidden and unfocused and leaves the developer's saved window state alone, so it opens nothing on the desktop and takes no focus, and no "hands off" is needed. The app keeps rendering at its frame cap and CDP screenshots and input work; never call `page.bringToFront()`. Close it by posting `WM_CLOSE` to its window or stopping its process tree (`CloseMainWindow()` cannot find a hidden window). To watch a run, launch without `--agent`. Details in `docs/DRIVING_CONVENTIONS.md`, rule hidden-window-keeps-rendering.
 - **`playwright`** launches Edge against the frontend alone. Every `/api/*` request then returns the SPA's HTML, so mods, tower positions, METAR (`/api/proxy`) and saved global settings are absent and the Cesium token lasts only until reload. A plain browser counts as remote mode (`isRemoteMode()`), so the app waits for the host and never polls VATSIM: no aircraft appear until polling is started by hand from `browser_evaluate` with `(await import('/stores/vatsimStore.ts')).useVatsimStore.getState().startPolling()`. To use it:
   1. Start the dev server: `pnpm run vite:dev` (port 5173)
   2. Navigate, click "Skip for now" on the Cesium token prompt — airports load from GitHub independently of the token
@@ -51,9 +71,13 @@ In either, `WeatherDebugPanel` (dev builds only) forces rain, snow and cloud cov
 
 Driving notes:
 
-- Tell the user "hands off" before driving the window; mouse or keyboard input from them breaks a run.
+- Tell the user "hands off" before driving a visible window (one launched without `--agent`); mouse or keyboard input from them breaks a run.
 - Shift+Home resets the camera to the app default; the "Defaults" button restores the *user's* saved default.
-- The dev build reads mods from `src-tauri/target/debug/mods`; clone `github.com/leftos/tc3d-mod-koak-tower` into its `towers/` for a tower model.
+- The dev build reads mods from `src-tauri/target/debug/mods`; clone `github.com/leftos/tc3d-mod-koak-tower` into its `towers/` for a tower model. The repo nests the mod one level down (`KOAK/`), and a tower-cab check also needs 3D buildings on and the camera aimed at the cab (see `docs/DRIVING_CONVENTIONS.md`, rule dev-mods-in-target).
+- The sun direction is `viewer.scene.context.uniformState.sunDirectionWC`, not `scene.light.direction`.
+- The selected airport is not restored after a reload; select it again.
+- Headless Edge over raw CDP renders at 1 fps until `page.bringToFront()` and needs `--disable-extensions`; do not restart Vite while its page is open (see `docs/DRIVING_CONVENTIONS.md`, rule headless-edge-quirks).
+- `pnpm run dev -- <log>` writes the log relative to `src-tauri/`, not the repo root.
 - The weather debug panel's Apply replaces all weather, clouds included.
 - CDP `Emulation.*` overrides last only for the `browser_run_code_unsafe` call that sets them.
 - An airport switch stalls page timers for about 10 s; wait before reading state.
@@ -69,8 +93,13 @@ pnpm run build        # Build for production without vNAS
 pnpm run build:vnas   # Build for production with vNAS (requires private repo access)
 pnpm run build:converter  # Build FSLTL converter executable (requires Python + PyInstaller)
 pnpm run vite:dev     # Frontend only, no browser open — use for headless Playwright/E2E (port 5173)
+pnpm run vite:headless  # Frontend plus the dev-only /api/* for the playwright-headless MCP server (port 5174)
 pnpm run vite:build   # Build frontend only (internal, used by Tauri)
 ```
+
+### Cargo checks without a frontend build
+
+A cargo build normally needs `dist/` and `src-tauri/resources/fsltl_converter.exe`, gitignored build outputs a fresh checkout or worktree lacks. With `TC3D_CHECK_BUILD=1` set (exactly `1`), `src-tauri/build.rs` empties `bundle.resources`, so `cargo check`, `cargo clippy` and `cargo test` run without either; through the gate pass it as `--env TC3D_CHECK_BUILD=1`. Nothing is copied into `target/<profile>/resources/` that way, so run the dev app from a normal build. The switch refuses a `tauri build` (custom-protocol) build.
 
 ### Rust Documentation
 
@@ -107,7 +136,7 @@ The optional `vnas` feature enables 1Hz real-time aircraft updates via the priva
 
 **Note:** The `pnpm run build` command automatically runs `build:converter` to create the FSLTL model converter executable. This requires Python 3 with Pillow installed. PyInstaller is auto-installed if missing.
 
-**Note for Claude:** You may launch `pnpm run dev` / `pnpm run dev:vnas` in the background to test your work (see "E2E testing via Playwright MCP" for the debugging-port launch). The window opens on the user's desktop, so stop the app when you are done with it.
+**Note for Claude:** You may launch `pnpm run dev` / `pnpm run dev:vnas` in the background to test your work (see "E2E testing via Playwright MCP" for the debugging-port launch). Launched with `-- --agent` the window is hidden and unfocused; without it the window opens on the user's desktop. Stop the app when you are done with it.
 
 **Windows Warning:** Never use `2>nul` to suppress stderr in terminal commands. On Windows, this creates a file literally named `nul` which is extremely difficult to delete (requires special tools or booting from Linux). Use `2>$null` in PowerShell or simply omit stderr redirection.
 
@@ -267,6 +296,18 @@ fsltl_converter.exe (Python sidecar)
 └─ Built via PyInstaller (pnpm run build:converter)
 ```
 
+### Package rule
+
+The converter opens only files inside the model's MSFS package (the folder holding `SimObjects/Airplanes`), with junctions and symlinks followed, and accepts a glTF buffer or image URI or an `aircraft.cfg` `texture=` value only as a plain file name. A whole-package junction (how AIG is installed on some machines) works; a junction on only `SimObjects` or `Airplanes` fails. Details in `docs/msfs-model-conversion.md`, "--no-discovery Mode".
+
+### Converter tests
+
+Stdlib `unittest` in `scripts/shipping/conversion/test_convert_fsltl_batch.py` (needs Pillow and numpy):
+
+```bash
+uv run --no-project --python 3.12 --with pillow --with numpy python -m unittest discover -s scripts/shipping/conversion -p "test_*.py" -v
+```
+
 ### Key Files
 
 | File | Purpose |
@@ -279,10 +320,16 @@ fsltl_converter.exe (Python sidecar)
 
 ### Model Matching Flow
 
-1. **Exact match**: Aircraft type + airline code → specific livery
-2. **Airline fallback**: Find any model for the airline (common narrowbody types)
-3. **Dimension matching**: Find closest model by wingspan/length, apply scale factors
-4. **Generic fallback**: Use built-in b738.glb model
+`AircraftModelService.checkMsfsModel` tries, in order, the first that matches winning:
+
+1. **User VMR rules**: the rule's alternatives, first one with a cached or convertible model
+2. **Registration match**: the callsign equals a private livery's `atc_id` for the type. The result is cached per callsign (`{type}@{CALLSIGN}`) for an aircraft with no airline code, so two aircraft of one type do not share a livery
+3. **Type + airline**: the exact livery
+4. **Closest for the airline**: the airline's model closest in wingspan/length, with a scale factor
+5. **Generic**: the type's ZZZZ (no-airline) livery
+6. **Closest of any airline**: closest by size, skipping liveries registered to a private aircraft (no airline code, non-empty registration)
+
+With no MSFS match, `getModelInfo` goes on to custom VMR mods, the built-in mapped or direct model, the built-in closest by size, then PA28 (GA) or B738. Reloading the MSFS model index clears the cached matches.
 
 ### Settings (GlobalSettings.msfsModels)
 
@@ -316,7 +363,7 @@ scripts/
 
 **Shipping scripts** are used for building, development, and data generation:
 - `shipping/build/` - Build tools: check.js, build_converter.py, dev-wrapper.js
-- `shipping/conversion/` - Runtime conversion: convert_fsltl_batch.py
+- `shipping/conversion/` - Runtime conversion: convert_fsltl_batch.py, and its tests test_convert_fsltl_batch.py
 - `shipping/data-generation/` - One-off scripts: convert-aircraft-data.py, extract-airport-surfaces.py, scrape-tower-positions.py
 
 **Debugging scripts** are utilities for development and troubleshooting:
@@ -361,6 +408,7 @@ if (version < 7) {
    - The Rust backend deserializes/serializes settings to disk
    - Fields not in the Rust struct will be silently dropped when saving
    - Add `#[serde(default)]` for new optional fields
+   - Class the new field in `FIELD_CLASSES` (public, host-owned, host-private or secret; host-private, a path on the host, is blanked in the remote view and kept on a remote write) and, if not public, in `remote_view` / `merge_remote_write`; a test fails until every JSON path is classed. Anything a remote browser must not read or change (paths, keys, the `server` block) is not public
 5. Settings auto-sync via HTTP endpoints in remote mode
 
 ### Adding a New Keyboard Shortcut

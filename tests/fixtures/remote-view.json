@@ -1,0 +1,702 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "airports": {
+          "defaultIcao": "KSFO",
+          "realtrafficFavorites": [
+            "KSJC"
+          ],
+          "recentAirports": [
+            "KSFO"
+          ],
+          "vatsimFavorites": [
+            "KOAK"
+          ]
+        },
+        "cesiumIonToken": "SECRET-ion",
+        "disabledMods": [
+          "mods/aircraft/b738"
+        ],
+        "display": {
+          "autoAvoidOverlaps": true,
+          "datablockMode": "full",
+          "defaultDatablockDirection": 7,
+          "groundLabelMinSpeed": 2.0,
+          "groundLabelMode": "all",
+          "inset": {
+            "datablockMode": "callsign",
+            "groundLabelMode": "crucialPhases",
+            "visibilityMargin": 0.15
+          },
+          "labelVisibilityDistance": 30.0,
+          "leaderDistance": 2,
+          "showAirborneTraffic": true,
+          "showGroundTraffic": true
+        },
+        "fsltl": {
+          "enableFsltlModels": true,
+          "outputPath": null,
+          "sourcePath": null,
+          "textureScale": "2k"
+        },
+        "imagery": {
+          "cesiumAdjustments": {
+            "brightness": 1.0,
+            "contrast": 1.0,
+            "hueShift": 0.0,
+            "saturation": 1.0
+          },
+          "googleAdjustments": {
+            "brightness": 1.0,
+            "contrast": 1.0,
+            "hueShift": 0.0,
+            "saturation": 1.0
+          },
+          "googleMapsApiKey": "",
+          "provider": "cesium"
+        },
+        "msfsModels": {
+          "cacheDirectory": null,
+          "cacheLimitMB": 5120,
+          "communityPath": null,
+          "enableAig": true,
+          "enableFsltl": true,
+          "priority": [
+            "fsltl",
+            "aig"
+          ],
+          "skipGenericVmrMatches": false,
+          "textureScale": "1k",
+          "vmrFiles": []
+        },
+        "realtraffic": {
+          "dataSource": "vatsim",
+          "licenseKey": "",
+          "maxParkedAircraft": 50,
+          "radiusNm": 100
+        },
+        "renderingBackend": "vulkan",
+        "server": {
+          "allowNonLocalClients": false,
+          "enabled": true,
+          "minimizeToTray": false,
+          "port": 9000
+        },
+        "viewports": {
+          "airportConfigs": {
+            "KSFO": {
+              "bookmarks": {
+                "1": {
+                  "fov": 3.0,
+                  "heading": 1.0,
+                  "name": "Runway 28",
+                  "pitch": 2.0,
+                  "positionOffsetX": 4.0,
+                  "positionOffsetY": 5.0,
+                  "positionOffsetZ": 6.0,
+                  "topdownAltitude": 7.0,
+                  "viewMode": "3d"
+                }
+              },
+              "datablockPosition": 7,
+              "default2d": {
+                "fov": 3.0,
+                "heading": 1.0,
+                "pitch": 2.0,
+                "positionOffsetX": 4.0,
+                "positionOffsetY": 5.0,
+                "positionOffsetZ": 6.0,
+                "topdownAltitude": 7.0
+              },
+              "default3d": {
+                "fov": 3.0,
+                "heading": 1.0,
+                "pitch": 2.0,
+                "positionOffsetX": 4.0,
+                "positionOffsetY": 5.0,
+                "positionOffsetZ": 6.0,
+                "topdownAltitude": 7.0
+              },
+              "insets": [
+                {
+                  "cameraState": {
+                    "followMode": "tower",
+                    "followZoom": 1.5,
+                    "fov": 3.0,
+                    "heading": 1.0,
+                    "orbitDistance": 500.0,
+                    "orbitHeading": 10.0,
+                    "orbitPitch": 20.0,
+                    "pitch": 2.0,
+                    "positionOffsetX": 4.0,
+                    "positionOffsetY": 5.0,
+                    "positionOffsetZ": 6.0,
+                    "topdownAltitude": 7.0,
+                    "viewMode": "3d"
+                  },
+                  "id": "inset-1",
+                  "label": "Ramp",
+                  "layout": {
+                    "height": 200.0,
+                    "width": 300.0,
+                    "x": 1.0,
+                    "y": 2.0,
+                    "zIndex": 1
+                  }
+                }
+              ],
+              "mainCamera": {
+                "followMode": "tower",
+                "followZoom": 1.5,
+                "fov": 3.0,
+                "heading": 1.0,
+                "orbitDistance": 500.0,
+                "orbitHeading": 10.0,
+                "orbitPitch": 20.0,
+                "pitch": 2.0,
+                "positionOffsetX": 4.0,
+                "positionOffsetY": 5.0,
+                "positionOffsetZ": 6.0,
+                "topdownAltitude": 7.0,
+                "viewMode": "3d"
+              }
+            }
+          },
+          "lastAirportIcao": "KSFO",
+          "orbitSettings": {
+            "distance": 500.0,
+            "heading": 0.0,
+            "pitch": 20.0
+          }
+        }
+      },
+      "input": {
+        "airports": {
+          "defaultIcao": "KSFO",
+          "realtrafficFavorites": [
+            "KSJC"
+          ],
+          "recentAirports": [
+            "KSFO"
+          ],
+          "vatsimFavorites": [
+            "KOAK"
+          ]
+        },
+        "cesiumIonToken": "SECRET-ion",
+        "disabledMods": [
+          "mods/aircraft/b738"
+        ],
+        "display": {
+          "autoAvoidOverlaps": true,
+          "datablockMode": "full",
+          "defaultDatablockDirection": 7,
+          "groundLabelMinSpeed": 2.0,
+          "groundLabelMode": "all",
+          "inset": {
+            "datablockMode": "callsign",
+            "groundLabelMode": "crucialPhases",
+            "visibilityMargin": 0.15
+          },
+          "labelVisibilityDistance": 30.0,
+          "leaderDistance": 2,
+          "showAirborneTraffic": true,
+          "showGroundTraffic": true
+        },
+        "fsltl": {
+          "enableFsltlModels": true,
+          "outputPath": "D:/fsltl-out",
+          "sourcePath": "D:/fsltl",
+          "textureScale": "2k"
+        },
+        "imagery": {
+          "cesiumAdjustments": {
+            "brightness": 1.0,
+            "contrast": 1.0,
+            "hueShift": 0.0,
+            "saturation": 1.0
+          },
+          "googleAdjustments": {
+            "brightness": 1.0,
+            "contrast": 1.0,
+            "hueShift": 0.0,
+            "saturation": 1.0
+          },
+          "googleMapsApiKey": "SECRET-google",
+          "provider": "cesium"
+        },
+        "msfsModels": {
+          "cacheDirectory": "D:/cache",
+          "cacheLimitMB": 5120,
+          "communityPath": "D:/Community",
+          "enableAig": true,
+          "enableFsltl": true,
+          "priority": [
+            "fsltl",
+            "aig"
+          ],
+          "skipGenericVmrMatches": false,
+          "textureScale": "1k",
+          "vmrFiles": [
+            "D:/rules.vmr"
+          ]
+        },
+        "realtraffic": {
+          "dataSource": "vatsim",
+          "licenseKey": "SECRET-licence",
+          "maxParkedAircraft": 50,
+          "radiusNm": 100
+        },
+        "renderingBackend": "vulkan",
+        "server": {
+          "allowNonLocalClients": false,
+          "enabled": true,
+          "minimizeToTray": false,
+          "port": 9000
+        },
+        "viewports": {
+          "airportConfigs": {
+            "KSFO": {
+              "bookmarks": {
+                "1": {
+                  "fov": 3.0,
+                  "heading": 1.0,
+                  "name": "Runway 28",
+                  "pitch": 2.0,
+                  "positionOffsetX": 4.0,
+                  "positionOffsetY": 5.0,
+                  "positionOffsetZ": 6.0,
+                  "topdownAltitude": 7.0,
+                  "viewMode": "3d"
+                }
+              },
+              "datablockPosition": 7,
+              "default2d": {
+                "fov": 3.0,
+                "heading": 1.0,
+                "pitch": 2.0,
+                "positionOffsetX": 4.0,
+                "positionOffsetY": 5.0,
+                "positionOffsetZ": 6.0,
+                "topdownAltitude": 7.0
+              },
+              "default3d": {
+                "fov": 3.0,
+                "heading": 1.0,
+                "pitch": 2.0,
+                "positionOffsetX": 4.0,
+                "positionOffsetY": 5.0,
+                "positionOffsetZ": 6.0,
+                "topdownAltitude": 7.0
+              },
+              "insets": [
+                {
+                  "cameraState": {
+                    "followMode": "tower",
+                    "followZoom": 1.5,
+                    "fov": 3.0,
+                    "heading": 1.0,
+                    "orbitDistance": 500.0,
+                    "orbitHeading": 10.0,
+                    "orbitPitch": 20.0,
+                    "pitch": 2.0,
+                    "positionOffsetX": 4.0,
+                    "positionOffsetY": 5.0,
+                    "positionOffsetZ": 6.0,
+                    "topdownAltitude": 7.0,
+                    "viewMode": "3d"
+                  },
+                  "id": "inset-1",
+                  "label": "Ramp",
+                  "layout": {
+                    "height": 200.0,
+                    "width": 300.0,
+                    "x": 1.0,
+                    "y": 2.0,
+                    "zIndex": 1
+                  }
+                }
+              ],
+              "mainCamera": {
+                "followMode": "tower",
+                "followZoom": 1.5,
+                "fov": 3.0,
+                "heading": 1.0,
+                "orbitDistance": 500.0,
+                "orbitHeading": 10.0,
+                "orbitPitch": 20.0,
+                "pitch": 2.0,
+                "positionOffsetX": 4.0,
+                "positionOffsetY": 5.0,
+                "positionOffsetZ": 6.0,
+                "topdownAltitude": 7.0,
+                "viewMode": "3d"
+              }
+            }
+          },
+          "lastAirportIcao": "KSFO",
+          "orbitSettings": {
+            "distance": 500.0,
+            "heading": 0.0,
+            "pitch": 20.0
+          }
+        },
+        "vnasTokens": "SECRET-vnas"
+      },
+      "name": "imagery provider is not google"
+    },
+    {
+      "expected": {
+        "airports": {
+          "defaultIcao": "KSFO",
+          "realtrafficFavorites": [
+            "KSJC"
+          ],
+          "recentAirports": [
+            "KSFO"
+          ],
+          "vatsimFavorites": [
+            "KOAK"
+          ]
+        },
+        "cesiumIonToken": "SECRET-ion",
+        "disabledMods": [
+          "mods/aircraft/b738"
+        ],
+        "display": {
+          "autoAvoidOverlaps": true,
+          "datablockMode": "full",
+          "defaultDatablockDirection": 7,
+          "groundLabelMinSpeed": 2.0,
+          "groundLabelMode": "all",
+          "inset": {
+            "datablockMode": "callsign",
+            "groundLabelMode": "crucialPhases",
+            "visibilityMargin": 0.15
+          },
+          "labelVisibilityDistance": 30.0,
+          "leaderDistance": 2,
+          "showAirborneTraffic": true,
+          "showGroundTraffic": true
+        },
+        "fsltl": {
+          "enableFsltlModels": true,
+          "outputPath": null,
+          "sourcePath": null,
+          "textureScale": "2k"
+        },
+        "imagery": {
+          "cesiumAdjustments": {
+            "brightness": 1.0,
+            "contrast": 1.0,
+            "hueShift": 0.0,
+            "saturation": 1.0
+          },
+          "googleAdjustments": {
+            "brightness": 1.0,
+            "contrast": 1.0,
+            "hueShift": 0.0,
+            "saturation": 1.0
+          },
+          "googleMapsApiKey": "SECRET-google",
+          "provider": "google"
+        },
+        "msfsModels": {
+          "cacheDirectory": null,
+          "cacheLimitMB": 5120,
+          "communityPath": null,
+          "enableAig": true,
+          "enableFsltl": true,
+          "priority": [
+            "fsltl",
+            "aig"
+          ],
+          "skipGenericVmrMatches": false,
+          "textureScale": "1k",
+          "vmrFiles": []
+        },
+        "realtraffic": {
+          "dataSource": "vatsim",
+          "licenseKey": "",
+          "maxParkedAircraft": 50,
+          "radiusNm": 100
+        },
+        "renderingBackend": "vulkan",
+        "server": {
+          "allowNonLocalClients": false,
+          "enabled": true,
+          "minimizeToTray": false,
+          "port": 9000
+        },
+        "viewports": {
+          "airportConfigs": {
+            "KSFO": {
+              "bookmarks": {
+                "1": {
+                  "fov": 3.0,
+                  "heading": 1.0,
+                  "name": "Runway 28",
+                  "pitch": 2.0,
+                  "positionOffsetX": 4.0,
+                  "positionOffsetY": 5.0,
+                  "positionOffsetZ": 6.0,
+                  "topdownAltitude": 7.0,
+                  "viewMode": "3d"
+                }
+              },
+              "datablockPosition": 7,
+              "default2d": {
+                "fov": 3.0,
+                "heading": 1.0,
+                "pitch": 2.0,
+                "positionOffsetX": 4.0,
+                "positionOffsetY": 5.0,
+                "positionOffsetZ": 6.0,
+                "topdownAltitude": 7.0
+              },
+              "default3d": {
+                "fov": 3.0,
+                "heading": 1.0,
+                "pitch": 2.0,
+                "positionOffsetX": 4.0,
+                "positionOffsetY": 5.0,
+                "positionOffsetZ": 6.0,
+                "topdownAltitude": 7.0
+              },
+              "insets": [
+                {
+                  "cameraState": {
+                    "followMode": "tower",
+                    "followZoom": 1.5,
+                    "fov": 3.0,
+                    "heading": 1.0,
+                    "orbitDistance": 500.0,
+                    "orbitHeading": 10.0,
+                    "orbitPitch": 20.0,
+                    "pitch": 2.0,
+                    "positionOffsetX": 4.0,
+                    "positionOffsetY": 5.0,
+                    "positionOffsetZ": 6.0,
+                    "topdownAltitude": 7.0,
+                    "viewMode": "3d"
+                  },
+                  "id": "inset-1",
+                  "label": "Ramp",
+                  "layout": {
+                    "height": 200.0,
+                    "width": 300.0,
+                    "x": 1.0,
+                    "y": 2.0,
+                    "zIndex": 1
+                  }
+                }
+              ],
+              "mainCamera": {
+                "followMode": "tower",
+                "followZoom": 1.5,
+                "fov": 3.0,
+                "heading": 1.0,
+                "orbitDistance": 500.0,
+                "orbitHeading": 10.0,
+                "orbitPitch": 20.0,
+                "pitch": 2.0,
+                "positionOffsetX": 4.0,
+                "positionOffsetY": 5.0,
+                "positionOffsetZ": 6.0,
+                "topdownAltitude": 7.0,
+                "viewMode": "3d"
+              }
+            }
+          },
+          "lastAirportIcao": "KSFO",
+          "orbitSettings": {
+            "distance": 500.0,
+            "heading": 0.0,
+            "pitch": 20.0
+          }
+        }
+      },
+      "input": {
+        "airports": {
+          "defaultIcao": "KSFO",
+          "realtrafficFavorites": [
+            "KSJC"
+          ],
+          "recentAirports": [
+            "KSFO"
+          ],
+          "vatsimFavorites": [
+            "KOAK"
+          ]
+        },
+        "cesiumIonToken": "SECRET-ion",
+        "disabledMods": [
+          "mods/aircraft/b738"
+        ],
+        "display": {
+          "autoAvoidOverlaps": true,
+          "datablockMode": "full",
+          "defaultDatablockDirection": 7,
+          "groundLabelMinSpeed": 2.0,
+          "groundLabelMode": "all",
+          "inset": {
+            "datablockMode": "callsign",
+            "groundLabelMode": "crucialPhases",
+            "visibilityMargin": 0.15
+          },
+          "labelVisibilityDistance": 30.0,
+          "leaderDistance": 2,
+          "showAirborneTraffic": true,
+          "showGroundTraffic": true
+        },
+        "fsltl": {
+          "enableFsltlModels": true,
+          "outputPath": "D:/fsltl-out",
+          "sourcePath": "D:/fsltl",
+          "textureScale": "2k"
+        },
+        "imagery": {
+          "cesiumAdjustments": {
+            "brightness": 1.0,
+            "contrast": 1.0,
+            "hueShift": 0.0,
+            "saturation": 1.0
+          },
+          "googleAdjustments": {
+            "brightness": 1.0,
+            "contrast": 1.0,
+            "hueShift": 0.0,
+            "saturation": 1.0
+          },
+          "googleMapsApiKey": "SECRET-google",
+          "provider": "google"
+        },
+        "msfsModels": {
+          "cacheDirectory": "D:/cache",
+          "cacheLimitMB": 5120,
+          "communityPath": "D:/Community",
+          "enableAig": true,
+          "enableFsltl": true,
+          "priority": [
+            "fsltl",
+            "aig"
+          ],
+          "skipGenericVmrMatches": false,
+          "textureScale": "1k",
+          "vmrFiles": [
+            "D:/rules.vmr"
+          ]
+        },
+        "realtraffic": {
+          "dataSource": "vatsim",
+          "licenseKey": "SECRET-licence",
+          "maxParkedAircraft": 50,
+          "radiusNm": 100
+        },
+        "renderingBackend": "vulkan",
+        "server": {
+          "allowNonLocalClients": false,
+          "enabled": true,
+          "minimizeToTray": false,
+          "port": 9000
+        },
+        "viewports": {
+          "airportConfigs": {
+            "KSFO": {
+              "bookmarks": {
+                "1": {
+                  "fov": 3.0,
+                  "heading": 1.0,
+                  "name": "Runway 28",
+                  "pitch": 2.0,
+                  "positionOffsetX": 4.0,
+                  "positionOffsetY": 5.0,
+                  "positionOffsetZ": 6.0,
+                  "topdownAltitude": 7.0,
+                  "viewMode": "3d"
+                }
+              },
+              "datablockPosition": 7,
+              "default2d": {
+                "fov": 3.0,
+                "heading": 1.0,
+                "pitch": 2.0,
+                "positionOffsetX": 4.0,
+                "positionOffsetY": 5.0,
+                "positionOffsetZ": 6.0,
+                "topdownAltitude": 7.0
+              },
+              "default3d": {
+                "fov": 3.0,
+                "heading": 1.0,
+                "pitch": 2.0,
+                "positionOffsetX": 4.0,
+                "positionOffsetY": 5.0,
+                "positionOffsetZ": 6.0,
+                "topdownAltitude": 7.0
+              },
+              "insets": [
+                {
+                  "cameraState": {
+                    "followMode": "tower",
+                    "followZoom": 1.5,
+                    "fov": 3.0,
+                    "heading": 1.0,
+                    "orbitDistance": 500.0,
+                    "orbitHeading": 10.0,
+                    "orbitPitch": 20.0,
+                    "pitch": 2.0,
+                    "positionOffsetX": 4.0,
+                    "positionOffsetY": 5.0,
+                    "positionOffsetZ": 6.0,
+                    "topdownAltitude": 7.0,
+                    "viewMode": "3d"
+                  },
+                  "id": "inset-1",
+                  "label": "Ramp",
+                  "layout": {
+                    "height": 200.0,
+                    "width": 300.0,
+                    "x": 1.0,
+                    "y": 2.0,
+                    "zIndex": 1
+                  }
+                }
+              ],
+              "mainCamera": {
+                "followMode": "tower",
+                "followZoom": 1.5,
+                "fov": 3.0,
+                "heading": 1.0,
+                "orbitDistance": 500.0,
+                "orbitHeading": 10.0,
+                "orbitPitch": 20.0,
+                "pitch": 2.0,
+                "positionOffsetX": 4.0,
+                "positionOffsetY": 5.0,
+                "positionOffsetZ": 6.0,
+                "topdownAltitude": 7.0,
+                "viewMode": "3d"
+              }
+            }
+          },
+          "lastAirportIcao": "KSFO",
+          "orbitSettings": {
+            "distance": 500.0,
+            "heading": 0.0,
+            "pitch": 20.0
+          }
+        },
+        "vnasTokens": "SECRET-vnas"
+      },
+      "name": "imagery provider is google"
+    }
+  ],
+  "secretPaths": [
+    "cesiumIonToken",
+    "imagery.googleMapsApiKey",
+    "realtraffic.licenseKey",
+    "vnasTokens"
+  ]
+}

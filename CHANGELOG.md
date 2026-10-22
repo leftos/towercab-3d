@@ -11,10 +11,13 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ### Changed
 - 3D buildings and aircraft no longer have an olive-green cast on their walls and fuselages; their reflected ground light is now a neutral grey.
+- Remote access accepts only devices on your local network, unless you turn on **Allow devices outside the local network** in Settings → Configuration.
 
 ### Fixed
 - Stale sun shadows no longer darken buildings and the ground at night, or flicker across walls after switching to a night time.
 - The remote access server no longer serves or writes files outside its own folders.
+- Remote browsers no longer receive your stored keys and sign-ins, such as the RealTraffic key and vNAS login.
+- Remote browsers no longer receive the host's folder locations (MSFS Community, model cache, VMR, FSLTL, mods, diagnostics) from its settings, lists or error messages.
 - Aircraft that first appear no longer jump backwards or crawl in slow motion before settling into smooth motion.
 - Aircraft in flight are no longer drawn 5 m above their reported altitude.
 - Nose wheels no longer appear turned to full lock while the gear is down.
@@ -22,6 +25,12 @@ All notable changes to TowerCab 3D will be documented in this file.
 - The flight phase badge now shows "Go Around" after a go-around, and leaves "Short Final" as soon as the aircraft climbs away.
 - Aircraft passing over an airport at altitude are no longer labelled "Final" or "Short Final".
 - Datablocks on iPads and other high-resolution screens now sit on their aircraft at full size, instead of half size and in the wrong place.
+- Tower and aircraft mod models now load on iPads and other browsers connected to the desktop app.
+- The MSFS model cache size limit, Unlimited included, now survives a restart instead of resetting and deleting converted models.
+- Converting an FSLTL or AIG model can no longer read files from outside that model's own MSFS package.
+- Mods you turn off in Settings → Mods stay off after a restart, and stay listed so you can turn them back on.
+- Private aircraft now get their own registered FSLTL or AIG livery, and other aircraft of that type no longer borrow it.
+- A model conversion cut short no longer leaves a broken model that never converts again.
 
 ### Removed
 - The experimental VR mode and its VR button in the controls bar.

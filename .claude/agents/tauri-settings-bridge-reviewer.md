@@ -24,6 +24,7 @@ CLAUDE.md flags this as a real footgun. Your job is to diff the two and report m
    - Fields in TS but not in Rust → P0 (silent data loss on save)
    - Fields in Rust but not in TS → P1 (dead field, deserialized but unused)
    - Type mismatches (e.g., TS `number`, Rust `String`) → P0
+   - Key spelling: compare the exact JSON key each side writes. `rename_all = "camelCase"` turns `cache_limit_mb` into `cacheLimitMb`, so a TS key with an upper-case acronym (`cacheLimitMB`) needs an explicit `#[serde(rename = "...")]`; a case-only mismatch drops the field just like a missing one → P0
    - Missing `#[serde(default)]` on optional Rust fields that are non-required in TS → P1 (deserialization fails on legacy settings files)
 
 4. **Report**:
@@ -40,7 +41,11 @@ CLAUDE.md flags this as a real footgun. Your job is to diff the two and report m
   - Fix: remove from Rust if truly unused, or add to TS interface
 
 ### Type mismatches (P0)
-- `cacheLimitMB`: TS `number`, Rust `String` — coerce one to match
+- `server.port`: TS `number`, Rust `String` — coerce one to match
+
+### Key spelling mismatches (P0 — silent data loss)
+- `msfsModels.cacheLimitMB` in TS, written by Rust as `cacheLimitMb` (camelCase of `cache_limit_mb`)
+  - Fix: `#[serde(rename = "cacheLimitMB")]`, and the same path in `FIELD_CLASSES`
 
 ### Missing #[serde(default)] (P1)
 - `msfs_models.texture_scale: TextureScale` — no default; will fail to load legacy settings files

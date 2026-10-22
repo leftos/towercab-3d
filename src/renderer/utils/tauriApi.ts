@@ -58,7 +58,6 @@ export function joinPath(basePath: string, ...segments: string[]): string {
  */
 interface ModInfo {
   name: string
-  path: string
   manifest: unknown | null
 }
 
@@ -66,7 +65,12 @@ interface ModInfo {
  * Discovered mod info from recursive search
  */
 export interface DiscoveredMod {
-  /** Absolute path to the directory containing manifest.json */
+  /** `mods/` and the folder's path under the mods root, `/`-separated and lowercased: how `disabledMods` names the mod */
+  id: string
+  /**
+   * The directory containing manifest.json: an absolute host path in the desktop app; for a remote
+   * browser, `mods/` and the folder's path under the mods root, `/`-separated with its case kept
+   */
   path: string
   /** Detected mod type: "aircraft" or "tower" */
   modType: 'aircraft' | 'tower'
@@ -529,7 +533,8 @@ export async function convertToAssetUrl(
 /**
  * Synchronous version for cases where async isn't possible
  * In Tauri mode: uses asset protocol for direct file access
- * In browser mode: uses HTTP API URLs
+ * In browser mode: uses HTTP API URLs — a path under a `mods/` folder maps to
+ * `/api/mods/file/...`, any other `.glb` path to the `/api/msfs/<filename>` cache route
  */
 export function convertToAssetUrlSync(filePath: string): string {
   // If path is already an HTTP URL or asset URL, return as-is
@@ -556,18 +561,21 @@ export function convertToAssetUrlSync(filePath: string): string {
   const normalized = filePath.replace(/\\/g, '/')
   const baseUrl = getApiBaseUrl()
 
+  // For mods: extract path after "mods/"
+  // Supports both old structure (mods/aircraft/B738) and git repos (mods/my-repo/tower/KJFK)
+  // Tested before the .glb cache rule, because a mod model is also a .glb but lives in the
+  // mods folder, not the flat MSFS cache. The match starts at a path segment boundary, so a
+  // cache folder whose name merely contains "mods" stays a cache path.
+  const modsMatch = normalized.match(/(?:^|\/)mods\/(.+)$/i)
+  if (modsMatch) {
+    return `${baseUrl}/api/mods/file/${modsMatch[1]}`
+  }
+
   // For MSFS models: extract just the filename (models are flat in cache dir)
   // GLB files are stored as {model_name}.glb directly in cache directory
   const filename = normalized.split('/').pop() || 'model.glb'
   if (filename.endsWith('.glb')) {
     return `${baseUrl}/api/msfs/${filename}`
-  }
-
-  // For mods: extract path after "mods/"
-  // Supports both old structure (mods/aircraft/B738) and git repos (mods/my-repo/tower/KJFK)
-  const modsMatch = normalized.match(/mods[/](.+)$/i)
-  if (modsMatch) {
-    return `${baseUrl}/api/mods/file/${modsMatch[1]}`
   }
 
   // Fallback: return path as-is

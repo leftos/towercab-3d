@@ -6,17 +6,13 @@
  * When no model exists, finds the closest match by FAA dimensions and applies scaling.
  *
  * Model Matching Priority:
- * 1. Custom VMR rules (user mods) - airline+type or type-only
- * 2. FSLTL models with exact airline+type match
- * 3. FSLTL closest airline model (scaled) - same airline, different but similar type
- * 4. FSLTL base livery for exact type (no airline-specific)
- * 5. FSLTL closest base model (scaled) - any FSLTL model close in size
- * 6. Built-in models with exact/mapped match
- * 7. Built-in models with direct lowercase match
- * 8. Built-in models with closest size match (scaled)
- * 9. FSLTL airline-specific fallback from common types
- * 10. FSLTL GA fallback (C172) for GA callsigns, or B738 for airlines
- * 11. Fallback to built-in PA28 for GA, or B738 for airlines
+ * 1. User VMR rules (user mods) - airline+type or type-only
+ * 2. Registration match by callsign - cached per callsign for aircraft with no airline code
+ * 3. FSLTL/AIG model for the exact type and airline
+ * 4. Closest model for the same airline (scaled)
+ * 5. Generic ZZZZ livery for the exact type
+ * 6. Closest model of any airline (scaled), skipping liveries registered to a private aircraft
+ * 7. Built-in tail: custom VMR rules, mapped/direct model, closest by size, then PA28 or B738
  *
  * GA Detection:
  * GA callsigns are detected by pattern (N-numbers, country registrations like C-XXXX,
@@ -471,7 +467,10 @@ const AIRLINE_COLORS: Record<string, AirlineLivery> = {
 }
 
 class AircraftModelServiceClass {
-  /** Cache of ModelInfo results by cache key (type_airline) */
+  /**
+   * Cache of ModelInfo results by cache key: `{type}_{airline}`, `{type}@{CALLSIGN}` for an
+   * aircraft with no airline code, or the bare type when neither is known
+   */
   private modelInfoCache = new Map<string, ModelInfo>()
 
   /** Keys with pending MSFS conversions - will be invalidated when conversion completes */
@@ -503,9 +502,14 @@ class AircraftModelServiceClass {
   }
 
   /**
-   * Get cache key for a type+airline combination
+   * Get the cache key for a model lookup
+   *
+   * A registration match depends on the callsign, not the type: two C172s with different
+   * registrations resolve to different liveries, so an aircraft with no airline code is
+   * keyed by its callsign. Callers with no callsign pass null or undefined.
    */
-  private getCacheKey(aircraftType: string, airlineCode: string | null): string {
+  private getCacheKey(aircraftType: string, airlineCode: string | null, callsign: string | null | undefined): string {
+    if (!airlineCode && callsign) return `${aircraftType}@${callsign.toUpperCase()}`
     return airlineCode ? `${aircraftType}_${airlineCode}` : aircraftType
   }
 
@@ -817,17 +821,19 @@ class AircraftModelServiceClass {
 
     // No aircraft type - try airline-specific narrowbody fallback, then generic
     if (!aircraftType) {
-      // For airline callsigns, try to find an airline-specific narrowbody model
+      // For airline callsigns, the narrowbody fallback scans a dozen types across the whole
+      // index, so both its result and its miss are cached under a special key
+      let unknownAirlineKey: string | null = null
       if (airlineCode && !isGA) {
+        const airlineKey = `_UNKNOWN_${airlineCode}`
+        unknownAirlineKey = airlineKey
+        const cached = this.modelInfoCache.get(airlineKey)
+        if (cached) {
+          return cached
+        }
+
         const airlineFallback = MSFSModelConversionService.findAirlineFallbackModel(airlineCode)
         if (airlineFallback) {
-          // Check cache first (use a special cache key for unknown type)
-          const cacheKey = `_UNKNOWN_${airlineCode}`
-          const cached = this.modelInfoCache.get(cacheKey)
-          if (cached) {
-            return cached
-          }
-
           // Try to get or convert the model
           const cachedPath = MSFSModelConversionService.getCachedModel(
             airlineFallback.modelName,
@@ -843,7 +849,7 @@ class AircraftModelServiceClass {
               rotationOffset: 180,
               isFsltl: true,
             }
-            this.modelInfoCache.set(cacheKey, result)
+            this.modelInfoCache.set(airlineKey, result)
             this.logModelMatch(callsign, 'N/A', airlineCode, 'airline-fallback', `MATCH ${airlineFallback.modelName}`)
             this.markLogged(callsign)
             return result
@@ -856,13 +862,13 @@ class AircraftModelServiceClass {
           ) {
             MSFSModelConversionService.convertModel(airlineFallback, aircraftPosition)
               .then(() => {
-                this.modelInfoCache.delete(cacheKey)
+                this.modelInfoCache.delete(airlineKey)
                 window.dispatchEvent(
                   new CustomEvent('model-conversion-complete', { detail: { modelName: airlineFallback.modelName } }),
                 )
               })
               .catch(() => {
-                this.modelInfoCache.delete(cacheKey)
+                this.modelInfoCache.delete(airlineKey)
               })
           }
 
@@ -878,7 +884,7 @@ class AircraftModelServiceClass {
             pendingMsfsModel: airlineFallback,
             msfsConversionPending: true,
           }
-          this.modelInfoCache.set(cacheKey, pendingResult)
+          this.modelInfoCache.set(airlineKey, pendingResult)
           this.logModelMatch(callsign, 'N/A', airlineCode, 'airline-fallback', `PENDING ${airlineFallback.modelName}`)
           this.markLogged(callsign)
           return pendingResult
@@ -888,17 +894,20 @@ class AircraftModelServiceClass {
       // Fall back to generic model (PA28 for GA, B738 otherwise)
       const fallbackModel = isGA ? GA_FALLBACK_MODEL : FALLBACK_MODEL
       const fallbackDims = this.getModelDimensions(fallbackModel)
-      return {
+      const fallbackResult: ModelInfo = {
         modelUrl: `./${fallbackModel}.glb`,
         scale: uniformScale,
         matchType: 'fallback',
         dimensions: fallbackDims,
       }
+      // The airline has no narrowbody model: cache the generic answer so it is not rescanned
+      if (unknownAirlineKey) this.modelInfoCache.set(unknownAirlineKey, fallbackResult)
+      return fallbackResult
     }
 
     // Extract base aircraft type (strips equipment suffixes like "/L" from "B738/L")
     const normalized = extractBaseAircraftType(aircraftType)
-    const cacheKey = this.getCacheKey(normalized, airlineCode)
+    const cacheKey = this.getCacheKey(normalized, airlineCode, callsign)
 
     // Check cache first - avoids expensive lookups every frame
     const cached = this.modelInfoCache.get(cacheKey)

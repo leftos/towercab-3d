@@ -2,11 +2,15 @@
   "mcpServers": {
     "playwright": {
       "command": "npx",
-      "args": ["-y", "@playwright/mcp@latest", "--browser", "msedge"]
+      "args": ["-y", "@playwright/mcp@0.0.83", "--browser", "msedge"]
+    },
+    "playwright-headless": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@0.0.83", "--browser", "msedge", "--headless", "--isolated", "--viewport-size", "1600,900"]
     },
     "tauri-app": {
       "command": "npx",
-      "args": ["-y", "@playwright/mcp@latest", "--cdp-endpoint", "http://localhost:9222"]
+      "args": ["-y", "@playwright/mcp@0.0.83", "--cdp-endpoint", "http://localhost:9222"]
     }
   }
 }

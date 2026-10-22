@@ -1569,15 +1569,11 @@ export interface GlobalSettings {
     enabled: boolean
 
     /**
-     * Optional authentication token for API access
-     * When set, remote clients must include this token as Bearer token in Authorization header
+     * If true, devices outside the local network may connect, by any address or host name.
+     * Off (default): only loopback, private and link-local addresses are served, and only
+     * when they name this PC by IP address, its name or name.local
      */
-    authToken?: string
-
-    /**
-     * If true, only allow connections from local network (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
-     */
-    requireLocalNetwork: boolean
+    allowNonLocalClients: boolean
 
     /**
      * If true, minimize to system tray instead of quitting when the window is closed
@@ -1633,12 +1629,6 @@ export interface GlobalSettings {
    * Changes require app restart to take effect
    */
   disabledMods: string[]
-
-  /**
-   * vNAS authentication tokens (opaque to frontend, managed by Rust)
-   * Stored as JSON string for feature-flag compatibility with the vnas crate
-   */
-  vnasTokens?: string
 }
 
 /**
@@ -1670,8 +1660,7 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   server: {
     port: 8765,
     enabled: false,
-    authToken: undefined,
-    requireLocalNetwork: false,
+    allowNonLocalClients: false,
     minimizeToTray: true,
   },
   realtraffic: {

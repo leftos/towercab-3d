@@ -25,11 +25,11 @@
       "user": "4db7422a30f223f1"
     },
     "design-names-hook-surface": {
-      "repo": "e9fa8baadf3c8f76",
+      "repo": "dd7ec90102e1bbc8",
       "user": "b59f296c1d742674"
     },
     "dev-flag-gates-hook": {
-      "repo": "cb7d1c24f51dcf99",
+      "repo": "19d67027fff5b41b",
       "user": "b96675d8e49a867d"
     },
     "discovery-file-per-pid": {
@@ -81,8 +81,8 @@
       "user": "3a775768199ca968"
     },
     "launch-isolated-lifecycle": {
-      "repo": "e8a4b1b17d9d66ba",
-      "user": "28a150edc237b497"
+      "repo": "b93a1f1293baa7e4",
+      "user": "62499bb81d1253b2"
     },
     "load-adjusted-timeouts": {
       "declined": "no server of its own; drives through third-party Playwright MCP",
@@ -90,7 +90,7 @@
     },
     "mark-injected-input": {
       "declined": "input is Playwright CDP only; no OS input path",
-      "user": "b3f75d9310294ad1"
+      "user": "77bc05c4065fa83d"
     },
     "merge-inherited-webview-args": {
       "repo": "41992ed8ba70fdb9",
@@ -145,8 +145,8 @@
       "user": "ebfaa4da3ea3e159"
     },
     "quiet-by-default": {
-      "repo": "128599798da85d4b",
-      "user": "6f85f9f72b58cf63"
+      "repo": "3b8d54433c65ffc7",
+      "user": "818b37ebe7468676"
     },
     "real-app-over-frontend-only": {
       "repo": "3fa8b7dcd982cb4d",
@@ -161,8 +161,8 @@
       "user": "b9ad60542633fe76"
     },
     "record-steady-never-minimize": {
-      "repo": "98d25592d33fc4ae",
-      "user": "c7abbb984fdaa216"
+      "repo": "91234ae595650c55",
+      "user": "cb214e1ee0ff9370"
     },
     "recording-shellout-hardening": {
       "declined": "no server of its own; drives through third-party Playwright MCP",
@@ -185,8 +185,8 @@
       "user": "e1357ad6c047e437"
     },
     "say-hands-off-first": {
-      "repo": "b6e2a75f47b0513b",
-      "user": "3876083c457cc8f6"
+      "repo": "8b9bcfa35bc0c730",
+      "user": "0a6f21fd5739c6de"
     },
     "semantic-click-first": {
       "declined": "input is Playwright CDP only",
@@ -209,7 +209,7 @@
       "user": "8c8df5532748dcfb"
     },
     "unified-log-tail": {
-      "repo": "82ea47f042777795",
+      "repo": "a43af6fae7ed94e7",
       "user": "c3f49d783eac66ac"
     },
     "verify-foreground-before-real": {
@@ -237,5 +237,5 @@
       "user": "81e92891fb8fe24c"
     }
   },
-  "user_revision": 9
+  "user_revision": 11
 }

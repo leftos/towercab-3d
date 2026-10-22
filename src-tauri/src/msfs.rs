@@ -108,6 +108,11 @@ fn parse_aircraft_cfg_unified(aircraft_dir: &std::path::Path) -> ParsedAircraftC
         Err(_) => return ParsedAircraftCfg::default(),
     };
 
+    parse_aircraft_cfg_str(&content)
+}
+
+/// Parse aircraft.cfg text once and extract all needed information
+fn parse_aircraft_cfg_str(content: &str) -> ParsedAircraftCfg {
     let mut result = ParsedAircraftCfg::default();
     let mut in_general_section = false;
     let mut in_variation_section = false;
@@ -149,17 +154,21 @@ fn parse_aircraft_cfg_unified(aircraft_dir: &std::path::Path) -> ParsedAircraftC
             continue;
         }
 
-        let lower = trimmed.to_lowercase();
+        // Keys match exactly: `atc_id_enable` is not `atc_id`, `texture.0` is not `texture`
+        let Some((key, _)) = trimmed.split_once('=') else {
+            continue;
+        };
+        let key = key.trim().to_ascii_lowercase();
 
         // Parse [General] section - only need ICAO type designator
-        if in_general_section && lower.starts_with("icao_type_designator") {
+        if in_general_section && key == "icao_type_designator" {
             if let Some(val) = extract_cfg_value_inline(trimmed) {
                 result.icao_type = Some(val.to_uppercase());
             }
         }
 
         // Parse [VARIATION] section - base_container specifies the base model folder
-        if in_variation_section && lower.starts_with("base_container") {
+        if in_variation_section && key == "base_container" {
             if let Some(val) = extract_cfg_value_inline(trimmed) {
                 // Store the raw value (e.g., "..\FSLTL_B77LF")
                 result.base_container = Some(val);
@@ -168,30 +177,37 @@ fn parse_aircraft_cfg_unified(aircraft_dir: &std::path::Path) -> ParsedAircraftC
 
         // Parse [fltsim] sections
         if in_fltsim_section {
-            if lower.starts_with("title") {
-                if let Some(val) = extract_cfg_value_inline(trimmed) {
-                    current_title = Some(val);
-                }
-            } else if lower.starts_with("texture") && !lower.starts_with("texture.") {
-                if let Some(val) = extract_cfg_value_inline(trimmed) {
-                    current_texture = Some(val);
-                }
-            } else if lower.starts_with("icao_airline") {
-                if let Some(val) = extract_cfg_value_inline(trimmed) {
-                    current_icao_airline = Some(val.to_uppercase());
-                }
-            } else if lower.starts_with("atc_id") {
-                if let Some(val) = extract_cfg_value_inline(trimmed) {
-                    current_atc_id = Some(val.to_uppercase());
-                }
-            } else if lower.starts_with("model=") && !first_fltsim_seen {
-                // Only capture model folder from FIRST fltsim section
-                if let Some(val) = extract_cfg_value_inline(trimmed) {
-                    if !val.is_empty() {
-                        result.model_folder = Some(val.to_lowercase());
-                        first_fltsim_seen = true;
+            match key.as_str() {
+                "title" => {
+                    if let Some(val) = extract_cfg_value_inline(trimmed) {
+                        current_title = Some(val);
                     }
                 }
+                "texture" => {
+                    if let Some(val) = extract_cfg_value_inline(trimmed) {
+                        current_texture = Some(val);
+                    }
+                }
+                "icao_airline" => {
+                    if let Some(val) = extract_cfg_value_inline(trimmed) {
+                        current_icao_airline = Some(val.to_uppercase());
+                    }
+                }
+                "atc_id" => {
+                    if let Some(val) = extract_cfg_value_inline(trimmed) {
+                        current_atc_id = Some(val.to_uppercase());
+                    }
+                }
+                // Only capture model folder from the FIRST fltsim section
+                "model" if !first_fltsim_seen => {
+                    if let Some(val) = extract_cfg_value_inline(trimmed) {
+                        if !val.is_empty() {
+                            result.model_folder = Some(val.to_lowercase());
+                            first_fltsim_seen = true;
+                        }
+                    }
+                }
+                _ => {}
             }
         }
     }
@@ -238,7 +254,12 @@ struct ModelIndexCache {
     models: Vec<SourceModelInfo>,
 }
 
-const MODEL_CACHE_VERSION: u32 = 9; // Bump when cache format changes (v9: exclude cargo/attachment GTLFs, fix single-digit LOD matching)
+/// Bump when the cache format changes. v10: exact cfg keys, so `atc_id` is no longer
+/// overwritten by `atc_id_enable`/`atc_id_color` and the spaced `model` key is read.
+const MODEL_CACHE_VERSION: u32 = 10;
+
+/// Distinguishes the temp file of each save, so two saves in one process never share one
+static CACHE_SAVE_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// Get the modification time of a folder (recursive max mtime would be too slow)
 fn get_folder_mtime(path: &std::path::Path) -> Option<u64> {
@@ -326,17 +347,35 @@ fn save_model_cache(
     }
 
     let cache_path = get_cache_path(cache_dir, source);
-    if let Ok(content) = serde_json::to_string(&cache) {
-        if let Err(e) = fs::write(&cache_path, content) {
-            tracing::info!("[MSFSDetection] Failed to write {} cache: {}", source, e);
-        } else {
-            tracing::info!(
-                "[MSFSDetection] Saved {} models to {} cache",
-                models.len(),
-                source
-            );
-        }
+    let Ok(content) = serde_json::to_string(&cache) else {
+        tracing::info!("[MSFSDetection] Failed to serialize {} cache", source);
+        return;
+    };
+    // Write beside the cache file, then rename into place, so a reader never
+    // sees a half-written index
+    let serial = CACHE_SAVE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let temp_path = cache_dir.join(format!(
+        "{}_model_cache.json.{}.{}.tmp",
+        source,
+        std::process::id(),
+        serial
+    ));
+    if let Err(e) = fs::write(&temp_path, content) {
+        tracing::info!("[MSFSDetection] Failed to write {} cache: {}", source, e);
+        let _ = fs::remove_file(&temp_path);
+        return;
     }
+    if let Err(e) = fs::rename(&temp_path, &cache_path) {
+        tracing::info!("[MSFSDetection] Failed to replace {} cache: {}", source, e);
+        let _ = fs::remove_file(&temp_path);
+        return;
+    }
+
+    tracing::info!(
+        "[MSFSDetection] Saved {} models to {} cache",
+        models.len(),
+        source
+    );
 }
 
 // =============================================================================
@@ -1547,6 +1586,17 @@ fn get_glb_converter_version(glb_path: &std::path::Path) -> Option<u32> {
         .map(|v| v as u32)
 }
 
+/// The total length the GLB header declares (bytes 8..12), or None when it cannot be read
+fn read_glb_declared_length(glb_path: &std::path::Path) -> Option<u64> {
+    use std::io::Read;
+
+    let mut file = fs::File::open(glb_path).ok()?;
+    let mut header = [0u8; 12];
+    file.read_exact(&mut header).ok()?;
+    let declared = u32::from_le_bytes([header[8], header[9], header[10], header[11]]);
+    Some(u64::from(declared))
+}
+
 /// Scan cache directory for existing GLB files
 /// Returns info about each cached model for loading into memory cache
 #[tauri::command]
@@ -1558,45 +1608,79 @@ pub async fn scan_cache_directory(cache_dir: String) -> Result<Vec<CachedGlbInfo
             return Ok(vec![]);
         }
 
-        let entries = fs::read_dir(&dir_path)
-            .map_err(|e| format!("Failed to read cache directory {}: {}", cache_dir, e))?;
-
-        let mut cached_models = Vec::new();
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_file() {
-                if let Some(ext) = path.extension() {
-                    if ext.eq_ignore_ascii_case("glb") {
-                        // Extract model key from filename (remove .glb extension)
-                        if let Some(stem) = path.file_stem() {
-                            let model_key = stem.to_string_lossy().to_string();
-                            let file_size = entry.metadata().map(|m| m.len()).unwrap_or(0);
-                            let converter_version = get_glb_converter_version(&path);
-                            cached_models.push(CachedGlbInfo {
-                                path: normalize_path_string(&path),
-                                model_key,
-                                file_size,
-                                converter_version,
-                            });
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(cached_models)
+        scan_cache_dir_sync(&dir_path)
     })
     .await
     .map_err(|e| format!("Task join error: {}", e))?
+}
+
+/// List the cached GLBs in a folder, one entry per readable `*.glb` file
+fn scan_cache_dir_sync(cache_dir: &std::path::Path) -> Result<Vec<CachedGlbInfo>, String> {
+    let entries = fs::read_dir(cache_dir).map_err(|e| {
+        format!(
+            "Failed to read cache directory {}: {}",
+            cache_dir.display(),
+            e
+        )
+    })?;
+
+    let mut cached_models = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let Some(ext) = path.extension() else {
+            continue;
+        };
+        if !ext.eq_ignore_ascii_case("glb") {
+            continue;
+        }
+        // Extract model key from filename (remove .glb extension)
+        let Some(stem) = path.file_stem() else {
+            continue;
+        };
+        let model_key = stem.to_string_lossy().to_string();
+        let file_size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+        // A GLB that cannot be validated is listed without a version, which the app
+        // treats as outdated: it deletes the file and converts the model again
+        let converter_version = match read_glb_declared_length(&path) {
+            None => {
+                tracing::warn!(
+                    "[MSFSDetection] Could not read the GLB header, reconverting: {}",
+                    path.display()
+                );
+                None
+            }
+            Some(declared) if declared != file_size => {
+                tracing::warn!(
+                    "[MSFSDetection] GLB header length {} does not match file size {}, \
+                     reconverting: {}",
+                    declared,
+                    file_size,
+                    path.display()
+                );
+                None
+            }
+            Some(_) => get_glb_converter_version(&path),
+        };
+        cached_models.push(CachedGlbInfo {
+            path: normalize_path_string(&path),
+            model_key,
+            file_size,
+            converter_version,
+        });
+    }
+
+    Ok(cached_models)
 }
 
 // =============================================================================
 // SERVER API HELPERS - For remote browser access
 // =============================================================================
 
-/// Get the combined model index for remote clients
-/// Returns a JSON object with fsltl and aig model arrays
-pub fn get_model_index(app: &tauri::AppHandle) -> Result<serde_json::Value, String> {
+/// Get the combined model index for remote clients: the fsltl and aig model arrays, without host paths
+pub fn get_model_index(app: &tauri::AppHandle) -> Result<RemoteModelIndex, String> {
     let cache_dir = app
         .path()
         .app_data_dir()
@@ -1626,11 +1710,71 @@ pub fn get_model_index(app: &tauri::AppHandle) -> Result<serde_json::Value, Stri
         Vec::new()
     };
 
-    Ok(serde_json::json!({
-        "fsltl": fsltl_models,
-        "aig": aig_models,
-        "totalCount": fsltl_models.len() + aig_models.len()
-    }))
+    Ok(remote_model_index(&fsltl_models, &aig_models))
+}
+
+/// What a remote client learns about one source model: the name it converts the model by and the
+/// fields it matches aircraft with. The host paths stay in `SourceModelInfo`.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteModelInfo {
+    pub source: String,
+    pub model_name: String,
+    pub aircraft_type: String,
+    pub airline_code: Option<String>,
+    pub atc_id: Option<String>,
+}
+
+impl From<&SourceModelInfo> for RemoteModelInfo {
+    fn from(model: &SourceModelInfo) -> Self {
+        RemoteModelInfo {
+            source: model.source.clone(),
+            model_name: model.model_name.clone(),
+            aircraft_type: model.aircraft_type.clone(),
+            airline_code: model.airline_code.clone(),
+            atc_id: model.atc_id.clone(),
+        }
+    }
+}
+
+/// The model index `GET /api/msfs/index` sends a remote client.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteModelIndex {
+    pub fsltl: Vec<RemoteModelInfo>,
+    pub aig: Vec<RemoteModelInfo>,
+    pub total_count: usize,
+}
+
+/// The model index a remote client receives for the host's FSLTL and AIG models.
+pub fn remote_model_index(fsltl: &[SourceModelInfo], aig: &[SourceModelInfo]) -> RemoteModelIndex {
+    RemoteModelIndex {
+        fsltl: fsltl.iter().map(RemoteModelInfo::from).collect(),
+        aig: aig.iter().map(RemoteModelInfo::from).collect(),
+        total_count: fsltl.len() + aig.len(),
+    }
+}
+
+/// What a remote client learns about one converted model: its key (the GLB is served as
+/// `/api/msfs/{model_key}.glb`), its size and the converter version that wrote it. The keys are
+/// snake_case, as the remote reader expects.
+#[derive(Debug, Serialize)]
+pub struct RemoteCachedModel {
+    pub model_key: String,
+    pub file_size: u64,
+    pub converter_version: Option<u32>,
+}
+
+/// The converted-model list a remote client receives for the host's cached GLBs.
+pub fn remote_cached_models(models: Vec<CachedGlbInfo>) -> Vec<RemoteCachedModel> {
+    models
+        .into_iter()
+        .map(|model| RemoteCachedModel {
+            model_key: model.model_key,
+            file_size: model.file_size,
+            converter_version: model.converter_version,
+        })
+        .collect()
 }
 
 /// Convert a model by name - looks up the model in the index and triggers conversion
@@ -1766,7 +1910,244 @@ pub fn convert_model_by_name(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::settings::host_path_walk::{assert_holds_no_host_path, HOST_PATHS};
+    use std::collections::BTreeSet;
     use std::path::PathBuf;
+
+    /// A source model with a host path in every path field.
+    fn host_model(source: &str) -> SourceModelInfo {
+        let [drive, extended, unc] = HOST_PATHS;
+        SourceModelInfo {
+            source: source.to_string(),
+            model_name: "FSLTL_B738_Southwest".to_string(),
+            folder_name: "FSLTL_B738_SWA".to_string(),
+            aircraft_folder_path: drive.to_string(),
+            gltf_path: extended.to_string(),
+            texture_dirs: vec![drive.to_string(), extended.to_string(), unc.to_string()],
+            aircraft_type: "B738".to_string(),
+            airline_code: Some("SWA".to_string()),
+            atc_id: Some("N8301J".to_string()),
+        }
+    }
+
+    /// Cached GLBs, one per host path shape.
+    fn host_cached_models() -> Vec<CachedGlbInfo> {
+        HOST_PATHS
+            .iter()
+            .map(|path| CachedGlbInfo {
+                path: path.to_string(),
+                model_key: "fsltl_FSLTL_B738_Southwest".to_string(),
+                file_size: 1024,
+                converter_version: Some(7),
+            })
+            .collect()
+    }
+
+    /// The keys of every object in `entries`, which must be a non-empty JSON array of objects.
+    fn entry_keys(entries: &serde_json::Value) -> BTreeSet<String> {
+        let entries = entries.as_array().expect("entries are an array");
+        assert!(!entries.is_empty(), "no entries to check");
+        entries
+            .iter()
+            .flat_map(|entry| entry.as_object().expect("entry is an object").keys())
+            .cloned()
+            .collect()
+    }
+
+    fn key_set(keys: &[&str]) -> BTreeSet<String> {
+        keys.iter().map(|key| key.to_string()).collect()
+    }
+
+    #[test]
+    fn cfg_atc_id_is_not_overwritten_by_atc_id_enable_or_color() {
+        let cfg = "[fltsim.0]\ntitle=Private One\ntexture=PRIV1\natc_id = \"\"\natc_id_enable = 1\n\
+                   atc_id_color = 0xFF000000\n\
+                   [fltsim.1]\ntitle=Private Two\ntexture=PRIV2\natc_id = \"N100VE\"\natc_id_enable = 1\n";
+        let parsed = parse_aircraft_cfg_str(cfg);
+        assert_eq!(parsed.liveries.len(), 2);
+        assert_eq!(parsed.liveries[0].atc_id, None);
+        assert_eq!(parsed.liveries[1].atc_id.as_deref(), Some("N100VE"));
+    }
+
+    #[test]
+    fn cfg_spaced_model_key_sets_model_folder() {
+        let spaced = "[fltsim.0]\ntitle=FSLTL_A20N_AIC\ntexture=AIC\nmodel = \"AIC\" ; model folder\n";
+        let unspaced = "[fltsim.0]\ntitle=FSLTL_A20N_AIC\ntexture=AIC\nmodel=\"AIC\"\n";
+        assert_eq!(
+            parse_aircraft_cfg_str(spaced).model_folder,
+            Some("aic".to_string())
+        );
+        assert_eq!(
+            parse_aircraft_cfg_str(unspaced).model_folder,
+            Some("aic".to_string())
+        );
+    }
+
+    #[test]
+    fn cfg_texture_dot_keys_are_not_texture() {
+        // `texture.0` comes last, so reading it as `texture` would replace REAL
+        let cfg = "[fltsim.0]\ntitle=Tex\ntexture=REAL\ntexture.0 = x\n";
+        let parsed = parse_aircraft_cfg_str(cfg);
+        assert_eq!(parsed.liveries.len(), 1);
+        assert_eq!(parsed.liveries[0].texture_folder, "REAL");
+    }
+
+    /// A unique folder under the system temp dir, removed when the test ends.
+    struct TempFolder(PathBuf);
+
+    impl TempFolder {
+        fn new() -> Self {
+            static COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+            let serial = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "tc3d-msfs-test-{}-{}",
+                std::process::id(),
+                serial
+            ));
+            fs::create_dir_all(&path).expect("create test folder");
+            Self(path)
+        }
+
+        fn path(&self) -> &std::path::Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TempFolder {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// A minimal valid GLB: header, JSON chunk carrying the converter version, BIN chunk.
+    fn minimal_glb(converter_version: u32, bin_bytes: usize) -> Vec<u8> {
+        let json = format!(
+            "{{\"asset\":{{\"version\":\"2.0\",\"extras\":{{\"towercab3d\":{{\"converterVersion\":{}}}}}}}}}",
+            converter_version
+        );
+        let mut json_bytes = json.into_bytes();
+        while json_bytes.len() % 4 != 0 {
+            json_bytes.push(b' ');
+        }
+        let bin = vec![0u8; bin_bytes];
+        let total = 12 + 8 + json_bytes.len() + 8 + bin.len();
+        let mut glb = Vec::with_capacity(total);
+        glb.extend_from_slice(b"glTF");
+        glb.extend_from_slice(&2u32.to_le_bytes());
+        glb.extend_from_slice(&(total as u32).to_le_bytes());
+        glb.extend_from_slice(&(json_bytes.len() as u32).to_le_bytes());
+        glb.extend_from_slice(&0x4E4F_534Au32.to_le_bytes());
+        glb.extend_from_slice(&json_bytes);
+        glb.extend_from_slice(&(bin.len() as u32).to_le_bytes());
+        glb.extend_from_slice(&0x004E_4942u32.to_le_bytes());
+        glb.extend_from_slice(&bin);
+        glb
+    }
+
+    #[test]
+    fn scan_lists_truncated_glb_as_outdated() {
+        let folder = TempFolder::new();
+        let glb = minimal_glb(8, 64);
+        let truncated = &glb[..glb.len() - 16];
+        let path = folder.path().join("fsltl_truncated.glb");
+        fs::write(&path, truncated).expect("write truncated GLB");
+        let scanned = scan_cache_dir_sync(folder.path()).expect("scan cache folder");
+        assert_eq!(scanned.len(), 1, "the truncated GLB must stay in the list");
+        assert_eq!(scanned[0].model_key, "fsltl_truncated");
+        assert_eq!(scanned[0].converter_version, None);
+    }
+
+    #[test]
+    fn scan_lists_empty_glb_as_outdated() {
+        let folder = TempFolder::new();
+        fs::write(folder.path().join("fsltl_empty.glb"), b"").expect("write empty GLB");
+        let scanned = scan_cache_dir_sync(folder.path()).expect("scan cache folder");
+        assert_eq!(scanned.len(), 1, "the empty GLB must stay in the list");
+        assert_eq!(scanned[0].model_key, "fsltl_empty");
+        assert_eq!(scanned[0].converter_version, None);
+    }
+
+    #[test]
+    fn scan_lists_intact_glb() {
+        let folder = TempFolder::new();
+        let path = folder.path().join("fsltl_intact.glb");
+        fs::write(&path, minimal_glb(8, 64)).expect("write GLB");
+        let scanned = scan_cache_dir_sync(folder.path()).expect("scan cache folder");
+        assert_eq!(scanned.len(), 1);
+        assert_eq!(scanned[0].model_key, "fsltl_intact");
+        assert_eq!(scanned[0].converter_version, Some(8));
+    }
+
+    #[test]
+    fn save_model_cache_replaces_existing_and_leaves_no_temp() {
+        let folder = TempFolder::new();
+        fs::create_dir_all(folder.path().join("SimObjects").join("Airplanes"))
+            .expect("create Airplanes folder");
+        let cache_dir = folder.path().join("cache");
+
+        save_model_cache(&cache_dir, folder.path(), "fsltl", &[host_model("fsltl")]);
+        let cache_path = cache_dir.join("fsltl_model_cache.json");
+        let first = fs::read_to_string(&cache_path).expect("read first cache");
+        assert!(first.contains("FSLTL_B738_Southwest"));
+
+        save_model_cache(&cache_dir, folder.path(), "fsltl", &[]);
+        let names: Vec<String> = fs::read_dir(&cache_dir)
+            .expect("read cache folder")
+            .flatten()
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, vec!["fsltl_model_cache.json".to_string()]);
+        let second = fs::read_to_string(&cache_path).expect("read second cache");
+        assert!(!second.contains("FSLTL_B738_Southwest"));
+    }
+
+    #[test]
+    fn msfs_index_response_holds_no_host_path() {
+        let index = remote_model_index(&[host_model("fsltl")], &[host_model("aig")]);
+        assert_holds_no_host_path(&serde_json::to_value(index).expect("serialise index"));
+    }
+
+    #[test]
+    fn msfs_index_response_sends_only_the_remote_fields() {
+        let index = serde_json::to_value(remote_model_index(
+            &[host_model("fsltl")],
+            &[host_model("aig")],
+        ))
+        .expect("serialise index");
+        let top: BTreeSet<String> = index
+            .as_object()
+            .expect("index is an object")
+            .keys()
+            .cloned()
+            .collect();
+        assert_eq!(top, key_set(&["aig", "fsltl", "totalCount"]));
+        assert_eq!(index["totalCount"], 2);
+        let remote_fields = key_set(&[
+            "source",
+            "modelName",
+            "aircraftType",
+            "airlineCode",
+            "atcId",
+        ]);
+        assert_eq!(entry_keys(&index["fsltl"]), remote_fields);
+        assert_eq!(entry_keys(&index["aig"]), remote_fields);
+    }
+
+    #[test]
+    fn msfs_models_response_holds_no_host_path() {
+        let models = remote_cached_models(host_cached_models());
+        assert_holds_no_host_path(&serde_json::to_value(models).expect("serialise models"));
+    }
+
+    #[test]
+    fn msfs_models_response_sends_only_the_remote_fields() {
+        let models = serde_json::to_value(remote_cached_models(host_cached_models()))
+            .expect("serialise models");
+        assert_eq!(
+            entry_keys(&models),
+            key_set(&["model_key", "file_size", "converter_version"])
+        );
+    }
 
     #[test]
     fn test_parse_aig_aircraft_cfg() {

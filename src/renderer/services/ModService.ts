@@ -1,6 +1,7 @@
 // Mod loading service for custom aircraft and tower models
 
 import { TOPDOWN_ALTITUDE_DEFAULT, VNAS_RANGE_TO_ALTITUDE_MULTIPLIER } from '../constants/camera'
+import { useGlobalSettingsStore } from '../stores/globalSettingsStore'
 import type {
   AircraftModManifest,
   CustomTowerPosition,
@@ -20,7 +21,7 @@ import {
   isSupportedModelFormat,
   SUPPORTED_MODEL_FORMATS,
 } from '../types/mod'
-import { joinPath, modApi } from '../utils/tauriApi'
+import { type DiscoveredMod, joinPath, modApi } from '../utils/tauriApi'
 import { customVMRService } from './CustomVMRService'
 
 /**
@@ -129,9 +130,12 @@ export interface ModGitInfo {
  * Tower mod information for the Mods UI
  */
 export interface TowerModInfo {
+  /** How `disabledMods` names the mod (`DiscoveredMod.id`) */
+  id: string
   path: string
   icao: string
   manifest: TowerModManifest
+  /** Whether the mod was registered at this startup; a disabled mod is listed but not registered */
   enabled: boolean
   placement: TowerPlacement | null
   gitInfo?: ModGitInfo
@@ -141,9 +145,12 @@ export interface TowerModInfo {
  * Aircraft mod information for the Mods UI
  */
 export interface AircraftModInfo {
+  /** How `disabledMods` names the mod (`DiscoveredMod.id`) */
+  id: string
   path: string
   aircraftTypes: string[]
   manifest: AircraftModManifest
+  /** Whether the mod was registered at this startup; a disabled mod is listed but not registered */
   enabled: boolean
   gitInfo?: ModGitInfo
 }
@@ -180,20 +187,21 @@ class ModService {
     errors: [],
   }
 
-  // Track disabled mods (paths)
+  // Track disabled mods (mod ids, lowercased)
   private disabledMods: Set<string> = new Set()
 
   /**
    * Initialize mod loading
    * Scans the mods directory and loads all valid mods
-   * @param disabledModPaths - Array of mod paths that should be skipped
+   * @param disabledModIds - Ids (`DiscoveredMod.id`, e.g. `mods/aircraft/b738`) of the mods to list without
+   * registering; defaults to the saved `disabledMods` from the global settings
    */
-  async loadMods(disabledModPaths: string[] = []): Promise<void> {
+  async loadMods(disabledModIds: string[] = useGlobalSettingsStore.getState().disabledMods): Promise<void> {
     if (this.loaded || this.loading) return
     this.loading = true // Set immediately to prevent React StrictMode double-mount
 
     // Store disabled mods for checking
-    this.disabledMods = new Set(disabledModPaths.map((p) => p.toLowerCase()))
+    this.disabledMods = new Set(disabledModIds.map((id) => id.toLowerCase()))
 
     // Reset loading result
     this.loadingResult = {
@@ -232,12 +240,14 @@ class ModService {
       // Discover and load all mods recursively (supports git repos at any depth)
       await this.loadAllDiscoveredMods()
 
-      // Log results
-      if (this.loadingResult.aircraft.length > 0) {
-        console.log(`[ModService] Loaded ${this.loadingResult.aircraft.length} aircraft mod(s)`)
+      // Log results: disabled mods are listed in the Mods tab but counted only when loaded
+      const loadedAircraft = this.loadingResult.aircraft.filter((mod) => mod.enabled)
+      const loadedTowers = this.loadingResult.towers.filter((mod) => mod.enabled)
+      if (loadedAircraft.length > 0) {
+        console.log(`[ModService] Loaded ${loadedAircraft.length} aircraft mod(s)`)
       }
-      if (this.loadingResult.towers.length > 0) {
-        const towerDetails = this.loadingResult.towers
+      if (loadedTowers.length > 0) {
+        const towerDetails = loadedTowers
           .map((t) => {
             const placementInfo = t.placement
               ? `position: ${t.placement.lat.toFixed(4)}, ${t.placement.lon.toFixed(4)}, height: ${t.placement.height}m, rotation: ${t.placement.rotation}° from ${t.placement.source}`
@@ -245,7 +255,7 @@ class ModService {
             return `  - ${t.icao}: ${t.manifest.name} (${placementInfo})`
           })
           .join('\n')
-        console.log(`[ModService] Loaded ${this.loadingResult.towers.length} tower mod(s):\n${towerDetails}`)
+        console.log(`[ModService] Loaded ${loadedTowers.length} tower mod(s):\n${towerDetails}`)
       }
 
       // Log any errors
@@ -275,12 +285,8 @@ class ModService {
       const discovered = await modApi.discoverAllMods()
 
       for (const modInfo of discovered) {
-        const normalizedPath = modInfo.path.toLowerCase().replace(/\\/g, '/')
-
-        // Check if this mod is disabled
-        if (this.disabledMods.has(normalizedPath)) {
-          continue
-        }
+        // A disabled mod is still listed in the Mods tab, but its model is not registered
+        const enabled = !this.disabledMods.has(modInfo.id.toLowerCase())
 
         // Extract git info
         const gitInfo: ModGitInfo = {
@@ -292,9 +298,9 @@ class ModService {
           const manifest = await modApi.readModManifest(modInfo.path)
 
           if (modInfo.modType === 'aircraft') {
-            await this.loadAircraftMod(manifest as AircraftModManifest, modInfo.path, gitInfo)
+            await this.loadAircraftMod(manifest as AircraftModManifest, modInfo, enabled, gitInfo)
           } else if (modInfo.modType === 'tower') {
-            await this.loadTowerMod(manifest as TowerModManifest, modInfo.path, gitInfo)
+            await this.loadTowerMod(manifest as TowerModManifest, modInfo, enabled, gitInfo)
           }
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : String(error)
@@ -312,8 +318,15 @@ class ModService {
 
   /**
    * Load and register an aircraft mod
+   * A disabled mod is listed for the Mods UI, but its model is not registered
    */
-  private async loadAircraftMod(manifest: AircraftModManifest, basePath: string, gitInfo?: ModGitInfo): Promise<void> {
+  private async loadAircraftMod(
+    manifest: AircraftModManifest,
+    modInfo: DiscoveredMod,
+    enabled: boolean,
+    gitInfo?: ModGitInfo,
+  ): Promise<void> {
+    const basePath = modInfo.path
     if (!manifest.modelFile || !this.validateModelFile(manifest.modelFile)) {
       this.loadingResult.errors.push({
         path: basePath,
@@ -323,24 +336,34 @@ class ModService {
       return
     }
 
-    // Use joinPath to handle OS-specific separators for Tauri asset protocol
-    const modelUrl = joinPath(basePath, manifest.modelFile)
-    this.registerAircraftMod(manifest, modelUrl, basePath)
+    if (enabled) {
+      // Use joinPath to handle OS-specific separators for Tauri asset protocol
+      const modelUrl = joinPath(basePath, manifest.modelFile)
+      this.registerAircraftMod(manifest, modelUrl, basePath)
+    }
 
     // Track for Mods UI
     this.loadingResult.aircraft.push({
+      id: modInfo.id,
       path: basePath,
       aircraftTypes: manifest.aircraftTypes || [],
       manifest,
-      enabled: true,
+      enabled,
       gitInfo,
     })
   }
 
   /**
    * Load and register a tower mod
+   * A disabled mod is listed for the Mods UI, but its model is not registered
    */
-  private async loadTowerMod(manifest: TowerModManifest, basePath: string, gitInfo?: ModGitInfo): Promise<void> {
+  private async loadTowerMod(
+    manifest: TowerModManifest,
+    modInfo: DiscoveredMod,
+    enabled: boolean,
+    gitInfo?: ModGitInfo,
+  ): Promise<void> {
+    const basePath = modInfo.path
     if (!manifest.modelFile || !this.validateModelFile(manifest.modelFile)) {
       this.loadingResult.errors.push({
         path: basePath,
@@ -350,9 +373,11 @@ class ModService {
       return
     }
 
-    // Use joinPath to handle OS-specific separators for Tauri asset protocol
-    const modelUrl = joinPath(basePath, manifest.modelFile)
-    this.registerTowerMod(manifest, modelUrl, basePath)
+    if (enabled) {
+      // Use joinPath to handle OS-specific separators for Tauri asset protocol
+      const modelUrl = joinPath(basePath, manifest.modelFile)
+      this.registerTowerMod(manifest, modelUrl, basePath)
+    }
 
     // Get the ICAO from the manifest's airports array (first one for display)
     // Fall back to folder name if airports array is empty
@@ -364,10 +389,11 @@ class ModService {
 
     // Track for Mods UI
     this.loadingResult.towers.push({
+      id: modInfo.id,
       path: basePath,
       icao,
       manifest,
-      enabled: true,
+      enabled,
       placement,
       gitInfo,
     })
@@ -681,14 +707,6 @@ class ModService {
    */
   getModLoadingResult(): ModLoadingResult {
     return this.loadingResult
-  }
-
-  /**
-   * Set the list of disabled mod paths
-   * This should be called before loadMods() or will require a reload
-   */
-  setDisabledMods(paths: string[]): void {
-    this.disabledMods = new Set(paths.map((p) => p.toLowerCase().replace(/\\/g, '/')))
   }
 }
 

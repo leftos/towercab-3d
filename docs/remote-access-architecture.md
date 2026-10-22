@@ -40,7 +40,7 @@ The Tauri desktop app runs an **HTTP server** (axum, port 8765) that serves the 
 └───────────────────────────────────┬─────────────────────────────────┘
                                     │
                            (HTTP/WebSocket)
-                           (Local Network Only)
+                           (Local Network by default)
                                     │
         ┌───────────────────────────┴───────────────────────────┐
         │                                                       │
@@ -172,8 +172,6 @@ The server is implemented in `src-tauri/src/server.rs` using **axum**.
 pub struct ServerState {
     pub app_handle: tauri::AppHandle,
     pub dist_path: PathBuf,
-    pub auth_token: Option<String>,
-    pub require_local_network: bool,
     pub observations_tx: broadcast::Sender<ObservationMessage>,
     pub connected_clients: AtomicUsize,
     pub synced_airport: RwLock<Option<String>>,
@@ -187,14 +185,17 @@ pub struct ServerState {
 |-------|--------|---------|
 | `/` | GET | Serve React app (index.html) |
 | `/assets/*` | GET | Static assets (JS, CSS, images) |
-| `/api/global-settings` | GET | Read global settings |
-| `/api/global-settings` | POST | Write global settings |
-| `/api/mods/aircraft` | GET | List aircraft mods |
-| `/api/mods/towers` | GET | List tower mods |
-| `/api/mods/*path` | GET | Serve mod files (GLB models) |
-| `/api/msfs/models` | GET | List converted MSFS models |
+| `/api/global-settings` | GET | Read the remote view of the global settings (see "Settings exposed to remote clients") |
+| `/api/global-settings` | POST | Write global settings through `merge_remote_write`; answers with the remote view of what was stored |
+| `/api/mods/discover` | GET | List every mod folder: `[{id, path, modType, isGitRepo, repoName}]`; `path` is relative to the mods root (case kept, e.g. `mods/towers/KOAK/KOAK`), `id` is that path lowercased and is how `disabledMods` names the mod |
+| `/api/mods/aircraft` | GET | List aircraft mods: `[{name, manifest}]` (no `path`) |
+| `/api/mods/towers` | GET | List tower mods: `[{name, manifest}]` (no `path`) |
+| `/api/mods/file/*path` | GET | Serve any file under the mods root by its relative path (GLB models, manifests) |
+| `/api/mods/aircraft/*path`, `/api/mods/towers/*path` | GET | Serve a file from one aircraft or tower mod |
+| `/api/msfs/index` | GET | List the host's FSLTL and AIG source models: `{fsltl, aig, totalCount}`, each model only `{source, modelName, aircraftType, airlineCode, atcId}` (no folder or file paths); a failure answers `Failed to get model index`, with the detail in the host log |
+| `/api/msfs/models` | GET | List converted MSFS models: each only `{model_key, file_size, converter_version}` (no file path); the GLB is `/api/msfs/{model_key}.glb`; a failure answers `Failed to list converted models`, with the detail in the host log |
 | `/api/msfs/*path` | GET | Serve converted GLB files |
-| `/api/msfs/convert` | POST | Request on-the-fly conversion |
+| `/api/msfs/convert` | POST | Request on-the-fly conversion of a model by `model_name`, looked up in the host's model index; `texture_scale` must be `full`, `2k`, `1k` or `512` (anything else is 400). A failure answers `error: "Model conversion failed"`, with the detail in the host log |
 | `/api/tower-positions` | GET | Read custom tower positions |
 | `/api/tower-positions/:icao` | PUT | Update tower position |
 | `/api/vmr-rules` | GET | Parse and serve VMR rules |
@@ -203,7 +204,13 @@ pub struct ServerState {
 | `/api/realtraffic/*` | POST | CORS proxy for RealTraffic API |
 | `/api/proxy` | GET | CORS proxy (VATSIM, Aviation Weather) |
 | `/api/log` | POST | Remote client logging endpoint |
-| `/api/diagnostic` | POST | Save a diagnostic file |
+| `/api/diagnostic` | POST | Save a diagnostic file on the host; answers `{filename}` only. A remote browser's Export Diagnostic dialog reads "Saved on the host as:" and the file name |
+
+Dev builds only: under `pnpm run vite:headless` (port 5174; never `pnpm run dev`, `vite preview` or a build) the Vite dev server answers a read-only subset of this table itself, for headless agent checks (`scripts/dev/devApi.ts`; recipe in `CLAUDE.md`, "E2E testing via Playwright MCP"). It serves `/api/global-settings` GET, the mod routes, `/api/tower-positions` GET, `/api/airport-surfaces`, `/api/proxy` and `/api/dev-health`, and passes `/api/realtraffic/*` to Vite's proxy.
+
+It differs from the desktop server: loopback sockets only (no private LAN ranges) with its own `Host` and `Origin` check, a 403 for `Sec-Fetch-Mode: navigate` and cross-site requests, `/api/proxy` limited to the METAR URL, `POST /api/global-settings` and `/api/log` answered 204 and dropped, other writes 405, WebSocket upgrades under `/api/` closed, and the ion token replaced by a placeholder with `/api/ion/v1/assets/<id>/endpoint` forwarding to Cesium ion.
+
+The desktop server is unchanged.
 
 ### Request path containment
 
@@ -213,11 +220,20 @@ Every route that builds a file path from a request resolves it with `resolve_wit
 - **Mod files** (`/api/mods/file/*`, `/api/mods/aircraft/*`, `/api/mods/towers/*`) and **MSFS models** (`/api/msfs/*path`): 403 for a refused path, 404 for a missing file.
 - **`PUT /api/tower-positions/{icao}`**: the code must be 3-4 ASCII letters, digits or `_` (e.g. `EK_2`), upper-cased to `<CODE>.json` in `tower-positions`; anything else is 400.
 - **`POST /api/diagnostic`**: the filename must match `tc3d-diag-<middle>.tc3d-diag.json`, the middle made of ASCII letters, digits, `-`, `_` and `.`; anything else is 400.
-- An I/O error while resolving a root or path answers 500 on every route above.
+- An I/O error while resolving a root or path answers 500 with the fixed text `Could not read the file` on every route above; the detail goes to the host log.
 
 ### Security
 
 **Local Network Restriction:**
+
+`auth_middleware` in `server.rs` runs before every handler and CORS answer. With `server.allowNonLocalClients` off (the default, `allow_non_local_clients` in Rust, read on every request so a change applies without a restart) it refuses with 403:
+- a source IP that is not local (`is_local_network_ip`, below);
+- a `Host` that is not a local name (`is_allowed_host`): a local-network IP literal, `localhost`, `*.local`, or a bare single-label name such as a Windows PC name (`DESKTOP-ABC`), with an optional port. A DNS-rebound page arrives under its own domain and is refused, as is a request without `Host`.
+
+With `allowNonLocalClients` on (Settings > Configuration > "Allow devices outside the local network"), any source IP and any `Host` that is present are served; this is for VPN or internet access. The field defaults to off in both Rust and TypeScript, so existing settings files that held the old `requireLocalNetwork` value restrict by default and drop that key on the next host save.
+
+**WebSocket Origin:** an upgrade (`/api/observations/ws`, `/api/presence`) is refused with 403 unless it has no `Origin` (a non-browser client), or an `http`/`https` `Origin` that is a local name (`is_local_host_name`) or equals the request's own `Host` (`is_same_origin`, the same-origin case that lets a VPN or internet client connect once non-local clients are allowed). This check applies whatever `allowNonLocalClients` says.
+
 ```rust
 fn is_local_network_ip(ip: &IpAddr) -> bool {
     match ip {
@@ -243,10 +259,7 @@ fn is_local_network_ip(ip: &IpAddr) -> bool {
 }
 ```
 
-**Authentication Middleware:**
-- Optional Bearer token validation
-- API routes require token if configured
-- Static files served without authentication
+There is no bearer token or other credential: access is decided by the network rules above.
 
 ## Observations Broadcasting
 
@@ -532,10 +545,15 @@ Settings are stored on the host and synced to remote clients:
 ~/.config/towercab-3d/global-settings.json
 ```
 
+The dev build keeps its own file in the `com.towercab.viewer.dev` app data folder (`%APPDATA%\com.towercab.viewer.dev\global-settings.json` on Windows), which `vite:headless` reads per request, never writes, and overrides with `TC3D_SETTINGS_FILE`.
+
 **Remote (Browser):**
 - Reads via `GET /api/global-settings`
 - Writes via `POST /api/global-settings`
 - Local per-browser settings in `localStorage` (not synced)
+- Loading sends no write: in remote mode `initializeGlobalSettings()` and the viewport and display migrations skip their writes, so an iPad opening the page never changes the host's settings
+
+A host save that finds `global-settings.json` unparseable first copies it to `global-settings.json.corrupt-{unix seconds}` beside it, then replaces the file with the settings being saved (the vNAS tokens it held are lost).
 
 ### Settings Flow
 
@@ -550,7 +568,7 @@ Host (Tauri)                            Remote (Browser)
      │        ↓                               │
      │ File: global-settings.json             │
      │                                        │
-     │                                        │ User changes Cesium token
+     │                                        │ User changes a shared setting (e.g. bookmark)
      │                                        │        ↓
      │                                        │ globalSettingsStore.update()
      │                                        │        ↓
@@ -558,23 +576,26 @@ Host (Tauri)                            Remote (Browser)
      │                                        │        ↓
      │<─────────────────────────────────────────────────│
      │        ↓                               │
-     │ Server writes global-settings.json    │
+     │ Server merges, writes global-settings.json │
 ```
 
-### Secret Preservation
+### Settings exposed to remote clients
 
-vNAS tokens are never sent to browsers:
+Both directions go through two functions in `settings.rs`, so a remote browser never reads or changes what only the host should hold, and no remote response body carries a host path: not the shared settings, the MSFS model routes (`/api/msfs/index`, `/api/msfs/models`, `/api/msfs/convert`), the mod routes (`/api/mods/*`), `/api/diagnostic` or `/api/airport-surfaces`, nor any error body:
 
-```rust
-// server.rs - POST /api/global-settings handler
+- **Read** (`remote_view`, used by the GET and by the POST's response): the settings with `realtraffic.licenseKey` and `vnasTokens` blanked, and `imagery.googleMapsApiKey` blanked unless `imagery.provider` is `google`. The Cesium ion token is kept: the remote viewer cannot start without it.
 
-// Preserve existing vnas_tokens (secrets should not come from browser)
-if let Ok(existing_content) = fs::read_to_string(&settings_file) {
-    if let Ok(existing_settings) = serde_json::from_str::<GlobalSettings>(&existing_content) {
-        settings.vnas_tokens = existing_settings.vnas_tokens;
-    }
-}
-```
+  The host-private paths are blanked too: `fsltl.sourcePath`/`outputPath` and `msfsModels.communityPath`/`cacheDirectory` are `null` and `msfsModels.vmrFiles` is `[]`, so the shared settings carry no folder or file path on the host. Fields are blanked, not removed, because several have no serde default.
+- **Write** (`merge_remote_write`): the incoming object with every host-owned, host-private and secret field copied back from the stored file: `server`, `renderingBackend`, `imagery.provider` and `imagery.googleMapsApiKey`, `fsltl.sourcePath`/`outputPath`, `msfsModels.communityPath`/`vmrFiles`/`cacheDirectory`, `realtraffic.licenseKey` and `vnasTokens`. The Cesium ion token is the one exception: a remote client may set it only while the host's is empty, and never overwrites one.
+- Every field has a class in `FIELD_CLASSES`: **public** (remote clients see and change it), **host-owned** (they see it but never change it), **host-private** (a path on the host: they neither see nor change it) or **secret** (hidden unless they need it, never changed). A test in `settings.rs` walks every JSON path of a fully populated `GlobalSettings` and requires each to be classed, so a new field fails it until classified.
+- `GET /api/global-settings` answers a 500 with exactly `Could not read the settings`, and `POST` with exactly `Could not save the settings`; the host log gets `[Server] Could not read the global settings: <detail>` (or `Could not save ...`) at error level, since the detail can name the settings file's path.
+- Every other remote-reachable 500 body is fixed text too, with the detail in the host log as `[Server] <message>: <detail>`: `/api/airport-surfaces` "Could not load airport surfaces"; the mod routes "Could not list mods"; `GET /api/tower-positions` "Could not read tower positions" and `PUT` "Could not save the tower position"; `/api/vmr-rules` "Could not read VMR rules"; `/api/diagnostic` "Could not save the diagnostic" (a remote browser shows it as the toast "Could not save the diagnostic"); file serving and path checks "Could not read the file". The settings routes' host log lines read `[Server] Could not read the settings: <detail>`.
+- `disabledMods` is a shared setting holding mod ids (`DiscoveredMod.id`, e.g. `mods/aircraft/b738`), never host paths. Saved absolute entries (a Windows drive, `\\?\`, UNC, or a macOS `/…` path) are rewritten to ids when the settings file is read and on a remote write; an entry with no `mods` folder or with `.`/`..` is dropped, logged once per process as `[Settings] Dropped <n> disabled-mod entries that name no mod folder`. The Mods tab stores and compares ids. The desktop's `discover_all_mods` result gains `id` while its `path` stays absolute.
+- A second test fills every path field with host paths and requires no string of the remote view to hold one or to look like an absolute path (a drive letter, `\\` or `/`); the `/api/msfs/index` and `/api/msfs/models` responses are checked the same way.
+
+The host webview reads every field except `vnasTokens` (`read_global_settings` never returns them). Only Rust writes the tokens (`read_vnas_tokens` / `write_vnas_tokens`, used by `vnas.rs`): a host write keeps the tokens already in the file, and an empty ion token from the host keeps the stored one. `vnasTokens` is not in the TypeScript `GlobalSettings` type.
+
+A settings export (`getSettings()`) holds no tokens, and importing one applies only `port`, `enabled` and `minimizeToTray` from its `server` block, so an imported file cannot open the server to other networks.
 
 ## Device Optimization
 
@@ -690,7 +711,7 @@ The proxy validates that URLs are on an allowed list before forwarding.
 │  │  ├─ broadcast_observations()     ├─ OBSERVATIONS_TX channel          │  │
 │  │  ├─ broadcast_aircraft_removals()├─ REST API handlers                │  │
 │  │  ├─ broadcast_subscriptions()    ├─ WebSocket handlers               │  │
-│  │  └─ broadcast_airport_sync()     └─ Auth middleware                  │  │
+│  │  └─ broadcast_airport_sync()     └─ Access middleware                │  │
 │  │                                                                       │  │
 │  │  settings.rs                     msfs.rs                             │  │
 │  │  ├─ GlobalSettings struct        ├─ Model detection                  │  │
@@ -701,7 +722,7 @@ The proxy validates that URLs are on an allowed list before forwarding.
 └───────────────────────────────────────────┼─────────────────────────────────┘
                                             │
                                    HTTP/WS (port 8765)
-                                   Local Network Only
+                                   Local Network by default
                                             │
            ┌────────────────────────────────┴────────────────────────────────┐
            │                                                                 │
@@ -737,7 +758,7 @@ The proxy validates that URLs are on an allowed list before forwarding.
 ## Design Principles
 
 ### 1. Single Source of Truth
-Global settings live only on the host's file system. Remote browsers read via API, never store locally.
+Global settings live only on the host's file system. Remote browsers read via API (minus host-only secrets), never store locally, and cannot change host-owned fields.
 
 ### 2. Unified Data Format
 All observation sources (VATSIM, vNAS, RealTraffic) convert to the same `ObservationData` struct before broadcast.
@@ -746,7 +767,7 @@ All observation sources (VATSIM, vNAS, RealTraffic) convert to the same `Observa
 Every API call checks `isTauri()` and branches to either Tauri commands or HTTP requests.
 
 ### 4. Local Network Isolation
-The server only accepts connections from private IP ranges (10.x, 172.16-31.x, 192.168.x, localhost).
+By default the server only accepts connections from private IP ranges (10.x, 172.16-31.x, 192.168.x, 169.254.x, localhost) that name this PC by IP address, `localhost`, `name.local` or its bare PC name. `server.allowNonLocalClients` lifts both checks; WebSocket `Origin` is checked either way.
 
 ### 5. Lazy Subscription
 Remote clients request vNAS subscriptions only when viewing an airport, not pre-subscribing to all facilities.

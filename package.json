@@ -7,9 +7,10 @@
   "scripts": {
     "serve": "vite --open",
     "vite:dev": "vite",
+    "vite:headless": "vite --mode headless --port 5174 --strictPort",
     "vite:build": "vite build",
     "vite:preview": "vite preview",
-    "typecheck": "tsc -p tsconfig.web.json --noEmit",
+    "typecheck": "tsc -p tsconfig.web.json --noEmit && tsc -p tsconfig.node.json --noEmit",
     "build:converter": "python scripts/shipping/build/build_converter.py",
     "extract:surfaces": "python scripts/shipping/data-generation/extract-airport-surfaces.py",
     "dev": "node scripts/shipping/build/dev-wrapper.js",

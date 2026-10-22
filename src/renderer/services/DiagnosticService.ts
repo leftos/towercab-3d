@@ -148,7 +148,8 @@ export async function saveDiagnostic(): Promise<string> {
     throw new Error(`Failed to save diagnostic: ${text}`)
   }
 
-  const result = (await response.json()) as { path: string }
-  console.log(`[Diagnostic] Saved ${pkg.timelines.length} timelines to ${result.path}`)
-  return result.path
+  // The host sends only the file name: its folder is a host path
+  const result = (await response.json()) as { filename: string }
+  console.log(`[Diagnostic] Saved ${pkg.timelines.length} timelines on the host as ${result.filename}`)
+  return result.filename
 }

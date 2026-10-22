@@ -109,6 +109,108 @@ TEXTURE_SCALE_MAP = {
     '512': 512
 }
 
+# Suffixes tried, in order, after a texture name when looking for its file
+TEXTURE_EXTENSIONS = ['.DDS', '.dds', '.PNG', '.png', '.png.dds', '.PNG.DDS', '']
+
+# Windows device names, refused as file names with or without an extension
+DOS_DEVICE_NAMES = frozenset(
+    ['CON', 'PRN', 'AUX', 'NUL']
+    + [f'COM{n}' for n in range(1, 10)]
+    + [f'LPT{n}' for n in range(1, 10)]
+)
+
+# Characters a plain file name may not hold: separators, a drive or stream colon, and Windows wildcards
+RESERVED_NAME_CHARS = frozenset('/\\:<>"|?*')
+
+
+def warn(message: str) -> None:
+    """Print a conversion warning on stderr."""
+    print(f"  Warning: {message}", file=sys.stderr)
+
+
+def is_plain_name(name: str) -> bool:
+    """Whether `name` is one plain file name that can only mean an entry in the folder it is joined to.
+
+    Refuses an empty name, `.` and `..`, a name ending in a dot or a space (Windows strips them, so
+    `t.bin.` opens `t.bin`), separators, a colon (a drive, an NTFS stream or any URI scheme, `data:`
+    included), NUL and other control characters, Windows wildcards, and device names such as `CON`
+    or `com1.bin`.
+    """
+    if name in ('', '.', '..') or name[-1] in '. ':
+        return False
+    if any(ch in RESERVED_NAME_CHARS or ord(ch) < 32 or ord(ch) == 127 for ch in name):
+        return False
+    return name.split('.')[0].rstrip(' ').upper() not in DOS_DEVICE_NAMES
+
+
+def find_package_root(path: Path) -> Path:
+    """The MSFS package `path` belongs to: the parent of its nearest `SimObjects/Airplanes` ancestor.
+
+    Raises:
+        ValueError: When no ancestor of `path` is an `Airplanes` folder inside a `SimObjects` folder.
+    """
+    absolute = Path(os.path.abspath(path))
+    for folder in (absolute, *absolute.parents):
+        if folder.name.lower() == 'airplanes' and folder.parent.name.lower() == 'simobjects':
+            return folder.parent.parent
+    raise ValueError(
+        f"{path} is not inside a SimObjects/Airplanes folder, so the package it belongs to is unknown; "
+        "models are converted only from an MSFS package"
+    )
+
+
+def _without_extended_prefix(path: str) -> str:
+    """`path` without a Windows `\\\\?\\` or `\\\\?\\UNC\\` prefix, for comparing with paths that lack it."""
+    if path.startswith('\\\\?\\UNC\\'):
+        return '\\\\' + path[8:]
+    if path.startswith('\\\\?\\'):
+        return path[4:]
+    return path
+
+
+def resolve_inside(package_root: Path, path: Path) -> Path | None:
+    """The real path of `path` when it lies inside the real path of `package_root`, else None.
+
+    Both sides go through `os.path.realpath`, which follows junctions and symlinks, so a link
+    inside the package that leads out of it is refused. The returned path is the one to open.
+    """
+    real_root = os.path.normcase(_without_extended_prefix(os.path.realpath(package_root)))
+    real_path = os.path.realpath(path)
+    comparable = os.path.normcase(_without_extended_prefix(real_path))
+    try:
+        common = os.path.commonpath([real_root, comparable])
+    except ValueError:
+        return None  # different drives, so the path cannot be inside the root
+    return Path(real_path) if common == real_root else None
+
+
+def texture_dirs_inside(package_root: Path, texture_dirs: list[Path]) -> list[Path]:
+    """The resolved texture folders that lie inside the package; each one outside it is dropped with a warning."""
+    kept = []
+    for folder in texture_dirs:
+        resolved = resolve_inside(package_root, folder)
+        if resolved is None:
+            warn(f"texture folder {folder} is outside the package {package_root}; not searching it")
+        else:
+            kept.append(resolved)
+    return kept
+
+
+def check_gltf_uris(gltf: dict) -> None:
+    """Refuse a glTF whose buffer or image URI is anything but a plain file name.
+
+    Raises:
+        ValueError: Naming the URI's role and index (`buffer 0`, `image 3`) and the refused value.
+    """
+    for role, key in (('buffer', 'buffers'), ('image', 'images')):
+        for index, entry in enumerate(gltf.get(key, [])):
+            uri = entry.get('uri', '')
+            if not isinstance(uri, str) or (uri and not is_plain_name(uri)):
+                raise ValueError(
+                    f"{role} {index} URI {uri!r} is not a plain file name beside the glTF; "
+                    "paths, URI schemes and device names are refused"
+                )
+
 
 def convert_dds_to_png(dds_path: Path, target_size: int | None = None) -> bytes:
     """Convert DDS file to PNG bytes, optionally resizing.
@@ -152,18 +254,21 @@ def convert_dds_to_png(dds_path: Path, target_size: int | None = None) -> bytes:
         return buffer.getvalue()
 
 
-def find_texture_file(texture_name: str, model_dir: Path, texture_dirs: list[Path]) -> Path | None:
-    """Find texture file in model dir or texture directories."""
-    for ext in ['.DDS', '.dds', '.PNG', '.png', '.png.dds', '.PNG.DDS', '']:
-        candidate = model_dir / f"{texture_name}{ext}"
-        if candidate.exists():
-            return candidate
+def find_texture_file(texture_name: str, model_dir: Path, texture_dirs: list[Path], package_root: Path) -> Path | None:
+    """Find a texture file by name in the model folder, then in each texture folder.
 
-    for tex_dir in texture_dirs:
-        for ext in ['.DDS', '.dds', '.PNG', '.png', '.png.dds', '.PNG.DDS', '']:
-            candidate = tex_dir / f"{texture_name}{ext}"
-            if candidate.exists():
-                return candidate
+    Returns the resolved path of the first file found inside the package; a file that resolves
+    outside it (a link) is passed over with a warning.
+    """
+    for folder in [model_dir, *texture_dirs]:
+        for ext in TEXTURE_EXTENSIONS:
+            candidate = folder / f"{texture_name}{ext}"
+            if not candidate.is_file():
+                continue
+            resolved = resolve_inside(package_root, candidate)
+            if resolved is not None:
+                return resolved
+            warn(f"texture {candidate} resolves outside the package {package_root}; not reading it")
 
     return None
 
@@ -232,6 +337,29 @@ def detect_animations(gltf: dict) -> bool:
     return False
 
 
+TEMP_FILE_MAX_AGE_SECONDS = 3600  # Stale temp files left behind by a killed conversion
+
+
+def sweep_stale_temp_files(folder: Path) -> None:
+    """Remove the temp files an interrupted conversion left in the output folder."""
+    cutoff = time.time() - TEMP_FILE_MAX_AGE_SECONDS
+    try:
+        entries = list(folder.iterdir())
+    except OSError as e:
+        print(f"WARNING: could not list {folder} to sweep temp files: {e}", file=sys.stderr)
+        return
+    for path in entries:
+        if not (path.name.startswith('.') and path.name.endswith('.tmp')):
+            continue
+        try:
+            if path.is_file() and path.stat().st_mtime < cutoff:
+                path.unlink()
+        except FileNotFoundError:
+            continue  # its writer renamed it into place between the listing and the removal
+        except OSError as e:
+            print(f"WARNING: could not remove stale temp file {path}: {e}", file=sys.stderr)
+
+
 def convert_single_gltf(gltf_path: Path, output_path: Path, texture_dirs: list[Path],
                         texture_scale: int | None = None,
                         source_metadata: dict | None = None) -> dict:
@@ -253,11 +381,17 @@ def convert_single_gltf(gltf_path: Path, output_path: Path, texture_dirs: list[P
         - output_size: int (bytes)
         - error: str (if failed)
     """
-    model_dir = gltf_path.parent
+    package_root = find_package_root(gltf_path)
+    resolved_gltf = resolve_inside(package_root, gltf_path)
+    if resolved_gltf is None:
+        raise ValueError(f"glTF {gltf_path} resolves outside its package {package_root}")
+    model_dir = resolved_gltf.parent
+    search_dirs = texture_dirs_inside(package_root, texture_dirs)
 
     # Load GLTF
-    with open(gltf_path, 'r', encoding='utf-8') as f:
+    with open(resolved_gltf, 'r', encoding='utf-8') as f:
         gltf = json.load(f)
+    check_gltf_uris(gltf)
 
     # Detect animations
     has_animations = detect_animations(gltf)
@@ -265,7 +399,9 @@ def convert_single_gltf(gltf_path: Path, output_path: Path, texture_dirs: list[P
     # Load binary buffer
     buffer_uri = gltf['buffers'][0].get('uri', '')
     if buffer_uri:
-        bin_file = model_dir / buffer_uri
+        bin_file = resolve_inside(package_root, model_dir / buffer_uri)
+        if bin_file is None:
+            raise ValueError(f"buffer 0 URI {buffer_uri!r} resolves outside the package {package_root}")
         with open(bin_file, 'rb') as f:
             bin_data = bytearray(f.read())
     else:
@@ -277,12 +413,13 @@ def convert_single_gltf(gltf_path: Path, output_path: Path, texture_dirs: list[P
         for i, image in enumerate(gltf['images']):
             uri = image.get('uri', '')
             if uri:
-                texture_path = find_texture_file(uri, model_dir, texture_dirs)
+                texture_path = find_texture_file(uri, model_dir, search_dirs, package_root)
                 if texture_path is None:
                     base_name = Path(uri).stem
                     if base_name.endswith('.PNG') or base_name.endswith('.png'):
                         base_name = base_name[:-4]
-                    texture_path = find_texture_file(base_name, model_dir, texture_dirs)
+                    if is_plain_name(base_name):
+                        texture_path = find_texture_file(base_name, model_dir, search_dirs, package_root)
 
                 if texture_path:
                     png_data = convert_dds_to_png(texture_path, texture_scale)
@@ -827,13 +964,20 @@ def convert_single_gltf(gltf_path: Path, output_path: Path, texture_dirs: list[P
     # Create output directory
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Write GLB
-    with open(output_path, 'wb') as f:
-        f.write(header)
-        f.write(json_chunk_header)
-        f.write(json_bytes)
-        f.write(bin_chunk_header)
-        f.write(bytes(bin_data))
+    # Write beside the final name, then rename into place: a failed or killed conversion
+    # never leaves a truncated GLB under the name the app loads
+    temp_path = output_path.with_name(f'.{output_path.name}.{os.getpid()}.tmp')
+    try:
+        with open(temp_path, 'wb') as f:
+            f.write(header)
+            f.write(json_chunk_header)
+            f.write(json_bytes)
+            f.write(bin_chunk_header)
+            f.write(bytes(bin_data))
+        os.replace(temp_path, output_path)
+    except BaseException:
+        temp_path.unlink(missing_ok=True)
+        raise
 
     return {
         'success': True,
@@ -929,7 +1073,7 @@ def find_gltf_in_model_dir(model_dir: Path) -> Path | None:
     return exterior_gltf[0] if exterior_gltf else None
 
 
-def parse_model_xml(xml_path: Path) -> Path | None:
+def parse_model_xml(xml_path: Path, package_root: Path) -> Path | None:
     """
     Parse an MSFS model XML file to find the GLTF filename.
 
@@ -939,7 +1083,8 @@ def parse_model_xml(xml_path: Path) -> Path | None:
           <LOD minSize="1" ModelFile="B772_PW_LOD1.gltf"/>
         </LODS>
 
-    Returns the path to the highest-quality LOD (highest minSize), or None.
+    Returns the resolved path to the highest-quality LOD (highest minSize), or None; a
+    ModelFile that resolves outside the package is skipped with a warning.
     """
     if not xml_path.exists():
         return None
@@ -958,15 +1103,49 @@ def parse_model_xml(xml_path: Path) -> Path | None:
         best_lod = max(lods, key=lambda lod: int(lod.get('minSize', '0')))
         model_file = best_lod.get('ModelFile')
         if model_file:
-            gltf_path = xml_path.parent / model_file
-            if gltf_path.exists():
+            gltf_path = resolve_inside(package_root, xml_path.parent / model_file)
+            if gltf_path is None:
+                warn(f"ModelFile {model_file!r} in {xml_path} is outside the package {package_root}; skipping it")
+            elif gltf_path.exists():
                 return gltf_path
     except Exception:
         pass
     return None
 
 
-def parse_model_cfg(model_cfg_path: Path) -> Path | None:
+def _gltf_from_model_cfg_reference(model_cfg_path: Path, rel_path: str, package_root: Path) -> Path | None:
+    """The glTF a model.cfg `normal=` XML reference names, or None when it names none inside the package."""
+    # Resolve relative to model.cfg's parent directory
+    xml_path = resolve_inside(package_root, model_cfg_path.parent / rel_path)
+    if xml_path is None:
+        warn(f"normal={rel_path} in {model_cfg_path} is outside the package {package_root}; skipping it")
+        return None
+    if xml_path.exists():
+        # Parse the XML to get the actual GLTF filename
+        gltf_from_xml = parse_model_xml(xml_path, package_root)
+        if gltf_from_xml:
+            return gltf_from_xml
+
+    # Fallback: derive GLTF name from XML name
+    # e.g., model.iae/FAIB_A320_IAE.xml -> model.iae/FAIB_A320_IAE_LOD0.gltf
+    gltf_dir = xml_path.parent
+    gltf_stem = xml_path.name[:-4]  # Remove .xml
+    if not gltf_dir.exists():
+        return None
+    # Look for LOD0 first (highest quality), then any LOD
+    candidates = [gltf_dir / f"{gltf_stem}{suffix}" for suffix in ['_LOD0.gltf', '_LOD0.GLTF', '_LOD1.gltf', '_LOD1.GLTF']]
+    # Fall back to any GLTF with matching prefix
+    candidates += list(gltf_dir.glob(f"{gltf_stem}*.gltf")) + list(gltf_dir.glob(f"{gltf_stem}*.GLTF"))
+    for candidate in candidates:
+        if candidate.exists():
+            resolved = resolve_inside(package_root, candidate)
+            if resolved is not None:
+                return resolved
+            warn(f"glTF {candidate} resolves outside the package {package_root}; skipping it")
+    return None
+
+
+def parse_model_cfg(model_cfg_path: Path, package_root: Path) -> Path | None:
     """
     Parse a model.cfg file to find the referenced base GLTF.
 
@@ -974,7 +1153,8 @@ def parse_model_cfg(model_cfg_path: Path) -> Path | None:
         [models]
         normal=..\\..\\FSLTL_A320\\model.iae\\FAIB_A320_IAE.xml
 
-    Returns the GLTF path derived from the XML reference, or None.
+    Returns the GLTF path derived from the XML reference, or None; a reference that
+    resolves outside the package is skipped with a warning.
     """
     if not model_cfg_path.exists():
         return None
@@ -984,47 +1164,24 @@ def parse_model_cfg(model_cfg_path: Path) -> Path | None:
         for line in content.splitlines():
             line = line.strip()
             if line.lower().startswith('normal='):
-                rel_path = line.partition('=')[2].strip()
-                if rel_path:
-                    # Convert backslashes to forward slashes
-                    rel_path = rel_path.replace('\\', '/')
-                    # The path points to an .xml file
-                    if rel_path.endswith('.xml'):
-                        # Resolve relative to model.cfg's parent directory
-                        xml_path = (model_cfg_path.parent / rel_path).resolve()
-                        if xml_path.exists():
-                            # Parse the XML to get the actual GLTF filename
-                            gltf_from_xml = parse_model_xml(xml_path)
-                            if gltf_from_xml:
-                                return gltf_from_xml
-
-                        # Fallback: derive GLTF name from XML name
-                        # e.g., model.iae/FAIB_A320_IAE.xml -> model.iae/FAIB_A320_IAE_LOD0.gltf
-                        gltf_base = rel_path[:-4]  # Remove .xml
-                        abs_path = (model_cfg_path.parent / gltf_base).resolve()
-                        gltf_dir = abs_path.parent
-                        gltf_stem = abs_path.name
-                        if gltf_dir.exists():
-                            # Look for LOD0 first (highest quality), then any LOD
-                            for suffix in ['_LOD0.gltf', '_LOD0.GLTF', '_LOD1.gltf', '_LOD1.GLTF']:
-                                candidate = gltf_dir / f"{gltf_stem}{suffix}"
-                                if candidate.exists():
-                                    return candidate
-                            # Fall back to any GLTF with matching prefix
-                            for gltf_file in gltf_dir.glob(f"{gltf_stem}*.gltf"):
-                                return gltf_file
-                            for gltf_file in gltf_dir.glob(f"{gltf_stem}*.GLTF"):
-                                return gltf_file
+                # Convert backslashes to forward slashes
+                rel_path = line.partition('=')[2].strip().replace('\\', '/')
+                # The path points to an .xml file
+                if rel_path.endswith('.xml'):
+                    gltf = _gltf_from_model_cfg_reference(model_cfg_path, rel_path, package_root)
+                    if gltf:
+                        return gltf
     except Exception:
         pass
     return None
 
 
-def parse_base_container(aircraft_dir: Path) -> Path | None:
+def parse_base_container(aircraft_dir: Path, package_root: Path) -> Path | None:
     """
     Parse aircraft.cfg to find the base_container reference.
 
-    Returns the resolved base container path, or None.
+    Returns the resolved base container path, or None; a base_container that resolves
+    outside the package is skipped with a warning.
     """
     cfg_path = aircraft_dir / "aircraft.cfg"
     if not cfg_path.exists():
@@ -1041,15 +1198,17 @@ def parse_base_container(aircraft_dir: Path) -> Path | None:
                     value = value.strip().strip('"').strip("'")
                     if value:
                         # Resolve relative path (e.g., "..\FSLTL_A320")
-                        base_path = (aircraft_dir / value.replace('\\', '/')).resolve()
-                        if base_path.exists():
+                        base_path = resolve_inside(package_root, aircraft_dir / value.replace('\\', '/'))
+                        if base_path is None:
+                            warn(f"base_container={value} in {cfg_path} is outside the package {package_root}; skipping it")
+                        elif base_path.exists():
                             return base_path
     except Exception:
         pass
     return None
 
 
-def find_gltf_for_aircraft(aircraft_dir: Path) -> tuple[Path | None, Path | None]:
+def find_gltf_for_aircraft(aircraft_dir: Path, package_root: Path) -> tuple[Path | None, Path | None]:
     """
     Find the GLTF file for an aircraft folder.
 
@@ -1076,14 +1235,14 @@ def find_gltf_for_aircraft(aircraft_dir: Path) -> tuple[Path | None, Path | None
             if not model_cfg.exists():
                 model_cfg = model_dir / "model.CFG"
             if model_cfg.exists():
-                gltf = parse_model_cfg(model_cfg)
+                gltf = parse_model_cfg(model_cfg, package_root)
                 if gltf:
                     # Return the base model's directory for texture fallback
                     base_dir = gltf.parent.parent  # model.xxx -> aircraft folder
                     return gltf, base_dir
 
     # Also check base_container in aircraft.cfg
-    base_container = parse_base_container(aircraft_dir)
+    base_container = parse_base_container(aircraft_dir, package_root)
     if base_container:
         base_model_dirs = list(base_container.glob("model*")) + list(base_container.glob("MODEL*"))
         for model_dir in base_model_dirs:
@@ -1093,6 +1252,35 @@ def find_gltf_for_aircraft(aircraft_dir: Path) -> tuple[Path | None, Path | None
                     return gltf, base_container
 
     return None, None
+
+
+def livery_texture_dir(aircraft_dir: Path, texture_folder: str) -> Path | None:
+    """The livery's own `texture.<name>` (or `Texture.<name>`) folder directly in the aircraft folder.
+
+    Returns None when the folder does not exist, or with a warning when the aircraft.cfg
+    `texture=` value is not a plain name.
+    """
+    if not is_plain_name(texture_folder):
+        warn(f"texture={texture_folder} in {aircraft_dir / 'aircraft.cfg'} is not a plain folder name; skipping it")
+        return None
+    for prefix in ('texture.', 'Texture.'):
+        candidate = aircraft_dir / f"{prefix}{texture_folder}"
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def check_source_paths(source_path: Path, gltf_path: Path | None) -> str | None:
+    """Why an explicit `--gltf-path` is refused for `--source`, or None when it lies inside the source's package."""
+    if gltf_path is None:
+        return None
+    try:
+        package_root = find_package_root(source_path)
+    except ValueError as e:
+        return f"--source: {e}"
+    if resolve_inside(package_root, gltf_path) is None:
+        return f"--gltf-path {gltf_path} is outside the package {package_root} of --source"
+    return None
 
 
 def discover_liveries_in_source(source_path: Path, requested_titles: set[str] | None = None, explicit_gltf_path: Path | None = None) -> list[dict]:
@@ -1130,7 +1318,7 @@ def discover_liveries_in_source(source_path: Path, requested_titles: set[str] | 
             # Base model dir is two levels up from GLTF: model.xxx/file.gltf -> aircraft folder
             base_model_dir = explicit_gltf_path.parent.parent
         else:
-            gltf_path, base_model_dir = find_gltf_for_aircraft(source_path)
+            gltf_path, base_model_dir = find_gltf_for_aircraft(source_path, find_package_root(source_path))
 
         if not gltf_path:
             return []
@@ -1165,10 +1353,8 @@ def discover_liveries_in_source(source_path: Path, requested_titles: set[str] | 
 
             # 1. Add livery-specific texture folder first (if it exists)
             if livery.get('texture_folder'):
-                livery_tex_path = source_path / f"texture.{livery['texture_folder']}"
-                if not livery_tex_path.exists():
-                    livery_tex_path = source_path / f"Texture.{livery['texture_folder']}"
-                if livery_tex_path.exists():
+                livery_tex_path = livery_texture_dir(source_path, livery['texture_folder'])
+                if livery_tex_path:
                     texture_dirs_for_livery.append(str(livery_tex_path))
 
             # 2. Add shared textures from this folder
@@ -1212,7 +1398,7 @@ def discover_liveries_in_source(source_path: Path, requested_titles: set[str] | 
             continue
 
         # Find GLTF (handles both direct and referenced models)
-        gltf_path, base_model_dir = find_gltf_for_aircraft(aircraft_dir)
+        gltf_path, base_model_dir = find_gltf_for_aircraft(aircraft_dir, find_package_root(aircraft_dir))
 
         if not gltf_path:
             continue
@@ -1243,10 +1429,8 @@ def discover_liveries_in_source(source_path: Path, requested_titles: set[str] | 
 
             # 1. Add livery-specific texture folder first (if it exists)
             if livery.get('texture_folder'):
-                livery_tex_path = aircraft_dir / f"texture.{livery['texture_folder']}"
-                if not livery_tex_path.exists():
-                    livery_tex_path = aircraft_dir / f"Texture.{livery['texture_folder']}"
-                if livery_tex_path.exists():
+                livery_tex_path = livery_texture_dir(aircraft_dir, livery['texture_folder'])
+                if livery_tex_path:
                     texture_dirs_for_livery.append(str(livery_tex_path))
 
             # 2. Add shared textures from this folder
@@ -1403,6 +1587,7 @@ Examples:
 
     # Ensure output directory exists
     output_path.mkdir(parents=True, exist_ok=True)
+    sweep_stale_temp_files(output_path)
 
     # Parse requested liveries FIRST (before discovery) so we can enable early stopping
     if args.liveries_file:
@@ -1419,6 +1604,12 @@ Examples:
     # Parse explicit overrides
     explicit_gltf_path = Path(args.gltf_path) if args.gltf_path else None
     explicit_texture_dirs = [Path(d.strip()) for d in args.texture_dirs.split(',') if d.strip()] if args.texture_dirs else None
+
+    # The glTF must come from the --source package; texture folders outside it are dropped at conversion
+    source_error = check_source_paths(source_path, explicit_gltf_path)
+    if source_error:
+        print(f"ERROR: {source_error}", file=sys.stderr)
+        return 1
 
     # No-discovery mode: Rust has already resolved all paths, skip discovery entirely
     if args.no_discovery:

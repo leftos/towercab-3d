@@ -244,9 +244,21 @@ class MSFSModelConversionServiceClass {
   }
 
   /**
+   * Drop model matches computed from an older MSFS model index
+   *
+   * Imported dynamically: AircraftModelService imports this module.
+   */
+  private async clearModelMatchCache(): Promise<void> {
+    const { aircraftModelService } = await import('./AircraftModelService')
+    aircraftModelService.clearCache()
+  }
+
+  /**
    * Fetch model index and already-converted models from remote host (for browser mode)
    */
   private async fetchRemoteModelIndex(): Promise<void> {
+    let indexLoaded = false
+
     // Fetch source model index (for on-demand conversion)
     try {
       const response = await fetch('/api/msfs/index')
@@ -254,41 +266,33 @@ class MSFSModelConversionServiceClass {
         console.warn('[MSFSConversion] Failed to fetch model index:', response.status)
       } else {
         // Rust serializes with camelCase (serde rename_all = "camelCase")
+        // The host sends no folder or path fields: a remote converts by modelName through the host.
+        type RemoteModel = {
+          source: 'fsltl' | 'aig'
+          modelName: string
+          aircraftType: string
+          airlineCode: string | null
+          atcId: string | null
+        }
         const data = (await response.json()) as {
-          fsltl: Array<{
-            source: string
-            modelName: string
-            folderName: string
-            aircraftFolderPath: string
-            gltfPath: string
-            textureDirs: string[]
-            aircraftType: string
-            airlineCode: string | null
-            atcId: string | null
-          }>
-          aig: Array<{
-            source: string
-            modelName: string
-            folderName: string
-            aircraftFolderPath: string
-            gltfPath: string
-            textureDirs: string[]
-            aircraftType: string
-            airlineCode: string | null
-            atcId: string | null
-          }>
+          fsltl: RemoteModel[]
+          aig: RemoteModel[]
           totalCount: number
         }
+        // A fresh set per entry: no two models in the maps share one array.
+        const hostOnly = (): {
+          folderName: string
+          aircraftFolderPath: string
+          gltfPath: string
+          textureDirs: string[]
+        } => ({ folderName: '', aircraftFolderPath: '', gltfPath: '', textureDirs: [] })
 
         // Populate model maps from remote index
         for (const model of data.fsltl) {
           this.fsltlModels.set(model.modelName, {
             source: 'fsltl',
             modelName: model.modelName,
-            folderName: model.folderName,
-            aircraftFolderPath: model.aircraftFolderPath,
-            gltfPath: model.gltfPath,
-            textureDirs: model.textureDirs,
+            ...hostOnly(),
             aircraftType: model.aircraftType,
             airlineCode: model.airlineCode,
             atcId: model.atcId,
@@ -299,10 +303,7 @@ class MSFSModelConversionServiceClass {
           this.aigModels.set(model.modelName, {
             source: 'aig',
             modelName: model.modelName,
-            folderName: model.folderName,
-            aircraftFolderPath: model.aircraftFolderPath,
-            gltfPath: model.gltfPath,
-            textureDirs: model.textureDirs,
+            ...hostOnly(),
             aircraftType: model.aircraftType,
             airlineCode: model.airlineCode,
             atcId: model.atcId,
@@ -312,13 +313,14 @@ class MSFSModelConversionServiceClass {
         console.log(
           `[MSFSConversion] Loaded ${data.totalCount} models from remote (${data.fsltl.length} FSLTL, ${data.aig.length} AIG)`,
         )
+        indexLoaded = true
       }
     } catch (error) {
       console.warn('[MSFSConversion] Failed to fetch model index:', error)
     }
 
     // Fetch already-converted models (to populate memory cache)
-    // Response format from scan_cache_directory: { model_key, path, file_size, converter_version }
+    // Response format: { model_key, file_size, converter_version } (the host sends no file path)
     try {
       const modelsResponse = await fetch('/api/msfs/models')
       if (!modelsResponse.ok) {
@@ -328,7 +330,6 @@ class MSFSModelConversionServiceClass {
 
       const convertedModels = (await modelsResponse.json()) as Array<{
         model_key: string // Cache key like "fsltl_FSLTL_FAIB_B738_American"
-        path: string // Full path on host (not used for URL)
         file_size: number
         converter_version: number | null
       }>
@@ -365,6 +366,10 @@ class MSFSModelConversionServiceClass {
       )
     } catch (error) {
       console.warn('[MSFSConversion] Failed to fetch converted models:', error)
+    } finally {
+      // After the converted-models fetch, so a frame resolved in that window sees the new
+      // memory cache too. A cached match must not outlive the index it was computed from.
+      if (indexLoaded) await this.clearModelMatchCache()
     }
   }
 
@@ -662,6 +667,9 @@ class MSFSModelConversionServiceClass {
           this.fsltlModels.set(model.modelName, model)
         }
 
+        // A cached match computed from the previous index must not outlive it
+        await this.clearModelMatchCache()
+
         onProgress?.(`Indexed ${models.length.toLocaleString()} FSLTL models`, 100)
 
         // Log sample model names to help debug matching
@@ -707,6 +715,9 @@ class MSFSModelConversionServiceClass {
         for (const model of models) {
           this.aigModels.set(model.modelName, model)
         }
+
+        // A cached match computed from the previous index must not outlive it
+        await this.clearModelMatchCache()
 
         onProgress?.(`Indexed ${models.length.toLocaleString()} AIG models`, 100)
 
@@ -982,6 +993,10 @@ class MSFSModelConversionServiceClass {
       if (!enabled) continue
 
       for (const model of models.values()) {
+        // A private registration belongs to one aircraft and is matched by its callsign, so
+        // it must not win a size-only match. A generic livery has no airline and no atc_id.
+        if (model.airlineCode === null && model.atcId) continue
+
         // Get dimensions for this model's aircraft type
         const modelDims = aircraftDimensionsService.getDimensions(model.aircraftType)
         if (!modelDims?.wingspan || !modelDims?.length) continue

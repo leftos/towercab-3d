@@ -38,7 +38,7 @@ Read by: `useCesiumLabels` (everything above), `CesiumViewer.tsx` click path (la
 Replaces it: a `PostProcessStage` composite that raymarches each METAR layer as a noise slab and stops at the scene depth (spike: `useCesiumSpikeWeather.ts`, `spikeWeatherShaders.ts`; `czm_windowToEyeCoordinates` on the stage `depthTexture` under log depth; 4 layers max; clouds at half res then composite at full res).
 
 Spike verdict (`canvases/spike-cesium-weather/index.html`): occlusion correct in all five cases; look "first draft" (value noise, flat deck tops, horizon band from a flat 40 km deck, fringe at half res); cost "+9.7 ms CPU draw time half res, +14.1 ms full res, GPU timer read 0 on this machine, iPad unmeasured"; estimate for the rest of the route 2.5-3.5 weeks (implementer's guess).
-Read by: `useCesiumLabels` through `isVisibleByWeather` (label culling), `useBabylonCameraSync` (cloud recentering in 10 km steps), `useBabylonNightLighting` (cloud/fog emissive multipliers), `SettingsGraphicsWeatherTab.tsx`, `useInsetStoreSync.ts:116-126` and `SettingsSharedWorkerService.ts:302-305` (they ship `fogDensity`, `cloudLayers`, `visib` to insets/remote clients; the Cesium stage reads the same `weatherStore`).
+Read by: `useCesiumLabels` through `isVisibleByWeather` (label culling), `useBabylonCameraSync` (cloud recentering in 10 km steps), `SettingsGraphicsWeatherTab.tsx`, `useInsetStoreSync.ts:116-126` and `SettingsSharedWorkerService.ts:302-305` (they ship `fogDensity`, `cloudLayers`, `visib` to insets/remote clients; the Cesium stage reads the same `weatherStore`).
 
 ## 1c. Fog
 Same files as clouds (`useBabylonWeather.ts` fog dome effect :864-926, scale = `visibilityMeters * visibilityScale`) plus Cesium's own fog `useCesiumWeather.ts` (89 lines; `scene.fog` density from `fogDensity`, gated on `showWeatherEffects && showCesiumFog`) and `weatherStore.visibilityToFogDensity` (the spike exports it).
@@ -84,11 +84,11 @@ Plus the unused half of `utils/cesiumFrustumPatch.ts` and `useCesiumVRRotation` 
 | `src/renderer/hooks/useBabylonRootNode.ts` | 289 | (above) |
 | `src/renderer/utils/enuTransforms.ts` | 237 | ENU helpers; `cesiumToBabylon`, `enuToBabylonPosition`, `calculateBabylonCameraRotation` are Babylon-typed; the pure `ecefToEnu`/matrix helpers are used by the cab hook and the spike's stage |
 | `src/renderer/hooks/useBabylonSunDirection.ts` | 129 | aims the Babylon directional light at the real sun (`CesiumViewer.tsx:440`) |
-| `src/renderer/hooks/useBabylonNightLighting.ts` | 148 | dims Babylon hemispheric/directional/fog/cloud by sun elevation (`CesiumViewer.tsx:434`); constants `BABYLON_NIGHT_*` in `constants/lighting.ts:62-87`, re-exported at `constants/index.ts:315-319` |
+| `src/renderer/hooks/useBabylonNightLighting.ts` | 148 | dims the Babylon scene lights named `light` and `dirLight` by sun elevation (`CesiumViewer.tsx:434`); the fog dome is unlit, and the fallback cloud planes dim only through those lights. Constants `BABYLON_NIGHT_*` in `constants/lighting.ts:62-87` (the two `*_EMISSIVE_MULT` ones have no reader), re-exported at `constants/index.ts:315-319`. Deleted in TC3D-149 |
 | `src/renderer/types/babylon.ts` | 295 | types for all of the above (re-exported `types/index.ts:311-336`) |
 | `src/renderer/constants/babylon.ts` | 426 | scene, camera, visibility thresholds, lighting (re-exported `constants/index.ts:104-182`) |
 
-Replaces it: nothing needed (one camera). Night look: Cesium's own lighting (TC3D-59, `useCesiumNightDarkening.ts` 195 lines stays) plus the post-process reading sun elevation for cloud/fog tint.
+Replaces it: nothing needed (one camera). Night look: Cesium's own lighting (TC3D-59, `useCesiumNightDarkening.ts` 195 lines stays) plus the weather stage, which already dims cloud and fog by sun elevation (`daylight()` in `hooks/weather/cloudStage.glsl.ts`, on its own curve). One curve shared by every layer is TC3D-185's design.
 
 ## 1h. Harness, perf HUD, tests
 | File | Lines | What |
@@ -146,7 +146,7 @@ Issues (order):
 2. Curve the deck with the earth, widen to ~100 km, add top relief; fold TC3D-125 (clear-sky band under OVC; dense-fog colour). Proving: EGLL case from TC3D-125 (camera ~80 m, heading 274, pitch -3, FOV 45; BKN900 + OVC2000; `fogDensity` 0.0083) shows grey horizon and grey haze.
 3. Fog in the composite replacing `scene.fog` tuning; map `fogIntensity` and `visibilityScale`; hide Cesium sky/sun/moon hack (`CesiumViewer.tsx:318-343`, `SkyBox.show` ts-expect-error from audit A1.2) only if overcast pixels now cover the sky.
 4. Restore the cab as a Cesium model: bring back `useTowerModel.ts` from the spike, delete `useBabylonTowerModel.ts`; light it with Cesium (fold the "cab stays lit at night" half of TC3D-126); resolve TC3D-138's axis convention in this step (one Cesium convention for aircraft and cab, no +90 degrees special case). Proving: KOAK mod loaded, wizard live edit still moves the cab, cab hides clouds and is hidden by aircraft/terrain correctly, shadow on the tarmac.
-5. Night: cloud/fog tint from sun elevation driven by `useSunElevation`, remove `useBabylonNightLighting` use for weather (cab and weather follow Cesium; TC3D-59 dependency for the globe side).
+5. Night: already done by the weather stage, which dims cloud and fog by sun elevation itself (`daylight()` in `hooks/weather/cloudStage.glsl.ts`); `useBabylonNightLighting` never touched cloud or fog colours. Its deletion, with the dead `BABYLON_NIGHT_*` constants, goes with TC3D-149; one sun curve for every layer (the stage, the imagery, the cab) is TC3D-185's design.
 6. Quality presets and resolution: spike knobs (`steps`, `densityScale`, `radius`, `resolutionScale`, `fogExtinction`, `fogHeightScale`) become presets; ties to TC3D-12 C2 (`viewer.resolutionScale`).
 7. Delete Babylon fog dome and cloud meshes and `hooks/weather/*` (this empties `useBabylonWeather.ts` apart from `isVisibleByWeather`, which M0 already moved) and recentering in `useBabylonCameraSync.ts`.
 8. iPad exit measurement (remote browser) at FEW/BKN/OVC and 1/4, 3, 10 SM; owner look sign-off.

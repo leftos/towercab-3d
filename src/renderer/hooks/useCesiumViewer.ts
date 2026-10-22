@@ -1,5 +1,6 @@
 import * as Cesium from 'cesium'
 import { useEffect, useRef, useState } from 'react'
+import { setIonAccessToken } from '@/utils/devIonServer'
 import { toCesiumShadowDarkness } from '@/utils/shadowDarkness'
 import { AIRCRAFT_POOL_SIZE, getModelColorBlendAmount, getModelColorRgb } from '../constants/rendering'
 import type { InsetGraphicsSettings } from '../types/settings'
@@ -219,7 +220,7 @@ export function useCesiumViewer(
     }
 
     // Set Ion access token
-    Cesium.Ion.defaultAccessToken = cesiumIonToken
+    setIonAccessToken(cesiumIonToken)
 
     // Create viewer with terrain but no base imagery layer
     // Imagery is managed by useImageryProvider hook for runtime switching

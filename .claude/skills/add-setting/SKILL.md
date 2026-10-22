@@ -51,6 +51,7 @@ This is the path with the well-known footgun. **Skipping step 4 silently drops t
    - Add the field with snake_case naming (or `#[serde(rename = "camelCaseName")]`).
    - Mark optional fields with `#[serde(default)]` so legacy settings files still load.
    - Match the TS type: `string` → `String`, `number` → `f64` or `i64`, `boolean` → `bool`, optional → `Option<T>`.
+   - Class the field in `FIELD_CLASSES` (public, host-owned, host-private or secret) and, if not public, in `remote_view` / `merge_remote_write`; host-private (a path on the host) is blanked in the remote view and kept on a remote write. A test fails until every JSON path is classed.
 5. Add the UI control in the appropriate settings tab (often `SettingsModsTab.tsx`, `SettingsCesiumTab.tsx`, etc.).
 
 After editing, `pnpm run typecheck` (TS) and `cargo check` in `src-tauri/` (Rust) will both surface mistakes, but the silent-drop bug only fails at runtime when a user saves and reloads.

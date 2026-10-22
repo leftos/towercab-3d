@@ -44,26 +44,26 @@ function SettingsModsTab({ onRequestClose }: SettingsModsTabProps) {
 
   // Check if a mod is disabled (in either saved state or pending changes)
   const isModDisabled = useCallback(
-    (path: string): boolean => {
-      const normalizedPath = path.toLowerCase().replace(/\\/g, '/')
-      if (pendingChanges.has(normalizedPath)) {
+    (id: string): boolean => {
+      const normalizedId = id.toLowerCase()
+      if (pendingChanges.has(normalizedId)) {
         // Pending change - inverts the saved state
-        return !disabledMods.includes(normalizedPath)
+        return !disabledMods.includes(normalizedId)
       }
-      return disabledMods.includes(normalizedPath)
+      return disabledMods.includes(normalizedId)
     },
     [disabledMods, pendingChanges],
   )
 
   // Toggle mod enabled state (marks as pending change)
-  const toggleMod = useCallback((path: string) => {
-    const normalizedPath = path.toLowerCase().replace(/\\/g, '/')
+  const toggleMod = useCallback((id: string) => {
+    const normalizedId = id.toLowerCase()
     setPendingChanges((prev) => {
       const next = new Set(prev)
-      if (next.has(normalizedPath)) {
-        next.delete(normalizedPath)
+      if (next.has(normalizedId)) {
+        next.delete(normalizedId)
       } else {
-        next.add(normalizedPath)
+        next.add(normalizedId)
       }
       return next
     })
@@ -71,13 +71,13 @@ function SettingsModsTab({ onRequestClose }: SettingsModsTabProps) {
 
   // Apply pending changes
   const applyChanges = useCallback(async () => {
-    const newDisabledMods = new Set(disabledMods.map((p) => p.toLowerCase().replace(/\\/g, '/')))
+    const newDisabledMods = new Set(disabledMods.map((id) => id.toLowerCase()))
 
-    for (const path of pendingChanges) {
-      if (newDisabledMods.has(path)) {
-        newDisabledMods.delete(path)
+    for (const id of pendingChanges) {
+      if (newDisabledMods.has(id)) {
+        newDisabledMods.delete(id)
       } else {
-        newDisabledMods.add(path)
+        newDisabledMods.add(id)
       }
     }
 
@@ -196,12 +196,12 @@ function SettingsModsTab({ onRequestClose }: SettingsModsTabProps) {
           <div className="mods-list">
             {modResult?.towers.map((tower) => (
               <TowerModItem
-                key={tower.path}
+                key={tower.id}
                 tower={tower}
-                isDisabled={isModDisabled(tower.path)}
-                onToggle={() => toggleMod(tower.path)}
+                isDisabled={isModDisabled(tower.id)}
+                onToggle={() => toggleMod(tower.id)}
                 onPosition={() => handleStartPositioning(tower)}
-                hasPendingChange={pendingChanges.has(tower.path.toLowerCase().replace(/\\/g, '/'))}
+                hasPendingChange={pendingChanges.has(tower.id.toLowerCase())}
               />
             ))}
           </div>
@@ -216,11 +216,11 @@ function SettingsModsTab({ onRequestClose }: SettingsModsTabProps) {
           <div className="mods-list">
             {modResult?.aircraft.map((aircraft) => (
               <AircraftModItem
-                key={aircraft.path}
+                key={aircraft.id}
                 aircraft={aircraft}
-                isDisabled={isModDisabled(aircraft.path)}
-                onToggle={() => toggleMod(aircraft.path)}
-                hasPendingChange={pendingChanges.has(aircraft.path.toLowerCase().replace(/\\/g, '/'))}
+                isDisabled={isModDisabled(aircraft.id)}
+                onToggle={() => toggleMod(aircraft.id)}
+                hasPendingChange={pendingChanges.has(aircraft.id.toLowerCase())}
               />
             ))}
           </div>

@@ -397,9 +397,9 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
         }
       }
 
-      // Migrate display settings from localStorage (v2 migration)
-      // This runs for both Tauri and remote browser modes to pick up local preferences
-      const displayMigrated = migrateDisplaySettings()
+      // Migrate display settings from localStorage (v2 migration), on the host only:
+      // a remote browser's load never writes to the host's settings
+      const displayMigrated = isTauri() ? migrateDisplaySettings() : null
       if (displayMigrated) {
         settings = {
           ...settings,
@@ -749,7 +749,6 @@ export const useGlobalSettingsStore = create<GlobalSettingsState>()((set, get) =
       viewports: state.viewports,
       display: state.display,
       disabledMods: state.disabledMods,
-      vnasTokens: state.vnasTokens,
     }
   },
 
@@ -807,6 +806,11 @@ export function useRealTrafficSettings(): GlobalSettings['realtraffic'] {
  */
 export async function initializeGlobalSettings(): Promise<void> {
   await useGlobalSettingsStore.getState().initialize()
+
+  // A remote browser's load never writes to the host's settings
+  if (!isTauri()) {
+    return
+  }
 
   // Automatically attempt to recover any settings that may have been
   // lost during previous upgrades. This is safe to run because it only

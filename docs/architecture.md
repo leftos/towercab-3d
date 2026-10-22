@@ -4,7 +4,7 @@
 
 TowerCab 3D is a React-based desktop application using Tauri 2, featuring dual 3D rendering engines (CesiumJS for globe/terrain/aircraft, Babylon.js for screen-space labels and weather effects) and real-time VATSIM data integration.
 
-**Remote Browser Access:** The Tauri app runs an HTTP server (Rust axum, port 8765) serving the React app to browsers on the local network. Remote mode enables iPad/tablet access with touch controls while sharing global settings and mods from the host PC.
+**Remote Browser Access:** The Tauri app runs an HTTP server (Rust axum, port 8765) serving the React app to browsers on the local network (other addresses only when `server.allowNonLocalClients` is on). Remote mode enables iPad/tablet access with touch controls while sharing global settings (minus host-only secrets) and mods from the host PC; see `remote-access-architecture.md`.
 
 ## Data Flow
 
@@ -17,13 +17,13 @@ Desktop App (Tauri + React)
 │   └─ server.rs - axum HTTP server (port 8765)
 │        ├─ Static file serving (/assets/, /index.html)
 │        ├─ Mods API (/api/mods/*)
+│        │    ├─ GET /api/mods/discover - List mod folders (relative path + id)
 │        │    ├─ GET /api/mods/aircraft - List aircraft mods
 │        │    ├─ GET /api/mods/towers - List tower mods
 │        │    └─ GET /api/mods/file/* - Serve mod files
-│        ├─ Settings API (/api/settings/*)
-│        │    ├─ GET /api/settings/global - Get global settings
-│        │    ├─ PUT /api/settings/global - Update global settings
-│        │    └─ PUT /api/settings/viewport-bookmarks - Update bookmarks
+│        ├─ Settings API (/api/global-settings)
+│        │    ├─ GET /api/global-settings - Get global settings (remote view, no host-only secrets)
+│        │    └─ POST /api/global-settings - Update global settings (host-owned fields kept)
 │        └─ Tower Positions API (/api/tower-positions/*)
 │             └─ GET /api/tower-positions/{icao} - Get tower position
 │
@@ -136,9 +136,9 @@ Tauri Mode (Desktop):
 Remote Mode (Browser):
   User changes Cesium token → globalSettingsStore.updateCesiumIonToken()
       ↓
-  HTTP PUT: /api/settings/global
+  HTTP POST: /api/global-settings
       ↓
-  Host PC Tauri backend updates global-settings.json
+  Host PC Tauri backend merges it (host-owned fields kept) into global-settings.json
       ↓ [HTTP response]
   Browser globalSettingsStore updates
 ```
