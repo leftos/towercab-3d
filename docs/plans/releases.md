@@ -1,6 +1,6 @@
 # Release plan
 
-The owner's plan for the next four releases. Linear's release placeholders (`vNext`, `vNext+1`, …) are the record; this file holds the slots the `linear` CLI cannot place yet and the reasoning for each cut. Once a slot exists in Linear, its list here is replaced by a pointer to it.
+The owner's plan for the next four releases. Linear's release placeholders (`vNext`, `vNext+1`, `vNext+2`, `vNext+3`) are the record of each release's issues (`linear release status towercab-3d`); this file holds each cut's theme and reasoning, and the lists below are the issues each slot held when the plan was made.
 
 | Release | Theme | Contents |
 |---|---|---|
@@ -10,7 +10,7 @@ The owner's plan for the next four releases. Linear's release placeholders (`vNe
 | `vNext+3` | Generated buildings and the settings drawer | OSM B2 (TC3D-168, 169, 170); project `Settings drawer` (`feat/settings-drawer`, TC3D-76 to 94, 106, 215) |
 | unplaced | Everything else | OSM B3 (TC3D-171 to 174), the design track, cameras, docs, tooling, dependency PRs and singles, until a slot frees |
 
-`vNext+2` and `vNext+3` move into Linear when the `linear` CLI's release slots land (`linear release add <repo> --slot 2`); until then their issues sit in no release.
+An issue joins a later slot with `linear release add towercab-3d --slot K <ID>`, and leaves every release with `linear release remove`.
 
 ## Rules
 
