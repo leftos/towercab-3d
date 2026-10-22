@@ -50,6 +50,28 @@ export const PUSHBACK_MIN_SPEED_KTS = 0.5
 /** Below this speed = truly stopped (accounts for GPS jitter) */
 export const STOPPED_SPEED_KTS = 2
 
+/**
+ * Below this speed an aircraft aligned on the runway reads lined up to the raw detector, not a takeoff roll; a
+ * confirmed landing roll keeps rolling out below it until the aircraft turns off or taxis.
+ */
+export const ROLL_MIN_SPEED_KTS = 15
+
+/**
+ * Height above the field (feet) below which an aircraft over the runway counts as touched down when its source
+ * reports no height above ground (VATSIM): the interpolated altitude against the field elevation, with room for the
+ * error in the reported altitude.
+ */
+export const TOUCHDOWN_AGL_FT = 10
+
+/**
+ * Height above the field (feet), on the same height TOUCHDOWN_AGL_FT reads, below which an aircraft over the runway
+ * after an approach that runs level counts as touched down when its source reports neither a height above ground nor
+ * a ground flag (VATSIM). It absorbs a reported altitude that sits above the field (the datum above the wheels, a
+ * scenery or geoid offset, about 10-30 ft) while a low approach or a go-around flown level higher over the runway
+ * still reads airborne.
+ */
+export const LEVEL_TOUCHDOWN_MAX_AGL_FT = 50
+
 /** Maximum ground speed for taxi operations */
 export const TAXI_MAX_SPEED_KTS = 40
 
@@ -199,12 +221,27 @@ export const STICKY_PHASE_EXIT_TIMES: Partial<Record<FlightPhase, number>> = {
   departure_roll: 3000, // Stay in departure_roll 3s minimum
 }
 
+/**
+ * Largest step back of an aircraft's display time (milliseconds) that the phase clock reads as live jitter rather than
+ * a replay scrubbed back. Live display time is anchored on the timeline's oldest observation and steps by the change in
+ * receive lag (receivedAt - observedAt) when that observation is pruned: under about 1 s for VATSIM (the 1 s poll plus
+ * the fetch; the motion harness models 0.4-1.4 s), none for vNAS, whose observedAt is its receive time. A step back
+ * within it holds the phase clock where it was; a larger one restarts the aircraft's phase state and history.
+ */
+export const DISPLAY_TIME_REGRESSION_TOLERANCE_MS = 5000
+
 // ============================================================================
 // WINDOW SIZES FOR TRAJECTORY ANALYSIS
 // ============================================================================
 
 /** Window size for computing windowed acceleration (milliseconds) */
 export const ACCEL_WINDOW_MS = 4000
+
+/**
+ * Longest span the acceleration window widens to when ACCEL_WINDOW_MS holds fewer than two observations at or
+ * before the display time (milliseconds): two VATSIM samples, 15 s apart, fit.
+ */
+export const ACCEL_WINDOW_MAX_SPAN_MS = 20000
 
 /** Window size for go-around approach trajectory analysis (milliseconds) */
 export const GO_AROUND_APPROACH_WINDOW_MS = 10000

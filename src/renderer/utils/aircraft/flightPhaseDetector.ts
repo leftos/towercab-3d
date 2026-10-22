@@ -5,14 +5,14 @@
  * Identifies 14 distinct phases from short final to stopped taxi.
  */
 
-import { STOPPED_SPEED_KTS } from '@/constants'
+import { LEVEL_TOUCHDOWN_MAX_AGL_FT, ROLL_MIN_SPEED_KTS, STOPPED_SPEED_KTS, TOUCHDOWN_AGL_FT } from '@/constants'
 import { isPushingBack } from '@/utils/aircraft/pushback'
 import { geoidService } from '../../services/GeoidService'
 import type { AircraftTimeline } from '../../types/aircraft-timeline'
 import type { Runway } from '../../types/airport'
 import type { InterpolatedAircraftState } from '../../types/vatsim'
 import { calculateBearing, haversineDistanceFt, haversineDistanceNm, headingDifference } from './geoMath'
-import { cleanupStabilizationStates, clearStabilizationStates, stabilizePhase } from './phaseStabilization'
+import { cleanupStabilizationStates, clearStabilizationStates, phaseClock, stabilizePhase } from './phaseStabilization'
 import type { FlightPhase, PhaseDetectionResult, RunwayProximity, SmartSortContext } from './types'
 
 /** Meters to feet conversion factor */
@@ -63,10 +63,9 @@ interface PhaseHistoryEntry {
 const phaseHistory = new Map<string, PhaseHistoryEntry[]>()
 
 /**
- * Record a phase observation for an aircraft
+ * Record a phase observation for an aircraft at its phase clock (see `phaseClock`)
  */
-export function recordPhase(callsign: string, phase: FlightPhase): void {
-  const now = Date.now()
+export function recordPhase(callsign: string, phase: FlightPhase, now: number): void {
   const history = phaseHistory.get(callsign) || []
 
   // Add new entry
@@ -80,31 +79,70 @@ export function recordPhase(callsign: string, phase: FlightPhase): void {
 }
 
 /**
- * Check if aircraft was recently on approach or landing roll
+ * Check if aircraft was recently on approach or landing roll, up to its displayed instant
  * (for go-around / balked landing detection)
  */
-function wasRecentlyOnApproach(callsign: string): boolean {
+function wasRecentlyOnApproach(callsign: string, displayTime: number): boolean {
   const history = phaseHistory.get(callsign)
   if (!history) return false
 
-  const cutoff = Date.now() - GO_AROUND_HISTORY_MS
+  // The history is stamped on the phase clock, so it is read on that clock too
+  const { now } = phaseClock(callsign, displayTime)
+  const cutoff = now - GO_AROUND_HISTORY_MS
   return history.some(
     (entry) =>
       entry.timestamp > cutoff &&
+      entry.timestamp <= now &&
       (entry.phase === 'short_final' || entry.phase === 'long_final' || entry.phase === 'landing_roll'),
   )
 }
 
 /**
- * Clean up stale entries from phase history (call periodically)
+ * Whether an aircraft over the runway after an approach is still in the air. It has touched down once its source's
+ * ground contact says so when the source reports a height above ground (vNAS), or once its ground flag is set when
+ * the source carries one (RealTraffic).
  */
-export function cleanupPhaseHistory(): void {
-  const now = Date.now()
-  const cutoff = now - 120000 // Remove aircraft not seen in 2 minutes
+function isFloatingAfterApproach(aircraft: InterpolatedAircraftState, aglFt: number): boolean {
+  let touchedDown: boolean
+  if (aircraft.heightAboveGround != null) touchedDown = aircraft.inContact === true
+  else if (aircraft.isOnGround != null) touchedDown = aircraft.isOnGround
+  else touchedDown = hasTouchedDownByHeight(aircraft, aglFt)
+  return !touchedDown && wasRecentlyOnApproach(aircraft.callsign, aircraft.displayTime)
+}
 
-  for (const [callsign, history] of phaseHistory.entries()) {
-    const latestEntry = history[history.length - 1]
-    if (!latestEntry || latestEntry.timestamp < cutoff) {
+/**
+ * Touchdown for a source with neither a height above ground nor a ground flag (VATSIM): a height above the field
+ * under TOUCHDOWN_AGL_FT, or running level (between DESCENDING_THRESHOLD_FPM and CLIMBING_THRESHOLD_FPM) under
+ * LEVEL_TOUCHDOWN_MAX_AGL_FT, which catches an altitude reported above the field without reading a low approach
+ * flown level over the runway as landed.
+ */
+function hasTouchedDownByHeight(aircraft: InterpolatedAircraftState, aglFt: number): boolean {
+  const verticalRateFpm = aircraft.verticalRate * METERS_TO_FEET
+  const isLevel = verticalRateFpm > DESCENDING_THRESHOLD_FPM && verticalRateFpm < CLIMBING_THRESHOLD_FPM
+  return aglFt < TOUCHDOWN_AGL_FT || (isLevel && aglFt < LEVEL_TOUCHDOWN_MAX_AGL_FT)
+}
+
+/** Whether an aircraft still in the air over the runway after an approach climbs away (a go-around, read airborne) */
+function isClimbingAfterApproach(aircraft: InterpolatedAircraftState, aglFt: number): boolean {
+  return aircraft.verticalRate * METERS_TO_FEET > CLIMBING_THRESHOLD_FPM && isFloatingAfterApproach(aircraft, aglFt)
+}
+
+/** Short final, for an aircraft still in the air over the runway after an approach */
+function shortFinalOverRunway(nearestRwy: RunwayProximity | null): RawPhaseDetectionResult {
+  return {
+    phase: 'short_final',
+    runway: nearestRwy?.endIdent || null,
+    runwayDistance: nearestRwy?.distanceNm || null,
+    nearestRunway: nearestRwy,
+  }
+}
+
+/**
+ * Drop the phase history of aircraft no longer in the active set (call periodically)
+ */
+export function cleanupPhaseHistory(activeCallsigns: Set<string>): void {
+  for (const callsign of phaseHistory.keys()) {
+    if (!activeCallsigns.has(callsign)) {
       phaseHistory.delete(callsign)
     }
   }
@@ -548,7 +586,8 @@ function detectRawFlightPhase(aircraft: InterpolatedAircraftState, context: Smar
   // === RUNWAY SURFACE PHASES ===
   // Check this FIRST regardless of speed - aircraft on takeoff roll can exceed 80+ kts
   // before liftoff, but they're still on the runway and need proper phase detection
-  if (onRunwaySurface && aglFt < GROUND_ALTITUDE_AGL_FT) {
+  if (onRunwaySurface && aglFt < GROUND_ALTITUDE_AGL_FT && !isClimbingAfterApproach(aircraft, aglFt)) {
+    if (isFloatingAfterApproach(aircraft, aglFt)) return shortFinalOverRunway(nearestRwy)
     // Must be aligned with runway for departure/landing roll, otherwise crossing
     const isAlignedWithRwy = nearestRwy?.isAligned ?? false
 
@@ -557,8 +596,7 @@ function detectRawFlightPhase(aircraft: InterpolatedAircraftState, context: Smar
       return { phase: 'active_taxi', runway: null, runwayDistance: null, nearestRunway: nearestRwy }
     }
 
-    if (speedKts < STOPPED_SPEED_KTS) {
-      // Stopped on runway = lined up
+    if (speedKts < ROLL_MIN_SPEED_KTS) {
       return { phase: 'lined_up', runway: runwayIdent, runwayDistance: runwayDistanceNm, nearestRunway: nearestRwy }
     }
 
@@ -571,7 +609,7 @@ function detectRawFlightPhase(aircraft: InterpolatedAircraftState, context: Smar
     if (accel > ACCEL_THRESHOLD) {
       // Accelerating on runway - check if this is a go-around (balked landing)
       // If aircraft was recently on approach, this is a rejected landing, not a departure
-      if (wasRecentlyOnApproach(aircraft.callsign)) {
+      if (wasRecentlyOnApproach(aircraft.callsign, aircraft.displayTime)) {
         return { phase: 'go_around', runway: runwayIdent, runwayDistance: runwayDistanceNm, nearestRunway: nearestRwy }
       }
       // Normal departure roll
@@ -685,7 +723,7 @@ function detectRawFlightPhase(aircraft: InterpolatedAircraftState, context: Smar
     const goAroundRunway = alignedRunwayByTrack || nearestRwy
     if (goAroundRunway && goAroundRunway.distanceNm < GO_AROUND_DISTANCE_NM) {
       // Only flag as go-around if we recently saw this aircraft on approach
-      if (wasRecentlyOnApproach(aircraft.callsign)) {
+      if (wasRecentlyOnApproach(aircraft.callsign, aircraft.displayTime)) {
         return {
           phase: 'go_around',
           runway: goAroundRunway.endIdent,
@@ -822,6 +860,10 @@ export function detectFlightPhase(
   context: SmartSortContext,
   timeline?: AircraftTimeline,
 ): PhaseDetectionResult {
+  // A replay scrubbed back drops the aircraft's phase state; its history goes with it, before detection reads it
+  const { now, scrubbedBack } = phaseClock(aircraft.callsign, aircraft.displayTime)
+  if (scrubbedBack) phaseHistory.delete(aircraft.callsign)
+
   // Get raw detection (instantaneous, may oscillate)
   const raw = detectRawFlightPhase(aircraft, context)
 
@@ -829,7 +871,7 @@ export function detectFlightPhase(
   const stabilizedPhase = stabilizePhase(aircraft.callsign, raw, aircraft, context, timeline, raw.nearestRunway)
 
   // Record phase for go-around detection history
-  recordPhase(aircraft.callsign, stabilizedPhase)
+  recordPhase(aircraft.callsign, stabilizedPhase, now)
 
   return {
     phase: stabilizedPhase,

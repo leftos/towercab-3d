@@ -522,9 +522,10 @@ runwayStore
 ├─ runways: Runway[]
 ├─ currentAirport: string | null
 └─ Used by:
-     ├─ useAircraftFiltering (flight phase detection, runway association)
-     └─ AircraftPanel (smart sort, runway badges)
+     └─ AircraftPanel (smart sort via calculateSmartSort, which runs detectFlightPhase; runway badges)
 ```
+
+Flight phase detection (`utils/aircraft/flightPhaseDetector.ts` raw phase, `phaseStabilization.ts` dwell and sticky exits) runs on the aircraft's displayed time (`InterpolatedAircraftState.displayTime`), not the wall clock, so a label follows the drawn aircraft live and in replay. The phase clock holds through the small backward steps of live display time; a step back larger than `DISPLAY_TIME_REGRESSION_TOLERANCE_MS` (a replay scrubbed back) drops the aircraft's phase state and history. Touchdown over the runway after an approach is read from the source: vNAS ground contact (`inContact`, when it reports a height above ground), the ground flag (RealTraffic), or for VATSIM a height above the field under `TOUCHDOWN_AGL_FT`, or level flight under `LEVEL_TOUCHDOWN_MAX_AGL_FT`. Until then the aircraft reads Short Final; after it, Roll Out. An aligned aircraft below `ROLL_MIN_SPEED_KTS` reads Lined Up, and a confirmed landing roll keeps Roll Out at any speed until the aircraft turns off or taxis.
 
 ## Rendering Pipeline
 
