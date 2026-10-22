@@ -1,19 +1,19 @@
 import * as Cesium from 'cesium'
 import { useEffect, useRef, useState } from 'react'
 import { PARTICLE_PREWARM_JUMP_THRESHOLD, SUN_POSITION_UPDATE_INTERVAL } from '@/constants'
-import type { TimeMode } from '@/types/settings'
-
-export interface SunElevationOptions {
-  /** Current time mode setting - changes trigger immediate recalculation */
-  timeMode?: TimeMode
-  /** Fixed time hour setting - changes trigger immediate recalculation */
-  fixedTimeHour?: number
-}
 
 /**
- * Calculates the sun elevation angle at the camera position
+ * Clock jumps larger than this (seconds) recompute the sun at once.
  *
- * The sun elevation angle determines how high the sun is above the horizon:
+ * A time-mode or fixed-hour change moves Cesium's clock by hours in one assignment; the sun moves too little
+ * in ordinary animated time to reach this between frames.
+ */
+const SUN_CLOCK_JUMP_THRESHOLD_SECONDS = 60
+
+/**
+ * Calculates the sun elevation angle (degrees) above the horizon for a position and time
+ *
+ * The elevation determines how high the sun is above the horizon:
  * - +90 degrees: Sun directly overhead (solar noon at tropics)
  * - 0 degrees: Sun at horizon (sunrise/sunset)
  * - -6 degrees: End of civil twilight
@@ -21,34 +21,69 @@ export interface SunElevationOptions {
  * - -18 degrees: End of astronomical twilight (full night)
  * - -90 degrees: Sun directly below (solar midnight at poles)
  *
- * This hook uses Cesium's built-in sun position calculation which accounts for:
- * - Current time from the Cesium clock
- * - Earth's orbital position
- * - Camera/viewer position on the globe
+ * Elevation is measured against the geodetic surface normal, the same up vector Cesium's shadow map uses
+ * to decide the sun is below the horizon.
+ *
+ * @param position - Camera position in Earth-Centered Earth-Fixed coordinates
+ * @param time - Time to compute the sun position at
+ * @returns Sun elevation angle in degrees (-90 to +90), or null if unavailable
+ */
+export function computeSunElevationDeg(position: Cesium.Cartesian3, time: Cesium.JulianDate): number | null {
+  if (Cesium.Cartesian3.equals(position, Cesium.Cartesian3.ZERO)) return null
+
+  // Sun position in Earth-Centered Inertial (ECI) frame, from the Simon 1994 planetary positions model
+  const sunPositionEci = Cesium.Simon1994PlanetaryPositions.computeSunPositionInEarthInertialFrame(
+    time,
+    new Cesium.Cartesian3(),
+  )
+
+  // Transform sun position from ECI to Earth-Centered Earth-Fixed (ECEF) frame
+  // This accounts for Earth's rotation
+  const icrfToFixed = Cesium.Transforms.computeIcrfToFixedMatrix(time)
+  if (icrfToFixed) {
+    Cesium.Matrix3.multiplyByVector(icrfToFixed, sunPositionEci, sunPositionEci)
+  } else {
+    // Fallback to TEME to Fixed if ICRF data unavailable
+    const temeToFixed = Cesium.Transforms.computeTemeToPseudoFixedMatrix(time)
+    if (!temeToFixed) return null
+    Cesium.Matrix3.multiplyByVector(temeToFixed, sunPositionEci, sunPositionEci)
+  }
+
+  // Dot product of up and the sun direction is sin(elevation), i.e. the angle from the horizon
+  const up = Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(position, new Cesium.Cartesian3())
+  const sunDirection = Cesium.Cartesian3.normalize(sunPositionEci, new Cesium.Cartesian3())
+  const sinElevation = Cesium.Math.clamp(Cesium.Cartesian3.dot(up, sunDirection), -1, 1)
+  return Cesium.Math.toDegrees(Math.asin(sinElevation))
+}
+
+/**
+ * Tracks the sun elevation angle at the camera position
+ *
+ * The sun is computed from Cesium's clock, so the sun this hook reports is the sun Cesium draws, whichever
+ * time set the clock (fixed time at the tower, real time, or an inset's clock).
  *
  * ## Performance
  * Sun position is only recalculated every 30 seconds since the sun moves slowly.
  * However, immediate recalculation is triggered when:
- * - timeMode or fixedTimeHour settings change
+ * - Cesium's clock jumps (time mode or fixed time hour changed)
  * - Camera position jumps significantly (>500m, e.g., airport switch)
  *
  * @param viewer - Initialized Cesium.Viewer instance
- * @param options - Optional time settings that trigger immediate recalculation when changed
  * @returns Sun elevation angle in degrees (-90 to +90), or null if unavailable
  *
  * @example
  * ```tsx
- * const sunElevation = useSunElevation(viewer, { timeMode, fixedTimeHour })
+ * const sunElevation = useSunElevation(viewer)
  * if (sunElevation !== null && sunElevation < 0) {
  *   // It's after sunset
  * }
  * ```
  */
-export function useSunElevation(viewer: Cesium.Viewer | null, options?: SunElevationOptions): number | null {
-  const { timeMode, fixedTimeHour } = options ?? {}
+export function useSunElevation(viewer: Cesium.Viewer | null): number | null {
   const [sunElevation, setSunElevation] = useState<number | null>(null)
   const lastUpdateRef = useRef<number>(0)
   const lastCameraPositionRef = useRef<Cesium.Cartesian3 | null>(null)
+  const lastClockTimeRef = useRef<Cesium.JulianDate | null>(null)
 
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) {
@@ -56,110 +91,49 @@ export function useSunElevation(viewer: Cesium.Viewer | null, options?: SunEleva
       return
     }
 
-    /**
-     * Calculate sun elevation angle at the camera position
-     */
-    const calculateSunElevation = (): number | null => {
-      if (!viewer || viewer.isDestroyed()) return null
-
-      const scene = viewer.scene
-      const camera = scene.camera
-
-      // Get camera position in Cartesian3 (ECEF coordinates)
-      const cameraPosition = camera.positionWC
-      if (!cameraPosition || Cesium.Cartesian3.equals(cameraPosition, Cesium.Cartesian3.ZERO)) {
-        return null
-      }
-
-      // Calculate the time to use for sun position
-      // When time settings are provided, calculate time directly to avoid waiting for clock update
-      let currentTime: Cesium.JulianDate
-      if (timeMode === 'fixed' && fixedTimeHour !== undefined) {
-        // Calculate fixed time based on camera longitude
-        const cartographic = Cesium.Cartographic.fromCartesian(cameraPosition)
-        const longitudeDegrees = Cesium.Math.toDegrees(cartographic.longitude)
-        const longitudeOffsetHours = longitudeDegrees / 15
-
-        const now = new Date()
-        const targetTime = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0))
-        const utcHour = fixedTimeHour - longitudeOffsetHours
-        targetTime.setTime(targetTime.getTime() + utcHour * 60 * 60 * 1000)
-
-        currentTime = Cesium.JulianDate.fromDate(targetTime)
-      } else {
-        // Real time mode - use current system time
-        currentTime = Cesium.JulianDate.now()
-      }
-
-      // Calculate sun position in Earth-Centered Inertial (ECI) frame
-      // This uses the Simon 1994 planetary positions model
-      const sunPositionEci = Cesium.Simon1994PlanetaryPositions.computeSunPositionInEarthInertialFrame(currentTime)
-
-      // Transform sun position from ECI to Earth-Centered Earth-Fixed (ECEF) frame
-      // This accounts for Earth's rotation
-      const icrfToFixed = Cesium.Transforms.computeIcrfToFixedMatrix(currentTime)
-      if (!icrfToFixed) {
-        // Fallback to TEME to Fixed if ICRF data unavailable
-        const temeToFixed = Cesium.Transforms.computeTemeToPseudoFixedMatrix(currentTime)
-        if (!temeToFixed) return null
-        Cesium.Matrix3.multiplyByVector(temeToFixed, sunPositionEci, sunPositionEci)
-      } else {
-        Cesium.Matrix3.multiplyByVector(icrfToFixed, sunPositionEci, sunPositionEci)
-      }
-
-      // Normalize camera and sun positions to unit vectors
-      const cameraNormalized = Cesium.Cartesian3.normalize(cameraPosition, new Cesium.Cartesian3())
-      const sunNormalized = Cesium.Cartesian3.normalize(sunPositionEci, new Cesium.Cartesian3())
-
-      // Calculate the angle between the "up" direction at camera and direction to sun
-      // Dot product gives cosine of angle; we want angle from horizon, not from zenith
-      // Up vector at camera position is just the normalized position (on sphere)
-      const dotProduct = Cesium.Cartesian3.dot(cameraNormalized, sunNormalized)
-
-      // Convert from angle-from-zenith to angle-from-horizon
-      // asin of dot product gives elevation angle directly
-      // (because dot product of up and sun direction = sin(elevation))
-      const elevationRadians = Math.asin(dotProduct)
-      const elevationDegrees = Cesium.Math.toDegrees(elevationRadians)
-
-      return elevationDegrees
+    const calculateSunElevation = (time: Cesium.JulianDate): number | null => {
+      if (viewer.isDestroyed()) return null
+      return computeSunElevationDeg(viewer.scene.camera.positionWC, time)
     }
 
     // Initial calculation
-    const initialElevation = calculateSunElevation()
-    setSunElevation(initialElevation)
+    setSunElevation(calculateSunElevation(viewer.clock.currentTime))
     lastUpdateRef.current = Date.now()
     lastCameraPositionRef.current = Cesium.Cartesian3.clone(viewer.scene.camera.positionWC)
+    lastClockTimeRef.current = Cesium.JulianDate.clone(viewer.clock.currentTime)
 
     // Set up periodic recalculation
-    // Using postRender to check if enough time has passed or camera jumped significantly
+    // Using postRender to check if enough time has passed, the camera jumped, or the clock jumped
     const removeListener = viewer.scene.postRender.addEventListener(() => {
       const now = Date.now()
       const currentCameraPosition = viewer.scene.camera.positionWC
+      const currentClockTime = viewer.clock.currentTime
 
       // Check if camera jumped significantly (e.g., airport switch)
-      let cameraJumped = false
-      if (lastCameraPositionRef.current) {
-        const distance = Cesium.Cartesian3.distance(lastCameraPositionRef.current, currentCameraPosition)
-        if (distance > PARTICLE_PREWARM_JUMP_THRESHOLD) {
-          cameraJumped = true
-        }
-      }
+      const cameraJumped =
+        lastCameraPositionRef.current !== null &&
+        Cesium.Cartesian3.distance(lastCameraPositionRef.current, currentCameraPosition) >
+          PARTICLE_PREWARM_JUMP_THRESHOLD
 
-      // Recalculate if time elapsed OR camera jumped
-      if (cameraJumped || now - lastUpdateRef.current >= SUN_POSITION_UPDATE_INTERVAL) {
-        const elevation = calculateSunElevation()
-        setSunElevation(elevation)
+      // Check if the clock jumped (e.g., time mode or fixed time hour changed)
+      const clockJumped =
+        lastClockTimeRef.current !== null &&
+        Math.abs(Cesium.JulianDate.secondsDifference(currentClockTime, lastClockTimeRef.current)) >
+          SUN_CLOCK_JUMP_THRESHOLD_SECONDS
+
+      // Recalculate if time elapsed, the camera jumped, or the clock jumped
+      if (clockJumped || cameraJumped || now - lastUpdateRef.current >= SUN_POSITION_UPDATE_INTERVAL) {
+        setSunElevation(calculateSunElevation(currentClockTime))
         lastUpdateRef.current = now
         lastCameraPositionRef.current = Cesium.Cartesian3.clone(currentCameraPosition)
+        lastClockTimeRef.current = Cesium.JulianDate.clone(currentClockTime)
       }
     })
 
     return () => {
       removeListener()
     }
-    // Re-run effect when time settings change to trigger immediate recalculation
-  }, [viewer, timeMode, fixedTimeHour])
+  }, [viewer])
 
   return sunElevation
 }

@@ -1,5 +1,6 @@
 import * as Cesium from 'cesium'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { applyBuildingStyle } from '@/utils/buildingStyle'
 import { createFacadeShader } from '@/utils/facadeShader'
 import { useAgentHarness } from '../../hooks/useAgentHarness'
 import { setInterpolationTerrainData, useAircraftInterpolation } from '../../hooks/useAircraftInterpolation'
@@ -286,6 +287,9 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
   // =========================================================================
   // 3. Lighting and Shadow Configuration
   // =========================================================================
+  // Sun elevation at camera position, from Cesium's clock: sun shadows are off below the horizon, and imagery darkens at night
+  const sunElevation = useSunElevation(viewer)
+
   useCesiumLighting(viewer, {
     isInset,
     insetGraphics,
@@ -293,6 +297,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
     enableLighting,
     enableGroundAtmosphere,
     enableShadows,
+    sunElevationDeg: sunElevation,
     shadowMapSize,
     shadowMaxDistance,
     shadowDarkness,
@@ -308,9 +313,6 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
   // =========================================================================
   // 3a. Night-Time Darkening (requires enableLighting)
   // =========================================================================
-  // Calculate sun elevation angle at camera position
-  const sunElevation = useSunElevation(viewer, { timeMode, fixedTimeHour })
-
   // Darken satellite imagery based on sun position
   useCesiumNightDarkening(viewer, sunElevation, {
     enabled: enableNightDarkening && enableLighting, // Only works with lighting enabled
@@ -722,6 +724,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
           tileset.shadows = aircraftShadowsOnly ? Cesium.ShadowMode.DISABLED : Cesium.ShadowMode.ENABLED
 
           tileset.customShader = createFacadeShader()
+          applyBuildingStyle(tileset)
 
           viewer.scene.primitives.add(tileset)
           currentTileset = tileset

@@ -1,5 +1,6 @@
 import * as Cesium from 'cesium'
 import { useEffect } from 'react'
+import { SUN_ELEVATION_DAY } from '@/constants'
 import type { InsetGraphicsSettings, ViewMode } from '@/types'
 import { toCesiumShadowDarkness } from '@/utils/shadowDarkness'
 
@@ -16,6 +17,8 @@ export interface CesiumLightingSettings {
   enableGroundAtmosphere: boolean
   /** Enable shadows cast by sun */
   enableShadows: boolean
+  /** Sun elevation above the horizon in degrees, or null until it is known (shadows are off below the horizon) */
+  sunElevationDeg: number | null
   /** Shadow map resolution (512, 1024, 2048, 4096) */
   shadowMapSize: number
   /** Maximum distance for shadow rendering (meters) */
@@ -24,7 +27,7 @@ export interface CesiumLightingSettings {
   shadowDarkness: number
   /** Enable soft shadow edges (PCF filtering) */
   shadowSoftness: boolean
-  /** Enable distance-based shadow fading */
+  /** Fade shadows out as the sun nears the horizon (Cesium's fadingEnabled) */
   shadowFadingEnabled: boolean
   /** Normal offset to prevent shadow acne */
   shadowNormalOffset: boolean
@@ -69,6 +72,7 @@ export interface CesiumLightingSettings {
  *   isInset: false,
  *   enableLighting: true,
  *   enableShadows: true,
+ *   sunElevationDeg: null,
  *   shadowMapSize: 2048,
  *   shadowMaxDistance: 10000,
  *   shadowDarkness: 0.5,
@@ -97,7 +101,13 @@ export function useCesiumLighting(viewer: Cesium.Viewer | null, settings: Cesium
     shadowDepthBias,
     shadowPolygonOffsetFactor,
     shadowPolygonOffsetUnits,
+    sunElevationDeg,
   } = settings
+
+  // Below the horizon Cesium stops drawing the sun shadow map but receivers keep sampling the stale daytime
+  // texture, dimming every wall (and its lit windows). Turning the map off there loses nothing real: nothing casts.
+  // Depend on this boolean, not the degrees: the effect below resizes the map and rebuilds every shadow command.
+  const sunAboveHorizon = sunElevationDeg === null || sunElevationDeg >= SUN_ELEVATION_DAY
 
   // Update lighting and shadows when settings change
   useEffect(() => {
@@ -112,12 +122,13 @@ export function useCesiumLighting(viewer: Cesium.Viewer | null, settings: Cesium
     // Update shadows - disabled for insets by default, aircraft-only for topdown, configurable for main 3D viewport
     const isTopDown = viewMode === 'topdown'
     const insetShadowsEnabled = isInset && insetGraphics.shadows
+    const sunShadowsEnabled = enableShadows && sunAboveHorizon
     if (isInset && !insetShadowsEnabled) {
       viewer.shadows = false
       viewer.terrainShadows = Cesium.ShadowMode.DISABLED
     } else if (isTopDown) {
       // In top-down view: show aircraft shadows only (terrain receives but doesn't cast)
-      viewer.shadows = enableShadows
+      viewer.shadows = sunShadowsEnabled
       if (enableShadows) {
         viewer.shadowMap.softShadows = shadowSoftness
         viewer.shadowMap.size = shadowMapSize
@@ -131,7 +142,7 @@ export function useCesiumLighting(viewer: Cesium.Viewer | null, settings: Cesium
         viewer.terrainShadows = Cesium.ShadowMode.DISABLED
       }
     } else {
-      viewer.shadows = enableShadows
+      viewer.shadows = sunShadowsEnabled
       if (enableShadows) {
         // Configure cascaded shadow maps with user settings
         viewer.shadowMap.softShadows = shadowSoftness
@@ -191,5 +202,6 @@ export function useCesiumLighting(viewer: Cesium.Viewer | null, settings: Cesium
     shadowDepthBias,
     shadowPolygonOffsetFactor,
     shadowPolygonOffsetUnits,
+    sunAboveHorizon,
   ])
 }

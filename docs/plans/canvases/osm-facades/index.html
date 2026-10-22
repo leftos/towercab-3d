@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OSM Facade Captures</title>
+<style>
+  :root { --bg:#14171c; --panel:#1d2128; --text:#e6e8eb; --muted:#9aa3ad; --line:#2c323b; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 system-ui, sans-serif; }
+  header { padding:20px 16px 8px; max-width:1600px; margin:0 auto; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  header p { color:var(--muted); margin:0; }
+  .grid { display:grid; grid-template-columns:110px 1fr 1fr; gap:12px; padding:16px; max-width:1600px; margin:0 auto; align-items:start; }
+  @media (max-width: 900px) { .grid { grid-template-columns:1fr; } .rowlabel { margin-top:12px; } }
+  .colhead { font-weight:600; color:var(--muted); }
+  .rowlabel { font-weight:600; padding-top:6px; }
+  img { width:100%; display:block; border-radius:6px; border:1px solid var(--line); background:#000; }
+</style>
+</head>
+<body>
+<header>
+  <h1>TC3D-164 / TC3D-163: building colours and type-aware facades</h1>
+  <p>Per-type palette chosen by a stable per-building hash; facades by type (offices and terminals banded, parking garages slab bands, hangars ribbed with door panels, houses punched windows, domestic garages and carports a plain wall, the rest the previous window grid). Same poses as the earlier window-fade captures.</p>
+</header>
+<div class="grid">
+  <div></div><div class="colhead">Noon</div><div class="colhead">22:00</div>
+  <div class="rowlabel">KSFO tower</div>
+  <img src="ksfo-tower-noon.png" alt="KSFO tower at noon"><img src="ksfo-tower-night.png" alt="KSFO tower at night">
+  <div class="rowlabel">KSFO garage</div>
+  <img src="ksfo-garage-noon.png" alt="KSFO garage at noon"><img src="ksfo-garage-night.png" alt="KSFO garage at night">
+  <div class="rowlabel">KOAK tower</div>
+  <img src="koak-tower-noon.png" alt="KOAK tower at noon"><img src="koak-tower-night.png" alt="KOAK tower at night">
+  <div class="rowlabel">KOAK hangar</div>
+  <img src="koak-hangar-noon.png" alt="KOAK hangar at noon"><img src="koak-hangar-night.png" alt="KOAK hangar at night">
+</div>
+</body>
+</html>

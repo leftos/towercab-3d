@@ -7,13 +7,14 @@ All notable changes to TowerCab 3D will be documented in this file.
 ### Added
 - New **Show Moon** setting under Settings → Graphics lets you hide the moon from the sky.
 - vNAS can join your CRC session on a YAAT training server: YAAT1, or YAAT Local when a local YAAT server is running.
-- 3D buildings now show rows of windows on their walls, some of them lit at night.
+- 3D buildings now show walls that suit their type, such as window rows lit at night, open parking-garage decks and hangar doors, and vary in colour.
 
 ### Changed
 - 3D buildings and aircraft no longer have an olive-green cast on their walls and fuselages; their reflected ground light is now a neutral grey.
 - Remote access accepts only devices on your local network, unless you turn on **Allow devices outside the local network** in Settings → Configuration.
 
 ### Fixed
+- Stale sun shadows no longer darken buildings and the ground at night, or flicker across walls after switching to a night time.
 - The remote access server no longer serves or writes files outside its own folders.
 - Remote browsers no longer receive your stored keys and sign-ins, such as the RealTraffic key and vNAS login.
 - Remote browsers no longer receive the host's folder locations (MSFS Community, model cache, VMR, FSLTL, mods, diagnostics) from its settings, lists or error messages.
