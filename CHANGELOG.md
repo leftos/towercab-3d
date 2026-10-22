@@ -28,6 +28,8 @@ All notable changes to TowerCab 3D will be documented in this file.
 - The MSFS model cache size limit, Unlimited included, now survives a restart instead of resetting and deleting converted models.
 - Converting an FSLTL or AIG model can no longer read files from outside that model's own MSFS package.
 - Mods you turn off in Settings → Mods stay off after a restart, and stay listed so you can turn them back on.
+- Private aircraft now get their own registered FSLTL or AIG livery, and other aircraft of that type no longer borrow it.
+- A model conversion cut short no longer leaves a broken model that never converts again.
 
 ### Removed
 - The experimental VR mode and its VR button in the controls bar.

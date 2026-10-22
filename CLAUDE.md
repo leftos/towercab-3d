@@ -320,10 +320,16 @@ uv run --no-project --python 3.12 --with pillow --with numpy python -m unittest 
 
 ### Model Matching Flow
 
-1. **Exact match**: Aircraft type + airline code → specific livery
-2. **Airline fallback**: Find any model for the airline (common narrowbody types)
-3. **Dimension matching**: Find closest model by wingspan/length, apply scale factors
-4. **Generic fallback**: Use built-in b738.glb model
+`AircraftModelService.checkMsfsModel` tries, in order, the first that matches winning:
+
+1. **User VMR rules**: the rule's alternatives, first one with a cached or convertible model
+2. **Registration match**: the callsign equals a private livery's `atc_id` for the type. The result is cached per callsign (`{type}@{CALLSIGN}`) for an aircraft with no airline code, so two aircraft of one type do not share a livery
+3. **Type + airline**: the exact livery
+4. **Closest for the airline**: the airline's model closest in wingspan/length, with a scale factor
+5. **Generic**: the type's ZZZZ (no-airline) livery
+6. **Closest of any airline**: closest by size, skipping liveries registered to a private aircraft (no airline code, non-empty registration)
+
+With no MSFS match, `getModelInfo` goes on to custom VMR mods, the built-in mapped or direct model, the built-in closest by size, then PA28 (GA) or B738. Reloading the MSFS model index clears the cached matches.
 
 ### Settings (GlobalSettings.msfsModels)
 

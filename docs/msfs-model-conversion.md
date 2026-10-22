@@ -796,6 +796,13 @@ The `converterVersion` field tracks which version of the conversion logic was us
 
 Both must match. When loading cached models on startup, the frontend skips GLBs with old/missing converter versions, forcing automatic re-conversion when the model is next requested.
 
+### Cache Integrity
+
+- **Atomic GLB writes**: the converter writes each GLB to `.{name}.{pid}.tmp` beside the final name and renames it into place, so a failed or killed conversion never leaves a truncated GLB under the loaded name. At start the converter removes `.*.tmp` files older than one hour from its output folder.
+- **Atomic index writes**: `save_model_cache` in `msfs.rs` writes the model index to a temp file in the cache folder and renames it over `{source}_model_cache.json`.
+- **Damaged GLBs**: `scan_cache_directory` compares the length in each GLB's header with its file size. A mismatch, or a header that cannot be read, lists the GLB with no converter version (and logs a warning), so the app deletes it and converts the model again.
+- **Index cache version**: `MODEL_CACHE_VERSION` is 10; aircraft.cfg keys are matched exactly (`atc_id_enable` no longer overwrites `atc_id`, and `model = "X"` with spaces is read), so older index caches are rebuilt once.
+
 ## File Locations
 
 | File | Purpose |
