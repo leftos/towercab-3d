@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TC3D-125 Weather Options</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #5b6475; --line: #dde1e8;
+  --accent: #2f6fd6; --good: #1f8a4c; --warn: #b26a00; --chip: #eef1f6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12151b; --panel: #1b2029; --text: #e6e9ef; --muted: #9aa3b2; --line: #2c3340;
+    --accent: #7aa7ff; --good: #5cc98a; --warn: #f0a640; --chip: #252c38;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12151b; --panel: #1b2029; --text: #e6e9ef; --muted: #9aa3b2; --line: #2c3340;
+  --accent: #7aa7ff; --good: #5cc98a; --warn: #f0a640; --chip: #252c38;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 1240px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { font-size: 26px; margin: 0 0 4px; }
+h2 { font-size: 21px; margin: 40px 0 4px; padding-top: 16px; border-top: 1px solid var(--line); }
+h3 { font-size: 16px; margin: 0 0 6px; }
+p { margin: 6px 0; }
+.sub { color: var(--muted); }
+.q { font-size: 16px; font-weight: 600; margin: 4px 0 14px; }
+.note { background: var(--chip); border-radius: 8px; padding: 10px 14px; margin: 12px 0; }
+.lanes { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 16px; }
+.lane { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0; }
+.lane img { width: 100%; display: block; border-radius: 6px; margin: 6px 0; border: 1px solid var(--line); }
+.cap { font-size: 12.5px; color: var(--muted); margin: 0 0 4px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; margin: 8px 0; }
+th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; }
+td.n { font-variant-numeric: tabular-nums; }
+.tablewrap { overflow-x: auto; }
+.sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; border: 1px solid var(--line); }
+.worst { margin-top: 8px; font-size: 13.5px; }
+.worst b { color: var(--warn); }
+.tag { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 10px; background: var(--chip); color: var(--muted); margin-left: 6px; }
+.find { margin: 8px 0 0; padding-left: 20px; }
+.find li { margin: 4px 0; }
+.base { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.base figure { margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+.base img { width: 100%; display: block; border-radius: 6px; }
+figcaption { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+code { font-size: 12.5px; background: var(--chip); padding: 0 4px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<main>
+<h1>TC3D-125: weather stage options</h1>
+<p class="sub">Rendered mocks for decisions 1, 3/4, 6 and 7 of the TC3D-125 map (overcast leaves a clear-sky band at the horizon; dense fog renders dark teal). Every lane is a throwaway prototype on the Cesium stage of <code>feat/cesium-weather</code> at 3ac96df; the rebuild steps and the prototype diff are in <code>RECIPE.md</code> beside this page.</p>
+
+<div class="note">
+<p><b>Baseline.</b> EGLL, BKN 274.3 m (coverage 0.7) + OVC 609.6 m (coverage 1). Clock fixed at 13:00 UTC (sun high, <code>daylight()</code> = 1). Tower camera 88.8 m above the anchor ground (not 80 m), heading 274, pitch −3, FOV 45; canvas 1596×800, horizon on row 309. Headless Edge with a GPU, <code>pnpm run vite:headless</code>.</p>
+<p><b>How to read the numbers.</b> <i>Strip</i>: mean RGB of the rows 0.24–0.6° above the horizon (centre 200 columns), where the band sits. <i>Row step</i>: the largest luminance jump between two adjacent rows from 2° above the horizon down to 0.24° above it (0–255; the band's edge). <i>Haze</i>: 100×100 patch just below the horizon. <i>Overhead</i>: rows 2.6–3.8° above the horizon. Each is a mean over three frames.</p>
+<p><b>Frame cost.</b> <code>perf().window</code> is no use here: <code>frameInterval</code> sits at 16.7 ms (60 Hz cap) in every lane, <code>gpuCesiumMs</code> returned the same 5.63/8.2 ms in every lane (stale), and <code>cesiumDraw</code> wandered 2.4–4.8 ms with no lane pattern. The cost column is instead the wall time of one <code>scene.render()</code> plus a 1-pixel <code>readPixels</code> (which waits for the GPU), lanes interleaved over 8 rounds of 20 frames. Other builds were running on the machine, so compare lanes with each other, not with any frame budget.</p>
+</div>
+
+<div class="base">
+  <figure><img src="base-596.jpg" alt="Baseline at 5.96 SM"><figcaption>Baseline 5.96 SM (pre-edit capture; app panels visible). Fog-grey strip between the terrain and the darker deck.</figcaption></figure>
+  <figure><img src="base-13.jpg" alt="Baseline at 1.3 SM"><figcaption>Baseline 1.3 SM. Grey fog, not dark teal.</figcaption></figure>
+  <figure><img src="base-10.jpg" alt="Baseline at 10 SM"><figcaption>Baseline 10 SM. The mint band: Cesium's sky between the 40 km deck edge and the terrain.</figcaption></figure>
+</div>
+<table>
+  <tr><th>Baseline</th><th>Strip RGB</th><th>Row step</th><th>Haze (lum, chroma)</th><th>Render ms (median / p95)</th></tr>
+  <tr><td>5.96 SM</td><td class="n"><span class="sw" style="background:rgb(158,168,178)"></span>158,168,178</td><td class="n">10–13 at 1.1–1.2° up</td><td class="n">123, 8</td><td class="n">5.9 / 8.0 (no march 4.4 / 7.5)</td></tr>
+  <tr><td>1.3 SM</td><td class="n"><span class="sw" style="background:rgb(158,168,178)"></span>158,168,178</td><td class="n">0.8</td><td class="n">152, 13</td><td class="n">—</td></tr>
+  <tr><td>10 SM</td><td class="n"><span class="sw" style="background:rgb(205,236,217)"></span>205,236,217</td><td class="n">57–72 at 0.6° up</td><td class="n">105, 10</td><td class="n">—</td></tr>
+</table>
+<p class="sub">The baseline images were captured before the prototype edit. The baseline numbers come from lanes A1, C1 and D1 (the prototype with every switch at today's value), whose metrics matched the pre-edit capture to 0.1.</p>
+
+<h2>A. Deck radius <span class="tag">decision 1</span></h2>
+<p class="q">How far should the overcast reach: today's flat 40 km, a curved deck at a fixed 100 km, or a curved deck sized to the horizon?</p>
+<p>Curved means the slab follows the earth down by d²/2R (R = 6,371 km), with exact entry and exit along the ray. Steps scale with the radius (48 per 40 km). The edge fade stays at 75–100% of the radius in every lane. Horizon-derived radius for an 88.8 m camera and a 609.6 m OVC base: <b>121.8 km</b>.</p>
+<div class="lanes">
+  <div class="lane">
+    <h3>A1 · flat 40 km, 48 steps (today)</h3>
+    <p class="cap">10 SM, horizon ×2</p><img src="crops/a1-10-horizon.png" alt="A1 horizon at 10 SM">
+    <p class="cap">5.96 SM, horizon ×2</p><img src="crops/a1-596-horizon.png" alt="A1 horizon at 5.96 SM">
+    <p class="cap">10 SM full frame</p><img src="a1-10.jpg" alt="A1 at 10 SM">
+    <table>
+      <tr><th></th><th>Strip RGB</th><th>Row step</th></tr>
+      <tr><td>10 SM</td><td class="n"><span class="sw" style="background:rgb(205,236,217)"></span>205,236,217</td><td class="n">57–72</td></tr>
+      <tr><td>5.96 SM</td><td class="n"><span class="sw" style="background:rgb(158,168,178)"></span>158,168,178</td><td class="n">10–13</td></tr>
+    </table>
+    <p class="n">Render 5.9 / 8.0 ms (+1.5 ms over no march)</p>
+    <p class="worst"><b>Worst case:</b> at 10 SM a mint band about 0.6° tall (17–22 px) right above the terrain.</p>
+  </div>
+  <div class="lane">
+    <h3>A2 · curved, 100 km, 120 steps</h3>
+    <p class="cap">10 SM, horizon ×2</p><img src="crops/a2-10-horizon.png" alt="A2 horizon at 10 SM">
+    <p class="cap">5.96 SM, horizon ×2</p><img src="crops/a2-596-horizon.png" alt="A2 horizon at 5.96 SM">
+    <p class="cap">10 SM full frame</p><img src="a2-10.jpg" alt="A2 at 10 SM">
+    <table>
+      <tr><th></th><th>Strip RGB</th><th>Row step</th></tr>
+      <tr><td>10 SM</td><td class="n"><span class="sw" style="background:rgb(128,134,147)"></span>128,134,147</td><td class="n">30</td></tr>
+      <tr><td>5.96 SM</td><td class="n"><span class="sw" style="background:rgb(156,166,177)"></span>156,166,177</td><td class="n">9–11</td></tr>
+    </table>
+    <p class="n">Render 6.2 / 9.1 ms (+0.3 ms over A1)</p>
+    <p class="worst"><b>Worst case:</b> no residual sliver at this pose; the 10 SM step is now the white BKN streaks along the horizon (in every lane, A1 included). The computed 0.14° gap is hidden here by terrain standing about 6 rows above the geometric horizon; a sea horizon or a higher camera would show it (not shot).</p>
+  </div>
+  <div class="lane">
+    <h3>A3 · curved, 121.8 km (horizon), 146 steps</h3>
+    <p class="cap">10 SM, horizon ×2</p><img src="crops/a3-10-horizon.png" alt="A3 horizon at 10 SM">
+    <p class="cap">5.96 SM, horizon ×2</p><img src="crops/a3-596-horizon.png" alt="A3 horizon at 5.96 SM">
+    <p class="cap">10 SM full frame</p><img src="a3-10.jpg" alt="A3 at 10 SM">
+    <table>
+      <tr><th></th><th>Strip RGB</th><th>Row step</th></tr>
+      <tr><td>10 SM</td><td class="n"><span class="sw" style="background:rgb(125,130,145)"></span>125,130,145</td><td class="n">30</td></tr>
+      <tr><td>5.96 SM</td><td class="n"><span class="sw" style="background:rgb(156,166,177)"></span>156,166,177</td><td class="n">9–10</td></tr>
+    </table>
+    <p class="n">Render 6.3 / 9.7 ms (+0.4 ms over A1)</p>
+    <p class="worst"><b>Worst case:</b> looks the same as A2 from this tower; the same BKN streaks. Costs most of the three and the radius changes with camera height.</p>
+  </div>
+  <div class="lane">
+    <h3>A3 + C2 · horizon radius, underside retuned to the fog grey</h3>
+    <p class="cap">5.96 SM, horizon ×2</p><img src="crops/a3c2-596-horizon.png" alt="A3 with C2 at 5.96 SM">
+    <p class="cap">5.96 SM full frame</p><img src="a3c2-596.jpg" alt="A3 with C2 at 5.96 SM">
+    <table>
+      <tr><th></th><th>Strip RGB</th><th>Row step</th><th>Overhead lum</th></tr>
+      <tr><td>5.96 SM</td><td class="n"><span class="sw" style="background:rgb(159,169,179)"></span>159,169,179</td><td class="n">3.7</td><td class="n">172 (A3: 130)</td></tr>
+    </table>
+    <p class="worst"><b>Worst case:</b> the band at 5.96 SM goes, because the deck and the fog are now one grey; the whole overcast is lighter (overhead 172 against 130). Added because C changes how the 5.96 SM band reads: the radius alone does not touch it.</p>
+  </div>
+</div>
+
+<h2>B. Top relief <span class="tag">decisions 3 and 4</span></h2>
+<p class="q">Seen from above the overcast, should the top stay flat or rise in billows, and how much?</p>
+<p>Camera 1 km east of the tower at 1,524 m (5,000 ft) above the ground, heading 274; pitch −16 (as the spike's case 3c) and −6 (across the deck). 10 SM. All B lanes use the A3 curved 121.8 km deck so a deck edge does not distract. The base stays flat; a two-octave 2D value noise (5 km and 2 km cells) raises the top by up to the lane's share of the slab thickness (600 m for OVC, 450 m for BKN). Test B738 over the tower at 1,219 m (4,000 ft), 10 m above the nominal OVC top, as in case 3c. The last row is the same pose at 16:30 UTC (sun about 2.5° up) because at 13:00 the relief barely shows.</p>
+<div class="lanes">
+  <div class="lane">
+    <h3>B1 · no relief (today)</h3>
+    <p class="cap">Pitch −16</p><img src="b1-p16.jpg" alt="B1 pitch -16">
+    <p class="cap">Pitch −6, deck crop</p><img src="crops/b1-p6-tops.png" alt="B1 pitch -6 crop">
+    <p class="cap">Pitch −6 at 16:30 UTC, deck crop</p><img src="crops/b1-p6-lowsun-tops.png" alt="B1 low sun crop">
+    <table><tr><th>Lum std (deck patch)</th><td class="n">−16: 8.1 · −6: 1.4 · low sun: 3.4</td></tr></table>
+    <p class="n">Render at pitch −6: 6.9 / 10.1 ms (flat 40 km deck at the same pose: 5.5 / 7.0)</p>
+    <p class="worst"><b>Worst case:</b> a featureless white plane; the aircraft above it reads clearly.</p>
+  </div>
+  <div class="lane">
+    <h3>B2 · moderate, up to 20% (120 m on OVC)</h3>
+    <p class="cap">Pitch −16</p><img src="b2-p16.jpg" alt="B2 pitch -16">
+    <p class="cap">Pitch −6, deck crop</p><img src="crops/b2-p6-tops.png" alt="B2 pitch -6 crop">
+    <p class="cap">Pitch −6 at 16:30 UTC, deck crop</p><img src="crops/b2-p6-lowsun-tops.png" alt="B2 low sun crop">
+    <table><tr><th>Lum std (deck patch)</th><td class="n">−16: 9.1 · −6: 2.3 · low sun: 3.9</td></tr></table>
+    <p class="n">Render at pitch −6: 7.5 / 9.2 ms</p>
+    <p class="worst"><b>Worst case:</b> at noon hardly different from B1; the billows show only as faint shading near the horizon under a low sun.</p>
+  </div>
+  <div class="lane">
+    <h3>B3 · strong, up to 40% (240 m on OVC)</h3>
+    <p class="cap">Pitch −16</p><img src="b3-p16.jpg" alt="B3 pitch -16">
+    <p class="cap">Pitch −6, deck crop</p><img src="crops/b3-p6-tops.png" alt="B3 pitch -6 crop">
+    <p class="cap">Pitch −6 at 16:30 UTC, deck crop</p><img src="crops/b3-p6-lowsun-tops.png" alt="B3 low sun crop">
+    <table><tr><th>Lum std (deck patch)</th><td class="n">−16: 5.6 · −6: 4.1 · low sun: 5.2</td></tr></table>
+    <p class="n">Render at pitch −6: 7.4 / 8.3 ms</p>
+    <p class="worst"><b>Worst case:</b> the case 3c aircraft at 4,000 ft is washed out: billows reach 1,449 m and swallow it. Even here the relief reads as soft shading, not as distinct cloud tops.</p>
+  </div>
+</div>
+<p class="sub">Relief changes nothing from the tower: A3 with 40% relief rendered in 6.1 / 8.2 ms against A3's 6.3 / 9.7 ms at the tower pose. The top shading (<code>cloudLight</code>) has no relief cue of its own, which is why the billows are faint; making them read would need lighting work beyond the top shape.</p>
+
+<h2>C. Fog colour at 1.3 SM <span class="tag">decision 6</span></h2>
+<p class="q">Which grey should dense fog and the overcast underside share, and should Cesium's own scene fog stay on under the stage?</p>
+<p><code>daylight()</code> is unchanged in every lane (TC3D-185 owns dusk). Fog grey is <code>(0.62, 0.66, 0.70)</code>; today's underside <code>dark</code> is <code>(0.40, 0.43, 0.50)</code>.</p>
+<div class="lanes">
+  <div class="lane">
+    <h3>C1 · today</h3>
+    <img src="c1-13.jpg" alt="C1 at 1.3 SM">
+    <p class="cap">Horizon ×2</p><img src="crops/c1-13-horizon.png" alt="C1 horizon">
+    <table>
+      <tr><th>Haze</th><td class="n"><span class="sw" style="background:rgb(146,153,159)"></span>146,153,159 · lum 152 · chroma 13</td></tr>
+      <tr><th>Overhead</th><td class="n">lum 154 · chroma 21</td></tr>
+    </table>
+    <p class="worst"><b>Worst case:</b> the overhead deck is a little bluer than the fog. Not dark teal: the haze passes the map's grey test (chroma ≤ 20, lum ≥ 115).</p>
+  </div>
+  <div class="lane">
+    <h3>C2 · underside <code>dark</code> = fog grey</h3>
+    <img src="c2-13.jpg" alt="C2 at 1.3 SM">
+    <p class="cap">Horizon ×2</p><img src="crops/c2-13-horizon.png" alt="C2 horizon">
+    <table>
+      <tr><th>Haze</th><td class="n"><span class="sw" style="background:rgb(146,153,159)"></span>146,153,159 · lum 152 · chroma 13</td></tr>
+      <tr><th>Overhead</th><td class="n">lum 168 · chroma 20</td></tr>
+    </table>
+    <p class="worst"><b>Worst case:</b> at 1.3 SM only the overhead deck changes (lighter by 15); the fogged far field is identical. The overcast loses its darker underside.</p>
+  </div>
+  <div class="lane">
+    <h3>C3 · C2, fog grey darkened 15% at full overcast</h3>
+    <img src="c3-13.jpg" alt="C3 at 1.3 SM">
+    <p class="cap">Horizon ×2</p><img src="crops/c3-13-horizon.png" alt="C3 horizon">
+    <table>
+      <tr><th>Haze</th><td class="n"><span class="sw" style="background:rgb(130,136,141)"></span>130,136,141 · lum 135 · chroma 11</td></tr>
+      <tr><th>Overhead</th><td class="n">lum 144 · chroma 17</td></tr>
+    </table>
+    <p class="worst"><b>Worst case:</b> the whole scene is a duller, heavier grey; still well above the "not dark" line (lum 135 against 115). Darkening uses the highest layer coverage, so a BKN-only sky darkens by 0.7 × 15%.</p>
+  </div>
+  <div class="lane">
+    <h3>C4 · C2 with <code>scene.fog</code> off</h3>
+    <img src="c4-13.jpg" alt="C4 at 1.3 SM">
+    <p class="cap">Horizon ×2</p><img src="crops/c4-13-horizon.png" alt="C4 horizon">
+    <table>
+      <tr><th>Haze</th><td class="n"><span class="sw" style="background:rgb(147,154,160)"></span>147,154,160 · lum 153 · chroma 13</td></tr>
+      <tr><th>Overhead</th><td class="n">lum 169 · chroma 20</td></tr>
+    </table>
+    <p class="worst"><b>Worst case:</b> no visible change from C2 (haze +1.4 lum); Cesium then renders 83 terrain tiles instead of 68 (+22%, read at the B pose), because its fog also culls distant tiles.</p>
+  </div>
+</div>
+
+<h2>D. Haze above the horizon at 10 SM <span class="tag">decision 7</span></h2>
+<p class="q">With visibility at 10 SM or more, should the sky right above the horizon still get a thin haze?</p>
+<p>D2 fogs sky pixels with the stage's height-fog model at a 10 SM (16,093 m) visibility, fading out by about 4° above level. Today's flat 40 km deck in D1 and D2; the third lane adds A3.</p>
+<div class="lanes">
+  <div class="lane">
+    <h3>D1 · none (today)</h3>
+    <img src="d1-10.jpg" alt="D1 at 10 SM">
+    <p class="cap">Horizon ×2</p><img src="crops/d1-10-horizon.png" alt="D1 horizon">
+    <table><tr><th>Strip</th><td class="n"><span class="sw" style="background:rgb(205,236,217)"></span>205,236,217 · step 72</td></tr></table>
+    <p class="worst"><b>Worst case:</b> the mint band.</p>
+  </div>
+  <div class="lane">
+    <h3>D2 · thin horizon haze</h3>
+    <img src="d2-10.jpg" alt="D2 at 10 SM">
+    <p class="cap">Horizon ×2</p><img src="crops/d2-10-horizon.png" alt="D2 horizon">
+    <table><tr><th>Strip</th><td class="n"><span class="sw" style="background:rgb(158,169,179)"></span>158,169,179 · step 22</td></tr></table>
+    <p class="worst"><b>Worst case:</b> the band turns fog grey but stays a lighter strip under the darker deck. It also hazes terrain up to about 1° below the horizon, which the composite reads as sky distance (see findings).</p>
+  </div>
+  <div class="lane">
+    <h3>D2 + A3 · haze with the horizon-radius deck</h3>
+    <img src="d2a3-10.jpg" alt="D2 with A3 at 10 SM">
+    <p class="cap">Horizon ×2</p><img src="crops/d2a3-10-horizon.png" alt="D2 with A3 horizon">
+    <table><tr><th>Strip</th><td class="n"><span class="sw" style="background:rgb(123,129,143)"></span>123,129,143 · step 21</td></tr></table>
+    <p class="worst"><b>Worst case:</b> no visible change from A3 alone: the deck already covers the sky there, so D2 only matters without a deck (BKN gaps, FEW/SCT, clear sky).</p>
+  </div>
+</div>
+<p class="sub">D2's frame cost was not measured on its own; it adds one fog integral on sky pixels in the composite.</p>
+
+<h2>Findings the map did not predict</h2>
+<ul class="find">
+  <li>At 5.96 SM the band is not sky: it is a fog-grey strip (158,168,178) under a darker, bluer deck. The radius does not change it (A1–A3 step 9–13); retuning the underside does (A3 + C2 step 3.7).</li>
+  <li>Dense fog at 1.3 SM is not dark teal on the Cesium path at 13:00 UTC: haze lum 152, chroma 13. <code>scene.fog</code> barely affects it (C4).</li>
+  <li>The flat-deck band at 10 SM measured about 0.6° (17–22 px), under the computed 1.05–1.3°: terrain covers its lowest part.</li>
+  <li>A 100 km curved deck leaves no visible sliver from the EGLL tower at 88.8 m; the computed 0.14° residual sits under the terrain.</li>
+  <li>The composite treats terrain within about 1° below the horizon as sky (D2's haze reaches it), so <code>sceneDistance</code> returns <code>SKY_DISTANCE</code> for those pixels. Cause unverified.</li>
+  <li>The white streaks of the BKN layer near the horizon (undersampled noise at grazing angles) appear in every A lane at 10 SM and are now the largest row step there.</li>
+</ul>
+</main>
+</body>
+</html>
