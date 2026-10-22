@@ -48,4 +48,10 @@ export interface VnasStatus {
   error: string | null
   /** Whether vNAS feature is compiled into the backend */
   available: boolean
+  /**
+   * How the last joined session ended, when the server ended it; null otherwise.
+   * A non-forcible end (e.g. "Room closed") is cleared when the next session is joined;
+   * a forcible one (a kick from a YAAT room) stays until the next connect.
+   */
+  lastSessionEnd: { reason: string; forcible: boolean } | null
 }

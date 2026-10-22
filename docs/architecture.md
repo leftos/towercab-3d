@@ -485,7 +485,8 @@ vnasStore
 vNAS backend (src-tauri/src/vnas.rs, `vnas` feature)
 ├─ Subscribe claims: `try_begin_subscribe` hands out a token per facility, `finish_subscribe` releases only the claim that still owns it, so a subscribe from an ended session cannot clear a newer one's claim
 ├─ One event forwarder per `vnas_connect`, started before the connect so no event is missed; a reconnect aborts and awaits the previous forwarder before the new receiver subscribes, so no event is emitted twice; a Lagged receiver logs and carries on
-├─ Status is written by read-modify-write under one lock (`update_status`); a `Disconnected` state drops every subscription and in-flight claim
+├─ Status is written by read-modify-write under one lock (`update_status`); a `Disconnected`, `WaitingForSession` or `Subscribing` state (the hub drops a connection's subscriptions when its session changes) drops every subscription, in-flight claim and the stored session token that `subscribe_towercab` names
+├─ `VnasStatus.lastSessionEnd` (`{ reason, forcible }`) records a server-ended session: a non-forcible end (a YAAT room closing) clears when the next session is joined, a forcible one (a kick) at the next connect, and a kick's reason is also shown as the status error. A subscribe that fails with a stale session (token forgotten) or with no connection (a kick tore it down) is ignored, so it never overwrites that reason (`settle_subscribe_failure`)
 └─ Session end (server `HandleSessionEnded` or user disconnect) reaches the frontend as the disconnected state; the crate has already torn the session down (see the crate's docs/ARCHITECTURE.md "Session teardown")
 
 aircraftTimelineStore

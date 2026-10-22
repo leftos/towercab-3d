@@ -88,6 +88,130 @@ pub struct VnasStatus {
     pub error: Option<String>,
     /// Whether vNAS feature is compiled in
     pub available: bool,
+    /// How the last joined session ended, when the server ended it. A non-forcible end
+    /// (e.g. a YAAT room closing) is cleared when the next session is joined; a forcible
+    /// one (a kick from the room) only at the next connect.
+    pub last_session_end: Option<SessionEndInfo>,
+}
+
+/// Why the server ended the joined session.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionEndInfo {
+    /// The server's reason, e.g. "Room closed" or "Removed from the room"
+    pub reason: String,
+    /// Whether the server forced the end (YAAT: a kick from the room), which disconnects
+    pub forcible: bool,
+}
+
+/// Why a hub subscribe failed, as far as showing it to the user goes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(not(feature = "vnas"), allow(dead_code))] // only the vNAS build subscribes
+enum SubscribeFailure {
+    /// The session the subscribe named is no longer the joined one; the next session's
+    /// `Subscribing` subscribes again
+    StaleSession,
+    /// The service has no connection: torn down meanwhile (a kick, or a disconnect)
+    NotConnected,
+    /// Any other failure
+    Failed,
+}
+
+/// What the host does about a failed hub subscribe.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(not(feature = "vnas"), allow(dead_code))] // only the vNAS build subscribes
+enum SubscribeOutcome {
+    /// The failure was written as the status error and is returned to the caller
+    ShowError,
+    /// The token was stale: forget it, so the next subscribe reads the joined session's
+    ForgetToken,
+    /// Not a failure worth showing; nothing changes
+    Ignore,
+}
+
+/// Write a session state the service reported into `status`.
+///
+/// The hub drops a connection's subscriptions whenever its session changes, so
+/// `Disconnected`, `WaitingForSession` and `Subscribing` (a new session) clear them; the
+/// caller then drops its subscribes in flight too. Reaching `Subscribing` also clears the
+/// error (a refused room join leaves one behind while waiting) and a non-forcible session
+/// end. Returns whether the subscriptions were cleared.
+#[cfg_attr(not(feature = "vnas"), allow(dead_code))] // the vNAS forwarder's rule, tested in both builds
+fn apply_session_change(status: &mut VnasStatus, new_state: SessionState) -> bool {
+    status.state = new_state;
+    let dropped = matches!(
+        new_state,
+        SessionState::Disconnected | SessionState::WaitingForSession | SessionState::Subscribing
+    );
+    if dropped {
+        status.subscribed_facilities.clear();
+    }
+    if new_state == SessionState::Subscribing {
+        status.error = None;
+        if status
+            .last_session_end
+            .as_ref()
+            .is_some_and(|end| !end.forcible)
+        {
+            status.last_session_end = None;
+        }
+    }
+    dropped
+}
+
+/// Write a state a connect publishes into `status`, with `error` when given. Starting a
+/// connect (`Connecting`) clears the previous error and session end, a kick's included.
+#[cfg_attr(not(feature = "vnas"), allow(dead_code))] // the vNAS connect's rule, tested in both builds
+fn apply_connect_state(status: &mut VnasStatus, new_state: SessionState, error: Option<String>) {
+    if new_state == SessionState::Connecting {
+        status.error = None;
+        status.last_session_end = None;
+    }
+    status.state = new_state;
+    if error.is_some() {
+        status.error = error;
+    }
+}
+
+/// Show a forcible end's `reason` as the status error, unless a connect has started since
+/// (it cleared the forcible session end). Returns whether the error was set.
+#[cfg_attr(not(feature = "vnas"), allow(dead_code))] // the vNAS forwarder's rule, tested in both builds
+fn apply_forced_end_error(status: &mut VnasStatus, reason: Option<String>) -> bool {
+    let forced = status
+        .last_session_end
+        .as_ref()
+        .is_some_and(|end| end.forcible);
+    match reason {
+        Some(reason) if forced => {
+            status.error = Some(reason);
+            true
+        }
+        _ => false,
+    }
+}
+
+/// Settle a failed subscribe against `status`, writing `error` as the status error only
+/// when it is shown.
+///
+/// A stale session is not a failure (the token is forgotten), and neither is a service
+/// with no connection (a kick's reason must stay the shown error) or a subscribe the
+/// host's own disconnect cut off; anything else is shown.
+#[cfg_attr(not(feature = "vnas"), allow(dead_code))] // the vNAS subscribe's rule, tested in both builds
+fn settle_subscribe_failure(
+    status: &mut VnasStatus,
+    failure: SubscribeFailure,
+    disconnecting: bool,
+    error: &str,
+) -> SubscribeOutcome {
+    match failure {
+        SubscribeFailure::StaleSession => SubscribeOutcome::ForgetToken,
+        SubscribeFailure::NotConnected => SubscribeOutcome::Ignore,
+        _ if disconnecting => SubscribeOutcome::Ignore,
+        SubscribeFailure::Failed => {
+            status.error = Some(error.to_string());
+            SubscribeOutcome::ShowError
+        }
+    }
 }
 
 impl Default for VnasStatus {
@@ -107,6 +231,7 @@ impl Default for VnasStatus {
             available: true,
             #[cfg(not(feature = "vnas"))]
             available: false,
+            last_session_end: None,
         }
     }
 }
@@ -247,8 +372,9 @@ mod real_impl {
 
     // Import types from the vNAS crate
     use towercab_3d_vnas::{
-        Environment as VnasEnvironment, SessionState as VnasSessionState, StoredTokens,
-        TowerCabAircraftDto, VnasConfig, VnasError, VnasEvent, VnasService,
+        Environment as VnasEnvironment, SessionAirports, SessionState as VnasSessionState,
+        SessionToken, StoredTokens, TowerCabAircraftDto, VnasConfig, VnasError, VnasEvent,
+        VnasService,
     };
 
     impl From<Environment> for VnasEnvironment {
@@ -338,6 +464,19 @@ mod real_impl {
         pending_subscribes: HashMap<String, u64>,
         /// The last claim token handed out; each claim takes the next one.
         last_claim_token: u64,
+        /// The joined session's token for `subscribe_towercab`, once read after its
+        /// `Subscribing`. Never leaves the host.
+        session_token: Option<SessionToken>,
+        /// Moves on every session change; a token read before the change is not stored.
+        session_generation: u64,
+    }
+
+    impl StatusCell {
+        /// Forget the joined session's token; a token read before this is not stored.
+        fn forget_session_token(&mut self) {
+            self.session_token = None;
+            self.session_generation += 1;
+        }
     }
 
     /// A claimed in-flight subscribe; dropping it releases the claim.
@@ -443,6 +582,48 @@ mod real_impl {
             cell.status.subscribed_facilities.clear();
             cell.status.error = None;
             cell.pending_subscribes.clear();
+            cell.forget_session_token();
+        }
+
+        /// Forget everything about the previous service's sessions: its token and how its
+        /// last session ended. Called whenever a new service replaces the stored one.
+        fn forget_session(&self) {
+            let mut cell = self.status.write();
+            cell.forget_session_token();
+            cell.status.last_session_end = None;
+        }
+
+        /// The session generation; read it before `session_airports` and pass it to
+        /// `store_session`.
+        fn session_generation(&self) -> u64 {
+            self.status.read().session_generation
+        }
+
+        /// The stored token of the joined session, if it has been read.
+        fn session_token(&self) -> Option<SessionToken> {
+            self.status.read().session_token
+        }
+
+        /// Forget the stored token if it is still `token`, which the service refused as
+        /// stale, so the next subscribe reads the joined session's token afresh. A newer
+        /// token stored meanwhile is kept.
+        fn forget_stale_session_token(&self, token: SessionToken) {
+            let mut cell = self.status.write();
+            if cell.session_token == Some(token) {
+                cell.forget_session_token();
+            }
+        }
+
+        /// Keep `session`'s token and cache its airports, unless the session changed since
+        /// `generation` was read. Returns whether it stored them.
+        fn store_session(&self, generation: u64, session: &SessionAirports) -> bool {
+            let mut cell = self.status.write();
+            if cell.session_generation != generation {
+                return false;
+            }
+            cell.session_token = Some(session.session);
+            cache_session_facilities(&session.airports);
+            true
         }
 
         pub fn update_state(&self, state: SessionState) {
@@ -589,19 +770,19 @@ mod real_impl {
         }
     }
 
-    /// Write a session state reported by the service into the managed status.
+    /// Write a session state reported by the service into the managed status
+    /// (`apply_session_change`).
     ///
-    /// `Disconnected` means the hub session is gone, so it also drops every subscription
-    /// and every subscribe in flight. Returns whether it did.
+    /// When the session changed (the subscriptions were cleared), also drops every
+    /// subscribe in flight and the stored session token. Returns whether it did.
     fn apply_session_state(state: &VnasState, new_state: SessionState) -> bool {
         let mut cell = state.status.write();
-        cell.status.state = new_state;
-        let ended = new_state == SessionState::Disconnected;
-        if ended {
-            cell.status.subscribed_facilities.clear();
+        let dropped = apply_session_change(&mut cell.status, new_state);
+        if dropped {
             cell.pending_subscribes.clear();
+            cell.forget_session_token();
         }
-        ended
+        dropped
     }
 
     impl Default for VnasState {
@@ -711,6 +892,7 @@ mod real_impl {
                 // Store service
                 let service = Arc::new(service);
                 *state.service.write().await = Some(Arc::clone(&service));
+                state.forget_session();
 
                 // Save potentially refreshed tokens
                 if let Some(tokens) = service.get_stored_tokens().await {
@@ -765,6 +947,7 @@ mod real_impl {
 
         // Store service for later use
         *state.service.write().await = Some(Arc::new(service));
+        state.forget_session();
 
         tracing::info!("vNAS OAuth flow started for {:?}", environment);
         Ok(auth_url)
@@ -831,6 +1014,7 @@ mod real_impl {
         tracing::info!("YAAT Local dev login as CID {cid}");
         *state.app_handle.write() = Some(app);
         *state.service.write().await = Some(Arc::new(service));
+        state.forget_session();
 
         state.update_status(|status| {
             status.environment = Environment::YaatLocal;
@@ -975,40 +1159,10 @@ mod real_impl {
         stop_event_forwarder(&state).await;
         let event_tx = state.event_tx.clone();
         let app_for_events = app.clone();
+        let service_for_events = Arc::clone(&service);
         let events = service.events();
         let forwarder = tokio::spawn(forward_events(events, move |event| {
-            let app = &app_for_events;
-            match event {
-                VnasEvent::AircraftUpdate(aircraft_list) => {
-                    for dto in aircraft_list {
-                        let aircraft = VnasAircraft::from(&dto);
-                        let _ = event_tx.send(aircraft.clone());
-
-                        // Emit to frontend via Tauri event
-                        let _ = app.emit("vnas-aircraft-update", &aircraft);
-                    }
-                }
-                VnasEvent::AircraftDisconnected(callsign) => {
-                    tracing::info!("[vNAS] Aircraft disconnected: {}", callsign);
-                    let _ = app.emit("vnas-aircraft-disconnected", &callsign);
-                }
-                VnasEvent::SessionStateChanged(new_state) => {
-                    let frontend_state: SessionState = new_state.into();
-                    let ended = apply_session_state(&app.state::<VnasState>(), frontend_state);
-                    cache_state(frontend_state);
-                    tracing::info!("[vNAS] Session state changed: {:?}", frontend_state);
-                    if ended {
-                        cache_subscribed_facilities(&[]);
-                        let _ = app.emit("vnas-subscriptions-changed", Vec::<String>::new());
-                    }
-                    let _ = app.emit("vnas-state-changed", &frontend_state);
-                }
-                VnasEvent::Error(error) => {
-                    tracing::info!("[vNAS] Error: {}", error);
-                    app.state::<VnasState>().set_error(Some(error.to_string()));
-                    let _ = app.emit("vnas-error", error.to_string());
-                }
-            }
+            forward_event(&app_for_events, &service_for_events, &event_tx, event);
         }));
         let forwarder_abort = forwarder.abort_handle();
         state.replace_event_forwarder(forwarder);
@@ -1019,6 +1173,107 @@ mod real_impl {
             abandon_detached_connect(&state, &service, Some(&forwarder_abort)).await;
         }
         Ok(())
+    }
+
+    /// Apply one service event to the managed status and pass it on to the frontend.
+    fn forward_event(
+        app: &AppHandle,
+        service: &Arc<VnasService>,
+        event_tx: &broadcast::Sender<VnasAircraft>,
+        event: VnasEvent,
+    ) {
+        match event {
+            VnasEvent::AircraftUpdate(aircraft_list) => {
+                for dto in aircraft_list {
+                    let aircraft = VnasAircraft::from(&dto);
+                    let _ = event_tx.send(aircraft.clone());
+
+                    // Emit to frontend via Tauri event
+                    let _ = app.emit("vnas-aircraft-update", &aircraft);
+                }
+            }
+            VnasEvent::AircraftDisconnected(callsign) => {
+                tracing::info!("[vNAS] Aircraft disconnected: {}", callsign);
+                let _ = app.emit("vnas-aircraft-disconnected", &callsign);
+            }
+            VnasEvent::SessionStateChanged(new_state) => {
+                forward_session_state(app, service, new_state.into());
+            }
+            VnasEvent::SessionEnded { reason, forcible } => {
+                tracing::info!(forcible, "[vNAS] Session ended: {reason}");
+                app.state::<VnasState>().update_status(|status| {
+                    status.last_session_end = Some(SessionEndInfo { reason, forcible });
+                });
+            }
+            VnasEvent::Error(error) => {
+                tracing::info!("[vNAS] Error: {}", error);
+                app.state::<VnasState>().set_error(Some(error.to_string()));
+                let _ = app.emit("vnas-error", error.to_string());
+            }
+        }
+    }
+
+    /// Apply a session state the service reported, refresh the caches and emit it.
+    ///
+    /// On `Subscribing` (a session joined) it reads the session's token in the
+    /// background; on `Disconnected` after a forcible end it shows the end's reason.
+    fn forward_session_state(app: &AppHandle, service: &Arc<VnasService>, new_state: SessionState) {
+        let state = app.state::<VnasState>();
+        let dropped = apply_session_state(&state, new_state);
+        cache_state(new_state);
+        tracing::info!("[vNAS] Session state changed: {:?}", new_state);
+        if dropped {
+            cache_subscribed_facilities(&[]);
+            let _ = app.emit("vnas-subscriptions-changed", Vec::<String>::new());
+        }
+        let _ = app.emit("vnas-state-changed", &new_state);
+
+        let forced_end = state
+            .status()
+            .last_session_end
+            .is_some_and(|end| end.forcible);
+        match new_state {
+            SessionState::Subscribing => {
+                let generation = state.session_generation();
+                tokio::spawn(remember_session(
+                    Arc::clone(service),
+                    app.clone(),
+                    generation,
+                ));
+            }
+            SessionState::Disconnected if forced_end => {
+                tokio::spawn(show_forced_end_reason(Arc::clone(service), app.clone()));
+            }
+            _ => {}
+        }
+    }
+
+    /// Read the joined session's token and airports and keep them, unless the session
+    /// changed again since `generation` was read.
+    async fn remember_session(service: Arc<VnasService>, app: AppHandle, generation: u64) {
+        let Some(session) = service.session_airports().await else {
+            tracing::debug!("[vNAS] Session ended before its airports were read");
+            return;
+        };
+        if !app.state::<VnasState>().store_session(generation, &session) {
+            tracing::debug!("[vNAS] Session changed while its airports were read");
+        }
+    }
+
+    /// Show the reason of the forcible end that disconnected the service as the status
+    /// error, unless a connect has started since.
+    async fn show_forced_end_reason(service: Arc<VnasService>, app: AppHandle) {
+        let Some(reason) = service.forced_end_reason().await else {
+            return;
+        };
+        let mut shown = false;
+        app.state::<VnasState>().update_status(|status| {
+            shown = apply_forced_end_error(status, Some(reason.clone()));
+        });
+        if shown {
+            tracing::info!("[vNAS] Removed from the session: {reason}");
+            let _ = app.emit("vnas-error", &reason);
+        }
     }
 
     /// Write a connect's `new_state` (and `error`, when given) into the status, refresh
@@ -1035,10 +1290,7 @@ mod real_impl {
         error: Option<String>,
     ) -> bool {
         state.update_status_if_epoch(epoch, |status| {
-            status.state = new_state;
-            if error.is_some() {
-                status.error = error;
-            }
+            apply_connect_state(status, new_state, error);
             cache_state(new_state);
             let _ = app.emit("vnas-state-changed", new_state);
         })
@@ -1119,13 +1371,15 @@ mod real_impl {
     /// Subscribe to a facility's TowerCabAircraft topic once, however many callers race.
     ///
     /// A caller that finds the facility subscribed or its subscribe in flight returns
-    /// `Ok(false)` without contacting the hub. On success, records the facility, sets the
-    /// state to `Connected`, refreshes the caches and emits the new subscription list.
+    /// `Ok(false)` without contacting the hub, as does one with no session joined. The
+    /// subscribe names the joined session; on success it records the facility, refreshes
+    /// the cache and emits the new subscription list (the service reports `Connected`).
     async fn subscribe_once(
         app: &AppHandle,
         state: &VnasState,
         facility_id: &str,
     ) -> Result<bool, String> {
+        let epoch = state.connect_epoch();
         let Some(pending) = state.begin_subscribe(facility_id) else {
             tracing::debug!(facility_id, "Already subscribed or subscribing to facility");
             return Ok(false);
@@ -1135,25 +1389,93 @@ mod real_impl {
             .current_service()
             .await
             .ok_or("Not connected - call vnas_connect first")?;
-        service.subscribe_towercab(facility_id).await.map_err(|e| {
-            state.set_error(Some(e.to_string()));
-            format!("Subscription failed: {}", e)
-        })?;
+        let Some(session) = joined_session_token(state, &service).await else {
+            tracing::debug!(facility_id, "No session joined; subscribe skipped");
+            return Ok(false);
+        };
+        if let Err(e) = service.subscribe_towercab(facility_id, session).await {
+            let attempt = SubscribeAttempt {
+                facility_id,
+                session,
+                epoch,
+            };
+            return subscribe_failed(state, &service, attempt, e).await;
+        }
         if !pending.succeed() {
             tracing::debug!(facility_id, "Subscribe finished after it was cancelled");
             return Ok(false);
         }
 
-        state.update_state(SessionState::Connected);
-        cache_state(SessionState::Connected);
-
         // Emit updated subscriptions list
         let subscriptions = state.status().subscribed_facilities;
         cache_subscribed_facilities(&subscriptions);
         let _ = app.emit("vnas-subscriptions-changed", &subscriptions);
-        let _ = app.emit("vnas-state-changed", SessionState::Connected);
 
         Ok(true)
+    }
+
+    /// The joined session's token: the stored one, else read from the service and stored.
+    /// `None` while no session is joined.
+    async fn joined_session_token(
+        state: &VnasState,
+        service: &VnasService,
+    ) -> Option<SessionToken> {
+        if let Some(token) = state.session_token() {
+            return Some(token);
+        }
+        let generation = state.session_generation();
+        let session = service.session_airports().await?;
+        state.store_session(generation, &session);
+        Some(session.session)
+    }
+
+    /// One hub subscribe: the facility, the session token it named, and the connect epoch
+    /// read when it began.
+    struct SubscribeAttempt<'a> {
+        facility_id: &'a str,
+        session: SessionToken,
+        epoch: u64,
+    }
+
+    /// Settle a failed hub subscribe (`settle_subscribe_failure`).
+    ///
+    /// A stale session token (the session changed meanwhile), a service with no connection
+    /// (a kick tore it down, whose reason must stay shown) and a subscribe cut off by the
+    /// host's own disconnect are not failures: they set no error and return `Ok(false)`;
+    /// a stale token is also forgotten. Anything else is shown as the status error and
+    /// returned.
+    async fn subscribe_failed(
+        state: &VnasState,
+        service: &Arc<VnasService>,
+        attempt: SubscribeAttempt<'_>,
+        error: VnasError,
+    ) -> Result<bool, String> {
+        let failure = match error {
+            VnasError::InvalidState(_) => SubscribeFailure::StaleSession,
+            VnasError::NotConnected => SubscribeFailure::NotConnected,
+            _ => SubscribeFailure::Failed,
+        };
+        let disconnecting =
+            state.connect_epoch() != attempt.epoch || !is_current_service(state, service).await;
+        let message = error.to_string();
+        let mut outcome = SubscribeOutcome::Ignore;
+        state.update_status(|status| {
+            outcome = settle_subscribe_failure(status, failure, disconnecting, &message);
+        });
+        if outcome == SubscribeOutcome::ForgetToken {
+            state.forget_stale_session_token(attempt.session);
+        }
+        if outcome != SubscribeOutcome::ShowError {
+            let facility_id = attempt.facility_id;
+            tracing::debug!(
+                facility_id,
+                ?failure,
+                disconnecting,
+                "Subscribe dropped: {message}"
+            );
+            return Ok(false);
+        }
+        Err(format!("Subscription failed: {error}"))
     }
 
     /// Subscribe to TowerCabAircraft updates for an additional facility (additive).
@@ -1299,7 +1621,9 @@ mod real_impl {
     /// Get the list of airport ICAOs that support 1Hz updates in the current session.
     ///
     /// This resolves the session's facilities (e.g., "NCT" TRACON) into their
-    /// constituent airports (e.g., KSFO, KOAK, KSJC) using the vNAS Data API.
+    /// constituent airports (e.g., KSFO, KOAK, KSJC) using the vNAS Data API. A YAAT room
+    /// session's airports are its position ids as given (e.g. "OAK"), with no lookup.
+    /// Returns an empty list while no session is joined.
     #[tauri::command]
     pub async fn vnas_get_session_airports(
         state: State<'_, VnasState>,
@@ -1309,14 +1633,15 @@ mod real_impl {
             .await
             .ok_or_else(|| "vNAS service not initialized".to_string())?;
 
-        let airports = service
-            .session_airports()
-            .await
-            .map_err(|e| e.to_string())?;
-        // Cache the resolved airports as session facilities (these are the ICAOs
-        // that remote clients can see in the airport selector)
-        cache_session_facilities(&airports);
-        Ok(airports)
+        let generation = state.session_generation();
+        let Some(session) = service.session_airports().await else {
+            cache_session_facilities(&[]);
+            return Ok(Vec::new());
+        };
+        // Keep the token for subscribes and cache the airports as session facilities
+        // (what remote clients see in the airport selector)
+        state.store_session(generation, &session);
+        Ok(session.airports)
     }
 
     /// Initialize vNAS state for Tauri app.
@@ -1486,6 +1811,39 @@ mod real_impl {
             assert!(!state.finish_subscribe("SFO", sfo, true));
             assert!(subscribed(&state).is_empty());
             assert!(state.try_begin_subscribe("OAK").is_some());
+        }
+
+        #[test]
+        fn session_change_drops_subscribes_in_flight_and_the_session_token() {
+            for new_state in [SessionState::Subscribing, SessionState::WaitingForSession] {
+                let state = VnasState::new();
+                let oak = claim(&state, "OAK");
+                let generation = state.session_generation();
+
+                assert!(apply_session_state(&state, new_state), "{new_state:?}");
+
+                assert!(!state.finish_subscribe("OAK", oak, true));
+                assert!(subscribed(&state).is_empty());
+                assert_ne!(state.session_generation(), generation);
+                assert_eq!(state.session_token(), None);
+            }
+        }
+
+        #[test]
+        fn new_service_forgets_the_last_session_end() {
+            let state = VnasState::new();
+            state.update_status(|status| {
+                status.last_session_end = Some(SessionEndInfo {
+                    reason: "Removed from the room".to_string(),
+                    forcible: true,
+                });
+            });
+            let generation = state.session_generation();
+
+            state.forget_session();
+
+            assert_eq!(state.status().last_session_end, None);
+            assert_ne!(state.session_generation(), generation);
         }
 
         #[test]
@@ -1867,5 +2225,174 @@ mod tests {
         assert!(yaat_local_probe_base("ftp://localhost:5000").is_err());
         assert!(yaat_local_probe_base("not a url").is_err());
         assert!(yaat_local_probe_base("").is_err());
+    }
+
+    fn subscribed_status(facilities: &[&str]) -> VnasStatus {
+        VnasStatus {
+            state: SessionState::Connected,
+            subscribed_facilities: facilities.iter().map(|f| f.to_string()).collect(),
+            error: None,
+            ..VnasStatus::default()
+        }
+    }
+
+    fn session_end(reason: &str, forcible: bool) -> Option<SessionEndInfo> {
+        Some(SessionEndInfo {
+            reason: reason.to_string(),
+            forcible,
+        })
+    }
+
+    #[test]
+    fn session_change_clears_subscriptions_on_subscribing_and_waiting() {
+        for new_state in [
+            SessionState::Subscribing,
+            SessionState::WaitingForSession,
+            SessionState::Disconnected,
+        ] {
+            let mut status = subscribed_status(&["OAK"]);
+            assert!(
+                apply_session_change(&mut status, new_state),
+                "{new_state:?}"
+            );
+            assert_eq!(status.state, new_state);
+            assert!(status.subscribed_facilities.is_empty(), "{new_state:?}");
+        }
+        for new_state in [SessionState::Connected, SessionState::JoiningSession] {
+            let mut status = subscribed_status(&["OAK"]);
+            assert!(
+                !apply_session_change(&mut status, new_state),
+                "{new_state:?}"
+            );
+            assert_eq!(status.subscribed_facilities, vec!["OAK".to_string()]);
+        }
+    }
+
+    #[test]
+    fn stale_token_or_own_disconnect_sets_no_error() {
+        let cases = [
+            (
+                SubscribeFailure::StaleSession,
+                false,
+                SubscribeOutcome::ForgetToken,
+            ),
+            (
+                SubscribeFailure::StaleSession,
+                true,
+                SubscribeOutcome::ForgetToken,
+            ),
+            (SubscribeFailure::Failed, true, SubscribeOutcome::Ignore),
+            (
+                SubscribeFailure::NotConnected,
+                true,
+                SubscribeOutcome::Ignore,
+            ),
+        ];
+        for (failure, disconnecting, outcome) in cases {
+            let mut status = subscribed_status(&["OAK"]);
+            let settled = settle_subscribe_failure(&mut status, failure, disconnecting, "boom");
+            assert_eq!(
+                settled, outcome,
+                "{failure:?}, disconnecting {disconnecting}"
+            );
+            assert_eq!(
+                status.error, None,
+                "{failure:?}, disconnecting {disconnecting}"
+            );
+        }
+
+        let mut status = subscribed_status(&["OAK"]);
+        let settled =
+            settle_subscribe_failure(&mut status, SubscribeFailure::Failed, false, "boom");
+        assert_eq!(settled, SubscribeOutcome::ShowError);
+        assert_eq!(status.error, Some("boom".to_string()));
+    }
+
+    #[test]
+    fn not_connected_after_forced_end_keeps_the_kick_reason() {
+        let mut status = subscribed_status(&["OAK"]);
+        status.last_session_end = session_end("Removed from the room", true);
+        apply_session_change(&mut status, SessionState::Disconnected);
+        assert!(apply_forced_end_error(
+            &mut status,
+            Some("Removed from the room".to_string())
+        ));
+
+        let settled = settle_subscribe_failure(
+            &mut status,
+            SubscribeFailure::NotConnected,
+            false,
+            "Not connected",
+        );
+
+        assert_eq!(settled, SubscribeOutcome::Ignore);
+        assert_eq!(status.error, Some("Removed from the room".to_string()));
+    }
+
+    #[test]
+    fn forcible_end_reason_kept_until_next_connect() {
+        let mut status = subscribed_status(&["OAK"]);
+        status.last_session_end = session_end("Removed from the room", true);
+        apply_session_change(&mut status, SessionState::Disconnected);
+        assert!(apply_forced_end_error(
+            &mut status,
+            Some("Removed from the room".to_string())
+        ));
+
+        apply_session_change(&mut status, SessionState::WaitingForSession);
+        apply_session_change(&mut status, SessionState::Subscribing);
+        assert_eq!(
+            status.last_session_end,
+            session_end("Removed from the room", true)
+        );
+
+        apply_connect_state(&mut status, SessionState::Connecting, None);
+        assert_eq!(status.last_session_end, None);
+        assert_eq!(status.error, None);
+        assert!(!apply_forced_end_error(
+            &mut status,
+            Some("Removed from the room".to_string())
+        ));
+        assert_eq!(status.error, None);
+    }
+
+    #[test]
+    fn forced_end_error_needs_a_forcible_end_and_a_reason() {
+        let mut status = subscribed_status(&[]);
+        status.last_session_end = session_end("Room closed", false);
+        assert!(!apply_forced_end_error(
+            &mut status,
+            Some("Room closed".to_string())
+        ));
+        status.last_session_end = session_end("Removed from the room", true);
+        assert!(!apply_forced_end_error(&mut status, None));
+        assert_eq!(status.error, None);
+    }
+
+    #[test]
+    fn room_end_reason_cleared_on_next_subscribing() {
+        let mut status = subscribed_status(&["OAK"]);
+        status.last_session_end = session_end("Room closed", false);
+        status.error = Some("SignalR connection error: join refused".to_string());
+
+        apply_session_change(&mut status, SessionState::WaitingForSession);
+        assert_eq!(status.last_session_end, session_end("Room closed", false));
+
+        apply_session_change(&mut status, SessionState::Subscribing);
+        assert_eq!(status.last_session_end, None);
+        assert_eq!(status.error, None);
+    }
+
+    #[test]
+    fn connect_failure_keeps_its_error() {
+        let mut status = subscribed_status(&[]);
+        apply_connect_state(
+            &mut status,
+            SessionState::Disconnected,
+            Some("boom".to_string()),
+        );
+        assert_eq!(status.error, Some("boom".to_string()));
+        apply_connect_state(&mut status, SessionState::Subscribing, None);
+        assert_eq!(status.error, Some("boom".to_string()));
     }
 }
