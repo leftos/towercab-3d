@@ -6,7 +6,7 @@ import {
   WEATHER_STAGE_QUALITY,
   WEATHER_STAGE_REANCHOR_CHECK_MS,
 } from '@/constants'
-import { CLOUD_STAGE_FS, WEATHER_COMPOSITE_FS } from '@/hooks/weather/cloudStage.glsl'
+import { CLOUD_STAGE_FS, CLOUD_STAGE_MAX_STEPS, WEATHER_COMPOSITE_FS } from '@/hooks/weather/cloudStage.glsl'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useWeatherStageStore } from '@/stores/weatherStageStore'
 import { useWeatherStore } from '@/stores/weatherStore'
@@ -167,7 +167,7 @@ function createStage(viewer: Cesium.Viewer, refs: StageRefs, startMs: number): C
       u_layer2: layerUniform(2),
       u_layer3: layerUniform(3),
       u_layerCount: () => inputsRef.current.layerCount,
-      u_steps: () => Cesium.Math.clamp(Math.round(quality.steps), 4, 128),
+      u_steps: () => Cesium.Math.clamp(Math.round(quality.steps), 4, CLOUD_STAGE_MAX_STEPS),
       u_densityScale: () => quality.densityScale,
       u_radius: () => quality.radius,
       u_time: () => (performance.now() - startMs) / 1000,

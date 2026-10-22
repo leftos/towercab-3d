@@ -153,20 +153,25 @@ export const WIND_SPEED_CHANGE_THRESHOLD = 2
 /**
  * Quality knobs of the Cesium cloud and fog post-process stage.
  *
- * - `steps`: raymarch steps per cloud layer crossing (shader maximum 128)
+ * - `steps`: raymarch steps per cloud layer crossing (shader maximum 256); 120 keeps
+ *   the step length of 48 steps over 40 km across the 100 km deck
  * - `resolutionScale`: cloud pass resolution relative to the canvas (0.25..1)
  * - `densityScale`: cloud extinction per meter at full density
  * - `fogExtinction`: k in the fog transmittance exp(-k * distance / visibility)
  * - `fogHeightScale`: height in meters over which fog density falls by 1/e
- * - `radius`: radius in meters around the anchor that cloud layers cover
+ * - `radius`: radius in meters around the anchor that cloud layers cover. The deck
+ *   curves down with the earth, so from a tower cab an overcast base at 2,000 ft ends
+ *   about 0.15 deg above the horizon at 100 km (a flat 40 km deck leaves a degree of
+ *   clear sky). About 120 km would reach the horizon, but would need 144 steps at the
+ *   same step length; 100 km keeps the sliver small for 120 steps
  */
 export const WEATHER_STAGE_QUALITY = {
-  steps: 48,
+  steps: 120,
   resolutionScale: 0.5,
   densityScale: 0.04,
   fogExtinction: 1.0,
   fogHeightScale: 400,
-  radius: 40000,
+  radius: 100000,
 } as const
 
 /** Cloud slab thickness in meters by METAR cover code */

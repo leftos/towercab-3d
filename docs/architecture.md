@@ -296,6 +296,7 @@ CesiumViewer Component Mount
     │
     ├─ 4. useCesiumWeatherStages(viewer, { airportIcao, refLat, refLon, viewMode }), returning its gates
     │      ├─ Adds the cloud and fog post-process stage (GLSL in hooks/weather/cloudStage.glsl.ts; pure helpers in utils/weatherStage.ts), kept after the silhouette stage so aircraft in cloud get no outline
+    │      ├─ Cloud deck reaches 100 km (WEATHER_STAGE_QUALITY radius) and curves down with the earth (d²/2R); layers are marched by base height relative to the camera on that curved datum, not by ray slope; undersides use the fog grey so the deck meets the distant haze; tops stay flat; CLOUD_STAGE_MAX_STEPS caps the shader's MAX_STEPS and the u_steps clamp; utils/cloudDeckGeometry.ts mirrors the shader geometry for tests
     │      ├─ Split in one file into useWeatherAnchor, useWeatherStageFrame and useWeatherStageComposite
     │      ├─ Reads showWeatherEffects, showClouds, showBabylonFog, visibilityScale, fogIntensity (scales the fog's optical depth), weatherStore.useInterpolation / interpolatedWeather.visibility; disabled when there is nothing to draw (no layers, no fog, no anchor frame)
     │      ├─ Reads the live scene.logarithmicDepthBuffer, not graphics.enableLogDepth: without it the stage is hidden, one warning is logged and the view shows only the globe's distance fog, with no clouds or METAR fog
