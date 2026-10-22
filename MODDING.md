@@ -177,6 +177,12 @@ One mod can match multiple aircraft types by listing them in `aircraftTypes`.
 4. **File Size**: Keep models under 5MB for best performance
 5. **Format**: GLB recommended; DAE and OBJ also supported
 
+### Animation Clips
+
+Only converted FSLTL and AIG models play animation clips; a custom mod model is drawn static. The viewer picks a clip by its glTF animation name: gear clips contain `GEAR`; spoiler clips are names like `l_spoiler_key`, `r_spoiler_key` or `custom_anim_SPOILERS_LEFT_POSITION_n`; reverser clips are names like `custom_anim_REV_THRUST`, `reverse_thrust` or `thrust_rev_n`; wheel-spin clips are names like `custom_anim_CENTER_WHEEL_ROTATION_ANGLE_n`, `WHEEL_ROLL_left` or `c_tire_anim`.
+
+A wheel-spin clip must be exactly one revolution about a single axis, or it is not played, and it must not move a node a gear clip moves. Steering clips (any name containing `STEER`) are never played. The full list is in `docs/msfs-model-conversion.md`, "Animation Clips the Viewer Drives".
+
 ## Tower Mods
 
 ### Manifest Format

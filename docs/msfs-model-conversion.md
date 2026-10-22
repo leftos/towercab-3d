@@ -748,6 +748,20 @@ fn is_attachment_gltf(filename: &str) -> bool {
 
 **Cache Invalidation**: Bumped `MODEL_CACHE_VERSION` to 9 and `CONVERTER_VERSION` to 8 to force re-indexing and re-conversion of affected models.
 
+## Animation Clips the Viewer Drives
+
+The converter keeps the glTF animation clips; the viewer picks which ones to play by name (`classifyAnimationClip` in `utils/gltfAnimationParser.ts`). Gear progress drives gear clips, and the surface controller (`utils/surfaceAnimationController.ts`) drives spoiler, reverser and wheel-spin clips.
+
+- **Excluded first** (driven by nothing): any name containing `STEER`, `custom_anim_C_WHEEL_LR`, `c_wheel` and `c_wheel_key`, `custom_anim_ROTATION_VELOCITY_BODY_Y_*`, `custom_anim_{LEFT,RIGHT,CENTER}_WHEEL_RPM_*`, `fx_tire_contactPoint_*`, `custom_anim_GROUND_VELOCITY_*` and `spoiler_UTT787_aileron`.
+- **Wheel spin**: `custom_anim_{CENTER,LEFT,RIGHT}_WHEEL_ROTATION_ANGLE_*`, `WHEEL_ROLL_{center,left,right}`, `{c,l,r}_tire` with the suffixes `_anim`, `_blurred_key`, `_still_key`, `_roll` or `_key`, `center_tire_roll`, `tire_anim` and `GEAR_{Center,Left,Right}_Tire`.
+- **Spoiler**: `custom_anim_SPOILERS_{LEFT,RIGHT}_POSITION_*`, `{l,r}_spoiler_key`, `SPOILERS` (also spelled `SPOLIERS`, with an optional `_left` or `_right`), `HANDLING_Spoilers_{Ground,l,r}`, `*_Spoiler_{L,R,LR}[n]`, `Spoiler_{L,R}n`, `spoiler_Q_new`, the `TFS_777`, `TFS_A380` and `UTT_787` spoiler sets, and `AIA_Fokker_TailSpeedBrake`.
+- **Reverser**: `custom_anim_REV_THRUST`, `reverse_thrust`, `REVERSER` and `REVERSERS`, `thrust_rev_n`, `engine_rev` and `custom_anim_TURB_ENG_REVERSE_NOZZLE_PERCENT_*`.
+- **Gear**: every other clip with `GEAR` in its name (case-insensitive).
+
+The patterns are an allowlist checked against the converted FSLTL and AIG models, so a new model family adds its names to the pattern lists in `gltfAnimationParser.ts`.
+
+A wheel-spin clip plays only when every rotation track turns exactly one revolution (within 4 degrees), monotonic about one axis with no half-turn step; a clip that does not is left out. A wheel clip that targets a node a gear clip of the same model moves is dropped and logged once, since the two would overwrite each other's pose.
+
 ## Embedded Source Metadata
 
 Converted GLB files contain embedded source metadata in `asset.extras.towercab3d`:

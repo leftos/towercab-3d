@@ -44,6 +44,9 @@ export const PATTERN_ALTITUDE_FT = 2000
 /** Pushback maximum speed - pushback is typically 2-5 kts */
 export const PUSHBACK_MAX_SPEED_KTS = 8
 
+/** Pushback minimum speed: below it the track defaults to the heading, so a standing aircraft is not pushing back */
+export const PUSHBACK_MIN_SPEED_KTS = 0.5
+
 /** Below this speed = truly stopped (accounts for GPS jitter) */
 export const STOPPED_SPEED_KTS = 2
 

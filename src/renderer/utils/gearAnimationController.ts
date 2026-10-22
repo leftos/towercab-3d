@@ -31,8 +31,14 @@
 
 import type * as Cesium from 'cesium'
 import type { GearContact, GearFrameInput } from '@/types'
+import { clearAllSurfaceStates, type SurfacePose } from '@/utils/surfaceAnimationController'
 import { geoidService } from '../services/GeoidService'
-import { type AnimationSet, applyGearAnimationsPercent, parseAnimationSetFromUrl } from './gltfAnimationParser'
+import {
+  type AnimationSet,
+  applyClipAnimationsPercent,
+  applyWheelSpin,
+  parseAnimationSetFromUrl,
+} from './gltfAnimationParser'
 
 /**
  * Height of an aircraft above the ground, in one datum, for the gear rules.
@@ -408,7 +414,25 @@ export function applyGearAnimation(
   }
 
   // Apply gear animations using direct node transforms (with caching by modelUrl)
-  applyGearAnimationsPercent(model, animSet, progress, modelUrl)
+  applyClipAnimationsPercent(model, animSet, 'gear', progress, modelUrl)
+}
+
+/**
+ * Apply spoiler, reverser and wheel-spin clips to a Cesium model, from the animation set applyGearAnimation loaded.
+ * Spoilers and reversers use the progress cache; wheel spin is uncached.
+ *
+ * @param model - Cesium Model instance
+ * @param pose - Spoiler and reverser deployment and wheel phase (updateSurfaceAnimation)
+ * @param modelUrl - Model URL
+ */
+export function applySurfaceAnimation(model: Cesium.Model, pose: SurfacePose, modelUrl: string): void {
+  const animSet = model.ready ? animationSets.get(modelUrl) : undefined
+  if (!animSet) {
+    return // Not ready, or applyGearAnimation is still loading the animation set
+  }
+  applyClipAnimationsPercent(model, animSet, 'spoiler', pose.spoiler, modelUrl)
+  applyClipAnimationsPercent(model, animSet, 'reverser', pose.reverser, modelUrl)
+  applyWheelSpin(model, animSet, pose.wheelPhase)
 }
 
 /**
@@ -430,6 +454,7 @@ export function clearGearState(callsign: string): void {
  */
 export function clearAllGearStates(): void {
   gearStates.clear()
+  clearAllSurfaceStates()
   animationSets.clear()
   animationSetsLoading.clear()
 }

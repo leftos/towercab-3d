@@ -1,5 +1,12 @@
 import * as Cesium from 'cesium'
 import { useCallback, useEffect, useRef } from 'react'
+import { aircraftDimensionsService } from '@/services/AircraftDimensionsService'
+import {
+  clearSurfaceState,
+  surfaceFrameFor,
+  updateSurfaceAnimation,
+  wheelRadiusForWingspan,
+} from '@/utils/surfaceAnimationController'
 import { SUN_ELEVATION_DAY, SUN_ELEVATION_NIGHT } from '../constants/lighting'
 import {
   FSLTL_MODEL_HEIGHT_OFFSET,
@@ -17,6 +24,7 @@ import type { InterpolatedAircraftState } from '../types/vatsim'
 import { neutralEnvironmentMapOptions } from '../utils/environmentMap'
 import {
   applyGearAnimation,
+  applySurfaceAnimation,
   clearGearState,
   gearHeightAboveGroundMeters,
   getCurrentGearProgress,
@@ -540,6 +548,14 @@ export function useAircraftModels(
             // Pass known animation count from gltfCallback for reliable animation access
             const knownAnimCount = modelAnimationCountsRef.current.get(modelInfo.modelUrl)
             applyGearAnimation(model, gearProgress, aircraft.callsign, modelInfo.modelUrl, knownAnimCount)
+
+            // Spoilers, reversers and wheel spin run on the data-source time of the frame, so a paused replay holds them
+            const wingspanM = aircraftDimensionsService.getDimensions(aircraft.aircraftType)?.wingspan ?? null
+            const surfacePose = updateSurfaceAnimation(
+              aircraft.callsign,
+              surfaceFrameFor(aircraft, wheelRadiusForWingspan(wingspanM)),
+            )
+            applySurfaceAnimation(model, surfacePose, modelInfo.modelUrl)
           }
         }
       }
@@ -549,8 +565,9 @@ export function useAircraftModels(
     // Use reverse lookup to find stale assignments - O(seenCallsigns) instead of O(poolSize)
     for (const [callsign, idx] of callsignToPoolIndexRef.current.entries()) {
       if (!seenCallsigns.has(callsign)) {
-        // Clean up gear animation state for this aircraft
+        // Clean up gear, spoiler, reverser and wheel animation state for this aircraft
         clearGearState(callsign)
+        clearSurfaceState(callsign)
 
         // Release this slot and hide the model
         modelPoolAssignments.current.set(idx, null)
