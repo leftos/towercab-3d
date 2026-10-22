@@ -236,6 +236,23 @@ export interface InterpolatedAircraftState extends AircraftState {
    */
   inContact: boolean | null
   /**
+   * How far the drawn height is blended onto the terrain this frame, 0..1 (0 = at the reported height, 1 = on the
+   * terrain). The spoilers, reversers and wheels read it for sources without a height above ground (`surfaceFrameFor`).
+   */
+  groundBlendWeight: number
+  /**
+   * True when this frame's `groundBlendWeight` came from the landing blend (the descending branch: descending below
+   * 50 m without a height above ground); false for the departure blend, the ground cases, and sources with a height
+   * above ground. The surfaces read it to tell a landing drawn down onto the terrain from a rollout or taxi reported a
+   * few metres above it.
+   */
+  groundBlendDescending: boolean
+  /**
+   * Whether this frame's data comes from a replay (buffer or imported) rather than live, from the same data-source
+   * read that set `timestamp`, so the two always agree.
+   */
+  isReplay: boolean
+  /**
    * Ground acceleration in knots per second.
    * Positive = accelerating, negative = decelerating.
    * Useful for distinguishing takeoff roll (accelerating) from landing roll (decelerating).

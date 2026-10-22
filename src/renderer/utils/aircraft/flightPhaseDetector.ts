@@ -6,6 +6,7 @@
  */
 
 import { STOPPED_SPEED_KTS } from '@/constants'
+import { isPushingBack } from '@/utils/aircraft/pushback'
 import { geoidService } from '../../services/GeoidService'
 import type { AircraftTimeline } from '../../types/aircraft-timeline'
 import type { Runway } from '../../types/airport'
@@ -30,7 +31,6 @@ const PATTERN_DISTANCE_NM = 5
 // false positives from low pattern work. Note: AGL is calculated from airport
 // elevation, not actual terrain - may be inaccurate for sloped terrain.
 const GROUND_ALTITUDE_AGL_FT = 100
-const PUSHBACK_MAX_SPEED_KTS = 8 // Pushback is typically 2-5 kts
 const RUNWAY_ALIGNMENT_DEG = 25 // Generous for wind correction/crab angle
 const HOLDING_SHORT_DISTANCE_FT = 500
 const RUNWAY_WIDTH_BUFFER_FT = 150
@@ -648,18 +648,9 @@ function detectRawFlightPhase(aircraft: InterpolatedAircraftState, context: Smar
       }
     }
 
-    // Check for pushback: moving with track opposite to heading
-    // Pushback: aircraft faces one direction but moves backwards
-    // IMPORTANT: Only check pushback if there's actual movement (speed > 0.5 kts)
-    // When stationary (speed ≈ 0), track defaults to heading, making the diff ≈ 0
-    // So stationary aircraft won't falsely trigger this check
-    if (speedKts > 0.5 && speedKts < PUSHBACK_MAX_SPEED_KTS) {
-      const trackHeadingDiff = Math.abs(headingDifference(track, heading))
-      // If track is 90-180° from heading, aircraft is moving backwards or sideways
-      // Use 90° threshold to catch curved pushbacks (not just straight back)
-      if (trackHeadingDiff > 90) {
-        return { phase: 'pushback', runway: null, runwayDistance: null, nearestRunway: nearestRwy }
-      }
+    // Pushback: moving slowly with the track more than 90° from the heading
+    if (isPushingBack(speedKts, heading, track)) {
+      return { phase: 'pushback', runway: null, runwayDistance: null, nearestRunway: nearestRwy }
     }
 
     // If moving at all, it's taxi - stopped is the last resort

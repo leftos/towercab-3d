@@ -662,3 +662,66 @@ export const DEPARTURE_BLEND_START_AGL = 5
  * Default: 35 meters (~115 feet) - generous transition zone
  */
 export const DEPARTURE_BLEND_END_AGL = 35
+
+// ============================================================================
+// SPOILERS, REVERSERS AND WHEEL SPIN (utils/surfaceAnimationController.ts)
+// ============================================================================
+
+/** Groundspeed above which spoilers deploy at touchdown and reversers run; both stow at or below it (knots) */
+export const SURFACE_DEPLOY_MIN_GROUNDSPEED_KTS = 60
+
+/** Seconds out of ground contact before a new contact counts as a touchdown; a shorter loss is a contact flicker */
+export const SURFACE_TOUCHDOWN_ARM_SECONDS = 2
+
+/** Seconds for the spoilers to deploy fully */
+export const SPOILER_DEPLOY_SECONDS = 1
+
+/** Seconds for the spoilers to stow fully */
+export const SPOILER_STOW_SECONDS = 1.5
+
+/** Seconds after touchdown before the reversers deploy */
+export const REVERSER_DELAY_SECONDS = 1.5
+
+/** Seconds for the reverser sleeves to travel fully, either way */
+export const REVERSER_TRAVEL_SECONDS = 2
+
+/** Seconds over which the wheel spin coasts linearly to zero after liftoff */
+export const WHEEL_COAST_SECONDS = 5
+
+/**
+ * In replay, a forward data-time step longer than this (seconds) is a seek; a backward step is a seek in any mode.
+ * A seek snaps the surfaces to their targets and keeps the wheel phase. Live, a longer gap just continues.
+ */
+export const SURFACE_SEEK_SECONDS = 5
+
+/** Knots the groundspeed may rise above its minimum since touchdown before the rollout counts as a touch-and-go */
+export const SURFACE_TOUCH_AND_GO_SPEEDUP_KTS = 10
+
+/**
+ * Seconds of data time over which the groundspeed change decides whether the aircraft is decelerating, for the
+ * reversers. Measured by the surface controller itself, so it holds on slow frames and fast replay.
+ */
+export const SURFACE_DECELERATION_WINDOW_SECONDS = 0.5
+
+/**
+ * For a source without a height above ground (VATSIM, RealTraffic) being drawn down by the landing blend, the ground
+ * blend weight at or above which the spoilers, reversers and wheels count the aircraft in contact: drawn fully onto
+ * the terrain. The gear's contact is the looser "more than halfway" of `inContact`, which also stands for the surfaces
+ * in the departure blend and the ground cases.
+ */
+export const SURFACE_HEIGHTLESS_CONTACT_BLEND_WEIGHT = 0.99
+
+/** Wheel radius of regional types (wingspan up to WHEEL_RADIUS_REGIONAL_MAX_WINGSPAN_M), meters */
+export const WHEEL_RADIUS_REGIONAL_M = 0.45
+
+/** Wheel radius of narrowbody types, and of types whose wingspan is unknown, meters */
+export const WHEEL_RADIUS_NARROWBODY_M = 0.55
+
+/** Wheel radius of widebody types (wingspan over WHEEL_RADIUS_NARROWBODY_MAX_WINGSPAN_M), meters */
+export const WHEEL_RADIUS_WIDEBODY_M = 0.7
+
+/** Largest wingspan of a regional type for the wheel radius, meters */
+export const WHEEL_RADIUS_REGIONAL_MAX_WINGSPAN_M = 30
+
+/** Largest wingspan of a narrowbody type for the wheel radius, meters */
+export const WHEEL_RADIUS_NARROWBODY_MAX_WINGSPAN_M = 42

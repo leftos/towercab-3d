@@ -115,7 +115,7 @@ Ground aircraft use the same timeline path; the hook rate-limits heading at 20 d
 
 ### How it works today
 
-No control surface, flap, spoiler or reverser is animated. The FSLTL converter bakes the neutral (or frame-0) pose of every clip into the static model and keeps the clips (`convert_fsltl_batch.py:713-789`). At runtime only gear is driven: `applyGearAnimationsPercent` sets every clip whose name contains `GEAR` to the gear progress (`gltfAnimationParser.ts:484-507`), FSLTL models only (`useAircraftModels.ts:498-528`).
+The FSLTL converter bakes the neutral (or frame-0) pose of every clip into the static model and keeps the clips (`convert_fsltl_batch.py:713-789`). At runtime, on FSLTL and AIG models only, the gear, spoiler, thrust-reverser and wheel-spin clips are driven (TC3D-54; `docs/architecture.md` describes the surface controller); flaps and other control surfaces are not animated.
 
 ### Findings
 

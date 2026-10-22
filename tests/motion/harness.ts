@@ -15,6 +15,7 @@ import { angleDiff, arrivalFlight, departureFlight, type TruthSample, truthAt } 
 type TimelineModule = typeof import('@/stores/aircraftTimelineStore')
 type InterpModule = typeof import('@/hooks/useAircraftInterpolation')
 type GearModule = typeof import('@/utils/gearAnimationController')
+type SurfaceModule = typeof import('@/utils/surfaceAnimationController')
 type SmartModule = typeof import('@/utils/smartSort')
 type AircraftMap = ReturnType<InterpModule['useAircraftInterpolation']>
 type AircraftEntry = NonNullable<ReturnType<AircraftMap['get']>>
@@ -68,6 +69,12 @@ export interface ScenarioOptions {
   vnasWithoutHeight?: boolean
   /** vNAS observations carry no 50/80 ft ground flag (null), as VATSIM's do. */
   vnasWithoutGroundFlag?: boolean
+  /**
+   * Scenario second, per callsign, before which that flight's VATSIM reports are dropped, so the aircraft is first
+   * seen at the first 3 + 15 n report at or after it (mid-taxi, on the takeoff roll, on short final). Flights not
+   * named report from their start.
+   */
+  vatsimFromS?: Partial<Record<string, number>>
 }
 
 /** What each vNAS observation carries besides its position. */
@@ -95,6 +102,12 @@ export interface FrameRecord {
   inContact: boolean | null
   gearApp: number
   gearEllipsoidal: number
+  /** Spoiler deployment, as useAircraftModels draws it (B738 wheel radius) */
+  spoiler: number
+  /** Reverser deployment */
+  reverser: number
+  /** Wheel spin in revolutions per second (negative = backwards) */
+  wheelRevPerSec: number
   displayDelayMs: number
   /** The delay the display delay is easing toward, from the receive intervals; null without a delay state. */
   targetDelayMs: number | null
@@ -137,6 +150,7 @@ interface FrameDeps {
   tl: TimelineModule
   interp: InterpModule
   gear: GearModule
+  surface: SurfaceModule
   groundEllip: number
   flightByCs: Map<string, Flight>
 }
@@ -241,7 +255,8 @@ function buildObservations(flights: Flight[], opts: ScenarioOptions, groundEllip
   const out: Observation[] = []
   for (const f of flights) {
     const times = vatsimTimes(f, opts.durationS)
-    const vatsimStart = opts.useVnas && opts.vnasFirst ? f.offset + 5 : 0
+    const vnasFirstStart = opts.useVnas && opts.vnasFirst ? f.offset + 5 : 0
+    const vatsimStart = Math.max(vnasFirstStart, opts.vatsimFromS?.[f.callsign] ?? 0)
     out.push(
       ...vatsimObservations(
         f,
@@ -354,6 +369,11 @@ function recordFrame(deps: FrameDeps, feed: FeedState, e: AircraftEntry, now: nu
     deps.gear.initializeGearState(`${e.callsign}#ell`, aglFtEll, vrFpm, onGroundApp)
   }
 
+  const surfaces = deps.surface.updateSurfaceAnimation(
+    e.callsign,
+    deps.surface.surfaceFrameFor(e, deps.surface.wheelRadiusForWingspan(35.78)),
+  )
+
   const list = feed.frames.get(e.callsign) ?? []
   list.push({
     frameTime: (now - T0) / 1000,
@@ -381,6 +401,9 @@ function recordFrame(deps: FrameDeps, feed: FeedState, e: AircraftEntry, now: nu
       { altitudeFt: aglFtEll, verticalRateFpm: vrFpm, inContact: onGroundApp, dataTime: e.timestamp },
       now,
     ),
+    spoiler: surfaces.spoiler,
+    reverser: surfaces.reverser,
+    wheelRevPerSec: surfaces.wheelRevPerSec,
     displayDelayMs: ts.displayDelay,
     targetDelayMs: deps.tl.useAircraftTimelineStore.getState().dynamicDelays.get(e.callsign)?.targetDelayMs ?? null,
     extrapolating: ts.isExtrapolating,
@@ -413,13 +436,21 @@ export async function runScenario(opts: ScenarioOptions): Promise<ScenarioResult
     const geo = await import('@/services/GeoidService')
     const gear = await import('@/utils/gearAnimationController')
     const smart = await import('@/utils/smartSort')
+    const surface = await import('@/utils/surfaceAnimationController')
 
     const groundEllip = geo.geoidService.mslToEllipsoidal(LAT0, LON0, GROUND_MSL)
     const terrainHeight = groundEllip + (opts.terrainOffsetM ?? 0)
     const unsampled = opts.unsampledReferenceOffsetM !== undefined
     const { flights, runwayThr } = buildFlights()
     const observations = buildObservations(flights, opts, groundEllip)
-    const deps: FrameDeps = { tl, interp, gear, groundEllip, flightByCs: new Map(flights.map((f) => [f.callsign, f])) }
+    const deps: FrameDeps = {
+      tl,
+      interp,
+      gear,
+      surface,
+      groundEllip,
+      flightByCs: new Map(flights.map((f) => [f.callsign, f])),
+    }
     const feed: FeedState = {
       frames: new Map(),
       phases: new Map(),

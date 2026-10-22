@@ -10,6 +10,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 - 3D buildings now show rows of windows on their walls, some of them lit at night.
 - New **Weather quality** setting (Low, Medium, High) under Settings → Graphics; iPads and phones start lower, and small insets step down.
 - New **About** tab in Settings shows the app version and the credits for the map, terrain, imagery and 3D building data in use.
+- FSLTL and AIG aircraft now deploy spoilers and thrust reversers on landing, and their wheels turn as they roll.
 
 ### Changed
 - 3D buildings and aircraft no longer have an olive-green cast on their walls and fuselages; their reflected ground light is now a neutral grey.

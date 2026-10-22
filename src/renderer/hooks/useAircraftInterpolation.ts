@@ -147,6 +147,7 @@ function timelineToInterpolatedState(
   now: number,
   orientationEnabled: boolean,
   orientationIntensity: number,
+  isReplay: boolean,
 ): InterpolatedAircraftState {
   const callsign = timeline.callsign
 
@@ -389,6 +390,10 @@ function timelineToInterpolatedState(
     isOnGround: timeline.onGround,
     heightAboveGround: timeline.heightAboveGround,
     inContact,
+    // Written by the terrain pass each frame
+    groundBlendWeight: 0,
+    groundBlendDescending: false,
+    isReplay,
 
     isInterpolated: true,
 
@@ -517,7 +522,9 @@ function runInterpolationFrame() {
     activeCallsigns.add(callsign)
 
     // Convert timeline result to InterpolatedAircraftState
-    const interpolated = timelineToInterpolatedState(timeline, now, orientationEnabled, orientationIntensity)
+    // The replay flag comes from the same data-source read as `now`, so the frame's data time and flag agree
+    const isReplay = source.playbackMode !== 'live'
+    const interpolated = timelineToInterpolatedState(timeline, now, orientationEnabled, orientationIntensity, isReplay)
 
     // Reuse existing entry or create new one
     const existing = statesMap.get(callsign)
@@ -546,6 +553,9 @@ function runInterpolationFrame() {
       existing.isOnGround = interpolated.isOnGround
       existing.heightAboveGround = interpolated.heightAboveGround
       existing.inContact = interpolated.inContact
+      existing.groundBlendWeight = interpolated.groundBlendWeight
+      existing.groundBlendDescending = interpolated.groundBlendDescending
+      existing.isReplay = interpolated.isReplay
     } else {
       statesMap.set(callsign, interpolated)
     }
@@ -641,6 +651,7 @@ function runInterpolationFrame() {
 
     // Determine ground blend weight (0 = fully airborne/reported, 1 = fully on terrain)
     let groundBlendWeight: number
+    let groundBlendDescending = false
     const isLowSpeed = entry.interpolatedGroundspeed < 5
 
     if (isLowSpeed) {
@@ -682,6 +693,7 @@ function runInterpolationFrame() {
       // At LANDING_BLEND_END_AGL (10m): full ground (weight = 1)
       const blendRange = LANDING_BLEND_START_AGL - LANDING_BLEND_END_AGL
       groundBlendWeight = Math.min(1.0, Math.max(0, (LANDING_BLEND_START_AGL - altitudeAGL) / blendRange))
+      groundBlendDescending = true
     } else if (altitudeAGL < DEPARTURE_BLEND_END_AGL) {
       // GROUND/DEPARTURE: Low altitude aircraft - clamp to terrain or blend toward reported
       // This catches:
@@ -710,6 +722,8 @@ function runInterpolationFrame() {
     if (entry.heightAboveGround === null) {
       entry.inContact = shouldClampToTerrain
     }
+    entry.groundBlendWeight = groundBlendWeight
+    entry.groundBlendDescending = groundBlendDescending
 
     // Reset smoothed terrain height for aircraft that are truly airborne
     if (groundBlendWeight === 0 && sampledTerrainHeight !== undefined && altitudeAGL > 50) {

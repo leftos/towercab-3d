@@ -957,6 +957,9 @@ TowerCab 3D matches aircraft to models in this order:
 ### Features
 
 - **Landing Gear Animation**: Gear is down on the ground and extends when descending below 2,000ft AGL; it retracts shortly after liftoff once the aircraft is climbing
+- **Spoilers, Thrust Reversers and Wheels**: On models that have the matching animations, spoilers deploy at touchdown and stay out through the rollout, thrust reversers deploy while the aircraft decelerates and stay out until the rollout ends, and the wheels spin with the aircraft's groundspeed (backwards in a pushback) and coast to a stop after liftoff. A touch-and-go ends the rollout.
+
+  For VATSIM and RealTraffic aircraft, which report no height, the surfaces wait until the aircraft is drawn fully on the ground
 - **Multiple Engine Variants**: Supports aircraft with GE, PW, or RR engine variants
 - **Texture Scaling**: Choose texture resolution (Full 4K, 2K, 1K, or 512) to balance quality and storage
 - **LRU Cache**: Automatic cleanup when cache limit is reached
