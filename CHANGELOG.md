@@ -16,6 +16,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 ### Fixed
 - The remote access server no longer serves or writes files outside its own folders.
 - Remote browsers no longer receive your stored keys and sign-ins, such as the RealTraffic key and vNAS login.
+- Remote browsers no longer receive your MSFS Community, model cache, VMR file or FSLTL folder locations from the host's settings or model lists.
 - Aircraft that first appear no longer jump backwards or crawl in slow motion before settling into smooth motion.
 - Aircraft in flight are no longer drawn 5 m above their reported altitude.
 - Nose wheels no longer appear turned to full lock while the gear is down.

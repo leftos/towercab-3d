@@ -589,6 +589,8 @@ pub enum FieldClass {
     Public,
     /// Belongs to the host machine: remote clients see it but never change it.
     HostOwned,
+    /// A place on the host machine (a folder or file path): remote clients neither see nor change it.
+    HostPrivate,
     /// A credential: hidden from remote clients unless they need it, never changed by them
     /// (the Cesium ion token may be set remotely while the host's is empty).
     Secret,
@@ -610,16 +612,16 @@ pub const FIELD_CLASSES: &[(&str, FieldClass)] = &[
     ("imagery.googleAdjustments.saturation", FieldClass::Public),
     ("imagery.googleAdjustments.brightness", FieldClass::Public),
     ("imagery.googleAdjustments.contrast", FieldClass::Public),
-    ("fsltl.sourcePath", FieldClass::HostOwned),
-    ("fsltl.outputPath", FieldClass::HostOwned),
+    ("fsltl.sourcePath", FieldClass::HostPrivate),
+    ("fsltl.outputPath", FieldClass::HostPrivate),
     ("fsltl.textureScale", FieldClass::Public),
     ("fsltl.enableFsltlModels", FieldClass::Public),
-    ("msfsModels.communityPath", FieldClass::HostOwned),
+    ("msfsModels.communityPath", FieldClass::HostPrivate),
     ("msfsModels.enableFsltl", FieldClass::Public),
     ("msfsModels.enableAig", FieldClass::Public),
     ("msfsModels.priority", FieldClass::Public),
-    ("msfsModels.vmrFiles", FieldClass::HostOwned),
-    ("msfsModels.cacheDirectory", FieldClass::HostOwned),
+    ("msfsModels.vmrFiles", FieldClass::HostPrivate),
+    ("msfsModels.cacheDirectory", FieldClass::HostPrivate),
     ("msfsModels.cacheLimitMB", FieldClass::Public),
     ("msfsModels.textureScale", FieldClass::Public),
     ("msfsModels.skipGenericVmrMatches", FieldClass::Public),
@@ -882,7 +884,9 @@ pub const FIELD_CLASSES: &[(&str, FieldClass)] = &[
 
 /// The settings a remote client may see: every field, with the secrets it has no use for
 /// blanked (`realtraffic.licenseKey`, `vnasTokens`, and `imagery.googleMapsApiKey` unless
-/// Google is the imagery provider). The Cesium ion token is kept: remote viewers need it.
+/// Google is the imagery provider) and every host-private path blanked (`fsltl.sourcePath`
+/// and `outputPath`, `msfsModels.communityPath`, `cacheDirectory` and `vmrFiles`). The Cesium
+/// ion token is kept: remote viewers need it.
 pub fn remote_view(settings: &GlobalSettings) -> GlobalSettings {
     let mut view = settings.clone();
     if view.imagery.provider != "google" {
@@ -890,11 +894,16 @@ pub fn remote_view(settings: &GlobalSettings) -> GlobalSettings {
     }
     view.realtraffic.license_key.clear();
     view.vnas_tokens = None;
+    view.fsltl.source_path = None;
+    view.fsltl.output_path = None;
+    view.msfs_models.community_path = None;
+    view.msfs_models.cache_directory = None;
+    view.msfs_models.vmr_files.clear();
     view
 }
 
 /// The settings to store after a remote client posts `incoming`: its public fields, with
-/// every host-owned and secret field of `FIELD_CLASSES` kept from `existing`. The one
+/// every host-owned, host-private and secret field of `FIELD_CLASSES` kept from `existing`. The one
 /// exception is the Cesium ion token, taken from `incoming` while the host has none.
 pub fn merge_remote_write(existing: &GlobalSettings, incoming: GlobalSettings) -> GlobalSettings {
     let mut merged = incoming;
@@ -1154,8 +1163,62 @@ fn write_vnas_tokens_at(settings_file: &Path, tokens: Option<String>) -> Result<
     Ok(())
 }
 
+/// The check every test of a remote response runs: no host absolute path in any JSON string.
+#[cfg(test)]
+pub(crate) mod host_path_walk {
+    use serde_json::Value;
+
+    /// Host paths in the three shapes a Windows host produces (a drive path, an extended-length
+    /// path and a UNC share), each holding the marker `TC3D-HOST`.
+    pub(crate) const HOST_PATHS: [&str; 3] = [
+        "D:/TC3D-HOST/Community",
+        r"\\?\D:\TC3D-HOST\cache",
+        r"\\srv\share\TC3D-HOST",
+    ];
+
+    /// Whether `text` begins like an absolute path: a drive letter, `\\`, or `/`.
+    fn looks_absolute(text: &str) -> bool {
+        let bytes = text.as_bytes();
+        let drive = bytes.len() >= 3
+            && bytes[0].is_ascii_alphabetic()
+            && bytes[1] == b':'
+            && (bytes[2] == b'\\' || bytes[2] == b'/');
+        drive || text.starts_with("\\\\") || text.starts_with('/')
+    }
+
+    fn collect_strings<'a>(value: &'a Value, out: &mut Vec<&'a str>) {
+        match value {
+            Value::String(text) => out.push(text),
+            Value::Array(items) => items.iter().for_each(|item| collect_strings(item, out)),
+            Value::Object(map) => {
+                for (key, child) in map {
+                    out.push(key);
+                    collect_strings(child, out);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Panics naming every string of `value`, object keys included, that holds the `TC3D-HOST`
+    /// marker or looks like an absolute path.
+    pub(crate) fn assert_holds_no_host_path(value: &Value) {
+        let mut strings = Vec::new();
+        collect_strings(value, &mut strings);
+        let leaks: Vec<&str> = strings
+            .into_iter()
+            .filter(|text| text.contains("TC3D-HOST") || looks_absolute(text))
+            .collect();
+        assert!(
+            leaks.is_empty(),
+            "remote response holds host paths: {leaks:?}"
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use super::host_path_walk::{assert_holds_no_host_path, HOST_PATHS};
     use super::*;
     use serde_json::Value;
     use std::collections::HashMap;
@@ -1391,6 +1454,72 @@ mod tests {
         assert_eq!(view.realtraffic.license_key, "");
         assert_eq!(view.imagery.google_maps_api_key, "");
         assert!(view.vnas_tokens.is_none());
+    }
+
+    #[test]
+    fn remote_view_holds_no_host_path() {
+        let [drive, extended, unc] = HOST_PATHS;
+        let mut host = populated();
+        host.fsltl.source_path = Some(drive.to_string());
+        host.fsltl.output_path = Some(extended.to_string());
+        host.msfs_models.community_path = Some(unc.to_string());
+        host.msfs_models.cache_directory = Some(extended.to_string());
+        host.msfs_models.vmr_files = HOST_PATHS.iter().map(|path| path.to_string()).collect();
+
+        let view = serde_json::to_value(remote_view(&host)).expect("serialise view");
+        assert_holds_no_host_path(&view);
+    }
+
+    /// The JSON value at a dotted `FIELD_CLASSES` path of `value`.
+    fn field_at<'a>(mut value: &'a Value, path: &str) -> &'a Value {
+        for part in path.split('.') {
+            value = &value[part];
+        }
+        value
+    }
+
+    /// Sets the JSON value at a dotted `FIELD_CLASSES` path of `value`.
+    fn set_field_at(value: &mut Value, path: &str, leaf: Value) {
+        match path.split_once('.') {
+            Some((head, rest)) => set_field_at(&mut value[head], rest, leaf),
+            None => value[path] = leaf,
+        }
+    }
+
+    #[test]
+    fn remote_view_blanks_every_host_private_field() {
+        let private: Vec<&str> = FIELD_CLASSES
+            .iter()
+            .filter(|(_, class)| *class == FieldClass::HostPrivate)
+            .map(|(path, _)| *path)
+            .collect();
+        assert!(!private.is_empty(), "no FieldClass::HostPrivate field");
+        for path in private {
+            let mut host =
+                serde_json::to_value(GlobalSettings::default()).expect("serialise defaults");
+            let planted = if field_at(&host, path).is_array() {
+                serde_json::json!(HOST_PATHS.to_vec())
+            } else {
+                serde_json::json!(HOST_PATHS[0])
+            };
+            set_field_at(&mut host, path, planted.clone());
+            let settings: GlobalSettings =
+                serde_json::from_value(host).expect("parse the planted settings");
+            let stored = serde_json::to_value(&settings).expect("serialise the planted settings");
+            assert_eq!(
+                field_at(&stored, path),
+                &planted,
+                "{path} did not keep the planted value through deserialization"
+            );
+
+            let view = serde_json::to_value(remote_view(&settings)).expect("serialise view");
+            let sent = field_at(&view, path);
+            assert!(
+                sent.is_null() || sent.as_array().is_some_and(|items| items.is_empty()),
+                "{path} reaches a remote client: {sent}"
+            );
+            assert_holds_no_host_path(&view);
+        }
     }
 
     #[test]

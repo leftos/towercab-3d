@@ -190,9 +190,10 @@ pub struct ServerState {
 | `/api/mods/aircraft` | GET | List aircraft mods |
 | `/api/mods/towers` | GET | List tower mods |
 | `/api/mods/*path` | GET | Serve mod files (GLB models) |
-| `/api/msfs/models` | GET | List converted MSFS models |
+| `/api/msfs/index` | GET | List the host's FSLTL and AIG source models: `{fsltl, aig, totalCount}`, each model only `{source, modelName, aircraftType, airlineCode, atcId}` (no folder or file paths); a failure answers `Failed to get model index`, with the detail in the host log |
+| `/api/msfs/models` | GET | List converted MSFS models: each only `{model_key, file_size, converter_version}` (no file path); the GLB is `/api/msfs/{model_key}.glb`; a failure answers `Failed to list converted models`, with the detail in the host log |
 | `/api/msfs/*path` | GET | Serve converted GLB files |
-| `/api/msfs/convert` | POST | Request on-the-fly conversion |
+| `/api/msfs/convert` | POST | Request on-the-fly conversion of a model by `model_name`, looked up in the host's model index; `texture_scale` must be `full`, `2k`, `1k` or `512` (anything else is 400). A failure answers `error: "Model conversion failed"`, with the detail in the host log |
 | `/api/tower-positions` | GET | Read custom tower positions |
 | `/api/tower-positions/:icao` | PUT | Update tower position |
 | `/api/vmr-rules` | GET | Parse and serve VMR rules |
@@ -578,11 +579,15 @@ Host (Tauri)                            Remote (Browser)
 
 ### Settings exposed to remote clients
 
-Both directions go through two functions in `settings.rs`, so a remote browser never reads or changes what only the host should hold:
+Both directions go through two functions in `settings.rs`, so a remote browser never reads or changes what only the host should hold, and never receives a host path in the shared settings or from the MSFS model routes (`/api/msfs/index`, `/api/msfs/models`, `/api/msfs/convert`). The mod routes (`/api/mods/*`), `/api/diagnostic` and `/api/airport-surfaces` still send host paths in their replies and errors (TC3D-286):
 
-- **Read** (`remote_view`, used by the GET and by the POST's response): the settings with `realtraffic.licenseKey` and `vnasTokens` blanked, and `imagery.googleMapsApiKey` blanked unless `imagery.provider` is `google`. The Cesium ion token is kept: the remote viewer cannot start without it. Fields are blanked, not removed, because several have no serde default.
-- **Write** (`merge_remote_write`): the incoming object with every host-owned field copied back from the stored file: `server`, `renderingBackend`, `imagery.provider` and `imagery.googleMapsApiKey`, `fsltl.sourcePath`/`outputPath`, `msfsModels.communityPath`/`vmrFiles`/`cacheDirectory`, `realtraffic.licenseKey` and `vnasTokens`. The Cesium ion token is the one exception: a remote client may set it only while the host's is empty, and never overwrites one.
-- A test in `settings.rs` walks every JSON path of a fully populated `GlobalSettings` and requires each to be classed public, host-owned or secret (`FIELD_CLASSES`), so a new field fails it until classified.
+- **Read** (`remote_view`, used by the GET and by the POST's response): the settings with `realtraffic.licenseKey` and `vnasTokens` blanked, and `imagery.googleMapsApiKey` blanked unless `imagery.provider` is `google`. The Cesium ion token is kept: the remote viewer cannot start without it.
+
+  The host-private paths are blanked too: `fsltl.sourcePath`/`outputPath` and `msfsModels.communityPath`/`cacheDirectory` are `null` and `msfsModels.vmrFiles` is `[]`, so the shared settings carry no folder or file path on the host. Fields are blanked, not removed, because several have no serde default.
+- **Write** (`merge_remote_write`): the incoming object with every host-owned, host-private and secret field copied back from the stored file: `server`, `renderingBackend`, `imagery.provider` and `imagery.googleMapsApiKey`, `fsltl.sourcePath`/`outputPath`, `msfsModels.communityPath`/`vmrFiles`/`cacheDirectory`, `realtraffic.licenseKey` and `vnasTokens`. The Cesium ion token is the one exception: a remote client may set it only while the host's is empty, and never overwrites one.
+- Every field has a class in `FIELD_CLASSES`: **public** (remote clients see and change it), **host-owned** (they see it but never change it), **host-private** (a path on the host: they neither see nor change it) or **secret** (hidden unless they need it, never changed). A test in `settings.rs` walks every JSON path of a fully populated `GlobalSettings` and requires each to be classed, so a new field fails it until classified.
+- `GET /api/global-settings` answers a 500 with exactly `Could not read the settings`, and `POST` with exactly `Could not save the settings`; the host log gets `[Server] Could not read the global settings: <detail>` (or `Could not save ...`) at error level, since the detail can name the settings file's path.
+- A second test fills every path field with host paths and requires no string of the remote view to hold one or to look like an absolute path (a drive letter, `\\` or `/`); the `/api/msfs/index` and `/api/msfs/models` responses are checked the same way.
 
 The host webview reads every field except `vnasTokens` (`read_global_settings` never returns them). Only Rust writes the tokens (`read_vnas_tokens` / `write_vnas_tokens`, used by `vnas.rs`): a host write keeps the tokens already in the file, and an empty ion token from the host keeps the stored one. `vnasTokens` is not in the TypeScript `GlobalSettings` type.
 

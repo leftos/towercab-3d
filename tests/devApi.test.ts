@@ -264,6 +264,49 @@ describe('devApi', () => {
     expect(allLoggedText(logger)).not.toMatch(/SECRET-/)
   })
 
+  it('settingsViewDropsUnknownPathBlockFields', () => {
+    const view = remoteView({
+      ...STORED_SETTINGS,
+      fsltl: {
+        textureScale: '2k',
+        enableFsltlModels: true,
+        sourcePath: 'D:/TC3D-HOST/fsltl',
+        outputPath: 'D:/TC3D-HOST/out',
+        surprisePath: 'D:/TC3D-HOST/surprise',
+      },
+      msfsModels: {
+        enableFsltl: true,
+        enableAig: true,
+        priority: ['fsltl', 'aig'],
+        cacheLimitMB: 5120,
+        textureScale: '1k',
+        skipGenericVmrMatches: false,
+        communityPath: 'D:/TC3D-HOST/Community',
+        cacheDirectory: 'D:/TC3D-HOST/cache',
+        vmrFiles: ['D:/TC3D-HOST/rules.vmr'],
+        surpriseDirectory: 'D:/TC3D-HOST/surprise-cache',
+      },
+    })
+    expect(view.fsltl).toEqual({
+      textureScale: '2k',
+      enableFsltlModels: true,
+      sourcePath: null,
+      outputPath: null,
+    })
+    expect(view.msfsModels).toEqual({
+      enableFsltl: true,
+      enableAig: true,
+      priority: ['fsltl', 'aig'],
+      cacheLimitMB: 5120,
+      textureScale: '1k',
+      skipGenericVmrMatches: false,
+      communityPath: null,
+      cacheDirectory: null,
+      vmrFiles: [],
+    })
+    expect(JSON.stringify(view)).not.toMatch(/TC3D-HOST/)
+  })
+
   it('settingsViewHoldsOnlyIonToken', async () => {
     const parity = JSON.parse(readFileSync(resolve(__dirname, 'fixtures/remote-view.json'), 'utf8')) as {
       secretPaths: string[]

@@ -36,7 +36,7 @@ use crate::{
     mods::{
         discover_all_mods, find_mods_root, read_tower_positions, DiscoveredMod, TowerPositionEntry,
     },
-    msfs::CachedGlbInfo,
+    msfs::{RemoteCachedModel, RemoteModelIndex},
     normalize_path_string,
     settings::{
         apply_remote_write, get_global_settings_file, read_remote_view, read_settings_file,
@@ -659,30 +659,48 @@ async fn get_airport_surfaces(
     Ok(resp)
 }
 
+/// Which settings route an error came from: `GET` reads the settings file, `POST` writes it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SettingsRoute {
+    Read,
+    Write,
+}
+
+/// The error a settings route sends a remote client: fixed text, with the detail, which names the
+/// settings file, kept in the host log.
+fn settings_error(route: SettingsRoute, detail: String) -> (StatusCode, String) {
+    let (what, body) = match route {
+        SettingsRoute::Read => ("read", "Could not read the settings"),
+        SettingsRoute::Write => ("save", "Could not save the settings"),
+    };
+    tracing::error!(
+        "[Server] Could not {} the global settings: {}",
+        what,
+        detail
+    );
+    (StatusCode::INTERNAL_SERVER_ERROR, body.to_string())
+}
+
 /// GET /api/global-settings - Return the remote view of the global settings
 async fn get_global_settings(
     State(state): State<Arc<ServerState>>,
 ) -> Result<Json<GlobalSettings>, (StatusCode, String)> {
-    let settings_file = get_global_settings_file(&state.app_handle)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
-    let view = run_settings_io(move || read_remote_view(&settings_file)).await?;
+    let failed = |e: String| settings_error(SettingsRoute::Read, e);
+    let settings_file = get_global_settings_file(&state.app_handle).map_err(failed)?;
+    let view = run_settings_io(move || read_remote_view(&settings_file))
+        .await
+        .map_err(failed)?;
     Ok(Json(view))
 }
 
 /// Run settings file I/O, which blocks on the settings lock and the disk, off the async
-/// workers
+/// workers. The error is the detail for the route's error body.
 async fn run_settings_io<T: Send + 'static>(
     work: impl FnOnce() -> Result<T, String> + Send + 'static,
-) -> Result<T, (StatusCode, String)> {
+) -> Result<T, String> {
     tokio::task::spawn_blocking(work)
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Settings file task failed: {}", e),
-            )
-        })?
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))
+        .map_err(|e| format!("Settings file task failed: {}", e))?
 }
 
 /// POST /api/global-settings - Store a remote client's settings, keeping every host-owned
@@ -691,10 +709,12 @@ async fn update_global_settings(
     State(state): State<Arc<ServerState>>,
     Json(incoming): Json<GlobalSettings>,
 ) -> Result<Json<GlobalSettings>, (StatusCode, String)> {
-    let settings_file = get_global_settings_file(&state.app_handle)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    let failed = |e: String| settings_error(SettingsRoute::Write, e);
+    let settings_file = get_global_settings_file(&state.app_handle).map_err(failed)?;
 
-    let view = run_settings_io(move || apply_remote_write(&settings_file, incoming)).await?;
+    let view = run_settings_io(move || apply_remote_write(&settings_file, incoming))
+        .await
+        .map_err(failed)?;
 
     tracing::info!("[Server] Updated global settings via API");
     Ok(Json(view))
@@ -846,13 +866,21 @@ async fn serve_mod_file(
 /// Returns flat list of cached GLB files with their model keys for remote browser clients
 async fn list_msfs_converted_models(
     State(state): State<Arc<ServerState>>,
-) -> Result<Json<Vec<CachedGlbInfo>>, (StatusCode, String)> {
+) -> Result<Json<Vec<RemoteCachedModel>>, (StatusCode, String)> {
+    // The detail names host paths, so it stays in the host log.
+    let failed = |e: String| {
+        tracing::error!("[Server] Listing converted MSFS models failed: {}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to list converted models".to_string(),
+        )
+    };
+
     // Get MSFS model cache directory from global settings
-    let settings_file = get_global_settings_file(&state.app_handle)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    let settings_file = get_global_settings_file(&state.app_handle).map_err(failed)?;
 
     let cache_dir = read_settings_file(&settings_file)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?
+        .map_err(failed)?
         .msfs_models
         .cache_directory;
 
@@ -863,9 +891,9 @@ async fn list_msfs_converted_models(
     // Use scan_cache_directory which correctly scans flat GLB files (same as host initialization)
     let models = crate::msfs::scan_cache_directory(cache_dir)
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+        .map_err(failed)?;
 
-    Ok(Json(models))
+    Ok(Json(crate::msfs::remote_cached_models(models)))
 }
 
 /// GET /api/msfs/*path - Serve converted MSFS model file (FSLTL/AIG)
@@ -873,14 +901,23 @@ async fn serve_msfs_model(
     State(state): State<Arc<ServerState>>,
     Path(path): Path<String>,
 ) -> impl IntoResponse {
-    // Get MSFS model cache directory from global settings
-    let settings_file = match get_global_settings_file(&state.app_handle) {
-        Ok(f) => f,
-        Err(e) => return Err((StatusCode::INTERNAL_SERVER_ERROR, e)),
+    // The detail names host paths, so it stays in the host log.
+    let failed = |e: String| {
+        tracing::error!(
+            "[Server] Reading the MSFS model cache setting failed: {}",
+            e
+        );
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to read the MSFS model settings".to_string(),
+        )
     };
 
+    // Get MSFS model cache directory from global settings
+    let settings_file = get_global_settings_file(&state.app_handle).map_err(failed)?;
+
     let cache_dir = read_settings_file(&settings_file)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?
+        .map_err(failed)?
         .msfs_models
         .cache_directory;
 
@@ -918,12 +955,13 @@ async fn serve_msfs_model(
 /// GET /api/msfs/index - Get the MSFS model index for remote clients
 async fn get_msfs_model_index(
     State(state): State<Arc<ServerState>>,
-) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+) -> Result<Json<RemoteModelIndex>, (StatusCode, String)> {
     // Get the model index from the MSFS module
     let index = crate::msfs::get_model_index(&state.app_handle).map_err(|e| {
+        tracing::error!("[Server] Reading the MSFS model index failed: {}", e);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to get model index: {}", e),
+            "Failed to get model index".to_string(),
         )
     })?;
 
@@ -944,6 +982,21 @@ fn default_texture_scale() -> String {
     "1k".to_string()
 }
 
+/// The texture scales the converter offers, the only ones `POST /api/msfs/convert` passes on.
+const TEXTURE_SCALES: [&str; 4] = ["full", "2k", "1k", "512"];
+
+/// Refuses a texture scale the converter does not offer before it reaches the converter's arguments.
+fn check_texture_scale(scale: &str) -> Result<(), (StatusCode, String)> {
+    if TEXTURE_SCALES.contains(&scale) {
+        Ok(())
+    } else {
+        Err((
+            StatusCode::BAD_REQUEST,
+            "Unknown texture scale: expected full, 2k, 1k or 512".to_string(),
+        ))
+    }
+}
+
 /// Conversion response
 #[derive(Debug, serde::Serialize)]
 struct ConversionResponse {
@@ -958,6 +1011,8 @@ async fn request_msfs_conversion(
     State(state): State<Arc<ServerState>>,
     Json(request): Json<ConversionRequest>,
 ) -> Result<Json<ConversionResponse>, (StatusCode, String)> {
+    check_texture_scale(&request.texture_scale)?;
+
     // Call the MSFS conversion function
     match crate::msfs::convert_model_by_name(
         &state.app_handle,
@@ -969,11 +1024,19 @@ async fn request_msfs_conversion(
             output_path: Some(output_path),
             error: None,
         })),
-        Err(e) => Ok(Json(ConversionResponse {
-            success: false,
-            output_path: None,
-            error: Some(e),
-        })),
+        Err(e) => {
+            // The detail (the converter's stderr included) names host paths, so it stays in the host log.
+            tracing::error!(
+                "[Server] Converting MSFS model {:?} failed: {}",
+                request.model_name,
+                e
+            );
+            Ok(Json(ConversionResponse {
+                success: false,
+                output_path: None,
+                error: Some("Model conversion failed".to_string()),
+            }))
+        }
     }
 }
 
@@ -2179,6 +2242,52 @@ fn tower_position_file_path(dir: &std::path::Path, icao: &str) -> Result<PathBuf
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::settings::host_path_walk::{assert_holds_no_host_path, HOST_PATHS};
+
+    #[test]
+    fn settings_errors_send_fixed_text_holding_no_host_path() {
+        for path in HOST_PATHS {
+            let detail = format!("Failed to read global settings \"{path}\": access denied");
+            for (route, expected) in [
+                (SettingsRoute::Read, "Could not read the settings"),
+                (SettingsRoute::Write, "Could not save the settings"),
+            ] {
+                let (status, body) = settings_error(route, detail.clone());
+                assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+                assert_eq!(
+                    body, expected,
+                    "{route:?} sent a body naming the settings file"
+                );
+                assert_holds_no_host_path(&serde_json::Value::String(body));
+            }
+        }
+    }
+
+    #[test]
+    fn texture_scale_outside_the_allowed_values_is_refused() {
+        for allowed in ["full", "2k", "1k", "512"] {
+            assert!(
+                check_texture_scale(allowed).is_ok(),
+                "{allowed:?} should be accepted"
+            );
+        }
+        for refused in [
+            "",
+            "4k",
+            "FULL",
+            "1K",
+            " 1k",
+            "1k ",
+            "--output",
+            "1k,--source",
+            "512\0",
+        ] {
+            let (status, body) =
+                check_texture_scale(refused).expect_err("an unknown texture scale is refused");
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{refused:?}");
+            assert_eq!(body, "Unknown texture scale: expected full, 2k, 1k or 512");
+        }
+    }
 
     #[test]
     fn host_check_accepts_ip_literals_localhost_and_mdns_names() {

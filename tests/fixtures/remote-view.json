@@ -36,8 +36,8 @@
         },
         "fsltl": {
           "enableFsltlModels": true,
-          "outputPath": "D:/fsltl-out",
-          "sourcePath": "D:/fsltl",
+          "outputPath": null,
+          "sourcePath": null,
           "textureScale": "2k"
         },
         "imagery": {
@@ -57,9 +57,9 @@
           "provider": "cesium"
         },
         "msfsModels": {
-          "cacheDirectory": "D:/cache",
+          "cacheDirectory": null,
           "cacheLimitMB": 5120,
-          "communityPath": "D:/Community",
+          "communityPath": null,
           "enableAig": true,
           "enableFsltl": true,
           "priority": [
@@ -68,9 +68,7 @@
           ],
           "skipGenericVmrMatches": false,
           "textureScale": "1k",
-          "vmrFiles": [
-            "D:/rules.vmr"
-          ]
+          "vmrFiles": []
         },
         "realtraffic": {
           "dataSource": "vatsim",
@@ -384,8 +382,8 @@
         },
         "fsltl": {
           "enableFsltlModels": true,
-          "outputPath": "D:/fsltl-out",
-          "sourcePath": "D:/fsltl",
+          "outputPath": null,
+          "sourcePath": null,
           "textureScale": "2k"
         },
         "imagery": {
@@ -405,9 +403,9 @@
           "provider": "google"
         },
         "msfsModels": {
-          "cacheDirectory": "D:/cache",
+          "cacheDirectory": null,
           "cacheLimitMB": 5120,
-          "communityPath": "D:/Community",
+          "communityPath": null,
           "enableAig": true,
           "enableFsltl": true,
           "priority": [
@@ -416,9 +414,7 @@
           ],
           "skipGenericVmrMatches": false,
           "textureScale": "1k",
-          "vmrFiles": [
-            "D:/rules.vmr"
-          ]
+          "vmrFiles": []
         },
         "realtraffic": {
           "dataSource": "vatsim",

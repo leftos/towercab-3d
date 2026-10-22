@@ -1594,9 +1594,8 @@ pub async fn scan_cache_directory(cache_dir: String) -> Result<Vec<CachedGlbInfo
 // SERVER API HELPERS - For remote browser access
 // =============================================================================
 
-/// Get the combined model index for remote clients
-/// Returns a JSON object with fsltl and aig model arrays
-pub fn get_model_index(app: &tauri::AppHandle) -> Result<serde_json::Value, String> {
+/// Get the combined model index for remote clients: the fsltl and aig model arrays, without host paths
+pub fn get_model_index(app: &tauri::AppHandle) -> Result<RemoteModelIndex, String> {
     let cache_dir = app
         .path()
         .app_data_dir()
@@ -1626,11 +1625,71 @@ pub fn get_model_index(app: &tauri::AppHandle) -> Result<serde_json::Value, Stri
         Vec::new()
     };
 
-    Ok(serde_json::json!({
-        "fsltl": fsltl_models,
-        "aig": aig_models,
-        "totalCount": fsltl_models.len() + aig_models.len()
-    }))
+    Ok(remote_model_index(&fsltl_models, &aig_models))
+}
+
+/// What a remote client learns about one source model: the name it converts the model by and the
+/// fields it matches aircraft with. The host paths stay in `SourceModelInfo`.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteModelInfo {
+    pub source: String,
+    pub model_name: String,
+    pub aircraft_type: String,
+    pub airline_code: Option<String>,
+    pub atc_id: Option<String>,
+}
+
+impl From<&SourceModelInfo> for RemoteModelInfo {
+    fn from(model: &SourceModelInfo) -> Self {
+        RemoteModelInfo {
+            source: model.source.clone(),
+            model_name: model.model_name.clone(),
+            aircraft_type: model.aircraft_type.clone(),
+            airline_code: model.airline_code.clone(),
+            atc_id: model.atc_id.clone(),
+        }
+    }
+}
+
+/// The model index `GET /api/msfs/index` sends a remote client.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteModelIndex {
+    pub fsltl: Vec<RemoteModelInfo>,
+    pub aig: Vec<RemoteModelInfo>,
+    pub total_count: usize,
+}
+
+/// The model index a remote client receives for the host's FSLTL and AIG models.
+pub fn remote_model_index(fsltl: &[SourceModelInfo], aig: &[SourceModelInfo]) -> RemoteModelIndex {
+    RemoteModelIndex {
+        fsltl: fsltl.iter().map(RemoteModelInfo::from).collect(),
+        aig: aig.iter().map(RemoteModelInfo::from).collect(),
+        total_count: fsltl.len() + aig.len(),
+    }
+}
+
+/// What a remote client learns about one converted model: its key (the GLB is served as
+/// `/api/msfs/{model_key}.glb`), its size and the converter version that wrote it. The keys are
+/// snake_case, as the remote reader expects.
+#[derive(Debug, Serialize)]
+pub struct RemoteCachedModel {
+    pub model_key: String,
+    pub file_size: u64,
+    pub converter_version: Option<u32>,
+}
+
+/// The converted-model list a remote client receives for the host's cached GLBs.
+pub fn remote_cached_models(models: Vec<CachedGlbInfo>) -> Vec<RemoteCachedModel> {
+    models
+        .into_iter()
+        .map(|model| RemoteCachedModel {
+            model_key: model.model_key,
+            file_size: model.file_size,
+            converter_version: model.converter_version,
+        })
+        .collect()
 }
 
 /// Convert a model by name - looks up the model in the index and triggers conversion
@@ -1766,7 +1825,101 @@ pub fn convert_model_by_name(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::settings::host_path_walk::{assert_holds_no_host_path, HOST_PATHS};
+    use std::collections::BTreeSet;
     use std::path::PathBuf;
+
+    /// A source model with a host path in every path field.
+    fn host_model(source: &str) -> SourceModelInfo {
+        let [drive, extended, unc] = HOST_PATHS;
+        SourceModelInfo {
+            source: source.to_string(),
+            model_name: "FSLTL_B738_Southwest".to_string(),
+            folder_name: "FSLTL_B738_SWA".to_string(),
+            aircraft_folder_path: drive.to_string(),
+            gltf_path: extended.to_string(),
+            texture_dirs: vec![drive.to_string(), extended.to_string(), unc.to_string()],
+            aircraft_type: "B738".to_string(),
+            airline_code: Some("SWA".to_string()),
+            atc_id: Some("N8301J".to_string()),
+        }
+    }
+
+    /// Cached GLBs, one per host path shape.
+    fn host_cached_models() -> Vec<CachedGlbInfo> {
+        HOST_PATHS
+            .iter()
+            .map(|path| CachedGlbInfo {
+                path: path.to_string(),
+                model_key: "fsltl_FSLTL_B738_Southwest".to_string(),
+                file_size: 1024,
+                converter_version: Some(7),
+            })
+            .collect()
+    }
+
+    /// The keys of every object in `entries`, which must be a non-empty JSON array of objects.
+    fn entry_keys(entries: &serde_json::Value) -> BTreeSet<String> {
+        let entries = entries.as_array().expect("entries are an array");
+        assert!(!entries.is_empty(), "no entries to check");
+        entries
+            .iter()
+            .flat_map(|entry| entry.as_object().expect("entry is an object").keys())
+            .cloned()
+            .collect()
+    }
+
+    fn key_set(keys: &[&str]) -> BTreeSet<String> {
+        keys.iter().map(|key| key.to_string()).collect()
+    }
+
+    #[test]
+    fn msfs_index_response_holds_no_host_path() {
+        let index = remote_model_index(&[host_model("fsltl")], &[host_model("aig")]);
+        assert_holds_no_host_path(&serde_json::to_value(index).expect("serialise index"));
+    }
+
+    #[test]
+    fn msfs_index_response_sends_only_the_remote_fields() {
+        let index = serde_json::to_value(remote_model_index(
+            &[host_model("fsltl")],
+            &[host_model("aig")],
+        ))
+        .expect("serialise index");
+        let top: BTreeSet<String> = index
+            .as_object()
+            .expect("index is an object")
+            .keys()
+            .cloned()
+            .collect();
+        assert_eq!(top, key_set(&["aig", "fsltl", "totalCount"]));
+        assert_eq!(index["totalCount"], 2);
+        let remote_fields = key_set(&[
+            "source",
+            "modelName",
+            "aircraftType",
+            "airlineCode",
+            "atcId",
+        ]);
+        assert_eq!(entry_keys(&index["fsltl"]), remote_fields);
+        assert_eq!(entry_keys(&index["aig"]), remote_fields);
+    }
+
+    #[test]
+    fn msfs_models_response_holds_no_host_path() {
+        let models = remote_cached_models(host_cached_models());
+        assert_holds_no_host_path(&serde_json::to_value(models).expect("serialise models"));
+    }
+
+    #[test]
+    fn msfs_models_response_sends_only_the_remote_fields() {
+        let models = serde_json::to_value(remote_cached_models(host_cached_models()))
+            .expect("serialise models");
+        assert_eq!(
+            entry_keys(&models),
+            key_set(&["model_key", "file_size", "converter_version"])
+        );
+    }
 
     #[test]
     fn test_parse_aig_aircraft_cfg() {

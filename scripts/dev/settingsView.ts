@@ -17,18 +17,18 @@ type Json = Record<string, unknown>
 /** The settings file does not have the types the desktop app's settings struct requires. */
 export class SettingsShapeError extends Error {}
 
-// Top-level settings blocks that hold no secret, passed to the view whole.
-const PUBLIC_BLOCKS = [
-  'renderingBackend',
-  'fsltl',
-  'msfsModels',
-  'airports',
-  'server',
-  'viewports',
-  'display',
-  'disabledMods',
-] as const
+// Top-level settings blocks that hold no secret and no host path, passed to the view whole.
+const PUBLIC_BLOCKS = ['renderingBackend', 'airports', 'server', 'viewports', 'display', 'disabledMods'] as const
 const PUBLIC_IMAGERY_FIELDS = ['provider', 'cesiumAdjustments', 'googleAdjustments'] as const
+const PUBLIC_FSLTL_FIELDS = ['textureScale', 'enableFsltlModels'] as const
+const PUBLIC_MSFS_MODELS_FIELDS = [
+  'enableFsltl',
+  'enableAig',
+  'priority',
+  'cacheLimitMB',
+  'textureScale',
+  'skipGenericVmrMatches',
+] as const
 const PUBLIC_REALTRAFFIC_FIELDS = ['dataSource', 'radiusNm', 'maxParkedAircraft'] as const
 
 function isObject(value: unknown): value is Json {
@@ -55,10 +55,11 @@ function pick(source: Json, keys: readonly string[]): Json {
 
 /**
  * The Node port of the desktop server's `remote_view` (src-tauri/src/settings.rs), built by picking
- * the fields a remote client may see: the ion token, every public block, and the imagery and
+ * the fields a remote client may see: the ion token, every public block, the imagery and
  * RealTraffic blocks with their secrets blank (the Google Maps key kept while Google is the imagery
- * provider). `vnasTokens` and unknown keys are left out. tests/fixtures/remote-view.json, written by
- * the Rust tests, pins it to the Rust function.
+ * provider), and the `fsltl` and `msfsModels` blocks picked down to their public fields with their
+ * host paths blank. `vnasTokens` and unknown keys are left out. tests/fixtures/remote-view.json,
+ * written by the Rust tests, pins it to the Rust function.
  *
  * Raises:
  *     SettingsShapeError: A field the view reads has the wrong type.
@@ -79,6 +80,22 @@ export function remoteView(stored: unknown): Json {
   if (realtraffic) {
     optionalString(realtraffic, 'licenseKey')
     view.realtraffic = { ...pick(realtraffic, PUBLIC_REALTRAFFIC_FIELDS), licenseKey: '' }
+  }
+
+  // Each block is picked down to its public fields and its host-private paths (FieldClass::HostPrivate
+  // in settings.rs) blanked, so a field added to the stored block later stays on the host.
+  const fsltl = optionalObject(stored, 'fsltl')
+  if (fsltl) {
+    view.fsltl = { ...pick(fsltl, PUBLIC_FSLTL_FIELDS), sourcePath: null, outputPath: null }
+  }
+  const msfsModels = optionalObject(stored, 'msfsModels')
+  if (msfsModels) {
+    view.msfsModels = {
+      ...pick(msfsModels, PUBLIC_MSFS_MODELS_FIELDS),
+      communityPath: null,
+      cacheDirectory: null,
+      vmrFiles: [],
+    }
   }
   return view
 }
