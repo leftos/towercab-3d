@@ -14,6 +14,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Remote access accepts only devices on your local network, unless you turn on **Allow devices outside the local network** in Settings → Configuration.
 
 ### Fixed
+- FSLTL and AIG aircraft now use their own livery's textures instead of another livery's, and AIG models with many liveries convert again.
 - The remote access server no longer serves or writes files outside its own folders.
 - Remote browsers no longer receive your stored keys and sign-ins, such as the RealTraffic key and vNAS login.
 - Remote browsers no longer receive the host's folder locations (MSFS Community, model cache, VMR, FSLTL, mods, diagnostics) from its settings, lists or error messages.

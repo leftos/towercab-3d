@@ -284,7 +284,7 @@ MSFSModelConversionService (TypeScript)
 
 msfs.rs (Rust backend)
 ├─ detect_msfs_installations() - Find FSLTL/AIG folders
-├─ list_fsltl_models() / list_aig_models() - Parse aircraft.cfg, index liveries
+├─ list_fsltl_models() / list_aig_models() - Parse aircraft.cfg, index liveries with their own texture folders and texture.cfg fallbacks
 ├─ convert_msfs_model() - Execute Python converter sidecar
 ├─ Model index caching - JSON cache files for fast re-indexing
 └─ scan_cache_directory() - Load pre-converted models on startup

@@ -568,7 +568,7 @@ fn resolve_gltf_via_model_cfg(aircraft_dir: &Path) -> Option<(String, PathBuf)> 
 
 This ensures consistent behavior - Rust is the single source of truth for path resolution.
 
-**Texture Directory Resolution**: When resolving via model.cfg, the base model's texture directories are added as fallback:
+**Texture Directory Resolution**: When resolving via model.cfg into another aircraft folder, that folder's texture directories are added as fallback (the full order is in "Livery Texture Folder Order"):
 ```rust
 // Add model.cfg base directory texture directories
 if let Some(ref cfg_base) = model_cfg_base_dir {
@@ -639,58 +639,42 @@ The `sample_dominant_light_color()` function:
 
 **Result**: FROST areas now render with a solid color matching the aircraft's paint scheme instead of magenta placeholders.
 
-### AIG Livery Texture Priority (Fixed)
+### Livery Texture Folder Order (Fixed)
 
-**Problem**: AIG aircraft displayed wrong airline liveries. For example, Alaska Airlines EMB-175 showed American Airlines colors.
+**Problem**: AIG aircraft displayed wrong airline liveries. For example, Alaska Airlines EMB-175 showed American Airlines colors, and the model index cache file grew very large.
 
-**Root Cause**: When building the `texture_dirs` list for each livery, ALL texture directories from the aircraft folder were included for EVERY livery. The converter would pick textures alphabetically, so "AAL" (American) came before "ASA" (Alaska).
+**Root Cause**: Every livery's `texture_dirs` listed every `texture.*` folder of its aircraft folder (and of the first folder of its ICAO type). The converter takes a texture from the first folder holding the file, so `texture.AAL-American Airlines` came before `texture.ASA-Alaska Airlines` for both liveries.
 
-**Investigation**:
 ```
 aircraft.cfg for AIG EMB-175:
-  [FLTSIM.0] - Alaska Airlines
-    texture=ASA-Alaska Airlines
-  [FLTSIM.1] - American Airlines
-    texture=AAL-American Airlines
+  [FLTSIM.0] - Alaska Airlines       texture=ASA-Alaska Airlines
+  [FLTSIM.1] - American Airlines     texture=AAL-American Airlines
 
-Texture folders in aircraft directory:
+Texture folders in the aircraft directory:
   texture.AAL-American Airlines/
   texture.ASA-Alaska Airlines/
-
-Old behavior: Both liveries got texture_dirs = [AAL folder, ASA folder]
-Converter picked first match = AAL textures for both liveries!
 ```
 
-**Fix**: Build livery-specific texture_dirs that prioritizes each livery's specific texture folder:
+**Fix**: `list_models_unified` in `msfs.rs` builds each livery's `texture_dirs` in this order, the converter searching them first to last (a folder listed twice is kept once, compared case-insensitively):
 
-```rust
-// In msfs.rs, when creating SourceModelInfo for each livery:
-let mut livery_texture_dirs: Vec<String> = Vec::new();
+1. The livery's own texture folder: `texture.<texture=>` in the aircraft folder, matched case-insensitively (`texture` for an empty `texture=`), then the folders its `texture.cfg` names.
+2. The aircraft folder's own `oci*` folders.
+3. Every `texture*` and `oci*` folder of the `base_container` folder (FSLTL freighter variants).
+4. When the livery's `model.cfg` resolves into another folder, every `texture*` and `oci*` folder of that folder. When it resolves into the livery's own aircraft folder, only that folder's plain `texture` folder with its fallbacks, then its `oci*` folders: never the other liveries' folders.
+5. The base model's folders: the plain `texture` folder with its fallbacks, then the `oci*` folders, of the base folder of the same ICAO type whose name shares the longest prefix with the livery's folder name.
+6. As the last resort, the `oci*` folders of the other aircraft folders of the same ICAO type, closest folder name first. Their `texture.*` livery folders are never listed.
 
-// 1. Add livery-specific texture folder FIRST (highest priority)
-if !livery.texture_folder.is_empty() {
-    let specific = aircraft_dir.join(format!("texture.{}", livery.texture_folder));
-    if specific.exists() {
-        livery_texture_dirs.push(normalize_path_string(&specific));
-    }
-}
+A folder with no `[fltsim]` liveries gets one entry per `texture.*` folder (the same order, that folder first), or one entry with its plain `texture` folder and `oci*` folders when it has none.
 
-// 2. Add shared texture directories as fallback
-for dir in &folder_texture_dirs {
-    if !livery_texture_dirs.contains(dir) {
-        livery_texture_dirs.push(dir.clone());
-    }
-}
+**texture.cfg fallbacks**: a texture folder's `texture.cfg` (name matched case-insensitively) lists `fallback.N=<relative path>` in its `[fltsim]` section. They are followed in N order, each relative to the folder holding the cfg, with `\` or `/` separators; when that folder does not exist, the same path is tried relative to its parent, the aircraft folder. A fallback folder's own `texture.cfg` is followed depth-first, up to 4 cfgs deep, and a folder already listed (cycles included) is skipped. A fallback that is not a folder, or that lies outside the package (the folder holding `SimObjects/Airplanes`, junctions resolved), is dropped with a warning in the host log. AIG liveries name `..\..\..\texture`, which resolves to no folder and is dropped.
 
-models.push(SourceModelInfo {
-    texture_dirs: livery_texture_dirs,  // Livery-specific, not folder_texture_dirs.clone()
-    // ...
-});
-```
+**Model choice per livery**: each `[fltsim]` entry's own `model=` picks the glTF. An empty `model=` is the plain `model` folder. An entry with no `model=` uses the first non-empty `model=` of the file. When `model.<value>` exists in the aircraft folder only it is searched, its glTF first and then its `model.cfg`; otherwise every `model*` folder is. Then the `base_container` folder's glTF, then for AIG the folder offering `model.<value>` for the same ICAO type, then the base model of the type. Among candidate folders the one whose name shares the longest prefix with the livery's folder name wins, then the smallest name.
 
-**Result**: Each AIG livery now uses its own texture folder first, with shared textures as fallback. Alaska Airlines aircraft correctly display Alaska livery.
+**Order and encoding**: aircraft folders and their child folders are visited sorted by lower-case name, so the index does not depend on directory order. An `aircraft.cfg` that is not valid UTF-8 is read as Windows-1252; a UTF-8 BOM is dropped.
 
-**Cache Invalidation**: Bumped `MODEL_CACHE_VERSION` to 8 to force re-indexing of AIG models with corrected texture directory priority.
+**Result**: Each livery lists a handful of folders (its own, its fallbacks and the shared ones) instead of every texture folder of its aircraft folder, so Alaska Airlines aircraft display the Alaska livery and the index stays small.
+
+**Cache Invalidation**: `MODEL_CACHE_VERSION` changes force re-indexing whenever the indexed contents change.
 
 ### AIG Attachment GLTF Selected Instead of Main Model (Fixed)
 
@@ -801,7 +785,7 @@ Both must match. When loading cached models on startup, the frontend skips GLBs 
 - **Atomic GLB writes**: the converter writes each GLB to `.{name}.{pid}.tmp` beside the final name and renames it into place, so a failed or killed conversion never leaves a truncated GLB under the loaded name. At start the converter removes `.*.tmp` files older than one hour from its output folder.
 - **Atomic index writes**: `save_model_cache` in `msfs.rs` writes the model index to a temp file in the cache folder and renames it over `{source}_model_cache.json`.
 - **Damaged GLBs**: `scan_cache_directory` compares the length in each GLB's header with its file size. A mismatch, or a header that cannot be read, lists the GLB with no converter version (and logs a warning), so the app deletes it and converts the model again.
-- **Index cache version**: `MODEL_CACHE_VERSION` is 10; aircraft.cfg keys are matched exactly (`atc_id_enable` no longer overwrites `atc_id`, and `model = "X"` with spaces is read), so older index caches are rebuilt once.
+- **Index cache version**: `MODEL_CACHE_VERSION` is 11; aircraft.cfg keys are matched exactly (`atc_id_enable` does not overwrite `atc_id`, and `model = "X"` with spaces is read), and each livery lists only its own texture folders (see "Livery Texture Folder Order"), so older index caches are rebuilt once.
 
 ## File Locations
 
