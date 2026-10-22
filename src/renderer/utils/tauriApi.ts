@@ -58,7 +58,6 @@ export function joinPath(basePath: string, ...segments: string[]): string {
  */
 interface ModInfo {
   name: string
-  path: string
   manifest: unknown | null
 }
 
@@ -66,7 +65,12 @@ interface ModInfo {
  * Discovered mod info from recursive search
  */
 export interface DiscoveredMod {
-  /** Absolute path to the directory containing manifest.json */
+  /** `mods/` and the folder's path under the mods root, `/`-separated and lowercased: how `disabledMods` names the mod */
+  id: string
+  /**
+   * The directory containing manifest.json: an absolute host path in the desktop app; for a remote
+   * browser, `mods/` and the folder's path under the mods root, `/`-separated with its case kept
+   */
   path: string
   /** Detected mod type: "aircraft" or "tower" */
   modType: 'aircraft' | 'tower'

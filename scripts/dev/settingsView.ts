@@ -18,7 +18,7 @@ type Json = Record<string, unknown>
 export class SettingsShapeError extends Error {}
 
 // Top-level settings blocks that hold no secret and no host path, passed to the view whole.
-const PUBLIC_BLOCKS = ['renderingBackend', 'airports', 'server', 'viewports', 'display', 'disabledMods'] as const
+const PUBLIC_BLOCKS = ['renderingBackend', 'airports', 'server', 'viewports', 'display'] as const
 const PUBLIC_IMAGERY_FIELDS = ['provider', 'cesiumAdjustments', 'googleAdjustments'] as const
 const PUBLIC_FSLTL_FIELDS = ['textureScale', 'enableFsltlModels'] as const
 const PUBLIC_MSFS_MODELS_FIELDS = [
@@ -49,6 +49,47 @@ function optionalString(parent: Json, key: string): string {
   return value
 }
 
+/** Whether a lowercased, `/`-separated entry is an absolute host path (settings.rs `is_absolute_entry`). */
+function isAbsoluteEntry(path: string): boolean {
+  return /^[a-z]:\//.test(path) || path.startsWith('/') || path.startsWith('unc/')
+}
+
+/** The mod id a stored `disabledMods` entry names, or null (settings.rs `disabled_mod_id`). */
+function disabledModId(entry: string): string | null {
+  const path = entry.replace(/\\/g, '/').toLowerCase()
+  const segments = path.split('/').filter((segment) => segment !== '')
+  if (segments.some((segment) => segment === '.' || segment === '..')) return null
+  let rest: string[]
+  if (path.startsWith('mods/')) {
+    rest = segments.slice(1)
+  } else if (isAbsoluteEntry(path)) {
+    const mods = segments.lastIndexOf('mods')
+    if (mods < 0) return null
+    rest = segments.slice(mods + 1)
+  } else {
+    return null
+  }
+  return rest.length > 0 ? `mods/${rest.join('/')}` : null
+}
+
+/**
+ * The Node port of settings.rs `migrate_disabled_mods`: each entry as its mod id (`mods/aircraft/b738`),
+ * entries naming no mod folder dropped, duplicates kept once in first-seen order.
+ *
+ * Raises:
+ *     SettingsShapeError: `disabledMods` is not a list of strings.
+ */
+export function disabledModIds(entries: unknown): string[] {
+  if (!Array.isArray(entries)) throw new SettingsShapeError('disabledMods is not a list')
+  const ids: string[] = []
+  for (const entry of entries) {
+    if (typeof entry !== 'string') throw new SettingsShapeError('a disabledMods entry is not a string')
+    const id = disabledModId(entry)
+    if (id !== null && !ids.includes(id)) ids.push(id)
+  }
+  return ids
+}
+
 function pick(source: Json, keys: readonly string[]): Json {
   return Object.fromEntries(keys.filter((key) => key in source).map((key) => [key, source[key]]))
 }
@@ -67,6 +108,8 @@ function pick(source: Json, keys: readonly string[]): Json {
 export function remoteView(stored: unknown): Json {
   if (!isObject(stored)) throw new SettingsShapeError('the settings are not an object')
   const view: Json = { cesiumIonToken: optionalString(stored, 'cesiumIonToken'), ...pick(stored, PUBLIC_BLOCKS) }
+  // The desktop server migrates these when it reads the settings file (settings.rs `read_settings_file`)
+  if ('disabledMods' in stored) view.disabledMods = disabledModIds(stored.disabledMods)
 
   const imagery = optionalObject(stored, 'imagery')
   if (imagery) {

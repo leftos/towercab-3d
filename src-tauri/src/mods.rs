@@ -16,8 +16,14 @@ use crate::normalize_path_string;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiscoveredMod {
+    /// `mods_path` lowercased: how settings name the mod (`disabledMods`)
+    pub id: String,
     /// Absolute path to the directory containing manifest.json
     pub path: String,
+    /// `mods/` and the folder's path under the mods root, `/`-separated with its case kept;
+    /// the path a remote client is sent in place of `path`
+    #[serde(skip)]
+    pub mods_path: String,
     /// Detected mod type: "aircraft" or "tower"
     pub mod_type: String,
     /// Whether this is inside a git repository
@@ -178,9 +184,7 @@ pub struct TowerPositionEntry {
 
 /// Helper to read tower position files from a directory
 /// Returns a map of ICAO codes to position data
-fn read_tower_positions_from_dir(
-    dir: &PathBuf,
-) -> serde_json::Map<String, serde_json::Value> {
+fn read_tower_positions_from_dir(dir: &PathBuf) -> serde_json::Map<String, serde_json::Value> {
     let mut positions = serde_json::Map::new();
 
     if dir.exists() && dir.is_dir() {
@@ -427,10 +431,7 @@ fn discover_mods_recursive(
 }
 
 /// Parse a manifest.json to determine mod type and extract discovery info
-fn parse_manifest_for_discovery(
-    mod_dir: &Path,
-    mods_root: &Path,
-) -> Result<DiscoveredMod, String> {
+fn parse_manifest_for_discovery(mod_dir: &Path, mods_root: &Path) -> Result<DiscoveredMod, String> {
     let manifest_path = mod_dir.join("manifest.json");
     let content = fs::read_to_string(&manifest_path)
         .map_err(|e| format!("Failed to read manifest: {}", e))?;
@@ -445,25 +446,53 @@ fn parse_manifest_for_discovery(
         match type_field {
             "aircraft" => "aircraft",
             "tower" => "tower",
-            _ => return Err(format!("Invalid mod type: '{}'. Must be 'aircraft' or 'tower'", type_field)),
+            _ => {
+                return Err(format!(
+                    "Invalid mod type: '{}'. Must be 'aircraft' or 'tower'",
+                    type_field
+                ))
+            }
         }
     } else if manifest.get("aircraftTypes").is_some() {
         "aircraft"
     } else if manifest.get("airports").is_some() {
         "tower"
     } else {
-        return Err("Unknown mod type: missing 'type' field and no aircraftTypes or airports field found".to_string());
+        return Err(
+            "Unknown mod type: missing 'type' field and no aircraftTypes or airports field found"
+                .to_string(),
+        );
     };
 
     // Check if this is inside a git repo by looking for .git in parent directories
     let (is_git_repo, repo_name) = find_git_repo_info(mod_dir, mods_root);
 
+    let mods_path = mods_relative_path(mod_dir, mods_root)
+        .ok_or_else(|| "Mod folder is not a plain path under the mods folder".to_string())?;
+
     Ok(DiscoveredMod {
+        id: mods_path.to_lowercase(),
         path: normalize_path_string(mod_dir),
+        mods_path,
         mod_type: mod_type.to_string(),
         is_git_repo,
         repo_name,
     })
+}
+
+/// `mods/` and `mod_dir`'s path under `mods_root`, joined with `/` and the folder names' case
+/// kept, or `None` when `mod_dir` is not a folder strictly under `mods_root` named by plain
+/// UTF-8 components.
+pub(crate) fn mods_relative_path(mod_dir: &Path, mods_root: &Path) -> Option<String> {
+    let relative = mod_dir.strip_prefix(mods_root).ok()?;
+    let mut parts = vec!["mods"];
+    for component in relative.components() {
+        match component {
+            std::path::Component::Normal(name) => parts.push(name.to_str()?),
+            _ => return None,
+        }
+    }
+    (parts.len() > 1).then(|| parts.join("/"))
 }
 
 /// Check if a directory is inside a git repo and get the repo folder name
@@ -663,5 +692,54 @@ fn update_single_repo(repo_path: &PathBuf, repo_name: &str) -> GitUpdateResult {
             message: format!("Failed to run git pull: {}", e),
             updated: false,
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mods_path_keeps_case_and_joins_with_slashes() {
+        let root = PathBuf::from("host").join("Mods");
+        let dir = root.join("Towers").join("KOAK").join("KOAK");
+        let mods_path = mods_relative_path(&dir, &root).expect("folder is under the root");
+        assert_eq!(mods_path, "mods/Towers/KOAK/KOAK");
+        assert_eq!(mods_path.to_lowercase(), "mods/towers/koak/koak");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn mods_path_from_an_extended_length_root() {
+        let root = Path::new(r"\\?\D:\TC3D-HOST\Mods");
+        let dir = Path::new(r"\\?\D:\TC3D-HOST\Mods\Aircraft\B738");
+        assert_eq!(
+            mods_relative_path(dir, root).as_deref(),
+            Some("mods/Aircraft/B738")
+        );
+    }
+
+    #[test]
+    fn discovered_mod_id_is_its_mods_path_lowercased() {
+        let root = std::env::temp_dir().join(format!("tc3d-mods-id-{}", std::process::id()));
+        let dir = root.join("Aircraft").join("B738");
+        fs::create_dir_all(&dir).expect("create mod folder");
+        fs::write(dir.join("manifest.json"), r#"{"type":"aircraft"}"#).expect("write manifest");
+
+        let found = parse_manifest_for_discovery(&dir, &root);
+        if let Err(e) = fs::remove_dir_all(&root) {
+            eprintln!("failed to remove temp dir {:?}: {}", root, e);
+        }
+        let found = found.expect("mod is discovered");
+        assert_eq!(found.mods_path, "mods/Aircraft/B738");
+        assert_eq!(found.id, "mods/aircraft/b738");
+    }
+
+    #[test]
+    fn mods_path_refuses_the_root_and_folders_outside_it() {
+        let root = PathBuf::from("host").join("mods");
+        assert_eq!(mods_relative_path(&root, &root), None);
+        let outside = PathBuf::from("elsewhere").join("aircraft").join("B738");
+        assert_eq!(mods_relative_path(&outside, &root), None);
     }
 }

@@ -904,9 +904,11 @@ pub fn remote_view(settings: &GlobalSettings) -> GlobalSettings {
 
 /// The settings to store after a remote client posts `incoming`: its public fields, with
 /// every host-owned, host-private and secret field of `FIELD_CLASSES` kept from `existing`. The one
-/// exception is the Cesium ion token, taken from `incoming` while the host has none.
+/// exception is the Cesium ion token, taken from `incoming` while the host has none. The
+/// incoming `disabledMods` are stored as mod ids (`migrate_disabled_mods`).
 pub fn merge_remote_write(existing: &GlobalSettings, incoming: GlobalSettings) -> GlobalSettings {
     let mut merged = incoming;
+    merged.disabled_mods = migrate_disabled_mods(std::mem::take(&mut merged.disabled_mods));
     if !existing.cesium_ion_token.is_empty() {
         merged.cesium_ion_token = existing.cesium_ion_token.clone();
     }
@@ -1026,8 +1028,69 @@ pub fn read_settings_file(settings_file: &Path) -> Result<GlobalSettings, String
         .map_err(|e| format!("Failed to read global settings {:?}: {}", settings_file, e))?;
 
     // Parse with defaults for missing fields (for forward compatibility)
-    serde_json::from_str(&content)
-        .map_err(|e| format!("Failed to parse global settings {:?}: {}", settings_file, e))
+    let mut settings: GlobalSettings = serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse global settings {:?}: {}", settings_file, e))?;
+    settings.disabled_mods = migrate_disabled_mods(std::mem::take(&mut settings.disabled_mods));
+    Ok(settings)
+}
+
+/// Set once a settings read has logged dropping `disabledMods` entries: every settings read
+/// migrates, so the warning would otherwise repeat on each request until the file is written.
+static DROPPED_DISABLED_MODS_LOGGED: AtomicBool = AtomicBool::new(false);
+
+/// `disabledMods` as mod ids (`mods/aircraft/b738`), lowercased with `/` separators: an entry
+/// that is already an id (starts with `mods/`) is kept, an absolute host path with a `mods`
+/// folder becomes `mods/` and the rest after its last `mods` folder; any other entry, and any
+/// entry with a `.` or `..` segment, is dropped. Duplicates are kept once, in first-seen order.
+/// The Node port in `scripts/dev/settingsView.ts` (`disabledModIds`) must match it.
+fn migrate_disabled_mods(entries: Vec<String>) -> Vec<String> {
+    let mut ids: Vec<String> = Vec::new();
+    let mut dropped = 0;
+    for entry in entries {
+        match disabled_mod_id(entry) {
+            Some(id) if !ids.contains(&id) => ids.push(id),
+            Some(_) => {}
+            None => dropped += 1,
+        }
+    }
+    if dropped > 0 && !DROPPED_DISABLED_MODS_LOGGED.swap(true, Ordering::Relaxed) {
+        tracing::warn!(
+            "[Settings] Dropped {} disabled-mod entries that name no mod folder",
+            dropped
+        );
+    }
+    ids
+}
+
+/// Whether a lowercased, `/`-separated `disabledMods` entry is an absolute host path: a drive
+/// path, a UNC or `\\?\` path, a POSIX path, or an extended-length UNC path stored with its
+/// `\\?\` prefix stripped (`unc/server/share/...`).
+fn is_absolute_entry(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    let drive =
+        bytes.len() >= 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && bytes[2] == b'/';
+    drive || path.starts_with('/') || path.starts_with("unc/")
+}
+
+/// The mod id a stored `disabledMods` entry names, or `None` when it names none.
+fn disabled_mod_id(entry: String) -> Option<String> {
+    let path = entry.replace('\\', "/").to_lowercase();
+    let segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+    if segments.iter().any(|s| *s == "." || *s == "..") {
+        return None;
+    }
+    let rest = if path.starts_with("mods/") {
+        &segments[1..]
+    } else if is_absolute_entry(&path) {
+        let mods = segments.iter().rposition(|segment| *segment == "mods")?;
+        &segments[mods + 1..]
+    } else {
+        return None;
+    };
+    if rest.is_empty() {
+        return None;
+    }
+    Some(format!("mods/{}", rest.join("/")))
 }
 
 /// Write global settings from the host webview to disk
@@ -1333,7 +1396,7 @@ mod tests {
                 last_airport_icao: Some("KSFO".to_string()),
             },
             display: GlobalDisplaySettings::default(),
-            disabled_mods: vec!["aircraft/B738".to_string()],
+            disabled_mods: vec!["mods/aircraft/b738".to_string()],
             vnas_tokens: Some("SECRET-vnas".to_string()),
         }
     }
@@ -1681,6 +1744,89 @@ mod tests {
                 eprintln!("failed to remove temp dir {:?}: {}", dir, e);
             }
         }
+    }
+
+    #[test]
+    fn stored_disabled_mods_are_read_as_mod_ids() {
+        let file = TempSettingsFile::new("disabled-mods");
+        let mut stored = populated();
+        stored.disabled_mods = [
+            r"C:\TC3D-HOST\app\mods\aircraft\B738",
+            r"\\?\D:\TC3D-HOST\mods\towers\KOAK\KOAK",
+            r"\\srv\share\TC3D-HOST\Mods\Aircraft\A320",
+            "d:/tc3d-host/mods/towers/ksfo",
+            "mods/aircraft/c172",
+            "c:/tc3d-host/app/mods/aircraft/b738",
+            r"D:\TC3D-HOST\models\B738",
+            "aircraft/B738",
+            "/applications/towercab 3d.app/contents/resources/mods/aircraft/e170",
+            "unc/srv/share/tc3d-host/mods/towers/kjfk",
+            "mods/Aircraft/C172",
+        ]
+        .map(String::from)
+        .to_vec();
+        write_settings_file(&file.0, &stored).expect("seed settings file");
+
+        let expected = [
+            "mods/aircraft/b738",
+            "mods/towers/koak/koak",
+            "mods/aircraft/a320",
+            "mods/towers/ksfo",
+            "mods/aircraft/c172",
+            "mods/aircraft/e170",
+            "mods/towers/kjfk",
+        ];
+        let host = read_host_settings_file(&file.0).expect("host read");
+        assert_eq!(host.disabled_mods, expected);
+        let view = read_remote_view(&file.0).expect("remote read");
+        assert_eq!(view.disabled_mods, expected);
+        assert_holds_no_host_path(&serde_json::to_value(&view).expect("serialise view"));
+        assert_eq!(migrate_disabled_mods(view.disabled_mods), expected);
+    }
+
+    #[test]
+    fn disabled_mod_ids_follow_the_last_mods_folder_and_refuse_dot_segments() {
+        for (entry, expected) in [
+            ("C:/TC3D-HOST/mods/repo/mods/KOAK", Some("mods/koak")),
+            ("mods/Aircraft/B738", Some("mods/aircraft/b738")),
+            ("mods/repo/mods/koak", Some("mods/repo/mods/koak")),
+            ("/home/tc3d-host/mods/towers/koak", Some("mods/towers/koak")),
+            (
+                "unc/srv/share/mods/aircraft/b738",
+                Some("mods/aircraft/b738"),
+            ),
+            ("C:/TC3D-HOST/mods/aircraft/../b738", None),
+            ("C:/TC3D-HOST/mods/./b738", None),
+            ("mods/aircraft/../b738", None),
+            ("mods/./b738", None),
+            ("mods/", None),
+            ("C:/TC3D-HOST/mods", None),
+            ("aircraft/B738", None),
+        ] {
+            assert_eq!(
+                disabled_mod_id(entry.to_string()).as_deref(),
+                expected,
+                "{entry:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn remote_write_stores_and_echoes_disabled_mods_as_ids() {
+        let mut incoming = populated();
+        incoming.disabled_mods = vec![r"C:\TC3D-HOST\mods\Aircraft\B738".to_string()];
+        let merged = merge_remote_write(&populated(), incoming.clone());
+        assert_eq!(merged.disabled_mods, ["mods/aircraft/b738"]);
+
+        let file = TempSettingsFile::new("remote-write-disabled-mods");
+        write_settings_file(&file.0, &populated()).expect("seed settings file");
+        let echoed = apply_remote_write(&file.0, incoming).expect("remote write");
+        assert_eq!(echoed.disabled_mods, ["mods/aircraft/b738"]);
+        let text = fs::read_to_string(&file.0).expect("read stored file");
+        assert!(
+            !text.contains("TC3D-HOST"),
+            "the stored file holds the host path"
+        );
     }
 
     #[test]

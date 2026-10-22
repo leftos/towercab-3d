@@ -16,7 +16,7 @@
         },
         "cesiumIonToken": "SECRET-ion",
         "disabledMods": [
-          "aircraft/B738"
+          "mods/aircraft/b738"
         ],
         "display": {
           "autoAvoidOverlaps": true,
@@ -186,7 +186,7 @@
         },
         "cesiumIonToken": "SECRET-ion",
         "disabledMods": [
-          "aircraft/B738"
+          "mods/aircraft/b738"
         ],
         "display": {
           "autoAvoidOverlaps": true,
@@ -362,7 +362,7 @@
         },
         "cesiumIonToken": "SECRET-ion",
         "disabledMods": [
-          "aircraft/B738"
+          "mods/aircraft/b738"
         ],
         "display": {
           "autoAvoidOverlaps": true,
@@ -532,7 +532,7 @@
         },
         "cesiumIonToken": "SECRET-ion",
         "disabledMods": [
-          "aircraft/B738"
+          "mods/aircraft/b738"
         ],
         "display": {
           "autoAvoidOverlaps": true,

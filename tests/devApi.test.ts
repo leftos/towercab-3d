@@ -307,6 +307,37 @@ describe('devApi', () => {
     expect(JSON.stringify(view)).not.toMatch(/TC3D-HOST/)
   })
 
+  it('settingsViewSendsDisabledModsAsIds', () => {
+    const view = remoteView({
+      ...STORED_SETTINGS,
+      disabledMods: [
+        'C:\\TC3D-HOST\\app\\mods\\aircraft\\B738',
+        '\\\\?\\D:\\TC3D-HOST\\mods\\towers\\KOAK\\KOAK',
+        '\\\\srv\\share\\TC3D-HOST\\Mods\\Aircraft\\A320',
+        '/applications/towercab 3d.app/contents/resources/mods/aircraft/e170',
+        'unc/srv/share/tc3d-host/mods/towers/kjfk',
+        'C:/TC3D-HOST/mods/repo/mods/KSFO',
+        'mods/Aircraft/C172',
+        'mods/aircraft/c172',
+        'c:/tc3d-host/app/mods/aircraft/b738',
+        'C:/TC3D-HOST/mods/aircraft/../b738',
+        'mods/./b738',
+        'D:\\TC3D-HOST\\models\\B738',
+        'aircraft/B738',
+      ],
+    })
+    expect(view.disabledMods).toEqual([
+      'mods/aircraft/b738',
+      'mods/towers/koak/koak',
+      'mods/aircraft/a320',
+      'mods/aircraft/e170',
+      'mods/towers/kjfk',
+      'mods/ksfo',
+      'mods/aircraft/c172',
+    ])
+    expect(JSON.stringify(view)).not.toMatch(/TC3D-HOST/i)
+  })
+
   it('settingsViewHoldsOnlyIonToken', async () => {
     const parity = JSON.parse(readFileSync(resolve(__dirname, 'fixtures/remote-view.json'), 'utf8')) as {
       secretPaths: string[]
@@ -426,8 +457,14 @@ describe('devApi', () => {
 
     const discovered = JSON.parse((await send(port, '/api/mods/discover')).body)
     expect(discovered).toEqual([
-      { path: 'mods/tc3d-mod-ksfo/tower/KSFO', modType: 'tower', isGitRepo: true, repoName: 'tc3d-mod-ksfo' },
-      { path: 'mods/towers/KOAK', modType: 'tower', isGitRepo: false, repoName: null },
+      {
+        id: 'mods/tc3d-mod-ksfo/tower/ksfo',
+        path: 'mods/tc3d-mod-ksfo/tower/KSFO',
+        modType: 'tower',
+        isGitRepo: true,
+        repoName: 'tc3d-mod-ksfo',
+      },
+      { id: 'mods/towers/koak', path: 'mods/towers/KOAK', modType: 'tower', isGitRepo: false, repoName: null },
     ])
   })
 

@@ -187,9 +187,11 @@ pub struct ServerState {
 | `/assets/*` | GET | Static assets (JS, CSS, images) |
 | `/api/global-settings` | GET | Read the remote view of the global settings (see "Settings exposed to remote clients") |
 | `/api/global-settings` | POST | Write global settings through `merge_remote_write`; answers with the remote view of what was stored |
-| `/api/mods/aircraft` | GET | List aircraft mods |
-| `/api/mods/towers` | GET | List tower mods |
-| `/api/mods/*path` | GET | Serve mod files (GLB models) |
+| `/api/mods/discover` | GET | List every mod folder: `[{id, path, modType, isGitRepo, repoName}]`; `path` is relative to the mods root (case kept, e.g. `mods/towers/KOAK/KOAK`), `id` is that path lowercased and is how `disabledMods` names the mod |
+| `/api/mods/aircraft` | GET | List aircraft mods: `[{name, manifest}]` (no `path`) |
+| `/api/mods/towers` | GET | List tower mods: `[{name, manifest}]` (no `path`) |
+| `/api/mods/file/*path` | GET | Serve any file under the mods root by its relative path (GLB models, manifests) |
+| `/api/mods/aircraft/*path`, `/api/mods/towers/*path` | GET | Serve a file from one aircraft or tower mod |
 | `/api/msfs/index` | GET | List the host's FSLTL and AIG source models: `{fsltl, aig, totalCount}`, each model only `{source, modelName, aircraftType, airlineCode, atcId}` (no folder or file paths); a failure answers `Failed to get model index`, with the detail in the host log |
 | `/api/msfs/models` | GET | List converted MSFS models: each only `{model_key, file_size, converter_version}` (no file path); the GLB is `/api/msfs/{model_key}.glb`; a failure answers `Failed to list converted models`, with the detail in the host log |
 | `/api/msfs/*path` | GET | Serve converted GLB files |
@@ -202,7 +204,7 @@ pub struct ServerState {
 | `/api/realtraffic/*` | POST | CORS proxy for RealTraffic API |
 | `/api/proxy` | GET | CORS proxy (VATSIM, Aviation Weather) |
 | `/api/log` | POST | Remote client logging endpoint |
-| `/api/diagnostic` | POST | Save a diagnostic file |
+| `/api/diagnostic` | POST | Save a diagnostic file on the host; answers `{filename}` only. A remote browser's Export Diagnostic dialog reads "Saved on the host as:" and the file name |
 
 Dev builds only: under `pnpm run vite:headless` (port 5174; never `pnpm run dev`, `vite preview` or a build) the Vite dev server answers a read-only subset of this table itself, for headless agent checks (`scripts/dev/devApi.ts`; recipe in `CLAUDE.md`, "E2E testing via Playwright MCP"). It serves `/api/global-settings` GET, the mod routes, `/api/tower-positions` GET, `/api/airport-surfaces`, `/api/proxy` and `/api/dev-health`, and passes `/api/realtraffic/*` to Vite's proxy.
 
@@ -218,7 +220,7 @@ Every route that builds a file path from a request resolves it with `resolve_wit
 - **Mod files** (`/api/mods/file/*`, `/api/mods/aircraft/*`, `/api/mods/towers/*`) and **MSFS models** (`/api/msfs/*path`): 403 for a refused path, 404 for a missing file.
 - **`PUT /api/tower-positions/{icao}`**: the code must be 3-4 ASCII letters, digits or `_` (e.g. `EK_2`), upper-cased to `<CODE>.json` in `tower-positions`; anything else is 400.
 - **`POST /api/diagnostic`**: the filename must match `tc3d-diag-<middle>.tc3d-diag.json`, the middle made of ASCII letters, digits, `-`, `_` and `.`; anything else is 400.
-- An I/O error while resolving a root or path answers 500 on every route above.
+- An I/O error while resolving a root or path answers 500 with the fixed text `Could not read the file` on every route above; the detail goes to the host log.
 
 ### Security
 
@@ -579,7 +581,7 @@ Host (Tauri)                            Remote (Browser)
 
 ### Settings exposed to remote clients
 
-Both directions go through two functions in `settings.rs`, so a remote browser never reads or changes what only the host should hold, and never receives a host path in the shared settings or from the MSFS model routes (`/api/msfs/index`, `/api/msfs/models`, `/api/msfs/convert`). The mod routes (`/api/mods/*`), `/api/diagnostic` and `/api/airport-surfaces` still send host paths in their replies and errors (TC3D-286):
+Both directions go through two functions in `settings.rs`, so a remote browser never reads or changes what only the host should hold, and no remote response body carries a host path: not the shared settings, the MSFS model routes (`/api/msfs/index`, `/api/msfs/models`, `/api/msfs/convert`), the mod routes (`/api/mods/*`), `/api/diagnostic` or `/api/airport-surfaces`, nor any error body:
 
 - **Read** (`remote_view`, used by the GET and by the POST's response): the settings with `realtraffic.licenseKey` and `vnasTokens` blanked, and `imagery.googleMapsApiKey` blanked unless `imagery.provider` is `google`. The Cesium ion token is kept: the remote viewer cannot start without it.
 
@@ -587,6 +589,8 @@ Both directions go through two functions in `settings.rs`, so a remote browser n
 - **Write** (`merge_remote_write`): the incoming object with every host-owned, host-private and secret field copied back from the stored file: `server`, `renderingBackend`, `imagery.provider` and `imagery.googleMapsApiKey`, `fsltl.sourcePath`/`outputPath`, `msfsModels.communityPath`/`vmrFiles`/`cacheDirectory`, `realtraffic.licenseKey` and `vnasTokens`. The Cesium ion token is the one exception: a remote client may set it only while the host's is empty, and never overwrites one.
 - Every field has a class in `FIELD_CLASSES`: **public** (remote clients see and change it), **host-owned** (they see it but never change it), **host-private** (a path on the host: they neither see nor change it) or **secret** (hidden unless they need it, never changed). A test in `settings.rs` walks every JSON path of a fully populated `GlobalSettings` and requires each to be classed, so a new field fails it until classified.
 - `GET /api/global-settings` answers a 500 with exactly `Could not read the settings`, and `POST` with exactly `Could not save the settings`; the host log gets `[Server] Could not read the global settings: <detail>` (or `Could not save ...`) at error level, since the detail can name the settings file's path.
+- Every other remote-reachable 500 body is fixed text too, with the detail in the host log as `[Server] <message>: <detail>`: `/api/airport-surfaces` "Could not load airport surfaces"; the mod routes "Could not list mods"; `GET /api/tower-positions` "Could not read tower positions" and `PUT` "Could not save the tower position"; `/api/vmr-rules` "Could not read VMR rules"; `/api/diagnostic` "Could not save the diagnostic" (a remote browser shows it as the toast "Could not save the diagnostic"); file serving and path checks "Could not read the file". The settings routes' host log lines read `[Server] Could not read the settings: <detail>`.
+- `disabledMods` is a shared setting holding mod ids (`DiscoveredMod.id`, e.g. `mods/aircraft/b738`), never host paths. Saved absolute entries (a Windows drive, `\\?\`, UNC, or a macOS `/…` path) are rewritten to ids when the settings file is read and on a remote write; an entry with no `mods` folder or with `.`/`..` is dropped, logged once per process as `[Settings] Dropped <n> disabled-mod entries that name no mod folder`. The Mods tab stores and compares ids. The desktop's `discover_all_mods` result gains `id` while its `path` stays absolute.
 - A second test fills every path field with host paths and requires no string of the remote view to hold one or to look like an absolute path (a drive letter, `\\` or `/`); the `/api/msfs/index` and `/api/msfs/models` responses are checked the same way.
 
 The host webview reads every field except `vnasTokens` (`read_global_settings` never returns them). Only Rust writes the tokens (`read_vnas_tokens` / `write_vnas_tokens`, used by `vnas.rs`): a host write keeps the tokens already in the file, and an empty ion token from the host keeps the stored one. `vnasTokens` is not in the TypeScript `GlobalSettings` type.

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 TowerCab 3D is a Tauri 2 desktop application that provides a 3D tower cab view for VATSIM air traffic controllers. It displays real-time aircraft positions on a 3D globe with satellite imagery and terrain, featuring smooth camera controls, aircraft following modes, and extensive customization options.
 
-**Remote Browser Access:** The desktop app runs an HTTP server (port 8765) allowing access from browsers on the local network (iPad, tablets, other PCs), refusing other addresses unless `server.allowNonLocalClients` is on. All mods, models, and settings are served from the host. Global settings (Cesium token, bookmarks, datablock positions) are shared across devices; secrets other than the Cesium token and the MSFS and FSLTL folder paths stay on the host, and a remote write cannot change host-owned fields (see `docs/remote-access-architecture.md`, "Settings exposed to remote clients").
+**Remote Browser Access:** The desktop app runs an HTTP server (port 8765) allowing access from browsers on the local network (iPad, tablets, other PCs), refusing other addresses unless `server.allowNonLocalClients` is on. All mods, models, and settings are served from the host. Global settings (Cesium token, bookmarks, datablock positions) are shared across devices; secrets (other than the Cesium token) and host folder paths stay on the host, no remote response carries a host path, and a remote write cannot change host-owned fields (see `docs/remote-access-architecture.md`, "Settings exposed to remote clients").
 
 ## Plan
 

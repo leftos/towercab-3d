@@ -606,8 +606,8 @@ async fn get_airport_surfaces(
             .path()
             .resource_dir()
             .map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
+                remote_error(
+                    AIRPORT_SURFACES_ERROR,
                     format!("Failed to get resource dir: {}", e),
                 )
             })?
@@ -624,8 +624,8 @@ async fn get_airport_surfaces(
 
     // Read and decompress the gzip file
     let compressed_data = fs::read(&resource_path).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
+        remote_error(
+            AIRPORT_SURFACES_ERROR,
             format!("Failed to read airport surfaces file: {}", e),
         )
     })?;
@@ -633,8 +633,8 @@ async fn get_airport_surfaces(
     let mut decoder = GzDecoder::new(&compressed_data[..]);
     let mut decompressed = String::new();
     decoder.read_to_string(&mut decompressed).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
+        remote_error(
+            AIRPORT_SURFACES_ERROR,
             format!("Failed to decompress airport surfaces: {}", e),
         )
     })?;
@@ -666,19 +666,36 @@ enum SettingsRoute {
     Write,
 }
 
+/// The 500 a remote client gets when `/api/airport-surfaces` fails.
+const AIRPORT_SURFACES_ERROR: &str = "Could not load airport surfaces";
+/// The 500 a remote client gets when `/api/mods/discover` or a mod list route fails.
+const LIST_MODS_ERROR: &str = "Could not list mods";
+/// The 500 a remote client gets when `GET /api/tower-positions` fails.
+const READ_TOWER_POSITIONS_ERROR: &str = "Could not read tower positions";
+/// The 500 a remote client gets when `PUT /api/tower-positions/{icao}` fails.
+const SAVE_TOWER_POSITION_ERROR: &str = "Could not save the tower position";
+/// The 500 a remote client gets when `/api/vmr-rules` fails.
+const VMR_RULES_ERROR: &str = "Could not read VMR rules";
+/// The 500 a remote client gets when `/api/diagnostic` fails.
+const DIAGNOSTIC_ERROR: &str = "Could not save the diagnostic";
+/// The 500 a remote client gets when a file it asked for could not be read or checked.
+const READ_FILE_ERROR: &str = "Could not read the file";
+
+/// The error a route sends a remote client: `message`, fixed text, with `detail`, which may name
+/// a host path, kept in the host log.
+fn remote_error(message: &'static str, detail: impl std::fmt::Display) -> (StatusCode, String) {
+    tracing::error!("[Server] {}: {}", message, detail);
+    (StatusCode::INTERNAL_SERVER_ERROR, message.to_string())
+}
+
 /// The error a settings route sends a remote client: fixed text, with the detail, which names the
 /// settings file, kept in the host log.
 fn settings_error(route: SettingsRoute, detail: String) -> (StatusCode, String) {
-    let (what, body) = match route {
-        SettingsRoute::Read => ("read", "Could not read the settings"),
-        SettingsRoute::Write => ("save", "Could not save the settings"),
+    let message = match route {
+        SettingsRoute::Read => "Could not read the settings",
+        SettingsRoute::Write => "Could not save the settings",
     };
-    tracing::error!(
-        "[Server] Could not {} the global settings: {}",
-        what,
-        detail
-    );
-    (StatusCode::INTERNAL_SERVER_ERROR, body.to_string())
+    remote_error(message, detail)
 }
 
 /// GET /api/global-settings - Return the remote view of the global settings
@@ -725,21 +742,43 @@ async fn update_global_settings(
 #[serde(rename_all = "camelCase")]
 struct ModInfo {
     name: String,
-    path: String,
     manifest: Option<serde_json::Value>,
+}
+
+/// A discovered mod as a remote client sees it: `path` is `mods/` and the folder's path under
+/// the mods root (`/`-separated, case kept), the shape the dev server's `scripts/dev/mods.ts`
+/// serves too, and `id` is that lowercased.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RemoteDiscoveredMod {
+    id: String,
+    path: String,
+    mod_type: String,
+    is_git_repo: bool,
+    repo_name: Option<String>,
+}
+
+/// The `/api/mods/discover` reply for `mods`: each mod with its path under the mods root in
+/// place of the host path.
+fn remote_discovered_mods(mods: Vec<DiscoveredMod>) -> Vec<RemoteDiscoveredMod> {
+    mods.into_iter()
+        .map(|found| RemoteDiscoveredMod {
+            id: found.id,
+            path: found.mods_path,
+            mod_type: found.mod_type,
+            is_git_repo: found.is_git_repo,
+            repo_name: found.repo_name,
+        })
+        .collect()
 }
 
 /// GET /api/mods/discover - Recursively discover all mods (supports git repos)
 async fn discover_mods(
     State(state): State<Arc<ServerState>>,
-) -> Result<Json<Vec<DiscoveredMod>>, (StatusCode, String)> {
-    let mods = discover_all_mods(state.app_handle.clone()).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to discover mods: {}", e),
-        )
-    })?;
-    Ok(Json(mods))
+) -> Result<Json<Vec<RemoteDiscoveredMod>>, (StatusCode, String)> {
+    let mods = discover_all_mods(state.app_handle.clone())
+        .map_err(|e| remote_error(LIST_MODS_ERROR, format!("Failed to discover mods: {}", e)))?;
+    Ok(Json(remote_discovered_mods(mods)))
 }
 
 /// GET /api/mods/file/*path - Serve any file within the mods directory
@@ -796,12 +835,8 @@ async fn list_mods(
         return Ok(Json(Vec::new()));
     }
 
-    let entries = fs::read_dir(&mods_path).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to read mods: {}", e),
-        )
-    })?;
+    let entries = fs::read_dir(&mods_path)
+        .map_err(|e| remote_error(LIST_MODS_ERROR, format!("Failed to read mods: {}", e)))?;
 
     let mut mods = Vec::new();
     for entry in entries.filter_map(|e| e.ok()) {
@@ -825,11 +860,7 @@ async fn list_mods(
             None
         };
 
-        mods.push(ModInfo {
-            name,
-            path: normalize_path_string(&path),
-            manifest,
-        });
+        mods.push(ModInfo { name, manifest });
     }
 
     Ok(Json(mods))
@@ -1045,7 +1076,7 @@ async fn get_tower_positions(
     State(state): State<Arc<ServerState>>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     let positions = read_tower_positions(state.app_handle.clone())
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+        .map_err(|e| remote_error(READ_TOWER_POSITIONS_ERROR, e))?;
 
     Ok(Json(positions))
 }
@@ -1075,8 +1106,8 @@ async fn update_tower_position(
 
     // Create tower-positions directory if it doesn't exist
     fs::create_dir_all(&tower_positions_dir).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
+        remote_error(
+            SAVE_TOWER_POSITION_ERROR,
             format!("Failed to create tower-positions directory: {}", e),
         )
     })?;
@@ -1084,8 +1115,8 @@ async fn update_tower_position(
     // If file exists, merge with existing data (preserve other view if only updating one)
     let mut entry = if file_path.exists() {
         let content = fs::read_to_string(&file_path).map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
+            remote_error(
+                SAVE_TOWER_POSITION_ERROR,
                 format!("Failed to read existing position file: {}", e),
             )
         })?;
@@ -1110,15 +1141,15 @@ async fn update_tower_position(
 
     // Serialize and write
     let content = serde_json::to_string_pretty(&entry).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
+        remote_error(
+            SAVE_TOWER_POSITION_ERROR,
             format!("Failed to serialize position: {}", e),
         )
     })?;
 
     fs::write(&file_path, content).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
+        remote_error(
+            SAVE_TOWER_POSITION_ERROR,
             format!("Failed to write position file: {}", e),
         )
     })?;
@@ -1152,12 +1183,8 @@ async fn get_vmr_rules(
             continue;
         }
 
-        let entries = fs::read_dir(dir).map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to read dir: {}", e),
-            )
-        })?;
+        let entries = fs::read_dir(dir)
+            .map_err(|e| remote_error(VMR_RULES_ERROR, format!("Failed to read dir: {}", e)))?;
 
         for entry in entries.filter_map(|e| e.ok()) {
             let path = entry.path();
@@ -1228,9 +1255,19 @@ struct DiagnosticSaveRequest {
     content: String,
 }
 
+/// The `/api/diagnostic` reply: the saved file's name, never its host path.
 #[derive(Serialize)]
 struct DiagnosticSaveResponse {
-    path: String,
+    filename: String,
+}
+
+/// The reply for a diagnostic saved at `file_path`.
+fn diagnostic_response(file_path: &std::path::Path) -> DiagnosticSaveResponse {
+    let filename = file_path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    DiagnosticSaveResponse { filename }
 }
 
 /// POST /api/diagnostic - Save diagnostic package to host filesystem
@@ -1243,16 +1280,16 @@ async fn save_diagnostic_handler(
         .path()
         .app_data_dir()
         .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
+            remote_error(
+                DIAGNOSTIC_ERROR,
                 format!("Failed to get app data directory: {}", e),
             )
         })?
         .join("diagnostics");
 
     fs::create_dir_all(&diag_dir).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
+        remote_error(
+            DIAGNOSTIC_ERROR,
             format!("Failed to create diagnostics directory: {}", e),
         )
     })?;
@@ -1270,16 +1307,18 @@ async fn save_diagnostic_handler(
         )
     })?;
     fs::write(&file_path, &req.content).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
+        remote_error(
+            DIAGNOSTIC_ERROR,
             format!("Failed to write diagnostic file: {}", e),
         )
     })?;
 
-    let normalized = normalize_path_string(&file_path);
-    tracing::info!("[Diagnostic] Saved to {}", normalized);
+    tracing::info!(
+        "[Diagnostic] Saved to {}",
+        normalize_path_string(&file_path)
+    );
 
-    Ok(Json(DiagnosticSaveResponse { path: normalized }))
+    Ok(Json(diagnostic_response(&file_path)))
 }
 
 // =============================================================================
@@ -1988,12 +2027,8 @@ async fn serve_static(
 
 /// Serve a single file with correct MIME type
 async fn serve_file(path: &PathBuf) -> Result<Response<Body>, (StatusCode, String)> {
-    let content = fs::read(path).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to read file: {}", e),
-        )
-    })?;
+    let content = fs::read(path)
+        .map_err(|e| remote_error(READ_FILE_ERROR, format!("Failed to read {:?}: {}", path, e)))?;
 
     let mime = mime_guess::from_path(path)
         .first_or_octet_stream()
@@ -2039,18 +2074,12 @@ enum ResolveError {
 }
 
 impl ResolveError {
-    /// The response for this refusal: `outside` when the path is outside its root, else 500 with
-    /// the I/O error, which is also logged with `operation`.
+    /// The response for this refusal: `outside` when the path is outside its root, else a 500
+    /// with fixed text, the I/O error logged with `operation`.
     fn into_response(self, outside: (StatusCode, String), operation: &str) -> (StatusCode, String) {
         match self {
             Self::Outside => outside,
-            Self::Io(e) => {
-                tracing::error!("[Server] {} failed: {}", operation, e);
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("{} failed: {}", operation, e),
-                )
-            }
+            Self::Io(e) => remote_error(READ_FILE_ERROR, format!("{} failed: {}", operation, e)),
         }
     }
 }
@@ -2261,6 +2290,126 @@ mod tests {
                 assert_holds_no_host_path(&serde_json::Value::String(body));
             }
         }
+    }
+
+    /// Every key the objects of the JSON array `entries` hold.
+    fn entry_keys(entries: &serde_json::Value) -> std::collections::BTreeSet<String> {
+        let entries = entries.as_array().expect("entries are an array");
+        assert!(!entries.is_empty(), "no entries to check");
+        entries
+            .iter()
+            .flat_map(|entry| entry.as_object().expect("entry is an object").keys())
+            .cloned()
+            .collect()
+    }
+
+    fn key_set(keys: &[&str]) -> std::collections::BTreeSet<String> {
+        keys.iter().map(|key| key.to_string()).collect()
+    }
+
+    /// A mod as `discover_all_mods` finds it in `mods_root`, at `parts` under it.
+    fn discovered_mod(
+        mods_root: &std::path::Path,
+        parts: &[&str],
+        mod_type: &str,
+    ) -> DiscoveredMod {
+        let dir = parts
+            .iter()
+            .fold(mods_root.to_path_buf(), |dir, part| dir.join(part));
+        let mods_path =
+            crate::mods::mods_relative_path(&dir, mods_root).expect("mod is under the root");
+        DiscoveredMod {
+            path: normalize_path_string(&dir),
+            id: mods_path.to_lowercase(),
+            mods_path,
+            mod_type: mod_type.to_string(),
+            is_git_repo: false,
+            repo_name: None,
+        }
+    }
+
+    #[test]
+    fn remote_discovered_mods_hold_no_host_path() {
+        for host in HOST_PATHS {
+            let mods_root = PathBuf::from(host).join("mods");
+            let mods = vec![
+                discovered_mod(&mods_root, &["Aircraft", "B738"], "aircraft"),
+                discovered_mod(&mods_root, &["towers", "KOAK", "KOAK"], "tower"),
+            ];
+            let reply = serde_json::to_value(remote_discovered_mods(mods)).expect("serialise");
+            assert_holds_no_host_path(&reply);
+            assert_eq!(
+                entry_keys(&reply),
+                key_set(&["id", "path", "modType", "isGitRepo", "repoName"]),
+                "a new discover field needs a decision on whether a remote may see it"
+            );
+            assert_eq!(reply[0]["id"], "mods/aircraft/b738");
+            assert_eq!(reply[0]["path"], "mods/Aircraft/B738");
+            assert_eq!(reply[1]["id"], "mods/towers/koak/koak");
+            assert_eq!(reply[1]["path"], "mods/towers/KOAK/KOAK");
+        }
+    }
+
+    #[test]
+    fn remote_errors_send_fixed_text_holding_no_host_path() {
+        let messages = [
+            (AIRPORT_SURFACES_ERROR, "Could not load airport surfaces"),
+            (LIST_MODS_ERROR, "Could not list mods"),
+            (READ_TOWER_POSITIONS_ERROR, "Could not read tower positions"),
+            (
+                SAVE_TOWER_POSITION_ERROR,
+                "Could not save the tower position",
+            ),
+            (VMR_RULES_ERROR, "Could not read VMR rules"),
+            (DIAGNOSTIC_ERROR, "Could not save the diagnostic"),
+            (READ_FILE_ERROR, "Could not read the file"),
+        ];
+        for path in HOST_PATHS {
+            let detail = format!("Failed to read \"{path}\": access denied");
+            for (message, expected) in messages {
+                assert_eq!(message, expected, "a remote error text changed");
+                let (status, body) = remote_error(message, &detail);
+                assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+                assert_eq!(body, expected, "{expected:?} sent the error detail");
+                assert_holds_no_host_path(&serde_json::Value::String(body));
+            }
+
+            let io = std::io::Error::other(format!("cannot open \"{path}\""));
+            let (status, body) = ResolveError::Io(io).into_response(
+                (StatusCode::FORBIDDEN, "Access denied".to_string()),
+                "Checking the mod file path",
+            );
+            assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+            assert_eq!(body, "Could not read the file");
+            assert_holds_no_host_path(&serde_json::Value::String(body));
+        }
+    }
+
+    #[test]
+    fn diagnostic_reply_holds_only_the_file_name() {
+        for host in HOST_PATHS {
+            let file = PathBuf::from(host)
+                .join("diagnostics")
+                .join("tc3d-diag-KOAK.tc3d-diag.json");
+            let reply = serde_json::to_value(diagnostic_response(&file)).expect("serialise");
+            assert_holds_no_host_path(&reply);
+            assert_eq!(
+                entry_keys(&serde_json::json!([reply.clone()])),
+                key_set(&["filename"])
+            );
+            assert_eq!(reply["filename"], "tc3d-diag-KOAK.tc3d-diag.json");
+        }
+    }
+
+    #[test]
+    fn mod_list_entries_hold_only_name_and_manifest() {
+        let entry = ModInfo {
+            name: "B738".to_string(),
+            manifest: Some(serde_json::json!({ "type": "aircraft" })),
+        };
+        let reply = serde_json::to_value(vec![entry]).expect("serialise");
+        assert_holds_no_host_path(&reply);
+        assert_eq!(entry_keys(&reply), key_set(&["name", "manifest"]));
     }
 
     #[test]

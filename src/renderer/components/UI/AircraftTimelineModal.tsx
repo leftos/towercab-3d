@@ -8,6 +8,7 @@ import { useReplayStore } from '@/stores/replayStore'
 import { useUIFeedbackStore } from '@/stores/uiFeedbackStore'
 import type { AircraftDataSource, AircraftObservation } from '@/types/aircraft-timeline'
 import { calculateDistanceNM } from '@/utils/geoMath'
+import { isRemoteMode } from '@/utils/remoteMode'
 import { getTowerPosition } from '@/utils/towerHeight'
 import './AircraftTimelineModal.css'
 
@@ -564,9 +565,11 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
                 const path = await saveDiagnostic()
                 setSavedDiagnosticPath(path)
               } catch (err) {
-                useUIFeedbackStore
-                  .getState()
-                  .showFeedback(`Export failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error')
+                const message = isRemoteMode()
+                  ? 'Could not save the diagnostic'
+                  : `Export failed: ${err instanceof Error ? err.message : 'Unknown error'}`
+                if (isRemoteMode()) console.error('[Diagnostic] Export failed:', err)
+                useUIFeedbackStore.getState().showFeedback(message, 'error')
               } finally {
                 setIsSavingDiagnostic(false)
               }
@@ -734,7 +737,7 @@ function AircraftTimelineModal({ onClose }: AircraftTimelineModalProps) {
               </button>
             </div>
             <div style={{ padding: '16px' }}>
-              <p style={{ marginBottom: '12px' }}>Saved to:</p>
+              <p style={{ marginBottom: '12px' }}>{isRemoteMode() ? 'Saved on the host as:' : 'Saved to:'}</p>
               <code
                 style={{
                   display: 'block',

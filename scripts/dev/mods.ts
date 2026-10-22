@@ -4,6 +4,8 @@ import { basename, dirname, extname, join, relative, resolve, sep } from 'node:p
 
 /** A mod folder as `GET /api/mods/discover` lists it (the shape of mods.rs `DiscoveredMod`). */
 export interface DiscoveredMod {
+  /** `path` lowercased: how `disabledMods` names the mod. */
+  id: string
   /** `mods/` and the folder's path under the mods root, with `/` separators. */
   path: string
   modType: 'aircraft' | 'tower'
@@ -92,8 +94,10 @@ function readDiscoveredMod(dir: string, realRoot: string): DiscoveredMod | null 
   const type = isObject(manifest) ? modType(manifest) : null
   if (!type) return null
   const repoName = gitRepoName(dir, realRoot)
+  const path = `mods/${relative(realRoot, dir).split(sep).join('/')}`
   return {
-    path: `mods/${relative(realRoot, dir).split(sep).join('/')}`,
+    id: path.toLowerCase(),
+    path,
     modType: type,
     isGitRepo: repoName !== null,
     repoName,

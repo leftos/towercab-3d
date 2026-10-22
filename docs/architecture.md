@@ -17,6 +17,7 @@ Desktop App (Tauri + React)
 │   └─ server.rs - axum HTTP server (port 8765)
 │        ├─ Static file serving (/assets/, /index.html)
 │        ├─ Mods API (/api/mods/*)
+│        │    ├─ GET /api/mods/discover - List mod folders (relative path + id)
 │        │    ├─ GET /api/mods/aircraft - List aircraft mods
 │        │    ├─ GET /api/mods/towers - List tower mods
 │        │    └─ GET /api/mods/file/* - Serve mod files

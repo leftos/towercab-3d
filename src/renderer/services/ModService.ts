@@ -20,7 +20,7 @@ import {
   isSupportedModelFormat,
   SUPPORTED_MODEL_FORMATS,
 } from '../types/mod'
-import { joinPath, modApi } from '../utils/tauriApi'
+import { type DiscoveredMod, joinPath, modApi } from '../utils/tauriApi'
 import { customVMRService } from './CustomVMRService'
 
 /**
@@ -129,6 +129,8 @@ export interface ModGitInfo {
  * Tower mod information for the Mods UI
  */
 export interface TowerModInfo {
+  /** How `disabledMods` names the mod (`DiscoveredMod.id`) */
+  id: string
   path: string
   icao: string
   manifest: TowerModManifest
@@ -141,6 +143,8 @@ export interface TowerModInfo {
  * Aircraft mod information for the Mods UI
  */
 export interface AircraftModInfo {
+  /** How `disabledMods` names the mod (`DiscoveredMod.id`) */
+  id: string
   path: string
   aircraftTypes: string[]
   manifest: AircraftModManifest
@@ -180,20 +184,20 @@ class ModService {
     errors: [],
   }
 
-  // Track disabled mods (paths)
+  // Track disabled mods (mod ids, lowercased)
   private disabledMods: Set<string> = new Set()
 
   /**
    * Initialize mod loading
    * Scans the mods directory and loads all valid mods
-   * @param disabledModPaths - Array of mod paths that should be skipped
+   * @param disabledModIds - Ids (`DiscoveredMod.id`, e.g. `mods/aircraft/b738`) of the mods to skip
    */
-  async loadMods(disabledModPaths: string[] = []): Promise<void> {
+  async loadMods(disabledModIds: string[] = []): Promise<void> {
     if (this.loaded || this.loading) return
     this.loading = true // Set immediately to prevent React StrictMode double-mount
 
     // Store disabled mods for checking
-    this.disabledMods = new Set(disabledModPaths.map((p) => p.toLowerCase()))
+    this.disabledMods = new Set(disabledModIds.map((id) => id.toLowerCase()))
 
     // Reset loading result
     this.loadingResult = {
@@ -275,10 +279,8 @@ class ModService {
       const discovered = await modApi.discoverAllMods()
 
       for (const modInfo of discovered) {
-        const normalizedPath = modInfo.path.toLowerCase().replace(/\\/g, '/')
-
         // Check if this mod is disabled
-        if (this.disabledMods.has(normalizedPath)) {
+        if (this.disabledMods.has(modInfo.id.toLowerCase())) {
           continue
         }
 
@@ -292,9 +294,9 @@ class ModService {
           const manifest = await modApi.readModManifest(modInfo.path)
 
           if (modInfo.modType === 'aircraft') {
-            await this.loadAircraftMod(manifest as AircraftModManifest, modInfo.path, gitInfo)
+            await this.loadAircraftMod(manifest as AircraftModManifest, modInfo, gitInfo)
           } else if (modInfo.modType === 'tower') {
-            await this.loadTowerMod(manifest as TowerModManifest, modInfo.path, gitInfo)
+            await this.loadTowerMod(manifest as TowerModManifest, modInfo, gitInfo)
           }
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : String(error)
@@ -313,7 +315,12 @@ class ModService {
   /**
    * Load and register an aircraft mod
    */
-  private async loadAircraftMod(manifest: AircraftModManifest, basePath: string, gitInfo?: ModGitInfo): Promise<void> {
+  private async loadAircraftMod(
+    manifest: AircraftModManifest,
+    modInfo: DiscoveredMod,
+    gitInfo?: ModGitInfo,
+  ): Promise<void> {
+    const basePath = modInfo.path
     if (!manifest.modelFile || !this.validateModelFile(manifest.modelFile)) {
       this.loadingResult.errors.push({
         path: basePath,
@@ -329,6 +336,7 @@ class ModService {
 
     // Track for Mods UI
     this.loadingResult.aircraft.push({
+      id: modInfo.id,
       path: basePath,
       aircraftTypes: manifest.aircraftTypes || [],
       manifest,
@@ -340,7 +348,8 @@ class ModService {
   /**
    * Load and register a tower mod
    */
-  private async loadTowerMod(manifest: TowerModManifest, basePath: string, gitInfo?: ModGitInfo): Promise<void> {
+  private async loadTowerMod(manifest: TowerModManifest, modInfo: DiscoveredMod, gitInfo?: ModGitInfo): Promise<void> {
+    const basePath = modInfo.path
     if (!manifest.modelFile || !this.validateModelFile(manifest.modelFile)) {
       this.loadingResult.errors.push({
         path: basePath,
@@ -364,6 +373,7 @@ class ModService {
 
     // Track for Mods UI
     this.loadingResult.towers.push({
+      id: modInfo.id,
       path: basePath,
       icao,
       manifest,
@@ -684,11 +694,11 @@ class ModService {
   }
 
   /**
-   * Set the list of disabled mod paths
+   * Set the ids (`DiscoveredMod.id`) of the disabled mods
    * This should be called before loadMods() or will require a reload
    */
-  setDisabledMods(paths: string[]): void {
-    this.disabledMods = new Set(paths.map((p) => p.toLowerCase().replace(/\\/g, '/')))
+  setDisabledMods(ids: string[]): void {
+    this.disabledMods = new Set(ids.map((id) => id.toLowerCase()))
   }
 }
 
