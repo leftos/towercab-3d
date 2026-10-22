@@ -4,7 +4,9 @@
  * Both stages work in a local east-north-up frame anchored on the airport's
  * ground (z = meters above the airport). The camera position in that frame is
  * computed on the CPU in double precision and passed as `u_camPosEnu`; ray
- * directions come from Cesium's inverse projection and inverse view.
+ * directions come from Cesium's inverse projection and inverse view. Cloud
+ * layers sit on a datum that falls away with the earth's curvature (`deckZ`),
+ * mirrored on the CPU in `utils/cloudDeckGeometry.ts`.
  *
  * Scene distance per pixel comes from the stage's `depthTexture`. With the
  * logarithmic depth buffer the stage is compiled with LOG_DEPTH, and
@@ -51,8 +53,11 @@ float daylight() {
   return smoothstep(-0.1, 0.25, sunEnu().z);
 }
 
+// Daylight fog colour, shared with the cloud underside so the deck and the haze meet without a seam.
+const vec3 FOG_GREY = vec3(0.62, 0.66, 0.70);
+
 vec3 fogColor() {
-  return vec3(0.62, 0.66, 0.70) * (0.08 + 0.92 * daylight());
+  return FOG_GREY * (0.08 + 0.92 * daylight());
 }
 
 // Length of the segment from ro over distance d along rd that lies below the anchor ground (z < 0).
@@ -90,6 +95,9 @@ float fogTransmittance(vec3 ro, vec3 rd, float d) {
 }
 `
 
+/** Most raymarch steps the cloud pass takes per layer; the `u_steps` uniform is clamped to it. */
+export const CLOUD_STAGE_MAX_STEPS = 256
+
 export const CLOUD_STAGE_FS = /* glsl */ `
 ${COMMON}
 uniform vec4 u_layer0;
@@ -105,7 +113,8 @@ uniform float u_time;
 // so the noise field stays put horizontally when the anchor moves; vertically it follows the deck.
 uniform vec3 u_noiseOffset;
 
-const int MAX_STEPS = 128;
+const int MAX_STEPS = ${CLOUD_STAGE_MAX_STEPS};
+const float EARTH_R = 6371000.0;
 
 float hash13(vec3 p3) {
   p3 = fract(p3 * 0.1031);
@@ -143,9 +152,16 @@ float fbm(vec3 p) {
   return sum / 0.9375;
 }
 
-// Layer: x = base (m above airport), y = thickness (m), z = coverage (0..1), w = active.
+// Height above the curved deck datum: the earth falls away by d^2/2R at horizontal distance d.
+// The parabola keeps float32 precision, where length(p + vec3(0, 0, R)) would lose about half a meter.
+float deckZ(vec3 p) {
+  return p.z + dot(p.xy, p.xy) / (2.0 * EARTH_R);
+}
+
+// Layer: x = base (m above the curved datum), y = thickness (m), z = coverage (0..1), w = active.
 float cloudDensity(vec3 p, vec4 layer) {
-  float hf = (p.z - layer.x) / layer.y;
+  float z = deckZ(p);
+  float hf = (z - layer.x) / layer.y;
   if (hf < 0.0 || hf > 1.0) {
     return 0.0;
   }
@@ -154,7 +170,7 @@ float cloudDensity(vec3 p, vec4 layer) {
     return 0.0;
   }
   float shape = smoothstep(0.0, 0.12, hf) * (1.0 - smoothstep(0.5, 1.0, hf));
-  vec3 world = p + u_noiseOffset;
+  vec3 world = vec3(p.xy, z) + u_noiseOffset;
   vec3 q = vec3(world.xy / 1800.0, world.z / 600.0) + vec3(u_time * 0.004, u_time * 0.002, 0.0);
   // fbm of value noise clusters around 0.5; stretch it so the coverage threshold
   // leaves roughly the reported fraction of sky covered.
@@ -168,8 +184,8 @@ vec3 cloudLight(vec3 p, vec4 layer, vec3 sun) {
   float lightStep = layer.y * 0.3;
   float occluder = cloudDensity(p + sun * lightStep, layer);
   float lightT = exp(-occluder * u_densityScale * lightStep * 0.5);
-  float hf = clamp((p.z - layer.x) / layer.y, 0.0, 1.0);
-  vec3 dark = vec3(0.40, 0.43, 0.50);
+  float hf = clamp((deckZ(p) - layer.x) / layer.y, 0.0, 1.0);
+  vec3 dark = FOG_GREY;
   vec3 bright = vec3(1.0, 0.98, 0.95);
   return mix(dark, bright, clamp(0.35 * hf + 0.65 * lightT, 0.0, 1.0)) * (0.08 + 0.92 * daylight());
 }
@@ -198,24 +214,46 @@ float cylinderExit(vec3 ro, vec3 rd) {
   return (-b + sqrt(disc)) / a;
 }
 
+// Interval of t where deckZ(ro + rd * t) <= h, as (lo, hi); lo > hi when empty.
+// deckZ along the ray is qc + qb t + qa t^2 with qa >= 0, so the set is one interval.
+// The roots use the numerically stable form, which keeps the small root accurate for grazing rays.
+vec2 belowLevel(vec3 ro, vec3 rd, float h) {
+  const float BIG = 1.0e9;
+  float qa = dot(rd.xy, rd.xy) / (2.0 * EARTH_R);
+  float qb = rd.z + dot(ro.xy, rd.xy) / EARTH_R;
+  float qc = deckZ(ro) - h;
+  if (qa < 1.0e-14) {
+    if (abs(qb) < 1.0e-7) {
+      return qc <= 0.0 ? vec2(-BIG, BIG) : vec2(1.0, -1.0);
+    }
+    float r = -qc / qb;
+    return qb > 0.0 ? vec2(-BIG, r) : vec2(r, BIG);
+  }
+  float disc = qb * qb - 4.0 * qa * qc;
+  if (disc < 0.0) {
+    return vec2(1.0, -1.0);
+  }
+  float s = sqrt(disc);
+  float q = -0.5 * (qb + (qb >= 0.0 ? s : -s));
+  float r0 = q / qa;
+  float r1 = qc / q;
+  return vec2(min(r0, r1), max(r0, r1));
+}
+
+// Marches the ray's first stretch through the curved slab of one layer, inside the deck's cylinder.
 void marchLayer(vec3 ro, vec3 rd, float tScene, vec4 layer, float jitter, vec3 sun,
                 inout float transmittance, inout vec3 color, inout float weightedT, inout float weightSum) {
-  float top = layer.x + layer.y;
-  float t0;
-  float t1;
-  if (abs(rd.z) < 1.0e-5) {
-    if (ro.z < layer.x || ro.z > top) {
-      return;
+  vec2 inTop = belowLevel(ro, rd, layer.x + layer.y);
+  float t0 = max(inTop.x, 0.0);
+  float t1 = min(inTop.y, min(tScene, cylinderExit(ro, rd)));
+  vec2 under = belowLevel(ro, rd, layer.x);
+  if (under.x <= under.y) {
+    if (under.x <= t0 && under.y > t0) {
+      t0 = under.y;
+    } else if (under.x > t0 && under.x < t1) {
+      t1 = under.x;
     }
-    t0 = 0.0;
-    t1 = SKY_DISTANCE;
-  } else {
-    float ta = (layer.x - ro.z) / rd.z;
-    float tb = (top - ro.z) / rd.z;
-    t0 = max(min(ta, tb), 0.0);
-    t1 = max(ta, tb);
   }
-  t1 = min(t1, min(tScene, cylinderExit(ro, rd)));
   if (t1 <= t0) {
     return;
   }
@@ -239,6 +277,17 @@ void marchLayer(vec3 ro, vec3 rd, float tScene, vec4 layer, float jitter, vec3 s
   }
 }
 
+// Number of the first count layers whose base is at or below the camera's height on the curved datum.
+int layersBelow(float camZ, int count) {
+  int below = 0;
+  for (int j = 0; j < 4; j++) {
+    if (j < count && layerAt(j).x <= camZ) {
+      below++;
+    }
+  }
+  return below;
+}
+
 void main() {
   vec2 uv = v_textureCoordinates;
   vec3 ro = u_camPosEnu;
@@ -252,12 +301,15 @@ void main() {
   float weightedT = 0.0;
   float weightSum = 0.0;
   int count = int(u_layerCount);
-  // Layers arrive sorted by base, lowest first; march them in the order the ray meets them.
+  int below = layersBelow(deckZ(ro), count);
+  // Layers arrive sorted by base, lowest first. A ray meets the layers under the camera from the
+  // highest down and the ones over it from the lowest up, whatever its slope: on the curved deck a
+  // ray that starts downward still rises into the layers above it.
   for (int k = 0; k < 4; k++) {
     if (k >= count) {
       break;
     }
-    int i = rd.z >= 0.0 ? k : count - 1 - k;
+    int i = k < below ? below - 1 - k : k;
     marchLayer(ro, rd, tScene, layerAt(i), jitter, sun, transmittance, color, weightedT, weightSum);
   }
 

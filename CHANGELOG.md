@@ -40,6 +40,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 - A model conversion cut short no longer leaves a broken model that never converts again.
 - FSLTL and AIG liveries whose names contain dashes, slashes or other symbols now convert; every converted model converts again once after updating.
 - vNAS no longer disconnects when it receives aircraft data it cannot read that contains non-English characters.
+- An overcast now reaches down to the horizon and meets the distant haze in one grey, instead of leaving a strip of clear sky.
 
 ### Removed
 - The experimental VR mode and its VR button in the controls bar.

@@ -81,6 +81,7 @@ Driving notes:
 - Headless Edge over raw CDP renders at 1 fps until `page.bringToFront()` and needs `--disable-extensions`; do not restart Vite while its page is open (see `docs/DRIVING_CONVENTIONS.md`, rule headless-edge-quirks).
 - `pnpm run dev -- <log>` writes the log relative to `src-tauri/`, not the repo root.
 - The weather debug panel's Apply replaces all weather, clouds included.
+- `viewer.scene.render()` with no argument renders at the wall clock, not the app's fixed clock; pass `viewer.clock.currentTime`.
 - CDP `Emulation.*` overrides last only for the `browser_run_code_unsafe` call that sets them.
 - An airport switch stalls page timers for about 10 s; wait before reading state.
 
@@ -456,7 +457,7 @@ if (version < 7) {
 ### Modifying Weather Effects
 
 1. METAR fetching/parsing: `services/MetarService.ts`, `weatherStore.ts`
-2. Fog/cloud rendering: the Cesium post-process stage in `useCesiumWeatherStages.ts` (shader in `hooks/weather/cloudStage.glsl.ts`, pure helpers in `utils/weatherStage.ts`); the stage stays hidden in a view with no logarithmic depth buffer, which then shows only the globe's distance fog; label weather culling (`isVisibleByWeather`, over `utils/weatherVisibility.ts`) in `useBabylonOverlay.ts`; scene fog in `useCesiumWeather.ts`
+2. Fog/cloud rendering: the Cesium post-process stage in `useCesiumWeatherStages.ts` (shader in `hooks/weather/cloudStage.glsl.ts`, pure helpers in `utils/weatherStage.ts`, the deck's curved-earth geometry in `utils/cloudDeckGeometry.ts`); the stage stays hidden in a view with no logarithmic depth buffer, which then shows only the globe's distance fog; label weather culling (`isVisibleByWeather`, over `utils/weatherVisibility.ts`) in `useBabylonOverlay.ts`; scene fog in `useCesiumWeather.ts`
 3. Smoothing: `useSmoothedWeather.ts`
 4. Settings: `settingsStore.ts` (fog/cloud toggles, intensity)
 
