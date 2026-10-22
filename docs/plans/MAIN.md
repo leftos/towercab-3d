@@ -4,10 +4,7 @@
 
 ## Do first
 
-- [/] TC3D-268 Stop the /api/msfs routes sending host paths to remote browsers · release vNext — High · MSFS model converter
 - [ ] TC3D-269 Bound remote conversions started through POST /api/msfs/convert · release vNext — High · MSFS model converter
-- [ ] TC3D-270 Refuse glTF buffer and image URIs that leave the model's folder · release vNext — High · MSFS model converter
-- [ ] TC3D-286 Stop the mod and diagnostic routes sending host paths to remote browsers · release vNext — High · MSFS model converter
 
 ## MSFS model converter
 
@@ -20,6 +17,9 @@
 - [ ] TC3D-127 Remote browsers draw built-in models instead of the host's MSFS liveries
 - [ ] TC3D-131 Skip the model-matching tests when the MSFS addon data is absent · release vNext
 - [ ] TC3D-256 FSLTL converter fails on AIG models with many liveries: texture-folder argument too long · release vNext
+- [ ] TC3D-289 Keep image positions when a glTF image has no URI in the converter
+- [ ] TC3D-290 Replace the converter's deprecated Pillow getdata call
+- [ ] TC3D-291 Finish the converter's package checks: extra device names, hard links, partial junctions
 
 ## Current focus
 
@@ -27,6 +27,7 @@
 - [ ] TC3D-65 Phase badge: runway labels at the wrong times and labels lagging the display · release vNext
 - [ ] TC3D-196 A vNAS go-around is labelled Climbing, never Go Around
 - [ ] TC3D-260 vNAS crate: a kick hidden in a lagged burst lets the resync join the next room
+- [ ] TC3D-288 Harden the vNAS crate's session actor: teardown race, stuck Connecting, hung calls, push starvation
 
 ## Babylon to Cesium migration
 
@@ -214,6 +215,8 @@
 - [ ] TC3D-277 Review and land PR #216 (dependabot)
 - [ ] TC3D-278 Review and land PR #215 (dependabot)
 - [ ] TC3D-279 Review and land PR #214 (dependabot)
+- [ ] TC3D-287 Lint and format tests/ and scripts/ with Biome
+- [ ] TC3D-292 Disabled mods may still load after a restart · release vNext
 
 ## Settings drawer
 
