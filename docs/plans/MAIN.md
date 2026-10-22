@@ -8,7 +8,7 @@
 
 ## MSFS model converter
 
-- [ ] TC3D-263 Index each livery's own texture folders and their texture.cfg fallbacks · release vNext
+- [/] TC3D-263 Index each livery's own texture folders and their texture.cfg fallbacks · release vNext
 - [ ] TC3D-264 Hand the converter a JSON job with safe output names and read a JSON result · release vNext
 - [ ] TC3D-28 msfs.rs test reads the real MSFS Community folder
 - [ ] TC3D-265 Run every model conversion through one Rust owner with a timeout and a shared limit · release vNext
@@ -20,6 +20,8 @@
 - [ ] TC3D-290 Replace the converter's deprecated Pillow getdata call
 - [ ] TC3D-291 Finish the converter's package checks: extra device names, hard links, partial junctions
 - [ ] TC3D-293 Clear a no-type airline aircraft's pending model when its conversion finishes elsewhere
+- [ ] TC3D-300 Stop treating every glTF named cargo as an attachment · release vNext
+- [ ] TC3D-301 Split parse_aircraft_cfg_str under the function limits · release vNext
 
 ## Current focus
 
@@ -27,6 +29,8 @@
 - [ ] TC3D-196 A vNAS go-around is labelled Climbing, never Go Around
 - [ ] TC3D-260 vNAS crate: a kick hidden in a lagged burst lets the resync join the next room
 - [ ] TC3D-288 Harden the vNAS crate's session actor: teardown race, stuck Connecting, hung calls, push starvation
+- [ ] TC3D-302 Read the vNAS session token without a Data API lookup · release vNext
+- [ ] TC3D-303 Let the vNAS event forwarder own every host state write · release vNext
 
 ## Babylon to Cesium migration
 
@@ -34,11 +38,10 @@
 
 ### M1 Remove VR (1/1 done)
 
-### M2 Cab, clouds and fog in Cesium (5/11 done)
+### M2 Cab, clouds and fog in Cesium (6/11 done)
 - [ ] TC3D-213 Clouds, fog and cab in Cesium on feat/cesium-weather · release vNext
   - [ ] TC3D-148 Turn the weather stage's knobs into quality presets · release vNext
   - [ ] TC3D-150 Measure the weather stage on an iPad and get the owner's look sign-off · release vNext
-  - [ ] TC3D-125 Overcast leaves a clear-sky band at the horizon; dense fog renders dark teal · release vNext
   - [ ] TC3D-219 Weather stage fog vanishes with the camera above about 32 km
   - [ ] TC3D-221 Merge feat/cesium-weather to main (#262)
   - [ ] TC3D-224 Ease weather fog in instead of popping at 10 SM and on each METAR · release vNext
@@ -65,6 +68,8 @@
 ### No milestone
 - [ ] TC3D-183 Stop camera moves recreating the GPU timers and frame listeners
 - [ ] TC3D-235 Place the cab and weather on the visible ground when terrain never loads
+- [ ] TC3D-294 Remove the BKN layer's white streaks along the horizon · release vNext
+- [ ] TC3D-295 Give distant terrain near the horizon its real distance in the weather composite · release vNext
 
 ## OSM buildings
 
@@ -124,6 +129,11 @@
   - [ ] TC3D-284 Stop scanning every observation per frame for the newest height sample
   - [ ] TC3D-285 Spin VATSIM wheels backwards on pushback
   - [/] TC3D-65 Phase badge: runway labels at the wrong times and labels lagging the display · release vNext
+  - [ ] TC3D-296 Read VATSIM touchdown within 1.5 s of the true touchdown · release vNext
+  - [ ] TC3D-297 Use the 15 s acceleration in VATSIM roll classification · release vNext
+  - [ ] TC3D-298 Split stabilizePhase and detectRawFlightPhase and drop their dead state · release vNext
+  - [ ] TC3D-299 Bound when the departure Rolling label ends in the motion suite · release vNext
+  - [ ] TC3D-304 Test the phase-state drop on a scrub back and size the RealTraffic regression tolerance · release vNext
 - [ ] TC3D-247 Aircraft motion follow-ups from TC3D-50's review
 - [ ] TC3D-257 Split interpolateTimeline (550 lines) into one function per branch
 - [ ] TC3D-259 Order the aircraft timeline by observedAt so a late packet cannot lerp backwards
