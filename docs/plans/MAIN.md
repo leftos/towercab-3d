@@ -20,7 +20,7 @@
 
 ### M2 Cab, clouds and fog in Cesium (6/16 done)
 - [ ] TC3D-213 Clouds, fog and cab in Cesium on feat/cesium-weather · release vNext
-  - [ ] TC3D-148 Turn the weather stage's knobs into quality presets · release vNext
+  - [/] TC3D-148 Turn the weather stage's knobs into quality presets · release vNext
   - [ ] TC3D-150 Measure the weather stage on an iPad and get the owner's look sign-off · release vNext
   - [ ] TC3D-219 Weather stage fog vanishes with the camera above about 32 km
   - [ ] TC3D-221 Merge feat/cesium-weather to main (#262) · release vNext
@@ -42,12 +42,16 @@
 - [ ] TC3D-177 Compare above-ground heights in the aircraft panel's weather filter
 
 ### M5 Remove Babylon (0/3 done)
-- [ ] TC3D-155 Delete the remaining Babylon code, dependencies and config · release vNext
-- [ ] TC3D-156 Migrate the Babylon-era weather settings · release vNext
-- [ ] TC3D-157 Drop the Babylon handle from the agent harness · release vNext
+- [ ] TC3D-155 Delete the remaining Babylon code, dependencies and config · release vNext+2
+- [ ] TC3D-156 Migrate the Babylon-era weather settings · release vNext+2
+- [ ] TC3D-157 Drop the Babylon handle from the agent harness · release vNext+2
 
 ### M6 Docs (0/1 done)
-- [ ] TC3D-158 Rewrite the rendering docs for a Cesium-only app · release vNext
+- [ ] TC3D-158 Rewrite the rendering docs for a Cesium-only app · release vNext+2
+
+### No milestone
+- [ ] TC3D-309 Clean invalid weather quality values and split the settings migrate function · release vNext+1
+- [ ] TC3D-310 Size an inset's weather quality against the main viewport, not the window · release vNext+1
 
 ## OSM buildings
 
@@ -62,15 +66,15 @@
 - [ ] TC3D-184 Destroy the OSM buildings tileset when its load is cancelled
 
 ### B2 Generated buildings near the field (0/3 done)
-- [ ] TC3D-168 Generate buildings from the local OSM planet near the field · release vNext
-- [ ] TC3D-169 Blend the generated area's edge into the ion buildings · release vNext
-- [ ] TC3D-170 Bake contact darkening and facade grammar into generated buildings · release vNext
+- [ ] TC3D-168 Generate buildings from the local OSM planet near the field · release vNext+3
+- [ ] TC3D-169 Blend the generated area's edge into the ion buildings · release vNext+3
+- [ ] TC3D-170 Bake contact darkening and facade grammar into generated buildings · release vNext+3
 
 ### B3 Trees, props and landmarks (0/4 done)
-- [ ] TC3D-171 Scatter trees from ESA WorldCover and OSM tree tags · release vNext
-- [ ] TC3D-172 Add roof props as instanced models near the field · release vNext
-- [ ] TC3D-173 Let mods override landmark buildings by OSM way id · release vNext
-- [ ] TC3D-174 Spike photorealistic 3D Tiles near the field as a desktop mode · release vNext
+- [ ] TC3D-171 Scatter trees from ESA WorldCover and OSM tree tags
+- [ ] TC3D-172 Add roof props as instanced models near the field
+- [ ] TC3D-173 Let mods override landmark buildings by OSM way id
+- [ ] TC3D-174 Spike photorealistic 3D Tiles near the field as a desktop mode
 
 ## vNAS
 
@@ -107,9 +111,9 @@
 
 ## MSFS model converter
 
-### Livery indexing (0/5 done)
-- [/] TC3D-263 Index each livery's own texture folders and their texture.cfg fallbacks · release vNext
-- [ ] TC3D-256 FSLTL converter fails on AIG models with many liveries: texture-folder argument too long · release vNext
+### Livery indexing (2/7 done)
+- [ ] TC3D-308 Keep the MSFS model index in memory in the host · release vNext+1
+- [ ] TC3D-307 Re-index only the MSFS aircraft folders whose fingerprint changed · release vNext+1
 - [ ] TC3D-300 Stop treating every glTF named cargo as an attachment · release vNext+1
 - [ ] TC3D-301 Split parse_aircraft_cfg_str under the function limits · release vNext+1
 - [ ] TC3D-306 Keep the MSFS index paths in one form and sort the remaining read_dir choices · release vNext+1
@@ -124,8 +128,7 @@
 - [ ] TC3D-127 Remote browsers draw built-in models instead of the host's MSFS liveries
 - [ ] TC3D-212 MSFS model cache limit is dropped on every settings save
 
-### Converter tests (0/3 done)
-- [ ] TC3D-28 msfs.rs test reads the real MSFS Community folder
+### Converter tests (1/3 done)
 - [ ] TC3D-131 Skip the model-matching tests when the MSFS addon data is absent · release vNext+1
 - [ ] TC3D-267 Add fixture tests to the converter's Python, Rust and TypeScript layers
 
@@ -167,39 +170,39 @@
 
 ## Remote server hardening
 
-- [ ] TC3D-176 Stop /api/realtraffic/* working as an open proxy
-- [ ] TC3D-175 Register the tower-positions PUT route with axum 0.7's path syntax
-- [ ] TC3D-232 Harden the desktop server's mod files, CORS, proxy and error bodies
-- [ ] TC3D-231 Test that every secret settings field but the ion token stays out of the remote view
-- [ ] TC3D-233 Hide the Cesium ion token field in Settings behind a show button
-- [ ] TC3D-187 Tidy the remote server's path checks: TOCTOU, empty segments, blocking calls, log flooding
-- [ ] TC3D-178 Share the validated tower and diagnostic path builders between IPC and HTTP
-- [ ] TC3D-216 A remote browser's settings import shows host-owned values the host refused
-- [ ] TC3D-217 Remote server access follow-ups: open sockets, router-suffix names, duplicate reads
-- [ ] TC3D-243 Harden the headless dev API's path checks and error paths
-- [ ] TC3D-223 Use design tokens for the remote-server settings' inline styles
+- [ ] TC3D-176 Stop /api/realtraffic/* working as an open proxy · release vNext+2
+- [ ] TC3D-175 Register the tower-positions PUT route with axum 0.7's path syntax · release vNext+2
+- [ ] TC3D-232 Harden the desktop server's mod files, CORS, proxy and error bodies · release vNext+2
+- [ ] TC3D-231 Test that every secret settings field but the ion token stays out of the remote view · release vNext+2
+- [ ] TC3D-233 Hide the Cesium ion token field in Settings behind a show button · release vNext+2
+- [ ] TC3D-187 Tidy the remote server's path checks: TOCTOU, empty segments, blocking calls, log flooding · release vNext+2
+- [ ] TC3D-178 Share the validated tower and diagnostic path builders between IPC and HTTP · release vNext+2
+- [ ] TC3D-216 A remote browser's settings import shows host-owned values the host refused · release vNext+2
+- [ ] TC3D-217 Remote server access follow-ups: open sockets, router-suffix names, duplicate reads · release vNext+2
+- [ ] TC3D-243 Harden the headless dev API's path checks and error paths · release vNext+2
+- [ ] TC3D-223 Use design tokens for the remote-server settings' inline styles · release vNext+2
 
 ## Settings drawer
 
-- [ ] TC3D-76 Add the settings registry and row primitives
-- [ ] TC3D-79 Replace the Settings modal with the settings drawer shell
-- [ ] TC3D-80 Move Mods management to its own screen
-- [ ] TC3D-81 Migrate the General settings category to the registry
-- [ ] TC3D-82 Migrate the Connections settings category to the registry
-- [ ] TC3D-83 Migrate the Traffic & Labels settings category to the registry
-- [ ] TC3D-84 Migrate the Aircraft Models settings category to the registry
-- [ ] TC3D-85 Migrate the Scene settings category to the registry
-- [ ] TC3D-86 Migrate the Weather settings category to the registry
-- [ ] TC3D-87 Migrate the Camera & Input settings category to the registry
-- [ ] TC3D-88 Migrate the Storage & Replay settings category to the registry
-- [ ] TC3D-89 Migrate the Developer settings category to the registry
-- [ ] TC3D-90 Add settings search and the changed-from-default filter
-- [ ] TC3D-91 Add the advanced switch, scope and restart badges, and read-only remote rows
-- [ ] TC3D-92 Expose settings to agents through window.__tc3d.settings
-- [ ] TC3D-93 Build the settings export tree from the registry and delete the old Settings tabs
-- [ ] TC3D-94 Document the settings drawer
-- [ ] TC3D-106 Restore or remove the camera near-plane setting
-- [ ] TC3D-215 Leader distance of 1.5 fails the settings save; orbit pitch defaults differ
+- [ ] TC3D-76 Add the settings registry and row primitives · release vNext+3
+- [ ] TC3D-79 Replace the Settings modal with the settings drawer shell · release vNext+3
+- [ ] TC3D-80 Move Mods management to its own screen · release vNext+3
+- [ ] TC3D-81 Migrate the General settings category to the registry · release vNext+3
+- [ ] TC3D-82 Migrate the Connections settings category to the registry · release vNext+3
+- [ ] TC3D-83 Migrate the Traffic & Labels settings category to the registry · release vNext+3
+- [ ] TC3D-84 Migrate the Aircraft Models settings category to the registry · release vNext+3
+- [ ] TC3D-85 Migrate the Scene settings category to the registry · release vNext+3
+- [ ] TC3D-86 Migrate the Weather settings category to the registry · release vNext+3
+- [ ] TC3D-87 Migrate the Camera & Input settings category to the registry · release vNext+3
+- [ ] TC3D-88 Migrate the Storage & Replay settings category to the registry · release vNext+3
+- [ ] TC3D-89 Migrate the Developer settings category to the registry · release vNext+3
+- [ ] TC3D-90 Add settings search and the changed-from-default filter · release vNext+3
+- [ ] TC3D-91 Add the advanced switch, scope and restart badges, and read-only remote rows · release vNext+3
+- [ ] TC3D-92 Expose settings to agents through window.__tc3d.settings · release vNext+3
+- [ ] TC3D-93 Build the settings export tree from the registry and delete the old Settings tabs · release vNext+3
+- [ ] TC3D-94 Document the settings drawer · release vNext+3
+- [ ] TC3D-106 Restore or remove the camera near-plane setting · release vNext+3
+- [ ] TC3D-215 Leader distance of 1.5 fails the settings save; orbit pitch defaults differ · release vNext+3
 
 ## Tower mods
 
@@ -242,7 +245,7 @@
 - [ ] TC3D-34 Watch the first release with tauri-action v1 and pinned toolchains
 - [ ] TC3D-24 macOS signing and runtime checks
 - [ ] TC3D-27 cargo fmt the host crate, then check it in CI and prek
-- [ ] TC3D-134 Run Rust tests with cargo-nextest · release vNext
+- [ ] TC3D-134 Run Rust tests with cargo-nextest
 - [ ] TC3D-64 Lint and type-check the tests/ folder
 - [ ] TC3D-287 Lint and format tests/ and scripts/ with Biome
 - [ ] TC3D-25 Fix Vite INEFFECTIVE_DYNAMIC_IMPORT warnings
@@ -283,7 +286,7 @@
 - [ ] TC3D-57 Spike: do converted models keep nav and strobe light meshes (E2-c)
 - [ ] TC3D-58 Aircraft custom shaders for tint and night boost (E2)
 - [ ] TC3D-59 Cesium's own night lighting (E3)
-- [/] TC3D-62 Assess rendering with a single engine · release vNext
+- [/] TC3D-62 Assess rendering with a single engine
 - [ ] TC3D-69 Design a binoculars key for a quick zoom on the selected aircraft
 - [ ] TC3D-70 Design METAR-accurate visibility: RVR, vertical visibility and calibrated fog
 - [ ] TC3D-71 Design airport lighting: runway, approach and taxiway lights and stop bars
@@ -291,9 +294,9 @@
 - [ ] TC3D-73 Design a remote browser that follows the desktop's selected aircraft
 - [ ] TC3D-74 Design selecting an aircraft on the desktop from a phone
 - [ ] TC3D-75 Design a command palette for airports, bookmarks, aircraft and toggles
-- [ ] TC3D-139 Design better-looking OSM buildings: restyle, facade shader or regenerated geometry · release vNext
+- [ ] TC3D-139 Design better-looking OSM buildings: restyle, facade shader or regenerated geometry
 - [ ] TC3D-159 Design VR on Cesium through WebXR
-- [ ] TC3D-185 Design night and dusk lighting that follows natural light across the whole scene · release vNext
+- [ ] TC3D-185 Design night and dusk lighting that follows natural light across the whole scene
 - [ ] TC3D-210 Replace the terrain flattening with the greenfield airfield surface
 - [ ] TC3D-200 Runways with no end elevation are flattened to sea level
 - [ ] TC3D-207 apt.dat pavement extractor drops pavements and turns taxi lines into holes
