@@ -58,7 +58,7 @@
         },
         "msfsModels": {
           "cacheDirectory": "D:/cache",
-          "cacheLimitMb": 5120,
+          "cacheLimitMB": 5120,
           "communityPath": "D:/Community",
           "enableAig": true,
           "enableFsltl": true,
@@ -230,7 +230,7 @@
         },
         "msfsModels": {
           "cacheDirectory": "D:/cache",
-          "cacheLimitMb": 5120,
+          "cacheLimitMB": 5120,
           "communityPath": "D:/Community",
           "enableAig": true,
           "enableFsltl": true,
@@ -406,7 +406,7 @@
         },
         "msfsModels": {
           "cacheDirectory": "D:/cache",
-          "cacheLimitMb": 5120,
+          "cacheLimitMB": 5120,
           "communityPath": "D:/Community",
           "enableAig": true,
           "enableFsltl": true,
@@ -578,7 +578,7 @@
         },
         "msfsModels": {
           "cacheDirectory": "D:/cache",
-          "cacheLimitMb": 5120,
+          "cacheLimitMB": 5120,
           "communityPath": "D:/Community",
           "enableAig": true,
           "enableFsltl": true,

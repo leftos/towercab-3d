@@ -24,6 +24,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Aircraft passing over an airport at altitude are no longer labelled "Final" or "Short Final".
 - Datablocks on iPads and other high-resolution screens now sit on their aircraft at full size, instead of half size and in the wrong place.
 - Tower and aircraft mod models now load on iPads and other browsers connected to the desktop app.
+- The MSFS model cache size limit, Unlimited included, now survives a restart instead of resetting and deleting converted models.
 
 ### Removed
 - The experimental VR mode and its VR button in the controls bar.

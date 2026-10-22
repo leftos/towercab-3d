@@ -475,7 +475,7 @@ pub struct MsfsModelSettings {
     #[serde(default)]
     pub cache_directory: Option<String>,
     /// Cache size limit in MB (None = unlimited)
-    #[serde(default = "default_cache_limit")]
+    #[serde(rename = "cacheLimitMB", default = "default_cache_limit")]
     pub cache_limit_mb: Option<u32>,
     /// Texture downscaling preference
     #[serde(default = "default_texture_scale")]
@@ -620,7 +620,7 @@ pub const FIELD_CLASSES: &[(&str, FieldClass)] = &[
     ("msfsModels.priority", FieldClass::Public),
     ("msfsModels.vmrFiles", FieldClass::HostOwned),
     ("msfsModels.cacheDirectory", FieldClass::HostOwned),
-    ("msfsModels.cacheLimitMb", FieldClass::Public),
+    ("msfsModels.cacheLimitMB", FieldClass::Public),
     ("msfsModels.textureScale", FieldClass::Public),
     ("msfsModels.skipGenericVmrMatches", FieldClass::Public),
     ("airports.defaultIcao", FieldClass::Public),
@@ -1325,6 +1325,29 @@ mod tests {
             serde_json::from_str(r#"{"port":8765,"enabled":true,"requireLocalNetwork":false}"#)
                 .expect("old server settings should still parse");
         assert!(!server.allow_non_local_clients);
+    }
+
+    #[test]
+    fn msfs_cache_limit_round_trips_frontend_key() {
+        for (stored, expected) in [(serde_json::json!(4096), Some(4096)), (Value::Null, None)] {
+            let mut json =
+                serde_json::to_value(GlobalSettings::default()).expect("serialise settings");
+            let msfs = json["msfsModels"]
+                .as_object_mut()
+                .expect("msfsModels is an object");
+            msfs.insert("cacheLimitMB".to_string(), stored.clone());
+
+            let settings: GlobalSettings =
+                serde_json::from_value(json).expect("frontend settings deserialise");
+            assert_eq!(settings.msfs_models.cache_limit_mb, expected);
+
+            let written = serde_json::to_value(&settings).expect("serialise settings");
+            assert_eq!(written["msfsModels"].get("cacheLimitMB"), Some(&stored));
+            assert!(
+                written["msfsModels"].get("cacheLimitMb").is_none(),
+                "settings still write the old cacheLimitMb key: {written}"
+            );
+        }
     }
 
     #[test]
