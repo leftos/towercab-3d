@@ -4,13 +4,13 @@
 
 ## Do first
 
-- [ ] TC3D-268 Stop the /api/msfs routes sending host paths to remote browsers · release vNext — High · MSFS model converter
+- [/] TC3D-268 Stop the /api/msfs routes sending host paths to remote browsers · release vNext — High · MSFS model converter
 - [ ] TC3D-269 Bound remote conversions started through POST /api/msfs/convert · release vNext — High · MSFS model converter
 - [ ] TC3D-270 Refuse glTF buffer and image URIs that leave the model's folder · release vNext — High · MSFS model converter
+- [ ] TC3D-286 Stop the mod and diagnostic routes sending host paths to remote browsers · release vNext — High · MSFS model converter
 
 ## MSFS model converter
 
-- [/] TC3D-262 Keep the MSFS model cache limit across restarts · release vNext
 - [ ] TC3D-263 Index each livery's own texture folders and their texture.cfg fallbacks · release vNext
 - [ ] TC3D-264 Hand the converter a JSON job with safe output names and read a JSON result · release vNext
 - [ ] TC3D-28 msfs.rs test reads the real MSFS Community folder
@@ -116,10 +116,13 @@
   - [ ] TC3D-250 Keep vNAS ground contact across a brief gap in height above ground
   - [ ] TC3D-251 Gear latch: clear by height above the aircraft's own field and on seeks before the latch
   - [ ] TC3D-252 Merge feat/aircraft-motion to main (#264)
-  - [/] TC3D-54 Animate spoilers, reversers and wheels after native gear animation · release vNext
   - [ ] TC3D-258 Keep a stopped vNAS aircraft held past the 30 s VATSIM fallback
   - [ ] TC3D-280 Measure and cut the per-frame cost of wheel spin and surface lookups
   - [ ] TC3D-281 Harden the glTF clip checks for held tracks and shared surface nodes
+  - [ ] TC3D-282 Hold vNAS aircraft on the ground by height above ground, not the 50/80 ft label flag
+  - [ ] TC3D-283 Stop a gear retract under way reversing when the aircraft crosses 150 ft
+  - [ ] TC3D-284 Stop scanning every observation per frame for the newest height sample
+  - [ ] TC3D-285 Spin VATSIM wheels backwards on pushback
 - [ ] TC3D-247 Aircraft motion follow-ups from TC3D-50's review
 - [ ] TC3D-257 Split interpolateTimeline (550 lines) into one function per branch
 - [ ] TC3D-259 Order the aircraft timeline by observedAt so a late packet cannot lerp backwards
