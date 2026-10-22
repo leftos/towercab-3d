@@ -711,11 +711,12 @@ TowerCab 3D displays real-time weather based on METAR reports.
 
 **Fog Effects:**
 - Visibility-based fog that limits terrain draw distance
-- Visual fog dome at the visibility boundary
+- Visual fog at the visibility boundary, drawn behind aircraft, buildings and terrain that are closer than the fog (not drawn in top-down view)
 - Adjustable intensity and visibility scale
 
 **Cloud Layers:**
-- Cloud planes positioned at METAR-reported ceiling altitudes
+- Clouds positioned at METAR-reported ceiling altitudes, hidden by anything closer to the camera
+- With the Logarithmic Depth Buffer graphics setting off, no clouds or METAR fog are drawn, and only the globe's distance fog shows
 - Scattered (SCT), broken (BKN), and overcast (OVC) layers shown
 - Aircraft behind clouds may have hidden datablocks
 
@@ -732,7 +733,7 @@ When weather effects are enabled:
 | Setting | Description |
 |---------|-------------|
 | Enable Fog | Toggle fog effects on/off |
-| Fog Intensity | Opacity of the fog dome (0.5x-2x) |
+| Fog Intensity | How thick weather fog looks (0.5x-2x) |
 | Visibility Scale | Multiplier for fog distance (2x = see twice as far as METAR) |
 | Enable Clouds | Toggle cloud layer display on/off |
 
@@ -971,7 +972,7 @@ Add custom aircraft models with airline-specific liveries. Mods match by ICAO ai
 
 ### Tower Mods
 
-Add custom control tower models for specific airports. Mods match by ICAO airport code (e.g., KJFK, EGLL).
+Add custom control tower models for specific airports. Mods match by ICAO airport code (e.g., KJFK, EGLL). The tower cab appears in the main view only, hides clouds and fog behind it, casts a shadow on the ground, and darkens at night when night darkening and lighting are on. Inset windows do not show it.
 
 ### Bundled Tower Positions
 

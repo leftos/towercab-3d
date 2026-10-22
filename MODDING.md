@@ -171,7 +171,7 @@ One mod can match multiple aircraft types by listing them in `aircraftTypes`.
 
 ### Model Guidelines
 
-1. **Orientation**: Aircraft should point along the +Y axis (forward)
+1. **Orientation**: Nose along -X and top up (in Blender: nose toward -X, Z up; export with +Y Up). A model with its nose along +X sets `rotationOffset.y` to 180
 2. **Origin**: Place the origin at the aircraft's center
 3. **Scale**: Model should be in meters (1 unit = 1 meter)
 4. **File Size**: Keep models under 5MB for best performance
@@ -241,7 +241,7 @@ Tower mods can specify an explicit model position using absolute lat/lon coordin
 | `lat` | number | Yes | Latitude of 3D model position (double precision) |
 | `lon` | number | Yes | Longitude of 3D model position (double precision) |
 | `height` | number | No | Height offset in meters above terrain (default 0) |
-| `rotation` | number | No | Model rotation in degrees (0=north, 90=east, default 0) |
+| `rotation` | number | No | Clockwise turn of the model in degrees. At 0 the model's +X axis faces east, and 90 turns it to face south (default 0) |
 
 **Note:** The `modelPosition` field controls where the 3D tower model renders. The `cameraPosition` field (separate) controls where the camera viewpoint is located. These can be different positions.
 
@@ -271,7 +271,7 @@ When these are set, they become the default camera position for that airport (us
 
 ### Model Guidelines
 
-1. **Orientation**: Tower should be upright with entrance facing +Y
+1. **Orientation**: Upright, with the side that should face east at `rotation` 0 along +X (in Blender: that side toward +X, Z up; export with +Y Up)
 2. **Origin**: Place at ground level, center of the tower base
 3. **Scale**: Model should be in meters
 4. **Detail**: Include cab windows and basic structure
@@ -515,7 +515,7 @@ For best results, convert SketchUp models to GLB:
 
 - **Scale**: SketchUp uses inches by default. Set units to Meters (Window → Model Info → Units)
 - **Origin**: Position your model at the origin (0,0,0) for proper placement
-- **Orientation**: Tower entrance should face the green axis (+Y)
+- **Orientation**: The side that should face east at `rotation` 0 faces the red axis (+X), with blue (+Z) up
 - **Textures**: Use simple, low-resolution textures for better performance
 - **Components**: Flatten components before export (Edit → Component → Explode)
 

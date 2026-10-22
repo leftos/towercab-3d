@@ -75,7 +75,7 @@ useAircraftInterpolation() [60 Hz singleton]
          └──→ useBabylonOverlay (60Hz rendering)
                 ├─ Datablock labels in screen space
                 ├─ Leader lines from aircraft to labels
-                └─ Weather effects (fog dome, cloud layers)
+                └─ Rain, snow and lightning (clouds and METAR fog are the Cesium weather stage's)
 
 Note: AircraftPanel uses useAircraftFiltering for 1Hz UI updates
 ```
@@ -93,12 +93,14 @@ weatherStore.setWeather()
     └─ ceiling (feet AGL)
          ↓
          ├──→ useCesiumWeather
-         │      └─ Applies fog density to Cesium scene
+         │      └─ Applies fog density to Cesium scene (tuned from METAR visibility only while the stage draws no fog; otherwise held at Cesium's clear-weather values so terrain is not fogged twice)
+         │
+         ├──→ useCesiumWeatherStages
+         │      └─ Post-process stage drawing clouds and fog against scene depth (also in insets; nothing in top-down, nor in a view with no logarithmic depth buffer, which shows only the globe's distance fog)
          │
          └──→ useBabylonOverlay
-                ├─ Fog dome mesh at visibility boundary
-                ├─ Cloud layer plane meshes
-                └─ Datablock weather visibility culling
+                ├─ Rain, snow and lightning
+                └─ Datablock weather visibility culling (always on)
 ```
 
 ### Settings Persistence Flow
@@ -292,9 +294,24 @@ CesiumViewer Component Mount
     │      ├─ Sets up shadow maps (size, distance, darkness)
     │      └─ Updates runtime when settings change
     │
-    ├─ 4. useCesiumWeather(viewer, showWeatherEffects, showCesiumFog, fogDensity)
-    │      ├─ Applies fog density from METAR visibility
-    │      └─ Adjusts visual density scalar and screen space error
+    ├─ 4. useCesiumWeatherStages(viewer, { airportIcao, refLat, refLon, viewMode }), returning its gates
+    │      ├─ Adds the cloud and fog post-process stage (GLSL in hooks/weather/cloudStage.glsl.ts; pure helpers in utils/weatherStage.ts), kept after the silhouette stage so aircraft in cloud get no outline
+    │      ├─ Split in one file into useWeatherAnchor, useWeatherStageFrame and useWeatherStageComposite
+    │      ├─ Reads showWeatherEffects, showClouds, showBabylonFog, visibilityScale, fogIntensity (scales the fog's optical depth), weatherStore.useInterpolation / interpolatedWeather.visibility; disabled when there is nothing to draw (no layers, no fog, no anchor frame)
+    │      ├─ Reads the live scene.logarithmicDepthBuffer, not graphics.enableLogDepth: without it the stage is hidden, one warning is logged and the view shows only the globe's distance fog, with no clouds or METAR fog
+    │      ├─ Cloud frame anchored on the airport (re-anchors past 100 m within it), or on the followed aircraft every 5 km in orbit-follow; terrain is resampled when the provider changes and retried each second on failure; ground changes between samples slide over 5 s; cloud noise is world-stable (origin resets past 50 km)
+    │      └─ useWeatherStageDriveAids runs after useCesiumCamera (dev camera and test-aircraft aids)
+    │
+    ├─ 4b. useCesiumWeather(viewer, showWeatherEffects, showCesiumFog, fogDensity, stageDrawsFog)
+    │      ├─ Runs after the stage hook and takes its stageDrawsFog (its `gates.fog` with an anchor frame); scene.fog.enabled follows showWeatherEffects && showCesiumFog
+    │      ├─ Stage draws fog: scene.fog held at Cesium's clear-weather values (density 0.0006, visualDensityScalar 0.15, screenSpaceErrorFactor 2.0, minimumBrightness 0.03)
+    │      └─ Stage draws no fog (Babylon overlay draws the weather, or no log depth): applies fog density from METAR visibility, with the visual density scalar and screen space error adjusted (pure helper sceneFogValues in utils/weatherStage.ts)
+    │
+    ├─ 4c. useTowerModel(viewer, { sunElevation, nightDarkeningEnabled, nightDarkeningIntensity }), returning a getter for the dev harness' `towerModel`
+    │      ├─ Draws the tower mod's cab as a Cesium model, so it writes scene depth (the weather stage's clouds and fog stop at it) and casts and receives Cesium shadows; insets mount it but draw no cab, since inset windows never load mods
+    │      ├─ Placement from modService.getTowerPlacement; base on resolveGroundHeight (utils/towerHeight.ts: terrain sample, globe tile, else field elevation), re-placed on terrainProviderChanged; orientation through utils/modelOrientation.ts (shared with aircraft)
+    │      ├─ Darkens at night with the imagery: light colour and image-based lighting scale by cabNightFactor from the curve in utils/nightBrightness.ts, shared with useCesiumNightDarkening
+    │      └─ While the positioning wizard's model step is open for the airport, its offsets rewrite the model matrix without reloading the glTF
     │
     ├─ 5. useAircraftModels(viewer, modelPoolRefs, interpolatedAircraft, ...)
     │      ├─ Assigns aircraft to model pool slots
@@ -536,7 +553,7 @@ requestAnimationFrame
     ├─ useBabylonOverlay.render()
     │    ├─ Renders datablock labels in screen space
     │    ├─ Renders leader lines from aircraft to labels
-    │    ├─ Renders weather effects (fog dome, clouds)
+    │    ├─ Renders weather effects (rain, snow, lightning)
     │    └─ Renders measuring tool lines
     │
     └─ performanceMonitor.endFrame()
@@ -544,7 +561,7 @@ requestAnimationFrame
 
 ### Environment-Map Lighting
 
-Cesium lights OSM buildings and aircraft models from a dynamic environment map whose ground hemisphere defaults to an olive. TowerCab 3D passes a neutral grey instead, as `environmentMapOptions` at creation (setting `groundColor` afterwards does not rebuild a computed map). The colour is `ENVIRONMENT_MAP_GROUND_COLOR` in `constants/lighting.ts`, wrapped by `neutralEnvironmentMapOptions()` in `utils/environmentMap.ts`. Creation sites: `createOsmBuildingsAsync` in `CesiumViewer.tsx`, `Model.fromGltfAsync` in `useCesiumViewer.ts` and `useAircraftModels.ts`, and `ModelPreviewModal.tsx`. A new tileset or model creation site must pass the same options.
+Cesium lights OSM buildings and aircraft models from a dynamic environment map whose ground hemisphere defaults to an olive. TowerCab 3D passes a neutral grey instead, as `environmentMapOptions` at creation (setting `groundColor` afterwards does not rebuild a computed map). The colour is `ENVIRONMENT_MAP_GROUND_COLOR` in `constants/lighting.ts`, wrapped by `neutralEnvironmentMapOptions()` in `utils/environmentMap.ts`. Creation sites: `createOsmBuildingsAsync` in `CesiumViewer.tsx`, `Model.fromGltfAsync` in `useCesiumViewer.ts`, `useAircraftModels.ts` and `useTowerModel.ts`, and `ModelPreviewModal.tsx`. A new tileset or model creation site must pass the same options.
 
 ### Coordinate Transform Pipeline
 
@@ -729,12 +746,8 @@ useBabylonOverlay (Orchestrator - 265 LOC)
     │      ├─ Adds hemispheric and directional lighting
     │      └─ Handles canvas resizing and resource disposal
     │
-    ├─ 2. useBabylonWeather({ scene })
-    │      ├─ Creates fog dome mesh (hemisphere, BACKSIDE rendering)
-    │      ├─ Creates cloud layer mesh pool (4 planes, 50km diameter)
-    │      ├─ Updates fog scale/opacity based on METAR visibility
-    │      ├─ Updates cloud positions based on METAR ceiling data
-    │      └─ Provides isVisibleByWeather() for label culling, delegating to isVisibleThroughWeather() in utils/weatherVisibility.ts (shared with useAircraftFiltering)
+    ├─ 2. isVisibleByWeather() (a callback inside useBabylonOverlay, no hook of its own)
+    │      └─ Label culling, delegating to isVisibleThroughWeather() in utils/weatherVisibility.ts (shared with useAircraftFiltering)
     │
     ├─ 3. useBabylonLabels({ guiTexture })
     │      ├─ Creates aircraft datablock labels (Rectangle + TextBlock)
@@ -751,12 +764,11 @@ useBabylonOverlay (Orchestrator - 265 LOC)
     │      ├─ Provides getters for matrices and terrain offset
     │      └─ Disposes root node on unmount or airport change
     │
-    └─ 5. useBabylonCameraSync({ cesiumViewer, camera, fogDome })
+    └─ 5. useBabylonCameraSync({ cesiumViewer, camera, getFixedToEnu })
            ├─ Reads Cesium camera position/rotation/FOV
            ├─ Converts ECEF → ENU using fixedToEnu matrix
            ├─ Extracts Euler angles from direction/up vectors
            ├─ Updates Babylon camera position/rotation/FOV
-           ├─ Positions fog dome at camera location
            └─ Handles both 3D perspective and top-down modes
 ```
 
@@ -765,13 +777,12 @@ useBabylonOverlay (Orchestrator - 265 LOC)
 ```typescript
 // Correct order - each hook depends on previous ones
 const { engine, scene, camera, guiTexture, sceneReady } = useBabylonScene({ canvas })
-const { fogDome, isVisibleByWeather } = useBabylonWeather({ scene })
 const { updateLabel, updateLabelPosition, removeLabel } = useBabylonLabels({ guiTexture })
 const { setupRootNode } = useBabylonRootNode({ scene, cesiumViewer })
-const { syncCamera } = useBabylonCameraSync({ cesiumViewer, camera, fogDome })
+const { syncCamera } = useBabylonCameraSync({ cesiumViewer, camera, getFixedToEnu })
 
 // WRONG - camera sync before scene initialization
-const { syncCamera } = useBabylonCameraSync({ cesiumViewer, camera, fogDome })  // ❌ camera is null!
+const { syncCamera } = useBabylonCameraSync({ cesiumViewer, camera, getFixedToEnu })  // ❌ camera is null!
 const { camera } = useBabylonScene({ canvas })
 ```
 
@@ -780,7 +791,7 @@ const { camera } = useBabylonScene({ canvas })
 **For LLM Agents:**
 - 70% reduction in file size (889 → 265 LOC for orchestrator)
 - Clear hook boundaries with single responsibilities
-- Easier to locate specific functionality (search for "fog" → useBabylonWeather)
+- Easier to locate specific functionality (search for "label" → useBabylonLabels)
 - Better code search results (specialized files vs monolith)
 
 **For Developers:**
@@ -793,7 +804,6 @@ const { camera } = useBabylonScene({ canvas })
 **Memory Management:**
 Each hook manages its own resource disposal:
 - useBabylonScene → engine, scene, camera, GUI
-- useBabylonWeather → fog dome, cloud meshes
 - useBabylonLabels → labels, leader lines
 - useBabylonRootNode → root transform node
 - useBabylonCameraSync → no resources (stateless calculations)
@@ -913,6 +923,7 @@ src/renderer/
 │   ├─ vatsimStore.ts
 │   ├─ viewportStore.ts (PRIMARY CAMERA STORE)
 │   ├─ vnasStore.ts (vNAS connection state)
+│   ├─ weatherStageStore.ts (dev-only drive aids of the cloud and fog stage, not persisted)
 │   └─ weatherStore.ts
 │
 ├─ services/

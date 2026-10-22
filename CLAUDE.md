@@ -66,7 +66,9 @@ In either, `WeatherDebugPanel` (dev builds only) forces rain, snow and cloud cov
 - `camera.get()` returns the active viewport's `{ heading, pitch, fov, followMode, followingCallsign }`; `camera.set({ heading, pitch, fov })` sets any of them.
 - `lookAt(lat, lon, altitudeFt)` aims the active viewport at a position.
 - `project(lat, lon, heightM)` returns the page CSS-pixel point for `browser_click` and friends, or `null` when the point is behind the camera.
-- `readPixels(x, y, w, h)` returns the Babylon canvas's RGBA bytes for a page rectangle (bottom-left row order). Rain is drawn additively with alpha 0, so screenshots and canvas `drawImage` miss it; read pixels instead.
+- `readPixels(x, y, w, h)` returns the Babylon canvas's RGBA bytes for a page rectangle (bottom-left row order). Rain is drawn additively with alpha 0, so screenshots and canvas `drawImage` miss it; read pixels instead. It cannot see the Cesium weather stage's clouds and fog; use screenshots for those.
+- `weatherStage` drives the cloud and fog stage: `set({ camera?, testAircraft? })` (null clears an aid) and `info()` returning `{ stageInScene, stageEnabled, stageNames, numberOfFrustums, logDepth }`.
+- `towerModel` returns `{ loaded, modelMatrix, nightFactor }` for the tower cab, read live: whether a cab is in the scene, its column-major model matrix (`number[]`, or null without a cab) and the light factor (1 by day, lower at night). The main view only: insets draw no cab.
 - `perf()` returns `{ current, window }`: `current` is the `performanceMonitor.getMetrics()` snapshot, `window` the median and p95 (`{ median, p95 }`, or null) over the last 300 frames of `frameInterval`, `totalFrame`, `cesiumUpdate`, `cesiumDraw` and `babylonRender`, plus `gpuCesiumMs` / `gpuBabylonMs` over the last 300 GPU timer results (null until the timer yields a real result). Rendering spikes sample it over 300 frames and report median and p95.
 
 Driving notes:
@@ -420,9 +422,18 @@ if (version < 7) {
 ### Modifying Aircraft Rendering
 
 1. Interpolation logic (60 Hz smooth motion): `useAircraftInterpolation.ts`
-2. 3D model rendering: `CesiumViewer.tsx` (Cesium entities)
+2. 3D model rendering: `CesiumViewer.tsx` (Cesium entities); model heading goes through `utils/modelOrientation.ts` (`aircraftModelHeading`)
 3. Datablock labels and leader lines: `useBabylonOverlay.ts` (Babylon.js GUI)
 4. Regression suite: `tests/motion/` drives the interpolation hook, the timeline store, the phase detector and the gear controller with synthetic VATSIM (15 s) and vNAS (1 Hz) flights and compares each frame with truth (`pnpm vitest run tests/motion`; `MOTION_REPORT=1` writes `.tmp/motion/report.txt`). A motion fix lands with a red-first assertion there, turning its finding's `it.todo` into an `it`.
+
+### Modifying the Tower Cab
+
+1. The cab is a Cesium model (`useTowerModel.ts`), not Babylon, so it hides the weather stage's clouds and fog behind it and casts a Cesium shadow; its console lines start `[useTowerModel]`
+2. Placement: `ModService.getTowerPlacement` (manifest `modelPosition`, then tower-positions); ground height from `resolveGroundHeight` in `utils/towerHeight.ts` (field elevation until terrain loads); live wizard edits from `towerPositioningStore.ts`
+3. Axis convention: `utils/modelOrientation.ts` (`compassToModelHeading`, `aircraftModelHeading`) serves aircraft and cab alike; `compassToModelHeading` points the glTF +X axis along a compass bearing; aircraft add 180 so their nose is on -X, and the cab adds 90 (`towerModelMatrix`) so its +X faces east at manifest `rotation` 0 and bearing `rotation + 90`, the convention KOAK's mod is tuned to
+4. Night darkening: `cabNightFactor` over the shared curve in `utils/nightBrightness.ts`, the same one `useCesiumNightDarkening.ts` uses for the imagery
+5. Inset windows never load mods (only the main window calls `modService.loadMods()`), so insets mount the hook but draw no cab
+6. `cab-environment.env` stays on disk but nothing loads it
 
 ### Modifying Camera Behavior
 
@@ -434,7 +445,7 @@ if (version < 7) {
 ### Modifying Weather Effects
 
 1. METAR fetching/parsing: `services/MetarService.ts`, `weatherStore.ts`
-2. Fog/cloud rendering: `useBabylonOverlay.ts`, `useBabylonWeather.ts`, `useCesiumWeather.ts`
+2. Fog/cloud rendering: the Cesium post-process stage in `useCesiumWeatherStages.ts` (shader in `hooks/weather/cloudStage.glsl.ts`, pure helpers in `utils/weatherStage.ts`); the stage stays hidden in a view with no logarithmic depth buffer, which then shows only the globe's distance fog; label weather culling (`isVisibleByWeather`, over `utils/weatherVisibility.ts`) in `useBabylonOverlay.ts`; scene fog in `useCesiumWeather.ts`
 3. Smoothing: `useSmoothedWeather.ts`
 4. Settings: `settingsStore.ts` (fog/cloud toggles, intensity)
 

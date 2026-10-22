@@ -59,7 +59,7 @@ A 3D tower cab view application for VATSIM air traffic controllers. View real-ti
 - Dynamic time-of-day lighting (real-time or fixed hour)
 - Aircraft rendered as 3D models with realistic type-based sizing (39 aircraft types)
 - Aircraft physics emulation: pitch during climbs/descents, banking in turns, landing flare
-- METAR-based weather effects: fog domes and cloud layers at real ceiling altitudes
+- METAR-based weather effects: visibility fog and cloud layers at real ceiling altitudes
 
 ### Multi-Viewport System
 - Create multiple inset viewports for simultaneous views

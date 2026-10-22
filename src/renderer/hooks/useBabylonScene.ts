@@ -1,7 +1,4 @@
 import * as BABYLON from '@babylonjs/core'
-// Side-effect import: registers the glTF SceneLoader plugin so LoadAssetContainerAsync
-// can load .glb / .gltf models for tower cabs and any future Babylon-side mod content.
-import '@babylonjs/loaders/glTF'
 import * as GUI from '@babylonjs/gui'
 import { useEffect, useRef, useState } from 'react'
 import {
@@ -12,19 +9,6 @@ import {
   HEMISPHERIC_LIGHT_INTENSITY,
 } from '@/constants'
 import type { BabylonSceneOptions, UseBabylonSceneResult } from '@/types'
-
-// Static path served from src/renderer/public/. If the file is absent the texture
-// load fails silently and the scene falls back to hemispheric+directional lighting only.
-const IBL_ENV_URL = '/cab-environment.env'
-
-// Shadow map size in texels. 2048 gives crisp self-shadows on cab interior fixtures
-// without measurable frame-time impact at airport scale.
-const SHADOW_MAP_SIZE = 2048
-
-// Tight near/far range for the directional light's shadow camera. Cab interiors are
-// a few tens of meters across; the shadow camera doesn't need globe-scale distances.
-const SHADOW_LIGHT_MIN_Z = 1
-const SHADOW_LIGHT_MAX_Z = 5000
 
 /**
  * Initializes Babylon.js engine, scene, camera, and lighting for transparent overlay rendering.
@@ -51,10 +35,10 @@ const SHADOW_LIGHT_MAX_Z = 5000
  *   const { engine, scene, camera, guiTexture, sceneReady } = useBabylonScene({ canvas })
  *
  *   // 2. Setup camera synchronization (needs camera from scene)
- *   const cameraSync = useBabylonCameraSync({ cesiumViewer, camera })
+ *   const cameraSync = useBabylonCameraSync({ cesiumViewer, camera, getFixedToEnu })
  *
- *   // 3. Create weather effects (needs scene for meshes)
- *   const weather = useBabylonWeather({ scene })
+ *   // 3. Create precipitation effects (needs scene and camera)
+ *   const precipitation = useBabylonPrecipitation({ scene, camera, isTopDownView })
  *
  *   // 4. Setup labels (needs guiTexture and scene)
  *   const labels = useBabylonLabels({ guiTexture, scene })
@@ -103,7 +87,9 @@ const SHADOW_LIGHT_MAX_Z = 5000
  * ### Directional Light
  * - **Direction**: (-1, -2, -1) pointing down and southwest
  * - **Intensity**: 0.6 (configurable via DIRECTIONAL_LIGHT_INTENSITY)
- * - Simulates sunlight for shadows and highlights
+ *
+ * Both lights keep a constant intensity day and night; nothing the overlay draws
+ * (labels, rain, snow, lightning) is lit by them.
  *
  * ## GUI Texture
  *
@@ -133,7 +119,7 @@ const SHADOW_LIGHT_MAX_Z = 5000
  * 5. Clear all refs
  *
  * **Note:** Scene disposal automatically handles child resources (lights, cameras),
- * but external hooks (useBabylonWeather, useBabylonLabels) are responsible for
+ * but external hooks (useBabylonPrecipitation, useBabylonLabels) are responsible for
  * disposing their own resources before scene disposal.
  *
  * ## Scene Ready State
@@ -200,14 +186,14 @@ const SHADOW_LIGHT_MAX_Z = 5000
  *   camera: camera
  * })
  *
- * // Weather effects (requires scene)
- * const weather = useBabylonWeather({ scene })
+ * // Precipitation effects (requires scene and camera)
+ * const precipitation = useBabylonPrecipitation({ scene, camera, isTopDownView })
  *
  * // Labels (requires guiTexture and scene)
  * const labels = useBabylonLabels({ guiTexture, scene })
  *
  * @see useBabylonCameraSync - For camera synchronization with Cesium
- * @see useBabylonWeather - For fog and cloud effects
+ * @see useBabylonPrecipitation - For rain, snow and lightning effects
  * @see useBabylonLabels - For aircraft datablock labels
  */
 export function useBabylonScene(options: BabylonSceneOptions): UseBabylonSceneResult {
@@ -217,8 +203,6 @@ export function useBabylonScene(options: BabylonSceneOptions): UseBabylonSceneRe
   const sceneRef = useRef<BABYLON.Scene | null>(null)
   const cameraRef = useRef<BABYLON.FreeCamera | null>(null)
   const guiTextureRef = useRef<GUI.AdvancedDynamicTexture | null>(null)
-  const shadowGeneratorRef = useRef<BABYLON.ShadowGenerator | null>(null)
-  const environmentTextureRef = useRef<BABYLON.CubeTexture | null>(null)
   const [sceneReady, setSceneReady] = useState(false)
   // Track when canvas has valid dimensions (needed for freshly created canvases)
   const [canvasReady, setCanvasReady] = useState(false)
@@ -311,36 +295,6 @@ export function useBabylonScene(options: BabylonSceneOptions): UseBabylonSceneRe
     // Add directional light
     const dirLight = new BABYLON.DirectionalLight('dirLight', new BABYLON.Vector3(-1, -2, -1), scene)
     dirLight.intensity = DIRECTIONAL_LIGHT_INTENSITY
-    dirLight.shadowMinZ = SHADOW_LIGHT_MIN_Z
-    dirLight.shadowMaxZ = SHADOW_LIGHT_MAX_Z
-
-    // Shadow generator on the directional light. Tower cab meshes (added by useBabylonTowerModel)
-    // register themselves as casters and set receiveShadows = true so cab geometry self-shadows
-    // (e.g. desks shadow the floor). useExponentialShadowMap is cheap and produces soft edges
-    // without acne, which matters since the cab is the only Babylon-side opaque geometry today.
-    const shadowGenerator = new BABYLON.ShadowGenerator(SHADOW_MAP_SIZE, dirLight)
-    shadowGenerator.useExponentialShadowMap = true
-    shadowGeneratorRef.current = shadowGenerator
-
-    // Best-effort IBL load. If the .env file isn't bundled (e.g. dev workspace without the asset),
-    // CubeTexture's onError fires and we leave environmentTexture unset — PBR materials in the cab
-    // will look flatter but everything still renders. StandardMaterial (fog/clouds) ignores
-    // environmentTexture so weather effects are unaffected either way.
-    const envTexture = new BABYLON.CubeTexture(
-      IBL_ENV_URL,
-      scene,
-      undefined,
-      undefined,
-      undefined,
-      () => {
-        scene.environmentTexture = envTexture
-      },
-      () => {
-        envTexture.dispose()
-        environmentTextureRef.current = null
-      },
-    )
-    environmentTextureRef.current = envTexture
 
     // Handle resize - engine.resize() re-reads the canvas's client size and the device
     // ratio, then re-sizes the backing store and the viewport accordingly.
@@ -365,10 +319,6 @@ export function useBabylonScene(options: BabylonSceneOptions): UseBabylonSceneRe
       resizeObserver.disconnect()
       window.removeEventListener('resize', handleResize)
 
-      shadowGeneratorRef.current?.dispose()
-      shadowGeneratorRef.current = null
-      environmentTextureRef.current?.dispose()
-      environmentTextureRef.current = null
       guiTexture.dispose()
       scene.dispose()
       engine.dispose()
@@ -385,7 +335,6 @@ export function useBabylonScene(options: BabylonSceneOptions): UseBabylonSceneRe
     scene: sceneRef.current,
     camera: cameraRef.current,
     guiTexture: guiTextureRef.current,
-    shadowGenerator: shadowGeneratorRef.current,
     sceneReady,
   }
 }

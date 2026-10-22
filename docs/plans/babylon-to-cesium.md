@@ -28,7 +28,7 @@ Read by: `useCesiumLabels` (everything above), `CesiumViewer.tsx` click path (la
 ## 1b. Clouds
 | File | Lines | Role |
 |---|---|---|
-| `src/renderer/hooks/useBabylonWeather.ts` | 1415 | fog dome + 4-slot cloud pool (planes, domes, above-planes), METAR smoothing reads, rotation animation (:1220-1359), label culling `isVisibleByWeather` (:1370-1401), per-type materials, night emissive |
+| `src/renderer/hooks/useBabylonWeather.ts` | 1415 | fog dome + 4-slot cloud pool (planes, domes, above-planes), METAR smoothing reads, rotation animation (:1220-1359), label culling `isVisibleByWeather` (now in `useBabylonOverlay.ts:258-272`), per-type materials, night emissive |
 | `src/renderer/hooks/weather/cloudDomeMesh.ts` | 118 | dome mesh builder (Babylon import) |
 | `src/renderer/hooks/weather/cloudTextureGenerator.ts` | 323 | procedural cloud textures (Babylon import) |
 | `src/renderer/hooks/weather/cloudNoiseGenerator.ts` | 58 | noise (no Babylon import, serves the textures) |
@@ -43,7 +43,7 @@ Read by: `useCesiumLabels` through `isVisibleByWeather` (label culling), `useBab
 ## 1c. Fog
 Same files as clouds (`useBabylonWeather.ts` fog dome effect :864-926, scale = `visibilityMeters * visibilityScale`) plus Cesium's own fog `useCesiumWeather.ts` (89 lines; `scene.fog` density from `fogDensity`, gated on `showWeatherEffects && showCesiumFog`) and `weatherStore.visibilityToFogDensity` (the spike exports it).
 Replaces it: fog in the same post-process composite, `exp(-distance/visibility)` with a height falloff (spike: 400 m scale, none at 10 SM+), replacing both the dome and the `scene.fog` tuning; also the base TC3D-70 needs.
-Read by (second copy of the culling rule): `useAircraftFiltering.ts:390-410` (Nearby Aircraft panel "weather visibility" filter reads `showCesiumFog`, `showClouds`, `visibilityScale` and repeats the visibility and cloud arithmetic). `useBabylonWeather.ts:1377` gates label culling on `showCesiumFog`, not `showBabylonFog` (TC3D-137).
+Read by (second copy of the culling rule): `useAircraftFiltering.ts:382-395` (Nearby Aircraft panel "weather visibility" filter reads `showCesiumFog`, `showClouds`, `visibilityScale` and calls the shared `isVisibleThroughWeather`). `useBabylonOverlay.ts:263` gates label culling on `showCesiumFog`, not `showBabylonFog` (TC3D-137).
 
 ## 1d. Precipitation (rain, snow, lightning)
 | File | Lines | Role |
@@ -62,7 +62,7 @@ Reads: `weatherStore` (`precipitation`, `wind`, `cameraPosition`), `airportStore
 | `src/renderer/hooks/useBabylonScene.ts` | (above) | IBL environment `IBL_ENV_URL` = `src/renderer/public/cab-environment.env` (Babylon `studio.env`, `CREDITS.md:7-11`), `ShadowGenerator` 2048 |
 | `src/renderer/hooks/useBabylonRootNode.ts` | 289 | ENU `TransformNode`, geoid/terrain sampling for the cab and weather placement |
 
-Replaces it: Cesium `Model` as before commit 05d0611; the spike's `useTowerModel.ts` (311 lines, branch 715e42a) already does it behind a flag (the Cesium hook that existed in history).
+Replaces it: Cesium `Model` as before commit 05d0611; `hooks/useTowerModel.ts` now draws the cab in the main view (shadow, night darkening, one axis convention in `utils/modelOrientation.ts`), and `useBabylonTowerModel.ts`, `useBabylonSunDirection.ts` and the Babylon shadow generator and IBL load are deleted.
 
 Read by: `SettingsModsTab.tsx:137` (comment only: the positioning store starts at 0 and `useBabylonTowerModel` caches the terrain), `towerPositioningStore` wizard, TC3D-126 (cab unlit at night), TC3D-138 (axis convention: the Babylon path adds +90 degrees, the Cesium path would use `gltfForwardAxis = X`). Important coupling: the cab only lives in Babylon so Babylon clouds depth-test against it. The cab and the Babylon weather must leave Babylon together (see M2).
 
@@ -123,7 +123,7 @@ Hard ordering fact: moving the cab to Cesium before Babylon clouds are gone undo
 BRANCH: no (each issue is one-site or additive; nothing changes what the user sees).
 - Land Cesium 1.145 (TC3D-9, project "Cesium 1.145 and shadow darkness", `feat/cesium-1.145`) before M2: audit A1 says 1.144 fixes a one-frame black flash from the stale framebuffer cache "post-process stages + shadow maps trigger it" and a post-process crash on large selected-feature lists. Dependency, not a new issue.
 - "Expose frame timings on the harness and fix the GPU timer" (TC3D-55 widened): `useAgentHarness.ts`, `types/harness.ts`, `performanceMonitor.ts`. Proving check: `__tc3d.perf()` returns median and p95 over 300 frames; GPU ms nonzero on the owner's desktop (spike: timer read 0 on this backend, GPU cost unmeasured, iPad unmeasured). Gate for M2's exit.
-- "Extract label weather culling into one pure module" (imperative: *Move `isVisibleByWeather` and the `useAircraftFiltering` copy into one weather-visibility function*): `useBabylonWeather.ts:1370-1401`, `useAircraftFiltering.ts:390-410`, new `utils/weatherVisibility.ts`. Proving: unit test under `tests/`; app check that labels cull the same as before. Hotspot: none. Unblocks M2 and M4 to run in parallel and absorbs TC3D-137.
+- "Extract label weather culling into one pure module" (imperative: *Move `isVisibleByWeather` and the `useAircraftFiltering` copy into one weather-visibility function*): `isVisibleByWeather` (now `useBabylonOverlay.ts:258-272`), `useAircraftFiltering.ts:382-395`, new `utils/weatherVisibility.ts`. Proving: unit test under `tests/`; app check that labels cull the same as before. Hotspot: none. Unblocks M2 and M4 to run in parallel and absorbs TC3D-137.
 Parallel with: M1 (VR). Hotspots: none (harness only overlaps TC3D-92).
 
 ## M1 Remove VR (main)
@@ -144,11 +144,11 @@ Issues (order):
 
    Proving: `__tc3d` camera poses of the spike's five cases (BKN025 10SM from the cab; OVC008 1/2SM; OVC015 from 5000 ft with an aircraft at 3000/1000 ft; BKN012 toward hills) match the spike's occlusion results; frame cost via `perf()`.
 2. Curve the deck with the earth, widen to ~100 km, add top relief; fold TC3D-125 (clear-sky band under OVC; dense-fog colour). Proving: EGLL case from TC3D-125 (camera ~80 m, heading 274, pitch -3, FOV 45; BKN900 + OVC2000; `fogDensity` 0.0083) shows grey horizon and grey haze.
-3. Fog in the composite replacing `scene.fog` tuning; map `fogIntensity` and `visibilityScale`; hide Cesium sky/sun/moon hack (`CesiumViewer.tsx:318-343`, `SkyBox.show` ts-expect-error from audit A1.2) only if overcast pixels now cover the sky.
+3. Fog in the composite replacing `scene.fog` tuning; map `fogIntensity` and `visibilityScale`; hide Cesium sky/sun/moon hack (`CesiumViewer.tsx:323-346`, `SkyBox.show` ts-expect-error from audit A1.2) only if overcast pixels now cover the sky.
 4. Restore the cab as a Cesium model: bring back `useTowerModel.ts` from the spike, delete `useBabylonTowerModel.ts`; light it with Cesium (fold the "cab stays lit at night" half of TC3D-126); resolve TC3D-138's axis convention in this step (one Cesium convention for aircraft and cab, no +90 degrees special case). Proving: KOAK mod loaded, wizard live edit still moves the cab, cab hides clouds and is hidden by aircraft/terrain correctly, shadow on the tarmac.
 5. Night: already done by the weather stage, which dims cloud and fog by sun elevation itself (`daylight()` in `hooks/weather/cloudStage.glsl.ts`); `useBabylonNightLighting` never touched cloud or fog colours. Its deletion, with the dead `BABYLON_NIGHT_*` constants, goes with TC3D-149; one sun curve for every layer (the stage, the imagery, the cab) is TC3D-185's design.
 6. Quality presets and resolution: spike knobs (`steps`, `densityScale`, `radius`, `resolutionScale`, `fogExtinction`, `fogHeightScale`) become presets; ties to TC3D-12 C2 (`viewer.resolutionScale`).
-7. Delete Babylon fog dome and cloud meshes and `hooks/weather/*` (this empties `useBabylonWeather.ts` apart from `isVisibleByWeather`, which M0 already moved) and recentering in `useBabylonCameraSync.ts`.
+7. Delete Babylon fog dome and cloud meshes and `hooks/weather/*` (this empties `useBabylonWeather.ts` apart from `isVisibleByWeather`, which M0 already moved) and recentering in `useBabylonCameraSync.ts`. Done (TC3D-149): `hooks/weather/cloudStage.glsl.ts` stays, `isVisibleByWeather` lives in `useBabylonOverlay.ts`, `useBabylonNightLighting.ts` and `BABYLON_NIGHT_*` went with it, and with the logarithmic depth buffer off the Cesium stage stays hidden (no clouds or METAR fog, only the globe's distance fog).
 8. iPad exit measurement (remote browser) at FEW/BKN/OVC and 1/4, 3, 10 SM; owner look sign-off.
 Hotspots: `CesiumViewer.tsx`, `useBabylonOverlay.ts`, `useBabylonCameraSync.ts`, `useCesiumWeather.ts`, `weatherStore.ts`; settings files only if a semantic changes (defer the key changes to M6).
 Depends on: M0 (1.145, perf harness, culling module). TC3D-141 (re-shoot "before" images) should land before the sign-off. Parallel with: M1 and M4, not with M3.
@@ -192,7 +192,7 @@ Parallelism summary: wave 1 = M0 then {M2 on `feat/cesium-weather` || M4 on main
 | TC3D-12 | Render resolution slider and Cesium quick wins (C1-C6, D7) | keep but rewrite | C1-C6 are Cesium-only and stay; drop D7 (hardware scaling for the Babylon canvas) and its sentence "drives resolutionScale and Babylon hardware scaling". C2 `viewer.resolutionScale` should land with or before M2 step 6 because the cloud stage's `textureScale` and the slider interact; C1 silhouettes use a `PostProcessStageComposite`, so check stage order with the weather stages. Hotspots `CesiumViewer.tsx`, `useCesiumViewer.ts`. |
 | TC3D-14 | Rendering docs H1-H6 | cancel: superseded by migration (fold H1 into M6) | H2-H5 describe Babylon hooks that M5 deletes; H6 documents the two-canvas depth split that M2 removes. H1 (measuring tool is Cesium `Entity`, not Babylon; `architecture.md:321,548`, `coordinate-systems.md:66`) is subsumed when M6 rewrites those sections. |
 | TC3D-15 | Reshape docs/architecture.md to the entry-point template | keep but rewrite | Still wanted (no Task Index, no README), but reshape once after M5 or reshape now with a stub for rendering; its Task Index row "Babylon overlay DPR or label screen size" becomes "datablock labels" (2D layer files). It overlaps TC3D-123, TC3D-122, TC3D-16, TC3D-109 and TC3D-77; sequence them as one docs pass. |
-| TC3D-125 | Overcast clear-sky band; dense fog dark teal | fold into milestone M2 (step 2) | Both symptoms come from the Babylon dome plus the Cesium sky hack (`CesiumViewer.tsx:318-343`, `useBabylonWeather.ts`, `useCesiumWeather.ts`). The spike notes the same band exists with a flat 40 km deck and that curving/widening to ~100 km fixes it. Use the EGLL repro as the acceptance test. |
+| TC3D-125 | Overcast clear-sky band; dense fog dark teal | fold into milestone M2 (step 2) | Both symptoms come from the Babylon dome plus the Cesium sky hack (`CesiumViewer.tsx:323-346`, `useBabylonWeather.ts`, `useCesiumWeather.ts`). The spike notes the same band exists with a flat 40 km deck and that curving/widening to ~100 km fixes it. Use the EGLL repro as the acceptance test. |
 | TC3D-126 | KOAK mod: camera 220 m outside cab; cab lit at night | keep but rewrite (split) | Half 1 (manifest `cameraPosition` vs `modelPosition`, or `getCameraPositionFromManifest` / `airportStore.selectAirport` at `airportStore.ts:88-125`) is engine-independent: keep as a single. Half 2 (cab stays lit at night, `useBabylonTowerModel.ts`) folds into M2 step 4/5 (Cesium model lighting). |
 | TC3D-137 | Label fog culling follows the Cesium fog toggle | fold into milestone M4 (via M0 module) | The issue says it folds into the single-engine work. With one fog, `showBabylonFog` disappears and the toggle question is moot; the shared pure function must also replace the `useAircraftFiltering.ts:390-410` copy. |
 | TC3D-138 | MODDING.md axes | keep as is | Pure doc-vs-code question, engine-independent, but its trace is simpler after M2 step 4 (one Cesium convention, no +90 degrees Babylon path). Do it with or just before M2 step 4; related to TC3D-95 (body frame). |
@@ -282,7 +282,7 @@ Other open issues that name a Babylon file or feature (from `.tmp/linear-list.js
 The answer took ~20 doc reads, ~25 searches and the `git show` of the spike branch beyond a Task Index row (there is no Task Index). Rows that should exist:
 - "Change how weather is drawn (clouds, fog, rain)": `hooks/useBabylonWeather.ts` + `hooks/weather/*` + `useBabylonPrecipitation.ts` (today); `useCesiumWeather.ts`, the weather stage hooks (after M2); `stores/weatherStore.ts`, `useSmoothedWeather.ts`, `types/settings.ts` `WeatherSettings` (:735).
 - "Change datablock labels or leader lines": `useCesiumLabels.ts` (layout, culling) -> `useBabylonOverlay.ts` adapter -> `useBabylonLabels.ts` -> `stores/datablockPositionStore.ts` -> `CesiumViewer.tsx:1145` (click hit-test).
-- "Change the tower cab model": `useBabylonTowerModel.ts` -> `useBabylonRootNode.ts` -> `towerPositioningStore.ts` -> `airportStore.ts:88-125`.
+- "Change the tower cab model": `hooks/useTowerModel.ts` -> `services/ModService.ts` (`getTowerPlacement`) -> `stores/towerPositioningStore.ts` -> `utils/modelOrientation.ts` -> `hooks/useAircraftModels.ts` -> `utils/nightBrightness.ts` -> `hooks/useCesiumLighting.ts` -> `MODDING.md` -> `stores/airportStore.ts` (camera default).
 - "Add or change an `__tc3d` harness call": `useAgentHarness.ts`, `types/harness.ts`, `CLAUDE.md` harness list, `docs/DRIVING_CONVENTIONS.md` (TC3D-123 notes the harness is in no doc).
 
 # MISSING ENTRY POINT

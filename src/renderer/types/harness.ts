@@ -4,7 +4,8 @@
  * The harness gives agent-driven tests a handle on the running app's Cesium
  * viewer, Babylon overlay and a few Zustand stores, so a test can read camera
  * state, aim the camera, project a coordinate to a screen point, read back
- * rendered pixels and read frame timings. It is installed by `useAgentHarness`
+ * rendered pixels, read frame timings, drive the Cesium cloud and fog stage
+ * (camera override, test aircraft) and read the tower cab's state. It is installed by `useAgentHarness`
  * and only exists in dev builds; production bundles drop it.
  *
  * @see useAgentHarness - Hook that installs the global
@@ -134,6 +135,67 @@ export interface AgentHarness {
    * median and p95 of the last 300 frames' timing series
    */
   perf: () => { current: PerformanceMetrics; window: FrameWindowSummary }
+
+  /** The Cesium cloud and fog stage: drive aids and state */
+  weatherStage: WeatherStageHandle
+
+  /** The tower cab model of the main viewport, read live on each access */
+  readonly towerModel: TowerModelHandle
+}
+
+/** State of the tower cab model drawn by `useTowerModel` */
+export interface TowerModelHandle {
+  /** Whether a cab model is in the scene */
+  loaded: boolean
+  /** The cab's model matrix, column-major (`Cesium.Matrix4.toArray`), or null without a cab */
+  modelMatrix: number[] | null
+  /** Light factor applied to the cab: 1 by day or with night darkening off, lower at night */
+  nightFactor: number
+}
+
+/** A camera pose that replaces the app's camera every frame while set */
+export interface WeatherStageCameraOverride {
+  lat: number
+  lon: number
+  /** Height above the ellipsoid in meters */
+  heightM: number
+  /** Degrees clockwise from north */
+  heading: number
+  /** Degrees, negative looks down */
+  pitch: number
+}
+
+/** The built-in B738 model placed at a fixed position, for occlusion tests */
+export interface WeatherStageTestAircraft {
+  lat: number
+  lon: number
+  /** Height above the ellipsoid in meters */
+  heightM: number
+  /** Degrees clockwise from north */
+  heading: number
+}
+
+/** Drive aids accepted by `weatherStage.set`; an omitted field is left alone, null clears it */
+export interface WeatherStageSetParams {
+  camera?: WeatherStageCameraOverride | null
+  testAircraft?: WeatherStageTestAircraft | null
+}
+
+/** Dev handle on the cloud and fog stage */
+export interface WeatherStageHandle {
+  /** Sets or clears the camera override and the test aircraft */
+  set: (params: WeatherStageSetParams) => void
+  /**
+   * Whether the stage is in the scene and enabled (disabled with nothing to draw), the scene's
+   * post-process stage names in draw order, and the depth facts its occlusion relies on
+   */
+  info: () => {
+    stageInScene: boolean
+    stageEnabled: boolean
+    stageNames: string[]
+    numberOfFrustums: number
+    logDepth: boolean
+  }
 }
 
 declare global {

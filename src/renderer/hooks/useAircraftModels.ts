@@ -25,6 +25,7 @@ import {
   updateGearAnimation,
 } from '../utils/gearAnimationController'
 import { getModelGroundData, parseGroundDataFromUrl } from '../utils/gltfAnimationParser'
+import { aircraftModelHeading } from '../utils/modelOrientation'
 import { performanceMonitor } from '../utils/performanceMonitor'
 import type { ModelPoolRefs, SilhouetteRefs } from './useCesiumViewer'
 import { isInsetContext } from './useInsetStoreSync'
@@ -443,14 +444,12 @@ export function useAircraftModels(
             prevModelPositionsRef.current.set(aircraft.callsign, Cesium.Cartesian3.clone(position))
           }
 
-          // Model heading: Cesium models typically face +X, so heading=0 means east
-          // Subtract 90 to convert from compass heading (north=0) to model heading
-          // Add 180° to flip models that face backwards
-          // Add rotationOffset for models that face different directions (e.g., FSLTL = 180°)
+          // Heading through the shared model convention (utils/modelOrientation.ts), with the
+          // aircraft's +180 flip and the model's own rotationOffset (e.g. FSLTL = 180°).
           // Pitch/Roll: Use values directly - positive pitch = nose up, positive roll = right bank
           const rotationOffset = modelInfo.rotationOffset ?? 0
           const hpr = new Cesium.HeadingPitchRoll(
-            Cesium.Math.toRadians(aircraft.interpolatedHeading - 90 + 180 + rotationOffset),
+            aircraftModelHeading(aircraft.interpolatedHeading, rotationOffset),
             Cesium.Math.toRadians(aircraft.interpolatedPitch),
             Cesium.Math.toRadians(aircraft.interpolatedRoll),
           )

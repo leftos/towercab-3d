@@ -63,7 +63,7 @@ const { latitude, longitude, height } = cartographic
 
 ## 3. ENU (East-North-Up)
 
-**Used by**: Babylon.js overlay for weather effects (fog dome, cloud layers), measuring tool
+**Used by**: Babylon.js overlay for weather effects (rain, snow, lightning), measuring tool
 
 **Format**:
 - Local tangent plane at tower location
@@ -94,7 +94,7 @@ const enuPosition = transformPositionToENU(
 ```
 
 **When to use**:
-- Weather effect positioning (fog dome, cloud layers)
+- Weather effect positioning (rain, snow, lightning)
 - Measuring tool line placement
 - Local distance calculations
 
@@ -266,7 +266,7 @@ const distance = calculateDistanceNM(
 - **Cause**: Geoid offset not applied
 - **Fix**: Calculate `geoidOffset = terrainHeight - airportElevationMSL`
 
-**Problem**: Weather effects (fog dome, clouds) don't align with Cesium terrain
+**Problem**: Weather effects (rain, snow, lightning) don't align with Cesium terrain
 - **Cause**: Root node not set up at correct location
 - **Fix**: Call `babylonOverlay.setupRootNode(lat, lon, elevation)` after airport change
 

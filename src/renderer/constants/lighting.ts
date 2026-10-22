@@ -59,34 +59,6 @@ export const NIGHT_BRIGHTNESS_CIVIL = 0.6
 export const NIGHT_GAMMA_BOOST = 1.15
 
 // =============================================================================
-// Babylon.js Night Lighting Multipliers
-// =============================================================================
-
-/**
- * Hemispheric light intensity multiplier at night (0.0-1.0)
- * Applied to ambient lighting for weather effects and 3D models
- */
-export const BABYLON_NIGHT_HEMISPHERIC_MULT = 0.3
-
-/**
- * Directional light intensity multiplier at night (0.0-1.0)
- * Applied to sun-like directional lighting
- */
-export const BABYLON_NIGHT_DIRECTIONAL_MULT = 0.15
-
-/**
- * Fog emissive color multiplier at night (0.0-1.0)
- * Reduces fog glow for darker nighttime appearance
- */
-export const BABYLON_NIGHT_FOG_EMISSIVE_MULT = 0.3
-
-/**
- * Cloud emissive color multiplier at night (0.0-1.0)
- * Slightly brighter than fog to simulate moonlight reflection
- */
-export const BABYLON_NIGHT_CLOUD_EMISSIVE_MULT = 0.4
-
-// =============================================================================
 // Performance Constants
 // =============================================================================
 

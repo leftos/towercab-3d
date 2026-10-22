@@ -1,20 +1,20 @@
 import { useCallback } from 'react'
-import type { BabylonOverlayOptions } from '@/types'
+import type { BabylonOverlayOptions, WeatherVisibilityParams } from '@/types'
+import { isVisibleThroughWeather } from '@/utils/weatherVisibility'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useViewportStore } from '../stores/viewportStore'
+import { useWeatherStore } from '../stores/weatherStore'
 import { useBabylonCameraSync } from './useBabylonCameraSync'
 import { useBabylonLabels } from './useBabylonLabels'
 import { useBabylonPrecipitation } from './useBabylonPrecipitation'
 import { useBabylonRootNode } from './useBabylonRootNode'
 import { useBabylonScene } from './useBabylonScene'
-import { useBabylonTowerModel } from './useBabylonTowerModel'
-import { useBabylonWeather } from './useBabylonWeather'
 
 /**
  * Orchestrator hook for Babylon.js overlay rendering synchronized with Cesium.
  *
  * ## Responsibilities
- * - Initialize and coordinate all Babylon.js subsystems (scene, weather, labels, transforms)
+ * - Initialize and coordinate all Babylon.js subsystems (scene, precipitation, labels, transforms)
  * - Provide unified API for CesiumViewer to manage the overlay
  * - Delegate to specialized hooks for specific functionality
  * - Maintain backward-compatible interface for existing code
@@ -24,7 +24,7 @@ import { useBabylonWeather } from './useBabylonWeather'
  * This hook is a **thin orchestrator** that composes specialized hooks:
  *
  * 1. **useBabylonScene**: Engine, scene, camera, GUI initialization
- * 2. **useBabylonWeather**: Fog dome and cloud layers from METAR data
+ * 2. **useBabylonPrecipitation**: Rain, snow and lightning from METAR data
  * 3. **useBabylonLabels**: Aircraft datablock labels and leader lines
  * 4. **useBabylonRootNode**: ENU coordinate system and transformation matrices
  * 5. **useBabylonCameraSync**: Camera synchronization with Cesium
@@ -35,8 +35,8 @@ import { useBabylonWeather } from './useBabylonWeather'
  * ## Dependencies
  * - Requires: Initialized Cesium.Viewer (from useCesiumViewer)
  * - Requires: HTMLCanvasElement for Babylon rendering (overlaid on Cesium)
- * - Reads: weatherStore (via useBabylonWeather for METAR data)
- * - Reads: settingsStore (via useBabylonWeather for weather toggles)
+ * - Reads: weatherStore (METAR visibility and cloud layers for label weather culling)
+ * - Reads: settingsStore (weather toggles for label weather culling, datablock font size)
  *
  * ## Call Order
  * This hook must be initialized AFTER Cesium viewer is ready:
@@ -53,7 +53,7 @@ import { useBabylonWeather } from './useBabylonWeather'
  *
  * ### Initialization (happens in specialized hooks)
  * 1. **Scene**: Create Babylon engine with transparent clear color, MSAA 4x
- * 2. **Weather**: Create fog dome and cloud layer meshes
+ * 2. **Precipitation**: Create rain, snow and lightning effects
  * 3. **Labels**: Initialize GUI texture for 2D overlays
  * 4. **Root Node**: Setup ENU coordinate system at tower location
  * 5. **Camera Sync**: Prepare camera transform calculations
@@ -63,7 +63,7 @@ import { useBabylonWeather } from './useBabylonWeather'
  * 2. Update aircraft labels via `updateAircraftLabel()` + `updateLeaderLine()`
  * 3. Call `render()` to render the Babylon scene
  *
- * Weather effects (fog dome, cloud layers) update automatically via React effects
+ * Precipitation effects (rain, snow, lightning) update automatically via React effects
  * when METAR data or settings change.
  *
  * ## Coordinate System
@@ -105,7 +105,7 @@ import { useBabylonWeather } from './useBabylonWeather'
  *
  * All specialized hooks handle their own resource disposal:
  * - **useBabylonScene**: Disposes engine, scene, camera, GUI on unmount
- * - **useBabylonWeather**: Disposes fog dome and cloud meshes
+ * - **useBabylonPrecipitation**: Disposes particle systems and their textures
  * - **useBabylonLabels**: Disposes labels and leader lines
  * - **useBabylonRootNode**: Disposes root node
  * - **useBabylonCameraSync**: No resources (stateless calculations)
@@ -113,7 +113,6 @@ import { useBabylonWeather } from './useBabylonWeather'
  * Memory counters available via:
  * - `getMemoryCounters()` from useBabylonOverlay (total)
  * - `getLabelMemoryCounters()` from useBabylonLabels
- * - `getWeatherMemoryCounters()` from useBabylonWeather
  *
  * @param options - Configuration options
  * @param options.cesiumViewer - Initialized Cesium.Viewer instance
@@ -169,7 +168,8 @@ import { useBabylonWeather } from './useBabylonWeather'
  * }
  *
  * @see useBabylonScene - Scene initialization hook
- * @see useBabylonWeather - Weather effects hook
+ * @see useBabylonPrecipitation - Rain, snow and lightning hook
+ * @see utils/weatherVisibility.ts - Label weather culling rules
  * @see useBabylonLabels - Label management hook
  * @see useBabylonRootNode - ENU coordinate system hook
  * @see useBabylonCameraSync - Camera synchronization hook
@@ -184,18 +184,20 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
   // Get datablock font size setting
   const datablockFontSize = useSettingsStore((state) => state.aircraft.datablockFontSize)
 
-  // 1. Initialize scene (engine, scene, camera, GUI, lighting, shadow generator)
-  const { engine, scene, camera, guiTexture, shadowGenerator, sceneReady } = useBabylonScene({
+  // 1. Initialize scene (engine, scene, camera, GUI, lighting)
+  const { engine, scene, camera, guiTexture, sceneReady } = useBabylonScene({
     canvas: canvas!,
     antialias: true,
     transparent: true,
   })
 
-  // 2. Initialize weather effects (fog dome, cloud layers)
-  const { fogDome, getCloudMeshes, isVisibleByWeather } = useBabylonWeather({
-    scene,
-    isTopDownView,
-  })
+  // 2. Weather state for label culling (clouds and fog themselves are drawn by the Cesium weather stage)
+  const cloudLayers = useWeatherStore((state) => state.cloudLayers)
+  const currentMetar = useWeatherStore((state) => state.currentMetar)
+  const showWeatherEffects = useSettingsStore((state) => state.weather.showWeatherEffects)
+  const showCesiumFog = useSettingsStore((state) => state.weather.showCesiumFog)
+  const showClouds = useSettingsStore((state) => state.weather.showClouds)
+  const visibilityScale = useSettingsStore((state) => state.weather.visibilityScale)
 
   // 3. Initialize precipitation effects (rain, snow, lightning)
   useBabylonPrecipitation({
@@ -216,21 +218,10 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
     scene,
   })
 
-  // 6. Tower cab model (loads modded glTF into Babylon scene so weather meshes
-  //    depth-test against cab geometry — replaces the previous Cesium-side cab).
-  useBabylonTowerModel({
-    scene,
-    cesiumViewer,
-    getFixedToEnu,
-    shadowGenerator,
-  })
-
-  // 7. Initialize camera synchronization
+  // 6. Initialize camera synchronization (the tower cab is a Cesium model, see useTowerModel)
   const { syncCamera: syncCameraInternal } = useBabylonCameraSync({
     cesiumViewer,
     camera,
-    fogDome,
-    getCloudMeshes,
     getFixedToEnu,
   })
 
@@ -261,6 +252,24 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
       removeLabel(callsign)
     },
     [removeLabel],
+  )
+
+  // Weather-based visibility culling: beyond METAR visibility or behind a BKN/OVC ceiling
+  const isVisibleByWeather = useCallback(
+    (params: WeatherVisibilityParams): boolean =>
+      isVisibleThroughWeather(
+        {
+          showWeatherEffects,
+          cullBeyondVisibility: showCesiumFog,
+          showClouds,
+          isTopDownView,
+          visibilityStatuteMiles: currentMetar ? currentMetar.visib : null,
+          visibilityScale,
+          cloudLayers,
+        },
+        params,
+      ),
+    [showWeatherEffects, showCesiumFog, showClouds, currentMetar, cloudLayers, visibilityScale, isTopDownView],
   )
 
   const isDatablockVisibleByWeatherAdapter = useCallback(
@@ -305,7 +314,6 @@ export function useBabylonOverlay({ cesiumViewer, canvas }: BabylonOverlayOption
 export function getMemoryCounters() {
   // This is now managed by individual hooks:
   // - getLabelMemoryCounters() from useBabylonLabels
-  // - getWeatherMemoryCounters() from useBabylonWeather
   // Return empty for backward compatibility
   return {
     materialsCreated: 0,

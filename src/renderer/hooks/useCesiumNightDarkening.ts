@@ -1,85 +1,13 @@
 import type * as Cesium from 'cesium'
 import { useEffect, useRef } from 'react'
-import {
-  NIGHT_BRIGHTNESS_CIVIL,
-  NIGHT_BRIGHTNESS_MIN,
-  NIGHT_BRIGHTNESS_TWILIGHT,
-  NIGHT_GAMMA_BOOST,
-  SUN_ELEVATION_CIVIL_TWILIGHT,
-  SUN_ELEVATION_DAY,
-  SUN_ELEVATION_NAUTICAL_TWILIGHT,
-  SUN_ELEVATION_NIGHT,
-} from '@/constants'
+import { NIGHT_GAMMA_BOOST, SUN_ELEVATION_CIVIL_TWILIGHT, SUN_ELEVATION_DAY } from '@/constants'
+import { nightBrightness, smoothstep } from '@/utils/nightBrightness'
 
 export interface NightDarkeningSettings {
   /** Whether night darkening is enabled */
   enabled: boolean
   /** Intensity of the darkening effect (0.0-1.0, higher = darker nights) */
   intensity: number
-}
-
-/**
- * Smoothstep function for smooth interpolation between values
- * Returns smooth transition between 0 and 1 based on where x is between edge0 and edge1
- */
-function smoothstep(edge0: number, edge1: number, x: number): number {
-  const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)))
-  return t * t * (3 - 2 * t)
-}
-
-/**
- * Linear interpolation between two values
- */
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t
-}
-
-/**
- * Calculate the target brightness based on sun elevation angle
- *
- * Uses smooth transitions through twilight phases:
- * - Day (sun > 0°): Full brightness (1.0)
- * - Civil twilight (0° to -6°): 1.0 -> 0.6
- * - Nautical twilight (-6° to -12°): 0.6 -> 0.3
- * - Astronomical twilight (-12° to -18°): 0.3 -> min
- * - Night (sun < -18°): Minimum brightness
- *
- * @param sunElevation - Sun elevation angle in degrees
- * @param intensity - User intensity setting (0.0-1.0)
- * @returns Target brightness value (0.0-1.0)
- */
-function calculateTargetBrightness(sunElevation: number, intensity: number): number {
-  // Minimum brightness at night depends on intensity setting
-  // intensity 0.0 = minBrightness 1.0 (no darkening - same as disabled)
-  // intensity 0.5 = minBrightness ~0.58
-  // intensity 1.0 = minBrightness 0.15 (maximum darkening)
-  const minBrightness = NIGHT_BRIGHTNESS_MIN + (1 - intensity) * (1.0 - NIGHT_BRIGHTNESS_MIN)
-
-  // Day: full brightness
-  if (sunElevation >= SUN_ELEVATION_DAY) {
-    return 1.0
-  }
-
-  // Civil twilight: smooth transition from 1.0 to 0.6
-  if (sunElevation > SUN_ELEVATION_CIVIL_TWILIGHT) {
-    const t = smoothstep(SUN_ELEVATION_CIVIL_TWILIGHT, SUN_ELEVATION_DAY, sunElevation)
-    return lerp(NIGHT_BRIGHTNESS_CIVIL, 1.0, t)
-  }
-
-  // Nautical twilight: smooth transition from 0.6 to 0.3
-  if (sunElevation > SUN_ELEVATION_NAUTICAL_TWILIGHT) {
-    const t = smoothstep(SUN_ELEVATION_NAUTICAL_TWILIGHT, SUN_ELEVATION_CIVIL_TWILIGHT, sunElevation)
-    return lerp(NIGHT_BRIGHTNESS_TWILIGHT, NIGHT_BRIGHTNESS_CIVIL, t)
-  }
-
-  // Astronomical twilight: smooth transition from 0.3 to minimum
-  if (sunElevation > SUN_ELEVATION_NIGHT) {
-    const t = smoothstep(SUN_ELEVATION_NIGHT, SUN_ELEVATION_NAUTICAL_TWILIGHT, sunElevation)
-    return lerp(minBrightness, NIGHT_BRIGHTNESS_TWILIGHT, t)
-  }
-
-  // Full night: minimum brightness
-  return minBrightness
 }
 
 /**
@@ -156,9 +84,9 @@ export function useCesiumNightDarkening(
     }
 
     // Calculate target values based on sun elevation
-    // The smoothstep functions in calculateTargetBrightness already provide
+    // The smoothstep functions in nightBrightness already provide
     // smooth transitions through twilight phases
-    const targetBrightness = calculateTargetBrightness(sunElevation, intensity)
+    const targetBrightness = nightBrightness(sunElevation, intensity)
     const targetGamma = calculateTargetGamma(sunElevation)
 
     // Only update if values changed significantly (avoid unnecessary updates)
