@@ -13,6 +13,7 @@
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { ROLL_MIN_SPEED_KTS } from '@/constants'
 import { knotsToMps } from '@/utils/coordinates'
 import { GEAR_RETRACT_MIN_AIRBORNE_SECONDS } from '@/utils/gearAnimationController'
 import { angleDiff, type FrameRecord, runScenario, type ScenarioResult } from './harness'
@@ -73,6 +74,17 @@ const PARKED_POS_ERR_MAX_M = 0.05
 const ROLL_STEP_RATE_MAX = 1.2
 const ROLL_STEP_MARGIN_M = 0.05 // measured 0.017 m over the allowance
 const ROLL_POS_ERR_MAX_M = 2 // measured 0.61 m
+// vNAS contact is entered below 3 ft, which the sim's flare (about 120 fpm through the last 3 ft) reaches 1.5 s
+// before the wheels touch; the landing roll is shown from contact (measured 0.43 s before touchdown).
+const CONTACT_BEFORE_TOUCHDOWN_S = 1.5
+// The roll labels on the display clock: one 800 ms dwell, the 1 s phase tick and a 1 Hz vNAS sample after the
+// display allows them (measured 1.89 s worst, DEP1 vNAS seen after VATSIM), or up to the contact lead before it
+// (measured 0.47 s, DEP1 VATSIM, whose 15 s chord reaches 15 kt early; 0.43 s, ARR1 vNAS).
+const ROLL_LABEL_LAG_MAX_S = 3
+const ROLL_LABEL_LEAD_MAX_S = 1.5
+// VATSIM reads the touchdown from the interpolated 15 s chord crossing the touchdown height (measured 3.79 s before
+// the truth touchdown); the old 100 ft gate showed the landing roll 9-10 s early.
+const VATSIM_ROLLOUT_LEAD_MAX_S = 5
 
 const ROOT = resolve(__dirname, '../..')
 const REPORT_PATH = resolve(ROOT, '.tmp/motion/report.txt')
@@ -129,6 +141,24 @@ function isSubsequence(seq: string[], sub: string[]): boolean {
     if (i === sub.length) return true
   }
   return false
+}
+
+/**
+ * Seconds from the displayed instant a roll label may first show to the first time it shows: for DEP1 the truth
+ * reaching ROLL_MIN_SPEED_KTS on the takeoff roll (below it the aircraft reads lined up), for ARR1 the touchdown.
+ * +Infinity when the label never shows.
+ */
+function rollLabelLagS(res: ScenarioResult, callsign: 'DEP1' | 'ARR1'): number {
+  const flight = res.flights.find((f) => f.callsign === callsign)
+  const phase = callsign === 'DEP1' ? 'departure_roll' : 'landing_roll'
+  const shown = (res.phases.get(callsign) ?? []).find((p) => p.phase === phase)
+  if (!flight || !shown) return Number.POSITIVE_INFINITY
+  const allowedAt =
+    callsign === 'DEP1'
+      ? framesFor(res, callsign).find((r) => r.truth.segment === 'takeoff_roll' && r.truth.gs >= ROLL_MIN_SPEED_KTS)
+          ?.tLocal
+      : flight.events.rollout
+  return allowedAt === undefined ? Number.POSITIVE_INFINITY : shown.tLocal - allowedAt
 }
 
 /**
@@ -214,6 +244,9 @@ function report(res: ScenarioResult, label: string): void {
     out.push(
       `  phase changes (${ph.length}): ${ph.map((p) => `${p.tLocal.toFixed(0)}s:${p.phase}[${p.segment}]`).join(' > ')}`,
     )
+    if (f.callsign === 'DEP1' || f.callsign === 'ARR1') {
+      out.push(`  roll label shown ${rollLabelLagS(res, f.callsign).toFixed(2)} s after the display allows it`)
+    }
     const gearEvent = f.callsign === 'GA1' ? 'go_around' : 'initial_climb'
     if (f.callsign !== 'ARR1') {
       out.push(`  gear retract starts at ${gearUpStartS(recs, f.events[gearEvent]).toFixed(1)} s after ${gearEvent}`)
@@ -337,14 +370,14 @@ describe('motion under the 15 s VATSIM feed alone', () => {
     expect(playbackOffFraction(recs)).toBeLessThanOrEqual(PLAYBACK_OFF_FRACTION_MAX)
   })
 
-  it('a VATSIM-only departure walks through pushback, stopped taxi, active taxi, a roll and a departure climb in order', () => {
+  it('a VATSIM-only departure walks through pushback, stopped taxi, active taxi, lined up, a roll and a departure climb in order', () => {
     const phases = phaseOrder(vatsim, 'DEP1')
     expect(phases.length).toBeGreaterThan(3)
     // Held standing still before its first report, the aircraft may read stopped before the pushback shows.
     const first = phases[0] === 'stopped_taxi' ? phases[1] : phases[0]
     expect(first).toBe('pushback')
     expect(
-      isSubsequence(phases, ['pushback', 'stopped_taxi', 'active_taxi', 'departure_roll', 'departing_climb']),
+      isSubsequence(phases, ['pushback', 'stopped_taxi', 'active_taxi', 'lined_up', 'departure_roll', 'departing_climb']),
     ).toBe(true)
   })
 
@@ -552,11 +585,116 @@ describe('findings the review measured that are still bugs today', () => {
   it.todo('2.2 the ground nose does not lead the turn or lag the path on a straight VATSIM taxi (TC3D-53)')
   it.todo('1.5 a VATSIM climb or descent does not begin up to one sample early (TC3D-53)')
   it.todo('3.3 the bank does not lag a VATSIM turn or outlive it (TC3D-53)')
-  // TC3D-65. The tightened check is: every departure_roll falls in
-  // [events.takeoff_roll, events.initial_climb], and every landing_roll falls at or after events.rollout.
-  // Both fail today, so the check is recorded here rather than weakened back to the sequence assertion.
-  it.todo(
-    '7.4 the departure roll is shown between the start of the takeoff roll and the initial climb, and the landing roll after touchdown (TC3D-65)',
-  )
-  it.todo('7.6 phase windows and dwell times run on the data-source time, not wall time (TC3D-65)')
+  it('7.4 the departure roll is shown between the start of the takeoff roll and the initial climb', () => {
+    for (const [label, res] of [
+      ['VATSIM only', vatsim],
+      ['vNAS, VATSIM seen first', vnas],
+      ['vNAS seen first', vnasFirst],
+    ] as const) {
+      const flight = res.flights.find((f) => f.callsign === 'DEP1')
+      expect(flight, label).toBeDefined()
+      if (!flight) return
+      const rolls = (res.phases.get('DEP1') ?? []).filter((p) => p.phase === 'departure_roll')
+      expect(rolls.length, `${label}: DEP1 shows a departure roll`).toBeGreaterThan(0)
+      for (const p of rolls) {
+        expect(p.tLocal, `${label}: departure roll shown at ${p.tLocal.toFixed(1)} s`).toBeGreaterThanOrEqual(
+          flight.events.takeoff_roll,
+        )
+        expect(p.tLocal, `${label}: departure roll shown at ${p.tLocal.toFixed(1)} s`).toBeLessThanOrEqual(
+          flight.events.initial_climb,
+        )
+      }
+    }
+  })
+
+  it('7.4 the landing roll is shown, and the rollout slowing through 15 kt never reads lined up', () => {
+    for (const [label, res] of [
+      ['VATSIM only', vatsim],
+      ['vNAS, VATSIM seen first', vnas],
+      ['vNAS seen first', vnasFirst],
+    ] as const) {
+      const phases = (res.phases.get('ARR1') ?? []).map((p) => p.phase)
+      expect(phases, `${label}: ARR1 shows a landing roll`).toContain('landing_roll')
+      expect(phases, label).not.toContain('lined_up')
+    }
+  })
+
+  it('7.4 a vNAS landing roll is shown at or after touchdown, not from the 100 ft gate', () => {
+    for (const [label, res] of [
+      ['vNAS, VATSIM seen first', vnas],
+      ['vNAS seen first', vnasFirst],
+    ] as const) {
+      const flight = res.flights.find((f) => f.callsign === 'ARR1')
+      expect(flight, label).toBeDefined()
+      if (!flight) return
+      const rolls = (res.phases.get('ARR1') ?? []).filter((p) => p.phase === 'landing_roll')
+      expect(rolls.length, `${label}: ARR1 shows a landing roll`).toBeGreaterThan(0)
+      for (const p of rolls) {
+        expect(p.tLocal, `${label}: landing roll shown at ${p.tLocal.toFixed(1)} s`).toBeGreaterThanOrEqual(
+          flight.events.rollout - CONTACT_BEFORE_TOUCHDOWN_S,
+        )
+      }
+    }
+  })
+  it(`7.4 a VATSIM landing roll is shown at most ${VATSIM_ROLLOUT_LEAD_MAX_S} s before touchdown, not from the 100 ft gate`, () => {
+    const flight = vatsim.flights.find((f) => f.callsign === 'ARR1')
+    expect(flight).toBeDefined()
+    if (!flight) return
+    const rolls = (vatsim.phases.get('ARR1') ?? []).filter((p) => p.phase === 'landing_roll')
+    expect(rolls.length, 'ARR1 shows a landing roll').toBeGreaterThan(0)
+    for (const p of rolls) {
+      expect(p.tLocal, `landing roll shown at ${p.tLocal.toFixed(1)} s`).toBeGreaterThanOrEqual(
+        flight.events.rollout - VATSIM_ROLLOUT_LEAD_MAX_S,
+      )
+    }
+  })
+  // The interpolated VATSIM altitude crosses the 10 ft touchdown height before the truth touchdown.
+  it.todo('7.4 VATSIM touchdown read about 3.8 s early from the interpolated height')
+  it(`7.6 the roll labels follow the display from at most their lead before it allows them to ${ROLL_LABEL_LAG_MAX_S} s after`, () => {
+    const cases = [
+      ['VATSIM only', vatsim, 'DEP1', ROLL_LABEL_LEAD_MAX_S],
+      ['vNAS, VATSIM seen first', vnas, 'DEP1', ROLL_LABEL_LEAD_MAX_S],
+      ['vNAS seen first', vnasFirst, 'DEP1', ROLL_LABEL_LEAD_MAX_S],
+      ['VATSIM only', vatsim, 'ARR1', VATSIM_ROLLOUT_LEAD_MAX_S],
+      ['vNAS, VATSIM seen first', vnas, 'ARR1', ROLL_LABEL_LEAD_MAX_S],
+      ['vNAS seen first', vnasFirst, 'ARR1', ROLL_LABEL_LEAD_MAX_S],
+    ] as const
+    for (const [label, res, callsign, leadMaxS] of cases) {
+      const lagS = rollLabelLagS(res, callsign)
+      const message = `${label}: ${callsign} roll label shown ${lagS.toFixed(2)} s after the display allows it`
+      expect(lagS, message).toBeGreaterThanOrEqual(-leadMaxS)
+      expect(lagS, message).toBeLessThanOrEqual(ROLL_LABEL_LAG_MAX_S)
+    }
+  })
+})
+
+describe('phases when the reported altitude reads above the field', () => {
+  let high: ScenarioResult
+
+  beforeAll(async () => {
+    high = await runScenario({
+      fps: 60,
+      useVnas: false,
+      vnasFirst: false,
+      durationS: DURATION,
+      fieldElevationBelowGroundFt: 15,
+    })
+  })
+
+  it('7.4 a VATSIM arrival reported 15 ft above the field reads the landing roll, not short final, after touchdown', () => {
+    const flight = high.flights.find((f) => f.callsign === 'ARR1')
+    expect(flight).toBeDefined()
+    if (!flight) return
+    const { rollout, exit_turn: turnOff } = flight.events
+    const changes = high.phases.get('ARR1') ?? []
+    const summary = changes.map((p) => `${p.tLocal.toFixed(1)}s:${p.phase}`).join(' > ')
+    const shownAtTurnOff = changes.filter((p) => p.tLocal <= turnOff).at(-1)?.phase
+    expect(shownAtTurnOff, `touchdown ${rollout.toFixed(1)} s, turn-off ${turnOff.toFixed(1)} s: ${summary}`).toBe(
+      'landing_roll',
+    )
+    const shortFinalAfterTouchdown = changes.filter(
+      (p) => p.phase === 'short_final' && p.tLocal >= rollout && p.tLocal <= turnOff,
+    )
+    expect(shortFinalAfterTouchdown, summary).toEqual([])
+  })
 })

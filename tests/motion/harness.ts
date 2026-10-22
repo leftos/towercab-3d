@@ -75,6 +75,11 @@ export interface ScenarioOptions {
    * named report from their start.
    */
   vatsimFromS?: Partial<Record<string, number>>
+  /**
+   * Feet the phase detector's field elevation sits below the sim's ground, so every reported altitude reads that much
+   * above the field (a datum above the wheels, or scenery off the airport database); 0 when omitted.
+   */
+  fieldElevationBelowGroundFt?: number
 }
 
 /** What each vNAS observation carries besides its position. */
@@ -279,13 +284,13 @@ function buildObservations(flights: Flight[], opts: ScenarioOptions, groundEllip
   return out
 }
 
-function buildRunwayContext(runwayThr: { x: number; y: number }): SortContext {
+function buildRunwayContext(runwayThr: { x: number; y: number }, fieldBelowGroundFt: number): SortContext {
   const thr = toLatLon(runwayThr.x, runwayThr.y)
   const far = toLatLon(runwayThr.x + 3000, runwayThr.y)
   return {
     airportLat: LAT0,
     airportLon: LON0,
-    airportElevationFt: GROUND_MSL * 3.28084,
+    airportElevationFt: GROUND_MSL * 3.28084 - fieldBelowGroundFt,
     icao: 'KOAK',
     runways: [
       {
@@ -458,7 +463,7 @@ export async function runScenario(opts: ScenarioOptions): Promise<ScenarioResult
       gearInit: new Set(),
       prevXY: new Map(),
     }
-    const context = buildRunwayContext(runwayThr)
+    const context = buildRunwayContext(runwayThr, opts.fieldElevationBelowGroundFt ?? 0)
 
     vat.useVatsimStore.setState({ referencePosition: { latitude: LAT0, longitude: LON0 } })
     rafCallback = null

@@ -308,4 +308,10 @@ export interface InterpolatedAircraftState extends AircraftState {
    * (e.g., RealTraffic-only aircraft before timeline integration).
    */
   displayDelay: number
+  /**
+   * The instant the drawn state shows, in milliseconds in the observations' `observedAt` domain (the timeline's
+   * display time). The flight-phase windows, dwell times and sticky exits run on it, so a label follows the
+   * displayed aircraft, in replay as live, rather than the wall clock.
+   */
+  displayTime: number
 }

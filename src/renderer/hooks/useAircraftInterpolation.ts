@@ -399,6 +399,7 @@ function timelineToInterpolatedState(
 
     // Display delay
     displayDelay: timeline.displayDelay,
+    displayTime: timeline.displayTime,
   }
 }
 
@@ -550,6 +551,7 @@ function runInterpolationFrame() {
       existing.track = interpolated.track
       existing.timestamp = interpolated.timestamp
       existing.displayDelay = interpolated.displayDelay
+      existing.displayTime = interpolated.displayTime
       existing.isOnGround = interpolated.isOnGround
       existing.heightAboveGround = interpolated.heightAboveGround
       existing.inContact = interpolated.inContact

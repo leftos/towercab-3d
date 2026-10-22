@@ -118,7 +118,7 @@ export function calculateSmartSort(
   const activeCallsigns = new Set(aircraft.map((ac) => ac.callsign))
 
   // Periodically clean up stale phase history and stabilization states
-  cleanupPhaseHistory()
+  cleanupPhaseHistory(activeCallsigns)
   cleanupStabilizationStates(activeCallsigns)
 
   for (const ac of aircraft) {
