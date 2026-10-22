@@ -6,55 +6,39 @@
 
 - [ ] TC3D-269 Bound remote conversions started through POST /api/msfs/convert · release vNext — High · MSFS model converter
 
-## MSFS model converter
-
-- [/] TC3D-263 Index each livery's own texture folders and their texture.cfg fallbacks · release vNext
-- [ ] TC3D-264 Hand the converter a JSON job with safe output names and read a JSON result · release vNext
-- [ ] TC3D-28 msfs.rs test reads the real MSFS Community folder
-- [ ] TC3D-265 Run every model conversion through one Rust owner with a timeout and a shared limit · release vNext
-- [ ] TC3D-267 Add fixture tests to the converter's Python, Rust and TypeScript layers
-- [ ] TC3D-127 Remote browsers draw built-in models instead of the host's MSFS liveries
-- [ ] TC3D-131 Skip the model-matching tests when the MSFS addon data is absent · release vNext
-- [ ] TC3D-256 FSLTL converter fails on AIG models with many liveries: texture-folder argument too long · release vNext
-- [ ] TC3D-289 Keep image positions when a glTF image has no URI in the converter
-- [ ] TC3D-290 Replace the converter's deprecated Pillow getdata call
-- [ ] TC3D-291 Finish the converter's package checks: extra device names, hard links, partial junctions
-- [ ] TC3D-293 Clear a no-type airline aircraft's pending model when its conversion finishes elsewhere
-- [ ] TC3D-300 Stop treating every glTF named cargo as an attachment · release vNext
-- [ ] TC3D-301 Split parse_aircraft_cfg_str under the function limits · release vNext
-
-## Current focus
-
-- [/] TC3D-45 Join a YAAT room as its member, with no CRC session · release vNext
-- [ ] TC3D-196 A vNAS go-around is labelled Climbing, never Go Around
-- [ ] TC3D-260 vNAS crate: a kick hidden in a lagged burst lets the resync join the next room
-- [ ] TC3D-288 Harden the vNAS crate's session actor: teardown race, stuck Connecting, hung calls, push starvation
-- [ ] TC3D-302 Read the vNAS session token without a Data API lookup · release vNext
-- [ ] TC3D-303 Let the vNAS event forwarder own every host state write · release vNext
-
 ## Babylon to Cesium migration
 
-### M0 Groundwork (2/2 done)
+### M0 Groundwork (2/8 done)
+- [ ] TC3D-12 Render resolution slider and Cesium quick wins (C1–C6, D7)
+- [ ] TC3D-13 Cesium-side dead code (G1–G4, G8, G9)
+- [ ] TC3D-183 Stop camera moves recreating the GPU timers and frame listeners
+- [ ] TC3D-195 Perf HUD tiles-loading counter reads a Cesium field that does not exist
+- [ ] TC3D-198 GPU timer in __tc3d.perf() stops updating after its first results
+- [ ] TC3D-229 Stop CesiumViewer re-running its GPU timer effect every frame
 
 ### M1 Remove VR (1/1 done)
 
-### M2 Cab, clouds and fog in Cesium (6/11 done)
+### M2 Cab, clouds and fog in Cesium (6/16 done)
 - [ ] TC3D-213 Clouds, fog and cab in Cesium on feat/cesium-weather · release vNext
   - [ ] TC3D-148 Turn the weather stage's knobs into quality presets · release vNext
   - [ ] TC3D-150 Measure the weather stage on an iPad and get the owner's look sign-off · release vNext
   - [ ] TC3D-219 Weather stage fog vanishes with the camera above about 32 km
-  - [ ] TC3D-221 Merge feat/cesium-weather to main (#262)
+  - [ ] TC3D-221 Merge feat/cesium-weather to main (#262) · release vNext
   - [ ] TC3D-224 Ease weather fog in instead of popping at 10 SM and on each METAR · release vNext
+- [ ] TC3D-141 Re-shoot spike A's before images on the v0.2.0-alpha release · release vNext
+- [ ] TC3D-294 Remove the BKN layer's white streaks along the horizon · release vNext
+- [ ] TC3D-295 Give distant terrain near the horizon its real distance in the weather composite · release vNext
+- [ ] TC3D-235 Place the cab and weather on the visible ground when terrain never loads
 
 ### M3 Rain, snow and lightning (0/2 done)
-- [ ] TC3D-151 Draw rain and snow in Cesium, depth-aware · release vNext
-- [ ] TC3D-152 Flash lightning without Babylon · release vNext
+- [ ] TC3D-151 Draw rain and snow in Cesium, depth-aware · release vNext+1
+- [ ] TC3D-152 Flash lightning without Babylon · release vNext+1
 
 ### M4 Labels on a 2D layer (0/5 done)
-- [ ] TC3D-153 Draw datablocks and leader lines on a 2D layer · release vNext
-- [ ] TC3D-154 Delete the Babylon label layer · release vNext
-- [ ] TC3D-31 useCesiumLabels lays labels out against window.innerWidth · release vNext
-- [ ] TC3D-137 Label fog culling follows the Cesium fog toggle, not the fog dome's · release vNext
+- [ ] TC3D-153 Draw datablocks and leader lines on a 2D layer · release vNext+1
+- [ ] TC3D-154 Delete the Babylon label layer · release vNext+1
+- [ ] TC3D-31 useCesiumLabels lays labels out against window.innerWidth · release vNext+1
+- [ ] TC3D-137 Label fog culling follows the Cesium fog toggle, not the fog dome's · release vNext+1
 - [ ] TC3D-177 Compare above-ground heights in the aircraft panel's weather filter
 
 ### M5 Remove Babylon (0/3 done)
@@ -65,18 +49,17 @@
 ### M6 Docs (0/1 done)
 - [ ] TC3D-158 Rewrite the rendering docs for a Cesium-only app · release vNext
 
-### No milestone
-- [ ] TC3D-183 Stop camera moves recreating the GPU timers and frame listeners
-- [ ] TC3D-235 Place the cab and weather on the visible ground when terrain never loads
-- [ ] TC3D-294 Remove the BKN layer's white streaks along the horizon · release vNext
-- [ ] TC3D-295 Give distant terrain near the horizon its real distance in the weather composite · release vNext
-
 ## OSM buildings
 
-### B1 Shader on the ion tiles (4/7 done)
-- [ ] TC3D-165 Draw curtain-wall glass on terminals through Cesium's reflections · release vNext
-- [ ] TC3D-166 Light windows at night by building use and local time · release vNext
-- [ ] TC3D-167 Add a buildings quality preset per device · release vNext
+### B1 Shader on the ion tiles (4/12 done)
+- [ ] TC3D-211 OSM facades on feat/osm-facades · release vNext
+  - [ ] TC3D-218 Type OSM building parts from their outline, then by shape near the field · release vNext
+  - [ ] TC3D-220 Facade floor lines don't start at the building's ground · release vNext
+  - [ ] TC3D-226 Merge feat/osm-facades to main (#263) · release vNext
+- [ ] TC3D-165 Draw curtain-wall glass on terminals through Cesium's reflections · release vNext+1
+- [ ] TC3D-166 Light windows at night by building use and local time · release vNext+1
+- [ ] TC3D-167 Add a buildings quality preset per device · release vNext+1
+- [ ] TC3D-184 Destroy the OSM buildings tileset when its load is cancelled
 
 ### B2 Generated buildings near the field (0/3 done)
 - [ ] TC3D-168 Generate buildings from the local OSM planet near the field · release vNext
@@ -89,38 +72,73 @@
 - [ ] TC3D-173 Let mods override landmark buildings by OSM way id · release vNext
 - [ ] TC3D-174 Spike photorealistic 3D Tiles near the field as a desktop mode · release vNext
 
-### No milestone
-- [ ] TC3D-184 Destroy the OSM buildings tileset when its load is cancelled
-- [ ] TC3D-211 OSM facades on feat/osm-facades · release vNext
-  - [ ] TC3D-218 Type OSM building parts from their outline, then by shape near the field
-  - [ ] TC3D-220 Facade floor lines don't start at the building's ground
-  - [ ] TC3D-226 Merge feat/osm-facades to main (#263)
+## vNAS
 
-## vNAS session lifecycle
+### Room join (0/5 done)
+- [/] TC3D-45 Join a YAAT room as its member, with no CRC session · release vNext
+- [ ] TC3D-302 Read the vNAS session token without a Data API lookup · release vNext
+- [ ] TC3D-303 Let the vNAS event forwarder own every host state write · release vNext
+- [ ] TC3D-260 vNAS crate: a kick hidden in a lagged burst lets the resync join the next room
+- [ ] TC3D-255 vNAS popover: Environment label renders at 16px white, unstyled
 
+### Lifecycle merge (#261) (0/2 done)
 - [/] TC3D-6 vNAS session lifecycle: one subscribe per facility, clean session end · release vNext
-  - [ ] TC3D-214 Merge feat/vnas-session-lifecycle to main (#261)
+  - [ ] TC3D-214 Merge feat/vnas-session-lifecycle to main (#261) · release vNext
+
+### Hardening (0/11 done)
 - [ ] TC3D-227 Keep VATSIM sign-in secrets out of the vNAS crate's logs and errors · release vNext
 - [ ] TC3D-228 Stop the vNAS client panicking on non-ASCII server text · release vNext
 - [ ] TC3D-234 Leave the vNAS crate Disconnected after a failed or cancelled connect
 - [ ] TC3D-239 Notice a closed hub socket while the vNAS crate waits for a session
 - [ ] TC3D-240 Make the host's vNAS unit tests start on this machine
 - [ ] TC3D-245 Put hang guards on the vNAS crate's hub test awaits
+- [ ] TC3D-288 Harden the vNAS crate's session actor: teardown race, stuck Connecting, hung calls, push starvation
+- [ ] TC3D-22 Crate connect(): the invocation listener exits on RecvError::Lagged
+- [ ] TC3D-66 Crate session_airports holds the session lock across Data API calls
+- [ ] TC3D-67 vNAS lifecycle: close the races left after TC3D-47
+- [ ] TC3D-68 vNAS: stray rejections, a stale error, a lost disconnect during sign-in, and startup connecting to Live
+
+### Dual-source and reconnect (0/5 done)
+- [ ] TC3D-19 vNAS dual-source and reconnect: the crate's Testing Checklist
+- [ ] TC3D-20 Re-read the crate's vnas-udp-integration-plan.md against its files
+- [ ] TC3D-21 Unsubscribe from a vNAS facility on the server
+- [ ] TC3D-23 vnasStore: skip zero-distance groundspeed samples
+- [ ] TC3D-42 Remote browsers keep stale vNAS data after a vNAS session ends
+
+## MSFS model converter
+
+### Livery indexing (0/5 done)
+- [/] TC3D-263 Index each livery's own texture folders and their texture.cfg fallbacks · release vNext
+- [ ] TC3D-256 FSLTL converter fails on AIG models with many liveries: texture-folder argument too long · release vNext
+- [ ] TC3D-300 Stop treating every glTF named cargo as an attachment · release vNext+1
+- [ ] TC3D-301 Split parse_aircraft_cfg_str under the function limits · release vNext+1
+- [ ] TC3D-306 Keep the MSFS index paths in one form and sort the remaining read_dir choices · release vNext+1
+
+### Conversion pipeline (0/9 done)
+- [ ] TC3D-265 Run every model conversion through one Rust owner with a timeout and a shared limit · release vNext
+- [ ] TC3D-264 Hand the converter a JSON job with safe output names and read a JSON result · release vNext
+- [ ] TC3D-289 Keep image positions when a glTF image has no URI in the converter
+- [ ] TC3D-290 Replace the converter's deprecated Pillow getdata call
+- [ ] TC3D-291 Finish the converter's package checks: extra device names, hard links, partial junctions
+- [ ] TC3D-293 Clear a no-type airline aircraft's pending model when its conversion finishes elsewhere
+- [ ] TC3D-127 Remote browsers draw built-in models instead of the host's MSFS liveries
+- [ ] TC3D-212 MSFS model cache limit is dropped on every settings save
+
+### Converter tests (0/3 done)
+- [ ] TC3D-28 msfs.rs test reads the real MSFS Community folder
+- [ ] TC3D-131 Skip the model-matching tests when the MSFS addon data is absent · release vNext+1
+- [ ] TC3D-267 Add fixture tests to the converter's Python, Rust and TypeScript layers
 
 ## Aircraft motion model
 
-- [ ] TC3D-179 Use the terrain under the aircraft as the gear datum in orbit mode with no airport
-- [ ] TC3D-180 Skip VATSIM samples while an aircraft's vNAS data is fresh
-- [ ] TC3D-181 Convert ground elevation to ellipsoid height in label culling
-- [ ] TC3D-189 Held slow airborne first report is drawn on the ground
-- [ ] TC3D-190 Gear height uses the airport elevation, not the sampled terrain
+### feat/aircraft-motion merge (#264) (0/19 done)
 - [ ] TC3D-241 Aircraft motion on feat/aircraft-motion · release vNext
   - [ ] TC3D-52 Aircraft orientation model: bank, rotation and flare
   - [ ] TC3D-53 Curved VATSIM paths: splines with heading from the path
   - [ ] TC3D-246 Check vNAS height above ground live for taxiing aircraft before merging feat/aircraft-motion · release vNext
   - [ ] TC3D-250 Keep vNAS ground contact across a brief gap in height above ground
   - [ ] TC3D-251 Gear latch: clear by height above the aircraft's own field and on seeks before the latch
-  - [ ] TC3D-252 Merge feat/aircraft-motion to main (#264)
+  - [ ] TC3D-252 Merge feat/aircraft-motion to main (#264) · release vNext
   - [ ] TC3D-258 Keep a stopped vNAS aircraft held past the 30 s VATSIM fallback
   - [ ] TC3D-280 Measure and cut the per-frame cost of wheel spin and surface lookups
   - [ ] TC3D-281 Harden the glTF clip checks for held tracks and shared surface nodes
@@ -128,129 +146,67 @@
   - [ ] TC3D-283 Stop a gear retract under way reversing when the aircraft crosses 150 ft
   - [ ] TC3D-284 Stop scanning every observation per frame for the newest height sample
   - [ ] TC3D-285 Spin VATSIM wheels backwards on pushback
-  - [/] TC3D-65 Phase badge: runway labels at the wrong times and labels lagging the display · release vNext
-  - [ ] TC3D-296 Read VATSIM touchdown within 1.5 s of the true touchdown · release vNext
-  - [ ] TC3D-297 Use the 15 s acceleration in VATSIM roll classification · release vNext
-  - [ ] TC3D-298 Split stabilizePhase and detectRawFlightPhase and drop their dead state · release vNext
-  - [ ] TC3D-299 Bound when the departure Rolling label ends in the motion suite · release vNext
-  - [ ] TC3D-304 Test the phase-state drop on a scrub back and size the RealTraffic regression tolerance · release vNext
+  - [ ] TC3D-296 Read VATSIM touchdown within 1.5 s of the true touchdown · release vNext+1
+  - [ ] TC3D-297 Use the 15 s acceleration in VATSIM roll classification · release vNext+1
+  - [ ] TC3D-298 Split stabilizePhase and detectRawFlightPhase and drop their dead state · release vNext+1
+  - [ ] TC3D-299 Bound when the departure Rolling label ends in the motion suite · release vNext+1
+  - [ ] TC3D-304 Test the phase-state drop on a scrub back and size the RealTraffic regression tolerance · release vNext+1
+
+### Follow-ups on main (0/11 done)
+- [ ] TC3D-179 Use the terrain under the aircraft as the gear datum in orbit mode with no airport
+- [ ] TC3D-180 Skip VATSIM samples while an aircraft's vNAS data is fresh
+- [ ] TC3D-181 Convert ground elevation to ellipsoid height in label culling
+- [ ] TC3D-189 Held slow airborne first report is drawn on the ground
+- [ ] TC3D-190 Gear height uses the airport elevation, not the sampled terrain
+- [ ] TC3D-196 A vNAS go-around is labelled Climbing, never Go Around
 - [ ] TC3D-247 Aircraft motion follow-ups from TC3D-50's review
 - [ ] TC3D-257 Split interpolateTimeline (550 lines) into one function per branch
 - [ ] TC3D-259 Order the aircraft timeline by observedAt so a late packet cannot lerp backwards
-
-## Render resolution and Cesium quick wins
-
-- [ ] TC3D-12 Render resolution slider and Cesium quick wins (C1–C6, D7)
-
-## Cesium-side dead code
-
-- [ ] TC3D-13 Cesium-side dead code (G1–G4, G8, G9)
-
-## Documentation
-
-- [ ] TC3D-15 Reshape docs/architecture.md to the architecture entry-point template
-- [ ] TC3D-16 Add docs/README.md with a glossary
-- [ ] TC3D-17 Re-read docs/inset-architecture.md; its broadcast files are gone
-- [ ] TC3D-18 Re-read docs/remote-access-architecture.md against its files
-- [ ] TC3D-77 Fix architecture.md's stale Settings UI section
-- [ ] TC3D-109 Fix architecture.md's stale camera, store and inset sections
-- [ ] TC3D-122 Add a Task Index to architecture.md: the vNAS bridge and aircraft motion
-- [ ] TC3D-123 Add docs/README.md and a Task Index to the architecture doc
-- [ ] TC3D-186 Fix CLAUDE.md's aircraft rendering step: pooled Model primitives, not entities
-- [ ] TC3D-261 Boil settled decision mocks down to a decision record and a rebuild recipe
-
-## vNAS dual-source and reconnect
-
-- [ ] TC3D-19 vNAS dual-source and reconnect: the crate's Testing Checklist
-- [ ] TC3D-20 Re-read the crate's vnas-udp-integration-plan.md against its files
-- [ ] TC3D-21 Unsubscribe from a vNAS facility on the server
-- [ ] TC3D-22 Crate connect(): the invocation listener exits on RecvError::Lagged
-- [ ] TC3D-23 vnasStore: skip zero-distance groundspeed samples
-- [ ] TC3D-42 Remote browsers keep stale vNAS data after a vNAS session ends
-- [ ] TC3D-66 Crate session_airports holds the session lock across Data API calls
-- [ ] TC3D-67 vNAS lifecycle: close the races left after TC3D-47
-- [ ] TC3D-68 vNAS: stray rejections, a stale error, a lost disconnect during sign-in, and startup connecting to Live
-
-## macOS signing and runtime checks
-
-- [ ] TC3D-24 macOS signing and runtime checks
-
-## Cleanup singles
-
-- [ ] TC3D-25 Fix Vite INEFFECTIVE_DYNAMIC_IMPORT warnings
-- [ ] TC3D-26 Decide whether protobufjs's skipped build script must run
-- [ ] TC3D-27 cargo fmt the host crate, then check it in CI and prek
-- [ ] TC3D-30 prepare-release runs its fixers outside the gate
-- [ ] TC3D-32 Embed a common-controls manifest for the vNAS test binary
-- [ ] TC3D-33 Protect the crate repo's main branch
-- [ ] TC3D-64 Lint and type-check the tests/ folder
-- [ ] TC3D-78 Fix the in-memory tile cache's two disagreeing controls
 - [ ] TC3D-105 Fill or delete the interpolated state's flightPhase field
-- [ ] TC3D-107 Reconcile the orbit camera defaults and fix wrong camera comments
 - [ ] TC3D-108 Import the phase detector's thresholds from constants/flightPhase.ts
-- [ ] TC3D-124 Split markdown lines of 500+ characters so Grep can see them
-- [ ] TC3D-126 KOAK tower mod: camera starts 220 m outside the cab; cab stays lit at night
-- [ ] TC3D-128 Gate the prepare-release push through the provenance check
-- [ ] TC3D-130 Add .gate/toolchain.toml (gate GATE-214)
-- [ ] TC3D-134 Run Rust tests with cargo-nextest · release vNext
-- [ ] TC3D-175 Register the tower-positions PUT route with axum 0.7's path syntax
+
+## Remote server hardening
+
 - [ ] TC3D-176 Stop /api/realtraffic/* working as an open proxy
-- [ ] TC3D-178 Share the validated tower and diagnostic path builders between IPC and HTTP
+- [ ] TC3D-175 Register the tower-positions PUT route with axum 0.7's path syntax
+- [ ] TC3D-232 Harden the desktop server's mod files, CORS, proxy and error bodies
+- [ ] TC3D-231 Test that every secret settings field but the ion token stays out of the remote view
+- [ ] TC3D-233 Hide the Cesium ion token field in Settings behind a show button
 - [ ] TC3D-187 Tidy the remote server's path checks: TOCTOU, empty segments, blocking calls, log flooding
-- [ ] TC3D-195 Perf HUD tiles-loading counter reads a Cesium field that does not exist
-- [ ] TC3D-197 Let several dev copies of the app run side by side, one per worktree
-- [ ] TC3D-198 GPU timer in __tc3d.perf() stops updating after its first results
-- [ ] TC3D-200 Runways with no end elevation are flattened to sea level
-- [ ] TC3D-207 apt.dat pavement extractor drops pavements and turns taxi lines into holes
-- [ ] TC3D-212 MSFS model cache limit is dropped on every settings save
-- [ ] TC3D-215 Leader distance of 1.5 fails the settings save; orbit pitch defaults differ
+- [ ] TC3D-178 Share the validated tower and diagnostic path builders between IPC and HTTP
 - [ ] TC3D-216 A remote browser's settings import shows host-owned values the host refused
 - [ ] TC3D-217 Remote server access follow-ups: open sockets, router-suffix names, duplicate reads
-- [ ] TC3D-223 Use design tokens for the remote-server settings' inline styles
-- [ ] TC3D-229 Stop CesiumViewer re-running its GPU timer effect every frame
-- [ ] TC3D-231 Test that every secret settings field but the ion token stays out of the remote view
-- [ ] TC3D-232 Harden the desktop server's mod files, CORS, proxy and error bodies
-- [ ] TC3D-233 Hide the Cesium ion token field in Settings behind a show button
-- [ ] TC3D-236 Draw tower mods in inset viewports
-- [ ] TC3D-237 Draw aircraft mods, or stop listing them
 - [ ] TC3D-243 Harden the headless dev API's path checks and error paths
-- [ ] TC3D-249 Restore the drawn cab when the tower wizard is cancelled
-- [ ] TC3D-255 vNAS popover: Environment label renders at 16px white, unstyled
-- [ ] TC3D-271 Review and land PR #259 (dependabot)
-- [ ] TC3D-272 Review and land PR #258 (dependabot)
-- [ ] TC3D-273 Review and land PR #257 (dependabot)
-- [ ] TC3D-274 Review and land PR #220 (dependabot)
-- [ ] TC3D-275 Review and land PR #219 (dependabot)
-- [ ] TC3D-276 Review and land PR #218 (dependabot)
-- [ ] TC3D-277 Review and land PR #216 (dependabot)
-- [ ] TC3D-278 Review and land PR #215 (dependabot)
-- [ ] TC3D-279 Review and land PR #214 (dependabot)
-- [ ] TC3D-287 Lint and format tests/ and scripts/ with Biome
+- [ ] TC3D-223 Use design tokens for the remote-server settings' inline styles
 
 ## Settings drawer
 
 - [ ] TC3D-76 Add the settings registry and row primitives
+- [ ] TC3D-79 Replace the Settings modal with the settings drawer shell
+- [ ] TC3D-80 Move Mods management to its own screen
+- [ ] TC3D-81 Migrate the General settings category to the registry
+- [ ] TC3D-82 Migrate the Connections settings category to the registry
+- [ ] TC3D-83 Migrate the Traffic & Labels settings category to the registry
+- [ ] TC3D-84 Migrate the Aircraft Models settings category to the registry
+- [ ] TC3D-85 Migrate the Scene settings category to the registry
+- [ ] TC3D-86 Migrate the Weather settings category to the registry
+- [ ] TC3D-87 Migrate the Camera & Input settings category to the registry
+- [ ] TC3D-88 Migrate the Storage & Replay settings category to the registry
+- [ ] TC3D-89 Migrate the Developer settings category to the registry
 - [ ] TC3D-90 Add settings search and the changed-from-default filter
 - [ ] TC3D-91 Add the advanced switch, scope and restart badges, and read-only remote rows
-- [ ] TC3D-83 Migrate the Traffic & Labels settings category to the registry
-- [ ] TC3D-81 Migrate the General settings category to the registry
 - [ ] TC3D-92 Expose settings to agents through window.__tc3d.settings
-- [ ] TC3D-87 Migrate the Camera & Input settings category to the registry
 - [ ] TC3D-93 Build the settings export tree from the registry and delete the old Settings tabs
 - [ ] TC3D-94 Document the settings drawer
-- [ ] TC3D-86 Migrate the Weather settings category to the registry
-- [ ] TC3D-80 Move Mods management to its own screen
 - [ ] TC3D-106 Restore or remove the camera near-plane setting
-- [ ] TC3D-85 Migrate the Scene settings category to the registry
-- [ ] TC3D-82 Migrate the Connections settings category to the registry
-- [ ] TC3D-79 Replace the Settings modal with the settings drawer shell
-- [ ] TC3D-88 Migrate the Storage & Replay settings category to the registry
-- [ ] TC3D-84 Migrate the Aircraft Models settings category to the registry
-- [ ] TC3D-89 Migrate the Developer settings category to the registry
+- [ ] TC3D-215 Leader distance of 1.5 fails the settings save; orbit pitch defaults differ
 
-## First release after 2026-09-27
+## Tower mods
 
-- [ ] TC3D-34 Watch the first release with tauri-action v1 and pinned toolchains
+- [ ] TC3D-126 KOAK tower mod: camera starts 220 m outside the cab; cab stays lit at night
+- [ ] TC3D-249 Restore the drawn cab when the tower wizard is cancelled
+- [ ] TC3D-236 Draw tower mods in inset viewports
+- [ ] TC3D-237 Draw aircraft mods, or stop listing them
 
 ## On-plane cameras
 
@@ -268,21 +224,36 @@
 - [ ] TC3D-103 Run the cinematic director in the main view and insets
 - [ ] TC3D-104 Hide the UI and show a caption while the director runs full-screen
 
-## Design track
+## Documentation
 
-- [ ] TC3D-59 Cesium's own night lighting (E3)
-- [ ] TC3D-58 Aircraft custom shaders for tint and night boost (E2)
-- [ ] TC3D-57 Spike: do converted models keep nav and strobe light meshes (E2-c)
-- [ ] TC3D-56 Native glTF gear animation (E1)
-- [/] TC3D-62 Assess rendering with a single engine · release vNext
-- [ ] TC3D-141 Re-shoot spike A's before images on the v0.2.0-alpha release
-- [ ] TC3D-69 Design a binoculars key for a quick zoom on the selected aircraft
-- [ ] TC3D-70 Design METAR-accurate visibility: RVR, vertical visibility and calibrated fog
-- [ ] TC3D-71 Design airport lighting: runway, approach and taxiway lights and stop bars
-- [ ] TC3D-72 Design replay clips: marks, trimmed export and video
-- [ ] TC3D-73 Design a remote browser that follows the desktop's selected aircraft
-- [ ] TC3D-74 Design selecting an aircraft on the desktop from a phone
-- [ ] TC3D-75 Design a command palette for airports, bookmarks, aircraft and toggles
+- [ ] TC3D-15 Reshape docs/architecture.md to the architecture entry-point template
+- [ ] TC3D-16 Add docs/README.md with a glossary
+- [ ] TC3D-122 Add a Task Index to architecture.md: the vNAS bridge and aircraft motion
+- [ ] TC3D-17 Re-read docs/inset-architecture.md; its broadcast files are gone
+- [ ] TC3D-18 Re-read docs/remote-access-architecture.md against its files
+- [ ] TC3D-77 Fix architecture.md's stale Settings UI section
+- [ ] TC3D-109 Fix architecture.md's stale camera, store and inset sections
+- [ ] TC3D-186 Fix CLAUDE.md's aircraft rendering step: pooled Model primitives, not entities
+- [ ] TC3D-261 Boil settled decision mocks down to a decision record and a rebuild recipe
+- [ ] TC3D-305 Rewrite the vnasStore block in architecture.md from VnasStatus
+
+## Tooling and CI
+
+- [ ] TC3D-34 Watch the first release with tauri-action v1 and pinned toolchains
+- [ ] TC3D-24 macOS signing and runtime checks
+- [ ] TC3D-27 cargo fmt the host crate, then check it in CI and prek
+- [ ] TC3D-134 Run Rust tests with cargo-nextest · release vNext
+- [ ] TC3D-64 Lint and type-check the tests/ folder
+- [ ] TC3D-287 Lint and format tests/ and scripts/ with Biome
+- [ ] TC3D-25 Fix Vite INEFFECTIVE_DYNAMIC_IMPORT warnings
+- [ ] TC3D-26 Decide whether protobufjs's skipped build script must run
+- [ ] TC3D-30 prepare-release runs its fixers outside the gate
+- [ ] TC3D-128 Gate the prepare-release push through the provenance check
+- [ ] TC3D-32 Embed a common-controls manifest for the vNAS test binary
+- [ ] TC3D-33 Protect the crate repo's main branch
+- [ ] TC3D-130 Add .gate/toolchain.toml (gate GATE-214)
+- [ ] TC3D-124 Split markdown lines of 500+ characters so Grep can see them
+- [ ] TC3D-197 Let several dev copies of the app run side by side, one per worktree
 - [ ] TC3D-111 Adopt app-driving lessons from the sibling projects
   - [ ] TC3D-112 Run agent-driven launches against a scratch app-data folder
   - [ ] TC3D-113 Build before stopping the dev app on an agent restart
@@ -293,7 +264,41 @@
   - [ ] TC3D-119 Record the app window on a steady clock without minimising it
   - [ ] TC3D-120 Queue file-dialog answers for agent-driven runs
   - [ ] TC3D-121 Read back every __tc3d write and fail on a changed value
+
+## Dependency updates
+
+- [ ] TC3D-271 Review and land PR #259 (dependabot)
+- [ ] TC3D-272 Review and land PR #258 (dependabot)
+- [ ] TC3D-273 Review and land PR #257 (dependabot)
+- [ ] TC3D-274 Review and land PR #220 (dependabot)
+- [ ] TC3D-275 Review and land PR #219 (dependabot)
+- [ ] TC3D-276 Review and land PR #218 (dependabot)
+- [ ] TC3D-277 Review and land PR #216 (dependabot)
+- [ ] TC3D-278 Review and land PR #215 (dependabot)
+- [ ] TC3D-279 Review and land PR #214 (dependabot)
+
+## Design track
+
+- [ ] TC3D-56 Native glTF gear animation (E1)
+- [ ] TC3D-57 Spike: do converted models keep nav and strobe light meshes (E2-c)
+- [ ] TC3D-58 Aircraft custom shaders for tint and night boost (E2)
+- [ ] TC3D-59 Cesium's own night lighting (E3)
+- [/] TC3D-62 Assess rendering with a single engine · release vNext
+- [ ] TC3D-69 Design a binoculars key for a quick zoom on the selected aircraft
+- [ ] TC3D-70 Design METAR-accurate visibility: RVR, vertical visibility and calibrated fog
+- [ ] TC3D-71 Design airport lighting: runway, approach and taxiway lights and stop bars
+- [ ] TC3D-72 Design replay clips: marks, trimmed export and video
+- [ ] TC3D-73 Design a remote browser that follows the desktop's selected aircraft
+- [ ] TC3D-74 Design selecting an aircraft on the desktop from a phone
+- [ ] TC3D-75 Design a command palette for airports, bookmarks, aircraft and toggles
 - [ ] TC3D-139 Design better-looking OSM buildings: restyle, facade shader or regenerated geometry · release vNext
 - [ ] TC3D-159 Design VR on Cesium through WebXR
 - [ ] TC3D-185 Design night and dusk lighting that follows natural light across the whole scene · release vNext
 - [ ] TC3D-210 Replace the terrain flattening with the greenfield airfield surface
+- [ ] TC3D-200 Runways with no end elevation are flattened to sea level
+- [ ] TC3D-207 apt.dat pavement extractor drops pavements and turns taxi lines into holes
+
+## Cleanup singles
+
+- [ ] TC3D-78 Fix the in-memory tile cache's two disagreeing controls
+- [ ] TC3D-107 Reconcile the orbit camera defaults and fix wrong camera comments
