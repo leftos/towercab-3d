@@ -56,6 +56,13 @@ export const FACADE_FADE_END = 0.6
 /** Share of windows lit at night. */
 export const FACADE_LIT_SHARE = 0.28
 
+/**
+ * Milliseconds per frame, after the render, in which building tiles may start their floor-line
+ * lookup build; the rest wait for the next frame. The tile in flight always finishes, so the worst
+ * frame spends about this plus one tile (about 4 + 4.7 ms at the largest tiles seen).
+ */
+export const BUILDING_LOOKUP_BUILD_BUDGET_MS = 4
+
 // ============================================================================
 // SHADOW CONFIGURATION
 // ============================================================================

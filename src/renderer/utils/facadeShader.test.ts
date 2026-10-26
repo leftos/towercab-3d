@@ -1,5 +1,6 @@
 import * as Cesium from 'cesium'
 import { describe, expect, it } from 'vitest'
+import { BUILDING_LOOKUP_DEFINE, BUILDING_LOOKUP_SAMPLER, glslBuildingLookupRead } from '@/utils/buildingBaseLookup'
 import {
   createBuildingStyle,
   decodePackedColour,
@@ -195,6 +196,55 @@ describe('createFacadeShader', () => {
     expect(guard).toBeGreaterThan(-1)
     expect(read).toBeGreaterThan(guard)
     expect(body.indexOf('#endif', guard)).toBeGreaterThan(read)
+  })
+
+  it("reads the building's base from the lookup texture only where feature ids and the bound lookup both exist", () => {
+    const text = createFacadeShader().fragmentShaderText ?? ''
+    const body = text.slice(text.indexOf('void fragmentMain('))
+    const guard = body.indexOf(`#if defined(HAS_SELECTED_FEATURE_ID) && defined(${BUILDING_LOOKUP_DEFINE})`)
+    const read = body.indexOf(`ground = ${glslBuildingLookupRead('styled.id')};`)
+
+    expect(guard).toBeGreaterThan(-1)
+    expect(read).toBeGreaterThan(guard)
+    expect(body.indexOf('texelFetch(')).toBe(read + 'ground = '.length)
+    expect(body.indexOf('#endif', guard)).toBeGreaterThan(read)
+  })
+
+  it('starts the base at the no-lookup sentinel, so a tile without one never draws rows', () => {
+    const text = createFacadeShader().fragmentShaderText ?? ''
+
+    expect(text).toContain('vec4 ground = vec4(0.0, 0.0, 0.0, -1.0);')
+  })
+
+  it('clamps the feature id into the lookup on both sides', () => {
+    const text = createFacadeShader().fragmentShaderText ?? ''
+
+    expect(text).toContain(`ivec2(clamp(styled.id, 0, textureSize(${BUILDING_LOOKUP_SAMPLER}, 0).x - 1), `)
+  })
+
+  it('drops the floor-line detail where the lookup is missing, after the derivatives and without a branch', () => {
+    const text = createFacadeShader().fragmentShaderText ?? ''
+    const body = text.slice(text.indexOf('void fragmentMain('))
+    const gate = body.search(/float detail = [^;\n]*\* step\(0\.0, ground\.w\);/)
+
+    expect(gate).toBeGreaterThan(body.indexOf('fwidth('))
+    expect(body.indexOf('if (')).toBeGreaterThan(gate)
+  })
+
+  it("counts storeys from the building's base, in model coordinates relative to it", () => {
+    const text = createFacadeShader().fragmentShaderText ?? ''
+
+    expect(text).not.toContain('float h = dot(positionMC, upMC);')
+    expect(text).toContain('float h = dot(positionMC - ground.xyz, upMC) + ground.w;')
+    expect(text).toContain('h / storey')
+  })
+
+  it("counts a raised part's storeys from the building's ground, its base less its min_height", () => {
+    const text = createFacadeShader().fragmentShaderText ?? ''
+    const read = text.indexOf(`ground = texelFetch(${BUILDING_LOOKUP_SAMPLER}`)
+
+    expect(read).toBeGreaterThan(-1)
+    expect(text.indexOf('+ ground.w;')).toBeGreaterThan(read)
   })
 
   // applyBuildingStyle sets the MIX blend at amount 0, so Cesium's CPU styling multiplies the lit

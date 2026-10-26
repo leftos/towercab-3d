@@ -1,5 +1,6 @@
 import * as Cesium from 'cesium'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { attachBuildingLookup, createLookupTexture, installBuildingLookupStage } from '@/utils/buildingBaseLookup'
 import { applyBuildingStyle } from '@/utils/buildingStyle'
 import { createFacadeShader } from '@/utils/facadeShader'
 import { useAgentHarness } from '../../hooks/useAgentHarness'
@@ -693,7 +694,14 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
     const insetBuildingsEnabled = isInset && insetGraphics.buildings
     if (isInset && !insetBuildingsEnabled) return
 
+    // The facade shader's floor lines read each building's base from a per-tile lookup texture,
+    // bound by wrapping Cesium's private BatchTexturePipelineStage.process
+    // (Source/Scene/Model/BatchTexturePipelineStage.js); this throws, naming the Cesium version,
+    // when that function is gone.
+    installBuildingLookupStage()
+
     let currentTileset: Cesium.Cesium3DTileset | null = null
+    let detachLookup: (() => void) | null = null
     let isCancelled = false
 
     const loadBuildings = async () => {
@@ -725,6 +733,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
 
           tileset.customShader = createFacadeShader()
           applyBuildingStyle(tileset)
+          detachLookup = attachBuildingLookup(tileset, viewer.scene, createLookupTexture)
 
           viewer.scene.primitives.add(tileset)
           currentTileset = tileset
@@ -739,6 +748,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
 
     return () => {
       isCancelled = true
+      detachLookup?.()
       if (currentTileset && viewer && !viewer.isDestroyed()) {
         viewer.scene.primitives.remove(currentTileset)
         setBuildingsTileset(null)

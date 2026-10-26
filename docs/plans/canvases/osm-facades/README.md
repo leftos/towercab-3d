@@ -8,7 +8,7 @@ The tileset's colour blend is MIX at amount 0, so the packed colour never tints 
 
 | File | Pose | What it shows |
 |------|------|---------------|
-| `ksfo-garage-noon.png` | KSFO tower eye, heading 235, pitch −14, FOV 35 | The curved central garage below the tower. It is OSM relation 15730419, tagged only `type=building`, so it gets the generic window grid; the terminal behind it gets office bands. |
+| `ksfo-garage-noon.png` | KSFO tower eye, heading 235, pitch −14, FOV 35 | The curved central garage below the tower. The building under the tower is OSM element 15730419, the International Terminal Main Hall; the terminal behind it gets office bands. |
 | `ksfo-garage-night.png` | same, 22:00 | Lit share 0.28 on the glass classes; garages tagged `amenity=parking` have no lit windows. |
 | `ksfo-tower-noon.png` | KSFO tower eye, heading 290, pitch −4, FOV 60 (wide) | Terminals and boarding areas (tagged `aeroway=terminal`, so the office grammar and the terminal palette) in front, the central garage's ring at the bottom, San Bruno 2–5 km behind. |
 | `ksfo-tower-night.png` | same, 22:00 | Night look of the wide view. |
@@ -16,5 +16,7 @@ The tileset's colour blend is MIX at amount 0, so the packed colour never tints 
 | `koak-tower-night.png` | same, 22:00 | Night look of the wide view. |
 | `koak-hangar-noon.png` | KOAK tower eye +25 m, heading 182.8, pitch −9.9, FOV 12 | The long building on the south field. It still shows windows, so its tag is not one the hangar class reads (it was not picked in this run). |
 | `koak-hangar-night.png` | same, 22:00 | Night look of the same building. |
+
+All eight captures predate the per-building ground fix (TC3D-220): their floor lines start at the tile's model origin, not each building's ground, so row positions differ from the current build.
 
 Palette values are a proposal for the owner to judge from these frames.

@@ -70,7 +70,7 @@ The spike measured no frame cost: every mode hit the 240 Hz cap on the RTX 4090.
 ### 8. Baked ambient occlusion and contact darkening — rank 8
 - **Look.** Building bases darken where they meet the ground, inner corners and parapets read, and roof clutter sits *on* the roof. Buildings stop floating on the imagery.
 - **Build.** Level 3 only. Cesium applies `material.occlusion` only to the IBL term, not to direct sun (`LightingStageFS.glsl`, `computePbrLighting`), so multiply `diffuse` in the shader or bake into `COLOR_0`.
-  Cheapest: store height above the base per vertex (a spare `TEXCOORD_1` channel) and darken analytically in the bottom 1–2 m, under parapets and in corners, with no added triangles; ray-cast per-vertex AO would need subdivided walls. Level 2 doesn't know a building's base height (the spike's floor-alignment gap).
+  Cheapest: store height above the base per vertex (a spare `TEXCOORD_1` channel) and darken analytically in the bottom 1–2 m, under parapets and in corners, with no added triangles; ray-cast per-vertex AO would need subdivided walls. Level 2 now measures each building's base per tile (`utils/buildingBaseLookup.ts`, TC3D-220), so floor rows start at its ground; contact darkening could read the same lookup.
 - **Cost.** A few ALU per fragment and one vertex attribute; build time is seconds.
 - **Measure.** GPU-bound A/B; GLB size change.
 
@@ -83,7 +83,7 @@ The spike measured no frame cost: every mode hit the 240 Hz cap on the RTX 4090.
 
 ### 10. Facade grammar: ground floor, top band, corner piers — own idea, rank 10
 - **Look.** A taller ground floor with storefront glass, a cornice or top band, solid corners and slight irregularity in window columns. These are the cues streets-gl and OSM2World use, and they give the eye a sense of scale.
-- **Build.** Level 3 easily, since height above the base is known (idea 8's attribute). Level 2 only partly, because the base is unknown; do the top band from the packed height (idea 4) only if the base can be inferred.
+- **Build.** Level 3 easily, since height above the base is known (idea 8's attribute). Level 2 too, now that the per-tile lookup gives each building's base (TC3D-220); the top band comes from the packed height (idea 4).
 - **Cost.** A few ALU per fragment.
 - **Measure.** Folded into idea 4's A/B.
 
@@ -125,7 +125,7 @@ All five fit the level 2 shader, so they ship before the level 3 pipeline and im
 
 - **Frame cost is unmeasured** ("all modes hit the 240 Hz cap"), and the GPU timer reads 0 on this desktop. Every rank above is a judgement until the shared method runs.
 - **Text tags never reach the level 2 shader** (spike, `parseBatchTable.js:94/110`). Type awareness on ion tiles depends on style-colour packing, which Cesium documents as undefined behaviour alongside custom shaders (`Model.js:2936`).
-- **Floors don't line up with each building's base on ion tiles** (spike "What shipping each would take"). Ground-floor grammar, slab bands on garages and contact darkening are reliable only at level 3.
+- **Floors line up with each building's base on ion tiles** since TC3D-220 (the spike's "What shipping each would take" gap): the shader reads the base from a per-tile lookup texture built from the tile's geometry, and a tile without one shows the flat far tint with no floor lines. Raised parts are measured from the building's ground.
 - **The spike hashes `featureId_0`**, a per-tile batch index. It's stable per building only if buildings never move between tiles; verify that before idea 3 relies on it at level 2.
 - **The garage has windows because OSM tags it only as a building.** Type-aware facades need a build-time join with parking polygons, which level 2 can't do.
 - **The olive cast is attributed to "the tileset's own lighting"**: idea 1 names a likely source (`#717145` default ground colour), still to be confirmed.

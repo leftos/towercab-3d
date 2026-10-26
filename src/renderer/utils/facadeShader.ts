@@ -6,7 +6,8 @@
  * per storey and bay. Offices and terminals get continuous window bands, houses small punched
  * windows, parking garages open slab bands with dark gaps, hangars door panels with corrugated
  * ribs, domestic garages and carports a plain wall, and every other building the generic window
- * grid. Walls take a colour from a curated palette per
+ * grid. Storeys count up from each building's ground, read per feature from the tile's lookup
+ * texture (see `buildingBaseLookup.ts`). Walls take a colour from a curated palette per
  * class, picked by the building's position hash, so neighbours differ. Where a grid cell shrinks under a pixel, the grid
  * can fade to a flat tint, the area-weighted mean of wall and opening in linear light. At night a
  * share of the windows glow, and the flat tint glows by the same share. Roofs are left as the
@@ -23,6 +24,7 @@ import {
   FACADE_WINDOW_HI,
   FACADE_WINDOW_LO,
 } from '@/constants'
+import { BUILDING_LOOKUP_DEFINE, glslBuildingLookupRead } from '@/utils/buildingBaseLookup'
 import {
   FacadeClass,
   type FacadeClassCode,
@@ -452,10 +454,16 @@ ${WALL_GLSL}
 
 void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
   vec4 building = vec4(0.0);
+  // (the building's lowest vertex in model coordinates, metres from its ground to that vertex);
+  // a negative w marks no lookup (unbuilt or skipped tile, or none bound), which draws no rows.
+  vec4 ground = vec4(0.0, 0.0, 0.0, -1.0);
   #ifdef HAS_SELECTED_FEATURE_ID
   SelectedFeature styled;
   selectedFeatureIdStage(styled, fsInput.featureIds);
   building = facadeDecode(styled.color.rgb);
+  #endif
+  #if defined(HAS_SELECTED_FEATURE_ID) && defined(${BUILDING_LOOKUP_DEFINE})
+  ground = ${glslBuildingLookupRead('styled.id')};
   #endif
   vec4 grammar = facadeCell(building.x);
   float levelsKnown = step(0.5, building.y) * step(0.5, building.z) * step(building.z, ${glslFloat(SATURATED_HEIGHT_M - 1)}) * grammar.w;
@@ -474,13 +482,16 @@ void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
   vec3 across = cross(upMC, normalMC);
   vec3 tangentMC = across / max(length(across), 1e-4);
   float s = dot(positionMC, tangentMC);
-  float h = dot(positionMC, upMC);
+  // Height above the building's ground, measured from its own base so the far model origin's
+  // tilt across the tile cannot shift it; a raised part adds its min_height, so rows continue
+  // through stacked parts.
+  float h = dot(positionMC - ground.xyz, upMC) + ground.w;
   vec2 cell = vec2(s / grammar.x, h / storey);
   vec2 aa = max(fwidth(cell), vec2(1e-4));
   float ribCoord = s * ${glslFloat(RIBS_PER_M)};
   float ribAa = max(fwidth(ribCoord), 1e-4);
   float fadeDetail = 1.0 - smoothstep(u_fadeStart, u_fadeEnd, max(aa.x, aa.y));
-  float detail = mix(1.0, fadeDetail, u_fade);
+  float detail = mix(1.0, fadeDetail, u_fade) * step(0.0, ground.w);
   float ribDetail = 1.0 - smoothstep(0.25, 0.6, ribAa);
 
   if (dot(normalWC, upWC) > 0.6) {

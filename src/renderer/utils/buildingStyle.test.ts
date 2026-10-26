@@ -5,11 +5,13 @@ import {
   createBuildingStyle,
   decodePackedColour,
   FacadeClass,
+  isBuildingPart,
   PACK_CHANNEL_MIN,
   PACK_CODE_MAX,
   PACK_HASH_STATES,
   PACK_HEIGHT_STEP_M,
   type PackedBuilding,
+  tagValueNumber,
 } from '@/utils/buildingStyle'
 
 /** A batch-table cell: a column can hold null or '' where a building lacks the tag. */
@@ -216,6 +218,30 @@ describe('createBuildingStyle tag numbers', () => {
     [14, 14],
   ])('reads %o as a wall height', (height, expected) => {
     expect(packed({ height } as Tags).heightM).toBe(expected)
+  })
+})
+
+describe('tagValueNumber', () => {
+  it('reads a number, metres and a decimal comma, and gives NaN for anything else', () => {
+    expect(tagValueNumber(12)).toBe(12)
+    expect(tagValueNumber('6 m')).toBe(6)
+    expect(tagValueNumber(' 4,5 ')).toBe(4.5)
+    expect(tagValueNumber('-2')).toBe(-2)
+    expect(tagValueNumber('10;12')).toBeNaN()
+    expect(tagValueNumber('30 ft')).toBeNaN()
+    expect(tagValueNumber('')).toBeNaN()
+    expect(tagValueNumber(null)).toBeNaN()
+    expect(tagValueNumber(undefined)).toBeNaN()
+    expect(tagValueNumber(Number.POSITIVE_INFINITY)).toBeNaN()
+  })
+})
+
+describe('isBuildingPart', () => {
+  it('is a part exactly when the feature carries its own part#elementId', () => {
+    expect(isBuildingPart(stubFeature({ elementId: 'w1', 'part#elementId': 'w9' }))).toBe(true)
+    expect(isBuildingPart(stubFeature({ 'part#elementId': 0 }))).toBe(true)
+    expect(isBuildingPart(stubFeature({ elementId: 'w1', 'part#height': '12' }))).toBe(false)
+    expect(isBuildingPart(stubFeature({ elementId: 'w1', 'part#elementId': null }))).toBe(false)
   })
 })
 

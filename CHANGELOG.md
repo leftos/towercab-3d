@@ -7,7 +7,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 ### Added
 - New **Show Moon** setting under Settings → Graphics lets you hide the moon from the sky.
 - vNAS can join your CRC session on a YAAT training server: YAAT1, or YAAT Local when a local YAAT server is running.
-- 3D buildings now show walls that suit their type, such as window rows lit at night, open parking-garage decks and hangar doors, and vary in colour.
+- 3D buildings now show walls that suit their type, such as window rows lit at night, open parking-garage decks and hangar doors, with floors counted from each building's ground.
 
 ### Changed
 - 3D buildings and aircraft no longer have an olive-green cast on their walls and fuselages; their reflected ground light is now a neutral grey.

@@ -20,6 +20,7 @@ export {
   // Aircraft model pool
   AIRCRAFT_POOL_SIZE,
   // Facade shader
+  BUILDING_LOOKUP_BUILD_BUDGET_MS,
   FACADE_BAY_WIDTH_M,
   FACADE_FADE_END,
   FACADE_FADE_START,
