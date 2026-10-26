@@ -418,6 +418,12 @@ TowerCab can also join your CRC session on a [YAAT](https://github.com/leftos/ya
 
 Connect CRC to the same YAAT server and start a session; TowerCab joins it the way it joins a vNAS session. YAAT sends all aircraft updates over its hub connection, so traffic keeps YAAT's own update rate.
 
+#### Joining a YAAT room
+
+On a YAAT server you can also join a room as its member, with no CRC session of your own. While neither a room nor a CRC session is open, the vNAS status reads "Waiting for a YAAT room or CRC...". If the last session ended because the room closed, the reason shows dimmed under the status while TowerCab waits for the next one. If the instructor removes you from the room, the status shows "Removed from the room by the instructor" and TowerCab disconnects.
+
+When a room's session is joined the status reads "Joining room..." and then "Connected", with the room's airport marked as a room, for example "OAK · room". TowerCab moves to the room's airport, even if you had picked another one by hand, and subscribes to it. Remote browsers do not follow the room, and RealTraffic remote browsers stay at their own airport. If the app has no tower view for the room's airport, TowerCab stays at your current airport and says so in the vNAS status and in a short message.
+
 ### Changing Airports
 
 When you select a new airport:

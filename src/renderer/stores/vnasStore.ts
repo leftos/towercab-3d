@@ -187,8 +187,11 @@ interface VnasStore {
   completeAuth: () => Promise<void>
   handleOAuthCallback: (callbackUrl: string) => Promise<void>
   connect: () => Promise<void>
-  /** Subscribe to a facility (additive, supports multiple) */
-  subscribeToFacility: (facilityId: string) => Promise<void>
+  /**
+   * Subscribe to a facility (additive, supports multiple). While a joined session's follow
+   * is pending, only the follow's own call (`fromFollow`) reaches the hub.
+   */
+  subscribeToFacility: (facilityId: string, options?: SubscribeOptions) => Promise<void>
   /** Unsubscribe from a facility */
   unsubscribeFromFacility: (facilityId: string) => Promise<void>
   /** Get currently subscribed facilities */
@@ -216,6 +219,20 @@ interface VnasStore {
   setSubscribedFacilities: (facilities: string[]) => void
   setSessionFacilities: (facilities: string[]) => void
   removeAircraft: (callsign: string) => void
+  // The notice that the joined YAAT room's airport has no tower view, while the room stays there
+  roomAirportNotice: string | null
+  setRoomAirportNotice: (notice: string | null) => void
+  /**
+   * Counts the sessions joined (each `subscribing`) and the disconnects, so work started
+   * for one session can tell that a newer one, or none, has replaced it
+   */
+  joinSerial: number
+  /** True from a session's `subscribing` until its follow starts; only the follow subscribes meanwhile */
+  followPending: boolean
+  /** The follow has started: subscribes from any caller reach the hub again */
+  clearFollowPending: () => void
+  // Apply a session state the host reported and re-read what goes with it
+  followSessionState: (state: VnasStatus['state']) => Promise<void>
   /** Drop the ended session's aircraft state, facility lists and vNAS observations */
   handleSessionEnded: () => void
 }
@@ -227,6 +244,68 @@ const DEFAULT_STATUS: VnasStatus = {
   error: null,
   available: true, // Assume available until we check
   lastSessionEnd: null,
+  sessionKind: null,
+}
+
+/** How a subscribe was asked for */
+export interface SubscribeOptions {
+  /** The joined session's follow is subscribing the airport in view; it alone may while the follow is pending */
+  fromFollow?: boolean
+}
+
+/** The states in which the host drops the session's kind and subscriptions (a session ended or was replaced) */
+const SESSION_CHANGE_STATES: readonly VnasStatus['state'][] = ['disconnected', 'waitingForSession', 'subscribing']
+
+/**
+ * The store fields a session state from the host changes, by the host's own rules
+ * (`apply_session_change` in vnas.rs): a session that ends or is replaced takes its kind,
+ * subscriptions and airports with it, and joining one clears the error and a non-forcible
+ * end. A joined session (`subscribing`) also gets a new join serial and its follow pending.
+ */
+function sessionStateChange(store: VnasStore, state: VnasStatus['state']): Partial<VnasStore> {
+  if (!SESSION_CHANGE_STATES.includes(state)) {
+    return { status: { ...store.status, state } }
+  }
+  const status: VnasStatus = { ...store.status, state, subscribedFacilities: [], sessionKind: null }
+  if (state !== 'subscribing') {
+    return { status, sessionFacilities: [], followPending: false }
+  }
+  const forcibleEnd = store.status.lastSessionEnd?.forcible ? store.status.lastSessionEnd : null
+  return {
+    status: { ...status, error: null, lastSessionEnd: forcibleEnd },
+    sessionFacilities: [],
+    joinSerial: store.joinSerial + 1,
+    followPending: true,
+  }
+}
+
+/**
+ * Write a host status read into the store, all but its `state`: the host publishes every
+ * state as an event, and a snapshot that put `subscribing` in the store ahead of that event
+ * would let subscribes through before the joined session's follow is pending. The one state a
+ * snapshot does apply is a live session's while the store is `disconnected`: a frontend that
+ * loaded while the host was already in a session missed those events, and a real connect has
+ * already moved the store to `connecting`. It goes through `followSessionState`, so the host's
+ * rules apply. A read started before a join or a disconnect moved `joinSerial` describes the old
+ * session, all but the subscriptions and the error, which the host keeps current; only those are
+ * taken from it then.
+ */
+function writeStatusSnapshot(
+  set: StoreApi<VnasStore>['setState'],
+  get: () => VnasStore,
+  serial: number,
+  status: VnasStatus,
+): void {
+  if (get().joinSerial === serial) {
+    set((store) => ({ status: { ...status, state: store.status.state } }))
+    if (get().status.state === 'disconnected' && status.state !== 'disconnected') {
+      void get().followSessionState(status.state)
+    }
+    return
+  }
+  set((store) => ({
+    status: { ...store.status, subscribedFacilities: status.subscribedFacilities, error: status.error },
+  }))
 }
 
 /** The exact rejection vnas_yaat_local_sign_in sends when it has no CID to sign in with */
@@ -249,12 +328,22 @@ async function signInYaatLocal(cid: string | null, set: StoreApi<VnasStore>['set
     if (message === YAAT_LOCAL_CID_REQUIRED) {
       set((state) => ({
         yaatLocalCidRequired: true,
-        status: { ...state.status, state: 'disconnected', error: 'Enter your VATSIM CID to sign in to YAAT Local.' },
+        status: {
+          ...state.status,
+          state: 'disconnected',
+          error: 'Enter your VATSIM CID to sign in to YAAT Local.',
+          lastSessionEnd: null,
+        },
       }))
     } else {
       console.warn('[vNAS] YAAT Local sign-in failed:', message)
       set((state) => ({
-        status: { ...state.status, state: 'disconnected', error: `YAAT Local sign-in failed: ${message}` },
+        status: {
+          ...state.status,
+          state: 'disconnected',
+          error: `YAAT Local sign-in failed: ${message}`,
+          lastSessionEnd: null,
+        },
       }))
     }
     return
@@ -288,6 +377,9 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
   sessionArtccId: null,
   lastUpdateTime: 0,
   yaatLocalCidRequired: false,
+  roomAirportNotice: null,
+  joinSerial: 0,
+  followPending: false,
 
   /**
    * Try to restore a session from stored tokens.
@@ -424,6 +516,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
           ...state.status,
           state: 'disconnected',
           error: `Auth failed: ${message}`,
+          lastSessionEnd: null,
         },
       }))
       throw error
@@ -449,6 +542,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
           ...state.status,
           state: 'disconnected',
           error: `Auth completion failed: ${message}`,
+          lastSessionEnd: null,
         },
       }))
       throw error
@@ -507,6 +601,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
           ...state.status,
           state: 'disconnected',
           error: `OAuth callback failed: ${message}`,
+          lastSessionEnd: null,
         },
       }))
       throw error
@@ -522,6 +617,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       return
     }
 
+    const serial = get().joinSerial
     try {
       const { invoke } = await import('@tauri-apps/api/core')
       await invoke('vnas_connect')
@@ -529,7 +625,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       // Explicitly fetch and update status after connection.
       // This ensures UI updates even if event listeners have issues.
       const status = await invoke<VnasStatus>('vnas_get_status')
-      set({ status })
+      writeStatusSnapshot(set, get, serial, status)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       set((state) => ({
@@ -537,6 +633,7 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
           ...state.status,
           state: 'disconnected',
           error: `Connection failed: ${message}`,
+          lastSessionEnd: null,
         },
       }))
       throw error
@@ -552,13 +649,26 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
    * Note: vNAS facility IDs don't include the K prefix for US airports.
    * This function automatically strips it (KSFO -> SFO).
    */
-  subscribeToFacility: async (icaoCode: string) => {
+  subscribeToFacility: async (icaoCode: string, options: SubscribeOptions = {}) => {
     if (isRemoteMode()) {
       // In remote mode, vNAS subscriptions are handled by the host
       return
     }
 
     if (get().isSubscribedTo(icaoCode)) {
+      return
+    }
+
+    // Only a joined session takes subscribes; the follow subscribes the airport in view once one is
+    if (!get().canSubscribe()) {
+      console.debug(`[vNAS] Not subscribing ${icaoCode}: no session joined (${get().status.state})`)
+      return
+    }
+
+    // The joined session's follow ends by subscribing the airport in view, which may be
+    // the room's rather than this one: nothing is lost by leaving it to the follow.
+    if (get().followPending && !options.fromFollow) {
+      console.log(`[vNAS] Leaving ${icaoCode} to the joined session's follow`)
       return
     }
 
@@ -575,13 +685,14 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
     }
 
     const subscribeOnHub = async () => {
+      const serial = get().joinSerial
       try {
         const { invoke } = await import('@tauri-apps/api/core')
         await invoke('vnas_subscribe_facility', { facilityId })
 
         // Explicitly fetch and update status after subscription.
         const status = await invoke<VnasStatus>('vnas_get_status')
-        set({ status })
+        writeStatusSnapshot(set, get, serial, status)
 
         // Broadcast updated subscriptions to remote browsers
         invoke('broadcast_subscriptions', { facilities: status.subscribedFacilities }).catch(() => {})
@@ -630,13 +741,14 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       facilityId = icaoCode.slice(1)
     }
 
+    const serial = get().joinSerial
     try {
       const { invoke } = await import('@tauri-apps/api/core')
       await invoke('vnas_unsubscribe_facility', { facilityId })
 
       // Explicitly fetch and update status after unsubscription
       const status = await invoke<VnasStatus>('vnas_get_status')
-      set({ status })
+      writeStatusSnapshot(set, get, serial, status)
 
       // Broadcast updated subscriptions to remote browsers
       invoke('broadcast_subscriptions', { facilities: status.subscribedFacilities }).catch(() => {})
@@ -672,6 +784,8 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       return
     }
 
+    // A follow still reading the joined session must not move the view after this
+    set((store) => ({ joinSerial: store.joinSerial + 1, followPending: false }))
     try {
       const { invoke } = await import('@tauri-apps/api/core')
       await invoke('vnas_disconnect')
@@ -933,10 +1047,11 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
       return get().status
     }
 
+    const serial = get().joinSerial
     try {
       const { invoke } = await import('@tauri-apps/api/core')
       const status = await invoke<VnasStatus>('vnas_get_status')
-      set({ status })
+      writeStatusSnapshot(set, get, serial, status)
       return status
     } catch (error) {
       console.error('Failed to get vNAS status:', error)
@@ -1177,7 +1292,69 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
     set((state) => ({
       aircraftStates: new Map(),
       sessionFacilities: [],
+      roomAirportNotice: null,
       status: { ...state.status, subscribedFacilities: [] },
     }))
   },
+
+  setRoomAirportNotice: (notice: string | null) => {
+    set({ roomAirportNotice: notice })
+  },
+
+  clearFollowPending: () => {
+    set({ followPending: false })
+  },
+
+  /**
+   * Apply a session state from `vnas-state-changed` by the host's rules (see
+   * `sessionStateChange`), then re-read the host status that goes with it: how the last
+   * session ended (`disconnected`, `waitingForSession`) and the joined session's kind and
+   * airports (`subscribing`). The host drops a session's subscriptions whenever the
+   * session changes, so a subscribe still in flight from the old one is forgotten too.
+   * The state is applied before the first await, so a caller can read the new
+   * `joinSerial` as soon as this returns its promise.
+   */
+  followSessionState: async (state: VnasStatus['state']) => {
+    set((store) => sessionStateChange(store, state))
+    const serial = get().joinSerial
+    if (state === 'disconnected') {
+      get().handleSessionEnded()
+    } else if (state === 'waitingForSession' || state === 'subscribing') {
+      inFlightSubscribes.clear()
+      set({ roomAirportNotice: null })
+    }
+    if (isRemoteMode() || !SESSION_CHANGE_STATES.includes(state)) {
+      return
+    }
+    if (state === 'subscribing') {
+      // Also tells the host the session's kind, so the status read below carries it
+      await get().getSessionAirports()
+    }
+    await readStatusFor(state, serial, set, get)
+  },
 }))
+
+/**
+ * Read what the host knows of the session `state` started, how the last one ended and
+ * the joined one's kind, into the store; the store keeps every other field, which its own
+ * events keep current. A join or a disconnect since (`joinSerial` moved past `serial`)
+ * makes the read stale, and it is dropped.
+ */
+async function readStatusFor(
+  state: VnasStatus['state'],
+  serial: number,
+  set: StoreApi<VnasStore>['setState'],
+  get: () => VnasStore,
+): Promise<void> {
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    const status = await invoke<VnasStatus>('vnas_get_status')
+    if (get().joinSerial === serial) {
+      set((store) => ({
+        status: { ...store.status, lastSessionEnd: status.lastSessionEnd, sessionKind: status.sessionKind },
+      }))
+    }
+  } catch (error) {
+    console.error(`[vNAS] Failed to read the status after ${state}:`, error)
+  }
+}

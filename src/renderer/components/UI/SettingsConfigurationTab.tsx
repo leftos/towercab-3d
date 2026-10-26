@@ -13,6 +13,7 @@ import { DEFAULT_IMAGERY_ADJUSTMENTS } from '../../types/settings'
 import type { VnasEnvironment } from '../../types/vnas'
 import { isRemoteMode } from '../../utils/remoteMode'
 import { httpServerApi, isTauri, type ServerStatus, shellApi } from '../../utils/tauriApi'
+import { getVnasErrorLine, getVnasFacilityChip, getVnasStateLabel } from '../../utils/vnasStatusText'
 import MSFSModelSettingsPanel from './MSFSModelSettingsPanel'
 import CollapsibleSection from './settings/CollapsibleSection'
 import { VnasEnvironmentSelect } from './VnasEnvironmentSelect'
@@ -220,29 +221,8 @@ function SettingsConfigurationTab({
     }
   }, [vnasDisconnect])
 
-  // Helper to get vNAS state label
-  const getVnasStateLabel = useCallback(() => {
-    switch (vnasStatus.state) {
-      case 'disconnected':
-        return 'Disconnected'
-      case 'authenticating':
-        return 'Authenticating...'
-      case 'connecting':
-        return 'Connecting...'
-      case 'joiningSession':
-        return 'Joining Session...'
-      case 'waitingForSession':
-        return 'Waiting for CRC...'
-      case 'subscribing':
-        return 'Ready for vNAS Airport...'
-      case 'connected':
-        return 'Connected'
-      case 'unavailable':
-        return 'Not Available'
-      default:
-        return vnasStatus.state
-    }
-  }, [vnasStatus.state])
+  const vnasFacilityChip = getVnasFacilityChip(vnasStatus)
+  const vnasErrorLine = getVnasErrorLine(vnasStatus)
 
   const handleDataSourceChange = useCallback(
     (newSource: DataSourceType) => {
@@ -722,20 +702,18 @@ function SettingsConfigurationTab({
                 fontWeight: 600,
               }}
             >
-              {getVnasStateLabel()}
-              {vnasStatus.subscribedFacilities.length > 0 && vnasStatus.state === 'connected' && (
-                <span style={{ color: '#4fc3f7', marginLeft: '8px' }}>
-                  ({vnasStatus.subscribedFacilities.join(', ')})
-                </span>
+              {getVnasStateLabel(vnasStatus)}
+              {vnasFacilityChip && (
+                <span style={{ color: 'var(--accent)', marginLeft: '8px' }}>({vnasFacilityChip})</span>
               )}
             </span>
           </div>
 
           {/* Error display */}
-          {vnasStatus.error && (
+          {vnasErrorLine && (
             <div className="setting-item">
               <p className="setting-hint" style={{ color: '#f44336' }}>
-                {vnasStatus.error}
+                {vnasErrorLine}
               </p>
             </div>
           )}

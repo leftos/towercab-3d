@@ -54,4 +54,14 @@ export interface VnasStatus {
    * a forcible one (a kick from a YAAT room) stays until the next connect.
    */
   lastSessionEnd: { reason: string; forcible: boolean } | null
+  /**
+   * Where the joined session comes from: a controller's CRC session or a YAAT room;
+   * null while no session is joined (and until the host has read a new session's kind).
+   */
+  sessionKind: VnasSessionKind | null
 }
+
+/**
+ * Where a joined vNAS session comes from
+ */
+export type VnasSessionKind = 'crc' | 'room'

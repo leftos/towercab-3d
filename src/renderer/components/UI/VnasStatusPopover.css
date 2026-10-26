@@ -69,6 +69,24 @@
   font-weight: 600;
 }
 
+.vnas-popover-note {
+  margin-bottom: 12px;
+  padding-left: 16px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.vnas-popover-notice {
+  padding: 8px 10px;
+  margin-bottom: 12px;
+  background: var(--white-a05);
+  border: 1px solid var(--white-a10);
+  border-radius: var(--radius-sm);
+  color: var(--accent);
+  font-size: 11px;
+  word-break: break-word;
+}
+
 .vnas-popover-error {
   padding: 8px 10px;
   margin-bottom: 12px;

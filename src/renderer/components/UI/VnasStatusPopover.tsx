@@ -12,6 +12,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useVnasStore } from '../../stores/vnasStore'
 import type { VnasEnvironment } from '../../types/vnas'
+import {
+  getVnasErrorLine,
+  getVnasFacilityChip,
+  getVnasSessionEndNote,
+  getVnasStateLabel,
+} from '../../utils/vnasStatusText'
 import { VnasEnvironmentSelect } from './VnasEnvironmentSelect'
 import { YaatLocalCidPrompt } from './YaatLocalCidPrompt'
 import './VnasStatusPopover.css'
@@ -32,6 +38,7 @@ export function VnasStatusPopover({ onClose, toggleRef }: VnasStatusPopoverProps
   const vnasHandleOAuthCallback = useVnasStore((state) => state.handleOAuthCallback)
   const vnasDisconnect = useVnasStore((state) => state.disconnect)
   const yaatLocalCidRequired = useVnasStore((state) => state.yaatLocalCidRequired)
+  const roomAirportNotice = useVnasStore((state) => state.roomAirportNotice)
 
   // Local state
   const [selectedEnv, setSelectedEnv] = useState<VnasEnvironment>(vnasStatus.environment)
@@ -84,28 +91,9 @@ export function VnasStatusPopover({ onClose, toggleRef }: VnasStatusPopoverProps
     }
   }, [vnasStatus.state, isAuthenticating, onClose])
 
-  const getStateLabel = useCallback(() => {
-    switch (vnasStatus.state) {
-      case 'disconnected':
-        return 'Disconnected'
-      case 'authenticating':
-        return 'Authenticating...'
-      case 'connecting':
-        return 'Connecting...'
-      case 'joiningSession':
-        return 'Joining Session...'
-      case 'waitingForSession':
-        return 'Waiting for CRC...'
-      case 'subscribing':
-        return 'Ready for vNAS Airport...'
-      case 'connected':
-        return 'Connected'
-      case 'unavailable':
-        return 'Not Available'
-      default:
-        return vnasStatus.state
-    }
-  }, [vnasStatus.state])
+  const facilityChip = getVnasFacilityChip(vnasStatus)
+  const sessionEndNote = getVnasSessionEndNote(vnasStatus)
+  const errorLine = getVnasErrorLine(vnasStatus)
 
   const getStateColor = useCallback(() => {
     switch (vnasStatus.state) {
@@ -195,15 +183,21 @@ export function VnasStatusPopover({ onClose, toggleRef }: VnasStatusPopoverProps
         <div className="vnas-popover-status">
           <span className="vnas-popover-status-dot" style={{ backgroundColor: getStateColor() }} />
           <span className="vnas-popover-status-text" style={{ color: getStateColor() }}>
-            {getStateLabel()}
+            {getVnasStateLabel(vnasStatus)}
           </span>
-          {vnasStatus.subscribedFacilities.length > 0 && vnasStatus.state === 'connected' && (
-            <span className="vnas-popover-facility">{vnasStatus.subscribedFacilities.join(', ')}</span>
-          )}
+          {facilityChip && <span className="vnas-popover-facility">{facilityChip}</span>}
         </div>
 
+        {/* Why the last session ended, while waiting for the next one */}
+        {sessionEndNote && <div className="vnas-popover-note">{sessionEndNote}</div>}
+
+        {/* The joined room's airport has no tower view */}
+        {roomAirportNotice && vnasStatus.sessionKind === 'room' && (
+          <div className="vnas-popover-notice">{roomAirportNotice}</div>
+        )}
+
         {/* Error message */}
-        {vnasStatus.error && <div className="vnas-popover-error">{vnasStatus.error}</div>}
+        {errorLine && <div className="vnas-popover-error">{errorLine}</div>}
 
         {/* Environment selector - only when disconnected */}
         {vnasStatus.state === 'disconnected' && !isAuthenticating && (
