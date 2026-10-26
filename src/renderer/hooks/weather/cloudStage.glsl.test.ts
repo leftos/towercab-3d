@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { WEATHER_STAGE_QUALITY } from '@/constants'
+import { WEATHER_STAGE_PRESETS } from '@/constants'
 import stageHookSource from '@/hooks/useCesiumWeatherStages.ts?raw'
 import { CLOUD_STAGE_FS, CLOUD_STAGE_MAX_STEPS, WEATHER_COMPOSITE_FS } from '@/hooks/weather/cloudStage.glsl'
 import { deckEdgeElevationDeg, EARTH_RADIUS_M, horizonDipDeg } from '@/utils/cloudDeckGeometry'
@@ -43,14 +43,14 @@ describe('cloud deck shader', () => {
     const maxSteps = glslNumber(CLOUD_STAGE_FS, /const int MAX_STEPS = (\d+);/)
     expect(maxSteps).toBe(256)
     expect(maxSteps).toBe(CLOUD_STAGE_MAX_STEPS)
-    expect(maxSteps).toBeGreaterThanOrEqual(WEATHER_STAGE_QUALITY.steps)
-    expect(stageHookSource).toContain('Math.round(quality.steps), 4, CLOUD_STAGE_MAX_STEPS)')
+    expect(maxSteps).toBeGreaterThanOrEqual(WEATHER_STAGE_PRESETS.high.steps)
+    expect(stageHookSource).toContain('Math.round(qualityRef.current.steps), 4, CLOUD_STAGE_MAX_STEPS)')
   })
 
-  it('spreads the deck 100 km with 120 steps, leaving under 0.16 deg of sky above the horizon from the tower', () => {
-    expect(WEATHER_STAGE_QUALITY.radius).toBe(100000)
-    expect(WEATHER_STAGE_QUALITY.steps).toBe(120)
-    const edge = deckEdgeElevationDeg(88.8, 609.6, WEATHER_STAGE_QUALITY.radius, true)
+  it('spreads the High deck 100 km with 120 steps, leaving under 0.16 deg of sky above the horizon from the tower', () => {
+    expect(WEATHER_STAGE_PRESETS.high.radius).toBe(100000)
+    expect(WEATHER_STAGE_PRESETS.high.steps).toBe(120)
+    const edge = deckEdgeElevationDeg(88.8, 609.6, WEATHER_STAGE_PRESETS.high.radius, true)
     expect(edge - -horizonDipDeg(88.8)).toBeLessThan(0.16)
   })
 

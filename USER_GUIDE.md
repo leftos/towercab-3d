@@ -112,6 +112,7 @@ On first connection from a touch device, you'll be prompted to apply optimized g
 - Reduced shadow quality for smoother performance
 - Lower MSAA anti-aliasing (2x instead of 4x)
 - Smaller tile cache to conserve memory
+- Lower weather quality (Medium; a low-end tablet gets the phone preset and Low)
 - Optimized for 60 FPS on mobile devices
 
 **Desktop Preset:**
@@ -736,6 +737,7 @@ When weather effects are enabled:
 | Fog Intensity | How thick weather fog looks (0.5x-2x) |
 | Visibility Scale | Multiplier for fog distance (2x = see twice as far as METAR) |
 | Enable Clouds | Toggle cloud layer display on/off |
+| Weather Quality | Cloud and fog detail (Low, Medium, High). Lower draws clouds nearer and coarser for a faster frame; smaller inset windows automatically use a lower quality |
 
 ### Automatic Weather Updates
 
@@ -859,6 +861,7 @@ See the [MSFS Model Support](#msfs-model-support) section for details on using F
 | **Fog Intensity** | Fog opacity multiplier | 1x |
 | **Visibility Scale** | Fog distance multiplier | 1x |
 | **Enable Clouds** | Cloud layers at METAR ceilings | On |
+| **Weather Quality** | Cloud and fog detail: Low, Medium or High | High in the desktop app; in a browser, Medium on iPads and tablets, Low on phones and low-end tablets |
 | **Enable Precipitation** | Rain/snow particle effects | On |
 | **Enable Lightning** | Lightning flashes during storms | On |
 

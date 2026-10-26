@@ -35,3 +35,15 @@ Weather was set with `stores.weather`: `setDebugOverriding(true)`, `setCloudLaye
 | 4 BKN012 hills | 18.0 / 20.8 | 18.2 / 21.2 | 22.3 / 26.1 | 22.9 / 26.8 |
 
 The stage adds at most 1.4 ms median CPU `cesiumDraw` in these runs, against the spike's +9.7 ms at half resolution. `cesiumDraw` is CPU time; the GPU cost of the raymarch is not in it, and `gpuCesiumMs` was not read.
+
+## Preset GPU cost
+
+The quality presets (`WEATHER_STAGE_PRESETS`: High, Medium, Low) were compared in the TC3D-148 mock (`docs/plans/canvases/tc3d-148-presets/`, on the main checkout) on the RTX desktop through ANGLE D3D11 in headless Edge, reading `gpuCesiumMs` with the stage on against off. Stage cost, median over the mock's shots:
+
+| Preset | steps / resolutionScale / radius | GPU cost of the stage |
+|---|---|---|
+| High | 120 / 0.5 / 100 km | +1.2 to +2.7 ms |
+| Medium | 72 / 0.375 / 60 km | +0.9 to +1.5 ms |
+| Low | 48 / 0.25 / 40 km | +0.7 to +0.9 ms |
+
+`frameInterval` sits on the 60 Hz cap in every case, so the desktop shows no frame-rate difference between presets. The iPad cost is unmeasured here (TC3D-150).

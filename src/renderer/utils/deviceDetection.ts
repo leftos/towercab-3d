@@ -5,6 +5,8 @@
  * adapting UI and performance settings.
  */
 
+import type { SettingsPreset } from '@/types'
+
 /**
  * Check if the current device supports touch input
  */
@@ -90,6 +92,20 @@ export function getDevicePerformanceTier(): 'high' | 'medium' | 'low' {
 
   // Desktop devices are high tier by default
   return 'high'
+}
+
+/**
+ * The device settings preset (`SETTINGS_PRESETS`) for this device: desktop without
+ * touch input; on a touch device, mobile for a low tier or a phone, otherwise ipad
+ * (an iPad, or a touch device not recognised as either).
+ *
+ * The device optimisation prompt suggests it, and `defaultWeatherQuality` picks the
+ * weather quality of a new or migrated install from it.
+ */
+export function deviceSettingsPreset(): SettingsPreset {
+  if (!isTouchDevice()) return 'desktop'
+  if (getDevicePerformanceTier() === 'low' || isMobileDevice()) return 'mobile'
+  return 'ipad'
 }
 
 /**

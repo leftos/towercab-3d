@@ -6,8 +6,9 @@
  */
 
 import { useEffect, useState } from 'react'
-import { type SettingsPreset, useSettingsStore } from '../../stores/settingsStore'
-import { getDevicePerformanceTier, isIPad, isMobileDevice, isTouchDevice } from '../../utils/deviceDetection'
+import type { SettingsPreset } from '@/types'
+import { useSettingsStore } from '../../stores/settingsStore'
+import { deviceSettingsPreset, isTouchDevice } from '../../utils/deviceDetection'
 import './DeviceOptimizationPrompt.css'
 
 function DeviceOptimizationPrompt() {
@@ -23,15 +24,7 @@ function DeviceOptimizationPrompt() {
     if (deviceOptimizationPromptDismissed) return
     if (!isTouchDevice()) return
 
-    // Determine suggested preset based on device type
-    const tier = getDevicePerformanceTier()
-    if (tier === 'low' || isMobileDevice()) {
-      setSuggestedPreset('mobile')
-    } else if (isIPad()) {
-      setSuggestedPreset('ipad')
-    } else {
-      setSuggestedPreset('ipad') // Default to iPad for unknown touch devices
-    }
+    setSuggestedPreset(deviceSettingsPreset())
 
     // Small delay to avoid flash on load
     const timer = setTimeout(() => {
@@ -95,6 +88,7 @@ function DeviceOptimizationPrompt() {
                 <li>Anti-aliasing: None</li>
                 <li>Terrain: Low quality</li>
                 <li>Tile cache: 200 tiles</li>
+                <li>Weather quality: Low</li>
               </>
             ) : (
               <>
@@ -102,6 +96,7 @@ function DeviceOptimizationPrompt() {
                 <li>Anti-aliasing: 2x MSAA</li>
                 <li>Terrain: Medium quality</li>
                 <li>Tile cache: 500 tiles</li>
+                <li>Weather quality: Medium</li>
               </>
             )}
           </ul>

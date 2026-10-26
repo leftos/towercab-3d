@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { WeatherQualityPreset } from '@/types'
 import { useGlobalSettingsStore } from '../../stores/globalSettingsStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useWeatherStore } from '../../stores/weatherStore'
@@ -90,6 +91,7 @@ function SettingsGraphicsWeatherTab() {
   const showClouds = useSettingsStore((state) => state.weather.showClouds)
   const cloudOpacity = useSettingsStore((state) => state.weather.cloudOpacity)
   const fogIntensity = useSettingsStore((state) => state.weather.fogIntensity)
+  const stageQuality = useSettingsStore((state) => state.weather.stageQuality)
   const visibilityScale = useSettingsStore((state) => state.weather.visibilityScale)
   const showPrecipitation = useSettingsStore((state) => state.weather.showPrecipitation ?? true)
   const precipitationIntensity = useSettingsStore((state) => state.weather.precipitationIntensity ?? 1.0)
@@ -874,6 +876,24 @@ function SettingsGraphicsWeatherTab() {
                 />
                 Show Cloud Layers
               </label>
+            </div>
+
+            <div className="setting-item">
+              <label htmlFor="weather-stage-quality">Weather quality</label>
+              <select
+                id="weather-stage-quality"
+                value={stageQuality}
+                onChange={(e) => updateWeatherSettings({ stageQuality: e.target.value as WeatherQualityPreset })}
+                className="select-input"
+              >
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+              <p className="setting-hint">
+                Cloud and fog detail. Lower draws clouds nearer and coarser for a faster frame; smaller insets use a
+                lower quality.
+              </p>
             </div>
 
             <div className="setting-item">

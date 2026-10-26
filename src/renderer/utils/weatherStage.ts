@@ -10,13 +10,17 @@ import {
   STATUTE_MILES_TO_METERS,
   WEATHER_STAGE_AIRPORT_REANCHOR_DISTANCE_M,
   WEATHER_STAGE_GROUND_BLEND_MS,
+  WEATHER_STAGE_INSET_FULL_AREA_RATIO,
+  WEATHER_STAGE_INSET_STEP_DOWN_AREA_RATIO,
   WEATHER_STAGE_MAX_LAYERS,
   WEATHER_STAGE_MIN_VISIBILITY_SM,
   WEATHER_STAGE_NO_FOG_VISIBILITY_SM,
   WEATHER_STAGE_NOISE_ORIGIN_RESET_M,
+  WEATHER_STAGE_PRESETS,
   WEATHER_STAGE_REANCHOR_DISTANCE_M,
+  type WeatherStageQuality,
 } from '@/constants'
-import type { CloudLayer, ViewMode } from '@/types'
+import type { CloudLayer, ViewMode, WeatherQualityPreset } from '@/types'
 import { haversineDistanceNm } from '@/utils/aircraft/geoMath'
 import { nmToMeters } from '@/utils/coordinates'
 
@@ -67,6 +71,96 @@ export function stageVisibilityMeters(visibSM: number | undefined, visibilitySca
   return Math.max(visibSM, WEATHER_STAGE_MIN_VISIBILITY_SM) * STATUTE_MILES_TO_METERS * visibilityScale
 }
 
+/** Invalid preset values already warned about, so a bad stored value warns once */
+const WARNED_INVALID_PRESETS = new Set<string>()
+
+/**
+ * The stored preset, or High for a value that is no preset (an imported or
+ * hand-edited settings file), warned about once per distinct value.
+ */
+function validStagePreset(preset: WeatherQualityPreset): WeatherQualityPreset {
+  if (WEATHER_STAGE_PRESETS[preset]) return preset
+  if (!WARNED_INVALID_PRESETS.has(preset)) {
+    WARNED_INVALID_PRESETS.add(preset)
+    console.warn(`[WeatherStage] Unknown weather quality preset "${preset}"; using High`)
+  }
+  return 'high'
+}
+
+/**
+ * The stage's knobs at a quality preset.
+ *
+ * @param preset - The `stageQuality` weather setting, or the preset an inset resolved
+ * @returns The preset's knobs; High's, with one warning per distinct bad value, for a stored value that is no preset
+ */
+export function weatherStageQuality(preset: WeatherQualityPreset): WeatherStageQuality {
+  return WEATHER_STAGE_PRESETS[validStagePreset(preset)]
+}
+
+/** One preset below each preset; Low stays Low */
+const PRESET_ONE_STEP_DOWN: Readonly<Record<WeatherQualityPreset, WeatherQualityPreset>> = {
+  high: 'medium',
+  medium: 'low',
+  low: 'low',
+}
+
+/**
+ * The preset an inset viewport's stage uses, from its size against the main viewport:
+ * the main view's preset from WEATHER_STAGE_INSET_FULL_AREA_RATIO of the main area, one
+ * step down from WEATHER_STAGE_INSET_STEP_DOWN_AREA_RATIO, and Low below that.
+ *
+ * @param mainPreset - The main view's preset (the `stageQuality` weather setting)
+ * @param insetArea - The inset's area in CSS pixels squared
+ * @param mainArea - The main viewport's area in the same unit
+ * @returns The inset's preset; the main preset, with a warning, when either area is not positive
+ */
+export function insetStageQuality(
+  mainPreset: WeatherQualityPreset,
+  insetArea: number,
+  mainArea: number,
+): WeatherQualityPreset {
+  const preset = validStagePreset(mainPreset)
+  if (!(insetArea > 0) || !(mainArea > 0)) {
+    console.warn(
+      `[WeatherStage] Inset area ${insetArea} or main area ${mainArea} is not positive; using the main preset ${preset}`,
+    )
+    return preset
+  }
+  const ratio = insetArea / mainArea
+  if (ratio >= WEATHER_STAGE_INSET_FULL_AREA_RATIO) return preset
+  if (ratio >= WEATHER_STAGE_INSET_STEP_DOWN_AREA_RATIO) return PRESET_ONE_STEP_DOWN[preset]
+  return 'low'
+}
+
+/** A viewport's kind and the areas its quality preset depends on */
+export interface ViewportStagePresetInput {
+  /** The `stageQuality` weather setting, the main view's preset */
+  stageQuality: WeatherQualityPreset
+  /** Whether the viewport is an inset */
+  isInset: boolean
+  /** The inset's area in CSS pixels squared; null when it cannot be read */
+  insetArea: number | null
+  /** The main window's area in the same unit; null when it cannot be read */
+  mainArea: number | null
+}
+
+/**
+ * The quality preset a viewport's stage uses: the `stageQuality` setting in the
+ * main view, or an inset at its size against the main window (`insetStageQuality`).
+ *
+ * @param input - The stored preset, the viewport's kind and the areas
+ * @returns The preset this viewport's stage uses
+ */
+export function stagePresetForViewport({
+  stageQuality,
+  isInset,
+  insetArea,
+  mainArea,
+}: ViewportStagePresetInput): WeatherQualityPreset {
+  if (!isInset || insetArea === null || mainArea === null) return validStagePreset(stageQuality)
+  return insetStageQuality(stageQuality, insetArea, mainArea)
+}
+
 /** Cesium `scene.fog` values the weather hook writes */
 export interface SceneFogValues {
   /** Whether the scene's own fog is on at all */
@@ -101,7 +195,7 @@ const SCENE_FOG_TUNED_MINIMUM_BRIGHTNESS = 0.1
  * The shader multiplies the optical depth integral by `u_fogExtinction`, so fogIntensity 1
  * keeps the base extinction, 2 doubles the optical depth and 0 removes the fog.
  *
- * @param baseExtinction - `WEATHER_STAGE_QUALITY.fogExtinction`
+ * @param baseExtinction - The active preset's `fogExtinction` (see `weatherStageQuality`)
  * @param fogIntensity - The `fogIntensity` weather setting
  * @returns Extinction for the shader, floored at 0
  */

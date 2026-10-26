@@ -1,7 +1,12 @@
-import { describe, expect, it } from 'vitest'
-import { STATUTE_MILES_TO_METERS, WEATHER_STAGE_GROUND_BLEND_MS, WEATHER_STAGE_NOISE_ORIGIN_RESET_M } from '@/constants'
-import { CLOUD_STAGE_FS, WEATHER_COMPOSITE_FS } from '@/hooks/weather/cloudStage.glsl'
-import type { CloudLayer } from '@/types'
+import { describe, expect, it, vi } from 'vitest'
+import {
+  STATUTE_MILES_TO_METERS,
+  WEATHER_STAGE_GROUND_BLEND_MS,
+  WEATHER_STAGE_NOISE_ORIGIN_RESET_M,
+  WEATHER_STAGE_PRESETS,
+} from '@/constants'
+import { CLOUD_STAGE_FS, CLOUD_STAGE_MAX_STEPS, WEATHER_COMPOSITE_FS } from '@/hooks/weather/cloudStage.glsl'
+import type { CloudLayer, WeatherQualityPreset } from '@/types'
 import {
   anchorGround,
   buildCloudLayerUniforms,
@@ -10,18 +15,158 @@ import {
   groundBlendShift,
   groundShiftStart,
   horizontalNoiseOffset,
+  insetStageQuality,
   nextWeatherAnchor,
   noiseOriginNeedsReset,
   sceneFogValues,
   stageDrawsFog,
   stageFogExtinction,
+  stagePresetForViewport,
   stageVisibilityMeters,
   type WeatherStageGateInput,
   weatherStageGates,
   weatherStageHasWork,
+  weatherStageQuality,
 } from '@/utils/weatherStage'
 
 const THICKNESS = { FEW: 250, SCT: 350, BKN: 450, OVC: 600 }
+
+const PRESETS: WeatherQualityPreset[] = ['low', 'medium', 'high']
+
+describe('weatherStageQuality', () => {
+  it.each(PRESETS)('gives the %s preset all six knobs', (preset) => {
+    expect(Object.keys(weatherStageQuality(preset)).sort()).toEqual([
+      'densityScale',
+      'fogExtinction',
+      'fogHeightScale',
+      'radius',
+      'resolutionScale',
+      'steps',
+    ])
+  })
+
+  it.each(PRESETS)('keeps the %s preset steps an integer within the shader maximum', (preset) => {
+    const { steps } = weatherStageQuality(preset)
+    expect(Number.isInteger(steps)).toBe(true)
+    expect(steps).toBeGreaterThanOrEqual(4)
+    expect(steps).toBeLessThanOrEqual(CLOUD_STAGE_MAX_STEPS)
+  })
+
+  it.each(PRESETS)('keeps the %s preset cloud pass scale within 0.25..1', (preset) => {
+    const { resolutionScale } = weatherStageQuality(preset)
+    expect(resolutionScale).toBeGreaterThanOrEqual(0.25)
+    expect(resolutionScale).toBeLessThanOrEqual(1)
+  })
+
+  it('keeps High at the stage values the deck was tuned with', () => {
+    expect(weatherStageQuality('high')).toEqual({
+      steps: 120,
+      resolutionScale: 0.5,
+      densityScale: 0.04,
+      fogExtinction: 1.0,
+      fogHeightScale: 400,
+      radius: 100000,
+    })
+  })
+
+  it('gives Medium and Low lower cost knobs and the same look knobs as High', () => {
+    expect(weatherStageQuality('medium')).toMatchObject({ steps: 72, resolutionScale: 0.375, radius: 60000 })
+    expect(weatherStageQuality('low')).toMatchObject({ steps: 48, resolutionScale: 0.25, radius: 40000 })
+    const look = ({ densityScale, fogExtinction, fogHeightScale }: (typeof WEATHER_STAGE_PRESETS)['high']) => ({
+      densityScale,
+      fogExtinction,
+      fogHeightScale,
+    })
+    expect(look(WEATHER_STAGE_PRESETS.medium)).toEqual(look(WEATHER_STAGE_PRESETS.high))
+    expect(look(WEATHER_STAGE_PRESETS.low)).toEqual(look(WEATHER_STAGE_PRESETS.high))
+  })
+
+  it('falls back to High for a stored value that is no preset', () => {
+    expect(weatherStageQuality('ultra' as WeatherQualityPreset)).toBe(WEATHER_STAGE_PRESETS.high)
+  })
+})
+
+describe('insetStageQuality', () => {
+  const MAIN = 1000
+
+  it.each(PRESETS)('keeps the main %s preset for an inset of exactly half the main area or more', (preset) => {
+    expect(insetStageQuality(preset, 500, MAIN)).toBe(preset)
+    expect(insetStageQuality(preset, 1000, MAIN)).toBe(preset)
+  })
+
+  it.each([
+    ['high', 'medium'],
+    ['medium', 'low'],
+    ['low', 'low'],
+  ] as const)('steps %s down to %s from exactly 15% to just under 50%', (main, expected) => {
+    expect(insetStageQuality(main, 150, MAIN)).toBe(expected)
+    expect(insetStageQuality(main, 499.9, MAIN)).toBe(expected)
+  })
+
+  it.each(PRESETS)('drops the main %s preset to Low under 15% of the main area', (preset) => {
+    expect(insetStageQuality(preset, 149.9, MAIN)).toBe('low')
+  })
+
+  it.each([
+    [0, MAIN],
+    [-5, MAIN],
+    [500, 0],
+    [500, -1],
+    [Number.NaN, MAIN],
+  ])('keeps the main preset for inset area %s and main area %s', (insetArea, mainArea) => {
+    expect(insetStageQuality('medium', insetArea, mainArea)).toBe('medium')
+  })
+})
+
+describe('stagePresetForViewport', () => {
+  const MAIN = 1000
+
+  it.each(PRESETS)('keeps the stored %s preset in the main view whatever the areas', (preset) => {
+    expect(stagePresetForViewport({ stageQuality: preset, isInset: false, insetArea: 100, mainArea: MAIN })).toBe(
+      preset,
+    )
+    expect(stagePresetForViewport({ stageQuality: preset, isInset: false, insetArea: null, mainArea: null })).toBe(
+      preset,
+    )
+  })
+
+  it('keeps the stored preset for an inset at 60% of the main area', () => {
+    expect(stagePresetForViewport({ stageQuality: 'high', isInset: true, insetArea: 600, mainArea: MAIN })).toBe('high')
+  })
+
+  it('steps an inset at 30% of the main area one preset down', () => {
+    expect(stagePresetForViewport({ stageQuality: 'high', isInset: true, insetArea: 300, mainArea: MAIN })).toBe(
+      'medium',
+    )
+  })
+
+  it('drops an inset at 10% of the main area to Low', () => {
+    expect(stagePresetForViewport({ stageQuality: 'high', isInset: true, insetArea: 100, mainArea: MAIN })).toBe('low')
+  })
+
+  it('keeps the stored preset for an inset whose areas cannot be read', () => {
+    expect(stagePresetForViewport({ stageQuality: 'medium', isInset: true, insetArea: null, mainArea: null })).toBe(
+      'medium',
+    )
+  })
+
+  it('warns once for an invalid stored value and falls back to High', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const invalid = 'insane' as WeatherQualityPreset
+      expect(stagePresetForViewport({ stageQuality: invalid, isInset: false, insetArea: null, mainArea: null })).toBe(
+        'high',
+      )
+      expect(stagePresetForViewport({ stageQuality: invalid, isInset: true, insetArea: 300, mainArea: MAIN })).toBe(
+        'medium',
+      )
+      expect(weatherStageQuality(invalid)).toBe(WEATHER_STAGE_PRESETS.high)
+      expect(warn).toHaveBeenCalledTimes(1)
+    } finally {
+      warn.mockRestore()
+    }
+  })
+})
 
 function layer(altitude: number, coverage: number, type: string): CloudLayer {
   return { altitude, coverage, type } as CloudLayer

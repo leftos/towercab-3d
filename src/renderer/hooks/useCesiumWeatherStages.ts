@@ -1,16 +1,17 @@
 import * as Cesium from 'cesium'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   CLOUD_THICKNESS_BY_TYPE_M,
+  WEATHER_STAGE_INSET_RESIZE_SETTLE_MS,
   WEATHER_STAGE_MAX_LAYERS,
-  WEATHER_STAGE_QUALITY,
   WEATHER_STAGE_REANCHOR_CHECK_MS,
+  type WeatherStageQuality,
 } from '@/constants'
 import { CLOUD_STAGE_FS, CLOUD_STAGE_MAX_STEPS, WEATHER_COMPOSITE_FS } from '@/hooks/weather/cloudStage.glsl'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useWeatherStageStore } from '@/stores/weatherStageStore'
 import { useWeatherStore } from '@/stores/weatherStore'
-import type { ViewMode } from '@/types'
+import type { ViewMode, WeatherQualityPreset } from '@/types'
 import { aircraftModelHeading } from '@/utils/modelOrientation'
 import {
   anchorGround,
@@ -25,11 +26,13 @@ import {
   noiseOriginNeedsReset,
   stageDrawsFog,
   stageFogExtinction,
+  stagePresetForViewport,
   stageVisibilityMeters,
   type WeatherAnchor,
   type WeatherReference,
   weatherStageGates,
   weatherStageHasWork,
+  weatherStageQuality,
 } from '@/utils/weatherStage'
 
 /** Name of the composite the hook adds to `scene.postProcessStages` */
@@ -73,6 +76,8 @@ interface StageRefs {
   frame: { current: EnuFrame | null }
   inputs: { current: StageInputs }
   stage: { current: Cesium.PostProcessStageComposite | null }
+  /** Knobs of this viewport's preset; the uniform callbacks read them live */
+  quality: { current: WeatherStageQuality }
 }
 
 /** Where the noise field is fixed in the world; moved per `noiseOriginNeedsReset` */
@@ -128,12 +133,19 @@ function setFrame(refs: StageRefs, frame: EnuFrame | null): void {
  * stage is enabled, and `syncStageEnabled` enables it only with a frame, so
  * the uniform callbacks can count on one.
  *
+ * The cloud pass resolution is fixed here; the other knobs are read live from `refs.quality`.
+ *
  * @param startMs - Time the cloud drift counts from; kept for the viewer's lifetime so the drift does not snap back
+ * @param resolutionScale - Cloud pass resolution relative to the canvas, the preset's `resolutionScale`
  */
-function createStage(viewer: Cesium.Viewer, refs: StageRefs, startMs: number): Cesium.PostProcessStageComposite {
-  const { frame: frameRef, inputs: inputsRef } = refs
+function createStage(
+  viewer: Cesium.Viewer,
+  refs: StageRefs,
+  startMs: number,
+  resolutionScale: number,
+): Cesium.PostProcessStageComposite {
+  const { frame: frameRef, inputs: inputsRef, quality: qualityRef } = refs
   const scratchCam = new Cesium.Cartesian3()
-  const quality = WEATHER_STAGE_QUALITY
   const layerUniform = (index: number) => () => inputsRef.current.layers[index]
   const frame = (): EnuFrame => {
     if (!frameRef.current) {
@@ -153,13 +165,13 @@ function createStage(viewer: Cesium.Viewer, refs: StageRefs, startMs: number): C
     u_ecefToEnu: () => frame().ecefToEnuRotation,
     u_visibility: () => inputsRef.current.visibilityMeters,
     u_fogExtinction: () => inputsRef.current.fogExtinction,
-    u_fogHeightScale: () => quality.fogHeightScale,
+    u_fogHeightScale: () => qualityRef.current.fogHeightScale,
   }
 
   const clouds = new Cesium.PostProcessStage({
     name: CLOUD_PASS_NAME,
     fragmentShader: CLOUD_STAGE_FS,
-    textureScale: Cesium.Math.clamp(quality.resolutionScale, 0.25, 1),
+    textureScale: Cesium.Math.clamp(resolutionScale, 0.25, 1),
     uniforms: {
       ...shared,
       u_layer0: layerUniform(0),
@@ -167,9 +179,9 @@ function createStage(viewer: Cesium.Viewer, refs: StageRefs, startMs: number): C
       u_layer2: layerUniform(2),
       u_layer3: layerUniform(3),
       u_layerCount: () => inputsRef.current.layerCount,
-      u_steps: () => Cesium.Math.clamp(Math.round(quality.steps), 4, CLOUD_STAGE_MAX_STEPS),
-      u_densityScale: () => quality.densityScale,
-      u_radius: () => quality.radius,
+      u_steps: () => Cesium.Math.clamp(Math.round(qualityRef.current.steps), 4, CLOUD_STAGE_MAX_STEPS),
+      u_densityScale: () => qualityRef.current.densityScale,
+      u_radius: () => qualityRef.current.radius,
       u_time: () => (performance.now() - startMs) / 1000,
       u_noiseOffset: () => frame().noiseOffset,
     },
@@ -352,11 +364,17 @@ function useWeatherStageFrame(
  * Adds the stage to the scene while it is on, and keeps it last among the
  * scene's post-process stages: stages added later (the silhouette stage is
  * added a few frames after the viewer) would draw over the clouds and fog.
- * Removing destroys a stage, so a fresh one is added at the end. The cloud
- * drift start time is held for the viewer's lifetime, so neither re-creation
- * nor the stage going off and on snaps the drift back.
+ * Removing destroys a stage, so a fresh one is added at the end. A new cloud
+ * pass resolution rebuilds the stage, since Cesium reads it at creation. The
+ * cloud drift start time is held for the viewer's lifetime, so neither
+ * re-creation nor the stage going off and on snaps the drift back.
  */
-function useWeatherStageComposite(viewer: Cesium.Viewer | null, stageOn: boolean, refs: StageRefs): void {
+function useWeatherStageComposite(
+  viewer: Cesium.Viewer | null,
+  stageOn: boolean,
+  refs: StageRefs,
+  resolutionScale: number,
+): void {
   const startMsRef = useRef<{ viewer: Cesium.Viewer; startMs: number } | null>(null)
 
   useEffect(() => {
@@ -367,7 +385,9 @@ function useWeatherStageComposite(viewer: Cesium.Viewer | null, stageOn: boolean
     const { startMs } = startMsRef.current
     const stages = viewer.scene.postProcessStages
     const addStage = () => {
-      refs.stage.current = stages.add(createStage(viewer, refs, startMs)) as Cesium.PostProcessStageComposite
+      refs.stage.current = stages.add(
+        createStage(viewer, refs, startMs, resolutionScale),
+      ) as Cesium.PostProcessStageComposite
       syncStageEnabled(refs)
     }
     addStage()
@@ -384,12 +404,66 @@ function useWeatherStageComposite(viewer: Cesium.Viewer | null, stageOn: boolean
       }
       refs.stage.current = null
     }
-  }, [viewer, stageOn, refs])
+  }, [viewer, stageOn, refs, resolutionScale])
+}
+
+/** Areas of an inset and of the main window it sits in, in CSS pixels squared */
+interface InsetAreas {
+  insetArea: number
+  mainArea: number
+}
+
+/**
+ * This inset window's area and its parent (main) window's. Null, with a warning,
+ * when the parent window cannot be read.
+ */
+function readInsetAreas(): InsetAreas | null {
+  const insetArea = window.innerWidth * window.innerHeight
+  try {
+    return { insetArea, mainArea: window.parent.innerWidth * window.parent.innerHeight }
+  } catch (error) {
+    console.warn("[WeatherStage] Cannot read the main window's size from the inset; using the main preset:", error)
+    return null
+  }
+}
+
+/**
+ * The quality preset this viewport's stage uses (`stagePresetForViewport`): the
+ * `stageQuality` setting in the main view; in an inset, its size against the main
+ * window, read once on mount and again once a resize has been quiet for
+ * WEATHER_STAGE_INSET_RESIZE_SETTLE_MS, so a drag does not rebuild the stage on every frame.
+ */
+function useStagePreset(isInset: boolean): WeatherQualityPreset {
+  const mainPreset = useSettingsStore((state) => state.weather.stageQuality)
+  const [insetAreas, setInsetAreas] = useState<InsetAreas | null>(() => (isInset ? readInsetAreas() : null))
+
+  useEffect(() => {
+    if (!isInset) return
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const onResize = () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => setInsetAreas(readInsetAreas()), WEATHER_STAGE_INSET_RESIZE_SETTLE_MS)
+    }
+    window.addEventListener('resize', onResize)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('resize', onResize)
+    }
+  }, [isInset])
+
+  return stagePresetForViewport({
+    stageQuality: mainPreset,
+    isInset,
+    insetArea: insetAreas?.insetArea ?? null,
+    mainArea: insetAreas?.mainArea ?? null,
+  })
 }
 
 /** Inputs of `useCesiumWeatherStages` from the viewer component */
 export interface WeatherStagesOptions extends ReferenceInputs {
   viewMode: ViewMode
+  /** Whether the viewport is an inset, whose preset follows its size against the main view */
+  isInset: boolean
 }
 
 /**
@@ -401,7 +475,9 @@ export interface WeatherStagesOptions extends ReferenceInputs {
  * visibility while weather interpolation is on) and the weather settings:
  * `showClouds` gates the clouds, `showBabylonFog` the fog and `visibilityScale`
  * scales the fog visibility while `fogIntensity` scales its optical depth, under
- * `showWeatherEffects`. Draws nothing in the top-down view, and is disabled while
+ * `showWeatherEffects`. Its knobs come from the `stageQuality` preset (see
+ * `useStagePreset` for insets): steps, radius and the look knobs apply live, and a
+ * new cloud pass resolution rebuilds the stage. Draws nothing in the top-down view, and is disabled while
  * there is no anchor or nothing to draw. Without a logarithmic depth buffer on the
  * scene the stage stays out (no clouds or METAR fog are drawn) and one warning is logged. The stage is kept last among the scene's
  * post-process stages, so the aircraft silhouette outlines are fogged and
@@ -438,11 +514,16 @@ export function useCesiumWeatherStages(viewer: Cesium.Viewer | null, options: We
   const viewMode = options.viewMode
   const gates = weatherStageGates({ showWeatherEffects, showClouds, showBabylonFog, viewMode, logDepth })
 
+  const quality = weatherStageQuality(useStagePreset(options.isInset))
   const refs = useRef<StageRefs>({
     frame: { current: null },
     inputs: { current: NO_INPUTS },
     stage: { current: null },
+    quality: { current: quality },
   }).current
+  useLayoutEffect(() => {
+    refs.quality.current = quality
+  }, [quality, refs])
   const warnedLogDepthRef = useRef(false)
   const anchor = useWeatherAnchor(viewer, options)
 
@@ -456,7 +537,7 @@ export function useCesiumWeatherStages(viewer: Cesium.Viewer | null, options: We
       }),
       layerCount: layers.length,
       visibilityMeters: gates.fog ? stageVisibilityMeters(visibSM, visibilityScale) : 0,
-      fogExtinction: stageFogExtinction(WEATHER_STAGE_QUALITY.fogExtinction, fogIntensity),
+      fogExtinction: stageFogExtinction(quality.fogExtinction, fogIntensity),
     }
     syncStageEnabled(refs)
   }, [
@@ -468,6 +549,7 @@ export function useCesiumWeatherStages(viewer: Cesium.Viewer | null, options: We
     interpolatedSM,
     visibilityScale,
     fogIntensity,
+    quality.fogExtinction,
     refs,
   ])
 
@@ -481,7 +563,7 @@ export function useCesiumWeatherStages(viewer: Cesium.Viewer | null, options: We
   }, [gates.missingLogDepth])
 
   useWeatherStageFrame(viewer, anchor, gates.stage, refs)
-  useWeatherStageComposite(viewer, gates.stage, refs)
+  useWeatherStageComposite(viewer, gates.stage, refs, quality.resolutionScale)
   return stageDrawsFog(gates.fog, anchor !== null)
 }
 

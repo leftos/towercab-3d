@@ -113,6 +113,20 @@ export type AircraftTintColor = 'white' | 'lightBlue' | 'tan' | 'yellow' | 'oran
 export type BuildingQuality = 'low' | 'medium' | 'high'
 
 /**
+ * Settings preset of a device class, keyed into `SETTINGS_PRESETS`: desktop,
+ * iPad or tablet, phone or low-end touch device. The device optimisation prompt
+ * suggests the one for the current device.
+ */
+export type SettingsPreset = 'desktop' | 'ipad' | 'mobile'
+
+/**
+ * Quality preset of the Cesium cloud and fog stage; the knobs of each are in
+ * `WEATHER_STAGE_PRESETS`. Lower presets march fewer steps, at a lower cloud
+ * pass resolution, over a smaller cloud radius; the look knobs are the same.
+ */
+export type WeatherQualityPreset = 'low' | 'medium' | 'high'
+
+/**
  * Ground traffic label display mode
  *
  * Controls which ground aircraft display labels to reduce gate clutter:
@@ -782,6 +796,13 @@ export interface WeatherSettings {
    * When disabled, weather uses only the current airport's METAR.
    */
   enableWeatherInterpolation: boolean
+
+  /**
+   * Quality preset of the cloud and fog stage in the main view (default: 'high';
+   * the device presets set 'medium' on iPad and 'low' on phones). Insets derive
+   * theirs from it by their size against the main view.
+   */
+  stageQuality: WeatherQualityPreset
 }
 
 /**
@@ -1962,6 +1983,7 @@ export const DEFAULT_SETTINGS: Omit<
     precipitationIntensity: 1.0,
     showLightning: true,
     enableWeatherInterpolation: true,
+    stageQuality: 'high',
   },
   memory: {
     inMemoryTileCacheSize: 2000,

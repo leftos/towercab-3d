@@ -172,6 +172,7 @@ export type {
   RealTrafficSettings,
   // GPU rendering backend (ANGLE) selection
   RenderingBackend,
+  SettingsPreset,
   // Main settings store (NEW grouped structure for Phase 5)
   SettingsStore,
   ShadowQuality,
@@ -180,6 +181,8 @@ export type {
   Theme,
   TimeMode,
   UISettings,
+  // Weather stage quality preset
+  WeatherQualityPreset,
   WeatherSettings,
 } from './settings'
 

@@ -1,5 +1,8 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import type { SettingsPreset, WeatherQualityPreset } from '@/types'
+import { deviceSettingsPreset } from '@/utils/deviceDetection'
+import { isTauri } from '@/utils/tauriApi'
 import type {
   AdvancedSettings,
   AircraftSettings,
@@ -21,21 +24,13 @@ import { DEFAULT_INSET_GRAPHICS_SETTINGS, DEFAULT_SETTINGS } from '../types/sett
 // ============================================================================
 
 /**
- * Available settings presets
- *
- * - 'desktop': High quality for desktop PCs (default settings)
- * - 'ipad': Optimized for iPad/tablet with reduced GPU/memory usage
- * - 'mobile': Low quality for phones or low-end devices
- */
-export type SettingsPreset = 'desktop' | 'ipad' | 'mobile'
-
-/**
  * Partial settings that a preset can override
  */
 interface PresetSettings {
   graphics?: Partial<GraphicsSettings>
   memory?: Partial<MemorySettings>
   cesium?: Partial<CesiumSettings>
+  weather: Pick<WeatherSettings, 'stageQuality'>
 }
 
 /**
@@ -61,6 +56,9 @@ export const SETTINGS_PRESETS: Record<SettingsPreset, PresetSettings> = {
       terrainQuality: 3,
       show3DBuildings: false,
     },
+    weather: {
+      stageQuality: 'high',
+    },
   },
   ipad: {
     graphics: {
@@ -78,6 +76,9 @@ export const SETTINGS_PRESETS: Record<SettingsPreset, PresetSettings> = {
     cesium: {
       terrainQuality: 2,
       show3DBuildings: false,
+    },
+    weather: {
+      stageQuality: 'medium',
     },
   },
   mobile: {
@@ -98,7 +99,25 @@ export const SETTINGS_PRESETS: Record<SettingsPreset, PresetSettings> = {
       terrainQuality: 1,
       show3DBuildings: false,
     },
+    weather: {
+      stageQuality: 'low',
+    },
   },
+}
+
+/**
+ * The weather stage quality a new install starts at, and the one a reset or a
+ * settings migration gives it: High in the desktop app, whatever touch screen the
+ * machine reports, since the app runs only on desktops; in a remote browser, the
+ * device preset's (`SETTINGS_PRESETS`): Medium on an iPad or tablet, Low on a phone.
+ * Outside a browser (a test run in Node), where there is no device to ask, it is Desktop's.
+ *
+ * @returns The `weather.stageQuality` a new or reset install takes
+ */
+export function defaultWeatherQuality(): WeatherQualityPreset {
+  if (typeof window === 'undefined') return SETTINGS_PRESETS.desktop.weather.stageQuality
+  if (isTauri()) return 'high'
+  return SETTINGS_PRESETS[deviceSettingsPreset()].weather.stageQuality
 }
 
 /**
@@ -165,6 +184,7 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
   persist(
     (set, get) => ({
       ...DEFAULT_SETTINGS,
+      weather: { ...DEFAULT_SETTINGS.weather, stageQuality: defaultWeatherQuality() },
 
       // ========================================================================
       // UPDATE FUNCTIONS (Group-based)
@@ -341,7 +361,8 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
       // RESET TO DEFAULTS
       // ========================================================================
 
-      resetToDefaults: () => set(DEFAULT_SETTINGS),
+      resetToDefaults: () =>
+        set({ ...DEFAULT_SETTINGS, weather: { ...DEFAULT_SETTINGS.weather, stageQuality: defaultWeatherQuality() } }),
 
       // ========================================================================
       // EXPORT / IMPORT
@@ -438,12 +459,13 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
           graphics: { ...state.graphics, ...preset.graphics },
           memory: { ...state.memory, ...preset.memory },
           cesium: { ...state.cesium, ...preset.cesium },
+          weather: { ...state.weather, ...preset.weather },
         }))
       },
     }),
     {
       name: 'settings-store',
-      version: 38,
+      version: 39,
       migrate: (persistedState: unknown, version: number) => {
         // biome-ignore lint/suspicious/noExplicitAny: migration handles arbitrary persisted state
         let state: any = persistedState
@@ -564,6 +586,14 @@ export const useSettingsStore = create<SettingsStoreWithPresets>()(
               },
             }
           }
+        }
+
+        // v38 → v39: Weather stage quality preset for this device's class (iPad Medium, phone Low, desktop High;
+        // the desktop app stays High, whatever touch screen the machine reports)
+        if (version < 39) {
+          const stageQuality = defaultWeatherQuality()
+          console.log(`[Settings] Migrating v38 to v39: weather quality ${stageQuality} for this device`)
+          state = { ...state, weather: { ...state.weather, stageQuality } }
         }
 
         // ========================================================================
@@ -703,6 +733,7 @@ function migrateOldSettings(oldSettings: any): typeof DEFAULT_SETTINGS {
         oldSettings.showLightning ?? oldSettings.weather?.showLightning ?? DEFAULT_SETTINGS.weather.showLightning,
       enableWeatherInterpolation:
         oldSettings.enableWeatherInterpolation ?? DEFAULT_SETTINGS.weather.enableWeatherInterpolation,
+      stageQuality: defaultWeatherQuality(),
     },
     memory: {
       inMemoryTileCacheSize: oldSettings.inMemoryTileCacheSize ?? DEFAULT_SETTINGS.memory.inMemoryTileCacheSize,

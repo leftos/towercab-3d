@@ -392,6 +392,7 @@ function CesiumViewer({ viewportId = 'main', isInset = false, isActivated = true
     followedCallsign: isOrbitWithoutAirport(currentAirport, followMode, followingCallsign) ? followingCallsign : null,
     interpolatedAircraft,
     viewMode,
+    isInset,
   })
   useCesiumWeather(viewer, showWeatherEffects, showCesiumFog, fogDensity, stageDrawsFog)
 

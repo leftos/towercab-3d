@@ -4,6 +4,8 @@
  * Configuration for METAR weather interpolation and auto-airport switching features.
  */
 
+import type { WeatherQualityPreset } from '@/types'
+
 // ============================================================================
 // WEATHER INTERPOLATION
 // ============================================================================
@@ -151,28 +153,71 @@ export const WIND_SPEED_CHANGE_THRESHOLD = 2
 // ============================================================================
 
 /**
- * Quality knobs of the Cesium cloud and fog post-process stage.
+ * Knobs of the Cesium cloud and fog post-process stage at one quality preset.
  *
- * - `steps`: raymarch steps per cloud layer crossing (shader maximum 256); 120 keeps
- *   the step length of 48 steps over 40 km across the 100 km deck
- * - `resolutionScale`: cloud pass resolution relative to the canvas (0.25..1)
+ * - `steps`: raymarch steps per cloud layer crossing (shader maximum 256)
+ * - `resolutionScale`: cloud pass resolution relative to the canvas (0.25..1); read when
+ *   the stage is created, independent of the canvas's own resolution
  * - `densityScale`: cloud extinction per meter at full density
  * - `fogExtinction`: k in the fog transmittance exp(-k * distance / visibility)
  * - `fogHeightScale`: height in meters over which fog density falls by 1/e
- * - `radius`: radius in meters around the anchor that cloud layers cover. The deck
- *   curves down with the earth, so from a tower cab an overcast base at 2,000 ft ends
- *   about 0.15 deg above the horizon at 100 km (a flat 40 km deck leaves a degree of
- *   clear sky). About 120 km would reach the horizon, but would need 144 steps at the
- *   same step length; 100 km keeps the sliver small for 120 steps
+ * - `radius`: radius in meters around the anchor that cloud layers cover
  */
-export const WEATHER_STAGE_QUALITY = {
-  steps: 120,
-  resolutionScale: 0.5,
-  densityScale: 0.04,
-  fogExtinction: 1.0,
-  fogHeightScale: 400,
-  radius: 100000,
-} as const
+export interface WeatherStageQuality {
+  readonly steps: number
+  readonly resolutionScale: number
+  readonly densityScale: number
+  readonly fogExtinction: number
+  readonly fogHeightScale: number
+  readonly radius: number
+}
+
+/**
+ * Knobs of the stage per quality preset. Only the cost knobs (steps, resolutionScale,
+ * radius) differ; the look knobs (densityScale, fogExtinction, fogHeightScale) are equal.
+ *
+ * High: the deck curves down with the earth, so from a tower cab an overcast base at
+ * 2,000 ft ends about 0.15 deg above the horizon at 100 km (a flat 40 km deck leaves a
+ * degree of clear sky). About 120 km would reach the horizon, but would need 144 steps at
+ * the same step length; 100 km keeps the sliver small for 120 steps, which keep the step
+ * length of 48 steps over 40 km. Medium and Low trade a wider band of clear sky at the
+ * horizon and a coarser cloud pass for frame time.
+ */
+export const WEATHER_STAGE_PRESETS: Readonly<Record<WeatherQualityPreset, WeatherStageQuality>> = {
+  low: {
+    steps: 48,
+    resolutionScale: 0.25,
+    densityScale: 0.04,
+    fogExtinction: 1.0,
+    fogHeightScale: 400,
+    radius: 40000,
+  },
+  medium: {
+    steps: 72,
+    resolutionScale: 0.375,
+    densityScale: 0.04,
+    fogExtinction: 1.0,
+    fogHeightScale: 400,
+    radius: 60000,
+  },
+  high: {
+    steps: 120,
+    resolutionScale: 0.5,
+    densityScale: 0.04,
+    fogExtinction: 1.0,
+    fogHeightScale: 400,
+    radius: 100000,
+  },
+}
+
+/** Inset area, as a fraction of the main viewport's, from which an inset uses the main view's preset */
+export const WEATHER_STAGE_INSET_FULL_AREA_RATIO = 0.5
+
+/** Inset area fraction from which an inset uses one preset below the main view's; under it, Low */
+export const WEATHER_STAGE_INSET_STEP_DOWN_AREA_RATIO = 0.15
+
+/** Quiet time after an inset resize before a changed preset rebuilds the stage, in ms */
+export const WEATHER_STAGE_INSET_RESIZE_SETTLE_MS = 300
 
 /** Cloud slab thickness in meters by METAR cover code */
 export const CLOUD_THICKNESS_BY_TYPE_M: Readonly<Record<string, number>> = {

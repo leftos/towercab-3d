@@ -114,7 +114,7 @@ export const SUBCATEGORY_MAPPINGS: Record<string, Record<string, { label: string
     },
     clouds: {
       label: 'Clouds',
-      properties: ['showClouds', 'cloudOpacity'],
+      properties: ['showClouds', 'cloudOpacity', 'stageQuality'],
     },
     precipitation: {
       label: 'Precipitation',

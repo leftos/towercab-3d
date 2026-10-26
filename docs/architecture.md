@@ -96,7 +96,7 @@ weatherStore.setWeather()
          │      └─ Applies fog density to Cesium scene (tuned from METAR visibility only while the stage draws no fog; otherwise held at Cesium's clear-weather values so terrain is not fogged twice)
          │
          ├──→ useCesiumWeatherStages
-         │      └─ Post-process stage drawing clouds and fog against scene depth (also in insets; nothing in top-down, nor in a view with no logarithmic depth buffer, which shows only the globe's distance fog)
+         │      └─ Post-process stage drawing clouds and fog against scene depth at the Low/Medium/High quality preset (also in insets, which pick a preset by size; nothing in top-down, nor in a view with no logarithmic depth buffer, which shows only the globe's distance fog)
          │
          └──→ useBabylonOverlay
                 ├─ Rain, snow and lightning
@@ -294,11 +294,12 @@ CesiumViewer Component Mount
     │      ├─ Sets up shadow maps (size, distance, darkness)
     │      └─ Updates runtime when settings change
     │
-    ├─ 4. useCesiumWeatherStages(viewer, { airportIcao, refLat, refLon, viewMode }), returning its gates
+    ├─ 4. useCesiumWeatherStages(viewer, { airportIcao, refLat, refLon, viewMode, isInset }), returning its gates
     │      ├─ Adds the cloud and fog post-process stage (GLSL in hooks/weather/cloudStage.glsl.ts; pure helpers in utils/weatherStage.ts), kept after the silhouette stage so aircraft in cloud get no outline
-    │      ├─ Cloud deck reaches 100 km (WEATHER_STAGE_QUALITY radius) and curves down with the earth (d²/2R); layers are marched by base height relative to the camera on that curved datum, not by ray slope; undersides use the fog grey so the deck meets the distant haze; tops stay flat; CLOUD_STAGE_MAX_STEPS caps the shader's MAX_STEPS and the u_steps clamp; utils/cloudDeckGeometry.ts mirrors the shader geometry for tests
+    │      ├─ Knobs come from a quality preset (WEATHER_STAGE_PRESETS in constants/weather.ts, resolved by weatherStageQuality): the `weather.stageQuality` setting in the main view, `insetStageQuality` in an inset (its area against the main window's: at least 50% the main preset, at least 15% one step down, else Low; re-read 300 ms after a resize stops). A preset change rebuilds the stage only when resolutionScale changes, since Cesium reads textureScale at creation; steps, radius and the look knobs are read live
+    │      ├─ At High the cloud deck reaches 100 km (the preset's radius; Medium 60 km, Low 40 km) and curves down with the earth (d²/2R); layers are marched by base height relative to the camera on that curved datum, not by ray slope; undersides use the fog grey so the deck meets the distant haze; tops stay flat; CLOUD_STAGE_MAX_STEPS caps the shader's MAX_STEPS and the u_steps clamp; utils/cloudDeckGeometry.ts mirrors the shader geometry for tests
     │      ├─ Split in one file into useWeatherAnchor, useWeatherStageFrame and useWeatherStageComposite
-    │      ├─ Reads showWeatherEffects, showClouds, showBabylonFog, visibilityScale, fogIntensity (scales the fog's optical depth), weatherStore.useInterpolation / interpolatedWeather.visibility; disabled when there is nothing to draw (no layers, no fog, no anchor frame)
+    │      ├─ Reads showWeatherEffects, showClouds, showBabylonFog, stageQuality, visibilityScale, fogIntensity (scales the fog's optical depth), weatherStore.useInterpolation / interpolatedWeather.visibility; disabled when there is nothing to draw (no layers, no fog, no anchor frame)
     │      ├─ Reads the live scene.logarithmicDepthBuffer, not graphics.enableLogDepth: without it the stage is hidden, one warning is logged and the view shows only the globe's distance fog, with no clouds or METAR fog
     │      ├─ Cloud frame anchored on the airport (re-anchors past 100 m within it), or on the followed aircraft every 5 km in orbit-follow; terrain is resampled when the provider changes and retried each second on failure; ground changes between samples slide over 5 s; cloud noise is world-stable (origin resets past 50 km)
     │      └─ useWeatherStageDriveAids runs after useCesiumCamera (dev camera and test-aircraft aids)
