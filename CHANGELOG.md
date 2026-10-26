@@ -31,6 +31,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Mods you turn off in Settings → Mods stay off after a restart, and stay listed so you can turn them back on.
 - Private aircraft now get their own registered FSLTL or AIG livery, and other aircraft of that type no longer borrow it.
 - A model conversion cut short no longer leaves a broken model that never converts again.
+- vNAS no longer disconnects when it receives aircraft data it cannot read that contains non-English characters.
 
 ### Removed
 - The experimental VR mode and its VR button in the controls bar.
