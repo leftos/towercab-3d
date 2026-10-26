@@ -1278,9 +1278,11 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
   /**
    * Drop everything the ended session left behind.
    *
-   * Called when the service reports the session is over, whether the server ended
-   * it or the user disconnected: the per-aircraft maps, the facility lists and the
-   * session's vNAS observations all go. Aircraft that VATSIM also reports carry on
+   * Called at each state that ends the session in progress (see `followSessionState`):
+   * `disconnected` (the server ended it or the user disconnected), `waitingForSession` (a
+   * room or CRC session ended and the connection stays) and `subscribing` (a new session
+   * replaced it). The per-aircraft maps, the facility lists, the subscribes in flight and
+   * the session's vNAS observations all go. Aircraft that VATSIM also reports carry on
    * from their VATSIM timeline.
    */
   handleSessionEnded: () => {
@@ -1309,21 +1311,20 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
    * Apply a session state from `vnas-state-changed` by the host's rules (see
    * `sessionStateChange`), then re-read the host status that goes with it: how the last
    * session ended (`disconnected`, `waitingForSession`) and the joined session's kind and
-   * airports (`subscribing`). The host drops a session's subscriptions whenever the
-   * session changes, so a subscribe still in flight from the old one is forgotten too.
-   * The state is applied before the first await, so a caller can read the new
-   * `joinSerial` as soon as this returns its promise.
+   * airports (`subscribing`). Each of those three states ends the session in progress (a
+   * disconnect, a room or CRC session ending with the connection kept, or a new session
+   * replacing it), so `handleSessionEnded` drops what it left behind, its subscribes in
+   * flight included, before the join's own follow work. The state is applied before the
+   * first await, so a caller can read the new `joinSerial` as soon as this returns its promise.
    */
   followSessionState: async (state: VnasStatus['state']) => {
     set((store) => sessionStateChange(store, state))
-    const serial = get().joinSerial
-    if (state === 'disconnected') {
+    const sessionChanged = SESSION_CHANGE_STATES.includes(state)
+    if (sessionChanged) {
       get().handleSessionEnded()
-    } else if (state === 'waitingForSession' || state === 'subscribing') {
-      inFlightSubscribes.clear()
-      set({ roomAirportNotice: null })
     }
-    if (isRemoteMode() || !SESSION_CHANGE_STATES.includes(state)) {
+    const serial = get().joinSerial
+    if (isRemoteMode() || !sessionChanged) {
       return
     }
     if (state === 'subscribing') {

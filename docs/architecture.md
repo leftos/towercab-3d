@@ -479,7 +479,7 @@ vnasStore
 ├─ handleSessionEnded(): clears the in-flight map, the per-aircraft maps, the facility lists and the session's vNAS timeline observations
 └─ Used by:
      ├─ VnasService (session management)
-     ├─ useVnasEvents (Tauri event listeners; calls handleSessionEnded when the state goes to disconnected, and mirrors the host's `vnas-subscriptions-changed` list)
+     ├─ useVnasEvents (Tauri event listeners; each state goes through followSessionState, which calls handleSessionEnded at every state that ends the session in progress: disconnected, waitingForSession and subscribing; it also mirrors the host's `vnas-subscriptions-changed` list)
      └─ TopBar (connection status)
 
 vNAS backend (src-tauri/src/vnas.rs, `vnas` feature)
@@ -488,7 +488,7 @@ vNAS backend (src-tauri/src/vnas.rs, `vnas` feature)
 ├─ Status is written by read-modify-write under one lock (`update_status`); a `Disconnected`, `WaitingForSession` or `Subscribing` state (the hub drops a connection's subscriptions when its session changes) drops every subscription, in-flight claim and the stored session token that `subscribe_towercab` names
 ├─ `VnasStatus.lastSessionEnd` (`{ reason, forcible }`) records a server-ended session: a non-forcible end (a YAAT room closing) clears when the next session is joined, a forcible one (a kick) at the next connect, and a kick's reason is also shown as the status error. A subscribe that fails with a stale session (token forgotten) or with no connection (a kick tore it down) is ignored, so it never overwrites that reason (`settle_subscribe_failure`)
 ├─ On a session change the host emits `vnas-state-changed` first, then the cleared `vnas-subscriptions-changed` list (`session_change_events`), so the frontend has dropped the old session's airports and holds its subscribes (`canSubscribe`, until the joined session is followed) before the cleared list re-runs the subscribe effects. A `vnas_get_status` snapshot never overwrites the frontend's state, except when the frontend is still `disconnected` and the host reports a live session (a webview reload): it adopts the host's state and resubscribes the airport in view
-└─ Session end (server `HandleSessionEnded` or user disconnect) reaches the frontend as the disconnected state; the crate has already torn the session down (see the crate's docs/ARCHITECTURE.md "Session teardown")
+└─ Session end (server `HandleSessionEnded` or user disconnect) reaches the frontend as the disconnected state, or as waitingForSession when the connection stays (a YAAT room ending), or as subscribing when a room switch joins the next session at once; the crate has already torn the session down (see the crate's docs/ARCHITECTURE.md "Session teardown")
 
 aircraftTimelineStore
 ├─ isOpen: boolean

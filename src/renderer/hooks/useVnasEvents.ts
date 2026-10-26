@@ -78,8 +78,9 @@ function applyDataFeedPolicy(state: SessionState): void {
     useVatsimStore.getState().stopPolling()
   }
 
-  // Disconnecting ends the session (followSessionState drops its aircraft, facility lists
-  // and vNAS observations): restart VATSIM polling if that's the active data source.
+  // followSessionState drops an ended session's aircraft, facility lists and vNAS
+  // observations at disconnected, waitingForSession and subscribing. Only a disconnect
+  // leaves the environment, so only it restarts VATSIM polling, if that's the active data source.
   if (state === 'disconnected') {
     const dataSource = useGlobalSettingsStore.getState().realtraffic.dataSource
     if (dataSource !== 'realtraffic') {
