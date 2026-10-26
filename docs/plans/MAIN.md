@@ -18,9 +18,8 @@
 
 ### M1 Remove VR (1/1 done)
 
-### M2 Cab, clouds and fog in Cesium (6/16 done)
+### M2 Cab, clouds and fog in Cesium (7/17 done)
 - [ ] TC3D-213 Clouds, fog and cab in Cesium on feat/cesium-weather · release vNext
-  - [/] TC3D-148 Turn the weather stage's knobs into quality presets · release vNext
   - [ ] TC3D-150 Measure the weather stage on an iPad and get the owner's look sign-off · release vNext
   - [ ] TC3D-219 Weather stage fog vanishes with the camera above about 32 km
   - [ ] TC3D-221 Merge feat/cesium-weather to main (#262) · release vNext
@@ -29,6 +28,7 @@
 - [ ] TC3D-294 Remove the BKN layer's white streaks along the horizon · release vNext
 - [ ] TC3D-295 Give distant terrain near the horizon its real distance in the weather composite · release vNext
 - [ ] TC3D-235 Place the cab and weather on the visible ground when terrain never loads
+- [ ] TC3D-314 Pin the weather quality device default with a test and keep it stable · release vNext+1
 
 ### M3 Rain, snow and lightning (0/2 done)
 - [ ] TC3D-151 Draw rain and snow in Cesium, depth-aware · release vNext+1
@@ -89,7 +89,7 @@
 - [/] TC3D-6 vNAS session lifecycle: one subscribe per facility, clean session end · release vNext
   - [ ] TC3D-214 Merge feat/vnas-session-lifecycle to main (#261) · release vNext
 
-### Hardening (0/11 done)
+### Hardening (0/12 done)
 - [ ] TC3D-227 Keep VATSIM sign-in secrets out of the vNAS crate's logs and errors · release vNext
 - [ ] TC3D-228 Stop the vNAS client panicking on non-ASCII server text · release vNext
 - [ ] TC3D-234 Leave the vNAS crate Disconnected after a failed or cancelled connect
@@ -101,6 +101,7 @@
 - [ ] TC3D-66 Crate session_airports holds the session lock across Data API calls
 - [ ] TC3D-67 vNAS lifecycle: close the races left after TC3D-47
 - [ ] TC3D-68 vNAS: stray rejections, a stale error, a lost disconnect during sign-in, and startup connecting to Live
+- [ ] TC3D-313 Tie each vNAS subscribe to the session its caller saw · release vNext+1
 
 ### Dual-source and reconnect (0/5 done)
 - [ ] TC3D-19 vNAS dual-source and reconnect: the crate's Testing Checklist
@@ -118,7 +119,7 @@
 - [ ] TC3D-301 Split parse_aircraft_cfg_str under the function limits · release vNext+1
 - [ ] TC3D-306 Keep the MSFS index paths in one form and sort the remaining read_dir choices · release vNext+1
 
-### Conversion pipeline (0/9 done)
+### Conversion pipeline (1/9 done)
 - [ ] TC3D-265 Run every model conversion through one Rust owner with a timeout and a shared limit · release vNext
 - [ ] TC3D-264 Hand the converter a JSON job with safe output names and read a JSON result · release vNext
 - [ ] TC3D-289 Keep image positions when a glTF image has no URI in the converter
@@ -126,11 +127,13 @@
 - [ ] TC3D-291 Finish the converter's package checks: extra device names, hard links, partial junctions
 - [ ] TC3D-293 Clear a no-type airline aircraft's pending model when its conversion finishes elsewhere
 - [ ] TC3D-127 Remote browsers draw built-in models instead of the host's MSFS liveries
-- [ ] TC3D-212 MSFS model cache limit is dropped on every settings save
 
 ### Converter tests (1/3 done)
 - [ ] TC3D-131 Skip the model-matching tests when the MSFS addon data is absent · release vNext+1
 - [ ] TC3D-267 Add fixture tests to the converter's Python, Rust and TypeScript layers
+
+### No milestone
+- [ ] TC3D-315 Harden the conversion owner: bounded kill, orphaned remote jobs, case-insensitive dedupe · release vNext+1
 
 ## Aircraft motion model
 
