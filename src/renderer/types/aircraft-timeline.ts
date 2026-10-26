@@ -44,8 +44,10 @@ export interface AircraftObservation {
   onGround: boolean | null
 
   /**
-   * Height of the aircraft above the ground under it, in metres, as the source reports it (vNAS: the simulator's
-   * own AGL). Absent for VATSIM and RealTraffic; replay carries what was recorded. Ground contact is decided from it.
+   * Height above the ground under it, in metres, raw as the source reports it (vNAS: the simulator's AGL of the
+   * aircraft's reference point, so an aircraft at rest reads its type's resting height). Absent for VATSIM and
+   * RealTraffic; replay carries what was recorded. Slow vNAS samples teach the type's resting height; ground contact,
+   * the parked test and the flare use the height over it (`heightOverRest`).
    */
   heightAboveGround?: number
 

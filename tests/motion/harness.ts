@@ -75,18 +75,38 @@ export interface ScenarioOptions {
    * named report from their start.
    */
   vatsimFromS?: Partial<Record<string, number>>
+  /** Scenario second per callsign before which its vNAS feed sends nothing; the feed's usual start when omitted. */
+  vnasFromS?: Partial<Record<string, number>>
   /**
    * Feet the phase detector's field elevation sits below the sim's ground, so every reported altitude reads that much
    * above the field (a datum above the wheels, or scenery off the airport database); 0 when omitted.
    */
   fieldElevationBelowGroundFt?: number
+  /** Aircraft type per callsign; B738 for flights not named. */
+  aircraftTypes?: Partial<Record<string, string>>
+  /**
+   * Feet per aircraft type that the reported altitude and the vNAS height above ground read over the wheels (vNAS
+   * reports a reference point: an A320 at rest reads 9 ft); 0 for types not named.
+   */
+  restingHeightsFt?: Partial<Record<string, number>>
+  /** Height in feet at which GA1 begins its go-around; GO_AROUND_FT when omitted. */
+  goAroundFt?: number
 }
+
+/** GA1's go-around height (ft) when a scenario names none. */
+export const GO_AROUND_FT = 200
 
 /** What each vNAS observation carries besides its position. */
 interface VnasFeedOptions {
   jitterM: number
   withHeight: boolean
   withGroundFlag: boolean
+}
+
+/** The aircraft type a flight reports and how far above its wheels its reported heights read (m). */
+interface FlightReport {
+  aircraftType: string
+  restM: number
 }
 
 export interface FrameRecord {
@@ -96,6 +116,8 @@ export interface FrameRecord {
   x: number
   y: number
   agl: number
+  /** The altitude the datablock and the aircraft list show (`reportedAltitude`) over the ground (m) */
+  reportedAgl: number
   heading: number
   pitch: number
   roll: number
@@ -160,12 +182,12 @@ interface FrameDeps {
   flightByCs: Map<string, Flight>
 }
 
-export function buildFlights(): { flights: Flight[]; runwayThr: { x: number; y: number } } {
+export function buildFlights(goAroundFt: number): { flights: Flight[]; runwayThr: { x: number; y: number } } {
   const dep = departureFlight()
   const lineup = dep.samples.find((s) => s.t >= dep.events.lined_up) as TruthSample
   const thr = { x: lineup.x, y: lineup.y }
-  const arr = arrivalFlight(thr.x + 300, thr.y, false)
-  const ga = arrivalFlight(thr.x + 300, thr.y, true)
+  const arr = arrivalFlight(thr.x + 300, thr.y, null)
+  const ga = arrivalFlight(thr.x + 300, thr.y, goAroundFt)
   const depLiftoff = dep.events.initial_climb
   const arrOffset = depLiftoff + 90 - arr.events.rollout
   return {
@@ -195,13 +217,14 @@ function makeObservation(
   source: 'vatsim' | 'vnas',
   groundState: boolean | null,
   groundEllip: number,
+  report: FlightReport,
 ) {
   const s = truthAt(f.samples, tg - f.offset) as TruthSample
   const { lat, lon } = toLatLon(s.x, s.y)
   return {
     latitude: lat,
     longitude: lon,
-    altitude: groundEllip + s.agl,
+    altitude: groundEllip + s.agl + report.restM,
     heading: s.heading,
     groundspeed: s.gs,
     groundTrack: source === 'vnas' ? s.course : null,
@@ -214,14 +237,20 @@ function makeObservation(
     receivedAt: 0,
     source,
     displayDelay: source === 'vnas' ? 1500 : 17000,
-    ...(source === 'vnas' ? { heightAboveGround: s.agl } : {}),
+    ...(source === 'vnas' ? { heightAboveGround: s.agl + report.restM } : {}),
   }
 }
 
-function vatsimObservations(f: Flight, times: number[], groundEllip: number): Observation[] {
-  const meta = { cid: 1, aircraftType: 'B738', transponder: '1200', departure: f.departure, arrival: f.arrival }
+function vatsimObservations(f: Flight, times: number[], groundEllip: number, report: FlightReport): Observation[] {
+  const meta = {
+    cid: 1,
+    aircraftType: report.aircraftType,
+    transponder: '1200',
+    departure: f.departure,
+    arrival: f.arrival,
+  }
   return times.map((tg) => {
-    const observation = makeObservation(f, tg, 'vatsim', null, groundEllip)
+    const observation = makeObservation(f, tg, 'vatsim', null, groundEllip, report)
     observation.receivedAt = observation.observedAt + 400 + ((tg * 7919) % 1000)
     return { callsign: f.callsign, receivedAt: observation.receivedAt, isVatsim: true, observation, metadata: meta }
   })
@@ -234,9 +263,10 @@ function vnasObservations(
   durationS: number,
   groundEllip: number,
   feed: VnasFeedOptions,
+  report: FlightReport,
 ): Observation[] {
   const out: Observation[] = []
-  const meta = { cid: 0, aircraftType: 'B738', transponder: '', departure: null, arrival: null }
+  const meta = { cid: 0, aircraftType: report.aircraftType, transponder: '', departure: null, arrival: null }
   const end = f.samples[f.samples.length - 1].t
   let onGround: boolean | undefined
   for (let tg = Math.ceil(start) + 0.37; tg - f.offset <= end && tg <= durationS; tg += 1) {
@@ -244,9 +274,10 @@ function vnasObservations(
     const prevS = truthAt(f.samples, tg - f.offset - 2)
     if (s.gs < 1 && prevS && prevS.gs < 1) continue
     onGround = onGround ? s.agl / 0.3048 < 80 : s.agl / 0.3048 < 50
-    const observation = makeObservation(f, tg, 'vnas', feed.withGroundFlag ? onGround : null, groundEllip)
+    const observation = makeObservation(f, tg, 'vnas', feed.withGroundFlag ? onGround : null, groundEllip, report)
     if (feed.withHeight) {
-      observation.heightAboveGround = Math.max(0, s.agl + (out.length % 2 === 0 ? -feed.jitterM : feed.jitterM))
+      const jittered = Math.max(0, s.agl + (out.length % 2 === 0 ? -feed.jitterM : feed.jitterM))
+      observation.heightAboveGround = jittered + report.restM
     } else {
       delete observation.heightAboveGround
     }
@@ -259,6 +290,8 @@ function vnasObservations(
 function buildObservations(flights: Flight[], opts: ScenarioOptions, groundEllip: number): Observation[] {
   const out: Observation[] = []
   for (const f of flights) {
+    const aircraftType = opts.aircraftTypes?.[f.callsign] ?? 'B738'
+    const report: FlightReport = { aircraftType, restM: (opts.restingHeightsFt?.[aircraftType] ?? 0) * 0.3048 }
     const times = vatsimTimes(f, opts.durationS)
     const vnasFirstStart = opts.useVnas && opts.vnasFirst ? f.offset + 5 : 0
     const vatsimStart = Math.max(vnasFirstStart, opts.vatsimFromS?.[f.callsign] ?? 0)
@@ -267,17 +300,18 @@ function buildObservations(flights: Flight[], opts: ScenarioOptions, groundEllip
         f,
         times.filter((tg) => tg >= vatsimStart),
         groundEllip,
+        report,
       ),
     )
     if (opts.useVnas) {
       const firstVatsim = times[0] ?? f.offset
-      const start = opts.vnasFirst ? f.offset : firstVatsim + 20
+      const start = Math.max(opts.vnasFirst ? f.offset : firstVatsim + 20, opts.vnasFromS?.[f.callsign] ?? 0)
       const feed: VnasFeedOptions = {
         jitterM: opts.vnasHeightJitterM ?? 0,
         withHeight: !opts.vnasWithoutHeight,
         withGroundFlag: !opts.vnasWithoutGroundFlag,
       }
-      out.push(...vnasObservations(f, start, opts.durationS, groundEllip, feed))
+      out.push(...vnasObservations(f, start, opts.durationS, groundEllip, feed, report))
     }
   }
   out.sort((a, b) => a.receivedAt - b.receivedAt)
@@ -387,6 +421,7 @@ function recordFrame(deps: FrameDeps, feed: FeedState, e: AircraftEntry, now: nu
     x,
     y,
     agl: e.interpolatedAltitude - deps.groundEllip,
+    reportedAgl: e.reportedAltitude - deps.groundEllip,
     heading: e.interpolatedHeading,
     pitch: e.interpolatedPitch,
     roll: e.interpolatedRoll,
@@ -446,7 +481,7 @@ export async function runScenario(opts: ScenarioOptions): Promise<ScenarioResult
     const groundEllip = geo.geoidService.mslToEllipsoidal(LAT0, LON0, GROUND_MSL)
     const terrainHeight = groundEllip + (opts.terrainOffsetM ?? 0)
     const unsampled = opts.unsampledReferenceOffsetM !== undefined
-    const { flights, runwayThr } = buildFlights()
+    const { flights, runwayThr } = buildFlights(opts.goAroundFt ?? GO_AROUND_FT)
     const observations = buildObservations(flights, opts, groundEllip)
     const deps: FrameDeps = {
       tl,

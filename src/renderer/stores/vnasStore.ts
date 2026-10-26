@@ -23,9 +23,11 @@ const speedHistory = new Map<string, number[]>()
 
 /**
  * Ground state hysteresis tracking per aircraft, for the observation's `onGround` flag.
- * The flag is for labels only: drawn height, pitch and ground contact come from the height above
- * ground each observation carries (`heightAboveGround`), which the interpolation loop turns into
- * contact per frame. The hysteresis keeps the flag from toggling when AGL oscillates near the threshold.
+ * The flag is for labels only: drawn height, pitch and ground contact come from the height above ground each
+ * observation carries (`heightAboveGround`, raw: vNAS measures a reference point, so an aircraft at rest reads its
+ * type's resting height). The interpolation loop measures it over the type's learned resting height
+ * (`utils/aircraft/restingHeight.ts`), or uses the drop rule until that is learned, to decide contact per frame.
+ * The hysteresis keeps the flag from toggling when AGL oscillates near the threshold.
  *
  * Enter ground: AGL < 50ft, Exit ground: AGL > 80ft
  */
@@ -49,8 +51,9 @@ function getOnGroundWithHysteresis(callsign: string, altitudeAglFt: number): boo
 }
 
 /**
- * The ground fields of a vNAS observation: the 50/80 ft label flag and the simulator's height above ground in
- * metres. A non-finite AGL leaves the height out, so that observation counts as one without height.
+ * The ground fields of a vNAS observation: the 50/80 ft label flag and the simulator's height above ground of the
+ * aircraft's reference point in metres, raw (6-14 ft at rest, by type; contact subtracts the learned resting height
+ * downstream). A non-finite AGL leaves the height out, so that observation counts as one without height.
  */
 function vnasGroundFields(
   callsign: string,

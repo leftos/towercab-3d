@@ -7,7 +7,14 @@
  */
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { KNOTS_TO_MS } from '@/constants/precipitation'
-import { buildFlights, type Flight, type FrameRecord, runScenario, type ScenarioResult } from './harness'
+import {
+  buildFlights,
+  type Flight,
+  type FrameRecord,
+  GO_AROUND_FT,
+  runScenario,
+  type ScenarioResult,
+} from './harness'
 import { truthAt } from './sim'
 
 vi.mock('react', () => {
@@ -177,7 +184,7 @@ describe('a VATSIM arrival reported 8 m above the drawn terrain', () => {
 })
 
 /** The flights as the harness builds them, for choosing when a feed starts. */
-const FLIGHTS = buildFlights().flights
+const FLIGHTS = buildFlights(GO_AROUND_FT).flights
 const flightOf = (callsign: string) => FLIGHTS.find((f) => f.callsign === callsign) as Flight
 
 /** The first scenario second of the 15 s VATSIM report grid (3 + 15 n) at or after `s`. */

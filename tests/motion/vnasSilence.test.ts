@@ -8,6 +8,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { DYNAMIC_DELAY_JITTER_BUFFER_MS, SOURCE_DISPLAY_DELAYS } from '@/constants/aircraft-timeline'
 import type {
   AircraftDataSource,
+  AircraftMetadata,
   AircraftObservation,
   DynamicDelayState,
   TimelineInterpolationResult,
@@ -90,13 +91,18 @@ interface Frame {
 
 /** Feeds each sample once its receive time has passed and interpolates a 60 fps frame, up to `untilMs` after T0. */
 function run(samples: AircraftObservation[], untilMs: number): Frame[] {
+  return runAs(METADATA, samples, untilMs)
+}
+
+/** `run` for an aircraft with the given metadata. */
+function runAs(metadata: AircraftMetadata, samples: AircraftObservation[], untilMs: number): Frame[] {
   const store = tl.useAircraftTimelineStore
   const frames: Frame[] = []
   let next = 0
   for (let f = 0; f * FRAME_MS <= untilMs; f++) {
     const now = T0 + f * FRAME_MS
     while (next < samples.length && samples[next].receivedAt <= now) {
-      store.getState().addObservation(CS, samples[next], METADATA)
+      store.getState().addObservation(CS, samples[next], metadata)
       next++
     }
     const result = store.getState().getInterpolatedStates(now).get(CS)
@@ -338,13 +344,42 @@ it('a stop decided while the sample before it was missing is decided again when 
   for (const s of stopped) store.getState().addObservation(CS, s, METADATA)
   const decide = () => {
     const observations = store.getState().timelines.get(CS)?.observations ?? []
-    return tl.isStoppedVnasSample(observations, observations.indexOf(stopped[3]))
+    return tl.isStoppedVnasSample(observations, observations.indexOf(stopped[3]), METADATA.aircraftType)
   }
   expect(decide(), 'stopped while t = 9 is missing').toBe(true)
 
   const fastStep = { ...sample('vnas', 9, 8, 15), receivedAt: stopped[3].receivedAt + 500 }
   store.getState().addObservation(CS, fastStep, METADATA)
   expect(decide(), 'stopped once t = 9 arrives 8 m away').toBe(false)
+})
+
+const A320_REST_M = 9 * 0.3048
+const A320: AircraftMetadata = { ...METADATA, aircraftType: 'A320' }
+
+/** `samples` as an A320 whose vNAS height reads its 9 ft resting height on the ground. */
+function atA320Rest(samples: AircraftObservation[]): AircraftObservation[] {
+  return samples.map((s) => ({ ...s, heightAboveGround: A320_REST_M }))
+}
+
+it('a stopped A320 reporting its 9 ft resting height is held through 25 s of silence (TC3D-316)', () => {
+  const samples = atA320Rest(steadyVnas(19, 1.5))
+  const last = samples[samples.length - 1]
+  expectHeldAt(runAs(A320, samples, last.receivedAt - T0 + PARKED_SILENCE_MS), last)
+})
+
+it('a stop decided before its type rests at a known height is decided again once it does (TC3D-316)', () => {
+  const store = tl.useAircraftTimelineStore
+  // Stationary, but reporting 5 kt: no resting-height sample, so A320's resting height stays unknown
+  const stopped = atA320Rest([6, 7, 8, 10].map((t) => sample('vnas', t, 0, 5)))
+  for (const s of stopped) store.getState().addObservation(CS, s, A320)
+  const decide = () => {
+    const observations = store.getState().timelines.get(CS)?.observations ?? []
+    return tl.isStoppedVnasSample(observations, observations.indexOf(stopped[3]), 'A320')
+  }
+  expect(decide(), 'stopped at 9 ft before the resting height is known').toBe(false)
+
+  for (const s of atA320Rest([0, 1, 2].map((t) => sample('vnas', t, 0, 0)))) store.getState().addObservation('ACA4LG', s, A320)
+  expect(decide(), 'stopped at 9 ft once another A320 has rested at 9 ft').toBe(true)
 })
 
 it('one slow 3 s step from the only sample in range is not enough to hold (TC3D-51)', () => {

@@ -209,6 +209,11 @@ export interface InterpolatedAircraftState extends AircraftState {
   interpolatedLatitude: number
   interpolatedLongitude: number
   interpolatedAltitude: number // Interpolated altitude in METERS ellipsoidal (WGS84)
+  /**
+   * Altitude in METERS ellipsoidal before the resting-height correction; what datablocks and the aircraft list show.
+   * `interpolatedAltitude` is the drawn height.
+   */
+  reportedAltitude: number
   interpolatedHeading: number
   interpolatedGroundspeed: number
   // Emulated orientation (derived from physics)
@@ -225,14 +230,16 @@ export interface InterpolatedAircraftState extends AircraftState {
    */
   isOnGround: boolean | null
   /**
-   * Height above ground in metres reported by the source at the displayed instant (vNAS), or null for
-   * sources without it (VATSIM, RealTraffic); replay carries what was recorded.
+   * Height above ground in metres reported by the source at the displayed instant (vNAS, raw: a reference point's
+   * height), or null for sources without it (VATSIM, RealTraffic); replay carries what was recorded.
    */
   heightAboveGround: number | null
   /**
-   * Ground contact decided per frame. From `heightAboveGround` when the source reports it: entered below 3 ft,
-   * left above 5 ft. Otherwise from the drawn result of the landing and departure height blends (drawn more than
-   * halfway onto the terrain). Null only before the aircraft's first drawn frame.
+   * Ground contact decided per frame. From `heightAboveGround` when the source reports it: entered within 3 ft of
+   * the type's resting height and left above 5 ft over it once that is learned; until then, entered when the height
+   * under 20 ft stops changing (within 1 ft/s over 1 s) and left above 25 ft or on a climb over 3 ft/s. Otherwise
+   * from the drawn result of the landing and departure height blends (drawn more than halfway onto the terrain).
+   * Null only before the aircraft's first drawn frame.
    */
   inContact: boolean | null
   /**
