@@ -1,0 +1,257 @@
+diff --git a/src/renderer/hooks/useCesiumWeatherStages.ts b/src/renderer/hooks/useCesiumWeatherStages.ts
+index f6c934b..7e9b84a 100644
+--- a/src/renderer/hooks/useCesiumWeatherStages.ts
++++ b/src/renderer/hooks/useCesiumWeatherStages.ts
+@@ -62,6 +62,9 @@ interface StageInputs {
+   visibilityMeters: number
+   /** Optical depth multiplier of the fog, from the quality knob and `fogIntensity` */
+   fogExtinction: number
++  mockVisSM?: number
++  mockScale?: number
++  mockFogGate?: boolean
+ }
+ 
+ const NO_INPUTS: StageInputs = {
+@@ -115,12 +118,56 @@ function currentShift(frame: EnuFrame): number {
+   return groundBlendShift(frame.shiftStartM, performance.now() - frame.shiftStartMs)
+ }
+ 
++// MOCK (TC3D-294/295/224): runtime switches from window.__tc3dMock; empty object = today's behaviour.
++;(window as unknown as { __Cesium: typeof Cesium }).__Cesium = Cesium
++function mockKnobs(): Record<string, number> {
++  return (window as unknown as { __tc3dMock?: Record<string, number> }).__tc3dMock ?? {}
++}
++
++// MOCK (TC3D-224): fade = 0 today (step at 10 SM, no ease), 1 extinction fade 10->8 SM + ease,
++// 2 visibility fade (log-space from 100 SM-equivalent at 10 SM to the real value at 8 SM) + ease,
++// 3 time ease only. easeS = ease time (smoothstep), clock = pinned time in s (else performance.now()).
++const SM_M = 1609.344
++const mockEase = { from: 0, to: 0, start: 0, mode: -1 }
++function mockTargetDensity(mode: number, visSM: number | undefined, scale: number, fogGate: boolean): number {
++  if (!fogGate || visSM === undefined) return 0
++  const v = Math.max(visSM, 0.05) * SM_M * scale
++  const s = visSM >= 10 ? 0 : visSM <= 8 ? 1 : ((10 - visSM) / 2) ** 2 * (3 - 2 * ((10 - visSM) / 2))
++  if (mode === 1) return s / v
++  if (mode === 2) {
++    if (visSM >= 10) return 0
++    const far = 100 * SM_M * scale
++    return 1 / Math.exp(Math.log(far) + (Math.log(v) - Math.log(far)) * s)
++  }
++  return visSM >= 10 ? 0 : 1 / v
++}
++function mockVisibility(inputs: StageInputs): number {
++  const k = mockKnobs()
++  if (k.fade === undefined) return inputs.visibilityMeters
++  const now = k.clock ?? performance.now() / 1000
++  const target = mockTargetDensity(k.fade, inputs.mockVisSM, inputs.mockScale ?? 1, inputs.mockFogGate ?? false)
++  const easeS = k.easeS ?? 6
++  const valueAt = (t: number) => {
++    const x = Math.min(Math.max((t - mockEase.start) / easeS, 0), 1)
++    return mockEase.from + (mockEase.to - mockEase.from) * x * x * (3 - 2 * x)
++  }
++  if (mockEase.mode !== k.fade || k.fade === 0) {
++    Object.assign(mockEase, { from: target, to: target, start: now, mode: k.fade })
++  } else if (target !== mockEase.to) {
++    Object.assign(mockEase, { from: valueAt(now), to: target, start: now })
++  }
++  const density = valueAt(now)
++  ;(window as unknown as { __tc3dMockDensity: number }).__tc3dMockDensity = density
++  return density > 1e-9 ? 1 / density : 0
++}
++
+ /** Enables the stage only while it has a frame and something to draw */
+ function syncStageEnabled(refs: StageRefs): void {
+   const stage = refs.stage.current
+   if (!stage) return
+   const { layerCount, visibilityMeters } = refs.inputs.current
+-  stage.enabled = weatherStageHasWork(layerCount, visibilityMeters, refs.frame.current !== null)
++  const mockFade = mockKnobs().fade !== undefined && refs.frame.current !== null
++  stage.enabled = mockFade || weatherStageHasWork(layerCount, visibilityMeters, refs.frame.current !== null)
+ }
+ 
+ function setFrame(refs: StageRefs, frame: EnuFrame | null): void {
+@@ -155,6 +202,8 @@ function createStage(
+   }
+ 
+   const shared = {
++    u_mockDebug: () => mockKnobs().debug ?? 0,
++    u_mockHorizon: () => mockKnobs().horizon ?? 0,
+     // The deck shift is added to the camera, which moves the whole field (noise included) relative to it.
+     u_camPosEnu: () => {
+       const current = frame()
+@@ -163,7 +212,7 @@ function createStage(
+       return scratchCam
+     },
+     u_ecefToEnu: () => frame().ecefToEnuRotation,
+-    u_visibility: () => inputsRef.current.visibilityMeters,
++    u_visibility: () => mockVisibility(inputsRef.current),
+     u_fogExtinction: () => inputsRef.current.fogExtinction,
+     u_fogHeightScale: () => qualityRef.current.fogHeightScale,
+   }
+@@ -184,6 +233,11 @@ function createStage(
+       u_radius: () => qualityRef.current.radius,
+       u_time: () => (performance.now() - startMs) / 1000,
+       u_noiseOffset: () => frame().noiseOffset,
++      u_mockLod: () => mockKnobs().lod ?? 0,
++      u_mockGraze: () => mockKnobs().graze ?? 0,
++      u_mockJitter: () => mockKnobs().jitter ?? 0,
++      u_mockShade: () => mockKnobs().shade ?? 0,
++      u_mockDrift: () => mockKnobs().drift ?? (performance.now() - startMs) / 1000,
+     },
+   })
+ 
+@@ -538,6 +592,9 @@ export function useCesiumWeatherStages(viewer: Cesium.Viewer | null, options: We
+       layerCount: layers.length,
+       visibilityMeters: gates.fog ? stageVisibilityMeters(visibSM, visibilityScale) : 0,
+       fogExtinction: stageFogExtinction(quality.fogExtinction, fogIntensity),
++      mockVisSM: visibSM,
++      mockScale: visibilityScale,
++      mockFogGate: gates.fog,
+     }
+     syncStageEnabled(refs)
+   }, [
+diff --git a/src/renderer/hooks/weather/cloudStage.glsl.ts b/src/renderer/hooks/weather/cloudStage.glsl.ts
+index 54becc9..12aa7d9 100644
+--- a/src/renderer/hooks/weather/cloudStage.glsl.ts
++++ b/src/renderer/hooks/weather/cloudStage.glsl.ts
+@@ -23,10 +23,20 @@ uniform mat3 u_ecefToEnu;
+ uniform float u_visibility;
+ uniform float u_fogExtinction;
+ uniform float u_fogHeightScale;
++uniform float u_mockDebug;
++uniform float u_mockHorizon;
+ in vec2 v_textureCoordinates;
+ 
+ const float SKY_DISTANCE = 1.0e6;
+ 
++vec3 mockEncode24(float v01) {
++  float n = floor(clamp(v01, 0.0, 1.0) * 16777215.0 + 0.5);
++  float r = floor(n / 65536.0);
++  float g = floor((n - r * 65536.0) / 256.0);
++  float b = n - r * 65536.0 - g * 256.0;
++  return vec3(r, g, b) / 255.0;
++}
++
+ float sceneDistance(vec2 uv) {
+   float rawDepth = texture(depthTexture, uv).r;
+   if (rawDepth >= 1.0) {
+@@ -112,6 +122,25 @@ uniform float u_time;
+ // Horizontal position of this frame's origin from a fixed noise origin, in this frame's axes,
+ // so the noise field stays put horizontally when the anchor moves; vertically it follows the deck.
+ uniform vec3 u_noiseOffset;
++uniform float u_mockLod;
++uniform float u_mockGraze;
++uniform float u_mockJitter;
++// MOCK: drift time of the noise field, s (u_time unless window.__tc3dMock.drift pins it).
++uniform float u_mockDrift;
++// MOCK: horizontal footprint of the current sample, m (the larger of the step and the pixel), for u_mockLod.
++float g_footprint = 0.0;
++uniform float u_mockShade;
++// MOCK: largest coverage of the layers above the one being marched.
++float g_shade = 0.0;
++// MOCK: angle one cloud-pass pixel spans, rad.
++float g_pixelAngle = 0.0;
++
++// MOCK jitter: interleaved gradient noise (Jimenez 2014), advanced by the golden ratio each frame.
++float ignJitter(vec2 pixel) {
++  float frame = floor(u_time * 60.0);
++  pixel += 5.588238 * mod(frame, 64.0);
++  return fract(52.9829189 * fract(dot(pixel, vec2(0.06711056, 0.00583715))));
++}
+ 
+ const int MAX_STEPS = ${CLOUD_STAGE_MAX_STEPS};
+ const float EARTH_R = 6371000.0;
+@@ -144,10 +173,14 @@ float valueNoise(vec3 x) {
+ float fbm(vec3 p) {
+   float sum = 0.0;
+   float amplitude = 0.5;
++  float cell = 1800.0;
+   for (int i = 0; i < 4; i++) {
+-    sum += amplitude * valueNoise(p);
++    // MOCK lod: an octave whose cell is under about twice the sample footprint fades to its mean.
++    float keep = u_mockLod > 0.5 ? 1.0 - smoothstep(0.5, 1.0, g_footprint / cell) : 1.0;
++    sum += amplitude * mix(0.5, valueNoise(p), keep);
+     p = p * 2.03 + vec3(17.1, 9.7, 3.3);
+     amplitude *= 0.5;
++    cell /= 2.03;
+   }
+   return sum / 0.9375;
+ }
+@@ -171,7 +204,7 @@ float cloudDensity(vec3 p, vec4 layer) {
+   }
+   float shape = smoothstep(0.0, 0.12, hf) * (1.0 - smoothstep(0.5, 1.0, hf));
+   vec3 world = vec3(p.xy, z) + u_noiseOffset;
+-  vec3 q = vec3(world.xy / 1800.0, world.z / 600.0) + vec3(u_time * 0.004, u_time * 0.002, 0.0);
++  vec3 q = vec3(world.xy / 1800.0, world.z / 600.0) + vec3(u_mockDrift * 0.004, u_mockDrift * 0.002, 0.0);
+   // fbm of value noise clusters around 0.5; stretch it so the coverage threshold
+   // leaves roughly the reported fraction of sky covered.
+   float n = clamp((fbm(q) - 0.3) / 0.4, 0.0, 1.0);
+@@ -187,6 +220,8 @@ vec3 cloudLight(vec3 p, vec4 layer, vec3 sun) {
+   float hf = clamp((deckZ(p) - layer.x) / layer.y, 0.0, 1.0);
+   vec3 dark = FOG_GREY;
+   vec3 bright = vec3(1.0, 0.98, 0.95);
++  // MOCK shade: a layer under higher cover gets no sunlit top; its bright end falls to the fog grey.
++  bright = mix(bright, FOG_GREY, g_shade * u_mockShade);
+   return mix(dark, bright, clamp(0.35 * hf + 0.65 * lightT, 0.0, 1.0)) * (0.08 + 0.92 * daylight());
+ }
+ 
+@@ -257,12 +292,15 @@ void marchLayer(vec3 ro, vec3 rd, float tScene, vec4 layer, float jitter, vec3 s
+   if (t1 <= t0) {
+     return;
+   }
+-  float dt = (t1 - t0) / u_steps;
++  // MOCK graze: steps grow with the chord so no step exceeds u_mockGraze m, up to MAX_STEPS.
++  float steps = u_mockGraze > 0.0 ? clamp(ceil((t1 - t0) / u_mockGraze), u_steps, float(MAX_STEPS)) : u_steps;
++  float dt = (t1 - t0) / steps;
+   float t = t0 + dt * jitter;
+   for (int i = 0; i < MAX_STEPS; i++) {
+-    if (float(i) >= u_steps || transmittance < 0.01) {
++    if (float(i) >= steps || transmittance < 0.01) {
+       break;
+     }
++    g_footprint = max(dt * length(rd.xy), t * g_pixelAngle);
+     vec3 p = ro + rd * t;
+     float density = cloudDensity(p, layer);
+     if (density > 0.0) {
+@@ -295,6 +333,12 @@ void main() {
+   float tScene = sceneDistance(uv);
+   vec3 sun = sunEnu();
+   float jitter = hash13(vec3(gl_FragCoord.xy, fract(u_time) * 97.0));
++  if (u_mockJitter > 0.5) {
++    jitter = ignJitter(gl_FragCoord.xy);
++  }
++  if (u_mockLod > 0.5) {
++    g_pixelAngle = length(rd - viewRayEnu(uv + vec2(0.0, 1.0 / czm_viewport.w)));
++  }
+ 
+   float transmittance = 1.0;
+   vec3 color = vec3(0.0);
+@@ -310,6 +354,12 @@ void main() {
+       break;
+     }
+     int i = k < below ? below - 1 - k : k;
++    g_shade = 0.0;
++    for (int j = 0; j < 4; j++) {
++      if (j > i && j < count) {
++        g_shade = max(g_shade, layerAt(j).z);
++      }
++    }
+     marchLayer(ro, rd, tScene, layerAt(i), jitter, sun, transmittance, color, weightedT, weightSum);
+   }
+ 
+@@ -330,6 +380,15 @@ void main() {
+   vec2 uv = v_textureCoordinates;
+   vec4 scene = texture(colorTexture, uv);
+   vec4 cloud = texture(cloudTexture, uv);
++  if (u_mockDebug > 0.5) {
++    float raw = texture(depthTexture, uv).r;
++    if (u_mockDebug < 1.5) {
++      out_FragColor = vec4(mockEncode24(raw), 1.0);
++    } else {
++      out_FragColor = vec4(mockEncode24(sceneDistance(uv) / 16777215.0), 1.0);
++    }
++    return;
++  }
+   float fogT = fogTransmittance(u_camPosEnu, viewRayEnu(uv), sceneDistance(uv));
+   vec3 fogged = mix(fogColor(), scene.rgb, fogT);
+   out_FragColor = vec4(fogged * (1.0 - cloud.a) + cloud.rgb, scene.a);

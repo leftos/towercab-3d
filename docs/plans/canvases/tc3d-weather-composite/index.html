@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weather Composite Options</title>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --panel: #ffffff;
+    --text: #1b1f24;
+    --muted: #5b6470;
+    --line: #d9dde3;
+    --accent: #1f6feb;
+    --warn: #b35900;
+    --ok: #1a7f37;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    --sans: system-ui, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1216; --panel: #171b21; --text: #e6e9ee; --muted: #9aa4b1; --line: #2a313a;
+      --accent: #58a6ff; --warn: #f0a04b; --ok: #56d364;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1216; --panel: #171b21; --text: #e6e9ee; --muted: #9aa4b1; --line: #2a313a;
+    --accent: #58a6ff; --warn: #f0a04b; --ok: #56d364;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 var(--sans); }
+  main { max-width: 1800px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 18px; margin: 40px 0 6px; padding-top: 12px; border-top: 1px solid var(--line); }
+  h3 { font-size: 15px; margin: 0 0 4px; }
+  h4 { font-size: 14px; margin: 22px 0 6px; }
+  p, li { color: var(--muted); max-width: 120ch; }
+  p.q { color: var(--text); font-weight: 600; }
+  code, .mono { font-family: var(--mono); font-size: 12.5px; }
+  .lanes { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 12px; align-items: start; }
+  .lane { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px; min-width: 0; }
+  .lane img, .lane video, figure img, figure video { width: 100%; height: auto; display: block; border-radius: 4px; }
+  .lane img.px { image-rendering: pixelated; }
+  .lane p { margin: 6px 0 0; font-size: 13px; }
+  .worst { color: var(--warn); }
+  .rec { background: var(--panel); border: 1px solid var(--accent); border-radius: 8px; padding: 10px 14px; margin: 14px 0; }
+  .rec p { color: var(--text); margin: 4px 0; }
+  figure { margin: 10px 0; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+  figcaption { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  table.t { border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); margin: 8px 0; display: block; overflow-x: auto; max-width: 100%; }
+  table.t th, table.t td { padding: 4px 10px; border-bottom: 1px solid var(--line); text-align: left; font-size: 12.5px; white-space: nowrap; }
+  table.t td.n { font-family: var(--mono); text-align: right; }
+  table.t th { color: var(--muted); font-weight: 600; }
+  .tag { font-size: 12px; color: var(--accent); border: 1px solid var(--accent); border-radius: 10px; padding: 0 8px; margin-left: 8px; vertical-align: middle; font-weight: 500; }
+  .chart { background: #fff; border-radius: 4px; }
+</style>
+</head>
+<body>
+<main>
+<h1>Weather composite: TC3D-295, TC3D-294, TC3D-224</h1>
+<p>Prototyped on <code>feat/cesium-weather</code> at 1d69463 in a scratch worktree, with runtime switches (<code>window.__tc3dMock</code>, diff in <code>shoot/mock.diff</code>). With the switches empty the code behaves exactly as on the branch. All shots: EGLL tower camera (88.8 m above the anchor ground, 158.6 m ellipsoid), heading 274, pitch −3, FOV 45, 13:00 UTC, High preset, canvas 1596×800, headless Edge on the desktop RTX. Rebuild steps: <code>RECIPE.md</code>.</p>
+
+<!-- ============================== 295 ============================== -->
+<h2>TC3D-295 · distant terrain near the horizon <span class="tag">measurement, no fix lanes</span></h2>
+<p class="q">Does the weather composite give distant terrain near the horizon a sky distance (1,000 km)?</p>
+<p><b>No.</b> At this pose every terrain pixel has a real depth, and the composite decodes it to the right distance. A debug switch wrote the composite's raw depth as 24-bit colour, and then <code>sceneDistance()</code> in metres. Each row was compared with a CPU ray pick of the terrain (<code>globe.pick</code>) and with the ray's WGS84 ellipsoid hit. Neither the "no depth drawn" nor the "decoded wrong" outcome holds, so this section shows the measurement and no fix lanes.</p>
+
+<table class="t">
+  <tr><th>Row (centre column)</th><th>Rows below geometric horizon</th><th>Ray elevation</th><th>Raw depth</th><th>Composite distance</th><th>CPU terrain pick</th><th>Ellipsoid hit</th></tr>
+  <tr><td>297</td><td class="n">−12</td><td class="n">+0.06°</td><td class="n">1.0 (cleared)</td><td class="n">sky</td><td class="n">none</td><td class="n">none</td></tr>
+  <tr><td>303</td><td class="n">−6</td><td class="n">−0.12°</td><td class="n">1.0 (cleared)</td><td class="n">sky</td><td class="n">none</td><td class="n">none</td></tr>
+  <tr><td>306</td><td class="n">−3</td><td class="n">−0.21°</td><td class="n">0.9231</td><td class="n">42,932 m</td><td class="n">43,124 m</td><td class="n">none</td></tr>
+  <tr><td>309 (horizon)</td><td class="n">0</td><td class="n">−0.30°</td><td class="n">0.8357</td><td class="n">15,774 m</td><td class="n">15,850 m</td><td class="n">none</td></tr>
+  <tr><td>315</td><td class="n">6</td><td class="n">−0.47°</td><td class="n">0.8082</td><td class="n">11,532 m</td><td class="n">12,198 m</td><td class="n">25,184 m</td></tr>
+  <tr><td>324</td><td class="n">15</td><td class="n">−0.74°</td><td class="n">0.7511</td><td class="n">6,057 m</td><td class="n">6,070 m</td><td class="n">13,342 m</td></tr>
+  <tr><td>342</td><td class="n">33</td><td class="n">−1.28°</td><td class="n">0.7152</td><td class="n">4,066 m</td><td class="n">4,078 m</td><td class="n">7,313 m</td></tr>
+  <tr><td>417</td><td class="n">108</td><td class="n">−3.51°</td><td class="n">0.6176</td><td class="n">1,449 m</td><td class="n">1,455 m</td><td class="n">2,603 m</td></tr>
+</table>
+<p>Across headings 0, 90, 180 and 274, three columns each and 41 rows per column, no row had a cleared depth where the CPU pick found terrain. The composite's distance differed from the pick by a median of 0.5–0.8%; the largest differences (5–30%) sit on the skyline's edge rows, where the two samples land on either side of a hill. Log depth was on, with one frustum (near 0.1 m, far 1e10 m).</p>
+
+<div class="lanes">
+  <div class="lane">
+    <h3>Heading 274: cleared depth tinted red</h3>
+    <img class="px" src="img/295-depth-h274.webp" alt="Horizon at heading 274 with depth-1.0 pixels tinted red; the red ends exactly at the terrain skyline">
+    <p>Rows 249–388, centre 640 columns at 2×. The red (depth 1.0) ends exactly at the terrain skyline, which sits 4–6 rows above the geometric horizon because the hills about 43 km out stand above the anchor ground.</p>
+  </div>
+  <div class="lane">
+    <h3>Heading 180: cleared depth tinted red</h3>
+    <img class="px" src="img/295-depth-h180.webp" alt="Horizon at heading 180 with depth-1.0 pixels tinted red">
+    <p>Same test facing south: no terrain is tinted.</p>
+  </div>
+</div>
+<div class="lanes" style="margin-top:12px">
+  <div class="lane">
+    <h3>Composite at 5.96 SM</h3>
+    <img src="img/295-strip-596.webp" alt="Composite horizon at 5.96 SM">
+    <p>Terrain 15–43 km out takes the fog of its real distance: 1.6–4.5 times the visibility, so it fades almost to the fog grey and reads like sky. That is the fog working as designed.</p>
+  </div>
+  <div class="lane">
+    <h3>Composite at 10 SM (stage fog off)</h3>
+    <img src="img/295-strip-10.webp" alt="Composite horizon at 10 SM">
+    <p>With no stage fog the skyline is crisp. The white streaks above it are TC3D-294.</p>
+  </div>
+</div>
+<div class="rec">
+  <p><b>What the hazed strip in the TC3D-125 mock was instead:</b> the sky between the terrain skyline and the geometric horizon (cleared depth, rightly treated as sky), plus Cesium's own ground atmosphere, which turns terrain 15–43 km out pale while its depth stays real.</p>
+  <p><b>Recommendation:</b> close TC3D-295 as not reproduced, with this measurement as the pin. If a pale band on far terrain still bothers you at some weather, that band is Cesium's ground atmosphere (<code>globe.showGroundAtmosphere</code> / <code>scene.fog</code>), not the composite. It would be a new issue.</p>
+  <p class="worst"><b>Worst case:</b> the measurement covers EGLL at 88.8 m in four directions. A much higher camera (above the deck, where tiles near the horizon are coarser) was not measured.</p>
+</div>
+
+<!-- ============================== 294 ============================== -->
+<h2>TC3D-294 · BKN streaks along the horizon <span class="tag">decision 5</span></h2>
+<p class="q">Which change removes the white streaks of a BKN 274 m layer under an OVC 610 m deck at 10 SM?</p>
+<p>Weather: BKN 274.3 m cov 0.7 + OVC 609.6 m cov 1, 10 SM. The cloud drift time is pinned so every lane sees the same cloud field. <i>Row step</i> is the largest luminance jump between adjacent rows (0–255, centre 200 columns) from 2° above the horizon down to 8 rows above it, the issue's metric (target ≤ 6), at drift 0 / 300 / 600 s. <i>GPU</i> is <code>gpuCesiumMs</code> from <code>__tc3d.perf()</code>, median and p95 over 300 frames, as the median of rounds 2–4 of four interleaved rounds. Stage off read 2.03 / 2.32 ms, so the stage's own cost is the lane's value minus 2.03. In round 1 every lane read near the stage-off value (timer lag after the stage rebuild), so round 1 is left out.</p>
+<p><b>Finding:</b> the three candidates in the issue (B, C, D) leave the streaks exactly as they are. Their row steps stay within 1.5 of today's at every drift, so the streaks are not undersampling. They are the BKN tops lit as if in full sun, seen edge-on through gaps, although an overcast deck sits above them. Lanes E and F test that cause.</p>
+
+<div class="lanes">
+  <div class="lane">
+    <h3>A · today</h3>
+    <img class="px" src="img/294-a-crop.webp" alt="Lane A horizon crop">
+    <p>Equal steps per layer (120 at High), per-pixel white-noise jitter.</p>
+    <p class="mono">row step 23.8 / 15.6 / 9.0 · GPU 3.57 / 4.41 ms</p>
+    <p class="worst">Worst case: white streaks along the horizon in every BKN-under-OVC case.</p>
+  </div>
+  <div class="lane">
+    <h3>B · coarser noise with distance</h3>
+    <img class="px" src="img/294-b-crop.webp" alt="Lane B horizon crop">
+    <p>Each noise octave fades to its mean once the sample's footprint (the larger of the step and the pixel) nears its cell size.</p>
+    <p class="mono">row step 24.5 / 14.4 / 10.4 · GPU 3.68 / 4.55 ms</p>
+    <p class="worst">Worst case: no change to the streaks; +0.1 ms; by design distant clouds lose fine detail, though none shows at this pose.</p>
+  </div>
+  <div class="lane">
+    <h3>C · more steps on grazing rays</h3>
+    <img class="px" src="img/294-c-crop.webp" alt="Lane C horizon crop">
+    <p>The step count grows with the chord, so no step is longer than 150 m (up to 256).</p>
+    <p class="mono">row step 23.9 / 17.7 / 10.5 · GPU 3.90 / 4.53 ms</p>
+    <p class="worst">Worst case: no change to the streaks; +0.33 ms (+21% of the stage). It breaks the presets' "steps only buy quality" rule, since the count no longer follows the preset.</p>
+  </div>
+  <div class="lane">
+    <h3>D · different jitter</h3>
+    <img class="px" src="img/294-d-crop.webp" alt="Lane D horizon crop">
+    <p>Interleaved gradient noise, rotated each frame, in place of the white-noise hash.</p>
+    <p class="mono">row step 23.8 / 15.6 / 8.9 · GPU 3.58 / 4.31 ms</p>
+    <p class="worst">Worst case: no change to the streaks or anything else visible at this pose.</p>
+  </div>
+  <div class="lane">
+    <h3>E · no sunlit tops under higher cover</h3>
+    <img class="px" src="img/294-e-crop.webp" alt="Lane E horizon crop">
+    <p>A layer's lit colour is mixed toward the fog grey by the largest coverage of the layers above it (1.0 under OVC).</p>
+    <p class="mono">row step 0.3 / 0.2 / 0.2 · GPU 3.45 / 4.03 ms</p>
+    <p class="worst">Worst case: under an OVC the BKN becomes the same flat grey as the deck, so from the tower it cannot be told apart from the OVC, overhead included (see the upward shots).</p>
+  </div>
+  <div class="lane">
+    <h3>F · half that (shade × 0.6)</h3>
+    <img class="px" src="img/294-f-crop.webp" alt="Lane F horizon crop">
+    <p>As E, but the lit colour goes only 60% of the way to the fog grey.</p>
+    <p class="mono">row step 10.8 / 7.3 / 4.1 · GPU 3.22 / 3.95 ms</p>
+    <p class="worst">Worst case: faint grey streaks remain; misses the 6/255 target at two of three drifts.</p>
+  </div>
+</div>
+
+<h4>Whole frame, lanes A and E</h4>
+<div class="lanes">
+  <div class="lane"><h3>A · today</h3><img src="img/294-a.webp" alt="Lane A full frame"></div>
+  <div class="lane"><h3>E · no sunlit tops under higher cover</h3><img src="img/294-e.webp" alt="Lane E full frame"></div>
+</div>
+<h4>Looking up (pitch +12): what happens to the BKN overhead</h4>
+<div class="lanes">
+  <div class="lane"><h3>A · today</h3><img src="img/294-up-a.webp" alt="Lane A looking up"><p>The BKN shows as lighter patches against the deck.</p></div>
+  <div class="lane"><h3>E</h3><img src="img/294-up-e.webp" alt="Lane E looking up"><p>The BKN disappears into the overcast grey.</p></div>
+  <div class="lane"><h3>F</h3><img src="img/294-up-f.webp" alt="Lane F looking up"><p>Faint structure remains.</p></div>
+</div>
+<p>The other lanes' full frames are <code>img/294-b.webp</code>, <code>img/294-c.webp</code>, <code>img/294-d.webp</code> and <code>img/294-f.webp</code>. A one-pixel pale line along the terrain skyline shows in every lane, today included. It is separate from this issue and not studied here.</p>
+<div class="rec">
+  <p><b>Recommendation:</b> E, which removes the light the BKN tops should not get under an overcast. It is the only lane under the 6/255 target (0.2–0.3), costs nothing, and is the same in every preset, so the presets' cost-only rule holds. B, C and D do not fix the streaks, so they leave the issue's Done-when unmet.</p>
+  <p class="worst"><b>Worst case of E:</b> a BKN under an OVC loses all contrast against the deck and reads as one grey ceiling. If you want the BKN still readable, the next step is a darker underside for the lower layer rather than a lit top. F is a halfway point that leaves faint streaks.</p>
+</div>
+
+<!-- ============================== 224 shape ============================== -->
+<h2>TC3D-224 · fade shape below 10 SM <span class="tag">decisions 1 and 3</span></h2>
+<p class="q">How should the fog arrive when the METAR visibility drops, and when it crosses 10 SM?</p>
+<p>Fog only (no cloud layers). The ease runs on a pinned clock stepped 0.1 s per frame, so the clips are exact whatever the capture speed (10 fps, real time). The chart is the mean luminance of canvas rows 300–340, centre 600 columns: the skyline and the terrain 15–43 km out.</p>
+<ul>
+  <li><b>A · today:</b> 0 fog at 10 SM or more, the full METAR fog below it, applied on the next frame.</li>
+  <li><b>B · extinction fade:</b> the fog's optical depth is scaled by a smoothstep from 0 at 10 SM to 1 at 8 SM, with a 6 s smoothstep time ease of the fog density.</li>
+  <li><b>C · visibility fade:</b> the visibility is interpolated in log space from 100 SM-equivalent at 10 SM to the METAR value at 8 SM, with the same 6 s ease.</li>
+  <li><b>D · time ease only:</b> today's mapping, with the 6 s ease.</li>
+</ul>
+
+<h4>10 SM → 6 SM METAR step at t = 0</h4>
+<figure>
+  <video src="clip/224-r1.mp4" controls loop muted playsinline preload="metadata"></video>
+  <figcaption>2×2: A top left, B top right, C bottom left, D bottom right.</figcaption>
+</figure>
+<div class="lanes">
+  <figure><img src="img/224-r1-strip.webp" alt="Frame strip, 10 to 6 SM"><figcaption>One frame every 1 s (crop around the horizon).</figcaption></figure>
+  <figure><img class="chart" src="chart/224-r1.svg" alt="Luminance against time, 10 to 6 SM"><figcaption>A jumps 42.9 luminance levels in one frame. B, C and D change by at most 1.4 per 0.1 s and reach 90% at t = 4.6 s. B, C and D are identical here: 6 SM is below the 8–10 SM band.</figcaption></figure>
+</div>
+
+<h4>3 SM → 1 SM METAR step at t = 0</h4>
+<figure>
+  <video src="clip/224-r2.mp4" controls loop muted playsinline preload="metadata"></video>
+  <figcaption>2×2: A top left, B top right, C bottom left, D bottom right.</figcaption>
+</figure>
+<div class="lanes">
+  <figure><img src="img/224-r2-strip.webp" alt="Frame strip, 3 to 1 SM"><figcaption>One frame every 1 s.</figcaption></figure>
+  <figure><img class="chart" src="chart/224-r2.svg" alt="Luminance against time, 3 to 1 SM"><figcaption>A jumps 17.9 levels in one frame. B, C and D reach 90% at t = 4.0 s, at most 0.6 per 0.1 s; identical, since both values are outside the band.</figcaption></figure>
+</div>
+
+<h4>Visibility gliding 10.5 → 8.5 SM over 8 s, no time ease (the shapes alone)</h4>
+<p>This is what weather interpolation produces, and the only case where B and C differ. The glide crosses 10 SM at t = 2 s.</p>
+<figure>
+  <video src="clip/224-r4.mp4" controls loop muted playsinline preload="metadata"></video>
+  <figcaption>A top left, B top right, C bottom left.</figcaption>
+</figure>
+<div class="lanes">
+  <figure><img src="img/224-r4-strip.webp" alt="Frame strip, glide, no ease"><figcaption>One frame every 1.3 s.</figcaption></figure>
+  <figure><img class="chart" src="chart/224-r4.svg" alt="Luminance against time, glide, no ease"><figcaption>A pops by 29.6 levels the frame it crosses 10 SM. B starts at t = 2 s: thin fog first greys the pale horizon sky (a 3-level dip), then the patch brightens steadily (at most 0.8 per 0.1 s) to 114, against A's 118. C starts later, rises more slowly and ends at 109.</figcaption></figure>
+</div>
+
+<h4>The same glide with the 6 s smoothstep ease on top</h4>
+<figure>
+  <video src="clip/224-r3.mp4" controls loop muted playsinline preload="metadata"></video>
+  <figcaption>2×2: A top left, B top right, C bottom left, D bottom right.</figcaption>
+</figure>
+<div class="lanes">
+  <figure><img src="img/224-r3-strip.webp" alt="Frame strip, glide with ease"><figcaption>One frame every 1.3 s.</figcaption></figure>
+  <figure><img class="chart" src="chart/224-r3.svg" alt="Luminance against time, glide with ease"><figcaption>B, C and D barely move: at t = 10 s they read 88–93 against A's 118. A smoothstep that restarts on every change of target starts from zero speed each time, so a target that moves every frame stalls it.</figcaption></figure>
+</div>
+<div class="rec">
+  <p><b>Recommendation (shape):</b> B, the extinction fade from 10 to 8 SM, plus a time ease for METAR steps. On a glide it fades the fog in from 10 SM with no pop and stays close to the METAR value (114 against 118 at 8.5 SM). C trails B through the whole band and is still 9 levels short of today's fog at 8.5 SM.</p>
+  <p><b>Recommendation (ease mechanics):</b> do not restart a smoothstep on every target change. Either ease only METAR steps and pass the interpolated (gliding) visibility straight through, or use an ease that keeps its speed when the target moves (exponential or critically damped).</p>
+  <p class="worst"><b>Worst case of B:</b> between 8 and 10 SM the fog is weaker than the METAR says (at 9 SM, half the physical optical depth). <b>Worst case of C:</b> a residual haze of 100 SM-equivalent visibility just under 10 SM, and fog that builds late in the band, still well short of the METAR at 8.5 SM. <b>Worst case of D:</b> a crossing of 10 SM still steps the fog target, which only the ease hides.</p>
+</div>
+
+<!-- ============================== 224 ease time ============================== -->
+<h2>TC3D-224 · ease time <span class="tag">decision 3</span></h2>
+<p class="q">How long should a METAR step take to show: 2 s, 6 s or 15 s (smoothstep)?</p>
+<p>10 SM → 6 SM at t = 0, time ease only (lane D's mapping), clock stepped 0.2 s per frame (5 fps, real time).</p>
+<figure>
+  <video src="clip/224-r5.mp4" controls loop muted playsinline preload="metadata"></video>
+  <figcaption>2 s top left, 6 s top right, 15 s bottom left.</figcaption>
+</figure>
+<div class="lanes">
+  <figure><img src="img/224-r5-strip.webp" alt="Frame strip, ease times"><figcaption>One frame every 2.1 s.</figcaption></figure>
+  <figure><img class="chart" src="chart/224-r5.svg" alt="Luminance against time, ease times"><figcaption>Largest change per 0.2 s and time to 90%: 2 s → 7.9 levels, 1.7 s; 6 s → 2.7 levels, 4.7 s; 15 s → 1.1 levels, 11.5 s.</figcaption></figure>
+</div>
+<div class="lanes">
+  <div class="lane"><h3>2 s</h3><p>Reads as a quick fade rather than a pop.</p><p class="worst">Worst case: still a visible sweep (7.9 levels per 0.2 s) when you happen to be looking.</p></div>
+  <div class="lane"><h3>6 s</h3><p>A slow fade that is hard to catch happening. 90% after 4.7 s.</p><p class="worst">Worst case: the fog lags the METAR by about 5 s.</p></div>
+  <div class="lane"><h3>15 s</h3><p>Imperceptible. 90% after 11.5 s.</p><p class="worst">Worst case: for about 10 s after a METAR the scene shows weather the controller has already read as changed.</p></div>
+</div>
+<div class="rec">
+  <p><b>Recommendation:</b> 6 s smoothstep for METAR steps. It never moves more than 2.7 levels per 0.2 s and is done long before the next METAR (they refresh every 5 minutes).</p>
+</div>
+</main>
+</body>
+</html>
