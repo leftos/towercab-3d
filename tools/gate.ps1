@@ -73,7 +73,7 @@ $spellings = @{
     Cli = @{
         Prefix = '--'
         Joiner = '='
-        Values = @('log', 'timeout', 'slot', 'stall', 'tail', 'reason', 'cd', 'env', 'bring-tracked', 'state-dir')
+        Values = @('log', 'timeout', 'slot', 'stall', 'tail', 'reason', 'builder', 'cd', 'env', 'bring-tracked', 'state-dir')
         Flags = @('no-markers', 'local', 'alone')
     }
 }
