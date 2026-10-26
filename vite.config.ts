@@ -1,6 +1,7 @@
 import { resolve, join } from 'node:path'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { defineConfig } from 'vite'
+import { chunkCyclePlugin } from './scripts/dev/chunkCycles'
 import { serveCesiumAssets } from './scripts/dev/cesiumAssets'
 import { devApiOptionsFromEnv, devApiPlugin } from './scripts/dev/devApi'
 
@@ -126,7 +127,14 @@ export default defineConfig({
             // ships in the main index chunk it forms a circular dep — the stores
             // call `create()` at module top level before the binding is initialized,
             // producing `TypeError: F is not a function` at boot.
-            { name: 'zustand', test: /[\\/]node_modules[\\/]zustand[\\/]/, priority: 10 }
+            { name: 'zustand', test: /[\\/]node_modules[\\/]zustand[\\/]/, priority: 10 },
+            // settingsStore reads DEFAULT_SETTINGS and calls isTauri() while its module loads, so these
+            // modules must not ship in the index chunk that imports the settingsStore chunk (a chunk cycle).
+            {
+              name: 'settings-core',
+              test: /([\\/]src[\\/]renderer[\\/](types[\\/]settings|utils[\\/](tauriApi|remoteMode|deviceDetection))\.ts$)|([\\/]node_modules[\\/]@tauri-apps[\\/])/,
+              priority: 10
+            }
           ]
         }
       }
@@ -152,6 +160,13 @@ export default defineConfig({
     // (scripts/dev/devApi.ts); every other serve and every build leave it out.
     devApiPlugin((logger) => devApiOptionsFromEnv(resolve('.'), logger)),
     writeBuildModeMarker(),
+    // Cycles a shipped build already has and boots with: they are tracked as TC3D-351, so they warn
+    // here instead of failing. Remove an entry once its cycle is broken.
+    chunkCyclePlugin([
+      ['AircraftModelService', 'MSFSModelConversionService', 'index'],
+      ['AircraftModelService', 'index'],
+      ['MSFSModelConversionService', 'index']
+    ]),
     // Only copy Cesium assets if they don't exist (speeds up rebuilds significantly).
     //
     // The dest is `cesium-package` (NOT `cesium-package/Workers` etc) and each

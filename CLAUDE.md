@@ -357,10 +357,11 @@ With no MSFS match, `getModelInfo` goes on to custom VMR mods, the built-in mapp
 ## Build Configuration
 
 - **Tauri 2**: Native desktop wrapper with Rust backend
-- **Vite 7**: Frontend build tool
+- **Vite 8**: Frontend build tool
 - **TypeScript**: Strict mode with path aliases
 - **React 19**: Latest React with concurrent features
 - **vite-plugin-static-copy**: Cesium assets copied to output
+- **Chunk cycle check**: every production build (`pnpm run vite:build`, so CI and `tauri build` too) fails when its emitted chunks statically import each other in a cycle (`scripts/dev/chunkCycles.ts`). A module that reads an imported binding while it loads (a store initializer reading `DEFAULT_SETTINGS`) gets `undefined` across such a cycle and the app boots to a black screen; the dev server never shows it. Break a new cycle with a `codeSplitting` group in `vite.config.ts` (the `zustand` and `settings-core` groups are examples); the plugin's known-cycle list holds only cycles a shipped build already has, each with its issue.
 
 ## Scripts Organization
 
