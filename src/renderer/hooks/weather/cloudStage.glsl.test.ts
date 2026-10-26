@@ -65,4 +65,16 @@ describe('cloud deck shader', () => {
   it('takes the cloud underside colour from the fog grey', () => {
     expect(glslFunction(CLOUD_STAGE_FS, 'vec3 cloudLight(')).toContain('vec3 dark = FOG_GREY;')
   })
+
+  it('marches each layer with the sun shade its layer data gives it', () => {
+    const passesShade = (source: string) => glslFunction(source, 'void main(').includes('layerAt(i), layerShade(i),')
+    expect(passesShade(CLOUD_STAGE_FS)).toBe(true)
+    expect(passesShade(CLOUD_STAGE_FS.replace('layerShade(i)', '0.0'))).toBe(false)
+  })
+
+  it('lights a shaded layer from its shade, not from full sun', () => {
+    const lightsWithShade = (source: string) => /mix\([^;]*,\s*shade\)/.test(glslFunction(source, 'vec3 cloudLight('))
+    expect(lightsWithShade(CLOUD_STAGE_FS)).toBe(true)
+    expect(lightsWithShade(CLOUD_STAGE_FS.replace(', shade)', ', 0.0)'))).toBe(false)
+  })
 })

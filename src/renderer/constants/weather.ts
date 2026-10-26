@@ -233,6 +233,12 @@ export const CLOUD_THICKNESS_DEFAULT_M = 400
 /** Cloud layers the stage shader takes (u_layer0..u_layer3) */
 export const WEATHER_STAGE_MAX_LAYERS = 4
 
+/**
+ * Coverage from which a cloud layer shades the layers under it from direct sun:
+ * 5 oktas, the lower bound of BKN
+ */
+export const WEATHER_STAGE_SUN_SHADE_COVERAGE = 5 / 8
+
 /** Visibility (statute miles) at and above which the stage draws no fog */
 export const WEATHER_STAGE_NO_FOG_VISIBILITY_SM = 10
 

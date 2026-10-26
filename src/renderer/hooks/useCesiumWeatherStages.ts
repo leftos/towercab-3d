@@ -21,6 +21,7 @@ import {
   groundBlendShift,
   groundShiftStart,
   horizontalNoiseOffset,
+  layerSunShade,
   type NoiseOriginAnchor,
   nextWeatherAnchor,
   noiseOriginNeedsReset,
@@ -58,6 +59,8 @@ interface EnuFrame {
 interface StageInputs {
   /** Always WEATHER_STAGE_MAX_LAYERS entries; unused slots are inactive (w = 0) */
   layers: Cesium.Cartesian4[]
+  /** Per layer (x..w = layer 0..3), 1 when a higher layer shades it from direct sun (`layerSunShade`) */
+  layerShade: Cesium.Cartesian4
   layerCount: number
   visibilityMeters: number
   /** Optical depth multiplier of the fog, from the quality knob and `fogIntensity` */
@@ -66,6 +69,7 @@ interface StageInputs {
 
 const NO_INPUTS: StageInputs = {
   layers: Array.from({ length: WEATHER_STAGE_MAX_LAYERS }, () => new Cesium.Cartesian4(0, 1, 0, 0)),
+  layerShade: new Cesium.Cartesian4(0, 0, 0, 0),
   layerCount: 0,
   visibilityMeters: 0,
   fogExtinction: 0,
@@ -178,6 +182,7 @@ function createStage(
       u_layer1: layerUniform(1),
       u_layer2: layerUniform(2),
       u_layer3: layerUniform(3),
+      u_layerShade: () => inputsRef.current.layerShade,
       u_layerCount: () => inputsRef.current.layerCount,
       u_steps: () => Cesium.Math.clamp(Math.round(qualityRef.current.steps), 4, CLOUD_STAGE_MAX_STEPS),
       u_densityScale: () => qualityRef.current.densityScale,
@@ -530,11 +535,13 @@ export function useCesiumWeatherStages(viewer: Cesium.Viewer | null, options: We
   useEffect(() => {
     const layers = gates.clouds ? buildCloudLayerUniforms(cloudLayers, CLOUD_THICKNESS_BY_TYPE_M) : []
     const visibSM = effectiveVisibilitySM({ metarSM, useInterpolation, interpolatedSM })
+    const shade = layerSunShade(layers)
     refs.inputs.current = {
       layers: NO_INPUTS.layers.map((inactive, index) => {
         const layer = layers[index]
         return layer ? new Cesium.Cartesian4(layer.base, layer.thickness, layer.coverage, 1) : inactive
       }),
+      layerShade: new Cesium.Cartesian4(shade[0] ?? 0, shade[1] ?? 0, shade[2] ?? 0, shade[3] ?? 0),
       layerCount: layers.length,
       visibilityMeters: gates.fog ? stageVisibilityMeters(visibSM, visibilityScale) : 0,
       fogExtinction: stageFogExtinction(quality.fogExtinction, fogIntensity),

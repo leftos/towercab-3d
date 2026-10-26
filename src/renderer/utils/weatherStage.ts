@@ -18,6 +18,7 @@ import {
   WEATHER_STAGE_NOISE_ORIGIN_RESET_M,
   WEATHER_STAGE_PRESETS,
   WEATHER_STAGE_REANCHOR_DISTANCE_M,
+  WEATHER_STAGE_SUN_SHADE_COVERAGE,
   type WeatherStageQuality,
 } from '@/constants'
 import type { CloudLayer, ViewMode, WeatherQualityPreset } from '@/types'
@@ -55,6 +56,20 @@ export function buildCloudLayerUniforms(
       thickness: thicknessByType[layer.type] ?? CLOUD_THICKNESS_DEFAULT_M,
       coverage: layer.coverage,
     }))
+}
+
+/**
+ * Whether each cloud layer is shaded from direct sun by a higher layer of BKN or
+ * more (WEATHER_STAGE_SUN_SHADE_COVERAGE): a shaded layer's top is lit no
+ * brighter than its underside, so its tops seen through gaps in it do not shine.
+ *
+ * @param layers - The stage's layers (`buildCloudLayerUniforms`)
+ * @returns Per layer, 1 when shaded and 0 when lit, in the same order
+ */
+export function layerSunShade(layers: readonly CloudLayerUniform[]): number[] {
+  return layers.map((layer) =>
+    layers.some((above) => above.base > layer.base && above.coverage >= WEATHER_STAGE_SUN_SHADE_COVERAGE) ? 1 : 0,
+  )
 }
 
 /**

@@ -104,6 +104,8 @@ uniform vec4 u_layer0;
 uniform vec4 u_layer1;
 uniform vec4 u_layer2;
 uniform vec4 u_layer3;
+// Per layer (x..w = layer 0..3): 1 when a higher BKN or OVC layer shades it from direct sun.
+uniform vec4 u_layerShade;
 uniform float u_layerCount;
 uniform float u_steps;
 uniform float u_densityScale;
@@ -180,13 +182,14 @@ float cloudDensity(vec3 p, vec4 layer) {
   return d * edge;
 }
 
-vec3 cloudLight(vec3 p, vec4 layer, vec3 sun) {
+// shade: 1 under higher cover, whose sunlit end falls to the underside grey, so its tops do not shine.
+vec3 cloudLight(vec3 p, vec4 layer, float shade, vec3 sun) {
   float lightStep = layer.y * 0.3;
   float occluder = cloudDensity(p + sun * lightStep, layer);
   float lightT = exp(-occluder * u_densityScale * lightStep * 0.5);
   float hf = clamp((deckZ(p) - layer.x) / layer.y, 0.0, 1.0);
   vec3 dark = FOG_GREY;
-  vec3 bright = vec3(1.0, 0.98, 0.95);
+  vec3 bright = mix(vec3(1.0, 0.98, 0.95), FOG_GREY, shade);
   return mix(dark, bright, clamp(0.35 * hf + 0.65 * lightT, 0.0, 1.0)) * (0.08 + 0.92 * daylight());
 }
 
@@ -195,6 +198,13 @@ vec4 layerAt(int i) {
   if (i == 1) return u_layer1;
   if (i == 2) return u_layer2;
   return u_layer3;
+}
+
+float layerShade(int i) {
+  if (i == 0) return u_layerShade.x;
+  if (i == 1) return u_layerShade.y;
+  if (i == 2) return u_layerShade.z;
+  return u_layerShade.w;
 }
 
 // Exit distance of the ray from the cylinder of radius u_radius around the airport.
@@ -241,7 +251,7 @@ vec2 belowLevel(vec3 ro, vec3 rd, float h) {
 }
 
 // Marches the ray's first stretch through the curved slab of one layer, inside the deck's cylinder.
-void marchLayer(vec3 ro, vec3 rd, float tScene, vec4 layer, float jitter, vec3 sun,
+void marchLayer(vec3 ro, vec3 rd, float tScene, vec4 layer, float shade, float jitter, vec3 sun,
                 inout float transmittance, inout vec3 color, inout float weightedT, inout float weightSum) {
   vec2 inTop = belowLevel(ro, rd, layer.x + layer.y);
   float t0 = max(inTop.x, 0.0);
@@ -268,7 +278,7 @@ void marchLayer(vec3 ro, vec3 rd, float tScene, vec4 layer, float jitter, vec3 s
     if (density > 0.0) {
       float alpha = 1.0 - exp(-density * u_densityScale * dt);
       float contribution = transmittance * alpha;
-      color += contribution * cloudLight(p, layer, sun);
+      color += contribution * cloudLight(p, layer, shade, sun);
       weightedT += contribution * t;
       weightSum += contribution;
       transmittance *= 1.0 - alpha;
@@ -310,7 +320,7 @@ void main() {
       break;
     }
     int i = k < below ? below - 1 - k : k;
-    marchLayer(ro, rd, tScene, layerAt(i), jitter, sun, transmittance, color, weightedT, weightSum);
+    marchLayer(ro, rd, tScene, layerAt(i), layerShade(i), jitter, sun, transmittance, color, weightedT, weightSum);
   }
 
   float alpha = 1.0 - transmittance;

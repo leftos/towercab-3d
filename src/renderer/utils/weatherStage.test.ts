@@ -16,6 +16,7 @@ import {
   groundShiftStart,
   horizontalNoiseOffset,
   insetStageQuality,
+  layerSunShade,
   nextWeatherAnchor,
   noiseOriginNeedsReset,
   sceneFogValues,
@@ -204,6 +205,36 @@ describe('buildCloudLayerUniforms', () => {
     const input = [layer(900, 0.5, 'SCT'), layer(300, 0.5, 'SCT')]
     buildCloudLayerUniforms(input, THICKNESS)
     expect(input.map((l) => l.altitude)).toEqual([900, 300])
+  })
+})
+
+describe('layerSunShade', () => {
+  const slab = (base: number, coverage: number) => ({ base, thickness: 450, coverage })
+  const FEW = 0.1875
+  const SCT = 0.4375
+  const BKN = 0.6875
+  const OVC = 1
+
+  it('shades a BKN layer under an OVC layer', () => {
+    expect(layerSunShade([slab(300, BKN), slab(600, OVC)])).toEqual([1, 0])
+  })
+
+  it('shades a BKN layer under another BKN layer', () => {
+    expect(layerSunShade([slab(300, BKN), slab(900, BKN)])).toEqual([1, 0])
+  })
+
+  it('leaves a BKN layer lit when only FEW or SCT layers are above it', () => {
+    expect(layerSunShade([slab(300, BKN), slab(900, SCT), slab(1500, FEW)])).toEqual([0, 0, 0])
+  })
+
+  it('shades every layer under a BKN or OVC one, through a lit layer between them', () => {
+    expect(layerSunShade([slab(300, BKN), slab(600, SCT), slab(900, OVC)])).toEqual([1, 1, 0])
+  })
+
+  it('never shades the top layer or a single layer', () => {
+    expect(layerSunShade([slab(300, OVC), slab(600, BKN)])).toEqual([1, 0])
+    expect(layerSunShade([slab(300, BKN)])).toEqual([0])
+    expect(layerSunShade([])).toEqual([])
   })
 })
 
