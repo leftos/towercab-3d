@@ -1,0 +1,140 @@
+{
+  "view": "ksfo-aluxor",
+  "cam": {
+    "lat": 37.62329997339495,
+    "lon": -122.41149990736513,
+    "h": -11.99999999922568,
+    "heading": 285,
+    "pitch": -4,
+    "fov": 45,
+    "followMode": "tower",
+    "followingCallsign": null
+  },
+  "rows": [
+    {
+      "cells": 237,
+      "x": 550,
+      "y": 372,
+      "elementId": 385956478,
+      "part#elementId": 1455771630,
+      "name": "Aluxor SFO",
+      "building": "yes",
+      "part#building:part": "yes",
+      "building:levels": "3",
+      "cesium#estimatedHeight": 10,
+      "A": {
+        "storeys": 2,
+        "wallM": 10
+      },
+      "B": {
+        "storeys": 0,
+        "wallM": null
+      },
+      "C": {
+        "storeys": 2,
+        "wallM": 10
+      }
+    },
+    {
+      "cells": 209,
+      "x": 310,
+      "y": 403,
+      "elementId": 385956478,
+      "part#elementId": 1444464262,
+      "name": "Aluxor SFO",
+      "building": "yes",
+      "part#building:part": "yes",
+      "part#building:levels": "3",
+      "building:levels": "3",
+      "cesium#estimatedHeight": 10,
+      "A": {
+        "storeys": 3,
+        "wallM": null
+      },
+      "B": {
+        "storeys": 3,
+        "wallM": null
+      },
+      "C": {
+        "storeys": 3,
+        "wallM": null
+      }
+    },
+    {
+      "cells": 174,
+      "x": 95,
+      "y": 388,
+      "elementId": 385956478,
+      "part#elementId": 1444464261,
+      "name": "Aluxor SFO",
+      "building": "yes",
+      "part#building:part": "yes",
+      "part#building:levels": "3",
+      "building:levels": "3",
+      "cesium#estimatedHeight": 10,
+      "A": {
+        "storeys": 3,
+        "wallM": null
+      },
+      "B": {
+        "storeys": 3,
+        "wallM": null
+      },
+      "C": {
+        "storeys": 3,
+        "wallM": null
+      }
+    },
+    {
+      "cells": 154,
+      "x": 992,
+      "y": 360,
+      "elementId": 385956478,
+      "part#elementId": 1444464264,
+      "name": "Aluxor SFO",
+      "building": "yes",
+      "part#building:part": "yes",
+      "part#building:levels": "3",
+      "building:levels": "3",
+      "cesium#estimatedHeight": 10,
+      "A": {
+        "storeys": 3,
+        "wallM": null
+      },
+      "B": {
+        "storeys": 3,
+        "wallM": null
+      },
+      "C": {
+        "storeys": 3,
+        "wallM": null
+      }
+    },
+    {
+      "cells": 47,
+      "x": 596,
+      "y": 273,
+      "elementId": 385956478,
+      "part#elementId": 385956479,
+      "name": "Aluxor SFO",
+      "building": "yes",
+      "part#building:part": "yes",
+      "part#height": "10",
+      "part#building:min_level": "1",
+      "building:levels": "3",
+      "cesium#estimatedHeight": 10,
+      "A": {
+        "storeys": -1,
+        "wallM": 10
+      },
+      "B": {
+        "storeys": -1,
+        "wallM": 10
+      },
+      "C": {
+        "storeys": 2,
+        "wallM": 10
+      }
+    }
+  ]
+}

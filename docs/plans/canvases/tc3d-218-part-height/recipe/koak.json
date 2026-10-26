@@ -1,0 +1,36 @@
+{
+  "view": "koak",
+  "cam": {
+    "lat": 37.71325002198577,
+    "lon": -122.21605002184884,
+    "h": -19.999999999145878,
+    "heading": 140,
+    "pitch": -3,
+    "fov": 50,
+    "followMode": "tower",
+    "followingCallsign": null
+  },
+  "rows": [
+    {
+      "cells": 1147,
+      "x": 590,
+      "y": 471,
+      "elementId": 23476550,
+      "name": "Terminal 1",
+      "building": "transportation",
+      "cesium#estimatedHeight": 3,
+      "A": {
+        "storeys": 0,
+        "wallM": 3
+      },
+      "B": {
+        "storeys": 0,
+        "wallM": 3
+      },
+      "C": {
+        "storeys": 0,
+        "wallM": 3
+      }
+    }
+  ]
+}

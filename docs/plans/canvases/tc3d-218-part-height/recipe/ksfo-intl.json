@@ -1,0 +1,261 @@
+{
+  "view": "ksfo-intl",
+  "cam": {
+    "lat": 37.61578055555556,
+    "lon": -122.3838277777778,
+    "h": 46.355297028150446,
+    "heading": 262,
+    "pitch": -5,
+    "fov": 32,
+    "followMode": "tower",
+    "followingCallsign": null
+  },
+  "rows": [
+    {
+      "cells": 396,
+      "x": 998,
+      "y": 467,
+      "elementId": 15730419,
+      "part#elementId": 1164607723,
+      "part#building:part": "yes",
+      "part#building:levels": "6",
+      "part#height": "32",
+      "part#min_height": "19",
+      "part#building:min_level": "3",
+      "cesium#estimatedHeight": 41,
+      "A": {
+        "storeys": 3,
+        "wallM": 13
+      },
+      "B": {
+        "storeys": 3,
+        "wallM": 13
+      },
+      "C": {
+        "storeys": 3,
+        "wallM": 13
+      }
+    },
+    {
+      "cells": 337,
+      "x": 1014,
+      "y": 379,
+      "elementId": 15730419,
+      "part#elementId": 1164607724,
+      "part#building:part": "yes",
+      "part#building:levels": "6",
+      "part#height": "41",
+      "part#min_height": "19",
+      "part#building:min_level": "3",
+      "cesium#estimatedHeight": 41,
+      "A": {
+        "storeys": 3,
+        "wallM": 22
+      },
+      "B": {
+        "storeys": 3,
+        "wallM": 22
+      },
+      "C": {
+        "storeys": 3,
+        "wallM": 22
+      }
+    },
+    {
+      "cells": 301,
+      "x": 866,
+      "y": 545,
+      "elementId": 15730419,
+      "part#elementId": 15731516,
+      "part#building:part": "yes",
+      "part#building:levels": "3",
+      "part#height": "19",
+      "part#min_height": "13",
+      "part#building:min_level": "2",
+      "cesium#estimatedHeight": 41,
+      "A": {
+        "storeys": 1,
+        "wallM": 6
+      },
+      "B": {
+        "storeys": 1,
+        "wallM": 6
+      },
+      "C": {
+        "storeys": 1,
+        "wallM": 6
+      }
+    },
+    {
+      "cells": 181,
+      "x": 955,
+      "y": 592,
+      "elementId": 15730419,
+      "part#elementId": 15731158,
+      "part#building:part": "yes",
+      "part#building:levels": "2",
+      "part#height": "13",
+      "part#min_height": "7",
+      "part#building:min_level": "1",
+      "cesium#estimatedHeight": 41,
+      "A": {
+        "storeys": 1,
+        "wallM": 6
+      },
+      "B": {
+        "storeys": 1,
+        "wallM": 6
+      },
+      "C": {
+        "storeys": 1,
+        "wallM": 6
+      }
+    },
+    {
+      "cells": 73,
+      "x": 541,
+      "y": 659,
+      "elementId": 15730419,
+      "part#elementId": 15730418,
+      "part#building:part": "yes",
+      "part#building:levels": "1",
+      "part#height": "7",
+      "cesium#estimatedHeight": 41,
+      "A": {
+        "storeys": 1,
+        "wallM": 7
+      },
+      "B": {
+        "storeys": 1,
+        "wallM": 7
+      },
+      "C": {
+        "storeys": 1,
+        "wallM": 7
+      }
+    },
+    {
+      "cells": 35,
+      "x": 1549,
+      "y": 445,
+      "elementId": 15730419,
+      "part#elementId": 1164338942,
+      "part#building:part": "yes",
+      "part#building:levels": "6",
+      "part#height": "38",
+      "part#min_height": "19",
+      "part#building:min_level": "3",
+      "cesium#estimatedHeight": 41,
+      "A": {
+        "storeys": 3,
+        "wallM": 19
+      },
+      "B": {
+        "storeys": 3,
+        "wallM": 19
+      },
+      "C": {
+        "storeys": 3,
+        "wallM": 19
+      }
+    },
+    {
+      "cells": 35,
+      "x": 376,
+      "y": 648,
+      "elementId": 15730419,
+      "part#elementId": 15731157,
+      "part#building:part": "yes",
+      "part#building:levels": "2",
+      "part#height": "14",
+      "part#min_height": "8",
+      "part#building:min_level": "1",
+      "cesium#estimatedHeight": 41,
+      "A": {
+        "storeys": 1,
+        "wallM": 6
+      },
+      "B": {
+        "storeys": 1,
+        "wallM": 6
+      },
+      "C": {
+        "storeys": 1,
+        "wallM": 6
+      }
+    },
+    {
+      "cells": 32,
+      "x": 688,
+      "y": 464,
+      "elementId": 15730419,
+      "part#elementId": 1164338943,
+      "part#building:part": "yes",
+      "part#building:levels": "6",
+      "part#height": "38",
+      "part#min_height": "19",
+      "part#building:min_level": "3",
+      "cesium#estimatedHeight": 41,
+      "A": {
+        "storeys": 3,
+        "wallM": 19
+      },
+      "B": {
+        "storeys": 3,
+        "wallM": 19
+      },
+      "C": {
+        "storeys": 3,
+        "wallM": 19
+      }
+    },
+    {
+      "cells": 31,
+      "x": 367,
+      "y": 482,
+      "elementId": 15730419,
+      "part#elementId": 1164338950,
+      "part#building:part": "yes",
+      "part#building:levels": "4",
+      "part#height": "26",
+      "part#min_height": "13",
+      "part#building:min_level": "3",
+      "cesium#estimatedHeight": 41,
+      "A": {
+        "storeys": 1,
+        "wallM": 13
+      },
+      "B": {
+        "storeys": 1,
+        "wallM": 13
+      },
+      "C": {
+        "storeys": 1,
+        "wallM": 13
+      }
+    },
+    {
+      "cells": 27,
+      "x": 1520,
+      "y": 612,
+      "elementId": 15730419,
+      "part#elementId": 15730417,
+      "part#building:part": "yes",
+      "part#building:levels": "1",
+      "part#height": "7",
+      "cesium#estimatedHeight": 41,
+      "A": {
+        "storeys": 1,
+        "wallM": 7
+      },
+      "B": {
+        "storeys": 1,
+        "wallM": 7
+      },
+      "C": {
+        "storeys": 1,
+        "wallM": 7
+      }
+    }
+  ]
+}

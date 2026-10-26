@@ -1,0 +1,30 @@
+diff --git a/src/renderer/utils/buildingStyle.ts b/src/renderer/utils/buildingStyle.ts
+index ab9a352..d0f2c97 100644
+--- a/src/renderer/utils/buildingStyle.ts
++++ b/src/renderer/utils/buildingStyle.ts
+@@ -219,15 +219,16 @@ function classify(feature: Feature): FacadeClassCode {
+  * own height stays unknown and the shader keeps the grammar's storey.
+  */
+ function storeysAndWall(feature: Feature): { storeys: number; wallM: number } {
+-  const partLevels = tagNumber(feature, 'part#building:levels')
+-  const partHeight = tagNumber(feature, 'part#height')
+-  const isPart = !Number.isNaN(partLevels) || !Number.isNaN(partHeight)
+-  const keys = isPart ? PART_KEYS : BUILDING_KEYS
+-  const levels = isPart ? partLevels : tagNumber(feature, 'building:levels')
+-  const height = isPart ? partHeight : tagNumber(feature, 'height')
+-
+-  const storeys = orZero(levels) - orZero(tagNumber(feature, keys.minLevel))
+-  if (isPart && Number.isNaN(height)) return { storeys, wallM: Number.NaN }
++  const isPart = isBuildingPart(feature)
++  const partLevels = isPart ? tagNumber(feature, 'part#building:levels') : Number.NaN
++  const partHeight = isPart ? tagNumber(feature, 'part#height') : Number.NaN
++  const levelKeys = Number.isNaN(partLevels) ? BUILDING_KEYS : PART_KEYS
++  const keys = Number.isNaN(partHeight) ? BUILDING_KEYS : PART_KEYS
++  const levels = Number.isNaN(partLevels) ? tagNumber(feature, 'building:levels') : partLevels
++  const height = Number.isNaN(partHeight) ? tagNumber(feature, 'height') : partHeight
++
++  const storeys = orZero(levels) - orZero(tagNumber(feature, levelKeys.minLevel))
++  if (!Number.isNaN(partLevels) && Number.isNaN(height)) return { storeys, wallM: Number.NaN }
+   const taggedHeight = !Number.isNaN(height)
+   const topM = taggedHeight ? height : tagNumber(feature, 'cesium#estimatedHeight')
+   const totalM = Math.max(topM - orZero(tagNumber(feature, keys.minHeight)), 0)

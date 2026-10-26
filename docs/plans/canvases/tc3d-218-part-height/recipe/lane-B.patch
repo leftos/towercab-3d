@@ -1,0 +1,20 @@
+diff --git a/src/renderer/utils/buildingStyle.ts b/src/renderer/utils/buildingStyle.ts
+index ab9a352..28c163a 100644
+--- a/src/renderer/utils/buildingStyle.ts
++++ b/src/renderer/utils/buildingStyle.ts
+@@ -219,12 +219,10 @@ function classify(feature: Feature): FacadeClassCode {
+  * own height stays unknown and the shader keeps the grammar's storey.
+  */
+ function storeysAndWall(feature: Feature): { storeys: number; wallM: number } {
+-  const partLevels = tagNumber(feature, 'part#building:levels')
+-  const partHeight = tagNumber(feature, 'part#height')
+-  const isPart = !Number.isNaN(partLevels) || !Number.isNaN(partHeight)
++  const isPart = isBuildingPart(feature)
+   const keys = isPart ? PART_KEYS : BUILDING_KEYS
+-  const levels = isPart ? partLevels : tagNumber(feature, 'building:levels')
+-  const height = isPart ? partHeight : tagNumber(feature, 'height')
++  const levels = tagNumber(feature, isPart ? 'part#building:levels' : 'building:levels')
++  const height = tagNumber(feature, isPart ? 'part#height' : 'height')
+ 
+   const storeys = orZero(levels) - orZero(tagNumber(feature, keys.minLevel))
+   if (isPart && Number.isNaN(height)) return { storeys, wallM: Number.NaN }

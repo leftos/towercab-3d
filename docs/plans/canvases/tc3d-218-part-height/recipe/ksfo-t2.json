@@ -1,0 +1,172 @@
+{
+  "view": "ksfo-t2",
+  "cam": {
+    "lat": 37.61679999639304,
+    "lon": -122.37950001520059,
+    "h": 4.999999998652785,
+    "heading": 268,
+    "pitch": -4,
+    "fov": 40,
+    "followMode": "tower",
+    "followingCallsign": null
+  },
+  "rows": [
+    {
+      "cells": 406,
+      "x": 1067,
+      "y": 338,
+      "elementId": 60500080,
+      "part#elementId": 550704745,
+      "name": "Terminal 2",
+      "building": "transportation",
+      "part#building:part": "yes",
+      "part#height": "40",
+      "building:levels": "4",
+      "height": "20",
+      "cesium#estimatedHeight": 67.36,
+      "A": {
+        "storeys": 0,
+        "wallM": 40
+      },
+      "B": {
+        "storeys": 0,
+        "wallM": 40
+      },
+      "C": {
+        "storeys": 4,
+        "wallM": 40
+      }
+    },
+    {
+      "cells": 112,
+      "x": 312,
+      "y": 230,
+      "elementId": 60500080,
+      "part#elementId": 462265110,
+      "name": "Terminal 2",
+      "building": "transportation",
+      "part#building:part": "yes",
+      "part#height": "60",
+      "building:levels": "4",
+      "height": "20",
+      "cesium#estimatedHeight": 67.36,
+      "A": {
+        "storeys": 0,
+        "wallM": 60
+      },
+      "B": {
+        "storeys": 0,
+        "wallM": 60
+      },
+      "C": {
+        "storeys": 4,
+        "wallM": 60
+      }
+    },
+    {
+      "cells": 95,
+      "x": 1343,
+      "y": 380,
+      "elementId": 60500080,
+      "part#elementId": 550704747,
+      "name": "Terminal 2",
+      "building": "transportation",
+      "part#building:part": "yes",
+      "part#height": "25",
+      "building:levels": "4",
+      "height": "20",
+      "cesium#estimatedHeight": 67.36,
+      "A": {
+        "storeys": 0,
+        "wallM": 25
+      },
+      "B": {
+        "storeys": 0,
+        "wallM": 25
+      },
+      "C": {
+        "storeys": 4,
+        "wallM": 25
+      }
+    },
+    {
+      "cells": 48,
+      "x": 784,
+      "y": 364,
+      "elementId": 60500080,
+      "part#elementId": 550704746,
+      "name": "Terminal 2",
+      "building": "transportation",
+      "part#building:part": "yes",
+      "part#height": "25",
+      "building:levels": "4",
+      "height": "20",
+      "cesium#estimatedHeight": 67.36,
+      "A": {
+        "storeys": 0,
+        "wallM": 25
+      },
+      "B": {
+        "storeys": 0,
+        "wallM": 25
+      },
+      "C": {
+        "storeys": 4,
+        "wallM": 25
+      }
+    },
+    {
+      "cells": 18,
+      "x": 304,
+      "y": 72,
+      "elementId": 60500080,
+      "part#elementId": 554547693,
+      "name": "Terminal 2",
+      "building": "transportation",
+      "part#building:part": "yes",
+      "part#height": "67.36",
+      "part#min_height": "60",
+      "building:levels": "4",
+      "height": "20",
+      "cesium#estimatedHeight": 67.36,
+      "A": {
+        "storeys": 0,
+        "wallM": 7.4
+      },
+      "B": {
+        "storeys": 0,
+        "wallM": 7.4
+      },
+      "C": {
+        "storeys": 4,
+        "wallM": 7.4
+      }
+    },
+    {
+      "cells": 12,
+      "x": 800,
+      "y": 288,
+      "elementId": 60500080,
+      "part#elementId": 550704748,
+      "name": "Terminal 2",
+      "building": "transportation",
+      "part#building:part": "yes",
+      "part#height": "30",
+      "building:levels": "4",
+      "height": "20",
+      "cesium#estimatedHeight": 67.36,
+      "A": {
+        "storeys": 0,
+        "wallM": 30
+      },
+      "B": {
+        "storeys": 0,
+        "wallM": 30
+      },
+      "C": {
+        "storeys": 4,
+        "wallM": 30
+      }
+    }
+  ]
+}

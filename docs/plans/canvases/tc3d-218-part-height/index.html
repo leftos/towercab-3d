@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Part Storey Source</title>
+<style>
+  :root {
+    --bg: #f6f6f3;
+    --panel: #ffffff;
+    --text: #1d1f22;
+    --muted: #5d636b;
+    --rule: #d9dbdf;
+    --accent: #0b6bcb;
+    --note-bg: #fff6dc;
+    --note-rule: #e8c766;
+    --rec-bg: #e6f3ea;
+    --rec-rule: #4f9d69;
+    --chg-bg: #fde8e4;
+    --chg-text: #9b2c1c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #131518;
+      --panel: #1b1e22;
+      --text: #e7e9ec;
+      --muted: #9aa1aa;
+      --rule: #30353b;
+      --accent: #6cb4ff;
+      --note-bg: #2b2616;
+      --note-rule: #7a6420;
+      --rec-bg: #17291d;
+      --rec-rule: #3f7d54;
+      --chg-bg: #3a1d18;
+      --chg-text: #f3a493;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #131518;
+    --panel: #1b1e22;
+    --text: #e7e9ec;
+    --muted: #9aa1aa;
+    --rule: #30353b;
+    --accent: #6cb4ff;
+    --note-bg: #2b2616;
+    --note-rule: #7a6420;
+    --rec-bg: #17291d;
+    --rec-rule: #3f7d54;
+    --chg-bg: #3a1d18;
+    --chg-text: #f3a493;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1800px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  h2 { font-size: 1.2rem; margin: 0 0 6px; }
+  h3 { font-size: 1rem; margin: 18px 0 8px; }
+  p, li { max-width: 1150px; }
+  .sub { color: var(--muted); margin: 0 0 16px; }
+  .note, .rec { border-radius: 4px; padding: 10px 14px; margin: 0 0 16px; max-width: 1200px; }
+  .note { background: var(--note-bg); border-left: 4px solid var(--note-rule); }
+  .rec { background: var(--rec-bg); border-left: 4px solid var(--rec-rule); }
+  a { color: var(--accent); }
+  .toc { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 24px; padding: 0; list-style: none; }
+  .toc a { text-decoration: none; }
+  section { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 16px; margin: 0 0 22px; }
+  .cap { color: var(--muted); margin: 0 0 12px; font-size: 0.92rem; }
+  .lanes { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; }
+  figure { margin: 0; }
+  figure img { display: block; width: 100%; height: auto; border-radius: 4px; border: 1px solid var(--rule); }
+  figcaption { font-size: 0.88rem; margin: 6px 0 0; }
+  figcaption b { display: block; font-size: 0.95rem; }
+  .same { color: var(--muted); }
+  .diff { color: var(--chg-text); font-weight: 600; }
+  .scroll { overflow-x: auto; margin: 12px 0 0; }
+  .scroll + .cap { margin-top: 10px; }
+  table { border-collapse: collapse; font-size: 0.84rem; min-width: 760px; }
+  th, td { border: 1px solid var(--rule); padding: 4px 7px; text-align: left; vertical-align: top; white-space: nowrap; }
+  th { background: var(--bg); font-weight: 600; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.chg { background: var(--chg-bg); color: var(--chg-text); font-weight: 600; }
+  code { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 0.9em; }
+  @media (max-width: 760px) {
+    .lanes { grid-template-columns: minmax(0, 1fr); }
+  }
+</style>
+</head>
+<body>
+<main>
+<h1>TC3D-218: where a building part's storeys come from</h1>
+<p class="sub">OSM Buildings facades, <code>feat/osm-facades</code> at ca4d7fc. Headless Edge, 1596×800 canvas, 12:00 local, building quality high, tileset SSE 4. Each view is shot three times in one page session; only <code>storeysAndWall</code> in <code>buildingStyle.ts</code> changes between lanes.</p>
+
+<div class="note">
+<p><b>The question.</b> <code>storeysAndWall</code> (<code>buildingStyle.ts:221-236</code>) treats a feature as a building part when its <code>part#building:levels</code> or <code>part#height</code> parses. Everything else (the ground lookup, the probe) uses <code>isBuildingPart</code> (<code>:187-190</code>, true when <code>part#elementId</code> is present). Should the storey rule switch to <code>isBuildingPart</code>, and if so, where should a part without its own tags get its numbers?</p>
+<ul>
+<li><b>A, today:</b> a feature with its own <code>part#</code> levels or height reads only those; any other feature, a part without its own tags included, reads the unprefixed tags (for a part, those are its parent's) and falls back to <code>cesium#estimatedHeight</code>.</li>
+<li><b>B, strict switch:</b> <code>isPart = isBuildingPart(feature)</code>; a part reads only its own <code>part#</code> levels and height. A part with neither gets storeys 0 and wall NaN: the grammar's default storey.</li>
+<li><b>C, switch with parent fallback:</b> <code>isPart = isBuildingPart(feature)</code>; a part reads its own <code>part#</code> value for each of levels and height when present, else the parent's unprefixed value for that one tag.</li>
+</ul>
+<p>The shader only uses the two numbers together: the storey height is wall ÷ storeys, clamped to 2.4–6 m, and only when storeys ≥ 1 and the wall is under 53 m; otherwise the grammar's default storey is drawn. So most differences in the numbers draw nothing different.</p>
+</div>
+
+<div class="rec">
+<p><b>Read.</b> B. It draws differently from today on 2 of 960 loaded parts across the Bay Area, and where it does (Aluxor SFO below), its rows match the part's 3-storey siblings while A's 5 m rows come from the parent's tags. C changes 40 parts, and each change mixes a part's own height with the parent's storey count (Terminal 2: the whole building's 4 levels spread over 25–40 m parts, all clamped to 6 m rows; one part gets 2.4 m rows over its 7.4 m wall). Read per tag, the parent's numbers describe a different volume from the part.</p>
+<p>Read as a whole-group fallback (use the parent's tags only when the part has neither of its own), C is exactly A: no loaded feature without <code>part#elementId</code> carries a <code>part#</code> level or height (0 of 13,924), so the two tests always agree.</p>
+</div>
+
+<ul class="toc">
+<li><a href="#census">Census</a></li>
+<li><a href="#intl">KSFO International Terminal</a></li>
+<li><a href="#t2">KSFO Terminal 2</a></li>
+<li><a href="#aluxor">KSFO area: Aluxor SFO</a></li>
+<li><a href="#koak">KOAK Terminal 1</a></li>
+</ul>
+
+<section id="census">
+<h2>Census of loaded features</h2>
+<p class="cap">Top-down 5,000 m over the airport, tileset SSE 2, every selected tile. "Numbers differ" compares storeys and wall; "draws differently" compares the storey height the shader would draw (grammar classes that ignore levels, hangar and plain, are not excluded, so it is an upper bound).</p>
+<div class="scroll">
+<table>
+<thead><tr><th>Area</th><th>Features</th><th>Parts</th><th>Own levels and height</th><th>Own levels only</th><th>Own height only</th><th>Neither</th><th>Numbers differ A/B</th><th>A/C</th><th>Draws differently A/B</th><th>A/C</th></tr></thead>
+<tbody>
+<tr><td>All loaded from KSFO (reaches downtown SF)</td><td class="num">13,924</td><td class="num">960</td><td class="num">71</td><td class="num">322</td><td class="num">217</td><td class="num">350</td><td class="num">350</td><td class="num">228</td><td class="num">2</td><td class="num">40</td></tr>
+<tr><td>Within 3.5 km of the KSFO ARP</td><td class="num">6,421</td><td class="num">47</td><td class="num">13</td><td class="num">20</td><td class="num">12</td><td class="num">2</td><td class="num">2</td><td class="num">9</td><td class="num">1</td><td class="num">8</td></tr>
+<tr><td>Within 3.5 km of the KOAK ARP</td><td class="num">5,099</td><td class="num">6</td><td class="num">0</td><td class="num">0</td><td class="num">1</td><td class="num">5</td><td class="num">5</td><td class="num">0</td><td class="num">0</td><td class="num">0</td></tr>
+</tbody>
+</table>
+</div>
+<p class="cap">The other part outside KSFO that A and B draw differently is way 237713308 (relation 1462895663, parent <code>building:levels</code> 1, no tags of its own): A draws 4 m rows, B the default. Downtown, C's changes are towers such as Salesforce Tower (parts with <code>part#height</code> 326 and <code>part#roof:height</code> 245 get the parent's 61 levels over an 81 m wall) and the Transamerica Pyramid (48 levels over 30 m wings).</p>
+</section>
+
+<section id="intl">
+<h2>KSFO International Terminal Main Hall (relation 15730419)</h2>
+<p class="cap">Tower eye, heading 262, pitch −5, FOV 32. All 12 parts carry their own <code>part#building:levels</code> and <code>part#height</code>, so every lane computes the same numbers and the three stills are byte-identical.</p>
+<div class="lanes">
+<figure><img src="ksfo-intl-A.png" alt="International Terminal, lane A"><figcaption><b>A, today</b><span class="same">Every part reads its own tags.</span></figcaption></figure>
+<figure><img src="ksfo-intl-B.png" alt="International Terminal, lane B"><figcaption><b>B, strict</b><span class="same">No change: every part has its own levels and height.</span></figcaption></figure>
+<figure><img src="ksfo-intl-C.png" alt="International Terminal, lane C"><figcaption><b>C, parent fallback</b><span class="same">No change: nothing falls back.</span></figcaption></figure>
+</div>
+<div class="scroll">
+<table>
+<thead><tr><th>part#elementId</th><th>part# levels</th><th>part# height</th><th>part# min_height / min_level</th><th>Parent levels / height</th><th>A storeys / wall</th><th>B</th><th>C</th><th>Drawn storey (all lanes)</th></tr></thead>
+<tbody>
+<tr><td>1164607723</td><td class="num">6</td><td class="num">32</td><td>19 / 3</td><td>— / —</td><td>3 / 13</td><td>3 / 13</td><td>3 / 13</td><td class="num">4.67 m</td></tr>
+<tr><td>1164607724</td><td class="num">6</td><td class="num">41</td><td>19 / 3</td><td>— / —</td><td>3 / 22</td><td>3 / 22</td><td>3 / 22</td><td class="num">6 m</td></tr>
+<tr><td>15731516</td><td class="num">3</td><td class="num">19</td><td>13 / 2</td><td>— / —</td><td>1 / 6</td><td>1 / 6</td><td>1 / 6</td><td class="num">6 m</td></tr>
+<tr><td>15731158</td><td class="num">2</td><td class="num">13</td><td>7 / 1</td><td>— / —</td><td>1 / 6</td><td>1 / 6</td><td>1 / 6</td><td class="num">6 m</td></tr>
+<tr><td>15731157</td><td class="num">2</td><td class="num">14</td><td>8 / 1</td><td>— / —</td><td>1 / 6</td><td>1 / 6</td><td>1 / 6</td><td class="num">6 m</td></tr>
+<tr><td>15730418</td><td class="num">1</td><td class="num">7</td><td>— / —</td><td>— / —</td><td>1 / 7</td><td>1 / 7</td><td>1 / 7</td><td class="num">6 m</td></tr>
+<tr><td>15730417</td><td class="num">1</td><td class="num">7</td><td>— / —</td><td>— / —</td><td>1 / 7</td><td>1 / 7</td><td>1 / 7</td><td class="num">6 m</td></tr>
+<tr><td>1164338942</td><td class="num">6</td><td class="num">38</td><td>19 / 3</td><td>— / —</td><td>3 / 19</td><td>3 / 19</td><td>3 / 19</td><td class="num">6 m</td></tr>
+<tr><td>1164338943</td><td class="num">6</td><td class="num">38</td><td>19 / 3</td><td>— / —</td><td>3 / 19</td><td>3 / 19</td><td>3 / 19</td><td class="num">6 m</td></tr>
+<tr><td>1164338944</td><td class="num">4</td><td class="num">26</td><td>13 / 3</td><td>— / —</td><td>1 / 13</td><td>1 / 13</td><td>1 / 13</td><td class="num">6 m</td></tr>
+<tr><td>1164338950</td><td class="num">4</td><td class="num">26</td><td>13 / 3</td><td>— / —</td><td>1 / 13</td><td>1 / 13</td><td>1 / 13</td><td class="num">6 m</td></tr>
+<tr><td colspan="9" class="same">The 12th part, 15731156 (levels 2, height 14, same numbers as 15731157), is out of frame. The relation itself also appears as a feature with no <code>part#elementId</code> and no tags, <code>cesium#estimatedHeight</code> 41: storeys 0 in every lane, so it draws the default storey.</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section id="t2">
+<h2>KSFO Terminal 2 (way 60500080 and its parts)</h2>
+<p class="cap">Airside, 37.6168 N 122.3795 W, ellipsoid height 5 m, heading 268, pitch −4, FOV 40. Every Terminal 2 part has its own <code>part#height</code> and no <code>part#building:levels</code>; the outline way carries <code>building:levels</code> 4 and <code>height</code> 20. The round 60 m part on the left draws the same in every lane (its wall saturates the packed height).</p>
+<div class="lanes">
+<figure><img src="ksfo-t2-A.png" alt="Terminal 2, lane A"><figcaption><b>A, today</b><span class="same">Own height, no own levels: the grammar's default storey.</span></figcaption></figure>
+<figure><img src="ksfo-t2-B.png" alt="Terminal 2, lane B"><figcaption><b>B, strict</b><span class="same">Pixel-identical to A: every part has its own height, and neither lane reads levels from the parent.</span></figcaption></figure>
+<figure><img src="ksfo-t2-C.png" alt="Terminal 2, lane C"><figcaption><b>C, parent fallback</b><span class="diff">The parent's 4 levels over each part's own 25–40 m: every row clamps to 6 m.</span></figcaption></figure>
+</div>
+<h3>Detail: the 40 m and 25 m parts</h3>
+<div class="lanes">
+<figure><img src="ksfo-t2-zoom-A.png" alt="Terminal 2 detail, lane A"><figcaption><b>A</b></figcaption></figure>
+<figure><img src="ksfo-t2-zoom-B.png" alt="Terminal 2 detail, lane B"><figcaption><b>B</b></figcaption></figure>
+<figure><img src="ksfo-t2-zoom-C.png" alt="Terminal 2 detail, lane C"><figcaption><b>C</b></figcaption></figure>
+</div>
+<div class="scroll">
+<table>
+<thead><tr><th>part#elementId</th><th>part# levels</th><th>part# height</th><th>part# min_height</th><th>Parent levels / height</th><th>A storeys / wall</th><th>B</th><th>C</th><th>Drawn storey A / B / C</th></tr></thead>
+<tbody>
+<tr><td>550704745</td><td>—</td><td class="num">40</td><td>—</td><td>4 / 20</td><td>0 / 40</td><td>0 / 40</td><td class="chg">4 / 40</td><td>default / default / <b>6 m</b></td></tr>
+<tr><td>550704746</td><td>—</td><td class="num">25</td><td>—</td><td>4 / 20</td><td>0 / 25</td><td>0 / 25</td><td class="chg">4 / 25</td><td>default / default / <b>6 m</b></td></tr>
+<tr><td>550704747</td><td>—</td><td class="num">25</td><td>—</td><td>4 / 20</td><td>0 / 25</td><td>0 / 25</td><td class="chg">4 / 25</td><td>default / default / <b>6 m</b></td></tr>
+<tr><td>550704748</td><td>—</td><td class="num">30</td><td>—</td><td>4 / 20</td><td>0 / 30</td><td>0 / 30</td><td class="chg">4 / 30</td><td>default / default / <b>6 m</b></td></tr>
+<tr><td>462265110</td><td>—</td><td class="num">60</td><td>—</td><td>4 / 20</td><td>0 / 60</td><td>0 / 60</td><td class="chg">4 / 60</td><td>default (wall saturates) in all</td></tr>
+<tr><td>554547693</td><td>—</td><td class="num">67.36</td><td class="num">60</td><td>4 / 20</td><td>0 / 7.4</td><td>0 / 7.4</td><td class="chg">4 / 7.4</td><td>default / default / <b>2.4 m</b></td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section id="aluxor">
+<h2>KSFO area: Aluxor SFO (relation 385956478), the one A≠B case near the field</h2>
+<p class="cap">3.3 km west of the ARP, in Millbrae. 37.6233 N 122.4115 W, ellipsoid height −12 m, heading 285, pitch −4, FOV 45. The relation carries <code>building:levels</code> 3 and <code>building:min_level</code> 1, no height (estimate 10 m). Three parts tag <code>part#building:levels</code> 3 and no height; one part (1455771630, the dark block left of centre) has no tags of its own.</p>
+<div class="lanes">
+<figure><img src="ksfo-aluxor-A.png" alt="Aluxor SFO, lane A"><figcaption><b>A, today</b><span class="same">The untagged part reads the parent's 3 − 1 = 2 storeys over the 10 m estimate: two 5 m rows.</span></figcaption></figure>
+<figure><img src="ksfo-aluxor-B.png" alt="Aluxor SFO, lane B"><figcaption><b>B, strict</b><span class="diff">The untagged part gets the default storey: three rows, like its 3-storey siblings.</span></figcaption></figure>
+<figure><img src="ksfo-aluxor-C.png" alt="Aluxor SFO, lane C"><figcaption><b>C, parent fallback</b><span class="diff">As A for the untagged part; the 10 m part 385956479 (above it) also gets the parent's 2 storeys: 5 m rows.</span></figcaption></figure>
+</div>
+<h3>Detail: part 1455771630 (zoomed 2×)</h3>
+<div class="lanes">
+<figure><img src="ksfo-aluxor-zoom-A.png" alt="Aluxor detail, lane A"><figcaption><b>A</b></figcaption></figure>
+<figure><img src="ksfo-aluxor-zoom-B.png" alt="Aluxor detail, lane B"><figcaption><b>B</b></figcaption></figure>
+<figure><img src="ksfo-aluxor-zoom-C.png" alt="Aluxor detail, lane C"><figcaption><b>C</b></figcaption></figure>
+</div>
+<div class="scroll">
+<table>
+<thead><tr><th>part#elementId</th><th>part# levels</th><th>part# height</th><th>part# min_level</th><th>Parent levels / min_level / height</th><th>A storeys / wall</th><th>B</th><th>C</th><th>Drawn storey A / B / C</th></tr></thead>
+<tbody>
+<tr><td>1455771630</td><td>—</td><td>—</td><td>—</td><td>3 / 1 / —</td><td>2 / 10 (estimate)</td><td class="chg">0 / NaN</td><td>2 / 10</td><td><b>5 m</b> / default / <b>5 m</b></td></tr>
+<tr><td>385956479</td><td>—</td><td class="num">10</td><td class="num">1</td><td>3 / 1 / —</td><td>−1 / 10</td><td>−1 / 10</td><td class="chg">2 / 10</td><td>default / default / <b>5 m</b></td></tr>
+<tr><td>1444464261</td><td class="num">3</td><td>—</td><td>—</td><td>3 / 1 / —</td><td>3 / NaN</td><td>3 / NaN</td><td>3 / NaN</td><td>default in all</td></tr>
+<tr><td>1444464262</td><td class="num">3</td><td>—</td><td>—</td><td>3 / 1 / —</td><td>3 / NaN</td><td>3 / NaN</td><td>3 / NaN</td><td>default in all</td></tr>
+<tr><td>1444464264</td><td class="num">3</td><td>—</td><td>—</td><td>3 / 1 / —</td><td>3 / NaN</td><td>3 / NaN</td><td>3 / NaN</td><td>default in all</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section id="koak">
+<h2>KOAK Terminal 1 (way 23476550)</h2>
+<p class="cap">Airside, 37.71325 N 122.21605 W, ellipsoid height −20 m, heading 140, pitch −3, FOV 50. KOAK's terminals are whole buildings with no parts and no height or level tags (estimate 3 m); the 6 parts within 3.5 km all draw the default storey in every lane. The three stills are pixel-identical.</p>
+<div class="lanes">
+<figure><img src="koak-A.png" alt="KOAK Terminal 1, lane A"><figcaption><b>A, today</b><span class="same">Not a part: the unprefixed tags, here none.</span></figcaption></figure>
+<figure><img src="koak-B.png" alt="KOAK Terminal 1, lane B"><figcaption><b>B, strict</b><span class="same">No change.</span></figcaption></figure>
+<figure><img src="koak-C.png" alt="KOAK Terminal 1, lane C"><figcaption><b>C, parent fallback</b><span class="same">No change.</span></figcaption></figure>
+</div>
+<div class="scroll">
+<table>
+<thead><tr><th>elementId</th><th>part#elementId</th><th>Levels / height</th><th>Estimated height</th><th>A storeys / wall</th><th>B</th><th>C</th><th>Drawn storey</th></tr></thead>
+<tbody>
+<tr><td>23476550 (Terminal 1)</td><td>—</td><td>— / —</td><td class="num">3</td><td>0 / 3</td><td>0 / 3</td><td>0 / 3</td><td>default in all</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<p class="sub">Rebuild: <code>RECIPE.md</code> beside this page; the three patches are in <code>recipe/</code>.</p>
+</main>
+</body>
+</html>
