@@ -1,0 +1,841 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>About Screen Placement</title>
+<style>
+/* TC3D-345 decision mock: where the About screen with the map data credits lives.
+   Every app style below is copied from the app's CSS (file named above each block).
+   Styles marked "mock" are this page's own: the page chrome, the scene backdrop,
+   the pink "new" marks, and the few About rows the app does not have yet (built from tokens). */
+
+/* Fonts: the app's own self-hosted files, linked from the source tree. */
+@font-face {
+  font-family: "Geist";
+  src: url("../../../../src/renderer/public/fonts/Geist-Variable.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("../../../../src/renderer/public/fonts/GeistMono-Variable.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+}
+
+/* ---- Copied from src/renderer/assets/styles/global.css :root ---- */
+:root {
+  --bg-app: #0a0a0f;
+  --bg-panel: rgba(20, 20, 30, 0.95);
+  --bg-panel-strong: rgba(30, 30, 40, 0.98);
+  --bg-overlay: rgba(0, 0, 0, 0.6);
+  --white-a05: rgba(255, 255, 255, 0.05);
+  --white-a08: rgba(255, 255, 255, 0.08);
+  --white-a10: rgba(255, 255, 255, 0.1);
+  --white-a15: rgba(255, 255, 255, 0.15);
+  --white-a20: rgba(255, 255, 255, 0.2);
+  --white-a30: rgba(255, 255, 255, 0.3);
+  --text-primary: rgba(255, 255, 255, 0.95);
+  --text-secondary: rgba(255, 255, 255, 0.7);
+  --text-tertiary: rgba(255, 255, 255, 0.5);
+  --text-muted: rgba(255, 255, 255, 0.4);
+  --accent: #4fc3f7;
+  --accent-warn: #ffb300;
+  --accent-danger: #ef5350;
+  --accent-ok: #81c784;
+  --accent-pending: #fff176;
+  --topbar-h: 48px;
+  --topbar-h-compact: 44px;
+  --topbar-h-mobile: 40px;
+  --controls-h: 48px;
+  --controls-h-compact: 44px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --blur: blur(10px);
+  --blur-strong: blur(12px);
+  --font-sans:
+    "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans",
+    "Droid Sans", "Helvetica Neue", sans-serif;
+  --font-mono: "Geist Mono", "JetBrains Mono", "Fira Code", "Consolas", "Monaco", monospace;
+
+  /* mock: the mark for what each lane adds; not an app colour */
+  --mock-mark: #ff6ad5;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--bg-app);
+  color: white;
+}
+
+/* ---- mock: page chrome ---- */
+.page { padding: 32px; }
+.page-head { max-width: 1280px; margin-bottom: 28px; }
+.page-head .issue { font-family: var(--font-mono); font-size: 13px; color: var(--accent); letter-spacing: 0.5px; }
+.page-head h1 { font-size: 28px; font-weight: 600; color: var(--text-primary); margin: 6px 0 10px; }
+.page-head p { font-size: 15px; line-height: 1.55; color: var(--text-secondary); margin-bottom: 6px; }
+.page-head .legend { display: inline-flex; align-items: center; gap: 8px; }
+.page-head .legend i { width: 28px; height: 14px; border: 2px dashed var(--mock-mark); border-radius: 3px; display: inline-block; }
+.zoom-bar { display: flex; gap: 8px; margin: 14px 0 0; }
+.zoom-bar button {
+  background: var(--white-a10); border: 1px solid var(--white-a20); border-radius: 6px;
+  color: white; font: inherit; font-size: 13px; padding: 6px 12px; cursor: pointer;
+}
+.zoom-hint { align-self: center; font-size: 13px; color: var(--text-muted); }
+.zoom-bar button.on { background: rgba(79, 195, 247, 0.2); border-color: var(--accent); color: var(--accent); }
+.lanes { display: flex; gap: 32px; align-items: flex-start; width: max-content; }
+.lane { width: 1280px; }
+.lane-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+.lane-tag {
+  font-family: var(--font-mono); font-weight: 700; font-size: 18px; color: var(--bg-app);
+  background: var(--mock-mark); border-radius: 4px; padding: 2px 10px;
+}
+.lane-head h2 { font-size: 22px; font-weight: 600; color: var(--text-primary); }
+.lane-head .sub { font-size: 14px; color: var(--text-tertiary); }
+.lane-note {
+  margin-top: 14px; padding: 12px 16px; border-left: 3px solid var(--mock-mark);
+  background: var(--white-a05); border-radius: 0 6px 6px 0;
+  font-size: 15px; line-height: 1.55; color: var(--text-secondary);
+}
+.lane-note b { color: var(--text-primary); font-weight: 600; }
+.page-foot { margin-top: 28px; font-size: 13px; line-height: 1.6; color: var(--text-muted); max-width: 1280px; }
+.page-foot code { font-family: var(--font-mono); font-size: 12px; color: var(--text-tertiary); }
+
+/* mock: one app window per lane. The transform makes the app's position: fixed
+   bars and overlays sit inside this 1280 x 800 frame instead of the page. */
+.frame {
+  position: relative;
+  width: 1280px;
+  height: 800px;
+  overflow: hidden;
+  transform: translateZ(0);
+  border: 1px solid var(--white-a15);
+  border-radius: 8px;
+  background: var(--bg-app);
+}
+/* mock: a stand-in for the 3D view (sky, horizon, runway) behind the bars */
+.scene {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to bottom, #213a59 0%, #4f7298 38%, #9db4c8 49.6%, #5b6a4a 50%, #3d4a31 70%, #2a3322 100%);
+}
+.scene::before {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; top: 50%; bottom: 0;
+  background: linear-gradient(to bottom, #6b6f70, #3a3d3e);
+  clip-path: polygon(47.5% 0, 52.5% 0, 78% 100%, 22% 100%);
+}
+.scene::after {
+  content: "";
+  position: absolute;
+  left: 50%; top: 52%; bottom: 0; width: 4px; margin-left: -2px;
+  background: repeating-linear-gradient(to bottom, rgba(255,255,255,0.75) 0 14px, transparent 14px 34px);
+  clip-path: polygon(40% 0, 60% 0, 100% 100%, 0 100%);
+}
+
+/* ---- Copied from src/renderer/components/UI/TopBar.css ---- */
+.top-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--topbar-h);
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--white-a10);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  z-index: 100;
+  backdrop-filter: var(--blur);
+}
+.top-bar-left,
+.top-bar-right {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+.top-bar-right {
+  justify-content: flex-end;
+  gap: 12px;
+}
+.top-bar-center { flex: 0 0 auto; }
+.compass-direction {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+  min-width: 24px;
+  text-align: center;
+  margin-right: 12px;
+}
+.airport-button {
+  background: var(--white-a10);
+  border: 1px solid var(--white-a20);
+  border-radius: var(--radius-md);
+  padding: 8px 16px;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.airport-icao { font-weight: 700; font-size: 16px; color: var(--accent); }
+.airport-name {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.8);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.help-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: var(--white-a08);
+  border: 1px solid var(--white-a15);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.zulu-time {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 1px;
+}
+.status-info { display: flex; align-items: center; gap: 16px; }
+.aircraft-count { font-size: 13px; color: var(--text-secondary); }
+.connection-status {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.connection-status.connected {
+  background: rgba(76, 175, 80, 0.2);
+  color: var(--accent-ok);
+  border: 1px solid rgba(76, 175, 80, 0.4);
+}
+
+/* ---- Copied from src/renderer/components/UI/ControlsBar.css (bar, buttons, camera info) ---- */
+.controls-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: var(--controls-h);
+  background: var(--bg-panel);
+  border-top: 1px solid var(--white-a10);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  z-index: 100;
+  backdrop-filter: var(--blur);
+}
+.controls-left,
+.controls-right {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.controls-right { justify-content: flex-end; }
+.controls-center { flex: 0 0 auto; }
+.control-button {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--white-a10);
+  border: 1px solid var(--white-a20);
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: white;
+  cursor: pointer;
+  font-size: 13px;
+}
+.defaults-dropdown { position: relative; }
+.runway-dropdown { position: relative; }
+.runway-dropdown .control-button { min-width: 120px; }
+.camera-info { display: flex; align-items: center; gap: 12px; }
+.camera-info .info-item {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  background: var(--white-a08);
+  padding: 4px 8px;
+  border-radius: 4px;
+  text-align: center;
+}
+.mode-toggle-btn {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  background: var(--white-a10);
+  border: 1px solid var(--white-a20);
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 8px;
+}
+
+/* ---- Copied from src/renderer/components/UI/GlobalSearchPanel.css (bar button) ---- */
+.global-search-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--white-a10);
+  border: 1px solid var(--white-a20);
+  border-radius: 6px;
+  padding: 6px 12px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 12px;
+  cursor: pointer;
+}
+.search-btn-text { font-weight: 500; }
+.search-shortcut {
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--white-a10);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+/* ---- Copied from src/renderer/components/UI/ControlsBar.css (Settings modal) ---- */
+.settings-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--bg-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  backdrop-filter: blur(4px);
+}
+.settings-modal {
+  background: var(--bg-panel-strong);
+  border: 1px solid var(--white-a15);
+  border-radius: var(--radius-lg);
+  width: 736px;
+  max-width: 90vw;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--white-a10);
+  cursor: grab;
+}
+.settings-header h2 { margin: 0; font-size: 18px; font-weight: 600; color: white; }
+.settings-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--white-a10);
+  background: rgba(0, 0, 0, 0.2);
+}
+.tab-button {
+  background: transparent;
+  border: none;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  white-space: nowrap;
+}
+.tab-button.active { color: var(--accent); border-bottom-color: var(--accent); }
+.close-button {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+.settings-content { padding: 20px; overflow-y: auto; }
+.settings-section { margin-bottom: 24px; }
+.settings-section:last-child { margin-bottom: 0; }
+.settings-section h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0 0 12px 0;
+}
+.settings-section.collapsible .collapsible-header { display: flex; align-items: center; }
+.settings-section.collapsible .collapsible-header .collapsible-toggle {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+}
+.settings-section.collapsible.collapsed .collapsible-header { margin-bottom: 0; }
+.collapsible-chevron { display: flex; align-items: center; justify-content: center; }
+.settings-section.collapsible.expanded .collapsible-chevron { transform: rotate(90deg); }
+.setting-item { margin-bottom: 16px; }
+.setting-item:last-child { margin-bottom: 0; }
+.setting-hint { font-size: 12px; color: rgba(255, 255, 255, 0.4); margin-top: 6px; }
+.shortcuts-list { display: flex; flex-direction: column; gap: 8px; }
+.shortcut {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--white-a05);
+  border-radius: 4px;
+}
+.shortcut .keys {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent);
+  background: rgba(79, 195, 247, 0.1);
+  padding: 4px 8px;
+  border-radius: 3px;
+}
+.shortcut .action { font-size: 13px; color: rgba(255, 255, 255, 0.7); }
+/* Copied from ControlsBar.css .shadow-settings-group.disabled: the app's greyed-out group */
+.disabled-group { opacity: 0.5; }
+
+/* ---- Copied from src/renderer/components/UI/KeyboardCheatsheet.css ---- */
+.kbd-cheatsheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg-overlay);
+  /* Copied as written: blur(var(--blur)) expands to blur(blur(10px)), which the browser
+     drops, so the real cheatsheet backdrop is dimmed but not blurred. */
+  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: blur(var(--blur));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+.kbd-cheatsheet-modal {
+  background: var(--bg-panel-strong);
+  border: 1px solid var(--white-a15);
+  border-radius: var(--radius-lg);
+  width: 100%;
+  max-width: 760px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  font-family: var(--font-sans);
+}
+.kbd-cheatsheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px 12px;
+  border-bottom: 1px solid var(--white-a08);
+}
+.kbd-cheatsheet-title { font-size: 18px; font-weight: 600; color: var(--text-primary); margin: 0; }
+.kbd-cheatsheet-close {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+}
+.kbd-cheatsheet-body { flex: 1; overflow-y: auto; padding: 16px 20px 20px; }
+.kbd-cheatsheet-section + .kbd-cheatsheet-section { margin-top: 18px; }
+.kbd-cheatsheet-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  margin: 0 0 8px;
+}
+.kbd-cheatsheet-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.kbd-cheatsheet-label { font-size: 13px; color: var(--text-secondary); line-height: 1.45; }
+.kbd-cheatsheet-note { color: var(--text-muted); }
+
+/* mock: the window is 800px tall, so the app's 80vh caps are 640px here */
+.frame .settings-modal,
+.frame .kbd-cheatsheet-modal { max-height: 640px; }
+/* mock: the About modal reuses the cheatsheet shell, narrowed for its shorter content */
+.frame .about-modal { max-width: 560px; }
+
+/* ---- mock: the About content the app does not have yet, from the tokens and the rows above ---- */
+.about-version { font-size: 14px; color: rgba(255, 255, 255, 0.9); }
+.about-version .ver { font-family: var(--font-mono); color: var(--accent); margin-left: 6px; }
+.about-credit-main { display: flex; flex-direction: column; gap: 2px; }
+.about-credit-main .setting-hint { margin-top: 0; }
+.about-runtime {
+  margin: -2px 0 0 14px;
+  padding: 6px 0 2px 12px;
+  border-left: 2px solid var(--white-a10);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.about-runtime .setting-hint { margin-top: 0; margin-bottom: 2px; }
+.about-runtime-line { font-size: 13px; color: rgba(255, 255, 255, 0.7); }
+.about-modal-row { padding: 4px 0; }
+.about-modal-runtime { margin: 0 0 2px 14px; padding: 2px 0 2px 12px; border-left: 2px solid var(--white-a10); }
+.about-modal-runtime li { padding: 2px 0; }
+.about-modal-hint { font-size: 12px; color: var(--text-muted); margin-bottom: 2px; }
+
+/* mock: marks for what each lane adds */
+.mock-new { outline: 2px dashed var(--mock-mark); outline-offset: 3px; border-radius: 3px; position: relative; }
+.mock-tag {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bg-app);
+  background: var(--mock-mark);
+  border-radius: 3px;
+  padding: 1px 5px;
+  vertical-align: middle;
+}
+.mock-tag.example { background: transparent; color: var(--mock-mark); border: 1px solid var(--mock-mark); margin-left: 6px; }
+.mock-flag { position: absolute; top: -22px; right: -6px; white-space: nowrap; }
+.tab-button .mock-flag { top: 50%; right: auto; left: calc(100% + 10px); transform: translateY(-50%); }
+/* mock note: no rule here sets a font on buttons, as in the app, so tabs and bar buttons
+   keep the browser's default button font (Segoe UI on Windows) just as they do in the app. */
+.mock-lift { position: absolute; z-index: 2000; }
+.mock-callout {
+  position: absolute; z-index: 2000; white-space: nowrap;
+  font-size: 13px; color: var(--mock-mark); font-weight: 600;
+}
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="page-head">
+    <div class="issue">TC3D-345 · Show the map data credits on the About screen</div>
+    <h1>Where does the About screen live?</h1>
+    <p>Three places for the same content: the app version, then the map data credits. Each lane is a 1280 × 800 app window built from the app's own CSS; only the placement differs.</p>
+    <p class="legend"><i></i> marks what the lane adds to the app. Lines tagged <span class="mock-tag example">example</span> are what Cesium reports at runtime for the default Bing imagery, not fixed text.</p>
+    <div class="zoom-bar"><button type="button" id="zoom-fit">Fit to window</button><button type="button" id="zoom-full">100%</button><span class="zoom-hint">100% is the faithful view (scroll sideways for B and C); fitting shrinks the text, so tab wrapping can differ from the app.</span></div>
+  </header>
+
+  <div class="lanes" id="lanes">
+
+    <!-- ================= Lane A: About tab in Settings ================= -->
+    <section class="lane">
+      <div class="lane-head"><span class="lane-tag">A</span><h2>An About tab in Settings</h2><span class="sub">last tab, after Advanced</span></div>
+      <div class="frame">
+        <div class="scene"></div>
+        <div data-include="top-bar"></div>
+        <div data-include="controls-bar"></div>
+        <div class="settings-modal-overlay">
+          <div class="settings-modal" role="dialog">
+            <div class="settings-header"><h2>Settings</h2><button type="button" class="close-button">&times;</button></div>
+            <div class="settings-tabs">
+              <button type="button" class="tab-button">Configuration</button>
+              <button type="button" class="tab-button">Aircraft &amp; Labels</button>
+              <button type="button" class="tab-button">Graphics &amp; Weather</button>
+              <button type="button" class="tab-button">Controls &amp; Camera</button>
+              <button type="button" class="tab-button">Performance</button>
+              <button type="button" class="tab-button">Mods</button>
+              <button type="button" class="tab-button">Advanced</button>
+              <button type="button" class="tab-button active mock-new">About</button>
+            </div>
+            <div class="settings-content">
+              <div data-include="about-settings"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="lane-note"><b>Opens:</b> gear button (or Ctrl+,) → About tab. <b>Worst case:</b> one more tab in a tab bar that is already full; an eighth tab may wrap the bar onto a second row.</p>
+    </section>
+
+    <!-- ================= Lane B: About section in the Advanced tab ================= -->
+    <section class="lane">
+      <div class="lane-head"><span class="lane-tag">B</span><h2>An About section in the Advanced tab</h2><span class="sub">bottom of the tab, under Updates and Troubleshooting</span></div>
+      <div class="frame">
+        <div class="scene"></div>
+        <div data-include="top-bar"></div>
+        <div data-include="controls-bar"></div>
+        <div class="settings-modal-overlay">
+          <div class="settings-modal" role="dialog">
+            <div class="settings-header"><h2>Settings</h2><button type="button" class="close-button">&times;</button></div>
+            <div class="settings-tabs">
+              <button type="button" class="tab-button">Configuration</button>
+              <button type="button" class="tab-button">Aircraft &amp; Labels</button>
+              <button type="button" class="tab-button">Graphics &amp; Weather</button>
+              <button type="button" class="tab-button">Controls &amp; Camera</button>
+              <button type="button" class="tab-button">Performance</button>
+              <button type="button" class="tab-button">Mods</button>
+              <button type="button" class="tab-button active">Advanced</button>
+            </div>
+            <div class="settings-content" id="content-b">
+              <div class="settings-section collapsible collapsed">
+                <h3 class="collapsible-header"><button type="button" class="collapsible-toggle"><span class="collapsible-chevron"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></span>Appearance</button></h3>
+              </div>
+              <div class="settings-section collapsible collapsed">
+                <h3 class="collapsible-header"><button type="button" class="collapsible-toggle"><span class="collapsible-chevron"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></span>Debugging</button></h3>
+              </div>
+              <div class="settings-section collapsible expanded">
+                <h3 class="collapsible-header"><button type="button" class="collapsible-toggle"><span class="collapsible-chevron"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></span>Updates</button></h3>
+                <div class="collapsible-content">
+                  <div class="setting-row"><button type="button" class="control-button">Check for Updates</button></div>
+                  <p class="setting-hint" style="margin-top: 8px;">Current version: v0.2.0-alpha</p>
+                </div>
+              </div>
+              <div class="settings-section collapsible collapsed">
+                <h3 class="collapsible-header"><button type="button" class="collapsible-toggle"><span class="collapsible-chevron"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></span>Troubleshooting</button></h3>
+              </div>
+              <div class="settings-section collapsible expanded mock-new">
+                <h3 class="collapsible-header"><button type="button" class="collapsible-toggle"><span class="collapsible-chevron"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></span>About</button></h3>
+                <div class="collapsible-content">
+                  <div data-include="about-settings-flat"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="lane-note"><b>Opens:</b> gear button (or Ctrl+,) → Advanced tab → scroll down → expand About (every Advanced section opens collapsed; shown here expanded and scrolled to the bottom). <b>Worst case:</b> easy to miss, the last collapsed section of the tab few users open.</p>
+    </section>
+
+    <!-- ================= Lane C: standalone About modal ================= -->
+    <section class="lane">
+      <div class="lane-head"><span class="lane-tag">C</span><h2>A standalone About modal</h2><span class="sub">its own info button in the controls bar, cheatsheet-style</span></div>
+      <div class="frame" id="frame-c">
+        <div class="scene"></div>
+        <div data-include="top-bar"></div>
+        <div data-include="controls-bar-info"></div>
+        <div class="kbd-cheatsheet-overlay" role="presentation">
+          <div class="kbd-cheatsheet-modal about-modal" role="dialog" aria-label="About TowerCab 3D">
+            <div class="kbd-cheatsheet-header">
+              <h2 class="kbd-cheatsheet-title">About TowerCab 3D</h2>
+              <button type="button" class="kbd-cheatsheet-close" aria-label="Close">×</button>
+            </div>
+            <div class="kbd-cheatsheet-body">
+              <section class="kbd-cheatsheet-section">
+                <h3 class="kbd-cheatsheet-section-title">Version</h3>
+                <div class="about-version">TowerCab 3D<span class="ver">v0.2.0-alpha</span></div>
+              </section>
+              <section class="kbd-cheatsheet-section">
+                <h3 class="kbd-cheatsheet-section-title">Map data</h3>
+                <ul class="kbd-cheatsheet-rows">
+                  <li class="about-modal-row"><span class="kbd-cheatsheet-label">© OpenStreetMap contributors<span class="kbd-cheatsheet-note"> — 3D buildings, ODbL</span></span></li>
+                  <li class="about-modal-row"><span class="kbd-cheatsheet-label">Terrain and imagery: Cesium ion</span></li>
+                  <li>
+                    <ul class="kbd-cheatsheet-rows about-modal-runtime">
+                      <li class="about-modal-hint">Reported by Cesium for the map in view:</li>
+                      <li><span class="kbd-cheatsheet-label">© 2026 Microsoft Corporation</span><span class="mock-tag example">example</span></li>
+                      <li><span class="kbd-cheatsheet-label">Earthstar Geographics SIO</span><span class="mock-tag example">example</span></li>
+                    </ul>
+                  </li>
+                  <li class="about-modal-row disabled-group"><span class="kbd-cheatsheet-label">Overture Maps Foundation<span class="kbd-cheatsheet-note"> — places hint, when enabled</span></span></li>
+                </ul>
+              </section>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="lane-note"><b>Opens:</b> a new info button beside the gear in the controls bar (the keyboard cheatsheet's own <code>?</code> sits in the top bar). <b>Worst case:</b> a new button in a controls bar that is already crowded, and one more modal to keep in step with the others.</p>
+    </section>
+
+  </div>
+
+  <p class="page-foot">Built from <code>global.css</code> <code>:root</code>, <code>TopBar.css</code>, <code>ControlsBar.css</code> (bar, Settings modal, collapsible sections, <code>.shortcut</code> rows), <code>GlobalSearchPanel.css</code> and <code>KeyboardCheatsheet.css</code>, with markup following <code>SettingsModal.tsx</code>, <code>SettingsAdvancedTab.tsx</code>, <code>CollapsibleSection.tsx</code>, <code>ControlsBar.tsx</code> and <code>KeyboardCheatsheet.tsx</code>. The 3D view behind the bars is a flat stand-in.</p>
+</div>
+
+<!-- ================= shared fragments, cloned into each lane ================= -->
+<template id="tpl-top-bar">
+  <div class="top-bar">
+    <div class="top-bar-left">
+      <span class="compass-direction">W</span>
+      <button type="button" class="airport-button"><span class="airport-icao">KOAK</span><span class="airport-name">Metropolitan Oakland International Airport</span></button>
+    </div>
+    <div class="top-bar-center"><span class="zulu-time">18:42:07Z</span></div>
+    <div class="top-bar-right">
+      <button type="button" class="help-button" title="Keyboard shortcuts (?)">?</button>
+      <div class="status-info">
+        <span class="aircraft-count">1,284 pilots online</span>
+        <span class="connection-status connected">VATSIM</span>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="tpl-controls-bar">
+  <div class="controls-bar">
+    <button type="button" class="mode-toggle-btn" title="Show replay controls"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg></button>
+    <div class="controls-left">
+      <button type="button" class="control-button" title="Toggle View Mode (T)"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg><span class="button-label">3D</span></button>
+      <div class="defaults-dropdown"><button type="button" class="control-button" title="Default View Options"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span class="button-label">Defaults</span></button></div>
+      <div class="runway-dropdown"><button type="button" class="control-button" title="Look at Runway"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg><span class="button-label">Look at Rwy</span></button></div>
+      <span class="hide-on-mobile"><button type="button" class="global-search-btn" title="Global Aircraft Search (Ctrl+K)"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg><span class="search-btn-text">Flights</span><span class="search-shortcut">Ctrl+K</span></button></span>
+      <div class="camera-info"><span class="info-item">HDG 280</span><span class="info-item">PIT -5°</span><span class="info-item">FOV 60°</span></div>
+    </div>
+    <div class="controls-center"></div>
+    <div class="controls-right">
+      <button type="button" class="control-button" title="Measuring Tool (M)"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h20M12 2v20M6 6l12 12M18 6L6 18"/></svg></button>
+      <button type="button" class="control-button" title="Bookmark Manager (Ctrl+B)"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/><path d="M19 4l-5 5M19 10l-5 5M19 16l-5 5"/></svg></button>
+      <button type="button" class="control-button" title="Add Inset Viewport"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><rect x="12" y="3" width="9" height="9" rx="1" ry="1"/></svg></button>
+      <button type="button" class="control-button" title="Back to Main Menu"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+      <!-- info -->
+      <button type="button" class="control-button" title="Settings (Ctrl+,)"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+    </div>
+  </div>
+</template>
+
+<template id="tpl-info-button">
+  <button type="button" class="control-button mock-info" title="About (credits)"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></button>
+</template>
+
+<!-- The About content inside Settings: lane A as two plain sections, lane B inside its collapsible section. -->
+<template id="tpl-about-settings">
+  <div class="settings-section">
+    <h3>Version</h3>
+    <div class="about-version">TowerCab 3D<span class="ver">v0.2.0-alpha</span></div>
+  </div>
+  <div class="settings-section">
+    <h3>Map data</h3>
+    <div data-include="credit-list"></div>
+  </div>
+</template>
+
+<template id="tpl-about-settings-flat">
+  <div class="setting-item"><div class="about-version">TowerCab 3D<span class="ver">v0.2.0-alpha</span></div></div>
+  <div class="setting-item">
+    <p class="setting-hint" style="margin: 0 0 8px;">Map data</p>
+    <div data-include="credit-list"></div>
+  </div>
+</template>
+
+<template id="tpl-credit-list">
+  <div class="shortcuts-list">
+    <div class="shortcut">
+      <div class="about-credit-main"><span class="action">© OpenStreetMap contributors</span><span class="setting-hint">3D buildings, ODbL</span></div>
+      <span class="keys">Buildings</span>
+    </div>
+    <div class="shortcut">
+      <div class="about-credit-main"><span class="action">Terrain and imagery: Cesium ion</span></div>
+      <span class="keys">Terrain · Imagery</span>
+    </div>
+    <div class="about-runtime">
+      <p class="setting-hint">Reported by Cesium for the map in view:</p>
+      <div class="about-runtime-line">© 2026 Microsoft Corporation<span class="mock-tag example">example</span></div>
+      <div class="about-runtime-line">Earthstar Geographics SIO<span class="mock-tag example">example</span></div>
+    </div>
+    <div class="shortcut disabled-group">
+      <div class="about-credit-main"><span class="action">Overture Maps Foundation</span><span class="setting-hint">Places hint, when enabled</span></div>
+      <span class="keys">Off</span>
+    </div>
+  </div>
+</template>
+
+<script>
+// mock: stamp the shared fragments into each lane, then add lane C's info button.
+function include(root) {
+  for (const slot of root.querySelectorAll('[data-include]')) {
+    const name = slot.getAttribute('data-include');
+    const tpl = document.getElementById('tpl-' + (name === 'controls-bar-info' ? 'controls-bar' : name));
+    const frag = tpl.content.cloneNode(true);
+    include(frag);
+    if (name === 'controls-bar-info') {
+      const settings = frag.querySelector('[title="Settings (Ctrl+,)"]');
+      const info = document.getElementById('tpl-info-button').content.cloneNode(true);
+      settings.parentNode.insertBefore(info, settings);
+    }
+    slot.replaceWith(frag);
+  }
+}
+include(document);
+
+// mock: lane C's new button sits under the modal's backdrop; lift a sharp copy above it with a mark.
+function liftInfoButton() {
+  const frame = document.getElementById('frame-c');
+  for (const old of frame.querySelectorAll('.mock-lift, .mock-callout')) old.remove();
+  const btn = frame.querySelector('.mock-info');
+  const f = frame.getBoundingClientRect();
+  const b = btn.getBoundingClientRect();
+  const z = f.width / frame.offsetWidth;
+  const lift = btn.cloneNode(true);
+  lift.classList.add('mock-new');
+  const wrap = document.createElement('div');
+  wrap.className = 'mock-lift';
+  wrap.style.left = (b.left - f.left) / z + 'px';
+  wrap.style.top = (b.top - f.top) / z + 'px';
+  wrap.appendChild(lift);
+  frame.appendChild(wrap);
+  const call = document.createElement('div');
+  call.className = 'mock-callout';
+  call.innerHTML = '<span class="mock-tag">new</span> info button opens About';
+  call.style.right = (f.right - b.right) / z + 'px';
+  call.style.top = (b.top - f.top) / z - 30 + 'px';
+  frame.appendChild(call);
+}
+
+// mock: the lane flags, one per marked element in lanes A and B
+for (const el of document.querySelectorAll('.lane .mock-new')) {
+  const tag = document.createElement('span');
+  tag.className = 'mock-tag mock-flag';
+  tag.textContent = 'new';
+  el.appendChild(tag);
+}
+
+// mock: fit the 3 lanes to the window, or show them at 100%
+const lanes = document.getElementById('lanes');
+const fitBtn = document.getElementById('zoom-fit');
+const fullBtn = document.getElementById('zoom-full');
+let fit = false;
+function applyZoom() {
+  lanes.style.zoom = '1';
+  const avail = document.documentElement.clientWidth - 64;
+  lanes.style.zoom = fit ? String(Math.min(1, avail / lanes.scrollWidth)) : '1';
+  fitBtn.classList.toggle('on', fit);
+  fullBtn.classList.toggle('on', !fit);
+  liftInfoButton();
+  const contentB = document.getElementById('content-b');
+  contentB.scrollTop = contentB.scrollHeight;
+}
+fitBtn.addEventListener('click', () => { fit = true; applyZoom(); });
+fullBtn.addEventListener('click', () => { fit = false; applyZoom(); });
+window.addEventListener('resize', applyZoom);
+document.fonts.ready.then(applyZoom);
+applyZoom();
+</script>
+</body>
+</html>
