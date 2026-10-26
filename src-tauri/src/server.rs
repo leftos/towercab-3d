@@ -33,10 +33,11 @@ use url::Url;
 use tauri::{Emitter, Manager};
 
 use crate::{
+    conversion::{Caller, ConversionError, ConversionOwner},
     mods::{
         discover_all_mods, find_mods_root, read_tower_positions, DiscoveredMod, TowerPositionEntry,
     },
-    msfs::{RemoteCachedModel, RemoteModelIndex},
+    msfs::{RemoteCachedModel, RemoteModelIndex, SourceModelInfo},
     normalize_path_string,
     settings::{
         apply_remote_write, get_global_settings_file, read_remote_view, read_settings_file,
@@ -932,6 +933,10 @@ async fn serve_msfs_model(
     State(state): State<Arc<ServerState>>,
     Path(path): Path<String>,
 ) -> impl IntoResponse {
+    if !is_servable_model_name(&path) {
+        return Err((StatusCode::NOT_FOUND, "File not found".to_string()));
+    }
+
     // The detail names host paths, so it stays in the host log.
     let failed = |e: String| {
         tracing::error!(
@@ -981,6 +986,16 @@ async fn serve_msfs_model(
     }
 
     serve_file(&file_path).await
+}
+
+/// Whether `/api/msfs/{name}` may serve `name`: a top-level `.glb` (any case) not starting with
+/// `.`, so a converter's `.{name}.{pid}.tmp` file or anything in a subfolder is never served.
+fn is_servable_model_name(name: &str) -> bool {
+    let name = name.strip_prefix('/').unwrap_or(name);
+    !name.contains(['/', '\\'])
+        && !name.starts_with('.')
+        && name.len() > ".glb".len()
+        && name.to_ascii_lowercase().ends_with(".glb")
 }
 
 /// GET /api/msfs/index - Get the MSFS model index for remote clients
@@ -1037,38 +1052,119 @@ struct ConversionResponse {
     error: Option<String>,
 }
 
-/// POST /api/msfs/convert - Request conversion of an MSFS model
+/// How long a refused remote conversion asks the browser to wait before it asks again, in seconds.
+const CONVERSION_RETRY_AFTER_SECS: &str = "30";
+
+/// POST /api/msfs/convert - Request conversion of an MSFS model. The model is looked up in the
+/// host's index before anything waits, and converted at the host's texture scale.
 async fn request_msfs_conversion(
     State(state): State<Arc<ServerState>>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Json(request): Json<ConversionRequest>,
-) -> Result<Json<ConversionResponse>, (StatusCode, String)> {
+) -> Result<Response<Body>, (StatusCode, String)> {
     check_texture_scale(&request.texture_scale)?;
+    let model_name = request.model_name.as_str();
 
-    // Call the MSFS conversion function
-    match crate::msfs::convert_model_by_name(
-        &state.app_handle,
-        &request.model_name,
-        &request.texture_scale,
-    ) {
-        Ok(output_path) => Ok(Json(ConversionResponse {
-            success: true,
-            output_path: Some(output_path),
-            error: None,
-        })),
-        Err(e) => {
-            // The detail (the converter's stderr included) names host paths, so it stays in the host log.
-            tracing::error!(
-                "[Server] Converting MSFS model {:?} failed: {}",
-                request.model_name,
-                e
-            );
-            Ok(Json(ConversionResponse {
-                success: false,
-                output_path: None,
-                error: Some("Model conversion failed".to_string()),
-            }))
+    let settings = match get_global_settings_file(&state.app_handle)
+        .and_then(|file| read_settings_file(&file))
+    {
+        Ok(settings) => settings.msfs_models,
+        Err(e) => return Ok(conversion_failed(model_name, &e)),
+    };
+    let entry = match crate::msfs::find_index_entry(&state.app_handle, &settings, model_name) {
+        Ok(Some(entry)) => entry,
+        Ok(None) => {
+            return Ok(conversion_failed(
+                model_name,
+                &format!("Model not found: {}", model_name),
+            ))
         }
+        Err(e) => return Ok(conversion_failed(model_name, &e)),
+    };
+    let Some(cache_dir) = settings.cache_directory.clone() else {
+        return Ok(conversion_failed(
+            model_name,
+            "MSFS model cache directory not configured",
+        ));
+    };
+
+    let owner = state.app_handle.state::<ConversionOwner>();
+    let result = convert_for_remote(
+        &owner,
+        &entry,
+        PathBuf::from(cache_dir),
+        &settings.texture_scale,
+        addr.ip(),
+    )
+    .await;
+    Ok(conversion_response(model_name, result))
+}
+
+/// Converts `entry` into `cache_dir` for the remote client at `ip`, answering at once with the
+/// GLB already there when it passes the cache scan's check. Returns the GLB's file name.
+async fn convert_for_remote(
+    owner: &ConversionOwner,
+    entry: &SourceModelInfo,
+    cache_dir: PathBuf,
+    texture_scale: &str,
+    ip: IpAddr,
+) -> Result<String, ConversionError> {
+    let request =
+        crate::conversion::ConversionRequest::from_index_entry(entry, cache_dir, texture_scale);
+    let file_name = request.output_file_name();
+    if crate::msfs::is_accepted_glb(&request.output_dir.join(&file_name)) {
+        return Ok(file_name);
     }
+    owner
+        .convert(request, Caller::Remote(ip))
+        .await
+        .map(|converted| converted.file_name)
+}
+
+/// The reply to a remote conversion: the GLB's name, a 503 asking the client to come back after
+/// `Retry-After` when the host refused for load, or a fixed failure.
+fn conversion_response(
+    model_name: &str,
+    result: Result<String, ConversionError>,
+) -> Response<Body> {
+    match result {
+        Ok(file_name) => Json(ConversionResponse {
+            success: true,
+            output_path: Some(file_name),
+            error: None,
+        })
+        .into_response(),
+        Err(ConversionError::Refused(refusal)) => {
+            tracing::info!(
+                "[Server] Refused converting MSFS model {:?}: {:?}",
+                model_name,
+                refusal
+            );
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                [(header::RETRY_AFTER, CONVERSION_RETRY_AFTER_SECS)],
+                Json(serde_json::json!({ "success": false, "error": "busy" })),
+            )
+                .into_response()
+        }
+        Err(e) => conversion_failed(model_name, &e.to_string()),
+    }
+}
+
+/// A failed remote conversion's fixed reply; the detail (the converter's stderr included) names
+/// host paths, so it stays in the host log.
+fn conversion_failed(model_name: &str, detail: &str) -> Response<Body> {
+    tracing::error!(
+        "[Server] Converting MSFS model {:?} failed: {}",
+        model_name,
+        detail
+    );
+    Json(ConversionResponse {
+        success: false,
+        output_path: None,
+        error: Some("Model conversion failed".to_string()),
+    })
+    .into_response()
 }
 
 /// GET /api/tower-positions - Custom tower positions JSON
@@ -2410,6 +2506,85 @@ mod tests {
         let reply = serde_json::to_value(vec![entry]).expect("serialise");
         assert_holds_no_host_path(&reply);
         assert_eq!(entry_keys(&reply), key_set(&["name", "manifest"]));
+    }
+
+    /// The index entry of livery `title` of the FSLTL Boeing 737 `conversion::test_support` uses.
+    fn index_entry(title: &str) -> SourceModelInfo {
+        let folder = "C:/Community/fsltl-traffic-base/SimObjects/Airplanes/FSLTL_B738_ZZZZ";
+        SourceModelInfo {
+            source: "fsltl".to_string(),
+            model_name: title.to_string(),
+            folder_name: "FSLTL_B738_ZZZZ".to_string(),
+            aircraft_folder_path: folder.to_string(),
+            gltf_path: format!("{folder}/model/B738.gltf"),
+            texture_dirs: vec![format!("{folder}/texture.AAL")],
+            aircraft_type: "B738".to_string(),
+            airline_code: Some("AAL".to_string()),
+            atc_id: None,
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_refused_remote_conversion_answers_503_with_retry_after() {
+        use crate::conversion::test_support::{remote, request, start, FakeRunner, TempDir};
+
+        let dir = TempDir::new("server-refused");
+        let (runner, mut control) = FakeRunner::new();
+        let owner = ConversionOwner::new(runner);
+        let _running = start(&owner, request(&dir.0, "Running"), remote(7));
+        control.next_spawn().await;
+
+        let ip = IpAddr::from([192, 168, 1, 7]);
+        let refused =
+            convert_for_remote(&owner, &index_entry("Second"), dir.0.clone(), "1k", ip).await;
+        let response = conversion_response("Second", refused);
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.headers()[header::RETRY_AFTER], "30");
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("read body");
+        let body: serde_json::Value = serde_json::from_slice(&body).expect("JSON body");
+        assert_eq!(
+            body,
+            serde_json::json!({ "success": false, "error": "busy" })
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn an_accepted_glb_already_cached_is_answered_without_converting() {
+        use crate::conversion::test_support::{write_glb, FakeRunner, TempDir};
+
+        let dir = TempDir::new("server-cached");
+        write_glb(&dir.0.join("fsltl_Cached.glb"));
+        let (runner, control) = FakeRunner::new();
+        let owner = ConversionOwner::new(runner);
+
+        let ip = IpAddr::from([192, 168, 1, 8]);
+        let answer =
+            convert_for_remote(&owner, &index_entry("Cached"), dir.0.clone(), "1k", ip).await;
+
+        assert_eq!(answer, Ok("fsltl_Cached.glb".to_string()));
+        assert_eq!(control.spawn_count(), 0, "the converter was started");
+    }
+
+    #[test]
+    fn only_top_level_glb_files_are_served_from_the_model_cache() {
+        for served in ["fsltl_A.glb", "/fsltl_A.glb", "aig_B C.GLB"] {
+            assert!(is_servable_model_name(served), "{served:?} refused");
+        }
+        for refused in [
+            ".x.123.tmp",
+            ".fsltl_A.glb.123.tmp",
+            ".hidden.glb",
+            "sub/fsltl_A.glb",
+            "sub\\fsltl_A.glb",
+            "fsltl_A.gltf",
+            ".glb",
+            "",
+        ] {
+            assert!(!is_servable_model_name(refused), "{refused:?} served");
+        }
     }
 
     #[test]

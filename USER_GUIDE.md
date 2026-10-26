@@ -168,7 +168,7 @@ The indicator uses source-aware thresholds: vNAS data is considered stale after 
 ### Limitations in Remote Mode
 
 - **Configuration Settings:** Global settings (Cesium token, MSFS paths, etc.) are managed by the host. The Configuration tab shows a notice explaining this.
-- **FSLTL Conversion:** Model conversion can only be performed on the desktop app (requires file system access)
+- **FSLTL Conversion:** Models are converted on the host PC, using its texture scale. A browser converts one model at a time and shares the host with the desktop app, so when the host is busy a model may appear a little later; the browser asks again by itself, up to 3 times
 - **Updates:** Update checks and downloads happen on the host PC only
 - **Mods:** All mods must be installed on the host PC (remote clients access them via HTTP)
 

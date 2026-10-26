@@ -29,6 +29,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tokio::sync::broadcast;
 
 // Module declarations
+pub mod conversion;
 pub mod files;
 pub mod mods;
 pub mod msfs;
@@ -43,49 +44,26 @@ pub use msfs::SourceModelInfo;
 pub use settings::GlobalSettings;
 
 #[cfg(windows)]
-use windows_sys::Win32::Foundation::CloseHandle;
-#[cfg(windows)]
-use windows_sys::Win32::System::JobObjects::{
-    AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
-    SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-    JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
-};
+use conversion::JobObject;
 
 // =============================================================================
 // PROCESS MANAGEMENT (for FSLTL converter)
 // =============================================================================
 
-/// Wrapper for a Windows HANDLE that is Send-safe
-/// Job handles are thread-safe kernel objects, safe to send between threads
-#[cfg(windows)]
-struct SendableHandle(*mut std::ffi::c_void);
-
-#[cfg(windows)]
-unsafe impl Send for SendableHandle {}
-
 /// Wrapper for a process and its associated job object (Windows)
-/// The job object ensures all child processes are killed when we terminate
+/// The job object ensures all child processes are killed when we terminate:
+/// dropping it closes the job, which ends every process in it
 struct ProcessWithJob {
     child: Child,
     #[cfg(windows)]
-    job_handle: SendableHandle,
+    job: Option<JobObject>,
 }
 
+#[cfg(not(windows))]
 impl Drop for ProcessWithJob {
     fn drop(&mut self) {
-        #[cfg(windows)]
-        {
-            // Closing the job handle terminates all processes in the job
-            // due to JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE flag
-            if !self.job_handle.0.is_null() {
-                unsafe { CloseHandle(self.job_handle.0) };
-            }
-        }
-        #[cfg(not(windows))]
-        {
-            // On non-Windows, explicitly kill the child process
-            let _ = self.child.kill();
-        }
+        // On non-Windows, explicitly kill the child process
+        let _ = self.child.kill();
     }
 }
 
@@ -568,41 +546,7 @@ fn start_fsltl_conversion(
     models: Vec<String>,
     progress_file: String,
 ) -> Result<(), String> {
-    // Try multiple locations for the converter:
-    // 1. Resource directory (production build - bundled resources preserve directory structure)
-    // 2. src-tauri/resources (dev mode)
-    // 3. Fallback paths
-    let resource_path = app
-        .path()
-        .resource_dir()
-        .map_err(|e| format!("Failed to get resource directory: {}", e))?;
-
-    // In dev mode, CARGO_MANIFEST_DIR points to src-tauri/
-    let dev_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("resources")
-        .join(CONVERTER_BIN);
-
-    let possible_paths = [
-        // Production: bundled resources preserve directory structure
-        resource_path.join("resources").join(CONVERTER_BIN),
-        // Dev mode: relative to src-tauri/
-        dev_path,
-        // Fallback paths
-        PathBuf::from("src-tauri/resources").join(CONVERTER_BIN),
-        PathBuf::from(CONVERTER_BIN),
-    ];
-
-    let converter_path =
-        possible_paths
-            .iter()
-            .find(|p| p.exists())
-            .ok_or_else(|| {
-                format!(
-                    "Converter executable not found. Tried: {:?}. Run 'pnpm run build:converter' first.",
-                    possible_paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>()
-                )
-            })?
-            .clone();
+    let converter_path = conversion::find_converter(&app)?;
 
     // Build command arguments
     let mut cmd = Command::new(&converter_path);
@@ -647,41 +591,11 @@ fn start_fsltl_conversion(
     // This ensures all child processes (gltf-transform, etc.) are killed together
     #[cfg(windows)]
     let process_with_job = {
-        let job_handle = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
-        if job_handle.is_null() {
-            return Err("Failed to create job object".to_string());
-        }
-
-        // Configure job to kill all processes when the job handle is closed
-        let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = unsafe { std::mem::zeroed() };
-        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-
-        let success = unsafe {
-            SetInformationJobObject(
-                job_handle,
-                JobObjectExtendedLimitInformation,
-                &info as *const _ as *const _,
-                std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
-            )
-        };
-
-        if success == 0 {
-            unsafe { CloseHandle(job_handle) };
-            return Err("Failed to configure job object".to_string());
-        }
-
-        // Assign the process to the job
-        let process_handle = child.as_raw_handle();
-        let success = unsafe { AssignProcessToJobObject(job_handle, process_handle) };
-
-        if success == 0 {
-            unsafe { CloseHandle(job_handle) };
-            return Err("Failed to assign process to job object".to_string());
-        }
-
+        let job = JobObject::kill_on_close()?;
+        job.assign(child.as_raw_handle())?;
         ProcessWithJob {
             child,
-            job_handle: SendableHandle(job_handle),
+            job: Some(job),
         }
     };
 
@@ -707,12 +621,7 @@ fn cancel_fsltl_conversion() -> Result<(), String> {
             // The JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE flag terminates all processes
             // when the handle is closed
             #[cfg(windows)]
-            {
-                if !proc.job_handle.0.is_null() {
-                    unsafe { CloseHandle(proc.job_handle.0) };
-                    proc.job_handle.0 = std::ptr::null_mut(); // Prevent double-close in Drop
-                }
-            }
+            drop(proc.job.take());
 
             // On non-Windows, explicitly kill the parent process
             #[cfg(not(windows))]
@@ -883,6 +792,11 @@ pub fn run() {
         .plugin(window_state_plugin())
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
+            // The one owner of every model conversion, for the host window and the HTTP server
+            app.manage(conversion::ConversionOwner::new(std::sync::Arc::new(
+                conversion::BundledConverter::new(app.handle().clone()),
+            )));
+
             // Register updater plugin (desktop only)
             #[cfg(desktop)]
             app.handle()

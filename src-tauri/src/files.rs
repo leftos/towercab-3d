@@ -336,29 +336,5 @@ pub fn read_conversion_progress(progress_file: String) -> Result<FSLTLProgress, 
 /// Get the bundled converter executable path
 #[tauri::command]
 pub fn get_converter_path(app: tauri::AppHandle) -> Result<String, String> {
-    use crate::CONVERTER_BIN;
-    use tauri::Manager;
-
-    let resource_path = app
-        .path()
-        .resource_dir()
-        .map_err(|e| format!("Failed to get resource directory: {}", e))?;
-
-    // In dev mode, CARGO_MANIFEST_DIR points to src-tauri/
-    let dev_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("resources")
-        .join(CONVERTER_BIN);
-
-    let possible_paths = [
-        // Production: bundled resources preserve directory structure
-        resource_path.join("resources").join(CONVERTER_BIN),
-        // Dev mode: relative to src-tauri/
-        dev_path,
-    ];
-
-    possible_paths
-        .iter()
-        .find(|p| p.exists())
-        .map(|p| p.to_string_lossy().to_string())
-        .ok_or_else(|| "Converter executable not found".to_string())
+    crate::conversion::find_converter(&app).map(|path| path.to_string_lossy().to_string())
 }

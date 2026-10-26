@@ -40,7 +40,7 @@ tauri-plugin-deep-link = "~2.5"
 axum = { version = "0.7", features = ["ws"] }  # ws feature for WebSocket support
 flate2 = "1.0"  # For gzip decompression (airport surfaces data)
 tower-http = { version = "0.5", features = ["cors", "fs", "trace"] }
-tokio = { version = "1", features = ["rt-multi-thread", "net", "sync"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "sync", "process", "time", "io-util", "macros"] }
 mime_guess = "2"
 url = "2"  # For proper URL parsing in proxy validation
 futures-util = { version = "0.3", features = ["sink"] }  # For WebSocket stream handling
@@ -62,6 +62,9 @@ towercab-3d-vnas = { path = "vnas-stub", optional = true }
 # Enable vNAS real-time updates (requires access to private towercab-3d-vnas repo)
 # Without this feature, the app falls back to VATSIM HTTP polling (15-second updates)
 vnas = ["dep:towercab-3d-vnas"]
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt", "test-util"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_System_JobObjects", "Win32_System_Threading", "Win32_Foundation", "Win32_Security"] }

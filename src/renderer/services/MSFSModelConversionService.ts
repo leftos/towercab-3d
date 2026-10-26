@@ -103,13 +103,21 @@ export interface MSFSDetectionResult {
   aigModelCount?: number
 }
 
+/** A conversion waiting for a free slot */
+interface QueuedConversion {
+  sourceInfo: SourceModelInfo
+  resolve: (result: ConversionResult) => void
+  aircraftPosition?: { lat: number; lon: number }
+  /** Times the host has refused this conversion for load so far */
+  refusals: number
+}
+
 // =============================================================================
 // Constants
 // =============================================================================
 
 /**
  * Converter version - must match CONVERTER_VERSION in convert_fsltl_batch.py
- * and CONVERTER_VERSION in msfs.rs
  * Increment this when converter logic changes to invalidate old cached GLB files
  * Version history:
  *   1: Initial version with source metadata embedding
@@ -140,18 +148,20 @@ class MSFSModelConversionServiceClass {
   /** Total size of cached models in bytes */
   private totalCacheSize = 0
 
-  /** Maximum concurrent conversions */
-  private readonly MAX_CONCURRENT = 2
+  /** Maximum concurrent conversions: the host converts one at a time per remote browser */
+  private readonly MAX_CONCURRENT = isTauri() ? 2 : 1
 
   /** Current number of active conversions */
   private activeConversions = 0
 
+  /** Times a model the host refused for load (HTTP 503) is asked for again */
+  private readonly MAX_REFUSAL_RETRIES = 3
+
+  /** Seconds to wait after a refusal that carries no usable `Retry-After` */
+  private readonly DEFAULT_RETRY_AFTER_S = 30
+
   /** Queue of pending conversion requests */
-  private conversionQueue: Array<{
-    sourceInfo: SourceModelInfo
-    resolve: (result: ConversionResult) => void
-    aircraftPosition?: { lat: number; lon: number }
-  }> = []
+  private conversionQueue: QueuedConversion[] = []
 
   /** Current camera position for distance-based queue prioritization */
   private cameraPosition: { lat: number; lon: number } | null = null
@@ -1086,11 +1096,29 @@ class MSFSModelConversionServiceClass {
       return status.promise
     }
 
-    // Check disk cache (if enabled)
+    // Record the conversion before the first await, so a second call for the same model joins it
+    const promise = this.convertUncached(sourceInfo, modelKey, aircraftPosition)
+    this.conversionStatus.set(modelKey, {
+      converting: true,
+      promise,
+      startedAt: Date.now(),
+    })
+    return promise
+  }
+
+  /**
+   * Answer from the disk cache when the model is there, else queue its conversion
+   */
+  private async convertUncached(
+    sourceInfo: SourceModelInfo,
+    modelKey: string,
+    aircraftPosition?: { lat: number; lon: number },
+  ): Promise<ConversionResult> {
     const settings = this.getSettings()
     if (settings.cacheDirectory) {
       const diskPath = await this.checkDiskCache(modelKey, settings.cacheDirectory)
       if (diskPath) {
+        this.conversionStatus.set(modelKey, { converting: false })
         return { success: true, glbPath: diskPath }
       }
     }
@@ -1113,7 +1141,7 @@ class MSFSModelConversionServiceClass {
     const promise = new Promise<ConversionResult>((resolve) => {
       // Always queue first, then let processQueue() sort by distance and start
       // This ensures closer aircraft are prioritized even when there's capacity
-      this.conversionQueue.push({ sourceInfo, resolve, aircraftPosition })
+      this.conversionQueue.push({ sourceInfo, resolve, aircraftPosition, refusals: 0 })
     })
 
     // Track conversion status
@@ -1132,17 +1160,17 @@ class MSFSModelConversionServiceClass {
   /**
    * Execute a model conversion
    */
-  private async executeConversion(
-    sourceInfo: SourceModelInfo,
-    resolve: (result: ConversionResult) => void,
-  ): Promise<void> {
+  private async executeConversion(item: QueuedConversion): Promise<void> {
+    const { sourceInfo, resolve } = item
     this.activeConversions++
     const modelKey = this.getModelKey(sourceInfo)
+    // A conversion waiting to retry after a refusal is still in progress
+    let retrying = false
 
     try {
       // In remote browser mode, use HTTP API
       if (!isTauri()) {
-        await this.executeRemoteConversion(sourceInfo, resolve, modelKey)
+        retrying = (await this.executeRemoteConversion(item, modelKey)) === 'retry'
         return
       }
 
@@ -1226,7 +1254,9 @@ class MSFSModelConversionServiceClass {
       resolve({ success: false, error: message })
     } finally {
       this.activeConversions--
-      this.conversionStatus.set(modelKey, { converting: false })
+      if (!retrying) {
+        this.conversionStatus.set(modelKey, { converting: false })
+      }
 
       // Process next queued conversion
       this.processQueue()
@@ -1234,13 +1264,12 @@ class MSFSModelConversionServiceClass {
   }
 
   /**
-   * Execute model conversion via remote HTTP API (for browser mode)
+   * Execute model conversion via remote HTTP API (for browser mode).
+   * Returns 'retry' when the host refused for load (HTTP 503) and the conversion is queued
+   * again after its `Retry-After`; the caller frees the slot meanwhile.
    */
-  private async executeRemoteConversion(
-    sourceInfo: SourceModelInfo,
-    resolve: (result: ConversionResult) => void,
-    modelKey: string,
-  ): Promise<void> {
+  private async executeRemoteConversion(item: QueuedConversion, modelKey: string): Promise<'done' | 'retry'> {
+    const { sourceInfo, resolve } = item
     try {
       const settings = this.getSettings()
 
@@ -1252,6 +1281,10 @@ class MSFSModelConversionServiceClass {
           texture_scale: settings.textureScale,
         }),
       })
+
+      if (response.status === 503) {
+        return this.handleRefusal(item, modelKey, response.headers.get('Retry-After'))
+      }
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`)
@@ -1294,11 +1327,28 @@ class MSFSModelConversionServiceClass {
       console.error(`[MSFSConversion] Remote conversion failed for ${modelKey}:`, message)
       this.failedConversions.add(modelKey)
       resolve({ success: false, error: message })
-    } finally {
-      this.activeConversions--
-      this.conversionStatus.set(modelKey, { converting: false })
-      this.processQueue()
     }
+    return 'done'
+  }
+
+  /**
+   * The host refused a conversion for load: queue it again after `Retry-After` seconds, up to
+   * MAX_REFUSAL_RETRIES times, then give up for now. A refusal never marks the model failed.
+   */
+  private handleRefusal(item: QueuedConversion, modelKey: string, retryAfter: string | null): 'done' | 'retry' {
+    if (item.refusals >= this.MAX_REFUSAL_RETRIES) {
+      console.warn(`[MSFSConversion] Host stayed busy for ${modelKey}; giving up for now`)
+      item.resolve({ success: false, error: 'Host busy' })
+      return 'done'
+    }
+    const seconds = Number.parseInt(retryAfter ?? '', 10)
+    const delaySeconds = Number.isFinite(seconds) && seconds >= 0 ? seconds : this.DEFAULT_RETRY_AFTER_S
+    console.info(`[MSFSConversion] Host busy for ${modelKey}; retrying in ${delaySeconds}s`)
+    setTimeout(() => {
+      this.conversionQueue.push({ ...item, refusals: item.refusals + 1 })
+      this.processQueue()
+    }, delaySeconds * 1000)
+    return 'retry'
   }
 
   /**
@@ -1335,7 +1385,7 @@ class MSFSModelConversionServiceClass {
     while (this.activeConversions < this.MAX_CONCURRENT && this.conversionQueue.length > 0) {
       const next = this.conversionQueue.shift()
       if (next) {
-        this.executeConversion(next.sourceInfo, next.resolve)
+        this.executeConversion(next)
       }
     }
   }

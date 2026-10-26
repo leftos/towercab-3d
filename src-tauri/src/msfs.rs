@@ -11,13 +11,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use tauri::{Emitter, Manager};
 
-#[cfg(windows)]
-use std::os::windows::process::CommandExt;
-
-use crate::{normalize_path_string, to_extended_length_path, CONVERTER_BIN};
+use crate::conversion::{Caller, ConversionOwner, ConversionRequest};
+use crate::normalize_path_string;
 
 // =============================================================================
 // TYPES
@@ -1679,7 +1676,7 @@ pub async fn list_aig_models(
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn convert_msfs_model(
-    app: tauri::AppHandle,
+    owner: tauri::State<'_, ConversionOwner>,
     source_path: String,
     folder_name: String,
     output_dir: String,
@@ -1689,154 +1686,42 @@ pub async fn convert_msfs_model(
     texture_dirs: Option<Vec<String>>,
 ) -> Result<MSFSConversionResult, String> {
     let start_time = std::time::Instant::now();
-
-    // Find the converter executable
-    let resource_path = app
-        .path()
-        .resource_dir()
-        .map_err(|e| format!("Failed to get resource directory: {}", e))?;
-
-    let dev_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("resources")
-        .join(CONVERTER_BIN);
-
-    let possible_paths = [
-        resource_path.join("resources").join(CONVERTER_BIN),
-        dev_path,
-        PathBuf::from("src-tauri/resources").join(CONVERTER_BIN),
-        PathBuf::from(CONVERTER_BIN),
-    ];
-
-    let converter_path = possible_paths
-        .iter()
-        .find(|p| p.exists())
-        .ok_or_else(|| "Converter executable not found in resources/".to_string())?
-        .clone();
-
-    // Create output directory if needed
-    fs::create_dir_all(&output_dir)
-        .map_err(|e| format!("Failed to create output directory: {}", e))?;
-
-    // Build command arguments with extended-length paths to support paths > 260 chars on Windows
-    let ext_source = to_extended_length_path(&source_path);
-    let ext_output = to_extended_length_path(&output_dir);
-
-    let mut cmd = Command::new(&converter_path);
-    cmd.args([
-        "--source",
-        &ext_source,
-        "--output",
-        &ext_output,
-        "--texture-scale",
-        &texture_scale,
-    ]);
-
-    // Pass the specific livery title to convert only that livery
-    if !livery_title.is_empty() {
-        cmd.args(["--liveries", &livery_title]);
-    }
-
-    // Use --no-discovery mode: Rust has already resolved all paths via model.cfg parsing,
-    // so we skip Python's discovery and pass all required data directly.
-    // This ensures consistent behavior - Rust is the single source of truth for path resolution.
-    let use_no_discovery = gltf_path.as_ref().is_some_and(|p| !p.is_empty())
-        && texture_dirs.as_ref().is_some_and(|t| !t.is_empty())
-        && !livery_title.is_empty();
-
-    if use_no_discovery {
-        cmd.arg("--no-discovery");
-    }
-
-    // Pass GLTF path (required for --no-discovery, optional otherwise)
-    if let Some(gltf) = &gltf_path {
-        if !gltf.is_empty() {
-            let ext_gltf = to_extended_length_path(gltf);
-            cmd.args(["--gltf-path", &ext_gltf]);
-        }
-    }
-
-    // Pass texture directories (required for --no-discovery, optional otherwise)
-    if let Some(tex_dirs) = &texture_dirs {
-        if !tex_dirs.is_empty() {
-            // Convert each texture directory to extended-length path
-            let ext_tex_dirs: Vec<String> = tex_dirs
-                .iter()
-                .map(|d| to_extended_length_path(d))
-                .collect();
-            let tex_dirs_str = ext_tex_dirs.join(",");
-            cmd.args(["--texture-dirs", &tex_dirs_str]);
-        }
-    }
-
-    // Hide console window on Windows
-    #[cfg(windows)]
-    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
-
-    // Execute and wait for completion
-    let output = cmd
-        .output()
-        .map_err(|e| format!("Failed to execute converter: {}", e))?;
-
+    let request = ConversionRequest {
+        source_path,
+        livery_title,
+        gltf_path: gltf_path.unwrap_or_default(),
+        texture_dirs: texture_dirs.unwrap_or_default(),
+        texture_scale,
+        output_dir: PathBuf::from(output_dir),
+    };
+    let result = owner.convert(request, Caller::Host).await;
     let duration_ms = start_time.elapsed().as_millis() as u64;
 
-    // Log command output for debugging
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    if !stderr.is_empty() {
-        tracing::info!("[MSFSConvert] stderr: {}", stderr);
-    }
-    if !stdout.is_empty() {
-        tracing::info!("[MSFSConvert] stdout: {}", stdout);
-    }
-
-    if output.status.success() {
-        // Construct expected output path (matches Python converter naming)
-        // Python creates: {outputDir}/{source}_{liveryTitle}.glb
-        let source_type = if folder_name.to_lowercase().starts_with("fsltl") {
-            "fsltl"
-        } else {
-            "aig"
-        };
-        let output_file = format!("{}_{}.glb", source_type, livery_title);
-        let output_path = PathBuf::from(&output_dir).join(&output_file);
-        let output_path_str = normalize_path_string(&output_path);
-
-        tracing::info!(
-            "[MSFSConvert] Converted {} in {}ms -> {}",
-            folder_name,
-            duration_ms,
-            output_path_str
-        );
-        Ok(MSFSConversionResult {
-            success: true,
-            output_path: Some(output_path_str),
-            error: None,
-            duration_ms,
-        })
-    } else {
-        let error_msg = if !stderr.is_empty() {
-            stderr.to_string()
-        } else if !stdout.is_empty() {
-            stdout.to_string()
-        } else {
-            format!(
-                "Conversion failed with exit code: {:?}",
-                output.status.code()
-            )
-        };
-
-        tracing::info!(
-            "[MSFSConvert] Failed to convert {}: {}",
-            folder_name,
-            error_msg
-        );
-
-        Ok(MSFSConversionResult {
-            success: false,
-            output_path: None,
-            error: Some(error_msg),
-            duration_ms,
-        })
+    match result {
+        Ok(converted) => {
+            let output_path_str = normalize_path_string(&converted.output_path);
+            tracing::info!(
+                "[MSFSConvert] Converted {} in {}ms -> {}",
+                folder_name,
+                duration_ms,
+                output_path_str
+            );
+            Ok(MSFSConversionResult {
+                success: true,
+                output_path: Some(output_path_str),
+                error: None,
+                duration_ms,
+            })
+        }
+        Err(e) => {
+            tracing::info!("[MSFSConvert] Failed to convert {}: {}", folder_name, e);
+            Ok(MSFSConversionResult {
+                success: false,
+                output_path: None,
+                error: Some(e.to_string()),
+                duration_ms,
+            })
+        }
     }
 }
 
@@ -1910,6 +1795,34 @@ fn read_glb_declared_length(glb_path: &std::path::Path) -> Option<u64> {
     Some(u64::from(declared))
 }
 
+/// Why a GLB fails the cache scan's check.
+pub(crate) enum GlbDefect {
+    /// The header could not be read
+    Unreadable,
+    /// The header declares a length other than the file's size
+    LengthMismatch { declared: u64 },
+}
+
+/// The cache scan's check of a GLB of `file_size` bytes: a readable header declaring that size.
+pub(crate) fn check_glb_length(glb_path: &Path, file_size: u64) -> Result<(), GlbDefect> {
+    match read_glb_declared_length(glb_path) {
+        None => Err(GlbDefect::Unreadable),
+        Some(declared) if declared != file_size => Err(GlbDefect::LengthMismatch { declared }),
+        Some(_) => Ok(()),
+    }
+}
+
+/// Whether `glb_path` is a file the cache scan accepts: a `.glb` passing `check_glb_length`.
+pub(crate) fn is_accepted_glb(glb_path: &Path) -> bool {
+    let is_glb = glb_path
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("glb"));
+    let Ok(metadata) = fs::metadata(glb_path) else {
+        return false;
+    };
+    is_glb && metadata.is_file() && check_glb_length(glb_path, metadata.len()).is_ok()
+}
+
 /// Scan cache directory for existing GLB files
 /// Returns info about each cached model for loading into memory cache
 #[tauri::command]
@@ -1957,15 +1870,15 @@ fn scan_cache_dir_sync(cache_dir: &std::path::Path) -> Result<Vec<CachedGlbInfo>
         let file_size = entry.metadata().map(|m| m.len()).unwrap_or(0);
         // A GLB that cannot be validated is listed without a version, which the app
         // treats as outdated: it deletes the file and converts the model again
-        let converter_version = match read_glb_declared_length(&path) {
-            None => {
+        let converter_version = match check_glb_length(&path, file_size) {
+            Err(GlbDefect::Unreadable) => {
                 tracing::warn!(
                     "[MSFSDetection] Could not read the GLB header, reconverting: {}",
                     path.display()
                 );
                 None
             }
-            Some(declared) if declared != file_size => {
+            Err(GlbDefect::LengthMismatch { declared }) => {
                 tracing::warn!(
                     "[MSFSDetection] GLB header length {} does not match file size {}, \
                      reconverting: {}",
@@ -1975,7 +1888,7 @@ fn scan_cache_dir_sync(cache_dir: &std::path::Path) -> Result<Vec<CachedGlbInfo>
                 );
                 None
             }
-            Some(_) => get_glb_converter_version(&path),
+            Ok(()) => get_glb_converter_version(&path),
         };
         cached_models.push(CachedGlbInfo {
             path: normalize_path_string(&path),
@@ -2090,134 +2003,63 @@ pub fn remote_cached_models(models: Vec<CachedGlbInfo>) -> Vec<RemoteCachedModel
         .collect()
 }
 
-/// Convert a model by name - looks up the model in the index and triggers conversion
-/// Returns the relative path to the converted GLB file
-pub fn convert_model_by_name(
+/// The index entry a remote client converts by `model_name` (its `aircraft.cfg` title): the first
+/// match in the FSLTL index, then the AIG one, each read only while its source is enabled, as the
+/// host indexes them.
+pub fn find_index_entry(
     app: &tauri::AppHandle,
+    settings: &crate::settings::MsfsModelSettings,
     model_name: &str,
-    texture_scale: &str,
-) -> Result<String, String> {
-    // First, find the model in the index
+) -> Result<Option<SourceModelInfo>, String> {
     let cache_dir = app
         .path()
         .app_data_dir()
         .map_err(|e| format!("Failed to get app data dir: {}", e))?;
 
-    // Search in both FSLTL and AIG caches
-    let mut found_model: Option<SourceModelInfo> = None;
-
-    for source in ["fsltl", "aig"] {
+    for (source, enabled) in [
+        ("fsltl", settings.enable_fsltl),
+        ("aig", settings.enable_aig),
+    ] {
+        if !enabled {
+            continue;
+        }
         let cache_path = cache_dir.join(format!("{}_model_cache.json", source));
-        if cache_path.exists() {
-            if let Ok(content) = fs::read_to_string(&cache_path) {
-                if let Ok(cache) = serde_json::from_str::<ModelIndexCache>(&content) {
-                    // Search by model_name (display name from aircraft.cfg title)
-                    if let Some(model) = cache.models.iter().find(|m| m.model_name == model_name) {
-                        found_model = Some(model.clone());
-                        break;
-                    }
-                }
+        if !cache_path.exists() {
+            continue;
+        }
+        let content = match fs::read_to_string(&cache_path) {
+            Ok(content) => content,
+            Err(e) => {
+                tracing::warn!(
+                    "[MSFSConvert] Could not read the {} model index {}: {}",
+                    source,
+                    cache_path.display(),
+                    e
+                );
+                continue;
             }
+        };
+        let cache = match serde_json::from_str::<ModelIndexCache>(&content) {
+            Ok(cache) => cache,
+            Err(e) => {
+                tracing::warn!(
+                    "[MSFSConvert] Could not parse the {} model index {}: {}",
+                    source,
+                    cache_path.display(),
+                    e
+                );
+                continue;
+            }
+        };
+        if let Some(model) = cache
+            .models
+            .into_iter()
+            .find(|m| m.model_name == model_name)
+        {
+            return Ok(Some(model));
         }
     }
-
-    let model = found_model.ok_or_else(|| format!("Model not found: {}", model_name))?;
-
-    // Get the cache directory from settings
-    let settings_file = crate::settings::get_global_settings_file(app)
-        .map_err(|e| format!("Failed to get settings file: {}", e))?;
-
-    let output_dir = if settings_file.exists() {
-        let content = fs::read_to_string(&settings_file)
-            .map_err(|e| format!("Failed to read settings: {}", e))?;
-        let settings: crate::settings::GlobalSettings = serde_json::from_str(&content)
-            .map_err(|e| format!("Failed to parse settings: {}", e))?;
-        settings.msfs_models.cache_directory.clone()
-    } else {
-        None
-    };
-
-    let output_dir = output_dir.ok_or("MSFS model cache directory not configured")?;
-
-    // Find the converter executable
-    let resource_path = app
-        .path()
-        .resource_dir()
-        .map_err(|e| format!("Failed to get resource directory: {}", e))?;
-
-    let dev_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("resources")
-        .join(CONVERTER_BIN);
-
-    let possible_paths = [
-        resource_path.join("resources").join(CONVERTER_BIN),
-        dev_path,
-        PathBuf::from("src-tauri/resources").join(CONVERTER_BIN),
-        PathBuf::from(CONVERTER_BIN),
-    ];
-
-    let converter_path = possible_paths
-        .iter()
-        .find(|p| p.exists())
-        .ok_or_else(|| "Converter executable not found".to_string())?
-        .clone();
-
-    // Create output directory if needed
-    fs::create_dir_all(&output_dir)
-        .map_err(|e| format!("Failed to create output directory: {}", e))?;
-
-    // Build command arguments with extended-length paths to support paths > 260 chars on Windows
-    let ext_source = to_extended_length_path(&model.aircraft_folder_path);
-    let ext_output = to_extended_length_path(&output_dir);
-
-    let mut cmd = Command::new(&converter_path);
-    cmd.args([
-        "--source",
-        &ext_source,
-        "--output",
-        &ext_output,
-        "--texture-scale",
-        texture_scale,
-        "--liveries",
-        &model.model_name,
-    ]);
-
-    // Pass explicit GLTF path if available
-    if !model.gltf_path.is_empty() {
-        let ext_gltf = to_extended_length_path(&model.gltf_path);
-        cmd.args(["--gltf-path", &ext_gltf]);
-    }
-
-    // Pass texture directories if available
-    if !model.texture_dirs.is_empty() {
-        // Convert each texture directory to extended-length path
-        let ext_tex_dirs: Vec<String> = model
-            .texture_dirs
-            .iter()
-            .map(|d| to_extended_length_path(d))
-            .collect();
-        let tex_dirs_str = ext_tex_dirs.join(",");
-        cmd.args(["--texture-dirs", &tex_dirs_str]);
-    }
-
-    // Hide console window on Windows
-    #[cfg(windows)]
-    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
-
-    // Execute and wait for completion
-    let output = cmd
-        .output()
-        .map_err(|e| format!("Failed to execute converter: {}", e))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("Conversion failed: {}", stderr));
-    }
-
-    // Return the relative path to the GLB file
-    // The converter outputs files as {source}_{model_name}.glb (e.g., fsltl_FSLTL_FAIB_B738_American.glb)
-    let glb_filename = format!("{}_{}.glb", model.source, model.model_name);
-    Ok(glb_filename)
+    Ok(None)
 }
 
 #[cfg(test)]

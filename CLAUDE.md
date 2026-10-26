@@ -279,13 +279,18 @@ MSFSModelConversionService (TypeScript)
 ├─ resolveSourceModel() - Find model by name, respects source priority
 ├─ findModelByTypeAndAirline() - Match by aircraft type + airline code
 ├─ findClosestModel() - Dimension-based fallback matching with scale factors
-├─ convertModel() - Queue conversion via Rust backend
+├─ convertModel() - Queue conversion via Rust backend (2 at a time on the desktop; a remote browser asks `POST /api/msfs/convert`, 1 at a time, and retries a 503 up to 3 times)
 └─ Cache management - Memory + disk cache with LRU eviction
+
+conversion.rs (Rust backend) - ConversionOwner, the only place a converter is started
+├─ convert(request, Caller::Host | Caller::Remote(ip)) - converter lookup, arguments, output name, job object
+├─ Limits: 2 converters in all, 1 for remote browsers (1 per IP, 8 waiting), 5 min run, 2 min remote queue wait
+└─ Callers for one output file share one job; a refused remote request is HTTP 503 + Retry-After
 
 msfs.rs (Rust backend)
 ├─ detect_msfs_installations() - Find FSLTL/AIG folders
 ├─ list_fsltl_models() / list_aig_models() - Parse aircraft.cfg, index liveries with their own texture folders and texture.cfg fallbacks
-├─ convert_msfs_model() - Execute Python converter sidecar
+├─ convert_msfs_model() - Host command; awaits the ConversionOwner
 ├─ Model index caching - JSON cache files for fast re-indexing
 └─ scan_cache_directory() - Load pre-converted models on startup
 
@@ -313,7 +318,8 @@ uv run --no-project --python 3.12 --with pillow --with numpy python -m unittest 
 | File | Purpose |
 |------|---------|
 | `src/renderer/services/MSFSModelConversionService.ts` | Frontend conversion service |
-| `src-tauri/src/msfs.rs` | Rust backend for detection, indexing, conversion |
+| `src-tauri/src/conversion.rs` | The one owner of every conversion: spawn, limits, timeout (never start the converter elsewhere) |
+| `src-tauri/src/msfs.rs` | Rust backend for detection, indexing, the conversion command |
 | `scripts/shipping/conversion/convert_fsltl_batch.py` | Python converter (source) |
 | `src-tauri/resources/fsltl_converter.exe` | Bundled converter executable |
 | `scripts/shipping/build/build_converter.py` | Builds the Python converter |
@@ -336,9 +342,11 @@ With no MSFS match, `getModelInfo` goes on to custom VMR mods, the built-in mapp
 - `communityPath`: MSFS Community folder location
 - `enableFsltl` / `enableAig`: Toggle each source
 - `priority`: Source priority order (`['fsltl', 'aig']`)
-- `textureScale`: Texture downscaling (`'full'` | `'2k'` | `'1k'` | `'512'`)
+- `textureScale`: Texture downscaling (`'full'` | `'2k'` | `'1k'` | `'512'`); remote conversions always use the host's
 - `cacheDirectory`: Where to store converted GLB files
 - `cacheLimitMB`: Max cache size (LRU eviction when exceeded)
+
+`enableFsltl`, `enableAig`, `textureScale` and `cacheLimitMB` are host-owned (a remote write keeps the host's values); `communityPath`, `cacheDirectory` and `vmrFiles` are host-private.
 
 ## Build Configuration
 

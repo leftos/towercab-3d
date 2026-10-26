@@ -617,13 +617,13 @@ pub const FIELD_CLASSES: &[(&str, FieldClass)] = &[
     ("fsltl.textureScale", FieldClass::Public),
     ("fsltl.enableFsltlModels", FieldClass::Public),
     ("msfsModels.communityPath", FieldClass::HostPrivate),
-    ("msfsModels.enableFsltl", FieldClass::Public),
-    ("msfsModels.enableAig", FieldClass::Public),
+    ("msfsModels.enableFsltl", FieldClass::HostOwned),
+    ("msfsModels.enableAig", FieldClass::HostOwned),
     ("msfsModels.priority", FieldClass::Public),
     ("msfsModels.vmrFiles", FieldClass::HostPrivate),
     ("msfsModels.cacheDirectory", FieldClass::HostPrivate),
-    ("msfsModels.cacheLimitMB", FieldClass::Public),
-    ("msfsModels.textureScale", FieldClass::Public),
+    ("msfsModels.cacheLimitMB", FieldClass::HostOwned),
+    ("msfsModels.textureScale", FieldClass::HostOwned),
     ("msfsModels.skipGenericVmrMatches", FieldClass::Public),
     ("airports.defaultIcao", FieldClass::Public),
     ("airports.recentAirports", FieldClass::Public),
@@ -920,6 +920,10 @@ pub fn merge_remote_write(existing: &GlobalSettings, incoming: GlobalSettings) -
     merged.msfs_models.community_path = existing.msfs_models.community_path.clone();
     merged.msfs_models.vmr_files = existing.msfs_models.vmr_files.clone();
     merged.msfs_models.cache_directory = existing.msfs_models.cache_directory.clone();
+    merged.msfs_models.enable_fsltl = existing.msfs_models.enable_fsltl;
+    merged.msfs_models.enable_aig = existing.msfs_models.enable_aig;
+    merged.msfs_models.cache_limit_mb = existing.msfs_models.cache_limit_mb;
+    merged.msfs_models.texture_scale = existing.msfs_models.texture_scale.clone();
     merged.server = existing.server.clone();
     merged.realtraffic.license_key = existing.realtraffic.license_key.clone();
     merged.vnas_tokens = existing.vnas_tokens.clone();
@@ -1922,6 +1926,27 @@ mod tests {
                 "remote write changed host-owned {path}"
             );
         }
+    }
+
+    #[test]
+    fn remote_write_keeps_the_host_model_conversion_settings() {
+        let mut host = populated();
+        host.msfs_models.cache_limit_mb = Some(2048);
+        host.msfs_models.texture_scale = "2k".to_string();
+        host.msfs_models.enable_fsltl = true;
+        host.msfs_models.enable_aig = false;
+        let mut incoming = remote_view(&host);
+        incoming.msfs_models.cache_limit_mb = None;
+        incoming.msfs_models.texture_scale = "512".to_string();
+        incoming.msfs_models.enable_fsltl = false;
+        incoming.msfs_models.enable_aig = true;
+
+        let merged = merge_remote_write(&host, incoming).msfs_models;
+
+        assert_eq!(merged.cache_limit_mb, Some(2048), "cacheLimitMB");
+        assert_eq!(merged.texture_scale, "2k", "textureScale");
+        assert!(merged.enable_fsltl, "enableFsltl");
+        assert!(!merged.enable_aig, "enableAig");
     }
 
     #[test]

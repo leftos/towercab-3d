@@ -24,8 +24,11 @@ Our converter transforms these into self-contained GLB files with embedded PNG t
 │  - Manages conversion queue and caching                         │
 │  - Calls Rust backend for conversion                            │
 ├─────────────────────────────────────────────────────────────────┤
+│  conversion.rs (Rust/Tauri Backend)                             │
+│  - ConversionOwner: the only place a converter is started       │
+│  - Limits, timeout, shared jobs (see "Conversion Owner")        │
+├─────────────────────────────────────────────────────────────────┤
 │  msfs.rs (Rust/Tauri Backend)                                   │
-│  - Spawns Python converter as sidecar process                   │
 │  - Handles file I/O and path resolution                         │
 │  - Caches model indexes as JSON                                 │
 ├─────────────────────────────────────────────────────────────────┤
@@ -787,6 +790,17 @@ Both must match. When loading cached models on startup, the frontend skips GLBs 
 - **Damaged GLBs**: `scan_cache_directory` compares the length in each GLB's header with its file size. A mismatch, or a header that cannot be read, lists the GLB with no converter version (and logs a warning), so the app deletes it and converts the model again.
 - **Index cache version**: `MODEL_CACHE_VERSION` is 11; aircraft.cfg keys are matched exactly (`atc_id_enable` does not overwrite `atc_id`, and `model = "X"` with spaces is read), and each livery lists only its own texture folders (see "Livery Texture Folder Order"), so older index caches are rebuilt once.
 
+## Conversion Owner
+
+Every conversion, from the host window (`convert_msfs_model`) or a remote browser (`POST /api/msfs/convert`), runs through `ConversionOwner` in `src-tauri/src/conversion.rs`, held in Tauri managed state. It owns the converter lookup (`find_converter`), the argument builder (`--no-discovery` with the glTF, texture folders and livery whenever the index entry has all three), the output-name function (`{source_type}_{livery_title}.glb`, what the Python writes), and the Windows job object that kills the converter's whole process tree. The batch command `start_fsltl_conversion` in `lib.rs` shares the lookup and the job-object helper but not the limits.
+
+- **Limits**: at most 2 converters at once in all; remote browsers share 1 of them, so the host always has a slot. A remote caller is allowed 1 conversion in flight per device (IP) and at most 8 remote requests waiting; a request past either is refused at once.
+- **Timeouts**: a converter running past 5 minutes is killed with its process tree and its callers get "timed out". A remote request waiting past 2 minutes for a slot is refused. The host has no queue wait, since its queue is the frontend's (2 at a time).
+- **Shared jobs**: callers asking for the same output file (cache directory plus file name), host or remote, share one job; a job runs on a task the owner spawns, so a caller going away never cancels it. A host joining a remote browser's job promotes it and is never refused; a joining remote takes no remote slot.
+- **Verified output**: a conversion succeeds only when the output file exists and passes the cache scan's GLB check (`is_accepted_glb` in `msfs.rs`: the header length matches the file size). A verified file found after a kill counts as success.
+- **Remote requests**: the model is looked up in the host's index first (honouring `enableFsltl` / `enableAig`), and a GLB already in the cache that passes the check is answered without a converter. A refusal for load is HTTP 503 with `Retry-After: 30`. Remote conversions always use the host's `msfsModels.textureScale`, whatever the request says.
+- **Browser retries**: on a 503 the frontend re-queues that model after `Retry-After` seconds (30 when absent), up to 3 times, then gives up for now without marking the model failed. A remote browser converts 1 model at a time; the desktop converts 2.
+
 ## File Locations
 
 | File | Purpose |
@@ -797,7 +811,8 @@ Both must match. When loading cached models on startup, the frontend skips GLBs 
 | `scripts/shipping/build/converter-requirements.txt` | Python dependencies |
 | `scripts/shipping/build/fsltl_converter.spec` | PyInstaller spec file |
 | `src-tauri/resources/fsltl_converter[.exe]` | Bundled converter (`.exe` on Windows) |
-| `src-tauri/src/msfs.rs` | Rust backend |
+| `src-tauri/src/conversion.rs` | Conversion owner: converter lookup, arguments, limits, timeout, job object |
+| `src-tauri/src/msfs.rs` | Rust backend: detection, indexing, the `convert_msfs_model` command, cache scan |
 | `src/renderer/services/MSFSModelConversionService.ts` | Frontend service |
 
 ## Debugging
