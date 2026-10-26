@@ -214,17 +214,17 @@ function classify(feature: Feature): FacadeClassCode {
 }
 
 /**
- * Storeys and wall height in metres (NaN when unknown) of the part, or of the building. Every
- * part of one element carries the element's own `cesium#estimatedHeight`, so a part without its
- * own height stays unknown and the shader keeps the grammar's storey.
+ * Storeys and wall height in metres (NaN when unknown) of the part, or of the building. Part-ness
+ * is the feature's own `part#elementId`: a part reads only its own `part#` tags, never the parent
+ * building's unprefixed levels or height. Every part of one element carries the element's own
+ * `cesium#estimatedHeight`, so a part without its own height stays unknown and the shader keeps
+ * the grammar's storey.
  */
 function storeysAndWall(feature: Feature): { storeys: number; wallM: number } {
-  const partLevels = tagNumber(feature, 'part#building:levels')
-  const partHeight = tagNumber(feature, 'part#height')
-  const isPart = !Number.isNaN(partLevels) || !Number.isNaN(partHeight)
+  const isPart = isBuildingPart(feature)
   const keys = isPart ? PART_KEYS : BUILDING_KEYS
-  const levels = isPart ? partLevels : tagNumber(feature, 'building:levels')
-  const height = isPart ? partHeight : tagNumber(feature, 'height')
+  const levels = isPart ? tagNumber(feature, 'part#building:levels') : tagNumber(feature, 'building:levels')
+  const height = isPart ? tagNumber(feature, 'part#height') : tagNumber(feature, 'height')
 
   const storeys = orZero(levels) - orZero(tagNumber(feature, keys.minLevel))
   if (isPart && Number.isNaN(height)) return { storeys, wallM: Number.NaN }

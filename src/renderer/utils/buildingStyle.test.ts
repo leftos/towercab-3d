@@ -95,7 +95,12 @@ describe('createBuildingStyle levels', () => {
   })
 
   it("counts a building part's own storeys above its min_level", () => {
-    const part = { 'part#building:levels': '6', 'part#building:min_level': '3', 'building:levels': '9' }
+    const part = {
+      'part#elementId': 'w9',
+      'part#building:levels': '6',
+      'part#building:min_level': '3',
+      'building:levels': '9',
+    }
     expect(packed(part).levels).toBe(3)
   })
 
@@ -107,7 +112,13 @@ describe('createBuildingStyle levels', () => {
 describe('createBuildingStyle height', () => {
   it('uses the explicit height, less any min_height, in buckets', () => {
     expect(packed({ height: '20', 'cesium#estimatedHeight': 99 }).heightM).toBe(20)
-    expect(packed({ 'part#height': '38', 'part#min_height': '20', 'cesium#estimatedHeight': 41 }).heightM).toBe(18)
+    const part = {
+      'part#elementId': 'w9',
+      'part#height': '38',
+      'part#min_height': '20',
+      'cesium#estimatedHeight': 41,
+    }
+    expect(packed(part).heightM).toBe(18)
   })
 
   it('falls back to the estimated height when no explicit height parses', () => {
@@ -118,7 +129,12 @@ describe('createBuildingStyle height', () => {
   // Every part of one element carries the element's own cesium#estimatedHeight (probe-koak.json),
   // so a part without a part#height has an unknown height, not the element's top.
   it('leaves a part without its own height unknown', () => {
-    const part = { 'part#building:levels': '2', 'part#min_height': '10', 'cesium#estimatedHeight': 40 }
+    const part = {
+      'part#elementId': 'w9',
+      'part#building:levels': '2',
+      'part#min_height': '10',
+      'cesium#estimatedHeight': 40,
+    }
     expect(packed(part).heightM).toBe(0)
   })
 
@@ -141,7 +157,13 @@ describe('createBuildingStyle height', () => {
   })
 
   it("takes a part's roof from the part", () => {
-    const part = { 'part#height': '30', 'part#building:levels': '5', 'part#roof:height': '6', 'roof:height': '20' }
+    const part = {
+      'part#elementId': 'w9',
+      'part#height': '30',
+      'part#building:levels': '5',
+      'part#roof:height': '6',
+      'roof:height': '20',
+    }
     expect(packed(part).heightM).toBe(24)
   })
 
@@ -184,6 +206,7 @@ describe('createBuildingStyle absent cells', () => {
 describe('createBuildingStyle part or building', () => {
   it('takes storeys from the part levels, and height only from its own height', () => {
     const levelsOnly = {
+      'part#elementId': 'w9',
       'part#building:levels': '4',
       height: '40',
       'building:levels': '12',
@@ -191,15 +214,24 @@ describe('createBuildingStyle part or building', () => {
     }
     expect(packed(levelsOnly)).toMatchObject({ levels: 4, heightM: 0 })
 
-    const heightOnly = { 'part#height': '10', height: '40', 'building:levels': '12' }
+    const heightOnly = { 'part#elementId': 'w9', 'part#height': '10', height: '40', 'building:levels': '12' }
     expect(packed(heightOnly)).toMatchObject({ levels: 0, heightM: 10 })
   })
 
-  it('takes both from the building when the part has neither', () => {
-    expect(packed({ 'part#min_height': '5', height: '40', 'building:levels': '12' })).toMatchObject({
-      levels: 12,
-      heightM: 40,
-    })
+  it("gives a part with neither of its own tags the default storey, never the building's levels or height", () => {
+    const part = {
+      'part#elementId': 'w9',
+      'part#min_height': '5',
+      height: '40',
+      'building:levels': '12',
+      'cesium#estimatedHeight': 40,
+    }
+    expect(packed(part)).toMatchObject({ levels: 0, heightM: 0 })
+  })
+
+  it('reads a feature without part#elementId as a whole building, even with part# tags', () => {
+    const whole = { 'part#building:levels': '4', 'part#height': '10', height: '40', 'building:levels': '12' }
+    expect(packed(whole)).toMatchObject({ levels: 12, heightM: 40 })
   })
 })
 
