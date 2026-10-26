@@ -1164,17 +1164,22 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
 
   /**
    * Get the list of airport ICAOs that support 1Hz updates in the current session.
-   * This resolves facilities (e.g., NCT TRACON) to their constituent airports.
+   * This resolves facilities (e.g., NCT TRACON) to their constituent airports. The list is
+   * kept as `sessionFacilities` only while no join or disconnect has happened since the
+   * read began (`joinSerial` unchanged); a later answer describes an ended session.
    */
   getSessionAirports: async (): Promise<string[]> => {
     if (isRemoteMode()) {
       return []
     }
 
+    const serial = get().joinSerial
     try {
       const { invoke } = await import('@tauri-apps/api/core')
       const airports = await invoke<string[]>('vnas_get_session_airports')
-      set({ sessionFacilities: airports })
+      if (get().joinSerial === serial) {
+        set({ sessionFacilities: airports })
+      }
       console.log(`[vNAS] Session airports (1Hz): ${airports.join(', ') || '(none)'}`)
       return airports
     } catch (error) {
@@ -1316,6 +1321,12 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
    * replacing it), so `handleSessionEnded` drops what it left behind, its subscribes in
    * flight included, before the join's own follow work. The state is applied before the
    * first await, so a caller can read the new `joinSerial` as soon as this returns its promise.
+   *
+   * On `subscribing` the host already knows the session's kind (it comes with the join), so
+   * the status is read first. A room session's airports need no lookup and are awaited, since
+   * the room follow picks its airport from them; a CRC session's airports come from the Data
+   * API, so they are not awaited: the airport in view is subscribed at once and
+   * `sessionFacilities` fills in when the Data API answers.
    */
   followSessionState: async (state: VnasStatus['state']) => {
     set((store) => sessionStateChange(store, state))
@@ -1327,11 +1338,15 @@ export const useVnasStore = create<VnasStore>((set, get) => ({
     if (isRemoteMode() || !sessionChanged) {
       return
     }
-    if (state === 'subscribing') {
-      // Also tells the host the session's kind, so the status read below carries it
-      await get().getSessionAirports()
-    }
     await readStatusFor(state, serial, set, get)
+    if (state !== 'subscribing' || get().joinSerial !== serial) {
+      return
+    }
+    if (get().status.sessionKind === 'room') {
+      await get().getSessionAirports()
+    } else {
+      void get().getSessionAirports()
+    }
   },
 }))
 

@@ -140,15 +140,13 @@ describe('vnasStore.followSessionState', () => {
   })
 
   it('learns the session kind and airports when a session is joined', async () => {
-    // The host knows the kind only once the session's airports have been read
-    let airportsRead = false
+    // The host knows the kind from the join, before any airport lookup
     invokeMock.mockImplementation(async (command: string) => {
       if (command === 'vnas_get_session_airports') {
-        airportsRead = true
         return ['OAK']
       }
       if (command === 'vnas_get_status') {
-        return { ...ROOM_STATUS, state: 'subscribing', subscribedFacilities: [], sessionKind: airportsRead ? 'room' : null }
+        return { ...ROOM_STATUS, state: 'subscribing', subscribedFacilities: [] }
       }
       return null
     })
@@ -160,6 +158,44 @@ describe('vnasStore.followSessionState', () => {
     expect(state.status.sessionKind).toBe('room')
     expect(state.sessionFacilities).toEqual(['OAK'])
     expect(state.roomAirportNotice).toBeNull()
+  })
+
+  it("awaits a room join's airports before returning", async () => {
+    let airportsRequested: () => void = () => {}
+    const requested = new Promise<void>((resolve) => {
+      airportsRequested = resolve
+    })
+    let releaseAirports: () => void = () => {}
+    const released = new Promise<void>((resolve) => {
+      releaseAirports = resolve
+    })
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === 'vnas_get_session_airports') {
+        airportsRequested()
+        await released
+        return ['OAK']
+      }
+      if (command === 'vnas_get_status') {
+        return { ...ROOM_STATUS, state: 'subscribing', subscribedFacilities: [] }
+      }
+      return null
+    })
+    let returned = false
+    const following = useVnasStore
+      .getState()
+      .followSessionState('subscribing')
+      .then(() => {
+        returned = true
+      })
+
+    await requested
+    // Let every pending continuation run: an unawaited lookup would let the follow return
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(returned).toBe(false)
+
+    releaseAirports()
+    await following
+    expect(useVnasStore.getState().sessionFacilities).toEqual(['OAK'])
   })
 
   it("drops the last session's kind and end reason at the next session's first state, before the host read", async () => {

@@ -62,6 +62,8 @@ let hostStatus: VnasStatus = ROOM_JOINED
 let hostAirports: string[] = []
 /** When set, every `vnas_get_status` waits for it before replying */
 let statusGate: Deferred | null = null
+/** When set, every `vnas_get_session_airports` waits for it before replying */
+let airportsGate: Deferred | null = null
 /** Runs inside `vnas_connect`, as the host's forwarder emits a join while the connect is under way */
 let duringConnect: (() => void) | null = null
 /** When set, `vnas_disconnect` waits for it before replying */
@@ -88,6 +90,9 @@ async function fakeHost(command: string, args?: Record<string, unknown>): Promis
       }
       return hostStatus
     case 'vnas_get_session_airports':
+      if (airportsGate) {
+        await airportsGate.promise
+      }
       return hostAirports
     case 'vnas_subscribe_facility':
       hostStatus = {
@@ -139,6 +144,7 @@ beforeEach(() => {
   hostStatus = ROOM_JOINED
   hostAirports = ['OAK']
   statusGate = null
+  airportsGate = null
   duringConnect = null
   disconnectGate = null
   waiters.clear()
@@ -210,6 +216,24 @@ describe('following a joined session', () => {
     expect(selectAirport).not.toHaveBeenCalled()
     expect(showFeedback).not.toHaveBeenCalled()
     expect(subscribeCalls()).toEqual(['SFO'])
+  })
+
+  it('subscribes the airport in view after a CRC join whose airports never answer', async () => {
+    hostStatus = { ...ROOM_JOINED, sessionKind: 'crc' }
+    airportsGate = deferred()
+    const subscribed = invoked('vnas_subscribe_facility')
+
+    // The session info log after the follow still waits on the airports
+    const handled = handleSessionStateEvent('subscribing')
+    await subscribed
+
+    expect(selectAirport).not.toHaveBeenCalled()
+    expect(subscribeCalls()).toEqual(['SFO'])
+    expect(useVnasStore.getState().sessionFacilities).toEqual([])
+
+    airportsGate.resolve()
+    await handled
+    expect(useVnasStore.getState().sessionFacilities).toEqual(['OAK'])
   })
 
   it('still switches when the session connects before the status read lands', async () => {

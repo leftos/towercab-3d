@@ -92,8 +92,9 @@ pub struct VnasStatus {
     /// (e.g. a YAAT room closing) is cleared when the next session is joined; a forcible
     /// one (a kick from the room) only at the next connect.
     pub last_session_end: Option<SessionEndInfo>,
-    /// Where the joined session comes from, once the host has read it after `Subscribing`;
-    /// `None` while no session is joined.
+    /// Where the joined session comes from, as its join reported it; `None` while no
+    /// session is joined. `VnasState::status` fills it from the session cell, so a value
+    /// written here through `update_status` is never reported.
     pub session_kind: Option<SessionKind>,
 }
 
@@ -146,8 +147,8 @@ enum SubscribeOutcome {
 ///
 /// The hub drops a connection's subscriptions whenever its session changes, so
 /// `Disconnected`, `WaitingForSession` and `Subscribing` (a new session) clear them; the
-/// caller then drops its subscribes in flight too, and the session kind (the host reads a
-/// new session's kind after its `Subscribing`). Reaching `Subscribing` also clears the
+/// caller (`StatusCell::apply_session_state`) then drops its subscribes in flight, and
+/// `apply_session_change_with_cell` ends the joined session too. Reaching `Subscribing` also clears the
 /// error (a refused room join leaves one behind while waiting) and a non-forcible session
 /// end. Returns whether the subscriptions were cleared.
 #[cfg_attr(not(feature = "vnas"), allow(dead_code))] // the vNAS forwarder's rule, tested in both builds
@@ -159,7 +160,6 @@ fn apply_session_change(status: &mut VnasStatus, new_state: SessionState) -> boo
     );
     if dropped {
         status.subscribed_facilities.clear();
-        status.session_kind = None;
     }
     if new_state == SessionState::Subscribing {
         status.error = None;
@@ -195,6 +195,116 @@ fn session_change_events(new_state: SessionState, dropped: bool) -> Vec<SessionC
         events.push(SessionChangeEvent::SubscriptionsCleared);
     }
     events
+}
+
+/// What the host knows of the joined session: the token naming it for subscribes (`T`),
+/// its kind and its airports, and a generation that moves on every session change.
+///
+/// A value read before a session change is stored only if the generation it was read
+/// under is still the current one, so nothing of an ended session outlives its change.
+#[cfg(any(feature = "vnas", test))]
+#[derive(Debug)]
+struct SessionCell<T> {
+    token: Option<T>,
+    kind: Option<SessionKind>,
+    airports: Vec<String>,
+    generation: u64,
+}
+
+#[cfg(any(feature = "vnas", test))]
+impl<T> Default for SessionCell<T> {
+    fn default() -> Self {
+        Self {
+            token: None,
+            kind: None,
+            airports: Vec::new(),
+            generation: 0,
+        }
+    }
+}
+
+#[cfg(any(feature = "vnas", test))]
+impl<T: Copy + Eq> SessionCell<T> {
+    /// The current generation; read it before reading what to store.
+    fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    fn token(&self) -> Option<T> {
+        self.token
+    }
+
+    fn kind(&self) -> Option<SessionKind> {
+        self.kind
+    }
+
+    fn airports(&self) -> &[String] {
+        &self.airports
+    }
+
+    /// Keep the joined session's token and kind, unless the generation moved since
+    /// `generation` was read. Returns whether they were stored.
+    fn store_joined(&mut self, generation: u64, token: T, kind: SessionKind) -> bool {
+        if self.generation != generation {
+            return false;
+        }
+        self.token = Some(token);
+        self.kind = Some(kind);
+        true
+    }
+
+    /// Keep the joined session's airports, unless the generation moved since
+    /// `generation` was read. Returns whether they were stored.
+    fn store_airports(&mut self, generation: u64, airports: Vec<String>) -> bool {
+        if self.generation != generation {
+            return false;
+        }
+        self.airports = airports;
+        true
+    }
+
+    /// Forget the token, the kind and the airports.
+    fn forget(&mut self) {
+        self.token = None;
+        self.kind = None;
+        self.airports.clear();
+    }
+
+    /// Move the generation on: whatever was read before is not stored.
+    fn bump(&mut self) {
+        self.generation += 1;
+    }
+
+    /// End the joined session: forget it and move the generation on, so nothing read of
+    /// it before is stored.
+    fn end(&mut self) {
+        self.forget();
+        self.bump();
+    }
+
+    /// Join a new session: end the one stored, then keep the new session's token and kind
+    /// under the generation that moved to. Returns that generation.
+    fn join(&mut self, token: T, kind: SessionKind) -> u64 {
+        self.end();
+        self.store_joined(self.generation, token, kind);
+        self.generation
+    }
+}
+
+/// Write a session state the service reported into `status` (`apply_session_change`)
+/// and, when the session changed, end the joined session in `session`. Returns whether
+/// the session changed.
+#[cfg(any(feature = "vnas", test))]
+fn apply_session_change_with_cell<T: Copy + Eq>(
+    status: &mut VnasStatus,
+    session: &mut SessionCell<T>,
+    new_state: SessionState,
+) -> bool {
+    let dropped = apply_session_change(status, new_state);
+    if dropped {
+        session.end();
+    }
+    dropped
 }
 
 /// Write a state a connect publishes into `status`, with `error` when given. Starting a
@@ -411,7 +521,7 @@ mod real_impl {
 
     // Import types from the vNAS crate
     use towercab_3d_vnas::{
-        Environment as VnasEnvironment, SessionAirports, SessionKind as VnasSessionKind,
+        Environment as VnasEnvironment, JoinedSession, SessionKind as VnasSessionKind,
         SessionState as VnasSessionState, SessionToken, StoredTokens, TowerCabAircraftDto,
         VnasConfig, VnasError, VnasEvent, VnasService,
     };
@@ -423,14 +533,6 @@ mod real_impl {
                 VnasSessionKind::Room => SessionKind::Room,
             }
         }
-    }
-
-    /// The joined session's airports and token, with its kind; `None` while no session
-    /// is joined.
-    async fn read_joined_session(service: &VnasService) -> Option<(SessionAirports, SessionKind)> {
-        let session = service.session_airports().await?;
-        let kind = service.current_session().await?.kind().into();
-        Some((session, kind))
     }
 
     impl From<Environment> for VnasEnvironment {
@@ -520,18 +622,38 @@ mod real_impl {
         pending_subscribes: HashMap<String, u64>,
         /// The last claim token handed out; each claim takes the next one.
         last_claim_token: u64,
-        /// The joined session's token for `subscribe_towercab`, once read after its
-        /// `Subscribing`. Never leaves the host.
-        session_token: Option<SessionToken>,
-        /// Moves on every session change; a token read before the change is not stored.
-        session_generation: u64,
+        /// The joined session's token for `subscribe_towercab` (never leaves the host), its
+        /// kind (reported as the status's `session_kind`) and its airports.
+        session: SessionCell<SessionToken>,
     }
 
     impl StatusCell {
-        /// Forget the joined session's token; a token read before this is not stored.
-        fn forget_session_token(&mut self) {
-            self.session_token = None;
-            self.session_generation += 1;
+        /// Forget the joined session; anything read of it before this is not stored.
+        fn forget_joined_session(&mut self) {
+            self.session.end();
+        }
+
+        /// Apply a session state the service reported (`apply_session_change_with_cell`);
+        /// when the session changed, also drop every subscribe in flight. Returns whether
+        /// the session changed.
+        fn apply_session_state(&mut self, new_state: SessionState) -> bool {
+            let dropped =
+                apply_session_change_with_cell(&mut self.status, &mut self.session, new_state);
+            if dropped {
+                self.pending_subscribes.clear();
+            }
+            dropped
+        }
+
+        /// Apply a join the service reported: `Subscribing` (`apply_session_change`), every
+        /// subscribe in flight dropped, then the joined session's token and kind stored
+        /// under the generation the join moved to (`SessionCell::join`). Returns whether the
+        /// subscriptions were cleared and that generation.
+        fn apply_join(&mut self, joined: JoinedSession) -> (bool, u64) {
+            let dropped = apply_session_change(&mut self.status, SessionState::Subscribing);
+            self.pending_subscribes.clear();
+            let generation = self.session.join(joined.session, joined.kind.into());
+            (dropped, generation)
         }
     }
 
@@ -601,7 +723,11 @@ mod real_impl {
         }
 
         pub fn status(&self) -> VnasStatus {
-            self.status.read().status.clone()
+            let cell = self.status.read();
+            VnasStatus {
+                session_kind: cell.session.kind(),
+                ..cell.status.clone()
+            }
         }
 
         /// Apply `f` to the status under one write lock, so a change any other status
@@ -637,9 +763,8 @@ mod real_impl {
             cell.status.state = SessionState::Disconnected;
             cell.status.subscribed_facilities.clear();
             cell.status.error = None;
-            cell.status.session_kind = None;
             cell.pending_subscribes.clear();
-            cell.forget_session_token();
+            cell.forget_joined_session();
         }
 
         /// Forget everything about the previous service's sessions: its token, its kind
@@ -647,47 +772,50 @@ mod real_impl {
         /// stored one.
         fn forget_session(&self) {
             let mut cell = self.status.write();
-            cell.forget_session_token();
+            cell.forget_joined_session();
             cell.status.last_session_end = None;
-            cell.status.session_kind = None;
         }
 
-        /// The session generation; read it before `session_airports` and pass it to
-        /// `store_session`.
+        /// The session generation; read it before reading the joined session from the
+        /// service and pass it to `store_joined` or `store_airports`.
         fn session_generation(&self) -> u64 {
-            self.status.read().session_generation
+            self.status.read().session.generation()
         }
 
         /// The stored token of the joined session, if it has been read.
         fn session_token(&self) -> Option<SessionToken> {
-            self.status.read().session_token
+            self.status.read().session.token()
         }
 
-        /// Forget the stored token if it is still `token`, which the service refused as
-        /// stale, so the next subscribe reads the joined session's token afresh. A newer
-        /// token stored meanwhile is kept.
+        /// Forget the joined session (token, kind and airports) if its token is still
+        /// `token`, which the service refused as stale, so the next subscribe reads the
+        /// joined session's token afresh. A newer token stored meanwhile is kept. The kind
+        /// reads `None` until the newer session's join stores it again.
         fn forget_stale_session_token(&self, token: SessionToken) {
             let mut cell = self.status.write();
-            if cell.session_token == Some(token) {
-                cell.forget_session_token();
+            if cell.session.token() == Some(token) {
+                cell.forget_joined_session();
             }
         }
 
-        /// Keep `session`'s token and `kind` and cache its airports, unless the session
-        /// changed since `generation` was read. Returns whether it stored them.
-        fn store_session(
-            &self,
-            generation: u64,
-            session: &SessionAirports,
-            kind: SessionKind,
-        ) -> bool {
+        /// Keep the joined session's token and kind, unless the session changed since
+        /// `generation` was read. Returns whether it stored them.
+        fn store_joined(&self, generation: u64, joined: JoinedSession) -> bool {
+            self.status
+                .write()
+                .session
+                .store_joined(generation, joined.session, joined.kind.into())
+        }
+
+        /// Keep the joined session's airports and cache them as the session facilities
+        /// (what remote clients see in the airport selector), unless the session changed
+        /// since `generation` was read. Returns whether it stored them.
+        fn store_airports(&self, generation: u64, airports: Vec<String>) -> bool {
             let mut cell = self.status.write();
-            if cell.session_generation != generation {
+            if !cell.session.store_airports(generation, airports) {
                 return false;
             }
-            cell.session_token = Some(session.session);
-            cell.status.session_kind = Some(kind);
-            cache_session_facilities(&session.airports);
+            cache_session_facilities(cell.session.airports());
             true
         }
 
@@ -839,15 +967,25 @@ mod real_impl {
     /// (`apply_session_change`).
     ///
     /// When the session changed (the subscriptions were cleared), also drops every
-    /// subscribe in flight and the stored session token. Returns whether it did.
+    /// subscribe in flight and the stored session token, kind and airports. Returns
+    /// whether it did.
     fn apply_session_state(state: &VnasState, new_state: SessionState) -> bool {
-        let mut cell = state.status.write();
-        let dropped = apply_session_change(&mut cell.status, new_state);
-        if dropped {
-            cell.pending_subscribes.clear();
-            cell.forget_session_token();
-        }
-        dropped
+        state.status.write().apply_session_state(new_state)
+    }
+
+    /// Apply a join the service reported: `Subscribing`, a session change, then the joined
+    /// session's token and kind, all under one status write lock, so they are stored under
+    /// the generation the change moved to and a claim never meets the change without them.
+    /// Returns whether the subscriptions were cleared and that generation.
+    fn apply_session_joined(state: &VnasState, joined: JoinedSession) -> (bool, u64) {
+        state.status.write().apply_join(joined)
+    }
+
+    /// A session change the service reported: a bare state, or a join carrying the joined
+    /// session (its state is `Subscribing`).
+    enum ReportedSessionChange {
+        State(SessionState),
+        Joined(JoinedSession),
     }
 
     impl Default for VnasState {
@@ -1262,7 +1400,10 @@ mod real_impl {
                 let _ = app.emit("vnas-aircraft-disconnected", &callsign);
             }
             VnasEvent::SessionStateChanged(new_state) => {
-                forward_session_state(app, service, new_state.into());
+                forward_session_state(app, service, ReportedSessionChange::State(new_state.into()));
+            }
+            VnasEvent::SessionJoined(joined) => {
+                forward_session_state(app, service, ReportedSessionChange::Joined(joined));
             }
             VnasEvent::SessionEnded { reason, forcible } => {
                 tracing::info!(forcible, "[vNAS] Session ended: {reason}");
@@ -1280,11 +1421,24 @@ mod real_impl {
 
     /// Apply a session state the service reported, refresh the caches and emit it.
     ///
-    /// On `Subscribing` (a session joined) it reads the session's token in the
-    /// background; on `Disconnected` after a forcible end it shows the end's reason.
-    fn forward_session_state(app: &AppHandle, service: &Arc<VnasService>, new_state: SessionState) {
+    /// A join stores the joined session's token and kind with the state and looks its
+    /// airports up in the background, under the generation the join moved to; on
+    /// `Disconnected` after a forcible end it shows the end's reason.
+    fn forward_session_state(
+        app: &AppHandle,
+        service: &Arc<VnasService>,
+        change: ReportedSessionChange,
+    ) {
         let state = app.state::<VnasState>();
-        let dropped = apply_session_state(&state, new_state);
+        let (new_state, dropped, joined_generation) = match change {
+            ReportedSessionChange::State(new_state) => {
+                (new_state, apply_session_state(&state, new_state), None)
+            }
+            ReportedSessionChange::Joined(joined) => {
+                let (dropped, generation) = apply_session_joined(&state, joined);
+                (SessionState::Subscribing, dropped, Some(generation))
+            }
+        };
         cache_state(new_state);
         tracing::info!("[vNAS] Session state changed: {:?}", new_state);
         if dropped {
@@ -1298,16 +1452,15 @@ mod real_impl {
             .status()
             .last_session_end
             .is_some_and(|end| end.forcible);
-        match new_state {
-            SessionState::Subscribing => {
-                let generation = state.session_generation();
+        match (new_state, joined_generation) {
+            (_, Some(generation)) => {
                 tokio::spawn(remember_session(
                     Arc::clone(service),
                     app.clone(),
                     generation,
                 ));
             }
-            SessionState::Disconnected if forced_end => {
+            (SessionState::Disconnected, None) if forced_end => {
                 tokio::spawn(show_forced_end_reason(Arc::clone(service), app.clone()));
             }
             _ => {}
@@ -1326,16 +1479,16 @@ mod real_impl {
         }
     }
 
-    /// Read the joined session's token and airports and keep them, unless the session
-    /// changed again since `generation` was read.
+    /// Look the joined session's airports up and keep them, unless the session changed
+    /// again since `generation` was read. Its token and kind came with the join.
     async fn remember_session(service: Arc<VnasService>, app: AppHandle, generation: u64) {
-        let Some((session, kind)) = read_joined_session(&service).await else {
+        let Some(session) = service.session_airports().await else {
             tracing::debug!("[vNAS] Session ended before its airports were read");
             return;
         };
         if !app
             .state::<VnasState>()
-            .store_session(generation, &session, kind)
+            .store_airports(generation, session.airports)
         {
             tracing::debug!("[vNAS] Session changed while its airports were read");
         }
@@ -1458,6 +1611,7 @@ mod real_impl {
         facility_id: &str,
     ) -> Result<bool, String> {
         let epoch = state.connect_epoch();
+        let generation = state.session_generation();
         let Some(pending) = state.begin_subscribe(facility_id) else {
             tracing::debug!(facility_id, "Already subscribed or subscribing to facility");
             return Ok(false);
@@ -1467,7 +1621,7 @@ mod real_impl {
             .current_service()
             .await
             .ok_or("Not connected - call vnas_connect first")?;
-        let Some(session) = joined_session_token(state, &service).await else {
+        let Some(session) = joined_session_token(state, &service, generation).await else {
             tracing::debug!(facility_id, "No session joined; subscribe skipped");
             return Ok(false);
         };
@@ -1492,19 +1646,20 @@ mod real_impl {
         Ok(true)
     }
 
-    /// The joined session's token: the stored one, else read from the service and stored.
+    /// The joined session's token: the stored one, else read from the service (no Data API
+    /// lookup) and stored with its kind under `generation`, the one read with the claim.
     /// `None` while no session is joined.
     async fn joined_session_token(
         state: &VnasState,
         service: &VnasService,
+        generation: u64,
     ) -> Option<SessionToken> {
         if let Some(token) = state.session_token() {
             return Some(token);
         }
-        let generation = state.session_generation();
-        let (session, kind) = read_joined_session(service).await?;
-        state.store_session(generation, &session, kind);
-        Some(session.session)
+        let joined = service.joined_session().await?;
+        state.store_joined(generation, joined);
+        Some(joined.session)
     }
 
     /// One hub subscribe: the facility, the session token it named, and the connect epoch
@@ -1712,14 +1867,14 @@ mod real_impl {
             .await
             .ok_or_else(|| "vNAS service not initialized".to_string())?;
 
+        // Only the airports are kept: the join stored the token and kind, and the crate's
+        // current session may already be newer than the one the host has applied.
         let generation = state.session_generation();
-        let Some((session, kind)) = read_joined_session(&service).await else {
+        let Some(session) = service.session_airports().await else {
             cache_session_facilities(&[]);
             return Ok(Vec::new());
         };
-        // Keep the token for subscribes and the kind for the status, and cache the
-        // airports as session facilities (what remote clients see in the airport selector)
-        state.store_session(generation, &session, kind);
+        state.store_airports(generation, session.airports.clone());
         Ok(session.airports)
     }
 
@@ -1911,7 +2066,7 @@ mod real_impl {
         #[test]
         fn new_service_forgets_the_session_kind() {
             let state = VnasState::new();
-            state.update_status(|status| status.session_kind = Some(SessionKind::Room));
+            state.status.write().session.kind = Some(SessionKind::Room);
 
             state.forget_session();
 
@@ -1921,7 +2076,7 @@ mod real_impl {
         #[test]
         fn disconnect_forgets_the_session_kind() {
             let state = VnasState::new();
-            state.update_status(|status| status.session_kind = Some(SessionKind::Crc));
+            state.status.write().session.kind = Some(SessionKind::Crc);
 
             state.reset_for_disconnect();
 
@@ -2542,19 +2697,79 @@ mod tests {
             SessionState::Disconnected,
         ] {
             let mut status = subscribed_status(&["OAK"]);
-            status.session_kind = Some(SessionKind::Room);
-            apply_session_change(&mut status, new_state);
-            assert_eq!(status.session_kind, None, "{new_state:?}");
+            let mut cell = SessionCell::<u64>::default();
+            cell.join(7, SessionKind::Room);
+            apply_session_change_with_cell(&mut status, &mut cell, new_state);
+            assert_eq!(cell.kind(), None, "{new_state:?}");
         }
         for new_state in [SessionState::Connected, SessionState::JoiningSession] {
             let mut status = subscribed_status(&["OAK"]);
-            status.session_kind = Some(SessionKind::Room);
-            apply_session_change(&mut status, new_state);
-            assert_eq!(
-                status.session_kind,
-                Some(SessionKind::Room),
-                "{new_state:?}"
-            );
+            let mut cell = SessionCell::<u64>::default();
+            cell.join(7, SessionKind::Room);
+            apply_session_change_with_cell(&mut status, &mut cell, new_state);
+            assert_eq!(cell.kind(), Some(SessionKind::Room), "{new_state:?}");
         }
+    }
+
+    #[test]
+    fn session_cell_join_replaces_the_older_session() {
+        let mut cell = SessionCell::<u64>::default();
+        let before = cell.join(7, SessionKind::Room);
+        assert!(cell.store_airports(before, vec!["OAK".to_string()]));
+
+        let after = cell.join(8, SessionKind::Crc);
+
+        assert_eq!(cell.token(), Some(8));
+        assert_eq!(cell.kind(), Some(SessionKind::Crc));
+        assert!(cell.airports().is_empty());
+        assert!(!cell.store_joined(before, 7, SessionKind::Room));
+        assert!(!cell.store_airports(before, vec!["OAK".to_string()]));
+        assert_eq!(cell.token(), Some(8));
+        assert!(cell.airports().is_empty());
+        assert_eq!(after, cell.generation());
+    }
+
+    #[test]
+    fn session_cell_refuses_a_join_stored_after_a_bump() {
+        let mut cell = SessionCell::<u64>::default();
+        let generation = cell.generation();
+
+        cell.bump();
+
+        assert!(!cell.store_joined(generation, 7, SessionKind::Room));
+        assert_eq!(cell.token(), None);
+        assert_eq!(cell.kind(), None);
+        assert!(cell.store_joined(cell.generation(), 8, SessionKind::Crc));
+        assert_eq!(cell.token(), Some(8));
+        assert_eq!(cell.kind(), Some(SessionKind::Crc));
+    }
+
+    #[test]
+    fn session_cell_refuses_airports_from_an_older_generation() {
+        let mut cell = SessionCell::<u64>::default();
+        let generation = cell.generation();
+        assert!(cell.store_joined(generation, 7, SessionKind::Crc));
+
+        cell.forget();
+        cell.bump();
+
+        assert!(!cell.store_airports(generation, vec!["KOAK".to_string()]));
+        assert!(cell.airports().is_empty());
+        assert!(cell.store_airports(cell.generation(), vec!["KSFO".to_string()]));
+        assert_eq!(cell.airports(), ["KSFO".to_string()]);
+    }
+
+    #[test]
+    fn session_cell_forget_clears_token_kind_and_airports() {
+        let mut cell = SessionCell::<u64>::default();
+        let generation = cell.generation();
+        assert!(cell.store_joined(generation, 7, SessionKind::Room));
+        assert!(cell.store_airports(generation, vec!["OAK".to_string()]));
+
+        cell.forget();
+
+        assert_eq!(cell.token(), None);
+        assert_eq!(cell.kind(), None);
+        assert!(cell.airports().is_empty());
     }
 }
