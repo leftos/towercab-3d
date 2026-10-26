@@ -1,0 +1,19 @@
+{
+  "airport": "KSFO",
+  "hour": 12,
+  "shots": [
+    { "name": "m1-ksfo-today", "pose": { "lat": 37.6045, "lon": -122.3985, "h": 5, "heading": 200, "pitch": -12, "fov": 35 } },
+    { "name": "m1-ksfo-base", "uniforms": { "u_mockFloor": 1 } },
+    { "name": "m1-ksfo-roof", "uniforms": { "u_mockFloor": 2 } },
+    { "name": "m1-raised-today", "pose": { "dx": 0, "dy": 0, "dz": 0, "heading": 262, "pitch": -7, "fov": 18 }, "features": true },
+    { "name": "m1-raised-own", "uniforms": { "u_mockFloor": 1 } },
+    { "name": "m1-raised-ground", "uniforms": { "u_mockFloor": 1, "u_mockGround": 1 } },
+    { "name": "m2-today", "pose": { "lat": 37.6050, "lon": -122.3990, "h": 25, "heading": 195, "pitch": -18, "fov": 45 }, "features": true },
+    { "name": "m2-hash2", "uniforms": { "u_mockHash": 2 } },
+    { "name": "m2-storey2", "uniforms": { "u_mockStoreyBucket": 2 } },
+    { "name": "m2-term-today", "pose": { "dx": 0, "dy": 0, "dz": 0, "heading": 262, "pitch": -7, "fov": 30 } },
+    { "name": "m2-term-storey2", "uniforms": { "u_mockStoreyBucket": 2 } },
+    { "name": "m4-ksfo", "pose": { "dx": 0, "dy": 0, "dz": 0, "heading": 274, "pitch": -7, "fov": 45 }, "cls": { "parent": "15730419", "cls": 5, "overrides": {} }, "uniforms": { "u_mockClass": 1 }, "features": true },
+    { "name": "m4-ksfo-today", "uniforms": {} }
+  ]
+}

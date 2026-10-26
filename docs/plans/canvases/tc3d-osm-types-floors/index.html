@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OSM Types and Floors</title>
+<style>
+  :root {
+    --bg: #f6f6f3;
+    --panel: #ffffff;
+    --text: #1d1f22;
+    --muted: #5d636b;
+    --rule: #d9dbdf;
+    --accent: #0b6bcb;
+    --note-bg: #fff6dc;
+    --note-rule: #e8c766;
+    --rec-bg: #e6f3ea;
+    --rec-rule: #4f9d69;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #131518;
+      --panel: #1b1e22;
+      --text: #e7e9ec;
+      --muted: #9aa1aa;
+      --rule: #30353b;
+      --accent: #6cb4ff;
+      --note-bg: #2b2616;
+      --note-rule: #7a6420;
+      --rec-bg: #17291d;
+      --rec-rule: #3f7d54;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #131518;
+    --panel: #1b1e22;
+    --text: #e7e9ec;
+    --muted: #9aa1aa;
+    --rule: #30353b;
+    --accent: #6cb4ff;
+    --note-bg: #2b2616;
+    --note-rule: #7a6420;
+    --rec-bg: #17291d;
+    --rec-rule: #3f7d54;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1800px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  h2 { font-size: 1.2rem; margin: 0 0 6px; }
+  h3 { font-size: 1rem; margin: 18px 0 8px; }
+  .sub { color: var(--muted); margin: 0 0 16px; max-width: 1100px; }
+  .note, .rec { border-radius: 4px; padding: 10px 14px; margin: 0 0 16px; max-width: 1200px; }
+  .note { background: var(--note-bg); border-left: 4px solid var(--note-rule); }
+  .rec { background: var(--rec-bg); border-left: 4px solid var(--rec-rule); }
+  .toc { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 24px; padding: 0; list-style: none; }
+  a { color: var(--accent); }
+  .toc a { text-decoration: none; }
+  section { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 16px; margin: 0 0 22px; }
+  .cap { color: var(--muted); margin: 0 0 12px; font-size: 0.92rem; max-width: 1200px; }
+  .lanes { display: grid; gap: 12px; grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); align-items: start; }
+  .lanes.two { --n: 2; }
+  figure { margin: 0; }
+  figure img { display: block; width: 100%; height: auto; border-radius: 4px; border: 1px solid var(--rule); }
+  figcaption { font-size: 0.88rem; margin: 6px 0 0; }
+  figcaption b { display: block; font-size: 0.95rem; }
+  figcaption .how { display: block; color: var(--muted); }
+  figcaption .worst { display: block; }
+  figcaption .worst::before { content: "Worst case: "; font-weight: 600; }
+  ol.marks { margin: 6px 0 0; padding-left: 22px; font-size: 0.86rem; color: var(--muted); }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 0.88rem; margin: 0 0 12px; padding: 0; list-style: none; }
+  .legend span { display: inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: -2px; margin-right: 6px; border: 1px solid #0006; }
+  table { border-collapse: collapse; font-size: 0.9rem; margin: 6px 0 12px; }
+  th, td { text-align: left; padding: 5px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  td.num { font-variant-numeric: tabular-nums; text-align: right; }
+  code { font-size: 0.88em; }
+  @media (max-width: 900px) { .lanes, .lanes.two { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>OSM building types and floor lines: decision mocks</h1>
+  <p class="sub">Open decisions of TC3D-218 (type OSM building parts from their outline, then by shape near the field) and TC3D-220 (facade floor lines don't start at the building's ground), numbered as in the code map. Every still is the real app (<code>feat/osm-facades</code> at 4b888e2) in headless Edge with the facade shader, noon fixed time, building quality high, <code>u_fade</code> 0. The lanes other than "today" are a throwaway prototype in a scratch worktree: a per-tile lookup texture, filled from each tile's vertex buffers, feeds the shader each building's base, roof, footprint and a debug class. Click an image for full size.</p>
+  <ul class="toc">
+    <li><a href="#d1">220 decision 1: where floor lines start</a></li>
+    <li><a href="#d3">220 decision 3: raised parts</a></li>
+    <li><a href="#d2">220 decision 2: the carrier</a></li>
+    <li><a href="#d5">218 decision 5: shape thresholds</a></li>
+    <li><a href="#d7">218 decision 7: the KSFO garage (settled)</a></li>
+  </ul>
+
+  <section id="d1">
+    <h2>TC3D-220 decision 1: where a building's floor lines start</h2>
+    <p class="cap">Today the shader measures height from the tile's model origin (<code>facadeShader.ts:477</code>), so each building's storey grid starts at a random height. (a) keeps that on the ion tiles and fixes floors only in the generated near-field buildings of TC3D-168, so on ion tiles (a) looks exactly like today. Lane (c) needs the same per-building data as (b): the shader knows neither where the roof nor where the ground is in the tile's frame, and the packed wall height is a length, not a position.</p>
+    <h3>KOAK Terminal 2, ramp side (eye 4 m above the ramp, heading 255, FOV 16)</h3>
+    <div class="lanes">
+      <figure><a href="m1-koak-today.webp"><img src="m1-koak-today.webp" alt="KOAK Terminal 2, floor lines as today"></a>
+        <figcaption><b>Today = (a) leave ion buildings as they are</b><span class="how">Grid phase set by the tile origin; (a) fixes it only where TC3D-168 generates buildings.</span><span class="worst">a sliver storey at the ground or a window row cut by the roof on any ion building, and the grid jumps when a tile refines.</span></figcaption></figure>
+      <figure><a href="m1-koak-base.webp"><img src="m1-koak-base.webp" alt="KOAK Terminal 2, floor lines from the ground"></a>
+        <figcaption><b>(b) floor lines from each building's own ground</b><span class="how">Height measured from the building's lowest vertex, read from the tile at load and passed per building.</span><span class="worst">the partial storey moves under the roof (a thin window row here) when the wall is not a whole number of storeys.</span></figcaption></figure>
+      <figure><a href="m1-koak-roof.webp"><img src="m1-koak-roof.webp" alt="KOAK Terminal 2, slabs counted down from the roof"></a>
+        <figcaption><b>(c) no ground-floor line: slabs counted down from the roof</b><span class="how">Height measured down from the building's highest vertex, so a whole storey sits under the roof.</span><span class="worst">a sliver window row at ramp level, the most visible place from a tower; needs the same per-building carrier as (b).</span></figcaption></figure>
+    </div>
+    <h3>KSFO, San Bruno street west of the field (crop; 5 m ellipsoid height, heading 200, pitch −12, FOV 35)</h3>
+    <div class="lanes">
+      <figure><a href="m1-ksfo-today.webp"><img src="m1-ksfo-today.webp" alt="San Bruno street, today"></a>
+        <figcaption><b>Today = (a)</b><span class="how">Each building's rows sit at a different height; the near building's top row is cut by the roof.</span><span class="worst">neighbouring buildings disagree on where their floors are.</span></figcaption></figure>
+      <figure><a href="m1-ksfo-base.webp"><img src="m1-ksfo-base.webp" alt="San Bruno street, from the ground"></a>
+        <figcaption><b>(b) from the ground</b><span class="how">Ground-floor windows line up along the street.</span><span class="worst">blank band under the roof where the last storey is partial.</span></figcaption></figure>
+      <figure><a href="m1-ksfo-roof.webp"><img src="m1-ksfo-roof.webp" alt="San Bruno street, from the roof"></a>
+        <figcaption><b>(c) from the roof</b><span class="how">Top-floor windows line up under the roofs.</span><span class="worst">cut window row at the pavement.</span></figcaption></figure>
+    </div>
+  </section>
+
+  <section id="d3">
+    <h2>TC3D-220 decision 3: a raised part (<code>part#min_height</code> &gt; 0)</h2>
+    <p class="cap">KSFO International Terminal Main Hall from the tower eye (heading 262, pitch −7, FOV 18, crop). Its lower block is stacked parts: one from the ground (7.6 m), others starting at 7, 8 and 13 m; the upper tiers start at 13 and 19 m. Both prototype lanes use the floor-from-ground shader of (b).</p>
+    <div class="lanes">
+      <figure><a href="m1-raised-today.webp"><img src="m1-raised-today.webp" alt="Raised parts, today"></a>
+        <figcaption><b>Today</b><span class="how">Tile-origin grid; stacked parts happen to share it, so rows run on across them.</span><span class="worst">rows at a random height in every part.</span></figcaption></figure>
+      <figure><a href="m1-raised-own.webp"><img src="m1-raised-own.webp" alt="Raised parts, lines from the part's own bottom"></a>
+        <figcaption><b>Lines from the part's own bottom</b><span class="how">Each part starts a storey at its lowest vertex.</span><span class="worst">a stacked block shows a seam where every part restarts its rows (lower block, centre).</span></figcaption></figure>
+      <figure><a href="m1-raised-ground.webp"><img src="m1-raised-ground.webp" alt="Raised parts, lines from the building's ground"></a>
+        <figcaption><b>Lines from the building's ground</b><span class="how">Part bottom minus its <code>part#min_height</code>, so the grid continues up through stacked parts.</span><span class="worst">a part starting between floors shows a cut row at its bottom edge; trusts <code>min_height</code> to be tagged right.</span></figcaption></figure>
+    </div>
+  </section>
+
+  <section id="d2">
+    <h2>TC3D-220 decision 2: how each building's base reaches the shader</h2>
+    <p class="cap">All four style-colour channels are in use. Shrinking the hash or coarsening storeys each frees one bit, so together they carry a base phase of 4 states: 0.75 m steps at a 3 m storey. The phase must still be computed per tile from the same vertex readback, because the shader's height origin is per tile (TC3D-220 probe). Counts below are over the 6,091 elements loaded around the San Bruno pose.</p>
+    <div class="lanes">
+      <figure><a href="m2-street-today.webp"><img src="m2-street-today.webp" alt="Street, palette today"></a>
+        <figcaption><b>Today: 4 colour-hash states</b><span class="how">Each class picks one of 4 wall colours by position.</span></figcaption></figure>
+      <figure><a href="m2-street-hash2.webp"><img src="m2-street-hash2.webp" alt="Street, palette with 2 hash states"></a>
+        <figcaption><b>Shrink the colour hash to 2 states</b><span class="how">Each class keeps 2 of its 4 wall colours; 3,000 of 6,091 elements (49%) change colour.</span><span class="worst">streets of one class alternate between two colours.</span></figcaption></figure>
+      <figure><a href="m2-street-today.webp"><img src="m2-street-today.webp" alt="Street, look unchanged with a lookup texture"></a>
+        <figcaption><b>Per-tile lookup texture</b><span class="how">No look change. One texel per building per tile, keyed by feature id, filled from the vertex readback.</span><span class="worst">rides on Cesium private API (see costs below).</span></figcaption></figure>
+    </div>
+    <h3>Coarser storey buckets (2 storeys per code), International Terminal Main Hall (tower eye, heading 262, FOV 30, crop)</h3>
+    <div class="lanes two">
+      <figure><a href="m2-term-today.webp"><img src="m2-term-today.webp" alt="Main hall, storeys today"></a>
+        <figcaption><b>Today: one code per storey</b><span class="how">Storey height = wall height ÷ tagged levels.</span></figcaption></figure>
+      <figure><a href="m2-term-storey2.webp"><img src="m2-term-storey2.webp" alt="Main hall, storeys rounded to even counts"></a>
+        <figcaption><b>Coarser storey buckets</b><span class="how">Odd level counts round up (1→2, 3→4, 5→6): 414 of 6,091 elements (6.8%) change, every one with tagged levels; the untagged San Bruno houses do not change (0 pixels).</span><span class="worst">tagged low buildings get half-height storeys (the main hall's lower block).</span></figcaption></figure>
+    </div>
+    <h3>Measured cost of the lookup texture (prototype, headless Edge, 4 views)</h3>
+    <table>
+      <tr><th>What</th><th>Measured</th></tr>
+      <tr><td>Tiles and elements per view</td><td>29 to 40 tiles, 14,788 to 27,415 features (each element appears twice, one copy without vertices)</td></tr>
+      <tr><td>GPU readback (<code>getBufferSubData</code> of positions, batch ids, indices)</td><td>46 to 76 ms per view, about 1.6 ms per tile; 11 to 16 MB copied to the CPU per view, dropped after use</td></tr>
+      <tr><td>Per-building base, roof, footprint and tag reads</td><td>82 to 122 ms per view, about 3 ms per tile; the slowest tile (1,748 features) took 12 to 22 ms including its readback</td></tr>
+      <tr><td>Texture memory</td><td>prototype 2 rows of RGBA32F = 32 B per feature, 0.47 to 0.88 MB per view; one RGBA32F row (base point and roof) would be 16 B per feature</td></tr>
+      <tr><td>Code</td><td>about 250 lines in the prototype. A custom shader has no per-tile uniform, so the texture is bound by patching Cesium's private <code>BatchTexturePipelineStage.process</code>, and the readback uses private <code>_sceneGraph</code>, <code>runtimePrimitives</code> and <code>buffer._buffer</code>: every Cesium upgrade has to re-check them.</td></tr>
+    </table>
+    <p class="note">Not mocked: the packed channels stay in 228..255 (<code>buildingStyle.ts:8</code> gives alpha, not the colour range, as the translucency trigger). If the near-white floor is not needed, red alone has over 200 spare codes, which would change this decision; worth checking before choosing.</p>
+  </section>
+
+  <section id="d5">
+    <h2>TC3D-218 decision 5: shape fallback thresholds and the "inside an airport" test</h2>
+    <p class="cap">Top-down, 6,500 m, building LOD forced fine (SSE 2) so every building draws. Footprint is the up-facing triangle area read back from each tile (the same readback as the lookup texture, no extra GPU cost). Untagged buildings carry <code>cesium#estimatedHeight</code> 3 m, so "low" passes for almost every untyped building and area is the only real test; "4-8 levels" fires only where levels or height are tagged (5 buildings at most per airport). Numbered markers are the named buildings the fallback types; unnamed ones cannot be judged from tags.</p>
+    <ul class="legend">
+      <li><span style="background:#8094b8"></span>typed by tags today</li>
+      <li><span style="background:#33bf4d"></span>typed by the outline lookup (relation 15730419)</li>
+      <li><span style="background:#fa8c1a"></span>fallback: hangar ("large and low")</li>
+      <li><span style="background:#b34de6"></span>fallback: 4-8 levels</li>
+      <li><span style="background:#26d9d9"></span>untyped inside the airport, stays generic</li>
+      <li><span style="background:#525252"></span>outside the airport test</li>
+      <li><span style="background:#ffdc00"></span>OSM aerodrome polygon</li>
+      <li><span style="background:#ffffff"></span>3 km radius around the ARP</li>
+    </ul>
+    <table>
+      <tr><th>Set</th><th>Hangar</th><th>4-8 levels</th><th class="num">KSFO typed (hangar / 4-8)</th><th class="num">KOAK typed</th></tr>
+      <tr><td>A strict</td><td>≥ 3,000 m², ≤ 15 m, ≤ 2 levels</td><td>≥ 2,000 m²</td><td class="num">7 / 0</td><td class="num">5 / 0</td></tr>
+      <tr><td>B medium</td><td>≥ 1,500 m², ≤ 20 m, ≤ 2 levels</td><td>≥ 1,000 m²</td><td class="num">9 / 0</td><td class="num">10 / 0</td></tr>
+      <tr><td>C loose</td><td>≥ 600 m², ≤ 25 m, ≤ 2 levels</td><td>≥ 500 m²</td><td class="num">25 / 1</td><td class="num">30 / 0</td></tr>
+      <tr><td>B with a 3 km radius</td><td colspan="2">as B, airport = within 3 km of the ARP</td><td class="num">55 / 5</td><td class="num">98 / 2</td></tr>
+    </table>
+    <h3>KSFO</h3>
+    <div class="lanes two">
+      <figure><a href="m3-ksfo-a-poly.webp"><img src="m3-ksfo-a-poly.webp" alt="KSFO set A, aerodrome polygon"></a>
+        <figcaption><b>A strict, aerodrome polygon</b><span class="how">Only the big cargo sheds on the west side.</span><span class="worst">mid-size maintenance sheds keep the generic grid.</span>
+        <ol class="marks"><li>United Cargo: right</li></ol></figcaption></figure>
+      <figure><a href="m3-ksfo-b-poly.webp"><img src="m3-ksfo-b-poly.webp" alt="KSFO set B, aerodrome polygon"></a>
+        <figcaption><b>B medium, aerodrome polygon</b><span class="how">Adds two more unnamed sheds on the west side.</span><span class="worst">none of the named ones wrong at KSFO.</span>
+        <ol class="marks"><li>United Cargo: right</li></ol></figcaption></figure>
+      <figure><a href="m3-ksfo-c-poly.webp"><img src="m3-ksfo-c-poly.webp" alt="KSFO set C, aerodrome polygon"></a>
+        <figcaption><b>C loose, aerodrome polygon</b><span class="how">Small service buildings across the field turn into hangars.</span><span class="worst">fire stations get hangar doors.</span>
+        <ol class="marks"><li>United Cargo: right</li><li>SFO Fire Station 1: wrong</li><li>SFO Fire Station 2: wrong</li></ol></figcaption></figure>
+      <figure><a href="m3-ksfo-b-radius.webp"><img src="m3-ksfo-b-radius.webp" alt="KSFO set B, 3 km radius"></a>
+        <figcaption><b>B medium, 3 km radius</b><span class="how">The circle takes in Millbrae and San Bruno.</span><span class="worst">a chocolate factory, a school office and a hotel off the field get airport types.</span>
+        <ol class="marks"><li>United Cargo: right</li><li>Guittard Chocolate Company: off-field</li><li>Airport Service Center: off-field</li><li>Outdoor Supply Hardware: off-field</li><li>Michael S. Hensely Party &amp; Rental Sales Co.: off-field</li><li>Alexandria Technologies: off-field</li><li>American Bridal: off-field</li><li>San Mateo County Office of Education: off-field</li><li>Interstate Batteries: off-field</li><li>Bay Landing Hotel as 4-8 levels: wrong</li></ol></figcaption></figure>
+    </div>
+    <h3>KOAK</h3>
+    <div class="lanes two">
+      <figure><a href="m3-koak-a-poly.webp"><img src="m3-koak-a-poly.webp" alt="KOAK set A, aerodrome polygon"></a>
+        <figcaption><b>A strict, aerodrome polygon</b><span class="how">Five sheds: three by Terminal 2, two on the north field.</span><span class="worst">north-field hangars under 3,000 m² stay generic.</span></figcaption></figure>
+      <figure><a href="m3-koak-b-poly.webp"><img src="m3-koak-b-poly.webp" alt="KOAK set B, aerodrome polygon"></a>
+        <figcaption><b>B medium, aerodrome polygon</b><span class="how">Adds the rest of the south-field sheds.</span><span class="worst">a fire station gets hangar doors.</span>
+        <ol class="marks"><li>Building 621: use unknown</li><li>Oakland Fire Station No. 22: wrong</li></ol></figcaption></figure>
+      <figure><a href="m3-koak-c-poly.webp"><img src="m3-koak-c-poly.webp" alt="KOAK set C, aerodrome polygon"></a>
+        <figcaption><b>C loose, aerodrome polygon</b><span class="how">30 hangars, most of the north field's small buildings.</span><span class="worst">a school and the car-rental centre become hangars.</span>
+        <ol class="marks"><li>Building 621: use unknown</li><li>Oakland Fire Station No. 22: wrong</li><li>Aviation Institute of Maintenance: wrong</li><li>Oakland Airport Car Rental Center: wrong</li></ol></figcaption></figure>
+      <figure><a href="m3-koak-b-radius.webp"><img src="m3-koak-b-radius.webp" alt="KOAK set B, 3 km radius"></a>
+        <figcaption><b>B medium, 3 km radius</b><span class="how">The circle takes in East Oakland's industrial blocks and Harbor Bay.</span><span class="worst">98 hangars, most of them warehouses and plants off the field.</span>
+        <ol class="marks"><li>General Bottle Supply: off-field</li><li>UPS Customer Center: off-field</li><li>Peet's Coffee Roasting Plant: off-field</li><li>Alameda County Community Food Bank: off-field</li><li>Comcast: off-field</li><li>Horizon Beverage Company: off-field</li><li>Dry Ice Roller Hockey Arena: off-field</li><li>Semifreddi's World Headquarters: off-field</li><li>FedEx: off-field</li><li>Grainger: off-field</li><li>Building 621: use unknown</li><li>Oakland Fire Station No. 22: wrong</li></ol></figcaption></figure>
+    </div>
+  </section>
+
+  <section id="d7">
+    <h2>TC3D-218 decision 7: the KSFO "central garage" (settled, no lanes)</h2>
+    <p class="cap">OSM relation 15730419 is the International Terminal Main Hall: its outline member, relation 14273628, is named "International Terminal Main Hall" (<code>aeroway=terminal</code>, <code>building=transportation</code>, 5 levels, 40 m). The curved garage below the tower is relation 2920181 "Domestic Garage" (<code>amenity=parking</code>, <code>parking=multi-storey</code>), which the branch already classes GARAGE. Inheriting TERMINAL onto 15730419's 12 parts is therefore right. <code>docs/plans/canvases/osm-facades/README.md:11</code> misnames the garage as relation 15730419. Tower eye, heading 274, pitch −7, FOV 45; the main hall's parts are drawn as TERMINAL (prototype class override).</p>
+    <figure style="max-width:1280px"><a href="m4-ksfo.webp"><img src="m4-ksfo.webp" alt="KSFO main hall typed TERMINAL and Domestic Garage typed GARAGE"></a></figure>
+  </section>
+
+  <section>
+    <h2>Recommendations</h2>
+    <div class="rec">
+      <p><b>Decision 1: (b) floors from each building's ground.</b> It is the only lane where ground-floor windows line up along a street and at the ramp. Worst case: a partial storey under the roof (a thin window row at KOAK, a blank band in San Bruno).</p>
+      <p><b>Decision 2: the per-tile lookup texture.</b> No look change. The colour-bit options cost palette variety or storeys and buy only a 0.75 m phase, yet need the same readback. Worst case: about 4 ms per loaded tile (22 ms for the slowest), and private Cesium API to re-check on each upgrade. Check the 228 floor first.</p>
+      <p><b>Decision 3: lines from the building's ground.</b> Stacked parts keep one rhythm. Worst case: a cut row at a raised part's bottom edge.</p>
+      <p><b>Decision 5: the aerodrome polygon with set B</b> (≥ 1,500 m², ≤ 20 m). The radius test types whole industrial districts (98 hangars at KOAK). Worst case: a fire station inside the fence gets hangar walls. Drop the "4-8 levels" rule or make it tag-only: untagged buildings never reach it.</p>
+      <p><b>Decision 7:</b> no longer a question; fix the osm-facades README row.</p>
+    </div>
+  </section>
+</main>
+</body>
+</html>

@@ -1,0 +1,674 @@
+diff --git a/src/renderer/components/CesiumViewer/CesiumViewer.tsx b/src/renderer/components/CesiumViewer/CesiumViewer.tsx
+index b2c0f74..afc5594 100644
+--- a/src/renderer/components/CesiumViewer/CesiumViewer.tsx
++++ b/src/renderer/components/CesiumViewer/CesiumViewer.tsx
+@@ -40,6 +40,7 @@ import { getTowerPosition } from '../../utils/towerHeight'
+ import { hasViewingContext, isOrbitFollowing, isOrbitWithoutAirport } from '../../utils/viewingContext'
+ import DebugCoordinateOverlay from '../UI/DebugCoordinateOverlay'
+ import './CesiumViewer.css'
++import '../../utils/mockFloors'
+ 
+ // Import Cesium CSS
+ import 'cesium/Build/Cesium/Widgets/widgets.css'
+diff --git a/src/renderer/utils/facadeShader.ts b/src/renderer/utils/facadeShader.ts
+index 844cbbd..24252e7 100644
+--- a/src/renderer/utils/facadeShader.ts
++++ b/src/renderer/utils/facadeShader.ts
+@@ -457,6 +457,17 @@ void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
+   selectedFeatureIdStage(styled, fsInput.featureIds);
+   building = facadeDecode(styled.color.rgb);
+   #endif
++  vec4 mockBase = vec4(0.0);
++  vec4 mockInfo = vec4(0.0);
++  #ifdef HAS_SELECTED_FEATURE_ID
++  if (styled.id < textureSize(mock_lookup, 0).x && textureSize(mock_lookup, 0).y > 1) {
++    mockBase = texelFetch(mock_lookup, ivec2(styled.id, 0), 0);
++    mockInfo = texelFetch(mock_lookup, ivec2(styled.id, 1), 0);
++  }
++  #endif
++  if (u_mockClass > 0.5 && mockInfo.y > 0.5) building.x = mockInfo.y - 1.0;
++  if (u_mockHash < 3.5) building.w = mod(building.w, 2.0);
++  if (u_mockStoreyBucket > 1.5 && building.y > 0.5) building.y = max(2.0 * floor(building.y * 0.5 + 0.5), 2.0);
+   vec4 grammar = facadeCell(building.x);
+   float levelsKnown = step(0.5, building.y) * step(0.5, building.z) * step(building.z, ${glslFloat(SATURATED_HEIGHT_M - 1)}) * grammar.w;
+   float levelStorey = clamp(building.z / max(building.y, 1.0), ${glslFloat(STOREY_MIN_M)}, ${glslFloat(STOREY_MAX_M)});
+@@ -475,6 +486,10 @@ void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
+   vec3 tangentMC = across / max(length(across), 1e-4);
+   float s = dot(positionMC, tangentMC);
+   float h = dot(positionMC, upMC);
++  if (u_mockFloor > 0.5 && mockInfo.x > 0.5) {
++    float hbOwn = dot(positionMC - mockBase.xyz, upMC);
++    h = u_mockFloor > 1.5 ? hbOwn - mockBase.w : hbOwn + u_mockGround * mockInfo.w;
++  }
+   vec2 cell = vec2(s / grammar.x, h / storey);
+   vec2 aa = max(fwidth(cell), vec2(1e-4));
+   float ribCoord = s * ${glslFloat(RIBS_PER_M)};
+@@ -483,6 +498,18 @@ void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
+   float detail = mix(1.0, fadeDetail, u_fade);
+   float ribDetail = 1.0 - smoothstep(0.25, 0.6, ribAa);
+ 
++  if (u_mockDebug > 0.5) {
++    float k = mockInfo.z;
++    vec3 c = vec3(0.32);
++    if (k > 0.5 && k < 1.5) c = vec3(0.50, 0.58, 0.72);
++    if (k > 1.5 && k < 2.5) c = vec3(0.20, 0.75, 0.30);
++    if (k > 2.5 && k < 3.5) c = vec3(0.98, 0.55, 0.10);
++    if (k > 3.5 && k < 4.5) c = vec3(0.70, 0.30, 0.90);
++    if (k > 4.5 && k < 5.5) c = vec3(0.15, 0.85, 0.85);
++    if (k > 5.5 && k < 6.5) c = vec3(0.95, 0.20, 0.20);
++    material.diffuse = c * c;
++    return;
++  }
+   if (dot(normalWC, upWC) > 0.6) {
+     return;
+   }
+@@ -551,6 +578,12 @@ export function createFacadeShader(): Cesium.CustomShader {
+     mode: Cesium.CustomShaderMode.MODIFY_MATERIAL,
+     uniforms: {
+       u_fade: { type: Cesium.UniformType.FLOAT, value: 0 },
++      u_mockFloor: { type: Cesium.UniformType.FLOAT, value: 0 },
++      u_mockGround: { type: Cesium.UniformType.FLOAT, value: 0 },
++      u_mockHash: { type: Cesium.UniformType.FLOAT, value: 4 },
++      u_mockStoreyBucket: { type: Cesium.UniformType.FLOAT, value: 1 },
++      u_mockDebug: { type: Cesium.UniformType.FLOAT, value: 0 },
++      u_mockClass: { type: Cesium.UniformType.FLOAT, value: 0 },
+       u_fadeStart: { type: Cesium.UniformType.FLOAT, value: FACADE_FADE_START },
+       u_fadeEnd: { type: Cesium.UniformType.FLOAT, value: FACADE_FADE_END },
+       u_glassMean: {
+diff --git a/src/renderer/utils/mockFloors.ts b/src/renderer/utils/mockFloors.ts
+new file mode 100644
+index 0000000..093f183
+--- /dev/null
++++ b/src/renderer/utils/mockFloors.ts
+@@ -0,0 +1,591 @@
++// Scratch-tree mock harness for TC3D-218/220 (never shipped). Exposes window.__mock.
++import * as Cesium from 'cesium'
++
++const C: any = Cesium
++
++function tilesetOf(viewer: any): any {
++  const prims = viewer.scene.primitives
++  for (let i = 0; i < prims.length; i++) {
++    const p = prims.get(i)
++    if (p instanceof C.Cesium3DTileset) return p
++  }
++  return undefined
++}
++
++function forEachModel(tileset: any, fn: (model: any, tile: any) => void): void {
++  const stack = [tileset.root]
++  while (stack.length) {
++    const tile = stack.pop()
++    if (!tile) continue
++    const content = tile.content
++    const model = content?._model
++    if (model?.ready) fn(model, tile)
++    for (const c of tile.children) stack.push(c)
++  }
++}
++
++// ---- Per-tile lookup texture (prototype carrier) -------------------------------------------
++
++interface FeatureStat {
++  known: boolean
++  base: [number, number, number]
++  top: number
++  area: number
++  areaDown: number
++  lat: number
++  lon: number
++  baseHeight: number
++  minHeight: number
++  cls: number
++  levels: number
++  elementId: string
++  partId: string
++  name: string
++  building: string
++  aeroway: string
++  partBuilding: string
++}
++
++interface ModelStats {
++  features: FeatureStat[]
++  readMs: number
++  computeMs: number
++  vertexBytes: number
++  ft: any
++}
++
++interface Config {
++  floor: number
++  categoryOf: ((f: FeatureStat) => number) | null
++  classOf: ((f: FeatureStat) => number) | null
++}
++
++const config: Config = { floor: 0, categoryOf: null, classOf: null }
++let generation = 1
++const totals = { models: 0, features: 0, readMs: 0, computeMs: 0, textureBytes: 0, vertexBytes: 0, maxTileMs: 0, maxTileFeatures: 0 }
++const statsByModel = new WeakMap<any, ModelStats>()
++const textureByModel = new WeakMap<any, { gen: number; texture: any }>()
++let defaultTexture: any
++
++function readGl(gl: WebGL2RenderingContext, buffer: any): ArrayBuffer {
++  const bytes = new Uint8Array(buffer.sizeInBytes)
++  gl.bindBuffer(gl.COPY_READ_BUFFER, buffer._buffer)
++  gl.getBufferSubData(gl.COPY_READ_BUFFER, 0, bytes)
++  gl.bindBuffer(gl.COPY_READ_BUFFER, null)
++  return bytes.buffer
++}
++
++function tagNumber(feature: any, name: string): number {
++  const v = feature.getProperty(name)
++  if (typeof v === 'number') return v
++  if (typeof v !== 'string') return Number.NaN
++  const m = /^(-?\d+(?:\.\d+)?)\s*m?$/.exec(v.trim().replace(',', '.'))
++  return m ? Number(m[1]) : Number.NaN
++}
++
++function computeModel(model: any, gl: WebGL2RenderingContext): ModelStats | undefined {
++  const ft = model.featureTables[model.featureTableId]
++  if (!ft) return undefined
++  const n = ft.featuresLength
++  const t0 = performance.now()
++  const parts: { pos: Float32Array; fid: Float32Array; idx: Uint16Array | Uint32Array; M: any }[] = []
++  let vertexBytes = 0
++  for (const rn of model._sceneGraph._runtimeNodes) {
++    for (const rp of rn.runtimePrimitives) {
++      const p = rp.primitive
++      if (!rp.drawCommand) return undefined
++      const posAttr = p.attributes.find((a: any) => a.semantic === 'POSITION')
++      const fidAttr = p.attributes.find((a: any) => a.semantic === '_FEATURE_ID' && a.setIndex === 0)
++      if (!posAttr?.buffer || !fidAttr?.buffer || !p.indices?.buffer) continue
++      const pos = new Float32Array(readGl(gl, posAttr.buffer), posAttr.byteOffset ?? 0, posAttr.count * 3)
++      const fid = new Float32Array(readGl(gl, fidAttr.buffer), fidAttr.byteOffset ?? 0, fidAttr.count)
++      const ib = readGl(gl, p.indices.buffer)
++      const idx = p.indices.indexDatatype === 5125 ? new Uint32Array(ib, 0, p.indices.count) : new Uint16Array(ib, 0, p.indices.count)
++      vertexBytes += posAttr.count * 12 + fidAttr.count * 4 + ib.byteLength
++      parts.push({ pos, fid, idx, M: rp.drawCommand.modelMatrix })
++    }
++  }
++  const t1 = performance.now()
++  const up = new Float64Array(n * 3)
++  const hasUp = new Uint8Array(n)
++  const minH = new Float64Array(n).fill(Number.POSITIVE_INFINITY)
++  const maxH = new Float64Array(n).fill(Number.NEGATIVE_INFINITY)
++  const baseV = new Float64Array(n * 3)
++  const area = new Float64Array(n)
++  const areaDown = new Float64Array(n)
++  const baseWC = new Array<any>(n)
++  const centreWC = new Array<any>(n)
++  const sum = new Float64Array(n * 3)
++  const cnt = new Uint32Array(n)
++  const scratch = new C.Cartesian3()
++  for (const { pos, fid, idx, M } of parts) {
++    const inv = C.Matrix4.inverse(M, new C.Matrix4())
++    const count = fid.length
++    for (let v = 0; v < count; v++) {
++      const f = fid[v]
++      if (f < 0 || f >= n) continue
++      const x = pos[v * 3]
++      const y = pos[v * 3 + 1]
++      const z = pos[v * 3 + 2]
++      if (!hasUp[f]) {
++        const wc = C.Matrix4.multiplyByPoint(M, new C.Cartesian3(x, y, z), scratch)
++        C.Cartesian3.normalize(wc, wc)
++        const u = C.Matrix4.multiplyByPointAsVector(inv, wc, new C.Cartesian3())
++        C.Cartesian3.normalize(u, u)
++        up[f * 3] = u.x
++        up[f * 3 + 1] = u.y
++        up[f * 3 + 2] = u.z
++        hasUp[f] = 1
++      }
++      const h = x * up[f * 3] + y * up[f * 3 + 1] + z * up[f * 3 + 2]
++      if (h < minH[f]) {
++        minH[f] = h
++        baseV[f * 3] = x
++        baseV[f * 3 + 1] = y
++        baseV[f * 3 + 2] = z
++      }
++      if (h > maxH[f]) maxH[f] = h
++      sum[f * 3] += x
++      sum[f * 3 + 1] += y
++      sum[f * 3 + 2] += z
++      cnt[f]++
++    }
++    for (let t = 0; t + 2 < idx.length; t += 3) {
++      const a = idx[t]
++      const b = idx[t + 1]
++      const c = idx[t + 2]
++      const f = fid[a]
++      if (f < 0 || f >= n) continue
++      const ax = pos[a * 3], ay = pos[a * 3 + 1], az = pos[a * 3 + 2]
++      const e1x = pos[b * 3] - ax, e1y = pos[b * 3 + 1] - ay, e1z = pos[b * 3 + 2] - az
++      const e2x = pos[c * 3] - ax, e2y = pos[c * 3 + 1] - ay, e2z = pos[c * 3 + 2] - az
++      const cx = e1y * e2z - e1z * e2y
++      const cy = e1z * e2x - e1x * e2z
++      const cz = e1x * e2y - e1y * e2x
++      const len = Math.hypot(cx, cy, cz)
++      const dotUp = cx * up[f * 3] + cy * up[f * 3 + 1] + cz * up[f * 3 + 2]
++      if (len > 0 && dotUp / len > 0.9) area[f] += dotUp / 2
++      if (len > 0 && dotUp / len < -0.9) areaDown[f] -= dotUp / 2
++    }
++    for (let f = 0; f < n; f++) {
++      if (hasUp[f] && baseWC[f] === undefined) {
++        baseWC[f] = C.Matrix4.multiplyByPoint(M, new C.Cartesian3(baseV[f * 3], baseV[f * 3 + 1], baseV[f * 3 + 2]), new C.Cartesian3())
++        const k = cnt[f]
++        centreWC[f] = C.Matrix4.multiplyByPoint(M, new C.Cartesian3(sum[f * 3] / k, sum[f * 3 + 1] / k, sum[f * 3 + 2] / k), new C.Cartesian3())
++      }
++    }
++  }
++  const features: FeatureStat[] = []
++  const colour = new C.Color()
++  for (let f = 0; f < n; f++) {
++    const feature = ft.getFeature(f)
++    const known = hasUp[f] === 1
++    let lat = tagNumber(feature, 'cesium#latitude')
++    let lon = tagNumber(feature, 'cesium#longitude')
++    let baseHeight = 0
++    if (known) {
++      baseHeight = C.Cartographic.fromCartesian(baseWC[f]).height
++      const carto = C.Cartographic.fromCartesian(centreWC[f])
++      lat = C.Math.toDegrees(carto.latitude)
++      lon = C.Math.toDegrees(carto.longitude)
++    }
++    const isPart = feature.getProperty('part#elementId') !== undefined
++    const packed = ft.getColor(f, colour)
++    const red = 255 - Math.round(packed.red * 255)
++    features.push({
++      known,
++      base: [baseV[f * 3], baseV[f * 3 + 1], baseV[f * 3 + 2]],
++      top: known ? maxH[f] - minH[f] : 0,
++      area: area[f],
++      areaDown: areaDown[f],
++      lat,
++      lon,
++      baseHeight,
++      minHeight: tagNumber(feature, isPart ? 'part#min_height' : 'min_height') || 0,
++      cls: Math.floor(red / 4),
++      levels: 255 - Math.round(packed.green * 255),
++      elementId: String(feature.getProperty('elementId') ?? ''),
++      partId: String(feature.getProperty('part#elementId') ?? ''),
++      name: String(feature.getProperty('name') ?? ''),
++      building: String(feature.getProperty('building') ?? ''),
++      aeroway: String(feature.getProperty('aeroway') ?? ''),
++      partBuilding: String(feature.getProperty('part#building:part') ?? ''),
++    })
++  }
++  const t2 = performance.now()
++  return { features, readMs: t1 - t0, computeMs: t2 - t1, vertexBytes, ft }
++}
++
++/** The style colour is applied after the first compute, so class and storeys are re-read. */
++function rereadColours(stats: ModelStats): void {
++  const colour = new C.Color()
++  stats.features.forEach((f, i) => {
++    const packed = stats.ft.getColor(i, colour)
++    f.cls = Math.floor((255 - Math.round(packed.red * 255)) / 4)
++    ;(f as any).hash = (255 - Math.round(packed.red * 255)) % 4
++    f.levels = 255 - Math.round(packed.green * 255)
++  })
++}
++
++function buildTexture(context: any, stats: ModelStats): any {
++  const n = Math.max(stats.features.length, 1)
++  const data = new Float32Array(n * 2 * 4)
++  stats.features.forEach((f, i) => {
++    if (!f.known) return
++    data[i * 4] = f.base[0]
++    data[i * 4 + 1] = f.base[1]
++    data[i * 4 + 2] = f.base[2]
++    data[i * 4 + 3] = f.top
++    const r = (n + i) * 4
++    data[r] = 1
++    data[r + 1] = config.classOf ? config.classOf(f) + 1 : 0
++    data[r + 2] = config.categoryOf ? config.categoryOf(f) : 0
++    data[r + 3] = f.minHeight
++  })
++  return new C.Texture({
++    context,
++    width: n,
++    height: 2,
++    pixelFormat: C.PixelFormat.RGBA,
++    pixelDatatype: C.PixelDatatype.FLOAT,
++    flipY: false,
++    source: { width: n, height: 2, arrayBufferView: data },
++    sampler: new C.Sampler({
++      minificationFilter: C.TextureMinificationFilter.NEAREST,
++      magnificationFilter: C.TextureMagnificationFilter.NEAREST,
++    }),
++  })
++}
++
++function lookupFor(model: any, context: any): any {
++  const entry = textureByModel.get(model)
++  if (entry) return entry.texture
++  if (!defaultTexture) {
++    defaultTexture = new C.Texture({
++      context,
++      width: 1,
++      height: 1,
++      pixelFormat: C.PixelFormat.RGBA,
++      pixelDatatype: C.PixelDatatype.FLOAT,
++      flipY: false,
++      source: { width: 1, height: 1, arrayBufferView: new Float32Array(4) },
++      sampler: new C.Sampler({
++        minificationFilter: C.TextureMinificationFilter.NEAREST,
++        magnificationFilter: C.TextureMagnificationFilter.NEAREST,
++      }),
++    })
++  }
++  return defaultTexture
++}
++
++const stage = C.BatchTexturePipelineStage
++const originalProcess = stage.process
++stage.process = function (renderResources: any, primitive: any, frameState: any) {
++  originalProcess.call(this, renderResources, primitive, frameState)
++  const model = renderResources.model
++  const context = frameState.context
++  renderResources.shaderBuilder.addUniform('sampler2D', 'mock_lookup', C.ShaderDestination.FRAGMENT)
++  renderResources.uniformMap = { ...renderResources.uniformMap, mock_lookup: () => lookupFor(model, context) }
++}
++
++function refresh(viewer: any): void {
++  const ts = tilesetOf(viewer)
++  if (!ts) return
++  const gl = viewer.scene.context._gl as WebGL2RenderingContext
++  let budget = 40
++  forEachModel(ts, (model) => {
++    if (budget <= 0) return
++    let stats = statsByModel.get(model)
++    if (!stats) {
++      stats = computeModel(model, gl)
++      if (!stats) return
++      budget--
++      statsByModel.set(model, stats)
++      totals.models++
++      totals.features += stats.features.length
++      totals.readMs += stats.readMs
++      totals.computeMs += stats.computeMs
++      totals.maxTileMs = Math.max(totals.maxTileMs, stats.readMs + stats.computeMs)
++      totals.maxTileFeatures = Math.max(totals.maxTileFeatures, stats.features.length)
++      totals.textureBytes += Math.max(stats.features.length, 1) * 2 * 16
++      totals.vertexBytes += stats.vertexBytes
++    }
++    const entry = textureByModel.get(model)
++    if (entry?.gen === generation) return
++    entry?.texture.destroy()
++    rereadColours(stats)
++    textureByModel.set(model, { gen: generation, texture: buildTexture(viewer.scene.context, stats) })
++  })
++}
++
++function allFeatures(viewer: any): FeatureStat[] {
++  const ts = tilesetOf(viewer)
++  const out: FeatureStat[] = []
++  forEachModel(ts, (model) => {
++    const s = statsByModel.get(model)
++    if (s && model._sceneGraph && ts._selectedTiles?.some((t: any) => t.content?._model === model)) {
++      rereadColours(s)
++      out.push(...s.features)
++    }
++  })
++  return out
++}
++
++let listening = false
++function ensureListener(): void {
++  if (listening) return
++  const t = (window as any).__tc3d
++  if (!t?.viewer) return
++  t.viewer.scene.postRender.addEventListener(() => refresh(t.viewer))
++  listening = true
++}
++setInterval(ensureListener, 500)
++
++function describeAttr(a: any): any {
++  return {
++    semantic: a.semantic,
++    setIndex: a.setIndex,
++    name: a.name,
++    type: a.type,
++    componentDatatype: a.componentDatatype,
++    normalized: a.normalized,
++    count: a.count,
++    byteOffset: a.byteOffset,
++    byteStride: a.byteStride,
++    hasBuffer: a.buffer !== undefined,
++    hasTyped: a.typedArray !== undefined,
++    quantization: a.quantization
++      ? {
++          octEncoded: a.quantization.octEncoded,
++          offset: a.quantization.quantizedVolumeOffset,
++          step: a.quantization.quantizedVolumeStepSize,
++          dt: a.quantization.componentDatatype,
++          type: a.quantization.type,
++        }
++      : undefined,
++  }
++}
++
++const METERS_PER_DEGREE_LAT = 111320
++
++/** Canvas pixel (drawing-buffer) position of a point, or null when off screen. */
++function canvasPoint(viewer: any, lat: number, lon: number, h: number): { x: number; y: number } | null {
++  const p = C.Cartesian3.fromDegrees(lon, lat, h)
++  const w = C.SceneTransforms.worldToDrawingBufferCoordinates(viewer.scene, p)
++  if (!w) return null
++  const cam = viewer.camera
++  const toPoint = C.Cartesian3.subtract(p, cam.positionWC, new C.Cartesian3())
++  if (C.Cartesian3.dot(toPoint, cam.directionWC) <= 0) return null
++  return { x: w.x, y: w.y }
++}
++
++async function frames(n: number): Promise<void> {
++  for (let i = 0; i < n; i++) await new Promise((r) => requestAnimationFrame(() => r(null)))
++}
++
++const api = {
++  async pose(p: { lat: number; lon: number; h: number; heading: number; pitch: number; fov: number }): Promise<void> {
++    const t = (window as any).__tc3d
++    const vs = t.stores.viewport.getState()
++    vs.setPositionOffsetX(0)
++    vs.setPositionOffsetY(0)
++    vs.setPositionOffsetZ(0)
++    await frames(4)
++    if ((p as any).topdown) {
++      const o = p as any
++      const b = t.viewer.camera.positionCartographic
++      const bLat = C.Math.toDegrees(b.latitude)
++      const bLon = C.Math.toDegrees(b.longitude)
++      if (o.lat !== undefined) {
++        o.dy = (o.lat - bLat) * METERS_PER_DEGREE_LAT
++        o.dx = (o.lon - bLon) * METERS_PER_DEGREE_LAT * Math.cos((bLat * Math.PI) / 180)
++      }
++      vs.setViewMode('topdown')
++      await frames(4)
++      vs.setTopdownAltitude(o.topdown)
++      vs.setPositionOffsetX(o.dx ?? 0)
++      vs.setPositionOffsetY(o.dy ?? 0)
++      if (o.heading !== undefined) t.camera.set({ heading: o.heading })
++      await frames(4)
++      return
++    }
++    if ((p as any).lat === undefined) {
++      const o = p as any
++      vs.setPositionOffsetX(o.dx ?? 0)
++      vs.setPositionOffsetY(o.dy ?? 0)
++      vs.setPositionOffsetZ(o.dz ?? 0)
++      t.camera.set({ heading: p.heading, pitch: p.pitch, fov: p.fov })
++      await frames(4)
++      return
++    }
++    const c = t.viewer.camera.positionCartographic
++    const baseLat = C.Math.toDegrees(c.latitude)
++    const baseLon = C.Math.toDegrees(c.longitude)
++    const y = (p.lat - baseLat) * METERS_PER_DEGREE_LAT
++    const x = (p.lon - baseLon) * METERS_PER_DEGREE_LAT * Math.cos((baseLat * Math.PI) / 180)
++    vs.setPositionOffsetX(x)
++    vs.setPositionOffsetY(y)
++    vs.setPositionOffsetZ(p.h - c.height)
++    t.camera.set({ heading: p.heading, pitch: p.pitch, fov: p.fov })
++    const target = C.Cartesian3.fromDegrees(p.lon, p.lat, p.h)
++    for (let round = 0; round < 4; round++) {
++      let last = new C.Cartesian3()
++      for (let i = 0; i < 120; i++) {
++        await frames(2)
++        const now = t.viewer.camera.positionWC
++        if (C.Cartesian3.distance(now, target) < 0.5 || C.Cartesian3.distance(now, last) < 0.01) break
++        last = C.Cartesian3.clone(now)
++      }
++      const a = t.viewer.camera.positionCartographic
++      const s = vs.getActiveCameraState()
++      const errY = (p.lat - C.Math.toDegrees(a.latitude)) * METERS_PER_DEGREE_LAT
++      const errX = (p.lon - C.Math.toDegrees(a.longitude)) * METERS_PER_DEGREE_LAT * Math.cos((p.lat * Math.PI) / 180)
++      const errZ = p.h - a.height
++      if (Math.hypot(errX, errY, errZ) < 0.5) break
++      vs.setPositionOffsetX(s.positionOffsetX + errX)
++      vs.setPositionOffsetY(s.positionOffsetY + errY)
++      vs.setPositionOffsetZ(s.positionOffsetZ + errZ)
++    }
++    const error = C.Cartesian3.distance(t.viewer.camera.positionWC, target)
++    const s = vs.getActiveCameraState()
++    console.log(`[mock] pose error ${error.toFixed(1)} m, offsetZ ${s.positionOffsetZ.toFixed(1)}, h ${t.viewer.camera.positionCartographic.height.toFixed(1)}`)
++    return error
++  },
++  camera(): any {
++    const cam = (window as any).__tc3d.viewer.camera
++    const c = cam.positionCartographic
++    return { lat: C.Math.toDegrees(c.latitude), lon: C.Math.toDegrees(c.longitude), h: c.height, ...(window as any).__tc3d.camera.get() }
++  },
++  uniforms(u: Record<string, number>): void {
++    const ts = tilesetOf((window as any).__tc3d.viewer)
++    if (u.sse !== undefined) {
++      ts.maximumScreenSpaceError = u.sse
++      delete u.sse
++    }
++    if (u.globeSse !== undefined) {
++      ;(window as any).__tc3d.viewer.scene.globe.maximumScreenSpaceError = u.globeSse
++      delete u.globeSse
++    }
++    for (const [k, v] of Object.entries(u)) ts.customShader.setUniform(k, v)
++  },
++  setCategory(cfg: any): void {
++    if (!cfg) {
++      config.categoryOf = null
++    } else if (cfg.byPart) {
++      config.categoryOf = (f) => (f.known ? (cfg.byPart[f.partId] ?? 0) : 0)
++    } else {
++      const inside = (lat: number, lon: number): boolean => {
++        if (cfg.inside.kind === 'radius') {
++          const dy = (lat - cfg.inside.lat) * METERS_PER_DEGREE_LAT
++          const dx = (lon - cfg.inside.lon) * METERS_PER_DEGREE_LAT * Math.cos((lat * Math.PI) / 180)
++          return Math.hypot(dx, dy) <= cfg.inside.radiusM
++        }
++        let hit = false
++        for (const ring of cfg.inside.rings as [number, number][][]) {
++          for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
++            const [xi, yi] = ring[i]
++            const [xj, yj] = ring[j]
++            if (yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) hit = !hit
++          }
++        }
++        return hit
++      }
++      config.categoryOf = (f) => {
++        if (!f.known) return 0
++        const isIn = inside(f.lat, f.lon)
++        if (!isIn) return 0
++        if (f.cls !== 0) return 1
++        if (f.partId && cfg.lookupParents.includes(f.elementId)) return 2
++        const levels = f.levels > 0 ? f.levels : Math.max(1, Math.round(f.top / 3))
++        if (f.area >= cfg.hangar.minArea && f.top <= cfg.hangar.maxHeight && levels <= 2) return 3
++        if (f.area >= cfg.mid.minArea && levels >= cfg.mid.minLevels && levels <= cfg.mid.maxLevels) return 4
++        return 5
++      }
++    }
++    generation++
++  },
++  setClass(cfg: any): void {
++    config.classOf = cfg
++      ? (f) => (f.partId && f.elementId === cfg.parent ? (cfg.overrides[f.partId] ?? cfg.cls) : -1)
++      : null
++    generation++
++  },
++  features(): any[] {
++    const t = (window as any).__tc3d
++    return allFeatures(t.viewer)
++      .filter((f) => f.known)
++      .map((f) => ({
++        ...f,
++        base: undefined,
++        category: config.categoryOf ? config.categoryOf(f) : 0,
++        screen: canvasPoint(t.viewer, f.lat, f.lon, f.baseHeight + f.top),
++      }))
++  },
++  project(points: [number, number, number][]): ({ x: number; y: number } | null)[] {
++    const viewer = (window as any).__tc3d.viewer
++    return points.map(([lon, lat, h]) => canvasPoint(viewer, lat, lon, h))
++  },
++  pick(x: number, y: number): any {
++    const viewer = (window as any).__tc3d.viewer
++    const picked = viewer.scene.pick(new C.Cartesian2(x, y))
++    if (!picked || !(picked instanceof C.Cesium3DTileFeature)) return null
++    const model = (picked as any).content?._model
++    const stats = statsByModel.get(model)
++    const id = (picked as any).featureId
++    return {
++      id,
++      elementId: picked.getProperty('elementId'),
++      partId: picked.getProperty('part#elementId'),
++      hasStats: !!stats,
++      stat: stats ? { ...stats.features[id], base: undefined } : null,
++      texGen: textureByModel.get(model)?.gen,
++      gen: generation,
++    }
++  },
++  totals(): any {
++    return { ...totals }
++  },
++  grab(): string {
++    const viewer = (window as any).__tc3d.viewer
++    viewer.render()
++    return viewer.canvas.toDataURL('image/png')
++  },
++  loaded(): boolean {
++    const viewer = (window as any).__tc3d.viewer
++    const ts = tilesetOf(viewer)
++    if (!ts || !ts.tilesLoaded || !viewer.scene.globe.tilesLoaded) return false
++    for (const tile of ts._selectedTiles ?? []) {
++      const model = tile.content?._model
++      if (model?.featureTables?.[model.featureTableId] && textureByModel.get(model)?.gen !== generation) return false
++    }
++    return true
++  },
++  probe(): any {
++    const viewer = (window as any).__tc3d.viewer
++    const ts = tilesetOf(viewer)
++    const out: any[] = []
++    forEachModel(ts, (model) => {
++      if (out.length >= 2) return
++      const sg = model._sceneGraph
++      const prims: any[] = []
++      for (const rn of sg._runtimeNodes) {
++        for (const rp of rn.runtimePrimitives) {
++          const p = rp.primitive
++          prims.push({
++            attrs: p.attributes.map(describeAttr),
++            featureIds: p.featureIds.map((f: any) => ({ setIndex: f.setIndex, label: f.label, positionalLabel: f.positionalLabel, featureCount: f.featureCount, offset: f.offset })),
++            indices: p.indices ? { count: p.indices.count, dt: p.indices.indexDatatype, hasBuffer: !!p.indices.buffer } : null,
++            mode: p.primitiveType,
++            hasCmd: !!rp.drawCommand,
++            modelMatrix: rp.drawCommand ? Array.from(C.Matrix4.toArray(rp.drawCommand.modelMatrix)) : null,
++          })
++        }
++      }
++      const ft = model.featureTables[model.featureTableId]
++      out.push({ featuresLength: ft.featuresLength, prims })
++    })
++    return out
++  },
++}
++
++;(window as any).__mock = api
