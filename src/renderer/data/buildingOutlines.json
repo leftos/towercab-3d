@@ -1,0 +1,90 @@
+{
+  "_meta": {
+    "generator": "scripts/shipping/data-generation/extract-airport-buildings.py",
+    "licence": "ODbL 1.0, © OpenStreetMap contributors",
+    "source": "OpenStreetMap planet 2026-10-12 (planet-261012)"
+  },
+  "relations": {
+    "13327367": {
+      "aeroway": "terminal",
+      "building": "transportation"
+    },
+    "15730419": {
+      "aeroway": "terminal",
+      "building": "transportation",
+      "building:levels": "5",
+      "height": "40"
+    },
+    "20083681": {
+      "amenity": "fire_station",
+      "building": "yes"
+    },
+    "20083682": {
+      "aeroway": "hangar",
+      "building": "hangar"
+    },
+    "20083683": {
+      "aeroway": "hangar",
+      "building": "hangar"
+    },
+    "20083684": {
+      "aeroway": "hangar",
+      "building": "hangar"
+    },
+    "20083685": {
+      "aeroway": "tower",
+      "building": "control_tower"
+    },
+    "20083686": {
+      "aeroway": "hangar",
+      "building": "hangar"
+    },
+    "20083687": {
+      "aeroway": "hangar",
+      "building": "hangar"
+    },
+    "20083688": {
+      "aeroway": "hangar",
+      "building": "hangar"
+    },
+    "20083689": {
+      "aeroway": "terminal",
+      "building": "yes"
+    },
+    "6655005": {
+      "aeroway": "terminal",
+      "building": "yes"
+    },
+    "6655017": {
+      "aeroway": "terminal",
+      "building": "yes"
+    },
+    "6655050": {
+      "aeroway": "terminal",
+      "building": "yes"
+    },
+    "6681765": {
+      "aeroway": "terminal",
+      "building": "yes"
+    },
+    "6682317": {
+      "amenity": "parking",
+      "building": "parking",
+      "building:levels": "4",
+      "parking": "multi-storey"
+    },
+    "6684131": {
+      "aeroway": "terminal",
+      "building": "yes"
+    },
+    "6684421": {
+      "aeroway": "hangar",
+      "building": "hangar",
+      "height": "0"
+    },
+    "6684447": {
+      "aeroway": "hangar",
+      "building": "yes"
+    }
+  }
+}
