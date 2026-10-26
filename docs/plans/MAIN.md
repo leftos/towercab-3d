@@ -14,12 +14,9 @@
 
 ### M1 Remove VR (1/1 done)
 
-### M2 Cab, clouds and fog in Cesium (11/18 done)
-- [ ] TC3D-213 Clouds, fog and cab in Cesium on feat/cesium-weather · release vNext
-  - [ ] TC3D-219 Weather stage fog vanishes with the camera above about 32 km
-  - [ ] TC3D-221 Merge feat/cesium-weather to main (#262) · release vNext
-  - [ ] TC3D-349 Fix the settings chunk cycle that blacks out production builds of feat/cesium-weather · release vNext
-  - [ ] TC3D-350 Give an iPad mini the iPad preset, not the phone one · release vNext+1
+### M2 Cab, clouds and fog in Cesium (14/18 done)
+- [ ] TC3D-350 Give an iPad mini the iPad preset, not the phone one · release vNext+1
+- [ ] TC3D-219 Weather stage fog vanishes with the camera above about 32 km
 - [ ] TC3D-235 Place the cab and weather on the visible ground when terrain never loads
 - [ ] TC3D-314 Pin the weather quality device default with a test and keep it stable · release vNext+1
 
@@ -91,23 +88,22 @@
 
 ## vNAS
 
-### Room join (1/5 done)
+### Room join (2/5 done)
 - [ ] TC3D-260 vNAS crate: a kick hidden in a lagged burst lets the resync join the next room
 - [ ] TC3D-255 vNAS popover: Environment label renders at 16px white, unstyled
-- [/] TC3D-302 Read the vNAS session token without a Data API lookup (sub-issue of TC3D-6) · release vNext
 - [ ] TC3D-303 Let the vNAS event forwarder own every host state write (sub-issue of TC3D-6) · release vNext
 
-### Lifecycle merge (#261) (0/5 done)
+### Lifecycle merge (#261) (0/7 done)
 - [/] TC3D-6 vNAS session lifecycle: one subscribe per facility, clean session end · release vNext
   - [ ] TC3D-214 Merge feat/vnas-session-lifecycle to main (#261) · release vNext
-  - [/] TC3D-302 Read the vNAS session token without a Data API lookup · release vNext
   - [ ] TC3D-303 Let the vNAS event forwarder own every host state write · release vNext
-  - [/] TC3D-227 Keep VATSIM sign-in secrets out of the vNAS crate's logs and errors · release vNext
   - [ ] TC3D-339 Stop logging the vNAS OAuth callback URL with its authorization code · release vNext
   - [ ] TC3D-346 Delete dead vNAS auth and session commands and guard start_auth against a live session · release vNext+1
   - [ ] TC3D-348 Report SSE stream errors in the vNAS crate's sign-in instead of a closed connection · release vNext+1
+  - [ ] TC3D-352 Tidy the vNAS sign-in error paths left by TC3D-227 · release vNext+1
+  - [ ] TC3D-353 Log a CRC join's session without a second airport lookup · release vNext+1
 
-### Hardening (1/12 done)
+### Hardening (2/12 done)
 - [ ] TC3D-234 Leave the vNAS crate Disconnected after a failed or cancelled connect
 - [ ] TC3D-239 Notice a closed hub socket while the vNAS crate waits for a session
 - [ ] TC3D-240 Make the host's vNAS unit tests start on this machine
@@ -118,7 +114,6 @@
 - [ ] TC3D-67 vNAS lifecycle: close the races left after TC3D-47
 - [ ] TC3D-68 vNAS: stray rejections, a stale error, a lost disconnect during sign-in, and startup connecting to Live
 - [ ] TC3D-313 Tie each vNAS subscribe to the session its caller saw · release vNext+1
-- [/] TC3D-227 Keep VATSIM sign-in secrets out of the vNAS crate's logs and errors (sub-issue of TC3D-6) · release vNext
 
 ### Dual-source and reconnect (0/5 done)
 - [ ] TC3D-19 vNAS dual-source and reconnect: the crate's Testing Checklist
@@ -154,10 +149,11 @@
 - [ ] TC3D-343 Take a converted model's source prefix from the index, not the folder name · release vNext+1
 - [ ] TC3D-344 Delete the dead batch-conversion progress state and split lookup_glb_source main · release vNext+1
 - [ ] TC3D-347 Test the converter's UTF-8 stdout with a non-cp1252 DDS file name · release vNext+1
+- [ ] TC3D-351 Break the three production chunk cycles through the aircraft model services · release vNext+1
 
 ## Aircraft motion model
 
-### feat/aircraft-motion merge (#264) (1/20 done)
+### feat/aircraft-motion merge (#264) (1/21 done)
 - [ ] TC3D-241 Aircraft motion on feat/aircraft-motion · release vNext
   - [ ] TC3D-52 Aircraft orientation model: bank, rotation and flare
   - [ ] TC3D-53 Curved VATSIM paths: splines with heading from the path
@@ -177,6 +173,7 @@
   - [ ] TC3D-298 Split stabilizePhase and detectRawFlightPhase and drop their dead state · release vNext+1
   - [ ] TC3D-299 Bound when the departure Rolling label ends in the motion suite · release vNext+1
   - [ ] TC3D-304 Test the phase-state drop on a scrub back and size the RealTraffic regression tolerance · release vNext+1
+  - [ ] TC3D-354 Enter vNAS contact correctly for types with no learned resting height, and per simulator · release vNext
 
 ### Follow-ups on main (0/11 done)
 - [ ] TC3D-179 Use the terrain under the aircraft as the gear datum in orbit mode with no airport
