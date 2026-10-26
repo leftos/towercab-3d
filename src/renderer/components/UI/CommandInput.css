@@ -59,6 +59,10 @@
   color: #ff6b6b;
 }
 
+.command-feedback.info {
+  color: var(--accent);
+}
+
 /* Datablock position mode */
 .command-input-bar.datablock-mode {
   border-color: rgba(0, 255, 255, 0.5);

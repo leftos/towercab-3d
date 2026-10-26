@@ -82,26 +82,29 @@ describe('vnasStore.subscribeToFacility', () => {
         }
         case 'vnas_get_status':
           return {
-            state: 'subscribed',
+            state: 'connected',
             environment: 'live',
             subscribedFacilities: [...hubFacilities],
             error: null,
             available: true,
             lastSessionEnd: null,
+            sessionKind: 'crc',
           }
         default:
           return null
       }
     })
 
+    // A CRC session has just been joined: subscribes reach the hub
     useVnasStore.setState({
       status: {
-        state: 'disconnected',
+        state: 'subscribing',
         environment: 'live',
         subscribedFacilities: [],
         error: null,
         available: true,
         lastSessionEnd: null,
+        sessionKind: 'crc',
       },
     })
   })

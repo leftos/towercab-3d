@@ -12,6 +12,28 @@ import { useVatsimStore } from './vatsimStore'
 import { useViewportStore } from './viewportStore'
 import { useVnasStore } from './vnasStore'
 
+/** How an airport is selected */
+export interface SelectAirportOptions {
+  /** Don't take RealTraffic remote browsers along (a YAAT room's switch leaves them where they are) */
+  skipRealTrafficBroadcast?: boolean
+}
+
+/** Tell RealTraffic remote browsers to switch to `icao` too (host only) */
+function broadcastRealTrafficAirport(icao: string): void {
+  import('@tauri-apps/api/core')
+    .then(({ invoke }) => {
+      invoke('broadcast_airport_sync', {
+        icao: icao.toUpperCase(),
+        realtrafficActive: true,
+      }).catch((err) => {
+        console.debug('[airportStore] Failed to broadcast airport sync:', err)
+      })
+    })
+    .catch(() => {
+      // Tauri not available
+    })
+}
+
 interface AirportStore {
   // Data
   airports: Map<string, Airport>
@@ -29,7 +51,7 @@ interface AirportStore {
 
   // Actions
   loadAirports: (data: Record<string, Airport>) => void
-  selectAirport: (icao: string) => void
+  selectAirport: (icao: string, options?: SelectAirportOptions) => void
   deselectAirport: () => void
   searchAirports: (query: string) => Airport[]
   addToRecent: (icao: string) => void
@@ -85,7 +107,7 @@ export const useAirportStore = create<AirportStore>()((set, get) => ({
   },
 
   // Select an airport
-  selectAirport: (icao: string) => {
+  selectAirport: (icao: string, options: SelectAirportOptions = {}) => {
     const { airports, addToRecent } = get()
     const airport = airports.get(icao.toUpperCase())
 
@@ -165,19 +187,8 @@ export const useAirportStore = create<AirportStore>()((set, get) => ({
       }
 
       // Broadcast airport change to remote clients in RealTraffic mode (host only)
-      if (isTauriMode() && dataSource === 'realtraffic') {
-        import('@tauri-apps/api/core')
-          .then(({ invoke }) => {
-            invoke('broadcast_airport_sync', {
-              icao: icao.toUpperCase(),
-              realtrafficActive: true,
-            }).catch((err) => {
-              console.debug('[airportStore] Failed to broadcast airport sync:', err)
-            })
-          })
-          .catch(() => {
-            // Tauri not available
-          })
+      if (isTauriMode() && dataSource === 'realtraffic' && !options.skipRealTrafficBroadcast) {
+        broadcastRealTrafficAirport(icao)
       }
 
       // In remote mode with RealTraffic, notify host of airport change

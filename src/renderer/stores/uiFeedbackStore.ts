@@ -1,8 +1,15 @@
 import { create } from 'zustand'
 
+/** How a feedback toast reads: green success, red error, or accent-coloured information */
+export type FeedbackType = 'success' | 'error' | 'info'
+
+/** How long a feedback toast stays up unless the call says otherwise */
+const DEFAULT_FEEDBACK_MS = 2000
+
 interface UIFeedbackStore {
-  feedback: { message: string; type: 'success' | 'error' } | null
-  showFeedback: (message: string, type: 'success' | 'error') => void
+  feedback: { message: string; type: FeedbackType } | null
+  /** Show a toast for `durationMs` (2 s when omitted), replacing any toast still up */
+  showFeedback: (message: string, type: FeedbackType, durationMs?: number) => void
   clearFeedback: () => void
   // When true, keyboard input should be blocked from camera controls etc.
   isCommandInputActive: boolean
@@ -37,10 +44,10 @@ let feedbackTimeout: ReturnType<typeof setTimeout> | null = null
 
 export const useUIFeedbackStore = create<UIFeedbackStore>((set, get) => ({
   feedback: null,
-  showFeedback: (message, type) => {
+  showFeedback: (message, type, durationMs = DEFAULT_FEEDBACK_MS) => {
     if (feedbackTimeout) clearTimeout(feedbackTimeout)
     set({ feedback: { message, type } })
-    feedbackTimeout = setTimeout(() => set({ feedback: null }), 2000)
+    feedbackTimeout = setTimeout(() => set({ feedback: null }), durationMs)
   },
   clearFeedback: () => {
     if (feedbackTimeout) clearTimeout(feedbackTimeout)

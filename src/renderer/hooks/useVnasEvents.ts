@@ -11,12 +11,120 @@
 import { useEffect } from 'react'
 import { useAirportStore } from '../stores/airportStore'
 import { useGlobalSettingsStore } from '../stores/globalSettingsStore'
+import { useUIFeedbackStore } from '../stores/uiFeedbackStore'
 import { useVatsimStore } from '../stores/vatsimStore'
 import { useVnasStore } from '../stores/vnasStore'
 import type { VnasAircraft, VnasStatus } from '../types/vnas'
 import { isRemoteMode } from '../utils/remoteMode'
+import { decideRoomAirport } from '../utils/roomAirport'
+import { getRoomAirportNotice } from '../utils/vnasStatusText'
 
 type SessionState = VnasStatus['state']
+
+/** How long the toast saying a room's airport has no tower view stays up */
+const ROOM_AIRPORT_NOTICE_TOAST_MS = 5000
+
+/**
+ * Follow the session joined at `serial` (after the store has read its kind and airports):
+ * a YAAT room takes the view to its airport, or keeps the current one with a notice when
+ * that airport has no tower view. Then subscribe the airport in view, since the hub dropped
+ * the old session's subscriptions. Runs once per join, and not at all once a newer join or
+ * a disconnect has replaced it; a `connected` from the same session does not stop it.
+ */
+async function followJoinedSession(serial: number): Promise<void> {
+  const vnas = useVnasStore.getState()
+  if (vnas.joinSerial !== serial || !vnas.followPending) {
+    return
+  }
+  vnas.clearFollowPending()
+  if (vnas.status.state !== 'subscribing' && vnas.status.state !== 'connected') {
+    return
+  }
+  const airportStore = useAirportStore.getState()
+  const decision = decideRoomAirport({
+    sessionKind: vnas.status.sessionKind,
+    isRemote: isRemoteMode(),
+    facilityId: vnas.sessionFacilities[0] ?? '',
+    hasAirport: (icao) => airportStore.airports.has(icao),
+    currentIcao: airportStore.currentAirport?.icao ?? null,
+  })
+  if (decision.action === 'switch') {
+    console.log('[vNAS] Following the room to its airport:', decision.icao)
+    // RealTraffic remote browsers stay at their own airport when the room moves this one
+    airportStore.selectAirport(decision.icao, { skipRealTrafficBroadcast: true })
+  } else if (decision.action === 'notice') {
+    const notice = getRoomAirportNotice(decision.facilityId)
+    console.log(`[vNAS] ${notice}`)
+    vnas.setRoomAirportNotice(notice)
+    useUIFeedbackStore.getState().showFeedback(notice, 'info', ROOM_AIRPORT_NOTICE_TOAST_MS)
+  }
+
+  const icao = useAirportStore.getState().currentAirport?.icao
+  if (icao) {
+    await vnas.subscribeToFacility(icao, { fromFollow: true }).catch((err) => {
+      console.warn('[vNAS] Failed to subscribe after joining a session:', err)
+    })
+  }
+}
+
+/**
+ * Stop the VATSIM feed while connected to a non-Live environment, so data from different
+ * environments never blends, and restart it on disconnect when VATSIM is the data source.
+ */
+function applyDataFeedPolicy(state: SessionState): void {
+  const vnasEnv = useVnasStore.getState().status.environment
+  if (state === 'connected' && vnasEnv !== 'live') {
+    console.log(`[vNAS] Connected to ${vnasEnv} — stopping VATSIM data feed polling`)
+    useVatsimStore.getState().stopPolling()
+  }
+
+  // Disconnecting ends the session (followSessionState drops its aircraft, facility lists
+  // and vNAS observations): restart VATSIM polling if that's the active data source.
+  if (state === 'disconnected') {
+    const dataSource = useGlobalSettingsStore.getState().realtraffic.dataSource
+    if (dataSource !== 'realtraffic') {
+      console.log('[vNAS] Disconnected — resuming VATSIM data feed polling')
+      useVatsimStore.getState().startPolling()
+    }
+  }
+}
+
+/** Fetch the joined session's ARTCC and resolved airport list, for debugging and the UI */
+async function logSessionInfo(): Promise<void> {
+  const vnas = useVnasStore.getState()
+  try {
+    const [artcc, airports] = await Promise.all([vnas.getSessionArtcc(), vnas.getSessionAirports()])
+    console.log('[vNAS] Session info - ARTCC:', artcc, 'Airports:', airports)
+  } catch (err) {
+    console.warn('[vNAS] Failed to fetch session info:', err)
+  }
+}
+
+/**
+ * Handle one `vnas-state-changed` event: apply the state, tell remote browsers, set the
+ * VATSIM feed for it, and follow a joined session.
+ */
+export async function handleSessionStateEvent(state: SessionState): Promise<void> {
+  console.log('[vNAS] State changed:', state)
+  // Applies the state now, a join's serial included; the status re-read that goes with it
+  // (how the last session ended, the joined session's kind) is awaited below
+  const following = useVnasStore.getState().followSessionState(state)
+  const serial = useVnasStore.getState().joinSerial
+
+  // Broadcast vNAS state to remote browsers
+  const { invoke } = await import('@tauri-apps/api/core')
+  invoke('broadcast_vnas_state', { state }).catch(() => {})
+
+  applyDataFeedPolicy(state)
+
+  await following
+  if (state === 'subscribing') {
+    await followJoinedSession(serial)
+  }
+  if (state === 'subscribing' || state === 'connected') {
+    await logSessionInfo()
+  }
+}
 
 // Module-level flag to prevent double initialization from React Strict Mode.
 // Using module-level instead of useRef because Strict Mode unmount/remount
@@ -26,8 +134,6 @@ let vnasInitialized = false
 export function useVnasEvents(): void {
   const handleAircraftUpdate = useVnasStore((state) => state.handleAircraftUpdate)
   const removeAircraft = useVnasStore((state) => state.removeAircraft)
-  const handleSessionEnded = useVnasStore((state) => state.handleSessionEnded)
-  const setStateOnly = useVnasStore((state) => state.setStateOnly)
   const setError = useVnasStore((state) => state.setError)
   const tryRestoreSession = useVnasStore((state) => state.tryRestoreSession)
   const connect = useVnasStore((state) => state.connect)
@@ -84,47 +190,9 @@ export function useVnasEvents(): void {
         const { listen } = await import('@tauri-apps/api/event')
 
         // Listen for state changes
-        unlistenState = await listen<SessionState>('vnas-state-changed', async (event) => {
-          console.log('[vNAS] State changed:', event.payload)
-          // Update just the state field using functional update to avoid race conditions
-          setStateOnly(event.payload)
-
-          // Broadcast vNAS state to remote browsers
-          const { invoke } = await import('@tauri-apps/api/core')
-          invoke('broadcast_vnas_state', { state: event.payload }).catch(() => {})
-
-          // When connected to a non-Live environment, stop VATSIM data feed polling
-          // to avoid blending data from different environments
-          const vnasEnv = useVnasStore.getState().status.environment
-          if (event.payload === 'connected' && vnasEnv !== 'live') {
-            console.log(`[vNAS] Connected to ${vnasEnv} — stopping VATSIM data feed polling`)
-            useVatsimStore.getState().stopPolling()
-          }
-
-          // Disconnecting ends the session: drop its aircraft, facility lists and
-          // vNAS observations, then restart VATSIM polling if that's the active
-          // data source.
-          if (event.payload === 'disconnected') {
-            handleSessionEnded()
-
-            const dataSource = useGlobalSettingsStore.getState().realtraffic.dataSource
-            if (dataSource !== 'realtraffic') {
-              console.log('[vNAS] Disconnected — resuming VATSIM data feed polling')
-              useVatsimStore.getState().startPolling()
-            }
-          }
-
-          // Fetch session info when we've joined a session (subscribing or connected state)
-          if (event.payload === 'subscribing' || event.payload === 'connected') {
-            try {
-              // Fetch ARTCC and resolved airport list for debugging and UI
-              const [artcc, airports] = await Promise.all([getSessionArtcc(), getSessionAirports()])
-              console.log('[vNAS] Session info - ARTCC:', artcc, 'Airports:', airports)
-            } catch (err) {
-              console.warn('[vNAS] Failed to fetch session info:', err)
-            }
-          }
-        })
+        unlistenState = await listen<SessionState>('vnas-state-changed', (event) =>
+          handleSessionStateEvent(event.payload),
+        )
 
         // Listen for aircraft updates
         unlistenAircraft = await listen<VnasAircraft>('vnas-aircraft-update', (event) => {
@@ -202,8 +270,6 @@ export function useVnasEvents(): void {
   }, [
     handleAircraftUpdate,
     removeAircraft,
-    handleSessionEnded,
-    setStateOnly,
     setError,
     tryRestoreSession,
     connect,

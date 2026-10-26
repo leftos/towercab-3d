@@ -6,7 +6,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 
 ### Added
 - New **Show Moon** setting under Settings → Graphics lets you hide the moon from the sky.
-- vNAS can join your CRC session on a YAAT training server: YAAT1, or YAAT Local when a local YAAT server is running, with once-a-second aircraft updates as on live vNAS.
+- vNAS works on YAAT training servers (YAAT1, YAAT Local): it joins your CRC session or, without CRC, your YAAT room, and moves to the room's airport.
 - 3D buildings now show rows of windows on their walls, some of them lit at night.
 - New **Weather quality** setting (Low, Medium, High) under Settings → Graphics; iPads and phones start lower, and small insets step down.
 - New **About** tab in Settings shows the app version and the credits for the map, terrain, imagery and 3D building data in use.
