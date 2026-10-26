@@ -14,11 +14,12 @@
 
 ### M1 Remove VR (1/1 done)
 
-### M2 Cab, clouds and fog in Cesium (10/16 done)
+### M2 Cab, clouds and fog in Cesium (11/18 done)
 - [ ] TC3D-213 Clouds, fog and cab in Cesium on feat/cesium-weather · release vNext
-  - [ ] TC3D-150 Measure the weather stage on an iPad and get the owner's look sign-off · release vNext
   - [ ] TC3D-219 Weather stage fog vanishes with the camera above about 32 km
   - [ ] TC3D-221 Merge feat/cesium-weather to main (#262) · release vNext
+  - [ ] TC3D-349 Fix the settings chunk cycle that blacks out production builds of feat/cesium-weather · release vNext
+  - [ ] TC3D-350 Give an iPad mini the iPad preset, not the phone one · release vNext+1
 - [ ] TC3D-235 Place the cab and weather on the visible ground when terrain never loads
 - [ ] TC3D-314 Pin the weather quality device default with a test and keep it stable · release vNext+1
 
