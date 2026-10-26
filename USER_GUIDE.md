@@ -713,12 +713,13 @@ TowerCab 3D displays real-time weather based on METAR reports.
 **Fog Effects:**
 - Visibility-based fog that limits terrain draw distance
 - Visual fog at the visibility boundary, drawn behind aircraft, buildings and terrain that are closer than the fog (not drawn in top-down view)
+- Fog fades in as visibility drops from 10 to 8 statute miles, and eases over 6 seconds when the visibility changes (a new METAR, or a move of the interpolated visibility); the Visibility Scale slider, the fog toggle and the top-down view apply at once
 - Adjustable intensity and visibility scale
 
 **Cloud Layers:**
 - Clouds positioned at METAR-reported ceiling altitudes, hidden by anything closer to the camera
 - With the Logarithmic Depth Buffer graphics setting off, no clouds or METAR fog are drawn, and only the globe's distance fog shows
-- Scattered (SCT), broken (BKN), and overcast (OVC) layers shown
+- Scattered (SCT), broken (BKN), and overcast (OVC) layers shown; a layer under a BKN or OVC layer is drawn grey on top, with no bright streaks along the horizon
 - Aircraft behind clouds may have hidden datablocks
 
 ### Weather-Based Visibility

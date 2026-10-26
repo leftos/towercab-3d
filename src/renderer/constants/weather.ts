@@ -77,31 +77,8 @@ export const AUTO_SWITCH_HYSTERESIS_NM = 5
 export const AUTO_SWITCH_MIN_DISTANCE_NM = 2
 
 // ============================================================================
-// WEATHER SMOOTHING / HYSTERESIS
+// WEATHER HYSTERESIS
 // ============================================================================
-
-/**
- * Transition time for visibility changes (seconds)
- * Controls how fast fog opacity/scale responds to METAR updates
- * Higher = smoother but slower to respond to real weather changes
- */
-export const VISIBILITY_TRANSITION_TIME = 8.0
-
-/**
- * Transition time for fog density changes (seconds)
- */
-export const FOG_DENSITY_TRANSITION_TIME = 8.0
-
-/**
- * Transition time for wind direction changes (seconds)
- * Uses circular interpolation to handle wrap-around at 360°
- */
-export const WIND_DIRECTION_TRANSITION_TIME = 5.0
-
-/**
- * Transition time for wind speed changes (seconds)
- */
-export const WIND_SPEED_TRANSITION_TIME = 3.0
 
 /**
  * Transition time for precipitation intensity fade in/out (seconds)
@@ -131,22 +108,6 @@ export const THUNDERSTORM_ONSET_DELAY = 1.0
  * Hysteresis threshold for thunderstorm deactivation (seconds)
  */
 export const THUNDERSTORM_CESSATION_DELAY = 8.0
-
-/**
- * Minimum visibility change (statute miles) to trigger transition
- * Changes smaller than this are applied instantly
- */
-export const VISIBILITY_CHANGE_THRESHOLD = 0.1
-
-/**
- * Minimum wind direction change (degrees) to trigger transition
- */
-export const WIND_DIRECTION_CHANGE_THRESHOLD = 5
-
-/**
- * Minimum wind speed change (knots) to trigger transition
- */
-export const WIND_SPEED_CHANGE_THRESHOLD = 2
 
 // ============================================================================
 // CESIUM CLOUD AND FOG STAGE
@@ -241,6 +202,15 @@ export const WEATHER_STAGE_SUN_SHADE_COVERAGE = 5 / 8
 
 /** Visibility (statute miles) at and above which the stage draws no fog */
 export const WEATHER_STAGE_NO_FOG_VISIBILITY_SM = 10
+
+/**
+ * Visibility (statute miles) at and below which the stage draws the METAR's full fog;
+ * from here up to WEATHER_STAGE_NO_FOG_VISIBILITY_SM its density fades out linearly
+ */
+export const WEATHER_STAGE_FULL_FOG_VISIBILITY_SM = 8
+
+/** Time (ms) over which the stage's fog density eases (smoothstep) to a new METAR's */
+export const WEATHER_STAGE_FOG_EASE_MS = 6000
 
 /** Lowest visibility (statute miles) the stage's fog uses, so 0 SM stays finite */
 export const WEATHER_STAGE_MIN_VISIBILITY_SM = 0.05

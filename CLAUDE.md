@@ -458,7 +458,7 @@ if (version < 7) {
 
 1. METAR fetching/parsing: `services/MetarService.ts`, `weatherStore.ts`
 2. Fog/cloud rendering: the Cesium post-process stage in `useCesiumWeatherStages.ts` (shader in `hooks/weather/cloudStage.glsl.ts`, pure helpers in `utils/weatherStage.ts`, the deck's curved-earth geometry in `utils/cloudDeckGeometry.ts`); the stage stays hidden in a view with no logarithmic depth buffer, which then shows only the globe's distance fog; label weather culling (`isVisibleByWeather`, over `utils/weatherVisibility.ts`) in `useBabylonOverlay.ts`; scene fog in `useCesiumWeather.ts`
-3. Smoothing: `useSmoothedWeather.ts`
+3. Smoothing: the fog's fade-in (`stageFogFade`) and its 6 s ease on a visibility step (`nextFogEase`, `easedFogDensity`) are in `utils/weatherStage.ts`, stepped from the stage's `preRender` in `useCesiumWeatherStages.ts`
 4. Settings: `settingsStore.ts` (fog/cloud toggles, intensity, `weather.stageQuality`, the Low/Medium/High quality preset). The knobs of each preset are `WEATHER_STAGE_PRESETS` in `constants/weather.ts`; the main view reads the setting, an inset takes `insetStageQuality` from its size against the main window; the device presets (`SETTINGS_PRESETS`, via `deviceSettingsPreset()`) set it to High on desktop, Medium on iPad, Low on a phone
 
 ### Modifying Viewport System

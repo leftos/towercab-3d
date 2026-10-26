@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   STATUTE_MILES_TO_METERS,
+  WEATHER_STAGE_FOG_EASE_MS,
   WEATHER_STAGE_GROUND_BLEND_MS,
   WEATHER_STAGE_NOISE_ORIGIN_RESET_M,
   WEATHER_STAGE_PRESETS,
@@ -10,20 +11,27 @@ import type { CloudLayer, WeatherQualityPreset } from '@/types'
 import {
   anchorGround,
   buildCloudLayerUniforms,
+  easedFogDensity,
   effectiveVisibilitySM,
+  type FogEase,
+  type FogEaseInput,
   type FrameGround,
   groundBlendShift,
   groundShiftStart,
   horizontalNoiseOffset,
   insetStageQuality,
   layerSunShade,
+  NO_FOG_EASE,
+  nextFogEase,
   nextWeatherAnchor,
   noiseOriginNeedsReset,
   sceneFogValues,
   stageDrawsFog,
+  stageFogDensity,
   stageFogExtinction,
+  stageFogFade,
   stagePresetForViewport,
-  stageVisibilityMeters,
+  startFogEase,
   type WeatherStageGateInput,
   weatherStageGates,
   weatherStageHasWork,
@@ -238,23 +246,187 @@ describe('layerSunShade', () => {
   })
 })
 
-describe('stageVisibilityMeters', () => {
+describe('stageFogFade', () => {
+  it('is 0 (no fog) at 10 SM and above', () => {
+    expect(stageFogFade(10)).toBe(0)
+    expect(stageFogFade(12)).toBe(0)
+  })
+
+  it('fades in linearly between 10 and 8 SM', () => {
+    expect(stageFogFade(9)).toBeCloseTo(0.5, 12)
+  })
+
+  it('is 1 (full METAR fog) at 8 SM and below', () => {
+    expect(stageFogFade(8)).toBe(1)
+    expect(stageFogFade(3)).toBe(1)
+  })
+})
+
+describe('stageFogDensity', () => {
+  /** Relative difference, for densities of order 1e-4 per meter */
+  const relative = (actual: number, expected: number) => Math.abs(actual - expected) / expected
+
   it('is 0 (no fog) without a METAR', () => {
-    expect(stageVisibilityMeters(undefined, 1)).toBe(0)
+    expect(stageFogDensity(undefined, 1)).toBe(0)
   })
 
   it('is 0 (no fog) at 10 SM and above', () => {
-    expect(stageVisibilityMeters(10, 1)).toBe(0)
-    expect(stageVisibilityMeters(15, 2)).toBe(0)
+    expect(stageFogDensity(10, 1)).toBe(0)
+    expect(stageFogDensity(15, 2)).toBe(0)
   })
 
-  it('converts statute miles to meters and applies visibilityScale', () => {
-    expect(stageVisibilityMeters(0.5, 1)).toBeCloseTo(0.5 * STATUTE_MILES_TO_METERS)
-    expect(stageVisibilityMeters(3, 2)).toBeCloseTo(6 * STATUTE_MILES_TO_METERS)
+  it('is one over the visibility in meters, with visibilityScale applied, at full strength', () => {
+    expect(relative(stageFogDensity(0.5, 1), 1 / (0.5 * STATUTE_MILES_TO_METERS))).toBeLessThan(1e-12)
+    expect(relative(stageFogDensity(3, 2), 1 / (6 * STATUTE_MILES_TO_METERS))).toBeLessThan(1e-12)
+  })
+
+  it('scales the density by the fade between 10 and 8 SM', () => {
+    expect(relative(stageFogDensity(9, 1), 0.5 / (9 * STATUTE_MILES_TO_METERS))).toBeLessThan(1e-12)
   })
 
   it('floors visibility at 0.05 SM so zero visibility still draws finite fog', () => {
-    expect(stageVisibilityMeters(0, 1)).toBeCloseTo(0.05 * STATUTE_MILES_TO_METERS)
+    expect(relative(stageFogDensity(0, 1), 1 / (0.05 * STATUTE_MILES_TO_METERS))).toBeLessThan(1e-12)
+  })
+})
+
+describe('fog ease', () => {
+  const density = (visibSM: number) => stageFogDensity(visibSM, 1)
+
+  it('eases a METAR step from 10 SM to 6 SM with a smoothstep, reaching the target exactly at the ease time', () => {
+    const target = density(6)
+    const ease = startFogEase(density(10), target, 0)
+    const fraction = (ms: number) => easedFogDensity(ease, target, ms) / target
+    expect(fraction(0)).toBe(0)
+    expect(fraction(1000)).toBeLessThan(0.1)
+    expect(fraction(4800)).toBeLessThan(0.9)
+    expect(fraction(4900)).toBeGreaterThanOrEqual(0.9)
+    expect(easedFogDensity(ease, target, WEATHER_STAGE_FOG_EASE_MS)).toBe(target)
+    expect(easedFogDensity(ease, target, WEATHER_STAGE_FOG_EASE_MS * 3)).toBe(target)
+  })
+
+  it('never overshoots, rising or falling', () => {
+    for (const [fromSM, toSM] of [
+      [10, 6],
+      [2, 9],
+    ]) {
+      const from = density(fromSM)
+      const target = density(toSM)
+      const ease = startFogEase(from, target, 0)
+      let previous = from
+      for (let ms = 0; ms <= WEATHER_STAGE_FOG_EASE_MS + 2000; ms += 100) {
+        const value = easedFogDensity(ease, target, ms)
+        expect(value).toBeGreaterThanOrEqual(Math.min(from, target))
+        expect(value).toBeLessThanOrEqual(Math.max(from, target))
+        expect(Math.sign(value - previous) * Math.sign(target - from)).toBeGreaterThanOrEqual(0)
+        previous = value
+      }
+    }
+  })
+
+  it('starts a new METAR step mid-ease from the current value, without a jump', () => {
+    const first = startFogEase(density(10), density(6), 0)
+    const current = easedFogDensity(first, density(6), 3000)
+    const second = startFogEase(current, density(2), 3000)
+    expect(Math.abs(easedFogDensity(second, density(2), 3000) - current) / current).toBeLessThan(1e-9)
+    expect(easedFogDensity(second, density(2), 3100)).toBeGreaterThan(current)
+    expect(easedFogDensity(second, density(2), 3000 + WEATHER_STAGE_FOG_EASE_MS)).toBe(density(2))
+  })
+
+  it('tracks a target gliding 0.01 SM per frame for 10 s after a METAR step, without stalling', () => {
+    const ease = startFogEase(density(10), density(7), 0)
+    let visibSM = 7
+    let value = 0
+    for (let frame = 0; frame <= 600; frame++) {
+      visibSM = 7 - 0.01 * frame
+      value = easedFogDensity(ease, density(visibSM), (frame * 1000) / 60)
+    }
+    expect(Math.abs(value - density(visibSM)) / density(visibSM)).toBeLessThan(0.02)
+  })
+})
+
+describe('nextFogEase', () => {
+  const density = (visibSM: number | undefined, scale = 1) => stageFogDensity(visibSM, scale)
+  const input = (
+    visibilitySM: number | undefined,
+    targetDensity = density(visibilitySM),
+    gateOpen = true,
+  ): FogEaseInput => ({ visibilitySM, gateOpen, targetDensity })
+  const draw = (ease: FogEase, targetDensity: number, nowMs: number) => easedFogDensity(ease, targetDensity, nowMs)
+
+  it('eases a METAR step from 10 SM to 6 SM with the gate open', () => {
+    const target = density(6)
+    const ease = nextFogEase(NO_FOG_EASE, input(10), input(6), 0)
+    expect(draw(ease, target, 2000)).toBeGreaterThan(0)
+    expect(draw(ease, target, 2000)).toBeLessThan(target)
+    expect(draw(ease, target, WEATHER_STAGE_FOG_EASE_MS)).toBe(target)
+  })
+
+  it('eases an interpolated step the same way, the function cannot tell the two apart', () => {
+    const target = density(3)
+    const ease = nextFogEase(NO_FOG_EASE, input(5), input(3), 0)
+    expect(draw(ease, target, 2000)).toBeGreaterThan(0)
+    expect(draw(ease, target, 2000)).toBeLessThan(target)
+    expect(draw(ease, target, WEATHER_STAGE_FOG_EASE_MS)).toBe(target)
+  })
+
+  it('restarts a step mid-ease from the value drawn at that instant', () => {
+    const first = nextFogEase(NO_FOG_EASE, input(10), input(6), 0)
+    const drawn = draw(first, density(6), 3000)
+    const second = nextFogEase(first, input(6), input(2), 3000)
+    expect(Math.abs(draw(second, density(2), 3000) - drawn) / drawn).toBeLessThan(1e-12)
+    expect(draw(second, density(2), 3000 + WEATHER_STAGE_FOG_EASE_MS)).toBe(density(2))
+  })
+
+  it('applies a visibilityScale change at once, with or without an ease in flight', () => {
+    const scaled = density(6, 2)
+    const settled = nextFogEase(NO_FOG_EASE, input(6), input(6, scaled), 1000)
+    expect(draw(settled, scaled, 1001)).toBe(scaled)
+    const easing = nextFogEase(NO_FOG_EASE, input(10), input(6), 0)
+    const changed = nextFogEase(easing, input(6), input(6, scaled), 2000)
+    expect(draw(changed, scaled, 2001)).toBe(scaled)
+  })
+
+  it('applies the gate closing at once, also with an ease in flight', () => {
+    const easing = nextFogEase(NO_FOG_EASE, input(10), input(6), 0)
+    const closed = nextFogEase(easing, input(6), input(6, 0, false), 2000)
+    expect(draw(closed, 0, 2000)).toBe(0)
+    expect(draw(closed, 0, 2001)).toBe(0)
+  })
+
+  it('applies the gate opening at once, without an ease from 0, after the input changed while it was closed', () => {
+    const opened = nextFogEase(NO_FOG_EASE, input(6, 0, false), input(4), 5000)
+    expect(draw(opened, density(4), 5000)).toBe(density(4))
+    expect(draw(opened, density(4), 5001)).toBe(density(4))
+  })
+
+  it('eases the first input in from no fog', () => {
+    const target = density(5)
+    const ease = nextFogEase(NO_FOG_EASE, input(undefined, 0), input(5), 0)
+    expect(draw(ease, target, 0)).toBe(0)
+    expect(draw(ease, target, 1000)).toBeGreaterThan(0)
+    expect(draw(ease, target, 1000)).toBeLessThan(target)
+    expect(draw(ease, target, WEATHER_STAGE_FOG_EASE_MS)).toBe(target)
+  })
+
+  it('leaves an ease in flight alone when nothing changed', () => {
+    const first = nextFogEase(NO_FOG_EASE, input(10), input(6), 0)
+    expect(nextFogEase(first, input(6), input(6), 3000)).toBe(first)
+    const closed = input(undefined, 0, false)
+    expect(nextFogEase(NO_FOG_EASE, closed, closed, 0)).toBe(NO_FOG_EASE)
+  })
+
+  it('applies every frame of a visibilityScale drag at once, without restarting the ease', () => {
+    const visibSM = 6
+    let ease = nextFogEase(NO_FOG_EASE, input(10), input(visibSM, density(visibSM, 1)), 0)
+    let previous = input(visibSM, density(visibSM, 1))
+    for (let frame = 1; frame <= 188; frame++) {
+      const nowMs = frame * 16
+      const targetDensity = density(visibSM, 1 + frame * 0.01)
+      const current = input(visibSM, targetDensity)
+      ease = nextFogEase(ease, previous, current, nowMs)
+      expect(draw(ease, targetDensity, nowMs)).toBe(targetDensity)
+      previous = current
+    }
   })
 })
 

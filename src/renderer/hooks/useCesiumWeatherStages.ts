@@ -16,19 +16,24 @@ import { aircraftModelHeading } from '@/utils/modelOrientation'
 import {
   anchorGround,
   buildCloudLayerUniforms,
+  easedFogDensity,
   effectiveVisibilitySM,
+  type FogEase,
+  type FogEaseInput,
   type FrameGround,
   groundBlendShift,
   groundShiftStart,
   horizontalNoiseOffset,
   layerSunShade,
+  NO_FOG_EASE,
   type NoiseOriginAnchor,
+  nextFogEase,
   nextWeatherAnchor,
   noiseOriginNeedsReset,
   stageDrawsFog,
+  stageFogDensity,
   stageFogExtinction,
   stagePresetForViewport,
-  stageVisibilityMeters,
   type WeatherAnchor,
   type WeatherReference,
   weatherStageGates,
@@ -62,7 +67,8 @@ interface StageInputs {
   /** Per layer (x..w = layer 0..3), 1 when a higher layer shades it from direct sun (`layerSunShade`) */
   layerShade: Cesium.Cartesian4
   layerCount: number
-  visibilityMeters: number
+  /** Fog density per meter the fog eases to (`stageFogDensity`), 0 for no fog */
+  fogDensity: number
   /** Optical depth multiplier of the fog, from the quality knob and `fogIntensity` */
   fogExtinction: number
 }
@@ -71,14 +77,27 @@ const NO_INPUTS: StageInputs = {
   layers: Array.from({ length: WEATHER_STAGE_MAX_LAYERS }, () => new Cesium.Cartesian4(0, 1, 0, 0)),
   layerShade: new Cesium.Cartesian4(0, 0, 0, 0),
   layerCount: 0,
-  visibilityMeters: 0,
+  fogDensity: 0,
   fogExtinction: 0,
 }
+
+/** The fog density drawn: the ease in flight (`nextFogEase`) and its value at the last frame */
+interface FogState {
+  ease: FogEase
+  /** Density per meter drawn this frame, stepped in `preRender` */
+  density: number
+}
+
+/** The fog inputs before the first run: no visibility yet, so the first input eases in from no fog */
+const INITIAL_FOG_INPUT: FogEaseInput = { visibilitySM: undefined, gateOpen: true, targetDensity: 0 }
 
 /** Mutable state shared by the stage's hooks and its uniform callbacks */
 interface StageRefs {
   frame: { current: EnuFrame | null }
   inputs: { current: StageInputs }
+  fog: { current: FogState }
+  /** Inputs of the last effect run, which decide the next ease (`nextFogEase`) */
+  fogInput: { current: FogEaseInput }
   stage: { current: Cesium.PostProcessStageComposite | null }
   /** Knobs of this viewport's preset; the uniform callbacks read them live */
   quality: { current: WeatherStageQuality }
@@ -119,12 +138,20 @@ function currentShift(frame: EnuFrame): number {
   return groundBlendShift(frame.shiftStartM, performance.now() - frame.shiftStartMs)
 }
 
-/** Enables the stage only while it has a frame and something to draw */
+/** Enables the stage only while it has a frame and something to draw, a fog still easing out included */
 function syncStageEnabled(refs: StageRefs): void {
   const stage = refs.stage.current
   if (!stage) return
-  const { layerCount, visibilityMeters } = refs.inputs.current
-  stage.enabled = weatherStageHasWork(layerCount, visibilityMeters, refs.frame.current !== null)
+  const { layerCount, fogDensity } = refs.inputs.current
+  const fog = Math.max(fogDensity, refs.fog.current.density)
+  stage.enabled = weatherStageHasWork(layerCount, fog, refs.frame.current !== null)
+}
+
+/** Moves the drawn fog density along its ease for this frame */
+function stepFog(refs: StageRefs): void {
+  const fog = refs.fog.current
+  fog.density = easedFogDensity(fog.ease, refs.inputs.current.fogDensity, performance.now())
+  syncStageEnabled(refs)
 }
 
 function setFrame(refs: StageRefs, frame: EnuFrame | null): void {
@@ -148,7 +175,7 @@ function createStage(
   startMs: number,
   resolutionScale: number,
 ): Cesium.PostProcessStageComposite {
-  const { frame: frameRef, inputs: inputsRef, quality: qualityRef } = refs
+  const { frame: frameRef, inputs: inputsRef, fog: fogRef, quality: qualityRef } = refs
   const scratchCam = new Cesium.Cartesian3()
   const layerUniform = (index: number) => () => inputsRef.current.layers[index]
   const frame = (): EnuFrame => {
@@ -167,7 +194,8 @@ function createStage(
       return scratchCam
     },
     u_ecefToEnu: () => frame().ecefToEnuRotation,
-    u_visibility: () => inputsRef.current.visibilityMeters,
+    // The shader takes the fog as a visibility (density = 1 / visibility); 0 draws no fog.
+    u_visibility: () => (fogRef.current.density > 0 ? 1 / fogRef.current.density : 0),
     u_fogExtinction: () => inputsRef.current.fogExtinction,
     u_fogHeightScale: () => qualityRef.current.fogHeightScale,
   }
@@ -396,6 +424,7 @@ function useWeatherStageComposite(
       syncStageEnabled(refs)
     }
     addStage()
+    const easeFog = viewer.scene.preRender.addEventListener(() => stepFog(refs))
     const keepLast = viewer.scene.preRender.addEventListener(() => {
       const current = refs.stage.current
       if (!current || stages.get(stages.length - 1) === current) return
@@ -403,6 +432,7 @@ function useWeatherStageComposite(
       addStage()
     })
     return () => {
+      easeFog()
       keepLast()
       if (refs.stage.current && !viewer.isDestroyed()) {
         stages.remove(refs.stage.current)
@@ -480,7 +510,10 @@ export interface WeatherStagesOptions extends ReferenceInputs {
  * visibility while weather interpolation is on) and the weather settings:
  * `showClouds` gates the clouds, `showBabylonFog` the fog and `visibilityScale`
  * scales the fog visibility while `fogIntensity` scales its optical depth, under
- * `showWeatherEffects`. Its knobs come from the `stageQuality` preset (see
+ * `showWeatherEffects`. The fog fades in between 10 and 8 SM (`stageFogFade`); a
+ * change of the visibility input, METAR or interpolated, eases the fog over
+ * WEATHER_STAGE_FOG_EASE_MS, while a settings or view change applies at once
+ * (`nextFogEase`, `easedFogDensity`, stepped in `preRender`). Its knobs come from the `stageQuality` preset (see
  * `useStagePreset` for insets): steps, radius and the look knobs apply live, and a
  * new cloud pass resolution rebuilds the stage. Draws nothing in the top-down view, and is disabled while
  * there is no anchor or nothing to draw. Without a logarithmic depth buffer on the
@@ -523,6 +556,8 @@ export function useCesiumWeatherStages(viewer: Cesium.Viewer | null, options: We
   const refs = useRef<StageRefs>({
     frame: { current: null },
     inputs: { current: NO_INPUTS },
+    fog: { current: { ease: NO_FOG_EASE, density: 0 } },
+    fogInput: { current: INITIAL_FOG_INPUT },
     stage: { current: null },
     quality: { current: quality },
   }).current
@@ -536,6 +571,11 @@ export function useCesiumWeatherStages(viewer: Cesium.Viewer | null, options: We
     const layers = gates.clouds ? buildCloudLayerUniforms(cloudLayers, CLOUD_THICKNESS_BY_TYPE_M) : []
     const visibSM = effectiveVisibilitySM({ metarSM, useInterpolation, interpolatedSM })
     const shade = layerSunShade(layers)
+    const fogDensity = gates.fog ? stageFogDensity(visibSM, visibilityScale) : 0
+    // A visibility step eases over WEATHER_STAGE_FOG_EASE_MS; the scale, the gate and the view apply at once.
+    const fogInput: FogEaseInput = { visibilitySM: visibSM, gateOpen: gates.fog, targetDensity: fogDensity }
+    refs.fog.current.ease = nextFogEase(refs.fog.current.ease, refs.fogInput.current, fogInput, performance.now())
+    refs.fogInput.current = fogInput
     refs.inputs.current = {
       layers: NO_INPUTS.layers.map((inactive, index) => {
         const layer = layers[index]
@@ -543,7 +583,7 @@ export function useCesiumWeatherStages(viewer: Cesium.Viewer | null, options: We
       }),
       layerShade: new Cesium.Cartesian4(shade[0] ?? 0, shade[1] ?? 0, shade[2] ?? 0, shade[3] ?? 0),
       layerCount: layers.length,
-      visibilityMeters: gates.fog ? stageVisibilityMeters(visibSM, visibilityScale) : 0,
+      fogDensity,
       fogExtinction: stageFogExtinction(quality.fogExtinction, fogIntensity),
     }
     syncStageEnabled(refs)

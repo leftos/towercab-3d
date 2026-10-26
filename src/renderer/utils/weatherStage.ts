@@ -9,6 +9,8 @@ import {
   CLOUD_THICKNESS_DEFAULT_M,
   STATUTE_MILES_TO_METERS,
   WEATHER_STAGE_AIRPORT_REANCHOR_DISTANCE_M,
+  WEATHER_STAGE_FOG_EASE_MS,
+  WEATHER_STAGE_FULL_FOG_VISIBILITY_SM,
   WEATHER_STAGE_GROUND_BLEND_MS,
   WEATHER_STAGE_INSET_FULL_AREA_RATIO,
   WEATHER_STAGE_INSET_STEP_DOWN_AREA_RATIO,
@@ -73,17 +75,110 @@ export function layerSunShade(layers: readonly CloudLayerUniform[]): number[] {
 }
 
 /**
- * Fog visibility for the stage in meters, or 0 for no fog.
+ * Strength of the stage's fog against the METAR's, so visibility crossing
+ * 10 SM fades the fog in instead of switching it on.
  *
- * @param visibSM - METAR visibility in statute miles, undefined without a METAR
- * @param visibilityScale - The `visibilityScale` weather setting (2 = see twice as far)
- * @returns Visibility in meters, 0 at 10 SM and above or without a METAR
+ * @param visibSM - Visibility in statute miles
+ * @returns 0 at WEATHER_STAGE_NO_FOG_VISIBILITY_SM and above, 1 at
+ *   WEATHER_STAGE_FULL_FOG_VISIBILITY_SM and below, linear in between
  */
-export function stageVisibilityMeters(visibSM: number | undefined, visibilityScale: number): number {
-  if (visibSM === undefined || visibSM >= WEATHER_STAGE_NO_FOG_VISIBILITY_SM) {
+export function stageFogFade(visibSM: number): number {
+  const width = WEATHER_STAGE_NO_FOG_VISIBILITY_SM - WEATHER_STAGE_FULL_FOG_VISIBILITY_SM
+  return Math.min(Math.max((WEATHER_STAGE_NO_FOG_VISIBILITY_SM - visibSM) / width, 0), 1)
+}
+
+/**
+ * Fog density for the stage per meter: one over the visibility in meters, scaled by `stageFogFade`.
+ *
+ * @param visibSM - Visibility in statute miles, undefined without a METAR
+ * @param visibilityScale - The `visibilityScale` weather setting (2 = see twice as far)
+ * @returns Density per meter, 0 at 10 SM and above or without a METAR
+ */
+export function stageFogDensity(visibSM: number | undefined, visibilityScale: number): number {
+  if (visibSM === undefined) {
     return 0
   }
-  return Math.max(visibSM, WEATHER_STAGE_MIN_VISIBILITY_SM) * STATUTE_MILES_TO_METERS * visibilityScale
+  const fade = stageFogFade(visibSM)
+  if (fade === 0) {
+    return 0
+  }
+  return fade / (Math.max(visibSM, WEATHER_STAGE_MIN_VISIBILITY_SM) * STATUTE_MILES_TO_METERS * visibilityScale)
+}
+
+/**
+ * An ease of the stage's fog density after a visibility step: the gap between
+ * the density shown and the new target when the step came, closed over
+ * WEATHER_STAGE_FOG_EASE_MS. The ease is decided by `nextFogEase`.
+ */
+export interface FogEase {
+  /** Density shown minus the new target when the ease started, per meter */
+  gap: number
+  startMs: number
+}
+
+/** An ease with nothing left to close: the density is the target */
+export const NO_FOG_EASE: FogEase = { gap: 0, startMs: 0 }
+
+/**
+ * Starts an ease toward a new target's fog density from the density shown now.
+ *
+ * @param currentDensity - Density shown now (`easedFogDensity` of the previous ease)
+ * @param targetDensity - The new METAR's density (`stageFogDensity`)
+ * @param nowMs - Time of the step
+ */
+export function startFogEase(currentDensity: number, targetDensity: number, nowMs: number): FogEase {
+  return { gap: currentDensity - targetDensity, startMs: nowMs }
+}
+
+/**
+ * Fog density to draw: the target plus what is left of the ease's gap, which
+ * closes with a smoothstep over WEATHER_STAGE_FOG_EASE_MS.
+ *
+ * @param ease - The last METAR step's ease (`startFogEase`), or NO_FOG_EASE
+ * @param targetDensity - Density the fog is heading to now
+ * @param nowMs - Current time, on the clock `ease.startMs` was taken on
+ * @returns Density per meter, never below 0; exactly the target once the ease has run
+ */
+export function easedFogDensity(ease: FogEase, targetDensity: number, nowMs: number): number {
+  const x = Math.min(Math.max((nowMs - ease.startMs) / WEATHER_STAGE_FOG_EASE_MS, 0), 1)
+  if (x === 1 || ease.gap === 0) {
+    return targetDensity
+  }
+  const remaining = 1 - x * x * (3 - 2 * x)
+  return Math.max(0, targetDensity + ease.gap * remaining)
+}
+
+/** The inputs the fog's ease is decided on */
+export interface FogEaseInput {
+  /** Visibility input in SM (`effectiveVisibilitySM`), undefined when there is none */
+  visibilitySM: number | undefined
+  /** Whether the fog gate is open (`gates.fog`) */
+  gateOpen: boolean
+  /** Target density per meter (`stageFogDensity`, or 0 when the gate is closed) */
+  targetDensity: number
+}
+
+/**
+ * Ease to use after the fog's inputs changed. A visibility step (the gate open on
+ * both runs and the visibility input changed, METAR or interpolated) eases from
+ * the density drawn at this instant; any other change of the target (the
+ * visibility scale, the gate opening or closing, a view change) applies at once;
+ * with nothing changed the ease in flight is left alone.
+ *
+ * @param ease - The ease in flight
+ * @param previous - The inputs the last run drew with
+ * @param next - This run's inputs
+ * @param nowMs - Current time
+ * @returns The ease to draw with
+ */
+export function nextFogEase(ease: FogEase, previous: FogEaseInput, next: FogEaseInput, nowMs: number): FogEase {
+  if (next.gateOpen && previous.gateOpen && next.visibilitySM !== previous.visibilitySM) {
+    return startFogEase(easedFogDensity(ease, previous.targetDensity, nowMs), next.targetDensity, nowMs)
+  }
+  if (next.targetDensity !== previous.targetDensity) {
+    return NO_FOG_EASE
+  }
+  return ease
 }
 
 /** Invalid preset values already warned about, so a bad stored value warns once */
@@ -511,9 +606,9 @@ export function effectiveVisibilitySM(input: {
  * or with no cloud layers and no fog, it is disabled so its passes cost nothing.
  *
  * @param layerCount - Cloud layers the stage draws
- * @param visibilityMeters - Fog visibility, 0 for no fog
+ * @param fogDensity - Fog density per meter, 0 for no fog
  * @param hasFrame - Whether the stage's east-north-up frame is set
  */
-export function weatherStageHasWork(layerCount: number, visibilityMeters: number, hasFrame: boolean): boolean {
-  return hasFrame && (layerCount > 0 || visibilityMeters > 0)
+export function weatherStageHasWork(layerCount: number, fogDensity: number, hasFrame: boolean): boolean {
+  return hasFrame && (layerCount > 0 || fogDensity > 0)
 }

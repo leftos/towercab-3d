@@ -280,7 +280,7 @@ Other open issues that name a Babylon file or feature (from `.tmp/linear-list.js
 # TASK INDEX GAP
 
 The answer took ~20 doc reads, ~25 searches and the `git show` of the spike branch beyond a Task Index row (there is no Task Index). Rows that should exist:
-- "Change how weather is drawn (clouds, fog, rain)": `hooks/useBabylonWeather.ts` + `hooks/weather/*` + `useBabylonPrecipitation.ts` (today); `useCesiumWeather.ts`, the weather stage hooks (after M2); `stores/weatherStore.ts`, `useSmoothedWeather.ts`, `types/settings.ts` `WeatherSettings` (:735).
+- "Change how weather is drawn (clouds, fog, rain)": `hooks/useBabylonWeather.ts` + `hooks/weather/*` + `useBabylonPrecipitation.ts` (today); `useCesiumWeather.ts`, the weather stage hooks (after M2); `stores/weatherStore.ts`, `utils/weatherStage.ts` (fog fade and ease), `types/settings.ts` `WeatherSettings` (:735).
 - "Change datablock labels or leader lines": `useCesiumLabels.ts` (layout, culling) -> `useBabylonOverlay.ts` adapter -> `useBabylonLabels.ts` -> `stores/datablockPositionStore.ts` -> `CesiumViewer.tsx:1145` (click hit-test).
 - "Change the tower cab model": `hooks/useTowerModel.ts` -> `services/ModService.ts` (`getTowerPlacement`) -> `stores/towerPositioningStore.ts` -> `utils/modelOrientation.ts` -> `hooks/useAircraftModels.ts` -> `utils/nightBrightness.ts` -> `hooks/useCesiumLighting.ts` -> `MODDING.md` -> `stores/airportStore.ts` (camera default).
 - "Add or change an `__tc3d` harness call": `useAgentHarness.ts`, `types/harness.ts`, `CLAUDE.md` harness list, `docs/DRIVING_CONVENTIONS.md` (TC3D-123 notes the harness is in no doc).
