@@ -17,7 +17,7 @@ This repo declines the whole Server plumbing section, because it builds no MCP s
 
 Driving a desktop app from outside its process brings the window forward or moves the cursor: a survey in another project found no desktop-automation MCP server that drives from outside and fully avoids stealing focus, while the ones that never do run a hook inside the app.
 
-TowerCab 3D is driven from inside: the `tauri-app` server attaches to the app's WebView2 over CDP, input is dispatched to the page through CDP rather than through the OS cursor and keyboard, and state is read and set through the dev-only `window.__tc3d` hook from `browser_evaluate`. An app started without the debugging port cannot be attached; relaunch it with the port (see launch-isolated-lifecycle) rather than reaching for OS-level automation.
+TowerCab 3D is driven from inside: the `tauri-app` server attaches to the app's WebView2 over CDP, input is dispatched to the page through CDP rather than through the OS cursor and keyboard, and state is read and set through the dev-only `window.__tc3d` hook from `browser_evaluate`. An app started without the debugging port cannot be attached; relaunch it with the port (see launch-isolated-lifecycle) rather than reaching for OS-level automation. A third-party app a check needs beside it (CRC, for vNAS work) is driven through its own startup hook the same way (see fenced-hook-for-third-party-app). The route is chosen per process by whether its hook answers.
 
 The one check worth making outside the hook is on the app's own output: the unified log file (see unified-log-tail) is read from the shell, which still works while the page is paused in a debugger or before the hook has installed.
 Source: .mcp.json:7-10; src/renderer/hooks/useAgentHarness.ts:32-84; src-tauri/src/lib.rs:789-797; CLAUDE.md:31-34; a survey of desktop-automation MCP servers in another project. Seen: 0 here (seeded from yaat).
@@ -29,7 +29,9 @@ Drive the desktop app itself (WebView2 over CDP) for anything that touches the b
 
 In towercab-3d the frontend-only server gets the SPA's HTML for every `/api/*` request, so mods, tower positions, METAR and saved global settings are missing and the Cesium token lasts only until reload; worse, a plain browser counts as remote mode (`isRemoteMode()`), so the app waits for a host and never polls VATSIM, and no aircraft appear until polling is started by hand from `browser_evaluate`.
 
-The no-polling fact reached CLAUDE.md (commit 46a4598, 2026-10-02) five months after the frontend-only route was first documented (commit 66062dd, 2026-05-02), in the commit that fixed a bug found while driving. Write down, per driving route, exactly which subsystems are absent, so a run that "shows nothing" is not mistaken for a bug.
+The no-polling fact reached CLAUDE.md (commit 46a4598, 2026-10-02) five months after the frontend-only route was first documented (commit 66062dd, 2026-05-02), in the commit that fixed a bug found while driving. Write down, per driving route, exactly which subsystems are absent, so a run that "shows nothing" is not mistaken for a bug. CLAUDE.md "E2E testing via Playwright MCP" holds that list for each of the three routes here (`playwright-headless` has no host WebSockets or aircraft feed; `playwright` lacks every `/api/*`).
+
+TowerCab has no UI Automation route. Measured in another project, one would return none of the app's errors with the call (read its log instead), could not fill a native file picker, would reach only the app's own windows with posted input and no cloaked window, and would see nothing drawn on the WebGL canvas.
 Source: CLAUDE.md:29-40; .mcp.json:3-10; commits 0275468 (tauri-app server added), 46a4598 (remote-mode/no-polling note). Seen: twice (Wave 1 run moved to the real app; TC3D-5 fix).
 
 ### Run render-only checks headless against the dev server's `/api/*`, and keep the ion token out of the transcript
@@ -112,7 +114,9 @@ Source: spike TC3D-244 measurements; src-tauri/src/lib.rs:777-778; the spike's W
 ### Say "hands off" before driving the user's window
 <!-- rule: say-hands-off-first -->
 
-Tell the user "hands off" before driving the app window: the app runs on the user's own desktop and any mouse or keyboard input from them breaks a run. The nextup profile repeats it as a step of every app check. A run the user's input cannot reach needs no warning: a `--agent` launch never shows or focuses the window (see quiet-by-default, hidden-window-keeps-rendering). A launch without `--agent` shows the window and can take the focus, so the warning stands until it is hidden.
+Tell the user "hands off" before driving the app window: the app runs on the user's own desktop and any mouse or keyboard input from them breaks a run. The nextup profile repeats it as a step of every app check. A run the user's input cannot reach needs no warning: a `--agent` launch never shows or focuses the window (see quiet-by-default, hidden-window-keeps-rendering). A launch without `--agent` shows the window and can take the focus, so the warning stands until it is hidden; a launch that shows the window even briefly before hiding it still needs the warning.
+
+Real OS input (`SendInput`, SendKeys) is where it bites: in another project a field's value gained stray letters in front of it because the user was typing during the run. CDP input never goes through the OS, but posted input is not fully out of reach either, since a UI framework may read Shift and Ctrl from the real keyboard (Avalonia does; it matters for CRC through the yaat client driver).
 Source: CLAUDE.md:53; .claude/skills/towercab-3d-nextup/SKILL.md:35; commit b39260a (Wave 1 friction list). Seen: Wave 1 run (2026-09-27).
 
 ### Project world points to the page CSS pixels the input tools take, and judge visibility by that projection
@@ -266,6 +270,14 @@ The mod repo nests the mod one level down (`KOAK/`), while the app wants `<folde
 
 A tower-cab check also needs 3D buildings on, because the mod draws no shaft. The mod's camera sits about 225 m NNE of the cab facing about 075, so the cab is behind the default view; aim at bearing about 203 to see it. Read the OSM shaft centroid live from the feature's `cesium#latitude` / `cesium#longitude` rather than hard-coding it.
 Source: CLAUDE.md:55; commit b39260a. Seen: Wave 1 run; TC3D-244 checks.
+
+### Drive a third-party app through a hook that fences itself, never through the owner's input
+<!-- rule: fenced-hook-for-third-party-app -->
+
+CRC, the controller client vNAS work checks against, is not ours: driven through UI Automation it would take the real mouse and keyboard from the user. The `yaat-client-driver` MCP's `crc_*` tools instead launch CRC with yaat's .NET startup hook, which drives it over a pipe: no real input, windows visible but never brought to the foreground, and the user's cursor snapshotted and restored around every input.
+
+CRC can reach the live VATSIM network, so the hook checks before each input, in the same UI-thread operation, that CRC is connected only to a local test server (a local YAAT server), and refuses otherwise, so a driver can never type into a live session; if the check ever finds otherwise it breaches loudly (every window brought forward, every call refused). A local server port only one process can hold is checked before a server is started for a run, and another session's server is left alone.
+Source: the yaat-client-driver MCP (`yaat/docs/client-driver-mcp.md`); .claude/skills/towercab-3d-nextup/SKILL.md "App checks". Seen: 0 here (seeded from yaat).
 
 ## App-side hook
 

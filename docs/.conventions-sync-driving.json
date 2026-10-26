@@ -37,8 +37,8 @@
       "user": "5703da5682eac4dc"
     },
     "drive-owned-app-in-process": {
-      "repo": "42fc6ac562805091",
-      "user": "be66d24a8139e90d"
+      "repo": "05543c64b3d737c9",
+      "user": "251b272a6a8d0e5b"
     },
     "emulation-per-call": {
       "repo": "0fbc405eaabb5823",
@@ -47,6 +47,10 @@
     "error-feed-on-results": {
       "declined": "no server of its own; tool results come from the third-party Playwright MCP",
       "user": "779511c62a903798"
+    },
+    "fenced-hook-for-third-party-app": {
+      "repo": "dd62c966283e7ee4",
+      "user": "b80e08d4e363fb72"
     },
     "fixed-tool-surface": {
       "declined": "no server of its own; drives through third-party Playwright MCP",
@@ -149,8 +153,8 @@
       "user": "818b37ebe7468676"
     },
     "real-app-over-frontend-only": {
-      "repo": "3fa8b7dcd982cb4d",
-      "user": "5d6fb063892d6fe5"
+      "repo": "e28774e301970a04",
+      "user": "8454655860f455c9"
     },
     "real-devices-leak-in": {
       "declined": "input is Playwright CDP only; no device input path",
@@ -185,8 +189,8 @@
       "user": "e1357ad6c047e437"
     },
     "say-hands-off-first": {
-      "repo": "8b9bcfa35bc0c730",
-      "user": "0a6f21fd5739c6de"
+      "repo": "1f101d9d63b310e1",
+      "user": "4c60944bbcac704d"
     },
     "semantic-click-first": {
       "declined": "input is Playwright CDP only",
@@ -207,6 +211,14 @@
     "test-server-over-stdio": {
       "declined": "no server of its own; drives through third-party Playwright MCP",
       "user": "8c8df5532748dcfb"
+    },
+    "transport-sole-stream-disposer": {
+      "declined": "no .NET in-app host: TowerCab is driven over CDP into its WebView2, with no pipe transport",
+      "user": "abda32b30dc2e4b1"
+    },
+    "ui-post-with-request-token": {
+      "declined": "no in-app request handler posting to a UI dispatcher: the window.__tc3d hook runs synchronously inside browser_evaluate",
+      "user": "d6b8e2f928716062"
     },
     "unified-log-tail": {
       "repo": "a43af6fae7ed94e7",
@@ -237,5 +249,5 @@
       "user": "81e92891fb8fe24c"
     }
   },
-  "user_revision": 11
+  "user_revision": 14
 }
