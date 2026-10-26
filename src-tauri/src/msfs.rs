@@ -62,8 +62,11 @@ pub struct MSFSConversionResult {
 pub struct CachedGlbInfo {
     /// Full path to the GLB file
     pub path: String,
-    /// Model key extracted from filename (e.g., "fsltl_FSLTL_FAIB_B738_American")
-    pub model_key: String,
+    /// The app's cache key, `{source}_{liveryTitle}` from the GLB's embedded metadata
+    /// (e.g. "fsltl_FSLTL_FAIB_B738_American"); None when the GLB does not embed both
+    pub model_key: Option<String>,
+    /// The GLB's file name in the cache folder (e.g. "fsltl_FSLTL_FAIB_B738_American-3f9a1c2e.glb")
+    pub file_name: String,
     /// File size in bytes
     pub file_size: u64,
     /// Converter version used to create this GLB (from asset.extras.towercab3d.converterVersion)
@@ -1659,17 +1662,16 @@ pub async fn list_aig_models(
 // TAURI COMMANDS - CONVERSION
 // =============================================================================
 
-/// Convert one or more MSFS model liveries to GLB format
+/// Convert one MSFS model livery to GLB through the ConversionOwner
 /// This is used for on-the-fly conversion when an aircraft first appears
 ///
 /// Arguments:
 /// - source_path: Path to aircraft folder (source/SimObjects/Airplanes/FSLTL_B738_AAL).
-///                Converter auto-detects this and skips global scan for fast conversion.
 /// - folder_name: Aircraft folder name (used for logging, e.g., "FSLTL_B738_AAL")
-/// - output_dir: Output directory for converted models (converter creates {source}_{liveryTitle}.glb)
+/// - output_dir: Output directory for converted models (the conversion owner names the GLB; see `conversion::output_file_name`)
 /// - texture_scale: Texture scaling ("full", "2k", "1k", "512")
 /// - livery_title: Livery title from aircraft.cfg to convert (only this livery)
-/// - gltf_path: Explicit GLTF path (for AIG shared models where GLTF is in a different folder)
+/// - gltf_path: The glTF the index resolved; a request without it (or without texture_dirs) is refused
 /// - texture_dirs: Pre-computed texture directories from model indexing
 // Each argument is part of the Tauri IPC contract deserialized from the
 // frontend; grouping them into a struct would break that surface.
@@ -1729,8 +1731,18 @@ pub async fn convert_msfs_model(
 // TAURI COMMANDS - SCANNING
 // =============================================================================
 
-/// Extract converter version from a GLB file's metadata
-fn get_glb_converter_version(glb_path: &std::path::Path) -> Option<u32> {
+/// What the converter embeds in a GLB's `asset.extras.towercab3d`; each field absent when the
+/// GLB does not hold it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct GlbExtras {
+    pub converter_version: Option<u32>,
+    pub source: Option<String>,
+    pub livery_title: Option<String>,
+}
+
+/// The converter's metadata in a GLB's JSON chunk (read up to 1 MB), or None when the file has
+/// no readable JSON chunk or the chunk no `asset.extras.towercab3d` object.
+pub(crate) fn read_glb_extras(glb_path: &std::path::Path) -> Option<GlbExtras> {
     use std::io::Read;
 
     let mut file = fs::File::open(glb_path).ok()?;
@@ -1775,13 +1787,16 @@ fn get_glb_converter_version(glb_path: &std::path::Path) -> Option<u32> {
     let json_str = String::from_utf8(json_bytes).ok()?;
     let gltf: serde_json::Value = serde_json::from_str(&json_str).ok()?;
 
-    // Extract asset.extras.towercab3d.converterVersion
-    gltf.get("asset")?
-        .get("extras")?
-        .get("towercab3d")?
-        .get("converterVersion")?
-        .as_u64()
-        .map(|v| v as u32)
+    let towercab = gltf.get("asset")?.get("extras")?.get("towercab3d")?;
+    let text = |key: &str| towercab.get(key)?.as_str().map(str::to_string);
+    Some(GlbExtras {
+        converter_version: towercab
+            .get("converterVersion")
+            .and_then(serde_json::Value::as_u64)
+            .and_then(|version| u32::try_from(version).ok()),
+        source: text("source"),
+        livery_title: text("liveryTitle"),
+    })
 }
 
 /// The total length the GLB header declares (bytes 8..12), or None when it cannot be read
@@ -1841,7 +1856,9 @@ pub async fn scan_cache_directory(cache_dir: String) -> Result<Vec<CachedGlbInfo
 }
 
 /// List the cached GLBs in a folder, one entry per readable `*.glb` file
-fn scan_cache_dir_sync(cache_dir: &std::path::Path) -> Result<Vec<CachedGlbInfo>, String> {
+pub(crate) fn scan_cache_dir_sync(
+    cache_dir: &std::path::Path,
+) -> Result<Vec<CachedGlbInfo>, String> {
     let entries = fs::read_dir(cache_dir).map_err(|e| {
         format!(
             "Failed to read cache directory {}: {}",
@@ -1862,43 +1879,98 @@ fn scan_cache_dir_sync(cache_dir: &std::path::Path) -> Result<Vec<CachedGlbInfo>
         if !ext.eq_ignore_ascii_case("glb") {
             continue;
         }
-        // Extract model key from filename (remove .glb extension)
-        let Some(stem) = path.file_stem() else {
-            continue;
-        };
-        let model_key = stem.to_string_lossy().to_string();
         let file_size = entry.metadata().map(|m| m.len()).unwrap_or(0);
-        // A GLB that cannot be validated is listed without a version, which the app
-        // treats as outdated: it deletes the file and converts the model again
-        let converter_version = match check_glb_length(&path, file_size) {
-            Err(GlbDefect::Unreadable) => {
-                tracing::warn!(
-                    "[MSFSDetection] Could not read the GLB header, reconverting: {}",
-                    path.display()
-                );
-                None
-            }
-            Err(GlbDefect::LengthMismatch { declared }) => {
-                tracing::warn!(
-                    "[MSFSDetection] GLB header length {} does not match file size {}, \
-                     reconverting: {}",
-                    declared,
-                    file_size,
-                    path.display()
-                );
-                None
-            }
-            Ok(()) => get_glb_converter_version(&path),
-        };
-        cached_models.push(CachedGlbInfo {
-            path: normalize_path_string(&path),
-            model_key,
-            file_size,
-            converter_version,
-        });
+        cached_models.push(cached_glb_info(&path, file_size));
     }
 
     Ok(cached_models)
+}
+
+/// What the scan lists for the GLB at `path`. A GLB that cannot be validated, or whose embedded
+/// metadata lacks its source or livery title, is listed without a key or a version, which the app
+/// treats as outdated: it deletes the file and converts the model again.
+fn cached_glb_info(path: &Path, file_size: u64) -> CachedGlbInfo {
+    let extras = match check_glb_length(path, file_size) {
+        Err(GlbDefect::Unreadable) => {
+            tracing::warn!(
+                "[MSFSDetection] Could not read the GLB header, reconverting: {}",
+                path.display()
+            );
+            None
+        }
+        Err(GlbDefect::LengthMismatch { declared }) => {
+            tracing::warn!(
+                "[MSFSDetection] GLB header length {} does not match file size {}, \
+                 reconverting: {}",
+                declared,
+                file_size,
+                path.display()
+            );
+            None
+        }
+        Ok(()) => read_glb_extras(path),
+    };
+    let keyed = extras.and_then(|extras| match (extras.source, extras.livery_title) {
+        (Some(source), Some(title)) => {
+            Some((format!("{source}_{title}"), extras.converter_version))
+        }
+        _ => {
+            tracing::warn!(
+                "[MSFSDetection] GLB embeds no source or livery title, reconverting: {}",
+                path.display()
+            );
+            None
+        }
+    });
+    let (model_key, converter_version) = match keyed {
+        Some((key, version)) => (Some(key), version),
+        None => (None, None),
+    };
+    CachedGlbInfo {
+        path: normalize_path_string(path),
+        model_key,
+        file_name: path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default(),
+        file_size,
+        converter_version,
+    }
+}
+
+/// Find the cached GLB the converter wrote for `source` livery `livery_title` in `cache_dir`, by
+/// the name the conversion owner gives it. Returns None when `source` is not `fsltl` or `aig`, no
+/// such file exists, the scan would refuse it, or its embedded source or livery title is not the
+/// one asked for.
+#[tauri::command]
+pub async fn find_cached_model(
+    cache_dir: String,
+    source: String,
+    livery_title: String,
+) -> Result<Option<CachedGlbInfo>, String> {
+    tokio::task::spawn_blocking(move || {
+        find_cached_model_sync(Path::new(&cache_dir), &source, &livery_title)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))
+}
+
+fn find_cached_model_sync(
+    cache_dir: &Path,
+    source: &str,
+    livery_title: &str,
+) -> Option<CachedGlbInfo> {
+    if !matches!(source, "fsltl" | "aig") {
+        return None;
+    }
+    let path = cache_dir.join(crate::conversion::output_file_name(source, livery_title));
+    if !is_accepted_glb(&path) {
+        return None;
+    }
+    let file_size = fs::metadata(&path).ok()?.len();
+    let info = cached_glb_info(&path, file_size);
+    let wanted = format!("{source}_{livery_title}");
+    (info.model_key.as_deref() == Some(wanted.as_str())).then_some(info)
 }
 
 // =============================================================================
@@ -1981,12 +2053,13 @@ pub fn remote_model_index(fsltl: &[SourceModelInfo], aig: &[SourceModelInfo]) ->
     }
 }
 
-/// What a remote client learns about one converted model: its key (the GLB is served as
-/// `/api/msfs/{model_key}.glb`), its size and the converter version that wrote it. The keys are
-/// snake_case, as the remote reader expects.
+/// What a remote client learns about one converted model: its cache key (None for an outdated
+/// GLB), its file name (the GLB is served as `/api/msfs/{file_name}`), its size and the converter
+/// version that wrote it. The keys are snake_case, as the remote reader expects.
 #[derive(Debug, Serialize)]
 pub struct RemoteCachedModel {
-    pub model_key: String,
+    pub model_key: Option<String>,
+    pub file_name: String,
     pub file_size: u64,
     pub converter_version: Option<u32>,
 }
@@ -1997,6 +2070,7 @@ pub fn remote_cached_models(models: Vec<CachedGlbInfo>) -> Vec<RemoteCachedModel
         .into_iter()
         .map(|model| RemoteCachedModel {
             model_key: model.model_key,
+            file_name: model.file_name,
             file_size: model.file_size,
             converter_version: model.converter_version,
         })
@@ -2091,7 +2165,8 @@ mod tests {
             .iter()
             .map(|path| CachedGlbInfo {
                 path: path.to_string(),
-                model_key: "fsltl_FSLTL_B738_Southwest".to_string(),
+                model_key: Some("fsltl_FSLTL_B738_Southwest".to_string()),
+                file_name: "fsltl_FSLTL_B738_Southwest-0123abcd.glb".to_string(),
                 file_size: 1024,
                 converter_version: Some(7),
             })
@@ -2202,12 +2277,24 @@ mod tests {
         }
     }
 
-    /// A minimal valid GLB: header, JSON chunk carrying the converter version, BIN chunk.
+    /// A minimal valid GLB whose extras hold the converter version, source `fsltl` and title `T`.
     fn minimal_glb(converter_version: u32, bin_bytes: usize) -> Vec<u8> {
-        let json = format!(
-            "{{\"asset\":{{\"version\":\"2.0\",\"extras\":{{\"towercab3d\":{{\"converterVersion\":{}}}}}}}}}",
-            converter_version
-        );
+        glb_with_extras(
+            &serde_json::json!({
+                "converterVersion": converter_version,
+                "source": "fsltl",
+                "liveryTitle": "T",
+            }),
+            bin_bytes,
+        )
+    }
+
+    /// A minimal valid GLB: header, JSON chunk carrying `towercab3d` as its extras, BIN chunk.
+    fn glb_with_extras(towercab3d: &serde_json::Value, bin_bytes: usize) -> Vec<u8> {
+        let json = serde_json::json!({
+            "asset": { "version": "2.0", "extras": { "towercab3d": towercab3d } }
+        })
+        .to_string();
         let mut json_bytes = json.into_bytes();
         while json_bytes.len() % 4 != 0 {
             json_bytes.push(b' ');
@@ -2236,7 +2323,8 @@ mod tests {
         fs::write(&path, truncated).expect("write truncated GLB");
         let scanned = scan_cache_dir_sync(folder.path()).expect("scan cache folder");
         assert_eq!(scanned.len(), 1, "the truncated GLB must stay in the list");
-        assert_eq!(scanned[0].model_key, "fsltl_truncated");
+        assert_eq!(scanned[0].model_key, None);
+        assert_eq!(scanned[0].file_name, "fsltl_truncated.glb");
         assert_eq!(scanned[0].converter_version, None);
     }
 
@@ -2246,7 +2334,8 @@ mod tests {
         fs::write(folder.path().join("fsltl_empty.glb"), b"").expect("write empty GLB");
         let scanned = scan_cache_dir_sync(folder.path()).expect("scan cache folder");
         assert_eq!(scanned.len(), 1, "the empty GLB must stay in the list");
-        assert_eq!(scanned[0].model_key, "fsltl_empty");
+        assert_eq!(scanned[0].model_key, None);
+        assert_eq!(scanned[0].file_name, "fsltl_empty.glb");
         assert_eq!(scanned[0].converter_version, None);
     }
 
@@ -2257,8 +2346,129 @@ mod tests {
         fs::write(&path, minimal_glb(8, 64)).expect("write GLB");
         let scanned = scan_cache_dir_sync(folder.path()).expect("scan cache folder");
         assert_eq!(scanned.len(), 1);
-        assert_eq!(scanned[0].model_key, "fsltl_intact");
+        assert_eq!(scanned[0].model_key.as_deref(), Some("fsltl_T"));
         assert_eq!(scanned[0].converter_version, Some(8));
+    }
+
+    #[test]
+    fn scan_keys_a_glb_by_its_embedded_source_and_title() {
+        let folder = TempFolder::new();
+        let extras = serde_json::json!({
+            "converterVersion": 9,
+            "source": "fsltl",
+            "liveryTitle": "Some Title",
+        });
+        fs::write(
+            folder.path().join("fsltl_Some_Title-1a2b3c4d.glb"),
+            glb_with_extras(&extras, 64),
+        )
+        .expect("write GLB");
+        let scanned = scan_cache_dir_sync(folder.path()).expect("scan cache folder");
+        assert_eq!(scanned.len(), 1);
+        assert_eq!(scanned[0].model_key.as_deref(), Some("fsltl_Some Title"));
+        assert_eq!(scanned[0].file_name, "fsltl_Some_Title-1a2b3c4d.glb");
+        assert_eq!(scanned[0].converter_version, Some(9));
+    }
+
+    #[test]
+    fn scan_lists_a_glb_without_source_or_title_as_outdated() {
+        let folder = TempFolder::new();
+        let no_title = serde_json::json!({ "converterVersion": 9, "source": "fsltl" });
+        let no_source = serde_json::json!({ "converterVersion": 9, "liveryTitle": "T" });
+        fs::write(
+            folder.path().join("fsltl_A.glb"),
+            glb_with_extras(&no_title, 64),
+        )
+        .expect("write GLB");
+        fs::write(
+            folder.path().join("fsltl_B.glb"),
+            glb_with_extras(&no_source, 64),
+        )
+        .expect("write GLB");
+        let scanned = scan_cache_dir_sync(folder.path()).expect("scan cache folder");
+        assert_eq!(scanned.len(), 2);
+        for model in &scanned {
+            assert_eq!(model.model_key, None, "{}", model.file_name);
+            assert_eq!(model.converter_version, None, "{}", model.file_name);
+        }
+    }
+
+    /// Writes the GLB the converter makes for `source` `title`, with `extras_title` embedded.
+    fn write_converted(folder: &Path, source: &str, title: &str, extras_title: &str) -> PathBuf {
+        let extras = serde_json::json!({
+            "converterVersion": 9,
+            "source": source,
+            "liveryTitle": extras_title,
+        });
+        let path = folder.join(crate::conversion::output_file_name(source, title));
+        fs::write(&path, glb_with_extras(&extras, 64)).expect("write GLB");
+        path
+    }
+
+    #[test]
+    fn find_cached_model_returns_the_converted_glb_of_a_livery() {
+        let folder = TempFolder::new();
+        let path = write_converted(folder.path(), "aig", "Some Title", "Some Title");
+        let found = find_cached_model_sync(folder.path(), "aig", "Some Title")
+            .expect("the converted GLB is found");
+        assert_eq!(found.path, normalize_path_string(&path));
+        assert_eq!(found.model_key.as_deref(), Some("aig_Some Title"));
+        assert_eq!(
+            found.file_name,
+            crate::conversion::output_file_name("aig", "Some Title")
+        );
+        assert_eq!(found.converter_version, Some(9));
+    }
+
+    #[test]
+    fn find_cached_model_is_none_for_a_missing_file() {
+        let folder = TempFolder::new();
+        assert!(find_cached_model_sync(folder.path(), "aig", "Some Title").is_none());
+    }
+
+    #[test]
+    fn find_cached_model_is_none_for_a_glb_the_scan_refuses() {
+        let folder = TempFolder::new();
+        let path = write_converted(folder.path(), "aig", "Some Title", "Some Title");
+        let glb = fs::read(&path).expect("read GLB");
+        fs::write(&path, &glb[..glb.len() - 16]).expect("truncate GLB");
+        assert!(find_cached_model_sync(folder.path(), "aig", "Some Title").is_none());
+    }
+
+    #[test]
+    fn find_cached_model_is_none_when_the_embedded_title_differs() {
+        let folder = TempFolder::new();
+        write_converted(folder.path(), "aig", "Some Title", "Other Title");
+        assert!(find_cached_model_sync(folder.path(), "aig", "Some Title").is_none());
+    }
+
+    #[test]
+    fn find_cached_model_is_none_for_a_source_other_than_fsltl_or_aig() {
+        let folder = TempFolder::new();
+        write_converted(folder.path(), "other", "Some Title", "Some Title");
+        assert!(find_cached_model_sync(folder.path(), "other", "Some Title").is_none());
+    }
+
+    #[test]
+    fn scan_keeps_titles_sharing_their_first_80_characters_apart() {
+        let folder = TempFolder::new();
+        let titles = [
+            format!("{}x", "A".repeat(120)),
+            format!("{}y", "A".repeat(120)),
+        ];
+        for title in &titles {
+            let extras = serde_json::json!({
+                "converterVersion": 9,
+                "source": "aig",
+                "liveryTitle": title,
+            });
+            let name = crate::conversion::output_file_name("aig", title);
+            fs::write(folder.path().join(name), glb_with_extras(&extras, 64)).expect("write GLB");
+        }
+        let scanned = scan_cache_dir_sync(folder.path()).expect("scan cache folder");
+        let keys: BTreeSet<String> = scanned.iter().filter_map(|m| m.model_key.clone()).collect();
+        let expected: BTreeSet<String> = titles.iter().map(|t| format!("aig_{t}")).collect();
+        assert_eq!(keys, expected);
     }
 
     #[test]
@@ -2328,7 +2538,7 @@ mod tests {
             .expect("serialise models");
         assert_eq!(
             entry_keys(&models),
-            key_set(&["model_key", "file_size", "converter_version"])
+            key_set(&["model_key", "file_name", "file_size", "converter_version"])
         );
     }
 

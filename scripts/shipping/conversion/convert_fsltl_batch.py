@@ -1,93 +1,59 @@
 #!/usr/bin/env python3
 """
-FSLTL/AIG Batch Converter
+FSLTL/AIG Model Converter
 
-Converts MSFS aircraft models from GLTF with DDS textures to self-contained GLB files.
-Uses aircraft.cfg livery titles for filtering instead of folder names.
+Converts MSFS aircraft models from glTF with DDS textures to self-contained GLB files.
 
-Features:
-- Discover liveries from aircraft.cfg FLTSIM sections
-- Filter by livery titles (comma-separated list or all if not specified)
-- Batch conversion with multiple texture scale options
-- Progress reporting to JSON file
-- Animation detection for landing gear
+The app hands over one JSON job naming the glTF, its texture folders, the texture scale and,
+for each livery, its title and the absolute path of the GLB to write; the converter writes each
+GLB at exactly that path and reports per livery in a JSON result file.
 
 Usage:
-    python convert_fsltl_batch.py \
-        --source "X:/...../fsltl-traffic-base" \
-        --output "X:/...../mods/aircraft/fsltl" \
-        --texture-scale 1k \
-        --liveries "FSLTL_FAIB_B738_American,FSLTL_FAIB_A320_UAL"
+    python convert_fsltl_batch.py --job job.json --result result.json
 
-    # Convert all liveries if --liveries not specified:
-    python convert_fsltl_batch.py --source "..." --output "..."
+    # Check that the bundled dependencies load:
+    python convert_fsltl_batch.py --self-test
+
+Job (UTF-8 JSON):
+    {"version": 1, "source": "fsltl" | "aig", "texture_scale": "full" | "2k" | "1k" | "512",
+     "gltf_path": "...", "texture_dirs": ["..."],
+     "liveries": [{"title": "...", "output": "<absolute path ending .glb>"}]}
+
+Result (UTF-8 JSON):
+    {"version": 1, "outputs": [{"title": "...", "path": "...", "ok": true, "error": null}],
+     "errors": ["..."]}
+
+Exit codes: 0 every livery converted, 1 at least one failed, 2 the job is invalid.
 """
 
-# IMPORTANT: Parse progress file arg FIRST before any imports that might fail
-# This allows us to write errors to the progress file if imports fail
 import sys
 import json
 import traceback  # Safe stdlib import - needed for error handling
 from pathlib import Path
 
-def _get_progress_file_from_args():
-    """Extract --progress-file from sys.argv before full argument parsing."""
-    for i, arg in enumerate(sys.argv):
-        if arg == '--progress-file' and i + 1 < len(sys.argv):
-            return Path(sys.argv[i + 1])
-        if arg.startswith('--progress-file='):
-            return Path(arg.split('=', 1)[1])
-    return None
 
-def _write_startup_error(progress_file: Path | None, error_msg: str, details: str = ""):
-    """Write an error to the progress file and print to stderr."""
-    full_error = f"{error_msg}\n{details}" if details else error_msg
-    print(f"STARTUP ERROR: {full_error}", file=sys.stderr)
+def _startup_error(error_msg: str, details: str) -> None:
+    """Print an error that stopped the converter before it could start."""
+    print(f"STARTUP ERROR: {error_msg}\n{details}", file=sys.stderr)
 
-    if progress_file:
-        try:
-            progress_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(progress_file, 'w') as f:
-                json.dump({
-                    'status': 'error',
-                    'total': 0,
-                    'completed': 0,
-                    'current': None,
-                    'errors': [error_msg],
-                    'converted': [],
-                    'startup_error': full_error
-                }, f)
-        except Exception as e:
-            print(f"Failed to write error to progress file: {e}", file=sys.stderr)
 
-# Get progress file path BEFORE importing potentially failing modules
-_progress_file_path = _get_progress_file_from_args()
-
-# Now try to import everything else, catching any failures
+# Import everything else, catching any failures
 try:
     import argparse
-    import re
     import struct
     from PIL import Image
     import numpy as np
     import io
     import time
     import os
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-    import threading
 except ImportError as e:
-    _write_startup_error(
-        _progress_file_path,
+    _startup_error(
         f"Failed to import required module: {e.name}",
         f"Full error: {e}\n\nThis usually means the converter was not built correctly.\nPlease run 'pnpm run build:converter' to rebuild."
     )
     sys.exit(1)
 except Exception as e:
-    _write_startup_error(
-        _progress_file_path,
-        f"Unexpected error during startup: {type(e).__name__}",
-        traceback.format_exc()
-    )
+    _startup_error(f"Unexpected error during startup: {type(e).__name__}", traceback.format_exc())
     sys.exit(1)
 
 # Converter version - increment when conversion logic changes to invalidate cached models
@@ -98,7 +64,12 @@ except Exception as e:
 #   4: Fixed model.cfg parsing to read GLTF filename from XML (fixes wrong engine variant textures)
 #   5: Fixed base_container resolution for FSLTL freighter variants (e.g., B77LF, B744F)
 #   6: Added --no-discovery mode; Rust now handles model.cfg parsing (fixes wrong engine variant for liveries)
-CONVERTER_VERSION = 8  # Bump when converter output changes (v8: exclude cargo/attachment GTLFs from model selection)
+#   8: Exclude cargo/attachment GLTFs from model selection
+#   9: The app hands over a JSON job; output names are a sanitized title plus a hash of it
+CONVERTER_VERSION = 9  # Bump when converter output changes
+
+# The job format version this converter reads
+JOB_VERSION = 1
 
 
 # Texture scale limits
@@ -986,854 +957,212 @@ def convert_single_gltf(gltf_path: Path, output_path: Path, texture_dirs: list[P
     }
 
 
-def parse_aircraft_cfg_all_liveries(aircraft_dir: Path, requested_titles: set[str] | None = None) -> list[dict]:
+class JobError(ValueError):
+    """A job the converter cannot run: unreadable, of another version, or missing a field."""
+
+
+# Every job field with the type its value must have
+JOB_FIELDS = {
+    'version': int,
+    'source': str,
+    'texture_scale': str,
+    'gltf_path': str,
+    'texture_dirs': list,
+    'liveries': list,
+}
+
+JOB_SOURCES = ('fsltl', 'aig')
+
+
+def _check_field_types(job: dict) -> None:
+    """Raise JobError for the first job field that is missing or holds the wrong type."""
+    for field, kind in JOB_FIELDS.items():
+        if field not in job:
+            raise JobError(f"job field {field!r} is missing")
+        value = job[field]
+        if not isinstance(value, kind) or isinstance(value, bool):
+            raise JobError(f"job field {field!r} must be a {kind.__name__}")
+
+
+def _check_values(job: dict) -> None:
+    """Raise JobError for the first of source, texture_scale and texture_dirs outside its allowed values."""
+    if job['source'] not in JOB_SOURCES:
+        raise JobError(f"job source {job['source']!r} is not one of {', '.join(JOB_SOURCES)}")
+    if job['texture_scale'] not in TEXTURE_SCALE_MAP:
+        raise JobError(f"job texture_scale {job['texture_scale']!r} is not one of {', '.join(TEXTURE_SCALE_MAP)}")
+    if not all(isinstance(folder, str) for folder in job['texture_dirs']):
+        raise JobError("job field 'texture_dirs' must hold only strings")
+
+
+def _check_liveries(liveries: list) -> None:
+    """Raise JobError unless `liveries` is a non-empty list of {title, output} string pairs."""
+    if not liveries:
+        raise JobError("job field 'liveries' is empty")
+    for index, livery in enumerate(liveries):
+        if not isinstance(livery, dict):
+            raise JobError(f"livery {index} must be an object")
+        for field in ('title', 'output'):
+            if not isinstance(livery.get(field), str):
+                raise JobError(f"livery {index} field {field!r} is missing or not a string")
+
+
+def read_job(job_path: Path) -> dict:
+    """The job at `job_path`, checked against the job format.
+
+    Raises:
+        JobError: When the file cannot be read or parsed, its version is not JOB_VERSION, or a
+            field is missing, of the wrong type or outside its allowed values.
     """
-    Parse FLTSIM sections from aircraft.cfg.
-    Returns list of dicts with: title, texture_folder, icao_airline (or None)
-
-    Args:
-        aircraft_dir: Path to aircraft folder
-        requested_titles: Optional set of livery titles to find. If provided, stops parsing once all are found.
-                         If None, parses all liveries.
-
-    This mirrors the Rust function parse_aircraft_cfg_all_liveries() in msfs.rs
-    """
-    cfg_path = aircraft_dir / "aircraft.cfg"
-    if not cfg_path.exists():
-        return []
-
-    liveries = []
     try:
-        content = cfg_path.read_text(encoding='utf-8', errors='ignore')
-        in_fltsim = False
-        current_livery = {}
-
-        for line in content.splitlines():
-            trimmed = line.strip()
-
-            # Check for section headers
-            if trimmed.startswith('['):
-                # Save previous livery if complete (title + texture_folder key exists, even if empty)
-                if in_fltsim and current_livery.get('title') and 'texture_folder' in current_livery:
-                    liveries.append(current_livery)
-
-                    # Early stopping: if we found all requested liveries, we're done
-                    if requested_titles and all(liv['title'] in requested_titles for liv in liveries):
-                        return liveries
-
-                in_fltsim = trimmed.upper().startswith('[FLTSIM')
-                current_livery = {}
-                continue
-
-            if not in_fltsim or '=' not in trimmed:
-                continue
-
-            key, _, value = trimmed.partition('=')
-            key = key.strip().lower()
-            value = value.split(';')[0].strip().strip('"').strip("'").strip()
-
-            if key == 'title':
-                current_livery['title'] = value
-            elif key == 'texture' and not key.startswith('texture.'):
-                current_livery['texture_folder'] = value
-            elif key == 'icao_airline':
-                current_livery['icao_airline'] = value.upper()
-
-        # Don't forget the last section (title + texture_folder key exists, even if empty)
-        if in_fltsim and current_livery.get('title') and 'texture_folder' in current_livery:
-            liveries.append(current_livery)
-
-    except Exception:
-        pass
-
-    return liveries
+        job = json.loads(job_path.read_text(encoding='utf-8'))
+    except (OSError, ValueError) as e:
+        raise JobError(f"cannot read job {job_path}: {e}") from e
+    if not isinstance(job, dict):
+        raise JobError(f"job {job_path} is not a JSON object")
+    version = job.get('version')
+    if version != JOB_VERSION or isinstance(version, bool):
+        raise JobError(f"job version {version!r} is not supported; this converter reads version {JOB_VERSION}")
+    _check_field_types(job)
+    _check_values(job)
+    _check_liveries(job['liveries'])
+    return job
 
 
-def find_gltf_in_model_dir(model_dir: Path) -> Path | None:
-    """Find GLTF file in a model directory, balancing quality and performance."""
-    # Get all GLTF files
-    all_gltf = list(model_dir.glob("*.gltf")) + list(model_dir.glob("*.GLTF"))
-    if not all_gltf:
-        return None
+def output_refusal(output: str) -> str | None:
+    """Why the job's `output` path is refused, or None when it may be written.
 
-    # Filter out interior/cockpit/cargo attachment models (we want main exterior only)
-    exterior_gltf = [f for f in all_gltf if 'INTERIOR' not in f.stem.upper() and 'COCKPIT' not in f.stem.upper() and 'CARGO' not in f.stem.upper()]
-    if not exterior_gltf:
-        exterior_gltf = all_gltf  # Fall back to all if no exterior found
-
-    # Sort by LOD number (lowest first = highest quality)
-    def lod_sort_key(path: Path):
-        name = path.stem.upper()
-        match = re.search(r'LOD(\d+)', name)
-        if match:
-            return (0, int(match.group(1)))
-        return (1, 0)  # No LOD number (sort after LOD files)
-
-    exterior_gltf.sort(key=lod_sort_key)
-    return exterior_gltf[0] if exterior_gltf else None
-
-
-def parse_model_xml(xml_path: Path, package_root: Path) -> Path | None:
+    The path must be absolute with no `..` step, and its file name a plain name that does not
+    start with a dot and ends `.glb`.
     """
-    Parse an MSFS model XML file to find the GLTF filename.
-
-    MSFS model XMLs have a LODS section listing the model files:
-        <LODS>
-          <LOD minSize="8" ModelFile="B772_PW_LOD0.gltf"/>
-          <LOD minSize="1" ModelFile="B772_PW_LOD1.gltf"/>
-        </LODS>
-
-    Returns the resolved path to the highest-quality LOD (highest minSize), or None; a
-    ModelFile that resolves outside the package is skipped with a warning.
-    """
-    if not xml_path.exists():
-        return None
-
-    try:
-        import xml.etree.ElementTree as ET
-        tree = ET.parse(xml_path)
-        root = tree.getroot()
-
-        # Find all LOD elements
-        lods = root.findall('.//LOD')
-        if not lods:
-            return None
-
-        # Sort by minSize (highest first = best quality)
-        best_lod = max(lods, key=lambda lod: int(lod.get('minSize', '0')))
-        model_file = best_lod.get('ModelFile')
-        if model_file:
-            gltf_path = resolve_inside(package_root, xml_path.parent / model_file)
-            if gltf_path is None:
-                warn(f"ModelFile {model_file!r} in {xml_path} is outside the package {package_root}; skipping it")
-            elif gltf_path.exists():
-                return gltf_path
-    except Exception:
-        pass
+    path = Path(output)
+    if not path.is_absolute():
+        return f"output {output!r} is not an absolute path"
+    if '..' in path.parts:
+        return f"output {output!r} steps out of its folder with '..'"
+    name = path.name
+    if not is_plain_name(name) or name.startswith('.') or not name.lower().endswith('.glb'):
+        return f"output file name {name!r} is not a plain name ending .glb"
     return None
 
 
-def _gltf_from_model_cfg_reference(model_cfg_path: Path, rel_path: str, package_root: Path) -> Path | None:
-    """The glTF a model.cfg `normal=` XML reference names, or None when it names none inside the package."""
-    # Resolve relative to model.cfg's parent directory
-    xml_path = resolve_inside(package_root, model_cfg_path.parent / rel_path)
-    if xml_path is None:
-        warn(f"normal={rel_path} in {model_cfg_path} is outside the package {package_root}; skipping it")
-        return None
-    if xml_path.exists():
-        # Parse the XML to get the actual GLTF filename
-        gltf_from_xml = parse_model_xml(xml_path, package_root)
-        if gltf_from_xml:
-            return gltf_from_xml
-
-    # Fallback: derive GLTF name from XML name
-    # e.g., model.iae/FAIB_A320_IAE.xml -> model.iae/FAIB_A320_IAE_LOD0.gltf
-    gltf_dir = xml_path.parent
-    gltf_stem = xml_path.name[:-4]  # Remove .xml
-    if not gltf_dir.exists():
-        return None
-    # Look for LOD0 first (highest quality), then any LOD
-    candidates = [gltf_dir / f"{gltf_stem}{suffix}" for suffix in ['_LOD0.gltf', '_LOD0.GLTF', '_LOD1.gltf', '_LOD1.GLTF']]
-    # Fall back to any GLTF with matching prefix
-    candidates += list(gltf_dir.glob(f"{gltf_stem}*.gltf")) + list(gltf_dir.glob(f"{gltf_stem}*.GLTF"))
-    for candidate in candidates:
-        if candidate.exists():
-            resolved = resolve_inside(package_root, candidate)
-            if resolved is not None:
-                return resolved
-            warn(f"glTF {candidate} resolves outside the package {package_root}; skipping it")
-    return None
+def aircraft_type_of(folder_name: str) -> str:
+    """The aircraft type in an aircraft folder name: `B738` in `FSLTL_B738_AAL`, `A320` in `AIGAIM_Airbus_A320-200_CFM`."""
+    parts = folder_name.split('_')
+    if folder_name.startswith('FSLTL_'):
+        return parts[1] if len(parts) > 1 else ''
+    if folder_name.startswith('AIGAIM_'):
+        return parts[2].split('-')[0] if len(parts) > 2 else ''
+    return parts[1] if len(parts) > 1 else folder_name
 
 
-def parse_model_cfg(model_cfg_path: Path, package_root: Path) -> Path | None:
-    """
-    Parse a model.cfg file to find the referenced base GLTF.
-
-    MSFS livery folders have a model.XXX/model.cfg that points to the base model:
-        [models]
-        normal=..\\..\\FSLTL_A320\\model.iae\\FAIB_A320_IAE.xml
-
-    Returns the GLTF path derived from the XML reference, or None; a reference that
-    resolves outside the package is skipped with a warning.
-    """
-    if not model_cfg_path.exists():
-        return None
-
+def convert_livery(job: dict, livery: dict) -> dict:
+    """Convert one livery of `job` to its output path; returns its result entry."""
+    title, output = livery['title'], livery['output']
+    entry = {'title': title, 'path': output, 'ok': False, 'error': None}
+    refusal = output_refusal(output)
+    if refusal:
+        entry['error'] = refusal
+        return entry
+    output_path = Path(output)
+    gltf_path = Path(job['gltf_path'])
+    texture_dirs = [Path(folder) for folder in job['texture_dirs']]
+    # The folder holding the glTF's model folder: the aircraft the model belongs to
+    folder_name = gltf_path.parent.parent.name
+    source_metadata = {
+        'source': job['source'],
+        'livery_title': title,
+        'folder_name': folder_name,
+        'aircraft_type': aircraft_type_of(folder_name),
+        'icao_airline': None,
+        'gltf_path': str(gltf_path),
+        'texture_dirs': [str(folder) for folder in texture_dirs],
+        'aircraft_folder': None,
+    }
     try:
-        content = model_cfg_path.read_text(encoding='utf-8', errors='ignore')
-        for line in content.splitlines():
-            line = line.strip()
-            if line.lower().startswith('normal='):
-                # Convert backslashes to forward slashes
-                rel_path = line.partition('=')[2].strip().replace('\\', '/')
-                # The path points to an .xml file
-                if rel_path.endswith('.xml'):
-                    gltf = _gltf_from_model_cfg_reference(model_cfg_path, rel_path, package_root)
-                    if gltf:
-                        return gltf
-    except Exception:
-        pass
-    return None
-
-
-def parse_base_container(aircraft_dir: Path, package_root: Path) -> Path | None:
-    """
-    Parse aircraft.cfg to find the base_container reference.
-
-    Returns the resolved base container path, or None; a base_container that resolves
-    outside the package is skipped with a warning.
-    """
-    cfg_path = aircraft_dir / "aircraft.cfg"
-    if not cfg_path.exists():
-        return None
-
-    try:
-        content = cfg_path.read_text(encoding='utf-8', errors='ignore')
-        for line in content.splitlines():
-            line = line.strip()
-            if '=' in line:
-                key, _, value = line.partition('=')
-                key = key.strip().lower()
-                if key == 'base_container':
-                    value = value.strip().strip('"').strip("'")
-                    if value:
-                        # Resolve relative path (e.g., "..\FSLTL_A320")
-                        base_path = resolve_inside(package_root, aircraft_dir / value.replace('\\', '/'))
-                        if base_path is None:
-                            warn(f"base_container={value} in {cfg_path} is outside the package {package_root}; skipping it")
-                        elif base_path.exists():
-                            return base_path
-    except Exception:
-        pass
-    return None
-
-
-def find_gltf_for_aircraft(aircraft_dir: Path, package_root: Path) -> tuple[Path | None, Path | None]:
-    """
-    Find the GLTF file for an aircraft folder.
-
-    Handles both:
-    1. Base models (GLTF directly in model.* subfolder)
-    2. Livery-only folders (model.cfg references a base model)
-
-    Returns (gltf_path, base_model_dir) where base_model_dir is set if
-    this is a livery referencing another folder's model.
-    """
-    model_dirs = list(aircraft_dir.glob("model*")) + list(aircraft_dir.glob("MODEL*"))
-
-    # First try to find GLTF directly in this folder
-    for model_dir in model_dirs:
-        if model_dir.is_dir():
-            gltf = find_gltf_in_model_dir(model_dir)
-            if gltf:
-                return gltf, None
-
-    # No direct GLTF - check for model.cfg references to base model
-    for model_dir in model_dirs:
-        if model_dir.is_dir():
-            model_cfg = model_dir / "model.cfg"
-            if not model_cfg.exists():
-                model_cfg = model_dir / "model.CFG"
-            if model_cfg.exists():
-                gltf = parse_model_cfg(model_cfg, package_root)
-                if gltf:
-                    # Return the base model's directory for texture fallback
-                    base_dir = gltf.parent.parent  # model.xxx -> aircraft folder
-                    return gltf, base_dir
-
-    # Also check base_container in aircraft.cfg
-    base_container = parse_base_container(aircraft_dir, package_root)
-    if base_container:
-        base_model_dirs = list(base_container.glob("model*")) + list(base_container.glob("MODEL*"))
-        for model_dir in base_model_dirs:
-            if model_dir.is_dir():
-                gltf = find_gltf_in_model_dir(model_dir)
-                if gltf:
-                    return gltf, base_container
-
-    return None, None
-
-
-def livery_texture_dir(aircraft_dir: Path, texture_folder: str) -> Path | None:
-    """The livery's own `texture.<name>` (or `Texture.<name>`) folder directly in the aircraft folder.
-
-    Returns None when the folder does not exist, or with a warning when the aircraft.cfg
-    `texture=` value is not a plain name.
-    """
-    if not is_plain_name(texture_folder):
-        warn(f"texture={texture_folder} in {aircraft_dir / 'aircraft.cfg'} is not a plain folder name; skipping it")
-        return None
-    for prefix in ('texture.', 'Texture.'):
-        candidate = aircraft_dir / f"{prefix}{texture_folder}"
-        if candidate.exists():
-            return candidate
-    return None
-
-
-def check_source_paths(source_path: Path, gltf_path: Path | None) -> str | None:
-    """Why an explicit `--gltf-path` is refused for `--source`, or None when it lies inside the source's package."""
-    if gltf_path is None:
-        return None
-    try:
-        package_root = find_package_root(source_path)
-    except ValueError as e:
-        return f"--source: {e}"
-    if resolve_inside(package_root, gltf_path) is None:
-        return f"--gltf-path {gltf_path} is outside the package {package_root} of --source"
-    return None
-
-
-def discover_liveries_in_source(source_path: Path, requested_titles: set[str] | None = None, explicit_gltf_path: Path | None = None) -> list[dict]:
-    """
-    Discover liveries in source path (smart detection).
-
-    If source_path is an aircraft folder (ends with FSLTL_*, AIGAIM_*, etc.),
-    scans only that folder (fast). Otherwise, scans all aircraft folders in
-    source/SimObjects/Airplanes (slow, batch mode).
-
-    Handles both:
-    - Base model folders (contain GLTF directly)
-    - Livery-only folders (reference base model via model.cfg or base_container)
-
-    Args:
-        source_path: Path to source (traffic base or specific aircraft folder)
-        requested_titles: Optional set of livery titles to find. Enables early stopping in parsing.
-        explicit_gltf_path: Optional explicit GLTF path for AIG shared models where the
-                           GLTF is in a different folder than the livery aircraft.cfg
-
-    Returns list of dicts with livery information.
-    """
-    folder_name = source_path.name
-
-    # Check if this is a specific aircraft folder (fast path)
-    if folder_name.startswith("FSLTL_") or folder_name.startswith("AIGAIM_"):
-        # Fast path: source_path is already an aircraft folder
-        if not source_path.is_dir():
-            return []
-
-        # Find GLTF (handles both direct and referenced models)
-        # Use explicit path if provided (for AIG shared models)
-        if explicit_gltf_path and explicit_gltf_path.exists():
-            gltf_path = explicit_gltf_path
-            # Base model dir is two levels up from GLTF: model.xxx/file.gltf -> aircraft folder
-            base_model_dir = explicit_gltf_path.parent.parent
-        else:
-            gltf_path, base_model_dir = find_gltf_for_aircraft(source_path, find_package_root(source_path))
-
-        if not gltf_path:
-            return []
-
-        # Extract aircraft type from folder name
-        parts = folder_name.split('_')
-        aircraft_type = parts[1] if len(parts) > 1 else folder_name
-
-        # Parse liveries from this aircraft's aircraft.cfg (with early stopping if requested_titles provided)
-        liveries = parse_aircraft_cfg_all_liveries(source_path, requested_titles)
-
-        # Get texture directories for shared textures (from this folder)
-        # Match any subfolder containing "texture" (covers TEXTURE*, texture.*, oci.texture*, etc.)
-        texture_dirs = [d for d in source_path.iterdir() if d.is_dir() and 'texture' in d.name.lower()]
-
-        # If using a base model, also include base model's textures as fallback
-        base_texture_dirs = []
-        if base_model_dir:
-            base_texture_dirs = [d for d in base_model_dir.iterdir() if d.is_dir() and 'texture' in d.name.lower()]
-
-        if not liveries:
-            # Fallback: create a single entry if no liveries found
-            liveries = [{'title': folder_name, 'texture_folder': '', 'icao_airline': None}]
-
-        # Determine source type from folder name
-        source_type = 'fsltl' if folder_name.lower().startswith('fsltl') else 'aig'
-
-        all_liveries = []
-        for livery in liveries:
-            # Build texture directory list (priority order)
-            texture_dirs_for_livery = []
-
-            # 1. Add livery-specific texture folder first (if it exists)
-            if livery.get('texture_folder'):
-                livery_tex_path = livery_texture_dir(source_path, livery['texture_folder'])
-                if livery_tex_path:
-                    texture_dirs_for_livery.append(str(livery_tex_path))
-
-            # 2. Add shared textures from this folder
-            texture_dirs_for_livery.extend([str(d) for d in texture_dirs])
-
-            # 3. Add base model textures as final fallback (for livery-only folders)
-            texture_dirs_for_livery.extend([str(d) for d in base_texture_dirs])
-
-            all_liveries.append({
-                'source': source_type,
-                'folder_name': folder_name,
-                'livery_title': livery['title'],
-                'texture_folder': livery.get('texture_folder', ''),
-                'icao_airline': livery.get('icao_airline'),
-                'gltf_path': str(gltf_path),
-                'texture_dirs': texture_dirs_for_livery,
-                'aircraft_type': aircraft_type,
-            })
-
-        return all_liveries
-
-    # Slow path: source_path is the traffic base (fsltl-traffic-base or aig-aitraffic-oci)
-    # Scan all aircraft folders
-    airplanes = source_path / "SimObjects" / "Airplanes"
-    if not airplanes.exists():
-        return []
-
-    # Determine source type from the traffic base folder name
-    source_type = 'fsltl' if 'fsltl' in source_path.name.lower() else 'aig'
-
-    all_liveries = []
-
-    for aircraft_dir in sorted(airplanes.iterdir()):
-        if not aircraft_dir.is_dir():
-            continue
-
-        aircraft_folder_name = aircraft_dir.name
-
-        # Skip non-traffic folders
-        if not (aircraft_folder_name.startswith("FSLTL_") or aircraft_folder_name.startswith("AIGAIM_")):
-            continue
-
-        # Find GLTF (handles both direct and referenced models)
-        gltf_path, base_model_dir = find_gltf_for_aircraft(aircraft_dir, find_package_root(aircraft_dir))
-
-        if not gltf_path:
-            continue
-
-        # Extract aircraft type from folder name
-        parts = aircraft_folder_name.split('_')
-        aircraft_type = parts[1] if len(parts) > 1 else aircraft_folder_name
-
-        # Parse liveries from this aircraft's aircraft.cfg (with early stopping if requested_titles provided)
-        liveries = parse_aircraft_cfg_all_liveries(aircraft_dir, requested_titles)
-
-        # Get texture directories for shared textures (from this folder)
-        # Match any subfolder containing "texture" (covers TEXTURE*, texture.*, oci.texture*, etc.)
-        texture_dirs = [d for d in aircraft_dir.iterdir() if d.is_dir() and 'texture' in d.name.lower()]
-
-        # If using a base model, also include base model's textures as fallback
-        base_texture_dirs = []
-        if base_model_dir:
-            base_texture_dirs = [d for d in base_model_dir.iterdir() if d.is_dir() and 'texture' in d.name.lower()]
-
-        if not liveries:
-            # Fallback: create a single entry if no liveries found
-            liveries = [{'title': aircraft_folder_name, 'texture_folder': '', 'icao_airline': None}]
-
-        for livery in liveries:
-            # Build texture directory list (priority order)
-            texture_dirs_for_livery = []
-
-            # 1. Add livery-specific texture folder first (if it exists)
-            if livery.get('texture_folder'):
-                livery_tex_path = livery_texture_dir(aircraft_dir, livery['texture_folder'])
-                if livery_tex_path:
-                    texture_dirs_for_livery.append(str(livery_tex_path))
-
-            # 2. Add shared textures from this folder
-            texture_dirs_for_livery.extend([str(d) for d in texture_dirs])
-
-            # 3. Add base model textures as final fallback (for livery-only folders)
-            texture_dirs_for_livery.extend([str(d) for d in base_texture_dirs])
-
-            all_liveries.append({
-                'source': source_type,
-                'folder_name': aircraft_folder_name,
-                'aircraft_folder': str(aircraft_dir),
-                'livery_title': livery['title'],
-                'texture_folder': livery.get('texture_folder', ''),
-                'icao_airline': livery.get('icao_airline'),
-                'gltf_path': str(gltf_path),
-                'texture_dirs': texture_dirs_for_livery,
-                'aircraft_type': aircraft_type,
-            })
-
-    return all_liveries
-
-
-def convert_livery_task(args_tuple):
-    """Worker function for batch conversion."""
-    livery_info, output_base_path, texture_scale, texture_scale_name = args_tuple
-
-    aircraft_type = livery_info['aircraft_type']
-
-    # Determine output path and airline code
-    # Use icao_airline if available, otherwise try to parse from texture folder
-    airline_code = livery_info.get('icao_airline')
-    if not airline_code and livery_info.get('texture_folder'):
-        # Try to extract 3-4 letter airline code from texture folder
-        parts = livery_info['texture_folder'].split('-')
-        if parts:
-            code = parts[0].upper()
-            if 3 <= len(code) <= 4:
-                airline_code = code
-
-    # Output flat structure: all .glb files in root with source prefix and livery title
-    # Example: output_base_path/aig_AIGAIM_Singapore Airlines Airbus A350-900.glb
-    #          output_base_path/fsltl_FSLTL_A350_AIR_FRANCE.glb
-    livery_title = livery_info['livery_title']
-    source_type = livery_info.get('source', 'aig')  # Default to 'aig' if not specified
-    model_output = output_base_path / f"{source_type}_{livery_title}.glb"
-
-    try:
-        gltf_path = Path(livery_info['gltf_path'])
-        texture_dirs = [Path(d) for d in livery_info['texture_dirs']]
-
-        # Build source metadata to embed in the GLB for debugging/lookup
-        source_metadata = {
-            'source': source_type,
-            'livery_title': livery_info['livery_title'],
-            'folder_name': livery_info.get('folder_name'),
-            'aircraft_type': aircraft_type,
-            'icao_airline': airline_code,
-            'gltf_path': str(gltf_path),
-            'texture_dirs': [str(d) for d in texture_dirs],
-            'aircraft_folder': livery_info.get('aircraft_folder'),
-        }
-
-        result = convert_single_gltf(gltf_path, model_output, texture_dirs, texture_scale, source_metadata)
-        result['livery_title'] = livery_info['livery_title']
-        result['aircraft_type'] = aircraft_type
-        result['airline_code'] = airline_code
-        result['output_path'] = str(model_output)
-        result['texture_scale_name'] = texture_scale_name
-
-        return result
-
+        if output_path.parent.is_dir():
+            sweep_stale_temp_files(output_path.parent)
+        convert_single_gltf(gltf_path, output_path, texture_dirs, TEXTURE_SCALE_MAP[job['texture_scale']], source_metadata)
+        entry['ok'] = True
     except Exception as e:
-        return {
-            'livery_title': livery_info['livery_title'],
-            'success': False,
-            'error': str(e),
-            'traceback': traceback.format_exc(),
-            'aircraft_type': aircraft_type,
-            'airline_code': airline_code
-        }
+        entry['error'] = str(e) or type(e).__name__
+        print(f"ERROR: {title}: {entry['error']}", file=sys.stderr)
+        traceback.print_exc()
+    return entry
 
 
-def write_progress(progress_file: Path, progress: dict):
-    """Write progress to JSON file."""
-    with open(progress_file, 'w') as f:
-        json.dump(progress, f)
+def write_result(result_path: Path, outputs: list[dict], errors: list[str]) -> None:
+    """Write the result file: one entry per livery and every error message."""
+    result = {'version': JOB_VERSION, 'outputs': outputs, 'errors': errors}
+    result_path.write_text(json.dumps(result, ensure_ascii=False), encoding='utf-8')
 
 
-def main():
-    # Quick self-test before full argument parsing
-    if '--self-test' in sys.argv:
-        print("Self-test: Checking bundled dependencies...")
-        print(f"  Python: {sys.version}")
-        print(f"  PIL: {Image.__version__ if hasattr(Image, '__version__') else 'OK'}")
-        print(f"  NumPy: {np.__version__}")
-        print("  Struct: OK")
-        print("  Concurrent.futures: OK")
-        # Quick numpy operation test
-        arr = np.array([1, 2, 3], dtype=np.float32)
-        assert arr.sum() == 6.0, "NumPy operation failed"
-        print("  NumPy operations: OK")
-        print("Self-test PASSED: All dependencies working correctly.")
-        return 0
+def run_job(job_path: Path, result_path: Path) -> int:
+    """Run the job at `job_path`, writing the result to `result_path`; returns the exit code."""
+    try:
+        job = read_job(job_path)
+    except JobError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        try:
+            write_result(result_path, [], [str(e)])
+        except OSError as write_error:
+            print(f"ERROR: could not write the result {result_path}: {write_error}", file=sys.stderr)
+        return 2
+    outputs = [convert_livery(job, livery) for livery in job['liveries']]
+    errors = [f"{entry['title']}: {entry['error']}" for entry in outputs if not entry['ok']]
+    write_result(result_path, outputs, errors)
+    converted = len(outputs) - len(errors)
+    print(f"Conversion complete: {converted} converted, {len(errors)} failed")
+    return 0 if not errors else 1
+
+
+def self_test() -> int:
+    """Check that the bundled dependencies load and work."""
+    print("Self-test: Checking bundled dependencies...")
+    print(f"  Python: {sys.version}")
+    print(f"  PIL: {Image.__version__ if hasattr(Image, '__version__') else 'OK'}")
+    print(f"  NumPy: {np.__version__}")
+    print("  Struct: OK")
+    arr = np.array([1, 2, 3], dtype=np.float32)
+    assert arr.sum() == 6.0, "NumPy operation failed"
+    print("  NumPy operations: OK")
+    print("Self-test PASSED: All dependencies working correctly.")
+    return 0
+
+
+def main(argv: list[str]) -> int:
+    for stream in (sys.stdout, sys.stderr):
+        # A test's captured stream is not a TextIOWrapper and takes any text as it is
+        if isinstance(stream, io.TextIOWrapper):
+            stream.reconfigure(encoding='utf-8', errors='replace')
+
+    # The self-test needs no job
+    if '--self-test' in argv:
+        return self_test()
 
     parser = argparse.ArgumentParser(
         description='Convert MSFS aircraft models to GLB',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
 Examples:
-  # Convert all liveries from entire source (batch mode)
-  python convert_fsltl_batch.py --source "X:/...../fsltl-traffic-base" --output "X:/mods"
+  # Convert the liveries a job names, reporting in result.json
+  python convert_fsltl_batch.py --job job.json --result result.json
 
-  # Convert specific liveries in one aircraft (fast, for on-demand conversion)
-  python convert_fsltl_batch.py --source "X:/...../fsltl-traffic-base/SimObjects/Airplanes/FSLTL_B738_AAL" \\
-    --output "X:/mods" --liveries "FSLTL_FAIB_B738_American"
+  # Check that the bundled dependencies load
+  python convert_fsltl_batch.py --self-test
 
-  # Convert all liveries in one aircraft (fast)
-  python convert_fsltl_batch.py --source "X:/...../fsltl-traffic-base/SimObjects/Airplanes/FSLTL_B738_AAL" \\
-    --output "X:/mods"
-
-  # Convert with texture downscaling
-  python convert_fsltl_batch.py --source "X:/...../fsltl-traffic-base" --output "X:/mods" --texture-scale 1k
+Exit codes: 0 every livery converted, 1 at least one failed, 2 the job is invalid.
         '''
     )
-    parser.add_argument('--source', required=True, help='Path to traffic source. Can be either: (1) traffic base folder (fsltl-traffic-base or aig-aitraffic-oci) to scan all aircraft, or (2) specific aircraft folder (source/SimObjects/Airplanes/FSLTL_B738_AAL) for fast on-demand conversion.')
-    parser.add_argument('--output', required=True, help='Output directory for converted models')
-    parser.add_argument('--texture-scale', default='1k', choices=['full', '2k', '1k', '512'],
-                        help='Texture scaling (default: 1k)')
-    parser.add_argument('--liveries', help='Comma-separated list of livery titles to convert. If not specified, converts all liveries.')
-    parser.add_argument('--liveries-file', help='Path to file containing livery titles (one per line)')
-    parser.add_argument('--gltf-path', help='Explicit path to GLTF file (for AIG shared models where GLTF is in a different folder)')
-    parser.add_argument('--texture-dirs', help='Comma-separated list of texture directories to use (overrides auto-detection)')
-    parser.add_argument('--progress-file', help='Path to write progress JSON')
-    parser.add_argument('--workers', type=int, default=0, help='Number of parallel workers (0=auto)')
-    parser.add_argument('--log-file', help='Write output to log file instead of console')
+    parser.add_argument('--job', required=True, help='The JSON job file to convert')
+    parser.add_argument('--result', required=True, help='Where to write the JSON result file')
     parser.add_argument('--self-test', action='store_true', help='Test that all dependencies are bundled correctly')
-    parser.add_argument('--no-discovery', action='store_true',
-                        help='Skip livery discovery. Requires --gltf-path, --texture-dirs, and --liveries. '
-                             'Use this when the caller (Rust) has already resolved all paths.')
-    args = parser.parse_args()
-
-    # Set up logging to file if requested
-    if args.log_file:
-        log_file = open(args.log_file, 'w', encoding='utf-8')
-        sys.stdout = log_file
-        sys.stderr = log_file
-        print(f"Logging to: {args.log_file}")
-
-    source_path = Path(args.source)
-    output_path = Path(args.output)
-    texture_scale = TEXTURE_SCALE_MAP[args.texture_scale]
-    progress_file = Path(args.progress_file) if args.progress_file else None
-
-    # Ensure output directory exists
-    output_path.mkdir(parents=True, exist_ok=True)
-    sweep_stale_temp_files(output_path)
-
-    # Parse requested liveries FIRST (before discovery) so we can enable early stopping
-    if args.liveries_file:
-        liveries_file_path = Path(args.liveries_file)
-        requested_titles = set(
-            line.strip() for line in liveries_file_path.read_text().splitlines()
-            if line.strip() and not line.startswith('#')
-        )
-    elif args.liveries:
-        requested_titles = set(title.strip() for title in args.liveries.split(',') if title.strip())
-    else:
-        requested_titles = None
-
-    # Parse explicit overrides
-    explicit_gltf_path = Path(args.gltf_path) if args.gltf_path else None
-    explicit_texture_dirs = [Path(d.strip()) for d in args.texture_dirs.split(',') if d.strip()] if args.texture_dirs else None
-
-    # The glTF must come from the --source package; texture folders outside it are dropped at conversion
-    source_error = check_source_paths(source_path, explicit_gltf_path)
-    if source_error:
-        print(f"ERROR: {source_error}", file=sys.stderr)
-        return 1
-
-    # No-discovery mode: Rust has already resolved all paths, skip discovery entirely
-    if args.no_discovery:
-        # Validate required arguments
-        if not args.gltf_path:
-            print("ERROR: --no-discovery requires --gltf-path", file=sys.stderr)
-            return 1
-        if not args.texture_dirs:
-            print("ERROR: --no-discovery requires --texture-dirs", file=sys.stderr)
-            return 1
-        if not args.liveries:
-            print("ERROR: --no-discovery requires --liveries", file=sys.stderr)
-            return 1
-
-        # Determine source type from folder name
-        folder_name = source_path.name
-        source_type = 'fsltl' if folder_name.lower().startswith('fsltl') else 'aig'
-
-        # Extract aircraft type from folder name
-        parts = folder_name.split('_')
-        if folder_name.startswith('FSLTL_'):
-            aircraft_type = parts[1] if len(parts) > 1 else ''
-        elif folder_name.startswith('AIGAIM_'):
-            aircraft_type = parts[2].split('-')[0] if len(parts) > 2 else ''
-        else:
-            aircraft_type = parts[1] if len(parts) > 1 else folder_name
-
-        # Create livery entries directly from arguments
-        all_liveries = []
-        for title in requested_titles:
-            all_liveries.append({
-                'source': source_type,
-                'folder_name': folder_name,
-                'livery_title': title,
-                'texture_folder': '',
-                'icao_airline': None,
-                'gltf_path': str(explicit_gltf_path),
-                'texture_dirs': [str(d) for d in explicit_texture_dirs],
-                'aircraft_type': aircraft_type,
-            })
-
-        print(f"No-discovery mode: {len(all_liveries)} liveries from arguments")
-        liveries_to_convert = all_liveries
-
-    else:
-        # Discovery mode: auto-detect liveries from source path
-
-        # Discover liveries (auto-detects batch vs on-demand based on source path)
-        # Pass requested_titles for early stopping optimization if specified
-        # Pass explicit_gltf_path to allow discovery even when source folder has no GLTF
-        print(f"Discovering liveries in {source_path}...")
-        all_liveries = discover_liveries_in_source(source_path, requested_titles, explicit_gltf_path)
-
-        if not all_liveries:
-            print("ERROR: No liveries found in source directory")
-            return 1
-
-        # Apply explicit overrides if provided (for AIG shared models)
-        if explicit_gltf_path or explicit_texture_dirs:
-            for livery in all_liveries:
-                if explicit_gltf_path:
-                    livery['gltf_path'] = explicit_gltf_path
-                    # Also update base_model_dir to the folder containing the GLTF
-                    livery['base_model_dir'] = explicit_gltf_path.parent.parent
-                if explicit_texture_dirs:
-                    # Prepend explicit texture dirs (they take priority)
-                    livery['texture_dirs'] = explicit_texture_dirs + livery.get('texture_dirs', [])
-
-    # Only do filtering if we're not in no-discovery mode (where liveries_to_convert is already set)
-    if not args.no_discovery:
-        folder_name = source_path.name
-        if folder_name.startswith("FSLTL_") or folder_name.startswith("AIGAIM_"):
-            print(f"Found {len(all_liveries)} liveries in {folder_name}")
-        else:
-            print(f"Found {len(all_liveries)} total liveries")
-
-        # Filter by requested liveries if specified
-        if requested_titles:
-            liveries_to_convert = [liv for liv in all_liveries if liv['livery_title'] in requested_titles]
-            print(f"Filtering to {len(liveries_to_convert)} requested liveries")
-
-            # If specific liveries were requested but none found, that's an error
-            if not liveries_to_convert:
-                not_found = requested_titles - {liv['livery_title'] for liv in all_liveries}
-                print("ERROR: None of the requested liveries were found in source", file=sys.stderr)
-                print(f"Requested: {requested_titles}", file=sys.stderr)
-                if not_found:
-                    print(f"Not found: {not_found}", file=sys.stderr)
-                # Show some available liveries for debugging
-                available = [liv['livery_title'] for liv in all_liveries[:10]]
-                print(f"Available (first 10): {available}", file=sys.stderr)
-                return 1
-        else:
-            liveries_to_convert = all_liveries
-            print(f"Converting all {len(liveries_to_convert)} liveries")
-
-    # Determine worker count
-    if args.workers <= 0:
-        # Auto: use CPU count, but cap at 8 to avoid memory issues
-        num_workers = min(os.cpu_count() or 4, 8)
-    else:
-        num_workers = args.workers
-
-    print(f"Converting using {num_workers} workers...\n")
-
-    # Thread-safe progress tracking
-    progress_lock = threading.Lock()
-    progress = {
-        'status': 'converting',
-        'total': len(liveries_to_convert),
-        'completed': 0,
-        'current': None,
-        'errors': [],
-        'converted': []
-    }
-
-    # Write initial progress immediately
-    if progress_file:
-        write_progress(progress_file, progress)
-
-    last_progress_write = time.time()
-    PROGRESS_WRITE_INTERVAL = 0.5  # Write every 500ms for responsive UI
-
-    def update_progress():
-        """Write progress if enough time has passed."""
-        nonlocal last_progress_write
-        now = time.time()
-        if progress_file and (now - last_progress_write) >= PROGRESS_WRITE_INTERVAL:
-            with progress_lock:
-                write_progress(progress_file, progress)
-            last_progress_write = now
-
-    # Prepare task arguments
-    tasks = [
-        (livery_info, output_path, texture_scale, args.texture_scale)
-        for livery_info in liveries_to_convert
-    ]
-
-    # Process in parallel
-    completed_count = 0
-    with ThreadPoolExecutor(max_workers=num_workers) as executor:
-        # Submit all tasks
-        future_to_livery = {
-            executor.submit(convert_livery_task, task): task[0]['livery_title']
-            for task in tasks
-        }
-
-        # Process results as they complete
-        for future in as_completed(future_to_livery):
-            livery_title = future_to_livery[future]
-            completed_count += 1
-
-            try:
-                result = future.result()
-
-                with progress_lock:
-                    progress['completed'] = completed_count
-                    progress['current'] = livery_title
-
-                    if result.get('success'):
-                        progress['converted'].append({
-                            'liveryTitle': result['livery_title'],
-                            'aircraftType': result['aircraft_type'],
-                            'airlineCode': result['airline_code'],
-                            'modelPath': result.get('output_path'),
-                            'textureSize': result.get('texture_scale_name'),
-                            'hasAnimations': result.get('has_animations', False),
-                            'fileSize': result.get('output_size', 0),
-                            'convertedAt': int(time.time() * 1000)
-                        })
-                        size_mb = result.get('output_size', 0) / 1024 / 1024
-                        print(f"[{completed_count}/{len(liveries_to_convert)}] {livery_title} ({size_mb:.2f} MB)")
-                    else:
-                        error_msg = f"{livery_title}: {result.get('error', 'Unknown error')}"
-                        progress['errors'].append(error_msg)
-                        print(f"[{completed_count}/{len(liveries_to_convert)}] ERROR: {error_msg}")
-                        if result.get('traceback'):
-                            print(result['traceback'])
-
-                update_progress()
-
-            except Exception as e:
-                with progress_lock:
-                    progress['completed'] = completed_count
-                    progress['errors'].append(f"{livery_title}: {str(e)}")
-                print(f"[{completed_count}/{len(liveries_to_convert)}] EXCEPTION: {livery_title}: {e}")
-                traceback.print_exc()
-                update_progress()
-
-    # Final status
-    with progress_lock:
-        progress['status'] = 'complete' if not progress['errors'] else 'error'
-        progress['current'] = None
-    if progress_file:
-        write_progress(progress_file, progress)
-
-    # Summary
-    successful = len(progress['converted'])
-    failed = len(progress['errors'])
-    print(f"\nConversion complete: {successful} successful, {failed} failed")
-
-    if progress['errors']:
-        print(f"\nErrors ({len(progress['errors'])}):")
-        for error in progress['errors'][:10]:
-            print(f"  - {error}")
-        if len(progress['errors']) > 10:
-            print(f"  ... and {len(progress['errors']) - 10} more")
-
-    # Return error if nothing was successfully converted
-    if successful == 0:
-        print("ERROR: No models were successfully converted", file=sys.stderr)
-        return 1
-
-    return 0 if not failed else 1
+    args = parser.parse_args(argv)
+    return run_job(Path(args.job), Path(args.result))
 
 
 if __name__ == '__main__':
     try:
-        sys.exit(main())
+        sys.exit(main(sys.argv[1:]))
     except Exception as e:
-        # Catch any uncaught exception and write to progress file
-        _write_startup_error(
-            _progress_file_path,
-            f"Converter crashed: {type(e).__name__}: {e}",
-            traceback.format_exc()
-        )
+        _startup_error(f"Converter crashed: {type(e).__name__}: {e}", traceback.format_exc())
         sys.exit(1)

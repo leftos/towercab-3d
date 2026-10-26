@@ -506,13 +506,13 @@ export async function convertToAssetUrl(
   }
 
   // Try to extract relative path from absolute path
-  // Paths look like: C:\...\msfs-cache\FSLTL_B738_AAL.glb
+  // Paths look like: C:\...\msfs-cache\fsltl_FSLTL_FAIB_B738_American-3f9a1c2e.glb
   // or: C:\...\mods\aircraft\B738\model.glb
   const normalized = filePath.replace(/\\/g, '/')
 
   // For MSFS models: extract just the filename (models are flat in cache dir)
   if (type === 'msfs') {
-    // GLB files are stored as {model_name}.glb directly in cache directory
+    // GLB files sit flat in the cache folder, named by conversion::output_file_name ({source}_{sanitized title}-{8 hex}.glb)
     const filename = normalized.split('/').pop() || 'model.glb'
     return `/api/msfs/${filename}`
   }
@@ -572,7 +572,7 @@ export function convertToAssetUrlSync(filePath: string): string {
   }
 
   // For MSFS models: extract just the filename (models are flat in cache dir)
-  // GLB files are stored as {model_name}.glb directly in cache directory
+  // GLB files sit flat in the cache folder, named by conversion::output_file_name ({source}_{sanitized title}-{8 hex}.glb)
   const filename = normalized.split('/').pop() || 'model.glb'
   if (filename.endsWith('.glb')) {
     return `${baseUrl}/api/msfs/${filename}`

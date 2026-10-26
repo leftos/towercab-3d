@@ -2556,7 +2556,13 @@ mod tests {
         use crate::conversion::test_support::{write_glb, FakeRunner, TempDir};
 
         let dir = TempDir::new("server-cached");
-        write_glb(&dir.0.join("fsltl_Cached.glb"));
+        let cached = crate::conversion::ConversionRequest::from_index_entry(
+            &index_entry("Cached"),
+            dir.0.clone(),
+            "1k",
+        )
+        .output_file_name();
+        write_glb(&dir.0.join(&cached));
         let (runner, control) = FakeRunner::new();
         let owner = ConversionOwner::new(runner);
 
@@ -2564,7 +2570,7 @@ mod tests {
         let answer =
             convert_for_remote(&owner, &index_entry("Cached"), dir.0.clone(), "1k", ip).await;
 
-        assert_eq!(answer, Ok("fsltl_Cached.glb".to_string()));
+        assert_eq!(answer, Ok(cached));
         assert_eq!(control.spawn_count(), 0, "the converter was started");
     }
 
@@ -2585,6 +2591,35 @@ mod tests {
         ] {
             assert!(!is_servable_model_name(refused), "{refused:?} served");
         }
+    }
+
+    #[test]
+    fn a_listed_converted_model_is_served_by_its_file_name() {
+        use crate::conversion::test_support::{write_livery_glb, TempDir};
+
+        let dir = TempDir::new("server-listed");
+        let title = "Listed: A320 (D-AINA)";
+        let name = crate::conversion::ConversionRequest::from_index_entry(
+            &index_entry(title),
+            dir.0.clone(),
+            "1k",
+        )
+        .output_file_name();
+        write_livery_glb(&dir.0.join(&name), title);
+
+        let scanned = crate::msfs::scan_cache_dir_sync(&dir.0).expect("scan the cache");
+        let listed = serde_json::to_value(crate::msfs::remote_cached_models(scanned))
+            .expect("serialise models");
+
+        assert_eq!(listed[0]["file_name"], name.as_str());
+        assert_eq!(listed[0]["model_key"], "fsltl_Listed: A320 (D-AINA)");
+        assert!(is_servable_model_name(&name), "{name:?} refused");
+        let served = resolve_within(&dir.0, &name).expect("resolve the listed name");
+        assert!(
+            served.is_file(),
+            "{} is not the cached GLB",
+            served.display()
+        );
     }
 
     #[test]

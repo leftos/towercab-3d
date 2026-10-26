@@ -6,6 +6,7 @@ import io
 import json
 import os
 import struct
+import subprocess
 import sys
 import tempfile
 import time
@@ -167,27 +168,6 @@ class ConverterPathTests(unittest.TestCase):
         self.assertEqual(embedded_colours(self.output), [PLACEHOLDER_COLOUR])
         self.assert_no_secret()
 
-    def test_texture_folder_with_parent_steps_is_refused_in_discovery(self) -> None:
-        escaped = self.community / "evil_tex"
-        escaped.mkdir()
-        cfg = "[FLTSIM.0]\ntitle=T\ntexture=a\\" + UP_TO_COMMUNITY.replace("/", "\\") + "evil_tex\n"
-        (self.aircraft / "aircraft.cfg").write_text(cfg, encoding="utf-8")
-        liveries = converter.discover_liveries_in_source(self.aircraft)
-        self.assertEqual([livery["livery_title"] for livery in liveries], ["T"])
-        real_escaped = os.path.normcase(os.path.realpath(escaped))
-        for folder in liveries[0]["texture_dirs"]:
-            self.assertNotEqual(os.path.normcase(os.path.realpath(folder)), real_escaped)
-
-    def test_base_container_outside_package_is_skipped(self) -> None:
-        outside_model = self.community / "outside_base" / "model"
-        outside_model.mkdir(parents=True)
-        write_gltf(outside_model / "x.gltf", "t.bin", "ok.png")
-        livery_only = self.aircraft.parent / "FSLTL_U"
-        livery_only.mkdir()
-        cfg = "[GENERAL]\nbase_container=..\\..\\..\\..\\outside_base\n[FLTSIM.0]\ntitle=U\ntexture=\n"
-        (livery_only / "aircraft.cfg").write_text(cfg, encoding="utf-8")
-        self.assertEqual(converter.discover_liveries_in_source(livery_only), [])
-
     def test_model_outside_any_package_fails_with_root_error(self) -> None:
         loose_model = self.base / "loose" / "model"
         loose_model.mkdir(parents=True)
@@ -209,54 +189,12 @@ class ConverterPathTests(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertEqual(embedded_colours(self.output), [OK_COLOUR])
 
-    def build_sibling_package(self) -> Path:
-        """Creates `other-pkg` beside the package, laid out as a package of its own; returns its model folder."""
-        model = self.community / "other-pkg" / "SimObjects" / "Airplanes" / "X" / "model"
-        model.mkdir(parents=True)
-        (model / "t.bin").write_bytes(SECRET_MARKER * 4)
-        write_gltf(model / "x.gltf", "t.bin", "ok.png")
-        write_gltf(model / "x_LOD0.gltf", "t.bin", "ok.png")
-        return model
-
-    def make_livery_only_aircraft(self, name: str, normal: str) -> Path:
-        """Creates an aircraft folder whose only model is a model.cfg `normal=` reference; returns its model folder."""
-        aircraft = self.aircraft.parent / name
-        model = aircraft / "model.L"
-        model.mkdir(parents=True)
-        (aircraft / "aircraft.cfg").write_text(f"[FLTSIM.0]\ntitle={name}\ntexture=\n", encoding="utf-8")
-        (model / "model.cfg").write_text(f"[models]\nnormal={normal}\n", encoding="utf-8")
-        return model
-
     def symlink_or_skip(self, target: Path, link: Path) -> None:
         link.unlink()
         try:
             os.symlink(target, link)
         except OSError as e:
             self.skipTest(f"this machine refuses file symlinks: {e}")
-
-    def test_model_cfg_normal_into_sibling_package_is_skipped(self) -> None:
-        self.build_sibling_package()
-        sibling_xml = self.community / "other-pkg" / "SimObjects" / "Airplanes" / "X" / "model" / "x.xml"
-        # The outside XML would steer the converter back to a glTF inside the package
-        back_inside = UP_TO_COMMUNITY.replace("/", "\\") + "fsltl-traffic-base\\SimObjects\\Airplanes\\FSLTL_T\\model\\t.gltf"
-        sibling_xml.write_text(f'<ModelInfo><LODS><LOD minSize="1" ModelFile="{back_inside}"/></LODS></ModelInfo>', encoding="utf-8")
-        normal = UP_TO_COMMUNITY.replace("/", "\\") + "other-pkg\\SimObjects\\Airplanes\\X\\model\\x.xml"
-        livery_only = self.make_livery_only_aircraft("FSLTL_V", normal).parent
-        self.assertEqual(converter.discover_liveries_in_source(livery_only), [])
-
-    def test_model_xml_model_file_into_sibling_package_is_skipped(self) -> None:
-        self.build_sibling_package()
-        model = self.make_livery_only_aircraft("FSLTL_W", "w.xml")
-        model_file = UP_TO_COMMUNITY.replace("/", "\\") + "other-pkg\\SimObjects\\Airplanes\\X\\model\\x.gltf"
-        (model / "w.xml").write_text(f'<ModelInfo><LODS><LOD minSize="1" ModelFile="{model_file}"/></LODS></ModelInfo>', encoding="utf-8")
-        self.assertEqual(converter.discover_liveries_in_source(model.parent), [])
-
-    def test_gltf_path_in_another_package_is_refused_for_source(self) -> None:
-        sibling_gltf = self.build_sibling_package() / "x.gltf"
-        error = converter.check_source_paths(self.aircraft, sibling_gltf)
-        self.assertIsNotNone(error)
-        self.assertIn("outside the package", error)
-        self.assertIsNone(converter.check_source_paths(self.aircraft, self.model_dir / "t.gltf"))
 
     @unittest.skipUnless(os.name == "nt", "directory junctions are a Windows feature")
     def test_model_folder_junction_outside_package_is_refused(self) -> None:
@@ -377,6 +315,118 @@ class ConverterAtomicWriteTests(unittest.TestCase):
         converter.sweep_stale_temp_files(self.output_dir)
         untouched = sorted([fresh.name, notes.name, plain_tmp.name])
         self.assertEqual(self.output_names(), untouched)
+
+
+class ConverterJobTests(unittest.TestCase):
+    """The converter converts what a JSON job names, writes each GLB at the job's output path and reports in a result file."""
+
+    def setUp(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.base = Path(temp.name)
+        self.aircraft = build_package(self.base / "Community")
+        self.output_dir = self.base / "out"
+        self.output_dir.mkdir()
+        self.job_path = self.base / "job.json"
+        self.result_path = self.base / "result.json"
+
+    def job(self, liveries: list[dict]) -> dict:
+        return {
+            "version": 1,
+            "source": "fsltl",
+            "texture_scale": "1k",
+            "gltf_path": str(self.aircraft / "model" / "t.gltf"),
+            "texture_dirs": [str(self.aircraft / "TEXTURE")],
+            "liveries": liveries,
+        }
+
+    def run_job(self, job: dict) -> tuple[int, dict]:
+        self.job_path.write_text(json.dumps(job), encoding="utf-8")
+        code = converter.main(["--job", str(self.job_path), "--result", str(self.result_path)])
+        return code, json.loads(self.result_path.read_text(encoding="utf-8"))
+
+    def output_names(self) -> list[str]:
+        return sorted(path.name for path in self.output_dir.iterdir())
+
+    def test_a_one_livery_job_writes_the_glb_at_its_output_and_reports_it(self) -> None:
+        output = str(self.output_dir / "fsltl_T-0123abcd.glb")
+        code, result = self.run_job(self.job([{"title": "T", "output": output}]))
+        self.assertEqual(code, 0)
+        self.assertEqual(result["version"], 1)
+        self.assertEqual(result["outputs"], [{"title": "T", "path": output, "ok": True, "error": None}])
+        self.assertEqual(result["errors"], [])
+        self.assertEqual(self.output_names(), ["fsltl_T-0123abcd.glb"])
+        extras = read_glb(Path(output))[0]["asset"]["extras"]["towercab3d"]
+        self.assertEqual((extras["source"], extras["liveryTitle"]), ("fsltl", "T"))
+
+    def test_a_job_of_another_version_exits_2_with_an_error(self) -> None:
+        job = self.job([{"title": "T", "output": str(self.output_dir / "fsltl_T.glb")}])
+        job["version"] = 2
+        code, result = self.run_job(job)
+        self.assertEqual(code, 2)
+        self.assertIn("version", " ".join(result["errors"]))
+        self.assertEqual(self.output_names(), [])
+
+    def test_a_job_without_liveries_exits_2_with_an_error(self) -> None:
+        job = self.job([])
+        del job["liveries"]
+        code, result = self.run_job(job)
+        self.assertEqual(code, 2)
+        self.assertIn("liveries", " ".join(result["errors"]))
+
+    def test_an_output_that_is_not_a_plain_glb_name_is_refused(self) -> None:
+        outputs = [
+            str(self.output_dir / "..\\evil.glb"),
+            str(self.output_dir / ".hidden.glb"),
+            str(self.output_dir / "a:b.glb"),
+            "x.glb",
+        ]
+        code, result = self.run_job(self.job([{"title": f"T{n}", "output": out} for n, out in enumerate(outputs)]))
+        self.assertEqual(code, 1)
+        self.assertEqual([entry["ok"] for entry in result["outputs"]], [False] * len(outputs))
+        self.assertTrue(all(entry["error"] for entry in result["outputs"]))
+        self.assertEqual(self.output_names(), [])
+        self.assertFalse((self.base / "evil.glb").exists())
+        self.assertEqual(sorted(path.name for path in self.base.iterdir()), ["Community", "job.json", "out", "result.json"])
+
+    def test_a_two_livery_job_with_one_failure_exits_1_and_reports_both(self) -> None:
+        blocker = self.output_dir / "blocker"
+        blocker.write_bytes(b"a file where a folder is needed")
+        good = str(self.output_dir / "fsltl_Good-00000001.glb")
+        bad = str(blocker / "fsltl_Bad-00000002.glb")
+        code, result = self.run_job(self.job([{"title": "Good", "output": good}, {"title": "Bad", "output": bad}]))
+        self.assertEqual(code, 1)
+        self.assertEqual([(entry["title"], entry["ok"]) for entry in result["outputs"]], [("Good", True), ("Bad", False)])
+        self.assertTrue(Path(good).is_file())
+        self.assertEqual(len(result["errors"]), 1)
+        self.assertTrue(result["errors"][0].startswith("Bad: "))
+
+    def run_job_on_a_cp1252_console(self, job: dict) -> tuple[int, dict]:
+        """Run `job` in a converter process whose piped stdout and stderr default to cp1252."""
+        self.job_path.write_text(json.dumps(job), encoding="utf-8")
+        completed = subprocess.run(
+            [sys.executable, converter.__file__, "--job", str(self.job_path), "--result", str(self.result_path)],
+            env={**os.environ, "PYTHONIOENCODING": "cp1252"},
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        self.assertTrue(self.result_path.is_file(), completed.stderr.decode("utf-8", errors="replace"))
+        return completed.returncode, json.loads(self.result_path.read_text(encoding="utf-8"))
+
+    def test_a_title_outside_the_console_code_page_converts_with_piped_output(self) -> None:
+        title = "Airbus A320 → Łódź"
+        output = str(self.output_dir / "fsltl_Airbus_A320_Lodz-00000003.glb")
+        code, result = self.run_job_on_a_cp1252_console(self.job([{"title": title, "output": output}]))
+        self.assertEqual(code, 0)
+        self.assertEqual(result["outputs"], [{"title": title, "path": output, "ok": True, "error": None}])
+
+    def test_a_refused_title_outside_the_console_code_page_is_reported(self) -> None:
+        title = "Airbus A320 → Łódź"
+        code, result = self.run_job_on_a_cp1252_console(self.job([{"title": title, "output": "x.glb"}]))
+        self.assertEqual(code, 1)
+        self.assertEqual(len(result["errors"]), 1)
+        self.assertTrue(result["errors"][0].startswith(f"{title}: "), result["errors"])
 
 
 if __name__ == "__main__":

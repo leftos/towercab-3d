@@ -14,13 +14,10 @@
 
 use std::fs;
 use std::io::Write;
-use std::path::{Path, PathBuf};
-use std::process::{Child, Command};
+use std::path::Path;
 use std::sync::Mutex;
 
 use serde::Serialize;
-#[cfg(windows)]
-use std::os::windows::io::AsRawHandle;
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 use tauri::Manager;
@@ -43,36 +40,9 @@ mod vnas;
 pub use msfs::SourceModelInfo;
 pub use settings::GlobalSettings;
 
-#[cfg(windows)]
-use conversion::JobObject;
-
-// =============================================================================
-// PROCESS MANAGEMENT (for FSLTL converter)
-// =============================================================================
-
-/// Wrapper for a process and its associated job object (Windows)
-/// The job object ensures all child processes are killed when we terminate:
-/// dropping it closes the job, which ends every process in it
-struct ProcessWithJob {
-    child: Child,
-    #[cfg(windows)]
-    job: Option<JobObject>,
-}
-
-#[cfg(not(windows))]
-impl Drop for ProcessWithJob {
-    fn drop(&mut self) {
-        // On non-Windows, explicitly kill the child process
-        let _ = self.child.kill();
-    }
-}
-
 // =============================================================================
 // GLOBAL STATE
 // =============================================================================
-
-// Global storage for the FSLTL converter process so we can cancel it
-static FSLTL_CONVERTER_PROCESS: Mutex<Option<ProcessWithJob>> = Mutex::new(None);
 
 // Global storage for the HTTP server shutdown channel
 static HTTP_SERVER_SHUTDOWN: Mutex<Option<broadcast::Sender<()>>> = Mutex::new(None);
@@ -536,109 +506,6 @@ pub(crate) const CONVERTER_BIN: &str = "fsltl_converter.exe";
 #[cfg(not(windows))]
 pub(crate) const CONVERTER_BIN: &str = "fsltl_converter";
 
-/// Start FSLTL conversion process in background
-#[tauri::command]
-fn start_fsltl_conversion(
-    app: tauri::AppHandle,
-    source_path: String,
-    output_path: String,
-    texture_scale: String,
-    models: Vec<String>,
-    progress_file: String,
-) -> Result<(), String> {
-    let converter_path = conversion::find_converter(&app)?;
-
-    // Build command arguments
-    let mut cmd = Command::new(&converter_path);
-    cmd.args([
-        "--source",
-        &source_path,
-        "--output",
-        &output_path,
-        "--texture-scale",
-        &texture_scale,
-        "--progress-file",
-        &progress_file,
-    ]);
-
-    // Only pass --models if specific models are requested (not "convert all")
-    // If models list is empty, converter will auto-discover all FSLTL models
-    if !models.is_empty() {
-        // Write models to a temp file to avoid command line length limits
-        let models_file = PathBuf::from(&output_path).join("_models_list.txt");
-        fs::write(&models_file, models.join("\n"))
-            .map_err(|e| format!("Failed to write models list: {}", e))?;
-        cmd.args(["--models-file", &models_file.to_string_lossy()]);
-    }
-
-    // Hide console window on Windows (CREATE_NO_WINDOW = 0x08000000)
-    #[cfg(windows)]
-    cmd.creation_flags(0x08000000);
-
-    // Kill any existing converter process first
-    if let Ok(mut guard) = FSLTL_CONVERTER_PROCESS.lock() {
-        if let Some(proc) = guard.take() {
-            drop(proc); // Drop closes the job handle, killing all processes
-        }
-    }
-
-    // Start the new process
-    let child = cmd
-        .spawn()
-        .map_err(|e| format!("Failed to start converter: {}", e))?;
-
-    // On Windows, create a job object and assign the process to it
-    // This ensures all child processes (gltf-transform, etc.) are killed together
-    #[cfg(windows)]
-    let process_with_job = {
-        let job = JobObject::kill_on_close()?;
-        job.assign(child.as_raw_handle())?;
-        ProcessWithJob {
-            child,
-            job: Some(job),
-        }
-    };
-
-    #[cfg(not(windows))]
-    let process_with_job = ProcessWithJob { child };
-
-    if let Ok(mut guard) = FSLTL_CONVERTER_PROCESS.lock() {
-        *guard = Some(process_with_job);
-    }
-
-    Ok(())
-}
-
-/// Cancel the running FSLTL conversion process
-/// On Windows, closes the job object which terminates all child processes
-#[tauri::command]
-fn cancel_fsltl_conversion() -> Result<(), String> {
-    if let Ok(mut guard) = FSLTL_CONVERTER_PROCESS.lock() {
-        if let Some(mut proc) = guard.take() {
-            let pid = proc.child.id();
-
-            // Close job handle FIRST to kill all processes in the job
-            // The JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE flag terminates all processes
-            // when the handle is closed
-            #[cfg(windows)]
-            drop(proc.job.take());
-
-            // On non-Windows, explicitly kill the parent process
-            #[cfg(not(windows))]
-            {
-                let _ = proc.child.kill();
-            }
-
-            // Now wait for the child process to fully exit (should be quick since we killed it)
-            let _ = proc.child.wait();
-
-            tracing::info!("FSLTL converter process tree terminated (PID {})", pid);
-            return Ok(());
-        }
-    }
-    Err("No conversion process running".to_string())
-}
-
 // =============================================================================
 // BACKWARD-COMPATIBLE COMMAND ALIASES
 // =============================================================================
@@ -931,26 +798,14 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            match event {
-                tauri::WindowEvent::CloseRequested { api, .. } => {
-                    // Check if minimize-to-tray is active
-                    if let Ok(guard) = MINIMIZE_TO_TRAY.lock() {
-                        if *guard {
-                            api.prevent_close();
-                            let _ = window.hide();
-                        }
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // Check if minimize-to-tray is active
+                if let Ok(guard) = MINIMIZE_TO_TRAY.lock() {
+                    if *guard {
+                        api.prevent_close();
+                        let _ = window.hide();
                     }
                 }
-                tauri::WindowEvent::Destroyed => {
-                    // Kill FSLTL converter process when app window is closed
-                    if let Ok(mut guard) = FSLTL_CONVERTER_PROCESS.lock() {
-                        // Taking and dropping the ProcessWithJob terminates all child processes:
-                        // - Windows: closes job handle (JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE)
-                        // - Other: Drop impl calls child.kill()
-                        let _ = guard.take();
-                    }
-                }
-                _ => {}
             }
         })
         .plugin(tauri_plugin_dialog::init())
@@ -1008,17 +863,13 @@ pub fn run() {
             files::save_diagnostic,
             files::validate_fsltl_source,
             files::list_fsltl_aircraft,
-            files::get_converter_path,
-            files::read_conversion_progress,
-            // FSLTL batch conversion commands
-            start_fsltl_conversion,
-            cancel_fsltl_conversion,
             // MSFS model commands
             msfs::detect_msfs_installations,
             msfs::list_fsltl_models,
             msfs::list_aig_models,
             msfs::convert_msfs_model,
             msfs::scan_cache_directory,
+            msfs::find_cached_model,
             // Backward-compatible aliases (old names -> new implementations)
             get_fsltl_output_path,
             get_fsltl_default_output_path,

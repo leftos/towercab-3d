@@ -3,7 +3,7 @@
  *
  * Provides TypeScript bindings for FSLTL-related Tauri commands.
  * These functions call the Rust backend for file system operations,
- * folder picking, and conversion process management.
+ * folder picking, and model lookups.
  *
  * In browser mode, most functions return empty/default values since
  * FSLTL conversion is a host-only feature.
@@ -13,7 +13,6 @@
  */
 
 import { invoke } from '@tauri-apps/api/core'
-import type { ConversionProgress } from '../types/fsltl'
 import { isTauri } from '../utils/tauriApi'
 
 /**
@@ -119,72 +118,6 @@ export async function listFsltlAircraft(sourcePath: string): Promise<string[]> {
     return []
   }
   return invoke<string[]>('list_fsltl_aircraft', { sourcePath })
-}
-
-/**
- * Get the path to the bundled converter executable
- * @returns Path to fsltl_converter.exe
- * Note: Not available in browser mode
- */
-export async function getConverterPath(): Promise<string> {
-  if (!isTauri()) {
-    return ''
-  }
-  return invoke<string>('get_converter_path')
-}
-
-/**
- * Start the FSLTL conversion process in the background
- * @param sourcePath - Path to fsltl-traffic-base
- * @param outputPath - Path where converted models will be saved
- * @param textureScale - Texture quality ('full', '2k', '1k', '512')
- * @param models - Array of model names to convert
- * @param progressFile - Path where progress JSON will be written
- * Note: Not available in browser mode
- */
-export async function startFsltlConversion(
-  sourcePath: string,
-  outputPath: string,
-  textureScale: string,
-  models: string[],
-  progressFile: string,
-): Promise<void> {
-  if (!isTauri()) {
-    throw new Error('[fsltlApi] startFsltlConversion not available in browser mode')
-  }
-  return invoke<void>('start_fsltl_conversion', {
-    sourcePath,
-    outputPath,
-    textureScale,
-    models,
-    progressFile,
-  })
-}
-
-/**
- * Cancel the running FSLTL conversion process
- * Kills the converter subprocess if one is running
- * @throws Error if no conversion is in progress
- * Note: Not available in browser mode
- */
-export async function cancelFsltlConversion(): Promise<void> {
-  if (!isTauri()) {
-    throw new Error('[fsltlApi] cancelFsltlConversion not available in browser mode')
-  }
-  return invoke<void>('cancel_fsltl_conversion')
-}
-
-/**
- * Read the current conversion progress from the progress file
- * @param progressFile - Path to the progress JSON file
- * @returns Current conversion progress
- * Note: Not available in browser mode
- */
-export async function readConversionProgress(progressFile: string): Promise<ConversionProgress> {
-  if (!isTauri()) {
-    return { status: 'idle', total: 0, completed: 0, current: null, errors: [] }
-  }
-  return invoke<ConversionProgress>('read_conversion_progress', { progressFile })
 }
 
 /**

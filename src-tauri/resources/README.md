@@ -28,5 +28,4 @@ cp dist/fsltl_converter.exe ../src-tauri/resources/
 ## Notes
 
 - The executable is ~20-30MB due to bundled Python and dependencies
-- It's a console application that outputs progress to stdout/stderr
-- Progress is also written to a JSON file specified by `--progress-file`
+- It's a console application: `fsltl_converter --job job.json --result result.json` reads a JSON job and writes a JSON result (per-livery outcome and errors); stdout and stderr are UTF-8 logs

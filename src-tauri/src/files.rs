@@ -211,18 +211,6 @@ pub struct FSLTLConvertedModel {
     pub converted_at: u64,
 }
 
-/// FSLTL conversion progress status
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-pub struct FSLTLProgress {
-    pub status: String, // "idle" | "scanning" | "converting" | "complete" | "error"
-    pub total: u32,
-    pub completed: u32,
-    pub current: Option<String>,
-    pub errors: Vec<String>,
-    #[serde(default)]
-    pub converted: Vec<FSLTLConvertedModel>,
-}
-
 /// Get smart default output path for converted MSFS models
 /// Returns (default_path, is_writable)
 #[tauri::command]
@@ -322,19 +310,4 @@ pub fn check_converted_model_exists(
     } else {
         Ok(false)
     }
-}
-
-/// Read conversion progress from JSON file
-#[tauri::command]
-pub fn read_conversion_progress(progress_file: String) -> Result<FSLTLProgress, String> {
-    let content = fs::read_to_string(&progress_file)
-        .map_err(|e| format!("Failed to read progress file: {}", e))?;
-
-    serde_json::from_str(&content).map_err(|e| format!("Failed to parse progress JSON: {}", e))
-}
-
-/// Get the bundled converter executable path
-#[tauri::command]
-pub fn get_converter_path(app: tauri::AppHandle) -> Result<String, String> {
-    crate::conversion::find_converter(&app).map(|path| path.to_string_lossy().to_string())
 }

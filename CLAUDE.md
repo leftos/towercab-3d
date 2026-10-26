@@ -283,7 +283,8 @@ MSFSModelConversionService (TypeScript)
 └─ Cache management - Memory + disk cache with LRU eviction
 
 conversion.rs (Rust backend) - ConversionOwner, the only place a converter is started
-├─ convert(request, Caller::Host | Caller::Remote(ip)) - converter lookup, arguments, output name, job object
+├─ convert(request, Caller::Host | Caller::Remote(ip)) - converter lookup, JSON job file (temp folder, removed after the run), output name, job object
+├─ output_file_name() - the one function naming a GLB: {fsltl|aig}_{sanitized title}-{FNV-1a hash}.glb
 ├─ Limits: 2 converters in all, 1 for remote browsers (1 per IP, 8 waiting), 5 min run, 2 min remote queue wait
 └─ Callers for one output file share one job; a refused remote request is HTTP 503 + Retry-After
 
@@ -292,9 +293,11 @@ msfs.rs (Rust backend)
 ├─ list_fsltl_models() / list_aig_models() - Parse aircraft.cfg, index liveries with their own texture folders and texture.cfg fallbacks
 ├─ convert_msfs_model() - Host command; awaits the ConversionOwner
 ├─ Model index caching - JSON cache files for fast re-indexing
-└─ scan_cache_directory() - Load pre-converted models on startup
+├─ scan_cache_directory() - Load pre-converted models on startup, keyed by the source and title embedded in each GLB
+└─ find_cached_model() - Host command; the cached GLB of a livery, or null
 
 fsltl_converter.exe (Python sidecar)
+├─ Reads a JSON job (--job), writes a JSON result (--result)
 ├─ Converts GLTF + DDS textures to GLB
 ├─ Texture scaling options (full/2k/1k/512)
 ├─ Handles multiple liveries per aircraft folder
@@ -303,11 +306,11 @@ fsltl_converter.exe (Python sidecar)
 
 ### Package rule
 
-The converter opens only files inside the model's MSFS package (the folder holding `SimObjects/Airplanes`), with junctions and symlinks followed, and accepts a glTF buffer or image URI or an `aircraft.cfg` `texture=` value only as a plain file name. A whole-package junction (how AIG is installed on some machines) works; a junction on only `SimObjects` or `Airplanes` fails. Details in `docs/msfs-model-conversion.md`, "--no-discovery Mode".
+The converter opens only files inside the model's MSFS package (the folder holding `SimObjects/Airplanes`), with junctions and symlinks followed, and accepts a glTF buffer or image URI only as a plain file name. A whole-package junction (how AIG is installed on some machines) works; a junction on only `SimObjects` or `Airplanes` fails. Details in `docs/msfs-model-conversion.md`, "Job file".
 
 ### Converter tests
 
-Stdlib `unittest` in `scripts/shipping/conversion/test_convert_fsltl_batch.py` (needs Pillow and numpy):
+Stdlib `unittest` in `scripts/shipping/conversion/test_convert_fsltl_batch.py` and `test_lookup_glb_source.py` (needs Pillow and numpy):
 
 ```bash
 uv run --no-project --python 3.12 --with pillow --with numpy python -m unittest discover -s scripts/shipping/conversion -p "test_*.py" -v

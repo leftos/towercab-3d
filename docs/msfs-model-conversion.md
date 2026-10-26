@@ -563,11 +563,12 @@ fn resolve_gltf_via_model_cfg(aircraft_dir: &Path) -> Option<(String, PathBuf)> 
 }
 ```
 
-**--no-discovery Mode**: The converter now uses `--no-discovery` mode where Rust provides all resolved paths directly:
-- `--gltf-path`: The exact GLTF file to convert (resolved via model.cfg)
-- `--texture-dirs`: Pre-computed texture directories including base model's textures
-- Python converter uses these paths instead of doing its own discovery, but still checks that each one resolves (junctions and symlinks followed) inside the model's MSFS package, the folder holding `SimObjects/Airplanes`; a texture folder outside it is dropped with a warning, and a `--gltf-path` outside `--source`'s package exits 1
-- Every glTF buffer and image URI and every `aircraft.cfg` `texture=` value must be a single plain file name beside the glTF (no path separators, drive colon, URI scheme including `data:`, `.`/`..`, trailing dot or space, device names, or `< > " | ? *`); otherwise that livery fails
+**Job file**: The converter does no discovery; Rust hands it every resolved path in a JSON job (`--job job.json --result result.json`, see "Conversion Owner"):
+- `gltf_path`: The exact GLTF file to convert (resolved via model.cfg)
+- `texture_dirs`: Pre-computed texture directories including base model's textures
+- `liveries`: each livery's `title` and the absolute `output` path of its GLB
+- Python converter uses these paths instead of doing its own discovery, but still checks that each one resolves (junctions and symlinks followed) inside the model's MSFS package, the folder holding `SimObjects/Airplanes`; a texture folder outside it is dropped with a warning, and a `gltf_path` outside its package fails the livery
+- The converter reads no `aircraft.cfg`. Every glTF buffer and image URI must be a single plain file name beside the glTF (no path separators, drive colon, URI scheme including `data:`, `.`/`..`, trailing dot or space, device names, or `< > " | ? *`); otherwise that livery fails
 
 This ensures consistent behavior - Rust is the single source of truth for path resolution.
 
@@ -746,7 +747,7 @@ Converted GLB files contain embedded source metadata in `asset.extras.towercab3d
     "version": "2.0",
     "extras": {
       "towercab3d": {
-        "converterVersion": 2,
+        "converterVersion": 9,
         "source": "aig",
         "liveryTitle": "AIGAIM_United Airlines Boeing 737 MAX 8",
         "folderName": "AIGAIM_AIA_B737-MAX8",
@@ -761,7 +762,7 @@ Converted GLB files contain embedded source metadata in `asset.extras.towercab3d
 }
 ```
 
-This metadata allows tracing a converted GLB back to its source files without needing filesystem access.
+This metadata allows tracing a converted GLB back to its source files without needing filesystem access. The host source paths (`source`, `liveryTitle`, `gltfPath`, `textureDirs`) are what the app and `lookup_glb_source.py` read; the file name is only a name.
 
 ### Converter Version System
 
@@ -773,15 +774,16 @@ The `converterVersion` field tracks which version of the conversion logic was us
 - **Version 3**: Fixed steering animations by using identity quaternion frame instead of frame 0
 - **Version 4**: Fixed model.cfg parsing to read GLTF filename from XML (fixes wrong engine variant textures causing white models)
 - **Version 5**: Fixed base_container resolution for FSLTL freighter variants (e.g., B77LF, B744F)
-- **Version 6**: Added --no-discovery mode; Rust now handles model.cfg parsing (fixes wrong engine variant for liveries)
+- **Version 6**: Rust handles model.cfg parsing and hands the converter its resolved paths (fixes wrong engine variant for liveries)
 - **Version 7**: FROST materials (MSFS 2024 GeoDecalFrosted) replaced with solid color sampled from livery texture
 - **Version 8**: Exclude cargo/attachment GTLFs from model selection; fix single-digit LOD matching (fixes invisible hulls on freighter models)
+- **Version 9**: The app hands over a JSON job; output names are a sanitized title plus a hash of it (every GLB converted earlier is converted again once)
 
 **Implementation:**
 - Python converter: `CONVERTER_VERSION` constant in `convert_fsltl_batch.py`
 - TypeScript frontend: `CONVERTER_VERSION` constant in `MSFSModelConversionService.ts`
 
-Both must match. When loading cached models on startup, the frontend skips GLBs with old/missing converter versions, forcing automatic re-conversion when the model is next requested.
+Both must match; the Rust test `conversion::tests::converter_versions_match` checks it. When loading cached models on startup, the frontend deletes GLBs with an old or missing converter version, or with no `source` or `liveryTitle` in their extras, so the model is converted again once when it is next requested.
 
 ### Cache Integrity
 
@@ -792,7 +794,11 @@ Both must match. When loading cached models on startup, the frontend skips GLBs 
 
 ## Conversion Owner
 
-Every conversion, from the host window (`convert_msfs_model`) or a remote browser (`POST /api/msfs/convert`), runs through `ConversionOwner` in `src-tauri/src/conversion.rs`, held in Tauri managed state. It owns the converter lookup (`find_converter`), the argument builder (`--no-discovery` with the glTF, texture folders and livery whenever the index entry has all three), the output-name function (`{source_type}_{livery_title}.glb`, what the Python writes), and the Windows job object that kills the converter's whole process tree. The batch command `start_fsltl_conversion` in `lib.rs` shares the lookup and the job-object helper but not the limits.
+Every conversion, from the host window (`convert_msfs_model`) or a remote browser (`POST /api/msfs/convert`), runs through `ConversionOwner` in `src-tauri/src/conversion.rs`, held in Tauri managed state. It owns the converter lookup (`find_converter`), the job writer, the output-name function, and the Windows job object that kills the converter's whole process tree. There is no other way to start a converter: the batch start, cancel and progress commands, `get_converter_path` and their TypeScript wrappers are gone.
+
+- **Job and result**: the owner writes a JSON job (`job.json`: version, source, texture scale, `gltf_path`, `texture_dirs`, and each livery's title and absolute output path) into a fresh `tc3d-convert-*` folder under the system temp folder and runs `fsltl_converter --job <job> --result <result>`. The converter writes a JSON result (a `title`, `path`, `ok` and `error` per livery, plus `errors`) and exits 0 when every livery converted, 1 when one failed, 2 when the job is invalid. The folder is removed after the run; a folder older than a day, left by a crash, is swept when an owner starts. The converter reconfigures stdout and stderr to UTF-8, so a title outside the ANSI code page does not fail a finished conversion.
+- **Output names**: `conversion::output_file_name` is the one function naming a GLB: `{fsltl|aig}_{sanitized title}-{hash}.glb`. The title keeps `[A-Za-z0-9._-]`, every other character becomes `_`, runs of `_` collapse, edge `.`, `_` and `-` go, and it is cut at 80 characters; `hash` is the FNV-1a 32-bit hash of the unsanitized title as 8 hex digits, so titles that sanitize alike stay apart. The Python never names a file; it writes the `output` path it is given.
+- **Finding a cached GLB**: the file name cannot be read back as the title, so the app reads each GLB's embedded `source` and `liveryTitle`: `scan_cache_directory` lists the key `{source}_{liveryTitle}` from them, and `find_cached_model` (Tauri command; `source` must be `fsltl` or `aig`, else null) returns the GLB `output_file_name` names, or null.
 
 - **Limits**: at most 2 converters at once in all; remote browsers share 1 of them, so the host always has a slot. A remote caller is allowed 1 conversion in flight per device (IP) and at most 8 remote requests waiting; a request past either is refused at once.
 - **Timeouts**: a converter running past 5 minutes is killed with its process tree and its callers get "timed out". A remote request waiting past 2 minutes for a slot is refused. The host has no queue wait, since its queue is the frontend's (2 at a time).
@@ -806,12 +812,13 @@ Every conversion, from the host window (`convert_msfs_model`) or a remote browse
 | File | Purpose |
 |------|---------|
 | `scripts/shipping/conversion/convert_fsltl_batch.py` | Python converter source |
+| `scripts/shipping/conversion/test_lookup_glb_source.py` | Tests of the GLB source lookup utility |
 | `scripts/debugging/lookup_glb_source.py` | GLB source file lookup utility |
 | `scripts/shipping/build/build_converter.py` | PyInstaller build script |
 | `scripts/shipping/build/converter-requirements.txt` | Python dependencies |
 | `scripts/shipping/build/fsltl_converter.spec` | PyInstaller spec file |
 | `src-tauri/resources/fsltl_converter[.exe]` | Bundled converter (`.exe` on Windows) |
-| `src-tauri/src/conversion.rs` | Conversion owner: converter lookup, arguments, limits, timeout, job object |
+| `src-tauri/src/conversion.rs` | Conversion owner: converter lookup, job file, output names, limits, timeout, job object |
 | `src-tauri/src/msfs.rs` | Rust backend: detection, indexing, the `convert_msfs_model` command, cache scan |
 | `src/renderer/services/MSFSModelConversionService.ts` | Frontend service |
 
@@ -819,7 +826,7 @@ Every conversion, from the host window (`convert_msfs_model`) or a remote browse
 
 ### Lookup GLB Source Files
 ```bash
-# If GLB has embedded metadata (newer conversions):
+# The source and livery title come from the GLB's embedded extras, never from its file name:
 python scripts/debugging/lookup_glb_source.py model.glb
 
 # With custom Community folder:

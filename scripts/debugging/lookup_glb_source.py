@@ -2,15 +2,16 @@
 """
 GLB Source Lookup Tool
 
-Given a converted GLB filename, finds the original MSFS source files.
-Uses the same discovery logic as msfs.rs and convert_fsltl_batch.py.
+Given a converted GLB file, finds the original MSFS source files. The source and livery
+title come from the metadata the converter embeds in the GLB (asset.extras.towercab3d),
+never from the file name. When the GLB embeds no host paths, the source is found by
+searching the Community folder with the same discovery logic as msfs.rs.
 
 Usage:
-    python lookup_glb_source.py "aig_AIGAIM_United Airlines Boeing 737 MAX 8.glb"
-    python lookup_glb_source.py "fsltl_FSLTL_FAIB_B738_American.glb"
+    python lookup_glb_source.py "X:/cache/aig_AIGAIM_United_Airlines_Boeing_737_MAX_8-3f9a1c2e.glb"
 
     # With custom community path:
-    python lookup_glb_source.py --community "D:/MSFS/Community" "aig_AIGAIM_United Airlines Boeing 737 MAX 8.glb"
+    python lookup_glb_source.py --community "D:/MSFS/Community" "X:/cache/fsltl_FSLTL_FAIB_B738_American-0b1c2d3e.glb"
 
     # Dump full GLTF structure:
     python lookup_glb_source.py --dump-gltf "X:/path/to/model.glb"
@@ -29,42 +30,6 @@ DEFAULT_COMMUNITY_PATHS = [
     Path("X:/Games/MSFlightSimPackages2024/Community"),
     Path("C:/MSFS/Community"),
 ]
-
-
-def parse_glb_filename(filename: str) -> dict:
-    """
-    Parse a converted GLB filename to extract source info.
-
-    Format: {source}_{liveryTitle}.glb
-    Examples:
-        - aig_AIGAIM_United Airlines Boeing 737 MAX 8.glb
-        - fsltl_FSLTL_FAIB_B738_American.glb
-
-    Returns dict with:
-        - source: "fsltl" or "aig"
-        - livery_title: The full livery title from aircraft.cfg
-    """
-    # Remove .glb extension
-    name = filename
-    if name.lower().endswith('.glb'):
-        name = name[:-4]
-
-    # Split on first underscore to get source prefix
-    if name.startswith('aig_'):
-        return {
-            'source': 'aig',
-            'livery_title': name[4:]  # Everything after "aig_"
-        }
-    elif name.startswith('fsltl_'):
-        return {
-            'source': 'fsltl',
-            'livery_title': name[6:]  # Everything after "fsltl_"
-        }
-    else:
-        return {
-            'source': 'unknown',
-            'livery_title': name
-        }
 
 
 def parse_aircraft_cfg_all_liveries(aircraft_dir: Path) -> list[dict]:
@@ -288,6 +253,23 @@ def get_embedded_source_metadata(glb_path: Path) -> dict | None:
     return extras.get('towercab3d')
 
 
+def read_livery_identity(glb_path: Path) -> dict | None:
+    """
+    The livery a converted GLB holds, from its embedded metadata.
+
+    Returns dict with:
+        - source: "fsltl" or "aig"
+        - livery_title: The full livery title from aircraft.cfg
+    or None when the GLB does not embed both as non-empty strings.
+    """
+    embedded = get_embedded_source_metadata(glb_path) or {}
+    source = embedded.get('source')
+    livery_title = embedded.get('liveryTitle')
+    if not isinstance(source, str) or not source or not isinstance(livery_title, str) or not livery_title:
+        return None
+    return {'source': source, 'livery_title': livery_title}
+
+
 def dump_node_tree(gltf: dict, node_idx: int, indent: int = 0):
     """Recursively print node hierarchy."""
     nodes = gltf.get('nodes', [])
@@ -393,44 +375,39 @@ def main():
 
         return
 
-    # Check if the GLB file exists and has embedded metadata
-    if glb_path.exists():
-        embedded = get_embedded_source_metadata(glb_path)
-        if embedded:
-            print("=== Embedded Source Metadata (from GLB) ===")
-            print(f"Version: {embedded.get('version', 'unknown')}")
-            print(f"Source: {embedded.get('source')}")
-            print(f"Livery Title: {embedded.get('liveryTitle')}")
-            print(f"Folder Name: {embedded.get('folderName')}")
-            print(f"Aircraft Type: {embedded.get('aircraftType')}")
-            print(f"ICAO Airline: {embedded.get('icaoAirline')}")
-            print(f"Aircraft Folder: {embedded.get('aircraftFolder')}")
-            print(f"GLTF Path: {embedded.get('gltfPath')}")
-            print()
-            print("Texture Directories:")
-            for tex_dir in embedded.get('textureDirs', []):
-                print(f"  - {tex_dir}")
-            print()
-            print("(Source metadata was embedded during conversion - no lookup needed)")
-            return
+    if not glb_path.exists():
+        print(f"Error: File not found: {glb_path}")
+        print("Give the path of a converted GLB: its source and livery title are read from inside it")
+        sys.exit(1)
 
-    # Parse the GLB filename for fallback lookup
-    filename = glb_path.name
-    info = parse_glb_filename(filename)
+    info = read_livery_identity(glb_path)
+    if not info:
+        print(f"Error: {glb_path.name} embeds no source and liveryTitle in asset.extras.towercab3d")
+        print("It was written by an older converter; let the app convert the model again")
+        sys.exit(1)
 
-    print(f"GLB File: {filename}")
+    embedded = get_embedded_source_metadata(glb_path)
+    print("=== Embedded Source Metadata (from GLB) ===")
+    print(f"Converter Version: {embedded.get('converterVersion', 'unknown')}")
     print(f"Source: {info['source']}")
     print(f"Livery Title: {info['livery_title']}")
+    print(f"Folder Name: {embedded.get('folderName')}")
+    print(f"Aircraft Type: {embedded.get('aircraftType')}")
+    print(f"ICAO Airline: {embedded.get('icaoAirline')}")
+    print(f"Aircraft Folder: {embedded.get('aircraftFolder')}")
+    print(f"GLTF Path: {embedded.get('gltfPath')}")
     print()
-    print("(No embedded metadata found - performing filesystem lookup)")
+    print("Texture Directories:")
+    for tex_dir in embedded.get('textureDirs') or []:
+        print(f"  - {tex_dir}")
     print()
 
-    if info['source'] == 'unknown':
-        print("Error: Could not determine source type from filename")
-        print("Expected format: {source}_{liveryTitle}.glb")
-        print("  e.g., aig_AIGAIM_United Airlines Boeing 737 MAX 8.glb")
-        print("  e.g., fsltl_FSLTL_FAIB_B738_American.glb")
-        sys.exit(1)
+    if embedded.get('gltfPath'):
+        print("(Source paths were embedded during conversion - no lookup needed)")
+        return
+
+    print("(No source paths embedded - searching the Community folder by the embedded livery title)")
+    print()
 
     # Find community folder
     community_path = args.community

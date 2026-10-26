@@ -103,6 +103,16 @@ export interface MSFSDetectionResult {
   aigModelCount?: number
 }
 
+/** One GLB in the host's model cache, as `scan_cache_directory` and `find_cached_model` describe it */
+interface CachedGlbInfo {
+  path: string
+  /** `{source}_{liveryTitle}` from the GLB's embedded metadata; null when it embeds neither */
+  model_key: string | null
+  file_name: string
+  file_size: number
+  converter_version: number | null
+}
+
 /** A conversion waiting for a free slot */
 interface QueuedConversion {
   sourceInfo: SourceModelInfo
@@ -128,8 +138,9 @@ interface QueuedConversion {
  *   6: Added --no-discovery mode; Rust now handles model.cfg parsing (fixes wrong engine variant for liveries)
  *   7: FROST materials (MSFS 2024 GeoDecalFrosted) made fully transparent instead of magenta
  *   8: Exclude cargo/attachment GTLFs from model selection; fix single-digit LOD matching
+ *   9: The app hands over a JSON job; output names are a sanitized title plus a hash of it
  */
-const CONVERTER_VERSION = 8
+const CONVERTER_VERSION = 9
 
 // =============================================================================
 // Service Class
@@ -330,7 +341,7 @@ class MSFSModelConversionServiceClass {
     }
 
     // Fetch already-converted models (to populate memory cache)
-    // Response format: { model_key, file_size, converter_version } (the host sends no file path)
+    // Response format: { model_key, file_name, file_size, converter_version } (the host sends no file path)
     try {
       const modelsResponse = await fetch('/api/msfs/models')
       if (!modelsResponse.ok) {
@@ -339,7 +350,8 @@ class MSFSModelConversionServiceClass {
       }
 
       const convertedModels = (await modelsResponse.json()) as Array<{
-        model_key: string // Cache key like "fsltl_FSLTL_FAIB_B738_American"
+        model_key: string | null // Cache key from the GLB's embedded title, e.g. "fsltl_FSLTL_FAIB_B738_American"
+        file_name: string // The GLB's name in the host cache, served as /api/msfs/{file_name}
         file_size: number
         converter_version: number | null
       }>
@@ -348,17 +360,13 @@ class MSFSModelConversionServiceClass {
       let loadedCount = 0
       let skippedCount = 0
       for (const model of convertedModels) {
-        if (model.converter_version !== CONVERTER_VERSION) {
+        if (model.model_key === null || model.converter_version !== CONVERTER_VERSION) {
           skippedCount++
           continue
         }
 
-        // Build URL to serve the model from the cache
-        // Files are flat in cache dir, named {model_key}.glb
-        // URL-encode the model key to handle spaces and special characters in filenames
-        const modelUrl = `/api/msfs/${encodeURIComponent(model.model_key)}.glb`
+        const modelUrl = `/api/msfs/${encodeURIComponent(model.file_name)}`
 
-        // model_key is already in the correct format (e.g., "fsltl_FSLTL_FAIB_B738_American")
         this.memoryCache.set(model.model_key, {
           path: modelUrl,
           fileSize: model.file_size,
@@ -393,14 +401,7 @@ class MSFSModelConversionServiceClass {
     try {
       const { invoke } = await import('@tauri-apps/api/core')
 
-      const cachedModels = await invoke<
-        Array<{
-          path: string
-          model_key: string
-          file_size: number
-          converter_version: number | null
-        }>
-      >('scan_cache_directory', { cacheDir })
+      const cachedModels = await invoke<CachedGlbInfo[]>('scan_cache_directory', { cacheDir })
 
       if (cachedModels.length === 0) {
         console.log('[MSFSConversion] No cached models found')
@@ -413,15 +414,16 @@ class MSFSModelConversionServiceClass {
       let loadedCount = 0
       let deletedCount = 0
       for (const cached of cachedModels) {
-        // Delete models with old/missing converter versions
-        if (cached.converter_version !== CONVERTER_VERSION) {
+        // Delete models with old/missing converter versions, or no embedded source and title
+        if (cached.model_key === null || cached.converter_version !== CONVERTER_VERSION) {
           console.log(
-            `[MSFSConversion] Deleting outdated model ${cached.model_key} (version ${cached.converter_version ?? 'unknown'}, need ${CONVERTER_VERSION})`,
+            `[MSFSConversion] Deleting outdated model ${cached.file_name}`,
+            `(version ${cached.converter_version ?? 'unknown'}, need ${CONVERTER_VERSION})`,
           )
           try {
             await invoke<void>('delete_cache_file', { path: cached.path })
           } catch (e) {
-            console.warn(`[MSFSConversion] Failed to delete outdated model ${cached.model_key}:`, e)
+            console.warn(`[MSFSConversion] Failed to delete outdated model ${cached.file_name}:`, e)
           }
           deletedCount++
           continue
@@ -1116,7 +1118,7 @@ class MSFSModelConversionServiceClass {
   ): Promise<ConversionResult> {
     const settings = this.getSettings()
     if (settings.cacheDirectory) {
-      const diskPath = await this.checkDiskCache(modelKey, settings.cacheDirectory)
+      const diskPath = await this.checkDiskCache(sourceInfo, modelKey, settings.cacheDirectory)
       if (diskPath) {
         this.conversionStatus.set(modelKey, { converting: false })
         return { success: true, glbPath: diskPath }
@@ -1177,8 +1179,7 @@ class MSFSModelConversionServiceClass {
       const { invoke } = await import('@tauri-apps/api/core')
       const settings = this.getSettings()
 
-      // Pass output DIRECTORY to Python converter (not a file path)
-      // Python will create: {outputDir}/{source}_{liveryTitle}.glb
+      // Pass the output directory; the host names the GLB and returns its path
       const outputDir = settings.cacheDirectory || (await this.getTempOutputDir())
 
       // Determine source path - use specific aircraft folder, not the entire FSLTL/AIG folder
@@ -1208,7 +1209,7 @@ class MSFSModelConversionServiceClass {
       }>('convert_msfs_model', {
         sourcePath,
         folderName: sourceInfo.folderName,
-        outputDir, // Changed: pass directory, not full file path
+        outputDir,
         textureScale: settings.textureScale,
         // Pass the specific livery title to convert only this livery
         liveryTitle: sourceInfo.modelName,
@@ -1483,24 +1484,30 @@ class MSFSModelConversionServiceClass {
   }
 
   /**
-   * Check if model is in disk cache
+   * Find a model converted after the cache was loaded (by another process, or for a remote
+   * browser): the host looks the GLB up by the name it gives it. An outdated GLB is a miss, so
+   * the model is converted again over it.
    */
-  private async checkDiskCache(modelKey: string, cacheDir: string): Promise<string | null> {
+  private async checkDiskCache(
+    sourceInfo: SourceModelInfo,
+    modelKey: string,
+    cacheDir: string,
+  ): Promise<string | null> {
     if (!isTauri()) return null
 
     try {
       const { invoke } = await import('@tauri-apps/api/core')
-      const path = `${cacheDir}/${modelKey}.glb`
-
-      const exists = await invoke<boolean>('file_exists', { path })
-      if (exists) {
-        // Get file size and add to memory cache
-        const fileSize = await invoke<number>('get_file_size', { path })
-        this.addToCacheEntry(modelKey, path, fileSize, true)
-        return path
+      const cached = await invoke<CachedGlbInfo | null>('find_cached_model', {
+        cacheDir,
+        source: sourceInfo.source,
+        liveryTitle: sourceInfo.modelName,
+      })
+      if (cached && cached.converter_version === CONVERTER_VERSION) {
+        this.addToCacheEntry(modelKey, cached.path, cached.file_size, true)
+        return cached.path
       }
-    } catch {
-      // File doesn't exist or error checking
+    } catch (e) {
+      console.warn(`[MSFSConversion] Failed to look up ${modelKey} in the disk cache:`, e)
     }
 
     return null
