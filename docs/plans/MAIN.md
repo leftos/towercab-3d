@@ -90,19 +90,23 @@
 
 ## vNAS
 
-### Room join (0/5 done)
-- [/] TC3D-45 Join a YAAT room as its member, with no CRC session · release vNext
-- [ ] TC3D-302 Read the vNAS session token without a Data API lookup · release vNext
-- [ ] TC3D-303 Let the vNAS event forwarder own every host state write · release vNext
+### Room join (1/5 done)
 - [ ] TC3D-260 vNAS crate: a kick hidden in a lagged burst lets the resync join the next room
 - [ ] TC3D-255 vNAS popover: Environment label renders at 16px white, unstyled
+- [/] TC3D-302 Read the vNAS session token without a Data API lookup (sub-issue of TC3D-6) · release vNext
+- [ ] TC3D-303 Let the vNAS event forwarder own every host state write (sub-issue of TC3D-6) · release vNext
 
-### Lifecycle merge (#261) (0/2 done)
+### Lifecycle merge (#261) (0/5 done)
 - [/] TC3D-6 vNAS session lifecycle: one subscribe per facility, clean session end · release vNext
   - [ ] TC3D-214 Merge feat/vnas-session-lifecycle to main (#261) · release vNext
+  - [/] TC3D-302 Read the vNAS session token without a Data API lookup · release vNext
+  - [ ] TC3D-303 Let the vNAS event forwarder own every host state write · release vNext
+  - [/] TC3D-227 Keep VATSIM sign-in secrets out of the vNAS crate's logs and errors · release vNext
+  - [ ] TC3D-339 Stop logging the vNAS OAuth callback URL with its authorization code · release vNext
+  - [ ] TC3D-346 Delete dead vNAS auth and session commands and guard start_auth against a live session · release vNext+1
+  - [ ] TC3D-348 Report SSE stream errors in the vNAS crate's sign-in instead of a closed connection · release vNext+1
 
 ### Hardening (1/12 done)
-- [ ] TC3D-227 Keep VATSIM sign-in secrets out of the vNAS crate's logs and errors · release vNext
 - [ ] TC3D-234 Leave the vNAS crate Disconnected after a failed or cancelled connect
 - [ ] TC3D-239 Notice a closed hub socket while the vNAS crate waits for a session
 - [ ] TC3D-240 Make the host's vNAS unit tests start on this machine
@@ -113,6 +117,7 @@
 - [ ] TC3D-67 vNAS lifecycle: close the races left after TC3D-47
 - [ ] TC3D-68 vNAS: stray rejections, a stale error, a lost disconnect during sign-in, and startup connecting to Live
 - [ ] TC3D-313 Tie each vNAS subscribe to the session its caller saw · release vNext+1
+- [/] TC3D-227 Keep VATSIM sign-in secrets out of the vNAS crate's logs and errors (sub-issue of TC3D-6) · release vNext
 
 ### Dual-source and reconnect (0/5 done)
 - [ ] TC3D-19 vNAS dual-source and reconnect: the crate's Testing Checklist
@@ -130,8 +135,7 @@
 - [ ] TC3D-301 Split parse_aircraft_cfg_str under the function limits · release vNext+1
 - [ ] TC3D-306 Keep the MSFS index paths in one form and sort the remaining read_dir choices · release vNext+1
 
-### Conversion pipeline (3/9 done)
-- [/] TC3D-264 Hand the converter a JSON job with safe output names and read a JSON result · release vNext
+### Conversion pipeline (4/9 done)
 - [ ] TC3D-289 Keep image positions when a glTF image has no URI in the converter
 - [ ] TC3D-290 Replace the converter's deprecated Pillow getdata call
 - [ ] TC3D-291 Finish the converter's package checks: extra device names, hard links, partial junctions
@@ -145,10 +149,14 @@
 ### No milestone
 - [ ] TC3D-315 Harden the conversion owner: bounded kill, orphaned remote jobs, case-insensitive dedupe · release vNext+1
 - [ ] TC3D-319 AIG liveries fail to convert: filename or extension is too long · release vNext+1
+- [ ] TC3D-341 Read a GLB's whole JSON chunk when verifying a conversion · release vNext+1
+- [ ] TC3D-343 Take a converted model's source prefix from the index, not the folder name · release vNext+1
+- [ ] TC3D-344 Delete the dead batch-conversion progress state and split lookup_glb_source main · release vNext+1
+- [ ] TC3D-347 Test the converter's UTF-8 stdout with a non-cp1252 DDS file name · release vNext+1
 
 ## Aircraft motion model
 
-### feat/aircraft-motion merge (#264) (0/20 done)
+### feat/aircraft-motion merge (#264) (1/20 done)
 - [ ] TC3D-241 Aircraft motion on feat/aircraft-motion · release vNext
   - [ ] TC3D-52 Aircraft orientation model: bank, rotation and flare
   - [ ] TC3D-53 Curved VATSIM paths: splines with heading from the path
@@ -168,7 +176,6 @@
   - [ ] TC3D-298 Split stabilizePhase and detectRawFlightPhase and drop their dead state · release vNext+1
   - [ ] TC3D-299 Bound when the departure Rolling label ends in the motion suite · release vNext+1
   - [ ] TC3D-304 Test the phase-state drop on a scrub back and size the RealTraffic regression tolerance · release vNext+1
-  - [/] TC3D-316 Enter vNAS ground contact from each aircraft's resting height, not fixed 3/5 ft · release vNext
 
 ### Follow-ups on main (0/11 done)
 - [ ] TC3D-179 Use the terrain under the aircraft as the gear datum in orbit mode with no airport
@@ -182,6 +189,10 @@
 - [ ] TC3D-259 Order the aircraft timeline by observedAt so a late packet cannot lerp backwards
 - [ ] TC3D-105 Fill or delete the interpolated state's flightPhase field
 - [ ] TC3D-108 Import the phase detector's thresholds from constants/flightPhase.ts
+
+### No milestone
+- [ ] TC3D-340 Split runInterpolationFrame into per-stage functions · release vNext+1
+- [ ] TC3D-342 Learn resting height only from aircraft in contact, capped per callsign · release vNext+1
 
 ## Remote server hardening
 
@@ -323,3 +334,4 @@
 
 - [ ] TC3D-78 Fix the in-memory tile cache's two disagreeing controls
 - [ ] TC3D-107 Reconcile the orbit camera defaults and fix wrong camera comments
+- [ ] TC3D-345 Show the map data credits on the About screen · release vNext
