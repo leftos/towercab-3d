@@ -14,14 +14,11 @@
 
 ### M1 Remove VR (1/1 done)
 
-### M2 Cab, clouds and fog in Cesium (7/16 done)
+### M2 Cab, clouds and fog in Cesium (10/16 done)
 - [ ] TC3D-213 Clouds, fog and cab in Cesium on feat/cesium-weather · release vNext
   - [ ] TC3D-150 Measure the weather stage on an iPad and get the owner's look sign-off · release vNext
   - [ ] TC3D-219 Weather stage fog vanishes with the camera above about 32 km
   - [ ] TC3D-221 Merge feat/cesium-weather to main (#262) · release vNext
-  - [/] TC3D-224 Ease weather fog in instead of popping at 10 SM and on each METAR · release vNext
-- [ ] TC3D-141 Re-shoot spike A's before images on the v0.2.0-alpha release · release vNext
-- [/] TC3D-294 Remove the BKN layer's white streaks along the horizon · release vNext
 - [ ] TC3D-235 Place the cab and weather on the visible ground when terrain never loads
 - [ ] TC3D-314 Pin the weather quality device default with a test and keep it stable · release vNext+1
 
@@ -47,14 +44,29 @@
 ### No milestone
 - [ ] TC3D-309 Clean invalid weather quality values and split the settings migrate function · release vNext+1
 - [ ] TC3D-310 Size an inset's weather quality against the main viewport, not the window · release vNext+1
-- [/] TC3D-318 Review every weather effect and survey open-source prior art for weather rendering · release vNext
+- [ ] TC3D-320 BKN never counts as a ceiling for aircraft culling · release vNext+1
+- [ ] TC3D-321 Aircraft culling ignores the fog fade and ease · release vNext+1
+- [ ] TC3D-322 Cloud shading misses an overcast above the fourth layer · release vNext+1
+- [ ] TC3D-324 Fix the METAR parser's weather-group gaps and station-identifier misreads · release vNext+1
+- [ ] TC3D-325 Add a METAR parser test suite from real METAR strings · release vNext+1
+- [ ] TC3D-326 Keep one METAR cover table and one precipitation visibilityFactor · release vNext+1
+- [ ] TC3D-327 Calibrate the weather stage fog to METAR visibility (WMO 5% contrast) · release vNext+1
+- [ ] TC3D-328 Tint the weather fog from the sun, the sky and the obscuration type · release vNext+1
+- [ ] TC3D-329 Labels are hidden beyond 10 SM in clear air · release vNext+1
+- [ ] TC3D-330 Draw rain, snow and lightning in inset viewports · release vNext+1
+- [ ] TC3D-331 Add a quality preset for rain and snow · release vNext+1
+- [ ] TC3D-332 Draw cloud types from METAR cover and CB/TCU · release vNext+1
+- [ ] TC3D-333 Drift clouds with the METAR wind · release vNext+1
+- [ ] TC3D-334 Upscale the cloud pass temporally with a depth-aware upsample · release vNext+1
+- [ ] TC3D-335 Replace the cloud value noise and one-sample lighting with Perlin-Worley noise and multi-scattering · release vNext+1
+- [ ] TC3D-336 Draw wet surfaces and rain splashes on the airport · release vNext+1
+- [ ] TC3D-337 Draw rain droplets on the tower cab glass · release vNext+1
 
 ## OSM buildings
 
-### B1 Shader on the ion tiles (4/12 done)
+### B1 Shader on the ion tiles (5/12 done)
 - [ ] TC3D-211 OSM facades on feat/osm-facades · release vNext
   - [/] TC3D-218 Type OSM building parts from their outline, then by shape near the field · release vNext
-  - [/] TC3D-220 Facade floor lines don't start at the building's ground · release vNext
   - [ ] TC3D-226 Merge feat/osm-facades to main (#263) · release vNext
 - [ ] TC3D-165 Draw curtain-wall glass on terminals through Cesium's reflections · release vNext+1
 - [ ] TC3D-166 Light windows at night by building use and local time · release vNext+1
@@ -71,6 +83,10 @@
 - [ ] TC3D-172 Add roof props as instanced models near the field
 - [ ] TC3D-173 Let mods override landmark buildings by OSM way id
 - [ ] TC3D-174 Spike photorealistic 3D Tiles near the field as a desktop mode
+
+### No milestone
+- [ ] TC3D-323 Leave a building tile unbuilt when its primitives use different frames · release vNext+1
+- [ ] TC3D-338 Make building floor-line lookup failures visible and tested · release vNext+1
 
 ## vNAS
 
@@ -115,7 +131,7 @@
 - [ ] TC3D-306 Keep the MSFS index paths in one form and sort the remaining read_dir choices · release vNext+1
 
 ### Conversion pipeline (3/9 done)
-- [ ] TC3D-264 Hand the converter a JSON job with safe output names and read a JSON result · release vNext
+- [/] TC3D-264 Hand the converter a JSON job with safe output names and read a JSON result · release vNext
 - [ ] TC3D-289 Keep image positions when a glTF image has no URI in the converter
 - [ ] TC3D-290 Replace the converter's deprecated Pillow getdata call
 - [ ] TC3D-291 Finish the converter's package checks: extra device names, hard links, partial junctions
