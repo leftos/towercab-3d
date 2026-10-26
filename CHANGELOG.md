@@ -14,7 +14,6 @@ All notable changes to TowerCab 3D will be documented in this file.
 - 3D buildings and aircraft no longer have an olive-green cast on their walls and fuselages; their reflected ground light is now a neutral grey.
 - Remote access accepts only devices on your local network, unless you turn on **Allow devices outside the local network** in Settings → Configuration.
 - FSLTL and AIG model conversions now run at most two at a time and stop after five minutes; a browser connected to a busy desktop app waits and retries.
-- Clouds and fog are now drawn with the scene's depth, so aircraft, buildings and terrain in front of a cloud deck or fog bank hide it correctly.
 - Clouds and fog are now drawn with the scene's depth, so aircraft, buildings and terrain in front of a cloud deck or fog bank hide it correctly. They need the logarithmic depth setting on; with it off, no clouds or weather fog are drawn.
 - Fog Intensity sets how thick the depth-drawn fog looks, and terrain in low visibility is no longer fogged twice.
 - Weather fog now fades in as visibility drops from 10 to 8 miles, and eases over six seconds when visibility changes, instead of popping.
@@ -42,7 +41,6 @@ All notable changes to TowerCab 3D will be documented in this file.
 - A model conversion cut short no longer leaves a broken model that never converts again.
 - FSLTL and AIG liveries whose names contain dashes, slashes or other symbols now convert; every converted model converts again once after updating.
 - vNAS no longer disconnects when it receives aircraft data it cannot read that contains non-English characters.
-- An overcast now reaches down to the horizon and meets the distant haze in one grey, instead of leaving a strip of clear sky.
 - An overcast now reaches the horizon and meets the distant haze in one grey, and broken layers beneath it no longer show bright horizon streaks.
 
 ### Removed
