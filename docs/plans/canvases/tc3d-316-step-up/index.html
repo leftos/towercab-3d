@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TC3D-316 resting-height step</title>
+    <style>
+      :root {
+        --page: #f6f5f1;
+        --ink: #1d232b;
+        --muted: #5d6673;
+        --panel: #ffffff;
+        --line: #d9d6cc;
+      }
+      body {
+        margin: 0;
+        padding: 24px;
+        background: var(--page);
+        color: var(--ink);
+        font:
+          15px/1.45 system-ui,
+          sans-serif;
+      }
+      h1 {
+        margin: 0 0 4px;
+        font-size: 22px;
+      }
+      .question {
+        margin: 0 0 8px;
+        color: var(--muted);
+      }
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 18px;
+        margin: 0 0 12px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .legend i {
+        display: inline-block;
+        width: 22px;
+        height: 4px;
+        margin-right: 6px;
+        vertical-align: middle;
+      }
+      body .mt-grid {
+        grid-template-columns: 1fr;
+      }
+      body .mt-view {
+        position: relative;
+        aspect-ratio: 12 / 5;
+      }
+      .hud {
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        z-index: 2;
+        padding: 6px 10px;
+        border-radius: 6px;
+        background: rgb(16 20 26 / 0.72);
+        color: #fff;
+        font:
+          13px/1.5 ui-monospace,
+          Consolas,
+          monospace;
+        white-space: pre;
+        pointer-events: none;
+      }
+      .hud b.on {
+        color: #7ee08a;
+      }
+      .hud b.off {
+        color: #ffb26b;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>TC3D-316: the resting-height step at liftoff and touchdown</h1>
+    <p class="question">
+      vNAS reports height at a reference point that rests R = 2.75 m (9.0 ft) above the runway for an A320. Ground contact enters when the reported height
+      is within 3 ft of R and leaves above R + 5 ft; in contact the aircraft is drawn on the runway. How should the drawn height leave and rejoin the runway?
+      Every lane flies the same data on one clock: parked 0–3 s, takeoff roll 3–11 s (rotation 10–11.5 s), liftoff 11 s, climb at 1,500 ft/min to
+      100 ft by 15 s, then a cut to an approach at 700 ft/min from about 63 ft with a flare from 21.5 s, touchdown at 23 s and the rollout. Contact
+      leaves at 11.2 s (true wheels pass 5 ft) and enters at 22.3 s (below 3 ft, mid-flare), so in every lane the wheels stay on the runway until then and catch up
+      over 0.25 s.
+    </p>
+    <div class="legend">
+      <span><i style="background: #ff7a00"></i>runway surface (the near main-gear track)</span>
+      <span><i style="background: #e0182d"></i>true wheel height (what the aircraft really does)</span>
+      <span>HUD: reported height, drawn wheel height above the runway, true wheel height, contact</span>
+    </div>
+    <a hidden id="model" href="a320.glb"></a>
+    <script src="mock-three.js"></script>
+    <script>
+      const THREE = MockThree.THREE;
+      const FT = 0.3048;
+      const KT = 0.514444;
+      const R = 2.75;
+      const ENTER = 3 * FT;
+      const LEAVE = 5 * FT;
+      const ON_GROUND = 0.1;
+      const EASE = 0.25;
+      const FADE = 50 * FT;
+      const DURATION = 26;
+      const CUT = 17;
+      const LEARN_AT = 19.5;
+      const DT = 1 / 240;
+      const STEPS = Math.round(DURATION / DT);
+
+      const LENGTH = 37.57;
+      const NOSE_TO_MAIN = 17.7;
+      const WHEELBASE = 12.64;
+      const NACELLE_CLEARANCE = 0.56;
+      const MAIN_TRACK = 3.8;
+      const MAIN_WHEEL_R = 0.58;
+      const NOSE_WHEEL_R = 0.38;
+
+      const CLIMB_VS = 25 * FT;
+      const APP_VS = (700 / 60) * FT;
+      const FLARE_START = 21.5;
+      const TOUCHDOWN = 23;
+      const FLARE_END_VS = 2 * FT;
+      const FLARE_DUR = TOUCHDOWN - FLARE_START;
+      const FLARE_LOSS = ((APP_VS + FLARE_END_VS) / 2) * FLARE_DUR;
+      const APP_START_H = FLARE_LOSS + APP_VS * (FLARE_START - CUT);
+
+      function clamp01(u) {
+        return Math.min(Math.max(u, 0), 1);
+      }
+
+      function smooth(a, b, t) {
+        const u = clamp01((t - a) / (b - a));
+        return u * u * (3 - 2 * u);
+      }
+
+      function takeoffTruth(t) {
+        const accel = (140 * KT) / 8;
+        const roll = Math.max(t - 3, 0);
+        const x = roll <= 8 ? 0.5 * accel * roll * roll : 0.5 * accel * 64 + 140 * KT * (roll - 8);
+        const h = CLIMB_VS * Math.max(t - 11, 0);
+        return { x, h, pitch: 9 * smooth(10, 11.5, t) };
+      }
+
+      function approachTruth(t) {
+        const s = t - TOUCHDOWN;
+        const x = s < 0 ? 135 * KT * s : 135 * KT * s - 2 * s * s;
+        let h = 0;
+        if (t < FLARE_START) {
+          h = APP_START_H - APP_VS * (t - CUT);
+        } else if (t < TOUCHDOWN) {
+          const u = t - FLARE_START;
+          h = FLARE_LOSS - APP_VS * u + ((APP_VS - FLARE_END_VS) / (2 * FLARE_DUR)) * u * u;
+        }
+        const pitch = (2.5 + 3 * smooth(FLARE_START, TOUCHDOWN, t)) * (1 - smooth(23.3, 25, t));
+        return { x, h: Math.max(h, 0), pitch };
+      }
+
+      function truth(t) {
+        return t < CUT ? takeoffTruth(t) : approachTruth(t);
+      }
+
+      /** Steps the contact hysteresis and the 0.25 s clamp transition from the start of each segment, so any t is reproducible. */
+      function simulate(spec) {
+        const drawn = new Float32Array(STEPS + 1);
+        const contactAt = new Uint8Array(STEPS + 1);
+        let contact = true;
+        let mode = null;
+        let value = 0;
+        let transition = null;
+        for (let i = 0; i <= STEPS; i += 1) {
+          const t = i * DT;
+          const { h } = truth(t);
+          const segmentStart = i === 0 || (t >= CUT && (i - 1) * DT < CUT);
+          if (segmentStart) {
+            contact = h < ENTER;
+            mode = null;
+            transition = null;
+          } else if (contact && h > LEAVE) {
+            contact = false;
+          } else if (!contact && h < ENTER) {
+            contact = true;
+          }
+          const state = { t, h, contact, rKnown: !(t >= CUT && t < LEARN_AT) };
+          const target = spec.target(state);
+          const nextMode = spec.mode(state);
+          if (mode !== null && nextMode !== mode) {
+            transition = { source: value, start: t };
+          }
+          mode = nextMode;
+          value = target;
+          if (transition !== null) {
+            const p = (t - transition.start) / EASE;
+            if (p >= 1) {
+              transition = null;
+            } else {
+              value = transition.source + (target - transition.source) * p;
+            }
+          }
+          drawn[i] = value;
+          contactAt[i] = contact ? 1 : 0;
+        }
+        return { drawn, contactAt };
+      }
+
+      function orientModel(model) {
+        const body = new THREE.Group();
+        model.parent?.remove(model);
+        body.add(model);
+        body.updateMatrixWorld(true);
+        const size = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3());
+        if (size.z > size.x) {
+          model.rotation.y += Math.PI / 2;
+        }
+        model.scale.multiplyScalar(LENGTH / Math.max(size.x, size.z));
+        body.updateMatrixWorld(true);
+        let topY = -Infinity;
+        let topX = 0;
+        const v = new THREE.Vector3();
+        model.traverse((o) => {
+          if (!o.isMesh) return;
+          const pos = o.geometry.attributes.position;
+          for (let k = 0; k < pos.count; k += 1) {
+            v.fromBufferAttribute(pos, k).applyMatrix4(o.matrixWorld);
+            if (v.y > topY) {
+              topY = v.y;
+              topX = v.x;
+            }
+          }
+        });
+        let box = new THREE.Box3().setFromObject(model);
+        if (topX > (box.min.x + box.max.x) / 2) {
+          model.rotation.y += Math.PI;
+          body.updateMatrixWorld(true);
+          box = new THREE.Box3().setFromObject(model);
+        }
+        model.position.x -= box.max.x - NOSE_TO_MAIN;
+        model.position.y += NACELLE_CLEARANCE - box.min.y;
+        return body;
+      }
+
+      function wheel(radius, width, material) {
+        const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, width, 24), material);
+        mesh.rotation.x = Math.PI / 2;
+        return mesh;
+      }
+
+      function buildGear() {
+        const tyre = new THREE.MeshStandardMaterial({ color: 0x1b1b1b, roughness: 0.9 });
+        const strut = new THREE.MeshStandardMaterial({ color: 0xc8ccd2, metalness: 0.4, roughness: 0.4 });
+        const gear = new THREE.Group();
+        for (const side of [-1, 1]) {
+          for (const offset of [-0.46, 0.46]) {
+            const w = wheel(MAIN_WHEEL_R, 0.4, tyre);
+            w.position.set(0, MAIN_WHEEL_R, side * MAIN_TRACK + offset);
+            gear.add(w);
+          }
+          const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 1.9, 12), strut);
+          leg.position.set(0, MAIN_WHEEL_R + 0.95, side * MAIN_TRACK);
+          gear.add(leg);
+        }
+        for (const offset of [-0.3, 0.3]) {
+          const w = wheel(NOSE_WHEEL_R, 0.25, tyre);
+          w.position.set(WHEELBASE, NOSE_WHEEL_R, offset);
+          gear.add(w);
+        }
+        const noseLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 1.7, 12), strut);
+        noseLeg.position.set(WHEELBASE, NOSE_WHEEL_R + 0.85, 0);
+        gear.add(noseLeg);
+        return gear;
+      }
+
+      function buildGround(scene) {
+        const grass = new THREE.Mesh(new THREE.PlaneGeometry(9000, 9000), new THREE.MeshStandardMaterial({ color: 0x6f8f4e, roughness: 1 }));
+        grass.rotation.x = -Math.PI / 2;
+        grass.position.y = -0.03;
+        scene.add(grass);
+        const runway = new THREE.Mesh(new THREE.PlaneGeometry(3200, 45), new THREE.MeshStandardMaterial({ color: 0x55585c, roughness: 1 }));
+        runway.rotation.x = -Math.PI / 2;
+        runway.position.set(200, 0, 0);
+        scene.add(runway);
+        const paint = new THREE.MeshBasicMaterial({ color: 0xf2f2f2 });
+        for (let x = -1400; x < 1800; x += 60) {
+          const dash = new THREE.Mesh(new THREE.PlaneGeometry(30, 0.9), paint);
+          dash.rotation.x = -Math.PI / 2;
+          dash.position.set(x, 0.01, 0);
+          scene.add(dash);
+        }
+        const lightMat = new THREE.MeshStandardMaterial({ color: 0xfff3c4, emissive: 0x665a20 });
+        for (let x = -1400; x < 1800; x += 60) {
+          for (const z of [-24, 24]) {
+            const post = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.45, 0.3), lightMat);
+            post.position.set(x, 0.225, z);
+            scene.add(post);
+          }
+        }
+        const surface = new THREE.Mesh(new THREE.BoxGeometry(3200, 0.09, 0.09), new THREE.MeshBasicMaterial({ color: 0xff7a00 }));
+        surface.position.set(200, 0.045, MAIN_TRACK + 0.9);
+        scene.add(surface);
+      }
+
+      function buildLaneScene(ctx) {
+        buildGround(ctx.scene);
+        const pivot = new THREE.Group();
+        pivot.add(orientModel(ctx.model), buildGear());
+        ctx.scene.add(pivot);
+        const tick = new THREE.Mesh(new THREE.BoxGeometry(7, 0.12, 0.12), new THREE.MeshBasicMaterial({ color: 0xe0182d }));
+        ctx.scene.add(tick);
+        ctx.pivot = pivot;
+        ctx.tick = tick;
+        ctx.camera.fov = 26;
+        ctx.camera.near = 0.5;
+        ctx.camera.far = 9000;
+        ctx.camera.updateProjectionMatrix();
+      }
+
+      const huds = [];
+
+      function ftText(m) {
+        return `${(m / FT).toFixed(1).padStart(6)} ft`;
+      }
+
+      function makeLane(index, label, caption, spec) {
+        let sim = null;
+        return {
+          label,
+          caption,
+          setup(ctx) {
+            buildLaneScene(ctx);
+            sim = simulate(spec);
+          },
+          update(ctx, t) {
+            const i = Math.min(Math.floor(t / DT), STEPS);
+            const { x, h, pitch } = truth(t);
+            const drawn = sim.drawn[i];
+            ctx.pivot.position.set(x, drawn, 0);
+            ctx.pivot.rotation.z = THREE.MathUtils.degToRad(pitch);
+            ctx.tick.position.set(x, h + 0.06, MAIN_TRACK + 1.4);
+            const dist = 70 + 1.5 * h;
+            ctx.camera.position.set(x - 2, 2 + 0.6 * h, dist);
+            ctx.camera.lookAt(x - 2, 3 + 0.6 * h, 0);
+            const hud = huds[index];
+            if (hud === undefined) return;
+            const contact = sim.contactAt[i] === 1;
+            const lines = [
+              `reported      ${ftText(h + R)}`,
+              `drawn wheels  ${ftText(drawn)}`,
+              `true wheels   ${ftText(h)}`,
+              `contact       <b class="${contact ? "on" : "off"}">${contact ? "ON" : "off"}</b>`,
+            ];
+            if (spec.showR) {
+              const known = !(t >= CUT && t < LEARN_AT);
+              lines.push(`R for A320    ${known ? "learned" : '<b class="off">not learned yet</b>'}`);
+            }
+            hud.innerHTML = lines.join("\n");
+          },
+        };
+      }
+
+      MockThree.lanes({
+        duration: DURATION,
+        lanes: [
+          makeLane(
+            0,
+            "A: smooth the step (as built)",
+            "In contact: wheels on the runway; out of contact: drawn at reported height; the switch eases over 0.25 s. Worst case: a 3 m hop at liftoff, a 3 m drop at touchdown, and airborne aircraft drawn 2.75 m high all flight.",
+            {
+              target: (s) => (s.contact ? ON_GROUND : s.h + R),
+              mode: (s) => String(s.contact),
+            },
+          ),
+          makeLane(
+            1,
+            "B: fade R out over the first 50 ft",
+            "Drawn = reported − R × (1 − clamp(height over rest / 50 ft)). No hop. Worst case: below 50 ft the climb and descent look about 18% steep; above 50 ft it is drawn 2.75 m high.",
+            {
+              target: (s) => (s.contact ? ON_GROUND : s.h + R * clamp01(s.h / FADE)),
+              mode: (s) => String(s.contact),
+            },
+          ),
+          makeLane(
+            2,
+            "C: subtract R whenever it is known",
+            "Drawn = reported − R, on the ground and in the air. Worst case, replayed on this approach: a type not learned yet is drawn 2.75 m high, then drops 2.75 m (eased 0.25 s) when it is learned at 19.5 s.",
+            {
+              showR: true,
+              target: (s) => (s.contact ? ON_GROUND : s.rKnown ? s.h : s.h + R),
+              mode: (s) => `${s.contact}/${s.rKnown}`,
+            },
+          ),
+        ],
+      });
+
+      for (const view of document.querySelectorAll(".mt-view")) {
+        const hud = document.createElement("div");
+        hud.className = "hud";
+        view.append(hud);
+        huds.push(hud);
+      }
+    </script>
+  </body>
+</html>
