@@ -581,7 +581,7 @@ Host (Tauri)                            Remote (Browser)
 
 ### Settings exposed to remote clients
 
-Both directions go through two functions in `settings.rs`, so a remote browser never reads or changes what only the host should hold, and no remote response body carries a host path: not the shared settings, the MSFS model routes (`/api/msfs/index`, `/api/msfs/models`, `/api/msfs/convert`), the mod routes (`/api/mods/*`), `/api/diagnostic` or `/api/airport-surfaces`, nor any error body:
+Both directions go through two functions in `settings.rs`, so a remote browser never reads a secret or changes what only the host should hold. Host paths are not treated as secret, and converted GLBs embed their MSFS source folders (`gltfPath`, `textureDirs`, `aircraftFolder`); these responses still carry none: the shared settings, the MSFS model routes (`/api/msfs/index`, `/api/msfs/models`, `/api/msfs/convert`), the mod routes (`/api/mods/*`), `/api/diagnostic` or `/api/airport-surfaces`, nor any error body:
 
 - **Read** (`remote_view`, used by the GET and by the POST's response): the settings with `realtraffic.licenseKey` and `vnasTokens` blanked, and `imagery.googleMapsApiKey` blanked unless `imagery.provider` is `google`. The Cesium ion token is kept: the remote viewer cannot start without it.
 

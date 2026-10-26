@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 TowerCab 3D is a Tauri 2 desktop application that provides a 3D tower cab view for VATSIM air traffic controllers. It displays real-time aircraft positions on a 3D globe with satellite imagery and terrain, featuring smooth camera controls, aircraft following modes, and extensive customization options.
 
-**Remote Browser Access:** The desktop app runs an HTTP server (port 8765) allowing access from browsers on the local network (iPad, tablets, other PCs), refusing other addresses unless `server.allowNonLocalClients` is on. All mods, models, and settings are served from the host. Global settings (Cesium token, bookmarks, datablock positions) are shared across devices; secrets (other than the Cesium token) and host folder paths stay on the host, no remote response carries a host path, and a remote write cannot change host-owned fields (see `docs/remote-access-architecture.md`, "Settings exposed to remote clients").
+**Remote Browser Access:** The desktop app runs an HTTP server (port 8765) allowing access from browsers on the local network (iPad, tablets, other PCs), refusing other addresses unless `server.allowNonLocalClients` is on. All mods, models, and settings are served from the host. Global settings (Cesium token, bookmarks, datablock positions) are shared across devices; secrets (other than the Cesium token) stay on the host, and a remote write cannot change host-owned fields or host folder paths. Host folder paths are not treated as secret: the shared settings blank them, but converted aircraft models embed their MSFS source folders (see `docs/remote-access-architecture.md`, "Settings exposed to remote clients").
 
 ## Plan
 
@@ -408,7 +408,7 @@ if (version < 7) {
    - The Rust backend deserializes/serializes settings to disk
    - Fields not in the Rust struct will be silently dropped when saving
    - Add `#[serde(default)]` for new optional fields
-   - Class the new field in `FIELD_CLASSES` (public, host-owned, host-private or secret; host-private, a path on the host, is blanked in the remote view and kept on a remote write) and, if not public, in `remote_view` / `merge_remote_write`; a test fails until every JSON path is classed. Anything a remote browser must not read or change (paths, keys, the `server` block) is not public
+   - Class the new field in `FIELD_CLASSES` (public, host-owned, host-private or secret; host-private, a path on the host, is blanked in the remote view and kept on a remote write) and, if not public, in `remote_view` / `merge_remote_write`; a test fails until every JSON path is classed. Anything a remote browser must not change (host paths, the `server` block) or read (keys) is not public
 5. Settings auto-sync via HTTP endpoints in remote mode
 
 ### Adding a New Keyboard Shortcut
