@@ -113,80 +113,80 @@ footer { color: var(--muted); font-size: 14px; display: grid; gap: 4px; }
 
   <section aria-labelledby="cases">
     <h2 id="cases">Test cases</h2>
-    <p class="note">Drag across each picture. The left side is today's app, the right side is the spike. Same camera and test weather in both.</p>
+    <p class="note">Drag across each picture. The left side is the v0.2.0-alpha release, the right side is the spike. Same camera and test weather in both.</p>
 
     <article class="case">
       <div class="case-head"><h3>1 · From the tower, broken layer</h3><span class="wx">BKN025 · 10SM</span></div>
       <div class="compare" style="--split:50%">
-        <img src="img/case1-off.webp" alt="Today: clear sky with the tower cab floating above its shaft and an aircraft below it" width="1280" height="720">
+        <img src="img/case1-off.webp" alt="v0.2.0-alpha: a thin streaky cloud sheet over the sky, the aircraft washed out in front of it" width="1280" height="720">
         <img class="top" src="img/case1-on-v2.webp" alt="Spike: a grey broken cloud deck behind the tower cab and an aircraft" width="1280" height="720">
-        <input type="range" min="0" max="100" value="50" aria-label="Compare today and the spike for case 1">
+        <input type="range" min="0" max="100" value="50" aria-label="Compare v0.2.0-alpha and the spike for case 1">
         <span class="divider"></span>
-        <span class="tag l">Today</span><span class="tag r">Spike</span>
+        <span class="tag l">v0.2.0-alpha</span><span class="tag r">Spike</span>
       </div>
       <div class="caption">
-        <div class="chips"><span class="chip ok">Cab and aircraft in front of the deck</span><span class="chip warn">Light band at the horizon</span><span class="chip bad">Not a fair cloud comparison</span></div>
-        <p>The Cesium cab sits on its shaft and the aircraft stays in front of the clouds. Today's side shows no clouds at all: the Babylon layers did not draw under the spike's test weather. The floating cab on the left is a separate bug, now being traced.</p>
+        <div class="chips"><span class="chip ok">Cab and aircraft in front of the deck</span><span class="chip warn">Light band at the horizon</span></div>
+        <p>The Cesium cab sits on its shaft and the aircraft stays in front of the clouds. The release draws the broken layer as a thin, streaky sheet painted over the whole view, so the aircraft in front of the deck is washed out by it.</p>
       </div>
     </article>
 
     <article class="case">
       <div class="case-head"><h3>2 · From the tower, low overcast and fog</h3><span class="wx">1/2SM FG · OVC008</span></div>
       <div class="compare" style="--split:50%">
-        <img src="img/case2-off.webp" alt="Today: flat grey fog hides everything including the nearby aircraft" width="1280" height="720">
+        <img src="img/case2-off.webp" alt="v0.2.0-alpha: flat grey fog hides everything including the nearby aircraft" width="1280" height="720">
         <img class="top" src="img/case2-on.webp" alt="Spike: a nearby aircraft stays clear while distant terrain fades into fog" width="1280" height="720">
-        <input type="range" min="0" max="100" value="50" aria-label="Compare today and the spike for case 2">
+        <input type="range" min="0" max="100" value="50" aria-label="Compare v0.2.0-alpha and the spike for case 2">
         <span class="divider"></span>
-        <span class="tag l">Today</span><span class="tag r">Spike</span>
+        <span class="tag l">v0.2.0-alpha</span><span class="tag r">Spike</span>
       </div>
       <div class="caption">
         <div class="chips"><span class="chip ok">Near aircraft clear, distance fades</span></div>
-        <p>The aircraft 400 m out stays readable and the terrain behind it fades with distance. Today's fog dome is one flat wall that hides the near aircraft too.</p>
+        <p>The aircraft 400 m out stays readable and the terrain behind it fades with distance. The release's fog dome is one flat wall that hides the near aircraft too.</p>
       </div>
     </article>
 
     <article class="case">
       <div class="case-head"><h3>3a · From above, aircraft over the deck</h3><span class="wx">OVC015 · camera 5000 ft · aircraft 3000 ft</span></div>
       <div class="compare" style="--split:50%">
-        <img src="img/case3a-off.webp" alt="Today: the airport shows through a translucent white wash" width="1280" height="720">
+        <img src="img/case3a-off.webp" alt="v0.2.0-alpha: the airport shows through a translucent white wash" width="1280" height="720">
         <img class="top" src="img/case3a-on.webp" alt="Spike: an opaque white deck with the aircraft visible on top of it" width="1280" height="720">
-        <input type="range" min="0" max="100" value="50" aria-label="Compare today and the spike for case 3a">
+        <input type="range" min="0" max="100" value="50" aria-label="Compare v0.2.0-alpha and the spike for case 3a">
         <span class="divider"></span>
-        <span class="tag l">Today</span><span class="tag r">Spike</span>
+        <span class="tag l">v0.2.0-alpha</span><span class="tag r">Spike</span>
       </div>
       <div class="caption">
         <div class="chips"><span class="chip ok">Aircraft above the deck stays visible</span><span class="chip warn">Flat white top</span></div>
-        <p>An overcast deck hides the ground, as it should, and the aircraft above it shows. Today the ground shows through a translucent wash. The deck's top has no relief yet.</p>
+        <p>An overcast deck hides the ground, as it should, and the aircraft above it shows. On the release the ground shows through a translucent wash and no deck draws. The deck's top has no relief yet.</p>
       </div>
     </article>
 
     <article class="case">
       <div class="case-head"><h3>3b · From above, aircraft under the deck</h3><span class="wx">OVC015 · camera 5000 ft · aircraft 1000 ft</span></div>
       <div class="compare" style="--split:50%">
-        <img src="img/case3b-off.webp" alt="Today: the airport shows through a translucent white wash" width="1280" height="720">
+        <img src="img/case3b-off.webp" alt="v0.2.0-alpha: the airport shows through a translucent white wash" width="1280" height="720">
         <img class="top" src="img/case3b-on.webp" alt="Spike: an opaque white deck hides the aircraft below it" width="1280" height="720">
-        <input type="range" min="0" max="100" value="50" aria-label="Compare today and the spike for case 3b">
+        <input type="range" min="0" max="100" value="50" aria-label="Compare v0.2.0-alpha and the spike for case 3b">
         <span class="divider"></span>
-        <span class="tag l">Today</span><span class="tag r">Spike</span>
+        <span class="tag l">v0.2.0-alpha</span><span class="tag r">Spike</span>
       </div>
       <div class="caption">
         <div class="chips"><span class="chip ok">Aircraft below the deck hidden</span></div>
-        <p>The aircraft under the overcast is hidden by it. Today it would show through the wash.</p>
+        <p>The aircraft under the overcast is hidden by it. On the release no deck draws, and the aircraft shows faintly through the wash.</p>
       </div>
     </article>
 
     <article class="case">
       <div class="case-head"><h3>4 · From the ground, hills into the cloud base</h3><span class="wx">BKN012</span></div>
       <div class="compare" style="--split:50%">
-        <img src="img/case4-off.webp" alt="Today: blue sky over the Oakland hills" width="1280" height="720">
+        <img src="img/case4-off.webp" alt="v0.2.0-alpha: a whitish streaky sheet over the sky above the Oakland hills" width="1280" height="720">
         <img class="top" src="img/case4-on.webp" alt="Spike: a grey cloud base that the hills cut into" width="1280" height="720">
-        <input type="range" min="0" max="100" value="50" aria-label="Compare today and the spike for case 4">
+        <input type="range" min="0" max="100" value="50" aria-label="Compare v0.2.0-alpha and the spike for case 4">
         <span class="divider"></span>
-        <span class="tag l">Today</span><span class="tag r">Spike</span>
+        <span class="tag l">v0.2.0-alpha</span><span class="tag r">Spike</span>
       </div>
       <div class="caption">
-        <div class="chips"><span class="chip ok">Hills hide the cloud base</span><span class="chip warn">Faint fringe on ridges</span><span class="chip bad">Not a fair cloud comparison</span></div>
-        <p>Where the hills rise into the cloud base, the hills win. The clouds render at half resolution, which leaves a faint white fringe along the ridge line. Today's side again drew no clouds.</p>
+        <div class="chips"><span class="chip ok">Hills hide the cloud base</span><span class="chip warn">Faint fringe on ridges</span></div>
+        <p>Where the hills rise into the cloud base, the hills win. The clouds render at half resolution, which leaves a faint white fringe along the ridge line. The release draws a whitish sheet over the sky with no base for the hills to cut into.</p>
       </div>
     </article>
   </section>
