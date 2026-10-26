@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 
 /** A Tauri-shaped window before the store modules load; see vnasStore.subscribe.test.ts. */
 const { invokeMock } = vi.hoisted(() => {
@@ -15,6 +15,7 @@ vi.mock('../src/renderer/stores/airportStore', () => ({
   useAirportStore: { getState: () => airportState },
 }))
 
+import { useAircraftTimelineStore } from '../src/renderer/stores/aircraftTimelineStore'
 import { useVnasStore } from '../src/renderer/stores/vnasStore'
 import type { VnasStatus } from '../src/renderer/types/vnas'
 import { getVnasErrorLine, getVnasSessionEndNote } from '../src/renderer/utils/vnasStatusText'
@@ -61,6 +62,14 @@ function heldFirstStatusRead(status: VnasStatus): { requested: Promise<void>; re
     return command === 'vnas_get_session_airports' ? hostAirports : null
   })
   return { requested, release }
+}
+
+/** Two aircraft the session in progress reports. */
+function twoSessionAircraft() {
+  return new Map([
+    ['OAK1', {} as never],
+    ['OAK2', {} as never],
+  ])
 }
 
 function subscribeCalls(): unknown[] {
@@ -250,5 +259,51 @@ describe('vnasStore.followSessionState', () => {
 
     expect(useVnasStore.getState().status.state).toBe('connected')
     expect(subscribeCalls()).toEqual(['SFO'])
+  })
+
+  it("drops the ended session's aircraft when the session ends to waiting", async () => {
+    useVnasStore.setState({ aircraftStates: twoSessionAircraft() })
+
+    await useVnasStore.getState().followSessionState('waitingForSession')
+
+    expect(useVnasStore.getState().aircraftStates.size).toBe(0)
+  })
+
+  it("strips the ended session's vNAS observations from the timeline when the session ends to waiting", async () => {
+    const dropSourceObservations = vi.spyOn(useAircraftTimelineStore.getState(), 'dropSourceObservations')
+    onTestFinished(() => dropSourceObservations.mockRestore())
+
+    await useVnasStore.getState().followSessionState('waitingForSession')
+
+    expect(dropSourceObservations).toHaveBeenCalledWith('vnas')
+  })
+
+  it("drops the old session's aircraft on a room switch and keeps the join's serial and follow", async () => {
+    // The store is in the old room session (connected): the switch reaches subscribing with no waitingForSession between
+    useVnasStore.setState({ aircraftStates: twoSessionAircraft(), followPending: false })
+    const serial = useVnasStore.getState().joinSerial
+
+    await useVnasStore.getState().followSessionState('subscribing')
+
+    const state = useVnasStore.getState()
+    expect(state.aircraftStates.size).toBe(0)
+    expect(state.joinSerial).toBe(serial + 1)
+    expect(state.followPending).toBe(true)
+  })
+
+  it("drops the ended session's aircraft on a disconnect", async () => {
+    useVnasStore.setState({ aircraftStates: twoSessionAircraft() })
+
+    await useVnasStore.getState().followSessionState('disconnected')
+
+    expect(useVnasStore.getState().aircraftStates.size).toBe(0)
+  })
+
+  it('keeps the aircraft through a state that is not a session change', async () => {
+    useVnasStore.setState({ aircraftStates: twoSessionAircraft() })
+
+    await useVnasStore.getState().followSessionState('connected')
+
+    expect(useVnasStore.getState().aircraftStates.size).toBe(2)
   })
 })
