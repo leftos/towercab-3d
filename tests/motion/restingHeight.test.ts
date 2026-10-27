@@ -3,12 +3,12 @@
  * vNAS reports the height above ground of a reference point, so an aircraft at rest reads its resting height, which
  * varies by type and by simulator (TC3D-316, TC3D-354): one A320 was measured live at 9.0 ft and another at -0.31 ft;
  * the scenarios here use A320 9.0 ft, B77L 13.6 ft and C17 5.9 ft. Contact is decided on the height over the
- * aircraft's own resting height, else its type's, once one is learned from slow vNAS samples. With neither, the drop
- * rule decides: contact at or below 16 ft once the rate has stayed flat for 1 s after a descent, the drawn height
- * easing over 1 s of display time.
+ * aircraft's own resting height, else its type's, once one is learned from slow vNAS samples. With neither, lane B
+ * decides (`laneB.test.ts`): contact at or below 16 ft once a run of samples has settled after a descent, then over a
+ * provisional resting height taken from the run, the drawn height easing over 1 s of display time.
  */
 import { describe, expect, it, vi } from 'vitest'
-import { DROP_CONTACT_EASE_MS, DROP_CONTACT_FLAT_MS, DROP_CONTACT_RATE_WINDOW_MS } from '@/constants'
+import { DROP_CONTACT_EASE_MS } from '@/constants'
 import type { AircraftDataSource, AircraftMetadata, AircraftObservation } from '@/types/aircraft-timeline'
 import type { PilotData } from '@/types/vatsim'
 import {
@@ -35,8 +35,8 @@ const LOW_PASS_FT = 40
 const LOW_PASS_CHECK_MAX_AGL_M = 100 * 0.3048
 // The 3 ft entry is reached before touchdown: the sim's flare sinks at 2 ft/s below 4.8 ft (measured lead 1.53 s)
 const LEARNED_TOUCHDOWN_LAG_MAX_S = 1.6
-// The drop rule waits for the rate window to fill, then for the rate to stay within 1 ft/s of 0 for its flat time
-const DROP_RULE_TOUCHDOWN_LAG_MAX_S = (DROP_CONTACT_RATE_WINDOW_MS + DROP_CONTACT_FLAT_MS) / 1000
+// An arrival whose type has no resting height enters contact within this long of its displayed touchdown (TC3D-246)
+const LANE_B_TOUCHDOWN_LAG_MAX_S = 2.5
 const FLARE_CHECK_MAX_AGL_M = 15 // FLARE_START_ALTITUDE_METERS
 const FLARE_PITCH_DIFF_MAX_DEG = 0.01
 const TAXI_SEGMENTS = ['taxi_straight1', 'taxi_turn_left', 'taxi_straight2', 'taxi_turn_right_lineup']
@@ -108,7 +108,11 @@ it('a taxiing B77L reporting 13.6 ft at rest is in contact', () => {
   expect(taxi.filter((r) => r.inContact !== true).length, 'taxi frames out of contact').toBe(0)
 })
 
-it(`a learned A320 rollout enters contact on the frame a 0 ft aircraft does, within ${LEARNED_TOUCHDOWN_LAG_MAX_S} s of its reported touchdown`, () => {
+const LEARNED_ROLLOUT_TITLE =
+  'a learned A320 rollout enters contact on the frame a 0 ft aircraft does, ' +
+  `within ${LEARNED_TOUCHDOWN_LAG_MAX_S} s of its reported touchdown`
+
+it(LEARNED_ROLLOUT_TITLE, () => {
   const lag = touchdownLag(learned)
   expect(lag, 'contact entry against an aircraft that reads 0 ft at rest').toBe(touchdownLag(zeroRest))
   expect(Math.abs(lag), `contact ${lag.toFixed(2)} s after the reported touchdown`).toBeLessThanOrEqual(
@@ -116,11 +120,11 @@ it(`a learned A320 rollout enters contact on the frame a 0 ft aircraft does, wit
   )
 })
 
-it(`an unlearned type's first arrival enters contact by the drop rule within ${DROP_RULE_TOUCHDOWN_LAG_MAX_S} s of touchdown`, () => {
+it(`an unlearned type's first arrival enters contact by lane B within ${LANE_B_TOUCHDOWN_LAG_MAX_S} s of touchdown`, () => {
   const lag = touchdownLag(unlearned)
   expect(lag, 'contact before the reported touchdown').toBeGreaterThanOrEqual(0)
   expect(lag, `contact ${lag.toFixed(2)} s after the reported touchdown`).toBeLessThanOrEqual(
-    DROP_RULE_TOUCHDOWN_LAG_MAX_S,
+    LANE_B_TOUCHDOWN_LAG_MAX_S,
   )
 })
 
@@ -252,21 +256,6 @@ it(`an unlearned A320 on a level pass at ${LEVEL_PASS.ft} ft never enters contac
   expect(low.filter((r) => r.inContact === true).length, 'low-pass frames in contact').toBe(0)
 })
 
-describe('lane B: contact while the aircraft has no resting height', () => {
-  // No scenario flies this type, so its resting height is never learned and the drop rule decides
-  const UNLEARNED_TYPE = 'C5M'
-
-  it('a climb, then 3.5 s level at 11 ft, does not enter contact: the last rate that was not flat was not a descent', async () => {
-    const { updateContact } = await import('@/hooks/useAircraftInterpolation')
-    expect(updateContact('CLIMB1', 5 * FT, UNLEARNED_TYPE, 0)).toBe(false)
-    expect(updateContact('CLIMB1', 8 * FT, UNLEARNED_TYPE, 500)).toBe(false)
-    expect(updateContact('CLIMB1', 11 * FT, UNLEARNED_TYPE, 1_000), 'climbing at 6 ft/s').toBe(false)
-    for (let t = 1_500; t <= 4_500; t += 500) {
-      expect(updateContact('CLIMB1', 11 * FT, UNLEARNED_TYPE, t), `level at 11 ft, ${t} ms`).toBe(false)
-    }
-  })
-})
-
 // The terrain clamp draws an aircraft in contact this far over the ground (GROUND_AIRCRAFT_TERRAIN_OFFSET)
 const CLAMPED_GROUND_M = 0.1
 const EASE_QUARTER_S = 0.25
@@ -337,8 +326,8 @@ it("an aircraft decides contact by its own resting height, not its type's", asyn
   for (let t = 0; t < 3; t++) store.addObservation('REST0', stoppedVnasSample(t, 0), metadata)
   const updateContact = (await import('@/hooks/useAircraftInterpolation')).updateContact
   // 6 ft over its own 0 ft is out of contact; over the type's 9 ft (median of six 9s and three 0s) it is -3 ft, in it
-  expect(updateContact('REST0', 6 * FT, type, 0), 'REST0 at a raw 6 ft').toBe(false)
-  expect(updateContact('REST9', 6 * FT, type, 0), 'REST9 at a raw 6 ft').toBe(true)
+  expect(updateContact('REST0', 6 * FT, type, 0, undefined), 'REST0 at a raw 6 ft').toBe(false)
+  expect(updateContact('REST9', 6 * FT, type, 0, undefined), 'REST9 at a raw 6 ft').toBe(true)
 })
 
 /** A stationary sample at second `t` from `source`, reporting `heightFt`; only a vNAS sample reports a height. */
@@ -394,7 +383,7 @@ describe("a vNAS aircraft's type while VATSIM files another", () => {
     }
     const { updateContact } = await import('@/hooks/useAircraftInterpolation')
     // Over its own 0 ft, 6 ft is out of contact; over B77W's 9 ft it would be -3 ft, in contact
-    expect(updateContact('WAT2918', 6 * FT, typeOf(), 0), 'WAT2918 at a raw 6 ft').toBe(false)
+    expect(updateContact('WAT2918', 6 * FT, typeOf(), 0, undefined), 'WAT2918 at a raw 6 ft').toBe(false)
   })
 
   it("vNAS samples feed the vNAS type's pool while VATSIM reports another type", async () => {
@@ -605,7 +594,7 @@ describe("a vNAS aircraft's type while VATSIM files another", () => {
 
 const LIFTOFF_EXIT_LAG_MAX_S = 1.1
 
-it(`an unlearned B77L first seen by vNAS on its takeoff roll leaves contact by the drop rule within ${LIFTOFF_EXIT_LAG_MAX_S} s of liftoff`, () => {
+it(`an unlearned B77L first seen by vNAS on its takeoff roll leaves contact by lane B within ${LIFTOFF_EXIT_LAG_MAX_S} s of liftoff`, () => {
   const recs = frames(lateFeed, 'DEP1')
   const airborne = recs.filter((r) => r.truth.agl > AIRBORNE_CHECK_MIN_AGL_M && r.inContact === false)
   expect(airborne.length).toBeGreaterThan(1000)
@@ -621,28 +610,52 @@ it(`an unlearned B77L first seen by vNAS on its takeoff roll leaves contact by t
   expect(lag, `contact left ${lag.toFixed(2)} s after liftoff`).toBeLessThanOrEqual(LIFTOFF_EXIT_LAG_MAX_S)
 })
 
-describe('the drop rule over a jump in the displayed time', () => {
-  // No scenario flies this type, so its resting height is never learned and the drop rule decides
-  const UNLEARNED_TYPE = 'C5M'
-  const contact = async () => (await import('@/hooks/useAircraftInterpolation')).updateContact
+// Out of contact, the full provisional resting height is taken off the drawn height up to this raw height
+// (DROP_CONTACT_EXIT_HEIGHT_METERS), fading to none at the raw height it is dropped above (100 ft)
+const PROVISIONAL_REST_DROP_M = 25 * FT
+const PROVISIONAL_REST_FADE_TOP_M = 100 * FT
+// The flying offset the drawn height carries near the ground (GROUND_AIRCRAFT_TERRAIN_OFFSET)
+const FLYING_OFFSET_MAX_M = 0.1
+// The 1 s contact-change smoothstep from the clamped ground adds at most 1.5 x 17 ms / 1 s of its gap to the target
+// (under 5 m on this climb-out) to one frame's step: 0.13 m
+const EXIT_EASE_STEP_MAX_M = 0.15
 
-  it('a jump forward past twice the rate window does not enter contact on that frame', async () => {
-    const updateContact = await contact()
-    expect(updateContact('JUMP1', 100 * FT, UNLEARNED_TYPE, 0)).toBe(false)
-    expect(updateContact('JUMP1', 15 * FT, UNLEARNED_TYPE, 600_000), 'the frame after a 10 min jump').toBe(false)
-    expect(updateContact('JUMP1', 15 * FT, UNLEARNED_TYPE, 601_000), 'steady at 15 ft over the next 1 s').toBe(false)
-    expect(updateContact('JUMP1', 15 * FT, UNLEARNED_TYPE, 602_000), 'its rate flat for 1 s').toBe(true)
-  })
+it('an unlearned B77L climbing out by lane B rises no faster than its climb plus the fade, and is drawn at its raw height above 100 ft', () => {
+  const recs = frames(lateFeed, 'DEP1')
+  const liftoff = lateFeed.flights.find((f) => f.callsign === 'DEP1')?.events.initial_climb ?? Number.NaN
+  const leave = recs.findIndex((r) => r.tLocal >= liftoff && r.inContact === false)
+  expect(leave, 'a frame out of contact after liftoff').toBeGreaterThan(0)
+  const rawOf = (r: FrameRecord) => r.truth.agl + B77L_REST_M
+  const top = recs.findIndex((r, i) => i >= leave && rawOf(r) > PROVISIONAL_REST_FADE_TOP_M)
+  expect(top, 'a frame above 100 ft raw').toBeGreaterThan(leave)
+  // Drawn height is the raw height less 13.6 ft x the fade, so it climbs (1 + 13.6 ft / 75 ft) times as fast as raw
+  const fadeSlope = 1 + B77L_REST_M / (PROVISIONAL_REST_FADE_TOP_M - PROVISIONAL_REST_DROP_M)
+  let worst = Number.NEGATIVE_INFINITY
+  for (let i = leave + 1; i <= top; i++) {
+    const allowed = Math.max(0, rawOf(recs[i]) - rawOf(recs[i - 1])) * fadeSlope + EXIT_EASE_STEP_MAX_M
+    worst = Math.max(worst, recs[i].agl - recs[i - 1].agl - allowed)
+  }
+  expect(worst, `a frame rose ${worst.toFixed(3)} m past its climb and the fade`).toBeLessThanOrEqual(0)
+  const above = recs.slice(top).filter((r) => r.inContact === false && r.truth.agl < AIRBORNE_CHECK_MIN_AGL_M * 3)
+  expect(above.length, 'frames above 100 ft raw').toBeGreaterThan(30)
+  // The shown altitude adds back what is taken off the drawn height, so the two agree once nothing is taken off
+  const off = above.reduce((m, r) => Math.max(m, Math.abs(r.agl - r.reportedAgl)), 0)
+  expect(off, `drawn ${off.toFixed(3)} m under its raw height above 100 ft`).toBeLessThanOrEqual(DRAWN_HEIGHT_DIFF_MAX_M)
+})
 
-  it('display time going back restarts the rate: no contact until 1 s of frames is in again and its rate is flat for 1 s', async () => {
-    const updateContact = await contact()
-    expect(updateContact('BACK1', 19 * FT, UNLEARNED_TYPE, 10_000)).toBe(false)
-    expect(updateContact('BACK1', 17 * FT, UNLEARNED_TYPE, 10_500)).toBe(false)
-    expect(updateContact('BACK1', 15 * FT, UNLEARNED_TYPE, 11_000), 'sinking at 4 ft/s').toBe(false)
-    expect(updateContact('BACK1', 10 * FT, UNLEARNED_TYPE, 5_000), 'the frame after going back').toBe(false)
-    expect(updateContact('BACK1', 10 * FT, UNLEARNED_TYPE, 5_500), 'half the window refilled').toBe(false)
-    expect(updateContact('BACK1', 10 * FT, UNLEARNED_TYPE, 6_000), 'the window refilled').toBe(false)
-    expect(updateContact('BACK1', 10 * FT, UNLEARNED_TYPE, 6_500), 'its rate flat for 0.5 s').toBe(false)
-    expect(updateContact('BACK1', 10 * FT, UNLEARNED_TYPE, 7_000), 'its rate flat for 1 s').toBe(true)
-  })
+it('an unlearned B77L leaving contact by lane B is drawn its provisional resting height lower, not lifted by it', () => {
+  const recs = frames(lateFeed, 'DEP1')
+  const liftoff = lateFeed.flights.find((f) => f.callsign === 'DEP1')?.events.initial_climb ?? Number.NaN
+  const leave = recs.findIndex((r) => r.tLocal >= liftoff && r.inContact === false)
+  expect(leave, 'a frame out of contact after liftoff').toBeGreaterThan(0)
+  // vNAS reports the truth's height plus the type's 13.6 ft; the roll read 13.6 ft, the provisional resting height
+  const rawOf = (r: FrameRecord) => r.truth.agl + B77L_REST_M
+  const end = recs.findIndex((r, i) => i >= leave && rawOf(r) > PROVISIONAL_REST_DROP_M)
+  const out = recs.slice(leave, end < 0 ? recs.length : end)
+  expect(out.length, 'frames out of contact below the drop height').toBeGreaterThan(5)
+  // The exit eases up toward the raw height less the provisional resting height, the truth's height
+  const worst = out.reduce((m, r) => Math.max(m, r.agl - r.truth.agl), Number.NEGATIVE_INFINITY)
+  expect(worst, `drawn ${worst.toFixed(3)} m over the reported height less 13.6 ft`).toBeLessThanOrEqual(
+    FLYING_OFFSET_MAX_M + DRAWN_HEIGHT_DIFF_MAX_M,
+  )
 })

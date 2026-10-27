@@ -77,7 +77,9 @@ export const VNAS_PREFERENCE_THRESHOLD_MS = 30000 // 30 seconds
 
 /**
  * Ground contact is entered below this height over the aircraft's resting height, its own else its type's (3 ft).
- * While the aircraft has neither, the drop rule decides contact instead (`DROP_CONTACT_*`).
+ * While the aircraft has neither, lane B decides contact instead (`DROP_CONTACT_*`) over a provisional resting height
+ * by the same rule; it also takes this as the most a settled run of samples may move and as the move that turns its
+ * descent memory.
  */
 export const CONTACT_ENTER_HEIGHT_METERS = 3 * 0.3048
 
@@ -105,32 +107,34 @@ export const RESTING_HEIGHT_MIN_SAMPLES = 3
 /** While an aircraft has no resting height, contact is entered only at or below this raw height (16 ft) */
 export const DROP_CONTACT_MAX_HEIGHT_METERS = 16 * 0.3048
 
-/** While an aircraft has no resting height, contact is left above this raw height (25 ft) */
+/**
+ * While an aircraft has no resting height, contact is left above this raw height (25 ft); out of contact, the share of
+ * its provisional resting height taken off the drawn height fades from all of it here to none at
+ * DROP_CONTACT_REST_DROP_HEIGHT_METERS
+ */
 export const DROP_CONTACT_EXIT_HEIGHT_METERS = 25 * 0.3048
 
+/** While an aircraft has no resting height, its provisional resting height is dropped above this raw height (100 ft) */
+export const DROP_CONTACT_REST_DROP_HEIGHT_METERS = 100 * 0.3048
+
 /**
- * While an aircraft has no resting height, contact is entered once the height's rate has stayed within
- * DROP_CONTACT_STEADY_RATE_MPS of 0 for this long (ms) since its last descent
+ * While an aircraft has no resting height, contact is entered on the shortest run of its height samples ending at the
+ * bracket's newest readable sample that holds at least DROP_CONTACT_SETTLE_MIN_SAMPLES samples spanning at least this
+ * long (ms)
  */
-export const DROP_CONTACT_FLAT_MS = 1000
+export const DROP_CONTACT_SETTLE_SPAN_MS = 2500
+
+/** The fewest height samples in the run contact is entered on while an aircraft has no resting height */
+export const DROP_CONTACT_SETTLE_MIN_SAMPLES = 3
+
+/**
+ * While an aircraft has no resting height, display time going back or jumping forward more than this (ms) drops its
+ * provisional resting height and restarts its contact as at first sight
+ */
+export const DROP_CONTACT_SEEK_MS = 2000
 
 /** While an aircraft has no resting height, a change of contact eases its drawn height over this long (ms) */
 export const DROP_CONTACT_EASE_MS = 1000
-
-/** Span of frames over which the drop rule measures the height's rate (ms) */
-export const DROP_CONTACT_RATE_WINDOW_MS = 1000
-
-/**
- * The drop rule's frames may span at most this long (ms); a longer span (a paused frame loop, a seek forward) starts
- * them again, since a rate over it says nothing about the height now
- */
-export const DROP_CONTACT_RATE_MAX_SPAN_MS = 2 * DROP_CONTACT_RATE_WINDOW_MS
-
-/** The drop rule enters contact while the height's rate stays within this many m/s of 0 (1 ft/s) */
-export const DROP_CONTACT_STEADY_RATE_MPS = 1 * 0.3048
-
-/** The drop rule leaves contact when the height rises faster than this (3 ft/s, in m/s) */
-export const DROP_CONTACT_EXIT_RATE_MPS = 3 * 0.3048
 
 /** Time over which an aircraft's drawn height eases when its resting height (its own, else its type's) changes (ms) */
 export const RESTING_HEIGHT_EASE_MS = 250

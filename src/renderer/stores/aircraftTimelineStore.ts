@@ -29,6 +29,8 @@ import {
   AIRCRAFT_TIMEOUT,
   CADENCE_ANY_MOTION_MAX_MS,
   CONTACT_EXIT_HEIGHT_METERS,
+  DROP_CONTACT_SETTLE_MIN_SAMPLES,
+  DROP_CONTACT_SETTLE_SPAN_MS,
   DYNAMIC_DELAY_EXTRAPOLATION_BUMP_MS,
   DYNAMIC_DELAY_EXTRAPOLATION_DECAY_RATE,
   DYNAMIC_DELAY_INTERVAL_WINDOW,
@@ -67,6 +69,7 @@ import type {
   AircraftObservation,
   AircraftTimeline,
   DynamicDelayState,
+  SettleRun,
   TimelineInterpolationResult,
 } from '../types/aircraft-timeline'
 import { mergeAircraftMetadata } from '../types/aircraft-timeline'
@@ -551,7 +554,10 @@ interface ReportedTypes {
   newestNonVnas: string | null
 }
 
-/** What each source last named, per callsign, for as long as its timeline lives (`forgetAircraftRest`); never serialized. */
+/**
+ * What each source last named, per callsign, for as long as its timeline lives (`forgetAircraftRest`); never
+ * serialized.
+ */
 const reportedTypesByCallsign = new Map<string, ReportedTypes>()
 
 /** Forget an aircraft's own resting height and the types its sources named, as when its timeline is removed. */
@@ -671,6 +677,49 @@ function heightAboveGroundAt(
     return lerp(before.heightAboveGround, after.heightAboveGround, t)
   }
   return (before ?? after)?.heightAboveGround ?? null
+}
+
+/**
+ * The run of height samples contact is entered on while an aircraft has no resting height: going back from `end` over
+ * the drawn list, the shortest run of at least DROP_CONTACT_SETTLE_MIN_SAMPLES samples spanning at least
+ * DROP_CONTACT_SETTLE_SPAN_MS. Exported for tests.
+ *
+ * @param observations - The drawn list, oldest first
+ * @param end - The bracket's `after` sample while interpolating, else its `before` sample; null for no run
+ * @returns The run's lowest, second-lowest and highest heights, or undefined when the samples back to the list's start
+ *   do not span the run or a sample in the run carries no height
+ */
+export function settleRunEndingAt(
+  observations: AircraftObservation[],
+  end: AircraftObservation | null,
+): SettleRun | undefined {
+  if (end === null) return undefined
+  const endIndex = observations.lastIndexOf(end)
+  if (endIndex < 0) return undefined
+  const run = {
+    lowest: Number.POSITIVE_INFINITY,
+    secondLowest: Number.POSITIVE_INFINITY,
+    highest: Number.NEGATIVE_INFINITY,
+  }
+  for (let i = endIndex; i >= 0; i--) {
+    const height = observations[i].heightAboveGround
+    if (height === undefined) return undefined
+    addToSettleRun(run, height)
+    const spans = end.observedAt - observations[i].observedAt >= DROP_CONTACT_SETTLE_SPAN_MS
+    if (spans && endIndex - i + 1 >= DROP_CONTACT_SETTLE_MIN_SAMPLES) return run
+  }
+  return undefined
+}
+
+/** Take one more sample's height into a run's lowest, second-lowest and highest heights. */
+function addToSettleRun(run: SettleRun, height: number): void {
+  if (height < run.lowest) {
+    run.secondLowest = run.lowest
+    run.lowest = height
+  } else if (height < run.secondLowest) {
+    run.secondLowest = height
+  }
+  run.highest = Math.max(run.highest, height)
 }
 
 /**
@@ -1283,7 +1332,9 @@ function interpolateTimeline(
           const ts = new Date().toISOString().slice(11, 23)
           const reason = anchorChanged ? 'ANCHOR_SHIFT' : 'NEW_TARGET'
           console.log(
-            `[Interp] ${ts} ${callsign} ${reason} - using lastRenderedPos (${lastRenderedPos.latitude.toFixed(4)}, ${lastRenderedPos.longitude.toFixed(4)}) targetObs=${after.observedAt}`,
+            `[Interp] ${ts} ${callsign} ${reason} - using lastRenderedPos ` +
+              `(${lastRenderedPos.latitude.toFixed(4)}, ${lastRenderedPos.longitude.toFixed(4)}) ` +
+              `targetObs=${after.observedAt}`,
           )
         }
       } else {
@@ -1301,7 +1352,8 @@ function interpolateTimeline(
         if (callsign === debugState.__interpDebugCallsign) {
           const ts = new Date().toISOString().slice(11, 23)
           console.log(
-            `[Interp] ${ts} ${callsign} NEW TARGET - NO lastRenderedPos, using before (${before.latitude.toFixed(4)}, ${before.longitude.toFixed(4)}) targetObs=${after.observedAt}`,
+            `[Interp] ${ts} ${callsign} NEW TARGET - NO lastRenderedPos, using before ` +
+              `(${before.latitude.toFixed(4)}, ${before.longitude.toFixed(4)}) targetObs=${after.observedAt}`,
           )
         }
       }
@@ -1566,6 +1618,10 @@ function interpolateTimeline(
   }
 
   const heightAboveGround = heightAboveGroundAt(allObservations, before, after, displayTime, now)
+  // The run reads samples up to the bracket's `after`, never beyond; while extrapolating or held, up to `before`
+  // and only lane B (no resting height learned) reads it
+  const laneB = heightAboveGround !== null && restingHeightFor(callsign, metadata.aircraftType) === null
+  const settleRun = laneB ? settleRunEndingAt(observations, before && after ? after : before) : undefined
 
   return {
     result: {
@@ -1580,6 +1636,7 @@ function interpolateTimeline(
       // Extended ADS-B data
       onGround: drawingGroundFlag(groundFlagSource, heightAboveGround),
       heightAboveGround,
+      settleRun,
       pitch,
       roll,
       verticalRate,

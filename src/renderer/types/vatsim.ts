@@ -236,9 +236,11 @@ export interface InterpolatedAircraftState extends AircraftState {
   heightAboveGround: number | null
   /**
    * Ground contact decided per frame. From `heightAboveGround` when the source reports it: entered within 3 ft of
-   * the type's resting height and left above 5 ft over it once that is learned; until then, entered when the height
-   * under 20 ft stops changing (within 1 ft/s over 1 s) and left above 25 ft or on a climb over 3 ft/s. Otherwise
-   * from the drawn result of the landing and departure height blends (drawn more than halfway onto the terrain).
+   * the aircraft's resting height (its own, else its type's) and left above 5 ft over it once that is learned; until
+   * then, entered at or below 16 ft after a descent once a run of samples (3 or more over 2.5 s) moves no more than
+   * 3 ft, then decided the same way over a provisional resting height taken from the run, dropped above 25 ft.
+   * Otherwise from the drawn result of the landing and departure height blends (drawn more than halfway onto the
+   * terrain).
    * Null only before the aircraft's first drawn frame.
    */
   inContact: boolean | null

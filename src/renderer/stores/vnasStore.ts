@@ -26,8 +26,8 @@ const speedHistory = new Map<string, number[]>()
  * The flag is for labels only: drawn height, pitch and ground contact come from the height above ground each
  * observation carries (`heightAboveGround`, raw: vNAS measures a reference point, so an aircraft at rest reads its
  * resting height, which varies by type and by simulator). The interpolation loop measures it over the aircraft's
- * learned resting height (its own, else its type's; `utils/aircraft/restingHeight.ts`), or uses the drop rule while it
- * has none, to decide contact per frame.
+ * learned resting height (its own, else its type's; `utils/aircraft/restingHeight.ts`), or over a provisional resting
+ * height taken from a settled run of samples (lane B) while it has none, to decide contact per frame.
  * The hysteresis keeps the flag from toggling when AGL oscillates near the threshold.
  *
  * Enter ground: AGL < 50ft, Exit ground: AGL > 80ft

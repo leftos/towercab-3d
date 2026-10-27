@@ -48,7 +48,7 @@ export interface AircraftObservation {
    * aircraft's reference point, so an aircraft at rest reads its resting height, which varies by type and simulator).
    * Absent for VATSIM and RealTraffic; replay carries what was recorded. Slow vNAS samples from -3 to 16 ft teach the
    * aircraft's own resting height and its type's; ground contact, the parked test and the flare use the height over the
-   * aircraft's own, else its type's (`heightOverRest`). While it has neither, the drop rule decides contact and the
+   * aircraft's own, else its type's (`heightOverRest`). While it has neither, lane B decides contact and the
    * parked test and the flare take the raw height.
    */
   heightAboveGround?: number
@@ -204,6 +204,14 @@ export interface AircraftTimeline {
   lastReceivedAt: number
 }
 
+/** Heights above ground (metres) of the run of samples contact is entered on while an aircraft has no resting height */
+export interface SettleRun {
+  lowest: number
+  /** The second-lowest sample's height; the provisional resting height is taken from it */
+  secondLowest: number
+  highest: number
+}
+
 /**
  * Result of timeline interpolation/extrapolation.
  * Contains the computed position and debug info.
@@ -239,6 +247,14 @@ export interface TimelineInterpolationResult {
    * than `VNAS_PREFERENCE_THRESHOLD_MS`.
    */
   heightAboveGround: number | null
+
+  /**
+   * The run of height samples contact is entered on while the aircraft has no resting height: the shortest run of the
+   * drawn list's samples ending at the bracket's `after` sample (its `before` sample while extrapolating or held) that
+   * holds at least DROP_CONTACT_SETTLE_MIN_SAMPLES samples spanning at least DROP_CONTACT_SETTLE_SPAN_MS. Undefined
+   * when the samples do not span it or a sample in it carries no height.
+   */
+  settleRun: SettleRun | undefined
 
   /**
    * Pitch angle in degrees (interpolated from observations if available).

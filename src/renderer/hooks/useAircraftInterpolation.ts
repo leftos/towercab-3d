@@ -10,12 +10,9 @@ import {
   DEPARTURE_BLEND_START_AGL,
   DROP_CONTACT_EASE_MS,
   DROP_CONTACT_EXIT_HEIGHT_METERS,
-  DROP_CONTACT_EXIT_RATE_MPS,
-  DROP_CONTACT_FLAT_MS,
   DROP_CONTACT_MAX_HEIGHT_METERS,
-  DROP_CONTACT_RATE_MAX_SPAN_MS,
-  DROP_CONTACT_RATE_WINDOW_MS,
-  DROP_CONTACT_STEADY_RATE_MPS,
+  DROP_CONTACT_REST_DROP_HEIGHT_METERS,
+  DROP_CONTACT_SEEK_MS,
   FALLBACK_FLARE_PITCH_DEGREES,
   FLARE_START_ALTITUDE_METERS,
   GROUND_AIRCRAFT_TERRAIN_OFFSET,
@@ -41,7 +38,7 @@ import { geoidService } from '../services/GeoidService'
 import { useAircraftTimelineStore } from '../stores/aircraftTimelineStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useVatsimStore } from '../stores/vatsimStore'
-import type { TimelineInterpolationResult } from '../types/aircraft-timeline'
+import type { SettleRun, TimelineInterpolationResult } from '../types/aircraft-timeline'
 import type { InterpolatedAircraftState } from '../types/vatsim'
 import { angleDifference, calculateDistanceNM, calculateFlarePitch } from '../utils/geoMath'
 import { performanceMonitor } from '../utils/performanceMonitor'
@@ -119,107 +116,168 @@ const sharedTimelineRateStateRef = { current: new Map<string, TimelineRateState>
 /** Ground contact per aircraft with a height above ground, kept for the hysteresis */
 const sharedContactStateRef = { current: new Map<string, boolean>() }
 
-/** A frame's height above ground at its displayed instant, for the drop rule's rate */
-interface HeightFrame {
-  time: number
-  height: number
-}
-
-/** Per aircraft with a height above ground, the frames spanning the drop rule's rate window, oldest first */
-const sharedDropRuleFramesRef = { current: new Map<string, HeightFrame[]>() }
-
-/** An aircraft's drop-rule frames, or none when the displayed instant is earlier than the newest (a replay scrubbed back) */
-function dropRuleFramesAt(callsign: string, time: number): HeightFrame[] {
-  const frames = sharedDropRuleFramesRef.current.get(callsign) ?? []
-  const newest = frames[frames.length - 1]
-  return newest && time < newest.time ? [] : frames
-}
-
-/**
- * Rate of the height above ground (m/s) over the last DROP_CONTACT_RATE_WINDOW_MS of displayed time, from the newest
- * frame at least that old to this one. Null until the frames span the window; a displayed instant earlier than the
- * last (a replay scrubbed back) or a span over DROP_CONTACT_RATE_MAX_SPAN_MS (a paused frame loop, a seek forward)
- * starts the span again.
- */
-function updateHeightRate(callsign: string, time: number, height: number): number | null {
-  let frames = dropRuleFramesAt(callsign, time)
-  const newest = frames[frames.length - 1]
-  if (newest === undefined || time > newest.time) frames.push({ time, height })
-  while (frames.length > 1 && frames[1].time <= time - DROP_CONTACT_RATE_WINDOW_MS) frames.shift()
-  if (time - frames[0].time > DROP_CONTACT_RATE_MAX_SPAN_MS) frames = [{ time, height }]
-  sharedDropRuleFramesRef.current.set(callsign, frames)
-  const span = time - frames[0].time
-  return span < DROP_CONTACT_RATE_WINDOW_MS ? null : ((height - frames[0].height) * 1000) / span
-}
-
-/** What the drop rule remembers of an aircraft's height rate between frames */
-interface DropRuleState {
-  /** Display time of the first frame of the current run of flat rates, or null while the rate is not flat */
-  flatSince: number | null
-  /** Whether the last rate that was not flat was a descent; true for an aircraft first seen */
-  afterDescent: boolean
-  /** Display time of the last frame, to see it go back */
+/** What lane B remembers of an aircraft that has no resting height of its own or of its type */
+interface LaneBState {
+  /**
+   * Descent memory: the lowest height (m) since the height last turned down while `descending`, else the highest since
+   * it last turned up. A move of more than CONTACT_ENTER_HEIGHT_METERS past it turns the direction.
+   */
+  reference: number
+  descending: boolean
+  /** The provisional resting height (m) taken from the run contact was entered on, or null before an entry */
+  provisionalRest: number | null
+  /** Display time of the last frame, to see it go back or jump */
   lastTime: number
 }
 
-/** Per aircraft with a height above ground, the drop rule's memory of its rate */
-const sharedDropRuleStateRef = { current: new Map<string, DropRuleState>() }
+/** Per aircraft with a height above ground and no resting height, lane B's memory */
+const sharedLaneBStateRef = { current: new Map<string, LaneBState>() }
 
 /**
- * Update the drop rule's memory with this frame's rate: a flat rate (within DROP_CONTACT_STEADY_RATE_MPS of 0) extends
- * the run of flat rates, one that is not ends it and records whether it was a descent, and a frame without a rate ends
- * it and records nothing. An aircraft first seen, or whose display time goes back, starts as after a descent.
+ * What is taken off an aircraft's drawn reported height (`drawnRestOffset`): `share` of `rest`, a resting height, the
+ * share fading with the raw height when `fades` (a provisional one). A change of `rest` or `fades` leaves a `residual`,
+ * the old offset less the new one on the frame of the change (m), eased out as `progress` goes from 0 to 1.
  */
-function updateDropRuleState(callsign: string, time: number, rate: number | null): DropRuleState {
-  const previous = sharedDropRuleStateRef.current.get(callsign)
-  const state =
-    previous === undefined || time < previous.lastTime
-      ? { flatSince: null, afterDescent: true, lastTime: time }
-      : previous
-  if (rate === null) {
-    state.flatSince = null
-  } else if (Math.abs(rate) <= DROP_CONTACT_STEADY_RATE_MPS) {
-    state.flatSince ??= time
+interface RestOffsetState {
+  rest: number
+  fades: boolean
+  /** The share of `rest` taken off on the last frame */
+  share: number
+  residual: number
+  progress: number
+  /** Frame time (ms) of the last frame, which the ease runs on */
+  lastFrameTime: number
+}
+
+/** Per aircraft, what is taken off its drawn reported height */
+const sharedRestOffsetStateRef = { current: new Map<string, RestOffsetState>() }
+
+// The 3 ft span test compares with this tolerance (m), so a run that moves exactly 3 ft passes
+const SETTLE_RANGE_TOLERANCE_METERS = 1e-6 * 0.3048
+
+/** Feed one frame's height to the descent memory. */
+function feedDescentMemory(state: LaneBState, height: number): void {
+  if (state.descending) {
+    if (height > state.reference + CONTACT_ENTER_HEIGHT_METERS) {
+      state.descending = false
+      state.reference = height
+    } else {
+      state.reference = Math.min(state.reference, height)
+    }
+  } else if (height < state.reference - CONTACT_ENTER_HEIGHT_METERS) {
+    state.descending = true
+    state.reference = height
   } else {
-    state.flatSince = null
-    state.afterDescent = rate < 0
+    state.reference = Math.max(state.reference, height)
   }
-  state.lastTime = time
-  sharedDropRuleStateRef.current.set(callsign, state)
-  return state
 }
 
 /**
- * Contact while the aircraft has no resting height: entered at or below DROP_CONTACT_MAX_HEIGHT_METERS once the rate,
- * after a descent, has stayed flat for DROP_CONTACT_FLAT_MS; left above DROP_CONTACT_EXIT_HEIGHT_METERS or on a climb
- * faster than DROP_CONTACT_EXIT_RATE_MPS.
+ * Whether lane B enters contact without a provisional resting height: at or below DROP_CONTACT_MAX_HEIGHT_METERS,
+ * with the descent memory down, on a run whose highest and lowest samples are no more than CONTACT_ENTER_HEIGHT_METERS
+ * apart.
  */
-function dropRuleContact(
-  wasInContact: boolean,
-  heightAboveGround: number,
-  rate: number | null,
-  state: DropRuleState,
-): boolean {
-  if (wasInContact) {
-    return heightAboveGround <= DROP_CONTACT_EXIT_HEIGHT_METERS && (rate === null || rate <= DROP_CONTACT_EXIT_RATE_MPS)
-  }
+function settlesOnRun(state: LaneBState, height: number, run: SettleRun | undefined): run is SettleRun {
   return (
-    heightAboveGround <= DROP_CONTACT_MAX_HEIGHT_METERS &&
-    state.afterDescent &&
-    state.flatSince !== null &&
-    state.lastTime - state.flatSince >= DROP_CONTACT_FLAT_MS
+    height <= DROP_CONTACT_MAX_HEIGHT_METERS &&
+    state.descending &&
+    run !== undefined &&
+    run.highest - run.lowest <= CONTACT_ENTER_HEIGHT_METERS + SETTLE_RANGE_TOLERANCE_METERS
   )
+}
+
+/**
+ * Contact by the height over a resting height, learned or provisional: in contact, left above
+ * CONTACT_EXIT_HEIGHT_METERS over it; out of contact, entered below CONTACT_ENTER_HEIGHT_METERS over it.
+ */
+function contactOverRest(wasInContact: boolean, overRest: number): boolean {
+  return wasInContact ? overRest <= CONTACT_EXIT_HEIGHT_METERS : overRest < CONTACT_ENTER_HEIGHT_METERS
+}
+
+/**
+ * An aircraft's lane B memory at this frame, with the frame's height fed to its descent memory. Display time moving
+ * more than DROP_CONTACT_SEEK_MS either way from the last frame is a seek: the memory restarts as at first sight, and
+ * so does what is taken off the drawn height, rather than easing out a provisional resting height the seek dropped.
+ * Smaller steps back (the store's anchor moving by a receive-latency difference) take the frame as any other.
+ */
+function laneBStateAt(callsign: string, height: number, time: number): { state: LaneBState; restarts: boolean } {
+  const previous = sharedLaneBStateRef.current.get(callsign)
+  const restarts = previous !== undefined && Math.abs(time - previous.lastTime) > DROP_CONTACT_SEEK_MS
+  if (restarts) sharedRestOffsetStateRef.current.delete(callsign)
+  const state: LaneBState =
+    previous === undefined || restarts
+      ? { reference: height, descending: true, provisionalRest: null, lastTime: time }
+      : previous
+  feedDescentMemory(state, height)
+  state.lastTime = time
+  sharedLaneBStateRef.current.set(callsign, state)
+  return { state, restarts }
+}
+
+/**
+ * Lane B contact without a provisional resting height: an aircraft already in contact (from a source without height,
+ * or a resting height forgotten) takes its height as it; otherwise contact is entered on a settled run
+ * (`settlesOnRun`), whose second-lowest sample becomes it.
+ */
+function laneBEntry(state: LaneBState, height: number, run: SettleRun | undefined, inContactBefore: boolean): boolean {
+  if (inContactBefore) {
+    state.provisionalRest = height
+    return true
+  }
+  if (!settlesOnRun(state, height, run)) return false
+  state.provisionalRest = run.secondLowest
+  return true
+}
+
+/**
+ * Lane B: contact while the aircraft has no resting height. Without a provisional resting height, `laneBEntry`
+ * decides. With one, contact is the learned path's (`contactOverRest`), and in contact the provisional resting height
+ * follows the run's second-lowest sample down. Above DROP_CONTACT_EXIT_HEIGHT_METERS the aircraft is out of contact,
+ * and above DROP_CONTACT_REST_DROP_HEIGHT_METERS the provisional resting height is dropped; a seek (`laneBStateAt`)
+ * drops it and restarts out of contact, as at first sight.
+ */
+function laneBContact(
+  callsign: string,
+  height: number,
+  time: number,
+  run: SettleRun | undefined,
+  wasInContact: boolean,
+): boolean {
+  const { state, restarts } = laneBStateAt(callsign, height, time)
+  const inContactBefore = wasInContact && !restarts
+  if (height > DROP_CONTACT_REST_DROP_HEIGHT_METERS) state.provisionalRest = null
+  if (height > DROP_CONTACT_EXIT_HEIGHT_METERS) return false
+  if (state.provisionalRest === null) return laneBEntry(state, height, run, inContactBefore)
+  if (inContactBefore && run !== undefined) {
+    state.provisionalRest = Math.min(state.provisionalRest, run.secondLowest)
+  }
+  return contactOverRest(inContactBefore, height - state.provisionalRest)
+}
+
+/**
+ * The share of a provisional resting height taken off the drawn height at a raw height above ground: all of it up to
+ * DROP_CONTACT_EXIT_HEIGHT_METERS, none from DROP_CONTACT_REST_DROP_HEIGHT_METERS, linear between.
+ */
+function provisionalRestShare(height: number): number {
+  const span = DROP_CONTACT_REST_DROP_HEIGHT_METERS - DROP_CONTACT_EXIT_HEIGHT_METERS
+  return Math.min(1, Math.max(0, (DROP_CONTACT_REST_DROP_HEIGHT_METERS - height) / span))
+}
+
+/** An aircraft's provisional resting height (m), or null while lane B has none for it. */
+function provisionalRestFor(callsign: string): number | null {
+  return sharedLaneBStateRef.current.get(callsign)?.provisionalRest ?? null
 }
 
 /**
  * Ground contact for this frame from the height above ground at the displayed instant, with hysteresis.
  * Once the aircraft has a resting height (its own, else its type's), contact is entered below the entry height over it
- * and left above the exit height over it; until then the drop rule decides. An aircraft with no earlier contact state
- * from its height starts from the contact it was last drawn with (a source without height takes it from the terrain
- * clamp), so a switch to a source with height on the ground keeps it in contact.
+ * and left above the exit height over it; until then lane B decides (`laneBContact`). An aircraft with no earlier
+ * contact state from its height starts from the contact it was last drawn with (a source without height takes it from
+ * the terrain clamp), so a switch to a source with height on the ground keeps it in contact.
  *
  * Exported for tests.
  *
+ * @param settleRun - The run of height samples lane B enters on (`TimelineInterpolationResult.settleRun`)
  * @returns Whether the aircraft is in contact, or null when the source reports no height
  */
 export function updateContact(
@@ -227,23 +285,22 @@ export function updateContact(
   heightAboveGround: number | null,
   aircraftType: string | null,
   displayTime: number,
+  settleRun: SettleRun | undefined,
 ): boolean | null {
   if (heightAboveGround === null) {
     sharedContactStateRef.current.delete(callsign)
-    sharedDropRuleFramesRef.current.delete(callsign)
-    sharedDropRuleStateRef.current.delete(callsign)
+    sharedLaneBStateRef.current.delete(callsign)
     return null
   }
-  const rate = updateHeightRate(callsign, displayTime, heightAboveGround)
-  const dropRuleState = updateDropRuleState(callsign, displayTime, rate)
   const wasInContact =
     sharedContactStateRef.current.get(callsign) ?? sharedInterpolatedStates.get(callsign)?.inContact === true
-  const overRest = heightOverRest(callsign, aircraftType, heightAboveGround)
+  const rest = restingHeightFor(callsign, aircraftType)
   let inContact: boolean
-  if (overRest === null) {
-    inContact = dropRuleContact(wasInContact, heightAboveGround, rate, dropRuleState)
+  if (rest === null) {
+    inContact = laneBContact(callsign, heightAboveGround, displayTime, settleRun, wasInContact)
   } else {
-    inContact = wasInContact ? overRest <= CONTACT_EXIT_HEIGHT_METERS : overRest < CONTACT_ENTER_HEIGHT_METERS
+    sharedLaneBStateRef.current.delete(callsign)
+    inContact = contactOverRest(wasInContact, heightAboveGround - rest)
   }
   sharedContactStateRef.current.set(callsign, inContact)
   return inContact
@@ -263,37 +320,52 @@ export function transitionProgress(
   return elapsed * elapsed * (3 - 2 * elapsed)
 }
 
-/** The resting height taken off an aircraft's drawn reported height, easing linearly from `from` to `to` */
-interface RestOffsetState {
-  from: number
-  to: number
-  startedAt: number
+/**
+ * What is taken off an aircraft's drawn reported height this frame, before any ease: `share` of `rest`. When the source
+ * reports a height above ground, all of its resting height (its own, else its type's) once one is learned, else lane
+ * B's provisional resting height, its share fading with the raw height (`provisionalRestShare`), else 0; without that
+ * height, 0.
+ */
+function restOffsetTarget(
+  callsign: string,
+  entry: InterpolatedAircraftState,
+): { rest: number; fades: boolean; share: number } {
+  const height = entry.heightAboveGround
+  if (height === null) return { rest: 0, fades: false, share: 1 }
+  const learned = restingHeightFor(callsign, entry.aircraftType)
+  if (learned !== null) return { rest: learned, fades: false, share: 1 }
+  return { rest: provisionalRestFor(callsign) ?? 0, fades: true, share: provisionalRestShare(height) }
 }
 
-/** Per aircraft, the resting height taken off its drawn reported height */
-const sharedRestOffsetStateRef = { current: new Map<string, RestOffsetState>() }
-
 /**
- * How far below its reported height an aircraft is drawn out of contact (m): its resting height (its own, else its
- * type's) when the source reports a height above ground and one is learned, else 0. A change for an aircraft already
- * drawn (a resting height learned mid-flight, a switch to a source without height) eases linearly over
- * RESTING_HEIGHT_EASE_MS.
+ * How far below its reported height an aircraft is drawn out of contact (m): `restOffsetTarget`'s offset, so the
+ * provisional resting height's share fades from DROP_CONTACT_EXIT_HEIGHT_METERS to DROP_CONTACT_REST_DROP_HEIGHT_METERS
+ * with no ease. A discrete change for an aircraft already drawn (a resting height learned, a provisional one taken or
+ * dropped, a switch to a source without height) eases linearly over RESTING_HEIGHT_EASE_MS of frame time from what the
+ * old resting height takes off on that frame (its share at that frame's raw height, the last frame's without one), so
+ * the drawn height never jumps, and a change where both take off the same, as a provisional one dropped where its share
+ * is 0, moves nothing. Frame time going back holds the ease where it is. A seek (`laneBStateAt`) or a playback mode
+ * change restarts the offset as at first sight.
  */
 function drawnRestOffset(callsign: string, entry: InterpolatedAircraftState, now: number): number {
-  const target = entry.heightAboveGround === null ? 0 : (restingHeightFor(callsign, entry.aircraftType) ?? 0)
+  const next = restOffsetTarget(callsign, entry)
   const state = sharedRestOffsetStateRef.current.get(callsign)
   if (!state) {
-    sharedRestOffsetStateRef.current.set(callsign, { from: target, to: target, startedAt: now })
-    return target
+    sharedRestOffsetStateRef.current.set(callsign, { ...next, residual: 0, progress: 1, lastFrameTime: now })
+    return next.rest * next.share
   }
-  const progress = Math.min(1, Math.max(0, (now - state.startedAt) / RESTING_HEIGHT_EASE_MS))
-  const current = state.from + (state.to - state.from) * progress
-  if (target !== state.to) {
-    state.from = current
-    state.to = target
-    state.startedAt = now
+  state.progress = Math.min(1, state.progress + Math.max(0, now - state.lastFrameTime) / RESTING_HEIGHT_EASE_MS)
+  state.lastFrameTime = now
+  if (next.rest !== state.rest || next.fades !== state.fades) {
+    const height = entry.heightAboveGround
+    const oldShare = state.fades && height !== null ? provisionalRestShare(height) : state.share
+    state.residual = state.rest * oldShare + state.residual * (1 - state.progress) - next.rest * next.share
+    state.progress = 0
+    state.rest = next.rest
+    state.fades = next.fades
   }
-  return current
+  state.share = next.share
+  return next.rest * next.share + state.residual * (1 - state.progress)
 }
 
 /**
@@ -350,7 +422,13 @@ function timelineToInterpolatedState(
   }
 
   const lastFrameTime = sharedTimelineLastFrameTimeRef.current
-  const inContact = updateContact(callsign, timeline.heightAboveGround, timeline.aircraftType, timeline.displayTime)
+  const inContact = updateContact(
+    callsign,
+    timeline.heightAboveGround,
+    timeline.aircraftType,
+    timeline.displayTime,
+    timeline.settleRun,
+  )
   // On the ground for heading rate, pitch and roll: ground contact when the source reports its height above
   // ground, otherwise the source's ground flag or a groundspeed under 40 kt
   const isOnGround = inContact ?? (timeline.onGround === true || timeline.groundspeed < 40)
@@ -629,22 +707,22 @@ function runInterpolationFrame() {
   if (currentMode !== previousMode) {
     sharedLastPlaybackModeRef.current = currentMode
     const timelineStore = useAircraftTimelineStore.getState()
+    // Entering or leaving replay is a seek: contact and what is taken off the drawn height restart as at first sight,
+    // not from the last live frame's
+    for (const state of sharedInterpolatedStates.values()) state.inContact = null
+    sharedContactStateRef.current.clear()
+    sharedLaneBStateRef.current.clear()
+    sharedRestOffsetStateRef.current.clear()
 
     if (currentMode === 'imported') {
       // Entering imported replay mode - timelines are already loaded by
       // replayStore.importReplay() which calls loadImportedTimelines() or loadReplaySnapshots()
       sharedTimelineRateStateRef.current.clear()
-      sharedContactStateRef.current.clear()
-      sharedDropRuleFramesRef.current.clear()
-      sharedDropRuleStateRef.current.clear()
     } else if (currentMode === 'replay') {
       // Entering buffer replay mode - scrub through existing timeline
       // The timeline already has live observations, no need to load anything
-      // Just clear rate and contact tracking for fresh orientation and contact
+      // Just clear rate tracking for fresh orientation
       sharedTimelineRateStateRef.current.clear()
-      sharedContactStateRef.current.clear()
-      sharedDropRuleFramesRef.current.clear()
-      sharedDropRuleStateRef.current.clear()
     } else if (currentMode === 'live' && previousMode === 'imported') {
       // Returning to live mode from imported replay - clear the data
       // Live observations will start populating the timeline again
@@ -1135,8 +1213,7 @@ function runInterpolationFrame() {
       sharedNosewheelStateRef.current.delete(callsign)
       sharedTimelineRateStateRef.current.delete(callsign)
       sharedContactStateRef.current.delete(callsign)
-      sharedDropRuleFramesRef.current.delete(callsign)
-      sharedDropRuleStateRef.current.delete(callsign)
+      sharedLaneBStateRef.current.delete(callsign)
       sharedRestOffsetStateRef.current.delete(callsign)
     }
   }
