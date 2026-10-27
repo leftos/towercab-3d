@@ -62,10 +62,11 @@
 
 ## OSM buildings
 
-### B1 Shader on the ion tiles (5/12 done)
+### B1 Shader on the ion tiles (5/13 done)
 - [ ] TC3D-211 OSM facades on feat/osm-facades · release vNext
   - [/] TC3D-218 Type OSM building parts from their outline, then by shape near the field · release vNext
   - [ ] TC3D-226 Merge feat/osm-facades to main (#263) · release vNext
+  - [ ] TC3D-358 Keep each aerodrome hole with its own outer ring · release vNext
 - [ ] TC3D-165 Draw curtain-wall glass on terminals through Cesium's reflections · release vNext+1
 - [ ] TC3D-166 Light windows at night by building use and local time · release vNext+1
 - [ ] TC3D-167 Add a buildings quality preset per device · release vNext+1
@@ -85,6 +86,7 @@
 ### No milestone
 - [ ] TC3D-323 Leave a building tile unbuilt when its primitives use different frames · release vNext+1
 - [ ] TC3D-338 Make building floor-line lookup failures visible and tested · release vNext+1
+- [ ] TC3D-355 Find aerodrome boundaries by tower position when no area carries the airport code · release vNext+1
 
 ## vNAS
 
@@ -93,11 +95,10 @@
 - [ ] TC3D-255 vNAS popover: Environment label renders at 16px white, unstyled
 - [ ] TC3D-303 Let the vNAS event forwarder own every host state write (sub-issue of TC3D-6) · release vNext
 
-### Lifecycle merge (#261) (0/7 done)
+### Lifecycle merge (#261) (1/7 done)
 - [/] TC3D-6 vNAS session lifecycle: one subscribe per facility, clean session end · release vNext
   - [ ] TC3D-214 Merge feat/vnas-session-lifecycle to main (#261) · release vNext
   - [ ] TC3D-303 Let the vNAS event forwarder own every host state write · release vNext
-  - [ ] TC3D-339 Stop logging the vNAS OAuth callback URL with its authorization code · release vNext
   - [ ] TC3D-346 Delete dead vNAS auth and session commands and guard start_auth against a live session · release vNext+1
   - [ ] TC3D-348 Report SSE stream errors in the vNAS crate's sign-in instead of a closed connection · release vNext+1
   - [ ] TC3D-352 Tidy the vNAS sign-in error paths left by TC3D-227 · release vNext+1
@@ -332,4 +333,9 @@
 
 - [ ] TC3D-78 Fix the in-memory tile cache's two disagreeing controls
 - [ ] TC3D-107 Reconcile the orbit camera defaults and fix wrong camera comments
-- [ ] TC3D-345 Show the map data credits on the About screen · release vNext
+- [ ] TC3D-357 Open new-window links in the system browser, not a WebView2 popup · release vNext+1
+- [ ] TC3D-359 Style the Cesium credit links on the About tab as links · release vNext+1
+
+## No project
+
+- [ ] TC3D-356 Add a Task Index row for the vNAS link (vnas.rs and the vnas crate)
