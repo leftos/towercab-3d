@@ -4,10 +4,9 @@
 
 ## Babylon to Cesium migration
 
-### M0 Groundwork (2/7 done)
+### M0 Groundwork (3/7 done)
 - [ ] TC3D-12 Render resolution slider and Cesium quick wins (C1–C6, D7)
 - [ ] TC3D-13 Cesium-side dead code (G2, G4, G8, G9)
-- [ ] TC3D-183 Stop camera moves recreating the GPU timers and frame listeners
 - [ ] TC3D-195 Perf HUD tiles-loading counter reads a Cesium field that does not exist
 - [ ] TC3D-198 GPU timer in __tc3d.perf() stops updating after its first results
 
@@ -61,13 +60,14 @@
 
 ## OSM buildings
 
-### B1 Shader on the ion tiles (6/16 done)
+### B1 Shader on the ion tiles (8/19 done)
 - [ ] TC3D-211 OSM facades on feat/osm-facades · release vNext
   - [/] TC3D-218 Type OSM building parts from their outline, then by shape near the field · release vNext
-    - [/] TC3D-376 Mock facades for more OSM building types before typing fire stations · release vNext
-      - [ ] TC3D-384 The headless page freezes a few seconds after selecting some airports · release vNext
     - [ ] TC3D-381 A fire station at KVNY is drawn as a parking garage by the building shape fallback · release vNext+1
   - [ ] TC3D-226 Merge feat/osm-facades to main (#263) · release vNext
+  - [ ] TC3D-385 Fit facade window rows to each building so no window is cut at the roof or ground · release vNext
+  - [/] TC3D-386 Raise the facade looks' detail, shown in a new mock before TC3D-218 builds them · release vNext
+  - [ ] TC3D-388 Widen the facade class packing to fit 13 classes and their hash states · release vNext
 - [ ] TC3D-165 Draw curtain-wall glass on terminals through Cesium's reflections · release vNext+1
 - [ ] TC3D-166 Light windows at night by building use and local time · release vNext+1
 - [ ] TC3D-167 Add a buildings quality preset per device · release vNext+1
@@ -155,7 +155,7 @@
 
 ## Aircraft motion model
 
-### feat/aircraft-motion merge (#264) (4/27 done)
+### feat/aircraft-motion merge (#264) (5/28 done)
 - [ ] TC3D-241 Aircraft motion on feat/aircraft-motion · release vNext
   - [ ] TC3D-52 Aircraft orientation model: bank, rotation and flare
   - [ ] TC3D-53 Curved VATSIM paths: splines with heading from the path
@@ -175,10 +175,10 @@
   - [ ] TC3D-298 Split stabilizePhase and detectRawFlightPhase and drop their dead state · release vNext+1
   - [ ] TC3D-299 Bound when the departure Rolling label ends in the motion suite · release vNext+1
   - [ ] TC3D-304 Test the phase-state drop on a scrub back and size the RealTraffic regression tolerance · release vNext+1
-  - [/] TC3D-369 Enter vNAS contact for a slowly sinking unlearned arrival within 2.5 s · release vNext
-  - [ ] TC3D-371 A parked vNAS aircraft leaves contact on a short burst of bad height samples · release vNext
+  - [/] TC3D-371 A parked vNAS aircraft leaves contact on a short burst of bad height samples · release vNext
   - [ ] TC3D-382 A vNAS aircraft first seen while parked keeps VATSIM's 17 s display delay · release vNext+1
   - [ ] TC3D-383 Keep drawn time from stepping back when the oldest sample is pruned · release vNext+1
+  - [ ] TC3D-387 Pin the two untested branches of TC3D-369's drawn-offset ease · release vNext+1
 
 ### Follow-ups on main (0/11 done)
 - [ ] TC3D-179 Use the terrain under the aircraft as the gear datum in orbit mode with no airport
@@ -347,4 +347,4 @@
 - [ ] TC3D-107 Reconcile the orbit camera defaults and fix wrong camera comments
 - [ ] TC3D-357 Open new-window links in the system browser, not a WebView2 popup · release vNext+1
 - [ ] TC3D-359 Style the Cesium credit links on the About tab as links · release vNext+1
-- [ ] TC3D-375 The GPU renderer line is logged on every frame · release vNext+1
+- [ ] TC3D-389 Test that the frame-listener hook disposes the old Babylon GPU timer · release vNext+1
