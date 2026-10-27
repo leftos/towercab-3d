@@ -52,7 +52,12 @@ import {
   VNAS_STOP_WINDOW_MS,
 } from '@/constants'
 import { haversineDistanceFt } from '@/utils/aircraft/geoMath'
-import { heightOverRest, recordRestingSample } from '@/utils/aircraft/restingHeight'
+import {
+  forgetCallsign,
+  isRestingTypeChange,
+  recordRestingSample,
+  restingHeightFor,
+} from '@/utils/aircraft/restingHeight'
 import { knotsToMps, mpsToKnots } from '@/utils/coordinates'
 import type {
   AircraftDataSource,
@@ -417,12 +422,14 @@ function pruneObservations(
  * @param observations - Array of observations (oldest first), should already be
  *                       filtered to the preferred source (e.g., vNAS-only when vNAS is active)
  * @param maxIntervals - Maximum number of intervals to return
- * @param aircraftType - The aircraft's type, whose resting height decides which silences are parking
+ * @param callsign - The aircraft's callsign, whose resting height decides which silences are parking
+ * @param aircraftType - The aircraft's type, whose resting height stands in until the aircraft learns its own
  * @returns Array of intervals in milliseconds (most recent last)
  */
 function calculateObservationIntervals(
   observations: AircraftObservation[],
   maxIntervals: number,
+  callsign: string,
   aircraftType: string | null,
 ): number[] {
   if (observations.length < 2) return []
@@ -435,7 +442,9 @@ function calculateObservationIntervals(
     const next = observations[i + 1]
     const interval = next.receivedAt - observations[i].receivedAt
     const isParkedSilence =
-      interval > VNAS_PARKED_GAP_MS && next.source === 'vnas' && isStoppedVnasSample(observations, i, aircraftType)
+      interval > VNAS_PARKED_GAP_MS &&
+      next.source === 'vnas' &&
+      isStoppedVnasSample(observations, i, callsign, aircraftType)
     if (interval > 0 && !isParkedSilence) {
       intervals.push(interval)
     }
@@ -446,30 +455,30 @@ function calculateObservationIntervals(
 
 /**
  * Whether each sample marks a stop, decided once per sample: only the samples before it decide it. A decision made
- * before the type's resting height was learned is made again once it is.
+ * with one resting height (or none) is made again once the aircraft's resting height is another.
  */
-const stoppedSampleCache = new WeakMap<AircraftObservation, { stopped: boolean; restKnown: boolean }>()
+const stoppedSampleCache = new WeakMap<AircraftObservation, { stopped: boolean; rest: number | null }>()
 
 /**
  * Whether the sample at `index` is a vNAS sample of an aircraft standing on the ground, so the silence after it is
- * parking. On the ground takes a height over the type's resting height at or below the contact exit height (the raw
- * height until the type's resting height is learned): vNAS's ground flag is the 50/80 ft label flag, so a sample
+ * parking. On the ground takes a height over the aircraft's resting height (`restingHeightFor`) at or below the
+ * contact exit height (the raw height while it has none): vNAS's ground flag is the 50/80 ft label flag, so a sample
  * without a height is never held. Exported for tests.
  */
 export function isStoppedVnasSample(
   observations: AircraftObservation[],
   index: number,
+  callsign: string,
   aircraftType: string | null,
 ): boolean {
   const sample = observations[index]
   const height = sample.heightAboveGround
-  const overRest = height === undefined ? null : heightOverRest(aircraftType, height)
-  const restKnown = overRest !== null
+  const rest = restingHeightFor(callsign, aircraftType)
   const cached = stoppedSampleCache.get(sample)
-  if (cached !== undefined && cached.restKnown === restKnown) return cached.stopped
-  const onGround = height !== undefined && (overRest ?? height) <= CONTACT_EXIT_HEIGHT_METERS
+  if (cached !== undefined && cached.rest === rest) return cached.stopped
+  const onGround = height !== undefined && height - (rest ?? 0) <= CONTACT_EXIT_HEIGHT_METERS
   const stopped = sample.source === 'vnas' && onGround && hasStopped(observations, sample)
-  stoppedSampleCache.set(sample, { stopped, restKnown })
+  stoppedSampleCache.set(sample, { stopped, rest })
   return stopped
 }
 
@@ -523,9 +532,29 @@ function newestVnasSampleIn(observations: AircraftObservation[], from: number, t
   return newest
 }
 
-/** Offer a stored observation to its type's resting height, where observation and type meet. */
-function recordObservationRest(observation: AircraftObservation, metadata: AircraftMetadata): void {
-  recordRestingSample(metadata.aircraftType, observation.heightAboveGround, observation.groundspeed, observation.source)
+/** Offer a stored observation to its aircraft's and its type's resting height, where observation and type meet. */
+function recordObservationRest(callsign: string, observation: AircraftObservation, metadata: AircraftMetadata): void {
+  recordRestingSample(
+    callsign,
+    metadata.aircraftType,
+    observation.heightAboveGround,
+    observation.groundspeed,
+    observation.source,
+  )
+}
+
+/**
+ * Forget an aircraft's own resting height when its merged metadata names a different type than its timeline did
+ * (`isRestingTypeChange`).
+ */
+function forgetRestOnTypeChange(
+  callsign: string,
+  previous: AircraftMetadata | undefined,
+  merged: AircraftMetadata,
+): void {
+  if (previous !== undefined && isRestingTypeChange(previous.aircraftType, merged.aircraftType)) {
+    forgetCallsign(callsign)
+  }
 }
 
 /** Speed in knots from `from` to `to` over the time between them. */
@@ -651,20 +680,22 @@ function calculateTargetDelay(observations: AircraftObservation[], intervals: nu
  * @param existingState - Current dynamic delay state (or undefined for new aircraft)
  * @param observations - Current observation array (after adding new observation)
  * @param now - Current timestamp
- * @param aircraftType - The aircraft's type, whose resting height decides which silences are parking
+ * @param callsign - The aircraft's callsign, whose resting height decides which silences are parking
+ * @param aircraftType - The aircraft's type, whose resting height stands in until the aircraft learns its own
  * @returns Updated dynamic delay state
  */
 function updateDynamicDelayState(
   existingState: DynamicDelayState | undefined,
   observations: AircraftObservation[],
   now: number,
+  callsign: string,
   aircraftType: string | null,
 ): DynamicDelayState {
   // Filter observations to prefer vNAS when active (same logic as interpolation)
   const filteredObs = filterObservationsForSource(observations, now)
 
   // Calculate intervals from filtered observations
-  const intervals = calculateObservationIntervals(filteredObs, DYNAMIC_DELAY_INTERVAL_WINDOW, aircraftType)
+  const intervals = calculateObservationIntervals(filteredObs, DYNAMIC_DELAY_INTERVAL_WINDOW, callsign, aircraftType)
 
   // Calculate target delay
   const targetDelayMs = calculateTargetDelay(filteredObs, intervals)
@@ -1343,7 +1374,7 @@ function interpolateTimeline(
   } else if (
     before &&
     before === observations[observations.length - 1] &&
-    isStoppedVnasSample(observations, observations.length - 1, metadata.aircraftType)
+    isStoppedVnasSample(observations, observations.length - 1, callsign, metadata.aircraftType)
   ) {
     // PARKED: vNAS goes silent for an aircraft that stands still, so the silence after a stopped sample (only the
     // newest observation) is held at that sample, not extrapolated. Report what is drawn: no speed,
@@ -1546,6 +1577,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
 
     // Merge metadata to preserve VATSIM flight plan data when vNAS provides positions
     const mergedMetadata = mergeAircraftMetadata(existing?.metadata, metadata)
+    forgetRestOnTypeChange(callsign, existing?.metadata, mergedMetadata)
 
     let observations: AircraftObservation[]
     let pruned = false
@@ -1587,7 +1619,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       observations = [observation]
       oldestAfter = observation.observedAt
     }
-    recordObservationRest(observation, mergedMetadata)
+    recordObservationRest(callsign, observation, mergedMetadata)
 
     // Update dynamic delay state
     const { dynamicDelays } = get()
@@ -1595,6 +1627,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       dynamicDelays.get(callsign),
       observations,
       observation.receivedAt,
+      callsign,
       mergedMetadata.aircraftType,
     )
 
@@ -1657,6 +1690,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
 
       // Merge metadata to preserve VATSIM flight plan data when vNAS provides positions
       const mergedMetadata = mergeAircraftMetadata(existing?.metadata, metadata)
+      forgetRestOnTypeChange(callsign, existing?.metadata, mergedMetadata)
 
       // Always add VATSIM observations to keep the timeline alive, even when vNAS
       // is active. This ensures we have fallback data when vNAS goes quiet for
@@ -1716,13 +1750,14 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
         observations = [observation]
         oldestAfter = observation.observedAt
       }
-      recordObservationRest(observation, mergedMetadata)
+      recordObservationRest(callsign, observation, mergedMetadata)
 
       // Update dynamic delay state
       const dynamicDelay = updateDynamicDelayState(
         updatedDelays.get(callsign),
         observations,
         observation.receivedAt,
+        callsign,
         mergedMetadata.aircraftType,
       )
       updatedDelays.set(callsign, dynamicDelay)
@@ -1790,6 +1825,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
     } = get()
     const timeline = timelines.get(callsign)
     if (timeline) {
+      forgetCallsign(callsign)
       const updatedTimelines = new Map(timelines)
       updatedTimelines.delete(callsign)
 
@@ -1935,6 +1971,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
     // Move timed-out aircraft to graveyard
     for (const [callsign, timeline] of timelines) {
       if (now - timeline.lastReceivedAt > AIRCRAFT_TIMEOUT) {
+        forgetCallsign(callsign)
         updatedTimelines.delete(callsign)
         updatedGraveyard.set(callsign, { timeline, dynamicDelay: dynamicDelays.get(callsign), removedAt: now })
         updatedHeadings.delete(callsign)
@@ -2004,6 +2041,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
    * Clear all timelines
    */
   clear: () => {
+    for (const callsign of get().timelines.keys()) forgetCallsign(callsign)
     set({
       timelines: new Map(),
       recentlyRemoved: new Map(),
@@ -2249,7 +2287,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
         receivedAt: obs.observedAt,
         displayDelay: 0,
       }))
-      for (const obs of normalizedObs) recordObservationRest(obs, entry.metadata)
+      for (const obs of normalizedObs) recordObservationRest(entry.callsign, obs, entry.metadata)
 
       timelines.set(entry.callsign, {
         callsign: entry.callsign,

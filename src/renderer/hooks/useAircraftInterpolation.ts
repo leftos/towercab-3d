@@ -8,8 +8,10 @@ import {
   CONTACT_EXIT_HEIGHT_METERS,
   DEPARTURE_BLEND_END_AGL,
   DEPARTURE_BLEND_START_AGL,
+  DROP_CONTACT_EASE_MS,
   DROP_CONTACT_EXIT_HEIGHT_METERS,
   DROP_CONTACT_EXIT_RATE_MPS,
+  DROP_CONTACT_FLAT_MS,
   DROP_CONTACT_MAX_HEIGHT_METERS,
   DROP_CONTACT_RATE_MAX_SPAN_MS,
   DROP_CONTACT_RATE_WINDOW_MS,
@@ -81,7 +83,12 @@ const sharedAircraftDataRadiusNMRef = { current: 250 } // Default, updated from 
 interface TerrainCorrectionState {
   smoothedTerrainHeight: number
   prevClampState: boolean
-  transition: { source: number; target: number; progress: number } | null
+  /**
+   * The height easing from `source` to `target`: by HEIGHT_TRANSITION_LERP_FACTOR a frame, or, for a change of contact
+   * while the aircraft has no resting height, by a smoothstep over DROP_CONTACT_EASE_MS of display time from
+   * `easeStartedAt`
+   */
+  transition: { source: number; target: number; progress: number; easeStartedAt: number | null } | null
   prevCorrectedHeight: number
 }
 
@@ -145,28 +152,71 @@ function updateHeightRate(callsign: string, time: number, height: number): numbe
   return span < DROP_CONTACT_RATE_WINDOW_MS ? null : ((height - frames[0].height) * 1000) / span
 }
 
+/** What the drop rule remembers of an aircraft's height rate between frames */
+interface DropRuleState {
+  /** Display time of the first frame of the current run of flat rates, or null while the rate is not flat */
+  flatSince: number | null
+  /** Whether the last rate that was not flat was a descent; true for an aircraft first seen */
+  afterDescent: boolean
+  /** Display time of the last frame, to see it go back */
+  lastTime: number
+}
+
+/** Per aircraft with a height above ground, the drop rule's memory of its rate */
+const sharedDropRuleStateRef = { current: new Map<string, DropRuleState>() }
+
 /**
- * Contact before the type's resting height is learned: entered once the raw height, under
- * DROP_CONTACT_MAX_HEIGHT_METERS, stops changing; left above DROP_CONTACT_EXIT_HEIGHT_METERS or on a climb faster than
- * DROP_CONTACT_EXIT_RATE_MPS.
+ * Update the drop rule's memory with this frame's rate: a flat rate (within DROP_CONTACT_STEADY_RATE_MPS of 0) extends
+ * the run of flat rates, one that is not ends it and records whether it was a descent, and a frame without a rate ends
+ * it and records nothing. An aircraft first seen, or whose display time goes back, starts as after a descent.
  */
-function dropRuleContact(wasInContact: boolean, heightAboveGround: number, rate: number | null): boolean {
+function updateDropRuleState(callsign: string, time: number, rate: number | null): DropRuleState {
+  const previous = sharedDropRuleStateRef.current.get(callsign)
+  const state =
+    previous === undefined || time < previous.lastTime
+      ? { flatSince: null, afterDescent: true, lastTime: time }
+      : previous
+  if (rate === null) {
+    state.flatSince = null
+  } else if (Math.abs(rate) <= DROP_CONTACT_STEADY_RATE_MPS) {
+    state.flatSince ??= time
+  } else {
+    state.flatSince = null
+    state.afterDescent = rate < 0
+  }
+  state.lastTime = time
+  sharedDropRuleStateRef.current.set(callsign, state)
+  return state
+}
+
+/**
+ * Contact while the aircraft has no resting height: entered at or below DROP_CONTACT_MAX_HEIGHT_METERS once the rate,
+ * after a descent, has stayed flat for DROP_CONTACT_FLAT_MS; left above DROP_CONTACT_EXIT_HEIGHT_METERS or on a climb
+ * faster than DROP_CONTACT_EXIT_RATE_MPS.
+ */
+function dropRuleContact(
+  wasInContact: boolean,
+  heightAboveGround: number,
+  rate: number | null,
+  state: DropRuleState,
+): boolean {
   if (wasInContact) {
     return heightAboveGround <= DROP_CONTACT_EXIT_HEIGHT_METERS && (rate === null || rate <= DROP_CONTACT_EXIT_RATE_MPS)
   }
   return (
-    heightAboveGround < DROP_CONTACT_MAX_HEIGHT_METERS &&
-    rate !== null &&
-    Math.abs(rate) <= DROP_CONTACT_STEADY_RATE_MPS
+    heightAboveGround <= DROP_CONTACT_MAX_HEIGHT_METERS &&
+    state.afterDescent &&
+    state.flatSince !== null &&
+    state.lastTime - state.flatSince >= DROP_CONTACT_FLAT_MS
   )
 }
 
 /**
  * Ground contact for this frame from the height above ground at the displayed instant, with hysteresis.
- * Once the type's resting height is learned, contact is entered below the entry height over it and left above the
- * exit height over it; until then the drop rule decides. An aircraft with no earlier contact state from its height
- * starts from the contact it was last drawn with (a source without height takes it from the terrain clamp), so a
- * switch to a source with height on the ground keeps it in contact.
+ * Once the aircraft has a resting height (its own, else its type's), contact is entered below the entry height over it
+ * and left above the exit height over it; until then the drop rule decides. An aircraft with no earlier contact state
+ * from its height starts from the contact it was last drawn with (a source without height takes it from the terrain
+ * clamp), so a switch to a source with height on the ground keeps it in contact.
  *
  * Exported for tests.
  *
@@ -181,20 +231,36 @@ export function updateContact(
   if (heightAboveGround === null) {
     sharedContactStateRef.current.delete(callsign)
     sharedDropRuleFramesRef.current.delete(callsign)
+    sharedDropRuleStateRef.current.delete(callsign)
     return null
   }
   const rate = updateHeightRate(callsign, displayTime, heightAboveGround)
+  const dropRuleState = updateDropRuleState(callsign, displayTime, rate)
   const wasInContact =
     sharedContactStateRef.current.get(callsign) ?? sharedInterpolatedStates.get(callsign)?.inContact === true
-  const overRest = heightOverRest(aircraftType, heightAboveGround)
+  const overRest = heightOverRest(callsign, aircraftType, heightAboveGround)
   let inContact: boolean
   if (overRest === null) {
-    inContact = dropRuleContact(wasInContact, heightAboveGround, rate)
+    inContact = dropRuleContact(wasInContact, heightAboveGround, rate, dropRuleState)
   } else {
     inContact = wasInContact ? overRest <= CONTACT_EXIT_HEIGHT_METERS : overRest < CONTACT_ENTER_HEIGHT_METERS
   }
   sharedContactStateRef.current.set(callsign, inContact)
   return inContact
+}
+
+/**
+ * The next progress of a height transition: a smoothstep over DROP_CONTACT_EASE_MS of display time from its start for
+ * a change of contact without a resting height, else HEIGHT_TRANSITION_LERP_FACTOR more than the last frame's
+ * (~15 frames, ~0.25 s at 60 fps). Exported for tests.
+ */
+export function transitionProgress(
+  transition: { progress: number; easeStartedAt: number | null },
+  displayTime: number,
+): number {
+  if (transition.easeStartedAt === null) return Math.min(1.0, transition.progress + HEIGHT_TRANSITION_LERP_FACTOR)
+  const elapsed = Math.min(1, Math.max(0, (displayTime - transition.easeStartedAt) / DROP_CONTACT_EASE_MS))
+  return elapsed * elapsed * (3 - 2 * elapsed)
 }
 
 /** The resting height taken off an aircraft's drawn reported height, easing linearly from `from` to `to` */
@@ -208,12 +274,13 @@ interface RestOffsetState {
 const sharedRestOffsetStateRef = { current: new Map<string, RestOffsetState>() }
 
 /**
- * How far below its reported height an aircraft is drawn out of contact (m): its type's resting height when the source
- * reports a height above ground and that is learned, else 0. A change for an aircraft already drawn (its type learned
- * mid-flight, a switch to a source without height) eases linearly over RESTING_HEIGHT_EASE_MS.
+ * How far below its reported height an aircraft is drawn out of contact (m): its resting height (its own, else its
+ * type's) when the source reports a height above ground and one is learned, else 0. A change for an aircraft already
+ * drawn (a resting height learned mid-flight, a switch to a source without height) eases linearly over
+ * RESTING_HEIGHT_EASE_MS.
  */
 function drawnRestOffset(callsign: string, entry: InterpolatedAircraftState, now: number): number {
-  const target = entry.heightAboveGround === null ? 0 : (restingHeightFor(entry.aircraftType) ?? 0)
+  const target = entry.heightAboveGround === null ? 0 : (restingHeightFor(callsign, entry.aircraftType) ?? 0)
   const state = sharedRestOffsetStateRef.current.get(callsign)
   if (!state) {
     sharedRestOffsetStateRef.current.set(callsign, { from: target, to: target, startedAt: now })
@@ -230,11 +297,11 @@ function drawnRestOffset(callsign: string, entry: InterpolatedAircraftState, now
 }
 
 /**
- * Height above ground for the flare from a source that reports one: over the type's resting height (never below 0)
- * once that is learned, the raw height until then.
+ * Height above ground for the flare from a source that reports one: over the aircraft's resting height (its own, else
+ * its type's; never below 0) once one is learned, the raw height until then.
  */
-function flareHeightAboveGround(aircraftType: string | null, heightAboveGround: number): number {
-  const overRest = heightOverRest(aircraftType, heightAboveGround)
+function flareHeightAboveGround(callsign: string, aircraftType: string | null, heightAboveGround: number): number {
+  const overRest = heightOverRest(callsign, aircraftType, heightAboveGround)
   return overRest === null ? heightAboveGround : Math.max(0, overRest)
 }
 
@@ -569,6 +636,7 @@ function runInterpolationFrame() {
       sharedTimelineRateStateRef.current.clear()
       sharedContactStateRef.current.clear()
       sharedDropRuleFramesRef.current.clear()
+      sharedDropRuleStateRef.current.clear()
     } else if (currentMode === 'replay') {
       // Entering buffer replay mode - scrub through existing timeline
       // The timeline already has live observations, no need to load anything
@@ -576,6 +644,7 @@ function runInterpolationFrame() {
       sharedTimelineRateStateRef.current.clear()
       sharedContactStateRef.current.clear()
       sharedDropRuleFramesRef.current.clear()
+      sharedDropRuleStateRef.current.clear()
     } else if (currentMode === 'live' && previousMode === 'imported') {
       // Returning to live mode from imported replay - clear the data
       // Live observations will start populating the timeline again
@@ -716,7 +785,7 @@ function runInterpolationFrame() {
     const sampledTerrainHeight = terrainDataForAircraft?.height
     const terrainSlopeDegrees = terrainDataForAircraft?.slopeDegrees ?? 0
 
-    // A source with a height above ground reports a reference point its type's resting height above the wheels:
+    // A source with a height above ground reports a reference point its resting height above the wheels:
     // out of contact the aircraft is drawn that much lower, so its wheels sit at their true height
     const restOffset = drawnRestOffset(callsign, entry, now)
     const drawnReportedHeight = reportedEllipsoidHeight - restOffset
@@ -878,19 +947,24 @@ function runInterpolationFrame() {
           // New transition: use previous frame's corrected height
           sourceHeight = terrainState.prevCorrectedHeight
         }
+        // A change of contact while the aircraft has no resting height moves it by that unknown height: eased over
+        // DROP_CONTACT_EASE_MS of display time rather than a few frames
+        const contactWithoutRest =
+          entry.heightAboveGround !== null &&
+          entry.inContact === shouldClampToTerrain &&
+          restingHeightFor(callsign, entry.aircraftType) === null
         terrainState.transition = {
           source: sourceHeight,
           target: targetHeight,
           progress: 0,
+          easeStartedAt: contactWithoutRest ? entry.displayTime : null,
         }
       }
     }
 
     // Apply ongoing transition if exists
     if (terrainState.transition && terrainState.transition.progress < 1.0) {
-      // Lerp from source to target over ~15 frames (~0.25 seconds at 60fps)
-      // Slower transition for smoother landing appearance
-      terrainState.transition.progress = Math.min(1.0, terrainState.transition.progress + HEIGHT_TRANSITION_LERP_FACTOR)
+      terrainState.transition.progress = transitionProgress(terrainState.transition, entry.displayTime)
       correctedHeight =
         terrainState.transition.source +
         (terrainState.transition.target - terrainState.transition.source) * terrainState.transition.progress
@@ -933,12 +1007,12 @@ function runInterpolationFrame() {
         sharedNosewheelStateRef.current.set(callsign, nosewheelState)
       }
 
-      // Height above ground for the flare: the source's own over the type's resting height (raw until that is
+      // Height above ground for the flare: the source's own over the aircraft's resting height (raw until one is
       // learned) when it reports one, else the reported altitude
       // (not corrected) above the terrain sample, both in ellipsoid coords
       const altitudeAGLFlare =
         entry.heightAboveGround !== null
-          ? flareHeightAboveGround(entry.aircraftType, entry.heightAboveGround)
+          ? flareHeightAboveGround(callsign, entry.aircraftType, entry.heightAboveGround)
           : reportedEllipsoidHeight - sampledTerrainHeight
 
       // Clear groundCommitted when clearly airborne again (handles go-around / touch-and-go)
@@ -1062,6 +1136,7 @@ function runInterpolationFrame() {
       sharedTimelineRateStateRef.current.delete(callsign)
       sharedContactStateRef.current.delete(callsign)
       sharedDropRuleFramesRef.current.delete(callsign)
+      sharedDropRuleStateRef.current.delete(callsign)
       sharedRestOffsetStateRef.current.delete(callsign)
     }
   }

@@ -10,7 +10,7 @@
  *   `.tmp/motion/report.txt`; without it they write no file.
  */
 import { vi } from 'vitest'
-import { angleDiff, arrivalFlight, departureFlight, type TruthSample, truthAt } from './sim'
+import { angleDiff, arrivalFlight, departureFlight, type LevelPass, type TruthSample, truthAt } from './sim'
 
 type TimelineModule = typeof import('@/stores/aircraftTimelineStore')
 type InterpModule = typeof import('@/hooks/useAircraftInterpolation')
@@ -89,8 +89,15 @@ export interface ScenarioOptions {
    * reports a reference point: an A320 at rest reads 9 ft); 0 for types not named.
    */
   restingHeightsFt?: Partial<Record<string, number>>
+  /**
+   * Feet per callsign that its reported altitude and vNAS height above ground read over the wheels (two simulators of
+   * one type rest differently); its type's `restingHeightsFt` value for callsigns not named.
+   */
+  restingByCallsignFt?: Partial<Record<string, number>>
   /** Height in feet at which GA1 begins its go-around; GO_AROUND_FT when omitted. */
   goAroundFt?: number
+  /** GA1's glide ends at this height (ft), held level at 128 kt for this long (s) before its go-around; none when omitted. */
+  levelPass?: LevelPass
 }
 
 /** GA1's go-around height (ft) when a scenario names none. */
@@ -182,12 +189,16 @@ interface FrameDeps {
   flightByCs: Map<string, Flight>
 }
 
-export function buildFlights(goAroundFt: number): { flights: Flight[]; runwayThr: { x: number; y: number } } {
+/** The scenario's flights; GA1 goes around at `goAroundFt`, after a level pass when `levelPass` is given. */
+export function buildFlights(
+  goAroundFt: number,
+  levelPass: LevelPass | null = null,
+): { flights: Flight[]; runwayThr: { x: number; y: number } } {
   const dep = departureFlight()
   const lineup = dep.samples.find((s) => s.t >= dep.events.lined_up) as TruthSample
   const thr = { x: lineup.x, y: lineup.y }
-  const arr = arrivalFlight(thr.x + 300, thr.y, null)
-  const ga = arrivalFlight(thr.x + 300, thr.y, goAroundFt)
+  const arr = arrivalFlight(thr.x + 300, thr.y, null, null)
+  const ga = arrivalFlight(thr.x + 300, thr.y, goAroundFt, levelPass)
   const depLiftoff = dep.events.initial_climb
   const arrOffset = depLiftoff + 90 - arr.events.rollout
   return {
@@ -291,7 +302,8 @@ function buildObservations(flights: Flight[], opts: ScenarioOptions, groundEllip
   const out: Observation[] = []
   for (const f of flights) {
     const aircraftType = opts.aircraftTypes?.[f.callsign] ?? 'B738'
-    const report: FlightReport = { aircraftType, restM: (opts.restingHeightsFt?.[aircraftType] ?? 0) * 0.3048 }
+    const restFt = opts.restingByCallsignFt?.[f.callsign] ?? opts.restingHeightsFt?.[aircraftType] ?? 0
+    const report: FlightReport = { aircraftType, restM: restFt * 0.3048 }
     const times = vatsimTimes(f, opts.durationS)
     const vnasFirstStart = opts.useVnas && opts.vnasFirst ? f.offset + 5 : 0
     const vatsimStart = Math.max(vnasFirstStart, opts.vatsimFromS?.[f.callsign] ?? 0)
@@ -481,7 +493,7 @@ export async function runScenario(opts: ScenarioOptions): Promise<ScenarioResult
     const groundEllip = geo.geoidService.mslToEllipsoidal(LAT0, LON0, GROUND_MSL)
     const terrainHeight = groundEllip + (opts.terrainOffsetM ?? 0)
     const unsampled = opts.unsampledReferenceOffsetM !== undefined
-    const { flights, runwayThr } = buildFlights(opts.goAroundFt ?? GO_AROUND_FT)
+    const { flights, runwayThr } = buildFlights(opts.goAroundFt ?? GO_AROUND_FT, opts.levelPass ?? null)
     const observations = buildObservations(flights, opts, groundEllip)
     const deps: FrameDeps = {
       tl,

@@ -344,7 +344,7 @@ it('a stop decided while the sample before it was missing is decided again when 
   for (const s of stopped) store.getState().addObservation(CS, s, METADATA)
   const decide = () => {
     const observations = store.getState().timelines.get(CS)?.observations ?? []
-    return tl.isStoppedVnasSample(observations, observations.indexOf(stopped[3]), METADATA.aircraftType)
+    return tl.isStoppedVnasSample(observations, observations.indexOf(stopped[3]), CS, METADATA.aircraftType)
   }
   expect(decide(), 'stopped while t = 9 is missing').toBe(true)
 
@@ -374,7 +374,7 @@ it('a stop decided before its type rests at a known height is decided again once
   for (const s of stopped) store.getState().addObservation(CS, s, A320)
   const decide = () => {
     const observations = store.getState().timelines.get(CS)?.observations ?? []
-    return tl.isStoppedVnasSample(observations, observations.indexOf(stopped[3]), 'A320')
+    return tl.isStoppedVnasSample(observations, observations.indexOf(stopped[3]), CS, 'A320')
   }
   expect(decide(), 'stopped at 9 ft before the resting height is known').toBe(false)
 

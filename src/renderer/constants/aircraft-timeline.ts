@@ -76,34 +76,46 @@ export const AIRCRAFT_TIMEOUT = 30000 // 30 seconds
 export const VNAS_PREFERENCE_THRESHOLD_MS = 30000 // 30 seconds
 
 /**
- * Ground contact is entered below this height over the type's resting height (3 ft). Before the type's resting height
- * is learned, the drop rule decides contact instead (`DROP_CONTACT_*`).
+ * Ground contact is entered below this height over the aircraft's resting height, its own else its type's (3 ft).
+ * While the aircraft has neither, the drop rule decides contact instead (`DROP_CONTACT_*`).
  */
 export const CONTACT_ENTER_HEIGHT_METERS = 3 * 0.3048
 
 /**
- * Ground contact is left above this height over the type's resting height (5 ft); a stopped vNAS sample at or below
- * it is parked. Before the type's resting height is learned, the parked test takes the raw height.
+ * Ground contact is left above this height over the aircraft's resting height, its own else its type's (5 ft); a
+ * stopped vNAS sample at or below it is parked. While the aircraft has neither, the parked test takes the raw height.
  */
 export const CONTACT_EXIT_HEIGHT_METERS = 5 * 0.3048
 
-/** A vNAS sample under this groundspeed (kt) is a resting-height sample for its aircraft type */
+/** A vNAS sample under this groundspeed (kt) is a resting-height sample for its aircraft and its type */
 export const RESTING_HEIGHT_MAX_GROUNDSPEED_KTS = 5
 
-/** A vNAS sample at or above this raw height above ground (30 ft) is never a resting-height sample */
-export const RESTING_HEIGHT_MAX_SAMPLE_METERS = 30 * 0.3048
+/** A vNAS sample below this raw height above ground (-3 ft) is never a resting-height sample */
+export const RESTING_HEIGHT_MIN_SAMPLE_METERS = -3 * 0.3048
 
-/** Resting-height samples kept per aircraft type; the resting height is their median */
+/** A vNAS sample above this raw height above ground (16 ft) is never a resting-height sample */
+export const RESTING_HEIGHT_MAX_SAMPLE_METERS = 16 * 0.3048
+
+/** Resting-height samples kept per aircraft and per aircraft type; the resting height is their median */
 export const RESTING_HEIGHT_SAMPLE_WINDOW = 9
 
-/** Resting-height samples a type needs before its resting height is learned */
+/** Resting-height samples an aircraft or a type needs before its resting height is learned */
 export const RESTING_HEIGHT_MIN_SAMPLES = 3
 
-/** Before the type's resting height is learned, contact is entered only below this raw height (20 ft) */
-export const DROP_CONTACT_MAX_HEIGHT_METERS = 20 * 0.3048
+/** While an aircraft has no resting height, contact is entered only at or below this raw height (16 ft) */
+export const DROP_CONTACT_MAX_HEIGHT_METERS = 16 * 0.3048
 
-/** Before the type's resting height is learned, contact is left above this raw height (20 ft + 5 ft) */
+/** While an aircraft has no resting height, contact is left above this raw height (25 ft) */
 export const DROP_CONTACT_EXIT_HEIGHT_METERS = 25 * 0.3048
+
+/**
+ * While an aircraft has no resting height, contact is entered once the height's rate has stayed within
+ * DROP_CONTACT_STEADY_RATE_MPS of 0 for this long (ms) since its last descent
+ */
+export const DROP_CONTACT_FLAT_MS = 1000
+
+/** While an aircraft has no resting height, a change of contact eases its drawn height over this long (ms) */
+export const DROP_CONTACT_EASE_MS = 1000
 
 /** Span of frames over which the drop rule measures the height's rate (ms) */
 export const DROP_CONTACT_RATE_WINDOW_MS = 1000
@@ -120,7 +132,7 @@ export const DROP_CONTACT_STEADY_RATE_MPS = 1 * 0.3048
 /** The drop rule leaves contact when the height rises faster than this (3 ft/s, in m/s) */
 export const DROP_CONTACT_EXIT_RATE_MPS = 3 * 0.3048
 
-/** Time over which an aircraft's drawn height eases by its type's resting height when that is first learned (ms) */
+/** Time over which an aircraft's drawn height eases when its resting height (its own, else its type's) changes (ms) */
 export const RESTING_HEIGHT_EASE_MS = 250
 
 /**

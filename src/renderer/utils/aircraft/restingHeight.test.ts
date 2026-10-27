@@ -1,7 +1,8 @@
 // @vitest-environment node
 /**
- * The resting height of each aircraft type, learned from slow vNAS samples low over the ground: the median of the
- * last 9 per type, known once 3 exist, kept for the session through the timeline store's clear and removal.
+ * The resting height of each aircraft and of each aircraft type, learned from slow vNAS samples from -3 to 16 ft: the
+ * median of the last 9, known once 3 exist. An aircraft reads its own, else its type's. Its own lives as long as its
+ * timeline (forgotten on removal, pruning, clear and a change of type); the type's is kept for the session.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AircraftDataSource, AircraftMetadata, AircraftObservation } from '@/types/aircraft-timeline'
@@ -24,12 +25,19 @@ beforeEach(async () => {
   rest = await import('@/utils/aircraft/restingHeight')
 })
 
-function record(type: string | null, heightsFt: number[], groundspeedKt = 0, source: AircraftDataSource = 'vnas') {
-  for (const h of heightsFt) rest.recordRestingSample(type, h * FT, groundspeedKt, source)
+function record(
+  type: string | null,
+  heightsFt: number[],
+  groundspeedKt = 0,
+  source: AircraftDataSource = 'vnas',
+  callsign = 'AAL1',
+) {
+  for (const h of heightsFt) rest.recordRestingSample(callsign, type, h * FT, groundspeedKt, source)
 }
 
-function restFt(type: string | null): number | null {
-  const r = rest.restingHeightFor(type)
+/** Resting height (ft) an aircraft is drawn by; a callsign that recorded nothing reads its type's. */
+function restFt(type: string | null, callsign = 'NONE1'): number | null {
+  const r = rest.restingHeightFor(callsign, type)
   return r === null ? null : r / FT
 }
 
@@ -42,12 +50,12 @@ describe('the estimator', () => {
   })
 
   it('is the median of the samples, not their mean', () => {
-    record('B77L', [13.6, 13.5, 29])
+    record('B77L', [13.6, 13.5, 16])
     expect(restFt('B77L')).toBeCloseTo(13.6, 9)
   })
 
   it('keeps only the last 9 samples', () => {
-    record('C17', [20, 20, 20, 20, 20, 20, 20, 20, 20])
+    record('C17', [15, 15, 15, 15, 15, 15, 15, 15, 15])
     record('C17', [5.9, 5.9, 5.9, 5.9, 5.9])
     expect(restFt('C17')).toBeCloseTo(5.9, 9)
   })
@@ -66,11 +74,25 @@ describe('the samples it ignores', () => {
     expect(restFt('A320')).toBeCloseTo(9, 9)
   })
 
-  it('at 30 ft or over', () => {
-    record('A320', [30, 30, 30])
+  it('above 16 ft', () => {
+    record('A320', [16.1, 16.1, 16.1])
     expect(restFt('A320')).toBeNull()
-    record('A320', [29.9, 29.9, 29.9])
-    expect(restFt('A320')).toBeCloseTo(29.9, 9)
+    record('A320', [16, 16, 16])
+    expect(restFt('A320')).toBeCloseTo(16, 9)
+  })
+
+  it('samples below -3 ft or above 16 ft are ignored', () => {
+    record('A320', [-3.1, 16.1, -3.1, 16.1, -3.1, 16.1])
+    expect(restFt('A320')).toBeNull()
+    expect(restFt('A320', 'AAL1')).toBeNull()
+    record('A320', [-3, -3, -3])
+    expect(restFt('A320')).toBeCloseTo(-3, 9)
+  })
+
+  it('a sample at -0.3 ft is learned', () => {
+    record('A320', [-0.3, -0.3, -0.3])
+    expect(restFt('A320', 'AAL1')).toBeCloseTo(-0.3, 9)
+    expect(restFt('A320')).toBeCloseTo(-0.3, 9)
   })
 
   it.each<AircraftDataSource>(['vatsim', 'realtraffic', 'replay', 'broadcast'])('from %s', (source) => {
@@ -79,7 +101,7 @@ describe('the samples it ignores', () => {
   })
 
   it('without a height', () => {
-    for (let i = 0; i < 3; i++) rest.recordRestingSample('A320', undefined, 0, 'vnas')
+    for (let i = 0; i < 3; i++) rest.recordRestingSample('AAL1', 'A320', undefined, 0, 'vnas')
     expect(restFt('A320')).toBeNull()
   })
 })
@@ -103,16 +125,46 @@ describe('the type key', () => {
   })
 })
 
-it('heightOverRest is the raw height less the resting height, and null until it is learned', () => {
-  expect(rest.heightOverRest('A320', 10 * FT)).toBeNull()
-  record('A320', [9, 9, 9])
-  expect((rest.heightOverRest('A320', 10 * FT) ?? Number.NaN) / FT).toBeCloseTo(1, 9)
+describe('the callsign', () => {
+  it("a callsign's own resting height wins over its type's", () => {
+    record('A320', [9, 9, 9], 0, 'vnas', 'AAL1')
+    record('A320', [0, 0, 0], 0, 'vnas', 'DAL2')
+    expect(restFt('A320', 'DAL2')).toBeCloseTo(0, 9)
+    expect(restFt('A320', 'AAL1')).toBeCloseTo(9, 9)
+    expect(restFt('A320')).toBeCloseTo(4.5, 9)
+    expect((rest.heightOverRest('DAL2', 'A320', 10 * FT) ?? Number.NaN) / FT).toBeCloseTo(10, 9)
+  })
+
+  it("an aircraft uses its type's value until it has learned its own", () => {
+    record('A320', [9, 9, 9], 0, 'vnas', 'AAL1')
+    record('A320', [0, 0], 0, 'vnas', 'DAL2')
+    expect(restFt('A320', 'DAL2'), 'with 2 samples of its own').toBeCloseTo(9, 9)
+    record('A320', [0], 0, 'vnas', 'DAL2')
+    expect(restFt('A320', 'DAL2'), 'with 3 samples of its own').toBeCloseTo(0, 9)
+  })
+
+  it('forgetting a callsign drops its own value and falls back to the type', () => {
+    record('A320', [9, 9, 9, 9, 9], 0, 'vnas', 'AAL1')
+    record('A320', [0, 0, 0], 0, 'vnas', 'DAL2')
+    rest.forgetCallsign('DAL2')
+    expect(restFt('A320', 'DAL2')).toBeCloseTo(9, 9)
+    // Two new samples are not enough to learn its own again: it reads the type's median of 0, 0, 0, 3, 3, 9, 9, 9, 9
+    record('A320', [3, 3], 0, 'vnas', 'DAL2')
+    expect(restFt('A320', 'DAL2'), 'its earlier samples are gone too').toBeCloseTo(3, 9)
+  })
 })
 
-it('resetRestingHeightsForTests forgets every type', () => {
+it('heightOverRest is the raw height less the resting height, and null until it is learned', () => {
+  expect(rest.heightOverRest('AAL1', 'A320', 10 * FT)).toBeNull()
+  record('A320', [9, 9, 9])
+  expect((rest.heightOverRest('AAL1', 'A320', 10 * FT) ?? Number.NaN) / FT).toBeCloseTo(1, 9)
+})
+
+it('resetRestingHeightsForTests forgets every type and callsign', () => {
   record('A320', [9, 9, 9])
   rest.resetRestingHeightsForTests()
   expect(restFt('A320')).toBeNull()
+  expect(restFt('A320', 'AAL1')).toBeNull()
 })
 
 const METADATA: AircraftMetadata = { cid: 1, aircraftType: 'A320', transponder: '1200', departure: null, arrival: null }
@@ -165,6 +217,88 @@ describe('the timeline store', () => {
     expect(restFt('A320')).toBeCloseTo(9, 9)
     tl.useAircraftTimelineStore.getState().clear()
     expect(restFt('A320')).toBeCloseTo(9, 9)
+  })
+
+  describe("an aircraft's own resting height lives as long as its timeline", () => {
+    const OWN = 'ACA4LG'
+    const TEACHER = 'DAL2'
+
+    /** DAL2 teaches the A320 type 9 ft; ACA4LG learns its own 0 ft, which the type's median of 8 samples outvotes. */
+    function learnOwnBesideType() {
+      const store = tl.useAircraftTimelineStore.getState()
+      for (let t = 0; t < 5; t++) store.addObservation(TEACHER, vnasSample(t, 9), METADATA)
+      for (let t = 0; t < 3; t++) store.addObservation(OWN, vnasSample(t, 0), METADATA)
+      expect(restFt('A320', OWN), 'its own').toBeCloseTo(0, 9)
+      expect(restFt('A320'), "the type's").toBeCloseTo(9, 9)
+    }
+
+    it('removeAircraft forgets it', () => {
+      learnOwnBesideType()
+      tl.useAircraftTimelineStore.getState().removeAircraft(OWN)
+      expect(restFt('A320', OWN)).toBeCloseTo(9, 9)
+    })
+
+    it('pruneStaleAircraft forgets it', () => {
+      learnOwnBesideType()
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0 + 10 * 60_000)
+      try {
+        tl.useAircraftTimelineStore.getState().pruneStaleAircraft()
+      } finally {
+        now.mockRestore()
+      }
+      expect(tl.useAircraftTimelineStore.getState().timelines.has(OWN), 'pruned').toBe(false)
+      expect(restFt('A320', OWN)).toBeCloseTo(9, 9)
+    })
+
+    it('clear forgets it', () => {
+      learnOwnBesideType()
+      tl.useAircraftTimelineStore.getState().clear()
+      expect(restFt('A320', OWN)).toBeCloseTo(9, 9)
+    })
+
+    it('addObservation with another type forgets it', () => {
+      learnOwnBesideType()
+      tl.useAircraftTimelineStore
+        .getState()
+        .addObservation(OWN, vnasSample(3, 0), { ...METADATA, aircraftType: 'B738' })
+      expect(restFt('A320', OWN)).toBeCloseTo(9, 9)
+    })
+
+    it('addObservationBatch with another type forgets it', () => {
+      learnOwnBesideType()
+      const metadata = { ...METADATA, aircraftType: 'B738' }
+      tl.useAircraftTimelineStore
+        .getState()
+        .addObservationBatch([{ callsign: OWN, observation: vnasSample(3, 0), metadata }])
+      expect(restFt('A320', OWN)).toBeCloseTo(9, 9)
+    })
+
+    it.each<[string, string | null]>([
+      ['a case or whitespace difference', ' a320 '],
+      ['a placeholder type', 'UNKN'],
+      ['no type', null],
+    ])('a type that differs from %s keeps it', (_name, firstType) => {
+      const store = tl.useAircraftTimelineStore.getState()
+      for (let t = 0; t < 5; t++) store.addObservation(TEACHER, vnasSample(t, 9), METADATA)
+      for (let t = 0; t < 3; t++) store.addObservation(OWN, vnasSample(t, 0), { ...METADATA, aircraftType: firstType })
+      store.addObservation(OWN, vnasSample(3, 0), METADATA)
+      expect(restFt('A320', OWN)).toBeCloseTo(0, 9)
+    })
+  })
+
+  it('decides a stop again when the aircraft learns its own resting height beside a known type', () => {
+    const store = tl.useAircraftTimelineStore.getState()
+    for (let t = 0; t < 5; t++) store.addObservation('DAL2', vnasSample(t, 0), METADATA)
+    // Standing still at 9 ft but reporting 5 kt: no resting-height sample of its own yet
+    for (let t = 0; t < 4; t++) store.addObservation('ACA4LG', { ...vnasSample(t, 9), groundspeed: 5 }, METADATA)
+    const decide = () => {
+      const observations = tl.useAircraftTimelineStore.getState().timelines.get('ACA4LG')?.observations ?? []
+      return tl.isStoppedVnasSample(observations, 3, 'ACA4LG', 'A320')
+    }
+    expect(decide(), "9 ft over the type's 0 ft").toBe(false)
+    for (let t = 4; t < 7; t++) store.addObservation('ACA4LG', vnasSample(t, 9), METADATA)
+    expect(restFt('A320', 'ACA4LG'), 'its own').toBeCloseTo(9, 9)
+    expect(decide(), 'at its own 9 ft resting height').toBe(true)
   })
 
   it('learns from a loaded replay', () => {
