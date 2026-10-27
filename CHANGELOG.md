@@ -21,7 +21,6 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Weather fog now fades in as visibility drops from 10 to 8 miles, and eases over six seconds when visibility changes, instead of popping.
 - Tower mod cabs now darken at night with the rest of the view and cast a shadow on the ground.
 - Tower mod `rotation` now turns the cab clockwise, as documented; a cab with a rotation other than 0 may now face a different way.
-- vNAS aircraft now touch down and lift off when the simulator's aircraft does, and raise their gear a few seconds after liftoff.
 - vNAS aircraft now rest on their wheels whichever simulator flies them, touch down and lift off with the simulator's aircraft, and raise their gear a few seconds after liftoff.
 
 ### Fixed
@@ -38,6 +37,7 @@ All notable changes to TowerCab 3D will be documented in this file.
 - Aircraft passing over an airport at altitude are no longer labelled "Final" or "Short Final".
 - Datablocks on iPads and other high-resolution screens now sit on their aircraft at full size, instead of half size and in the wrong place.
 - Tower and aircraft mod models now load on iPads and other browsers connected to the desktop app.
+- vNAS aircraft whose flight plan files a different type than the one they fly now keep the flown type's model, instead of swapping every few seconds.
 - The MSFS model cache size limit, Unlimited included, now survives a restart instead of resetting and deleting converted models.
 - Converting an FSLTL or AIG model can no longer read files from outside that model's own MSFS package.
 - Mods you turn off in Settings → Mods stay off after a restart, and stay listed so you can turn them back on.

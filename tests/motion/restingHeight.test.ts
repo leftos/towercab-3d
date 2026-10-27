@@ -9,7 +9,8 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 import { DROP_CONTACT_EASE_MS, DROP_CONTACT_FLAT_MS, DROP_CONTACT_RATE_WINDOW_MS } from '@/constants'
-import type { AircraftMetadata, AircraftObservation } from '@/types/aircraft-timeline'
+import type { AircraftDataSource, AircraftMetadata, AircraftObservation } from '@/types/aircraft-timeline'
+import type { PilotData } from '@/types/vatsim'
 import {
   buildFlights,
   type Flight,
@@ -338,6 +339,268 @@ it("an aircraft decides contact by its own resting height, not its type's", asyn
   // 6 ft over its own 0 ft is out of contact; over the type's 9 ft (median of six 9s and three 0s) it is -3 ft, in it
   expect(updateContact('REST0', 6 * FT, type, 0), 'REST0 at a raw 6 ft').toBe(false)
   expect(updateContact('REST9', 6 * FT, type, 0), 'REST9 at a raw 6 ft').toBe(true)
+})
+
+/** A stationary sample at second `t` from `source`, reporting `heightFt`; only a vNAS sample reports a height. */
+function stoppedSample(source: AircraftDataSource, t: number, heightFt = 0): AircraftObservation {
+  const observation: AircraftObservation = { ...stoppedVnasSample(t, heightFt), source }
+  if (source !== 'vnas') delete observation.heightAboveGround
+  return observation
+}
+
+/** A vNAS sample at second `t` of an aircraft rolling too fast to be a resting-height sample. */
+const rollingVnasSample = (t: number): AircraftObservation => ({ ...stoppedVnasSample(t, 0), groundspeed: 10 })
+
+const typed = (aircraftType: string | null): AircraftMetadata => ({
+  cid: 1,
+  aircraftType,
+  transponder: '1200',
+  departure: null,
+  arrival: null,
+})
+
+const timelineStore = async () => (await import('@/stores/aircraftTimelineStore')).useAircraftTimelineStore
+const restOf = async (callsign: string, type: string | null) =>
+  (await import('@/utils/aircraft/restingHeight')).restingHeightFor(callsign, type)
+// NaN while none is learned, so a closeness check cannot pass on null
+const learnedRestOf = async (callsign: string, type: string | null) => (await restOf(callsign, type)) ?? Number.NaN
+
+/**
+ * Teach a type 9 ft through its own callsign, so an aircraft of that type that forgets its own 0 ft reads 9 ft: three
+ * 0 ft samples of the aircraft leave the type's median of its last 9 samples at 9 ft.
+ */
+async function teachType(type: string): Promise<void> {
+  const store = await timelineStore()
+  for (let t = 0; t < 9; t++) store.getState().addObservation(`TEACH${type}`, stoppedSample('vnas', t, 9), typed(type))
+}
+
+/** Each case below flies its own callsign and types, which no scenario teaches. */
+describe("a vNAS aircraft's type while VATSIM files another", () => {
+  it('a vNAS/VATSIM type flip keeps the vNAS type and its own resting height', async () => {
+    const store = await timelineStore()
+    const typeOf = () => store.getState().timelines.get('WAT2918')?.metadata.aircraftType ?? null
+    for (let t = 0; t < 9; t++) store.getState().addObservation('B77LREST', stoppedSample('vnas', t, 13.6), typed('B77L'))
+    await teachType('B77W')
+    for (let t = 0; t < 3; t++) store.getState().addObservation('WAT2918', stoppedSample('vnas', t, 0), typed('B77W'))
+    for (let t = 3; t <= 60; t++) {
+      if (t % 15 === 0) {
+        const observation = stoppedSample('vatsim', t + 0.5)
+        store.getState().addObservationBatch([{ callsign: 'WAT2918', observation, metadata: typed('B77L') }])
+      } else {
+        store.getState().addObservation('WAT2918', rollingVnasSample(t), typed('B77W'))
+      }
+      expect(typeOf(), `the type at ${t} s`).toBe('B77W')
+      expect(await learnedRestOf('WAT2918', typeOf()), `its resting height at ${t} s`).toBeCloseTo(0, 9)
+    }
+    const { updateContact } = await import('@/hooks/useAircraftInterpolation')
+    // Over its own 0 ft, 6 ft is out of contact; over B77W's 9 ft it would be -3 ft, in contact
+    expect(updateContact('WAT2918', 6 * FT, typeOf(), 0), 'WAT2918 at a raw 6 ft').toBe(false)
+  })
+
+  it("vNAS samples feed the vNAS type's pool while VATSIM reports another type", async () => {
+    const store = await timelineStore()
+    store.getState().addObservation('POOL370', stoppedSample('vnas', 0, 7), typed('B744'))
+    const observation = stoppedSample('vatsim', 0.5)
+    store.getState().addObservationBatch([{ callsign: 'POOL370', observation, metadata: typed('B748') }])
+    for (let t = 1; t < 3; t++) store.getState().addObservation('POOL370', stoppedSample('vnas', t, 7), typed(null))
+    expect(await restOf('NONE370', 'B744'), "the vNAS type's").toBeCloseTo(7 * FT, 9)
+    expect(await restOf('NONE370', 'B748'), "the flight-plan type's").toBeNull()
+  })
+
+  it('a vNAS sim swap forgets the resting height', async () => {
+    const store = await timelineStore()
+    const fileB762 = (t: number) => {
+      const observation = stoppedSample('vatsim', t)
+      store.getState().addObservationBatch([{ callsign: 'SWAP370', observation, metadata: typed('B762') }])
+    }
+    fileB762(0)
+    for (let t = 1; t < 4; t++) store.getState().addObservation('SWAP370', stoppedSample('vnas', t, 0), typed('B762'))
+    expect(await learnedRestOf('SWAP370', 'B762'), 'before the swap').toBeCloseTo(0, 9)
+    store.getState().addObservation('SWAP370', stoppedSample('vnas', 4, 0), typed('B763'))
+    expect(await restOf('SWAP370', 'B763'), 'after the swap').toBeNull()
+    fileB762(4.5)
+    expect(store.getState().timelines.get('SWAP370')?.metadata.aircraftType, 'the drawn type').toBe('B763')
+    expect(await restOf('SWAP370', 'B763'), 'after the next flight plan').toBeNull()
+  })
+
+  it('a VATSIM refile while vNAS reports forgets nothing and keeps the drawn type', async () => {
+    const store = await timelineStore()
+    const file = (t: number, type: string) => {
+      const observation = stoppedSample('vatsim', t)
+      store.getState().addObservationBatch([{ callsign: 'REFILE370', observation, metadata: typed(type) }])
+    }
+    await teachType('A332')
+    file(0, 'A332')
+    for (let t = 1; t < 4; t++) store.getState().addObservation('REFILE370', stoppedSample('vnas', t, 0), typed('A332'))
+    file(4, 'A333')
+    expect(store.getState().timelines.get('REFILE370')?.metadata.aircraftType, 'the drawn type').toBe('A332')
+    expect(await learnedRestOf('REFILE370', 'A332'), 'its resting height').toBeCloseTo(0, 9)
+  })
+
+  it('a VATSIM refile after vNAS has gone silent forgets nothing and keeps the vNAS type', async () => {
+    const store = await timelineStore()
+    const file = (t: number, type: string) => {
+      const observation = stoppedSample('vatsim', t)
+      store.getState().addObservationBatch([{ callsign: 'STALE370', observation, metadata: typed(type) }])
+    }
+    await teachType('A342')
+    file(0, 'A342')
+    for (let t = 1; t < 4; t++) store.getState().addObservation('STALE370', stoppedSample('vnas', t, 0), typed('A342'))
+    file(15, 'A342')
+    file(40, 'A343')
+    expect(store.getState().timelines.get('STALE370')?.metadata.aircraftType, 'the drawn type').toBe('A342')
+    expect(await learnedRestOf('STALE370', 'A342'), 'its resting height').toBeCloseTo(0, 9)
+  })
+
+  it('a VATSIM refile of an aircraft vNAS never named forgets and draws the new type', async () => {
+    const store = await timelineStore()
+    const file = (t: number, type: string) => {
+      const observation = stoppedSample('vatsim', t)
+      store.getState().addObservationBatch([{ callsign: 'UNNAMED370', observation, metadata: typed(type) }])
+    }
+    await teachType('A346')
+    file(0, 'A346')
+    for (let t = 1; t < 4; t++) store.getState().addObservation('UNNAMED370', stoppedSample('vnas', t, 0), typed(null))
+    expect(await learnedRestOf('UNNAMED370', 'A346'), 'before the refile').toBeCloseTo(0, 9)
+    file(4, 'A345')
+    expect(store.getState().timelines.get('UNNAMED370')?.metadata.aircraftType, 'the drawn type').toBe('A345')
+    expect(await restOf('UNNAMED370', 'A345'), 'after the refile').toBeNull()
+  })
+
+  it('vNAS going silent keeps the vNAS type and its resting height while VATSIM files another', async () => {
+    const store = await timelineStore()
+    const typeOf = () => store.getState().timelines.get('QUIET370')?.metadata.aircraftType ?? null
+    const file = (t: number) => {
+      const observation = stoppedSample('vatsim', t)
+      store.getState().addObservationBatch([{ callsign: 'QUIET370', observation, metadata: typed('A359') }])
+    }
+    await teachType('A35K')
+    file(0)
+    for (let t = 1; t < 4; t++) store.getState().addObservation('QUIET370', stoppedSample('vnas', t, 0), typed('A35K'))
+    // The last vNAS sample is at 3 s, so the last batch arrives after 62 s of vNAS silence
+    for (let t = 15; t <= 65; t += 10) {
+      file(t)
+      expect(typeOf(), `the drawn type at ${t} s`).toBe('A35K')
+      expect(await learnedRestOf('QUIET370', typeOf()), `its resting height at ${t} s`).toBeCloseTo(0, 9)
+    }
+  })
+
+  it("the second source's first appearance with another type is not a change", async () => {
+    const store = await timelineStore()
+    await teachType('B39M')
+    for (let t = 0; t < 3; t++) store.getState().addObservation('FIRST370', stoppedSample('vnas', t, 0), typed('B39M'))
+    const observation = stoppedSample('vatsim', 3)
+    store.getState().addObservationBatch([{ callsign: 'FIRST370', observation, metadata: typed('B38M') }])
+    expect(store.getState().timelines.get('FIRST370')?.metadata.aircraftType, 'the drawn type').toBe('B39M')
+    expect(await learnedRestOf('FIRST370', 'B39M'), 'its resting height').toBeCloseTo(0, 9)
+  })
+
+  it('a placeholder between two vNAS types keeps the drawn type through it', async () => {
+    const store = await timelineStore()
+    await teachType('E170')
+    for (let t = 0; t < 3; t++) store.getState().addObservation('UNKN370', stoppedSample('vnas', t, 0), typed('E170'))
+    store.getState().addObservation('UNKN370', stoppedSample('vnas', 3, 0), typed('UNKN'))
+    expect(store.getState().timelines.get('UNKN370')?.metadata.aircraftType, 'the drawn type').toBe('E170')
+    expect(await learnedRestOf('UNKN370', 'E170'), 'its resting height').toBeCloseTo(0, 9)
+  })
+
+  it('a placeholder between two vNAS types forgets the resting height at the second type', async () => {
+    const store = await timelineStore()
+    for (let t = 0; t < 3; t++) store.getState().addObservation('SWAP2370', stoppedSample('vnas', t, 0), typed('E190'))
+    store.getState().addObservation('SWAP2370', stoppedSample('vnas', 3, 0), typed('UNKN'))
+    store.getState().addObservation('SWAP2370', stoppedSample('vnas', 4, 0), typed('E195'))
+    expect(store.getState().timelines.get('SWAP2370')?.metadata.aircraftType, 'the drawn type').toBe('E195')
+    expect(await restOf('SWAP2370', 'E195'), 'its resting height').toBeNull()
+  })
+
+  it('VATSIM and RealTraffic types alternating on an aircraft vNAS never named forget nothing', async () => {
+    const store = await timelineStore()
+    const typeOf = () => store.getState().timelines.get('MIXED370')?.metadata.aircraftType ?? null
+    const report = (source: AircraftDataSource, t: number, type: string) => {
+      const observation = stoppedSample(source, t)
+      store.getState().addObservationBatch([{ callsign: 'MIXED370', observation, metadata: typed(type) }])
+    }
+    await teachType('B37M')
+    await teachType('B3XM')
+    report('vatsim', 0, 'B37M')
+    for (let t = 1; t < 4; t++) store.getState().addObservation('MIXED370', stoppedSample('vnas', t, 0), typed(null))
+    // vNAS never names a type here, so each source's report is compared with that source's own last type only
+    for (let t = 40; t < 46; t++) {
+      if (t % 2 === 0) report('realtraffic', t, 'B3XM')
+      else report('vatsim', t, 'B37M')
+      expect(typeOf(), `the drawn type at ${t} s`).toBe(t % 2 === 0 ? 'B3XM' : 'B37M')
+      expect(await learnedRestOf('MIXED370', typeOf()), `its resting height at ${t} s`).toBeCloseTo(0, 9)
+    }
+  })
+
+  it("vNAS naming its first type after VATSIM's is not a change", async () => {
+    const store = await timelineStore()
+    await teachType('CRJ9')
+    const observation = stoppedSample('vatsim', 0)
+    store.getState().addObservationBatch([{ callsign: 'LATE370', observation, metadata: typed('CRJ7') }])
+    for (let t = 1; t < 4; t++) store.getState().addObservation('LATE370', stoppedSample('vnas', t, 0), typed(null))
+    store.getState().addObservation('LATE370', rollingVnasSample(4), typed('CRJ9'))
+    expect(store.getState().timelines.get('LATE370')?.metadata.aircraftType, 'the drawn type').toBe('CRJ9')
+    expect(await learnedRestOf('LATE370', 'CRJ9'), 'its resting height').toBeCloseTo(0, 9)
+  })
+
+  it('a vNAS drop of an aircraft VATSIM still lists keeps the vNAS type and its resting height', async () => {
+    const store = await timelineStore()
+    const { useVatsimStore } = await import('@/stores/vatsimStore')
+    await teachType('B78X')
+    for (let t = 0; t < 3; t++) store.getState().addObservation('KEEP370', stoppedSample('vnas', t, 0), typed('B78X'))
+    const flightPlan = { aircraft_short: 'B789' } as PilotData['flight_plan']
+    const pilot = { callsign: 'KEEP370', cid: 1, latitude: 37.72, longitude: -122.22, altitude: 30, heading: 90 }
+    useVatsimStore.setState({
+      allPilots: [{ ...pilot, groundspeed: 0, transponder: '1200', flight_plan: flightPlan } as PilotData],
+      lastVatsimTimestamp: stoppedVnasSample(10, 0).observedAt,
+      isPolling: true,
+      lastUpdate: new Date(),
+    })
+    try {
+      store.getState().dropSourceObservations('vnas', ['KEEP370'])
+      const kept = store.getState().timelines.get('KEEP370')
+      expect(kept?.observations.map((o) => o.source), 'the kept timeline').toEqual(['vatsim'])
+      expect(kept?.metadata.aircraftType, 'the drawn type').toBe('B78X')
+      expect(await learnedRestOf('KEEP370', 'B78X'), 'its resting height').toBeCloseTo(0, 9)
+    } finally {
+      useVatsimStore.setState({ allPilots: [], lastVatsimTimestamp: 0, isPolling: false, lastUpdate: null })
+    }
+  })
+
+  it('a callsign dropped with its vNAS feed and seen again forgets the type vNAS named', async () => {
+    const store = await timelineStore()
+    for (let t = 0; t < 3; t++) store.getState().addObservation('DROP370', stoppedSample('vnas', t, 0), typed('B788'))
+    store.getState().dropSourceObservations('vnas', ['DROP370'])
+    expect(store.getState().timelines.has('DROP370'), 'its timeline').toBe(false)
+    expect(await restOf('DROP370', null), 'its resting height').toBeNull()
+    store.getState().addObservation('DROP370', stoppedSample('vnas', 10, 0), typed(null))
+    expect(store.getState().timelines.get('DROP370')?.metadata.aircraftType, 'the drawn type').toBeNull()
+  })
+
+  it('a single vNAS sample is relayed with the type vNAS named, not the drawn one', async () => {
+    const { registerBroadcastCallbacks } = await import('@/stores/aircraftTimelineStore')
+    const store = await timelineStore()
+    const relayed: (string | null)[] = []
+    registerBroadcastCallbacks(
+      (observations) => {
+        for (const o of observations) if (o.callsign === 'RELAY370') relayed.push(o.metadata.aircraftType)
+      },
+      () => {},
+    )
+    try {
+      const observation = stoppedSample('vatsim', 0)
+      store.getState().addObservationBatch([{ callsign: 'RELAY370', observation, metadata: typed('B752') }])
+      store.getState().addObservation('RELAY370', stoppedSample('vnas', 1, 0), typed(null))
+      expect(store.getState().timelines.get('RELAY370')?.metadata.aircraftType, 'the drawn type').toBe('B752')
+      expect(relayed, 'the relayed types').toEqual(['B752', null])
+    } finally {
+      registerBroadcastCallbacks(
+        () => {},
+        () => {},
+      )
+    }
+  })
 })
 
 const LIFTOFF_EXIT_LAG_MAX_S = 1.1

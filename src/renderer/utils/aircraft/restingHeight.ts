@@ -40,6 +40,11 @@ function typeKey(type: string | null | undefined): string | null {
   return PLACEHOLDER_TYPES.has(key) ? null : key
 }
 
+/** Whether a type code names a type: neither missing nor a placeholder. */
+export function namesType(type: string | null | undefined): type is string {
+  return typeKey(type) !== null
+}
+
 /**
  * Whether `next` names a different type than `previous`: both name a type (neither missing nor a placeholder) and their
  * keys differ, so a case or whitespace difference, or a type named for the first time, is no change.

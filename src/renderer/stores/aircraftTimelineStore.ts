@@ -55,6 +55,7 @@ import { haversineDistanceFt } from '@/utils/aircraft/geoMath'
 import {
   forgetCallsign,
   isRestingTypeChange,
+  namesType,
   recordRestingSample,
   restingHeightFor,
 } from '@/utils/aircraft/restingHeight'
@@ -532,29 +533,64 @@ function newestVnasSampleIn(observations: AircraftObservation[], from: number, t
   return newest
 }
 
-/** Offer a stored observation to its aircraft's and its type's resting height, where observation and type meet. */
-function recordObservationRest(callsign: string, observation: AircraftObservation, metadata: AircraftMetadata): void {
-  recordRestingSample(
-    callsign,
-    metadata.aircraftType,
-    observation.heightAboveGround,
-    observation.groundspeed,
-    observation.source,
-  )
+/** Offer a stored observation to its aircraft's resting height and to that of the type it is filed under. */
+function recordObservationRest(callsign: string, observation: AircraftObservation, type: string | null): void {
+  recordRestingSample(callsign, type, observation.heightAboveGround, observation.groundspeed, observation.source)
 }
 
 /**
- * Forget an aircraft's own resting height when its merged metadata names a different type than its timeline did
- * (`isRestingTypeChange`).
+ * The last real type each source named for an aircraft, by source, and the newest real type any non-vNAS source
+ * (VATSIM, RealTraffic) named.
  */
-function forgetRestOnTypeChange(
-  callsign: string,
-  previous: AircraftMetadata | undefined,
-  merged: AircraftMetadata,
-): void {
-  if (previous !== undefined && isRestingTypeChange(previous.aircraftType, merged.aircraftType)) {
-    forgetCallsign(callsign)
+interface ReportedTypes {
+  bySource: Partial<Record<AircraftDataSource, string>>
+  newestNonVnas: string | null
+}
+
+/** What each source last named, per callsign, for as long as its timeline lives (`forgetAircraftRest`); never serialized. */
+const reportedTypesByCallsign = new Map<string, ReportedTypes>()
+
+/** Forget an aircraft's own resting height and the types its sources named, as when its timeline is removed. */
+function forgetAircraftRest(callsign: string): void {
+  forgetCallsign(callsign)
+  reportedTypesByCallsign.delete(callsign)
+}
+
+/**
+ * Remember the type a source names for an aircraft, and forget the aircraft's own resting height when the source names
+ * a different type than it last did (`isRestingTypeChange`): vNAS (a simulator swap) always; another source (a refile)
+ * only for an aircraft vNAS has never named, since vNAS reports the aircraft actually flown. Each source is compared
+ * with its own last type only, so a source naming its first type is no change, and a missing or placeholder type never
+ * replaces the one remembered.
+ */
+function rememberReportedType(callsign: string, source: AircraftDataSource, type: string | null): ReportedTypes {
+  const reported = reportedTypesByCallsign.get(callsign) ?? { bySource: {}, newestNonVnas: null }
+  if (!namesType(type)) return reported
+  const fromVnas = source === 'vnas'
+  const comparesHere = fromVnas || reported.bySource.vnas === undefined
+  if (comparesHere && isRestingTypeChange(reported.bySource[source], type)) forgetCallsign(callsign)
+  const next: ReportedTypes = {
+    bySource: { ...reported.bySource, [source]: type },
+    newestNonVnas: fromVnas ? reported.newestNonVnas : type,
   }
+  reportedTypesByCallsign.set(callsign, next)
+  return next
+}
+
+/**
+ * Merge an observation's metadata into its timeline's (`mergeAircraftMetadata`) and set the type the aircraft is drawn
+ * as, which also keys its resting height and files its vNAS samples: the last type vNAS named once vNAS has named one,
+ * else the newest type a non-vNAS source named, else the merged one.
+ */
+function mergeObservationMetadata(
+  callsign: string,
+  existing: AircraftMetadata | undefined,
+  observation: AircraftObservation,
+  metadata: AircraftMetadata,
+): AircraftMetadata {
+  const merged = mergeAircraftMetadata(existing, metadata)
+  const reported = rememberReportedType(callsign, observation.source, metadata.aircraftType)
+  return { ...merged, aircraftType: reported.bySource.vnas ?? reported.newestNonVnas ?? merged.aircraftType }
 }
 
 /** Speed in knots from `from` to `to` over the time between them. */
@@ -747,7 +783,8 @@ function withoutSource(
   if (vatsimEntry) {
     const seed = vatsimEntry.observation
     observations = [...observations.filter((observation) => observation.observedAt < seed.observedAt), seed]
-    metadata = mergeAircraftMetadata(metadata, vatsimEntry.metadata)
+    // The seed is a VATSIM report like any other: an aircraft vNAS named keeps vNAS's type
+    metadata = mergeObservationMetadata(timeline.callsign, metadata, seed, vatsimEntry.metadata)
   }
   if (observations.length === 0) return null
 
@@ -1576,8 +1613,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
     const existing = timelines.get(callsign)
 
     // Merge metadata to preserve VATSIM flight plan data when vNAS provides positions
-    const mergedMetadata = mergeAircraftMetadata(existing?.metadata, metadata)
-    forgetRestOnTypeChange(callsign, existing?.metadata, mergedMetadata)
+    const mergedMetadata = mergeObservationMetadata(callsign, existing?.metadata, observation, metadata)
 
     let observations: AircraftObservation[]
     let pruned = false
@@ -1619,7 +1655,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       observations = [observation]
       oldestAfter = observation.observedAt
     }
-    recordObservationRest(callsign, observation, mergedMetadata)
+    recordObservationRest(callsign, observation, mergedMetadata.aircraftType)
 
     // Update dynamic delay state
     const { dynamicDelays } = get()
@@ -1672,7 +1708,10 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
 
     // Broadcast observation to insets and remote browsers
     if (observationBroadcastCallback) {
-      observationBroadcastCallback([{ callsign, observation, metadata: mergedMetadata }])
+      // Relay the type the source named, as the batch path relays its batch: receivers remember it as that source's
+      observationBroadcastCallback([
+        { callsign, observation, metadata: { ...mergedMetadata, aircraftType: metadata.aircraftType } },
+      ])
     }
   },
 
@@ -1689,8 +1728,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
       const existing = updated.get(callsign)
 
       // Merge metadata to preserve VATSIM flight plan data when vNAS provides positions
-      const mergedMetadata = mergeAircraftMetadata(existing?.metadata, metadata)
-      forgetRestOnTypeChange(callsign, existing?.metadata, mergedMetadata)
+      const mergedMetadata = mergeObservationMetadata(callsign, existing?.metadata, observation, metadata)
 
       // Always add VATSIM observations to keep the timeline alive, even when vNAS
       // is active. This ensures we have fallback data when vNAS goes quiet for
@@ -1750,7 +1788,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
         observations = [observation]
         oldestAfter = observation.observedAt
       }
-      recordObservationRest(callsign, observation, mergedMetadata)
+      recordObservationRest(callsign, observation, mergedMetadata.aircraftType)
 
       // Update dynamic delay state
       const dynamicDelay = updateDynamicDelayState(
@@ -1825,7 +1863,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
     } = get()
     const timeline = timelines.get(callsign)
     if (timeline) {
-      forgetCallsign(callsign)
+      forgetAircraftRest(callsign)
       const updatedTimelines = new Map(timelines)
       updatedTimelines.delete(callsign)
 
@@ -1923,6 +1961,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
         continue
       }
 
+      forgetAircraftRest(callsign)
       updatedTimelines.delete(callsign)
       updatedGraveyard.set(callsign, { timeline, dynamicDelay: dynamicDelays.get(callsign), removedAt: Date.now() })
       updatedHeadings.delete(callsign)
@@ -1977,7 +2016,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
     // Move timed-out aircraft to graveyard
     for (const [callsign, timeline] of timelines) {
       if (now - timeline.lastReceivedAt > AIRCRAFT_TIMEOUT) {
-        forgetCallsign(callsign)
+        forgetAircraftRest(callsign)
         updatedTimelines.delete(callsign)
         updatedGraveyard.set(callsign, { timeline, dynamicDelay: dynamicDelays.get(callsign), removedAt: now })
         updatedHeadings.delete(callsign)
@@ -2047,7 +2086,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
    * Clear all timelines
    */
   clear: () => {
-    for (const callsign of get().timelines.keys()) forgetCallsign(callsign)
+    for (const callsign of get().timelines.keys()) forgetAircraftRest(callsign)
     set({
       timelines: new Map(),
       recentlyRemoved: new Map(),
@@ -2293,7 +2332,7 @@ export const useAircraftTimelineStore = create<AircraftTimelineStore>((set, get)
         receivedAt: obs.observedAt,
         displayDelay: 0,
       }))
-      for (const obs of normalizedObs) recordObservationRest(entry.callsign, obs, entry.metadata)
+      for (const obs of normalizedObs) recordObservationRest(entry.callsign, obs, entry.metadata.aircraftType)
 
       timelines.set(entry.callsign, {
         callsign: entry.callsign,

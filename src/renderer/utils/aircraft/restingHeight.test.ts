@@ -130,6 +130,17 @@ describe('the type key', () => {
     record('A320', [9])
     expect(restFt('a320')).toBeCloseTo(9, 9)
   })
+
+  it.each<[string | null, boolean]>([
+    ['A320', true],
+    [' b77w ', true],
+    ['UNKN', false],
+    ['zzzz', false],
+    ['  ', false],
+    [null, false],
+  ])('namesType("%s") is %s', (type, expected) => {
+    expect(rest.namesType(type)).toBe(expected)
+  })
 })
 
 describe('the callsign', () => {
